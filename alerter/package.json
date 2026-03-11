@@ -40,7 +40,7 @@
     "country-code-emoji": "^2.3.0",
     "deep-object-diff": "^1.1.9",
     "discord.js": "^13.16.0",
-    "fast-json-stable-stringify": "^2.1.0",
+
     "fastify": "^4.25.2",
     "flat-cache": "^5.0.0",
     "form-data": "^4.0.0",
@@ -59,7 +59,7 @@
     "node-geocoder": "^4.2.0",
     "node-schedule": "^2.1.0",
     "nodes2ts": "^3.0.0",
-    "ohbem": "^1.5.1",
+
     "point-in-polygon": "^1.1.0",
     "rbush": "^3.0.1",
     "readline-sync": "^1.4.10",

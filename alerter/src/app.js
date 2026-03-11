@@ -6,17 +6,13 @@ const { writeHeapSnapshot } = require('v8')
 
 const fs = require('fs')
 const util = require('util')
-const { S2 } = require('s2-geometry')
 const { Worker, MessageChannel } = require('worker_threads')
-const NodeCache = require('node-cache')
 const pcache = require('flat-cache')
 const fastify = require('fastify')({
 	bodyLimit: 52428800,
 	maxParamLength: 256,
 })
-const stringify = require('fast-json-stable-stringify')
 const { Telegraf } = require('telegraf')
-const Ohbem = require('ohbem')
 const path = require('path')
 const chokidar = require('chokidar')
 const moment = require('moment-timezone')
@@ -46,8 +42,6 @@ const telegrafChannel = config.telegram.channelToken ? new Telegraf(config.teleg
 
 const scannerQuery = scannerFactory.createScanner(scannerKnex, config.database.scannerType)
 
-const cache = new NodeCache({ stdTTL: 5400, useClones: false }) // 90 minutes
-
 const DiscordWorker = require('./lib/discord/discordWorker')
 const DiscordWebhookWorker = require('./lib/discord/discordWebhookWorker')
 const DiscordCommando = require('./lib/discord/commando')
@@ -65,17 +59,12 @@ const query = new Query(logs.controller, knex, config, geofence)
 const pogoEventParser = new PogoEventParser(logs.log)
 const shinyPossible = new ShinyPossible(logs.log)
 
-const gymCache = pcache.load('gymCache', path.join(__dirname, '../.cache'))
-
 logs.setWorkerId('MAIN')
 fastify.decorate('logger', logs.log)
 fastify.decorate('controllerLog', logs.controller)
-fastify.decorate('webhooks', logs.webhooks)
 fastify.decorate('matchedWebhooks', logs.matchedWebhooks)
 fastify.decorate('config', config)
 fastify.decorate('knex', knex)
-fastify.decorate('cache', cache)
-fastify.decorate('gymCache', gymCache)
 fastify.decorate('GameData', GameData)
 fastify.decorate('query', query)
 fastify.decorate('scannerQuery', scannerQuery)
@@ -84,7 +73,6 @@ fastify.decorate('geofence', geofence)
 fastify.decorate('translatorFactory', translatorFactory)
 fastify.decorate('discordQueue', [])
 fastify.decorate('telegramQueue', [])
-fastify.decorate('hookQueue', [])
 fastify.decorate('matchedQueue', [])
 
 const discordCommando = config.discord.enabled ? new DiscordCommando(config.discord.token[0], query, scannerQuery, config, logs, GameData, PoracleInfo, dts, geofence, translatorFactory) : null
@@ -187,7 +175,6 @@ function handleShutdown() {
 	if (telegramChannel) workerSaves.push(telegramChannel.saveTimeouts())
 	if (discordWebhookWorker) workerSaves.push(discordWebhookWorker.saveTimeouts())
 
-	gymCache.save(true)
 	Promise.all(workerSaves)
 		.then(() => {
 			log.info('Poracle shutdown - complete')
@@ -197,8 +184,6 @@ function handleShutdown() {
 			process.exit()
 		})
 }
-
-const workers = []
 
 async function processPogoEvents() {
 	let file
@@ -212,14 +197,10 @@ async function processPogoEvents() {
 		return
 	}
 
-	for (const relayWorker of workers) {
-		relayWorker.commandPort.postMessage(
-			{
-				type: 'eventBroadcast',
-				data: file,
-			},
-		)
-	}
+	sendCommandToWorkers({
+		type: 'eventBroadcast',
+		data: file,
+	})
 
 	setTimeout(processPogoEvents, 6 * 60 * 60 * 1000) // 6 hours
 }
@@ -236,51 +217,17 @@ async function processPossibleShiny() {
 		return
 	}
 
-	for (const relayWorker of workers) {
-		relayWorker.commandPort.postMessage(
-			{
-				type: 'shinyBroadcast',
-				data: file,
-			},
-		)
-	}
+	sendCommandToWorkers({
+		type: 'shinyBroadcast',
+		data: file,
+	})
 
 	setTimeout(processPossibleShiny, 6 * 60 * 60 * 1000) // 6 hours
-}
-
-let ohbem
-async function initialiseOhbem() {
-	try {
-		const pokemonData = await Ohbem.fetchPokemonData()
-
-		ohbem = new Ohbem({
-			// all of the following options are optional and these (except for pokemonData) are the default values
-			// read the documentation for more information
-			leagues: {
-				little: {
-					little: !config.pvp.littleLeagueCanEvolve,
-					cap: 500,
-				},
-				great: 1500,
-				ultra: 2500,
-				//	master: null,
-			},
-			levelCaps: config.pvp.levelCaps,
-			// The following field is required to use queryPvPRank
-			// You can skip populating it if you only want to use other helper methods
-			pokemonData,
-			cachingStrategy: config.pvp.cacheStrategy === 'memoryheavy' ? Ohbem.cachingStrategies.memoryHeavy : Ohbem.cachingStrategies.balanced,
-		})
-	} catch (err) {
-		log.error('Error initialising ohbem', err)
-	}
 }
 
 const UserRateChecker = require('./userRateLimit')
 
 const rateChecker = new UserRateChecker(config)
-
-const maxWorkers = config.tuning.webhookProcessingWorkers
 
 async function processMessages(msgs) {
 	let newRateLimits = false
@@ -391,145 +338,25 @@ async function processMessages(msgs) {
 	}
 
 	if (newRateLimits) {
-		// Publish new rate limits to controllers
+		// Publish new rate limits to matched workers
 		const badguys = rateChecker.getBadBoys()
 
-		for (const worker of workers) {
-			worker.commandPort.postMessage({
-				type: 'badguys',
-				badguys,
-			})
-		}
+		sendCommandToWorkers({
+			type: 'badguys',
+			badguys,
+		})
 	}
-}
-
-let worker = new Worker(path.join(__dirname, './weatherWorker.js'))
-let queueChannel = new MessageChannel()
-let commandChannel = new MessageChannel()
-
-worker.postMessage({
-	type: 'queuePort',
-	queuePort: queueChannel.port2,
-	commandPort: commandChannel.port2,
-}, [queueChannel.port2, commandChannel.port2])
-
-const weatherWorker = {
-	worker,
-	commandPort: commandChannel.port1,
-	queuePort: queueChannel.port1,
-}
-
-worker = new Worker(path.join(__dirname, './statsWorker.js'))
-queueChannel = new MessageChannel()
-commandChannel = new MessageChannel()
-
-worker.postMessage({
-	type: 'queuePort',
-	queuePort: queueChannel.port2,
-	commandPort: commandChannel.port2,
-}, [queueChannel.port2, commandChannel.port2])
-
-const statsWorker = {
-	worker,
-	commandPort: commandChannel.port1,
-	queuePort: queueChannel.port1,
-}
-
-function processMessageFromControllers(msg) {
-	// Relay commands of weather type to weather controller
-	if (msg.type === 'weather') {
-		weatherWorker.commandPort.postMessage(msg)
-	}
-	// No commands from controllers to stats, but would be relayed here
-}
-
-function sendCommandToWorkers(msg) {
-	for (const relayWorker of workers) {
-		relayWorker.commandPort.postMessage(msg)
-	}
-	// Also relay DTS/geofence/badguys commands to matched workers
-	if (['reloadDts', 'reloadGeofence', 'badguys', 'eventBroadcast', 'shinyBroadcast'].includes(msg.type)) {
-		for (const mw of matchedWorkers) {
-			mw.commandPort.postMessage(msg)
-		}
-	}
-}
-
-function sendCommandToWeather(msg) {
-	weatherWorker.commandPort.postMessage(msg)
-}
-
-function processMessageFromWeather(msg) {
-	// Relay broadcasts from weather to all controllers
-
-	if (msg.type === 'weatherBroadcast') {
-		PoracleInfo.lastWeatherBroadcast = msg.data
-
-		sendCommandToWorkers(msg)
-	}
-}
-
-function processMessageFromStats(msg) {
-	// Relay broadcasts from stats to all controllers
-
-	if (msg.type === 'statsBroadcast') {
-		PoracleInfo.lastStatsBroadcast = msg.data
-
-		sendCommandToWorkers(msg)
-	}
-}
-
-weatherWorker.commandPort.on('message', processMessageFromWeather)
-weatherWorker.queuePort.on('message', (res) => {
-	processMessages(res.queue)
-})
-
-statsWorker.commandPort.on('message', processMessageFromStats)
-statsWorker.queuePort.on('message', (res) => {
-	processMessages(res.queue)
-})
-
-for (let w = 0; w < maxWorkers; w++) {
-	worker = new Worker(path.join(__dirname, './controllerWorker.js'), {
-		workerData:
-		{
-			workerId: w + 1,
-		},
-	})
-
-	queueChannel = new MessageChannel()
-	commandChannel = new MessageChannel()
-
-	worker.postMessage({
-		type: 'queuePort',
-		queuePort: queueChannel.port2,
-		commandPort: commandChannel.port2,
-	}, [queueChannel.port2, commandChannel.port2])
-
-	queueChannel.port1.on('message', (res) => {
-		processMessages(res.queue)
-	})
-	commandChannel.port1.on('message', processMessageFromControllers)
-
-	//	worker.on('error', (error) => console.error('error', error))
-	//	worker.on('exit', () => console.log('exit'))
-
-	workers.push({
-		worker,
-		commandPort: commandChannel.port1,
-		queuePort: queueChannel.port1,
-	})
 }
 
 // Matched worker - handles pre-matched payloads from the Go processor
 const matchedWorkers = []
 
-worker = new Worker(path.join(__dirname, './matchedWorker.js'), {
+let worker = new Worker(path.join(__dirname, './matchedWorker.js'), {
 	workerData: { workerId: 1 },
 })
 
-queueChannel = new MessageChannel()
-commandChannel = new MessageChannel()
+let queueChannel = new MessageChannel()
+let commandChannel = new MessageChannel()
 
 worker.postMessage({
 	type: 'queuePort',
@@ -547,7 +374,7 @@ matchedWorkers.push({
 	queuePort: queueChannel.port1,
 })
 
-function sendCommandToMatchedWorkers(msg) {
+function sendCommandToWorkers(msg) {
 	for (const mw of matchedWorkers) {
 		mw.commandPort.postMessage(msg)
 	}
@@ -555,329 +382,10 @@ function sendCommandToMatchedWorkers(msg) {
 
 process.on('SIGUSR2', () => {
 	writeHeapSnapshot()
-	for (const dumpWorker of workers) {
-		dumpWorker.commandPort.postMessage({ type: 'heapdump' })
-	}
 	for (const mw of matchedWorkers) {
 		mw.commandPort.postMessage({ type: 'heapdump' })
 	}
-	weatherWorker.commandPort.postMessage({ type: 'heapdump' })
-	statsWorker.commandPort.postMessage({ type: 'heapdump' })
 })
-
-let currentWorkerNo = 0
-
-async function processOne(hook) {
-	currentWorkerNo = (currentWorkerNo + 1) % maxWorkers
-
-	try {
-		const processHook = async (hookToProcess) => { await workers[currentWorkerNo].queuePort.postMessage(hookToProcess) }
-		const processWeather = async (hookToProcess) => { await weatherWorker.queuePort.postMessage(hookToProcess) }
-		const processStats = async (hookToProcess) => { await statsWorker.queuePort.postMessage(hookToProcess) }
-
-		switch (hook.type) {
-			case 'pokemon': {
-				if (config.general.disablePokemon) {
-					fastify.controllerLog.debug(`${hook.message.encounter_id}: Wild encounter was received but set to be ignored in config`)
-					break
-				}
-				if (!hook.message.poracleTest && !config.tuning?.disablePokemonCache) {
-					fastify.webhooks.info(`pokemon ${JSON.stringify(hook.message)}`)
-					const verifiedSpawnTime = (hook.message.verified || hook.message.disappear_time_verified)
-					const cacheKey = `${hook.message.encounter_id}${verifiedSpawnTime ? 'T' : 'F'}${hook.message.cp}`
-					if (fastify.cache.get(cacheKey)) {
-						fastify.controllerLog.debug(`${hook.message.encounter_id}: Wild encounter was sent again too soon, ignoring`)
-						break
-					}
-
-					// Set cache expiry to calculated pokemon expiry + 5 minutes to cope with near misses; or 60 minutes (3600s) in the case of an unverified spawn
-
-					const secondsRemaining = !verifiedSpawnTime ? 3600 : (Math.max((hook.message.disappear_time * 1000 - Date.now()) / 1000, 0) + 300)
-
-					fastify.cache.set(cacheKey, 'x', secondsRemaining)
-				}
-
-				if (ohbem) {
-					const data = hook.message
-					const encountered = !(!(['string', 'number'].includes(typeof data.individual_attack) && (+data.individual_attack + 1))
-						|| !(['string', 'number'].includes(typeof data.individual_defense) && (+data.individual_defense + 1))
-						|| !(['string', 'number'].includes(typeof data.individual_stamina) && (+data.individual_stamina + 1)))
-
-					if (encountered) {
-						try {
-							const ohbemstart = process.hrtime()
-							data.ohbem_pvp = ohbem.queryPvPRank(+data.pokemon_id, +data.form || 0, +data.costume, +data.gender, +data.individual_attack, +data.individual_defense, +data.individual_stamina, +data.pokemon_level)
-							const ohbemend = process.hrtime(ohbemstart)
-							const ohbemms = ohbemend[1] / 1000000
-							fastify.controllerLog.debug(`${hook.message.encounter_id}: PVP time: ${ohbemms}ms`)
-						} catch (err) {
-							fastify.controllerLog.error(`${hook.message.encounter_id}: Ohbem exception - params ohbem.queryPvPRank(${+data.pokemon_id}, ${+data.form || 0}, ${+data.costume}, ${+data.gender}, ${+data.individual_attack}, ${+data.individual_defense}, ${+data.individual_stamina}, ${+data.pokemon_level}) - continuing`, err)
-						}
-					}
-				}
-
-				await processHook(hook)
-
-				// also post directly to stats controller
-				if (!hook.message.poracleTest) await processStats(hook)
-				break
-			}
-			case 'raid': {
-				if (config.general.disableRaid) {
-					fastify.controllerLog.debug(`${hook.message.gym_id}: Raid was received but set to be ignored in config`)
-
-					break
-				}
-				if (!hook.message.poracleTest) {
-					fastify.webhooks.info(`raid ${JSON.stringify(hook.message)}`)
-					const cacheKey = `${hook.message.gym_id}${hook.message.end}${hook.message.pokemon_id}`
-
-					const raidDetails = fastify.cache.get(cacheKey)
-					let rsvpDifference = false
-					const oldRsvpsLen = raidDetails?.rsvps?.length ?? 0
-					const newRsvpsLen = hook.message.rsvps?.length ?? 0
-					if (newRsvpsLen > oldRsvpsLen) {
-						rsvpDifference = true
-					} else if (raidDetails && raidDetails.rsvps && hook.message.rsvps) {
-						// Allow for old timeslots to have disappeared, so only compare the
-						// new ones present
-						for (let x = 0; x < newRsvpsLen; x++) {
-							const newRsvp = hook.message.rsvps[x]
-
-							let found = false
-							for (const oldRsvp of raidDetails.rsvps) {
-								if (newRsvp.timeslot === oldRsvp.timeslot) {
-									found = true
-									if (newRsvp.going_count !== oldRsvp.going_count
-											|| newRsvp.maybe_count !== oldRsvp.maybe_count) {
-										rsvpDifference = true
-									}
-									break
-								}
-							}
-
-							if (found) {
-								if (rsvpDifference) break
-							} else {
-								// timeslot was not in old rsvps
-								rsvpDifference = true
-								break
-							}
-						}
-					}
-
-					if (raidDetails && !rsvpDifference) {
-						fastify.controllerLog.debug(`${hook.message.gym_id}: Raid was sent again too soon, ignoring`)
-						break
-					}
-
-					hook.message.firstNotification = !raidDetails
-
-					fastify.cache.set(cacheKey, {
-						rsvps: hook.message.rsvps,
-					})
-				}
-
-				await processHook(hook)
-				break
-			}
-			case 'invasion':
-			case 'pokestop': {
-				if (config.general.disablePokestop) {
-					fastify.controllerLog.debug(`${hook.message.pokestop_id}: Pokestop was received but set to be ignored in config`)
-					break
-				}
-				fastify.webhooks.info(`pokestop(${hook.type}) ${JSON.stringify(hook.message)}`)
-				const incidentExpiration = hook.message.incident_expiration ?? hook.message.incident_expire_timestamp
-				const lureExpiration = hook.message.lure_expiration
-				const incidentConfirmed = hook.message.confirmed
-				const incidentDisplayType = hook.message.display_type
-				if (!lureExpiration && !incidentExpiration) {
-					fastify.controllerLog.debug(`${hook.message.pokestop_id}: Pokestop received but no invasion or lure information, ignoring`)
-					break
-				}
-
-				if (lureExpiration && !config.general.disableLure) {
-					const cacheKey = `${hook.message.pokestop_id}L${lureExpiration}`
-
-					if (fastify.cache.get(cacheKey) && !hook.message.poracleTest) {
-						fastify.controllerLog.debug(`${hook.message.pokestop_id}: Lure was sent again too soon, ignoring`)
-					} else {
-						// Set cache expiry to calculated invasion expiry time + 5 minutes to cope with near misses
-						const secondsRemaining = Math.max((lureExpiration * 1000 - Date.now()) / 1000, 0) + 300
-
-						fastify.cache.set(cacheKey, 'x', secondsRemaining)
-						hook.type = 'lure'
-						await processHook(hook)
-					}
-				}
-
-				if (incidentExpiration && !config.general.disableInvasion && (!config.general.disableUnconfirmedInvasion || incidentDisplayType > '6')) {
-					const cacheKey = `${hook.message.pokestop_id}I${incidentExpiration}`
-
-					if (fastify.cache.get(cacheKey) && !hook.message.poracleTest) {
-						fastify.controllerLog.debug(`${hook.message.pokestop_id}: Invasion was sent again too soon, ignoring`)
-					} else {
-						// Set cache expiry to calculated invasion expiry time + 5 minutes to cope with near misses
-						const secondsRemaining = Math.max((incidentExpiration * 1000 - Date.now()) / 1000, 0) + 300
-
-						fastify.cache.set(cacheKey, 'x', secondsRemaining)
-
-						hook.type = 'invasion'
-						await processHook(hook)
-					}
-				}
-
-				if (incidentConfirmed && !config.general.disableInvasion && config.general.processConfirmedInvasionLineups) {
-					const cacheKey = `${hook.message.pokestop_id}I${incidentExpiration}H02`
-
-					if (fastify.cache.get(cacheKey) && !hook.message.poracleTest) {
-						fastify.controllerLog.debug(`${hook.message.pokestop_id}: Invasion was sent again too soon, ignoring`)
-					} else {
-						// Set cache expiry to calculated invasion expiry time + 5 minutes to cope with near misses
-						const secondsRemaining = Math.max((incidentExpiration * 1000 - Date.now()) / 1000, 0) + 300
-
-						fastify.cache.set(cacheKey, 'x', secondsRemaining)
-
-						hook.type = 'invasion'
-						await processHook(hook)
-					}
-				}
-				break
-			}
-			case 'fort_update': {
-				const fortId = hook.message.new?.id ?? hook.message.old?.id
-				if (config.general.disableFortUpdate) {
-					fastify.controllerLog.debug(`${fortId}: Fort update was received but set to be ignored in config`)
-					break
-				}
-				if (!hook.message.poracleTest) {
-					fastify.webhooks.info(`fort_update ${JSON.stringify(hook.message)}`)
-					// Caching not relevant, no duplicates
-				}
-				await processHook(hook)
-				break
-			}
-			case 'quest': {
-				if (config.general.disableQuest) {
-					fastify.controllerLog.debug(`${hook.message.pokestop_id}: Quest was received but set to be ignored in config`)
-					break
-				}
-				if (!hook.message.poracleTest) {
-					fastify.webhooks.info(`quest ${JSON.stringify(hook.message)}`)
-					const cacheKey = `${hook.message.pokestop_id}_${stringify(hook.message.rewards)}`
-
-					if (fastify.cache.get(cacheKey)) {
-						fastify.controllerLog.debug(`${hook.message.pokestop_id}: Quest was sent again too soon, ignoring`)
-						break
-					}
-					fastify.cache.set(cacheKey, 'x')
-				}
-				await processHook(hook)
-				break
-			}
-			case 'gym':
-			case 'gym_details': {
-				if (!hook.message.poracleTest) {
-					const id = hook.message.id ?? hook.message.gym_id
-					const team = hook.message.team_id ?? hook.message.team
-					const inBattle = hook.message.is_in_battle ?? hook.message.in_battle ?? 0
-
-					if (config.general.disableGym) {
-						fastify.controllerLog.debug(`${id}: Gym was received but set to be ignored in config`)
-						break
-					}
-					fastify.webhooks.info(`gym(${hook.type})  ${JSON.stringify(hook.message)}`)
-
-					const cacheKey = `${id}_battle`
-					const cachedGymDetails = fastify.gymCache.getKey(id)
-					const tooSoon = fastify.cache.get(cacheKey)
-
-					if (inBattle) {
-						fastify.cache.set(cacheKey, 'x', 5 * 60)
-					}
-
-					if (cachedGymDetails && cachedGymDetails.team_id === team && cachedGymDetails.slots_available === hook.message.slots_available && tooSoon) {
-						fastify.controllerLog.debug(`${id}: Gym battle cooldown time hasn't ended, ignoring`)
-						break
-					}
-
-					hook.message.old_team_id = cachedGymDetails ? cachedGymDetails.team_id : -1
-					hook.message.old_slots_available = cachedGymDetails ? cachedGymDetails.slots_available : -1
-					hook.message.old_in_battle = cachedGymDetails ? cachedGymDetails.in_battle : -1
-					hook.message.last_owner_id = cachedGymDetails ? cachedGymDetails.last_owner_id : -1
-
-					fastify.gymCache.setKey(id, {
-						team_id: team,
-						slots_available: hook.message.slots_available,
-						last_owner_id: team || hook.message.last_owner_id,
-						in_battle: inBattle,
-					}, 0)
-				}
-
-				await processHook(hook)
-				break
-			}
-
-			case 'nest': {
-				if (config.general.disableNest) {
-					fastify.controllerLog.debug(`${hook.message.nest_id}: Nest was received but set to be ignored in config`)
-					break
-				}
-				if (!hook.message.poracleTest) {
-					fastify.webhooks.info(`nest ${JSON.stringify(hook.message)}`)
-					const cacheKey = `${hook.message.nest_id}_${hook.message.pokemon_id}_${hook.message.reset_time}`
-					if (fastify.cache.get(cacheKey)) {
-						fastify.controllerLog.debug(`${hook.message.nest_id}: Nest was sent again too soon, ignoring`)
-						break
-					}
-
-					// expiry time -- 14 days (!) after reset time
-					const secondsRemaining = Math.max(((hook.message.reset_time + 14 * 24 * 60 * 60) * 1000 - Date.now()) / 1000, 0)
-
-					fastify.cache.set(cacheKey, 'x', secondsRemaining)
-				}
-				await processHook(hook)
-				break
-			}
-
-			case 'weather': {
-				if (config.general.disableWeather) break
-				fastify.webhooks.info(`weather ${JSON.stringify(hook.message)}`)
-				if (hook.message.updated) {
-					const weatherCellKey = S2.latLngToKey(hook.message.latitude, hook.message.longitude, 10)
-					hook.message.s2_cell_id = S2.keyToId(weatherCellKey)
-				}
-				const updateTimestamp = hook.message.time_changed || hook.message.updated
-				const hookHourTimestamp = updateTimestamp - (updateTimestamp % 3600)
-				const cacheKey = `${hook.message.s2_cell_id}_${hookHourTimestamp}`
-				if (fastify.cache.get(cacheKey)) {
-					fastify.controllerLog.debug(`${hook.message.s2_cell_id}: Weather for this cell was sent again too soon, ignoring`)
-					break
-				}
-				fastify.cache.set(cacheKey, 'x')
-
-				// post directly to weather controller
-				await processWeather(hook)
-				break
-			}
-			default:
-				fastify.webhooks.info(`${hook.type} [unrecognised] ${JSON.stringify(hook.message)}`)
-				break
-		}
-	} catch (err) {
-		fastify.controllerLog.error('Hook processor error (something wasn\'t caught higher)', err)
-	}
-}
-
-async function handleAlarms() {
-	if (fastify.hookQueue.length) {
-		if ((Math.random() * 1000) > 995) fastify.logger.verbose(`Inbound WebhookQueue is currently ${fastify.hookQueue.length}`)
-
-		await processOne(fastify.hookQueue.shift())
-		setImmediate(handleAlarms)
-	}
-}
 
 let currentMatchedWorkerNo = 0
 
@@ -917,14 +425,11 @@ async function currentStatus() {
 		discordWebhookWorker ? queueCount(discordWebhookWorker.webhookQueue) : {},
 	)
 
-	const infoMessage = `[Main] Queues: Inbound webhook ${fastify.hookQueue.length} | Matched: ${fastify.matchedQueue.length} | Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength}`
+	const infoMessage = `[Main] Queues: Matched: ${fastify.matchedQueue.length} | Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength}`
 	log.info(infoMessage)
-	const cacheMessage = `Duplicate cache stats: ${JSON.stringify(fastify.cache.getStats())}`
-	log.verbose(cacheMessage)
 
 	PoracleInfo.status = {
 		queueInfo: infoMessage,
-		cacheInfo: cacheMessage,
 		queueSummary,
 	}
 }
@@ -1008,10 +513,6 @@ async function run() {
 	process.on('SIGINT', handleShutdown)
 	process.on('SIGTERM', handleShutdown)
 
-	if (config.pvp.dataSource === 'internal' || config.pvp.dataSource === 'compare') {
-		initialiseOhbem()
-	}
-
 	setTimeout(processPogoEvents, 30000)
 	setTimeout(processPossibleShiny, 30000)
 
@@ -1028,9 +529,6 @@ async function run() {
 		log.info('Change in geofence detected, triggering reload')
 		try {
 			sendCommandToWorkers({
-				type: 'reloadGeofence',
-			})
-			sendCommandToWeather({
 				type: 'reloadGeofence',
 			})
 
@@ -1052,9 +550,6 @@ async function run() {
 		log.info('Change in DTS detected, triggering reload')
 		try {
 			sendCommandToWorkers({
-				type: 'reloadDts',
-			})
-			sendCommandToWeather({
 				type: 'reloadDts',
 			})
 
@@ -1122,8 +617,9 @@ async function run() {
 			processMessages(res)
 		})
 
-		discordCommando.on('addWebhook', (res) => {
-			processOne(res)
+		discordCommando.on('addMatchedQueue', (res) => {
+			fastify.matchedQueue.push(res)
+			handleMatchedAlarms()
 		})
 
 		discordCommando.on('refreshAlertCache', () => {
@@ -1163,8 +659,9 @@ async function run() {
 			processMessages(res)
 		})
 
-		telegram.on('addWebhook', (res) => {
-			processOne(res)
+		telegram.on('addMatchedQueue', (res) => {
+			fastify.matchedQueue.push(res)
+			handleMatchedAlarms()
 		})
 
 		telegram.on('refreshAlertCache', () => {
@@ -1199,7 +696,6 @@ async function run() {
 
 function startPoracle() {
 	run()
-	setInterval(handleAlarms, 100)
 	setInterval(handleMatchedAlarms, 100)
 	setInterval(currentStatus, 60000)
 }

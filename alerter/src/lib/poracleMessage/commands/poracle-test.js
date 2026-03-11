@@ -144,9 +144,22 @@ exports.run = async (client, msg, args, options) => {
 
 		await msg.reply(`Queueing ${hookType} test hook [${testId}] template [${template}]`)
 
-		client.addToWebhookQueue({
+		client.addToMatchedQueue({
 			type: dataItem.type,
 			message: hook,
+			matched_users: [{
+				id: target.id,
+				name: target.name,
+				type: target.type,
+				language: language,
+				latitude: human.latitude,
+				longitude: human.longitude,
+				template: template,
+				clean: false,
+				ping: '',
+				distance: 0,
+			}],
+			matched_areas: [],
 		})
 	} catch (err) {
 		client.log.error(`poracle-test command ${msg.content} unhappy:`, err)

@@ -22,7 +22,7 @@ class PoracleTelegramState {
 		this.hastebin = hastebin
 		this.updatedDiff = diff
 		this.addToMessageQueue = ctx.poracleAddMessageQueue
-		this.addToWebhookQueue = ctx.poracleAddWebhookQueue
+		this.addToMatchedQueue = ctx.poracleAddMatchedQueue
 		this.triggerReloadAlerts = ctx.poracleReloadAlerts
 	}
 
