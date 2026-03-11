@@ -1,0 +1,45 @@
+[server]
+listen_addr = ":4200"
+ip_whitelist = ["127.0.0.1"]
+
+[database]
+dsn = "poracle:password@tcp(127.0.0.1:3306)/poracle?parseTime=true"
+
+[alerter]
+url = "http://localhost:4201"
+
+[geofence]
+paths = ["geofence/geofence.json"]
+
+[pvp]
+pvp_query_max_rank = 100
+pvp_filter_max_rank = 100
+pvp_evolution_direct_tracking = true
+level_caps = [50]
+pvp_filter_great_min_cp = 1400
+pvp_filter_ultra_min_cp = 2400
+pvp_filter_little_min_cp = 400
+include_mega_evolution = false
+
+[weather]
+enable_inference = true
+
+[tuning]
+reload_interval_secs = 60
+encounter_cache_ttl = 3600
+worker_pool_size = 4
+batch_size = 50
+flush_interval_millis = 100
+
+[areaSecurity]
+enabled = false
+strict_locations = false
+
+[logging]
+level = "info"
+file_logging_enabled = true
+filename = "logs/processor.log"
+max_size = 50
+max_age = 30
+max_backups = 5
+compress = false
