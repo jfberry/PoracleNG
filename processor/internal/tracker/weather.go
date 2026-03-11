@@ -10,12 +10,13 @@ import (
 
 // WeatherChange represents a detected weather change event.
 type WeatherChange struct {
-	Longitude         float64 `json:"longitude"`
-	Latitude          float64 `json:"latitude"`
-	S2CellID          string  `json:"s2_cell_id"`
-	GameplayCondition int     `json:"gameplay_condition"`
-	Updated           int64   `json:"updated"`
-	Source            string  `json:"source"`
+	Longitude            float64 `json:"longitude"`
+	Latitude             float64 `json:"latitude"`
+	S2CellID             string  `json:"s2_cell_id"`
+	GameplayCondition    int     `json:"gameplay_condition"`
+	OldGameplayCondition int     `json:"old_gameplay_condition"`
+	Updated              int64   `json:"updated"`
+	Source               string  `json:"source"`
 }
 
 // localCellData holds locally inferred weather data per cell.
@@ -62,7 +63,8 @@ func GetWeatherCellID(lat, lon float64) string {
 }
 
 // UpdateFromWebhook updates weather state from a direct weather webhook.
-func (wt *WeatherTracker) UpdateFromWebhook(cellID string, condition int, timestamp int64) {
+// Emits a change event if the weather has changed from the previous hour.
+func (wt *WeatherTracker) UpdateFromWebhook(cellID string, condition int, timestamp int64, lat, lon float64) {
 	wt.mu.Lock()
 	defer wt.mu.Unlock()
 
@@ -73,8 +75,33 @@ func (wt *WeatherTracker) UpdateFromWebhook(cellID string, condition int, timest
 	}
 
 	hourTimestamp := timestamp - (timestamp % 3600)
+	previousHourTimestamp := hourTimestamp - 3600
+
+	// Check if weather changed from previous hour
+	previousWeather, hasPrevious := cd.hourWeather[previousHourTimestamp]
+	existingWeather, hasCurrentHour := cd.hourWeather[hourTimestamp]
+
+	isNew := !hasCurrentHour || existingWeather != condition || cd.lastCurrentWeatherCheck < hourTimestamp
+	changed := hasPrevious && previousWeather != condition && isNew
+
 	cd.hourWeather[hourTimestamp] = condition
 	cd.lastCurrentWeatherCheck = timestamp
+
+	if changed {
+		// Send non-blocking
+		select {
+		case wt.changes <- WeatherChange{
+			Longitude:            lon,
+			Latitude:             lat,
+			S2CellID:             cellID,
+			GameplayCondition:    condition,
+			OldGameplayCondition: previousWeather,
+			Updated:              timestamp,
+			Source:               "webhook",
+		}:
+		default:
+		}
+	}
 }
 
 // GetCurrentWeatherInCell returns the current weather condition for a cell.
@@ -168,12 +195,13 @@ func (wt *WeatherTracker) CheckWeatherOnMonster(cellID string, lat, lon float64,
 				// Send non-blocking
 				select {
 				case wt.changes <- WeatherChange{
-					Longitude:         lon,
-					Latitude:          lat,
-					S2CellID:          cellID,
-					GameplayCondition: monsterWeather,
-					Updated:           now,
-					Source:            "fromMonster",
+					Longitude:            lon,
+					Latitude:             lat,
+					S2CellID:             cellID,
+					GameplayCondition:    monsterWeather,
+					OldGameplayCondition: currentWeather,
+					Updated:              now,
+					Source:               "fromMonster",
 				}:
 				default:
 				}

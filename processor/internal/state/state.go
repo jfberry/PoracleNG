@@ -9,13 +9,19 @@ import (
 
 // State holds an immutable snapshot of all tracking data.
 type State struct {
-	Humans   map[string]*db.Human
-	Monsters *db.MonsterIndex
-	Raids    []*db.RaidTracking
-	Eggs     []*db.EggTracking
-	Profiles map[db.ProfileKey]*db.Profile
-	Geofence *geofence.SpatialIndex
-	Fences   []geofence.Fence
+	Humans    map[string]*db.Human
+	Monsters  *db.MonsterIndex
+	Raids     []*db.RaidTracking
+	Eggs      []*db.EggTracking
+	Profiles  map[db.ProfileKey]*db.Profile
+	Invasions []*db.InvasionTracking
+	Quests    []*db.QuestTracking
+	Lures     []*db.LureTracking
+	Gyms      []*db.GymTracking
+	Nests     []*db.NestTracking
+	Forts     []*db.FortTracking
+	Geofence  *geofence.SpatialIndex
+	Fences    []geofence.Fence
 }
 
 // Manager manages the current state with atomic swaps.

@@ -19,6 +19,12 @@ type Processor interface {
 	ProcessPokemon(raw json.RawMessage) error
 	ProcessRaid(raw json.RawMessage) error
 	ProcessWeather(raw json.RawMessage) error
+	ProcessInvasion(raw json.RawMessage) error
+	ProcessQuest(raw json.RawMessage) error
+	ProcessLure(raw json.RawMessage) error
+	ProcessGym(raw json.RawMessage) error
+	ProcessNest(raw json.RawMessage) error
+	ProcessFortUpdate(raw json.RawMessage) error
 }
 
 // NewHandler creates a new webhook handler.
@@ -73,8 +79,56 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if err := h.processor.ProcessWeather(hook.Message); err != nil {
 				log.Errorf("Failed to process weather: %s", err)
 			}
+		case "invasion":
+			if err := h.processor.ProcessInvasion(hook.Message); err != nil {
+				log.Errorf("Failed to process invasion: %s", err)
+			}
+		case "pokestop":
+			// Pokestop webhooks may contain invasion or lure data - route based on fields
+			if err := h.routePokestop(hook.Message); err != nil {
+				log.Errorf("Failed to process pokestop: %s", err)
+			}
+		case "quest":
+			if err := h.processor.ProcessQuest(hook.Message); err != nil {
+				log.Errorf("Failed to process quest: %s", err)
+			}
+		case "gym", "gym_details":
+			if err := h.processor.ProcessGym(hook.Message); err != nil {
+				log.Errorf("Failed to process gym: %s", err)
+			}
+		case "nest":
+			if err := h.processor.ProcessNest(hook.Message); err != nil {
+				log.Errorf("Failed to process nest: %s", err)
+			}
+		case "fort_update":
+			if err := h.processor.ProcessFortUpdate(hook.Message); err != nil {
+				log.Errorf("Failed to process fort_update: %s", err)
+			}
 		}
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// routePokestop inspects a pokestop webhook to determine if it's an invasion or lure.
+func (h *Handler) routePokestop(raw json.RawMessage) error {
+	// Peek at fields to determine type
+	var peek struct {
+		LureExpiration     int64 `json:"lure_expiration"`
+		IncidentExpiration int64 `json:"incident_expiration"`
+		IncidentGruntType  int   `json:"incident_grunt_type"`
+	}
+	if err := json.Unmarshal(raw, &peek); err != nil {
+		return err
+	}
+
+	if peek.LureExpiration > 0 {
+		return h.processor.ProcessLure(raw)
+	}
+	if peek.IncidentExpiration > 0 || peek.IncidentGruntType > 0 {
+		return h.processor.ProcessInvasion(raw)
+	}
+
+	// Default: try as invasion
+	return h.processor.ProcessInvasion(raw)
 }

@@ -23,6 +23,7 @@ include_mega_evolution = false
 
 [weather]
 enable_inference = true
+enable_change_alert = true
 
 [tuning]
 reload_interval_secs = 60

@@ -58,7 +58,8 @@ type PVPConfig struct {
 }
 
 type WeatherConfig struct {
-	EnableInference bool `toml:"enable_inference"`
+	EnableInference   bool `toml:"enable_inference"`
+	EnableChangeAlert bool `toml:"enable_change_alert"`
 }
 
 type TuningConfig struct {

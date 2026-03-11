@@ -174,3 +174,81 @@ type EncounterOld struct {
 	CP        int     `json:"cp"`
 	IV        float64 `json:"iv"`
 }
+
+// InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.
+type InvasionWebhook struct {
+	PokestopID              string  `json:"pokestop_id"`
+	Name                    string  `json:"name"`
+	Latitude                float64 `json:"latitude"`
+	Longitude               float64 `json:"longitude"`
+	IncidentExpiration      int64   `json:"incident_expiration"`
+	IncidentExpireTimestamp int64   `json:"incident_expire_timestamp"`
+	IncidentGruntType       int     `json:"incident_grunt_type"`
+	GruntType               int     `json:"grunt_type"`
+	Gender                  int     `json:"gender"`
+	DisplayType             int     `json:"display_type"`
+	IncidentDisplayType     int     `json:"incident_display_type"`
+	Confirmed               bool    `json:"confirmed"`
+}
+
+// QuestWebhook mirrors Golbat's quest webhook message.
+type QuestWebhook struct {
+	PokestopID string        `json:"pokestop_id"`
+	Name       string        `json:"pokestop_name"`
+	Latitude   float64       `json:"latitude"`
+	Longitude  float64       `json:"longitude"`
+	Rewards    []QuestReward `json:"rewards"`
+}
+
+// QuestReward represents a single quest reward.
+type QuestReward struct {
+	Type int                    `json:"type"`
+	Info map[string]interface{} `json:"info"`
+}
+
+// LureWebhook mirrors a pokestop webhook with lure data.
+type LureWebhook struct {
+	PokestopID     string  `json:"pokestop_id"`
+	Name           string  `json:"name"`
+	Latitude       float64 `json:"latitude"`
+	Longitude      float64 `json:"longitude"`
+	LureExpiration int64   `json:"lure_expiration"`
+	LureID         int     `json:"lure_id"`
+}
+
+// GymWebhook mirrors Golbat's gym/gym_details webhook message.
+type GymWebhook struct {
+	GymID          string   `json:"gym_id"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Latitude       float64  `json:"latitude"`
+	Longitude      float64  `json:"longitude"`
+	TeamID         int      `json:"team_id"`
+	Team           int      `json:"team"`
+	SlotsAvailable int      `json:"slots_available"`
+	IsInBattle     FlexBool `json:"is_in_battle"`
+	InBattle       FlexBool `json:"in_battle"`
+	LastOwnerID    int      `json:"last_owner_id"`
+}
+
+// NestWebhook mirrors a nest webhook message.
+type NestWebhook struct {
+	NestID     int64   `json:"nest_id"`
+	PokemonID  int     `json:"pokemon_id"`
+	Form       int     `json:"form"`
+	PokemonAvg float64 `json:"pokemon_avg"`
+	Latitude   float64 `json:"latitude"`
+	Longitude  float64 `json:"longitude"`
+	ResetTime  int64   `json:"reset_time"`
+}
+
+// FortWebhook mirrors a fort_update webhook message.
+type FortWebhook struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Latitude    float64  `json:"latitude"`
+	Longitude   float64  `json:"longitude"`
+	FortType    string   `json:"type"`
+	IsEmpty     bool     `json:"is_empty"`
+	ChangeTypes []string `json:"change_types"`
+}

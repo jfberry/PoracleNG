@@ -85,3 +85,71 @@ func (dc *DuplicateCache) CheckRaid(gymID string, end int64, pokemonID int, rsvp
 	// TODO: implement full RSVP comparison here
 	return true, false
 }
+
+// CheckInvasion returns true if this invasion was already seen (duplicate).
+// Key: {pokestop_id}I{incident_expiration}
+func (dc *DuplicateCache) CheckInvasion(pokestopID string, expiration int64) bool {
+	key := fmt.Sprintf("%sI%d", pokestopID, expiration)
+
+	if dc.cache.Get(key) != nil {
+		return true
+	}
+
+	now := time.Now().Unix()
+	remaining := expiration - now + 300
+	if remaining <= 0 {
+		remaining = 60
+	}
+	dc.cache.Set(key, true, time.Duration(remaining)*time.Second)
+	return false
+}
+
+// CheckQuest returns true if this quest was already seen (duplicate).
+// Key: {pokestop_id}_{rewards_hash}
+func (dc *DuplicateCache) CheckQuest(pokestopID string, rewardsKey string) bool {
+	key := fmt.Sprintf("%s_%s", pokestopID, rewardsKey)
+
+	if dc.cache.Get(key) != nil {
+		return true
+	}
+
+	dc.cache.Set(key, true, 90*time.Minute)
+	return false
+}
+
+// CheckLure returns true if this lure was already seen (duplicate).
+// Key: {pokestop_id}L{lure_expiration}
+func (dc *DuplicateCache) CheckLure(pokestopID string, expiration int64) bool {
+	key := fmt.Sprintf("%sL%d", pokestopID, expiration)
+
+	if dc.cache.Get(key) != nil {
+		return true
+	}
+
+	now := time.Now().Unix()
+	remaining := expiration - now + 300
+	if remaining <= 0 {
+		remaining = 60
+	}
+	dc.cache.Set(key, true, time.Duration(remaining)*time.Second)
+	return false
+}
+
+// CheckNest returns true if this nest was already seen (duplicate).
+// Key: {nest_id}_{pokemon_id}_{reset_time}
+func (dc *DuplicateCache) CheckNest(nestID int64, pokemonID int, resetTime int64) bool {
+	key := fmt.Sprintf("%d_%d_%d", nestID, pokemonID, resetTime)
+
+	if dc.cache.Get(key) != nil {
+		return true
+	}
+
+	// 14 days from reset_time
+	now := time.Now().Unix()
+	remaining := resetTime + 14*24*3600 - now
+	if remaining <= 0 {
+		remaining = 3600
+	}
+	dc.cache.Set(key, true, time.Duration(remaining)*time.Second)
+	return false
+}
