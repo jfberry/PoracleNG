@@ -7,15 +7,16 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig   `toml:"server"`
-	Database DatabaseConfig `toml:"database"`
-	Alerter  AlerterConfig  `toml:"alerter"`
-	Geofence GeofenceConfig `toml:"geofence"`
-	PVP      PVPConfig      `toml:"pvp"`
-	Weather  WeatherConfig  `toml:"weather"`
-	Tuning   TuningConfig   `toml:"tuning"`
-	Area     AreaConfig     `toml:"areaSecurity"`
-	Logging  LoggingConfig  `toml:"logging"`
+	Server         ServerConfig         `toml:"server"`
+	Database       DatabaseConfig       `toml:"database"`
+	Alerter        AlerterConfig        `toml:"alerter"`
+	Geofence       GeofenceConfig       `toml:"geofence"`
+	PVP            PVPConfig            `toml:"pvp"`
+	Weather        WeatherConfig        `toml:"weather"`
+	Tuning         TuningConfig         `toml:"tuning"`
+	Area           AreaConfig           `toml:"areaSecurity"`
+	Logging        LoggingConfig        `toml:"logging"`
+	WebhookLogging WebhookLoggingConfig `toml:"webhookLogging"`
 }
 
 type LoggingConfig struct {
@@ -71,6 +72,15 @@ type TuningConfig struct {
 type AreaConfig struct {
 	Enabled         bool `toml:"enabled"`
 	StrictLocations bool `toml:"strict_locations"`
+}
+
+type WebhookLoggingConfig struct {
+	Enabled    bool   `toml:"enabled"`
+	Filename   string `toml:"filename"`
+	MaxSize    int    `toml:"max_size"`
+	MaxAge     int    `toml:"max_age"`
+	MaxBackups int    `toml:"max_backups"`
+	Compress   bool   `toml:"compress"`
 }
 
 func Load(path string) (*Config, error) {

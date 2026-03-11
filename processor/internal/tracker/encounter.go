@@ -53,14 +53,11 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState) (
 		return true, nil
 	}
 
-	// Check for changes
+	// Only trigger a change event for meaningful changes (species or form),
+	// not for stats being filled in from an encounter (CP/ATK/DEF/STA going
+	// from 0 to a real value) or weather fluctuations.
 	changed := old.PokemonID != newState.PokemonID ||
-		old.Form != newState.Form ||
-		old.Weather != newState.Weather ||
-		old.CP != newState.CP ||
-		old.ATK != newState.ATK ||
-		old.DEF != newState.DEF ||
-		old.STA != newState.STA
+		old.Form != newState.Form
 
 	if changed {
 		change := &EncounterChange{
@@ -74,10 +71,8 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState) (
 		return false, change
 	}
 
-	// Update disappear time if changed
-	if old.DisappearTime != newState.DisappearTime {
-		old.DisappearTime = newState.DisappearTime
-	}
+	// Update stored state with latest data (stats, weather, disappear time)
+	*old = newState
 
 	return false, nil
 }

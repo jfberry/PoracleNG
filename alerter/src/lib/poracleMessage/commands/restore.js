@@ -31,6 +31,7 @@ exports.run = async (client, msg, args, options) => {
 				}
 			}
 		}
+		client.triggerReloadAlerts()
 		return msg.react(client.translator.translate('✅'))
 	} catch (err) {
 		client.log.error('restore command unhappy:', err, err.source, err.error)

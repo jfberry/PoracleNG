@@ -324,6 +324,7 @@ exports.run = async (client, msg, args, options) => {
 					{ id: target.id },
 				)
 				await msg.react('✅')
+				client.triggerReloadAlerts()
 			}
 		}
 	} catch (err) {

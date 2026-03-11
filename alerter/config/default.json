@@ -534,5 +534,8 @@
     "concurrentDiscordDestinationsPerBot": 10,
     "concurrentTelegramDestinationsPerBot": 10,
     "concurrentDiscordWebhookConnections": 10
+  },
+  "processor": {
+    "url": ""
   }
 }

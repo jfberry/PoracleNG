@@ -71,6 +71,7 @@ logs.setWorkerId('MAIN')
 fastify.decorate('logger', logs.log)
 fastify.decorate('controllerLog', logs.controller)
 fastify.decorate('webhooks', logs.webhooks)
+fastify.decorate('matchedWebhooks', logs.matchedWebhooks)
 fastify.decorate('config', config)
 fastify.decorate('knex', knex)
 fastify.decorate('cache', cache)
@@ -84,6 +85,7 @@ fastify.decorate('translatorFactory', translatorFactory)
 fastify.decorate('discordQueue', [])
 fastify.decorate('telegramQueue', [])
 fastify.decorate('hookQueue', [])
+fastify.decorate('matchedQueue', [])
 
 const discordCommando = config.discord.enabled ? new DiscordCommando(config.discord.token[0], query, scannerQuery, config, logs, GameData, PoracleInfo, dts, geofence, translatorFactory) : null
 const discordWorkers = []
@@ -445,6 +447,12 @@ function sendCommandToWorkers(msg) {
 	for (const relayWorker of workers) {
 		relayWorker.commandPort.postMessage(msg)
 	}
+	// Also relay DTS/geofence/badguys commands to matched workers
+	if (['reloadDts', 'reloadGeofence', 'badguys', 'eventBroadcast', 'shinyBroadcast'].includes(msg.type)) {
+		for (const mw of matchedWorkers) {
+			mw.commandPort.postMessage(msg)
+		}
+	}
 }
 
 function sendCommandToWeather(msg) {
@@ -513,10 +521,45 @@ for (let w = 0; w < maxWorkers; w++) {
 	})
 }
 
+// Matched worker - handles pre-matched payloads from the Go processor
+const matchedWorkers = []
+
+worker = new Worker(path.join(__dirname, './matchedWorker.js'), {
+	workerData: { workerId: 1 },
+})
+
+queueChannel = new MessageChannel()
+commandChannel = new MessageChannel()
+
+worker.postMessage({
+	type: 'queuePort',
+	queuePort: queueChannel.port2,
+	commandPort: commandChannel.port2,
+}, [queueChannel.port2, commandChannel.port2])
+
+queueChannel.port1.on('message', (res) => {
+	processMessages(res.queue)
+})
+
+matchedWorkers.push({
+	worker,
+	commandPort: commandChannel.port1,
+	queuePort: queueChannel.port1,
+})
+
+function sendCommandToMatchedWorkers(msg) {
+	for (const mw of matchedWorkers) {
+		mw.commandPort.postMessage(msg)
+	}
+}
+
 process.on('SIGUSR2', () => {
 	writeHeapSnapshot()
 	for (const dumpWorker of workers) {
 		dumpWorker.commandPort.postMessage({ type: 'heapdump' })
+	}
+	for (const mw of matchedWorkers) {
+		mw.commandPort.postMessage({ type: 'heapdump' })
 	}
 	weatherWorker.commandPort.postMessage({ type: 'heapdump' })
 	statsWorker.commandPort.postMessage({ type: 'heapdump' })
@@ -836,6 +879,20 @@ async function handleAlarms() {
 	}
 }
 
+let currentMatchedWorkerNo = 0
+
+async function handleMatchedAlarms() {
+	if (fastify.matchedQueue.length) {
+		if ((Math.random() * 1000) > 995) fastify.logger.verbose(`Inbound MatchedQueue is currently ${fastify.matchedQueue.length}`)
+
+		const payload = fastify.matchedQueue.shift()
+		fastify.matchedWebhooks.info(`${payload.type} ${JSON.stringify(payload)}`)
+		currentMatchedWorkerNo = (currentMatchedWorkerNo + 1) % matchedWorkers.length
+		await matchedWorkers[currentMatchedWorkerNo].queuePort.postMessage(payload)
+		setImmediate(handleMatchedAlarms)
+	}
+}
+
 async function currentStatus() {
 	let discordQueueLength = 0
 
@@ -860,7 +917,7 @@ async function currentStatus() {
 		discordWebhookWorker ? queueCount(discordWebhookWorker.webhookQueue) : {},
 	)
 
-	const infoMessage = `[Main] Queues: Inbound webhook ${fastify.hookQueue.length} | Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength}`
+	const infoMessage = `[Main] Queues: Inbound webhook ${fastify.hookQueue.length} | Matched: ${fastify.matchedQueue.length} | Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength}`
 	log.info(infoMessage)
 	const cacheMessage = `Duplicate cache stats: ${JSON.stringify(fastify.cache.getStats())}`
 	log.verbose(cacheMessage)
@@ -1070,9 +1127,7 @@ async function run() {
 		})
 
 		discordCommando.on('refreshAlertCache', () => {
-			sendCommandToWorkers({
-				type: 'refreshAlertCache',
-			})
+			fastify.triggerReloadAlerts()
 		})
 	}
 
@@ -1113,9 +1168,7 @@ async function run() {
 		})
 
 		telegram.on('refreshAlertCache', () => {
-			sendCommandToWorkers({
-				type: 'refreshAlertCache',
-			})
+			fastify.triggerReloadAlerts()
 		})
 	}
 
@@ -1123,6 +1176,14 @@ async function run() {
 		sendCommandToWorkers({
 			type: 'refreshAlertCache',
 		})
+
+		// Notify the Go processor to reload its in-memory data
+		if (config.processor.url) {
+			const axios = require('axios')
+			axios.post(`${config.processor.url}/api/reload`).catch((err) => {
+				log.error(`Failed to notify processor of reload: ${err.message}`)
+			})
+		}
 	})
 
 	const routeFiles = await readDir(`${__dirname}/routes/`)
@@ -1139,6 +1200,7 @@ async function run() {
 function startPoracle() {
 	run()
 	setInterval(handleAlarms, 100)
+	setInterval(handleMatchedAlarms, 100)
 	setInterval(currentStatus, 60000)
 }
 

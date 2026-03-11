@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/config"
@@ -65,7 +67,23 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Webhook receiver
-	webhookHandler := webhook.NewHandler(proc)
+	var webhookLogger io.Writer
+	log.Infof("Webhook logging config: enabled=%v filename=%q", cfg.WebhookLogging.Enabled, cfg.WebhookLogging.Filename)
+	if cfg.WebhookLogging.Enabled && cfg.WebhookLogging.Filename != "" {
+		maxSize := cfg.WebhookLogging.MaxSize
+		if maxSize == 0 {
+			maxSize = 100
+		}
+		webhookLogger = &lumberjack.Logger{
+			Filename:   cfg.WebhookLogging.Filename,
+			MaxSize:    maxSize,
+			MaxAge:     cfg.WebhookLogging.MaxAge,
+			MaxBackups: cfg.WebhookLogging.MaxBackups,
+			Compress:   cfg.WebhookLogging.Compress,
+		}
+		log.Infof("Webhook logging enabled: %s", cfg.WebhookLogging.Filename)
+	}
+	webhookHandler := webhook.NewHandler(proc, webhookLogger)
 	mux.Handle("/", webhookHandler)
 
 	// API endpoints
@@ -85,6 +103,7 @@ func main() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for range ticker.C {
+			log.Debugf("Periodic reload triggered")
 			if err := state.Load(stateMgr, database, cfg.Geofence.Paths); err != nil {
 				log.Errorf("Periodic reload failed: %s", err)
 			}
@@ -183,13 +202,15 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			return
 		}
 
+		l := log.WithField("ref", pokemon.EncounterID)
+
 		// Record for rarity tracking
 		ps.rarity.RecordSighting(pokemon.PokemonID)
 
 		// Duplicate check
 		verified := pokemon.Verified || pokemon.DisappearTimeVerified
 		if ps.duplicates.CheckPokemon(pokemon.EncounterID, verified, pokemon.CP, pokemon.DisappearTime) {
-			log.Debugf("%s: Wild encounter was sent again too soon, ignoring", pokemon.EncounterID)
+			l.Debug("Wild encounter was sent again too soon, ignoring")
 			return
 		}
 
@@ -251,8 +272,8 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			// Enrich message with computed fields
 			enriched := enrichPokemonMessage(raw, processed, ps.weather, pokemon.Latitude, pokemon.Longitude)
 
-			log.Infof("%s: Pokemon %d appeared at [%.3f,%.3f] and %d humans cared",
-				pokemon.EncounterID, pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude, len(matched))
+			l.Infof("Pokemon %d appeared at [%.3f,%.3f] and %d humans cared",
+				pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude, len(matched))
 
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "pokemon",
@@ -261,13 +282,13 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				MatchedUsers: matched,
 			})
 		} else {
-			log.Debugf("%s: Pokemon %d appeared at [%.3f,%.3f] and 0 humans cared",
-				pokemon.EncounterID, pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude)
+			l.Debugf("Pokemon %d appeared at [%.3f,%.3f] and 0 humans cared",
+				pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude)
 		}
 
 		// Handle pokemon change
 		if change != nil {
-			ps.handlePokemonChange(raw, change, st)
+			ps.handlePokemonChange(l, raw, change, st)
 		}
 	}()
 	return nil
@@ -286,8 +307,10 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			return
 		}
 
+		l := log.WithField("ref", raid.GymID)
+
 		st := ps.stateMgr.Get()
-		ex := raid.ExRaidEligible || raid.IsExRaidEligible
+		ex := bool(raid.ExRaidEligible) || bool(raid.IsExRaidEligible)
 
 		var matched []webhook.MatchedUser
 
@@ -341,8 +364,8 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				gymName = raid.Name
 			}
 
-			log.Infof("%s: %s level %d on %s appeared at [%.3f,%.3f] and %d humans cared",
-				raid.GymID, msgType, raid.Level, gymName, raid.Latitude, raid.Longitude, len(matched))
+			l.Infof("%s level %d on %s appeared at [%.3f,%.3f] and %d humans cared",
+				msgType, raid.Level, gymName, raid.Latitude, raid.Longitude, len(matched))
 
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         msgType,
@@ -351,8 +374,8 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				MatchedUsers: matched,
 			})
 		} else {
-			log.Debugf("%s: Raid/egg level %d appeared at [%.3f,%.3f] and 0 humans cared",
-				raid.GymID, raid.Level, raid.Latitude, raid.Longitude)
+			l.Debugf("Raid/egg level %d appeared at [%.3f,%.3f] and 0 humans cared",
+				raid.Level, raid.Latitude, raid.Longitude)
 		}
 	}()
 	return nil
@@ -374,11 +397,11 @@ func (ps *ProcessorService) ProcessWeather(raw json.RawMessage) error {
 	return nil
 }
 
-func (ps *ProcessorService) handlePokemonChange(raw json.RawMessage, change *tracker.EncounterChange, st *state.State) {
+func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessage, change *tracker.EncounterChange, st *state.State) {
 	// Re-match with new state and send as pokemon_changed
 	oldIV := float64(change.Old.ATK+change.Old.DEF+change.Old.STA) / 0.45
 
-	log.Infof("%s: Pokemon changed from %d to %d", change.EncounterID, change.Old.PokemonID, change.New.PokemonID)
+	l.Infof("Pokemon changed from %d to %d", change.Old.PokemonID, change.New.PokemonID)
 
 	ps.sender.Send(webhook.OutboundPayload{
 		Type:    "pokemon_changed",

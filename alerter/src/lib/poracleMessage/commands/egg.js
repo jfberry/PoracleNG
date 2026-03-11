@@ -193,6 +193,7 @@ exports.run = async (client, msg, args, options) => {
 		}
 
 		await msg.react(reaction)
+		client.triggerReloadAlerts()
 	} catch (err) {
 		client.log.error(`${logReference}: egg command unhappy:`, err)
 		msg.reply(`There was a problem making these changes, the administrator can find the details with reference ${logReference}`)

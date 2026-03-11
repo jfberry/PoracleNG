@@ -1,6 +1,33 @@
 package webhook
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strconv"
+)
+
+// FlexBool handles JSON booleans that may arrive as true/false or 0/1.
+type FlexBool bool
+
+func (fb *FlexBool) UnmarshalJSON(data []byte) error {
+	s := string(data)
+	if s == "true" || s == "1" {
+		*fb = true
+		return nil
+	}
+	if s == "false" || s == "0" || s == "null" {
+		*fb = false
+		return nil
+	}
+	// Try parsing as a number
+	n, err := strconv.ParseFloat(s, 64)
+	if err == nil {
+		*fb = FlexBool(n != 0)
+		return nil
+	}
+	// Try unquoted string
+	*fb = false
+	return nil
+}
 
 // InboundWebhook represents a single webhook entry from Golbat.
 type InboundWebhook struct {
@@ -64,28 +91,28 @@ type PVPRankEntry struct {
 
 // RaidWebhook mirrors Golbat's raid webhook message.
 type RaidWebhook struct {
-	GymID            string  `json:"gym_id"`
-	GymName          string  `json:"gym_name"`
-	GymURL           string  `json:"gym_url"`
-	Name             string  `json:"name"`
-	URL              string  `json:"url"`
-	Latitude         float64 `json:"latitude"`
-	Longitude        float64 `json:"longitude"`
-	PokemonID        int     `json:"pokemon_id"`
-	Form             int     `json:"form"`
-	Gender           int     `json:"gender"`
-	Costume          int     `json:"costume"`
-	Evolution        int     `json:"evolution"`
-	Alignment        int     `json:"alignment"`
-	Level            int     `json:"level"`
-	TeamID           int     `json:"team_id"`
-	Start            int64   `json:"start"`
-	End              int64   `json:"end"`
-	Move1            int     `json:"move_1"`
-	Move2            int     `json:"move_2"`
-	ExRaidEligible   bool    `json:"ex_raid_eligible"`
-	IsExRaidEligible bool    `json:"is_ex_raid_eligible"`
-	RSVPs            []RSVP  `json:"rsvps"`
+	GymID            string   `json:"gym_id"`
+	GymName          string   `json:"gym_name"`
+	GymURL           string   `json:"gym_url"`
+	Name             string   `json:"name"`
+	URL              string   `json:"url"`
+	Latitude         float64  `json:"latitude"`
+	Longitude        float64  `json:"longitude"`
+	PokemonID        int      `json:"pokemon_id"`
+	Form             int      `json:"form"`
+	Gender           int      `json:"gender"`
+	Costume          int      `json:"costume"`
+	Evolution        int      `json:"evolution"`
+	Alignment        int      `json:"alignment"`
+	Level            int      `json:"level"`
+	TeamID           int      `json:"team_id"`
+	Start            int64    `json:"start"`
+	End              int64    `json:"end"`
+	Move1            int      `json:"move_1"`
+	Move2            int      `json:"move_2"`
+	ExRaidEligible   FlexBool `json:"ex_raid_eligible"`
+	IsExRaidEligible FlexBool `json:"is_ex_raid_eligible"`
+	RSVPs            []RSVP   `json:"rsvps"`
 }
 
 // RSVP represents a raid RSVP timeslot.

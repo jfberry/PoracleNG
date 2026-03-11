@@ -158,6 +158,17 @@ const telegramLog = new winston.transports.DailyRotateFile({
 	level: config.logger.enableLogs.telegram ? config.logger.logLevel : 'warn',
 })
 
+const matchedWebhooksLog = new winston.transports.DailyRotateFile({
+	filename: 'matched_webhooks-%DATE%.log',
+	dirname: path.join(__dirname, '../../logs'),
+	symlinkName: 'matched_webhooks.log',
+	format: poracleFormat,
+	createSymlink: true,
+	datePattern: 'YYYY-MM-DD-HH',
+	maxFiles: config.logger.webhookLogLimit,
+	level: config.logger.enableLogs.webhooks ? config.logger.logLevel : 'warn',
+})
+
 const consoleLog = new (winston.transports.Console)({
 	format: winston.format.combine(
 		winston.format.colorize(),
@@ -181,6 +192,14 @@ module.exports.log = winston.createLogger({
 module.exports.webhooks = winston.createLogger({
 	transports: [
 		dataStoreLog,
+		errorLog,
+	],
+	exitOnError: false,
+})
+
+module.exports.matchedWebhooks = winston.createLogger({
+	transports: [
+		matchedWebhooksLog,
 		errorLog,
 	],
 	exitOnError: false,

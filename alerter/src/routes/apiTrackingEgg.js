@@ -48,6 +48,7 @@ module.exports = async (fastify, options) => {
 		}
 
 		await fastify.query.deleteQuery('egg', { id: req.params.id, uid: req.params.uid })
+		if (fastify.triggerReloadAlerts) fastify.triggerReloadAlerts()
 
 		return {
 			status: 'ok',
@@ -164,6 +165,7 @@ module.exports = async (fastify, options) => {
 			)
 
 			await fastify.query.insertQuery('egg', [...insert, ...updates])
+			if (fastify.triggerReloadAlerts) fastify.triggerReloadAlerts()
 
 			// Send message to user
 
@@ -216,6 +218,7 @@ module.exports = async (fastify, options) => {
 		await fastify.query.deleteWhereInQuery('egg', {
 			id: req.params.id,
 		}, deleteUids, 'uid')
+		if (fastify.triggerReloadAlerts) fastify.triggerReloadAlerts()
 
 		return {
 			status: 'ok',

@@ -266,6 +266,7 @@ exports.run = async (client, msg, args, options) => {
 			reaction = result || client.config.database.client === 'sqlite' ? '✅' : reaction
 		}
 		await msg.react(reaction)
+		client.triggerReloadAlerts()
 	} catch (err) {
 		client.log.error(`${logReference} Raid command unhappy:`, err)
 		msg.reply(`There was a problem making these changes, the administrator can find the details with reference ${logReference}`)

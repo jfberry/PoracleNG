@@ -40,6 +40,7 @@ exports.run = async (client, msg, args, options) => {
 			await client.query.deleteQuery('humans', { id: t })
 			await client.query.deleteQuery('profiles', { id: t })
 			client.log.info(`${msg.userId} unregistered ${t}`)
+			client.triggerReloadAlerts()
 		} catch (err) {
 			client.log.error('Unregister command failed with: ', err)
 		}

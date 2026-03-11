@@ -10,7 +10,8 @@ import (
 
 // Handler processes incoming Golbat webhooks.
 type Handler struct {
-	processor Processor
+	processor     Processor
+	webhookLogger io.Writer
 }
 
 // Processor processes individual webhook messages.
@@ -21,9 +22,11 @@ type Processor interface {
 }
 
 // NewHandler creates a new webhook handler.
-func NewHandler(processor Processor) *Handler {
+// webhookLogger is optional — if non-nil, raw webhook bodies are written to it.
+func NewHandler(processor Processor, webhookLogger io.Writer) *Handler {
 	return &Handler{
-		processor: processor,
+		processor:     processor,
+		webhookLogger: webhookLogger,
 	}
 }
 
@@ -49,6 +52,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, hook := range hooks {
+		// Log each individual webhook as one line: {"type":"pokemon","message":{...}}
+		if h.webhookLogger != nil {
+			if line, err := json.Marshal(hook); err == nil {
+				h.webhookLogger.Write(line)
+				h.webhookLogger.Write([]byte("\n"))
+			}
+		}
+
 		switch hook.Type {
 		case "pokemon":
 			if err := h.processor.ProcessPokemon(hook.Message); err != nil {

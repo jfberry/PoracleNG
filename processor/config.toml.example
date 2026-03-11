@@ -43,3 +43,11 @@ max_size = 50
 max_age = 30
 max_backups = 5
 compress = false
+
+[webhookLogging]
+enabled = false
+filename = "logs/webhooks.log"
+max_size = 100
+max_age = 1
+max_backups = 3
+compress = false
