@@ -19,9 +19,9 @@ The processor receives raw webhooks from Golbat, performs all matching against u
 
 **Responsibilities:**
 
-- Receives Golbat webhooks via `POST /` (pokemon, raid, weather)
-- Loads all tracking data from MySQL into memory (humans, monsters, raids, eggs, profiles, geofences)
-- Matches incoming pokemon and raids against user tracking rules entirely in memory
+- Receives Golbat webhooks via `POST /` (pokemon, raid, weather, invasion, quest, lure, gym, nest, fort update)
+- Loads all tracking data from MySQL into memory (humans, monsters, raids, eggs, invasions, quests, lures, gyms, nests, forts, profiles, geofences)
+- Matches all incoming webhook types against user tracking rules entirely in memory
 - Computes PVP rankings from Golbat-provided PVP data
 - Tracks weather state per S2 cell (direct webhooks + inference from pokemon boost)
 - Detects pokemon encounter changes (pokemon_id/form changes on the same encounter)
@@ -54,7 +54,7 @@ The alerter receives pre-matched results from the processor and handles everythi
 
 ## Data Flow
 
-1. **Golbat** sends pokemon/raid/weather webhooks to the processor
+1. **Golbat** sends webhooks to the processor (pokemon, raid, weather, invasion, quest, lure, gym, nest, fort update)
 2. **Processor** matches each webhook against all user tracking rules in memory
 3. For each match, the processor sends a payload to the alerter containing:
    - The original webhook message (enriched with computed fields for pokemon)
@@ -154,7 +154,7 @@ http://<processor-host>:4200/
 
 | From | To | Endpoint | Purpose |
 |------|----|----------|---------|
-| Golbat | Processor | `POST /` | Raw webhooks (pokemon, raid, weather) |
+| Golbat | Processor | `POST /` | Raw webhooks (all types) |
 | Processor | Alerter | `POST /api/matched` | Pre-matched results with user lists |
 | Alerter | Processor | `POST /api/reload` | Trigger in-memory state reload |
 
