@@ -1,0 +1,165 @@
+[
+  {
+    "id": "area",
+    "type": "help",
+    "default": true,
+    "language": "de",
+    "platform": "",
+    "template": {
+      "embed": {
+        "title": "Poracle Help",
+        "fields": [
+          {
+            "name": "Gebiet beobachten Befehle",
+            "value": "`{{prefix}}gebiet auflisten`: Listet alle verfügbaren Gebiete auf\n`{{prefix}}gebiet hinzufügen newyork`: Dieser Befehl würde das Gebiet 'newyork' zur Liste deiner beobachteten Gebiete hinzufügen\n`{{prefix}}gebiet entfernen newyork`: Dieser Befehl würde das Gebiet 'newyork' von deiner Liste der beobachteten Gebiete entfernen"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "track",
+    "type": "help",
+    "default": true,
+    "language": "de",
+    "platform": "",
+    "template": {
+      "embed": {
+        "title": "Poracle Help",
+        "description": "Vielen Dank für Ihre Registrierung\n Bitte geben Sie einen Ort `{{prefix}}location Name des Ortes` an oder fügen Sie Gebiete hinzu, von denen Sie Benachrichtigungen empfangen möchten",
+        "fields": [
+          {
+            "name": "Monster beobachten Befehle",
+            "value": "`{{prefix}}beobachte relaxo lapras d500 iv50-90 cp1000 level15`: Alle Argumente sind optional, dieser Befehl informiert euch über Snorlax und Lapras im Umkreis von 500 Metern um euren Standort oder in einem hinzugefügten Gebiet. Die eingestellten Filter erfordern, dass sie eine IV zwischen 50% und 90% haben, mindestens Level 15 und mindestens 1000 WP\n`{{prefix}}beobachte alle super1-3 superwp1450 aufräumen`: meldet alle Monster und Entwicklungen die in der Superliga Rang 1-3, minimum 1450 CP erreichen können und entfernt die Meldung nach dem Despawn.\n`{{prefix}}unbeobachte lapras vileplume`: entfernt das Tracking für Lapras und Vileplume"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "raid",
+    "type": "help",
+    "default": true,
+    "language": "de",
+    "platform": "",
+    "template": {
+      "embed": {
+        "title": "Poracle Help",
+        "fields": [
+          {
+            "name": "Raid beobachten Befehle",
+            "value": "`{{prefix}}raid relaxo lapras d500 intuition`: Alle Argumente sind optional, dieser Befehl informiert euch über Relaxo- und Lapras-Raids in einem Umkreis von 500 Metern um euren Standort oder in einem hinzugefügten Gebiet. Die eingestellten Filter erfordern, dass die Arena von Team Intuition kontrolliert wird\n`{{prefix}}raid entfernen lapras vileplume`: entfernt das Beobachten für Lapras und Vileplume Raids"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "quest",
+    "type": "help",
+    "default": true,
+    "language": "de",
+    "platform": "",
+    "template": {
+      "embed": {
+        "title": "Poracle Help",
+        "fields": [
+          {
+            "name": "Quest beobachten Befehle",
+            "value": "`{{prefix}}quest porygon pikachu pokéball d500 `: Alle Argumente sind optional, dieser Befehl informiert euch über Quests in einem Umkreis von 500m von deinem Standort und welche Porygon, Pikachu oder Pokébälle als Belohnung bieten \n `{{prefix}}quest entfernen alle_items` entfernt das Beobachten für alle Quests. Du kannst auch `alle_pokemon` oder `sternenstaub` verwenden."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "lure",
+    "type": "help",
+    "default": true,
+    "language": "de",
+    "platform": "",
+    "template": {
+      "embed": {
+        "title": "Poracle Help",
+        "fields": [
+          {
+            "name": "Lockmodul beobachten Befehle",
+            "value": "`{{prefix}}lockmodul magnet gletscher d500`: Alle Argumente sind optional, dieser Befehl informiert euch über Magnet- und Gletscher-Lockmodule in einem Umkreis von 500m von deinem Standort.\n`{{prefix}}lockmodul entfernen alle`: entfernt das Beobachten für alle Lockdmoule"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "invasion",
+    "type": "help",
+    "default": true,
+    "language": "de",
+    "platform": "",
+    "template": {
+      "embed": {
+        "title": "Poracle Help",
+        "fields": [
+          {
+            "name": "Invasion beobachten Befehle",
+            "value": "`{{prefix}}invasion template3 d500 Drache gemischt`: Alle Argumente sind optional, dieser Befehl informiert euch über Team Rocket Ereignisse in einem Umkreis von 500m von deinem Standort, wenn der Rüpel-Typ Gemischt oder Drache ist. Du kannst jeden Pokemon-Typ-Namen verwenden.\n `{{prefix}}invasion entfernen alle` entfernt das Beobachten für alle Team Rocket Ereignisse."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "egg",
+    "type": "help",
+    "default": true,
+    "language": "de",
+    "platform": "",
+    "template": {
+      "embed": {
+        "title": "Poracle Help",
+        "fields": [
+          {
+            "name": "Raid Ei beobachten Befehle",
+            "value": "`{{prefix}}ei level3 d500 intuition`: Alle Argumente sind optional, dieser Befehl informiert euch über Level 3 Raid Eier in einem Umkreis von 500m von deinem Standort oder in einem hinzugefügten Gebiet. Die eingestellten Filter erfordern, dass die Arena von Team Intuition kontrolliert wird\n`{{prefix}}ei entfernen level3`: entfernt das Beobachten für Level 3 Raid Eier"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "gym",
+    "type": "help",
+    "default": true,
+    "language": "de",
+    "platform": "",
+    "template": {
+      "embed": {
+        "title": "Poracle Help",
+        "fields": [
+          {
+            "name": "Arena beobachten Befehle",
+            "value": "`{{prefix}}arena intuition platzänderung`: Alle Argumente sind optional, dieser Befehl informiert euch über Arenen in einem zusätzlichen Gebiet. Die eingestellten Filter erfordern, dass die Arena von Team Intuition kontrolliert wird und Platzänderungen stattfinden\n`{{prefix}}arena entfernen intuition`: entfernt das Beobachten für Arenen, die vom Team Intution kontrolliert werden"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "role",
+    "type": "help",
+    "default": true,
+    "language": "de",
+    "platform": "",
+    "template": {
+      "embed": {
+        "title": "Poracle Help",
+        "fields": [
+          {
+            "name": "Discord Rollen Befehle",
+            "value": "`{{prefix}}rolle auflisten`: zeigt alle verfügbaren Discord-Rollen an.\n`{{prefix}}rolle hinzufügen <Rollenname>`: Fügt eine Discord-Rolle deiner Konfiguration hinzu.\n`{{prefix}}rolle mitglied`: Übersicht aller Rollen aus deiner Konfiguration.\n`{{prefix}}rolle entfernen <Rollenname>`: Entfernt die Discord-Rolle aus deiner Konfiguration."
+          }
+        ]
+      }
+    }
+  }
+]

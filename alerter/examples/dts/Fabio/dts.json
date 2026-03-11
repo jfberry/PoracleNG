@@ -1,0 +1,296 @@
+[
+  {
+    "id": "Normal",
+    "type": "monster",
+    "language": "en",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "embed": {
+        "color": "{{ivcolor}}",
+        "title": "{{#eq bestGreatLeagueRank 1}}🥇 {{else eq bestUltraLeagueRank 1}}🥇 {{else eq bestGreatLeagueRank 2}}🥈 {{else eq bestUltraLeagueRank 2}}🥈 {{else eq bestGreatLeagueRank 3}}🥉 {{else eq bestUltraLeagueRank 3}}🥉 {{/eq}}{{round iv}}% {{fullName}}{{#if disguisePokemonName}} (disguised as {{disguisePokemonName}}){{/if}}{{#eq id 29}}{{else eq id 32}}{{else}} {{genderData.emoji}}{{/eq}} L{{level}}{{#gte iv 100}}{{else}} ({{atk}}|{{def}}|{{sta}}){{/gte}}{{#if boostemoji}} {{boostemoji}}{{/if}} ⏱ {{time}}",
+        "description": "{{zipcode}} {{city}}, {{addr}}{{> futureEvent_en}}",
+        "thumbnail": {
+          "url": "{{{imgUrlAlt}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        },
+        "fields": [
+          {
+            "name": "Despawn",
+            "value": "{{time}} (<t:{{disappear_time}}:R>) {{#if weatherChange}}{{weatherChange}}{{/if}}{{#unless confirmedTime}}🅾️{{/unless}}",
+            "inline": false
+          },
+          {
+            "name": "Stats",
+            "value": "{{round iv}}% IV ({{atk}}/{{def}}/{{sta}}) | {{cp}} CP (Lvl. {{level}})\nWeight: {{weight}}kg | Height: {{height}}m{{#if form}}{{#isnt formname 'Normal'}}\nForm: {{formname}}{{/isnt}}{{/if}}",
+            "inline": false
+          },
+          {
+            "name": "Moveset",
+            "value": "{{quickMove}} {{{quickMoveEmoji}}} | {{chargeMove}} {{{chargeMoveEmoji}}}",
+            "inline": false
+          },
+          {
+            "name": "PVP",
+            "value": "{{#lt (sum (sum pvpLittle.length pvpGreat.length) pvpUltra.length) 3}}{{> pvplcup_en}}{{> pvpgbl_en}}{{> pvpubl_en}}{{else}}{{> pvplcup_pu_en}}{{> pvpgbl_pu_en}}{{> pvpubl_pu_en}}{{/lt}}{{#isFalsey pvpAvailable}}N/A{{/isFalsey}}",
+            "inline": false
+          },
+          {
+            "name": "Links",
+            "value": "[Map]({{{reactMapUrl}}}) | [Google](<S<{{{googleMapUrl}}}>S>) | [Apple](<S<{{{appleMapUrl}}}>S>)",
+            "inline": false
+          }
+        ],
+        "timestamp": "{{nowISO}}",
+        "footer": {
+          "text": "Area: {{areas}}"
+        }
+      }
+    }
+  },
+  {
+    "id": "Normal",
+    "type": "monsterNoIv",
+    "language": "en",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "embed": {
+        "color": "{{color}}",
+        "title": "{{name}} {{boostemoji}}",
+        "description": "{{city}}, {{addr}}",
+        "thumbnail": {
+          "url": "{{{imgUrlAlt}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        },
+        "fields": [
+          {
+            "name": "Despawn",
+            "value": "{{time}} ({{tthm}}m{{tths}}s) {{#if weatherChange}}{{weatherChange}}{{/if}}",
+            "inline": false
+          },
+          {
+            "name": "Links",
+            "value": "[Map]({{{reactMapUrl}}}) | [Google](<S<{{{googleMapUrl}}}>S>) | [Apple](<S<{{{appleMapUrl}}}>S>)",
+            "inline": false
+          }
+        ],
+        "timestamp": "{{nowISO}}",
+        "footer": {
+          "text": "Area: {{areas}}"
+        }
+      }
+    }
+  },
+  {
+    "id": "Normal",
+    "type": "raid",
+    "language": "en",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "embed": {
+        "title": "{{fullName}} - {{levelName}} Raid{{#if boosted}} {{{boostWeatherEmoji}}}{{/if}}",
+        "description": "{{city}}, {{{gym_name}}} ({{time}})",
+        "color": "{{color}}",
+        "thumbnail": {
+          "url": "{{{imgUrlAlt}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        },
+        "fields": [
+          {
+            "name": "End",
+            "value": "{{time}} ({{tthm}}m{{tths}}s)",
+            "inline": false
+          },
+          {
+            "name": "CP",
+            "value": "{{cp}}",
+            "inline": true
+          },
+          {
+            "name": "Moveset",
+            "value": "{{quickMove}} {{quickMoveEmoji}} | {{chargeMove}} {{chargeMoveEmoji}}",
+            "inline": true
+          },
+          {
+            "name": "Links",
+            "value": "[Map]({{{reactMapUrl}}}) | [Google](<S<{{{googleMapUrl}}}>S>) | [Apple](<S<{{{appleMapUrl}}}>S>)",
+            "inline": false
+          }
+        ],
+        "timestamp": "{{nowISO}}",
+        "footer": {
+          "text": "Area: {{areas}}"
+        }
+      }
+    }
+  },
+  {
+    "id": "Normal",
+    "type": "egg",
+    "language": "en",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "embed": {
+        "title": "A{{#eq level 8}}n Ultra Wormhole opens{{else}} {{levelName}} Egg hatches{{/eq}} soon!",
+        "description": "{{city}}, {{{gymName}}} ({{time}})",
+        "color": "{{color}}",
+        "thumbnail": {
+          "url": "{{{imgUrl}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        },
+        "fields": [
+          {
+            "name": "Start",
+            "value": "{{time}} ({{tthm}}m{{tths}}s)",
+            "inline": false
+          },
+          {
+            "name": "Links",
+            "value": "[Map]({{{reactMapUrl}}}) | [Google](<S<{{{googleMapUrl}}}>S>) | [Apple](<S<{{{appleMapUrl}}}>S>)",
+            "inline": false
+          }
+        ],
+        "timestamp": "{{nowISO}}",
+        "footer": {
+          "text": "Area: {{areas}}"
+        }
+      }
+    }
+  },
+  {
+    "id": "Normal",
+    "type": "gym",
+    "language": "en",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "content": "{{#if (eq teamId oldTeamId)}}{{#if (eq trainerCount '6')}}Gym {{{gymName}}} is fully occupied.{{else}}Free places in gym {{{gymName}}} has changed to {{slotsAvailable}}.{{/if}}{{else}}Control of gym {{{gymName}}} has changed.{{/if}}",
+      "embed": {
+        "title": "{{#if inBattle}}This gym is under attack. {{/if}}Gym change at {{{gymName}}} {{#if previousControlName}}from {{previousControlName}} {{/if}}to {{teamName}}",
+        "url": "{{{reactMapUrl}}}",
+        "description": "Gym: **{{{gymName}}}** {{{teamEmoji}}}\nPlaces available: **{{#eq trainerCount '6'}}full{{else}}{{slotsAvailable}}{{/eq}}**\n\nMaps: [Google](<S<{{{googleMapUrl}}}>S>) | [Apple](<S<{{{appleMapUrl}}}>S>)",
+        "color": "{{color}}",
+        "thumbnail": {
+          "url": "{{{gymUrl}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        },
+        "timestamp": "{{nowISO}}",
+        "footer": {
+          "text": "Area: {{areas}}"
+        }
+      }
+    }
+  },
+  {
+    "id": "Normal",
+    "type": "quest",
+    "language": "en",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "embed": {
+        "title": "Pokestop: {{pokestop_name}}",
+        "url": "{{{reactMapUrl}}}",
+        "description": "Quest: {{questString}}\nReward: {{rewardString}}\n{{addr}}\n\n{{#if with_ar}}You need an AR mapping task to get the right quest{{else}}Clear your AR mapping task beforehand to get the right quest\n\n{{/if}}{{#if futureEvent}}📅 the event ({{futureEventName}}) {{#eq futureEventTrigger 'start'}}starting{{else}}ending{{/eq}} at {{futureEventTime}}. ⚠️\n\n{{/if}}Maps: [Google](<S<{{{googleMapUrl}}}>S>) | [Apple](<S<{{{appleMapUrl}}}>S>)",
+        "thumbnail": {
+          "url": "{{{imgUrlAlt}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        },
+        "timestamp": "{{nowISO}}",
+        "footer": {
+          "text": "Area: {{areas}}"
+        }
+      }
+    }
+  },
+  {
+    "id": "Normal",
+    "type": "invasion",
+    "language": "en",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "embed": {
+        "title": "Team Rocket at {{name}}",
+        "url": "{{{reactMapUrl}}}",
+        "color": "{{gruntTypeColor}}",
+        "description": "Type:  {{gruntType}} {{gruntTypeEmoji}}\nGender: {{genderData.name}}{{genderData.emoji}}\nPossible rewards: {{gruntRewards}}\nEnds: {{time}} in ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{addr}}\n[Google](<S<{{{googleMapUrl}}}>S>) | [Apple](<S<{{{appleMapUrl}}}>S>)",
+        "thumbnail": {
+          "url": "{{{imgUrl}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        },
+        "timestamp": "{{nowISO}}",
+        "footer": {
+          "text": "Area: {{areas}}"
+        }
+      }
+    }
+  },
+  {
+    "id": "Normal",
+    "language": "en",
+    "type": "lure",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "username": "{{lureTypeName}}",
+      "avatar_url": "https://raw.githubusercontent.com/jms412/PkmnHomeIcons/master/UICONS/pokestop/{{lureTypeId}}{{#if (gt gruntTypeId '0')}}_i{{/if}}.png",
+      "embed": {
+        "title": "{{lureTypeName}} at {{{pokestopName}}}",
+        "url": "{{{reactMapUrl}}}",
+        "color": "{{lureTypeColor}}",
+        "description": "**Type:** {{lureTypeName}}\n **Ends at:** {{time}} \n(**Time left:** {{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\n\n[Google](<S<{{{googleMapUrl}}}>S>) | [Apple](<S<{{{appleMapUrl}}}>S>)",
+        "thumbnail": {
+          "url": "{{{imgUrl}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        },
+        "timestamp": "{{nowISO}}",
+        "footer": {
+          "text": "Area: {{areas}}"
+        }
+      }
+    }
+  },
+  {
+    "id": "Normal",
+    "type": "weatherchange",
+    "language": "en",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "embed": {
+        "title": "⚠️ Weather change ⚠️",
+        "description": "The weather for some active mons have changed from {{oldweather}} {{oldweatheremoji}} to {{weather}} {{weatheremoji}}!\n{{#if activePokemons}}The following Pokémon have now changed and will have different stats:\n{{#each activePokemons}}**{{this.name}}** {{#isnt this.formName 'Normal'}} {{this.formName}}{{/isnt}} - {{round this.iv}}% - {{this.cp}}CP\n{{/each}}{{else}}This could have altered the reported stats and IV...{{/if}}",
+        "thumbnail": {
+          "url": "{{{imgUrl}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        },
+        "timestamp": "{{nowISO}}",
+        "footer": {
+          "text": "Area: {{areas}}"
+        }
+      }
+    }
+  }
+]
