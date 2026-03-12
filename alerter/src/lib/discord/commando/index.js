@@ -77,7 +77,7 @@ class DiscordCommando extends EventEmitter {
 				}
 				this.logs.log.warn(`#${this.id} Discord commando worker - 429 rate limit hit - in timeout ${info.timeToReset ? info.timeToReset : 'Unknown timeout '} route ${info.route}${channelId ? ` (probably ${channelId})` : ''}`)
 			})
-			this.client.on('ready', () => {
+			this.client.on('clientReady', () => {
 				this.logs.log.info(`#${this.id} Discord commando - ${this.client.user.username} ready for action`)
 
 				this.busy = false

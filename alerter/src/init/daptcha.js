@@ -9,7 +9,7 @@ module.exports = async (idArray, config, log) => {
 	const client = new Client({ intents: [GatewayIntentBits.Guilds] })
 	const result = { humans: [], channels: [] }
 	let ready = false
-	client.on('ready', async () => {
+	client.on('clientReady', async () => {
 		log.info('im ready')
 		for (const id of idArray) {
 			let human = null

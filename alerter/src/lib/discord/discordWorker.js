@@ -57,7 +57,7 @@ class Worker {
 		this.client.on('warn', (err) => {
 			this.logs.discord.error(`Discord worker #${this.id} \n bouncing`, err)
 		})
-		this.client.on('ready', () => {
+		this.client.on('clientReady', () => {
 			this.logs.log.info(`discord worker #${this.id} ${this.client.user.username} ready for action`)
 			if (this.rehydrateTimeouts) {
 				this.loadTimeouts()
