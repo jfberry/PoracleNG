@@ -59,7 +59,7 @@ func main() {
 	stateMgr := state.NewManager()
 
 	// Initial load
-	if err := state.Load(stateMgr, database, cfg.Geofence.Paths); err != nil {
+	if err := state.Load(stateMgr, database, cfg.Geofence); err != nil {
 		log.Fatalf("Failed to load initial state: %s", err)
 	}
 
@@ -97,7 +97,7 @@ func main() {
 
 	// API endpoints
 	apiHandler := api.NewHandler(func() error {
-		return state.Load(stateMgr, database, cfg.Geofence.Paths)
+		return state.Load(stateMgr, database, cfg.Geofence)
 	})
 	apiHandler.RegisterRoutes(mux)
 
@@ -113,7 +113,7 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			log.Debugf("Periodic reload triggered")
-			if err := state.Load(stateMgr, database, cfg.Geofence.Paths); err != nil {
+			if err := state.Load(stateMgr, database, cfg.Geofence); err != nil {
 				log.Errorf("Periodic reload failed: %s", err)
 			}
 		}

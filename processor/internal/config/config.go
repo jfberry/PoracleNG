@@ -43,7 +43,13 @@ type AlerterConfig struct {
 }
 
 type GeofenceConfig struct {
-	Paths []string `toml:"paths"`
+	Paths       []string    `toml:"paths"`
+	KojiOptions KojiOptions `toml:"kojiOptions"`
+}
+
+type KojiOptions struct {
+	BearerToken string `toml:"bearerToken"`
+	CacheDir    string `toml:"cacheDir"`
 }
 
 type PVPConfig struct {
@@ -120,6 +126,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.PVP.PVPQueryMaxRank == 0 {
 		cfg.PVP.PVPQueryMaxRank = 100
+	}
+	if cfg.Geofence.KojiOptions.CacheDir == "" {
+		cfg.Geofence.KojiOptions.CacheDir = ".cache"
 	}
 	return cfg, nil
 }

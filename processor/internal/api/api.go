@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -13,6 +14,7 @@ type ReloadFunc func() error
 // Handler provides API endpoints for the processor.
 type Handler struct {
 	reloadFn ReloadFunc
+	reloadMu sync.Mutex
 }
 
 // NewHandler creates a new API handler.
@@ -33,6 +35,9 @@ func (h *Handler) handleReload(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+
+	h.reloadMu.Lock()
+	defer h.reloadMu.Unlock()
 
 	log.Infof("Reload requested via API")
 	if err := h.reloadFn(); err != nil {

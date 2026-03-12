@@ -82,8 +82,13 @@ dsn = "poracle:password@tcp(127.0.0.1:3306)/poracle?parseTime=true"
 url = "http://localhost:4201"
 
 [geofence]
-# Same geofence files as the alerter
+# Geofence files - supports local files and HTTP(S) URLs (Kōji integration)
 paths = ["geofence/geofence.json"]
+
+# Optional: Kōji geofence service integration
+[geofence.kojiOptions]
+bearerToken = ""           # Kōji API bearer token for authenticated geofence fetching
+cacheDir = ".cache"        # Directory to cache downloaded geofences (default: .cache)
 
 [pvp]
 # Must match the alerter's PVP settings
@@ -150,13 +155,54 @@ Configure Golbat to send webhooks to the **processor** (not the alerter):
 http://<processor-host>:4200/
 ```
 
+### Kōji Geofence Integration
+
+The processor supports fetching geofences from Kōji (or any HTTP endpoint) with Bearer token authentication. This allows you to use dynamically updated geofences without manually copying files.
+
+**Configuration:**
+
+```toml
+[geofence]
+# Mix local files and HTTP URLs
+paths = [
+    "geofence/local.json",
+    "https://koji.example.com/api/v1/geofence/project/main"
+]
+
+[geofence.kojiOptions]
+bearerToken = "your_koji_bearer_token_here"
+cacheDir = ".cache"  # Optional, defaults to .cache
+```
+
+**How it works:**
+
+1. On startup and reload, the processor fetches geofences from any HTTP(S) URLs in `paths`
+2. Requests include `Authorization: Bearer <token>` header
+3. Response JSON is expected to have a `data` field containing the geofence array
+4. Downloaded geofences are cached to `.cache/{sanitized_url}.json`
+5. Local file paths are loaded directly without fetching
+
+**Reload behavior:**
+
+- Initial load: Fetches Kōji geofences on startup
+- Periodic reload: Re-fetches every `reload_interval_secs` (default 60s)
+- API reload: Trigger with `POST /api/reload` to fetch immediately
+
+**Logs:**
+
+```
+INFO [KŌJI] Fetching https://koji.example.com/api/v1/geofence/project/main...
+INFO [KŌJI] Cached https://koji.example.com/api/v1/geofence/project/main to .cache/https:__koji.example.com__api__v1__geofence__project__main.json
+INFO State loaded: 150 humans, 45 raids, 12 eggs, 8 fences
+```
+
 ## Connections Summary
 
-| From | To | Endpoint | Purpose |
-|------|----|----------|---------|
-| Golbat | Processor | `POST /` | Raw webhooks (all types) |
-| Processor | Alerter | `POST /api/matched` | Pre-matched results with user lists |
-| Alerter | Processor | `POST /api/reload` | Trigger in-memory state reload |
+| From      | To        | Endpoint            | Purpose                             |
+| --------- | --------- | ------------------- | ----------------------------------- |
+| Golbat    | Processor | `POST /`            | Raw webhooks (all types)            |
+| Processor | Alerter   | `POST /api/matched` | Pre-matched results with user lists |
+| Alerter   | Processor | `POST /api/reload`  | Trigger in-memory state reload      |
 
 ## Building
 
@@ -185,17 +231,17 @@ The processor should be started before the alerter. On startup, the processor lo
 
 ### Processor
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/` | Receive Golbat webhooks |
-| POST | `/api/reload` | Trigger in-memory data reload |
-| GET | `/health` | Health check |
+| Method | Path          | Description                   |
+| ------ | ------------- | ----------------------------- |
+| POST   | `/`           | Receive Golbat webhooks       |
+| POST   | `/api/reload` | Trigger in-memory data reload |
+| GET    | `/health`     | Health check                  |
 
 ### Alerter
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/matched` | Receive pre-matched results from processor |
+| Method  | Path              | Description                                     |
+| ------- | ----------------- | ----------------------------------------------- |
+| POST    | `/api/matched`    | Receive pre-matched results from processor      |
 | Various | `/api/tracking/*` | User tracking management (existing Poracle API) |
 
 ## Logging

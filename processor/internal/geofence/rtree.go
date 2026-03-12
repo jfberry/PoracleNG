@@ -1,6 +1,7 @@
 package geofence
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/tidwall/rtree"
@@ -103,10 +104,15 @@ func boundingBox(path [][2]float64) (minX, minY, maxX, maxY float64) {
 }
 
 // LoadAllGeofences loads all geofence files from the given paths and builds a spatial index.
-func LoadAllGeofences(paths []string) (*SpatialIndex, []Fence, error) {
+// HTTP URLs are converted to cache file paths.
+func LoadAllGeofences(paths []string, cacheDir string) (*SpatialIndex, []Fence, error) {
 	var allFences []Fence
 	for _, p := range paths {
-		fences, err := LoadGeofenceFile(p)
+		filePath := p
+		if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
+			filePath = filepath.Join(cacheDir, sanitizeURL(p)+".json")
+		}
+		fences, err := LoadGeofenceFile(filePath)
 		if err != nil {
 			return nil, nil, err
 		}
