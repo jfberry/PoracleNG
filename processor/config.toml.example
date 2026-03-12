@@ -9,7 +9,7 @@ dsn = "poracle:password@tcp(127.0.0.1:3306)/poracle?parseTime=true"
 url = "http://localhost:4201"
 
 [geofence]
-paths = ["geofence/geofence.json"]
+paths = ["../alerter/config/geofence.json"]
 
 [pvp]
 pvp_query_max_rank = 100
@@ -24,6 +24,9 @@ include_mega_evolution = false
 [weather]
 enable_inference = true
 enable_change_alert = true
+show_altered_pokemon = false
+show_altered_pokemon_max_count = 10
+monsters_json_path = "../alerter/src/util/monsters.json"
 
 [tuning]
 reload_interval_secs = 60
