@@ -58,8 +58,11 @@ type PVPConfig struct {
 }
 
 type WeatherConfig struct {
-	EnableInference   bool `toml:"enable_inference"`
-	EnableChangeAlert bool `toml:"enable_change_alert"`
+	EnableInference            bool   `toml:"enable_inference"`
+	EnableChangeAlert          bool   `toml:"enable_change_alert"`
+	ShowAlteredPokemon         bool   `toml:"show_altered_pokemon"`
+	ShowAlteredPokemonMaxCount int    `toml:"show_altered_pokemon_max_count"`
+	MonstersJSONPath           string `toml:"monsters_json_path"`
 }
 
 type TuningConfig struct {
@@ -108,6 +111,9 @@ func Load(path string) (*Config, error) {
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
+	}
+	if cfg.Weather.ShowAlteredPokemonMaxCount == 0 {
+		cfg.Weather.ShowAlteredPokemonMaxCount = 10
 	}
 	if cfg.PVP.PVPQueryMaxRank == 0 {
 		cfg.PVP.PVPQueryMaxRank = cfg.PVP.PVPFilterMaxRank

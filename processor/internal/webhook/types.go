@@ -138,23 +138,35 @@ type MatchedArea struct {
 	Group            string `json:"group"`
 }
 
+// ActivePokemonEntry represents a pokemon affected by a weather change for a user.
+type ActivePokemonEntry struct {
+	PokemonID     int     `json:"pokemon_id"`
+	Form          int     `json:"form"`
+	IV            float64 `json:"iv"`
+	CP            int     `json:"cp"`
+	Latitude      float64 `json:"latitude"`
+	Longitude     float64 `json:"longitude"`
+	DisappearTime int64   `json:"disappear_time"`
+}
+
 // MatchedUser represents a user who matched an alert.
 type MatchedUser struct {
-	ID               string  `json:"id"`
-	Name             string  `json:"name"`
-	Type             string  `json:"type"`
-	Language         string  `json:"language"`
-	Latitude         float64 `json:"latitude"`
-	Longitude        float64 `json:"longitude"`
-	Template         string  `json:"template"`
-	Distance         int     `json:"distance"`
-	Clean            bool    `json:"clean"`
-	Ping             string  `json:"ping"`
-	PokemonID        int     `json:"pokemon_id"`
-	PVPRankingCap    int     `json:"pvp_ranking_cap"`
-	PVPRankingLeague int     `json:"pvp_ranking_league"`
-	PVPRankingWorst  int     `json:"pvp_ranking_worst"`
-	RSVPChanges      int     `json:"rsvp_changes"`
+	ID               string               `json:"id"`
+	Name             string               `json:"name"`
+	Type             string               `json:"type"`
+	Language         string               `json:"language"`
+	Latitude         float64              `json:"latitude"`
+	Longitude        float64              `json:"longitude"`
+	Template         string               `json:"template"`
+	Distance         int                  `json:"distance"`
+	Clean            bool                 `json:"clean"`
+	Ping             string               `json:"ping"`
+	PokemonID        int                  `json:"pokemon_id"`
+	PVPRankingCap    int                  `json:"pvp_ranking_cap"`
+	PVPRankingLeague int                  `json:"pvp_ranking_league"`
+	PVPRankingWorst  int                  `json:"pvp_ranking_worst"`
+	RSVPChanges      int                  `json:"rsvp_changes"`
+	ActivePokemons   []ActivePokemonEntry `json:"active_pokemons,omitempty"`
 }
 
 // OutboundPayload is sent from processor to alerter.

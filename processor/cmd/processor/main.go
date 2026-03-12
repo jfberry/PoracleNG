@@ -20,6 +20,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
@@ -160,6 +161,8 @@ type ProcessorService struct {
 	nestMatcher     *matching.NestMatcher
 	fortMatcher     *matching.FortMatcher
 	pvpCfg          *pvp.Config
+	activePokemon   *tracker.ActivePokemonTracker
+	pokemonTypes    *gamedata.PokemonTypes
 	workerPool      chan struct{}
 	wg              sync.WaitGroup
 }
@@ -176,6 +179,19 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	}
 
 	strictAreas := cfg.Area.Enabled && cfg.Area.StrictLocations
+
+	var activePokemon *tracker.ActivePokemonTracker
+	var pokemonTypes *gamedata.PokemonTypes
+	if cfg.Weather.ShowAlteredPokemon && cfg.Weather.MonstersJSONPath != "" {
+		pt, err := gamedata.LoadPokemonTypes(cfg.Weather.MonstersJSONPath)
+		if err != nil {
+			log.Errorf("Failed to load pokemon types from %s: %s (active pokemon tracking disabled)", cfg.Weather.MonstersJSONPath, err)
+		} else {
+			pokemonTypes = pt
+			activePokemon = tracker.NewActivePokemonTracker(50)
+			log.Infof("Active pokemon tracking enabled with %s", cfg.Weather.MonstersJSONPath)
+		}
+	}
 
 	return &ProcessorService{
 		cfg:          cfg,
@@ -202,6 +218,8 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		nestMatcher:     &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		fortMatcher:     &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		pvpCfg:          pvpCfg,
+		activePokemon:   activePokemon,
+		pokemonTypes:    pokemonTypes,
 		workerPool:      make(chan struct{}, cfg.Tuning.WorkerPoolSize),
 	}
 }
@@ -306,6 +324,28 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 						Ping:       u.Ping,
 						CaresUntil: pokemon.DisappearTime,
 					})
+				}
+
+				// Track active pokemon per user for weather change alerts
+				if ps.activePokemon != nil {
+					types := ps.pokemonTypes.GetTypes(pokemon.PokemonID, pokemon.Form)
+					pokWeather := pokemon.BoostedWeather
+					if pokWeather == 0 {
+						pokWeather = pokemon.Weather
+					}
+					for _, u := range matched {
+						ps.activePokemon.Register(cellID, u.ID, pokemon.EncounterID, tracker.ActivePokemon{
+							PokemonID:     pokemon.PokemonID,
+							Form:          pokemon.Form,
+							IV:            processed.IV,
+							CP:            processed.CP,
+							Latitude:      pokemon.Latitude,
+							Longitude:     pokemon.Longitude,
+							DisappearTime: pokemon.DisappearTime,
+							Weather:       pokWeather,
+							Types:         types,
+						})
+					}
 				}
 			}
 
@@ -464,6 +504,30 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				Template: u.Template,
 				Clean:    u.Clean,
 				Ping:     u.Ping,
+			}
+
+			// Attach active pokemon affected by this weather change
+			if ps.activePokemon != nil {
+				affected := ps.activePokemon.GetAffectedPokemon(
+					change.S2CellID, u.ID,
+					change.OldGameplayCondition, change.GameplayCondition,
+					ps.cfg.Weather.ShowAlteredPokemonMaxCount,
+				)
+				if len(affected) > 0 {
+					entries := make([]webhook.ActivePokemonEntry, len(affected))
+					for j, ap := range affected {
+						entries[j] = webhook.ActivePokemonEntry{
+							PokemonID:     ap.PokemonID,
+							Form:          ap.Form,
+							IV:            ap.IV,
+							CP:            ap.CP,
+							Latitude:      ap.Latitude,
+							Longitude:     ap.Longitude,
+							DisappearTime: ap.DisappearTime,
+						}
+					}
+					matched[i].ActivePokemons = entries
+				}
 			}
 		}
 

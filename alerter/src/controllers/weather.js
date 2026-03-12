@@ -75,6 +75,33 @@ class Weather extends Controller {
 			for (const cares of matchedUsers) {
 				this.log.debug(`${logReference}: Weather alert being generated for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`)
 
+				// Populate activePokemons from processor payload
+				if (cares.active_pokemons && cares.active_pokemons.length > 0) {
+					const language = cares.language || this.config.general.locale
+					const translator = this.translatorFactory.Translator(language)
+
+					data.activePokemons = await Promise.all(cares.active_pokemons.map(async (ap) => {
+						const mon = this.GameData.monsters[`${ap.pokemon_id}_${ap.form}`]
+							|| this.GameData.monsters[`${ap.pokemon_id}_0`] || {}
+						return {
+							pokemon_id: ap.pokemon_id,
+							form: ap.form,
+							name: translator.translate(mon.name || `Pokemon ${ap.pokemon_id}`),
+							nameEng: mon.name || '',
+							formName: translator.translate(mon.form?.name || ''),
+							formNameEng: mon.form?.name || '',
+							formNormalisedEng: (mon.form?.name === 'Normal' ? '' : mon.form?.name) || '',
+							formNormalised: translator.translate((mon.form?.name === 'Normal' ? '' : mon.form?.name) || ''),
+							fullNameEng: (mon.name || '').concat(mon.form?.name && mon.form.name !== 'Normal' ? ` ${mon.form.name}` : ''),
+							iv: ap.iv,
+							cp: ap.cp,
+							imgUrl: this.imgUicons ? await this.imgUicons.pokemonIcon(ap.pokemon_id, ap.form) : '',
+						}
+					}))
+				} else {
+					data.activePokemons = null
+				}
+
 				const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
 				if (rateLimitTtr) {
 					this.log.verbose(`${logReference}: Not creating weather alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
