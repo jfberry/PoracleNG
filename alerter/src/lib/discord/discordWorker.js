@@ -1,6 +1,7 @@
 const {
 	Client, DiscordAPIError,
-	Intents,
+	GatewayIntentBits,
+	Partials,
 	Options,
 } = require('discord.js')
 const fsp = require('fs').promises
@@ -9,6 +10,12 @@ const { performance } = require('perf_hooks')
 const FairPromiseQueue = require('../FairPromiseQueue')
 
 const noop = () => { }
+
+function coerceEmbedColor(embed) {
+	if (embed && typeof embed.color === 'string') {
+		embed.color = parseInt(embed.color.replace(/^#/, ''), 16)
+	}
+}
 
 class Worker {
 	constructor(token, id, config, logs, rehydrateTimeouts, statusActivity, query) {
@@ -51,14 +58,14 @@ class Worker {
 			this.logs.discord.error(`Discord worker #${this.id} \n bouncing`, err)
 		})
 		this.client.on('ready', () => {
-			this.logs.log.info(`discord worker #${this.id} ${this.client.user.tag} ready for action`)
+			this.logs.log.info(`discord worker #${this.id} ${this.client.user.username} ready for action`)
 			if (this.rehydrateTimeouts) {
 				this.loadTimeouts()
 			}
 			this.busy = false
 		})
-		this.client.on('rateLimit', (info) => {
-			const tag = (this.client && this.client.user) ? this.client.user.tag : ''
+		this.client.rest.on('rateLimited', (info) => {
+			const tag = (this.client && this.client.user) ? this.client.user.username : ''
 			let channelId
 			if (info.route) {
 				const channelMatch = info.route.match(/\/channels\/(\d+)\//)
@@ -70,19 +77,23 @@ class Worker {
 					}
 				}
 			}
-			this.logs.discord.warn(`#${this.id} Discord worker [${tag}] 429 rate limit hit - in timeout ${info.timeout ? info.timeout : 'Unknown timeout '} route ${info.route}${channelId ? ` (probably ${channelId})` : ''}`)
+			this.logs.discord.warn(`#${this.id} Discord worker [${tag}] 429 rate limit hit - in timeout ${info.timeToReset ? info.timeToReset : 'Unknown timeout '} route ${info.route}${channelId ? ` (probably ${channelId})` : ''}`)
 		})
 	}
 
 	async bounceWorker() {
 		delete this.client
 
-		const intents = new Intents()
-		intents.add(Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MEMBERS, Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILD_PRESENCES)
-
 		this.client = new Client({
-			intents,
-			partials: ['CHANNEL', 'MESSAGE'], // , 'GUILD_MEMBER'],
+			intents: [
+				GatewayIntentBits.Guilds,
+				GatewayIntentBits.GuildMessages,
+				GatewayIntentBits.GuildMembers,
+				GatewayIntentBits.DirectMessages,
+				GatewayIntentBits.GuildPresences,
+				GatewayIntentBits.MessageContent,
+			],
+			partials: [Partials.Channel, Partials.Message],
 			makeCache: Options.cacheWithLimits({
 				MessageManager: 1,
 				PresenceManager: 0,
@@ -95,7 +106,7 @@ class Worker {
 			await this.client.user.setStatus(this.status)
 			if (this.activity) await this.client.user.setActivity(this.activity)
 		} catch (err) {
-			if (err.code === 'DISALLOWED_INTENTS') {
+			if (err.code === 4014) {
 				this.logs.log.error('Could not initialise discord', err)
 				this.logs.log.error('Ensure that your discord bot Gateway intents for Presence, Server Members and Messages are on - see https://muckelba.github.io/poracleWiki/discordbot.html')
 				process.exit(1)
@@ -148,6 +159,8 @@ class Worker {
 				await user.createDM()
 			}
 
+			coerceEmbedColor(data.message.embed)
+
 			if (this.config.discord.uploadEmbedImages && data.message.embed && data.message.embed.image && data.message.embed.image.url) {
 				const { url } = data.message.embed.image
 				data.message.embed.image.url = 'attachment://map.png'
@@ -195,6 +208,8 @@ class Worker {
 			if (!channel) return this.logs.discord.warn(`${logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL not found`)
 			this.logs.discord.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL Sending discord message`, data.message)
 
+			coerceEmbedColor(data.message.embed)
+
 			if (this.config.discord.uploadEmbedImages && data.message.embed && data.message.embed.image && data.message.embed.image.url) {
 				const { url } = data.message.embed.image
 				data.message.embed.image.url = 'attachment://map.png'
@@ -238,7 +253,7 @@ class Worker {
 			guild = await this.client.guilds.fetch(guildID)
 		} catch (err) {
 			if (err instanceof DiscordAPIError) {
-				if (err.httpStatus === 403) {
+				if (err.status === 403) {
 					this.logs.log.debug(`${guildID} no access`)
 
 					invalidUsers.push(...allUsers)
@@ -255,7 +270,7 @@ class Worker {
 				discorduser = await guild.members.fetch(user.id)
 			} catch (err) {
 				if (err instanceof DiscordAPIError) {
-					if (err.httpStatus === 404) {
+					if (err.status === 404) {
 						this.logs.log.debug(`${user.id} doesn't exist on guild ${guildID}`)
 						invalidUsers.push(user)
 						// eslint-disable-next-line no-continue
@@ -276,18 +291,18 @@ class Worker {
 	}
 
 	async saveTimeouts() {
-		if (!this.client || !this.client.user || !this.client.user.tag) return
+		if (!this.client || !this.client.user || !this.client.user.username) return
 
 		// eslint-disable-next-line no-underscore-dangle
 		this.discordMessageTimeouts._checkData(false)
-		return fsp.writeFile(`.cache/cleancache-discord-${this.client.user.tag}.json`, JSON.stringify(this.discordMessageTimeouts.data), 'utf8')
+		return fsp.writeFile(`.cache/cleancache-discord-${this.client.user.username}.json`, JSON.stringify(this.discordMessageTimeouts.data), 'utf8')
 	}
 
 	async loadTimeouts() {
 		let loaddatatxt
 
 		try {
-			loaddatatxt = await fsp.readFile(`.cache/cleancache-discord-${this.client.user.tag}.json`, 'utf8')
+			loaddatatxt = await fsp.readFile(`.cache/cleancache-discord-${this.client.user.username}.json`, 'utf8')
 		} catch {
 			return
 		}
@@ -298,7 +313,7 @@ class Worker {
 		try {
 			data = JSON.parse(loaddatatxt)
 		} catch {
-			this.logs.log.warn(`Clean cache for discord tag ${this.client.user.tag} contains invalid data - ignoring`)
+			this.logs.log.warn(`Clean cache for discord tag ${this.client.user.username} contains invalid data - ignoring`)
 			return
 		}
 

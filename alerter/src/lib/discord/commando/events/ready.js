@@ -1,5 +1,5 @@
 module.exports = (client) => {
-	client.logs.discord.info(`Commando "${client.user.tag}" awaiting your orders!`)
+	client.logs.discord.info(`Commando "${client.user.username}" awaiting your orders!`)
 	const guilds = []
 	const guildId = []
 	for (const guild of client.guilds.cache.values()) {

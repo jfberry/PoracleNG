@@ -1,5 +1,5 @@
 exports.run = async (client, msg, [args]) => {
-	let target = { id: msg.author.id, name: msg.author.tag, webhook: false }
+	let target = { id: msg.author.id, name: msg.author.username, webhook: false }
 
 	try {
 		// Check target
@@ -40,14 +40,14 @@ exports.run = async (client, msg, [args]) => {
 			language = newLanguage
 		}
 
-		if ((msg.channel.type === 'GUILD_TEXT' || msg.channel.type === 'GUILD_NEWS') && !target.webhook) target = { id: msg.channel.id, name: msg.channel.name, webhook: false }
+		if ((msg.channel.isTextBased() && !msg.channel.isDMBased()) && !target.webhook) target = { id: msg.channel.id, name: msg.channel.name, webhook: false }
 
 		if (args.find((arg) => arg === 'add')) {
 			if (webhookName && !webhookLink || !webhookName && webhookLink) return await msg.reply('To add webhooks, provide both a name using the `name` parameter and an url')
 
 			if (webhookName && webhookLink) target = { id: webhookLink, name: webhookName, webhook: true }
 
-			if (!target.webhook && (msg.channel.type !== 'GUILD_TEXT' && msg.channel.type !== 'GUILD_NEWS')) {
+			if (!target.webhook && (!msg.channel.isTextBased() || msg.channel.isDMBased())) {
 				return msg.reply('Adding a bot controlled channel cannot be done from DM. To add webhooks, provide both a name using the `name` parameter and an url')
 			}
 
@@ -80,7 +80,7 @@ exports.run = async (client, msg, [args]) => {
 				return msg.reply('Webhook with that name does not appeared to be registered')
 			}
 
-			if (msg.channel.type === 'DM') {
+			if (msg.channel.isDMBased()) {
 				return msg.reply('Removing a bot controlled channel cannot be done from DM')
 			}
 

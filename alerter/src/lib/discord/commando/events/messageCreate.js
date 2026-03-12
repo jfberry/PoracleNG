@@ -2,12 +2,12 @@ module.exports = async (client, msg) => {
 	try {
 		// Ignore all bots
 		if (msg.author.bot && !client.config.discord.admins.includes(msg.author.id)) return
-		if (msg.webhookID) return
+		if (msg.webhookId) return
 
 		client.logs.discord.debug(`Received message ${msg.author.username} ${msg.content}`)
 
 		// Log all DM messages to dmLogChannelID
-		if (msg.channel.type === 'DM' && client.config.discord.dmLogChannelID !== '') {
+		if (msg.channel.isDMBased() && client.config.discord.dmLogChannelID !== '') {
 			let message = `${msg.author} > ${msg.cleanContent}`
 			if (client.config.discord.guilds && client.config.discord.guilds.length > 1) {
 				message = `${msg.author.username} ${msg.author} > ${msg.cleanContent}`
@@ -85,7 +85,7 @@ module.exports = async (client, msg) => {
 				}
 			}
 		}
-		if (msg.channel.type === 'DM' && !recognisedCommand && client.config.discord.unrecognisedCommandMessage) {
+		if (msg.channel.isDMBased() && !recognisedCommand && client.config.discord.unrecognisedCommandMessage) {
 			msg.reply(client.config.discord.unrecognisedCommandMessage)
 		}
 	} catch (err) {

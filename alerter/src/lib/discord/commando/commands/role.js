@@ -2,7 +2,7 @@ const PoracleDiscordMessage = require('../../poracleDiscordMessage')
 const DiscordRoleSetter = require('../../discordRoleSetter')
 
 exports.run = async (client, discordMsg, [args]) => {
-	const target = { id: discordMsg.author.id, name: discordMsg.author.tag, webhook: false }
+	const target = { id: discordMsg.author.id, name: discordMsg.author.username, webhook: false }
 
 	try {
 		const msg = new PoracleDiscordMessage(client, discordMsg)

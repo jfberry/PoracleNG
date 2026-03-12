@@ -12,10 +12,10 @@ exports.run = async (client, msg) => {
 				}
 			}
 			if (!communityToAdd) {
-				return client.logs.log.info(`${msg.author.tag} tried to register in ${msg.channel.name}`)
+				return client.logs.log.info(`${msg.author.username} tried to register in ${msg.channel.name}`)
 			}
 		} else if (!client.config.discord.channels.includes(msg.channel.id)) {
-			return client.logs.log.info(`${msg.author.tag} tried to register in ${msg.channel.name}`)
+			return client.logs.log.info(`${msg.author.username} tried to register in ${msg.channel.name}`)
 		}
 
 		const command = msg.content.split(' ')[0].substring(1)
@@ -54,7 +54,7 @@ exports.run = async (client, msg) => {
 					updateRequired = true
 					client.logs.discord.log({
 						level: 'debug',
-						message: `user ${msg.author.tag} used poracle command to remove admin_disable flag`,
+						message: `user ${msg.author.username} used poracle command to remove admin_disable flag`,
 						event: 'discord:registerCheck',
 					})
 				}

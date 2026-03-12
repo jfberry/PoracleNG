@@ -1,12 +1,12 @@
 // Discord Automated Program Telling Channels and Humans Apart
 
-const { Client } = require('discord.js')
+const { Client, GatewayIntentBits } = require('discord.js')
 
 // eslint-disable-next-line no-promise-executor-return
 const sleep = (n) => new Promise((resolve) => setTimeout(resolve, n))
 
 module.exports = async (idArray, config, log) => {
-	const client = new Client()
+	const client = new Client({ intents: [GatewayIntentBits.Guilds] })
 	const result = { humans: [], channels: [] }
 	let ready = false
 	client.on('ready', async () => {
