@@ -519,6 +519,11 @@
   //     counter productive so talk to me before playing with this one
   // concurrentWebhookProcessorsPerWorker - Number of inbound webhooks that can be processed at once per worker thread. Since each requires a database
   //     connection for a query this should be lower than the maxDatabaseConnections
+  // matchedProcessingWorkers - Number of threads to run matched webhook workers. Falls back to webhookProcessingWorkers if not set.
+  // concurrentMatchedProcessorsPerWorker - Number of pre-matched payloads processed concurrently per matched worker. Higher values improve throughput
+  //     but use more memory. Falls back to concurrentWebhookProcessorsPerWorker if not set.
+  // matchedWorkerMaxOldGenerationSizeMb - V8 heap limit for each matched worker thread (default 512MB). Increase if worker OOMs under load.
+  // matchedWorkerMaxQueueSize - Maximum total items buffered across all matched worker queues before backpressure kicks in (default 5000)
   // concurrentDiscordDestinationsPerBot - How many concurrent messages should be queued for sending by the discord.js based bots. Discord rate limits
   //     by route as well as a global limit so this will message 10 people at once
   // concurrentTelegramDestinationsPerBot - How many concurrent messages should be queued for sending by the Telegram/telegraf based bots. Telegram rate
@@ -531,6 +536,10 @@
     "maxDatabaseConnections": 15,
     "webhookProcessingWorkers": 5,
     "concurrentWebhookProcessorsPerWorker": 4,
+    "matchedProcessingWorkers": 3,
+    "concurrentMatchedProcessorsPerWorker": 10,
+    "matchedWorkerMaxOldGenerationSizeMb": 512,
+    "matchedWorkerMaxQueueSize": 5000,
     "concurrentDiscordDestinationsPerBot": 10,
     "concurrentTelegramDestinationsPerBot": 10,
     "concurrentDiscordWebhookConnections": 10

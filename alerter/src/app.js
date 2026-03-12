@@ -348,31 +348,47 @@ async function processMessages(msgs) {
 	}
 }
 
-// Matched worker - handles pre-matched payloads from the Go processor
+// Matched workers - handle pre-matched payloads from the Go processor
 const matchedWorkers = []
+const matchedWorkerStatuses = {}
 
-let worker = new Worker(path.join(__dirname, './matchedWorker.js'), {
-	workerData: { workerId: 1 },
-})
+const matchedWorkerHeapMb = config.tuning.matchedWorkerMaxOldGenerationSizeMb || 512
+const maxMatchedWorkers = config.tuning.matchedProcessingWorkers || config.tuning.webhookProcessingWorkers || 3
 
-let queueChannel = new MessageChannel()
-let commandChannel = new MessageChannel()
+for (let w = 0; w < maxMatchedWorkers; w++) {
+	let worker = new Worker(path.join(__dirname, './matchedWorker.js'), {
+		workerData: { workerId: w + 1 },
+		resourceLimits: {
+			maxOldGenerationSizeMb: matchedWorkerHeapMb,
+			maxYoungGenerationSizeMb: Math.max(64, Math.floor(matchedWorkerHeapMb / 4)),
+		},
+	})
 
-worker.postMessage({
-	type: 'queuePort',
-	queuePort: queueChannel.port2,
-	commandPort: commandChannel.port2,
-}, [queueChannel.port2, commandChannel.port2])
+	let queueChannel = new MessageChannel()
+	let commandChannel = new MessageChannel()
 
-queueChannel.port1.on('message', (res) => {
-	processMessages(res.queue)
-})
+	worker.postMessage({
+		type: 'queuePort',
+		queuePort: queueChannel.port2,
+		commandPort: commandChannel.port2,
+	}, [queueChannel.port2, commandChannel.port2])
 
-matchedWorkers.push({
-	worker,
-	commandPort: commandChannel.port1,
-	queuePort: queueChannel.port1,
-})
+	queueChannel.port1.on('message', (res) => {
+		if (res.type === 'status') {
+			matchedWorkerStatuses[res.workerId] = res
+			return
+		}
+		if (res.queue) {
+			processMessages(res.queue)
+		}
+	})
+
+	matchedWorkers.push({
+		worker,
+		commandPort: commandChannel.port1,
+		queuePort: queueChannel.port1,
+	})
+}
 
 function sendCommandToWorkers(msg) {
 	for (const mw of matchedWorkers) {
@@ -389,9 +405,26 @@ process.on('SIGUSR2', () => {
 
 let currentMatchedWorkerNo = 0
 
+const matchedWorkerMaxQueue = config.tuning.matchedWorkerMaxQueueSize || 5000
+
+function getTotalWorkerQueueDepth() {
+	let total = 0
+	for (const status of Object.values(matchedWorkerStatuses)) {
+		total += (status.queueDepth || 0) + (status.activeJobs || 0)
+	}
+	return total
+}
+
 async function handleMatchedAlarms() {
 	if (fastify.matchedQueue.length) {
 		if ((Math.random() * 1000) > 995) fastify.logger.verbose(`Inbound MatchedQueue is currently ${fastify.matchedQueue.length}`)
+
+		// Backpressure: if total worker queue depth is too high, wait before sending more
+		const totalDepth = getTotalWorkerQueueDepth()
+		if (totalDepth >= matchedWorkerMaxQueue) {
+			if ((Math.random() * 1000) > 990) fastify.logger.warn(`Backpressure active: total worker queue depth ${totalDepth} >= limit ${matchedWorkerMaxQueue}, inbound queue ${fastify.matchedQueue.length}`)
+			return
+		}
 
 		const payload = fastify.matchedQueue.shift()
 		fastify.matchedWebhooks.info(`${payload.type} ${JSON.stringify(payload)}`)
@@ -425,12 +458,27 @@ async function currentStatus() {
 		discordWebhookWorker ? queueCount(discordWebhookWorker.webhookQueue) : {},
 	)
 
-	const infoMessage = `[Main] Queues: Matched: ${fastify.matchedQueue.length} | Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength}`
+	const mainMem = process.memoryUsage()
+	const mainMemMb = Math.round(mainMem.heapUsed / 1048576)
+	const mainRssMb = Math.round(mainMem.rss / 1048576)
+
+	const workerStatusList = Object.values(matchedWorkerStatuses)
+	let workerInfo = ''
+	if (workerStatusList.length) {
+		const parts = workerStatusList.map((s) => `W${s.workerId}:${s.heapUsedMb}/${s.heapTotalMb}MB q:${s.queueDepth} a:${s.activeJobs}`)
+		workerInfo = ` | Workers [${parts.join(', ')}]`
+	}
+
+	const totalWorkerDepth = getTotalWorkerQueueDepth()
+	const infoMessage = `[Main] Queues: Matched inbound:${fastify.matchedQueue.length} workers:${totalWorkerDepth} | Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength} | Main heap:${mainMemMb}MB rss:${mainRssMb}MB${workerInfo}`
 	log.info(infoMessage)
 
 	PoracleInfo.status = {
 		queueInfo: infoMessage,
 		queueSummary,
+		mainMemoryMb: mainMemMb,
+		mainRssMb,
+		matchedWorkerStatuses,
 	}
 }
 

@@ -175,9 +175,11 @@ async function processOne(payload) {
 	} catch (err) {
 		log.error(`Worker MATCHED-${workerId}: Matched processor error`, err)
 	}
+
 }
 
-const alarmProcessor = new PromiseQueue(hookQueue, config.tuning.concurrentWebhookProcessorsPerWorker)
+const concurrentProcessors = config.tuning.concurrentMatchedProcessorsPerWorker || config.tuning.concurrentWebhookProcessorsPerWorker || 10
+const alarmProcessor = new PromiseQueue(hookQueue, concurrentProcessors)
 
 function receiveQueue(msg) {
 	try {
@@ -286,6 +288,24 @@ if (!isMainThread) {
 			msg.queuePort.on('message', receiveQueue)
 		}
 	})
+
+	// Periodic status reporting
+	setInterval(() => {
+		if (!queuePort) return
+		const mem = process.memoryUsage()
+		const status = {
+			type: 'status',
+			workerId,
+			heapUsedMb: Math.round(mem.heapUsed / 1048576),
+			heapTotalMb: Math.round(mem.heapTotal / 1048576),
+			rssMb: Math.round(mem.rss / 1048576),
+			queueDepth: hookQueue.length,
+			activeJobs: alarmProcessor.running.length,
+		}
+		queuePort.postMessage(status)
+
+		log.info(`Worker MATCHED-${workerId}: heap ${status.heapUsedMb}/${status.heapTotalMb}MB rss ${status.rssMb}MB | queue: ${status.queueDepth} active: ${status.activeJobs}`)
+	}, 60000)
 
 	monsterController.on('postMessage', (jobs) => queuePort.postMessage({ queue: jobs }))
 	raidController.on('postMessage', (jobs) => queuePort.postMessage({ queue: jobs }))
