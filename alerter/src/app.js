@@ -465,7 +465,12 @@ async function currentStatus() {
 	const workerStatusList = Object.values(matchedWorkerStatuses)
 	let workerInfo = ''
 	if (workerStatusList.length) {
-		const parts = workerStatusList.map((s) => `W${s.workerId}:${s.heapUsedMb}/${s.heapTotalMb}MB q:${s.queueDepth} a:${s.activeJobs}`)
+		const parts = workerStatusList.map((s) => {
+			let detail = `W${s.workerId}:${s.eventsPerSec || 0}/s ${s.heapUsedMb}/${s.heapTotalMb}MB q:${s.queueDepth} a:${s.activeJobs}`
+			if (s.geocoder) detail += ` geo(${s.geocoder.calls} avg:${s.geocoder.avgMs}ms fly:${s.geocoder.inFlight} hit:${s.geocoder.cacheHits} err:${s.geocoder.errors} cached:${s.geocoder.cacheEntries})`
+			if (s.tileserver) detail += ` tile(${s.tileserver.calls} avg:${s.tileserver.avgMs}ms fly:${s.tileserver.inFlight} err:${s.tileserver.errors})`
+			return detail
+		})
 		workerInfo = ` | Workers [${parts.join(', ')}]`
 	}
 

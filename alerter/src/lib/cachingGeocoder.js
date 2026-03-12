@@ -55,6 +55,7 @@ class CachingGeocoder {
 		this.mustache = mustache
 		this.cache = cacheFilename ? pcache.load(cacheFilename, path.join(__dirname, '../../.cache')) : null
 		this.timeout = this.config.tuning.geocodingTimeout || 5000
+		this.stats = { calls: 0, totalMs: 0, inFlight: 0, cacheHits: 0, errors: 0 }
 		setInterval(() => this.writeCache(), 60000) // Write out cache every minute
 	}
 
@@ -103,18 +104,23 @@ class CachingGeocoder {
 		}
 
 		const doGeolocate = async () => {
+			this.stats.inFlight++
 			try {
 				const startTime = performance.now()
 				const geocoder = this.getGeocoder()
 				const r = await geocoder.reverse(locationObject)
 				if (!r || r.error) {
 					this.log.error(`getAddress: failed to fetch data - ${!r ? 'no result' : `${r.error}`}`)
+					this.stats.errors++
 					return { addr: 'Unknown', flag: '' }
 				}
 
 				const result = r[0]
-				const endTime = performance.now();
-				(this.config.logger.timingStats ? this.log.verbose : this.log.debug)(`Geocode ${locationObject.lat},${locationObject.lon} (${endTime - startTime} ms)`)
+				const endTime = performance.now()
+				const elapsed = endTime - startTime
+				this.stats.calls++
+				this.stats.totalMs += elapsed;
+				(this.config.logger.timingStats ? this.log.verbose : this.log.debug)(`Geocode ${locationObject.lat},${locationObject.lon} (${elapsed} ms)`)
 
 				const flag = emojiFlags.countryCodeEmoji(result.countryCode)
 				if (!this.addressDts) {
@@ -125,8 +131,11 @@ class CachingGeocoder {
 
 				return this.escapeAddress(result)
 			} catch (err) {
+				this.stats.errors++
 				this.log.error('getAddress: failed to fetch data', err)
 				return { addr: 'Unknown', flag: '' }
+			} finally {
+				this.stats.inFlight--
 			}
 		}
 
@@ -136,7 +145,10 @@ class CachingGeocoder {
 
 		const cacheKey = `${String(+locationObject.lat.toFixed(this.config.geocoding.cacheDetail))}-${String(+locationObject.lon.toFixed(this.config.geocoding.cacheDetail))}`
 		const cachedResult = this.cache ? this.cache.getKey(cacheKey) : null
-		if (cachedResult) return this.escapeAddress(cachedResult)
+		if (cachedResult) {
+			this.stats.cacheHits++
+			return this.escapeAddress(cachedResult)
+		}
 
 		const result = await doGeolocate()
 		if (this.cache) {
@@ -145,6 +157,18 @@ class CachingGeocoder {
 		}
 
 		return result
+	}
+
+	getStats() {
+		return {
+			...this.stats,
+			avgMs: this.stats.calls > 0 ? Math.round(this.stats.totalMs / this.stats.calls) : 0,
+			cacheEntries: this.cache ? this.cache.keys().length : 0,
+		}
+	}
+
+	resetStats() {
+		this.stats = { calls: 0, totalMs: 0, inFlight: this.stats.inFlight, cacheHits: 0, errors: 0 }
 	}
 
 	// eslint-disable-next-line class-methods-use-this

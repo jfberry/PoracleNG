@@ -73,6 +73,7 @@ const fortUpdateController = new FortUpdateController(logs.controller, knex, cac
 const hookQueue = []
 let queuePort
 let commandPort
+let eventsProcessed = 0
 
 async function processOne(payload) {
 	let queueAddition = []
@@ -176,6 +177,7 @@ async function processOne(payload) {
 		log.error(`Worker MATCHED-${workerId}: Matched processor error`, err)
 	}
 
+	eventsProcessed++
 }
 
 const concurrentProcessors = config.tuning.concurrentMatchedProcessorsPerWorker || config.tuning.concurrentWebhookProcessorsPerWorker || 10
@@ -289,10 +291,40 @@ if (!isMainThread) {
 		}
 	})
 
+	// Collect tileserver stats across all controllers
+	const allControllers = [monsterController, raidController, weatherController, pokestopController, pokestopLureController, questController, gymController, nestController, fortUpdateController]
+
+	function aggregateTileStats() {
+		const agg = { calls: 0, totalMs: 0, inFlight: 0, errors: 0 }
+		for (const ctrl of allControllers) {
+			if (ctrl.tileserverPregen) {
+				const s = ctrl.tileserverPregen.getStats()
+				agg.calls += s.calls
+				agg.totalMs += s.totalMs
+				agg.inFlight += s.inFlight
+				agg.errors += s.errors
+			}
+		}
+		agg.avgMs = agg.calls > 0 ? Math.round(agg.totalMs / agg.calls) : 0
+		return agg
+	}
+
+	function resetAllStats() {
+		for (const ctrl of allControllers) {
+			if (ctrl.tileserverPregen) ctrl.tileserverPregen.resetStats()
+		}
+		cachingGeocoder.resetStats()
+	}
+
 	// Periodic status reporting
 	setInterval(() => {
 		if (!queuePort) return
 		const mem = process.memoryUsage()
+		const geoStats = cachingGeocoder.getStats()
+		const tileStats = aggregateTileStats()
+		const eps = +(eventsProcessed / 60).toFixed(1)
+		eventsProcessed = 0
+
 		const status = {
 			type: 'status',
 			workerId,
@@ -301,10 +333,15 @@ if (!isMainThread) {
 			rssMb: Math.round(mem.rss / 1048576),
 			queueDepth: hookQueue.length,
 			activeJobs: alarmProcessor.running.length,
+			eventsPerSec: eps,
+			geocoder: geoStats,
+			tileserver: tileStats,
 		}
 		queuePort.postMessage(status)
 
-		log.info(`Worker MATCHED-${workerId}: heap ${status.heapUsedMb}/${status.heapTotalMb}MB rss ${status.rssMb}MB | queue: ${status.queueDepth} active: ${status.activeJobs}`)
+		log.info(`Worker MATCHED-${workerId}: ${eps} evt/s heap ${status.heapUsedMb}/${status.heapTotalMb}MB rss ${status.rssMb}MB | queue: ${status.queueDepth} active: ${status.activeJobs} | geo: ${geoStats.calls} calls avg ${geoStats.avgMs}ms inflight:${geoStats.inFlight} hit:${geoStats.cacheHits} err:${geoStats.errors} cached:${geoStats.cacheEntries} | tile: ${tileStats.calls} calls avg ${tileStats.avgMs}ms inflight:${tileStats.inFlight} err:${tileStats.errors}`)
+
+		resetAllStats()
 	}, 60000)
 
 	monsterController.on('postMessage', (jobs) => queuePort.postMessage({ queue: jobs }))

@@ -5,6 +5,7 @@ class TileserverPregen {
 		this.axios = axios
 		this.log = log
 		this.config = config
+		this.stats = { calls: 0, totalMs: 0, inFlight: 0, errors: 0 }
 	}
 
 	getConfigForTileType(maptype) {
@@ -43,6 +44,7 @@ class TileserverPregen {
 			templateType = 'multi-'
 		}
 		const url = `${this.config.geocoding.staticProviderURL}/${mapType}/poracle-${templateType}${type}?pregenerate=true&regeneratable=true`
+		this.stats.inFlight++
 		try {
 			this.log.debug(`${logReference}: Pre-generating static map ${url}`)
 			const hrstart = process.hrtime()
@@ -57,16 +59,21 @@ class TileserverPregen {
 			const result = await axios.post(url, data, { cancelToken: source.token })
 			clearTimeout(timeout)
 			if (result.status !== 200) {
+				this.stats.errors++
 				this.log.warn(`${logReference}: Failed to Pregenerate ${templateType}StaticMap. Got ${result.status}. Error: ${result.data ? result.data.reason : '?'}.`)
 				return null
 			} if (typeof result.data !== 'string') {
+				this.stats.errors++
 				this.log.warn(`${logReference}: Failed to Pregenerate ${templateType}StaticMap. No id returned.`)
 				return null
 			}
 			const hrend = process.hrtime(hrstart)
-			const hrendms = hrend[1] / 1000000
+			const hrendms = (hrend[0] * 1000) + (hrend[1] / 1000000)
+			this.stats.calls++
+			this.stats.totalMs += hrendms
 
 			if (result.data.includes('<')) { // check for HTML error response
+				this.stats.errors++
 				this.log.warn(`${logReference}: Failed to Pregenerate ${templateType}StaticMap. Got invalid response from tileserver - ${result.data}`)
 				return null
 			}
@@ -75,13 +82,27 @@ class TileserverPregen {
 
 			return tileResult
 		} catch (error) {
+			this.stats.errors++
 			if (error.response) {
 				this.log.warn(`${logReference}: Failed to Pregenerate ${templateType}StaticMap. Got ${error.response.status}. Error: ${error.response.data ? error.response.data.reason : '?'}.`)
 			} else {
 				this.log.warn(`${logReference}: Failed to Pregenerate ${templateType}StaticMap. Error: ${error}.`)
 			}
 			return null
+		} finally {
+			this.stats.inFlight--
 		}
+	}
+
+	getStats() {
+		return {
+			...this.stats,
+			avgMs: this.stats.calls > 0 ? Math.round(this.stats.totalMs / this.stats.calls) : 0,
+		}
+	}
+
+	resetStats() {
+		this.stats = { calls: 0, totalMs: 0, inFlight: this.stats.inFlight, errors: 0 }
 	}
 
 	async getTileURL(logReference, type, data, staticMapType) {
