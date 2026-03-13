@@ -189,6 +189,25 @@ func (wt *WeatherTracker) CheckWeatherOnMonster(cellID string, lat, lon float64,
 		if changed {
 			local.weatherFromBoost = [8]int{}
 
+			// Determine the effective old weather: use previous hour's data if current
+			// hour has no weather yet (which is normal at hour boundaries).
+			oldWeather := currentWeather
+			if oldWeather == 0 {
+				oldWeather = controller.hourWeather[previousHour]
+			}
+
+			// Update state so subsequent pokemon in this hour don't re-trigger
+			controller.hourWeather[currentHour] = monsterWeather
+			controller.lastCurrentWeatherCheck = now
+
+			// If we still have no prior weather, this is a first observation — not a change
+			if oldWeather == 0 || oldWeather == monsterWeather {
+				local.currentHourTimestamp = currentHour
+				local.monsterWeather = monsterWeather
+				log.Infof("Weather inferred in cell %s as %d (no prior data or unchanged, no alert)", cellID, monsterWeather)
+				return
+			}
+
 			if local.currentHourTimestamp != currentHour || local.monsterWeather != monsterWeather {
 				local.currentHourTimestamp = currentHour
 				local.monsterWeather = monsterWeather
@@ -202,7 +221,7 @@ func (wt *WeatherTracker) CheckWeatherOnMonster(cellID string, lat, lon float64,
 					Latitude:             lat,
 					S2CellID:             cellID,
 					GameplayCondition:    monsterWeather,
-					OldGameplayCondition: currentWeather,
+					OldGameplayCondition: oldWeather,
 					Updated:              now,
 					Source:               "fromMonster",
 				}:
