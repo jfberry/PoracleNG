@@ -151,31 +151,34 @@ type ActivePokemonEntry struct {
 
 // MatchedUser represents a user who matched an alert.
 type MatchedUser struct {
-	ID               string               `json:"id"`
-	Name             string               `json:"name"`
-	Type             string               `json:"type"`
-	Language         string               `json:"language"`
-	Latitude         float64              `json:"latitude"`
-	Longitude        float64              `json:"longitude"`
-	Template         string               `json:"template"`
-	Distance         int                  `json:"distance"`
-	Clean            bool                 `json:"clean"`
-	Ping             string               `json:"ping"`
-	PokemonID        int                  `json:"pokemon_id"`
-	PVPRankingCap    int                  `json:"pvp_ranking_cap"`
-	PVPRankingLeague int                  `json:"pvp_ranking_league"`
-	PVPRankingWorst  int                  `json:"pvp_ranking_worst"`
-	RSVPChanges      int                  `json:"rsvp_changes"`
-	ActivePokemons   []ActivePokemonEntry `json:"active_pokemons,omitempty"`
+	ID                string               `json:"id"`
+	Name              string               `json:"name"`
+	Type              string               `json:"type"`
+	Language          string               `json:"language"`
+	Latitude          float64              `json:"latitude"`
+	Longitude         float64              `json:"longitude"`
+	Template          string               `json:"template"`
+	Distance          int                  `json:"distance"`
+	Clean             bool                 `json:"clean"`
+	Ping              string               `json:"ping"`
+	Bearing           int                  `json:"bearing"`
+	CardinalDirection string               `json:"cardinalDirection"`
+	PokemonID         int                  `json:"pokemon_id"`
+	PVPRankingCap     int                  `json:"pvp_ranking_cap"`
+	PVPRankingLeague  int                  `json:"pvp_ranking_league"`
+	PVPRankingWorst   int                  `json:"pvp_ranking_worst"`
+	RSVPChanges       int                  `json:"rsvp_changes"`
+	ActivePokemons    []ActivePokemonEntry `json:"active_pokemons,omitempty"`
 }
 
 // OutboundPayload is sent from processor to alerter.
 type OutboundPayload struct {
-	Type         string          `json:"type"`
-	Message      json.RawMessage `json:"message"`
-	MatchedAreas []MatchedArea   `json:"matched_areas"`
-	MatchedUsers []MatchedUser   `json:"matched_users"`
-	OldState     *EncounterOld   `json:"old_state,omitempty"`
+	Type         string                 `json:"type"`
+	Message      json.RawMessage        `json:"message"`
+	Enrichment   map[string]interface{} `json:"enrichment,omitempty"`
+	MatchedAreas []MatchedArea          `json:"matched_areas"`
+	MatchedUsers []MatchedUser          `json:"matched_users"`
+	OldState     *EncounterOld          `json:"old_state,omitempty"`
 }
 
 // EncounterOld holds old state for pokemon_changed events.
@@ -263,4 +266,5 @@ type FortWebhook struct {
 	FortType    string   `json:"type"`
 	IsEmpty     bool     `json:"is_empty"`
 	ChangeTypes []string `json:"change_types"`
+	ResetTime   int64    `json:"reset_time"`
 }

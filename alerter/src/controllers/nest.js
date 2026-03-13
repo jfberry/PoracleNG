@@ -1,5 +1,3 @@
-const geoTz = require('geo-tz')
-const moment = require('moment-timezone')
 const Controller = require('./controller')
 
 /**
@@ -30,12 +28,7 @@ class Nest extends Controller {
 			}
 			data.name = this.escapeJsonString(data.name)
 
-			const nestExpiration = data.reset_time + (7 * 24 * 60 * 60)
-			data.tth = moment.preciseDiff(Date.now(), nestExpiration * 1000, true)
-			data.disappearDate = moment(nestExpiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.date)
-			data.resetDate = moment(data.reset_time * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.date)
-			data.disappearTime = moment(nestExpiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.time)
-			data.resetTime = moment(data.reset_time * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.time)
+			// tth, disappearDate, disappearTime, resetDate, resetTime provided by processor enrichment
 
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated

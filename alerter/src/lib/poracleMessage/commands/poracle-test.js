@@ -3,6 +3,7 @@ const fs = require('fs')
 const path = require('path')
 const geoTz = require('geo-tz')
 const moment = require('moment-timezone')
+require('moment-precise-range-plugin')
 
 exports.run = async (client, msg, args, options) => {
 	try {
@@ -144,9 +145,82 @@ exports.run = async (client, msg, args, options) => {
 
 		await msg.reply(`Queueing ${hookType} test hook [${testId}] template [${template}]`)
 
+		// Build enrichment fields that the processor would normally provide
+		const enrichment = {}
+		const tz = geoTz.find(hook.latitude, hook.longitude)[0].toString()
+
+		const formatTime = (unix) => moment(unix * 1000).tz(tz).format(client.config.locale.time)
+		const formatDate = (unix) => moment(unix * 1000).tz(tz).format(client.config.locale.date)
+		const computeTth = (unix) => moment.preciseDiff(Date.now(), unix * 1000, true)
+
+		switch (hookType) {
+			case 'pokemon': {
+				enrichment.disappearTime = formatTime(hook.disappear_time)
+				enrichment.tth = computeTth(hook.disappear_time)
+				const weatherChangeTS = hook.disappear_time - (hook.disappear_time % 3600)
+				enrichment.weatherChangeTime = formatTime(weatherChangeTS)
+				break
+			}
+			case 'raid': {
+				if (hook.pokemon_id > 0) {
+					enrichment.disappearTime = formatTime(hook.end)
+					enrichment.tth = computeTth(hook.end)
+					const weatherChangeTS = hook.end - (hook.end % 3600)
+					enrichment.weatherChangeTime = formatTime(weatherChangeTS)
+				} else {
+					enrichment.hatchTime = formatTime(hook.start)
+					enrichment.tth = computeTth(hook.start)
+				}
+				break
+			}
+			case 'pokestop': {
+				const expiration = hook.incident_expiration || hook.incident_expire_timestamp
+				if (expiration) {
+					enrichment.disappearTime = formatTime(expiration)
+					enrichment.tth = computeTth(expiration)
+				}
+				if (hook.lure_expiration) {
+					enrichment.disappearTime = formatTime(hook.lure_expiration)
+					enrichment.tth = computeTth(hook.lure_expiration)
+				}
+				break
+			}
+			case 'quest': {
+				const endOfDay = moment().tz(tz).endOf('day').unix()
+				enrichment.disappearTime = formatTime(endOfDay)
+				enrichment.tth = computeTth(endOfDay)
+				break
+			}
+			case 'gym': {
+				enrichment.conqueredTime = moment().tz(tz).format(client.config.locale.time)
+				enrichment.tth = { days: 0, hours: 1, minutes: 0, seconds: 0 }
+				break
+			}
+			case 'nest': {
+				const nestExpiration = hook.reset_time + (7 * 24 * 60 * 60)
+				enrichment.tth = computeTth(nestExpiration)
+				enrichment.disappearTime = formatTime(nestExpiration)
+				enrichment.disappearDate = formatDate(nestExpiration)
+				enrichment.resetTime = formatTime(hook.reset_time)
+				enrichment.resetDate = formatDate(hook.reset_time)
+				break
+			}
+			case 'fort_update': {
+				const fortExpiration = hook.reset_time + (7 * 24 * 60 * 60)
+				enrichment.tth = computeTth(fortExpiration)
+				enrichment.disappearTime = formatTime(fortExpiration)
+				enrichment.disappearDate = formatDate(fortExpiration)
+				enrichment.resetTime = formatTime(hook.reset_time)
+				enrichment.resetDate = formatDate(hook.reset_time)
+				break
+			}
+			default:
+		}
+
 		client.addToMatchedQueue({
 			type: dataItem.type,
 			message: hook,
+			enrichment,
 			matched_users: [{
 				id: target.id,
 				name: target.name,

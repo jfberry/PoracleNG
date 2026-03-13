@@ -3,8 +3,6 @@
 //
 // ....because it is smartly done there!!
 
-const geoTz = require('geo-tz')
-const moment = require('moment-timezone')
 const Controller = require('./controller')
 const { log } = require('../lib/logger')
 
@@ -30,11 +28,11 @@ class Quest extends Controller {
 				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
 			}
 			data.intersection = await this.obtainIntersection(data)
-			data.disappearTime = moment.tz(new Date(), this.config.locale.time, geoTz.find(data.latitude, data.longitude)[0].toString()).endOf('day')
+			// disappearTime is pre-computed by the Go processor
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
 			data.disTime = data.disappearTime // deprecated
-			data.tth = moment.preciseDiff(Date.now(), data.disappearTime.clone().utc(), true)
+			// tth is pre-computed by the Go processor
 			data.imgUrl = ''
 			data.stickerUrl = ''
 
@@ -125,7 +123,7 @@ class Quest extends Controller {
 				if (!data.baseStats) data.baseStats = Object.values(this.GameData.monsters).some((mon) => data.rewardData.monsters[0].pokemonId === mon.id && !mon.form.id) ? Object.values(this.GameData.monsters).filter((mon) => data.rewardData.monsters[0].pokemonId === mon.id && !mon.form.id)[0].stats : ''
 			}
 
-			const event = this.eventParser.eventChangesQuest(moment().unix(), data.disappearTime.unix(), data.latitude, data.longitude)
+			const event = this.eventParser.eventChangesQuest(Math.floor(Date.now() / 1000), data.disappear_time, data.latitude, data.longitude)
 			if (event) {
 				data.futureEvent = true
 				data.futureEventTime = event.time

@@ -1,6 +1,3 @@
-const geoTz = require('geo-tz')
-const moment = require('moment-timezone')
-require('moment-precise-range-plugin')
 const Controller = require('./controller')
 
 class Monster extends Controller {
@@ -90,9 +87,7 @@ class Monster extends Controller {
 			data.color = this.GameData.utilData.types[monster.types[0].name].color
 			data.ivColor = this.findIvColor(data.iv)
 			if (data.tthSeconds === undefined) data.tthSeconds = data.disappear_time - Date.now() / 1000
-			data.tth = moment.preciseDiff(Date.now(), data.disappear_time * 1000, true)
-			const disappearTime = moment(data.disappear_time * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString())
-			data.disappearTime = disappearTime.format(this.config.locale.time)
+			// tth and disappearTime are pre-computed by the Go processor
 			data.confirmedTime = data.disappear_time_verified
 			data.distime = data.disappearTime // deprecated
 			data.individual_attack = data.atk // deprecated
@@ -271,7 +266,7 @@ class Monster extends Controller {
 
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, disappearTime, this.config)
+				require('./common/nightTime').setNightTime(data, this.config)
 
 				data.intersection = await this.obtainIntersection(data)
 
@@ -290,18 +285,7 @@ class Monster extends Controller {
 				else if (data.pokestop_id === 'None') data.seenType = encountered ? 'encounter' : 'wild'
 				else data.seenType = 'pokestop'
 
-				if (data.seenType === 'cell' && !data.cell_coords) {
-					const { S2 } = require('s2-geometry')
-					const S2ts = require('nodes2ts')
-					const areaCellKey = S2.latLngToKey(data.latitude, data.longitude, 15)
-					const areaCellId = S2.keyToId(areaCellKey)
-					const s2cell = new S2ts.S2Cell(new S2ts.S2CellId(areaCellId))
-					data.cell_coords = []
-					for (let i = 0; i <= 3; i++) {
-						const vertex = S2ts.S2LatLng.fromPoint(s2cell.getVertex(i))
-						data.cell_coords.push([parseFloat(vertex.latDegrees), parseFloat(vertex.lngDegrees)])
-					}
-				}
+				// cell_coords are pre-computed by the Go processor
 
 				await this.getStaticMapUrl(
 					logReference,
@@ -324,10 +308,7 @@ class Monster extends Controller {
 					const forecastBoostedTypes = weatherForecast.next ? this.GameData.utilData.weatherTypeBoost[weatherForecast.next] : []
 					if (weatherForecast.current > 0 && currentBoostedTypes.filter((boostedType) => data.types.includes(boostedType)).length > 0) pokemonShouldBeBoosted = true
 					if (weatherForecast.next > 0 && ((data.weather > 0 && weatherForecast.next !== data.weather) || (weatherForecast.current > 0 && weatherForecast.next !== weatherForecast.current) || (pokemonShouldBeBoosted && data.weather === 0))) {
-						const weatherChangeTime = moment((data.disappear_time - (data.disappear_time % 3600)) * 1000)
-							.tz(geoTz.find(data.latitude, data.longitude)[0].toString())
-							.format(this.config.locale.time)
-							.slice(0, -3)
+						const weatherChangeTime = data.weatherChangeTime || ''
 						pokemonWillBeBoosted = forecastBoostedTypes.filter((boostedType) => data.types.includes(boostedType)).length > 0 ? 1 : 0
 						if (data.weather > 0 && !pokemonWillBeBoosted || data.weather === 0 && pokemonWillBeBoosted) {
 							weatherForecast.current = data.weather > 0 ? data.weather : weatherForecast.current
@@ -343,7 +324,7 @@ class Monster extends Controller {
 				}
 
 				// Future event processing
-				const event = this.eventParser.eventChangesSpawn(moment().unix(), data.disappear_time, data.latitude, data.longitude)
+				const event = this.eventParser.eventChangesSpawn(Math.floor(Date.now() / 1000), data.disappear_time, data.latitude, data.longitude)
 				if (event) {
 					data.futureEvent = true
 					data.futureEventTime = event.time
@@ -536,11 +517,9 @@ class Monster extends Controller {
 					data.pvpAvailable = data.pvpGreat !== null || data.pvpUltra !== null || data.pvpLittle !== null
 					data.userHasPvpTracks = !!cares.filters.length
 
-					data.distance = cares.longitude ? this.getDistance({ lat: cares.latitude, lon: cares.longitude }, { lat: data.latitude, lon: data.longitude }) : ''
-
-					const bearing = cares.longitude ? this.getBearing({ lat: cares.latitude, lon: cares.longitude }, { lat: data.latitude, lon: data.longitude }) : null
-					data.bearing = bearing?.toFixed(0) ?? ''
-					data.bearingEmoji = bearing ? this.emojiLookup.lookup(this.getBearingEmoji(data.bearing), platform) : ''
+					data.distance = cares.distance ?? ''
+					data.bearing = cares.bearing ?? ''
+					data.bearingEmoji = cares.cardinalDirection ? this.emojiLookup.lookup(cares.cardinalDirection, platform) : ''
 
 					const view = {
 						...geoResult,

@@ -1,7 +1,3 @@
-const geoTz = require('geo-tz')
-const moment = require('moment-timezone')
-require('moment-precise-range-plugin')
-
 const Controller = require('./controller')
 
 class Invasion extends Controller {
@@ -32,9 +28,7 @@ class Invasion extends Controller {
 
 			const incidentExpiration = data.incident_expiration ?? data.incident_expire_timestamp
 			data.incidentExpiration = incidentExpiration
-			data.tth = moment.preciseDiff(Date.now(), incidentExpiration * 1000, true)
-			const disappearTime = moment(incidentExpiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString())
-			data.disappearTime = disappearTime.format(this.config.locale.time)
+			// tth and disappearTime are pre-computed by the Go processor
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
 			data.distime = data.disappearTime // deprecated
@@ -116,7 +110,7 @@ class Invasion extends Controller {
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, disappearTime, this.config)
+				require('./common/nightTime').setNightTime(data, this.config)
 
 				data.intersection = await this.obtainIntersection(data)
 

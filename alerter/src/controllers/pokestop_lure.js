@@ -1,7 +1,3 @@
-const geoTz = require('geo-tz')
-const moment = require('moment-timezone')
-require('moment-precise-range-plugin')
-
 const Controller = require('./controller')
 /**
  * Controller for processing pokestop webhooks
@@ -33,10 +29,7 @@ class Lure extends Controller {
 			data.url = data.url || this.config.fallbacks?.pokestopUrl
 			data.pokestopUrl = data.url
 
-			const lureExpiration = data.lure_expiration
-			data.tth = moment.preciseDiff(Date.now(), lureExpiration * 1000, true)
-			const disappearTime = moment(lureExpiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString())
-			data.disappearTime = disappearTime.format(this.config.locale.time)
+			// tth and disappearTime provided by processor enrichment
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
 			data.distime = data.disappearTime // deprecated
@@ -84,7 +77,7 @@ class Lure extends Controller {
 				})
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, disappearTime, this.config)
+				require('./common/nightTime').setNightTime(data, this.config)
 
 				await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'lureTypeId', 'style'])
 				data.intersection = await this.obtainIntersection(data)

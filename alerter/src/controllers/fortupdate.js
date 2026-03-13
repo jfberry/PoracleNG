@@ -1,5 +1,3 @@
-const geoTz = require('geo-tz')
-const moment = require('moment-timezone')
 const Controller = require('./controller')
 
 /**
@@ -32,12 +30,7 @@ class FortUpdate extends Controller {
 			}
 			data.name = this.escapeJsonString(data.name)
 
-			const expiration = data.reset_time + (7 * 24 * 60 * 60)
-			data.tth = moment.preciseDiff(Date.now(), expiration * 1000, true)
-			data.disappearDate = moment(expiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.date)
-			data.resetDate = moment(data.reset_time * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.date)
-			data.disappearTime = moment(expiration * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.time)
-			data.resetTime = moment(data.reset_time * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString()).format(this.config.locale.time)
+			// tth, disappearDate, disappearTime, resetDate, resetTime provided by processor enrichment
 
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
@@ -175,8 +168,6 @@ class FortUpdate extends Controller {
 				let [platform] = cares.type.split(':')
 				if (platform === 'webhook') platform = 'discord'
 
-				const now = new Date()
-				const time = moment.tz(now, this.config.locale.time, geoTz.find(data.latitude, data.longitude)[0].toString())
 				const view = {
 					...geoResult,
 					...data,
@@ -184,8 +175,8 @@ class FortUpdate extends Controller {
 					tthh: data.tth.hours,
 					tthm: data.tth.minutes,
 					tths: data.tth.seconds,
-					time: time.format(this.config.locale.time),
-					nowISO: now.toISOString(),
+					time: data.resetTime,
+					nowISO: new Date().toISOString(),
 					areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
 				}
 

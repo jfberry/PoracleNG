@@ -1,7 +1,3 @@
-const geoTz = require('geo-tz')
-const moment = require('moment-timezone')
-require('moment-precise-range-plugin')
-
 const Controller = require('./controller')
 
 class Raid extends Controller {
@@ -44,9 +40,7 @@ class Raid extends Controller {
 			data.gymColor = this.GameData.utilData.teams[data.team_id].color
 			data.ex = !!(data.ex_raid_eligible ?? data.is_ex_raid_eligible)
 			data.gymUrl = data.gym_url || data.url || ''
-			const timezone = geoTz.find(data.latitude, data.longitude)[0].toString()
-			const disappearTime = moment(data.end * 1000).tz(timezone)
-			data.disappearTime = disappearTime.format(this.config.locale.time)
+			// disappearTime is pre-computed by the Go processor
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
 			data.color = data.gymColor // deprecated
@@ -75,7 +69,7 @@ class Raid extends Controller {
 				for (const rsvp of data.rsvps) {
 					if (rsvp.timeslot > unixMsNow) {
 						rsvp.timeSlot = Math.ceil(rsvp.timeslot / 1000)
-						rsvp.time = moment(rsvp.timeslot).tz(timezone).format(this.config.locale.time)
+						rsvp.time = rsvp.time || ''
 						rsvp.goingCount = rsvp.going_count || 0
 						rsvp.maybeCount = rsvp.maybe_count || 0
 						newRsvps.push(rsvp)
@@ -100,7 +94,7 @@ class Raid extends Controller {
 				data.formNameEng = monster.form.name
 				data.genderDataEng = this.GameData.utilData.genders[data.gender]
 				data.evolutionNameEng = data.evolution ? this.GameData.utilData.evolution[data.evolution].name : ''
-				data.tth = moment.preciseDiff(Date.now(), data.end * 1000, true)
+				// tth is pre-computed by the Go processor
 				data.formname = data.formNameEng // deprecated
 				data.evolutionname = data.evolutionNameEng // deprecated
 				data.quickMoveId = data.move_1 ?? ''
@@ -138,7 +132,7 @@ class Raid extends Controller {
 					const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 					const jobs = []
 
-					require('./common/nightTime').setNightTime(data, disappearTime, this.config)
+					require('./common/nightTime').setNightTime(data, this.config)
 					await this.getStaticMapUrl(logReference, data, 'raid', ['pokemon_id', 'latitude', 'longitude', 'form', 'level', 'imgUrl', 'style'])
 					data.intersection = await this.obtainIntersection(data)
 					data.staticmap = data.staticMap // deprecated
@@ -305,9 +299,8 @@ class Raid extends Controller {
 			}
 
 			// Egg handling
-			data.tth = moment.preciseDiff(Date.now(), data.start * 1000, true)
-			const hatchTime = moment(data.start * 1000).tz(timezone)
-			data.hatchTime = hatchTime.format(this.config.locale.time)
+			// tth is pre-computed by the Go processor
+			// hatchTime is pre-computed by the Go processor
 			data.hatchtime = data.hatchTime // deprecated
 
 			if (data.tth.firstDateWasLater || ((data.tth.hours * 3600) + (data.tth.minutes * 60) + data.tth.seconds) < minTth) {
@@ -335,7 +328,7 @@ class Raid extends Controller {
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, hatchTime, this.config)
+				require('./common/nightTime').setNightTime(data, this.config)
 				await this.getStaticMapUrl(logReference, data, 'raid', ['latitude', 'longitude', 'level', 'imgUrl'])
 				data.staticmap = data.staticMap // deprecated
 

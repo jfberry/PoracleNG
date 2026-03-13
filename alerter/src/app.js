@@ -401,6 +401,11 @@ async function processOne(payload) {
 	try {
 		if ((Math.random() * 1000) > 995) log.verbose(`MatchedQueue is currently ${hookQueue.length}`)
 
+		// Merge processor enrichment into message
+		if (payload.enrichment) {
+			Object.assign(payload.message, payload.enrichment)
+		}
+
 		switch (payload.type) {
 			case 'pokemon': {
 				const result = await monsterController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)

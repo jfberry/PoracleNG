@@ -1,7 +1,3 @@
-const geoTz = require('geo-tz')
-const moment = require('moment-timezone')
-require('moment-precise-range-plugin')
-
 const Controller = require('./controller')
 
 /**
@@ -35,18 +31,10 @@ class Gym extends Controller {
 			data.gymName = data.name
 			data.gymUrl = data.url
 
-			data.tth = {
-				days: 0,
-				hours: 1,
-				minutes: 0,
-				seconds: 0,
-			}
+			// tth and conqueredTime provided by processor enrichment
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
 			data.distime = data.disappearTime // deprecated
-
-			const conqueredTime = moment().tz(geoTz.find(data.latitude, data.longitude)[0].toString())
-			data.conqueredTime = conqueredTime.format(this.config.locale.time)
 
 			// Stop handling if it already disappeared or is about to go away
 			if (data.tth.firstDateWasLater || ((data.tth.hours * 3600) + (data.tth.minutes * 60) + data.tth.seconds) < minTth) {
@@ -94,7 +82,7 @@ class Gym extends Controller {
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, conqueredTime, this.config)
+				require('./common/nightTime').setNightTime(data, this.config)
 
 				await this.getStaticMapUrl(logReference, data, 'gym', ['teamId', 'latitude', 'longitude', 'imgUrl', 'style'])
 				data.intersection = await this.obtainIntersection(data)

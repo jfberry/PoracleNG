@@ -1,5 +1,3 @@
-const moment = require('moment-timezone')
-require('moment-precise-range-plugin')
 const Controller = require('./controller')
 
 class Weather extends Controller {
@@ -12,7 +10,7 @@ class Weather extends Controller {
 		let pregenerateTile = false
 		const data = obj
 		try {
-			moment.locale(this.config.locale.timeformat)
+			// locale handled by Go processor
 			const logReference = data.s2_cell_id
 
 			switch (this.config.geocoding.staticProvider.toLowerCase()) {
@@ -45,7 +43,7 @@ class Weather extends Controller {
 
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 
-			require('./common/nightTime').setNightTime(data, moment(), this.config)
+			require('./common/nightTime').setNightTime(data, this.config)
 
 			// Generate tile once before the loop if we don't need pokemon on the map
 			if (pregenerateTile && !this.config.weather.showAlteredPokemonStaticMap) {
@@ -68,8 +66,8 @@ class Weather extends Controller {
 			if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.weatherIcon(data.condition)
 
 			const jobs = []
-			const now = moment.now()
-			const weatherTth = moment.preciseDiff(now, nextHourTimestamp * 1000, true)
+			// weatherTth is pre-computed by the Go processor
+			const weatherTth = data.weatherTth || { hours: 0, minutes: 0, seconds: 0 }
 
 			for (const cares of matchedUsers) {
 				this.log.debug(`${logReference}: Weather alert being generated for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`)
