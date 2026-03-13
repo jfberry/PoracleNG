@@ -84,6 +84,9 @@ func (wt *WeatherTracker) UpdateFromWebhook(cellID string, condition int, timest
 	isNew := !hasCurrentHour || existingWeather != condition || cd.lastCurrentWeatherCheck < hourTimestamp
 	changed := hasPrevious && previousWeather != condition && isNew
 
+	log.Debugf("Weather webhook cell=%s condition=%d hour=%d prevHour=%d hasPrev=%v prevWeather=%d hasCurrentHour=%v existingWeather=%d isNew=%v changed=%v",
+		cellID, condition, hourTimestamp, previousHourTimestamp, hasPrevious, previousWeather, hasCurrentHour, existingWeather, isNew, changed)
+
 	cd.hourWeather[hourTimestamp] = condition
 	cd.lastCurrentWeatherCheck = timestamp
 

@@ -24,7 +24,7 @@ include_mega_evolution = false
 [weather]
 enable_inference = true
 enable_change_alert = true
-show_altered_pokemon = false
+show_altered_pokemon = true
 show_altered_pokemon_max_count = 10
 monsters_json_path = "../alerter/src/util/monsters.json"
 
