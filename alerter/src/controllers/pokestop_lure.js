@@ -73,88 +73,85 @@ class Lure extends Controller {
 			})
 			if (discordCacheBad) return []
 
-			setImmediate(async () => {
-				try {
-					if (this.imgUicons) data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
-					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
-					if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokestopIcon(data.lureTypeId)
+			try {
+				if (this.imgUicons) data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
+				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
+				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokestopIcon(data.lureTypeId)
 
-					const geoResult = await this.getAddress({
-						lat: data.latitude,
-						lon: data.longitude,
-					})
-					const jobs = []
+				const geoResult = await this.getAddress({
+					lat: data.latitude,
+					lon: data.longitude,
+				})
+				const jobs = []
 
-					require('./common/nightTime').setNightTime(data, disappearTime, this.config)
+				require('./common/nightTime').setNightTime(data, disappearTime, this.config)
 
-					await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'lureTypeId', 'style'])
-					data.intersection = await this.obtainIntersection(data)
+				await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'lureTypeId', 'style'])
+				data.intersection = await this.obtainIntersection(data)
 
-					data.staticmap = data.staticMap // deprecated
+				data.staticmap = data.staticMap // deprecated
 
-					for (const cares of whoCares) {
-						this.log.debug(`${logReference}: [matched] Creating lure alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
+				for (const cares of whoCares) {
+					this.log.debug(`${logReference}: [matched] Creating lure alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-						const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-						if (rateLimitTtr) {
-							this.log.verbose(`${logReference}: [matched] Not creating lure alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-							// eslint-disable-next-line no-continue
-							continue
-						}
-						this.log.verbose(`${logReference}: [matched] Creating lure alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
-
-						const language = cares.language || this.config.general.locale
-						const translator = this.translatorFactory.Translator(language)
-						let [platform] = cares.type.split(':')
-						if (platform === 'webhook') platform = 'discord'
-
-						// full build
-						data.lureTypeName = translator.translate(data.lureTypeNameEng)
-						data.lureType = data.lureTypeName
-						data.lureTypeEmoji = this.emojiLookup.lookup(this.GameData.utilData.lures[data.lure_id].emoji, platform)
-
-						const view = {
-							...geoResult,
-							...data,
-							time: data.distime,
-							tthh: data.tth.hours,
-							tthm: data.tth.minutes,
-							tths: data.tth.seconds,
-							now: new Date(),
-							nowISO: new Date().toISOString(),
-							areas: data.matchedAreas.filter((area) => area.displayInMatches)
-								.map((area) => area.name)
-								.join(', '),
-						}
-
-						const templateType = 'lure'
-						const message = await this.createMessage(logReference, templateType, platform, cares.template, language, cares.ping, view)
-
-						const work = {
-							lat: data.latitude.toString()
-								.substring(0, 8),
-							lon: data.longitude.toString()
-								.substring(0, 8),
-							message,
-							target: cares.id,
-							type: cares.type,
-							name: cares.name,
-							tth: data.tth,
-							clean: cares.clean,
-							emoji: data.emoji,
-							logReference,
-							language,
-						}
-
-						jobs.push(work)
+					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
+					if (rateLimitTtr) {
+						this.log.verbose(`${logReference}: [matched] Not creating lure alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
+						// eslint-disable-next-line no-continue
+						continue
 					}
-					this.emit('postMessage', jobs)
-				} catch (e) {
-					this.log.error(`${data.pokestop_id}: [matched] Can't seem to handle pokestop(lure) (user cares): `, e, data)
-				}
-			})
+					this.log.verbose(`${logReference}: [matched] Creating lure alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
-			return []
+					const language = cares.language || this.config.general.locale
+					const translator = this.translatorFactory.Translator(language)
+					let [platform] = cares.type.split(':')
+					if (platform === 'webhook') platform = 'discord'
+
+					// full build
+					data.lureTypeName = translator.translate(data.lureTypeNameEng)
+					data.lureType = data.lureTypeName
+					data.lureTypeEmoji = this.emojiLookup.lookup(this.GameData.utilData.lures[data.lure_id].emoji, platform)
+
+					const view = {
+						...geoResult,
+						...data,
+						time: data.distime,
+						tthh: data.tth.hours,
+						tthm: data.tth.minutes,
+						tths: data.tth.seconds,
+						now: new Date(),
+						nowISO: new Date().toISOString(),
+						areas: data.matchedAreas.filter((area) => area.displayInMatches)
+							.map((area) => area.name)
+							.join(', '),
+					}
+
+					const templateType = 'lure'
+					const message = await this.createMessage(logReference, templateType, platform, cares.template, language, cares.ping, view)
+
+					const work = {
+						lat: data.latitude.toString()
+							.substring(0, 8),
+						lon: data.longitude.toString()
+							.substring(0, 8),
+						message,
+						target: cares.id,
+						type: cares.type,
+						name: cares.name,
+						tth: data.tth,
+						clean: cares.clean,
+						emoji: data.emoji,
+						logReference,
+						language,
+					}
+
+					jobs.push(work)
+				}
+				return jobs
+			} catch (e) {
+				this.log.error(`${data.pokestop_id}: [matched] Can't seem to handle pokestop(lure) (user cares): `, e, data)
+				return []
+			}
 		} catch (e) {
 			this.log.error(`${data.pokestop_id}: [matched] Can't seem to handle pokestop(lure): `, e, data)
 		}

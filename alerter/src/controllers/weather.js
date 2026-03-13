@@ -1,6 +1,4 @@
 const moment = require('moment-timezone')
-const { S2 } = require('s2-geometry')
-const S2ts = require('nodes2ts')
 require('moment-precise-range-plugin')
 const Controller = require('./controller')
 
@@ -193,7 +191,7 @@ class Weather extends Controller {
 			this.log.info(`${logReference}: Weather change alert generated for ${jobs.length} humans`)
 			return jobs
 		} catch (e) {
-			this.log.error(`Weather handleMatched error: `, e, data)
+			this.log.error('Weather handleMatched error: ', e, data)
 		}
 	}
 }
