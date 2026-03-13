@@ -55,7 +55,13 @@ class CachingGeocoder {
 		this.mustache = mustache
 		this.cache = cacheFilename ? pcache.load(cacheFilename, path.join(__dirname, '../../.cache')) : null
 		this.timeout = this.config.tuning.geocodingTimeout || 5000
-		this.stats = { calls: 0, totalMs: 0, inFlight: 0, cacheHits: 0, errors: 0 }
+		this.stats = {
+			calls: 0, totalMs: 0, inFlight: 0, cacheHits: 0, errors: 0,
+		}
+		this.consecutiveErrors = 0
+		this.failureThreshold = config.tuning.geocodingFailureThreshold || 5
+		this.cooldownMs = config.tuning.geocodingCooldownMs || 30000
+		this.circuitOpenSince = 0
 		setInterval(() => this.writeCache(), 60000) // Write out cache every minute
 	}
 
@@ -104,6 +110,16 @@ class CachingGeocoder {
 		}
 
 		const doGeolocate = async () => {
+			// Circuit breaker: skip calls when geocoder is repeatedly failing
+			const now = Date.now()
+			if (this.consecutiveErrors >= this.failureThreshold) {
+				if (now - this.circuitOpenSince < this.cooldownMs) {
+					this.stats.circuitBreaks = (this.stats.circuitBreaks || 0) + 1
+					return { addr: 'Unknown', flag: '' }
+				}
+				// Half-open: allow one probe request
+			}
+
 			this.stats.inFlight++
 			try {
 				const startTime = performance.now()
@@ -112,6 +128,8 @@ class CachingGeocoder {
 				if (!r || r.error) {
 					this.log.error(`getAddress: failed to fetch data - ${!r ? 'no result' : `${r.error}`}`)
 					this.stats.errors++
+					this.consecutiveErrors++
+					if (this.consecutiveErrors >= this.failureThreshold) this.circuitOpenSince = Date.now()
 					return { addr: 'Unknown', flag: '' }
 				}
 
@@ -119,7 +137,8 @@ class CachingGeocoder {
 				const endTime = performance.now()
 				const elapsed = endTime - startTime
 				this.stats.calls++
-				this.stats.totalMs += elapsed;
+				this.stats.totalMs += elapsed
+				this.consecutiveErrors = 0;
 				(this.config.logger.timingStats ? this.log.verbose : this.log.debug)(`Geocode ${locationObject.lat},${locationObject.lon} (${elapsed} ms)`)
 
 				const flag = emojiFlags.countryCodeEmoji(result.countryCode)
@@ -132,6 +151,8 @@ class CachingGeocoder {
 				return this.escapeAddress(result)
 			} catch (err) {
 				this.stats.errors++
+				this.consecutiveErrors++
+				if (this.consecutiveErrors >= this.failureThreshold) this.circuitOpenSince = Date.now()
 				this.log.error('getAddress: failed to fetch data', err)
 				return { addr: 'Unknown', flag: '' }
 			} finally {
@@ -168,7 +189,9 @@ class CachingGeocoder {
 	}
 
 	resetStats() {
-		this.stats = { calls: 0, totalMs: 0, inFlight: this.stats.inFlight, cacheHits: 0, errors: 0 }
+		this.stats = {
+			calls: 0, totalMs: 0, inFlight: this.stats.inFlight, cacheHits: 0, errors: 0,
+		}
 	}
 
 	// eslint-disable-next-line class-methods-use-this

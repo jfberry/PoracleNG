@@ -102,213 +102,210 @@ class Invasion extends Controller {
 			})
 			if (discordCacheBad) return []
 
-			setImmediate(async () => {
-				try {
-					if (((data.grunt_type === 0) || !data.grunt_type) && (data.displayTypeId >= 7)) {
-						if (this.imgUicons) data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId, true, data.displayTypeId) || this.config.fallbacks?.imgUrlPokestop
-						if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId, true, data.displayTypeId) || this.config.fallbacks?.imgUrlPokestop
-						if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokestopIcon(data.lureTypeId, true, data.displayTypeId)
-					} else {
-						if (this.imgUicons) data.imgUrl = await this.imgUicons.invasionIcon(data.gruntTypeId) || this.config.fallbacks?.imgUrlPokestop
-						if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.invasionIcon(data.gruntTypeId) || this.config.fallbacks?.imgUrlPokestop
-						if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.invasionIcon(data.gruntTypeId)
-					}
-
-					const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
-					const jobs = []
-
-					require('./common/nightTime').setNightTime(data, disappearTime, this.config)
-
-					data.intersection = await this.obtainIntersection(data)
-
-					// Get current cell weather from cache
-					const weatherCellId = this.weatherData.getWeatherCellId(data.latitude, data.longitude)
-					const currentCellWeather = this.weatherData.getCurrentWeatherInCell(weatherCellId)
-
-					await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'gruntTypeId', 'displayTypeId', 'style'])
-					data.staticmap = data.staticMap // deprecated
-
-					for (const cares of whoCares) {
-						this.log.debug(`${logReference}: [matched] Creating invasion alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
-
-						const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-						if (rateLimitTtr) {
-							this.log.verbose(`${logReference}: [matched] Not creating invasion alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-							// eslint-disable-next-line no-continue
-							continue
-						}
-						this.log.verbose(`${logReference}: [matched] Creating invasion alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
-
-						const language = cares.language || this.config.general.locale
-						const translator = this.translatorFactory.Translator(language)
-						let [platform] = cares.type.split(':')
-						if (platform === 'webhook') platform = 'discord'
-
-						data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup('grunt-unknown', platform))
-						require('./common/weather').setGameWeather(data, translator, this.GameData, this.emojiLookup, platform, currentCellWeather)
-
-						if (((data.grunt_type === 0) || !data.grunt_type) && (data.displayTypeId >= 7)) {
-							data.gruntName = translator.translate(data.displayTypeId && this.GameData.utilData.pokestopEvent[data.displayTypeId].name ? this.GameData.utilData.pokestopEvent[data.displayTypeId].name : '')
-							data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup(this.GameData.utilData.pokestopEvent[data.displayTypeId].emoji, platform))
-						}
-
-						// full build
-						if (data.gruntTypeId) {
-							data.gender = 0
-							data.gruntName = translator.translate('Grunt')
-							data.gruntType = translator.translate('Mixed')
-							data.gruntRewards = ''
-							if (data.gruntTypeId in this.GameData.grunts) {
-								const gruntType = this.GameData.grunts[data.gruntTypeId]
-								const type = gruntType.type === 'Metal' ? 'Steel' : gruntType.type
-								data.gruntName = translator.translate(`${type} ${gruntType.grunt}`)
-								data.gender = gruntType.gender
-								data.genderDataEng = this.GameData.utilData.genders[data.gender]
-								if (!data.genderDataEng) {
-									data.genderDataEng = { name: '', emoji: '' }
-								}
-								if (this.GameData.utilData.types[type]) {
-									data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup(this.GameData.utilData.types[type].emoji, platform))
-								}
-								if (type in this.GameData.utilData.types) {
-									data.gruntTypeColor = this.GameData.utilData.types[type].color
-								}
-								data.gruntType = translator.translate(type)
-
-								let gruntRewards = ''
-								let gruntRewardsformNormalised = ''
-								const gruntRewardsList = {}
-								gruntRewardsList.first = { chance: 100, monsters: [] }
-								if (gruntType.encounters && gruntType.encounters.first) {
-									if (gruntType.secondReward && gruntType.encounters.second) {
-										gruntRewards = '85%: '
-										gruntRewardsList.first = { chance: 85, monsters: [] }
-										let first = true
-										gruntType.encounters.first.forEach((fr) => {
-											if (!first) gruntRewards += ', '
-											else first = false
-
-											const firstReward = +fr.id
-											const firstRewardForm = +fr.form
-											const firstRewardMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === firstReward && mon.form.id === firstRewardForm)
-											gruntRewardsformNormalised = firstRewardMonster.form.name === 'Normal' ? '' : (`${translator.translate(firstRewardMonster.form.name)} `)
-											gruntRewards += gruntRewardsformNormalised + firstRewardMonster ? translator.translate(firstRewardMonster.name) : ''
-											gruntRewardsList.first.monsters.push({
-												id: firstReward,
-												formId: firstRewardForm,
-												name: translator.translate(firstRewardMonster.name),
-												formName: translator.translate(firstRewardMonster.form.name),
-												fullName: gruntRewardsformNormalised + translator.translate(firstRewardMonster.name),
-											})
-										})
-										gruntRewards += '\\n15%: '
-										gruntRewardsList.second = { chance: 15, monsters: [] }
-										first = true
-										gruntType.encounters.second.forEach((sr) => {
-											if (!first) gruntRewards += ', '
-											else first = false
-
-											const secondReward = +sr.id
-											const secondRewardForm = +sr.form
-											const secondRewardMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === secondReward && mon.form.id === secondRewardForm)
-											gruntRewardsformNormalised = secondRewardMonster.form.name === 'Normal' ? '' : (`${translator.translate(secondRewardMonster.form.name)} `)
-											gruntRewards += gruntRewardsformNormalised + secondRewardMonster ? translator.translate(secondRewardMonster.name) : ''
-											gruntRewardsList.second.monsters.push({
-												id: secondReward,
-												formId: secondRewardForm,
-												name: translator.translate(secondRewardMonster.name),
-												formName: translator.translate(secondRewardMonster.form.name),
-												fullName: gruntRewardsformNormalised + translator.translate(secondRewardMonster.name),
-											})
-										})
-									} else {
-										let first = true
-										gruntType.encounters[gruntType.thirdReward ? 'third' : 'first'].forEach((tr) => {
-											if (!first) gruntRewards += ', '
-											else first = false
-
-											const reward = +tr.id
-											const rewardForm = +tr.form
-											const rewardMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === reward && mon.form.id === rewardForm)
-											gruntRewardsformNormalised = rewardMonster.form.name === 'Normal' ? '' : (`${translator.translate(rewardMonster.form.name)} `)
-											gruntRewards += gruntRewardsformNormalised + rewardMonster ? translator.translate(rewardMonster.name) : ''
-											gruntRewardsList.first.monsters.push({
-												id: reward,
-												formId: rewardForm,
-												name: translator.translate(rewardMonster.name),
-												formName: translator.translate(rewardMonster.form.name),
-												fullName: gruntRewardsformNormalised + translator.translate(rewardMonster.name),
-											})
-										})
-									}
-									data.gruntRewards = gruntRewards
-									data.gruntRewardsList = gruntRewardsList
-								}
-							}
-							// Lineup 100% of encounter
-							let gruntLineupformNormalised = ''
-							const gruntLineupList = { confirmed: true, monsters: [] }
-							if (data.lineup && data.lineup !== 'null') {
-								data.lineup.forEach((lr) => {
-									const lineup = +lr.pokemon_id
-									const lineupForm = +lr.form
-									const lineupMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === lineup && mon.form.id === lineupForm)
-									gruntLineupformNormalised = lineupMonster.form.name === 'Normal' ? '' : (`${translator.translate(lineupMonster.form.name)} `)
-									gruntLineupList.monsters.push({
-										id: lineup,
-										formId: lineupForm,
-										name: translator.translate(lineupMonster.name),
-										formName: translator.translate(lineupMonster.form.name),
-										fullName: gruntLineupformNormalised + translator.translate(lineupMonster.name),
-									})
-								})
-								data.gruntLineupList = gruntLineupList
-							}
-						}
-
-						const view = {
-							...geoResult,
-							...data,
-							time: data.distime,
-							tthd: data.tth.days,
-							tthh: data.tth.hours,
-							tthm: data.tth.minutes,
-							tths: data.tth.seconds,
-							confirmedTime: data.disappear_time_verified,
-							now: new Date(),
-							nowISO: new Date().toISOString(),
-							genderData: data.genderDataEng ? {
-								name: translator.translate(data.genderDataEng.name),
-								emoji: translator.translate(this.emojiLookup.lookup(data.genderDataEng.emoji, platform)),
-							} : { name: '', emoji: '' },
-							areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
-						}
-
-						const templateType = 'invasion'
-						const message = await this.createMessage(logReference, templateType, platform, cares.template, language, cares.ping, view)
-
-						const work = {
-							lat: data.latitude.toString().substring(0, 8),
-							lon: data.longitude.toString().substring(0, 8),
-							message,
-							target: cares.id,
-							type: cares.type,
-							name: cares.name,
-							tth: data.tth,
-							clean: cares.clean,
-							emoji: data.emoji,
-							logReference,
-							language,
-						}
-						jobs.push(work)
-					}
-					this.emit('postMessage', jobs)
-				} catch (e) {
-					this.log.error(`${data.pokestop_id}: [matched] Can't seem to handle pokestop (user cares): `, e, data)
+			try {
+				if (((data.grunt_type === 0) || !data.grunt_type) && (data.displayTypeId >= 7)) {
+					if (this.imgUicons) data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId, true, data.displayTypeId) || this.config.fallbacks?.imgUrlPokestop
+					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId, true, data.displayTypeId) || this.config.fallbacks?.imgUrlPokestop
+					if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokestopIcon(data.lureTypeId, true, data.displayTypeId)
+				} else {
+					if (this.imgUicons) data.imgUrl = await this.imgUicons.invasionIcon(data.gruntTypeId) || this.config.fallbacks?.imgUrlPokestop
+					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.invasionIcon(data.gruntTypeId) || this.config.fallbacks?.imgUrlPokestop
+					if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.invasionIcon(data.gruntTypeId)
 				}
-			})
 
-			return []
+				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
+				const jobs = []
+
+				require('./common/nightTime').setNightTime(data, disappearTime, this.config)
+
+				data.intersection = await this.obtainIntersection(data)
+
+				// Get current cell weather from cache
+				const weatherCellId = this.weatherData.getWeatherCellId(data.latitude, data.longitude)
+				const currentCellWeather = this.weatherData.getCurrentWeatherInCell(weatherCellId)
+
+				await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'gruntTypeId', 'displayTypeId', 'style'])
+				data.staticmap = data.staticMap // deprecated
+
+				for (const cares of whoCares) {
+					this.log.debug(`${logReference}: [matched] Creating invasion alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
+
+					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
+					if (rateLimitTtr) {
+						this.log.verbose(`${logReference}: [matched] Not creating invasion alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
+						// eslint-disable-next-line no-continue
+						continue
+					}
+					this.log.verbose(`${logReference}: [matched] Creating invasion alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
+
+					const language = cares.language || this.config.general.locale
+					const translator = this.translatorFactory.Translator(language)
+					let [platform] = cares.type.split(':')
+					if (platform === 'webhook') platform = 'discord'
+
+					data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup('grunt-unknown', platform))
+					require('./common/weather').setGameWeather(data, translator, this.GameData, this.emojiLookup, platform, currentCellWeather)
+
+					if (((data.grunt_type === 0) || !data.grunt_type) && (data.displayTypeId >= 7)) {
+						data.gruntName = translator.translate(data.displayTypeId && this.GameData.utilData.pokestopEvent[data.displayTypeId].name ? this.GameData.utilData.pokestopEvent[data.displayTypeId].name : '')
+						data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup(this.GameData.utilData.pokestopEvent[data.displayTypeId].emoji, platform))
+					}
+
+					// full build
+					if (data.gruntTypeId) {
+						data.gender = 0
+						data.gruntName = translator.translate('Grunt')
+						data.gruntType = translator.translate('Mixed')
+						data.gruntRewards = ''
+						if (data.gruntTypeId in this.GameData.grunts) {
+							const gruntType = this.GameData.grunts[data.gruntTypeId]
+							const type = gruntType.type === 'Metal' ? 'Steel' : gruntType.type
+							data.gruntName = translator.translate(`${type} ${gruntType.grunt}`)
+							data.gender = gruntType.gender
+							data.genderDataEng = this.GameData.utilData.genders[data.gender]
+							if (!data.genderDataEng) {
+								data.genderDataEng = { name: '', emoji: '' }
+							}
+							if (this.GameData.utilData.types[type]) {
+								data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup(this.GameData.utilData.types[type].emoji, platform))
+							}
+							if (type in this.GameData.utilData.types) {
+								data.gruntTypeColor = this.GameData.utilData.types[type].color
+							}
+							data.gruntType = translator.translate(type)
+
+							let gruntRewards = ''
+							let gruntRewardsformNormalised = ''
+							const gruntRewardsList = {}
+							gruntRewardsList.first = { chance: 100, monsters: [] }
+							if (gruntType.encounters && gruntType.encounters.first) {
+								if (gruntType.secondReward && gruntType.encounters.second) {
+									gruntRewards = '85%: '
+									gruntRewardsList.first = { chance: 85, monsters: [] }
+									let first = true
+									gruntType.encounters.first.forEach((fr) => {
+										if (!first) gruntRewards += ', '
+										else first = false
+
+										const firstReward = +fr.id
+										const firstRewardForm = +fr.form
+										const firstRewardMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === firstReward && mon.form.id === firstRewardForm)
+										gruntRewardsformNormalised = firstRewardMonster.form.name === 'Normal' ? '' : (`${translator.translate(firstRewardMonster.form.name)} `)
+										gruntRewards += gruntRewardsformNormalised + firstRewardMonster ? translator.translate(firstRewardMonster.name) : ''
+										gruntRewardsList.first.monsters.push({
+											id: firstReward,
+											formId: firstRewardForm,
+											name: translator.translate(firstRewardMonster.name),
+											formName: translator.translate(firstRewardMonster.form.name),
+											fullName: gruntRewardsformNormalised + translator.translate(firstRewardMonster.name),
+										})
+									})
+									gruntRewards += '\\n15%: '
+									gruntRewardsList.second = { chance: 15, monsters: [] }
+									first = true
+									gruntType.encounters.second.forEach((sr) => {
+										if (!first) gruntRewards += ', '
+										else first = false
+
+										const secondReward = +sr.id
+										const secondRewardForm = +sr.form
+										const secondRewardMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === secondReward && mon.form.id === secondRewardForm)
+										gruntRewardsformNormalised = secondRewardMonster.form.name === 'Normal' ? '' : (`${translator.translate(secondRewardMonster.form.name)} `)
+										gruntRewards += gruntRewardsformNormalised + secondRewardMonster ? translator.translate(secondRewardMonster.name) : ''
+										gruntRewardsList.second.monsters.push({
+											id: secondReward,
+											formId: secondRewardForm,
+											name: translator.translate(secondRewardMonster.name),
+											formName: translator.translate(secondRewardMonster.form.name),
+											fullName: gruntRewardsformNormalised + translator.translate(secondRewardMonster.name),
+										})
+									})
+								} else {
+									let first = true
+									gruntType.encounters[gruntType.thirdReward ? 'third' : 'first'].forEach((tr) => {
+										if (!first) gruntRewards += ', '
+										else first = false
+
+										const reward = +tr.id
+										const rewardForm = +tr.form
+										const rewardMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === reward && mon.form.id === rewardForm)
+										gruntRewardsformNormalised = rewardMonster.form.name === 'Normal' ? '' : (`${translator.translate(rewardMonster.form.name)} `)
+										gruntRewards += gruntRewardsformNormalised + rewardMonster ? translator.translate(rewardMonster.name) : ''
+										gruntRewardsList.first.monsters.push({
+											id: reward,
+											formId: rewardForm,
+											name: translator.translate(rewardMonster.name),
+											formName: translator.translate(rewardMonster.form.name),
+											fullName: gruntRewardsformNormalised + translator.translate(rewardMonster.name),
+										})
+									})
+								}
+								data.gruntRewards = gruntRewards
+								data.gruntRewardsList = gruntRewardsList
+							}
+						}
+						// Lineup 100% of encounter
+						let gruntLineupformNormalised = ''
+						const gruntLineupList = { confirmed: true, monsters: [] }
+						if (data.lineup && data.lineup !== 'null') {
+							data.lineup.forEach((lr) => {
+								const lineup = +lr.pokemon_id
+								const lineupForm = +lr.form
+								const lineupMonster = Object.values(this.GameData.monsters).find((mon) => mon.id === lineup && mon.form.id === lineupForm)
+								gruntLineupformNormalised = lineupMonster.form.name === 'Normal' ? '' : (`${translator.translate(lineupMonster.form.name)} `)
+								gruntLineupList.monsters.push({
+									id: lineup,
+									formId: lineupForm,
+									name: translator.translate(lineupMonster.name),
+									formName: translator.translate(lineupMonster.form.name),
+									fullName: gruntLineupformNormalised + translator.translate(lineupMonster.name),
+								})
+							})
+							data.gruntLineupList = gruntLineupList
+						}
+					}
+
+					const view = {
+						...geoResult,
+						...data,
+						time: data.distime,
+						tthd: data.tth.days,
+						tthh: data.tth.hours,
+						tthm: data.tth.minutes,
+						tths: data.tth.seconds,
+						confirmedTime: data.disappear_time_verified,
+						now: new Date(),
+						nowISO: new Date().toISOString(),
+						genderData: data.genderDataEng ? {
+							name: translator.translate(data.genderDataEng.name),
+							emoji: translator.translate(this.emojiLookup.lookup(data.genderDataEng.emoji, platform)),
+						} : { name: '', emoji: '' },
+						areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
+					}
+
+					const templateType = 'invasion'
+					const message = await this.createMessage(logReference, templateType, platform, cares.template, language, cares.ping, view)
+
+					const work = {
+						lat: data.latitude.toString().substring(0, 8),
+						lon: data.longitude.toString().substring(0, 8),
+						message,
+						target: cares.id,
+						type: cares.type,
+						name: cares.name,
+						tth: data.tth,
+						clean: cares.clean,
+						emoji: data.emoji,
+						logReference,
+						language,
+					}
+					jobs.push(work)
+				}
+				return jobs
+			} catch (e) {
+				this.log.error(`${data.pokestop_id}: [matched] Can't seem to handle pokestop (user cares): `, e, data)
+				return []
+			}
 		} catch (e) {
 			this.log.error(`${data.pokestop_id}: [matched] Can't seem to handle pokestop: `, e, data)
 		}
