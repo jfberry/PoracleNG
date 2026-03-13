@@ -49,7 +49,8 @@ class Weather extends Controller {
 
 			require('./common/nightTime').setNightTime(data, moment(), this.config)
 
-			if (pregenerateTile) {
+			// Generate tile once before the loop if we don't need pokemon on the map
+			if (pregenerateTile && !this.config.weather.showAlteredPokemonStaticMap) {
 				const tileServerOptions = this.tileserverPregen.getConfigForTileType('weather')
 				if (tileServerOptions.type !== 'none') {
 					data.staticMap = await this.tileserverPregen.getPregeneratedTileURL(logReference, 'weather', data, tileServerOptions.type)
@@ -77,30 +78,24 @@ class Weather extends Controller {
 
 				// Populate activePokemons from processor payload
 				if (cares.active_pokemons && cares.active_pokemons.length > 0) {
-					const language = cares.language || this.config.general.locale
-					const translator = this.translatorFactory.Translator(language)
-
-					data.activePokemons = await Promise.all(cares.active_pokemons.map(async (ap) => {
-						const mon = this.GameData.monsters[`${ap.pokemon_id}_${ap.form}`]
-							|| this.GameData.monsters[`${ap.pokemon_id}_0`] || {}
-						return {
-							pokemon_id: ap.pokemon_id,
-							form: ap.form,
-							name: translator.translate(mon.name || `Pokemon ${ap.pokemon_id}`),
-							nameEng: mon.name || '',
-							formName: translator.translate(mon.form?.name || ''),
-							formNameEng: mon.form?.name || '',
-							formNormalisedEng: (mon.form?.name === 'Normal' ? '' : mon.form?.name) || '',
-							formNormalised: translator.translate((mon.form?.name === 'Normal' ? '' : mon.form?.name) || ''),
-							fullNameEng: (mon.name || '').concat(mon.form?.name && mon.form.name !== 'Normal' ? ` ${mon.form.name}` : ''),
-							iv: ap.iv,
-							cp: ap.cp,
-							imgUrl: this.imgUicons ? await this.imgUicons.pokemonIcon(ap.pokemon_id, ap.form) : '',
+					data.activePokemons = cares.active_pokemons.slice()
+					if (this.imgUicons) {
+						for (const mon of data.activePokemons) {
+							mon.imgUrl = await this.imgUicons.pokemonIcon(mon.pokemon_id, mon.form)
 						}
-					}))
+					}
 				} else {
 					data.activePokemons = null
 				}
+
+				// Generate tile per-user when pokemon should appear on the map
+				if (pregenerateTile && this.config.weather.showAlteredPokemonStaticMap) {
+					const tileServerOptions = this.tileserverPregen.getConfigForTileType('weather')
+					if (tileServerOptions.type !== 'none') {
+						data.staticMap = await this.tileserverPregen.getPregeneratedTileURL(logReference, 'weather', data, tileServerOptions.type)
+					}
+				}
+				data.staticmap = data.staticMap // deprecated
 
 				const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
 				if (rateLimitTtr) {
@@ -121,12 +116,24 @@ class Weather extends Controller {
 				data.weatherName = data.weatherNameEng ? translator.translate(data.weatherNameEng) : ''
 				data.weatherEmojiEng = data.weatherId ? this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherId].emoji, platform) : ''
 				data.weatherEmoji = data.weatherEmojiEng ? translator.translate(data.weatherEmojiEng) : ''
+				if (data.activePokemons) {
+					data.activePokemons.forEach((pok) => {
+						const mon = this.GameData.monsters[`${pok.pokemon_id}_${pok.form}`]
+							|| this.GameData.monsters[`${pok.pokemon_id}_0`] || {}
+						pok.nameEng = mon.name || ''
+						pok.name = translator.translate(pok.nameEng || `Pokemon ${pok.pokemon_id}`)
+						pok.formNameEng = mon.form?.name || ''
+						pok.formNormalisedEng = pok.formNameEng === 'Normal' ? '' : pok.formNameEng
+						pok.formNormalised = translator.translate(pok.formNormalisedEng)
+						pok.formName = translator.translate(pok.formNameEng)
+						pok.fullNameEng = pok.nameEng.concat(pok.formNormalisedEng ? ' ' : '', pok.formNormalisedEng)
+					})
+				}
 
 				data.weather = data.weatherName // deprecated
 				data.oldweather = data.oldWeatherName // deprecated
 				data.oldweatheremoji = data.oldWeatherEmoji // deprecated
 				data.weatheremoji = data.weatherEmoji // deprecated
-				data.staticmap = data.staticMap // deprecated
 
 				const view = {
 					...data,
