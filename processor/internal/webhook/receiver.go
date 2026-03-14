@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
 // Handler processes incoming Golbat webhooks.
@@ -65,6 +67,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.webhookLogger.Write([]byte("\n"))
 			}
 		}
+
+		metrics.WebhooksReceived.WithLabelValues(hook.Type).Inc()
 
 		switch hook.Type {
 		case "pokemon":

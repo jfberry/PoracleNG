@@ -2,19 +2,28 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 	ps.workerPool <- struct{}{}
+	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
+		start := time.Now()
+		defer func() {
+			metrics.WebhookProcessingDuration.WithLabelValues("raid").Observe(time.Since(start).Seconds())
+			metrics.WorkerPoolInUse.Dec()
+			<-ps.workerPool
+		}()
 		defer ps.wg.Done()
-		defer func() { <-ps.workerPool }()
 
 		var raid webhook.RaidWebhook
 		if err := json.Unmarshal(raw, &raid); err != nil {
@@ -23,6 +32,22 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		}
 
 		l := log.WithField("ref", raid.GymID)
+
+		// Duplicate check — also tells us if this is the first notification for this raid
+		rsvps := make([]tracker.RaidRSVP, len(raid.RSVPs))
+		for i, r := range raid.RSVPs {
+			rsvps[i] = tracker.RaidRSVP{
+				Timeslot:   r.Timeslot,
+				GoingCount: r.GoingCount,
+				MaybeCount: r.MaybeCount,
+			}
+		}
+		isDuplicate, isFirstNotification := ps.duplicates.CheckRaid(raid.GymID, raid.End, raid.PokemonID, rsvps)
+		if isDuplicate {
+			metrics.DuplicatesSkipped.WithLabelValues("raid").Inc()
+			l.Debugf("Raid/egg level %d on gym %s is a duplicate, skipping", raid.Level, raid.GymID)
+			return
+		}
 
 		st := ps.stateMgr.Get()
 		ex := bool(raid.ExRaidEligible) || bool(raid.IsExRaidEligible)
@@ -59,6 +84,9 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		}
 
 		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("raid").Inc()
+			metrics.MatchedUsers.WithLabelValues("raid").Add(float64(len(matched)))
+
 			areas := st.Geofence.PointInAreas(raid.Latitude, raid.Longitude)
 			matchedAreas := make([]webhook.MatchedArea, len(areas))
 			for i, a := range areas {
@@ -85,7 +113,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         msgType,
 				Message:      raw,
-				Enrichment:   ps.enricher.Raid(&raid),
+				Enrichment:   ps.enricher.Raid(&raid, isFirstNotification),
 				MatchedAreas: matchedAreas,
 				MatchedUsers: matched,
 			})

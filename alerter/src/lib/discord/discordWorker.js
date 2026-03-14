@@ -7,6 +7,7 @@ const fsp = require('fs').promises
 const NodeCache = require('node-cache')
 const { performance } = require('perf_hooks')
 const FairPromiseQueue = require('../FairPromiseQueue')
+const metrics = require('../metrics')
 
 const noop = () => { }
 
@@ -71,6 +72,7 @@ class Worker {
 				}
 			}
 			this.logs.discord.warn(`#${this.id} Discord worker [${tag}] 429 rate limit hit - in timeout ${info.timeout ? info.timeout : 'Unknown timeout '} route ${info.route}${channelId ? ` (probably ${channelId})` : ''}`)
+			metrics.discordRateLimits.inc({ source: 'bot' })
 		})
 	}
 
@@ -165,6 +167,8 @@ class Worker {
 			const msg = await user.send(/* data.message.content || '', */ data.message)
 			const endTime = performance.now();
 			(this.config.logger.timingStats ? this.logs.discord.verbose : this.logs.discord.debug)(`${logReference}: #${this.id} -> ${data.name} ${data.target} USER (${endTime - startTime} ms)`)
+			metrics.discordDeliveryDuration.observe({ destination_type: 'user' }, (endTime - startTime) / 1000)
+			metrics.messagesSent.inc({ destination_type: 'discord:user' })
 
 			if (data.clean) {
 				setTimeout(async () => {
@@ -178,6 +182,7 @@ class Worker {
 			}
 			return true
 		} catch (err) {
+			metrics.messagesFailed.inc({ destination_type: 'discord:user' })
 			await this.query.incrementQuery('humans', { id: data.target }, 'fails', 1)
 			this.logs.discord.error(`${data.logReference}: #${this.id} Failed to send Discord alert to ${data.name}`, err, data)
 			this.logs.discord.error(`${data.logReference}: ${JSON.stringify(data)}`)
@@ -209,6 +214,8 @@ class Worker {
 			const msg = await channel.send(data.message)
 			const endTime = performance.now();
 			(this.config.logger.timingStats ? this.logs.discord.verbose : this.logs.discord.debug)(`${logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL (${endTime - startTime} ms)`)
+			metrics.discordDeliveryDuration.observe({ destination_type: 'channel' }, (endTime - startTime) / 1000)
+			metrics.messagesSent.inc({ destination_type: 'discord:channel' })
 
 			if (data.clean) {
 				setTimeout(async () => {
@@ -222,6 +229,7 @@ class Worker {
 			}
 			return true
 		} catch (err) {
+			metrics.messagesFailed.inc({ destination_type: 'discord:channel' })
 			await this.query.incrementQuery('humans', { id: data.target }, 'fails', 1)
 			this.logs.discord.error(`${data.logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL failed to send Discord alert to `, err)
 			this.logs.discord.error(`${data.logReference}: ${JSON.stringify(data)}`)

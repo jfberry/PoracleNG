@@ -2,19 +2,27 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 	ps.workerPool <- struct{}{}
+	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
+		start := time.Now()
+		defer func() {
+			metrics.WebhookProcessingDuration.WithLabelValues("gym").Observe(time.Since(start).Seconds())
+			metrics.WorkerPoolInUse.Dec()
+			<-ps.workerPool
+		}()
 		defer ps.wg.Done()
-		defer func() { <-ps.workerPool }()
 
 		var gym webhook.GymWebhook
 		if err := json.Unmarshal(raw, &gym); err != nil {
@@ -62,6 +70,9 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		matched := ps.gymMatcher.Match(data, st)
 
 		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("gym").Inc()
+			metrics.MatchedUsers.WithLabelValues("gym").Add(float64(len(matched)))
+
 			areas := st.Geofence.PointInAreas(gym.Latitude, gym.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 

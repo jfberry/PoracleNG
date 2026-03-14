@@ -6,6 +6,7 @@ const mustache = require('handlebars')
 const { performance } = require('perf_hooks')
 const emojiStrip = require('../../util/emojiStrip')
 const FairPromiseQueue = require('../FairPromiseQueue')
+const metrics = require('../metrics')
 
 const noop = () => {}
 
@@ -186,6 +187,7 @@ class Telegram extends EventEmitter {
 				res = await fn()
 			} catch (err) {
 				if (err.code === 429) {
+					metrics.telegramRateLimits.inc()
 					const retryAfter = (err.response && err.response.parameters) ? err.response.parameters.retry_after : 30
 					this.logs.telegram.warn(`${senderId} 429 Rate limit [Telegram] - wait for ${retryAfter} retry count ${retryCount}`)
 					await this.sleep(retryAfter * 1000)
@@ -318,8 +320,11 @@ class Telegram extends EventEmitter {
 				}
 			}
 
-			const endTime = performance.now();
+			const endTime = performance.now()
+			const durationSec = (endTime - startTime) / 1000;
 			(this.config.logger.timingStats ? this.logs.telegram.verbose : this.logs.telegram.debug)(`${logReference}: #${this.id} -> ${data.name} ${data.target} ${dataType} (${endTime - startTime} ms)`)
+			metrics.telegramDeliveryDuration.observe({ destination_type: dataType.toLowerCase() }, durationSec)
+			metrics.messagesSent.inc({ destination_type: `telegram:${dataType.toLowerCase()}` })
 
 			if (data.clean) {
 				for (const id of messageIds) {
@@ -333,6 +338,7 @@ class Telegram extends EventEmitter {
 			}
 			return true
 		} catch (err) {
+			metrics.messagesFailed.inc({ destination_type: `telegram:${dataType.toLowerCase()}` })
 			this.logs.telegram.error(`${data.logReference}: #${this.id} -> ${data.name} ${data.target}  Failed to send Telegram alert`, err)
 			return false
 		}

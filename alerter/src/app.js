@@ -47,6 +47,7 @@ const DiscordCommando = require('./lib/discord/commando')
 const TelegramWorker = require('./lib/telegram/Telegram')
 
 const logs = require('./lib/logger')
+const metrics = require('./lib/metrics')
 
 const { log } = logs
 const re = require('./util/regex')(translatorFactory)
@@ -264,7 +265,7 @@ async function processMessages(msgs) {
 				newRateLimits = true
 			} else {
 				log.info(`${msg.logReference}: Intercepted and stopped message for user (Rate limit) for ${msg.type} ${msg.target} ${msg.name} Time to release: ${rate.resetTime}`)
-
+				metrics.rateLimited.inc()
 				queueMessage = null
 			}
 		} else {
@@ -376,6 +377,7 @@ const alarmProcessor = new PromiseQueue(hookQueue, concurrentProcessors)
 
 async function processOne(payload) {
 	let queueAddition = []
+	const processStart = performance.now()
 
 	try {
 		if ((Math.random() * 1000) > 995) log.verbose(`MatchedQueue is currently ${hookQueue.length}`)
@@ -473,12 +475,16 @@ async function processOne(payload) {
 		}
 
 		if (queueAddition && queueAddition.length) {
+			for (const msg of queueAddition) {
+				metrics.messagesCreated.inc({ controller_type: payload.type, destination_type: msg.type })
+			}
 			processMessages(queueAddition)
 		}
 	} catch (err) {
 		log.error('Matched processor error', err)
 	}
 
+	metrics.messageCreateDuration.observe({ controller_type: payload.type }, (performance.now() - processStart) / 1000)
 	eventsProcessed++
 }
 
@@ -527,6 +533,7 @@ async function handleMatchedAlarms() {
 		const totalDepth = hookQueue.length + alarmProcessor.running.length
 		if (totalDepth >= matchedMaxQueueSize) {
 			if ((Math.random() * 1000) > 990) fastify.logger.warn(`Backpressure active: queue depth ${totalDepth} >= limit ${matchedMaxQueueSize}, inbound queue ${fastify.matchedQueue.length}`)
+			metrics.backpressureEvents.inc()
 			return
 		}
 
@@ -580,6 +587,13 @@ async function currentStatus() {
 	matchedInfo += ` tile(${tileStats.calls} avg:${tileStats.avgMs}ms fly:${tileStats.inFlight} err:${tileStats.errors})`
 
 	resetAllStats()
+
+	// Update prometheus gauges
+	metrics.matchedQueueDepth.set(fastify.matchedQueue.length)
+	metrics.hookQueueDepth.set(hookQueue.length)
+	metrics.discordQueueDepth.set(discordQueueLength)
+	metrics.discordWebhookQueueDepth.set(webhookQueueLength)
+	metrics.telegramQueueDepth.set(telegramQueueLength)
 
 	const infoMessage = `[Main] Queues: Matched inbound:${fastify.matchedQueue.length}${matchedInfo} | Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength} | heap:${mainMemMb}MB rss:${mainRssMb}MB`
 	log.info(infoMessage)

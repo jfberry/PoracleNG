@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -13,10 +15,16 @@ import (
 
 func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 	ps.workerPool <- struct{}{}
+	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
+		start := time.Now()
+		defer func() {
+			metrics.WebhookProcessingDuration.WithLabelValues("pokemon").Observe(time.Since(start).Seconds())
+			metrics.WorkerPoolInUse.Dec()
+			<-ps.workerPool
+		}()
 		defer ps.wg.Done()
-		defer func() { <-ps.workerPool }()
 
 		var pokemon webhook.PokemonWebhook
 		if err := json.Unmarshal(raw, &pokemon); err != nil {
@@ -33,6 +41,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		verified := pokemon.Verified || pokemon.DisappearTimeVerified
 		if ps.duplicates.CheckPokemon(pokemon.EncounterID, verified, pokemon.CP, pokemon.DisappearTime) {
 			l.Debug("Wild encounter was sent again too soon, ignoring")
+			metrics.DuplicatesSkipped.WithLabelValues("pokemon").Inc()
 			return
 		}
 
@@ -80,6 +89,9 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		matched := ps.pokemonMatcher.Match(processed, st)
 
 		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
+			metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
+
 			// Get matched areas for the alerter
 			areas := st.Geofence.PointInAreas(pokemon.Latitude, pokemon.Longitude)
 			matchedAreas := make([]webhook.MatchedArea, len(areas))
