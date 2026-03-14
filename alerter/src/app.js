@@ -865,26 +865,10 @@ async function run() {
 	log.info(`Service started on ${fastify.server.address().address}:${fastify.server.address().port}`)
 }
 
-async function pollProcessorWeather() {
-	if (!config.processor.url) return
-	try {
-		const axios = require('axios')
-		const resp = await axios.get(`${config.processor.url}/api/weather`, { timeout: 5000 })
-		if (resp.data && typeof resp.data === 'object') {
-			PoracleInfo.lastWeatherBroadcast = resp.data
-		}
-	} catch (err) {
-		log.debug(`Failed to poll processor weather: ${err.message}`)
-	}
-}
-
 function startPoracle() {
 	run()
 	setInterval(handleMatchedAlarms, 100)
 	setInterval(currentStatus, 60000)
-	// Poll processor for weather data (used by !info weather)
-	pollProcessorWeather()
-	setInterval(pollProcessorWeather, 60000)
 }
 
 const NODE_MAJOR_VERSION = process.versions.node.split('.')[0]
