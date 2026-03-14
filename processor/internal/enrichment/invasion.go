@@ -2,6 +2,7 @@ package enrichment
 
 import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
 // Invasion builds enrichment fields for an invasion webhook.
@@ -11,6 +12,10 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64) map[string]inter
 	tz := geo.GetTimezone(lat, lon)
 
 	addSunTimes(m, lat, lon, tz)
+
+	// Cell weather for pokestop game weather display
+	cellID := tracker.GetWeatherCellID(lat, lon)
+	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
 
 	if expiration > 0 {
 		m["disappearTime"] = geo.FormatTime(expiration, tz, e.TimeLayout)

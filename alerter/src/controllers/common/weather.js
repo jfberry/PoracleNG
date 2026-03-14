@@ -32,9 +32,11 @@ async function calculateForecastImpact(data, GameData, weatherCellId, weatherDat
 
 	if (!config.weather.enableWeatherForecast) return
 
-	const { nextHourTimestamp } = weatherData.getWeatherTimes()
+	const nextHourTimestamp = data.nextHourTimestamp || weatherData.getWeatherTimes().nextHourTimestamp
 	if (disappearTimeUnix > nextHourTimestamp) {
-		const weatherForecast = await weatherData.getWeatherForecast(weatherCellId)
+		const weatherForecast = (data.weatherForecastCurrent !== undefined || data.weatherForecastNext !== undefined)
+			? { current: data.weatherForecastCurrent || 0, next: data.weatherForecastNext || 0 }
+			: await weatherData.getWeatherForecast(weatherCellId)
 
 		let pokemonShouldBeBoosted = false
 		let pokemonWillBeBoosted = false

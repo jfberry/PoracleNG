@@ -28,6 +28,14 @@ show_altered_pokemon = true
 show_altered_pokemon_max_count = 10
 monsters_json_path = "../alerter/src/util/monsters.json"
 
+# AccuWeather forecast - predicts next hour weather for boost change detection
+enable_forecast = false
+accuweather_api_keys = [""]
+accuweather_day_quota = 50           # max API calls per key per day
+forecast_refresh_interval = 8        # hours between API calls per cell
+local_first_fetch_hod = 3            # first fetch hour of the day (e.g. 3 = 3am)
+smart_forecast = false               # pull on demand if no data for a cell
+
 [tuning]
 reload_interval_secs = 60
 encounter_cache_ttl = 3600

@@ -69,6 +69,14 @@ type WeatherConfig struct {
 	ShowAlteredPokemon         bool   `toml:"show_altered_pokemon"`
 	ShowAlteredPokemonMaxCount int    `toml:"show_altered_pokemon_max_count"`
 	MonstersJSONPath           string `toml:"monsters_json_path"`
+
+	// AccuWeather forecast
+	EnableForecast          bool     `toml:"enable_forecast"`
+	AccuWeatherAPIKeys      []string `toml:"accuweather_api_keys"`
+	AccuWeatherDayQuota     int      `toml:"accuweather_day_quota"`
+	ForecastRefreshInterval int      `toml:"forecast_refresh_interval"` // hours between API calls
+	LocalFirstFetchHOD      int      `toml:"local_first_fetch_hod"`    // first fetch hour of day
+	SmartForecast           bool     `toml:"smart_forecast"`            // pull on demand if no data
 }
 
 type TuningConfig struct {
@@ -126,6 +134,15 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Weather.ShowAlteredPokemonMaxCount == 0 {
 		cfg.Weather.ShowAlteredPokemonMaxCount = 10
+	}
+	if cfg.Weather.AccuWeatherDayQuota == 0 {
+		cfg.Weather.AccuWeatherDayQuota = 50
+	}
+	if cfg.Weather.ForecastRefreshInterval == 0 {
+		cfg.Weather.ForecastRefreshInterval = 8
+	}
+	if cfg.Weather.LocalFirstFetchHOD == 0 {
+		cfg.Weather.LocalFirstFetchHOD = 3
 	}
 	if cfg.PVP.PVPQueryMaxRank == 0 {
 		cfg.PVP.PVPQueryMaxRank = cfg.PVP.PVPFilterMaxRank

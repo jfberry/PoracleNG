@@ -208,16 +208,31 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	timeLayout := geo.ConvertTimeFormat(cfg.Locale.Time)
 	eventChecker := enrichment.NewPogoEventChecker(timeLayout)
 
+	enricher := enrichment.New(
+		timeLayout,
+		geo.ConvertTimeFormat(cfg.Locale.Date),
+		weatherTracker,
+		eventChecker,
+	)
+
+	// AccuWeather forecast integration
+	if cfg.Weather.EnableForecast && len(cfg.Weather.AccuWeatherAPIKeys) > 0 {
+		awClient := tracker.NewAccuWeatherClient(tracker.AccuWeatherConfig{
+			APIKeys:                 cfg.Weather.AccuWeatherAPIKeys,
+			DayQuota:                cfg.Weather.AccuWeatherDayQuota,
+			ForecastRefreshInterval: cfg.Weather.ForecastRefreshInterval,
+			LocalFirstFetchHOD:      cfg.Weather.LocalFirstFetchHOD,
+			SmartForecast:           cfg.Weather.SmartForecast,
+		}, weatherTracker)
+		enricher.ForecastProvider = awClient
+		log.Infof("AccuWeather forecast enabled with %d API keys", len(cfg.Weather.AccuWeatherAPIKeys))
+	}
+
 	return &ProcessorService{
 		cfg:      cfg,
 		stateMgr: stateMgr,
 		database: database,
-		enricher: enrichment.New(
-			timeLayout,
-			geo.ConvertTimeFormat(cfg.Locale.Date),
-			weatherTracker,
-			eventChecker,
-		),
+		enricher: enricher,
 		sender:       webhook.NewSender(cfg.Alerter.URL, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),

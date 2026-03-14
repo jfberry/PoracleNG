@@ -2,6 +2,7 @@ package enrichment
 
 import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -14,6 +15,10 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 
 	addSunTimes(m, raid.Latitude, raid.Longitude, tz)
 
+	// Cell weather
+	cellID := tracker.GetWeatherCellID(raid.Latitude, raid.Longitude)
+	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
+
 	if raid.PokemonID > 0 {
 		// Hatched raid: disappearTime from end, tth from now to end
 		m["disappearTime"] = geo.FormatTime(raid.End, tz, e.TimeLayout)
@@ -22,6 +27,12 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 		// Weather change time: the hour boundary before end
 		weatherChangeTS := raid.End - (raid.End % 3600)
 		m["weatherChangeTime"] = geo.FormatTime(weatherChangeTS, tz, e.TimeLayout)
+
+		// Weather forecast for boost change detection (triggers AccuWeather fetch if configured)
+		forecast := e.GetForecast(cellID)
+		m["weatherForecastCurrent"] = forecast.Current
+		m["weatherForecastNext"] = forecast.Next
+		m["nextHourTimestamp"] = tracker.GetNextHourTimestamp()
 	} else {
 		// Egg: hatchTime from start, tth from now to start
 		m["hatchTime"] = geo.FormatTime(raid.Start, tz, e.TimeLayout)

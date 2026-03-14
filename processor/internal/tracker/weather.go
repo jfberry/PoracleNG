@@ -129,6 +129,71 @@ func (wt *WeatherTracker) GetCurrentWeatherInCell(cellID string) int {
 	return weather
 }
 
+// WeatherForecast holds current and next hour weather for a cell.
+type WeatherForecast struct {
+	Current int
+	Next    int
+}
+
+// GetWeatherForecast returns the current and next hour weather for a cell.
+func (wt *WeatherTracker) GetWeatherForecast(cellID string) WeatherForecast {
+	wt.mu.RLock()
+	defer wt.mu.RUnlock()
+
+	now := time.Now().Unix()
+	currentHour := now - (now % 3600)
+	nextHour := currentHour + 3600
+
+	var current, next int
+
+	cd := wt.controllerData[cellID]
+	ld := wt.localData[cellID]
+
+	if cd != nil {
+		current = cd.hourWeather[currentHour]
+		next = cd.hourWeather[nextHour]
+	}
+	// Local inference overrides current hour
+	if ld != nil && ld.currentHourTimestamp == currentHour {
+		current = ld.monsterWeather
+	}
+
+	return WeatherForecast{Current: current, Next: next}
+}
+
+// GetNextHourTimestamp returns the timestamp of the next hour boundary.
+func GetNextHourTimestamp() int64 {
+	now := time.Now().Unix()
+	return now - (now % 3600) + 3600
+}
+
+// SetHourWeather stores a weather condition for a specific hour in a cell.
+// Used by AccuWeatherClient to store forecast data.
+func (wt *WeatherTracker) SetHourWeather(cellID string, hourTimestamp int64, condition int) {
+	wt.mu.Lock()
+	defer wt.mu.Unlock()
+
+	cd, ok := wt.controllerData[cellID]
+	if !ok {
+		cd = &controllerCellData{hourWeather: make(map[int64]int)}
+		wt.controllerData[cellID] = cd
+	}
+	cd.hourWeather[hourTimestamp] = condition
+}
+
+// hasHourWeather checks if weather data exists for a specific hour in a cell.
+func (wt *WeatherTracker) hasHourWeather(cellID string, hourTimestamp int64) bool {
+	wt.mu.RLock()
+	defer wt.mu.RUnlock()
+
+	cd := wt.controllerData[cellID]
+	if cd == nil {
+		return false
+	}
+	_, ok := cd.hourWeather[hourTimestamp]
+	return ok
+}
+
 // CheckWeatherOnMonster analyzes an incoming pokemon's weather boost to detect
 // weather changes via vote-based inference.
 // Port of weatherData.js:68-123.
