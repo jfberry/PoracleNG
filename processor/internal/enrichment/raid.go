@@ -6,8 +6,9 @@ import (
 )
 
 // Raid builds enrichment fields for a raid or egg webhook.
-func (e *Enricher) Raid(raid *webhook.RaidWebhook) map[string]interface{} {
+func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[string]interface{} {
 	m := make(map[string]interface{})
+	m["firstNotification"] = firstNotification
 
 	tz := geo.GetTimezone(raid.Latitude, raid.Longitude)
 
