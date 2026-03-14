@@ -460,8 +460,14 @@ class DiscordReconciliation {
 
 		this.log.verbose('Reconciliation (Discord) Loading all guild users...')
 
-		for (const guildId of this.config.discord.guilds) {
+		for (let gi = 0; gi < this.config.discord.guilds.length; gi++) {
+			const guildId = this.config.discord.guilds[gi]
 			this.log.verbose(`Reconciliation (Discord) Loading guild id ${guildId} ...`)
+
+			// Stagger guild member fetches to avoid gateway opcode 8 rate limits
+			if (gi > 0) {
+				await new Promise((resolve) => { setTimeout(resolve, 15000) })
+			}
 
 			let guild
 			try {

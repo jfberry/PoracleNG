@@ -183,6 +183,9 @@ class Worker {
 			metrics.discordDeliveryDuration.observe({ destination_type: 'user' }, (endTime - startTime) / 1000)
 			metrics.messagesSent.inc({ destination_type: 'discord:user' })
 
+			// Reset fails counter on successful send
+			await this.query.updateQuery('humans', { fails: 0 }, { id: data.target })
+
 			if (data.clean) {
 				setTimeout(async () => {
 					try {
@@ -199,6 +202,14 @@ class Worker {
 			await this.query.incrementQuery('humans', { id: data.target }, 'fails', 1)
 			this.logs.discord.error(`${data.logReference}: #${this.id} Failed to send Discord alert to ${data.name}`, err, data)
 			this.logs.discord.error(`${data.logReference}: ${JSON.stringify(data)}`)
+
+			// Disable user after repeated DM failures (they can re-enable with !poracle / /start)
+			const maxFails = this.config.tuning.maxSendFailsBeforeDisable || 5
+			const human = await this.query.selectOneQuery('humans', { id: data.target })
+			if (human && human.fails >= maxFails) {
+				await this.query.updateQuery('humans', { enabled: 0 }, { id: data.target })
+				this.logs.discord.warn(`${data.logReference}: #${this.id} Disabled user ${data.name} ${data.target} after ${human.fails} consecutive send failures`)
+			}
 		}
 		return true
 	}

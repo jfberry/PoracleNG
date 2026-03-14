@@ -21,7 +21,7 @@ exports.run = async (client, msg, args, options) => {
 			return msg.reply(translator.translate('You do not have permission to execute this command'))
 		}
 
-		await client.query.updateQuery('humans', { enabled: 1 }, { id: target.id })
+		await client.query.updateQuery('humans', { enabled: 1, fails: 0 }, { id: target.id })
 		await msg.react('✅')
 
 		await msg.reply(translator.translateFormat(

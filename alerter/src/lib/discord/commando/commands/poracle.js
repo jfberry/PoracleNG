@@ -43,6 +43,7 @@ exports.run = async (client, msg) => {
 
 			if (!user.enabled) {
 				update.enabled = 1
+				update.fails = 0
 				updateRequired = true
 			}
 
