@@ -1,6 +1,7 @@
 /* eslint-disable max-classes-per-file */
 const NodeGeocoder = require('node-geocoder')
-const pcache = require('flat-cache')
+const Keyv = require('keyv').default
+const KeyvSqlite = require('@keyv/sqlite').default
 const { performance } = require('perf_hooks')
 const emojiFlags = require('country-code-emoji')
 const path = require('path')
@@ -54,7 +55,13 @@ class CachingGeocoder {
 		this.log = log || console
 		this.config = config
 		this.mustache = mustache
-		this.cache = cacheFilename ? pcache.load(cacheFilename, path.join(__dirname, '../../.cache')) : null
+		if (cacheFilename) {
+			const dbPath = path.join(__dirname, '../../.cache', `${cacheFilename}.sqlite`)
+			this.cache = new Keyv({ store: new KeyvSqlite(`sqlite://${dbPath}`), namespace: 'geo' })
+			this.cache.on('error', (err) => this.log.error('Keyv geocache error', err))
+		} else {
+			this.cache = null
+		}
 		this.timeout = this.config.tuning.geocodingTimeout || 5000
 		this.stats = {
 			calls: 0, totalMs: 0, inFlight: 0, cacheHits: 0, errors: 0,
@@ -63,18 +70,6 @@ class CachingGeocoder {
 		this.failureThreshold = config.tuning.geocodingFailureThreshold || 5
 		this.cooldownMs = config.tuning.geocodingCooldownMs || 30000
 		this.circuitOpenSince = 0
-		setInterval(() => this.writeCache(), 60000) // Write out cache every minute
-	}
-
-	writeCache() {
-		if (this.dirty) {
-			try {
-				this.dirty = false
-				this.cache.save(true)
-			} catch (err) {
-				this.log.error('Writing geoCache failed', err)
-			}
-		}
 	}
 
 	getGeocoder() {
@@ -173,17 +168,18 @@ class CachingGeocoder {
 		}
 
 		const cacheKey = `${String(+locationObject.lat.toFixed(this.config.geocoding.cacheDetail))}-${String(+locationObject.lon.toFixed(this.config.geocoding.cacheDetail))}`
-		const cachedResult = this.cache ? this.cache.getKey(cacheKey) : null
-		if (cachedResult) {
-			this.stats.cacheHits++
-			metrics.geocodeTotal.inc({ result: 'cache_hit' })
-			return this.escapeAddress(cachedResult)
+		if (this.cache) {
+			const cachedResult = await this.cache.get(cacheKey)
+			if (cachedResult) {
+				this.stats.cacheHits++
+				metrics.geocodeTotal.inc({ result: 'cache_hit' })
+				return this.escapeAddress(cachedResult)
+			}
 		}
 
 		const result = await doGeolocate()
 		if (this.cache) {
-			this.cache.setKey(cacheKey, result)
-			this.dirty = true
+			await this.cache.set(cacheKey, result)
 		}
 
 		return result
@@ -193,7 +189,6 @@ class CachingGeocoder {
 		return {
 			...this.stats,
 			avgMs: this.stats.calls > 0 ? Math.round(this.stats.totalMs / this.stats.calls) : 0,
-			cacheEntries: this.cache ? this.cache.keys().length : 0,
 		}
 	}
 
