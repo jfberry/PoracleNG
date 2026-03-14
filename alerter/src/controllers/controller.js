@@ -28,7 +28,6 @@ class Controller extends EventEmitter {
 		this.mustache = mustache
 		this.weatherData = weatherData
 		this.statsData = statsData
-		this.eventParser = eventProviders && eventProviders.pogoEvents
 		this.shinyPossible = eventProviders && eventProviders.shinyPossible
 		//		this.controllerData = weatherCacheData || {}
 		this.tileserverPregen = new TileserverPregen(this.config, this.log)

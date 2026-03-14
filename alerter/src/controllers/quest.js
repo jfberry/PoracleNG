@@ -123,13 +123,7 @@ class Quest extends Controller {
 				if (!data.baseStats) data.baseStats = Object.values(this.GameData.monsters).some((mon) => data.rewardData.monsters[0].pokemonId === mon.id && !mon.form.id) ? Object.values(this.GameData.monsters).filter((mon) => data.rewardData.monsters[0].pokemonId === mon.id && !mon.form.id)[0].stats : ''
 			}
 
-			const event = this.eventParser.eventChangesQuest(Math.floor(Date.now() / 1000), data.disappear_time, data.latitude, data.longitude)
-			if (event) {
-				data.futureEvent = true
-				data.futureEventTime = event.time
-				data.futureEventName = event.name
-				data.futureEventTrigger = event.reason
-			}
+			// Future event fields are pre-computed by the Go processor enrichment
 
 			for (const cares of whoCares) {
 				this.log.debug(`${logReference}: [matched] Creating quest alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)

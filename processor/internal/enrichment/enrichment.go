@@ -18,14 +18,16 @@ type Enricher struct {
 	TimeLayout      string
 	DateLayout      string
 	WeatherProvider WeatherProvider
+	EventChecker    *PogoEventChecker
 }
 
 // New creates a new Enricher.
-func New(timeLayout, dateLayout string, weather WeatherProvider) *Enricher {
+func New(timeLayout, dateLayout string, weather WeatherProvider, eventChecker *PogoEventChecker) *Enricher {
 	return &Enricher{
 		TimeLayout:      timeLayout,
 		DateLayout:      dateLayout,
 		WeatherProvider: weather,
+		EventChecker:    eventChecker,
 	}
 }
 

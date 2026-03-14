@@ -21,7 +21,6 @@ const telegramCommandParser = require('./lib/telegram/middleware/commandParser')
 const telegramController = require('./lib/telegram/middleware/controller')
 const DiscordReconciliation = require('./lib/discord/discordReconciliation')
 const TelegramReconciliation = require('./lib/telegram/telegramReconciliation')
-const PogoEventParser = require('./lib/pogoEventParser')
 const scannerFactory = require('./lib/scanner/scannerFactory')
 const ShinyPossible = require('./lib/shinyLoader')
 
@@ -55,7 +54,6 @@ const re = require('./util/regex')(translatorFactory)
 const Query = require('./controllers/query')
 
 const query = new Query(logs.controller, knex, config, geofence)
-const pogoEventParser = new PogoEventParser(logs.log)
 const shinyPossible = new ShinyPossible(logs.log)
 
 logs.setWorkerId('MAIN')
@@ -182,23 +180,6 @@ function handleShutdown() {
 			log.error(`Poracle shutdown - Error saving files ${err}`)
 			process.exit()
 		})
-}
-
-async function processPogoEvents() {
-	let file
-	log.info('PogoEvents: Fetching new event file')
-
-	try {
-		file = await pogoEventParser.download()
-	} catch (err) {
-		log.error('PogoEvents: Cannot download pogo event file', err)
-		setTimeout(processPogoEvents, 15 * 60 * 1000) // 15 mins
-		return
-	}
-
-	matchedPogoEventParser.loadEvents(file) // eslint-disable-line no-use-before-define
-
-	setTimeout(processPogoEvents, 6 * 60 * 60 * 1000) // 6 hours
 }
 
 async function processPossibleShiny() {
@@ -353,13 +334,11 @@ const mustache = require('./lib/handlebars')()
 
 const rateLimitedUserCache = new NodeCache({ stdTTL: config.alertLimits.timingPeriod })
 
-const matchedPogoEventParser = new PogoEventParser(log)
 const matchedShinyPossible = new ShinyPossible(log)
 const cachingGeocoder = new CachingGeocoder(config, log, mustache, 'geoCache-matched')
 
 const eventParsers = {
 	shinyPossible: matchedShinyPossible,
-	pogoEvents: matchedPogoEventParser,
 }
 
 // Stub weatherData/statsData since the processor provides this data
@@ -692,7 +671,6 @@ async function run() {
 	process.on('SIGINT', handleShutdown)
 	process.on('SIGTERM', handleShutdown)
 
-	setTimeout(processPogoEvents, 30000)
 	setTimeout(processPossibleShiny, 30000)
 
 	let watchGeofence = Array.isArray(config.geofence.path)

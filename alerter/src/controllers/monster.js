@@ -323,14 +323,7 @@ class Monster extends Controller {
 					}
 				}
 
-				// Future event processing
-				const event = this.eventParser.eventChangesSpawn(Math.floor(Date.now() / 1000), data.disappear_time, data.latitude, data.longitude)
-				if (event) {
-					data.futureEvent = true
-					data.futureEventTime = event.time
-					data.futureEventName = event.name
-					data.futureEventTrigger = event.reason
-				}
+				// Future event fields are pre-computed by the Go processor enrichment
 
 				// Lookup pokestop name if needed
 				if (this.config.general.populatePokestopName && !data.pokestopName && data.pokestop_id && this.scannerQuery) {

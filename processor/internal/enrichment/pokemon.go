@@ -1,6 +1,8 @@
 package enrichment
 
 import (
+	"time"
+
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -10,16 +12,8 @@ import (
 // Pokemon builds enrichment fields for a pokemon webhook.
 func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) map[string]interface{} {
 	m := map[string]interface{}{
-		"iv":              processed.IV,
-		"atk":             processed.ATK,
-		"def":             processed.DEF,
-		"sta":             processed.STA,
-		"cp":              processed.CP,
-		"level":           processed.Level,
-		"tthSeconds":      processed.TTHSeconds,
-		"encountered":     processed.Encountered,
-		"rarityGroup":     processed.RarityGroup,
-		"pvpBestRank":     processed.PVPBestRank,
+		"rarityGroup":      processed.RarityGroup,
+		"pvpBestRank":      processed.PVPBestRank,
 		"pvpEvolutionData": processed.PVPEvoData,
 	}
 
@@ -38,6 +32,17 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		m["weatherChangeTime"] = geo.FormatTime(weatherChangeTS, tz, e.TimeLayout)
 
 		addSunTimes(m, pokemon.Latitude, pokemon.Longitude, tz)
+
+		// Future event check
+		if e.EventChecker != nil {
+			now := time.Now().Unix()
+			if result := e.EventChecker.EventChangesSpawn(now, pokemon.DisappearTime, tz); result != nil {
+				m["futureEvent"] = result.FutureEvent
+				m["futureEventTime"] = result.FutureEventTime
+				m["futureEventName"] = result.FutureEventName
+				m["futureEventTrigger"] = result.FutureEventTrigger
+			}
+		}
 	}
 
 	// S2 cell coords for cell-spawned pokemon
