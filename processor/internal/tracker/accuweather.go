@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -194,9 +195,12 @@ func (aw *AccuWeatherClient) getLocationKey(cellID string) (string, error) {
 	}
 	aw.mu.Unlock()
 
-	// Convert S2 cell ID to lat/lon
-	token := cellID
-	cell := s2.CellIDFromToken(token)
+	// Convert S2 cell ID (numeric string) to lat/lon
+	numID, err := strconv.ParseUint(cellID, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid cell ID %q: %w", cellID, err)
+	}
+	cell := s2.CellID(numID)
 	ll := cell.LatLng()
 	lat := ll.Lat.Degrees()
 	lon := ll.Lng.Degrees()

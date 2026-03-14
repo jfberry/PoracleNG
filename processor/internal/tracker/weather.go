@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"strconv"
 	"sync"
 	"time"
 
@@ -55,11 +56,12 @@ func (wt *WeatherTracker) Changes() <-chan WeatherChange {
 	return wt.changes
 }
 
-// GetWeatherCellID returns the S2 level-10 cell ID for a lat/lon as a string token.
+// GetWeatherCellID returns the S2 level-10 cell ID for a lat/lon as a numeric string.
+// This matches the format used by Golbat webhooks and the JS S2.keyToId().
 func GetWeatherCellID(lat, lon float64) string {
 	ll := s2.LatLngFromDegrees(lat, lon)
 	cellID := s2.CellIDFromLatLng(ll).Parent(10)
-	return cellID.ToToken()
+	return strconv.FormatUint(uint64(cellID), 10)
 }
 
 // UpdateFromWebhook updates weather state from a direct weather webhook.
@@ -165,6 +167,35 @@ func (wt *WeatherTracker) GetWeatherForecast(cellID string) WeatherForecast {
 func GetNextHourTimestamp() int64 {
 	now := time.Now().Unix()
 	return now - (now % 3600) + 3600
+}
+
+// ExportWeatherData returns all known weather data in a format suitable for the alerter.
+// Returns map[cellID]map[hourTimestamp]condition.
+func (wt *WeatherTracker) ExportWeatherData() map[string]map[int64]int {
+	wt.mu.RLock()
+	defer wt.mu.RUnlock()
+
+	now := time.Now().Unix()
+	currentHour := now - (now % 3600)
+
+	result := make(map[string]map[int64]int)
+	for cellID, cd := range wt.controllerData {
+		cellData := make(map[int64]int)
+		for ts, condition := range cd.hourWeather {
+			// Only export current and future hours
+			if ts >= currentHour-3600 {
+				cellData[ts] = condition
+			}
+		}
+		// Override with local inference for current hour
+		if ld, ok := wt.localData[cellID]; ok && ld.currentHourTimestamp == currentHour {
+			cellData[currentHour] = ld.monsterWeather
+		}
+		if len(cellData) > 0 {
+			result[cellID] = cellData
+		}
+	}
+	return result
 }
 
 // SetHourWeather stores a weather condition for a specific hour in a cell.

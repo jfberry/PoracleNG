@@ -100,7 +100,7 @@ func main() {
 	// API endpoints
 	apiHandler := api.NewHandler(func() error {
 		return state.Load(stateMgr, database, cfg.Geofence.Paths)
-	})
+	}, proc.weather)
 	apiHandler.RegisterRoutes(mux)
 
 	// Prometheus metrics
