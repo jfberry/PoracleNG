@@ -15,8 +15,14 @@ type Config struct {
 	Weather        WeatherConfig        `toml:"weather"`
 	Tuning         TuningConfig         `toml:"tuning"`
 	Area           AreaConfig           `toml:"areaSecurity"`
+	Locale         LocaleConfig         `toml:"locale"`
 	Logging        LoggingConfig        `toml:"logging"`
 	WebhookLogging WebhookLoggingConfig `toml:"webhookLogging"`
+}
+
+type LocaleConfig struct {
+	Time string `toml:"time"`
+	Date string `toml:"date"`
 }
 
 type LoggingConfig struct {
@@ -111,6 +117,12 @@ func Load(path string) (*Config, error) {
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
+	}
+	if cfg.Locale.Time == "" {
+		cfg.Locale.Time = "HH:mm:ss"
+	}
+	if cfg.Locale.Date == "" {
+		cfg.Locale.Date = "DD/MM/YYYY"
 	}
 	if cfg.Weather.ShowAlteredPokemonMaxCount == 0 {
 		cfg.Weather.ShowAlteredPokemonMaxCount = 10

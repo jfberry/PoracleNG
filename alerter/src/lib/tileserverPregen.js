@@ -1,11 +1,18 @@
 const axios = require('axios')
+const metrics = require('./metrics')
 
 class TileserverPregen {
 	constructor(config, log) {
 		this.axios = axios
 		this.log = log
 		this.config = config
-		this.stats = { calls: 0, totalMs: 0, inFlight: 0, errors: 0 }
+		this.stats = {
+			calls: 0, totalMs: 0, inFlight: 0, errors: 0,
+		}
+		this.consecutiveErrors = 0
+		this.failureThreshold = config.tuning.tileserverFailureThreshold || 5
+		this.cooldownMs = config.tuning.tileserverCooldownMs || 30000
+		this.circuitOpenSince = 0
 	}
 
 	getConfigForTileType(maptype) {
@@ -37,6 +44,17 @@ class TileserverPregen {
 	}
 
 	async getPregeneratedTileURL(logReference, type, data, staticMapType) {
+		// Circuit breaker: skip calls when tileserver is repeatedly failing
+		const now = Date.now()
+		if (this.consecutiveErrors >= this.failureThreshold) {
+			if (now - this.circuitOpenSince < this.cooldownMs) {
+				this.stats.circuitBreaks = (this.stats.circuitBreaks || 0) + 1
+				metrics.tileTotal.inc({ result: 'circuit_break' })
+				return null
+			}
+			// Half-open: allow one probe request
+		}
+
 		let mapType = 'staticmap'
 		let templateType = ''
 		if (staticMapType.toLowerCase() === 'multistaticmap') {
@@ -45,6 +63,7 @@ class TileserverPregen {
 		}
 		const url = `${this.config.geocoding.staticProviderURL}/${mapType}/poracle-${templateType}${type}?pregenerate=true&regeneratable=true`
 		this.stats.inFlight++
+		metrics.tileInFlight.inc()
 		try {
 			this.log.debug(`${logReference}: Pre-generating static map ${url}`)
 			const hrstart = process.hrtime()
@@ -60,10 +79,16 @@ class TileserverPregen {
 			clearTimeout(timeout)
 			if (result.status !== 200) {
 				this.stats.errors++
+				this.consecutiveErrors++
+				metrics.tileTotal.inc({ result: 'error' })
+				if (this.consecutiveErrors >= this.failureThreshold) this.circuitOpenSince = Date.now()
 				this.log.warn(`${logReference}: Failed to Pregenerate ${templateType}StaticMap. Got ${result.status}. Error: ${result.data ? result.data.reason : '?'}.`)
 				return null
 			} if (typeof result.data !== 'string') {
 				this.stats.errors++
+				this.consecutiveErrors++
+				metrics.tileTotal.inc({ result: 'error' })
+				if (this.consecutiveErrors >= this.failureThreshold) this.circuitOpenSince = Date.now()
 				this.log.warn(`${logReference}: Failed to Pregenerate ${templateType}StaticMap. No id returned.`)
 				return null
 			}
@@ -71,18 +96,27 @@ class TileserverPregen {
 			const hrendms = (hrend[0] * 1000) + (hrend[1] / 1000000)
 			this.stats.calls++
 			this.stats.totalMs += hrendms
+			metrics.tileDuration.observe(hrendms / 1000)
 
 			if (result.data.includes('<')) { // check for HTML error response
 				this.stats.errors++
+				this.consecutiveErrors++
+				metrics.tileTotal.inc({ result: 'error' })
+				if (this.consecutiveErrors >= this.failureThreshold) this.circuitOpenSince = Date.now()
 				this.log.warn(`${logReference}: Failed to Pregenerate ${templateType}StaticMap. Got invalid response from tileserver - ${result.data}`)
 				return null
 			}
 			const tileResult = result.data.startsWith('http') ? result.data : new URL(`${mapType}/pregenerated/${result.data}`, this.config.geocoding.staticProviderURL).toString();
 			(this.config.logger.timingStats ? this.log.verbose : this.log.debug)(`${logReference}: Tile generated ${tileResult} (${hrendms} ms)`)
+			this.consecutiveErrors = 0
+			metrics.tileTotal.inc({ result: 'success' })
 
 			return tileResult
 		} catch (error) {
 			this.stats.errors++
+			this.consecutiveErrors++
+			metrics.tileTotal.inc({ result: 'error' })
+			if (this.consecutiveErrors >= this.failureThreshold) this.circuitOpenSince = Date.now()
 			if (error.response) {
 				this.log.warn(`${logReference}: Failed to Pregenerate ${templateType}StaticMap. Got ${error.response.status}. Error: ${error.response.data ? error.response.data.reason : '?'}.`)
 			} else {
@@ -91,6 +125,7 @@ class TileserverPregen {
 			return null
 		} finally {
 			this.stats.inFlight--
+			metrics.tileInFlight.dec()
 		}
 	}
 
@@ -102,7 +137,9 @@ class TileserverPregen {
 	}
 
 	resetStats() {
-		this.stats = { calls: 0, totalMs: 0, inFlight: this.stats.inFlight, errors: 0 }
+		this.stats = {
+			calls: 0, totalMs: 0, inFlight: this.stats.inFlight, errors: 0,
+		}
 	}
 
 	async getTileURL(logReference, type, data, staticMapType) {

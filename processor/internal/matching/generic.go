@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"math"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -71,17 +72,23 @@ func ValidateHumansGeneric(
 		}
 		seen[human.ID] = true
 
+		// Compute actual distance and bearing from user to event
+		actualDist := HaversineDistance(human.Latitude, human.Longitude, lat, lon)
+		bearing := Bearing(human.Latitude, human.Longitude, lat, lon)
+
 		result = append(result, webhook.MatchedUser{
-			ID:        human.ID,
-			Name:      human.Name,
-			Type:      human.Type,
-			Language:  human.Language,
-			Latitude:  human.Latitude,
-			Longitude: human.Longitude,
-			Template:  td.Template,
-			Distance:  td.Distance,
-			Clean:     td.Clean,
-			Ping:      td.Ping,
+			ID:                human.ID,
+			Name:              human.Name,
+			Type:              human.Type,
+			Language:          human.Language,
+			Latitude:          human.Latitude,
+			Longitude:         human.Longitude,
+			Template:          td.Template,
+			Distance:          actualDist,
+			Clean:             td.Clean,
+			Ping:              td.Ping,
+			Bearing:           int(math.Round(bearing)),
+			CardinalDirection: CardinalDirection(bearing),
 		})
 	}
 	return result

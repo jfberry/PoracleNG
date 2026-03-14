@@ -5,6 +5,7 @@ const FormData = require('form-data')
 const util = require('util')
 const { performance } = require('perf_hooks')
 const FairPromiseQueue = require('../FairPromiseQueue')
+const metrics = require('../metrics')
 
 const hookRegex = /(?:https?:\/\/|www\.)(?:\([-A-Z0-9+&@#/%=~_|$?!:,.]*\)|[-A-Z0-9+&@#/%=~_|$?!:,.])*(?:\([-A-Z0-9+&@#/%=~_|$?!:,.]*\)|[A-Z0-9+&@#/%=~_|$])/igm
 
@@ -61,6 +62,7 @@ class DiscordWebhookWorker {
 			try {
 				res = await fn()
 				if (res.status === 429) {
+					metrics.discordRateLimits.inc({ source: 'webhook' })
 					this.logs.discord.warn(`${senderId} WEBHOOK 429 Rate limit [Discord Webhook] retryCount ${retryCount} x-ratelimit-bucket ${res.headers['x-ratelimit-bucket']} retry after ${res.headers['retry-after']} limit ${res.headers['x-ratelimit-limit']} global ${res.headers['x-ratelimit-global']} reset after ${res.headers['x-ratelimit-reset-after']} `)
 					//	const resetAfter = res.headers["x-ratelimit-reset-after"]
 
@@ -93,6 +95,7 @@ class DiscordWebhookWorker {
 
 	async webhookAlert(firstData) {
 		const data = firstData
+		const alertStartTime = performance.now()
 		if (!data.target.match(hookRegex)) return this.logs.discord.warn(`Webhook, ${data.name} does not look like a link, exiting`)
 		if (data.message.embed && data.message.embed.color) {
 			data.message.embed.color = parseInt(data.message.embed.color.replace(/^#/, ''), 16)
@@ -160,11 +163,15 @@ class DiscordWebhookWorker {
 				return result
 			})
 
+			metrics.discordWebhookDeliveryDuration.observe((performance.now() - alertStartTime) / 1000)
+
 			if (res.status < 200 || res.status > 299) {
+				metrics.messagesFailed.inc({ destination_type: 'webhook' })
 				await this.query.incrementQuery('humans', { id: data.target }, 'fails', 1)
 				this.logs.discord.warn(`${logReference}: ${data.name} WEBHOOK Got ${res.status} ${res.statusText}`)
 				this.logs.discord.warn(`${logReference}: ${JSON.stringify(data.message)}`)
 			} else {
+				metrics.messagesSent.inc({ destination_type: 'webhook' })
 				this.logs.discord.verbose(`${logReference}: ${data.name} WEBHOOK Got ${res.status} ${res.statusText}`)
 			}
 			this.logs.discord.silly(`${logReference}: ${data.name} WEBHOOK results ${data.target} ${res.statusText} ${res.status}`, res.headers)
@@ -179,6 +186,7 @@ class DiscordWebhookWorker {
 				)
 			}
 		} catch (err) {
+			metrics.messagesFailed.inc({ destination_type: 'webhook' })
 			this.logs.discord.error(`${data.logReference}: ${data.name} WEBHOOK failed`, util.inspect(err))
 		}
 		return true

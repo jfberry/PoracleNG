@@ -1,7 +1,3 @@
-const geoTz = require('geo-tz')
-const moment = require('moment-timezone')
-require('moment-precise-range-plugin')
-
 const Controller = require('./controller')
 
 /**
@@ -35,18 +31,10 @@ class Gym extends Controller {
 			data.gymName = data.name
 			data.gymUrl = data.url
 
-			data.tth = {
-				days: 0,
-				hours: 1,
-				minutes: 0,
-				seconds: 0,
-			}
+			// tth and conqueredTime provided by processor enrichment
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
 			data.distime = data.disappearTime // deprecated
-
-			const conqueredTime = moment().tz(geoTz.find(data.latitude, data.longitude)[0].toString())
-			data.conqueredTime = conqueredTime.format(this.config.locale.time)
 
 			// Stop handling if it already disappeared or is about to go away
 			if (data.tth.firstDateWasLater || ((data.tth.hours * 3600) + (data.tth.minutes * 60) + data.tth.seconds) < minTth) {
@@ -87,83 +75,80 @@ class Gym extends Controller {
 			})
 			if (discordCacheBad) return []
 
-			setImmediate(async () => {
-				try {
-					if (this.imgUicons) data.imgUrl = await this.imgUicons.gymIcon(data.teamId, 6 - data.slotsAvailable, data.inBattle, data.ex) || this.config.fallbacks?.imgUrlGym
-					if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.gymIcon(data.teamId, 6 - data.slotsAvailable, data.inBattle, data.ex)
+			try {
+				if (this.imgUicons) data.imgUrl = await this.imgUicons.gymIcon(data.teamId, 6 - data.slotsAvailable, data.inBattle, data.ex) || this.config.fallbacks?.imgUrlGym
+				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.gymIcon(data.teamId, 6 - data.slotsAvailable, data.inBattle, data.ex)
 
-					const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
-					const jobs = []
+				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
+				const jobs = []
 
-					require('./common/nightTime').setNightTime(data, conqueredTime, this.config)
+				require('./common/nightTime').setNightTime(data, this.config)
 
-					await this.getStaticMapUrl(logReference, data, 'gym', ['teamId', 'latitude', 'longitude', 'imgUrl', 'style'])
-					data.intersection = await this.obtainIntersection(data)
+				await this.getStaticMapUrl(logReference, data, 'gym', ['teamId', 'latitude', 'longitude', 'imgUrl', 'style'])
+				data.intersection = await this.obtainIntersection(data)
 
-					data.staticmap = data.staticMap // deprecated
+				data.staticmap = data.staticMap // deprecated
 
-					for (const cares of whoCares) {
-						this.log.debug(`${logReference}: [matched] Creating gym alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
+				for (const cares of whoCares) {
+					this.log.debug(`${logReference}: [matched] Creating gym alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-						const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-						if (rateLimitTtr) {
-							this.log.verbose(`${logReference}: [matched] Not creating gym alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-							// eslint-disable-next-line no-continue
-							continue
-						}
-						this.log.verbose(`${logReference}: [matched] Creating gym alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
-
-						const language = cares.language || this.config.general.locale
-						const translator = this.translatorFactory.Translator(language)
-						let [platform] = cares.type.split(':')
-						if (platform === 'webhook') platform = 'discord'
-
-						data.teamName = translator.translate(data.teamNameEng)
-						data.oldTeamName = translator.translate(data.oldTeamNameEng)
-						data.previousControlName = translator.translate(data.previousControlNameEng)
-						data.teamEmojiEng = data.teamId >= 0 ? this.emojiLookup.lookup(this.GameData.utilData.teams[data.teamId].emoji, platform) : ''
-						data.teamEmoji = translator.translate(data.teamEmojiEng)
-						data.previousControlTeamEmojiEng = data.previousControlId >= 0 ? this.emojiLookup.lookup(this.GameData.utilData.teams[data.previousControlId].emoji, platform) : ''
-						data.previousControlTeamEmoji = translator.translate(data.previousControlTeamEmojiEng)
-
-						const view = {
-							...geoResult,
-							...data,
-							time: data.distime,
-							tthh: data.tth.hours,
-							tthm: data.tth.minutes,
-							tths: data.tth.seconds,
-							now: new Date(),
-							nowISO: new Date().toISOString(),
-							areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
-						}
-
-						const templateType = 'gym'
-						const message = await this.createMessage(logReference, templateType, platform, cares.template, language, cares.ping, view)
-
-						const work = {
-							lat: data.latitude.toString().substring(0, 8),
-							lon: data.longitude.toString().substring(0, 8),
-							message,
-							target: cares.id,
-							type: cares.type,
-							name: cares.name,
-							tth: data.tth,
-							clean: cares.clean,
-							emoji: data.emoji,
-							logReference,
-							language,
-						}
-
-						jobs.push(work)
+					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
+					if (rateLimitTtr) {
+						this.log.verbose(`${logReference}: [matched] Not creating gym alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
+						// eslint-disable-next-line no-continue
+						continue
 					}
-					this.emit('postMessage', jobs)
-				} catch (e) {
-					this.log.error(`${data.id || data.gym_id}: [matched] Can't seem to handle gym (user cares): `, e, data)
-				}
-			})
+					this.log.verbose(`${logReference}: [matched] Creating gym alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
-			return []
+					const language = cares.language || this.config.general.locale
+					const translator = this.translatorFactory.Translator(language)
+					let [platform] = cares.type.split(':')
+					if (platform === 'webhook') platform = 'discord'
+
+					data.teamName = translator.translate(data.teamNameEng)
+					data.oldTeamName = translator.translate(data.oldTeamNameEng)
+					data.previousControlName = translator.translate(data.previousControlNameEng)
+					data.teamEmojiEng = data.teamId >= 0 ? this.emojiLookup.lookup(this.GameData.utilData.teams[data.teamId].emoji, platform) : ''
+					data.teamEmoji = translator.translate(data.teamEmojiEng)
+					data.previousControlTeamEmojiEng = data.previousControlId >= 0 ? this.emojiLookup.lookup(this.GameData.utilData.teams[data.previousControlId].emoji, platform) : ''
+					data.previousControlTeamEmoji = translator.translate(data.previousControlTeamEmojiEng)
+
+					const view = {
+						...geoResult,
+						...data,
+						time: data.distime,
+						tthh: data.tth.hours,
+						tthm: data.tth.minutes,
+						tths: data.tth.seconds,
+						now: new Date(),
+						nowISO: new Date().toISOString(),
+						areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
+					}
+
+					const templateType = 'gym'
+					const message = await this.createMessage(logReference, templateType, platform, cares.template, language, cares.ping, view)
+
+					const work = {
+						lat: data.latitude.toString().substring(0, 8),
+						lon: data.longitude.toString().substring(0, 8),
+						message,
+						target: cares.id,
+						type: cares.type,
+						name: cares.name,
+						tth: data.tth,
+						clean: cares.clean,
+						emoji: data.emoji,
+						logReference,
+						language,
+					}
+
+					jobs.push(work)
+				}
+				return jobs
+			} catch (e) {
+				this.log.error(`${data.id || data.gym_id}: [matched] Can't seem to handle gym (user cares): `, e, data)
+				return []
+			}
 		} catch (e) {
 			this.log.error(`${data.id || data.gym_id}: [matched] Can't seem to handle gym: `, e, data)
 		}
