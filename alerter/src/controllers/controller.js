@@ -206,7 +206,7 @@ class Controller extends EventEmitter {
 									stop.imgUrl = await this.imgUicons.gymIcon(stop.teamId, 6 - stop.slots, false, false) || this.config.fallbacks?.imgUrlGym
 									break
 								}
-								case 'pokestop': {
+								case 'stop': {
 									break
 								}
 								default:
