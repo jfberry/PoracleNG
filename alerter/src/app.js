@@ -583,7 +583,7 @@ async function currentStatus() {
 	eventsProcessed = 0
 
 	let matchedInfo = ` | Matched: ${eps}/s q:${hookQueue.length} a:${alarmProcessor.running.length}`
-	matchedInfo += ` geo(${geoStats.calls} avg:${geoStats.avgMs}ms fly:${geoStats.inFlight} hit:${geoStats.cacheHits} err:${geoStats.errors} cached:${geoStats.cacheEntries})`
+	matchedInfo += ` geo(${geoStats.calls} avg:${geoStats.avgMs}ms fly:${geoStats.inFlight} hit:${geoStats.cacheHits} err:${geoStats.errors})`
 	matchedInfo += ` tile(${tileStats.calls} avg:${tileStats.avgMs}ms fly:${tileStats.inFlight} err:${tileStats.errors})`
 
 	resetAllStats()
