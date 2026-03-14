@@ -1,19 +1,19 @@
-const { Permissions } = require('discord.js')
+const { PermissionFlagsBits } = require('discord.js')
 
 exports.run = async (client, msg, [args]) => {
 	try {
 		if (!client.config.discord.admins.includes(msg.author.id)) return
 
 		// Check target
-		if (!client.config.discord.admins.includes(msg.author.id) && msg.channel.type !== 'DM') {
+		if (!client.config.discord.admins.includes(msg.author.id) && !msg.channel.isDMBased()) {
 			return await msg.author.send(client.translator.translate('Please run commands in Direct Messages'))
 		}
 
-		if (msg.channel.type !== 'GUILD_TEXT' && msg.channel.type !== 'GUILD_NEWS') {
+		if (!msg.channel.isTextBased() || msg.channel.isDMBased()) {
 			return await msg.reply('This needs to be run from within a channel on the appropriate guild')
 		}
 
-		if (!msg.guild.me.permissions.has(Permissions.FLAGS.MANAGE_WEBHOOKS)) {
+		if (!msg.guild.members.me.permissions.has(PermissionFlagsBits.ManageWebhooks)) {
 			return await msg.reply('I have not been allowed to make webhooks!')
 		}
 
@@ -81,7 +81,7 @@ exports.run = async (client, msg, [args]) => {
 			if (webhookLink) {
 				await msg.author.send(`There is an existing Poracle webhook ${webhookLink}`)
 			} else {
-				const res = await msg.channel.createWebhook('Poracle')
+				const res = await msg.channel.createWebhook({ name: 'Poracle' })
 				await msg.author.send(`I created a new webhook ${res.name} ${res.url}`)
 				webhookLink = res.url
 			}

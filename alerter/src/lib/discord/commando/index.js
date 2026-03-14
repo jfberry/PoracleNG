@@ -1,6 +1,7 @@
 const {
 	Client,
-	Intents,
+	GatewayIntentBits,
+	Partials,
 	Options,
 } = require('discord.js')
 const { EventEmitter } = require('events')
@@ -39,12 +40,16 @@ class DiscordCommando extends EventEmitter {
 	async bounceWorker() {
 		delete this.client
 
-		const intents = new Intents()
-		intents.add(Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MEMBERS, Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILD_PRESENCES)
-
 		this.client = new Client({
-			intents,
-			partials: ['CHANNEL', 'MESSAGE'], // , 'GUILD_MEMBER'],
+			intents: [
+				GatewayIntentBits.Guilds,
+				GatewayIntentBits.GuildMessages,
+				GatewayIntentBits.GuildMembers,
+				GatewayIntentBits.DirectMessages,
+				GatewayIntentBits.GuildPresences,
+				GatewayIntentBits.MessageContent,
+			],
+			partials: [Partials.Channel, Partials.Message],
 			makeCache: Options.cacheWithLimits({
 				MessageManager: 1,
 				PresenceManager: 0,
@@ -58,7 +63,7 @@ class DiscordCommando extends EventEmitter {
 				this.bounceWorker()
 			})
 
-			this.client.on('rateLimit', (info) => {
+			this.client.rest.on('rateLimited', (info) => {
 				let channelId
 				if (info.route) {
 					const channelMatch = info.route.match(/\/channels\/(\d+)\//)
@@ -70,10 +75,10 @@ class DiscordCommando extends EventEmitter {
 						}
 					}
 				}
-				this.logs.log.warn(`#${this.id} Discord commando worker - 429 rate limit hit - in timeout ${info.timeout ? info.timeout : 'Unknown timeout '} route ${info.route}${channelId ? ` (probably ${channelId})` : ''}`)
+				this.logs.log.warn(`#${this.id} Discord commando worker - 429 rate limit hit - in timeout ${info.timeToReset ? info.timeToReset : 'Unknown timeout '} route ${info.route}${channelId ? ` (probably ${channelId})` : ''}`)
 			})
-			this.client.on('ready', () => {
-				this.logs.log.info(`#${this.id} Discord commando - ${this.client.user.tag} ready for action`)
+			this.client.on('clientReady', () => {
+				this.logs.log.info(`#${this.id} Discord commando - ${this.client.user.username} ready for action`)
 
 				this.busy = false
 			})
@@ -137,7 +142,7 @@ class DiscordCommando extends EventEmitter {
 
 			await this.client.login(this.token)
 		} catch (err) {
-			if (err.code === 'DISALLOWED_INTENTS') {
+			if (err.code === 4014) {
 				this.logs.log.error('Could not initialise discord', err)
 				this.logs.log.error('Ensure that your discord bot Gateway intents for Presence, Server Members and Messages are on - see https://muckelba.github.io/poracleWiki/discordbot.html')
 				process.exit(1)

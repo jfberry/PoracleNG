@@ -9,7 +9,7 @@ const util = require('util')
 const NodeCache = require('node-cache')
 const fastify = require('fastify')({
 	bodyLimit: 52428800,
-	maxParamLength: 256,
+	routerOptions: { maxParamLength: 256 },
 })
 const { Telegraf } = require('telegraf')
 const path = require('path')

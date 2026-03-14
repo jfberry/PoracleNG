@@ -1,6 +1,6 @@
 const path = require('path')
 const fs = require('fs')
-const { Permissions } = require('discord.js')
+const { PermissionFlagsBits } = require('discord.js')
 const Uicons = require('../../../uicons')
 
 exports.run = async (client, msg, [args]) => {
@@ -8,7 +8,7 @@ exports.run = async (client, msg, [args]) => {
 		if (!client.config.discord.admins.includes(msg.author.id)) return
 
 		// Check target
-		if (!client.config.discord.admins.includes(msg.author.id) && msg.channel.type !== 'DM') {
+		if (!client.config.discord.admins.includes(msg.author.id) && !msg.channel.isDMBased()) {
 			return await msg.author.send(client.translator.translate('Please run commands in Direct Messages'))
 		}
 
@@ -29,7 +29,7 @@ exports.run = async (client, msg, [args]) => {
 			return await msg.reply('No guild has been set, either execute inside a channel or specify guild<id>')
 		}
 
-		if (!guild.me.permissions.has(Permissions.FLAGS.MANAGE_EMOJIS_AND_STICKERS)) {
+		if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageEmojisAndStickers)) {
 			return await msg.reply('I have not been allowed to manage emojis and stickers!')
 		}
 

@@ -56,7 +56,7 @@ class DiscordRoleSetter {
 				allServersRoleList.push(thisServer)
 			} catch (err) {
 				if (err instanceof DiscordAPIError) {
-					if (err.httpStatus === 404) {
+					if (err.status === 404) {
 						// eslint-disable-next-line no-continue
 						// last line in loop, so we don't need this
 						// continue
@@ -82,7 +82,7 @@ class DiscordRoleSetter {
 				guildMember = await guild.members.fetch(id)
 			} catch (err) {
 				if (err instanceof DiscordAPIError) {
-					if (err.httpStatus === 404) {
+					if (err.status === 404) {
 						// eslint-disable-next-line no-continue
 						continue
 					}

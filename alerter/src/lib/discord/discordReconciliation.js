@@ -101,7 +101,7 @@ class DiscordReconciliation {
 					}
 				} catch (err) {
 					if (err instanceof DiscordAPIError) {
-						if (err.httpStatus === 404) {
+						if (err.status === 404) {
 							// eslint-disable-next-line no-continue
 							// last line in loop, so we don't need this
 							// continue
@@ -162,7 +162,7 @@ class DiscordReconciliation {
 				this.log.warn(`Reconciliation (Discord) Cannot load guild "${guildId}"`, err)
 				throw err
 				// if (err instanceof DiscordAPIError) {
-				// 	if (err.httpStatus === 403) {
+				// 	if (err.status === 403) {
 				// 		// eslint-disable-next-line no-continue
 				// 		continue
 				// 		// this.logs.log.debug(`${guildID} no access`)
@@ -185,7 +185,7 @@ class DiscordReconciliation {
 				guildMember = await guild.members.fetch({ user: id, force: true })
 			} catch (err) {
 				if (err instanceof DiscordAPIError) {
-					if (err.httpStatus === 404) {
+					if (err.status === 404) {
 						// eslint-disable-next-line no-continue
 						continue
 					}
@@ -468,7 +468,7 @@ class DiscordReconciliation {
 				guild = await this.client.guilds.fetch(guildId)
 			} catch (err) {
 				// if (err instanceof DiscordAPIError) {
-				// 	if (err.httpStatus === 403) {
+				// 	if (err.status === 403) {
 				// 		this.log.debug(`${guildId} no access`)
 				// 		// eslint-disable-next-line no-continue
 				// 		continue

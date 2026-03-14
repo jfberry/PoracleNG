@@ -1,7 +1,7 @@
 const stripJsonComments = require('strip-json-comments')
 const fs = require('fs')
 const path = require('path')
-const { Permissions } = require('discord.js')
+const { PermissionFlagsBits } = require('discord.js')
 const PoracleDiscordMessage = require('../../poracleDiscordMessage')
 const PoracleDiscordState = require('../../poracleDiscordState')
 
@@ -19,7 +19,7 @@ exports.run = async (client, msg, [args]) => {
 		if (!client.config.discord.admins.includes(msg.author.id)) return
 
 		// Check target
-		if (!client.config.discord.admins.includes(msg.author.id) && msg.channel.type !== 'DM') {
+		if (!client.config.discord.admins.includes(msg.author.id) && !msg.channel.isDMBased()) {
 			return await msg.author.send(client.translator.translate('Please run commands in Direct Messages'))
 		}
 
@@ -48,10 +48,10 @@ exports.run = async (client, msg, [args]) => {
 			return await msg.reply('No guild has been set, either execute inside a channel or specify guild<id>')
 		}
 
-		if (!guild.me.permissions.has(Permissions.FLAGS.MANAGE_WEBHOOKS)) {
+		if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageWebhooks)) {
 			return await msg.reply('I have not been allowed to manage webhooks!')
 		}
-		if (!guild.me.permissions.has(Permissions.FLAGS.MANAGE_CHANNELS)) {
+		if (!guild.members.me.permissions.has(PermissionFlagsBits.ManageChannels)) {
 			return await msg.reply('I have not been allowed to manage channels!')
 		}
 
@@ -497,7 +497,7 @@ exports.run = async (client, msg, [args]) => {
 				name = format(channelDefinition.channelName, subArgs)
 			} else {
 				const webhookName = format(channelDefinition.channelName, subArgs)
-				const res = await channel.createWebhook('Poracle')
+				const res = await channel.createWebhook({ name: 'Poracle' })
 				id = res.url
 				type = 'webhook'
 				name = channelDefinition.webhookName ? format(channelDefinition.webhookName, subArgs) : webhookName
