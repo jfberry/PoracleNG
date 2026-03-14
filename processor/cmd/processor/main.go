@@ -490,13 +490,13 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			continue
 		}
 
-		l.Infof("Weather changed to %d (from %d, source=%s) and %d users care",
+		l.Debugf("Weather changed to %d (from %d, source=%s) and %d users care, checking for affected pokemon",
 			change.GameplayCondition, change.OldGameplayCondition, change.Source, len(caringUsers))
 
-		// Build matched users
-		matched := make([]webhook.MatchedUser, len(caringUsers))
-		for i, u := range caringUsers {
-			matched[i] = webhook.MatchedUser{
+		// Build matched users, skipping those with no affected pokemon
+		var matched []webhook.MatchedUser
+		for _, u := range caringUsers {
+			mu := webhook.MatchedUser{
 				ID:       u.ID,
 				Name:     u.Name,
 				Type:     u.Type,
@@ -513,23 +513,36 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 					change.OldGameplayCondition, change.GameplayCondition,
 					ps.cfg.Weather.ShowAlteredPokemonMaxCount,
 				)
-				if len(affected) > 0 {
-					entries := make([]webhook.ActivePokemonEntry, len(affected))
-					for j, ap := range affected {
-						entries[j] = webhook.ActivePokemonEntry{
-							PokemonID:     ap.PokemonID,
-							Form:          ap.Form,
-							IV:            ap.IV,
-							CP:            ap.CP,
-							Latitude:      ap.Latitude,
-							Longitude:     ap.Longitude,
-							DisappearTime: ap.DisappearTime,
-						}
-					}
-					matched[i].ActivePokemons = entries
+				if len(affected) == 0 {
+					l.Debugf("User %s (%s) cares about cell but has no affected pokemon, skipping", u.Name, u.ID)
+					continue
 				}
+				entries := make([]webhook.ActivePokemonEntry, len(affected))
+				for j, ap := range affected {
+					entries[j] = webhook.ActivePokemonEntry{
+						PokemonID:     ap.PokemonID,
+						Form:          ap.Form,
+						IV:            ap.IV,
+						CP:            ap.CP,
+						Latitude:      ap.Latitude,
+						Longitude:     ap.Longitude,
+						DisappearTime: ap.DisappearTime,
+					}
+				}
+				mu.ActivePokemons = entries
 			}
+
+			matched = append(matched, mu)
 		}
+
+		if len(matched) == 0 {
+			l.Debugf("Weather changed to %d (from %d, source=%s) but no users have affected pokemon",
+				change.GameplayCondition, change.OldGameplayCondition, change.Source)
+			continue
+		}
+
+		l.Infof("Weather changed to %d (from %d, source=%s) and %d users have affected pokemon",
+			change.GameplayCondition, change.OldGameplayCondition, change.Source, len(matched))
 
 		// Build matched areas from cell center
 		st := ps.stateMgr.Get()
