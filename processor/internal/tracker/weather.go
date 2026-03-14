@@ -169,32 +169,28 @@ func GetNextHourTimestamp() int64 {
 	return now - (now % 3600) + 3600
 }
 
-// ExportWeatherData returns all known weather data in a format suitable for the alerter.
-// Returns map[cellID]map[hourTimestamp]condition.
-func (wt *WeatherTracker) ExportWeatherData() map[string]map[int64]int {
+// ExportCellWeather returns weather data for a single cell, keyed by hour timestamp.
+func (wt *WeatherTracker) ExportCellWeather(cellID string) map[int64]int {
 	wt.mu.RLock()
 	defer wt.mu.RUnlock()
 
 	now := time.Now().Unix()
 	currentHour := now - (now % 3600)
 
-	result := make(map[string]map[int64]int)
-	for cellID, cd := range wt.controllerData {
-		cellData := make(map[int64]int)
+	result := make(map[int64]int)
+
+	if cd := wt.controllerData[cellID]; cd != nil {
 		for ts, condition := range cd.hourWeather {
-			// Only export current and future hours
 			if ts >= currentHour-3600 {
-				cellData[ts] = condition
+				result[ts] = condition
 			}
 		}
-		// Override with local inference for current hour
-		if ld, ok := wt.localData[cellID]; ok && ld.currentHourTimestamp == currentHour {
-			cellData[currentHour] = ld.monsterWeather
-		}
-		if len(cellData) > 0 {
-			result[cellID] = cellData
-		}
 	}
+	// Override with local inference for current hour
+	if ld := wt.localData[cellID]; ld != nil && ld.currentHourTimestamp == currentHour {
+		result[currentHour] = ld.monsterWeather
+	}
+
 	return result
 }
 

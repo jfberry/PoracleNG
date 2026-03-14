@@ -177,19 +177,18 @@ exports.run = async (client, msg, args, options) => {
 					}
 				}
 
-				// Fetch weather data from the Go processor on demand
+				const weatherCellId = weatherTileGenerator.getWeatherCellId(latitude, longitude)
+
+				// Fetch weather data for this cell from the Go processor on demand
 				const axios = require('axios')
-				let weatherData
+				let weatherInfo
 				try {
-					const resp = await axios.get(`${client.config.processor.url}/api/weather`, { timeout: 5000 })
-					weatherData = resp.data
+					const resp = await axios.get(`${client.config.processor.url}/api/weather`, { params: { cell: weatherCellId }, timeout: 5000 })
+					weatherInfo = resp.data
 				} catch (err) {
 					client.log.error(`Failed to fetch weather from processor: ${err.message}`)
 					return msg.reply(translator.translate('Weather information is not yet available - wait a few minutes and try again'))
 				}
-
-				const weatherCellId = weatherTileGenerator.getWeatherCellId(latitude, longitude)
-				const weatherInfo = weatherData[weatherCellId]
 
 				const nowTimestamp = Math.floor(Date.now() / 1000)
 				const currentHourTimestamp = nowTimestamp - (nowTimestamp % 3600)

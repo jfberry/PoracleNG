@@ -10,9 +10,9 @@ import (
 // ReloadFunc is called when a reload is requested.
 type ReloadFunc func() error
 
-// WeatherExporter returns all known weather data.
+// WeatherExporter returns weather data for a specific cell.
 type WeatherExporter interface {
-	ExportWeatherData() map[string]map[int64]int
+	ExportCellWeather(cellID string) map[int64]int
 }
 
 // Handler provides API endpoints for the processor.
@@ -60,8 +60,15 @@ func (h *Handler) handleWeather(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cellID := r.URL.Query().Get("cell")
+	if cellID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "cell parameter required"})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(h.weather.ExportWeatherData())
+	json.NewEncoder(w).Encode(h.weather.ExportCellWeather(cellID))
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
