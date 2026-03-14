@@ -1,6 +1,6 @@
 /* eslint-disable max-classes-per-file */
 const NodeGeocoder = require('node-geocoder')
-const Keyv = require('keyv').default
+const { Cacheable } = require('cacheable')
 const KeyvSqlite = require('@keyv/sqlite').default
 const { performance } = require('perf_hooks')
 const emojiFlags = require('country-code-emoji')
@@ -57,8 +57,10 @@ class CachingGeocoder {
 		this.mustache = mustache
 		if (cacheFilename) {
 			const dbPath = path.join(__dirname, '../../.cache', `${cacheFilename}.sqlite`)
-			this.cache = new Keyv({ store: new KeyvSqlite(`sqlite://${dbPath}`), namespace: 'geo' })
-			this.cache.on('error', (err) => this.log.error('Keyv geocache error', err))
+			this.cache = new Cacheable({
+				primary: { ttl: '24h' },
+				secondary: new KeyvSqlite(`sqlite://${dbPath}`),
+			})
 		} else {
 			this.cache = null
 		}
