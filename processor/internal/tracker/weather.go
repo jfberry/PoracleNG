@@ -7,17 +7,20 @@ import (
 
 	"github.com/golang/geo/s2"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/geo"
 )
 
 // WeatherChange represents a detected weather change event.
 type WeatherChange struct {
-	Longitude            float64 `json:"longitude"`
-	Latitude             float64 `json:"latitude"`
-	S2CellID             string  `json:"s2_cell_id"`
-	GameplayCondition    int     `json:"gameplay_condition"`
-	OldGameplayCondition int     `json:"old_gameplay_condition"`
-	Updated              int64   `json:"updated"`
-	Source               string  `json:"source"`
+	Longitude            float64      `json:"longitude"`
+	Latitude             float64      `json:"latitude"`
+	S2CellID             string       `json:"s2_cell_id"`
+	GameplayCondition    int          `json:"gameplay_condition"`
+	OldGameplayCondition int          `json:"old_gameplay_condition"`
+	Updated              int64        `json:"updated"`
+	Source               string       `json:"source"`
+	Coords               [][2]float64 `json:"coords,omitempty"`
 }
 
 // localCellData holds locally inferred weather data per cell.
@@ -66,7 +69,7 @@ func GetWeatherCellID(lat, lon float64) string {
 
 // UpdateFromWebhook updates weather state from a direct weather webhook.
 // Emits a change event if the weather has changed from the previous hour.
-func (wt *WeatherTracker) UpdateFromWebhook(cellID string, condition int, timestamp int64, lat, lon float64) {
+func (wt *WeatherTracker) UpdateFromWebhook(cellID string, condition int, timestamp int64, lat, lon float64, polygon [4][2]float64) {
 	wt.mu.Lock()
 	defer wt.mu.Unlock()
 
@@ -103,6 +106,7 @@ func (wt *WeatherTracker) UpdateFromWebhook(cellID string, condition int, timest
 			OldGameplayCondition: previousWeather,
 			Updated:              timestamp,
 			Source:               "webhook",
+			Coords:               polygon[:],
 		}:
 		default:
 		}
@@ -306,16 +310,20 @@ func (wt *WeatherTracker) CheckWeatherOnMonster(cellID string, lat, lon float64,
 
 				log.Infof("Boosted Pokemon! Force update of weather in cell %s with weather %d", cellID, monsterWeather)
 
+				// Use cell center instead of pokemon spawn point
+				centerLat, centerLon := geo.GetCellCenter(lat, lon, 10)
+
 				// Send non-blocking
 				select {
 				case wt.changes <- WeatherChange{
-					Longitude:            lon,
-					Latitude:             lat,
+					Longitude:            centerLon,
+					Latitude:             centerLat,
 					S2CellID:             cellID,
 					GameplayCondition:    monsterWeather,
 					OldGameplayCondition: oldWeather,
 					Updated:              now,
 					Source:               "fromMonster",
+					Coords:               geo.GetCellCoordsSlice(lat, lon, 10),
 				}:
 				default:
 				}

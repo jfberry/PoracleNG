@@ -21,7 +21,7 @@ func (ps *ProcessorService) ProcessWeather(raw json.RawMessage) error {
 		cellID = tracker.GetWeatherCellID(weather.Latitude, weather.Longitude)
 	}
 
-	ps.weather.UpdateFromWebhook(cellID, weather.GameplayCondition, weather.Updated, weather.Latitude, weather.Longitude)
+	ps.weather.UpdateFromWebhook(cellID, weather.GameplayCondition, weather.Updated, weather.Latitude, weather.Longitude, weather.Polygon)
 	return nil
 }
 

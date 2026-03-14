@@ -28,7 +28,7 @@ func TestWeatherTrackerDirectUpdate(t *testing.T) {
 	wt := NewWeatherTracker()
 
 	cellID := "test_cell"
-	wt.UpdateFromWebhook(cellID, 3, 1700000000, 51.5, -0.1)
+	wt.UpdateFromWebhook(cellID, 3, 1700000000, 51.5, -0.1, [4][2]float64{})
 
 	weather := wt.GetCurrentWeatherInCell(cellID)
 	// Since the timestamp is in the past, the current hour check may not match

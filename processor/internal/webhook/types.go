@@ -124,11 +124,12 @@ type RSVP struct {
 
 // WeatherWebhook mirrors Golbat's weather webhook message.
 type WeatherWebhook struct {
-	S2CellID          string  `json:"s2_cell_id"`
-	Latitude          float64 `json:"latitude"`
-	Longitude         float64 `json:"longitude"`
-	GameplayCondition int     `json:"gameplay_condition"`
-	Updated           int64   `json:"updated"`
+	S2CellID          string        `json:"s2_cell_id"`
+	Latitude          float64       `json:"latitude"`
+	Longitude         float64       `json:"longitude"`
+	Polygon           [4][2]float64 `json:"polygon"`
+	GameplayCondition int           `json:"gameplay_condition"`
+	Updated           int64         `json:"updated"`
 }
 
 // MatchedArea represents a geofence area that a point falls within.
