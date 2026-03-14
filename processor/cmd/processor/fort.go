@@ -2,19 +2,27 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 	ps.workerPool <- struct{}{}
+	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
+		start := time.Now()
+		defer func() {
+			metrics.WebhookProcessingDuration.WithLabelValues("fort_update").Observe(time.Since(start).Seconds())
+			metrics.WorkerPoolInUse.Dec()
+			<-ps.workerPool
+		}()
 		defer ps.wg.Done()
-		defer func() { <-ps.workerPool }()
 
 		var fort webhook.FortWebhook
 		if err := json.Unmarshal(raw, &fort); err != nil {
@@ -37,6 +45,9 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 		matched := ps.fortMatcher.Match(data, st)
 
 		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("fort_update").Inc()
+			metrics.MatchedUsers.WithLabelValues("fort_update").Add(float64(len(matched)))
+
 			areas := st.Geofence.PointInAreas(fort.Latitude, fort.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 

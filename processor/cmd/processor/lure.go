@@ -2,19 +2,27 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 	ps.workerPool <- struct{}{}
+	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
+		start := time.Now()
+		defer func() {
+			metrics.WebhookProcessingDuration.WithLabelValues("lure").Observe(time.Since(start).Seconds())
+			metrics.WorkerPoolInUse.Dec()
+			<-ps.workerPool
+		}()
 		defer ps.wg.Done()
-		defer func() { <-ps.workerPool }()
 
 		var lure webhook.LureWebhook
 		if err := json.Unmarshal(raw, &lure); err != nil {
@@ -27,6 +35,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 		// Duplicate check
 		if lure.LureExpiration > 0 && ps.duplicates.CheckLure(lure.PokestopID, lure.LureExpiration) {
 			l.Debug("Lure duplicate, ignoring")
+			metrics.DuplicatesSkipped.WithLabelValues("lure").Inc()
 			return
 		}
 
@@ -41,6 +50,9 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 		matched := ps.lureMatcher.Match(data, st)
 
 		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("lure").Inc()
+			metrics.MatchedUsers.WithLabelValues("lure").Add(float64(len(matched)))
+
 			areas := st.Geofence.PointInAreas(lure.Latitude, lure.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 

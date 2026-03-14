@@ -5,6 +5,7 @@ const { performance } = require('perf_hooks')
 const emojiFlags = require('country-code-emoji')
 const path = require('path')
 const NominatimGeocoder = require('./nominatimGeocoder')
+const metrics = require('./metrics')
 
 class NominatimGeocoderConverter extends NominatimGeocoder {
 	async reverse(obj) {
@@ -115,12 +116,14 @@ class CachingGeocoder {
 			if (this.consecutiveErrors >= this.failureThreshold) {
 				if (now - this.circuitOpenSince < this.cooldownMs) {
 					this.stats.circuitBreaks = (this.stats.circuitBreaks || 0) + 1
+					metrics.geocodeTotal.inc({ result: 'circuit_break' })
 					return { addr: 'Unknown', flag: '' }
 				}
 				// Half-open: allow one probe request
 			}
 
 			this.stats.inFlight++
+			metrics.geocodeInFlight.inc()
 			try {
 				const startTime = performance.now()
 				const geocoder = this.getGeocoder()
@@ -129,6 +132,7 @@ class CachingGeocoder {
 					this.log.error(`getAddress: failed to fetch data - ${!r ? 'no result' : `${r.error}`}`)
 					this.stats.errors++
 					this.consecutiveErrors++
+					metrics.geocodeTotal.inc({ result: 'error' })
 					if (this.consecutiveErrors >= this.failureThreshold) this.circuitOpenSince = Date.now()
 					return { addr: 'Unknown', flag: '' }
 				}
@@ -138,6 +142,8 @@ class CachingGeocoder {
 				const elapsed = endTime - startTime
 				this.stats.calls++
 				this.stats.totalMs += elapsed
+				metrics.geocodeDuration.observe(elapsed / 1000)
+				metrics.geocodeTotal.inc({ result: 'success' })
 				this.consecutiveErrors = 0;
 				(this.config.logger.timingStats ? this.log.verbose : this.log.debug)(`Geocode ${locationObject.lat},${locationObject.lon} (${elapsed} ms)`)
 
@@ -152,11 +158,13 @@ class CachingGeocoder {
 			} catch (err) {
 				this.stats.errors++
 				this.consecutiveErrors++
+				metrics.geocodeTotal.inc({ result: 'error' })
 				if (this.consecutiveErrors >= this.failureThreshold) this.circuitOpenSince = Date.now()
 				this.log.error('getAddress: failed to fetch data', err)
 				return { addr: 'Unknown', flag: '' }
 			} finally {
 				this.stats.inFlight--
+				metrics.geocodeInFlight.dec()
 			}
 		}
 
@@ -168,6 +176,7 @@ class CachingGeocoder {
 		const cachedResult = this.cache ? this.cache.getKey(cacheKey) : null
 		if (cachedResult) {
 			this.stats.cacheHits++
+			metrics.geocodeTotal.inc({ result: 'cache_hit' })
 			return this.escapeAddress(cachedResult)
 		}
 

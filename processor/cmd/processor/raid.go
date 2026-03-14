@@ -2,19 +2,27 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 	ps.workerPool <- struct{}{}
+	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
+		start := time.Now()
+		defer func() {
+			metrics.WebhookProcessingDuration.WithLabelValues("raid").Observe(time.Since(start).Seconds())
+			metrics.WorkerPoolInUse.Dec()
+			<-ps.workerPool
+		}()
 		defer ps.wg.Done()
-		defer func() { <-ps.workerPool }()
 
 		var raid webhook.RaidWebhook
 		if err := json.Unmarshal(raw, &raid); err != nil {
@@ -59,6 +67,9 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		}
 
 		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("raid").Inc()
+			metrics.MatchedUsers.WithLabelValues("raid").Add(float64(len(matched)))
+
 			areas := st.Geofence.PointInAreas(raid.Latitude, raid.Longitude)
 			matchedAreas := make([]webhook.MatchedArea, len(areas))
 			for i, a := range areas {

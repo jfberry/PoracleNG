@@ -3,19 +3,27 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 	ps.workerPool <- struct{}{}
+	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
+		start := time.Now()
+		defer func() {
+			metrics.WebhookProcessingDuration.WithLabelValues("quest").Observe(time.Since(start).Seconds())
+			metrics.WorkerPoolInUse.Dec()
+			<-ps.workerPool
+		}()
 		defer ps.wg.Done()
-		defer func() { <-ps.workerPool }()
 
 		var quest webhook.QuestWebhook
 		if err := json.Unmarshal(raw, &quest); err != nil {
@@ -29,6 +37,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		rewardsKey := buildQuestRewardsKey(quest.Rewards)
 		if ps.duplicates.CheckQuest(quest.PokestopID, rewardsKey) {
 			l.Debug("Quest duplicate, ignoring")
+			metrics.DuplicatesSkipped.WithLabelValues("quest").Inc()
 			return
 		}
 
@@ -49,6 +58,9 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		matched := ps.questMatcher.Match(data, st)
 
 		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("quest").Inc()
+			metrics.MatchedUsers.WithLabelValues("quest").Add(float64(len(matched)))
+
 			areas := st.Geofence.PointInAreas(quest.Latitude, quest.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 

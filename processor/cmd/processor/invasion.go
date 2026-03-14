@@ -2,19 +2,27 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 	ps.workerPool <- struct{}{}
+	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
+		start := time.Now()
+		defer func() {
+			metrics.WebhookProcessingDuration.WithLabelValues("invasion").Observe(time.Since(start).Seconds())
+			metrics.WorkerPoolInUse.Dec()
+			<-ps.workerPool
+		}()
 		defer ps.wg.Done()
-		defer func() { <-ps.workerPool }()
 
 		var inv webhook.InvasionWebhook
 		if err := json.Unmarshal(raw, &inv); err != nil {
@@ -33,6 +41,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		// Duplicate check
 		if expiration > 0 && ps.duplicates.CheckInvasion(inv.PokestopID, expiration) {
 			l.Debug("Invasion duplicate, ignoring")
+			metrics.DuplicatesSkipped.WithLabelValues("invasion").Inc()
 			return
 		}
 
@@ -55,6 +64,9 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		matched := ps.invasionMatcher.Match(data, st)
 
 		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("invasion").Inc()
+			metrics.MatchedUsers.WithLabelValues("invasion").Add(float64(len(matched)))
+
 			areas := st.Geofence.PointInAreas(inv.Latitude, inv.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 

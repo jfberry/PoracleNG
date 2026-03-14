@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -63,6 +65,7 @@ func main() {
 	}
 
 	// Create processor
+	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
 
 	// Weather change consumer
@@ -100,6 +103,9 @@ func main() {
 	})
 	apiHandler.RegisterRoutes(mux)
 
+	// Prometheus metrics
+	mux.Handle("/metrics", promhttp.Handler())
+
 	server := &http.Server{
 		Addr:    cfg.Server.ListenAddr,
 		Handler: mux,
@@ -112,9 +118,14 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			log.Debugf("Periodic reload triggered")
+			start := time.Now()
 			if err := state.Load(stateMgr, database, cfg.Geofence.Paths); err != nil {
 				log.Errorf("Periodic reload failed: %s", err)
+				metrics.StateReloads.WithLabelValues("error").Inc()
+			} else {
+				metrics.StateReloads.WithLabelValues("success").Inc()
 			}
+			metrics.StateReloadDuration.Observe(time.Since(start).Seconds())
 		}
 	}()
 
