@@ -21,6 +21,12 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	cellID := tracker.GetWeatherCellID(pokemon.Latitude, pokemon.Longitude)
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
 
+	// Weather forecast for boost change detection (triggers AccuWeather fetch if configured)
+	forecast := e.GetForecast(cellID)
+	m["weatherForecastCurrent"] = forecast.Current
+	m["weatherForecastNext"] = forecast.Next
+	m["nextHourTimestamp"] = tracker.GetNextHourTimestamp()
+
 	// Time enrichment
 	if pokemon.DisappearTime > 0 {
 		tz := geo.GetTimezone(pokemon.Latitude, pokemon.Longitude)

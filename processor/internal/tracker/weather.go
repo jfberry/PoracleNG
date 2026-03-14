@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"strconv"
 	"sync"
 	"time"
 
@@ -55,11 +56,12 @@ func (wt *WeatherTracker) Changes() <-chan WeatherChange {
 	return wt.changes
 }
 
-// GetWeatherCellID returns the S2 level-10 cell ID for a lat/lon as a string token.
+// GetWeatherCellID returns the S2 level-10 cell ID for a lat/lon as a numeric string.
+// This matches the format used by Golbat webhooks and the JS S2.keyToId().
 func GetWeatherCellID(lat, lon float64) string {
 	ll := s2.LatLngFromDegrees(lat, lon)
 	cellID := s2.CellIDFromLatLng(ll).Parent(10)
-	return cellID.ToToken()
+	return strconv.FormatUint(uint64(cellID), 10)
 }
 
 // UpdateFromWebhook updates weather state from a direct weather webhook.
@@ -127,6 +129,96 @@ func (wt *WeatherTracker) GetCurrentWeatherInCell(cellID string) int {
 		weather = ld.monsterWeather
 	}
 	return weather
+}
+
+// WeatherForecast holds current and next hour weather for a cell.
+type WeatherForecast struct {
+	Current int
+	Next    int
+}
+
+// GetWeatherForecast returns the current and next hour weather for a cell.
+func (wt *WeatherTracker) GetWeatherForecast(cellID string) WeatherForecast {
+	wt.mu.RLock()
+	defer wt.mu.RUnlock()
+
+	now := time.Now().Unix()
+	currentHour := now - (now % 3600)
+	nextHour := currentHour + 3600
+
+	var current, next int
+
+	cd := wt.controllerData[cellID]
+	ld := wt.localData[cellID]
+
+	if cd != nil {
+		current = cd.hourWeather[currentHour]
+		next = cd.hourWeather[nextHour]
+	}
+	// Local inference overrides current hour
+	if ld != nil && ld.currentHourTimestamp == currentHour {
+		current = ld.monsterWeather
+	}
+
+	return WeatherForecast{Current: current, Next: next}
+}
+
+// GetNextHourTimestamp returns the timestamp of the next hour boundary.
+func GetNextHourTimestamp() int64 {
+	now := time.Now().Unix()
+	return now - (now % 3600) + 3600
+}
+
+// ExportCellWeather returns weather data for a single cell, keyed by hour timestamp.
+func (wt *WeatherTracker) ExportCellWeather(cellID string) map[int64]int {
+	wt.mu.RLock()
+	defer wt.mu.RUnlock()
+
+	now := time.Now().Unix()
+	currentHour := now - (now % 3600)
+
+	result := make(map[int64]int)
+
+	if cd := wt.controllerData[cellID]; cd != nil {
+		for ts, condition := range cd.hourWeather {
+			if ts >= currentHour-3600 {
+				result[ts] = condition
+			}
+		}
+	}
+	// Override with local inference for current hour
+	if ld := wt.localData[cellID]; ld != nil && ld.currentHourTimestamp == currentHour {
+		result[currentHour] = ld.monsterWeather
+	}
+
+	return result
+}
+
+// SetHourWeather stores a weather condition for a specific hour in a cell.
+// Used by AccuWeatherClient to store forecast data.
+func (wt *WeatherTracker) SetHourWeather(cellID string, hourTimestamp int64, condition int) {
+	wt.mu.Lock()
+	defer wt.mu.Unlock()
+
+	cd, ok := wt.controllerData[cellID]
+	if !ok {
+		cd = &controllerCellData{hourWeather: make(map[int64]int)}
+		wt.controllerData[cellID] = cd
+	}
+	cd.hourWeather[hourTimestamp] = condition
+}
+
+// hasHourWeather checks if weather data exists for a specific hour in a cell.
+func (wt *WeatherTracker) hasHourWeather(cellID string, hourTimestamp int64) bool {
+	wt.mu.RLock()
+	defer wt.mu.RUnlock()
+
+	cd := wt.controllerData[cellID]
+	if cd == nil {
+		return false
+	}
+	_, ok := cd.hourWeather[hourTimestamp]
+	return ok
 }
 
 // CheckWeatherOnMonster analyzes an incoming pokemon's weather boost to detect

@@ -152,8 +152,8 @@ exports.run = async (client, msg, args, options) => {
 			}
 
 			case 'weather': {
-				if (!client.PoracleInfo.lastWeatherBroadcast) {
-					return msg.reply(translator.translate('Weather information is not yet available - wait a few minutes and try again'))
+				if (!client.config.processor.url) {
+					return msg.reply(translator.translate('Weather information is not available - processor URL is not configured'))
 				}
 
 				let latitude; let
@@ -176,8 +176,19 @@ exports.run = async (client, msg, args, options) => {
 						return msg.reply(translator.translateFormat('You have not set your location, use `!{0}{1}`', util.prefix, translator.translate('help')), { style: 'markdown' })
 					}
 				}
+
 				const weatherCellId = weatherTileGenerator.getWeatherCellId(latitude, longitude)
-				const weatherInfo = client.PoracleInfo.lastWeatherBroadcast[weatherCellId]
+
+				// Fetch weather data for this cell from the Go processor on demand
+				const axios = require('axios')
+				let weatherInfo
+				try {
+					const resp = await axios.get(`${client.config.processor.url}/api/weather`, { params: { cell: weatherCellId }, timeout: 5000 })
+					weatherInfo = resp.data
+				} catch (err) {
+					client.log.error(`Failed to fetch weather from processor: ${err.message}`)
+					return msg.reply(translator.translate('Weather information is not yet available - wait a few minutes and try again'))
+				}
 
 				const nowTimestamp = Math.floor(Date.now() / 1000)
 				const currentHourTimestamp = nowTimestamp - (nowTimestamp % 3600)

@@ -114,9 +114,8 @@ class Invasion extends Controller {
 
 				data.intersection = await this.obtainIntersection(data)
 
-				// Get current cell weather from cache
-				const weatherCellId = this.weatherData.getWeatherCellId(data.latitude, data.longitude)
-				const currentCellWeather = this.weatherData.getCurrentWeatherInCell(weatherCellId)
+				// Get current cell weather from enrichment (provided by Go processor)
+				const currentCellWeather = data.gameWeatherId || 0
 
 				await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'gruntTypeId', 'displayTypeId', 'style'])
 				data.staticmap = data.staticMap // deprecated

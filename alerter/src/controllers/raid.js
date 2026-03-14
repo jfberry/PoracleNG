@@ -138,8 +138,7 @@ class Raid extends Controller {
 					data.staticmap = data.staticMap // deprecated
 					data.types = monster.types.map((type) => type.id)
 
-					const weatherCellId = this.weatherData.getWeatherCellId(data.latitude, data.longitude)
-					await require('./common/weather').calculateForecastImpact(data, this.GameData, weatherCellId, this.weatherData, data.end, this.config)
+					await require('./common/weather').calculateForecastImpact(data, this.GameData, null, this.weatherData, data.end, this.config)
 
 					for (const cares of whoCares) {
 						if (cares.rsvp_changes === 0 && !data.firstNotification) continue // eslint-disable-line no-continue

@@ -296,11 +296,9 @@ class Monster extends Controller {
 				)
 				data.staticmap = data.staticMap // deprecated
 
-				// Weather forecast
-				const { nextHourTimestamp } = this.weatherData.getWeatherTimes()
-				if (this.config.weather.enableWeatherForecast && data.disappear_time > nextHourTimestamp) {
-					const weatherCellId = this.weatherData.getWeatherCellId(data.latitude, data.longitude)
-					const weatherForecast = await this.weatherData.getWeatherForecast(weatherCellId)
+				// Weather forecast (current/next provided by Go processor enrichment)
+				if (this.config.weather.enableWeatherForecast && data.nextHourTimestamp && data.disappear_time > data.nextHourTimestamp) {
+					const weatherForecast = { current: data.weatherForecastCurrent || 0, next: data.weatherForecastNext || 0 }
 
 					let pokemonShouldBeBoosted = false
 					let pokemonWillBeBoosted = false
