@@ -142,20 +142,29 @@ function buildUnifiedConfig(defaults, local) {
 	const userOverrides = deepDiff(defaults, local)
 	const unified = {}
 
-	// Database
-	if (userOverrides.database) {
-		unified.database = {}
-		const dbOverrides = userOverrides.database
-		if (dbOverrides.conn) {
-			Object.assign(unified.database, convertKeysToSnake(dbOverrides.conn))
-		}
-		if (dbOverrides.scannerType === 'rdm') unified.database.scanner_type = 'rdm'
-		if (dbOverrides.scanner) unified.database.scanner = convertKeysToSnake(dbOverrides.scanner)
+	// Database — always include full connection parameters (required)
+	const dbConn = (local.database && local.database.conn) || (defaults.database && defaults.database.conn) || {}
+	unified.database = {
+		host: dbConn.host || '127.0.0.1',
+		port: dbConn.port || 3306,
+		user: dbConn.user || 'poracleuser',
+		password: dbConn.password || 'poraclepassword',
+		database: dbConn.database || 'poracle',
 	}
+	const scannerType = (local.database && local.database.scannerType) || (defaults.database && defaults.database.scannerType)
+	if (scannerType === 'rdm') unified.database.scanner_type = 'rdm'
+	const scanner = (local.database && local.database.scanner) || (userOverrides.database && userOverrides.database.scanner)
+	if (scanner) unified.database.scanner = convertKeysToSnake(scanner)
 
-	// Alerter networking
-	if (userOverrides.server) {
-		unified.alerter = convertKeysToSnake(userOverrides.server)
+	// Alerter networking — always include, with processor_url
+	const serverOverrides = userOverrides.server || {}
+	const alerterPort = serverOverrides.port || (defaults.server && defaults.server.port) || '3030'
+	unified.alerter = convertKeysToSnake(serverOverrides)
+	unified.alerter.processor_url = `http://localhost:4200`
+
+	// Processor networking — always include, with alerter_url
+	unified.processor = {
+		alerter_url: `http://localhost:${alerterPort}`,
 	}
 
 	// Geofence
@@ -464,12 +473,12 @@ async function main() {
 
 	const unified = buildUnifiedConfig(defaults, local)
 
-	// Fix geofence paths for new layout
+	// Fix geofence paths for new layout (now relative to config/ directory)
 	if (unified.geofence?.paths) {
 		unified.geofence.paths = unified.geofence.paths.map((p) => {
-			// Old format: config/geofence.json → new: config/geofences/geofence.json
-			if (p === 'config/geofence.json') return 'config/geofences/geofence.json'
-			return p
+			if (p === 'config/geofence.json' || p === './config/geofence.json') return 'geofences/geofence.json'
+			// Strip leading config/ or ./config/ since paths are now relative to config dir
+			return p.replace(/^\.?\/?(config\/)?/, '')
 		})
 	}
 
@@ -518,20 +527,18 @@ function printSummary(copied, skipped, unified) {
 	}
 
 	console.log()
-	console.log('=== IMPORTANT: Manual Changes Required ===')
+	console.log('=== IMPORTANT: Review Required ===')
 	console.log()
 	console.log('PoracleNG splits Poracle into two components that talk to each other:')
 	console.log()
 	console.log('  Processor (Go)  - receives webhooks, matches alerts    [default :4200]')
 	console.log('  Alerter (Node)  - renders templates, sends messages    [default :3030]')
 	console.log()
-	console.log('You MUST configure these URLs in config/config.toml:')
+	console.log('The cross-component URLs have been auto-configured in config.toml:')
+	console.log(`  [processor] alerter_url = "${unified.processor?.alerter_url || 'http://localhost:3030'}"`)
+	console.log(`  [alerter]   processor_url = "${unified.alerter?.processor_url || 'http://localhost:4200'}"`)
 	console.log()
-	console.log('  [processor]')
-	console.log('  alerter_url = "http://localhost:3030"   # where the alerter is listening')
-	console.log()
-	console.log('  [alerter]')
-	console.log('  processor_url = "http://localhost:4200" # where the processor is listening')
+	console.log('If the components run on different hosts, update these URLs accordingly.')
 	console.log()
 	console.log('Your webhook sender (e.g. Golbat) should now POST to the PROCESSOR')
 	console.log('port (:4200), not the old alerter port.')
@@ -548,7 +555,7 @@ function printSummary(copied, skipped, unified) {
 
 	// Remind about geofence paths
 	console.log('Geofence files should be placed in config/geofences/ and referenced')
-	console.log('as "config/geofences/<filename>" in config.toml.')
+	console.log('as "geofences/<filename>" in config.toml (paths are relative to config/).')
 	console.log()
 	console.log('See config/config.example.toml for the full list of available settings.')
 	console.log()
