@@ -369,7 +369,7 @@ func TestLoadAllGeofences(t *testing.T) {
 	file1 := writeTempFile(t, `[{"name": "A", "path": [[51,0],[52,0],[52,1],[51,1]]}]`, "fence1_*.json")
 	file2 := writeTempFile(t, `[{"name": "B", "path": [[40,0],[41,0],[41,1],[40,1]]}]`, "fence2_*.json")
 
-	si, fences, err := LoadAllGeofences([]string{file1, file2})
+	si, fences, err := LoadAllGeofences([]string{file1, file2}, "")
 	if err != nil {
 		t.Fatalf("LoadAllGeofences failed: %v", err)
 	}
@@ -392,7 +392,7 @@ func TestLoadAllGeofences(t *testing.T) {
 }
 
 func TestLoadAllGeofencesFileNotFound(t *testing.T) {
-	_, _, err := LoadAllGeofences([]string{"/nonexistent.json"})
+	_, _, err := LoadAllGeofences([]string{"/nonexistent.json"}, "")
 	if err == nil {
 		t.Error("Expected error for nonexistent file")
 	}

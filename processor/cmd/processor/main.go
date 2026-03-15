@@ -26,6 +26,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
+	"github.com/pokemon/poracleng/processor/internal/resources"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -51,16 +52,29 @@ func main() {
 		Compress:           cfg.Logging.Compress,
 	})
 
+	// Download game resources (monsters, moves, locales, etc.)
+	if err := resources.Download(cfg.BaseDir); err != nil {
+		log.Warnf("Resource download had errors: %s", err)
+	}
+
 	database, err := db.OpenDB(cfg.Database.DSN)
 	if err != nil {
 		log.Fatalf("Failed to open database: %s", err)
 	}
 	defer database.Close()
 
+	// Database migrations: adopt existing Knex DB if needed, then run pending migrations
+	if err := db.AdoptExistingDatabase(database.DB); err != nil {
+		log.Fatalf("Failed to adopt database: %s", err)
+	}
+	if err := db.RunMigrations(database.DB); err != nil {
+		log.Fatalf("Failed to run migrations: %s", err)
+	}
+
 	stateMgr := state.NewManager()
 
 	// Initial load
-	if err := state.Load(stateMgr, database, cfg.Geofence.Paths); err != nil {
+	if err := state.Load(stateMgr, database, cfg.Geofence); err != nil {
 		log.Fatalf("Failed to load initial state: %s", err)
 	}
 
@@ -99,7 +113,7 @@ func main() {
 
 	// API endpoints
 	mux.HandleFunc("/api/reload", api.HandleReload(func() error {
-		return state.Load(stateMgr, database, cfg.Geofence.Paths)
+		return state.Load(stateMgr, database, cfg.Geofence)
 	}))
 	mux.HandleFunc("/api/weather", api.HandleWeather(proc.weather))
 	mux.HandleFunc("/api/stats/rarity", api.HandleStats(func() any { return proc.stats.ExportGroups() }))
@@ -123,7 +137,7 @@ func main() {
 		for range ticker.C {
 			log.Debugf("Periodic reload triggered")
 			start := time.Now()
-			if err := state.Load(stateMgr, database, cfg.Geofence.Paths); err != nil {
+			if err := state.Load(stateMgr, database, cfg.Geofence); err != nil {
 				log.Errorf("Periodic reload failed: %s", err)
 				metrics.StateReloads.WithLabelValues("error").Inc()
 			} else {
@@ -197,14 +211,15 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 
 	var activePokemon *tracker.ActivePokemonTracker
 	var pokemonTypes *gamedata.PokemonTypes
-	if cfg.Weather.ShowAlteredPokemon && cfg.Weather.MonstersJSONPath != "" {
-		pt, err := gamedata.LoadPokemonTypes(cfg.Weather.MonstersJSONPath)
+	if cfg.Weather.ShowAlteredPokemon {
+		monstersPath := cfg.ResolvePath("resources/data/monsters.json")
+		pt, err := gamedata.LoadPokemonTypes(monstersPath)
 		if err != nil {
-			log.Errorf("Failed to load pokemon types from %s: %s (active pokemon tracking disabled)", cfg.Weather.MonstersJSONPath, err)
+			log.Errorf("Failed to load pokemon types from %s: %s (active pokemon tracking disabled)", monstersPath, err)
 		} else {
 			pokemonTypes = pt
 			activePokemon = tracker.NewActivePokemonTracker(50)
-			log.Infof("Active pokemon tracking enabled with %s", cfg.Weather.MonstersJSONPath)
+			log.Infof("Active pokemon tracking enabled with %s", monstersPath)
 		}
 	}
 

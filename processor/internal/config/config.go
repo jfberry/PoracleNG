@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 )
@@ -19,6 +20,9 @@ type Config struct {
 	Locale         LocaleConfig         `toml:"locale"`
 	Logging        LoggingConfig        `toml:"logging"`
 	WebhookLogging WebhookLoggingConfig `toml:"webhookLogging"`
+
+	// BaseDir is the directory containing the config file, used to resolve relative paths.
+	BaseDir string `toml:"-"`
 }
 
 type LocaleConfig struct {
@@ -50,7 +54,13 @@ type AlerterConfig struct {
 }
 
 type GeofenceConfig struct {
-	Paths []string `toml:"paths"`
+	Paths []string    `toml:"paths"`
+	Koji  KojiOptions `toml:"koji"`
+}
+
+type KojiOptions struct {
+	BearerToken string `toml:"bearer_token"`
+	CacheDir    string `toml:"cache_dir"`
 }
 
 type PVPConfig struct {
@@ -68,8 +78,7 @@ type WeatherConfig struct {
 	EnableInference            bool   `toml:"enable_inference"`
 	EnableChangeAlert          bool   `toml:"enable_change_alert"`
 	ShowAlteredPokemon         bool   `toml:"show_altered_pokemon"`
-	ShowAlteredPokemonMaxCount int    `toml:"show_altered_pokemon_max_count"`
-	MonstersJSONPath           string `toml:"monsters_json_path"`
+	ShowAlteredPokemonMaxCount int `toml:"show_altered_pokemon_max_count"`
 
 	// AccuWeather forecast
 	EnableForecast          bool     `toml:"enable_forecast"`
@@ -112,8 +121,21 @@ type WebhookLoggingConfig struct {
 	Compress   bool   `toml:"compress"`
 }
 
+// ResolvePath resolves a path relative to the config file's directory.
+// Absolute paths are returned as-is.
+func (c *Config) ResolvePath(p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(c.BaseDir, p)
+}
+
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +159,20 @@ func Load(path string) (*Config, error) {
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
+
+	// BaseDir is the parent of the config file — all relative paths resolve from here
+	cfg.BaseDir = filepath.Dir(filepath.Dir(absPath)) // config/config.toml → project root
+
+	// Resolve relative geofence paths and cache dir
+	for i, p := range cfg.Geofence.Paths {
+		if !filepath.IsAbs(p) && !isHTTP(p) {
+			cfg.Geofence.Paths[i] = cfg.ResolvePath(p)
+		}
+	}
+	if cfg.Geofence.Koji.CacheDir != "" && !filepath.IsAbs(cfg.Geofence.Koji.CacheDir) {
+		cfg.Geofence.Koji.CacheDir = cfg.ResolvePath(cfg.Geofence.Koji.CacheDir)
+	}
+
 	if cfg.Stats.MinSampleSize == 0 {
 		cfg.Stats.MinSampleSize = 10000
 	}
@@ -183,4 +219,8 @@ func Load(path string) (*Config, error) {
 		cfg.PVP.PVPQueryMaxRank = 100
 	}
 	return cfg, nil
+}
+
+func isHTTP(s string) bool {
+	return len(s) >= 7 && (s[:7] == "http://" || (len(s) >= 8 && s[:8] == "https://"))
 }

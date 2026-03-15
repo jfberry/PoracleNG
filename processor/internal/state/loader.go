@@ -6,19 +6,25 @@ import (
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 )
 
 // Load loads all data from the database and geofence files, builds a new State,
-// and atomically swaps it in.
-func Load(manager *Manager, database *sqlx.DB, geofencePaths []string) error {
+// and atomically swaps it in. HTTP geofence URLs are fetched via Koji and cached locally.
+func Load(manager *Manager, database *sqlx.DB, geofenceCfg config.GeofenceConfig) error {
+	// Fetch Koji geofences (downloads HTTP URLs to cache, falls back to cached on failure)
+	if err := geofence.FetchKojiGeofences(geofenceCfg.Paths, geofenceCfg.Koji.BearerToken, geofenceCfg.Koji.CacheDir); err != nil {
+		log.Warnf("Koji geofence fetch had errors: %s", err)
+	}
+
 	data, err := db.LoadAll(database)
 	if err != nil {
 		return fmt.Errorf("load database: %w", err)
 	}
 
-	spatial, fences, err := geofence.LoadAllGeofences(geofencePaths)
+	spatial, fences, err := geofence.LoadAllGeofences(geofenceCfg.Paths, geofenceCfg.Koji.CacheDir)
 	if err != nil {
 		return fmt.Errorf("load geofences: %w", err)
 	}

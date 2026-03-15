@@ -3,6 +3,7 @@ const fs = require('fs')
 const path = require('path')
 const RBush = require('rbush')
 const { log } = require('./logger')
+const { getCacheDir, sanitizeURL } = require('../util/koji')
 
 function getGeofenceFromGEOjson(config, rawdata) {
 	if (rawdata.type !== 'FeatureCollection' || !rawdata.features) return
@@ -100,11 +101,12 @@ function getBoundingBox(fencePath) {
 
 function readAllGeofenceFiles(config) {
 	const fencePaths = Array.isArray(config.geofence.path) ? config.geofence.path : [config.geofence.path]
+	const cacheDir = getCacheDir()
 	const geofence = fencePaths.flatMap((fencePath) => readGeofenceFile(
 		config,
 		fencePath.startsWith('http')
-			? path.resolve(__dirname, '../../.cache', `${fencePath.replace(/\//g, '__')}.json`)
-			: path.join(__dirname, `../../${fencePath}`),
+			? path.join(cacheDir, `${sanitizeURL(fencePath)}.json`)
+			: path.resolve(__dirname, '../../..', fencePath),
 	))
 
 	const tree = new RBush()

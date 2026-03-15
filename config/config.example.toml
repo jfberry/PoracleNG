@@ -1,0 +1,449 @@
+# PoracleNG Unified Configuration
+# Copy this file to config.toml and modify as needed.
+# Only include settings you want to override — defaults are built in.
+
+[alerter]
+host = "127.0.0.1"                       # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces
+port = 3030
+ip_whitelist = []
+ip_blacklist = []
+api_secret = ""                          # API secret for Poracle API access (blank = API disabled)
+processor_url = "http://localhost:4200"
+
+[processor]
+listen_addr = ":4200"
+alerter_url = "http://localhost:4201"
+ip_whitelist = []
+
+# ---- Databases ----
+
+[database]
+host = "127.0.0.1"
+port = 3306
+user = "poracleuser"
+password = "poraclepassword"
+database = "poracle"
+scanner_type = "none"                    # none, golbat, rdm, mad
+
+[database.scanner]
+host = "127.0.0.1"
+port = 3306
+user = "scanneruser"
+password = "scannerpassword"
+database = "scannerdb"
+
+# ---- Geofence ----
+# Default format is that created at http://geo.jasparke.net/
+# You can also use a geojson file if you would like to share with other tools
+
+[geofence]
+paths = ["config/geofences/geofence.json"]
+default_name = "city"                    # default fence name if your fence does not have names
+default_color = "#3399ff"
+
+[geofence.koji]
+bearer_token = ""                        # Koji API token for HTTP geofence downloads
+cache_dir = "config/.cache/geofences"    # shared cache directory for downloaded geofences
+
+# ---- PVP ----
+# evolution_direct_tracking - whether users can track pvp evolutions directly
+#   (eg vaporeon would match an eevee)
+
+[pvp]
+level_caps = [50]                        # level caps to include in rank calculations, eg [50, 51]
+include_mega_evolution = false           # whether to include mega evolutions in rank calculations
+evolution_direct_tracking = false
+filter_by_track = false                  # whether PVP listings are auto-filtered by user's track requirements
+# filter_* - minimums on the track command to help users get PVP tracking right
+#   and to eliminate unexpectedly large tracks
+filter_max_rank = 10
+filter_great_min_cp = 1400
+filter_ultra_min_cp = 2350
+filter_little_min_cp = 450
+# display_* - variables passed into DTS to allow filtering calculations
+display_max_rank = 10
+display_great_min_cp = 1400
+display_ultra_min_cp = 2350
+display_little_min_cp = 450
+
+# ---- Weather ----
+
+[weather]
+change_alert = false                     # enable or disable weather change alerts
+show_altered_pokemon = false             # track weather changed pokemon to show in DTS
+show_altered_pokemon_static_map = false  # show weather changed pokemon on static map
+show_altered_pokemon_max_count = 10      # max number of changed pokemon per alert
+#enable_inference = true                 # processor-only: infer weather from pokemon boosts
+
+# AccuWeather forecast - predicts next hour weather for boost change detection
+# API keys are rotated; poracle will cycle through the array
+enable_forecast = false
+accuweather_api_keys = []
+accuweather_day_quota = 50               # max API calls per key per day
+forecast_refresh_interval = 8            # hours between API calls per cell
+local_first_fetch_hod = 3                # first fetch hour of the day (3 = 3am local)
+smart_forecast = false                   # pull on demand if no data for a cell
+
+# ---- Area Security ----
+# Restricts access to different communities based on individual membership.
+# These settings override the relevant roles and channels in the discord/telegram sections.
+
+[area_security]
+enabled = false
+# strict_locations checks that alerts are coming from the defined location_fence for every alert
+strict_locations = false
+
+# Community definitions:
+#   allowed_areas  - fences users are allowed to !area add
+#   location_fence - the single area used for checking strict_locations against
+#   discord        - registration channels and user roles for this community
+#   telegram       - membership groups that qualify for access to this community
+#
+# [area_security.communities.newyork]
+# allowed_areas = ["manhattan", "bronx", "brooklyn", "queens"]
+# location_fence = "wholenewyork"
+#
+# [area_security.communities.newyork.discord]
+# channels = ["1234567890123456"]
+# user_role = ["9876543210987654"]
+#
+# [area_security.communities.newyork.telegram]
+# channels = ["-100123456789"]
+#
+# [area_security.communities.chicago]
+# allowed_areas = ["northwest", "southside", "central"]
+# location_fence = "wholechicago"
+#
+# [area_security.communities.chicago.discord]
+# channels = ["1111111111111111"]
+# user_role = ["2222222222222222"]
+#
+# [area_security.communities.chicago.telegram]
+# channels = ["-100987654321"]
+
+# ---- Locale ----
+
+[locale]
+timeformat = "en-gb"
+time = "LTS"
+date = "L"
+# address_format - how an address is constructed into the {{addr}} tag
+address_format = "{{{streetName}}} {{streetNumber}}"
+# language - secondary language used for 'alt' translation in DTS; useful for
+#   retrieving english language detail for web links
+language = "en"
+
+# ---- General ----
+
+[general]
+environment = "production"               # leave as 'production'
+alert_minimum_time = 120                 # seconds before expiry inside which alerts will not be generated
+ignore_long_raids = false                # ignore raids > 47m to reduce raid hour/special event spam
+# img_url - base url for {{imgUrl}} reference (uicons repository)
+img_url = "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS"
+# img_url_alt - second base url for {{imgUrlAlt}} reference (uicons repository)
+img_url_alt = ""
+# sticker_url - base url for {{stickerUrl}} reference for telegram webp stickers
+sticker_url = "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle"
+# images/stickers - override uicons repository per alert type
+#   controller types: monster, gym, nest, invasion, lure, quest, raid, weather
+# [general.images]
+# monster = "repositoryUrl"
+# [general.stickers]
+# monster = "repositoryUrl"
+request_shiny_images = false
+populate_pokestop_name = false           # [RDM] lookup nearby pokestop names in scanner db
+locale = "en"                            # default locale - eg en, fr, de, it, ru
+# disabled_commands - array of commands which will be disabled from use
+# disabled_commands = ["track", "Pokemon"]
+default_template_name = 1                # default template name/number for new trackings
+# available_languages - languages users can swap between with !language command
+#   each language can have its own call word and help text
+# [general.available_languages.en]
+# poracle = "poracle"
+# help = "help"
+# [general.available_languages.de]
+# poracle = "dasporacle"
+# help = "hilfe"
+# shortlink provider - supported: hideuri, shlink, yourls
+shortlink_provider = "hideuri"
+shortlink_provider_url = ""
+shortlink_provider_key = ""
+shortlink_provider_domain = ""           # if supported, select domain to be used
+# additional shortlinks to Pogo Maps in DTS - supported: RDM, Reactmap, RocketMAD
+rdm_url = ""                             # https://myRDM.com/
+react_map_url = ""                       # https://myReactMap.com/
+rocket_mad_url = ""                      # https://myRocketMAD.com/
+
+
+# role_check_mode (case sensitive):
+#   "ignore"       - log and don't delete/disable users when required roles are removed
+#   "delete"       - delete user from database along with trackings when role is removed
+#   "disable-user" - disable user when role is removed, re-enable when restored, trackings remain
+role_check_mode = "ignore"
+
+
+# disable_* - disable individual hook processing for particular webhook types
+disable_pokemon = false
+disable_raid = false
+disable_pokestop = false                 # also disables invasion processing for RDM/Golbat
+disable_invasion = false
+disable_lure = false
+disable_quest = false
+disable_weather = false
+disable_nest = false
+disable_gym = false
+disable_fort_update = false
+process_confirmed_invasion_lineups = false
+disable_unconfirmed_invasion = false
+
+# ---- Discord ----
+
+[discord]
+enabled = true
+activity = "PoracleJS"                   # bot activity text
+worker_status = "invisible"              # available, dnd, idle, invisible
+worker_activity = "PoracleJS Helper"
+disable_auto_greetings = false           # whether to greet users who get role access
+upload_embed_images = false              # retrieve and upload images direct to discord CDN
+# check_role - check all discord users for role membership every check_role_interval hours
+#   (note: general.role_check_mode must be set to actually carry out deletions)
+check_role = false
+check_role_interval = 6
+# token - array of discord tokens; poracle can support multiple bots for sending
+#   messages but the first will be used as the command controller
+token = [""]
+# guilds - the guild (server) IDs that poracle will be on
+guilds = [""]
+# channels - channel IDs that can be used for !poracle registration
+#   not used in multi community (area security) mode
+channels = [""]
+# user_role - role IDs which automatically grant poracle access (without registration)
+#   not used in multi community (area security) mode
+user_role = [""]
+# admins - IDs of admins (can add channels with !channel add and perform other admin functions)
+admins = [""]
+# delegated_administration - channels/webhooks and users who can admin these
+#   for channels the id may be a guild, category or individual channel
+# [discord.delegated_administration.channel_tracking]
+# id = ["id"]
+# [discord.delegated_administration.webhook_tracking]
+# name = ["id"]
+# command_security - restrict commands to specific users/roles
+#   valid commands: monster, pvp, gym, invasion, lure, nest, ...
+# [discord.command_security]
+# monster = ["userid", "roleid"]
+# pvp = ["roleid"]
+prefix = "!"                             # prefix for poracle commands
+# iv_colors - 6 color codes for pokemon IV rankings
+iv_colors = ["#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"]
+dm_log_channel_id = ""                   # channel ID to log all poracle commands to
+dm_log_channel_deletion_time = 0         # time to clean up after (minutes) - 0 = don't delete
+message_delete_delay = 0                 # extra time (ms) to add to a message 'clean'
+unrecognised_command_message = ""        # reply to unrecognised commands in DM
+unregistered_user_message = ""           # reply to unregistered users (empty = shrug)
+lost_role_message = ""                   # message when user loses role-based access
+
+# ---- Telegram ----
+
+[telegram]
+enabled = false
+token = ""
+# admins - admin user ids (array)
+admins = [""]
+# delegated_administration - group ids or channel names and users who can admin these
+# [telegram.delegated_administration.channel_tracking]
+# id = ["id"]
+# name = ["id", "id"]
+# channels - groups that can be used for registration
+#   if they don't start with -100 they may not be supergroups yet
+#   use /identify command to get group and user ids
+#   not used in multi community (area security) mode
+channels = [""]
+# group_welcome_text - message in channel when someone registers; remind users to
+#   click on the bot and 'start bot' to receive messages
+group_welcome_text = "Welcome {user}, remember to click on me and 'start bot' to be able to receive messages"
+bot_welcome_text = "You are now registered with Poracle"
+bot_goodbye_message = ""                 # message when user loses access (through reconciliation)
+unregistered_user_message = ""           # reply to unregistered users (empty = shrug)
+unrecognised_command_message = ""        # reply to unrecognised commands in DM
+# check_role - check all telegram users for membership of a registration group
+#   (note: general.role_check_mode must be set to actually carry out deletions)
+check_role = false
+check_role_interval = 6
+register_on_start = false                # whether auto registration is attempted on /start
+
+# ---- Geocoding ----
+
+[geocoding]
+# provider - address lookups: 'none', 'nominatim' (recommended, see
+#   https://github.com/mediagis/nominatim-docker) or 'google'
+provider = "none"
+provider_url = ""
+forward_only = false                     # when true, disable reverse geocoding lookup
+cache_detail = 3                         # decimal places of lon/lat for caching (3 or 4 for 100x more detail)
+# Styles for different times of day using tileservercache
+# Use style: "#(style)" in templates to utilize these
+day_style = ""
+dawn_style = ""
+dusk_style = ""
+night_style = ""
+intersection_users = []                  # list of geonames usernames for street intersections
+# static_provider - map tile provider: tileservercache
+#   (https://github.com/123FLO321/SwiftTileserverCache),
+#   google, osm, or mapbox
+static_provider = "none"
+static_provider_url = ""
+# geocoding_key - google API keys for geolocation (array, poracle will cycle)
+geocoding_key = [""]
+# static_key - google or mapquest keys for tiles (array, poracle will cycle)
+static_key = [""]
+width = 320
+height = 200
+zoom = 15
+sprite_height = 20
+sprite_width = 20
+scale = 2
+type = "klokantech-basic"
+
+# Tileserver settings - default is unlikely to need changing
+[geocoding.tileserver_settings.default]
+type = "staticMap"                       # can be staticMap or multiStaticMap
+width = 500
+height = 250
+zoom = 15
+pregenerate = true
+include_stops = false
+# Override per alert type: monster, raid, pokestop, quest, weather, location, nest, gym
+# [geocoding.tileserver_settings.monster]
+# type = "staticMap"
+# include_stops = true
+
+# ---- Tuning ----
+# Do not change these settings without talking to us in discord.
+# For outbound, a lower number of concurrent senders will reduce the chance
+# of hitting the global rate limit.
+
+[tuning]
+# Processor tuning
+reload_interval_secs = 60
+encounter_cache_ttl = 3600
+worker_pool_size = 4
+batch_size = 50
+flush_interval_millis = 100
+# Alerter tuning
+max_database_connections = 15            # max database connections (per worker)
+concurrent_matched_processors = 10       # pre-matched payloads processed concurrently
+matched_max_queue_size = 5000            # max items buffered before backpressure
+concurrent_discord_destinations = 10     # concurrent discord DM/channel sends per bot
+concurrent_telegram_destinations = 10    # concurrent telegram sends per bot
+concurrent_discord_webhooks = 10         # concurrent discord webhook sends
+
+# ---- Alert Limits ----
+# Limit messages sent to a user/channel to avoid individual users hogging the
+# system or channel explosions during an event.
+
+[alert_limits]
+timing_period = 240                      # seconds over which limits are calculated
+dm_limit = 20                            # max messages a user can receive in the period
+channel_limit = 40                       # max messages a channel/group can receive in the period
+max_limits_before_stop = 10              # times user can hit rate limit (within 24hrs) before being stopped
+disable_on_stop = false                  # admin disable rather than just stop (requires admin to restart)
+shame_channel = ""                       # name and shame stopped/disabled users to this discord channel
+# Override for specific channel/user ids or webhook names:
+# [alert_limits.limit_override]
+# "channel_id" = 100
+# "webhook_name" = 200
+
+# ---- Tracking ----
+# Restrictions around tracking
+
+[tracking]
+# everything_flag_permissions - how the 'everything' flag is treated by !track:
+#   "allow-any"                      - unrestricted, recorded as wildcard, users can use 'individually'
+#   "allow-and-always-individually"  - unrestricted, recorded as individual rows per pokemon
+#   "allow-and-ignore-individually"  - unrestricted, users can't opt for individual rows
+#   "deny"                           - users must track individual pokemon
+everything_flag_permissions = "allow-any"
+default_distance = 0                     # default distance for distance-only tracking (no areas)
+max_distance = 0                         # max tracking circle radius (0 = no limit)
+enable_gym_battle = false                # allow "battle_changes" option in !gym
+default_user_tracking_level_cap = 0      # default pvp tracking level cap (0 = all levels)
+
+# ---- Reconciliation ----
+# User reconciliation/role check. Automated check is only enabled if check_role is
+# enabled for either telegram or discord. Also applies when role changes are seen on discord.
+
+[reconciliation.discord]
+update_user_names = false                # follow discord username changes
+remove_invalid_users = true              # de-register users who lose roles on role-check
+register_new_users = false               # auto-register users granted roles on role-check
+update_channel_names = true              # keep channel names in sync
+update_channel_notes = false             # update channel notes with guild name / category
+unregister_missing_channels = false      # remove channels deleted from discord
+
+[reconciliation.telegram]
+update_user_names = false                # follow telegram username changes
+remove_invalid_users = true              # automatically remove users who lose access
+
+# ---- Stats ----
+
+[stats]
+min_sample_size = 10000              # minimum sightings before calculating rarity
+window_hours = 8                     # rolling window for rarity and shiny stats
+refresh_interval_mins = 5            # how often to recalculate stats
+rarity_group_2_uncommon = 1.0        # % of total sightings to be considered uncommon
+rarity_group_3_rare = 0.5            # % rare
+rarity_group_4_very_rare = 0.03      # % very rare
+rarity_group_5_ultra_rare = 0.01     # % ultra rare
+
+# ---- Fallbacks ----
+# Fallback URLs if something goes wrong
+
+[fallbacks]
+static_map = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png"
+img_url = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/mon.png"
+img_url_weather = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/weather.png"
+img_url_egg = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/uni.png"
+img_url_gym = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/gym.png"
+img_url_pokestop = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png"
+pokestop_url = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png"
+
+
+
+# ---- Logging (alerter logging) ----
+# Log levels: silly, debug, verbose, info, warn
+# Suggestion: start at verbose; info is a bit less logging; debug has more detail
+
+[logging]
+console_log_level = "verbose"            # level displayed on screen (and in pm2/systemd logs)
+log_level = "verbose"                    # level on disk, affecting all logs
+timing_stats = false                     # increase log level of key timing stats to 'verbose'
+daily_log_limit = 7                      # days to keep daily logs (everything aside from webhooks)
+webhook_log_limit = 12                   # hours to keep webhook logs, if enabled
+
+[logging.enable_logs]
+webhooks = false                         # hourly webhook log (can be quite large)
+discord = true                           # outbound messages to discord users and channels
+telegram = true                          # outbound messages to telegram users, groups and channels
+pvp = false                              # pvp info/calculations (at verbose level)
+
+
+# ---- Component-specific networking ----
+
+[processor.logging]
+level = "info"
+file_logging_enabled = true
+filename = "logs/processor.log"
+max_size = 50                            # megabytes
+max_age = 30                             # days
+max_backups = 5
+compress = false
+
+[processor.webhook_logging]
+enabled = false
+filename = "logs/webhooks.log"
+max_size = 100                           # megabytes
+max_age = 1                              # days
+max_backups = 3
+compress = false
