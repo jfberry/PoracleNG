@@ -42,13 +42,19 @@ function adaptConfig(toml) {
 		apiSecret: alerter.api_secret || '',
 	}
 
-	// ---- processor (from [alerter] section) ----
+	// ---- processor ----
+	if (!alerter.processor_url) {
+		throw new Error('Config error: [alerter] processor_url is required (e.g. "http://localhost:4200")')
+	}
 	config.processor = {
-		url: alerter.processor_url || '',
+		url: alerter.processor_url,
 	}
 
 	// ---- database ----
 	const db = toml.database || {}
+	if (!db.user || !db.database) {
+		throw new Error('Config error: [database] user and database are required')
+	}
 	config.database = {
 		client: 'mysql',
 		conn: {

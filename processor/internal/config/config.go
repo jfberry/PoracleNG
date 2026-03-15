@@ -184,6 +184,14 @@ func Load(baseDir string) (*Config, error) {
 		return nil, err
 	}
 
+	// Validate required fields
+	if cfg.Processor.AlerterURL == "" {
+		return nil, fmt.Errorf("[processor] alerter_url is required")
+	}
+	if cfg.Database.User == "" || cfg.Database.Database == "" {
+		return nil, fmt.Errorf("[database] user and database are required")
+	}
+
 	// Resolve relative geofence paths and cache dir relative to config directory
 	configDir := filepath.Join(cfg.BaseDir, "config")
 	for i, p := range cfg.Geofence.Paths {
