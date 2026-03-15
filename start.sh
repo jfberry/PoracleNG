@@ -9,11 +9,27 @@ HEALTH_URL=""
 PROCESSOR_PID=""
 ALERTER_PID=""
 
+graceful_kill() {
+	local pid=$1 name=$2
+	[ -z "$pid" ] && return
+	kill "$pid" 2>/dev/null || return
+	local i=0
+	while [ $i -lt 10 ] && kill -0 "$pid" 2>/dev/null; do
+		sleep 1
+		i=$((i + 1))
+	done
+	if kill -0 "$pid" 2>/dev/null; then
+		echo "[start] $name did not stop after 10s, sending SIGKILL"
+		kill -9 "$pid" 2>/dev/null
+	fi
+	wait "$pid" 2>/dev/null
+}
+
 cleanup() {
 	echo ""
 	echo "[start] Shutting down..."
-	[ -n "$ALERTER_PID" ] && kill "$ALERTER_PID" 2>/dev/null && wait "$ALERTER_PID" 2>/dev/null
-	[ -n "$PROCESSOR_PID" ] && kill "$PROCESSOR_PID" 2>/dev/null && wait "$PROCESSOR_PID" 2>/dev/null
+	graceful_kill "$ALERTER_PID" "Alerter"
+	graceful_kill "$PROCESSOR_PID" "Processor"
 	echo "[start] Stopped"
 	exit 0
 }
