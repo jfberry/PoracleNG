@@ -192,6 +192,11 @@ func Load(baseDir string) (*Config, error) {
 		return nil, fmt.Errorf("[database] user and database are required")
 	}
 
+	// Default geofence path if none specified
+	if len(cfg.Geofence.Paths) == 0 {
+		cfg.Geofence.Paths = []string{"geofences/geofence.json"}
+	}
+
 	// Resolve relative geofence paths and cache dir relative to config directory
 	configDir := filepath.Join(cfg.BaseDir, "config")
 	for i, p := range cfg.Geofence.Paths {

@@ -194,15 +194,14 @@ function buildUnifiedConfig(defaults, local) {
 	unified.alerter.port = alerterPort
 	unified.alerter.processor_url = `http://localhost:${processorPort}`
 
-	// Geofence
-	if (userOverrides.geofence) {
-		unified.geofence = {}
-		const gfOver = userOverrides.geofence
-		if (gfOver.path) unified.geofence.paths = Array.isArray(gfOver.path) ? gfOver.path : [gfOver.path]
-		if (gfOver.defaultGeofenceName) unified.geofence.default_name = gfOver.defaultGeofenceName
-		if (gfOver.defaultGeofenceColor) unified.geofence.default_color = gfOver.defaultGeofenceColor
-		if (gfOver.kojiOptions) unified.geofence.koji = convertKeysToSnake(gfOver.kojiOptions)
-	}
+	// Geofence — always include paths so both components find the geofence
+	unified.geofence = {}
+	const gfOver = userOverrides.geofence || {}
+	const gfPaths = gfOver.path ? (Array.isArray(gfOver.path) ? gfOver.path : [gfOver.path]) : ['geofences/geofence.json']
+	unified.geofence.paths = gfPaths
+	if (gfOver.defaultGeofenceName) unified.geofence.default_name = gfOver.defaultGeofenceName
+	if (gfOver.defaultGeofenceColor) unified.geofence.default_color = gfOver.defaultGeofenceColor
+	if (gfOver.kojiOptions) unified.geofence.koji = convertKeysToSnake(gfOver.kojiOptions)
 
 	// PVP
 	if (userOverrides.pvp) {
