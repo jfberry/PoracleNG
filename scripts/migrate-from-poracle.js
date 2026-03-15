@@ -92,18 +92,10 @@ function tomlValue(val) {
 	return JSON.stringify(val)
 }
 
-/** Check if an object is a "simple" config section (string/number/bool/array leaves)
- *  vs a complex map with arbitrary keys that should be inlined */
-function isSimpleTable(obj) {
-	for (const value of Object.values(obj)) {
-		if (value === null || value === undefined) continue
-		if (typeof value === 'object' && !Array.isArray(value)) {
-			// Nested object — check if its keys look like config keys (snake_case/camelCase)
-			// or arbitrary user data (Discord IDs, etc.)
-			for (const k of Object.keys(value)) {
-				if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) return false
-			}
-		}
+/** Check if an object's own keys are all valid bare TOML config keys */
+function hasOnlyConfigKeys(obj) {
+	for (const k of Object.keys(obj)) {
+		if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(k)) return false
 	}
 	return true
 }
@@ -114,9 +106,11 @@ function writeToml(obj, prefix = '') {
 
 	for (const [key, value] of Object.entries(obj)) {
 		if (value === null || value === undefined) continue
-		if (typeof value === 'object' && !Array.isArray(value) && isSimpleTable(value)) {
+		if (typeof value === 'object' && !Array.isArray(value) && hasOnlyConfigKeys(value)) {
+			// This object has config-like keys — write as a TOML table section
 			tables.push([key, value])
 		} else {
+			// Primitives, arrays, or objects with arbitrary keys — write as key = value
 			lines.push(`${tomlKey(key)} = ${tomlValue(value)}`)
 		}
 	}
