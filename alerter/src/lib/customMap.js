@@ -1,15 +1,15 @@
-const path = require('path')
+const stripJsonComments = require('strip-json-comments')
 const fs = require('fs')
+const { listConfigDir } = require('./configResolver')
 
 function readCustomMaps() {
 	const maps = []
 
-	const dirpath = path.join(__dirname, '../../config/customMaps')
+	const files = listConfigDir('customMaps')
 
-	const filesList = fs.readdirSync(dirpath).filter((e) => path.extname(e).toLowerCase() === '.json')
-
-	for (const filename of filesList) {
-		const mapAddition = require(path.join(dirpath, filename))
+	for (const filePath of files) {
+		const raw = fs.readFileSync(filePath, 'utf8')
+		const mapAddition = JSON.parse(stripJsonComments(raw))
 		if (Array.isArray(mapAddition)) {
 			maps.push(...mapAddition)
 		} else {

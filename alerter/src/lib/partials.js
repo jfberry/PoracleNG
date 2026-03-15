@@ -1,18 +1,8 @@
-const stripJsonComments = require('strip-json-comments')
-const fs = require('fs')
-const path = require('path')
+const { loadConfigJson } = require('./configResolver')
 
 function registerPartials(handlebars) {
-	const filename = path.join(__dirname, '../../config/partials.json')
-	if (!fs.existsSync(filename)) return
-
-	let partials
-	try {
-		const partialText = stripJsonComments(fs.readFileSync(filename, 'utf8'))
-		partials = JSON.parse(partialText)
-	} catch (err) {
-		throw new Error(`partials.json - ${err.message}`)
-	}
+	const partials = loadConfigJson('partials.json')
+	if (!partials) return
 
 	for (const [key, partial] of Object.entries(partials)) {
 		handlebars.registerPartial(key, partial)

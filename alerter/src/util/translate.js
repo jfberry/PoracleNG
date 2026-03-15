@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { resolveConfigFile } = require('../lib/configResolver')
 
 const RESOURCES_LOCALE = path.resolve(__dirname, '../../../resources/locale')
 
@@ -7,7 +8,8 @@ class Translator {
 	constructor(region) {
 		const remote = fs.existsSync(path.join(RESOURCES_LOCALE, `${region}.json`)) ? require(path.join(RESOURCES_LOCALE, `${region}.json`)) : {}
 		const defaultData = fs.existsSync(path.join(__dirname, `../../locale/${region}.json`)) ? require(path.join(__dirname, `../../locale/${region}.json`)) : {}
-		const dataAddition = fs.existsSync(path.join(__dirname, `../../config/custom.${region}.json`)) ? require(path.join(__dirname, `../../config/custom.${region}.json`)) : {}
+		const customPath = resolveConfigFile(`custom.${region}.json`)
+		const dataAddition = customPath ? require(customPath) : {}
 		this.data = {
 			...remote, ...defaultData, ...dataAddition,
 		}

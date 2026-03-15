@@ -1,6 +1,6 @@
 const winston = require('winston')
 require('winston-daily-rotate-file')
-const config = require('config')
+const config = require('./configSingleton')
 const path = require('path')
 const util = require('util')
 
@@ -64,7 +64,7 @@ const poracleFormat = winston.format.combine(
 
 const debugLog = new winston.transports.DailyRotateFile({
 	filename: 'general-%DATE%.log',
-	dirname: path.join(__dirname, '../../logs'),
+	dirname: path.join(__dirname, '../../../logs'),
 	symlinkName: 'general.log',
 	format: poracleFormat,
 	createSymlink: true,
@@ -77,7 +77,7 @@ const debugLog = new winston.transports.DailyRotateFile({
 
 const errorLog = new winston.transports.DailyRotateFile({
 	filename: 'errors-%DATE%.log',
-	dirname: path.join(__dirname, '../../logs'),
+	dirname: path.join(__dirname, '../../../logs'),
 	symlinkName: 'errors.log',
 	format: poracleFormat,
 	createSymlink: true,
@@ -90,22 +90,9 @@ const errorLog = new winston.transports.DailyRotateFile({
 	level: 'warn',
 })
 
-const dataStoreLog = new winston.transports.DailyRotateFile({
-	filename: 'webhooks-%DATE%.log',
-	dirname: path.join(__dirname, '../../logs'),
-	symlinkName: 'webhooks.log',
-	format: poracleFormat,
-	createSymlink: true,
-	datePattern: 'YYYY-MM-DD-HH',
-	//	maxSize: `${config.logger.logSize}m`,
-	// frequency: '1h',
-	maxFiles: config.logger.webhookLogLimit,
-	level: config.logger.enableLogs.webhooks ? config.logger.logLevel : 'warn',
-})
-
 const discordLog = new winston.transports.DailyRotateFile({
 	filename: 'discord-%DATE%.log',
-	dirname: path.join(__dirname, '../../logs'),
+	dirname: path.join(__dirname, '../../../logs'),
 	symlinkName: 'discord.log',
 	format: poracleFormat,
 	createSymlink: true,
@@ -118,7 +105,7 @@ const discordLog = new winston.transports.DailyRotateFile({
 
 const commandLog = new winston.transports.DailyRotateFile({
 	filename: 'commands-%DATE%.log',
-	dirname: path.join(__dirname, '../../logs'),
+	dirname: path.join(__dirname, '../../../logs'),
 	symlinkName: 'commands.log',
 	format: poracleFormat,
 	createSymlink: true,
@@ -132,7 +119,7 @@ const commandLog = new winston.transports.DailyRotateFile({
 
 const processorLog = new winston.transports.DailyRotateFile({
 	filename: 'controller-%DATE%.log',
-	dirname: path.join(__dirname, '../../logs'),
+	dirname: path.join(__dirname, '../../../logs'),
 	symlinkName: 'controller.log',
 	format: poracleFormat,
 	createSymlink: true,
@@ -146,7 +133,7 @@ const processorLog = new winston.transports.DailyRotateFile({
 
 const telegramLog = new winston.transports.DailyRotateFile({
 	filename: 'telegram-%DATE%.log',
-	dirname: path.join(__dirname, '../../logs'),
+	dirname: path.join(__dirname, '../../../logs'),
 	symlinkName: 'telegram.log',
 	format: poracleFormat,
 	createSymlink: true,
@@ -160,7 +147,7 @@ const telegramLog = new winston.transports.DailyRotateFile({
 
 const matchedWebhooksLog = new winston.transports.DailyRotateFile({
 	filename: 'matched_webhooks-%DATE%.log',
-	dirname: path.join(__dirname, '../../logs'),
+	dirname: path.join(__dirname, '../../../logs'),
 	symlinkName: 'matched_webhooks.log',
 	format: poracleFormat,
 	createSymlink: true,
@@ -185,14 +172,6 @@ module.exports.log = winston.createLogger({
 		consoleLog,
 		errorLog,
 		debugLog,
-	],
-	exitOnError: false,
-})
-
-module.exports.webhooks = winston.createLogger({
-	transports: [
-		dataStoreLog,
-		errorLog,
 	],
 	exitOnError: false,
 })

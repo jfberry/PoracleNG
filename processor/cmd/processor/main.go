@@ -33,10 +33,10 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "config.toml", "path to config file")
+	baseDir := flag.String("basedir", "..", "path to project root directory")
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
+	cfg, err := config.Load(*baseDir)
 	if err != nil {
 		log.Fatalf("Failed to load config: %s", err)
 	}
@@ -57,7 +57,7 @@ func main() {
 		log.Warnf("Resource download had errors: %s", err)
 	}
 
-	database, err := db.OpenDB(cfg.Database.DSN)
+	database, err := db.OpenDB(cfg.Database.DSN())
 	if err != nil {
 		log.Fatalf("Failed to open database: %s", err)
 	}
@@ -121,11 +121,14 @@ func main() {
 	mux.HandleFunc("/api/stats/shiny-possible", api.HandleStats(func() any { return proc.stats.ExportShinyPossible() }))
 	mux.HandleFunc("/health", api.HandleHealth())
 
+	// Proxy unhandled /api/ requests to the alerter (tracking, config, humans, etc.)
+	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
+
 	// Prometheus metrics
 	mux.Handle("/metrics", promhttp.Handler())
 
 	server := &http.Server{
-		Addr:    cfg.Server.ListenAddr,
+		Addr:    cfg.Processor.ListenAddr(),
 		Handler: mux,
 	}
 
@@ -149,7 +152,7 @@ func main() {
 
 	// Start server
 	go func() {
-		log.Infof("Processor starting on %s", cfg.Server.ListenAddr)
+		log.Infof("Processor starting on %s", cfg.Processor.ListenAddr())
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %s", err)
 		}
@@ -264,7 +267,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		stateMgr: stateMgr,
 		database: database,
 		enricher: enricher,
-		sender:       webhook.NewSender(cfg.Alerter.URL, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
+		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),
 		encounters:   tracker.NewEncounterTracker(),

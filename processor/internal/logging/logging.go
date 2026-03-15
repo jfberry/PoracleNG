@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -30,28 +29,11 @@ func Setup(cfg Config) {
 		logLevel = log.InfoLevel
 	}
 
-	filename := cfg.Filename
-	if filename == "" {
-		filename = filepath.ToSlash("logs/processor.log")
-	}
-	maxSize := cfg.MaxSize
-	if maxSize == 0 {
-		maxSize = 50
-	}
-	maxAge := cfg.MaxAge
-	if maxAge == 0 {
-		maxAge = 30
-	}
-	maxBackups := cfg.MaxBackups
-	if maxBackups == 0 {
-		maxBackups = 5
-	}
-
 	lumberjackLogger = &lumberjack.Logger{
-		Filename:   filename,
-		MaxSize:    maxSize,
-		MaxBackups: maxBackups,
-		MaxAge:     maxAge,
+		Filename:   cfg.Filename,
+		MaxSize:    cfg.MaxSize,
+		MaxBackups: cfg.MaxBackups,
+		MaxAge:     cfg.MaxAge,
 		Compress:   cfg.Compress,
 	}
 

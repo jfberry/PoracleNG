@@ -1,9 +1,7 @@
-const stripJsonComments = require('strip-json-comments')
-const fs = require('fs')
-const path = require('path')
 const { PermissionFlagsBits } = require('discord.js')
 const PoracleDiscordMessage = require('../../poracleDiscordMessage')
 const PoracleDiscordState = require('../../poracleDiscordState')
+const { loadConfigJson } = require('../../../configResolver')
 
 function format(str, args) {
 	let newStr = str
@@ -60,14 +58,10 @@ exports.run = async (client, msg, [args]) => {
 			if (args[i].match(client.re.guildRe)) args.splice(i, 1)
 		}
 
-		let fileContents
-		try {
-			fileContents = fs.readFileSync(path.join(__dirname, '../../../../../config/channelTemplate.json'), 'utf8')
-		} catch (err) {
-			return await msg.reply('Cannot read channelTemplate definition')
+		const channelTemplate = loadConfigJson('channelTemplate.json')
+		if (!channelTemplate) {
+			return await msg.reply('No channel templates defined - create config/channelTemplate.json (see examples/channelTemplate.json)')
 		}
-
-		const channelTemplate = JSON.parse(stripJsonComments(fileContents))
 
 		const templateName = args.shift()
 

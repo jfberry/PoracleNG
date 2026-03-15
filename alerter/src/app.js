@@ -1,5 +1,4 @@
 process.title = 'PoracleJS'
-require('./lib/configFileCreator')()
 // eslint-disable-next-line no-underscore-dangle
 require('events').EventEmitter.prototype._maxListeners = 100
 const { writeHeapSnapshot } = require('v8')
@@ -715,9 +714,11 @@ async function run() {
 		}
 	})
 
+	const { getConfigDir } = require('./lib/configResolver')
+	const cfgDir = getConfigDir()
 	chokidar.watch([
-		path.join(__dirname, '../config/dts.json'),
-		path.join(__dirname, '../config/dts/'),
+		path.join(cfgDir, 'dts.json'),
+		path.join(cfgDir, 'dts'),
 	], {
 		awaitWriteFinish: true,
 	}).on('change', () => {
@@ -878,23 +879,5 @@ if (NODE_MAJOR_VERSION < 16) {
 	process.exit(1)
 }
 
-knex.migrate.latest({
-	directory: path.join(__dirname, './lib/db/migrations'),
-	tableName: 'migrations',
-}).then(() => {
-	startPoracle()
-}).catch((err) => {
-	// eslint-disable-next-line no-console
-	console.error(err)
-
-	log.error('Migration failed', err)
-
-	if (process.argv.includes('--force')) {
-		startPoracle()
-	} else {
-		// eslint-disable-next-line no-console
-		console.error('Migration failed - exiting PoracleJS')
-
-		process.exit(1)
-	}
-})
+// Database migrations are handled by the Go processor on startup.
+startPoracle()

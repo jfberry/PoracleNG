@@ -11,8 +11,9 @@ api_secret = ""                          # API secret for Poracle API access (bl
 processor_url = "http://localhost:4200"
 
 [processor]
-listen_addr = ":4200"
-alerter_url = "http://localhost:4201"
+host = "0.0.0.0"                        # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces
+port = 4200
+alerter_url = "http://localhost:3030"
 ip_whitelist = []
 
 # ---- Databases ----
@@ -23,7 +24,7 @@ port = 3306
 user = "poracleuser"
 password = "poraclepassword"
 database = "poracle"
-scanner_type = "none"                    # none, golbat, rdm, mad
+# scanner_type = "golbat"               # golbat (default) or rdm
 
 [database.scanner]
 host = "127.0.0.1"
@@ -37,13 +38,13 @@ database = "scannerdb"
 # You can also use a geojson file if you would like to share with other tools
 
 [geofence]
-paths = ["config/geofences/geofence.json"]
+paths = ["geofences/geofence.json"]
 default_name = "city"                    # default fence name if your fence does not have names
 default_color = "#3399ff"
 
 [geofence.koji]
 bearer_token = ""                        # Koji API token for HTTP geofence downloads
-cache_dir = "config/.cache/geofences"    # shared cache directory for downloaded geofences
+cache_dir = ".cache/geofences"           # shared cache directory for downloaded geofences
 
 # ---- PVP ----
 # evolution_direct_tracking - whether users can track pvp evolutions directly
@@ -156,7 +157,7 @@ populate_pokestop_name = false           # [RDM] lookup nearby pokestop names in
 locale = "en"                            # default locale - eg en, fr, de, it, ru
 # disabled_commands - array of commands which will be disabled from use
 # disabled_commands = ["track", "Pokemon"]
-default_template_name = 1                # default template name/number for new trackings
+default_template_name = "1"              # default template name/number for new trackings
 # available_languages - languages users can swap between with !language command
 #   each language can have its own call word and help text
 # [general.available_languages.en]
@@ -411,39 +412,34 @@ pokestop_url = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fa
 
 
 
-# ---- Logging (alerter logging) ----
+# ---- Logging ----
 # Log levels: silly, debug, verbose, info, warn
 # Suggestion: start at verbose; info is a bit less logging; debug has more detail
 
 [logging]
-console_log_level = "verbose"            # level displayed on screen (and in pm2/systemd logs)
-log_level = "verbose"                    # level on disk, affecting all logs
+level = "verbose"                        # log level for both console and file output
 timing_stats = false                     # increase log level of key timing stats to 'verbose'
-daily_log_limit = 7                      # days to keep daily logs (everything aside from webhooks)
-webhook_log_limit = 12                   # hours to keep webhook logs, if enabled
+max_age = 7                              # days to keep log files
+max_size = 50                            # max log file size in megabytes
+max_backups = 5                          # number of old log files to keep
+compress = false                         # gzip compress rotated log files
+webhook_log_limit = 12                   # hours to keep hourly webhook logs (alerter)
+
+# Processor file logging (processor writes to logs/ relative to project root)
+# file_logging_enabled = true            # processor-only: write logs to file
+# filename = "logs/processor.log"        # processor-only: log file path
+
+# Raw webhook logging (processor only — logs raw webhook bodies received from Golbat)
+[webhookLogging]
+enabled = false
+filename = "logs/webhooks.log"
+max_size = 100                           # max log file size in megabytes
+max_age = 1                              # days to keep old log files
+max_backups = 3                          # number of old log files to keep
+compress = false
 
 [logging.enable_logs]
-webhooks = false                         # hourly webhook log (can be quite large)
+webhooks = false                         # matched webhook log (can be quite large)
 discord = true                           # outbound messages to discord users and channels
 telegram = true                          # outbound messages to telegram users, groups and channels
 pvp = false                              # pvp info/calculations (at verbose level)
-
-
-# ---- Component-specific networking ----
-
-[processor.logging]
-level = "info"
-file_logging_enabled = true
-filename = "logs/processor.log"
-max_size = 50                            # megabytes
-max_age = 30                             # days
-max_backups = 5
-compress = false
-
-[processor.webhook_logging]
-enabled = false
-filename = "logs/webhooks.log"
-max_size = 100                           # megabytes
-max_age = 1                              # days
-max_backups = 3
-compress = false

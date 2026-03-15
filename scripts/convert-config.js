@@ -166,7 +166,7 @@ function main() {
 		if (dbOverrides.conn) {
 			Object.assign(unified.database, convertKeysToSnake(dbOverrides.conn))
 		}
-		if (dbOverrides.scannerType) unified.database.scanner_type = dbOverrides.scannerType
+		if (dbOverrides.scannerType === 'rdm') unified.database.scanner_type = 'rdm'
 		if (dbOverrides.scanner) unified.database.scanner = convertKeysToSnake(dbOverrides.scanner)
 	}
 

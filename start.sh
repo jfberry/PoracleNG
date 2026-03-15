@@ -49,26 +49,33 @@ fi
 
 # ---- Extract processor listen address from config ----
 
-# Parse listen_addr from [processor] section
-LISTEN_ADDR=$(awk '
+# Parse host and port from [processor] section
+PROC_HOST=$(awk '
 	/^\[processor\]/ { in_section=1; next }
 	/^\[/ { in_section=0 }
-	in_section && /^listen_addr/ {
+	in_section && /^host/ {
 		gsub(/.*=[ \t]*"/, ""); gsub(/".*/, ""); print; exit
 	}
 ' "$CONFIG_FILE")
-LISTEN_ADDR="${LISTEN_ADDR:-:4200}"
+PROC_PORT=$(awk '
+	/^\[processor\]/ { in_section=1; next }
+	/^\[/ { in_section=0 }
+	in_section && /^port/ {
+		gsub(/.*=[ \t]*/, ""); gsub(/[^0-9].*/, ""); print; exit
+	}
+' "$CONFIG_FILE")
+PROC_HOST="${PROC_HOST:-0.0.0.0}"
+PROC_PORT="${PROC_PORT:-4200}"
 
-# Build health URL
-HOST="${LISTEN_ADDR%:*}"
-PORT="${LISTEN_ADDR##*:}"
-[ -z "$HOST" ] && HOST="127.0.0.1"
-HEALTH_URL="http://${HOST}:${PORT}/health"
+# For health check, replace 0.0.0.0 with localhost
+HEALTH_HOST="$PROC_HOST"
+[ "$HEALTH_HOST" = "0.0.0.0" ] && HEALTH_HOST="127.0.0.1"
+HEALTH_URL="http://${HEALTH_HOST}:${PROC_PORT}/health"
 
 # ---- Start processor ----
 
 echo "[start] Starting processor..."
-"$PROCESSOR_BIN" -config "$CONFIG_FILE" 2>&1 | sed 's/^/[processor] /' &
+"$PROCESSOR_BIN" -basedir "$ROOT" 2>&1 | sed 's/^/[processor] /' &
 PROCESSOR_PID=$!
 
 # Wait for processor health endpoint
@@ -95,7 +102,7 @@ fi
 # ---- Start alerter ----
 
 echo "[start] Starting alerter..."
-(cd "$ALERTER_DIR" && node poracle.js) 2>&1 | sed 's/^/[alerter] /' &
+(cd "$ALERTER_DIR" && node src/app.js) 2>&1 | sed 's/^/[alerter] /' &
 ALERTER_PID=$!
 
 echo "[start] Both components running (processor=$PROCESSOR_PID, alerter=$ALERTER_PID)"

@@ -1,4 +1,4 @@
-const config = require('config')
+const config = require('../lib/configSingleton')
 const path = require('path')
 const reader = require('readline-sync')
 const fs = require('fs')

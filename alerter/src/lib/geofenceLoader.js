@@ -4,6 +4,7 @@ const path = require('path')
 const RBush = require('rbush')
 const { log } = require('./logger')
 const { getCacheDir, sanitizeURL } = require('../util/koji')
+const { getConfigDir } = require('./configResolver')
 
 function getGeofenceFromGEOjson(config, rawdata) {
 	if (rawdata.type !== 'FeatureCollection' || !rawdata.features) return
@@ -106,7 +107,7 @@ function readAllGeofenceFiles(config) {
 		config,
 		fencePath.startsWith('http')
 			? path.join(cacheDir, `${sanitizeURL(fencePath)}.json`)
-			: path.resolve(__dirname, '../../..', fencePath),
+			: path.resolve(getConfigDir(), fencePath),
 	))
 
 	const tree = new RBush()

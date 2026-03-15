@@ -1,9 +1,7 @@
-const stripJsonComments = require('strip-json-comments')
-const fs = require('fs')
-const path = require('path')
 const geoTz = require('geo-tz')
 const moment = require('moment-timezone')
 require('moment-precise-range-plugin')
+const { loadExampleJson, loadUserConfigJson } = require('../../configResolver')
 
 exports.run = async (client, msg, args, options) => {
 	try {
@@ -33,15 +31,10 @@ exports.run = async (client, msg, args, options) => {
 		}
 		const hookType = hookTypeDisplay.replace(/-/g, '_')
 
-		let testdata
-
-		try {
-			const rawText = stripJsonComments(fs.readFileSync(path.join(__dirname, '../../../../config/testdata.json'), 'utf8'))
-			testdata = JSON.parse(rawText)
-		} catch (err) {
-			await msg.reply('Cannot read testdata.json - see log file for details')
-			throw new Error(`testdata.json - ${err.message}`)
-		}
+		// Load bundled test data, then add user's custom entries on top
+		const bundledTestdata = loadExampleJson('testdata.json') || []
+		const userTestdata = loadUserConfigJson('testdata.json')
+		const testdata = userTestdata ? [...bundledTestdata, ...userTestdata] : bundledTestdata
 
 		const testId = args[1]
 
