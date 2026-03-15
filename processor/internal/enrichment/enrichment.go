@@ -18,6 +18,11 @@ type ForecastProvider interface {
 	EnsureForecast(cellID string)
 }
 
+// ShinyRateProvider returns shiny rate for a pokemon.
+type ShinyRateProvider interface {
+	GetShinyRate(pokemonID int) float64
+}
+
 // Enricher computes additional fields to accompany webhook messages
 // sent to the alerter. The enrichment map is sent alongside the original
 // raw message so neither needs to be re-encoded.
@@ -25,7 +30,8 @@ type Enricher struct {
 	TimeLayout       string
 	DateLayout       string
 	WeatherProvider  WeatherProvider
-	ForecastProvider ForecastProvider // optional; triggers AccuWeather fetch
+	ForecastProvider ForecastProvider  // optional; triggers AccuWeather fetch
+	ShinyProvider    ShinyRateProvider // optional; provides shiny rates
 	EventChecker     *PogoEventChecker
 }
 

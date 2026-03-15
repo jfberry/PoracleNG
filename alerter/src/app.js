@@ -184,20 +184,21 @@ function handleShutdown() {
 }
 
 async function processPossibleShiny() {
-	let file
-	log.info('ShinyPossible: Fetching new shiny file')
-
-	try {
-		file = await shinyPossible.download()
-	} catch (err) {
-		log.error('ShinyPossible: Cannot shiny file', err)
-		setTimeout(processPossibleShiny, 15 * 60 * 1000) // 15 mins
+	if (!config.processor || !config.processor.url) {
+		log.warn('ShinyPossible: processor URL not configured, skipping')
 		return
 	}
 
-	matchedShinyPossible.loadMap(file) // eslint-disable-line no-use-before-define
+	log.info('ShinyPossible: Fetching shiny-possible data from processor')
 
-	setTimeout(processPossibleShiny, 6 * 60 * 60 * 1000) // 6 hours
+	try {
+		const file = await shinyPossible.download(config.processor.url)
+		matchedShinyPossible.loadMap(file) // eslint-disable-line no-use-before-define
+	} catch (err) {
+		log.error(`ShinyPossible: Failed to fetch from processor: ${err.message}`)
+	}
+
+	setTimeout(processPossibleShiny, 5 * 60 * 1000) // 5 mins
 }
 
 const UserRateChecker = require('./userRateLimit')

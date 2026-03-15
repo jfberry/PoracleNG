@@ -34,8 +34,10 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		l := log.WithField("ref", pokemon.EncounterID)
 
-		// Record for rarity tracking
-		ps.rarity.RecordSighting(pokemon.PokemonID)
+		// Record for rarity and shiny tracking
+		ivScanned := pokemon.IndividualAttack != nil
+		isShiny := pokemon.Shiny != nil && *pokemon.Shiny
+		ps.stats.RecordSighting(pokemon.PokemonID, ivScanned, isShiny)
 
 		// Duplicate check
 		verified := pokemon.Verified || pokemon.DisappearTimeVerified
@@ -79,7 +81,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		_, change := ps.encounters.Track(pokemon.EncounterID, encounterState)
 
 		// Get rarity group
-		rarityGroup := ps.rarity.GetRarityGroup(pokemon.PokemonID)
+		rarityGroup := ps.stats.GetRarityGroup(pokemon.PokemonID)
 
 		// Process pokemon into matching format
 		processed := matching.ProcessPokemonWebhook(&pokemon, rarityGroup, ps.pvpCfg)

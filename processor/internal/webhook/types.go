@@ -68,6 +68,7 @@ type PokemonWebhook struct {
 	BaseCatch             float64 `json:"base_catch"`
 	GreatCatch            float64 `json:"great_catch"`
 	UltraCatch            float64 `json:"ultra_catch"`
+	Shiny                 *bool   `json:"shiny"` // null = unknown, true/false = reported by worker
 
 	// PVP data from Golbat (sole source of PVP rankings)
 	PVP                     map[string][]PVPRankEntry `json:"pvp"`

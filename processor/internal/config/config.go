@@ -14,6 +14,7 @@ type Config struct {
 	PVP            PVPConfig            `toml:"pvp"`
 	Weather        WeatherConfig        `toml:"weather"`
 	Tuning         TuningConfig         `toml:"tuning"`
+	Stats          StatsConfig          `toml:"stats"`
 	Area           AreaConfig           `toml:"areaSecurity"`
 	Locale         LocaleConfig         `toml:"locale"`
 	Logging        LoggingConfig        `toml:"logging"`
@@ -79,6 +80,16 @@ type WeatherConfig struct {
 	SmartForecast           bool     `toml:"smart_forecast"`            // pull on demand if no data
 }
 
+type StatsConfig struct {
+	MinSampleSize       int     `toml:"min_sample_size"`
+	WindowHours         int     `toml:"window_hours"`
+	RefreshIntervalMins int     `toml:"refresh_interval_mins"`
+	Uncommon            float64 `toml:"rarity_group_2_uncommon"`
+	Rare                float64 `toml:"rarity_group_3_rare"`
+	VeryRare            float64 `toml:"rarity_group_4_very_rare"`
+	UltraRare           float64 `toml:"rarity_group_5_ultra_rare"`
+}
+
 type TuningConfig struct {
 	ReloadIntervalSecs  int `toml:"reload_interval_secs"`
 	EncounterCacheTTL   int `toml:"encounter_cache_ttl"`
@@ -125,6 +136,27 @@ func Load(path string) (*Config, error) {
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
+	}
+	if cfg.Stats.MinSampleSize == 0 {
+		cfg.Stats.MinSampleSize = 10000
+	}
+	if cfg.Stats.WindowHours == 0 {
+		cfg.Stats.WindowHours = 8
+	}
+	if cfg.Stats.RefreshIntervalMins == 0 {
+		cfg.Stats.RefreshIntervalMins = 5
+	}
+	if cfg.Stats.Uncommon == 0 {
+		cfg.Stats.Uncommon = 1.0
+	}
+	if cfg.Stats.Rare == 0 {
+		cfg.Stats.Rare = 0.5
+	}
+	if cfg.Stats.VeryRare == 0 {
+		cfg.Stats.VeryRare = 0.03
+	}
+	if cfg.Stats.UltraRare == 0 {
+		cfg.Stats.UltraRare = 0.01
 	}
 	if cfg.Locale.Time == "" {
 		cfg.Locale.Time = "HH:mm:ss"

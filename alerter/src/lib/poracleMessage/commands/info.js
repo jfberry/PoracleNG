@@ -81,41 +81,71 @@ exports.run = async (client, msg, args, options) => {
 			}
 
 			case 'shiny': {
-				if (client.PoracleInfo.lastStatsBroadcast) {
-					let message = `**${translator.translate('Shiny Stats (Last few hours)')}**\n`
-					const { shiny } = client.PoracleInfo.lastStatsBroadcast
-
-					Object.entries(shiny).forEach(([pokemonId, shinyInfo]) => {
-						const mon = client.GameData.monsters[`${pokemonId}_0`]
-						const monName = mon ? translator.translate(mon.name) : `${translator.translate('Unknown monster')} ${pokemonId}`
-
-						message = message.concat(`${monName}: ${translator.translate('Seen')} ${shinyInfo.seen} - ${translator.translate('Ratio')} 1:${shinyInfo.ratio.toFixed(0)}\n`)
-					})
-
-					await msg.reply(message, { style: 'markdown' })
-				} else {
-					await msg.reply(translator.translate('Shiny information not yet calculated - wait a few minutes and try again'))
+				if (!client.config.processor.url) {
+					return msg.reply(translator.translate('Shiny information is not available - processor URL is not configured'))
 				}
+
+				const axios = require('axios')
+				let shinyData
+				try {
+					const resp = await axios.get(`${client.config.processor.url}/api/stats/shiny`, { timeout: 5000 })
+					shinyData = resp.data
+				} catch (err) {
+					client.log.error(`Failed to fetch shiny stats from processor: ${err.message}`)
+					return msg.reply(translator.translate('Shiny information not yet calculated - wait a few minutes and try again'))
+				}
+
+				if (!shinyData || Object.keys(shinyData).length === 0) {
+					return msg.reply(translator.translate('Shiny information not yet calculated - wait a few minutes and try again'))
+				}
+
+				let message = `**${translator.translate('Shiny Stats (Last few hours)')}**\n`
+				Object.entries(shinyData).forEach(([pokemonId, shinyInfo]) => {
+					const mon = client.GameData.monsters[`${pokemonId}_0`]
+					const monName = mon ? translator.translate(mon.name) : `${translator.translate('Unknown monster')} ${pokemonId}`
+					message = message.concat(`${monName}: ${translator.translate('Seen')} ${shinyInfo.seen} - ${translator.translate('Ratio')} 1:${shinyInfo.ratio.toFixed(0)}\n`)
+				})
+
+				await msg.reply(message, { style: 'markdown' })
 				break
 			}
 			case 'rarity': {
-				if (client.PoracleInfo.lastStatsBroadcast) {
-					let message = ''
-					const { rarity } = client.PoracleInfo.lastStatsBroadcast
-					// Miss out common and unseen
-					for (let group = 2; group < 6; group++) {
-						const monsters = rarity[group].map(
-							(x) => {
-								const mon = Object.values(client.GameData.monsters).find((m) => m.id === x && m.form.id === 0)
-								if (!mon) {
-									return `${translator.translate('Unknown monster')} ${x}`
-								}
-								return translator.translate(mon.name)
-							},
-						)
-						message = message.concat(`**${translator.translate(client.GameData.utilData.rarity[group])}**: ${monsters.join(', ')}`, '\n')
-					}
+				if (!client.config.processor.url) {
+					return msg.reply(translator.translate('Rarity information is not available - processor URL is not configured'))
+				}
 
+				const axiosRarity = require('axios')
+				let rarityData
+				try {
+					const resp = await axiosRarity.get(`${client.config.processor.url}/api/stats/rarity`, { timeout: 5000 })
+					rarityData = resp.data
+				} catch (err) {
+					client.log.error(`Failed to fetch rarity stats from processor: ${err.message}`)
+					return msg.reply(translator.translate('Rarity information not yet calculated - wait a few minutes and try again'))
+				}
+
+				if (!rarityData || Object.keys(rarityData).length === 0) {
+					return msg.reply(translator.translate('Rarity information not yet calculated - wait a few minutes and try again'))
+				}
+
+				let message = ''
+				// Miss out common (1) and unseen
+				for (let group = 2; group < 6; group++) {
+					const groupMonsters = rarityData[group]
+					if (!groupMonsters || groupMonsters.length === 0) continue
+					const monsters = groupMonsters.map(
+						(x) => {
+							const mon = Object.values(client.GameData.monsters).find((m) => m.id === x && m.form.id === 0)
+							if (!mon) {
+								return `${translator.translate('Unknown monster')} ${x}`
+							}
+							return translator.translate(mon.name)
+						},
+					)
+					message = message.concat(`**${translator.translate(client.GameData.utilData.rarity[group])}**: ${monsters.join(', ')}`, '\n')
+				}
+
+				if (message) {
 					await msg.reply(message, { style: 'markdown' })
 				} else {
 					await msg.reply(translator.translate('Rarity information not yet calculated - wait a few minutes and try again'))

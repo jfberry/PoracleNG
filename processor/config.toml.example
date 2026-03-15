@@ -36,6 +36,15 @@ forecast_refresh_interval = 8        # hours between API calls per cell
 local_first_fetch_hod = 3            # first fetch hour of the day (e.g. 3 = 3am)
 smart_forecast = false               # pull on demand if no data for a cell
 
+[stats]
+min_sample_size = 10000              # minimum sightings before calculating rarity
+window_hours = 8                     # rolling window for rarity and shiny stats
+refresh_interval_mins = 5            # how often to recalculate stats
+rarity_group_2_uncommon = 1.0        # % of total sightings to be considered uncommon
+rarity_group_3_rare = 0.5            # % rare
+rarity_group_4_very_rare = 0.03      # % very rare
+rarity_group_5_ultra_rare = 0.01     # % ultra rare
+
 [tuning]
 reload_interval_secs = 60
 encounter_cache_ttl = 3600

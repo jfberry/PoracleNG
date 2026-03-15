@@ -1,8 +1,7 @@
 const axios = require('axios')
 
 /**
- * Class for handling jms412's shiny list
- *
+ * Provides shiny-possible lookup, fetching data from the processor API.
  */
 class ShinyPossible {
 	constructor(log) {
@@ -10,44 +9,27 @@ class ShinyPossible {
 	}
 
 	/**
-	 * Download latest shiny list
+	 * Fetch shiny-possible map from processor API
+	 * @param {string} processorUrl
 	 * @returns {Promise<any>}
 	 */
-	// eslint-disable-next-line class-methods-use-this
-	async download() {
-		const timeoutMs = 10000
-
-		const source = axios.CancelToken.source()
-		const timeout = setTimeout(() => {
-			source.cancel(`Timeout waiting for response - ${timeoutMs}ms`)
-			// Timeout Logic
-		}, timeoutMs)
-
-		const url = 'https://raw.githubusercontent.com/jms412/PkmnShinyMap/main/shinyPossible.json'
-		const result = await axios({
-			method: 'get',
-			url,
-			validateStatus: ((status) => status < 500),
-			cancelToken: source.token,
-		})
-
-		clearTimeout(timeout)
-		return result.data
+	async download(processorUrl) {
+		const resp = await axios.get(`${processorUrl}/api/stats/shiny-possible`, { timeout: 5000 })
+		return resp.data
 	}
 
 	/**
 	 * Set parser to use given shiny list
-	 * @param events
+	 * @param shinyPossibleMap
 	 */
 	loadMap(shinyPossibleMap) {
 		this.shinyPossibleMap = shinyPossibleMap
 	}
 
 	/**
-	 *
 	 * @param pokemonId
 	 * @param formId
-	 * @returns {{reason: string, name, time}}
+	 * @returns {boolean}
 	 */
 	isShinyPossible(pokemonId, formId) {
 		if (!this.shinyPossibleMap) return false

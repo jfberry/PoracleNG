@@ -17,114 +17,237 @@ const (
 	RarityVeryRare  = 4
 	RarityUltraRare = 5
 	RarityNever     = 6
+
+	// minIVSeenForShiny is the minimum number of IV-scanned encounters
+	// required before reporting shiny stats for a species.
+	minIVSeenForShiny = 100
 )
 
-// RarityTracker maintains rolling pokemon sighting counts and computes rarity groups.
-type RarityTracker struct {
-	mu           sync.RWMutex
-	counts       map[int]int64 // pokemon_id -> sighting count in window
-	groups       map[int]int   // pokemon_id -> rarity group
-	window       time.Duration
-	calcInterval time.Duration
-	lastCalc     time.Time
+// StatsConfig holds configurable rarity/shiny thresholds.
+type StatsConfig struct {
+	MinSampleSize       int
+	WindowHours         int
+	RefreshIntervalMins int
+	Uncommon            float64 // percentage threshold for uncommon
+	Rare                float64
+	VeryRare            float64
+	UltraRare           float64
 }
 
-// NewRarityTracker creates a new rarity tracker.
-func NewRarityTracker(window time.Duration) *RarityTracker {
-	rt := &RarityTracker{
-		counts:       make(map[int]int64),
-		groups:       make(map[int]int),
-		window:       window,
-		calcInterval: 15 * time.Minute,
+// sighting records a pokemon sighting with its timestamp.
+type sighting struct {
+	pokemonID  int
+	timestamp  int64
+	ivScanned  bool // true if pokemon had IV data (full encounter)
+	shiny      bool // true if confirmed shiny
+}
+
+// ShinyStats holds the stats for a single pokemon.
+type ShinyStats struct {
+	Total int64   `json:"total"`
+	Seen  int64   `json:"seen"`
+	Ratio float64 `json:"ratio"` // total / seen (e.g. 512 means 1:512)
+}
+
+// StatsTracker maintains rolling pokemon sighting counts and computes
+// rarity groups and shiny stats within the same time window.
+type StatsTracker struct {
+	mu        sync.RWMutex
+	cfg       StatsConfig
+	sightings []sighting
+	groups    map[int]int        // pokemon_id -> rarity group
+	shiny     map[int]ShinyStats // pokemon_id -> shiny stats (cached)
+}
+
+// NewStatsTracker creates a new stats tracker with the given config.
+func NewStatsTracker(cfg StatsConfig) *StatsTracker {
+	st := &StatsTracker{
+		cfg:    cfg,
+		groups: make(map[int]int),
+		shiny:  make(map[int]ShinyStats),
 	}
-	go rt.recalcLoop()
-	return rt
+	go st.recalcLoop()
+	return st
 }
 
-// RecordSighting records a pokemon sighting.
-func (rt *RarityTracker) RecordSighting(pokemonID int) {
-	rt.mu.Lock()
-	rt.counts[pokemonID]++
-	rt.mu.Unlock()
+// RecordSighting records a pokemon sighting. ivScanned indicates whether the
+// pokemon had IV data (a full encounter). isShiny indicates a confirmed shiny.
+func (st *StatsTracker) RecordSighting(pokemonID int, ivScanned bool, isShiny bool) {
+	st.mu.Lock()
+	st.sightings = append(st.sightings, sighting{
+		pokemonID: pokemonID,
+		timestamp: time.Now().Unix(),
+		ivScanned: ivScanned,
+		shiny:     isShiny,
+	})
+	st.mu.Unlock()
 }
 
 // GetRarityGroup returns the rarity group for a pokemon.
 // Returns RarityUnknown (-1) if not enough data has accumulated.
-func (rt *RarityTracker) GetRarityGroup(pokemonID int) int {
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
-	if g, ok := rt.groups[pokemonID]; ok {
+func (st *StatsTracker) GetRarityGroup(pokemonID int) int {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+	if g, ok := st.groups[pokemonID]; ok {
 		return g
 	}
 	return RarityUnknown
 }
 
-func (rt *RarityTracker) recalcLoop() {
-	ticker := time.NewTicker(rt.calcInterval)
+// GetShinyRate returns the shiny ratio for a pokemon, or 0 if unknown.
+func (st *StatsTracker) GetShinyRate(pokemonID int) float64 {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+	if s, ok := st.shiny[pokemonID]; ok {
+		return s.Ratio
+	}
+	return 0
+}
+
+func (st *StatsTracker) recalcLoop() {
+	interval := time.Duration(st.cfg.RefreshIntervalMins) * time.Minute
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
-		rt.recalculate()
+		st.recalculate()
 	}
 }
 
-func (rt *RarityTracker) recalculate() {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
+func (st *StatsTracker) recalculate() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 
-	if len(rt.counts) == 0 {
-		return
-	}
-
-	// Get total and sort by count descending
-	type entry struct {
-		id    int
-		count int64
-	}
-	var entries []entry
-	var total int64
-	for id, count := range rt.counts {
-		entries = append(entries, entry{id, count})
-		total += count
-	}
-
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].count > entries[j].count
-	})
-
-	// Assign rarity groups: species sorted by count descending, walk through and
-	// assign groups based on cumulative percentage of species (not sightings).
-	// Species seen more frequently are "common", those rarely seen are "ultra rare".
-	newGroups := make(map[int]int)
-	for _, e := range entries {
-		// Individual species share of total sightings
-		pct := float64(e.count) / float64(total) * 100
-
-		var group int
-		switch {
-		case pct >= 5.0:
-			group = RarityCommon
-		case pct >= 1.0:
-			group = RarityUncommon
-		case pct >= 0.1:
-			group = RarityRare
-		case pct >= 0.01:
-			group = RarityVeryRare
-		default:
-			group = RarityUltraRare
+	// Prune sightings outside the window
+	cutoff := time.Now().Unix() - int64(st.cfg.WindowHours)*3600
+	pruned := st.sightings[:0]
+	for _, s := range st.sightings {
+		if s.timestamp >= cutoff {
+			pruned = append(pruned, s)
 		}
-		newGroups[e.id] = group
+	}
+	st.sightings = pruned
+
+	// Count per species
+	type counters struct {
+		allScanned   int64
+		ivScanned    int64
+		shinyScanned int64
+	}
+	counts := make(map[int]*counters)
+	var totalAll int64
+	for _, s := range st.sightings {
+		c := counts[s.pokemonID]
+		if c == nil {
+			c = &counters{}
+			counts[s.pokemonID] = c
+		}
+		c.allScanned++
+		totalAll++
+		if s.ivScanned {
+			c.ivScanned++
+			if s.shiny {
+				c.shinyScanned++
+			}
+		}
 	}
 
-	rt.groups = newGroups
-	rt.lastCalc = time.Now()
+	// Rarity groups (require minimum sample size)
+	if totalAll >= int64(st.cfg.MinSampleSize) {
+		newGroups := make(map[int]int)
+		for id, c := range counts {
+			pct := float64(c.allScanned) / float64(totalAll) * 100
 
-	log.Debugf("Rarity groups recalculated: %d species, %d total sightings", len(newGroups), total)
+			var group int
+			switch {
+			case pct >= st.cfg.Uncommon:
+				group = RarityCommon
+			case pct >= st.cfg.Rare:
+				group = RarityUncommon
+			case pct >= st.cfg.VeryRare:
+				group = RarityRare
+			case pct >= st.cfg.UltraRare:
+				group = RarityVeryRare
+			default:
+				group = RarityUltraRare
+			}
+			newGroups[id] = group
+		}
+		st.groups = newGroups
+		log.Debugf("Rarity groups recalculated: %d species, %d total sightings in %dh window", len(newGroups), totalAll, st.cfg.WindowHours)
+	}
+
+	// Shiny stats (always update, independent of min sample size)
+	newShiny := make(map[int]ShinyStats)
+	for id, c := range counts {
+		if c.ivScanned >= minIVSeenForShiny && c.shinyScanned > 0 {
+			newShiny[id] = ShinyStats{
+				Total: c.ivScanned,
+				Seen:  c.shinyScanned,
+				Ratio: float64(c.ivScanned) / float64(c.shinyScanned),
+			}
+		}
+	}
+	st.shiny = newShiny
 }
 
-// Reset clears all counts and groups (e.g. on window expiry).
-func (rt *RarityTracker) Reset() {
-	rt.mu.Lock()
-	rt.counts = make(map[int]int64)
-	rt.groups = make(map[int]int)
-	rt.mu.Unlock()
+// ExportGroups returns pokemon IDs grouped by rarity level.
+// Keys are rarity group constants (1-5), values are sorted pokemon ID slices.
+// Triggers a recalculation if groups are empty but sighting data exists.
+func (st *StatsTracker) ExportGroups() map[int][]int {
+	st.mu.RLock()
+	needsCalc := len(st.groups) == 0 && len(st.sightings) >= st.cfg.MinSampleSize
+	st.mu.RUnlock()
+
+	if needsCalc {
+		st.recalculate()
+	}
+
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+
+	result := make(map[int][]int)
+	for id, group := range st.groups {
+		result[group] = append(result[group], id)
+	}
+	for _, ids := range result {
+		sort.Ints(ids)
+	}
+	return result
+}
+
+// ExportShinyStats returns shiny stats for all pokemon that have been seen shiny
+// within the rolling window, with at least minIVSeenForShiny encounters.
+func (st *StatsTracker) ExportShinyStats() map[int]ShinyStats {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+
+	result := make(map[int]ShinyStats, len(st.shiny))
+	for id, s := range st.shiny {
+		result[id] = s
+	}
+	return result
+}
+
+// ExportShinyPossible returns a map of pokemon IDs that have been seen shiny,
+// in the format expected by the alerter's ShinyPossible loader: {map: {id: true}}.
+func (st *StatsTracker) ExportShinyPossible() map[string]interface{} {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+
+	possibleMap := make(map[int]bool)
+	for id := range st.shiny {
+		possibleMap[id] = true
+	}
+	return map[string]interface{}{
+		"map": possibleMap,
+	}
+}
+
+// Reset clears all sightings and computed stats.
+func (st *StatsTracker) Reset() {
+	st.mu.Lock()
+	st.sightings = nil
+	st.groups = make(map[int]int)
+	st.shiny = make(map[int]ShinyStats)
+	st.mu.Unlock()
 }

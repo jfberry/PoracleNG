@@ -17,6 +17,17 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		"pvpEvolutionData": processed.PVPEvoData,
 	}
 
+	// Shiny rate and shiny possible
+	if e.ShinyProvider != nil {
+		rate := e.ShinyProvider.GetShinyRate(pokemon.PokemonID)
+		if rate > 0 {
+			m["shinyStats"] = rate
+			m["shinyPossible"] = true
+		} else {
+			m["shinyPossible"] = false
+		}
+	}
+
 	// Cell weather
 	cellID := tracker.GetWeatherCellID(pokemon.Latitude, pokemon.Longitude)
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)

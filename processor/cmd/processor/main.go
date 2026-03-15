@@ -98,10 +98,14 @@ func main() {
 	mux.Handle("/", webhookHandler)
 
 	// API endpoints
-	apiHandler := api.NewHandler(func() error {
+	mux.HandleFunc("/api/reload", api.HandleReload(func() error {
 		return state.Load(stateMgr, database, cfg.Geofence.Paths)
-	}, proc.weather)
-	apiHandler.RegisterRoutes(mux)
+	}))
+	mux.HandleFunc("/api/weather", api.HandleWeather(proc.weather))
+	mux.HandleFunc("/api/stats/rarity", api.HandleStats(func() any { return proc.stats.ExportGroups() }))
+	mux.HandleFunc("/api/stats/shiny", api.HandleStats(func() any { return proc.stats.ExportShinyStats() }))
+	mux.HandleFunc("/api/stats/shiny-possible", api.HandleStats(func() any { return proc.stats.ExportShinyPossible() }))
+	mux.HandleFunc("/health", api.HandleHealth())
 
 	// Prometheus metrics
 	mux.Handle("/metrics", promhttp.Handler())
@@ -160,7 +164,7 @@ type ProcessorService struct {
 	weatherCares    *tracker.WeatherCareTracker
 	encounters      *tracker.EncounterTracker
 	duplicates      *tracker.DuplicateCache
-	rarity          *tracker.RarityTracker
+	stats           *tracker.StatsTracker
 	gymState        *tracker.GymStateTracker
 	pokemonMatcher  *matching.PokemonMatcher
 	raidMatcher     *matching.RaidMatcher
@@ -215,6 +219,18 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		eventChecker,
 	)
 
+	// Stats tracker (rarity + shiny, shared rolling window)
+	statsTracker := tracker.NewStatsTracker(tracker.StatsConfig{
+		MinSampleSize:       cfg.Stats.MinSampleSize,
+		WindowHours:         cfg.Stats.WindowHours,
+		RefreshIntervalMins: cfg.Stats.RefreshIntervalMins,
+		Uncommon:            cfg.Stats.Uncommon,
+		Rare:                cfg.Stats.Rare,
+		VeryRare:            cfg.Stats.VeryRare,
+		UltraRare:           cfg.Stats.UltraRare,
+	})
+	enricher.ShinyProvider = statsTracker
+
 	// AccuWeather forecast integration
 	if cfg.Weather.EnableForecast && len(cfg.Weather.AccuWeatherAPIKeys) > 0 {
 		awClient := tracker.NewAccuWeatherClient(tracker.AccuWeatherConfig{
@@ -238,7 +254,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		weatherCares: tracker.NewWeatherCareTracker(),
 		encounters:   tracker.NewEncounterTracker(),
 		duplicates:   tracker.NewDuplicateCache(),
-		rarity:       tracker.NewRarityTracker(24 * time.Hour),
+		stats:        statsTracker,
 		gymState:     tracker.NewGymStateTracker(),
 		pokemonMatcher: &matching.PokemonMatcher{
 			PVPQueryMaxRank:            cfg.PVP.PVPQueryMaxRank,
