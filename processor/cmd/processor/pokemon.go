@@ -106,7 +106,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			}
 
 			// Register matched users as caring about weather in this cell
-			if ps.cfg.Weather.EnableChangeAlert {
+			if ps.cfg.Weather.ChangeAlert {
 				cellID := tracker.GetWeatherCellID(pokemon.Latitude, pokemon.Longitude)
 				for _, u := range matched {
 					ps.weatherCares.Register(cellID, tracker.WeatherCareEntry{

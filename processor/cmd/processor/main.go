@@ -83,7 +83,7 @@ func main() {
 	proc := NewProcessorService(cfg, stateMgr, database)
 
 	// Weather change consumer
-	if cfg.Weather.EnableChangeAlert {
+	if cfg.Weather.ChangeAlert {
 		go proc.consumeWeatherChanges()
 		log.Infof("Weather change alerts enabled")
 	}

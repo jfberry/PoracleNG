@@ -96,7 +96,7 @@ type PVPConfig struct {
 
 type WeatherConfig struct {
 	EnableInference            bool   `toml:"enable_inference"`
-	EnableChangeAlert          bool   `toml:"enable_change_alert"`
+	ChangeAlert                bool   `toml:"change_alert"`
 	ShowAlteredPokemon         bool   `toml:"show_altered_pokemon"`
 	ShowAlteredPokemonMaxCount int `toml:"show_altered_pokemon_max_count"`
 
