@@ -512,6 +512,102 @@ module.exports = async (fastify, options) => {
 		}
 	})
 
+	fastify.post('/api/humans', options, async (req) => {
+		fastify.logger.info(`API: ${req.ip} ${req.routeOptions.method} ${req.routeOptions.url}`)
+
+		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
+		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
+
+		const secret = req.headers['x-poracle-secret']
+		if (!secret || !fastify.config.server.apiSecret || secret !== fastify.config.server.apiSecret) {
+			return { status: 'authError', reason: 'incorrect or missing api secret' }
+		}
+
+		const body = req.body || {}
+		if (!body.id || !body.name) {
+			return { status: 'error', message: 'id and name are required' }
+		}
+
+		const existing = await fastify.query.selectOneQuery('humans', { id: body.id })
+		if (existing) {
+			return { status: 'error', message: 'User already exists' }
+		}
+
+		const human = {
+			id: body.id,
+			name: body.name,
+			type: body.type || 'discord:user',
+			enabled: body.enabled !== undefined ? +body.enabled : 1,
+			area: body.area || '[]',
+			latitude: body.latitude || 0.0,
+			longitude: body.longitude || 0.0,
+			admin_disable: body.admin_disable !== undefined ? +body.admin_disable : 0,
+			language: body.language || fastify.config.general.locale || 'en',
+			current_profile_no: 1,
+		}
+
+		if (body.community) {
+			human.community_membership = JSON.stringify(Array.isArray(body.community) ? body.community : [body.community])
+			const communityAreas = communityLogic.filterAreas(
+				fastify.config,
+				Array.isArray(body.community) ? body.community : [body.community],
+				fastify.geofence.geofence.map((x) => x.name.toLowerCase()),
+			)
+			human.area_restriction = JSON.stringify(communityAreas)
+		}
+
+		if (body.notes) human.notes = body.notes
+
+		await fastify.query.insertQuery('humans', human)
+
+		// Create default profile
+		const profile = {
+			id: body.id,
+			profile_no: 1,
+			name: body.profile_name || 'Default',
+			area: human.area,
+			latitude: human.latitude,
+			longitude: human.longitude,
+		}
+		await fastify.query.insertQuery('profiles', profile)
+
+		return {
+			status: 'ok',
+			message: 'User created successfully',
+			human,
+		}
+	})
+
+	fastify.post('/api/humans/:id/adminDisabled', options, async (req) => {
+		fastify.logger.info(`API: ${req.ip} ${req.routeOptions.method} ${req.routeOptions.url}`)
+
+		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
+		if (fastify.config.server.ipBlacklist.length && fastify.config.server.ipBlacklist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} in blacklist` }
+
+		const secret = req.headers['x-poracle-secret']
+		if (!secret || !fastify.config.server.apiSecret || secret !== fastify.config.server.apiSecret) {
+			return { status: 'authError', reason: 'incorrect or missing api secret' }
+		}
+
+		const human = await fastify.query.selectOneQuery('humans', { id: req.params.id })
+		if (!human) {
+			return { status: 'error', message: 'User not found' }
+		}
+
+		const body = req.body || {}
+		if (body.state === undefined) {
+			return { status: 'error', message: 'state is required (true/false)' }
+		}
+
+		const adminDisable = body.state ? 1 : 0
+		await fastify.query.updateQuery('humans', { admin_disable: adminDisable }, { id: req.params.id })
+
+		return {
+			status: 'ok',
+			admin_disabled: adminDisable,
+		}
+	})
+
 	fastify.get('/api/humans/one/:id', options, async (req) => {
 		fastify.logger.info(`API: ${req.ip} ${req.routeOptions.method} ${req.routeOptions.url}`)
 
