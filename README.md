@@ -5,7 +5,7 @@ PoracleNG splits Poracle into two components: a high-performance **Processor** (
 ## Architecture
 
 ```
-Golbat ──webhook──▶ Processor (Go :4200) ──matched──▶ Alerter (Node.js :3030) ──▶ Discord / Telegram
+Golbat ──webhook──▶ Processor (Go :3030) ──matched──▶ Alerter (Node.js :3031) ──▶ Discord / Telegram
                          │                                │
                          │◀──── POST /api/reload ──────────│
                          │                                │
@@ -81,7 +81,7 @@ On first startup, the processor downloads game data (pokemon names, moves, local
 Configure Golbat to send webhooks to the **processor** (not the alerter):
 
 ```
-http://<your-host>:4200/
+http://<your-host>:3030/
 ```
 
 ## Configuration
@@ -100,13 +100,13 @@ The only settings specific to each component are their networking:
 ```toml
 [processor]
 host = "0.0.0.0"                        # Processor listen address
-port = 4200
-alerter_url = "http://localhost:3030"    # Where the alerter is listening
+port = 3030                              # Processor takes the original Poracle port
+alerter_url = "http://localhost:3031"    # Where the alerter is listening
 
 [alerter]
 host = "127.0.0.1"                      # Alerter listen address
-port = 3030
-processor_url = "http://localhost:4200"  # Where the processor is listening
+port = 3031                              # Alerter runs on processor port + 1
+processor_url = "http://localhost:3030"  # Where the processor is listening
 ```
 
 Everything else (database, PVP, weather, geofence, discord, telegram, geocoding, tuning, etc.) is shared.
@@ -205,7 +205,7 @@ The script will:
 
 ### What changes
 
-**Webhook destination changes.** Golbat must now send webhooks to the **processor** (default port 4200), not the old alerter port. The processor matches and forwards results to the alerter internally.
+**Webhook destination changes.** Golbat must now send webhooks to the **processor** (default port 3030), not the old alerter port. The processor matches and forwards results to the alerter internally.
 
 **Two components to run.** You now start both the processor and the alerter. The processor must be running before the alerter can receive matched results.
 
@@ -213,10 +213,10 @@ The script will:
 
 ```toml
 [processor]
-alerter_url = "http://localhost:3030"
+alerter_url = "http://localhost:3031"
 
 [alerter]
-processor_url = "http://localhost:4200"
+processor_url = "http://localhost:3030"
 ```
 
 **Config format.** The alerter's `default.json` / `local.json` system is replaced by a single `config/config.toml`. All settings use `snake_case`. See `config/config.example.toml` for the full reference.
@@ -260,7 +260,7 @@ The processor reverse-proxies any `/api/` request it doesn't handle natively to 
 | GET | `/health` | Health check |
 | GET | `/metrics` | Prometheus metrics |
 
-Both components expose `/health` and `/metrics` endpoints on their respective ports. Prometheus can scrape both to monitor the full pipeline (processor on port 4200, alerter on port 3030 by default).
+Both components expose `/health` and `/metrics` endpoints on their respective ports. Prometheus can scrape both to monitor the full pipeline (processor on port 3030, alerter on port 3031 by default).
 
 ## Connections Summary
 

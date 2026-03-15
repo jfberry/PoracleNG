@@ -2,19 +2,19 @@
 # Copy this file to config.toml and modify as needed.
 # Only include settings you want to override — defaults are built in.
 
+[processor]
+host = "0.0.0.0"                        # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces
+port = 3030                              # processor takes the original Poracle port
+alerter_url = "http://localhost:3031"
+ip_whitelist = []
+
 [alerter]
 host = "127.0.0.1"                       # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces
-port = 3030
+port = 3031                              # alerter runs on processor port + 1
 ip_whitelist = []
 ip_blacklist = []
 api_secret = ""                          # API secret for Poracle API access (blank = API disabled)
-processor_url = "http://localhost:4200"
-
-[processor]
-host = "0.0.0.0"                        # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces
-port = 4200
-alerter_url = "http://localhost:3030"
-ip_whitelist = []
+processor_url = "http://localhost:3030"
 
 # ---- Databases ----
 

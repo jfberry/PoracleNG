@@ -179,18 +179,20 @@ function buildUnifiedConfig(defaults, local) {
 	const scanner = (local.database && local.database.scanner) || (userOverrides.database && userOverrides.database.scanner)
 	if (scanner) unified.database.scanner = convertKeysToSnake(scanner)
 
-	// Alerter networking — always include port and processor_url
+	// Networking — processor takes the old Poracle port, alerter gets port+1
 	const serverOverrides = userOverrides.server || {}
-	const alerterPort = (local.server && local.server.port) || (defaults.server && defaults.server.port) || '3030'
-	unified.alerter = convertKeysToSnake(serverOverrides)
-	unified.alerter.port = alerterPort
-	unified.alerter.processor_url = `http://localhost:4200`
+	const oldPort = parseInt((local.server && local.server.port) || (defaults.server && defaults.server.port) || '3030', 10)
+	const processorPort = oldPort
+	const alerterPort = oldPort + 1
 
-	// Processor networking — always include port and alerter_url
 	unified.processor = {
-		port: 4200,
+		port: processorPort,
 		alerter_url: `http://localhost:${alerterPort}`,
 	}
+
+	unified.alerter = convertKeysToSnake(serverOverrides)
+	unified.alerter.port = alerterPort
+	unified.alerter.processor_url = `http://localhost:${processorPort}`
 
 	// Geofence
 	if (userOverrides.geofence) {
@@ -556,17 +558,17 @@ function printSummary(copied, skipped, unified) {
 	console.log()
 	console.log('PoracleNG splits Poracle into two components that talk to each other:')
 	console.log()
-	console.log('  Processor (Go)  - receives webhooks, matches alerts    [default :4200]')
-	console.log('  Alerter (Node)  - renders templates, sends messages    [default :3030]')
+	console.log(`  Processor (Go)  - receives webhooks, matches alerts    [:${unified.processor?.port || 3030}]`)
+	console.log(`  Alerter (Node)  - renders templates, sends messages    [:${unified.alerter?.port || 3031}]`)
 	console.log()
 	console.log('The cross-component URLs have been auto-configured in config.toml:')
-	console.log(`  [processor] alerter_url = "${unified.processor?.alerter_url || 'http://localhost:3030'}"`)
-	console.log(`  [alerter]   processor_url = "${unified.alerter?.processor_url || 'http://localhost:4200'}"`)
+	console.log(`  [processor] alerter_url = "${unified.processor?.alerter_url || 'http://localhost:3031'}"`)
+	console.log(`  [alerter]   processor_url = "${unified.alerter?.processor_url || 'http://localhost:3030'}"`)
 	console.log()
 	console.log('If the components run on different hosts, update these URLs accordingly.')
 	console.log()
-	console.log('Your webhook sender (e.g. Golbat) should now POST to the PROCESSOR')
-	console.log('port (:4200), not the old alerter port.')
+	console.log(`Your webhook sender (e.g. Golbat) should now POST to the PROCESSOR`)
+	console.log(`port (:${unified.processor?.port || 3030}), not the old alerter port.`)
 	console.log()
 
 	// Check for scanner type issues

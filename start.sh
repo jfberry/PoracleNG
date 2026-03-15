@@ -65,7 +65,7 @@ PROC_PORT=$(awk '
 	}
 ' "$CONFIG_FILE")
 PROC_HOST="${PROC_HOST:-0.0.0.0}"
-PROC_PORT="${PROC_PORT:-4200}"
+PROC_PORT="${PROC_PORT:-3030}"
 
 # For health check, replace 0.0.0.0 with localhost
 HEALTH_HOST="$PROC_HOST"

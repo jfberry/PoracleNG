@@ -164,8 +164,8 @@ func Load(baseDir string) (*Config, error) {
 		BaseDir: absDir,
 		Processor: ProcessorConfig{
 			Host:       "0.0.0.0",
-			Port:       4200,
-			AlerterURL: "http://localhost:3030",
+			Port:       3030,
+			AlerterURL: "http://localhost:3031",
 		},
 		PVP: PVPConfig{
 			PVPQueryMaxRank:  100,

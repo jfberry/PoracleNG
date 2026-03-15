@@ -36,7 +36,7 @@ function adaptConfig(toml) {
 	const alerter = toml.alerter || {}
 	config.server = {
 		host: alerter.host || '127.0.0.1',
-		port: String(alerter.port || 3030),
+		port: String(alerter.port || 3031),
 		ipWhitelist: alerter.ip_whitelist || [],
 		ipBlacklist: alerter.ip_blacklist || [],
 		apiSecret: alerter.api_secret || '',
@@ -44,7 +44,7 @@ function adaptConfig(toml) {
 
 	// ---- processor ----
 	if (!alerter.processor_url) {
-		throw new Error('Config error: [alerter] processor_url is required (e.g. "http://localhost:4200")')
+		throw new Error('Config error: [alerter] processor_url is required (e.g. "http://localhost:3030")')
 	}
 	config.processor = {
 		url: alerter.processor_url,
