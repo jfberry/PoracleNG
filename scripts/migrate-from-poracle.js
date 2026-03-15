@@ -68,6 +68,12 @@ function deepDiff(defaults, overrides) {
 	return diff
 }
 
+function tomlKey(key) {
+	// Quote keys containing characters that aren't bare-key safe
+	if (/^[A-Za-z0-9_-]+$/.test(key)) return key
+	return JSON.stringify(key)
+}
+
 function tomlValue(val) {
 	if (typeof val === 'string') return JSON.stringify(val)
 	if (typeof val === 'boolean') return val ? 'true' : 'false'
@@ -76,7 +82,30 @@ function tomlValue(val) {
 		if (val.length === 0) return '[]'
 		return `[${val.map(tomlValue).join(', ')}]`
 	}
+	if (typeof val === 'object' && val !== null) {
+		// Inline table for nested objects with arbitrary keys (e.g. Discord IDs)
+		const pairs = Object.entries(val)
+			.filter(([, v]) => v !== null && v !== undefined)
+			.map(([k, v]) => `${tomlKey(k)} = ${tomlValue(v)}`)
+		return `{ ${pairs.join(', ')} }`
+	}
 	return JSON.stringify(val)
+}
+
+/** Check if an object is a "simple" config section (string/number/bool/array leaves)
+ *  vs a complex map with arbitrary keys that should be inlined */
+function isSimpleTable(obj) {
+	for (const value of Object.values(obj)) {
+		if (value === null || value === undefined) continue
+		if (typeof value === 'object' && !Array.isArray(value)) {
+			// Nested object — check if its keys look like config keys (snake_case/camelCase)
+			// or arbitrary user data (Discord IDs, etc.)
+			for (const k of Object.keys(value)) {
+				if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) return false
+			}
+		}
+	}
+	return true
 }
 
 function writeToml(obj, prefix = '') {
@@ -85,15 +114,15 @@ function writeToml(obj, prefix = '') {
 
 	for (const [key, value] of Object.entries(obj)) {
 		if (value === null || value === undefined) continue
-		if (typeof value === 'object' && !Array.isArray(value)) {
+		if (typeof value === 'object' && !Array.isArray(value) && isSimpleTable(value)) {
 			tables.push([key, value])
 		} else {
-			lines.push(`${key} = ${tomlValue(value)}`)
+			lines.push(`${tomlKey(key)} = ${tomlValue(value)}`)
 		}
 	}
 
 	for (const [key, value] of tables) {
-		const fullKey = prefix ? `${prefix}.${key}` : key
+		const fullKey = prefix ? `${prefix}.${tomlKey(key)}` : tomlKey(key)
 		lines.push('')
 		lines.push(`[${fullKey}]`)
 		lines.push(writeToml(value, fullKey))
