@@ -156,14 +156,16 @@ function buildUnifiedConfig(defaults, local) {
 	const scanner = (local.database && local.database.scanner) || (userOverrides.database && userOverrides.database.scanner)
 	if (scanner) unified.database.scanner = convertKeysToSnake(scanner)
 
-	// Alerter networking — always include, with processor_url
+	// Alerter networking — always include port and processor_url
 	const serverOverrides = userOverrides.server || {}
-	const alerterPort = serverOverrides.port || (defaults.server && defaults.server.port) || '3030'
+	const alerterPort = (local.server && local.server.port) || (defaults.server && defaults.server.port) || '3030'
 	unified.alerter = convertKeysToSnake(serverOverrides)
+	unified.alerter.port = alerterPort
 	unified.alerter.processor_url = `http://localhost:4200`
 
-	// Processor networking — always include, with alerter_url
+	// Processor networking — always include port and alerter_url
 	unified.processor = {
+		port: 4200,
 		alerter_url: `http://localhost:${alerterPort}`,
 	}
 
