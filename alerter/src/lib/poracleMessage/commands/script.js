@@ -28,7 +28,7 @@ exports.run = async (client, msg, args, options) => {
 
 		if (!args.length) {
 			await msg.reply(
-				translator.translateFormat('Valid commands are e.g. `{0}script everything`, `{0}script pokemon raids eggs quest lures invasion nests gym forts`, `{0}script everything allprofiles`, `{0}script everything link`', util.prefix),
+				translator.translateFormat('Valid commands are e.g. `{0}script everything`, `{0}script pokemon raids eggs quest lures invasion nests gym forts maxbattle`, `{0}script everything allprofiles`, `{0}script everything link`', util.prefix),
 				{ style: 'markdown' },
 			)
 			return
@@ -61,6 +61,7 @@ exports.run = async (client, msg, args, options) => {
 			const nests = await client.query.selectAllQuery('nests', { id: target.id, profile_no: currentProfileNo })
 			const gyms = await client.query.selectAllQuery('gym', { id: target.id, profile_no: currentProfileNo })
 			const forts = await client.query.selectAllQuery('forts', { id: target.id, profile_no: currentProfileNo })
+			const maxbattles = await client.query.selectAllQuery('maxbattle', { id: target.id, profile_no: currentProfileNo })
 
 			const gender = ['', 'male', 'female', 'genderless']
 
@@ -272,6 +273,32 @@ exports.run = async (client, msg, args, options) => {
 						if (fort[dbFieldName] !== defaultValue) message += ` ${param}:${fort[dbFieldName]}`
 					}
 
+					message += '\n'
+				}
+			}
+
+			if (everything || args.includes('maxbattle')) {
+				const maxbattleParameters = {
+					template: ['template', client.config.general.defaultTemplateName.toString()],
+					d: ['distance', 0],
+				}
+
+				for (const mb of maxbattles) {
+					if (+mb.pokemon_id === 9000) {
+						message += `${prefix}maxbattle level${mb.level}`
+					} else {
+						const mon = Object.values(client.GameData.monsters).find((m) => m.id === mb.pokemon_id && m.form.id === mb.form)
+						message += `${prefix}maxbattle ${mon ? mon.name.toLowerCase() : mb.pokemon_id}`
+					}
+					if (mb.gmax) message += ' gmax'
+					if (mb.move !== 9000) {
+						const moveData = client.GameData.moves[mb.move]
+						if (moveData) message += ` m:${moveData.name.toLowerCase()}`
+					}
+					for (const [param, [dbFieldName, defaultValue]] of Object.entries(maxbattleParameters)) {
+						if (mb[dbFieldName] !== defaultValue) message += ` ${param}:${mb[dbFieldName]}`
+					}
+					if (mb.clean) message += ' clean'
 					message += '\n'
 				}
 			}

@@ -339,6 +339,7 @@ const QuestController = require('./controllers/quest')
 const GymController = require('./controllers/gym')
 const NestController = require('./controllers/nest')
 const FortUpdateController = require('./controllers/fortupdate')
+const MaxbattleController = require('./controllers/maxbattle')
 const CachingGeocoder = require('./lib/cachingGeocoder')
 
 const mustache = require('./lib/handlebars')()
@@ -377,8 +378,9 @@ const questController = new QuestController(logs.controller, knex, cachingGeocod
 const gymController = new GymController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
 const nestController = new NestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
 const fortUpdateController = new FortUpdateController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const maxbattleController = new MaxbattleController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
 
-const allControllers = [monsterController, raidController, weatherController, pokestopController, pokestopLureController, questController, gymController, nestController, fortUpdateController]
+const allControllers = [monsterController, raidController, weatherController, pokestopController, pokestopLureController, questController, gymController, nestController, fortUpdateController, maxbattleController]
 
 const hookQueue = []
 let eventsProcessed = 0
@@ -477,6 +479,15 @@ async function processOne(payload) {
 					queueAddition = result
 				} else {
 					log.error('Missing result from fort_update matched processor', { data: payload.message })
+				}
+				break
+			}
+			case 'maxbattle': {
+				const result = await maxbattleController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
+				if (result) {
+					queueAddition = result
+				} else {
+					log.error('Missing result from maxbattle matched processor', { data: payload.message })
 				}
 				break
 			}
