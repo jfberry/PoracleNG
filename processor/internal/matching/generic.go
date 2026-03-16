@@ -10,12 +10,13 @@ import (
 
 // trackingUserData holds common tracking fields for human validation.
 type trackingUserData struct {
-	HumanID   string
-	ProfileNo int
-	Distance  int
-	Template  string
-	Clean     bool
-	Ping      string
+	HumanID           string
+	ProfileNo         int
+	Distance          int
+	Template          string
+	Clean             bool
+	Ping              string
+	IsSpecificStation bool // maxbattle: station-specific tracking (for specificstation blocked check)
 }
 
 // ValidateHumansGeneric filters matched trackings against human criteria.

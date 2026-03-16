@@ -1,6 +1,8 @@
 package matching
 
 import (
+	"strings"
+
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -69,22 +71,36 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) []webhook
 		}
 
 		// Station ID filter: nil matches any
-		if mb.StationID != nil && *mb.StationID != data.StationID {
+		isSpecificStation := mb.StationID != nil
+		if isSpecificStation && *mb.StationID != data.StationID {
 			continue
 		}
 
 		trackings = append(trackings, trackingUserData{
-			HumanID:   mb.ID,
-			ProfileNo: mb.ProfileNo,
-			Distance:  mb.Distance,
-			Template:  mb.Template,
-			Clean:     mb.Clean,
-			Ping:      mb.Ping,
+			HumanID:          mb.ID,
+			ProfileNo:        mb.ProfileNo,
+			Distance:         mb.Distance,
+			Template:         mb.Template,
+			Clean:            mb.Clean,
+			Ping:             mb.Ping,
+			IsSpecificStation: isSpecificStation,
 		})
 	}
 
+	// Filter out users with blocked "specificstation" alerts for station-specific trackings
+	var filtered []trackingUserData
+	for _, td := range trackings {
+		if td.IsSpecificStation {
+			human := st.Humans[td.HumanID]
+			if human != nil && strings.Contains(human.BlockedAlerts, "specificstation") {
+				continue
+			}
+		}
+		filtered = append(filtered, td)
+	}
+
 	return ValidateHumansGeneric(
-		trackings,
+		filtered,
 		data.Latitude, data.Longitude,
 		matchedAreaNames,
 		m.AreaSecurityEnabled && m.StrictLocations,

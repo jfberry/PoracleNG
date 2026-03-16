@@ -41,7 +41,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 
 		// Derive gmax from battle level
 		gmax := 0
-		if mb.BattleLevel > 5 {
+		if mb.BattleLevel > 6 {
 			gmax = 1
 		}
 

@@ -17,7 +17,7 @@ class Maxbattle extends Controller {
 			data.move_1 = data.battle_pokemon_move_1
 			data.move_2 = data.battle_pokemon_move_2
 			data.level = data.battle_level
-			data.gmax = (data.level > 5) ? 1 : 0
+			data.gmax = (data.level > 6) ? 1 : 0
 			data.gender = data.battle_pokemon_gender
 			data.evolution = 0
 			data.form = data.battle_pokemon_form
@@ -180,6 +180,62 @@ class Maxbattle extends Controller {
 
 						require('./common/evolutionCalculator').setEvolutions(data, this.GameData, this.log, logReference, translator, this.emojiLookup, platform, monster)
 						require('./common/weather').setNextWeatherText(data, translator, this.GameData, this.emojiLookup, platform)
+
+						/* Weakness calculations */
+						const typeInfo = this.GameData.types
+						const typeData = this.GameData.utilData.types
+						const weaknesses = {}
+
+						for (const type of data.typeNameEng) {
+							typeInfo[type].weaknesses.forEach((x) => {
+								if (!weaknesses[x.typeName]) weaknesses[x.typeName] = 1
+								weaknesses[x.typeName] *= 2
+							})
+							typeInfo[type].resistances.forEach((x) => {
+								if (!weaknesses[x.typeName]) weaknesses[x.typeName] = 1
+								weaknesses[x.typeName] *= 0.5
+							})
+							typeInfo[type].immunes.forEach((x) => {
+								if (!weaknesses[x.typeName]) weaknesses[x.typeName] = 1
+								weaknesses[x.typeName] *= 0.25
+							})
+						}
+
+						const typeObj = {
+							extraWeak: { value: 4, types: [], text: 'Very vulnerable to' },
+							weak: { value: 2, types: [], text: 'Vulnerable to' },
+							resist: { value: 0.5, types: [], text: 'Resistant to' },
+							immune: { value: 0.25, types: [], text: 'Very resistant to' },
+							extraImmune: { value: 0.125, types: [], text: 'Extremely resistant to' },
+						}
+
+						for (const [name, value] of Object.entries(weaknesses)) {
+							const translated = {
+								nameEng: name,
+								name: translator.translate(name),
+								emoji: translator.translate(this.emojiLookup.lookup(typeData[name].emoji, platform)),
+							}
+							switch (value) {
+								case 0.125: typeObj.extraImmune.types.push(translated); break
+								case 0.25: typeObj.immune.types.push(translated); break
+								case 0.5: typeObj.resist.types.push(translated); break
+								case 2: typeObj.weak.types.push(translated); break
+								case 4: typeObj.extraWeak.types.push(translated); break
+								default: break
+							}
+						}
+
+						let weaknessEmoji = ''
+						for (const info of Object.values(typeObj)) {
+							if (info.types.length) {
+								const typeEmoji = info.types.map((x) => x.emoji).join('')
+								info.typeEmoji = typeEmoji
+								weaknessEmoji = weaknessEmoji.concat(`${info.value}x${typeEmoji} `)
+							}
+						}
+
+						data.weaknessList = Object.values(typeObj).filter((x) => x.types.length)
+						data.weaknessEmoji = weaknessEmoji
 
 						const view = {
 							...geoResult,
