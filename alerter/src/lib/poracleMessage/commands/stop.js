@@ -33,6 +33,7 @@ exports.run = async (client, msg, args, options) => {
 		}
 
 		await client.query.updateQuery('humans', { enabled: 0 }, { id: target.id })
+		client.triggerReloadAlerts()
 		await msg.reply(translator.translateFormat('All alert messages have been stopped, you can resume them with {0}{1}', util.prefix, translator.translate('start')))
 		await msg.react('✅')
 	} catch (err) {

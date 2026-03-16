@@ -22,6 +22,7 @@ exports.run = async (client, msg, args, options) => {
 		}
 
 		await client.query.updateQuery('humans', { enabled: 1, fails: 0 }, { id: target.id })
+		client.triggerReloadAlerts()
 		await msg.react('✅')
 
 		await msg.reply(translator.translateFormat(
