@@ -237,10 +237,21 @@ function adaptConfig(toml) {
 
 	// ---- areaSecurity ----
 	const as = toml.area_security || {}
+	let communities = {}
+	if (Array.isArray(as.communities)) {
+		// Array-of-tables format: [[area_security.communities]] with name = "..."
+		for (const entry of as.communities) {
+			const { name, ...rest } = convertKeys(entry)
+			if (name) communities[name] = rest
+		}
+	} else {
+		// Legacy object-keyed format: [area_security.communities.name]
+		communities = convertKeys(as.communities || {})
+	}
 	config.areaSecurity = {
 		enabled: as.enabled !== undefined ? as.enabled : false,
 		strictLocations: as.strict_locations !== undefined ? as.strict_locations : false,
-		communities: convertKeys(as.communities || {}),
+		communities,
 	}
 
 	// ---- discord ----

@@ -287,10 +287,10 @@ function buildUnifiedConfig(defaults, local) {
 		if (ao.enabled !== undefined) unified.area_security.enabled = ao.enabled
 		if (ao.strictLocations !== undefined) unified.area_security.strict_locations = ao.strictLocations
 		if (ao.communities) {
-			// Convert inner property keys to snake_case but preserve community names as-is
-			unified.area_security.communities = {}
+			// Convert to array-of-tables format with name field
+			unified.area_security.communities = []
 			for (const [name, community] of Object.entries(ao.communities)) {
-				unified.area_security.communities[name] = convertKeysToSnake(community)
+				unified.area_security.communities.push({ name, ...convertKeysToSnake(community) })
 			}
 		}
 	}

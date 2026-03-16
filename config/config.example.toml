@@ -94,33 +94,26 @@ enabled = false
 # strict_locations checks that alerts are coming from the defined location_fence for every alert
 strict_locations = false
 
-# Community definitions:
+# Community definitions (array-of-tables format):
+#   name           - community name (used as identifier)
 #   allowed_areas  - fences users are allowed to !area add
 #   location_fence - the single area used for checking strict_locations against
 #   discord        - registration channels and user roles for this community
 #   telegram       - membership groups that qualify for access to this community
 #
-# [area_security.communities.newyork]
+# [[area_security.communities]]
+# name = "newyork"
 # allowed_areas = ["manhattan", "bronx", "brooklyn", "queens"]
-# location_fence = "wholenewyork"
+# location_fence = ["wholenewyork"]
+# discord = { channels = ["1234567890123456"], user_role = ["9876543210987654"] }
+# telegram = { channels = ["-100123456789"] }
 #
-# [area_security.communities.newyork.discord]
-# channels = ["1234567890123456"]
-# user_role = ["9876543210987654"]
-#
-# [area_security.communities.newyork.telegram]
-# channels = ["-100123456789"]
-#
-# [area_security.communities.chicago]
+# [[area_security.communities]]
+# name = "chicago"
 # allowed_areas = ["northwest", "southside", "central"]
-# location_fence = "wholechicago"
-#
-# [area_security.communities.chicago.discord]
-# channels = ["1111111111111111"]
-# user_role = ["2222222222222222"]
-#
-# [area_security.communities.chicago.telegram]
-# channels = ["-100987654321"]
+# location_fence = ["wholechicago"]
+# discord = { channels = ["1111111111111111"], user_role = ["2222222222222222"] }
+# telegram = { channels = ["-100987654321"] }
 
 # ---- Locale ----
 
