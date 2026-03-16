@@ -8,7 +8,7 @@ build: build-processor install-alerter
 
 # Build the Go processor binary
 build-processor:
-	cd processor && go build -o processor ./cmd/processor
+	cd processor && go build -o poracle-processor ./cmd/processor
 
 # Install alerter Node.js dependencies
 install-alerter:
@@ -16,7 +16,7 @@ install-alerter:
 
 # Remove build artifacts
 clean:
-	rm -f processor/processor
+	rm -f processor/poracle-processor
 
 # Start both components via start.sh
 start: build
