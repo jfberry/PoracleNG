@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-PROCESSOR_BIN="$ROOT/processor/processor"
+PROCESSOR_BIN="$ROOT/processor/poracle-processor"
 ALERTER_DIR="$ROOT/alerter"
 CONFIG_FILE="$ROOT/config/config.toml"
 HEALTH_URL=""
@@ -52,7 +52,7 @@ fi
 # Processor binary
 if [ ! -x "$PROCESSOR_BIN" ]; then
 	echo "[start] Processor binary not found, building..."
-	(cd "$ROOT/processor" && go build -o processor ./cmd/processor) || fail "Failed to build processor"
+	(cd "$ROOT/processor" && go build -o poracle-processor ./cmd/processor) || fail "Failed to build processor"
 	echo "[start] Processor built"
 fi
 

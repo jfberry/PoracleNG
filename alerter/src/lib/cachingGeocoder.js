@@ -5,6 +5,7 @@ const KeyvSqlite = require('@keyv/sqlite').default
 const { performance } = require('perf_hooks')
 const emojiFlags = require('country-code-emoji')
 const path = require('path')
+const fs = require('fs')
 const NominatimGeocoder = require('./nominatimGeocoder')
 const metrics = require('./metrics')
 
@@ -56,7 +57,9 @@ class CachingGeocoder {
 		this.config = config
 		this.mustache = mustache
 		if (cacheFilename) {
-			const dbPath = path.join(__dirname, '../../.cache', `${cacheFilename}.sqlite`)
+			const cacheDir = path.join(__dirname, '../../.cache')
+			fs.mkdirSync(cacheDir, { recursive: true })
+			const dbPath = path.join(cacheDir, `${cacheFilename}.sqlite`)
 			this.cache = new Cacheable({
 				primary: { ttl: '24h' },
 				secondary: new KeyvSqlite(`sqlite://${dbPath}`),

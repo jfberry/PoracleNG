@@ -1,4 +1,4 @@
-process.title = 'PoracleJS'
+process.title = 'poracle-alerter'
 // eslint-disable-next-line no-underscore-dangle
 require('events').EventEmitter.prototype._maxListeners = 100
 const { writeHeapSnapshot } = require('v8')

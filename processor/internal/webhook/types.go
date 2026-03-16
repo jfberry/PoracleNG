@@ -125,7 +125,7 @@ type RSVP struct {
 
 // WeatherWebhook mirrors Golbat's weather webhook message.
 type WeatherWebhook struct {
-	S2CellID          string        `json:"s2_cell_id"`
+	S2CellID          json.Number   `json:"s2_cell_id"`
 	Latitude          float64       `json:"latitude"`
 	Longitude         float64       `json:"longitude"`
 	Polygon           [4][2]float64 `json:"polygon"`
