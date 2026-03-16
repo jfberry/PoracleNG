@@ -22,9 +22,9 @@ const EXAMPLES_DIR = path.join(ROOT, 'fallbacks')
 // Helpers (shared with convert-config.js)
 // ---------------------------------------------------------------------------
 
-let stripJsonComments
+let JSON5
 try {
-	stripJsonComments = require(path.join(ROOT, 'alerter', 'node_modules', 'strip-json-comments'))
+	JSON5 = require(path.join(ROOT, 'alerter', 'node_modules', 'json5'))
 } catch {
 	console.error('Error: run "npm install" in alerter/ first.')
 	process.exit(1)
@@ -32,25 +32,7 @@ try {
 
 function readJsonc(filePath) {
 	const raw = fs.readFileSync(filePath, 'utf8')
-	const stripped = stripJsonComments(raw)
-	try {
-		return JSON.parse(stripped)
-	} catch (err) {
-		// Show context around the error position to help the user find the problem
-		const match = err.message.match(/position (\d+)/)
-		if (match) {
-			const pos = parseInt(match[1], 10)
-			const start = Math.max(0, pos - 80)
-			const end = Math.min(stripped.length, pos + 80)
-			const snippet = stripped.slice(start, end)
-			const pointer = ' '.repeat(Math.min(pos, 80)) + '^'
-			console.error(`\nJSON parse error in ${filePath} at position ${pos}:`)
-			console.error(snippet)
-			console.error(pointer)
-			console.error('\nThis is often caused by trailing commas in JSON objects/arrays.')
-		}
-		throw new Error(`Failed to parse ${filePath}: ${err.message}`)
-	}
+	return JSON5.parse(raw)
 }
 
 function camelToSnake(str) {
