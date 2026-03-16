@@ -29,6 +29,32 @@ function defaults(target, defs) {
 	return target
 }
 
+/**
+ * Convert array-of-tables [{target, admins}, ...] to object-keyed form {target: admins, ...}
+ * used by the delegated administration code.
+ */
+function adminsArrayToObject(arr) {
+	if (!Array.isArray(arr)) return arr || {}
+	const obj = {}
+	for (const entry of arr) {
+		if (entry.target && entry.admins) obj[entry.target] = entry.admins
+	}
+	return obj
+}
+
+/**
+ * Convert array-of-tables [{target, limit}, ...] to object-keyed form {target: limit, ...}
+ * used by alert limit overrides.
+ */
+function overridesArrayToObject(arr) {
+	if (!Array.isArray(arr)) return arr || {}
+	const obj = {}
+	for (const entry of arr) {
+		if (entry.target && entry.limit !== undefined) obj[entry.target] = entry.limit
+	}
+	return obj
+}
+
 function adaptConfig(toml) {
 	const config = {}
 
@@ -208,7 +234,18 @@ function adaptConfig(toml) {
 	}
 
 	// ---- discord ----
-	config.discord = convertKeys(toml.discord || {})
+	const disc = toml.discord || {}
+	config.discord = convertKeys(disc)
+	// Convert array-of-tables delegated_admins/webhook_admins → object-keyed delegatedAdministration
+	delete config.discord.delegatedAdmins
+	delete config.discord.webhookAdmins
+	delete config.discord.userTrackingAdmins
+	config.discord.delegatedAdministration = {
+		channelTracking: adminsArrayToObject(disc.delegated_admins),
+		webhookTracking: adminsArrayToObject(disc.webhook_admins),
+		userTracking: disc.user_tracking_admins || undefined,
+	}
+	// command_security keys are command names — convertKeys already handled snake→camel
 	defaults(config.discord, {
 		enabled: true,
 		activity: 'PoracleJS',
@@ -223,7 +260,6 @@ function adaptConfig(toml) {
 		channels: [''],
 		userRole: [''],
 		admins: [''],
-		delegatedAdministration: {},
 		commandSecurity: {},
 		prefix: '!',
 		ivColors: ['#9D9D9D', '#FFFFFF', '#1EFF00', '#0070DD', '#A335EE', '#FF8000'],
@@ -235,17 +271,24 @@ function adaptConfig(toml) {
 		lostRoleMessage: '',
 	})
 	// Auto-detect enabled from token presence if not explicitly set in TOML
-	if ((toml.discord || {}).enabled === undefined) {
+	if (disc.enabled === undefined) {
 		config.discord.enabled = !!(config.discord.token && config.discord.token.length && config.discord.token[0])
 	}
 
 	// ---- telegram ----
-	config.telegram = convertKeys(toml.telegram || {})
+	const tg = toml.telegram || {}
+	config.telegram = convertKeys(tg)
+	// Convert array-of-tables delegated_admins → object-keyed delegatedAdministration
+	delete config.telegram.delegatedAdmins
+	delete config.telegram.userTrackingAdmins
+	config.telegram.delegatedAdministration = {
+		channelTracking: adminsArrayToObject(tg.delegated_admins),
+		userTracking: tg.user_tracking_admins || undefined,
+	}
 	defaults(config.telegram, {
 		enabled: false,
 		token: '',
 		admins: [''],
-		delegatedAdministration: {},
 		channels: [''],
 		groupWelcomeText: 'Welcome {user}, remember to click on me and \'start bot\' to be able to receive messages',
 		botWelcomeText: 'You are now registered with Poracle',
@@ -319,7 +362,11 @@ function adaptConfig(toml) {
 	})
 
 	// ---- alertLimits ----
-	config.alertLimits = convertKeys(toml.alert_limits || {})
+	const al = toml.alert_limits || {}
+	config.alertLimits = convertKeys(al)
+	// Convert array-of-tables overrides → object-keyed limitOverride
+	delete config.alertLimits.overrides
+	config.alertLimits.limitOverride = overridesArrayToObject(al.overrides)
 	defaults(config.alertLimits, {
 		timingPeriod: 240,
 		dmLimit: 20,
@@ -327,7 +374,6 @@ function adaptConfig(toml) {
 		maxLimitsBeforeStop: 10,
 		disableOnStop: false,
 		shameChannel: '',
-		limitOverride: {},
 	})
 
 	// ---- logger (from [logging] section) ----

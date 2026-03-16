@@ -224,14 +224,24 @@ channels = [""]
 user_role = [""]
 # admins - IDs of admins (can add channels with !channel add and perform other admin functions)
 admins = [""]
-# delegated_administration - channels/webhooks and users who can admin these
-#   for channels the id may be a guild, category or individual channel
-# [discord.delegated_administration.channel_tracking]
-# id = ["id"]
-# [discord.delegated_administration.webhook_tracking]
-# name = ["id"]
+# delegated_admins - grant users admin over specific channels/guilds/categories
+#   target = channel, guild, or category ID
+#   admins = array of user/role IDs who can admin that target
+# [[discord.delegated_admins]]
+# target = "channel_or_guild_id"
+# admins = ["user_id_1", "role_id_2"]
+#
+# webhook_admins - grant users admin over specific webhooks
+# [[discord.webhook_admins]]
+# target = "webhook_name"
+# admins = ["user_id_1"]
+#
+# user_tracking_admins - user/role IDs that can manage other users' tracking
+# user_tracking_admins = ["user_id_1", "role_id_1"]
+#
 # command_security - restrict commands to specific users/roles
-#   valid commands: monster, pvp, gym, invasion, lure, nest, ...
+#   valid commands: monster, pvp, gym, invasion, lure, nest, quest, egg,
+#   raid, fort, area, location, profile, tracked, script, start, language
 # [discord.command_security]
 # monster = ["userid", "roleid"]
 # pvp = ["roleid"]
@@ -252,10 +262,15 @@ enabled = false
 token = ""
 # admins - admin user ids (array)
 admins = [""]
-# delegated_administration - group ids or channel names and users who can admin these
-# [telegram.delegated_administration.channel_tracking]
-# id = ["id"]
-# name = ["id", "id"]
+# delegated_admins - grant users admin over specific groups/channels
+#   target = group or channel ID
+#   admins = array of user IDs who can admin that target
+# [[telegram.delegated_admins]]
+# target = "group_or_channel_id"
+# admins = ["user_id_1", "user_id_2"]
+#
+# user_tracking_admins - user IDs that can manage other users' tracking
+# user_tracking_admins = ["user_id_1"]
 # channels - groups that can be used for registration
 #   if they don't start with -100 they may not be supergroups yet
 #   use /identify command to get group and user ids
@@ -351,10 +366,13 @@ channel_limit = 40                       # max messages a channel/group can rece
 max_limits_before_stop = 10              # times user can hit rate limit (within 24hrs) before being stopped
 disable_on_stop = false                  # admin disable rather than just stop (requires admin to restart)
 shame_channel = ""                       # name and shame stopped/disabled users to this discord channel
-# Override for specific channel/user ids or webhook names:
-# [alert_limits.limit_override]
-# "channel_id" = 100
-# "webhook_name" = 200
+# overrides - override limits for specific channels/users/webhooks
+# [[alert_limits.overrides]]
+# target = "channel_or_user_id"
+# limit = 100
+# [[alert_limits.overrides]]
+# target = "webhook_name"
+# limit = 200
 
 # ---- Tracking ----
 # Restrictions around tracking

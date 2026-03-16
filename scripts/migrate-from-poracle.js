@@ -100,13 +100,22 @@ function hasOnlyConfigKeys(obj) {
 	return true
 }
 
+/** Check if an array should be written as array-of-tables ([[key]]) */
+function isArrayOfTables(arr) {
+	return arr.length > 0 && arr.every((item) => typeof item === 'object' && item !== null && !Array.isArray(item))
+}
+
 function writeToml(obj, prefix = '') {
 	const lines = []
 	const tables = []
+	const arrayTables = []
 
 	for (const [key, value] of Object.entries(obj)) {
 		if (value === null || value === undefined) continue
-		if (typeof value === 'object' && !Array.isArray(value) && hasOnlyConfigKeys(value)) {
+		if (Array.isArray(value) && isArrayOfTables(value)) {
+			// Array of tables — write as [[key]] sections
+			arrayTables.push([key, value])
+		} else if (typeof value === 'object' && !Array.isArray(value) && hasOnlyConfigKeys(value)) {
 			// This object has config-like keys — write as a TOML table section
 			tables.push([key, value])
 		} else {
@@ -120,6 +129,18 @@ function writeToml(obj, prefix = '') {
 		lines.push('')
 		lines.push(`[${fullKey}]`)
 		lines.push(writeToml(value, fullKey))
+	}
+
+	for (const [key, arr] of arrayTables) {
+		const fullKey = prefix ? `${prefix}.${tomlKey(key)}` : tomlKey(key)
+		for (const item of arr) {
+			lines.push('')
+			lines.push(`[[${fullKey}]]`)
+			for (const [k, v] of Object.entries(item)) {
+				if (v === null || v === undefined) continue
+				lines.push(`${tomlKey(k)} = ${tomlValue(v)}`)
+			}
+		}
 	}
 
 	return lines.join('\n')
@@ -278,6 +299,29 @@ function buildUnifiedConfig(defaults, local) {
 		}
 	}
 
+	// Convert delegatedAdministration from old object-keyed format to new array-of-tables
+	for (const section of ['discord', 'telegram']) {
+		if (!unified[section]) continue
+		const da = unified[section].delegated_administration
+		if (da && typeof da === 'object') {
+			const ct = da.channel_tracking
+			if (ct && typeof ct === 'object' && Object.keys(ct).length > 0) {
+				unified[section].delegated_admins = Object.entries(ct).map(([target, admins]) => ({ target, admins }))
+			}
+			if (section === 'discord') {
+				const wt = da.webhook_tracking
+				if (wt && typeof wt === 'object' && Object.keys(wt).length > 0) {
+					unified[section].webhook_admins = Object.entries(wt).map(([target, admins]) => ({ target, admins }))
+				}
+			}
+			// user_tracking is a flat array — rename to user_tracking_admins
+			if (da.user_tracking && Array.isArray(da.user_tracking) && da.user_tracking.length > 0) {
+				unified[section].user_tracking_admins = da.user_tracking
+			}
+			delete unified[section].delegated_administration
+		}
+	}
+
 	// Locale
 	if (userOverrides.locale) {
 		unified.locale = convertKeysToSnake(userOverrides.locale)
@@ -291,6 +335,12 @@ function buildUnifiedConfig(defaults, local) {
 	// Alert limits
 	if (userOverrides.alertLimits) {
 		unified.alert_limits = convertKeysToSnake(userOverrides.alertLimits)
+		// Convert limitOverride from old object-keyed format to new array-of-tables
+		const lo = unified.alert_limits.limit_override
+		if (lo && typeof lo === 'object' && Object.keys(lo).length > 0) {
+			unified.alert_limits.overrides = Object.entries(lo).map(([target, limit]) => ({ target, limit }))
+		}
+		delete unified.alert_limits.limit_override
 	}
 
 	// Remove empty sections
