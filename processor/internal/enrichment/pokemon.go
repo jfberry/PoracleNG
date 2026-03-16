@@ -10,8 +10,8 @@ import (
 )
 
 // Pokemon builds enrichment fields for a pokemon webhook.
-func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) map[string]interface{} {
-	m := map[string]interface{}{
+func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) map[string]any {
+	m := map[string]any{
 		"rarityGroup":      processed.RarityGroup,
 		"pvpBestRank":      processed.PVPBestRank,
 		"pvpEvolutionData": processed.PVPEvoData,

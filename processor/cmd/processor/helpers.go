@@ -19,7 +19,7 @@ func buildMatchedAreas(areas []geofence.MatchedArea) []webhook.MatchedArea {
 }
 
 // toInt converts a JSON number (float64) to int.
-func toInt(v interface{}) int {
+func toInt(v any) int {
 	switch val := v.(type) {
 	case float64:
 		return int(val)

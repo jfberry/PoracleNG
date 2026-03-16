@@ -1,5 +1,5 @@
-const geofenceTileGenerator = require('../lib/geofenceTileGenerator')
 const fetch = require('node-fetch-native')
+const geofenceTileGenerator = require('../lib/geofenceTileGenerator')
 
 module.exports = async (fastify, options) => {
 	fastify.get('/api/geofence/:area/map', options, async (req) => {

@@ -7,8 +7,8 @@ import (
 )
 
 // Quest builds enrichment fields for a quest webhook.
-func (e *Enricher) Quest(lat, lon float64) map[string]interface{} {
-	m := make(map[string]interface{})
+func (e *Enricher) Quest(lat, lon float64) map[string]any {
+	m := make(map[string]any)
 
 	endOfDay := geo.EndOfDay(lat, lon)
 	tz := geo.GetTimezone(lat, lon)

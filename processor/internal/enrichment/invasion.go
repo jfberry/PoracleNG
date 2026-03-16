@@ -6,8 +6,8 @@ import (
 )
 
 // Invasion builds enrichment fields for an invasion webhook.
-func (e *Enricher) Invasion(lat, lon float64, expiration int64) map[string]interface{} {
-	m := make(map[string]interface{})
+func (e *Enricher) Invasion(lat, lon float64, expiration int64) map[string]any {
+	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
 

@@ -175,12 +175,12 @@ type MatchedUser struct {
 
 // OutboundPayload is sent from processor to alerter.
 type OutboundPayload struct {
-	Type         string                 `json:"type"`
-	Message      json.RawMessage        `json:"message"`
-	Enrichment   map[string]interface{} `json:"enrichment,omitempty"`
-	MatchedAreas []MatchedArea          `json:"matched_areas"`
-	MatchedUsers []MatchedUser          `json:"matched_users"`
-	OldState     *EncounterOld          `json:"old_state,omitempty"`
+	Type         string          `json:"type"`
+	Message      json.RawMessage `json:"message"`
+	Enrichment   map[string]any  `json:"enrichment,omitempty"`
+	MatchedAreas []MatchedArea   `json:"matched_areas"`
+	MatchedUsers []MatchedUser   `json:"matched_users"`
+	OldState     *EncounterOld   `json:"old_state,omitempty"`
 }
 
 // EncounterOld holds old state for pokemon_changed events.
@@ -219,8 +219,8 @@ type QuestWebhook struct {
 
 // QuestReward represents a single quest reward.
 type QuestReward struct {
-	Type int                    `json:"type"`
-	Info map[string]interface{} `json:"info"`
+	Type int            `json:"type"`
+	Info map[string]any `json:"info"`
 }
 
 // LureWebhook mirrors a pokestop webhook with lure data.

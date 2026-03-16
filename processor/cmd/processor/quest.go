@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -82,21 +83,21 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 // buildQuestRewardsKey creates a dedup key from quest rewards.
 func buildQuestRewardsKey(rewards []webhook.QuestReward) string {
-	key := ""
+	var key strings.Builder
 	for _, r := range rewards {
-		key += fmt.Sprintf("%d:", r.Type)
+		key.WriteString(fmt.Sprintf("%d:", r.Type))
 		if info, ok := r.Info["pokemon_id"]; ok {
-			key += fmt.Sprintf("p%v", info)
+			key.WriteString(fmt.Sprintf("p%v", info))
 		}
 		if info, ok := r.Info["item_id"]; ok {
-			key += fmt.Sprintf("i%v", info)
+			key.WriteString(fmt.Sprintf("i%v", info))
 		}
 		if info, ok := r.Info["amount"]; ok {
-			key += fmt.Sprintf("a%v", info)
+			key.WriteString(fmt.Sprintf("a%v", info))
 		}
-		key += ";"
+		key.WriteString(";")
 	}
-	return key
+	return key.String()
 }
 
 // parseQuestReward converts a webhook QuestReward to a matching QuestRewardData.

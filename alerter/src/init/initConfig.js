@@ -1,7 +1,7 @@
-const config = require('../lib/configSingleton')
 const path = require('path')
 const reader = require('readline-sync')
 const fs = require('fs')
+const config = require('../lib/configSingleton')
 const { log } = require('../lib/logger')
 
 const discordRe = /[ODMN][A-Za-z\d]{23}\.[\w-]{6}\.[\w-]{27}/g

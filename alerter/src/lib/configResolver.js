@@ -75,4 +75,6 @@ function getConfigDir() {
 	return configDir
 }
 
-module.exports = { resolveConfigFile, loadConfigJson, loadExampleJson, loadUserConfigJson, listConfigDir, getConfigDir }
+module.exports = {
+	resolveConfigFile, loadConfigJson, loadExampleJson, loadUserConfigJson, listConfigDir, getConfigDir,
+}

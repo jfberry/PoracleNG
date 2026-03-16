@@ -1,8 +1,8 @@
 const winston = require('winston')
 require('winston-daily-rotate-file')
-const config = require('./configSingleton')
 const path = require('path')
 const util = require('util')
+const config = require('./configSingleton')
 
 // Emerg – the application is in an emergency state.
 // Alert – the application owners need to be alerted.

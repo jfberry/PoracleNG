@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,16 +32,16 @@ type AccuWeatherClient struct {
 	tracker *WeatherTracker
 	client  *http.Client
 
-	mu           sync.Mutex
-	keyUsage     map[string]int // date-key -> count
-	keyUsageDate string        // YYYY-MM-DD
-	cellMutexes  map[string]*sync.Mutex
+	mu            sync.Mutex
+	keyUsage      map[string]int // date-key -> count
+	keyUsageDate  string         // YYYY-MM-DD
+	cellMutexes   map[string]*sync.Mutex
 	cellLocations map[string]string // cellID -> AccuWeather location key
 	cellForecasts map[string]*forecastState
 }
 
 type forecastState struct {
-	forecastTimeout int64 // unix timestamp when forecast expires
+	forecastTimeout  int64 // unix timestamp when forecast expires
 	lastForecastLoad int64 // hour timestamp of last fetch attempt
 }
 
@@ -183,16 +184,16 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 	}
 
 	// Store forecast data in the weather tracker
-	var logString string
+	var logString strings.Builder
 	for _, f := range forecasts {
 		hourTS := f.EpochDateTime - (f.EpochDateTime % 3600)
 		if hourTS >= currentHour {
 			pogoWeather := mapPoGoWeather(f)
 			aw.tracker.SetHourWeather(cellID, hourTS, pogoWeather)
-			logString += fmt.Sprintf("%s=%d ", time.Unix(hourTS, 0).UTC().Format("15:04"), pogoWeather)
+			logString.WriteString(fmt.Sprintf("%s=%d ", time.Unix(hourTS, 0).UTC().Format("15:04"), pogoWeather))
 		}
 	}
-	log.Infof("AccuWeather: cell %s forecast [UTC] %s", cellID, logString)
+	log.Infof("AccuWeather: cell %s forecast [UTC] %s", cellID, logString.String())
 
 	// Calculate next refresh timeout
 	forecastTimeout := aw.calculateForecastTimeout(currentHour)

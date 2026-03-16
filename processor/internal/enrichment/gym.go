@@ -5,8 +5,8 @@ import (
 )
 
 // Gym builds enrichment fields for a gym webhook.
-func (e *Enricher) Gym(lat, lon float64) map[string]interface{} {
-	m := make(map[string]interface{})
+func (e *Enricher) Gym(lat, lon float64) map[string]any {
+	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
 

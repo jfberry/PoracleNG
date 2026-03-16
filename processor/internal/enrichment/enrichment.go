@@ -55,7 +55,7 @@ func (e *Enricher) GetForecast(cellID string) tracker.WeatherForecast {
 }
 
 // addSunTimes adds nightTime/dawnTime/duskTime booleans to the enrichment map.
-func addSunTimes(m map[string]interface{}, lat, lon float64, tz string) {
+func addSunTimes(m map[string]any, lat, lon float64, tz string) {
 	nowUnix := time.Now().Unix()
 	sunTimes := geo.ComputeSunTimes(nowUnix, lat, lon, tz)
 	m["nightTime"] = sunTimes.NightTime

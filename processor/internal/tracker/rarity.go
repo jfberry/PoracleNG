@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"maps"
 	"sort"
 	"sync"
 	"time"
@@ -36,10 +37,10 @@ type StatsConfig struct {
 
 // sighting records a pokemon sighting with its timestamp.
 type sighting struct {
-	pokemonID  int
-	timestamp  int64
-	ivScanned  bool // true if pokemon had IV data (full encounter)
-	shiny      bool // true if confirmed shiny
+	pokemonID int
+	timestamp int64
+	ivScanned bool // true if pokemon had IV data (full encounter)
+	shiny     bool // true if confirmed shiny
 }
 
 // ShinyStats holds the stats for a single pokemon.
@@ -222,15 +223,13 @@ func (st *StatsTracker) ExportShinyStats() map[int]ShinyStats {
 	defer st.mu.RUnlock()
 
 	result := make(map[int]ShinyStats, len(st.shiny))
-	for id, s := range st.shiny {
-		result[id] = s
-	}
+	maps.Copy(result, st.shiny)
 	return result
 }
 
 // ExportShinyPossible returns a map of pokemon IDs that have been seen shiny,
 // in the format expected by the alerter's ShinyPossible loader: {map: {id: true}}.
-func (st *StatsTracker) ExportShinyPossible() map[string]interface{} {
+func (st *StatsTracker) ExportShinyPossible() map[string]any {
 	st.mu.RLock()
 	defer st.mu.RUnlock()
 
@@ -238,7 +237,7 @@ func (st *StatsTracker) ExportShinyPossible() map[string]interface{} {
 	for id := range st.shiny {
 		possibleMap[id] = true
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"map": possibleMap,
 	}
 }

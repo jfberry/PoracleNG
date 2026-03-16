@@ -71,7 +71,7 @@ type PlainFormatter struct {
 func (f *PlainFormatter) Format(entry *log.Entry) ([]byte, error) {
 	timestamp := entry.Time.Format(f.TimestampFormat)
 	if ref, ok := entry.Data["ref"]; ok {
-		return []byte(fmt.Sprintf("%s %s [%v] %s\n", f.LevelDesc[entry.Level], timestamp, ref, entry.Message)), nil
+		return fmt.Appendf(nil, "%s %s [%v] %s\n", f.LevelDesc[entry.Level], timestamp, ref, entry.Message), nil
 	}
-	return []byte(fmt.Sprintf("%s %s %s\n", f.LevelDesc[entry.Level], timestamp, entry.Message)), nil
+	return fmt.Appendf(nil, "%s %s %s\n", f.LevelDesc[entry.Level], timestamp, entry.Message), nil
 }

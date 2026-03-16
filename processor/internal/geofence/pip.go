@@ -9,7 +9,7 @@ func PointInPolygon(lat, lon float64, polygon [][2]float64) bool {
 	}
 	inside := false
 	j := n - 1
-	for i := 0; i < n; i++ {
+	for i := range n {
 		yi, xi := polygon[i][0], polygon[i][1]
 		yj, xj := polygon[j][0], polygon[j][1]
 
