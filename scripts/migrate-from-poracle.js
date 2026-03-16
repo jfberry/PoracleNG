@@ -32,7 +32,23 @@ try {
 
 function readJsonc(filePath) {
 	const raw = fs.readFileSync(filePath, 'utf8')
-	return JSON5.parse(raw)
+	try {
+		return JSON5.parse(raw)
+	} catch (err) {
+		const lines = raw.split('\n')
+		if (err.lineNumber) {
+			const lineNo = err.lineNumber
+			const start = Math.max(1, lineNo - 3)
+			const end = Math.min(lines.length, lineNo + 3)
+			console.error(`\nParse error in ${filePath} at line ${lineNo}, column ${err.columnNumber}:`)
+			for (let i = start; i <= end; i++) {
+				const marker = i === lineNo ? ' >>>' : '    '
+				console.error(`${marker} ${i}: ${lines[i - 1]}`)
+			}
+			console.error('\nCommon causes: missing comma between entries, malformed comments (use // not /)')
+		}
+		throw new Error(`Failed to parse ${filePath}: ${err.message}`)
+	}
 }
 
 function camelToSnake(str) {
@@ -270,7 +286,13 @@ function buildUnifiedConfig(defaults, local) {
 		const ao = userOverrides.areaSecurity
 		if (ao.enabled !== undefined) unified.area_security.enabled = ao.enabled
 		if (ao.strictLocations !== undefined) unified.area_security.strict_locations = ao.strictLocations
-		if (ao.communities) unified.area_security.communities = convertKeysToSnake(ao.communities)
+		if (ao.communities) {
+			// Convert inner property keys to snake_case but preserve community names as-is
+			unified.area_security.communities = {}
+			for (const [name, community] of Object.entries(ao.communities)) {
+				unified.area_security.communities[name] = convertKeysToSnake(community)
+			}
+		}
 	}
 
 	// Tuning
