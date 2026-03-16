@@ -285,7 +285,7 @@ exports.run = async (client, msg, args, options) => {
 
 				for (const mb of maxbattles) {
 					if (+mb.pokemon_id === 9000) {
-						message += `${prefix}maxbattle level${mb.level}`
+						message += `${prefix}maxbattle level:${mb.level}`
 					} else {
 						const mon = Object.values(client.GameData.monsters).find((m) => m.id === mb.pokemon_id && m.form.id === mb.form)
 						message += `${prefix}maxbattle ${mon ? mon.name.toLowerCase() : mb.pokemon_id}`
