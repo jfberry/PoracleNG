@@ -132,17 +132,18 @@ exports.run = async (client, msg, args, options) => {
 				// Miss out common (1) and unseen
 				for (let group = 2; group < 6; group++) {
 					const groupMonsters = rarityData[group]
-					if (!groupMonsters || groupMonsters.length === 0) continue
-					const monsters = groupMonsters.map(
-						(x) => {
-							const mon = Object.values(client.GameData.monsters).find((m) => m.id === x && m.form.id === 0)
-							if (!mon) {
-								return `${translator.translate('Unknown monster')} ${x}`
-							}
-							return translator.translate(mon.name)
-						},
-					)
-					message = message.concat(`**${translator.translate(client.GameData.utilData.rarity[group])}**: ${monsters.join(', ')}`, '\n')
+					if (groupMonsters && groupMonsters.length > 0) {
+						const monsters = groupMonsters.map(
+							(x) => {
+								const mon = Object.values(client.GameData.monsters).find((m) => m.id === x && m.form.id === 0)
+								if (!mon) {
+									return `${translator.translate('Unknown monster')} ${x}`
+								}
+								return translator.translate(mon.name)
+							},
+						)
+						message = message.concat(`**${translator.translate(client.GameData.utilData.rarity[group])}**: ${monsters.join(', ')}`, '\n')
+					}
 				}
 
 				if (message) {

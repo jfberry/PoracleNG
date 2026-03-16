@@ -107,38 +107,37 @@ module.exports = async (fastify, options) => {
 						rsvp_changes: row.rsvp_changes >= 0 && row.rsvp_changes <= 2 ? row.rsvp_changes : 0,
 					})
 				}
-				continue
-			}
-
+			} else {
 			// level accepts int or int[] — expand arrays into one row per level
-			const levels = Array.isArray(row.level) ? row.level : [row.level]
+				const levels = Array.isArray(row.level) ? row.level : [row.level]
 
-			for (const lvl of levels) {
-				let level = 9000
-				if (+defaultTo(row.pokemon_id, 9000) === 9000) {
-					level = +lvl
-					if (lvl === undefined || level < 1 || (level > Math.max(...Object.keys(fastify.GameData.utilData.raidLevels).map((k) => +k)) && level !== 90)) {
-						throw new Error('Invalid level (must be specified if no pokemon_id)')
+				for (const lvl of levels) {
+					let level = 9000
+					if (+defaultTo(row.pokemon_id, 9000) === 9000) {
+						level = +lvl
+						if (lvl === undefined || level < 1 || (level > Math.max(...Object.keys(fastify.GameData.utilData.raidLevels).map((k) => +k)) && level !== 90)) {
+							throw new Error('Invalid level (must be specified if no pokemon_id)')
+						}
 					}
-				}
 
-				insert.push({
-					id,
-					profile_no: currentProfileNo,
-					ping: '',
-					template: (row.template || fastify.config.general.defaultTemplateName).toString(),
-					pokemon_id: +defaultTo(row.pokemon_id, 9000),
-					exclusive: +defaultTo(row.exclusive, 0),
-					distance: +defaultTo(row.distance, 0),
-					team: row.team >= 0 && row.team <= 4 ? row.team : 4,
-					clean: +defaultTo(+row.clean, 0),
-					level: +level,
-					form: +defaultTo(row.form, 0),
-					move: +defaultTo(row.move, 9000),
-					evolution: +defaultTo(row.evolution, 9000),
-					gym_id: row.gym_id ? row.gym_id : null,
-					rsvp_changes: row.rsvp_changes >= 0 && row.rsvp_changes <= 2 ? row.rsvp_changes : 0,
-				})
+					insert.push({
+						id,
+						profile_no: currentProfileNo,
+						ping: '',
+						template: (row.template || fastify.config.general.defaultTemplateName).toString(),
+						pokemon_id: +defaultTo(row.pokemon_id, 9000),
+						exclusive: +defaultTo(row.exclusive, 0),
+						distance: +defaultTo(row.distance, 0),
+						team: row.team >= 0 && row.team <= 4 ? row.team : 4,
+						clean: +defaultTo(+row.clean, 0),
+						level: +level,
+						form: +defaultTo(row.form, 0),
+						move: +defaultTo(row.move, 9000),
+						evolution: +defaultTo(row.evolution, 9000),
+						gym_id: row.gym_id ? row.gym_id : null,
+						rsvp_changes: row.rsvp_changes >= 0 && row.rsvp_changes <= 2 ? row.rsvp_changes : 0,
+					})
+				}
 			}
 		}
 

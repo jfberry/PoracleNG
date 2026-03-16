@@ -1,14 +1,14 @@
 const { loadToml } = require('./tomlConfigLoader')
 const { adaptConfig } = require('./configAdapter')
 
-let _config = null
+let cachedConfig = null
 
 function getConfig() {
-	if (!_config) {
+	if (!cachedConfig) {
 		const toml = loadToml()
-		_config = Object.freeze(adaptConfig(toml))
+		cachedConfig = Object.freeze(adaptConfig(toml))
 	}
-	return _config
+	return cachedConfig
 }
 
 // Return a proxy that behaves like the config object itself
@@ -19,7 +19,7 @@ module.exports = new Proxy({}, {
 		if (prop === 'toJSON') return () => getConfig()
 		if (prop === '_reload') {
 			// Exposed for testing; forces re-read
-			return () => { _config = null }
+			return () => { cachedConfig = null }
 		}
 		return getConfig()[prop]
 	},

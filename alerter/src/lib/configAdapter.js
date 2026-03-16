@@ -107,7 +107,9 @@ function adaptConfig(toml) {
 	config.general = convertKeys(gen)
 
 	// snakeToCamel produces rdmUrl/reactMapUrl/rocketMadUrl but code expects rdmURL/reactMapURL/rocketMadURL
-	const urlRenames = { rdmUrl: 'rdmURL', reactMapUrl: 'reactMapURL', rocketMadUrl: 'rocketMadURL', shortlinkProviderUrl: 'shortlinkProviderURL' }
+	const urlRenames = {
+		rdmUrl: 'rdmURL', reactMapUrl: 'reactMapURL', rocketMadUrl: 'rocketMadURL', shortlinkProviderUrl: 'shortlinkProviderURL',
+	}
 	for (const [from, to] of Object.entries(urlRenames)) {
 		if (config.general[from] !== undefined && config.general[to] === undefined) {
 			config.general[to] = config.general[from]
@@ -271,10 +273,11 @@ function adaptConfig(toml) {
 	if (disc.role_subscriptions && Array.isArray(disc.role_subscriptions)) {
 		const urs = {}
 		for (const entry of disc.role_subscriptions) {
-			if (!entry.guild) continue
-			urs[entry.guild] = {}
-			if (entry.roles) urs[entry.guild].roles = entry.roles
-			if (entry.exclusive_roles) urs[entry.guild].exclusiveRoles = entry.exclusive_roles
+			if (entry.guild) {
+				urs[entry.guild] = {}
+				if (entry.roles) urs[entry.guild].roles = entry.roles
+				if (entry.exclusive_roles) urs[entry.guild].exclusiveRoles = entry.exclusive_roles
+			}
 		}
 		config.discord.userRoleSubscription = urs
 	}

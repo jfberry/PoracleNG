@@ -1,12 +1,12 @@
 const { loadConfigJson } = require('./configResolver')
 
-let _cache = null
+let aliasCache = null
 
 function getPokemonAlias() {
-	if (!_cache) {
-		_cache = loadConfigJson('pokemonAlias.json') || {}
+	if (!aliasCache) {
+		aliasCache = loadConfigJson('pokemonAlias.json') || {}
 	}
-	return _cache
+	return aliasCache
 }
 
 module.exports = { getPokemonAlias }
