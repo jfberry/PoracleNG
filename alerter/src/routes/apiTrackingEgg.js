@@ -26,7 +26,7 @@ module.exports = async (fastify, options) => {
 		const language = human.language || fastify.config.general.locale
 		const translator = fastify.translatorFactory.Translator(language)
 
-		const eggs = await fastify.query.selectAllQuery('egg', { id: req.params.id, profile_no: human.current_profile_no })
+		const eggs = await fastify.query.selectAllQuery('egg', { id: req.params.id, profile_no: req.query.profile_no || human.current_profile_no })
 
 		const eggWithDesc = await Promise.all(eggs.map(async (row) => ({ ...row, description: await trackedCommand.eggRowText(fastify.config, translator, fastify.GameData, row, fastify.scannerQuery) })))
 
@@ -78,32 +78,38 @@ module.exports = async (fastify, options) => {
 		const language = human.language || fastify.config.general.locale
 		const translator = fastify.translatorFactory.Translator(language)
 		const { id } = req.params
-		const currentProfileNo = human.current_profile_no
+		const currentProfileNo = req.query.profile_no || human.current_profile_no
+		const silent = req.query.silent || req.query.suppressMessage
 
 		let insertReq = req.body
 		if (!Array.isArray(insertReq)) insertReq = [insertReq]
 
 		const defaultTo = ((value, x) => ((value === undefined) ? x : value))
 
-		const insert = insertReq.map((row) => {
-			const level = +row.level
-			if (row.level === undefined || level < 1 || (level > Math.max(...Object.keys(raidLevels).map((k) => +k)) && level !== 90)) {
-				throw new Error('Invalid level')
+		const insert = []
+		for (const row of insertReq) {
+			// level accepts int or int[] — expand arrays into one row per level
+			const levels = Array.isArray(row.level) ? row.level : [row.level]
+			for (const lvl of levels) {
+				const level = +lvl
+				if (lvl === undefined || level < 1 || (level > Math.max(...Object.keys(raidLevels).map((k) => +k)) && level !== 90)) {
+					throw new Error('Invalid level')
+				}
+				insert.push({
+					id,
+					profile_no: currentProfileNo,
+					ping: '',
+					template: (row.template || fastify.config.general.defaultTemplateName).toString(),
+					exclusive: +defaultTo(row.exclusive, 0),
+					distance: +defaultTo(row.distance, 0),
+					team: row.team >= 0 && row.team <= 4 ? row.team : 4,
+					clean: +defaultTo(row.clean, 0),
+					level: +level,
+					gym_id: row.gym_id ? row.gym_id : null,
+					rsvp_changes: row.rsvp_changes >= 0 && row.rsvp_changes <= 2 ? row.rsvp_changes : 0,
+				})
 			}
-			return {
-				id,
-				profile_no: currentProfileNo,
-				ping: '',
-				template: (row.template || fastify.config.general.defaultTemplateName).toString(),
-				exclusive: +defaultTo(row.exclusive, 0),
-				distance: +defaultTo(row.distance, 0),
-				team: row.team >= 0 && row.team <= 4 ? row.team : 4, // carefully chosen to get nulls/undefined to 4 but allow 0
-				clean: +defaultTo(row.clean, 0),
-				level: +level,
-				gym_id: row.gym_id ? row.gym_id : null,
-				rsvp_changes: row.rsvp_changes >= 0 && row.rsvp_changes <= 2 ? row.rsvp_changes : 0,
-			}
-		})
+		}
 
 		try {
 			const tracked = await fastify.query.selectAllQuery('egg', { id, profile_no: currentProfileNo })
@@ -164,33 +170,40 @@ module.exports = async (fastify, options) => {
 				'uid',
 			)
 
-			await fastify.query.insertQuery('egg', [...insert, ...updates])
+			const insertResult = await fastify.query.insertQuery('egg', [...insert, ...updates], 'uid')
+			const newUids = Array.isArray(insertResult) ? insertResult.map((r) => (typeof r === 'object' ? r.uid : r)) : []
 			if (fastify.triggerReloadAlerts) fastify.triggerReloadAlerts()
 
 			// Send message to user
 
-			const data = [{
-				lat: 0,
-				lon: 0,
-				message: { content: message },
-				target: human.id,
-				type: human.type,
-				name: human.name,
-				tth: { hours: 1, minutes: 0, seconds: 0 },
-				clean: false,
-				emoji: '',
-				logReference: 'WebApi',
-				language,
-			}]
+			if (!silent) {
+				const data = [{
+					lat: 0,
+					lon: 0,
+					message: { content: message },
+					target: human.id,
+					type: human.type,
+					name: human.name,
+					tth: { hours: 1, minutes: 0, seconds: 0 },
+					clean: false,
+					emoji: '',
+					logReference: 'WebApi',
+					language,
+				}]
 
-			data.forEach((job) => {
-				if (['discord:user', 'discord:channel', 'webhook'].includes(job.type)) fastify.discordQueue.push(job)
-				if (['telegram:user', 'telegram:channel'].includes(job.type)) fastify.telegramQueue.push(job)
-			})
+				data.forEach((job) => {
+					if (['discord:user', 'discord:channel', 'webhook'].includes(job.type)) fastify.discordQueue.push(job)
+					if (['telegram:user', 'telegram:channel'].includes(job.type)) fastify.telegramQueue.push(job)
+				})
+			}
 
 			return {
 				status: 'ok',
-				message,
+				message: silent ? '' : message,
+				newUids,
+				alreadyPresent: alreadyPresent.length,
+				updates: updates.length,
+				insert: insert.length,
 			}
 		} catch (err) {
 			fastify.logger.error(`API: ${req.ip} ${req.routeOptions.method} ${req.routeOptions.url}`, err)
