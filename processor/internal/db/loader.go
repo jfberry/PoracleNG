@@ -33,7 +33,8 @@ type AllData struct {
 	Lures     []*LureTracking
 	Gyms      []*GymTracking
 	Nests     []*NestTracking
-	Forts     []*FortTracking
+	Forts       []*FortTracking
+	Maxbattles  []*MaxbattleTracking
 }
 
 // LoadAll loads all tracking data from the database.
@@ -82,6 +83,10 @@ func LoadAll(db *sqlx.DB) (*AllData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load forts: %w", err)
 	}
+	maxbattles, err := LoadMaxbattles(db)
+	if err != nil {
+		return nil, fmt.Errorf("load maxbattles: %w", err)
+	}
 	return &AllData{
 		Humans:    humans,
 		Monsters:  monsters,
@@ -93,6 +98,7 @@ func LoadAll(db *sqlx.DB) (*AllData, error) {
 		Lures:     lures,
 		Gyms:      gyms,
 		Nests:     nests,
-		Forts:     forts,
+		Forts:      forts,
+		Maxbattles: maxbattles,
 	}, nil
 }

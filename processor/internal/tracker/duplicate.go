@@ -135,6 +135,24 @@ func (dc *DuplicateCache) CheckLure(pokestopID string, expiration int64) bool {
 	return false
 }
 
+// CheckMaxbattle returns true if this maxbattle was already seen (duplicate).
+// Key: {station_id}M{battle_end}{pokemon_id}
+func (dc *DuplicateCache) CheckMaxbattle(stationID string, battleEnd int64, pokemonID int) bool {
+	key := fmt.Sprintf("%sM%d%d", stationID, battleEnd, pokemonID)
+
+	if dc.cache.Get(key) != nil {
+		return true
+	}
+
+	now := time.Now().Unix()
+	remaining := battleEnd - now + 300
+	if remaining <= 0 {
+		remaining = 60
+	}
+	dc.cache.Set(key, true, time.Duration(remaining)*time.Second)
+	return false
+}
+
 // CheckNest returns true if this nest was already seen (duplicate).
 // Key: {nest_id}_{pokemon_id}_{reset_time}
 func (dc *DuplicateCache) CheckNest(nestID int64, pokemonID int, resetTime int64) bool {

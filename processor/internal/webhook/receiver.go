@@ -27,6 +27,7 @@ type Processor interface {
 	ProcessGym(raw json.RawMessage) error
 	ProcessNest(raw json.RawMessage) error
 	ProcessFortUpdate(raw json.RawMessage) error
+	ProcessMaxbattle(raw json.RawMessage) error
 }
 
 // NewHandler creates a new webhook handler.
@@ -107,6 +108,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "fort_update":
 			if err := h.processor.ProcessFortUpdate(hook.Message); err != nil {
 				log.Errorf("Failed to process fort_update: %s", err)
+			}
+		case "max_battle":
+			if err := h.processor.ProcessMaxbattle(hook.Message); err != nil {
+				log.Errorf("Failed to process max_battle: %s", err)
 			}
 		}
 	}

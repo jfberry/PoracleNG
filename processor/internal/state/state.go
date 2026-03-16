@@ -19,8 +19,9 @@ type State struct {
 	Lures     []*db.LureTracking
 	Gyms      []*db.GymTracking
 	Nests     []*db.NestTracking
-	Forts     []*db.FortTracking
-	Geofence  *geofence.SpatialIndex
+	Forts      []*db.FortTracking
+	Maxbattles []*db.MaxbattleTracking
+	Geofence   *geofence.SpatialIndex
 	Fences    []geofence.Fence
 }
 

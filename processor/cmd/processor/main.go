@@ -194,7 +194,8 @@ type ProcessorService struct {
 	lureMatcher     *matching.LureMatcher
 	gymMatcher      *matching.GymMatcher
 	nestMatcher     *matching.NestMatcher
-	fortMatcher     *matching.FortMatcher
+	fortMatcher       *matching.FortMatcher
+	maxbattleMatcher  *matching.MaxbattleMatcher
 	pvpCfg          *pvp.Config
 	activePokemon   *tracker.ActivePokemonTracker
 	pokemonTypes    *gamedata.PokemonTypes
@@ -295,7 +296,8 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		lureMatcher:     &matching.LureMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		gymMatcher:      &matching.GymMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		nestMatcher:     &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		fortMatcher:     &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		fortMatcher:       &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		maxbattleMatcher:  &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		pvpCfg:          pvpCfg,
 		activePokemon:   activePokemon,
 		pokemonTypes:    pokemonTypes,

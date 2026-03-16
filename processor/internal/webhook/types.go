@@ -259,6 +259,31 @@ type NestWebhook struct {
 	ResetTime  int64   `json:"reset_time"`
 }
 
+// MaxbattleWebhook mirrors Golbat's max_battle webhook message.
+type MaxbattleWebhook struct {
+	ID                      string  `json:"id"`
+	Name                    string  `json:"name"`
+	Latitude                float64 `json:"latitude"`
+	Longitude               float64 `json:"longitude"`
+	StartTime               int64   `json:"start_time"`
+	EndTime                 int64   `json:"end_time"`
+	IsBattleAvailable       bool    `json:"is_battle_available"`
+	BattleLevel             int     `json:"battle_level"`
+	BattleStart             int64   `json:"battle_start"`
+	BattleEnd               int64   `json:"battle_end"`
+	BattlePokemonID         int     `json:"battle_pokemon_id"`
+	BattlePokemonForm       int     `json:"battle_pokemon_form"`
+	BattlePokemonCostume    int     `json:"battle_pokemon_costume"`
+	BattlePokemonGender     int     `json:"battle_pokemon_gender"`
+	BattlePokemonAlignment  int     `json:"battle_pokemon_alignment"`
+	BattlePokemonBreadMode  int     `json:"battle_pokemon_bread_mode"`
+	BattlePokemonMove1      int     `json:"battle_pokemon_move_1"`
+	BattlePokemonMove2      int     `json:"battle_pokemon_move_2"`
+	TotalStationedPokemon   int     `json:"total_stationed_pokemon"`
+	TotalStationedGmax      int     `json:"total_stationed_gmax"`
+	Updated                 int64   `json:"updated"`
+}
+
 // FortWebhook mirrors a fort_update webhook message.
 type FortWebhook struct {
 	ID          string   `json:"id"`
