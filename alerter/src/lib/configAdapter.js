@@ -105,6 +105,16 @@ function adaptConfig(toml) {
 	// ---- general ----
 	const gen = toml.general || {}
 	config.general = convertKeys(gen)
+
+	// snakeToCamel produces rdmUrl/reactMapUrl/rocketMadUrl but code expects rdmURL/reactMapURL/rocketMadURL
+	const urlRenames = { rdmUrl: 'rdmURL', reactMapUrl: 'reactMapURL', rocketMadUrl: 'rocketMadURL', shortlinkProviderUrl: 'shortlinkProviderURL' }
+	for (const [from, to] of Object.entries(urlRenames)) {
+		if (config.general[from] !== undefined && config.general[to] === undefined) {
+			config.general[to] = config.general[from]
+			delete config.general[from]
+		}
+	}
+
 	defaults(config.general, {
 		environment: 'production',
 		alertMinimumTime: 120,
