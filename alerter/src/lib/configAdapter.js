@@ -408,11 +408,11 @@ function adaptConfig(toml) {
 		pvp: false,
 	})
 	config.logger = {
-		consoleLogLevel: lg.level || 'verbose',
-		logLevel: lg.level || 'verbose',
+		consoleLogLevel: lg.console_log_level || lg.level || 'verbose',
+		logLevel: lg.log_level || lg.level || 'verbose',
 		enableLogs,
 		timingStats: lg.timing_stats !== undefined ? lg.timing_stats : false,
-		dailyLogLimit: lg.max_age || 7,
+		dailyLogLimit: lg.daily_log_limit || lg.max_age || 7,
 		webhookLogLimit: lg.webhook_log_limit || 12,
 	}
 

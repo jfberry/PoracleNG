@@ -451,6 +451,8 @@ pokestop_url = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fa
 
 [logging]
 level = "verbose"                        # log level for both console and file output
+# console_log_level = "info"             # alerter only: override console log level
+# log_level = "info"                     # alerter only: override file log level
 timing_stats = false                     # increase log level of key timing stats to 'verbose'
 max_age = 7                              # days to keep log files
 max_size = 50                            # max log file size in megabytes

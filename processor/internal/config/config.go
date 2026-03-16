@@ -33,6 +33,8 @@ type LocaleConfig struct {
 
 type LoggingConfig struct {
 	Level              string `toml:"level"`
+	LogLevel           string `toml:"log_level"`
+	ConsoleLogLevel    string `toml:"console_log_level"`
 	FileLoggingEnabled bool   `toml:"file_logging_enabled"`
 	Filename           string `toml:"filename"`
 	MaxSize            int    `toml:"max_size"`
@@ -259,6 +261,14 @@ func Load(baseDir string) (*Config, error) {
 	}
 
 	// Logging defaults — file logging is on by default for the processor
+	// Resolve level: prefer 'level', fall back to 'log_level' or 'console_log_level' (from migrated configs)
+	if cfg.Logging.Level == "" {
+		if cfg.Logging.LogLevel != "" {
+			cfg.Logging.Level = cfg.Logging.LogLevel
+		} else if cfg.Logging.ConsoleLogLevel != "" {
+			cfg.Logging.Level = cfg.Logging.ConsoleLogLevel
+		}
+	}
 	if cfg.Logging.Filename == "" {
 		cfg.Logging.Filename = "logs/processor.log"
 		cfg.Logging.FileLoggingEnabled = true
