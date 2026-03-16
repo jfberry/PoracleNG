@@ -5,6 +5,7 @@ import (
 	"flag"
 	"io"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"sync"
@@ -126,6 +127,9 @@ func main() {
 
 	// Prometheus metrics
 	mux.Handle("/metrics", promhttp.Handler())
+
+	// pprof endpoints (cpu, heap, goroutine, etc.)
+	mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
 
 	server := &http.Server{
 		Addr:    cfg.Processor.ListenAddr(),
