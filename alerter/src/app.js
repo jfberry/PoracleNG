@@ -204,6 +204,15 @@ const UserRateChecker = require('./userRateLimit')
 
 const rateChecker = new UserRateChecker(config)
 
+function notifyProcessorReload() {
+	if (config.processor.url) {
+		const axios = require('axios')
+		axios.post(`${config.processor.url}/api/reload`).catch((err) => {
+			log.error(`Failed to notify processor of reload: ${err.message}`)
+		})
+	}
+}
+
 async function processMessages(msgs) {
 	let newRateLimits = false
 
@@ -256,6 +265,7 @@ async function processMessages(msgs) {
 							} else {
 								await query.updateQuery('humans', { enabled: 0 }, { id: msg.target })
 							}
+							notifyProcessorReload()
 						} catch (err) {
 							log.error('Failed to stop user messages', err)
 						}
@@ -846,15 +856,7 @@ async function run() {
 		})
 	}
 
-	fastify.decorate('triggerReloadAlerts', () => {
-		// Notify the Go processor to reload its in-memory data
-		if (config.processor.url) {
-			const axios = require('axios')
-			axios.post(`${config.processor.url}/api/reload`).catch((err) => {
-				log.error(`Failed to notify processor of reload: ${err.message}`)
-			})
-		}
-	})
+	fastify.decorate('triggerReloadAlerts', notifyProcessorReload)
 
 	const routeFiles = await readDir(`${__dirname}/routes/`)
 	const routes = routeFiles.map((fileName) => `${__dirname}/routes/${fileName}`)
