@@ -126,9 +126,14 @@ function writeToml(obj, prefix = '') {
 
 	for (const [key, value] of tables) {
 		const fullKey = prefix ? `${prefix}.${tomlKey(key)}` : tomlKey(key)
-		lines.push('')
-		lines.push(`[${fullKey}]`)
-		lines.push(writeToml(value, fullKey))
+		// Check if this table has any direct key-value pairs (not just sub-tables)
+		const hasDirect = Object.values(value).some((v) => v !== null && v !== undefined && (typeof v !== 'object' || Array.isArray(v) || !hasOnlyConfigKeys(v)))
+		const content = writeToml(value, fullKey)
+		if (hasDirect) {
+			lines.push('')
+			lines.push(`[${fullKey}]`)
+		}
+		lines.push(content)
 	}
 
 	for (const [key, arr] of arrayTables) {
