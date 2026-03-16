@@ -226,13 +226,18 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		}
 	}
 
+	if !geo.IsLocaleSupported(cfg.Locale.TimeFormat) {
+		log.Warnf("Unsupported locale.timeformat %q — Moment.js shortcuts (LTS, L, etc.) will fall back to en-gb. Supported locales: %v",
+			cfg.Locale.TimeFormat, geo.SupportedLocales())
+	}
+
 	weatherTracker := tracker.NewWeatherTracker()
-	timeLayout := geo.ConvertTimeFormat(cfg.Locale.Time)
+	timeLayout := geo.ConvertTimeFormat(cfg.Locale.Time, cfg.Locale.TimeFormat)
 	eventChecker := enrichment.NewPogoEventChecker(timeLayout)
 
 	enricher := enrichment.New(
 		timeLayout,
-		geo.ConvertTimeFormat(cfg.Locale.Date),
+		geo.ConvertTimeFormat(cfg.Locale.Date, cfg.Locale.TimeFormat),
 		weatherTracker,
 		eventChecker,
 	)

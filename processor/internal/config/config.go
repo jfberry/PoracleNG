@@ -26,8 +26,9 @@ type Config struct {
 }
 
 type LocaleConfig struct {
-	Time string `toml:"time"`
-	Date string `toml:"date"`
+	TimeFormat string `toml:"timeformat"`
+	Time       string `toml:"time"`
+	Date       string `toml:"date"`
 }
 
 type LoggingConfig struct {
@@ -229,11 +230,14 @@ func Load(baseDir string) (*Config, error) {
 	if cfg.Stats.UltraRare == 0 {
 		cfg.Stats.UltraRare = 0.01
 	}
+	if cfg.Locale.TimeFormat == "" {
+		cfg.Locale.TimeFormat = "en-gb"
+	}
 	if cfg.Locale.Time == "" {
-		cfg.Locale.Time = "HH:mm:ss"
+		cfg.Locale.Time = "LTS"
 	}
 	if cfg.Locale.Date == "" {
-		cfg.Locale.Date = "DD/MM/YYYY"
+		cfg.Locale.Date = "L"
 	}
 	if cfg.Weather.ShowAlteredPokemonMaxCount == 0 {
 		cfg.Weather.ShowAlteredPokemonMaxCount = 10
