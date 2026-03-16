@@ -15,7 +15,7 @@ RUN apk add --no-cache python3 make g++ git
 
 WORKDIR /build
 COPY alerter/package.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev --ignore-scripts && npm rebuild
 
 # ---- Stage 3: Runtime image ----
 FROM node:24-alpine
