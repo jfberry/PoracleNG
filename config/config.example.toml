@@ -239,6 +239,21 @@ admins = [""]
 # user_tracking_admins - user/role IDs that can manage other users' tracking
 # user_tracking_admins = ["user_id_1", "role_id_1"]
 #
+# role_subscriptions - user self-service role assignment via !role command
+#   Users can do: !role list, !role add <name>, !role remove <name>, !role membership
+#   Each entry is a guild with its available roles.
+#   roles: independent roles users can freely add/remove
+#   exclusive_roles: groups where user can only hold one role (e.g. team selection)
+#     each entry in the array is a group of mutually exclusive roles
+#   Roles are auto-removed when a user loses their poracle membership.
+# [[discord.role_subscriptions]]
+# guild = "745734887746568214"
+# roles = { alerts = "917438265009774633", raids = "917438323964903442" }
+# exclusive_roles = [
+#   { "team-a" = "919255663841017917", "team-b" = "919255700390170636" },
+#   { "color-red" = "919255733592289341", "color-blue" = "919255750948323340" },
+# ]
+#
 # command_security - restrict commands to specific users/roles
 #   valid commands: monster, pvp, gym, invasion, lure, nest, quest, egg,
 #   raid, fort, area, location, profile, tracked, script, start, language

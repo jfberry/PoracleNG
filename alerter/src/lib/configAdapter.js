@@ -245,6 +245,18 @@ function adaptConfig(toml) {
 		webhookTracking: adminsArrayToObject(disc.webhook_admins),
 		userTracking: disc.user_tracking_admins || undefined,
 	}
+	// Convert array-of-tables role_subscriptions → object-keyed userRoleSubscription
+	delete config.discord.roleSubscriptions
+	if (disc.role_subscriptions && Array.isArray(disc.role_subscriptions)) {
+		const urs = {}
+		for (const entry of disc.role_subscriptions) {
+			if (!entry.guild) continue
+			urs[entry.guild] = {}
+			if (entry.roles) urs[entry.guild].roles = entry.roles
+			if (entry.exclusive_roles) urs[entry.guild].exclusiveRoles = entry.exclusive_roles
+		}
+		config.discord.userRoleSubscription = urs
+	}
 	// command_security keys are command names — convertKeys already handled snake→camel
 	defaults(config.discord, {
 		enabled: true,

@@ -327,6 +327,18 @@ function main() {
 			}
 			delete unified[section].delegated_administration
 		}
+
+		// Convert userRoleSubscription from guild-keyed object to array-of-tables
+		const urs = unified[section].user_role_subscription
+		if (urs && typeof urs === 'object' && Object.keys(urs).length > 0) {
+			unified[section].role_subscriptions = Object.entries(urs).map(([guild, details]) => {
+				const entry = { guild }
+				if (details.roles) entry.roles = details.roles
+				if (details.exclusive_roles) entry.exclusive_roles = details.exclusive_roles
+				return entry
+			})
+			delete unified[section].user_role_subscription
+		}
 	}
 
 	// Locale
