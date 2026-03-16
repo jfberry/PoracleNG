@@ -343,6 +343,44 @@
 {
   "id": 1,
   "language": "en",
+  "type": "maxbattle",
+  "default": true,
+  "platform": "discord",
+  "template": {
+    "embed": {
+      "title": "{{levelName}} against {{fullName}} at {{{stationName}}}!",
+      "description": "quick: {{quickMoveName}}, charge: {{chargeMoveName}}\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+      "color": "{{color}}",
+      "thumbnail": {
+        "url": "{{{imgUrl}}}"
+      },
+      "author": {
+        "name": "{{fullName}} {{levelName}}. End: {{time}} in {{tthm}}m {{tths}}s",
+        "icon_url": "{{{imgUrl}}}"
+      },
+      "image": {
+        "url": "{{{staticMap}}}"
+      }
+    }
+  }
+},
+{
+  "id": 1,
+  "language": "en",
+  "type": "maxbattle",
+  "default": true,
+  "platform": "telegram",
+  "template": {
+    "content": "{{levelName}} against {{fullName}} at {{{stationName}}}!\nquick: {{quickMoveName}}, charge: {{chargeMoveName}}\nEnd: {{time}} in {{tthm}}m {{tths}}s\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+    "parse_mode": "Markdown",
+    "sticker": "{{{stickerUrl}}}",
+    "location": true,
+    "webpage_preview": true
+  }
+},
+{
+  "id": 1,
+  "language": "en",
   "type": "weatherchange",
   "default": true,
   "platform": "discord",

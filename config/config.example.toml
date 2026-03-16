@@ -188,6 +188,7 @@ disable_weather = false
 disable_nest = false
 disable_gym = false
 disable_fort_update = false
+disable_max_battle = false
 process_confirmed_invasion_lineups = false
 disable_unconfirmed_invasion = false
 

@@ -208,5 +208,23 @@
     "test": "remove",
     "location": "current",
     "webhook": {"change_type": "removal", "old": {"id": "f7430347f5c34facb838be376f16adea.16", "type": "pokestop", "name": "Journey Through Trees And Time", "description": null, "image_url": "http://lh3.googleusercontent.com/VSBh5Q5W6z5LHBLDFQqBNtCTBxqe0HAy4H9W_Um2_AVUg8Rh40u1tYteSc2TVLtPAd4v7c83umdTh6RUVNpOkACjt9saHNj6a_2XYRsGYg", "location": {"lat": 50.975598, "lon": 6.942527}}}
+  },
+  {
+    "type": "max_battle",
+    "test": "level1",
+    "location": "current",
+    "webhook": {"id":"764f71bb797c4ff292f05f96ebe1ea94.23","latitude":51.34488,"longitude":0.741318,"name":"British Chestnut","start_time":1773637200,"end_time":1773723600,"is_battle_available":true,"battle_level":1,"battle_start":1773666000,"battle_end":1773723600,"battle_pokemon_id":58,"battle_pokemon_form":280,"battle_pokemon_costume":0,"battle_pokemon_gender":1,"battle_pokemon_alignment":0,"battle_pokemon_bread_mode":1,"battle_pokemon_move_1":209,"battle_pokemon_move_2":131,"total_stationed_pokemon":null,"total_stationed_gmax":null,"updated":1773678766}
+  },
+  {
+    "type": "max_battle",
+    "test": "level3",
+    "location": "current",
+    "webhook": {"id":"1f15601369d641eeb4e75e145acde7dd.23","latitude":51.309852,"longitude":0.887046,"name":"Redsquare Architects","start_time":1773676800,"end_time":1773680400,"is_battle_available":true,"battle_level":3,"battle_start":1773676800,"battle_end":1773680400,"battle_pokemon_id":870,"battle_pokemon_form":2325,"battle_pokemon_costume":0,"battle_pokemon_gender":3,"battle_pokemon_alignment":0,"battle_pokemon_bread_mode":1,"battle_pokemon_move_1":243,"battle_pokemon_move_2":22,"total_stationed_pokemon":0,"total_stationed_gmax":0,"updated":1773677554}
+  },
+  {
+    "type": "max_battle",
+    "test": "gmax",
+    "location": "current",
+    "webhook": {"id":"b9876543210fedcba9876543210fedcb.16","latitude":51.28000,"longitude":1.07500,"name":"Cathedral Square","start_time":1773637200,"end_time":1773723600,"is_battle_available":true,"battle_level":7,"battle_start":1773673200,"battle_end":1773676800,"battle_pokemon_id":815,"battle_pokemon_form":0,"battle_pokemon_costume":0,"battle_pokemon_gender":3,"battle_pokemon_alignment":0,"battle_pokemon_bread_mode":2,"battle_pokemon_move_1":281,"battle_pokemon_move_2":31,"total_stationed_pokemon":0,"total_stationed_gmax":0,"updated":1773675100}
   }
 ]
