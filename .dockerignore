@@ -1,0 +1,14 @@
+.git
+.github
+*.md
+logs/
+alerter/node_modules
+alerter/logs
+alerter/.cache
+alerter/nominatimData
+processor/poracle-processor
+processor/test_*.sh
+resources/data/*.json
+resources/locale/*.json
+config/config.toml
+config/.cache
