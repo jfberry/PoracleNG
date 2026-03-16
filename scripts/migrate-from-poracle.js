@@ -502,7 +502,7 @@ async function main() {
 	// Copy DTS subdirectory (additional DTS files)
 	const oldDtsDir = path.join(oldConfigDir, 'dts')
 	if (fs.existsSync(oldDtsDir)) {
-		const dtsFiles = fs.readdirSync(oldDtsDir).filter((f) => f.endsWith('.json'))
+		const dtsFiles = fs.readdirSync(oldDtsDir).filter((f) => fs.statSync(path.join(oldDtsDir, f)).isFile())
 		if (dtsFiles.length > 0) {
 			const destDtsDir = path.join(CONFIG_DIR, 'dts')
 			fs.mkdirSync(destDtsDir, { recursive: true })
