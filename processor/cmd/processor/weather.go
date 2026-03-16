@@ -16,7 +16,7 @@ func (ps *ProcessorService) ProcessWeather(raw json.RawMessage) error {
 		return err
 	}
 
-	cellID := weather.S2CellID
+	cellID := string(weather.S2CellID)
 	if cellID == "" {
 		cellID = tracker.GetWeatherCellID(weather.Latitude, weather.Longitude)
 	}

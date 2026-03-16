@@ -5,6 +5,21 @@ import (
 	"strconv"
 )
 
+// FlexString handles JSON strings that may arrive as either "value" or bare numbers.
+type FlexString string
+
+func (fs *FlexString) UnmarshalJSON(data []byte) error {
+	n := len(data)
+	if n >= 2 && data[0] == '"' && data[n-1] == '"' {
+		// Quoted string: strip quotes directly, no allocation for simple cases
+		*fs = FlexString(data[1 : n-1])
+		return nil
+	}
+	// Bare number/value: use as-is
+	*fs = FlexString(data)
+	return nil
+}
+
 // FlexBool handles JSON booleans that may arrive as true/false or 0/1.
 type FlexBool bool
 
@@ -125,7 +140,7 @@ type RSVP struct {
 
 // WeatherWebhook mirrors Golbat's weather webhook message.
 type WeatherWebhook struct {
-	S2CellID          string        `json:"s2_cell_id"`
+	S2CellID          FlexString    `json:"s2_cell_id"`
 	Latitude          float64       `json:"latitude"`
 	Longitude         float64       `json:"longitude"`
 	Polygon           [4][2]float64 `json:"polygon"`
