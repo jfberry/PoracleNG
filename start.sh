@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-PROCESSOR_BIN="$ROOT/processor/processor"
+PROCESSOR_BIN="$ROOT/processor/poracleng-processor"
 ALERTER_DIR="$ROOT/alerter"
 CONFIG_FILE="$ROOT/config/config.toml"
 HEALTH_URL=""
@@ -52,7 +52,7 @@ fi
 # Processor binary
 if [ ! -x "$PROCESSOR_BIN" ]; then
 	echo "[start] Processor binary not found, building..."
-	(cd "$ROOT/processor" && go build -o processor ./cmd/processor) || fail "Failed to build processor"
+	(cd "$ROOT/processor" && go build -o poracleng-processor ./cmd/processor) || fail "Failed to build processor"
 	echo "[start] Processor built"
 fi
 
@@ -118,7 +118,7 @@ fi
 # ---- Start alerter ----
 
 echo "[start] Starting alerter..."
-(cd "$ALERTER_DIR" && node src/app.js) 2>&1 | sed 's/^/[alerter] /' &
+"$ALERTER_DIR/poracleng-alerter" 2>&1 | sed 's/^/[alerter] /' &
 ALERTER_PID=$!
 
 echo "[start] Both components running (processor=$PROCESSOR_PID, alerter=$ALERTER_PID)"

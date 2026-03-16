@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Wrapper to run alerter with a proper process name
+cd "$(dirname "$0")" || exit 1
+exec -a poracleng-alerter node src/app.js "$@"
