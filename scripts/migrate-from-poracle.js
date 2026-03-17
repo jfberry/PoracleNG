@@ -217,9 +217,12 @@ function buildUnifiedConfig(defaults, local) {
 		database: dbConn.database || 'poracle',
 	}
 	const scannerType = (local.database && local.database.scannerType) || (defaults.database && defaults.database.scannerType)
-	if (scannerType === 'rdm') unified.database.scanner_type = 'rdm'
 	const scanner = (local.database && local.database.scanner) || (userOverrides.database && userOverrides.database.scanner)
 	if (scanner) unified.database.scanner = convertKeysToSnake(scanner)
+	if (scannerType === 'rdm') {
+		if (!unified.database.scanner) unified.database.scanner = {}
+		unified.database.scanner.type = 'rdm'
+	}
 
 	// Networking — processor takes the old Poracle port, alerter gets port+1
 	const serverOverrides = userOverrides.server || {}
@@ -660,11 +663,11 @@ function printSummary(copied, skipped, unified) {
 	console.log()
 
 	// Check for scanner type issues
-	const scannerType = unified.database?.scanner_type
+	const scannerType = unified.database?.scanner?.type || unified.database?.scanner_type
 	if (scannerType === 'mad') {
 		console.log('WARNING: Your config had scanner_type = "mad". MAD is no longer')
 		console.log('supported. The default scanner type is now "golbat". If you are')
-		console.log('using RDM, add scanner_type = "rdm" under [database].')
+		console.log('using RDM, add type = "rdm" under [database.scanner].')
 		console.log()
 	}
 

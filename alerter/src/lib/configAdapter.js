@@ -90,7 +90,7 @@ function adaptConfig(toml) {
 			password: db.password || 'poraclepassword',
 			database: db.database || 'poracle',
 		},
-		scannerType: db.scanner_type || 'golbat',
+		scannerType: (db.scanner && db.scanner.type) || db.scanner_type || 'golbat',
 	}
 	if (db.scanner) {
 		config.database.scanner = {

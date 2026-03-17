@@ -24,7 +24,6 @@ port = 3306
 user = "poracleuser"
 password = "poraclepassword"
 database = "poracle"
-# scanner_type = "golbat"               # golbat (default) or rdm
 
 [database.scanner]
 host = "127.0.0.1"
@@ -32,6 +31,7 @@ port = 3306
 user = "scanneruser"
 password = "scannerpassword"
 database = "scannerdb"
+# type = "golbat"                        # golbat (default) or rdm
 
 # ---- Geofence ----
 # Default format is that created at http://geo.jasparke.net/
