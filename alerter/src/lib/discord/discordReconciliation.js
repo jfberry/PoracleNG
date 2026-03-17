@@ -488,7 +488,21 @@ class DiscordReconciliation {
 				throw err
 				// }
 			}
-			const members = await guild.members.fetch({ force: false })
+			let members
+			for (let attempt = 0; attempt < 3; attempt++) {
+				try {
+					members = await guild.members.fetch({ force: false })
+					break
+				} catch (fetchErr) {
+					if (fetchErr.constructor.name === 'GatewayRateLimitError' && attempt < 2) {
+						const retryAfter = (fetchErr.data?.retry_after || 15) * 1000
+						this.log.warn(`Reconciliation (Discord) Guild ${guildId} member fetch rate limited, retrying after ${retryAfter / 1000}s`)
+						await new Promise((resolve) => { setTimeout(resolve, retryAfter + 1000) })
+					} else {
+						throw fetchErr
+					}
+				}
+			}
 			let memberCount = 0
 			for (const member of members.values()) {
 				if (!member.user.bot) {
