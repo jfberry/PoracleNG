@@ -1,5 +1,5 @@
+const fetch = require('node-fetch-native')
 const geofenceTileGenerator = require('../lib/geofenceTileGenerator')
-const { getKojiFences } = require('../util/koji')
 
 module.exports = async (fastify, options) => {
 	fastify.get('/api/geofence/:area/map', options, async (req) => {
@@ -277,7 +277,20 @@ module.exports = async (fastify, options) => {
 			return { status: 'authError', reason: 'incorrect or missing api secret' }
 		}
 
-		await getKojiFences()
+		// Trigger processor reload (re-fetches Koji geofences + reloads state)
+		const processorUrl = fastify.config.processor?.url
+		if (processorUrl) {
+			try {
+				const res = await fetch(`${processorUrl}/api/reload`, { method: 'POST' })
+				if (!res.ok) {
+					fastify.logger.error(`Processor reload returned ${res.status}`)
+					return { status: 'error', reason: `processor returned ${res.status}` }
+				}
+			} catch (err) {
+				fastify.logger.error('Failed to trigger processor reload', err)
+				return { status: 'error', reason: err.message }
+			}
+		}
 
 		return { status: 'ok' }
 	})

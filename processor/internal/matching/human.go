@@ -2,6 +2,7 @@ package matching
 
 import (
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -199,10 +200,8 @@ type raidUserData struct {
 
 func areaOverlap(humanAreas []string, matchedAreas []string) bool {
 	for _, ha := range humanAreas {
-		for _, ma := range matchedAreas {
-			if ha == ma {
-				return true
-			}
+		if slices.Contains(matchedAreas, ha) {
+			return true
 		}
 	}
 	return false

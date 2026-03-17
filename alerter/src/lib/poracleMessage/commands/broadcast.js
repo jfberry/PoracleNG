@@ -1,6 +1,4 @@
-const stripJsonComments = require('strip-json-comments')
-const fs = require('fs')
-const path = require('path')
+const { loadConfigJson } = require('../../configResolver')
 
 exports.run = async (client, msg, args, options) => {
 	try {
@@ -66,13 +64,9 @@ exports.run = async (client, msg, args, options) => {
 
 		const message = args.join(' ')
 
-		let broadcastMessages
-		try {
-			const rawText = stripJsonComments(fs.readFileSync(path.join(__dirname, '../../../../config/broadcast.json'), 'utf8'))
-			broadcastMessages = JSON.parse(rawText)
-		} catch (err) {
-			await msg.reply('Cannot read broadcast.json - see log file for details')
-			throw new Error(`broadcast.json - ${err.message}`)
+		const broadcastMessages = loadConfigJson('broadcast.json')
+		if (!broadcastMessages) {
+			return await msg.reply('No broadcast messages defined - create config/broadcast.json (see examples/broadcast.json)')
 		}
 
 		const telegramMessage = broadcastMessages.find((x) => x.id?.toString() === message && (x.platform === 'telegram' || !x.platform))?.template

@@ -1,4 +1,3 @@
-const importFresh = require('import-fresh')
 const Knex = require('knex')
 const moment = require('moment-timezone')
 const TranslatorFactory = require('../util/translatorFactory')
@@ -48,25 +47,23 @@ function getKnex(conf) {
 }
 
 function getScannerKnex(conf) {
-	if (conf.database.scannerType === 'mad' || conf.database.scannerType === 'rdm' || conf.database.scannerType === 'golbat') {
-		return !Array.isArray(conf.database.scanner)
-			? [Knex({
-				client: 'mysql2',
-				connection: conf.database.scanner,
-				pool: { min: 0, max: conf.tuning.maxDatabaseConnections },
-			})] : conf.database.scanner.map((scanner) => Knex({
-				client: 'mysql2',
-				connection: scanner,
-				pool: { min: 0, max: conf.tuning.maxDatabaseConnections },
-			}))
-	}
+	if (!conf.database.scanner) return null
 
-	return null
+	return !Array.isArray(conf.database.scanner)
+		? [Knex({
+			client: 'mysql2',
+			connection: conf.database.scanner,
+			pool: { min: 0, max: conf.tuning.maxDatabaseConnections },
+		})] : conf.database.scanner.map((scanner) => Knex({
+			client: 'mysql2',
+			connection: scanner,
+			pool: { min: 0, max: conf.tuning.maxDatabaseConnections },
+		}))
 }
 
 module.exports = {
 	Config: (performChecks = true) => {
-		config = importFresh('config')
+		config = require('./configSingleton')
 		dts = dtsLoader.readDtsFiles()
 		geofence = geofenceLoader.readAllGeofenceFiles(config)
 		knex = getKnex(config)

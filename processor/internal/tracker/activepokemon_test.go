@@ -85,7 +85,7 @@ func TestActivePokemonTracker_MaxPerUser(t *testing.T) {
 
 	future := time.Now().Unix() + 3600
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		apt.Register("cell1", "user1", encID(i), ActivePokemon{
 			PokemonID:     i + 1,
 			DisappearTime: future + int64(i),
@@ -109,7 +109,7 @@ func TestActivePokemonTracker_MaxCount(t *testing.T) {
 
 	future := time.Now().Unix() + 3600
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		apt.Register("cell1", "user1", encID(i), ActivePokemon{
 			PokemonID:     i + 1,
 			DisappearTime: future,

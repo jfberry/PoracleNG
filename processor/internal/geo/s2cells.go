@@ -21,7 +21,7 @@ func GetCellCoords(lat, lon float64, level int) [4][2]float64 {
 	cell := s2.CellFromCellID(cellID)
 
 	var coords [4][2]float64
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		vertex := s2.LatLngFromPoint(cell.Vertex(i))
 		coords[i] = [2]float64{vertex.Lat.Degrees(), vertex.Lng.Degrees()}
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -90,11 +91,8 @@ func IsAffectedByWeatherChange(types []int, currentBoost int, newWeather int) bo
 	newBoosts := false
 	if boosted, ok := WeatherTypeBoost[newWeather]; ok {
 		for _, t := range types {
-			for _, b := range boosted {
-				if t == b {
-					newBoosts = true
-					break
-				}
+			if slices.Contains(boosted, t) {
+				newBoosts = true
 			}
 			if newBoosts {
 				break

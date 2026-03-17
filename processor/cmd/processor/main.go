@@ -5,6 +5,7 @@ import (
 	"flag"
 	"io"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"sync"
@@ -26,16 +27,17 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
+	"github.com/pokemon/poracleng/processor/internal/resources"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func main() {
-	configPath := flag.String("config", "config.toml", "path to config file")
+	baseDir := flag.String("basedir", "..", "path to project root directory")
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
+	cfg, err := config.Load(*baseDir)
 	if err != nil {
 		log.Fatalf("Failed to load config: %s", err)
 	}
@@ -51,16 +53,29 @@ func main() {
 		Compress:           cfg.Logging.Compress,
 	})
 
-	database, err := db.OpenDB(cfg.Database.DSN)
+	// Download game resources (monsters, moves, locales, etc.)
+	if err := resources.Download(cfg.BaseDir); err != nil {
+		log.Warnf("Resource download had errors: %s", err)
+	}
+
+	database, err := db.OpenDB(cfg.Database.DSN())
 	if err != nil {
 		log.Fatalf("Failed to open database: %s", err)
 	}
 	defer database.Close()
 
+	// Database migrations: adopt existing Knex DB if needed, then run pending migrations
+	if err := db.AdoptExistingDatabase(database.DB); err != nil {
+		log.Fatalf("Failed to adopt database: %s", err)
+	}
+	if err := db.RunMigrations(database.DB); err != nil {
+		log.Fatalf("Failed to run migrations: %s", err)
+	}
+
 	stateMgr := state.NewManager()
 
 	// Initial load
-	if err := state.Load(stateMgr, database, cfg.Geofence.Paths); err != nil {
+	if err := state.Load(stateMgr, database, cfg.Geofence); err != nil {
 		log.Fatalf("Failed to load initial state: %s", err)
 	}
 
@@ -69,7 +84,7 @@ func main() {
 	proc := NewProcessorService(cfg, stateMgr, database)
 
 	// Weather change consumer
-	if cfg.Weather.EnableChangeAlert {
+	if cfg.Weather.ChangeAlert {
 		go proc.consumeWeatherChanges()
 		log.Infof("Weather change alerts enabled")
 	}
@@ -99,7 +114,7 @@ func main() {
 
 	// API endpoints
 	mux.HandleFunc("/api/reload", api.HandleReload(func() error {
-		return state.Load(stateMgr, database, cfg.Geofence.Paths)
+		return state.Load(stateMgr, database, cfg.Geofence)
 	}))
 	mux.HandleFunc("/api/weather", api.HandleWeather(proc.weather))
 	mux.HandleFunc("/api/stats/rarity", api.HandleStats(func() any { return proc.stats.ExportGroups() }))
@@ -107,11 +122,17 @@ func main() {
 	mux.HandleFunc("/api/stats/shiny-possible", api.HandleStats(func() any { return proc.stats.ExportShinyPossible() }))
 	mux.HandleFunc("/health", api.HandleHealth())
 
+	// Proxy unhandled /api/ requests to the alerter (tracking, config, humans, etc.)
+	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
+
 	// Prometheus metrics
 	mux.Handle("/metrics", promhttp.Handler())
 
+	// pprof endpoints (cpu, heap, goroutine, etc.)
+	mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
+
 	server := &http.Server{
-		Addr:    cfg.Server.ListenAddr,
+		Addr:    cfg.Processor.ListenAddr(),
 		Handler: mux,
 	}
 
@@ -123,7 +144,7 @@ func main() {
 		for range ticker.C {
 			log.Debugf("Periodic reload triggered")
 			start := time.Now()
-			if err := state.Load(stateMgr, database, cfg.Geofence.Paths); err != nil {
+			if err := state.Load(stateMgr, database, cfg.Geofence); err != nil {
 				log.Errorf("Periodic reload failed: %s", err)
 				metrics.StateReloads.WithLabelValues("error").Inc()
 			} else {
@@ -135,7 +156,7 @@ func main() {
 
 	// Start server
 	go func() {
-		log.Infof("Processor starting on %s", cfg.Server.ListenAddr)
+		log.Infof("Processor starting on %s", cfg.Processor.ListenAddr())
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %s", err)
 		}
@@ -197,24 +218,30 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 
 	var activePokemon *tracker.ActivePokemonTracker
 	var pokemonTypes *gamedata.PokemonTypes
-	if cfg.Weather.ShowAlteredPokemon && cfg.Weather.MonstersJSONPath != "" {
-		pt, err := gamedata.LoadPokemonTypes(cfg.Weather.MonstersJSONPath)
+	if cfg.Weather.ShowAlteredPokemon {
+		monstersPath := cfg.ResolvePath("resources/data/monsters.json")
+		pt, err := gamedata.LoadPokemonTypes(monstersPath)
 		if err != nil {
-			log.Errorf("Failed to load pokemon types from %s: %s (active pokemon tracking disabled)", cfg.Weather.MonstersJSONPath, err)
+			log.Errorf("Failed to load pokemon types from %s: %s (active pokemon tracking disabled)", monstersPath, err)
 		} else {
 			pokemonTypes = pt
 			activePokemon = tracker.NewActivePokemonTracker(50)
-			log.Infof("Active pokemon tracking enabled with %s", cfg.Weather.MonstersJSONPath)
+			log.Infof("Active pokemon tracking enabled with %s", monstersPath)
 		}
 	}
 
+	if !geo.IsLocaleSupported(cfg.Locale.TimeFormat) {
+		log.Warnf("Unsupported locale.timeformat %q — Moment.js shortcuts (LTS, L, etc.) will fall back to en-gb. Supported locales: %v",
+			cfg.Locale.TimeFormat, geo.SupportedLocales())
+	}
+
 	weatherTracker := tracker.NewWeatherTracker()
-	timeLayout := geo.ConvertTimeFormat(cfg.Locale.Time)
+	timeLayout := geo.ConvertTimeFormat(cfg.Locale.Time, cfg.Locale.TimeFormat)
 	eventChecker := enrichment.NewPogoEventChecker(timeLayout)
 
 	enricher := enrichment.New(
 		timeLayout,
-		geo.ConvertTimeFormat(cfg.Locale.Date),
+		geo.ConvertTimeFormat(cfg.Locale.Date, cfg.Locale.TimeFormat),
 		weatherTracker,
 		eventChecker,
 	)
@@ -249,7 +276,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		stateMgr: stateMgr,
 		database: database,
 		enricher: enricher,
-		sender:       webhook.NewSender(cfg.Alerter.URL, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
+		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),
 		encounters:   tracker.NewEncounterTracker(),

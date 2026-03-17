@@ -26,13 +26,13 @@ func TestStatsTrackerRarity(t *testing.T) {
 	}
 
 	// Record lots of sightings
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		st.RecordSighting(25, false, false) // Very common
 	}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		st.RecordSighting(150, false, false) // Uncommon
 	}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		st.RecordSighting(151, false, false) // Rare
 	}
 	st.RecordSighting(132, false, false) // Ultra rare
@@ -57,7 +57,7 @@ func TestStatsTrackerShiny(t *testing.T) {
 	st := NewStatsTracker(testStatsConfig())
 
 	// Record IV-scanned encounters with some shiny
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		st.RecordSighting(25, true, i < 2) // 2 shiny out of 200
 	}
 
@@ -82,7 +82,7 @@ func TestStatsTrackerShinyMinEncounters(t *testing.T) {
 	st := NewStatsTracker(testStatsConfig())
 
 	// Record fewer than minIVSeenForShiny encounters
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		st.RecordSighting(25, true, i == 0) // 1 shiny out of 50
 	}
 

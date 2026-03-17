@@ -35,10 +35,6 @@ class Weather extends Controller {
 				}
 			}
 
-			const nowTimestamp = Math.floor(Date.now() / 1000)
-			const currentHourTimestamp = nowTimestamp - (nowTimestamp % 3600)
-			const nextHourTimestamp = currentHourTimestamp + 3600
-
 			this.log.info(`${logReference}: Weather change received from processor: ${data.old_gameplay_condition} -> ${data.gameplay_condition} (source=${data.source})`)
 
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })

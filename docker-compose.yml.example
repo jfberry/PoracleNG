@@ -1,0 +1,26 @@
+services:
+  poracle_db:
+    image: mariadb:10.11
+    restart: always
+    command: ['mysqld', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci']
+    environment:
+      MYSQL_ROOT_PASSWORD: poracle_secure_root_database_password
+      MYSQL_DATABASE: poracle_database
+      MYSQL_USER: poracle_user
+      MYSQL_PASSWORD: poracle_secure_database_password
+    volumes:
+      - ./poracledb:/var/lib/mysql
+
+  poracle:
+    image: ghcr.io/jfberry/poracleng:latest
+    restart: always
+    ports:
+      - "127.0.0.1:3030:3030"   # Processor (webhook receiver + API)
+      # Alerter port only needed if scraping alerter Prometheus metrics directly.
+      # All API calls are proxied via the processor.
+      #- "127.0.0.1:3031:3031"
+    depends_on:
+      - poracle_db
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs

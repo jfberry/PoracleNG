@@ -1,5 +1,5 @@
 const handlebars = require('handlebars')
-const config = require('config')
+const config = require('./configSingleton')
 const moreHandlebars = require('./more-handlebars')
 const partials = require('./partials')
 const {

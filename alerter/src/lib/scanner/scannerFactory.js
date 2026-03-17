@@ -1,17 +1,14 @@
 const RdmScanner = require('./rdmScanner')
 const GolbatScanner = require('./golbatScanner')
-const MadScanner = require('./madScanner')
 
 function createScanner(db, scannerType) {
+	if (!db) return null
+
 	switch (scannerType) {
 		case 'rdm':
 			return new RdmScanner(db)
-		case 'golbat':
-			return new GolbatScanner(db)
-		case 'mad':
-			return new MadScanner(db)
 		default:
-			return null
+			return new GolbatScanner(db)
 	}
 }
 

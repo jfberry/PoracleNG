@@ -53,7 +53,7 @@ exports.run = async (client, msg, args, options) => {
 		const argTypes = args.filter((arg) => typeArray.includes(arg))
 
 		// Substitute aliases
-		const pokemonAlias = require('../../../../config/pokemonAlias.json')
+		const pokemonAlias = require('../../pokemonAlias').getPokemonAlias()
 		for (let i = args.length - 1; i >= 0; i--) {
 			let alias = pokemonAlias[args[i]]
 			if (alias) {

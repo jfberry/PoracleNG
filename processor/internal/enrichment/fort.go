@@ -7,8 +7,8 @@ import (
 
 // Fort builds enrichment fields for a fort_update webhook.
 // Expiration is reset_time + 7 days.
-func (e *Enricher) Fort(fort *webhook.FortWebhook, resetTime int64) map[string]interface{} {
-	m := make(map[string]interface{})
+func (e *Enricher) Fort(fort *webhook.FortWebhook, resetTime int64) map[string]any {
+	m := make(map[string]any)
 
 	expiration := resetTime + 7*24*60*60
 	tz := geo.GetTimezone(fort.Latitude, fort.Longitude)

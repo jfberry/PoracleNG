@@ -1,7 +1,12 @@
 const fs = require('fs')
+const path = require('path')
 const Fetch = require('node-fetch-native')
 
 const { log } = require('../lib/logger')
+
+const RESOURCES_DIR = path.resolve(__dirname, '../../../resources')
+const DATA_DIR = path.join(RESOURCES_DIR, 'data')
+const LOCALE_DIR = path.join(RESOURCES_DIR, 'locale')
 
 const fetch = async (url) => {
 	try {
@@ -16,6 +21,9 @@ const fetch = async (url) => {
 }
 
 const update = async function update() {
+	fs.mkdirSync(DATA_DIR, { recursive: true })
+	fs.mkdirSync(LOCALE_DIR, { recursive: true })
+
 	// Write monsters/moves/items/questTypes
 	try {
 		log.info('Fetching latest Game Master...')
@@ -24,7 +32,7 @@ const update = async function update() {
 		log.info('Creating new Game Master...')
 		Object.keys(gameMaster).forEach((category) => {
 			fs.writeFileSync(
-				`./src/util/${category}.json`,
+				path.join(DATA_DIR, `${category}.json`),
 				JSON.stringify(gameMaster[category], null, 2),
 				'utf8',
 			)
@@ -38,7 +46,7 @@ const update = async function update() {
 		try {
 			log.info('Fetching latest invasions...')
 			fs.writeFileSync(
-				'./src/util/grunts.json',
+				path.join(DATA_DIR, 'grunts.json'),
 				await fetch('https://raw.githubusercontent.com/WatWowMap/event-info/main/grunts/formatted.json'),
 				'utf8',
 			)
@@ -52,20 +60,13 @@ const update = async function update() {
 	try {
 		log.info('Creating new locales...')
 
-		try {
-			fs.mkdirSync('./src/util/locale')
-			log.info('Locale folder created.')
-		} catch (error) {
-			log.info('Locale folder already exists, skipping.')
-		}
-
 		const availableLocales = await fetch('https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/index.json')
 
 		await Promise.all(availableLocales.map(async (locale) => {
 			try {
 				const remoteFiles = await fetch(`https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/static/enRefMerged/${locale}`)
 				fs.writeFileSync(
-					`./src/util/locale/${locale}`,
+					path.join(LOCALE_DIR, locale),
 					JSON.stringify(remoteFiles, null, 2),
 					'utf8',
 				)

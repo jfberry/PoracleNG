@@ -1,9 +1,8 @@
-const fs = require('fs')
-const path = require('path')
+const { loadConfigJson } = require('./configResolver')
 
 class EmojiLookup {
 	constructor(emojis) {
-		this.customEmoji = fs.existsSync(path.join(__dirname, '../../config/emoji.json')) ? require(path.join(__dirname, '../../config/emoji.json')) : {}
+		this.customEmoji = loadConfigJson('emoji.json') || {}
 		this.emojis = emojis
 	}
 

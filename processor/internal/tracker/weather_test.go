@@ -42,7 +42,7 @@ func TestWeatherTrackerInference(t *testing.T) {
 	cellID := "test_cell"
 
 	// Send enough weather observations to trigger a change
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		wt.CheckWeatherOnMonster(cellID, 51.5, -0.1, 3)
 	}
 

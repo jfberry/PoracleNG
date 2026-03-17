@@ -1,5 +1,4 @@
-process.title = 'PoracleJS'
-require('./lib/configFileCreator')()
+process.title = 'poracle-alerter'
 // eslint-disable-next-line no-underscore-dangle
 require('events').EventEmitter.prototype._maxListeners = 100
 const { writeHeapSnapshot } = require('v8')
@@ -205,6 +204,15 @@ const UserRateChecker = require('./userRateLimit')
 
 const rateChecker = new UserRateChecker(config)
 
+function notifyProcessorReload() {
+	if (config.processor.url) {
+		const axios = require('axios')
+		axios.post(`${config.processor.url}/api/reload`).catch((err) => {
+			log.error(`Failed to notify processor of reload: ${err.message}`)
+		})
+	}
+}
+
 async function processMessages(msgs) {
 	let newRateLimits = false
 
@@ -257,6 +265,7 @@ async function processMessages(msgs) {
 							} else {
 								await query.updateQuery('humans', { enabled: 0 }, { id: msg.target })
 							}
+							notifyProcessorReload()
 						} catch (err) {
 							log.error('Failed to stop user messages', err)
 						}
@@ -715,9 +724,11 @@ async function run() {
 		}
 	})
 
+	const { getConfigDir } = require('./lib/configResolver')
+	const cfgDir = getConfigDir()
 	chokidar.watch([
-		path.join(__dirname, '../config/dts.json'),
-		path.join(__dirname, '../config/dts/'),
+		path.join(cfgDir, 'dts.json'),
+		path.join(cfgDir, 'dts'),
 	], {
 		awaitWriteFinish: true,
 	}).on('change', () => {
@@ -845,15 +856,7 @@ async function run() {
 		})
 	}
 
-	fastify.decorate('triggerReloadAlerts', () => {
-		// Notify the Go processor to reload its in-memory data
-		if (config.processor.url) {
-			const axios = require('axios')
-			axios.post(`${config.processor.url}/api/reload`).catch((err) => {
-				log.error(`Failed to notify processor of reload: ${err.message}`)
-			})
-		}
-	})
+	fastify.decorate('triggerReloadAlerts', notifyProcessorReload)
 
 	const routeFiles = await readDir(`${__dirname}/routes/`)
 	const routes = routeFiles.map((fileName) => `${__dirname}/routes/${fileName}`)
@@ -878,23 +881,5 @@ if (NODE_MAJOR_VERSION < 16) {
 	process.exit(1)
 }
 
-knex.migrate.latest({
-	directory: path.join(__dirname, './lib/db/migrations'),
-	tableName: 'migrations',
-}).then(() => {
-	startPoracle()
-}).catch((err) => {
-	// eslint-disable-next-line no-console
-	console.error(err)
-
-	log.error('Migration failed', err)
-
-	if (process.argv.includes('--force')) {
-		startPoracle()
-	} else {
-		// eslint-disable-next-line no-console
-		console.error('Migration failed - exiting PoracleJS')
-
-		process.exit(1)
-	}
-})
+// Database migrations are handled by the Go processor on startup.
+startPoracle()

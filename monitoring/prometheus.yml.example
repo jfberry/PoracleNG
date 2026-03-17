@@ -1,0 +1,16 @@
+# prometheus.yml
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  - job_name: "poracle_processor"
+    static_configs:
+      - targets: ["127.0.0.1:3030"]
+        labels:
+          instance: "poracle-processor"
+
+  - job_name: "poracle_alerter"
+    static_configs:
+      - targets: ["127.0.0.1:3031"]
+        labels:
+          instance: "poracle-alerter"

@@ -6,8 +6,8 @@ import (
 )
 
 // Lure builds enrichment fields for a lure webhook.
-func (e *Enricher) Lure(lure *webhook.LureWebhook) map[string]interface{} {
-	m := make(map[string]interface{})
+func (e *Enricher) Lure(lure *webhook.LureWebhook) map[string]any {
+	m := make(map[string]any)
 
 	if lure.LureExpiration > 0 {
 		tz := geo.GetTimezone(lure.Latitude, lure.Longitude)

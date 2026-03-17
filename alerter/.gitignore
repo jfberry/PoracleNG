@@ -4,6 +4,7 @@ config/customMaps/*
 config/dts/*.json
 docker-compose.yml
 .cache/*
+!.cache/.gitkeep
 .idea
 .idea/*
 .vscode

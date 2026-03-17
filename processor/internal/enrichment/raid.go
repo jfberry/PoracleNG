@@ -7,8 +7,8 @@ import (
 )
 
 // Raid builds enrichment fields for a raid or egg webhook.
-func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[string]interface{} {
-	m := make(map[string]interface{})
+func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[string]any {
+	m := make(map[string]any)
 	m["firstNotification"] = firstNotification
 
 	tz := geo.GetTimezone(raid.Latitude, raid.Longitude)
@@ -41,9 +41,9 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 
 	// Format RSVP timeslots
 	if len(raid.RSVPs) > 0 {
-		rsvpTimes := make([]map[string]interface{}, len(raid.RSVPs))
+		rsvpTimes := make([]map[string]any, len(raid.RSVPs))
 		for i, r := range raid.RSVPs {
-			rsvpTimes[i] = map[string]interface{}{
+			rsvpTimes[i] = map[string]any{
 				"timeslot":    r.Timeslot,
 				"going_count": r.GoingCount,
 				"maybe_count": r.MaybeCount,

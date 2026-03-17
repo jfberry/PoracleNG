@@ -6,11 +6,14 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang/geo/s2"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
 // AccuWeatherConfig holds configuration for the AccuWeather forecast client.
@@ -29,16 +32,16 @@ type AccuWeatherClient struct {
 	tracker *WeatherTracker
 	client  *http.Client
 
-	mu           sync.Mutex
-	keyUsage     map[string]int // date-key -> count
-	keyUsageDate string        // YYYY-MM-DD
-	cellMutexes  map[string]*sync.Mutex
+	mu            sync.Mutex
+	keyUsage      map[string]int // date-key -> count
+	keyUsageDate  string         // YYYY-MM-DD
+	cellMutexes   map[string]*sync.Mutex
 	cellLocations map[string]string // cellID -> AccuWeather location key
 	cellForecasts map[string]*forecastState
 }
 
 type forecastState struct {
-	forecastTimeout int64 // unix timestamp when forecast expires
+	forecastTimeout  int64 // unix timestamp when forecast expires
 	lastForecastLoad int64 // hour timestamp of last fetch attempt
 }
 
@@ -133,32 +136,46 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 	// Get location key
 	locationKey, err := aw.getLocationKey(cellID)
 	if err != nil {
-		log.Errorf("AccuWeather: failed to get location for cell %s: %v", cellID, err)
+		if isQuotaExhaustedErr(err) {
+			log.Warnf("AccuWeather: cannot get location for cell %s: %v", cellID, err)
+		} else {
+			log.Errorf("AccuWeather: failed to get location for cell %s: %v", cellID, err)
+		}
 		return
 	}
 
 	// Get API key
-	apiKey := aw.getLaziestKey()
+	apiKey, exhausted := aw.getLaziestKey()
 	if apiKey == "" {
-		log.Warn("AccuWeather: no API key available with free quota")
+		if exhausted {
+			log.Warn("AccuWeather: no API key available with free quota")
+		} else {
+			log.Error("AccuWeather: no API keys configured")
+		}
 		return
 	}
 
 	// Fetch 12-hour forecast
 	url := fmt.Sprintf("https://dataservice.accuweather.com/forecasts/v1/hourly/12hour/%s?apikey=%s&details=true&metric=true", locationKey, apiKey)
-	log.Debugf("AccuWeather: fetching forecast for cell %s: %s", cellID, url)
+	log.Debugf("AccuWeather: fetching forecast for cell %s", cellID)
 
 	resp, err := aw.client.Get(url)
 	if err != nil {
+		metrics.AccuWeatherRequests.WithLabelValues("forecast", "error").Inc()
 		log.Errorf("AccuWeather: forecast request failed for cell %s: %v", cellID, err)
 		return
 	}
 	defer resp.Body.Close()
 
+	aw.logRateLimitHeaders(resp, "forecast", apiKey)
+
 	if resp.StatusCode != 200 {
+		metrics.AccuWeatherRequests.WithLabelValues("forecast", fmt.Sprintf("http_%d", resp.StatusCode)).Inc()
 		log.Errorf("AccuWeather: forecast request returned %d for cell %s", resp.StatusCode, cellID)
 		return
 	}
+
+	metrics.AccuWeatherRequests.WithLabelValues("forecast", "success").Inc()
 
 	var forecasts []accuWeatherHourlyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&forecasts); err != nil {
@@ -167,16 +184,16 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 	}
 
 	// Store forecast data in the weather tracker
-	var logString string
+	var logString strings.Builder
 	for _, f := range forecasts {
 		hourTS := f.EpochDateTime - (f.EpochDateTime % 3600)
 		if hourTS >= currentHour {
 			pogoWeather := mapPoGoWeather(f)
 			aw.tracker.SetHourWeather(cellID, hourTS, pogoWeather)
-			logString += fmt.Sprintf("%s=%d ", time.Unix(hourTS, 0).UTC().Format("15:04"), pogoWeather)
+			logString.WriteString(fmt.Sprintf("%s=%d ", time.Unix(hourTS, 0).UTC().Format("15:04"), pogoWeather))
 		}
 	}
-	log.Infof("AccuWeather: cell %s forecast [UTC] %s", cellID, logString)
+	log.Infof("AccuWeather: cell %s forecast [UTC] %s", cellID, logString.String())
 
 	// Calculate next refresh timeout
 	forecastTimeout := aw.calculateForecastTimeout(currentHour)
@@ -205,9 +222,12 @@ func (aw *AccuWeatherClient) getLocationKey(cellID string) (string, error) {
 	lat := ll.Lat.Degrees()
 	lon := ll.Lng.Degrees()
 
-	apiKey := aw.getLaziestKey()
+	apiKey, exhausted := aw.getLaziestKey()
 	if apiKey == "" {
-		return "", fmt.Errorf("no API key available")
+		if exhausted {
+			return "", fmt.Errorf("all API keys exhausted for today")
+		}
+		return "", fmt.Errorf("no API keys configured")
 	}
 
 	url := fmt.Sprintf("https://dataservice.accuweather.com/locations/v1/cities/geoposition/search?apikey=%s&q=%f%%2C%f", apiKey, lat, lon)
@@ -215,13 +235,19 @@ func (aw *AccuWeatherClient) getLocationKey(cellID string) (string, error) {
 
 	resp, err := aw.client.Get(url)
 	if err != nil {
+		metrics.AccuWeatherRequests.WithLabelValues("location", "error").Inc()
 		return "", fmt.Errorf("location request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
+	aw.logRateLimitHeaders(resp, "location", apiKey)
+
 	if resp.StatusCode != 200 {
+		metrics.AccuWeatherRequests.WithLabelValues("location", fmt.Sprintf("http_%d", resp.StatusCode)).Inc()
 		return "", fmt.Errorf("location request returned %d", resp.StatusCode)
 	}
+
+	metrics.AccuWeatherRequests.WithLabelValues("location", "success").Inc()
 
 	var locResp accuWeatherLocationResponse
 	if err := json.NewDecoder(resp.Body).Decode(&locResp); err != nil {
@@ -235,13 +261,15 @@ func (aw *AccuWeatherClient) getLocationKey(cellID string) (string, error) {
 	return locResp.Key, nil
 }
 
-// getLaziestKey returns the API key with the fewest calls today, or "" if all are exhausted.
-func (aw *AccuWeatherClient) getLaziestKey() string {
+// getLaziestKey returns the API key with the fewest calls today.
+// Returns the key and true if keys exist but are exhausted, or "" and false if
+// no keys are configured.
+func (aw *AccuWeatherClient) getLaziestKey() (string, bool) {
 	aw.mu.Lock()
 	defer aw.mu.Unlock()
 
 	if len(aw.cfg.APIKeys) == 0 {
-		return ""
+		return "", false
 	}
 
 	today := time.Now().Format("2006-01-02")
@@ -253,11 +281,14 @@ func (aw *AccuWeatherClient) getLaziestKey() string {
 	// Find the key with the fewest calls
 	var bestKey string
 	bestCount := math.MaxInt
-	for _, key := range aw.cfg.APIKeys {
+	totalUsage := 0
+	for i, key := range aw.cfg.APIKeys {
 		if key == "" {
 			continue
 		}
 		count := aw.keyUsage[key]
+		totalUsage += count
+		metrics.AccuWeatherKeyUsage.WithLabelValues(strconv.Itoa(i)).Set(float64(count))
 		if count < bestCount {
 			bestCount = count
 			bestKey = key
@@ -265,11 +296,16 @@ func (aw *AccuWeatherClient) getLaziestKey() string {
 	}
 
 	if bestKey == "" || bestCount >= aw.cfg.DayQuota {
-		return ""
+		metrics.AccuWeatherQuotaExhausted.Inc()
+		totalQuota := len(aw.cfg.APIKeys) * aw.cfg.DayQuota
+		log.Warnf("AccuWeather: all API keys exhausted (%d/%d requests used today)", totalUsage, totalQuota)
+		return "", true // keys exist but exhausted
 	}
 
 	aw.keyUsage[bestKey]++
-	return bestKey
+	remaining := aw.cfg.DayQuota - (bestCount + 1)
+	log.Debugf("AccuWeather: using key with %d/%d requests remaining today", remaining, aw.cfg.DayQuota)
+	return bestKey, false
 }
 
 // calculateForecastTimeout computes when the next forecast refresh should happen.
@@ -301,6 +337,51 @@ func (aw *AccuWeatherClient) calculateForecastTimeout(currentHour int64) int64 {
 	}
 
 	return currentHour + int64(nextUpdateInHours)*3600
+}
+
+// logRateLimitHeaders reads AccuWeather rate limit headers, logs them, and
+// corrects local key usage tracking from the authoritative server-side count.
+func (aw *AccuWeatherClient) logRateLimitHeaders(resp *http.Response, requestType string, apiKey string) {
+	remaining := resp.Header.Get("RateLimit-Remaining")
+	if remaining == "" {
+		return
+	}
+	remainingInt, err := strconv.Atoi(remaining)
+	if err != nil {
+		return
+	}
+
+	aw.mu.Lock()
+	// Correct local usage from the server-reported remaining quota.
+	// This self-corrects after restart: the first API call per key will
+	// set keyUsage to the real value instead of 0.
+	serverUsage := aw.cfg.DayQuota - remainingInt
+	if serverUsage > aw.keyUsage[apiKey] {
+		log.Debugf("AccuWeather: correcting local usage for key from %d to %d (server reports %d remaining)",
+			aw.keyUsage[apiKey], serverUsage, remainingInt)
+		aw.keyUsage[apiKey] = serverUsage
+	}
+
+	// Update per-key metrics
+	for i, key := range aw.cfg.APIKeys {
+		if key == apiKey {
+			metrics.AccuWeatherQuotaRemaining.WithLabelValues(strconv.Itoa(i)).Set(float64(remainingInt))
+			metrics.AccuWeatherKeyUsage.WithLabelValues(strconv.Itoa(i)).Set(float64(aw.keyUsage[apiKey]))
+			break
+		}
+	}
+	aw.mu.Unlock()
+
+	if remainingInt < 10 {
+		log.Warnf("AccuWeather: %s response — only %d API requests remaining", requestType, remainingInt)
+	} else {
+		log.Debugf("AccuWeather: %s response — %d API requests remaining", requestType, remainingInt)
+	}
+}
+
+// isQuotaExhaustedErr checks if the error is due to API key quota exhaustion.
+func isQuotaExhaustedErr(err error) bool {
+	return err != nil && err.Error() == "all API keys exhausted for today"
 }
 
 // mapPoGoWeather maps AccuWeather icon codes to PoGo weather conditions (1-7).

@@ -74,4 +74,25 @@ var (
 		Help:    "Time to reload state from DB",
 		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 	})
+
+	// AccuWeather metrics
+	AccuWeatherRequests = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_processor_accuweather_requests_total",
+		Help: "AccuWeather API requests by type and status",
+	}, []string{"type", "status"})
+
+	AccuWeatherQuotaRemaining = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "poracle_processor_accuweather_quota_remaining",
+		Help: "Remaining AccuWeather API quota (from RateLimit-Remaining header)",
+	}, []string{"key_index"})
+
+	AccuWeatherQuotaExhausted = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_processor_accuweather_quota_exhausted_total",
+		Help: "Number of times all AccuWeather API keys had no remaining quota",
+	})
+
+	AccuWeatherKeyUsage = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "poracle_processor_accuweather_key_usage_today",
+		Help: "Number of API calls made today per key",
+	}, []string{"key_index"})
 )
