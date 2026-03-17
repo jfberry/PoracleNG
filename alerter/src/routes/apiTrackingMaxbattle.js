@@ -1,5 +1,3 @@
-const { diff } = require('deep-object-diff')
-
 const trackedCommand = require('../lib/poracleMessage/commands/tracked')
 
 module.exports = async (fastify, options) => {
@@ -21,16 +19,12 @@ module.exports = async (fastify, options) => {
 				message: 'User not found',
 			}
 		}
-		const language = human.language || fastify.config.general.locale
-		const translator = fastify.translatorFactory.Translator(language)
 
-		const maxbattles = await fastify.query.selectAllQuery('maxbattle', { id: req.params.id, profile_no: human.current_profile_no })
-
-		const maxbattleWithDesc = await Promise.all(maxbattles.map(async (row) => ({ ...row, description: await trackedCommand.maxbattleRowText(fastify.config, translator, fastify.GameData, row, fastify.scannerQuery) })))
+		const maxbattles = await fastify.query.selectAllQuery('maxbattle', { id: req.params.id, profile_no: req.query.profile_no || human.current_profile_no })
 
 		return {
 			status: 'ok',
-			maxbattle: maxbattleWithDesc,
+			maxbattle: maxbattles,
 		}
 	})
 
@@ -75,7 +69,8 @@ module.exports = async (fastify, options) => {
 		const language = human.language || fastify.config.general.locale
 		const translator = fastify.translatorFactory.Translator(language)
 		const { id } = req.params
-		const currentProfileNo = human.current_profile_no
+		const currentProfileNo = req.query.profile_no || human.current_profile_no
+		const silent = req.query.silent || req.query.suppressMessage
 
 		let insertReq = req.body
 		if (!Array.isArray(insertReq)) insertReq = [insertReq]
@@ -87,7 +82,7 @@ module.exports = async (fastify, options) => {
 			if (row.pokemon_id === 9000) {
 				level = +row.level
 				if (row.level === undefined || level < 1 || (level > Math.max(...Object.keys(fastify.GameData.utilData.maxbattleLevels).map((k) => +k)) && level !== 90)) {
-					throw new Error('Invalid level (must be specified if no pokemon_id')
+					throw new Error('Invalid level (must be specified if no pokemon_id)')
 				}
 			}
 
@@ -117,7 +112,7 @@ module.exports = async (fastify, options) => {
 			let message = ''
 
 			if ((alreadyPresent.length + updates.length + insert.length) > 50) {
-				message = translator.translateFormat('I have made a lot of changes. See {0}{1} for details', '!', /* util.prefix, */ translator.translate('tracked'))
+				message = translator.translateFormat('I have made a lot of changes. See {0}{1} for details', '!', translator.translate('tracked'))
 			} else {
 				for (const i of alreadyPresent) {
 					message = message.concat(translator.translate('Unchanged: '), await trackedCommand.maxbattleRowText(fastify.config, translator, fastify.GameData, i, fastify.scannerQuery), '\n')
@@ -140,32 +135,39 @@ module.exports = async (fastify, options) => {
 				'uid',
 			)
 
-			await fastify.query.insertQuery('maxbattle', [...insert, ...updates])
+			const insertResult = await fastify.query.insertQuery('maxbattle', [...insert, ...updates], 'uid')
+			const newUids = Array.isArray(insertResult) ? insertResult.map((r) => (typeof r === 'object' ? r.uid : r)) : []
 
 			// Send message to user
 
-			const data = [{
-				lat: 0,
-				lon: 0,
-				message: { content: message },
-				target: human.id,
-				type: human.type,
-				name: human.name,
-				tth: { hours: 1, minutes: 0, seconds: 0 },
-				clean: false,
-				emoji: '',
-				logReference: 'WebApi',
-				language,
-			}]
+			if (!silent) {
+				const data = [{
+					lat: 0,
+					lon: 0,
+					message: { content: message },
+					target: human.id,
+					type: human.type,
+					name: human.name,
+					tth: { hours: 1, minutes: 0, seconds: 0 },
+					clean: false,
+					emoji: '',
+					logReference: 'WebApi',
+					language,
+				}]
 
-			data.forEach((job) => {
-				if (['discord:user', 'discord:channel', 'webhook'].includes(job.type)) fastify.discordQueue.push(job)
-				if (['telegram:user', 'telegram:channel'].includes(job.type)) fastify.telegramQueue.push(job)
-			})
+				data.forEach((job) => {
+					if (['discord:user', 'discord:channel', 'webhook'].includes(job.type)) fastify.discordQueue.push(job)
+					if (['telegram:user', 'telegram:channel'].includes(job.type)) fastify.telegramQueue.push(job)
+				})
+			}
 
 			return {
 				status: 'ok',
-				message,
+				message: silent ? '' : message,
+				newUids,
+				alreadyPresent: alreadyPresent.length,
+				updates: updates.length,
+				insert: insert.length,
 			}
 		} catch (err) {
 			fastify.logger.error(`API: ${req.ip} ${req.routeOptions.method} ${req.routeOptions.url}`, err)
