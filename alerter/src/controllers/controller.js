@@ -2,6 +2,7 @@ const inside = require('point-in-polygon')
 const EventEmitter = require('events')
 const path = require('path')
 const fs = require('fs')
+const { getConfigDir } = require('../lib/configResolver')
 const Uicons = require('../lib/uicons')
 const TileserverPregen = require('../lib/tileserverPregen')
 const replaceAsync = require('../util/stringReplaceAsync')
@@ -107,7 +108,7 @@ class Controller extends EventEmitter {
 		if (findDts.templateFile) {
 			let filepath
 			try {
-				filepath = path.join(__dirname, '../../config', findDts.templateFile)
+				filepath = path.join(getConfigDir(), findDts.templateFile)
 				template = fs.readFileSync(filepath, 'utf8')
 			} catch (err) {
 				this.log.error(`${logReference}: Unable to load DTS filepath ${filepath} from DTS type: ${findDts.type} platform: ${findDts.platform} language: ${findDts.language} template: ${findDts.template}`)
@@ -116,7 +117,7 @@ class Controller extends EventEmitter {
 		} else {
 			const loadInclude = (includeString) => {
 				const includePath = includeString.split(' ')[1]
-				const filepath = path.join(__dirname, '../../config/dts', includePath)
+				const filepath = path.join(getConfigDir(), 'dts', includePath)
 				try {
 					template = fs.readFileSync(filepath, 'utf8')
 				} catch (err) {
