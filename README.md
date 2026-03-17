@@ -262,11 +262,11 @@ The processor reverse-proxies any `/api/` request it doesn't handle natively to 
 
 Both components expose `/health` and `/metrics` endpoints on their respective ports. Prometheus can scrape both to monitor the full pipeline (processor on port 3030, alerter on port 3031 by default).
 
-### Grafana Dashboard Prometheus Stats
+## Monitoring
 
 An importable Grafana dashboard for the Prometheus metrics exposed by both services is included at `monitoring/grafana/poracle-observability-dashboard.json`.
 
-There is also an example Prometheus scrape config at `monitoring/prometheus.yml.example`. If you are using Zapdos, add - job_name: "poracle_processor" and - job_name: "poracle_alerter" to `Zapdos/vmagnet/prometheus.yml`
+There is also an example Prometheus scrape config at `monitoring/prometheus.yml.example`. If you are using [Zapdos](https://github.com/UnownHash/Zapdos), add `poracle_processor` and `poracle_alerter` jobs to `Zapdos/vmagnet/prometheus.yml`.
 
 Then:
 

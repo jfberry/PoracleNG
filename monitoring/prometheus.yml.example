@@ -3,19 +3,14 @@ global:
   scrape_interval: 30s
 
 scrape_configs:
-  - job_name: "prometheus"
-    basic_auth:
-      username: "prometheus"
-      password: "password"
-        
   - job_name: "poracle_processor"
     static_configs:
-      - targets: ["127.0.0.1:4206"]
+      - targets: ["127.0.0.1:3030"]
         labels:
           instance: "poracle-processor"
 
   - job_name: "poracle_alerter"
     static_configs:
-      - targets: ["127.0.0.1:4205"]
+      - targets: ["127.0.0.1:3031"]
         labels:
           instance: "poracle-alerter"
