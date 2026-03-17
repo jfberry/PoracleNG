@@ -2,6 +2,7 @@ const { DiscordAPIError } = require('discord.js')
 const mustache = require('handlebars')
 const communityLogic = require('../communityLogic')
 const emojiStrip = require('../../util/emojiStrip')
+const { withRateLimitRetry } = require('./rateLimitRetry')
 
 const haveSameContents = (a, b) => {
 	for (const v of new Set([...a, ...b])) {
@@ -488,21 +489,10 @@ class DiscordReconciliation {
 				throw err
 				// }
 			}
-			let members
-			for (let attempt = 0; attempt < 3; attempt++) {
-				try {
-					members = await guild.members.fetch({ force: false })
-					break
-				} catch (fetchErr) {
-					if (fetchErr.constructor.name === 'GatewayRateLimitError' && attempt < 2) {
-						const retryAfter = (fetchErr.data?.retry_after || 15) * 1000
-						this.log.warn(`Reconciliation (Discord) Guild ${guildId} member fetch rate limited, retrying after ${retryAfter / 1000}s`)
-						await new Promise((resolve) => { setTimeout(resolve, retryAfter + 1000) })
-					} else {
-						throw fetchErr
-					}
-				}
-			}
+			const members = await withRateLimitRetry(
+				() => guild.members.fetch({ force: false }),
+				{ log: this.log, context: `Reconciliation (Discord) Guild ${guildId} member fetch` },
+			)
 			let memberCount = 0
 			for (const member of members.values()) {
 				if (!member.user.bot) {
