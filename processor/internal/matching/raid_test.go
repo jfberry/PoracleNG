@@ -217,6 +217,313 @@ func TestEggMatchLevel90(t *testing.T) {
 	}
 }
 
+func TestRaidBlockedAlerts(t *testing.T) {
+	human := makeHuman("user1")
+	human.BlockedAlerts = `["raid"]`
+	raid := &db.RaidTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
+		Team: 4, Exclusive: false, Form: 0, Evolution: 9000,
+		Move: 9000, Distance: 0, Template: "1",
+	}
+
+	st := makeRaidTestState([]*db.RaidTracking{raid}, nil, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	raidData := &RaidData{
+		GymID: "gym1", PokemonID: 150, Form: 0, Level: 5,
+		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+
+	matched := matcher.MatchRaid(raidData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches for blocked raid alerts, got %d", len(matched))
+	}
+}
+
+func TestRaidMatchExclusive(t *testing.T) {
+	human := makeHuman("user1")
+	raid := &db.RaidTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
+		Team: 4, Exclusive: true, Form: 0, Evolution: 9000,
+		Move: 9000, Distance: 0, Template: "1",
+	}
+
+	st := makeRaidTestState([]*db.RaidTracking{raid}, nil, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	// EX raid — should match
+	raidData := &RaidData{
+		GymID: "gym1", PokemonID: 150, Form: 0, Level: 5,
+		TeamID: 1, Ex: true, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matched := matcher.MatchRaid(raidData, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 match for EX raid, got %d", len(matched))
+	}
+
+	// Non-EX raid — should not match
+	raidData.Ex = false
+	matched = matcher.MatchRaid(raidData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches for non-EX raid with exclusive tracking, got %d", len(matched))
+	}
+}
+
+func TestRaidMatchFormFilter(t *testing.T) {
+	human := makeHuman("user1")
+	raid := &db.RaidTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
+		Team: 4, Exclusive: false, Form: 598, Evolution: 9000,
+		Move: 9000, Distance: 0, Template: "1",
+	}
+
+	st := makeRaidTestState([]*db.RaidTracking{raid}, nil, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	// Correct form
+	raidData := &RaidData{
+		GymID: "gym1", PokemonID: 150, Form: 598, Level: 5,
+		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matched := matcher.MatchRaid(raidData, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 match for correct form, got %d", len(matched))
+	}
+
+	// Wrong form
+	raidData.Form = 181
+	matched = matcher.MatchRaid(raidData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches for wrong form, got %d", len(matched))
+	}
+}
+
+func TestRaidMatchEvolution(t *testing.T) {
+	human := makeHuman("user1")
+	raid := &db.RaidTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
+		Team: 4, Exclusive: false, Form: 0, Evolution: 1,
+		Move: 9000, Distance: 0, Template: "1",
+	}
+
+	st := makeRaidTestState([]*db.RaidTracking{raid}, nil, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	// Correct evolution
+	raidData := &RaidData{
+		GymID: "gym1", PokemonID: 150, Form: 0, Level: 5,
+		TeamID: 1, Ex: false, Evolution: 1, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matched := matcher.MatchRaid(raidData, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 match for correct evolution, got %d", len(matched))
+	}
+
+	// Wrong evolution
+	raidData.Evolution = 2
+	matched = matcher.MatchRaid(raidData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches for wrong evolution, got %d", len(matched))
+	}
+}
+
+func TestRaidMatchDistance(t *testing.T) {
+	human := makeHuman("user1")
+	human.Latitude = 51.0
+	human.Longitude = 0.0
+	raid := &db.RaidTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
+		Team: 4, Exclusive: false, Form: 0, Evolution: 9000,
+		Move: 9000, Distance: 1000, Template: "1",
+	}
+
+	st := makeRaidTestState([]*db.RaidTracking{raid}, nil, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	// Within distance
+	raidData := &RaidData{
+		GymID: "gym1", PokemonID: 150, Form: 0, Level: 5,
+		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.005, Longitude: 0.005,
+	}
+	matched := matcher.MatchRaid(raidData, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 match within distance, got %d", len(matched))
+	}
+
+	// Outside distance
+	raidData.Latitude = 51.5
+	matched = matcher.MatchRaid(raidData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches outside distance, got %d", len(matched))
+	}
+}
+
+func TestRaidMatchWrongLevel(t *testing.T) {
+	human := makeHuman("user1")
+	raid := &db.RaidTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 9000, Level: 5,
+		Team: 4, Exclusive: false, Form: 0, Evolution: 9000,
+		Move: 9000, Distance: 0, Template: "1",
+	}
+
+	st := makeRaidTestState([]*db.RaidTracking{raid}, nil, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	raidData := &RaidData{
+		GymID: "gym1", PokemonID: 999, Form: 0, Level: 3,
+		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+
+	matched := matcher.MatchRaid(raidData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches for wrong level, got %d", len(matched))
+	}
+}
+
+func TestRaidSpecificGymBlockedAlerts(t *testing.T) {
+	human := makeHuman("user1")
+	human.BlockedAlerts = `["specificgym"]`
+	raid := &db.RaidTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
+		Team: 4, Exclusive: false, Form: 0, Evolution: 9000,
+		Move: 9000, Distance: 0, Template: "1",
+		GymID: sql.NullString{String: "gym1", Valid: true},
+	}
+
+	st := makeRaidTestState([]*db.RaidTracking{raid}, nil, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	raidData := &RaidData{
+		GymID: "gym1", PokemonID: 150, Form: 0, Level: 5,
+		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+
+	matched := matcher.MatchRaid(raidData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches for specificgym blocked, got %d", len(matched))
+	}
+}
+
+func TestEggBlockedAlerts(t *testing.T) {
+	human := makeHuman("user1")
+	human.BlockedAlerts = `["egg"]`
+	egg := &db.EggTracking{
+		ID: "user1", ProfileNo: 1, Level: 5,
+		Team: 4, Exclusive: false,
+		Distance: 0, Template: "1",
+	}
+
+	st := makeRaidTestState(nil, []*db.EggTracking{egg}, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	eggData := &EggData{
+		GymID: "gym1", Level: 5, TeamID: 1, Ex: false,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+
+	matched := matcher.MatchEgg(eggData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches for blocked egg alerts, got %d", len(matched))
+	}
+}
+
+func TestEggMatchSpecificGym(t *testing.T) {
+	human := makeHuman("user1")
+	egg := &db.EggTracking{
+		ID: "user1", ProfileNo: 1, Level: 5,
+		Team: 4, Exclusive: false,
+		Distance: 0, Template: "1",
+		GymID: sql.NullString{String: "gym1", Valid: true},
+	}
+
+	st := makeRaidTestState(nil, []*db.EggTracking{egg}, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	// Correct gym
+	eggData := &EggData{
+		GymID: "gym1", Level: 5, TeamID: 1, Ex: false,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matched := matcher.MatchEgg(eggData, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 match for specific gym, got %d", len(matched))
+	}
+
+	// Wrong gym
+	eggData.GymID = "gym2"
+	matched = matcher.MatchEgg(eggData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches for wrong gym, got %d", len(matched))
+	}
+}
+
+func TestEggMatchExclusive(t *testing.T) {
+	human := makeHuman("user1")
+	egg := &db.EggTracking{
+		ID: "user1", ProfileNo: 1, Level: 5,
+		Team: 4, Exclusive: true,
+		Distance: 0, Template: "1",
+	}
+
+	st := makeRaidTestState(nil, []*db.EggTracking{egg}, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	// EX — match
+	eggData := &EggData{
+		GymID: "gym1", Level: 5, TeamID: 1, Ex: true,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matched := matcher.MatchEgg(eggData, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 match for EX egg, got %d", len(matched))
+	}
+
+	// Non-EX — no match
+	eggData.Ex = false
+	matched = matcher.MatchEgg(eggData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches for non-EX egg with exclusive tracking, got %d", len(matched))
+	}
+}
+
+func TestEggMatchDistance(t *testing.T) {
+	human := makeHuman("user1")
+	human.Latitude = 51.0
+	human.Longitude = 0.0
+	egg := &db.EggTracking{
+		ID: "user1", ProfileNo: 1, Level: 5,
+		Team: 4, Exclusive: false,
+		Distance: 1000, Template: "1",
+	}
+
+	st := makeRaidTestState(nil, []*db.EggTracking{egg}, map[string]*db.Human{"user1": human})
+	matcher := &RaidMatcher{}
+
+	// Within distance
+	eggData := &EggData{
+		GymID: "gym1", Level: 5, TeamID: 1, Ex: false,
+		Latitude: 51.005, Longitude: 0.005,
+	}
+	matched := matcher.MatchEgg(eggData, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 match within distance, got %d", len(matched))
+	}
+
+	// Outside distance
+	eggData.Latitude = 51.5
+	matched = matcher.MatchEgg(eggData, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches outside distance, got %d", len(matched))
+	}
+}
+
 func TestRaidMatchDedup(t *testing.T) {
 	human := makeHuman("user1")
 	// Two raid trackings for same human
