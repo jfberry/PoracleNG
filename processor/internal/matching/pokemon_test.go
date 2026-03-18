@@ -379,6 +379,57 @@ func TestPokemonMatchPVPFilter(t *testing.T) {
 	}
 }
 
+// Test case from real webhook: Venipede (543) spawns with PVP data showing
+// Scolipede (545) is rank 1 in ultra league. User tracks pokemon 545 with PVP.
+func TestPokemonMatchPVPEvolutionDirect(t *testing.T) {
+	human := makeHuman("user1")
+
+	// User tracks Scolipede (545) in ultra league PVP
+	monster := &db.MonsterTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 545, Form: 0,
+		MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9999,
+		MinLevel: 0, MaxLevel: 40, ATK: 0, DEF: 0, STA: 0,
+		MaxATK: 15, MaxDEF: 15, MaxSTA: 15, Gender: 0,
+		MinWeight: 0, MaxWeight: 99999999, Rarity: -1, MaxRarity: 6,
+		Size: -1, MaxSize: 5, Template: "1",
+		PVPRankingLeague: 2500, PVPRankingBest: 1, PVPRankingWorst: 100,
+		PVPRankingMinCP: 0, PVPRankingCap: 0,
+	}
+
+	st := makeTestState([]*db.MonsterTracking{monster}, map[string]*db.Human{"user1": human})
+	matcher := &PokemonMatcher{PVPQueryMaxRank: 100, PVPEvolutionDirectTracking: true}
+
+	// Venipede (543) spawns with PVP evo data showing Scolipede (545) rank 1 ultra league
+	pokemon := &ProcessedPokemon{
+		PokemonID: 543, Form: 2033, IV: 66.7, CP: 461, Level: 27,
+		ATK: 0, DEF: 15, STA: 15, Weight: 2.871, Size: 3, RarityGroup: 1,
+		TTHSeconds: 600, Latitude: 51.0, Longitude: 0.0, Encountered: true,
+		PVPBestRank: map[int][]pvp.LeagueRank{
+			2500: {{Rank: 1075, CP: 676, Caps: []int{50}}},
+		},
+		PVPEvoData: map[int]map[int][]pvp.LeagueRank{
+			545: {
+				2500: {{Rank: 1, CP: 2500, Caps: []int{50}}},
+			},
+		},
+	}
+
+	matched := matcher.Match(pokemon, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 PVP evolution direct match for Scolipede, got %d", len(matched))
+	}
+	if len(matched) == 1 && matched[0].PokemonID != 545 {
+		t.Errorf("Expected matched PokemonID 545 (Scolipede), got %d", matched[0].PokemonID)
+	}
+
+	// With evolution direct tracking disabled, should not match
+	matcher2 := &PokemonMatcher{PVPQueryMaxRank: 100, PVPEvolutionDirectTracking: false}
+	matched = matcher2.Match(pokemon, st)
+	if len(matched) != 0 {
+		t.Errorf("Expected 0 matches with evo direct tracking disabled, got %d", len(matched))
+	}
+}
+
 func TestPokemonMatchBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
 	human.BlockedAlerts = "monster,pvp"
