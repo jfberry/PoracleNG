@@ -167,6 +167,13 @@ const consoleLog = new (winston.transports.Console)({
 	level: config.logger.consoleLogLevel,
 })
 
+// Prevent EPIPE errors on stdout from crashing the process
+// (happens when the pipe consumer, e.g. PM2, restarts or the terminal is closed)
+consoleLog.on('error', (err) => {
+	if (err.code === 'EPIPE') return
+	console.error('Console transport error:', err)
+})
+
 module.exports.log = winston.createLogger({
 	transports: [
 		consoleLog,
