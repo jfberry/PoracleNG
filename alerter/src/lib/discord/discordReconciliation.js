@@ -58,10 +58,13 @@ class DiscordReconciliation {
 
 	async sendGoodbye(id) {
 		if (this.config.discord.lostRoleMessage) {
-			const discordUser = await this.client.users.fetch(id)
-			await discordUser.createDM()
-
-			await discordUser.send({ content: this.config.discord.lostRoleMessage })
+			try {
+				const discordUser = await this.client.users.fetch(id)
+				await discordUser.createDM()
+				await discordUser.send({ content: this.config.discord.lostRoleMessage })
+			} catch (err) {
+				this.log.warn(`Reconciliation (Discord) Could not send goodbye to ${id}: ${err.message}`)
+			}
 		}
 	}
 
