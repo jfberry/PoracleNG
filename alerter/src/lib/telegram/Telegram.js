@@ -1,6 +1,9 @@
 const { EventEmitter } = require('events')
+const path = require('path')
 const fs = require('fs')
 const fsp = require('fs').promises
+
+const CACHE_DIR = path.resolve(__dirname, '../../../.cache')
 const NodeCache = require('node-cache')
 const mustache = require('handlebars')
 const { performance } = require('perf_hooks')
@@ -365,14 +368,14 @@ class Telegram extends EventEmitter {
 	async saveTimeouts() {
 		// eslint-disable-next-line no-underscore-dangle
 		this.telegramMessageTimeouts._checkData(false)
-		return fsp.writeFile(`.cache/cleancache-telegram-${this.bot.token}.json`, JSON.stringify(this.telegramMessageTimeouts.data), 'utf8')
+		return fsp.writeFile(`${CACHE_DIR}/cleancache-telegram-${this.bot.token}.json`, JSON.stringify(this.telegramMessageTimeouts.data), 'utf8')
 	}
 
 	async loadTimeouts() {
 		let loaddatatxt
 
 		try {
-			loaddatatxt = await fsp.readFile(`.cache/cleancache-telegram-${this.bot.token}.json`, 'utf8')
+			loaddatatxt = await fsp.readFile(`${CACHE_DIR}/cleancache-telegram-${this.bot.token}.json`, 'utf8')
 		} catch {
 			return
 		}

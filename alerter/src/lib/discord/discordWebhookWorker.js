@@ -1,6 +1,9 @@
+const path = require('path')
 const axios = require('axios')
 const NodeCache = require('node-cache')
 const fsp = require('fs').promises
+
+const CACHE_DIR = path.resolve(__dirname, '../../../.cache')
 const FormData = require('form-data')
 const util = require('util')
 const { performance } = require('perf_hooks')
@@ -205,7 +208,7 @@ class DiscordWebhookWorker {
 	async saveTimeouts() {
 		// eslint-disable-next-line no-underscore-dangle
 		this.webhookTimeouts._checkData(false)
-		return fsp.writeFile('.cache/cleancache-webhookWorker.json', JSON.stringify(this.webhookTimeouts.data), 'utf8')
+		return fsp.writeFile(`${CACHE_DIR}/cleancache-webhookWorker.json`, JSON.stringify(this.webhookTimeouts.data), 'utf8')
 	}
 
 	async deleteMessage(logReference, hookName, hookUrl, msgId) {
@@ -244,7 +247,7 @@ class DiscordWebhookWorker {
 		let loaddatatxt
 
 		try {
-			loaddatatxt = await fsp.readFile('.cache/cleancache-webhookWorker.json', 'utf8')
+			loaddatatxt = await fsp.readFile(`${CACHE_DIR}/cleancache-webhookWorker.json`, 'utf8')
 		} catch {
 			return
 		}

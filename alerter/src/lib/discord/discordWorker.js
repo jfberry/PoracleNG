@@ -4,8 +4,11 @@ const {
 	Partials,
 	Options,
 } = require('discord.js')
+const path = require('path')
 const fsp = require('fs').promises
 const NodeCache = require('node-cache')
+
+const CACHE_DIR = path.resolve(__dirname, '../../../.cache')
 const { performance } = require('perf_hooks')
 const FairPromiseQueue = require('../FairPromiseQueue')
 const metrics = require('../metrics')
@@ -314,14 +317,14 @@ class Worker {
 
 		// eslint-disable-next-line no-underscore-dangle
 		this.discordMessageTimeouts._checkData(false)
-		return fsp.writeFile(`.cache/cleancache-discord-${this.client.user.username}.json`, JSON.stringify(this.discordMessageTimeouts.data), 'utf8')
+		return fsp.writeFile(`${CACHE_DIR}/cleancache-discord-${this.client.user.username}.json`, JSON.stringify(this.discordMessageTimeouts.data), 'utf8')
 	}
 
 	async loadTimeouts() {
 		let loaddatatxt
 
 		try {
-			loaddatatxt = await fsp.readFile(`.cache/cleancache-discord-${this.client.user.username}.json`, 'utf8')
+			loaddatatxt = await fsp.readFile(`${CACHE_DIR}/cleancache-discord-${this.client.user.username}.json`, 'utf8')
 		} catch {
 			return
 		}
