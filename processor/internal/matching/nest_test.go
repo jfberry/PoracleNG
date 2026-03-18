@@ -177,7 +177,7 @@ func TestNestMatchMinSpawnAvg(t *testing.T) {
 
 func TestNestBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = "nest"
+	human.BlockedAlerts = `["nest"]`
 	nest := &db.NestTracking{
 		ID: "user1", ProfileNo: 1, PokemonID: 0,
 		Distance: 0, Template: "1",

@@ -122,7 +122,7 @@ func validateHumansForGym(
 		if !ok || !human.Enabled || human.AdminDisable {
 			continue
 		}
-		if strings.Contains(human.BlockedAlerts, "gym") {
+		if strings.Contains(human.BlockedAlerts, `"gym"`) {
 			continue
 		}
 		if td.ProfileNo != human.CurrentProfileNo {
@@ -131,7 +131,7 @@ func validateHumansForGym(
 
 		isSpecificGym := specificGymUsers[td.HumanID]
 		if isSpecificGym {
-			if strings.Contains(human.BlockedAlerts, "specificgym") {
+			if strings.Contains(human.BlockedAlerts, `"specificgym"`) {
 				continue
 			}
 		} else {

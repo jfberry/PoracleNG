@@ -212,7 +212,7 @@ func TestGymSpecificGym(t *testing.T) {
 
 func TestGymBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = "gym,raid"
+	human.BlockedAlerts = `["gym","raid"]`
 	gym := &db.GymTracking{
 		ID: "user1", ProfileNo: 1, Team: 4,
 		Distance: 0, Template: "1",
@@ -229,6 +229,29 @@ func TestGymBlockedAlerts(t *testing.T) {
 	matched := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
+	}
+}
+
+// Verify that blocking "specificgym" does NOT block regular gym alerts
+func TestGymBlockedSpecificGymNotGym(t *testing.T) {
+	human := makeHuman("user1")
+	human.BlockedAlerts = `["specificgym"]`
+	gym := &db.GymTracking{
+		ID: "user1", ProfileNo: 1, Team: 4,
+		Distance: 0, Template: "1",
+	}
+
+	st := makeGymTestState([]*db.GymTracking{gym}, map[string]*db.Human{"user1": human})
+	matcher := &GymMatcher{}
+
+	data := &GymData{
+		GymID: "gym1", TeamID: 2, OldTeamID: 1,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+
+	matched := matcher.Match(data, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 match (specificgym blocked should not block gym alerts), got %d", len(matched))
 	}
 }
 

@@ -152,7 +152,7 @@ func TestInvasionMatchGenderAny(t *testing.T) {
 
 func TestInvasionBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = "invasion"
+	human.BlockedAlerts = `["invasion"]`
 	inv := &db.InvasionTracking{
 		ID: "user1", ProfileNo: 1, GruntType: "everything",
 		Distance: 0, Template: "1",

@@ -40,7 +40,7 @@ func ValidateHumansGeneric(
 		if !ok || !human.Enabled || human.AdminDisable {
 			continue
 		}
-		if strings.Contains(human.BlockedAlerts, blockedAlertType) {
+		if strings.Contains(human.BlockedAlerts, `"`+blockedAlertType+`"`) {
 			continue
 		}
 		if td.ProfileNo != human.CurrentProfileNo {

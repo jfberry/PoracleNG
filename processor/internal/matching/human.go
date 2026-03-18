@@ -38,7 +38,7 @@ func ValidateHumans(
 		if !h.Enabled || h.AdminDisable {
 			continue
 		}
-		if strings.Contains(h.BlockedAlerts, "monster") {
+		if strings.Contains(h.BlockedAlerts, `"monster"`) {
 			continue
 		}
 		validHumans[id] = h
@@ -125,7 +125,7 @@ func ValidateHumansForRaid(
 		if !ok || !human.Enabled || human.AdminDisable {
 			continue
 		}
-		if strings.Contains(human.BlockedAlerts, blockedAlertType) {
+		if strings.Contains(human.BlockedAlerts, `"`+blockedAlertType+`"`) {
 			continue
 		}
 		if td.ProfileNo != human.CurrentProfileNo {
@@ -134,7 +134,7 @@ func ValidateHumansForRaid(
 
 		// Specific gym tracking - check specificgym block
 		if td.IsSpecificGym {
-			if strings.Contains(human.BlockedAlerts, "specificgym") {
+			if strings.Contains(human.BlockedAlerts, `"specificgym"`) {
 				continue
 			}
 		} else {
