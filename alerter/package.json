@@ -29,7 +29,8 @@
     "migrateV3": "node src/init/migrateV3.js",
     "prepare": "husky",
     "start": "npm run generate && npm run koji && node .",
-    "test": "node test/test"
+    "test": "node test/test",
+    "test:commands": "mocha src/lib/poracleMessage/commands/__tests__/*.test.js --timeout 10000"
   },
   "dependencies": {
     "@budibase/handlebars-helpers": "^0.13.1",

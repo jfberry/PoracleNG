@@ -1,5 +1,6 @@
 const helpCommand = require('./help')
 const trackedCommand = require('./tracked')
+const { reportUnrecognizedArgs } = require('../commandUtil')
 
 exports.run = async (client, msg, args, options) => {
 	const logReference = Math.random().toString().slice(2, 11)
@@ -46,23 +47,49 @@ exports.run = async (client, msg, args, options) => {
 		let includeEmpty = false
 		const changes = []
 		const pings = msg.getPings()
+		const consumed = new Set()
 
 		let fortType
 
 		args.forEach((element) => {
-			if (element.match(client.re.templateRe)) [,, template] = element.match(client.re.templateRe)
-			else if (element.match(client.re.dRe)) [,, distance] = element.match(client.re.dRe)
-			else if (element === 'pokestop') fortType = 'pokestop'
-			else if (element === 'gym') fortType = 'gym'
-			else if (element === 'everything') fortType = 'everything'
-
-			else if (element === 'include empty') includeEmpty = true
-			else if (element === 'location') changes.push('location')
-			else if (element === 'name') changes.push('name')
-			else if (element === 'photo') changes.push('image_url')
-			else if (element === 'removal') changes.push('removal')
-			else if (element === 'new') changes.push('new')
+			if (element.match(client.re.templateRe)) {
+				[,, template] = element.match(client.re.templateRe)
+				consumed.add(element)
+			} else if (element.match(client.re.dRe)) {
+				[,, distance] = element.match(client.re.dRe)
+				consumed.add(element)
+			} else if (element === 'pokestop') {
+				fortType = 'pokestop'
+				consumed.add(element)
+			} else if (element === 'gym') {
+				fortType = 'gym'
+				consumed.add(element)
+			} else if (element === 'everything') {
+				fortType = 'everything'
+				consumed.add(element)
+			} else if (element === 'include empty') {
+				includeEmpty = true
+				consumed.add(element)
+			} else if (element === 'location') {
+				changes.push('location')
+				consumed.add(element)
+			} else if (element === 'name') {
+				changes.push('name')
+				consumed.add(element)
+			} else if (element === 'photo') {
+				changes.push('image_url')
+				consumed.add(element)
+			} else if (element === 'removal') {
+				changes.push('removal')
+				consumed.add(element)
+			} else if (element === 'new') {
+				changes.push('new')
+				consumed.add(element)
+			}
 		})
+
+		if (remove) consumed.add('remove')
+		if (reportUnrecognizedArgs(msg, translator, args, consumed)) return
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
 		if (client.config.tracking.maxDistance !== 0 && distance > client.config.tracking.maxDistance && !msg.isFromAdmin) distance = client.config.tracking.maxDistance
 		if (distance > 0 && !userHasLocation && !remove) {

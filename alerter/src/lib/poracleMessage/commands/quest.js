@@ -1,5 +1,6 @@
 const helpCommand = require('./help')
 const trackedCommand = require('./tracked')
+const { reportUnrecognizedArgs } = require('../commandUtil')
 
 exports.run = async (client, msg, args, options) => {
 	const logReference = Math.random().toString().slice(2, 11)
@@ -70,11 +71,20 @@ exports.run = async (client, msg, args, options) => {
 			}
 		}
 
+		const consumed = new Set()
+
 		// Check for monsters or forms
 		const formArgs = args.filter((arg) => arg.match(client.re.formRe))
+		formArgs.forEach((arg) => consumed.add(arg))
 		const formNames = formArgs ? formArgs.map((arg) => client.translatorFactory.reverseTranslateCommand(arg.match(client.re.formRe)[2], true).toLowerCase()) : []
-		const argTypes = args.filter((arg) => typeArray.includes(arg))
-		const genCommand = args.filter((arg) => arg.match(client.re.genRe))
+		const argTypes = args.filter((arg) => {
+			if (typeArray.includes(arg)) { consumed.add(arg); return true }
+			return false
+		})
+		const genCommand = args.filter((arg) => {
+			if (arg.match(client.re.genRe)) { consumed.add(arg); return true }
+			return false
+		})
 		const gen = genCommand.length ? client.GameData.utilData.genData[+(genCommand[0].match(client.re.genRe)[2])] : 0
 
 		if (formNames.length) {
@@ -91,46 +101,81 @@ exports.run = async (client, msg, args, options) => {
 				|| (args.includes('all pokemon') || args.includes('everything')) && msg.isFromAdmin) && !mon.form.id)
 		}
 		if (gen) fullMonsters = fullMonsters.filter((mon) => mon.id >= gen.min && mon.id <= gen.max)
-		//		monsters = fullMonsters.map((mon) => mon.id)
-		items = Object.keys(client.GameData.items).filter((key) => args.includes(translator.translate(client.GameData.items[key].name.toLowerCase())) || args.includes('all items'))
+
+		// Mark matched monster names/ids as consumed
+		for (const element of args) {
+			if (Object.values(client.GameData.monsters).some((mon) => mon.name.toLowerCase() === element || mon.id.toString() === element)) {
+				consumed.add(element)
+			}
+		}
+
+		// Mark matched item names as consumed
+		items = Object.keys(client.GameData.items).filter((key) => {
+			const itemName = translator.translate(client.GameData.items[key].name.toLowerCase())
+			if (args.includes(itemName)) { consumed.add(itemName); return true }
+			if (args.includes('all items')) return true
+			return false
+		})
+		if (args.includes('all items')) consumed.add('all items')
+		if (args.includes('all pokemon')) consumed.add('all pokemon')
+
 		if (args.includes('everything') && (!disableEverythingTracking || args.includes('remove') || msg.isFromAdmin)) {
-			// monsters = Object.values(client.GameData.monsters).filter((mon) => !mon.form.id).map((m) => m.id)
 			items = Object.keys(client.GameData.items)
 			minDust = 0
 			stardustTracking = -1
 			energyMonsters.push('0')
 			candyMonsters.push('0')
 			commandEverything = 1
+			consumed.add('everything')
 		}
 		args.forEach((element) => {
-			if (element.match(client.re.templateRe)) [,, template] = element.match(client.re.templateRe)
-			else if (element.match(client.re.stardustRe)) {
+			if (element.match(client.re.templateRe)) {
+				[,, template] = element.match(client.re.templateRe)
+				consumed.add(element)
+			} else if (element.match(client.re.stardustRe)) {
 				minDust = +element.match(client.re.stardustRe)[2]
 				stardustTracking = -1
-			} else if (element.match(client.re.dRe)) [,, distance] = element.match(client.re.dRe)
-			else if (element === 'stardust') {
+				consumed.add(element)
+			} else if (element.match(client.re.dRe)) {
+				[,, distance] = element.match(client.re.dRe)
+				consumed.add(element)
+			} else if (element === 'stardust') {
 				minDust = 0
 				stardustTracking = -1
+				consumed.add(element)
 			} else if (element.match(client.re.energyRe)) {
 				[,, energyMonster] = element.match(client.re.energyRe)
 				energyMonster = translator.reverse(energyMonster.toLowerCase(), true).toLowerCase()
 				energyMonster = Object.values(client.GameData.monsters).find((mon) => energyMonster.includes(mon.name.toLowerCase()) && mon.form.id === 0)
 				energyMonster = energyMonster ? energyMonster.id : 0
 				if (+energyMonster > 0) energyMonsters.push(energyMonster)
+				consumed.add(element)
 			} else if (element === 'energy') {
 				energyMonsters.push('0')
+				consumed.add(element)
 			} else if (element.match(client.re.candyRe)) {
 				[,, candyMonster] = element.match(client.re.candyRe)
 				candyMonster = translator.reverse(candyMonster.toLowerCase(), true).toLowerCase()
 				candyMonster = Object.values(client.GameData.monsters).find((mon) => candyMonster.includes(mon.name.toLowerCase()) && mon.form.id === 0)
 				candyMonster = candyMonster ? candyMonster.id : 0
 				if (+candyMonster > 0) candyMonsters.push(candyMonster)
+				consumed.add(element)
 			} else if (element === 'candy') {
 				candyMonsters.push('0')
-			} else if (element === 'shiny') mustShiny = 1
-			else if (element === 'remove') remove = true
-			else if (element === 'clean') clean = true
+				consumed.add(element)
+			} else if (element === 'shiny') {
+				mustShiny = 1
+				consumed.add(element)
+			} else if (element === 'remove') {
+				remove = true
+				consumed.add(element)
+			} else if (element === 'clean') {
+				clean = true
+				consumed.add(element)
+			}
 		})
+
+		if (reportUnrecognizedArgs(msg, translator, args, consumed)) return
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
 		if (client.config.tracking.maxDistance !== 0 && distance > client.config.tracking.maxDistance && !msg.isFromAdmin) distance = client.config.tracking.maxDistance
 		if (distance > 0 && !userHasLocation && !remove) {

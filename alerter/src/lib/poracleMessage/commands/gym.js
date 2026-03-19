@@ -1,5 +1,6 @@
 const helpCommand = require('./help')
 const trackedCommand = require('./tracked')
+const { reportUnrecognizedArgs } = require('../commandUtil')
 
 exports.run = async (client, msg, args, options) => {
 	const logReference = Math.random().toString().slice(2, 11)
@@ -60,20 +61,47 @@ exports.run = async (client, msg, args, options) => {
 		let battleChanges = false
 		const teams = []
 		const pings = msg.getPings()
+		const consumed = new Set()
 
 		args.forEach((element) => {
-			if (element === 'normal') teams.push(501)
-			else if (element.match(client.re.templateRe)) [,, template] = element.match(client.re.templateRe)
-			else if (element.match(client.re.dRe)) [,, distance] = element.match(client.re.dRe)
-			else if (element === 'instinct' || element === 'yellow') teams.push(3)
-			else if (element === 'valor' || element === 'red') teams.push(2)
-			else if (element === 'mystic' || element === 'blue') teams.push(1)
-			else if (element === 'harmony' || element === 'gray' || element === 'uncontested') teams.push(0)
-			else if (element === 'everything') teams.push(...[0, 1, 2, 3])
-			else if (element === 'clean') clean = true
-			else if (element === 'slot changes') slotChanges = true
-			else if (element === 'battle changes') battleChanges = true
+			if (element === 'normal') {
+				teams.push(501)
+				consumed.add(element)
+			} else if (element.match(client.re.templateRe)) {
+				[,, template] = element.match(client.re.templateRe)
+				consumed.add(element)
+			} else if (element.match(client.re.dRe)) {
+				[,, distance] = element.match(client.re.dRe)
+				consumed.add(element)
+			} else if (element === 'instinct' || element === 'yellow') {
+				teams.push(3)
+				consumed.add(element)
+			} else if (element === 'valor' || element === 'red') {
+				teams.push(2)
+				consumed.add(element)
+			} else if (element === 'mystic' || element === 'blue') {
+				teams.push(1)
+				consumed.add(element)
+			} else if (element === 'harmony' || element === 'gray' || element === 'uncontested') {
+				teams.push(0)
+				consumed.add(element)
+			} else if (element === 'everything') {
+				teams.push(...[0, 1, 2, 3])
+				consumed.add(element)
+			} else if (element === 'clean') {
+				clean = true
+				consumed.add(element)
+			} else if (element === 'slot changes') {
+				slotChanges = true
+				consumed.add(element)
+			} else if (element === 'battle changes') {
+				battleChanges = true
+				consumed.add(element)
+			}
 		})
+
+		if (remove) consumed.add('remove')
+		if (reportUnrecognizedArgs(msg, translator, args, consumed)) return
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
 		if (client.config.tracking.maxDistance !== 0 && distance > client.config.tracking.maxDistance && !msg.isFromAdmin) distance = client.config.tracking.maxDistance
 		if (distance > 0 && !userHasLocation && !remove) {
