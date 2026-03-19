@@ -8,7 +8,8 @@ const path = require('path')
 const fsp = require('fs').promises
 const NodeCache = require('node-cache')
 
-const CACHE_DIR = path.resolve(__dirname, '../../../.cache')
+const { getConfigDir } = require('../configResolver')
+const CACHE_DIR = path.resolve(getConfigDir(), '.cache')
 const { performance } = require('perf_hooks')
 const FairPromiseQueue = require('../FairPromiseQueue')
 const metrics = require('../metrics')

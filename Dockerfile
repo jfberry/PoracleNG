@@ -37,7 +37,7 @@ COPY start.sh start.sh
 RUN chmod +x start.sh processor/poracle-processor
 
 # Create runtime directories
-RUN mkdir -p config resources/data resources/locale alerter/logs alerter/.cache alerter/nominatimData logs
+RUN mkdir -p config/.cache/geofences resources/data resources/locale alerter/logs alerter/nominatimData logs backups
 
 # Processor: 3030, Alerter: 3031
 EXPOSE 3030 3031

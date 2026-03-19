@@ -1,16 +1,13 @@
 const path = require('path')
 const config = require('../lib/configSingleton')
-
-const DEFAULT_CACHE_DIR = path.resolve(__dirname, '../../../config/.cache/geofences')
+const { getConfigDir } = require('../lib/configResolver')
 
 function getCacheDir() {
 	const configured = config.geofence?.kojiOptions?.cacheDir
-	if (configured) {
-		return path.isAbsolute(configured)
-			? configured
-			: path.resolve(__dirname, '../../..', configured)
-	}
-	return DEFAULT_CACHE_DIR
+	const cacheDir = configured || '.cache/geofences'
+	return path.isAbsolute(cacheDir)
+		? cacheDir
+		: path.resolve(getConfigDir(), cacheDir)
 }
 
 function sanitizeURL(url) {

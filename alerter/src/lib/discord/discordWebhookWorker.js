@@ -3,7 +3,8 @@ const axios = require('axios')
 const NodeCache = require('node-cache')
 const fsp = require('fs').promises
 
-const CACHE_DIR = path.resolve(__dirname, '../../../.cache')
+const { getConfigDir } = require('../configResolver')
+const CACHE_DIR = path.resolve(getConfigDir(), '.cache')
 const FormData = require('form-data')
 const util = require('util')
 const { performance } = require('perf_hooks')
