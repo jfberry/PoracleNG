@@ -1,5 +1,6 @@
 const helpCommand = require('./help')
 const trackedCommand = require('./tracked')
+const { reportUnrecognizedArgs } = require('../commandUtil')
 
 exports.run = async (client, msg, args, options) => {
 	const logReference = Math.random().toString().slice(2, 11)
@@ -54,14 +55,22 @@ exports.run = async (client, msg, args, options) => {
 		let rsvpChanges = 0
 		const levelSet = new Set()
 		const pings = msg.getPings()
-		const formNames = args.filter((arg) => arg.match(client.re.formRe)).map((arg) => client.translatorFactory.reverseTranslateCommand(arg.match(client.re.formRe)[2], true).toLowerCase())
-		const argTypes = args.filter((arg) => typeArray.includes(arg))
+		const consumed = new Set()
+		const formNames = args.filter((arg) => arg.match(client.re.formRe)).map((arg) => {
+			consumed.add(arg)
+			return client.translatorFactory.reverseTranslateCommand(arg.match(client.re.formRe)[2], true).toLowerCase()
+		})
+		const argTypes = args.filter((arg) => {
+			if (typeArray.includes(arg)) { consumed.add(arg); return true }
+			return false
+		})
 
 		// Substitute aliases
 		const pokemonAlias = require('../../pokemonAlias').getPokemonAlias()
 		for (let i = args.length - 1; i >= 0; i--) {
 			let alias = pokemonAlias[args[i]]
 			if (alias) {
+				consumed.add(args[i])
 				if (!Array.isArray(alias)) alias = [alias]
 				args.splice(i, 1, ...alias.map((x) => x.toString()))
 			}
@@ -78,17 +87,36 @@ exports.run = async (client, msg, args, options) => {
 				|| mon.types.map((t) => t.name.toLowerCase()).find((t) => argTypes.includes(t))) && !mon.form.id)
 		}
 
-		const genCommand = args.filter((arg) => arg.match(client.re.genRe))
+		// Mark matched monster names/ids as consumed
+		for (const element of args) {
+			if (Object.values(client.GameData.monsters).some((mon) => mon.name.toLowerCase() === element || mon.id.toString() === element)) {
+				consumed.add(element)
+			}
+		}
+
+		const genCommand = args.filter((arg) => {
+			if (arg.match(client.re.genRe)) { consumed.add(arg); return true }
+			return false
+		})
 		const gen = genCommand.length ? client.GameData.utilData.genData[+genCommand[0].replace(client.translator.translate('gen'), '')] : 0
 
 		if (gen) monsters = monsters.filter((mon) => mon.id >= gen.min && mon.id <= gen.max)
 
 		for (const element of args) {
-			if (element === 'ex') exclusive = 1
-			else if (element.match(client.re.levelRe)) levelSet.add(+element.match(client.re.levelRe)[2])
-			else if (element.match(client.re.templateRe)) [,, template] = element.match(client.re.templateRe)
-			else if (element.match(client.re.dRe)) [,, distance] = element.match(client.re.dRe)
-			else if (element.match(client.re.moveRe)) {
+			if (element === 'ex') {
+				exclusive = 1
+				consumed.add(element)
+			} else if (element.match(client.re.levelRe)) {
+				levelSet.add(+element.match(client.re.levelRe)[2])
+				consumed.add(element)
+			} else if (element.match(client.re.templateRe)) {
+				[,, template] = element.match(client.re.templateRe)
+				consumed.add(element)
+			} else if (element.match(client.re.dRe)) {
+				[,, distance] = element.match(client.re.dRe)
+				consumed.add(element)
+			} else if (element.match(client.re.moveRe)) {
+				consumed.add(element)
 				const [,, moveText] = element.match(client.re.moveRe)
 				const [moveName, typeName] = moveText.split('/')
 				const englishMoveName = client.translatorFactory.reverseTranslateCommand(moveName, true).toLowerCase()
@@ -99,16 +127,39 @@ exports.run = async (client, msg, args, options) => {
 					return msg.reply(translator.translateFormat('Unrecognised move name {0}', typeName ? `${moveName}/${typeName}` : moveName))
 				}
 				[move] = moveData
-			} else if (element === 'instinct' || element === 'yellow') team = 3
-			else if (element === 'valor' || element === 'red') team = 2
-			else if (element === 'mystic' || element === 'blue') team = 1
-			else if (element === 'harmony' || element === 'gray') team = 0
-			else if (element === 'everything') Object.keys(client.GameData.utilData.raidLevels).forEach((x) => levelSet.add(+x))
-			else if (element === 'clean') clean = true
-			else if (element === 'no rsvp') rsvpChanges = 0
-			else if (element === 'rsvp') rsvpChanges = 1
-			else if (element === 'rsvp only') rsvpChanges = 2
+			} else if (element === 'instinct' || element === 'yellow') {
+				team = 3
+				consumed.add(element)
+			} else if (element === 'valor' || element === 'red') {
+				team = 2
+				consumed.add(element)
+			} else if (element === 'mystic' || element === 'blue') {
+				team = 1
+				consumed.add(element)
+			} else if (element === 'harmony' || element === 'gray') {
+				team = 0
+				consumed.add(element)
+			} else if (element === 'everything') {
+				Object.keys(client.GameData.utilData.raidLevels).forEach((x) => levelSet.add(+x))
+				consumed.add(element)
+			} else if (element === 'clean') {
+				clean = true
+				consumed.add(element)
+			} else if (element === 'no rsvp') {
+				rsvpChanges = 0
+				consumed.add(element)
+			} else if (element === 'rsvp') {
+				rsvpChanges = 1
+				consumed.add(element)
+			} else if (element === 'rsvp only') {
+				rsvpChanges = 2
+				consumed.add(element)
+			}
 		}
+
+		if (remove) consumed.add('remove')
+		if (commandEverything) consumed.add('everything')
+		if (reportUnrecognizedArgs(msg, translator, args, consumed)) return
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
 		if (client.config.tracking.maxDistance !== 0 && distance > client.config.tracking.maxDistance && !msg.isFromAdmin) distance = client.config.tracking.maxDistance
 		if (distance > 0 && !userHasLocation && !remove) {

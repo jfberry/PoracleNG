@@ -1,5 +1,6 @@
 const helpCommand = require('./help')
 const trackedCommand = require('./tracked')
+const { reportUnrecognizedArgs } = require('../commandUtil')
 
 exports.run = async (client, msg, args, options) => {
 	const logReference = Math.random().toString().slice(2, 11)
@@ -45,19 +46,44 @@ exports.run = async (client, msg, args, options) => {
 		let clean = false
 		const lures = []
 		const pings = msg.getPings()
+		const consumed = new Set()
 
 		args.forEach((element) => {
-			if (element === 'normal') lures.push(501)
-			else if (element.match(client.re.templateRe)) [,, template] = element.match(client.re.templateRe)
-			else if (element.match(client.re.dRe)) [,, distance] = element.match(client.re.dRe)
-			else if (element === 'glacial') lures.push(502)
-			else if (element === 'mossy') lures.push(503)
-			else if (element === 'magnetic') lures.push(504)
-			else if (element === 'rainy') lures.push(505)
-			else if (element === 'sparkly') lures.push(506)
-			else if (element === 'everything') lures.push(0)
-			else if (element === 'clean') clean = true
+			if (element === 'normal') {
+				lures.push(501)
+				consumed.add(element)
+			} else if (element.match(client.re.templateRe)) {
+				[,, template] = element.match(client.re.templateRe)
+				consumed.add(element)
+			} else if (element.match(client.re.dRe)) {
+				[,, distance] = element.match(client.re.dRe)
+				consumed.add(element)
+			} else if (element === 'glacial') {
+				lures.push(502)
+				consumed.add(element)
+			} else if (element === 'mossy') {
+				lures.push(503)
+				consumed.add(element)
+			} else if (element === 'magnetic') {
+				lures.push(504)
+				consumed.add(element)
+			} else if (element === 'rainy') {
+				lures.push(505)
+				consumed.add(element)
+			} else if (element === 'sparkly') {
+				lures.push(506)
+				consumed.add(element)
+			} else if (element === 'everything') {
+				lures.push(0)
+				consumed.add(element)
+			} else if (element === 'clean') {
+				clean = true
+				consumed.add(element)
+			}
 		})
+
+		if (remove) consumed.add('remove')
+		if (reportUnrecognizedArgs(msg, translator, args, consumed)) return
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
 		if (client.config.tracking.maxDistance !== 0 && distance > client.config.tracking.maxDistance && !msg.isFromAdmin) distance = client.config.tracking.maxDistance
 		if (distance > 0 && !userHasLocation && !remove) {
