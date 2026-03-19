@@ -1,4 +1,3 @@
-const geoTz = require('geo-tz')
 const moment = require('moment-timezone')
 require('moment-precise-range-plugin')
 
@@ -45,14 +44,13 @@ class Maxbattle extends Controller {
 				data.stationName = data.name
 			}
 
-			const disappearTime = moment(data.battle_end * 1000).tz(geoTz.find(data.latitude, data.longitude)[0].toString())
-			data.disappearTime = disappearTime.format(this.config.locale.time)
+			// disappearTime and tth are pre-computed by the Go processor
 
 			data.matchedAreas = matchedAreas || []
-			data.matched = data.matchedAreas.map((x) => x.name.toLowerCase())
+			data.matched = data.matchedAreas.map((x) => (x.name || x).toLowerCase())
 
-			const weatherCellId = this.weatherData.getWeatherCellId(data.latitude, data.longitude)
-			data.weather = this.weatherData.getCurrentWeatherInCell(weatherCellId) || 0
+			// Use processor-provided weather data
+			data.weather = data.gameWeatherId || 0
 			data.gameWeatherId = data.weather
 			data.gameWeatherNameEng = data.weather ? this.GameData.utilData.weather[data.gameWeatherId].name : ''
 
@@ -72,7 +70,7 @@ class Maxbattle extends Controller {
 			data.formNameEng = monster.form.name
 			data.genderDataEng = this.GameData.utilData.genders[data.gender]
 			data.evolutionNameEng = data.evolution ? this.GameData.utilData.evolution[data.evolution].name : ''
-			data.tth = moment.preciseDiff(Date.now(), data.battle_end * 1000, true)
+			if (!data.tth) data.tth = moment.preciseDiff(Date.now(), data.battle_end * 1000, true)
 			data.quickMoveId = data.move_1 ?? ''
 			data.chargeMoveId = data.move_2 ?? ''
 			data.quickMoveNameEng = this.GameData.moves[data.move_1] ? this.GameData.moves[data.move_1].name : ''
@@ -113,13 +111,13 @@ class Maxbattle extends Controller {
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, disappearTime, this.config)
+				require('./common/nightTime').setNightTime(data, this.config)
 				await this.getStaticMapUrl(logReference, data, 'maxbattle', ['battle_pokemon_id', 'latitude', 'longitude', 'battle_pokemon_form', 'battle_level', 'imgUrl', 'style'])
 				data.intersection = await this.obtainIntersection(data)
-				data.staticmap = data.staticMap
+				data.staticmap = data.staticMap // deprecated
 				data.types = monster.types.map((type) => type.id)
 
-				await require('./common/weather').calculateForecastImpact(data, this.GameData, weatherCellId, this.weatherData, data.battle_end, this.config)
+				await require('./common/weather').calculateForecastImpact(data, this.GameData, null, this.weatherData, data.battle_end, this.config)
 
 				for (const cares of whoCares) {
 					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
