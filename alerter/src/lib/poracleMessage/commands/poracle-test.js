@@ -216,6 +216,11 @@ exports.run = async (client, msg, args, options) => {
 				enrichment.resetDate = formatDate(hook.reset_time)
 				break
 			}
+			case 'max_battle': {
+				enrichment.disappearTime = formatTime(hook.battle_end)
+				enrichment.tth = computeTth(hook.battle_end)
+				break
+			}
 			default:
 		}
 

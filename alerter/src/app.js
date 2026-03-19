@@ -482,7 +482,7 @@ async function processOne(payload) {
 				}
 				break
 			}
-			case 'maxbattle': {
+			case 'max_battle': {
 				const result = await maxbattleController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
 				if (result) {
 					queueAddition = result
