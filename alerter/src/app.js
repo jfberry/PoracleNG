@@ -168,46 +168,20 @@ function handleShutdown() {
 	if (shuttingDown) return
 	shuttingDown = true
 
-	log.info('Poracle shutdown - draining queues...')
+	log.info('Poracle shutdown - saving cache')
 
-	// Stop accepting new matched payloads
-	fastify.close()
+	const workerSaves = []
+	for (const worker of discordWorkers) {
+		workerSaves.push(worker.saveTimeouts())
+	}
+	if (telegram) workerSaves.push(telegram.saveTimeouts())
+	if (telegramChannel) workerSaves.push(telegramChannel.saveTimeouts())
+	if (discordWebhookWorker) workerSaves.push(discordWebhookWorker.saveTimeouts())
 
-	// Wait for message queues to drain (up to 10s)
-	const drainStart = Date.now()
-	const maxDrainMs = 10000
-	const drainInterval = setInterval(async () => {
-		const discordDepth = discordWorkers.reduce((sum, w) => sum + w.discordQueue.length, 0)
-		const telegramDepth = (telegram ? telegram.telegramQueue.length : 0)
-			+ (telegramChannel ? telegramChannel.telegramQueue.length : 0)
-		const webhookDepth = discordWebhookWorker ? discordWebhookWorker.webhookQueue.length : 0
-		const totalDepth = discordDepth + telegramDepth + webhookDepth
-
-		if (totalDepth > 0 && (Date.now() - drainStart) <= maxDrainMs) return
-		clearInterval(drainInterval)
-
-		if (totalDepth > 0) {
-			log.warn(`Poracle shutdown - ${totalDepth} messages still in queue after ${maxDrainMs}ms, proceeding`)
-		} else {
-			log.info('Poracle shutdown - queues drained')
-		}
-
-		log.info('Poracle shutdown - saving cache')
-		try {
-			const workerSaves = []
-			for (const worker of discordWorkers) {
-				workerSaves.push(worker.saveTimeouts())
-			}
-			if (telegram) workerSaves.push(telegram.saveTimeouts())
-			if (telegramChannel) workerSaves.push(telegramChannel.saveTimeouts())
-			if (discordWebhookWorker) workerSaves.push(discordWebhookWorker.saveTimeouts())
-			await Promise.all(workerSaves)
-			log.info('Poracle shutdown - complete')
-		} catch (err) {
-			log.error(`Poracle shutdown - Error saving files ${err}`)
-		}
-		process.exit()
-	}, 250)
+	Promise.all(workerSaves)
+		.then(() => log.info('Poracle shutdown - complete'))
+		.catch((err) => log.error(`Poracle shutdown - Error saving files ${err}`))
+		.finally(() => process.exit())
 }
 
 async function processPossibleShiny() {
