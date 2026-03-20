@@ -206,6 +206,17 @@ class Worker {
 			this.logs.discord.error(`${data.logReference}: #${this.id} Failed to send Discord alert to ${data.name}`, err, data)
 			this.logs.discord.error(`${data.logReference}: ${JSON.stringify(data)}`)
 
+			// Permanent failures — disable immediately
+			// 50007 = Cannot send messages to this user (DMs disabled)
+			// 10003 = Unknown Channel, 10013 = Unknown User
+			const { code } = err
+			if (code === 50007 || code === 10003 || code === 10013) {
+				await this.query.updateQuery('humans', { enabled: 0 }, { id: data.target })
+				this.logs.discord.warn(`${data.logReference}: #${this.id} Disabled user ${data.name} ${data.target} — Discord error ${code}`)
+				this.consecutiveFails.delete(data.target)
+				return true
+			}
+
 			// Disable user after repeated DM failures (they can re-enable with !poracle / /start)
 			const fails = (this.consecutiveFails.get(data.target) || 0) + 1
 			this.consecutiveFails.set(data.target, fails)

@@ -348,6 +348,18 @@ class Telegram extends EventEmitter {
 			metrics.messagesFailed.inc({ destination_type: `telegram:${dataType.toLowerCase()}` })
 			this.logs.telegram.error(`${data.logReference}: #${this.id} -> ${data.name} ${data.target}  Failed to send Telegram alert`, err)
 
+			// Permanent failures — disable immediately, no point retrying
+			const errDesc = err.response?.description || ''
+			if (err.response?.error_code === 403
+				|| errDesc.includes('user is deactivated')
+				|| errDesc.includes('bot was blocked by the user')
+				|| errDesc.includes('chat not found')) {
+				await this.query.updateQuery('humans', { enabled: 0 }, { id: data.target })
+				this.logs.telegram.warn(`${data.logReference}: #${this.id} Disabled user ${data.name} ${data.target} — ${errDesc}`)
+				this.consecutiveFails.delete(data.target)
+				return false
+			}
+
 			const fails = (this.consecutiveFails.get(data.target) || 0) + 1
 			this.consecutiveFails.set(data.target, fails)
 			const maxFails = this.config.tuning.maxSendFailsBeforeDisable || 5
