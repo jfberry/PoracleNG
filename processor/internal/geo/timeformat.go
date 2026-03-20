@@ -40,12 +40,28 @@ var momentLocales = map[string]map[string]string{
 		"LLL":  "D MMMM YYYY HH:mm",
 		"LLLL": "dddd D MMMM YYYY HH:mm",
 	},
+	"pl": {
+		"LT":   "HH:mm",
+		"LTS":  "HH:mm:ss",
+		"L":    "DD.MM.YYYY",
+		"LL":   "D MMMM YYYY",
+		"LLL":  "D MMMM YYYY HH:mm",
+		"LLLL": "dddd, D MMMM YYYY HH:mm",
+	},
 }
 
 // IsLocaleSupported returns true if the given locale has Moment.js shortcut mappings.
 func IsLocaleSupported(locale string) bool {
-	_, ok := momentLocales[strings.ToLower(locale)]
-	return ok
+	locale = strings.ToLower(locale)
+	if _, ok := momentLocales[locale]; ok {
+		return true
+	}
+	if base, _, ok := strings.Cut(locale, "-"); ok {
+		if _, ok := momentLocales[base]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // SupportedLocales returns the list of supported locale names.
@@ -64,12 +80,18 @@ func SupportedLocales() []string {
 func ConvertTimeFormat(format, locale string) string {
 	// Resolve Moment.js locale shortcuts
 	locale = strings.ToLower(locale)
-	if shortcuts, ok := momentLocales[locale]; ok {
-		if expanded, ok := shortcuts[format]; ok {
-			format = expanded
+	shortcuts := momentLocales[locale]
+	// Try base language if full locale not found (e.g. "pl-pl" → "pl")
+	if shortcuts == nil {
+		if base, _, ok := strings.Cut(locale, "-"); ok {
+			shortcuts = momentLocales[base]
 		}
-	} else if shortcuts, ok := momentLocales["en-gb"]; ok {
-		// Fall back to en-gb for unknown locales
+	}
+	// Fall back to en-gb for unknown locales
+	if shortcuts == nil {
+		shortcuts = momentLocales["en-gb"]
+	}
+	if shortcuts != nil {
 		if expanded, ok := shortcuts[format]; ok {
 			format = expanded
 		}
