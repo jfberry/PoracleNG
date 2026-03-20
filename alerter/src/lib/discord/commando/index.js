@@ -8,7 +8,6 @@ const { EventEmitter } = require('events')
 const fs = require('fs')
 const { S2 } = require('s2-geometry')
 const mustache = require('handlebars')
-const hastebin = require('hastebin-gen')
 const { diff } = require('deep-object-diff')
 
 const emojiStrip = require('../../../util/emojiStrip')
@@ -96,7 +95,6 @@ class DiscordCommando extends EventEmitter {
 			this.client.GameData = this.GameData
 			this.client.PoracleInfo = this.PoracleInfo
 			this.client.mustache = mustache
-			this.client.hastebin = hastebin
 			this.client.translatorFactory = this.translatorFactory
 			this.client.updatedDiff = diff
 			this.client.translator = this.translator

@@ -1,6 +1,5 @@
 const { diff } = require('deep-object-diff')
 const mustache = require('handlebars')
-const hastebin = require('hastebin-gen')
 const PoracleTelegramUtil = require('./poracleTelegramUtil')
 const PoracleTelegramMessage = require('./poracleTelegramMessage')
 
@@ -19,7 +18,6 @@ class PoracleTelegramState {
 		this.translatorFactory = ctx.state.controller.translatorFactory
 		this.config = ctx.state.controller.config
 		this.mustache = mustache
-		this.hastebin = hastebin
 		this.updatedDiff = diff
 		this.addToMessageQueue = ctx.poracleAddMessageQueue
 		this.addToMatchedQueue = ctx.poracleAddMatchedQueue

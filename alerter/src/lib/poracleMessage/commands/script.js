@@ -374,15 +374,6 @@ exports.run = async (client, msg, args, options) => {
 			return await msg.reply(translator.translate('The script specified is empty'))
 		}
 
-		if (args.includes('link')) {
-			try {
-				const hastelink = await client.hastebin(message)
-				return await msg.reply(`${translator.translate('Your backup is at')} ${hastelink}`)
-			} catch (e) {
-				await msg.reply(translator.translate('Hastebin seems down'))
-			}
-		}
-
 		const filepath = path.join(__dirname, `./${target.name}.txt`)
 		fs.writeFileSync(filepath, message)
 		await msg.replyWithAttachment(translator.translate('Your backup'), filepath)
