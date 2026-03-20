@@ -20,7 +20,7 @@ RUN npm install --omit=dev --ignore-scripts && npm rebuild
 # ---- Stage 3: Runtime image ----
 FROM node:24-alpine
 
-RUN apk add --no-cache curl bash tini
+RUN apk add --no-cache curl bash tini tzdata
 
 WORKDIR /app
 

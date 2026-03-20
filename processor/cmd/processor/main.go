@@ -7,6 +7,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	_ "time/tzdata" // embed IANA timezone database as fallback
 	"os/signal"
 	"sync"
 	"syscall"
