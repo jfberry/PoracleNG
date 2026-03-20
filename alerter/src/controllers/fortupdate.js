@@ -171,11 +171,11 @@ class FortUpdate extends Controller {
 				const view = {
 					...geoResult,
 					...data,
-					tthd: data.tth.days,
-					tthh: data.tth.hours,
-					tthm: data.tth.minutes,
-					tths: data.tth.seconds,
-					time: data.resetTime,
+					tthd: data.tth?.days || 0,
+					tthh: data.tth?.hours || 0,
+					tthm: data.tth?.minutes || 0,
+					tths: data.tth?.seconds || 0,
+					time: data.resetTime || '',
 					nowISO: new Date().toISOString(),
 					areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
 				}
@@ -202,7 +202,8 @@ class FortUpdate extends Controller {
 
 			return jobs
 		} catch (e) {
-			this.log.error(`${data.pokestop_id}: [matched] Can't seem to handle fort update: `, e, data)
+			this.log.error(`${data.id}: [matched] Can't seem to handle fort update: `, e, data)
+			return []
 		}
 	}
 }
