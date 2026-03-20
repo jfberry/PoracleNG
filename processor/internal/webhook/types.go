@@ -284,14 +284,105 @@ type MaxbattleWebhook struct {
 	Updated                 int64   `json:"updated"`
 }
 
-// FortWebhook mirrors a fort_update webhook message.
+// FortWebhook mirrors Golbat's fort_update webhook message.
 type FortWebhook struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Latitude    float64  `json:"latitude"`
-	Longitude   float64  `json:"longitude"`
-	FortType    string   `json:"type"`
-	IsEmpty     bool     `json:"is_empty"`
-	ChangeTypes []string `json:"change_types"`
-	ResetTime   int64    `json:"reset_time"`
+	ChangeType string        `json:"change_type"` // "new", "edit", "removal"
+	EditTypes  []string      `json:"edit_types"`  // e.g. ["name", "location", "image_url"]
+	New        *FortSnapshot `json:"new"`
+	Old        *FortSnapshot `json:"old"`
+}
+
+// FortSnapshot represents the new or old state of a fort in a fort_update webhook.
+type FortSnapshot struct {
+	ID          string       `json:"id"`
+	FortType    string       `json:"type"` // "pokestop" or "gym"
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	ImageURL    string       `json:"image_url"`
+	Location    FortLocation `json:"location"`
+}
+
+// FortLocation holds lat/lon for a fort.
+type FortLocation struct {
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
+}
+
+// FortID returns the fort ID from whichever snapshot is present.
+func (f *FortWebhook) FortID() string {
+	if f.New != nil {
+		return f.New.ID
+	}
+	if f.Old != nil {
+		return f.Old.ID
+	}
+	return ""
+}
+
+// FortType returns the fort type from whichever snapshot is present.
+func (f *FortWebhook) FortType() string {
+	if f.New != nil {
+		return f.New.FortType
+	}
+	if f.Old != nil {
+		return f.Old.FortType
+	}
+	return ""
+}
+
+// Latitude returns the lat from whichever snapshot is present.
+func (f *FortWebhook) Latitude() float64 {
+	if f.New != nil {
+		return f.New.Location.Lat
+	}
+	if f.Old != nil {
+		return f.Old.Location.Lat
+	}
+	return 0
+}
+
+// Longitude returns the lon from whichever snapshot is present.
+func (f *FortWebhook) Longitude() float64 {
+	if f.New != nil {
+		return f.New.Location.Lon
+	}
+	if f.Old != nil {
+		return f.Old.Location.Lon
+	}
+	return 0
+}
+
+// IsEmpty returns true if neither the new nor old snapshot has a name or description.
+func (f *FortWebhook) IsEmpty() bool {
+	if f.New != nil && (f.New.Name != "" || f.New.Description != "") {
+		return false
+	}
+	if f.Old != nil && (f.Old.Name != "" || f.Old.Description != "") {
+		return false
+	}
+	return true
+}
+
+// AllChangeTypes returns a combined list of change types (edit_types + change_type).
+func (f *FortWebhook) AllChangeTypes() []string {
+	var types []string
+	// If this was an edit from an empty fort, treat as "new"
+	changeType := f.ChangeType
+	if changeType == "edit" && (f.Old == nil || (f.Old.Name == "" && f.Old.Description == "")) {
+		changeType = "new"
+	}
+	types = append(types, f.EditTypes...)
+	types = append(types, changeType)
+	return types
+}
+
+// FortName returns the name from whichever snapshot is present.
+func (f *FortWebhook) FortName() string {
+	if f.New != nil {
+		return f.New.Name
+	}
+	if f.Old != nil {
+		return f.Old.Name
+	}
+	return ""
 }

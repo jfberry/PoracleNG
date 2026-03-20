@@ -30,15 +30,24 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			return
 		}
 
-		l := log.WithField("ref", fort.ID)
+		lat := fort.Latitude()
+		lon := fort.Longitude()
+		fortID := fort.FortID()
+
+		if fortID == "" {
+			log.Warn("Fort update webhook has no fort ID, skipping")
+			return
+		}
+
+		l := log.WithField("ref", fortID)
 
 		data := &matching.FortData{
-			ID:          fort.ID,
-			FortType:    fort.FortType,
-			IsEmpty:     fort.IsEmpty,
-			ChangeTypes: fort.ChangeTypes,
-			Latitude:    fort.Latitude,
-			Longitude:   fort.Longitude,
+			ID:          fortID,
+			FortType:    fort.FortType(),
+			IsEmpty:     fort.IsEmpty(),
+			ChangeTypes: fort.AllChangeTypes(),
+			Latitude:    lat,
+			Longitude:   lon,
 		}
 
 		st := ps.stateMgr.Get()
@@ -48,13 +57,13 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			metrics.MatchedEvents.WithLabelValues("fort_update").Inc()
 			metrics.MatchedUsers.WithLabelValues("fort_update").Add(float64(len(matched)))
 
-			areas := st.Geofence.PointInAreas(fort.Latitude, fort.Longitude)
+			areas := st.Geofence.PointInAreas(lat, lon)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Fort update %s (%s) and %d humans cared",
-				fort.Name, fort.FortType, len(matched))
+			l.Infof("Fort update %s (%s, %s) and %d humans cared",
+				fort.FortName(), fort.FortType(), fort.ChangeType, len(matched))
 
-			enrichment := ps.enricher.Fort(&fort, fort.ResetTime)
+			enrichment := ps.enricher.FortUpdate(lat, lon)
 
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "fort_update",
@@ -64,7 +73,8 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 				MatchedUsers: matched,
 			})
 		} else {
-			l.Debugf("Fort update %s (%s) and 0 humans cared", fort.Name, fort.FortType)
+			l.Debugf("Fort update %s (%s, %s) and 0 humans cared",
+				fort.FortName(), fort.FortType(), fort.ChangeType)
 		}
 	}()
 	return nil
