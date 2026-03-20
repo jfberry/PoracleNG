@@ -37,7 +37,7 @@
     "async-mutex": "^0.5.0",
     "axios": "^1.13.6",
     "cacheable": "^2.3.3",
-    "chokidar": "^3.5.3",
+    "chokidar": "^5.0.0",
     "config": "^4.4.1",
     "country-code-emoji": "^2.3.0",
     "deep-object-diff": "^1.1.9",
