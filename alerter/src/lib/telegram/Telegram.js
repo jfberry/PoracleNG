@@ -2,12 +2,12 @@ const { EventEmitter } = require('events')
 const path = require('path')
 const fs = require('fs')
 const fsp = require('fs').promises
-
-const { getConfigDir } = require('../configResolver')
-const CACHE_DIR = path.resolve(getConfigDir(), '.cache')
 const NodeCache = require('node-cache')
 const mustache = require('handlebars')
 const { performance } = require('perf_hooks')
+const { getConfigDir } = require('../configResolver')
+
+const CACHE_DIR = path.resolve(getConfigDir(), '.cache')
 const emojiStrip = require('../../util/emojiStrip')
 const FairPromiseQueue = require('../FairPromiseQueue')
 const metrics = require('../metrics')

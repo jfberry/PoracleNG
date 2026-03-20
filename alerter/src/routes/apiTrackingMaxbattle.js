@@ -104,38 +104,17 @@ module.exports = async (fastify, options) => {
 		})
 
 		try {
-			const tracked = await fastify.query.selectAllQuery('maxbattle', { id, profile_no: currentProfileNo })
-
-			const updates = []
-			const alreadyPresent = []
-
 			let message = ''
 
-			if ((alreadyPresent.length + updates.length + insert.length) > 50) {
+			if (insert.length > 50) {
 				message = translator.translateFormat('I have made a lot of changes. See {0}{1} for details', '!', translator.translate('tracked'))
 			} else {
-				for (const i of alreadyPresent) {
-					message = message.concat(translator.translate('Unchanged: '), await trackedCommand.maxbattleRowText(fastify.config, translator, fastify.GameData, i, fastify.scannerQuery), '\n')
-				}
-				for (const i of updates) {
-					message = message.concat(translator.translate('Updated: '), await trackedCommand.maxbattleRowText(fastify.config, translator, fastify.GameData, i, fastify.scannerQuery), '\n')
-				}
 				for (const i of insert) {
 					message = message.concat(translator.translate('New: '), await trackedCommand.maxbattleRowText(fastify.config, translator, fastify.GameData, i, fastify.scannerQuery), '\n')
 				}
 			}
 
-			await fastify.query.deleteWhereInQuery(
-				'maxbattle',
-				{
-					id,
-					profile_no: currentProfileNo,
-				},
-				updates.map((x) => x.uid),
-				'uid',
-			)
-
-			const insertResult = await fastify.query.insertQuery('maxbattle', [...insert, ...updates], 'uid')
+			const insertResult = await fastify.query.insertQuery('maxbattle', insert, 'uid')
 			const newUids = Array.isArray(insertResult) ? insertResult.map((r) => (typeof r === 'object' ? r.uid : r)) : []
 
 			// Send message to user
@@ -165,8 +144,6 @@ module.exports = async (fastify, options) => {
 				status: 'ok',
 				message: silent ? '' : message,
 				newUids,
-				alreadyPresent: alreadyPresent.length,
-				updates: updates.length,
 				insert: insert.length,
 			}
 		} catch (err) {
