@@ -91,7 +91,7 @@ HEALTH_URL="http://${HEALTH_HOST}:${PROC_PORT}/health"
 # ---- Start processor ----
 
 echo "[start] Starting processor..."
-"$PROCESSOR_BIN" -basedir "$ROOT" 2>&1 | sed 's/^/[processor] /' &
+"$PROCESSOR_BIN" -basedir "$ROOT" 2>&1 | sed -u 's/^/[processor] /' &
 PROCESSOR_PID=$!
 
 # Wait for processor health endpoint
@@ -118,7 +118,7 @@ fi
 # ---- Start alerter ----
 
 echo "[start] Starting alerter..."
-(cd "$ALERTER_DIR" && node src/app.js) 2>&1 | sed 's/^/[alerter] /' &
+(cd "$ALERTER_DIR" && node src/app.js) 2>&1 | sed -u 's/^/[alerter] /' &
 ALERTER_PID=$!
 
 echo "[start] Both components running (processor=$PROCESSOR_PID, alerter=$ALERTER_PID)"
