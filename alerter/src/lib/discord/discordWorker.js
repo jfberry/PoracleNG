@@ -34,6 +34,7 @@ class Worker {
 		this.client = {}
 		this.rehydrateTimeouts = rehydrateTimeouts
 		this.discordMessageTimeouts = new NodeCache()
+		this.consecutiveFails = new Map()
 		this.discordQueue = []
 		this.queueProcessor = new FairPromiseQueue(this.discordQueue, this.config.tuning.concurrentDiscordDestinationsPerBot, ((entry) => entry.target))
 		this.status = statusActivity.status
@@ -187,8 +188,7 @@ class Worker {
 			metrics.discordDeliveryDuration.observe({ destination_type: 'user' }, (endTime - startTime) / 1000)
 			metrics.messagesSent.inc({ destination_type: 'discord:user' })
 
-			// Reset fails counter on successful send
-			await this.query.updateQuery('humans', { fails: 0 }, { id: data.target })
+			this.consecutiveFails.delete(data.target)
 
 			if (data.clean) {
 				setTimeout(async () => {
@@ -203,16 +203,17 @@ class Worker {
 			return true
 		} catch (err) {
 			metrics.messagesFailed.inc({ destination_type: 'discord:user' })
-			await this.query.incrementQuery('humans', { id: data.target }, 'fails', 1)
 			this.logs.discord.error(`${data.logReference}: #${this.id} Failed to send Discord alert to ${data.name}`, err, data)
 			this.logs.discord.error(`${data.logReference}: ${JSON.stringify(data)}`)
 
 			// Disable user after repeated DM failures (they can re-enable with !poracle / /start)
+			const fails = (this.consecutiveFails.get(data.target) || 0) + 1
+			this.consecutiveFails.set(data.target, fails)
 			const maxFails = this.config.tuning.maxSendFailsBeforeDisable || 5
-			const human = await this.query.selectOneQuery('humans', { id: data.target })
-			if (human && human.fails >= maxFails) {
+			if (fails >= maxFails) {
 				await this.query.updateQuery('humans', { enabled: 0 }, { id: data.target })
-				this.logs.discord.warn(`${data.logReference}: #${this.id} Disabled user ${data.name} ${data.target} after ${human.fails} consecutive send failures`)
+				this.logs.discord.warn(`${data.logReference}: #${this.id} Disabled user ${data.name} ${data.target} after ${fails} consecutive send failures`)
+				this.consecutiveFails.delete(data.target)
 			}
 		}
 		return true
@@ -260,7 +261,8 @@ class Worker {
 			return true
 		} catch (err) {
 			metrics.messagesFailed.inc({ destination_type: 'discord:channel' })
-			await this.query.incrementQuery('humans', { id: data.target }, 'fails', 1)
+			const fails = (this.consecutiveFails.get(data.target) || 0) + 1
+			this.consecutiveFails.set(data.target, fails)
 			this.logs.discord.error(`${data.logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL failed to send Discord alert to `, err)
 			this.logs.discord.error(`${data.logReference}: ${JSON.stringify(data)}`)
 		}

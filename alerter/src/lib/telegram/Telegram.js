@@ -32,6 +32,8 @@ class Telegram extends EventEmitter {
 		this.client = {}
 		this.rehydrateTimeouts = rehydrateTimeouts
 		this.telegramMessageTimeouts = new NodeCache()
+		this.consecutiveFails = new Map()
+		this.query = query
 		this.commandFiles = fs.readdirSync(`${__dirname}/commands`)
 		this.bot = telegraf
 		this.id = id
@@ -329,6 +331,7 @@ class Telegram extends EventEmitter {
 			(this.config.logger.timingStats ? this.logs.telegram.verbose : this.logs.telegram.debug)(`${logReference}: #${this.id} -> ${data.name} ${data.target} ${dataType} (${endTime - startTime} ms)`)
 			metrics.telegramDeliveryDuration.observe({ destination_type: dataType.toLowerCase() }, durationSec)
 			metrics.messagesSent.inc({ destination_type: `telegram:${dataType.toLowerCase()}` })
+			this.consecutiveFails.delete(data.target)
 
 			if (data.clean) {
 				for (const id of messageIds) {
@@ -344,6 +347,15 @@ class Telegram extends EventEmitter {
 		} catch (err) {
 			metrics.messagesFailed.inc({ destination_type: `telegram:${dataType.toLowerCase()}` })
 			this.logs.telegram.error(`${data.logReference}: #${this.id} -> ${data.name} ${data.target}  Failed to send Telegram alert`, err)
+
+			const fails = (this.consecutiveFails.get(data.target) || 0) + 1
+			this.consecutiveFails.set(data.target, fails)
+			const maxFails = this.config.tuning.maxSendFailsBeforeDisable || 5
+			if (fails >= maxFails) {
+				await this.query.updateQuery('humans', { enabled: 0 }, { id: data.target })
+				this.logs.telegram.warn(`${data.logReference}: #${this.id} Disabled user ${data.name} ${data.target} after ${fails} consecutive send failures`)
+				this.consecutiveFails.delete(data.target)
+			}
 			return false
 		}
 	}

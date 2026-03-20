@@ -26,6 +26,7 @@ class DiscordWebhookWorker {
 		this.webhookQueue = []
 		this.rehydrateTimeouts = rehydrateTimeouts
 		this.webhookTimeouts = new NodeCache()
+		this.consecutiveFails = new Map()
 		this.query = query
 
 		this.queueProcessor = new FairPromiseQueue(this.webhookQueue, this.config.tuning.concurrentDiscordWebhookConnections, ((t) => t.target))
@@ -171,11 +172,13 @@ class DiscordWebhookWorker {
 
 			if (res.status < 200 || res.status > 299) {
 				metrics.messagesFailed.inc({ destination_type: 'webhook' })
-				await this.query.incrementQuery('humans', { id: data.target }, 'fails', 1)
+				const fails = (this.consecutiveFails.get(data.target) || 0) + 1
+				this.consecutiveFails.set(data.target, fails)
 				this.logs.discord.warn(`${logReference}: ${data.name} WEBHOOK Got ${res.status} ${res.statusText}`)
 				this.logs.discord.warn(`${logReference}: ${JSON.stringify(data.message)}`)
 			} else {
 				metrics.messagesSent.inc({ destination_type: 'webhook' })
+				this.consecutiveFails.delete(data.target)
 				this.logs.discord.verbose(`${logReference}: ${data.name} WEBHOOK Got ${res.status} ${res.statusText}`)
 			}
 			this.logs.discord.silly(`${logReference}: ${data.name} WEBHOOK results ${data.target} ${res.statusText} ${res.status}`, res.headers)
