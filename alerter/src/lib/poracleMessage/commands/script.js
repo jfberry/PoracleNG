@@ -1,5 +1,6 @@
-const path = require('path')
+const os = require('os')
 const fs = require('fs')
+const path = require('path')
 const helpCommand = require('./help')
 
 exports.run = async (client, msg, args, options) => {
@@ -374,7 +375,7 @@ exports.run = async (client, msg, args, options) => {
 			return await msg.reply(translator.translate('The script specified is empty'))
 		}
 
-		const filepath = path.join(__dirname, `./${target.name}.txt`)
+		const filepath = path.join(os.tmpdir(), `poracle-script-${target.id}-${Date.now()}.txt`)
 		fs.writeFileSync(filepath, message)
 		await msg.replyWithAttachment(translator.translate('Your backup'), filepath)
 		fs.unlinkSync(filepath)

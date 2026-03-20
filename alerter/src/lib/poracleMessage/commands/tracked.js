@@ -1,4 +1,5 @@
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const helpCommand = require('./help')
 
@@ -454,7 +455,7 @@ exports.run = async (client, msg, args, options) => {
 			return await msg.reply(message, { style: 'markdown' })
 		}
 
-		const filepath = path.join(__dirname, `./${target.name}.txt`)
+		const filepath = path.join(os.tmpdir(), `poracle-tracked-${target.id}-${Date.now()}.txt`)
 		fs.writeFileSync(filepath, message)
 		await msg.replyWithAttachment(translator.translate('Tracking list is quite long. Here it is as a file:'), filepath)
 		fs.unlinkSync(filepath)
