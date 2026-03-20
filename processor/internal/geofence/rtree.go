@@ -31,6 +31,7 @@ func NewSpatialIndex(fences []Fence) *SpatialIndex {
 	si := &SpatialIndex{fences: fences}
 	for i := range fences {
 		f := &fences[i]
+		f.NormalizedName = strings.ToLower(strings.ReplaceAll(f.Name, "_", " "))
 		if len(f.Path) > 0 {
 			minX, minY, maxX, maxY := boundingBox(f.Path)
 			entry := &fenceEntry{fence: f, path: f.Path}
@@ -71,13 +72,22 @@ func (si *SpatialIndex) PointInAreas(lat, lon float64) []MatchedArea {
 	return results
 }
 
-// MatchedAreaNames returns lowercased area names (with _ replaced by space) for a point.
-func (si *SpatialIndex) MatchedAreaNames(lat, lon float64) []string {
-	areas := si.PointInAreas(lat, lon)
-	names := make([]string, len(areas))
-	for i, a := range areas {
-		names[i] = strings.ToLower(strings.ReplaceAll(a.Name, "_", " "))
-	}
+// MatchedAreaNames returns a set of normalized area names for a point.
+func (si *SpatialIndex) MatchedAreaNames(lat, lon float64) map[string]bool {
+	names := make(map[string]bool)
+	seen := make(map[string]bool)
+
+	si.tree.Search(
+		[2]float64{lat, lon},
+		[2]float64{lat, lon},
+		func(min, max [2]float64, entry *fenceEntry) bool {
+			if !seen[entry.fence.Name] && PointInPolygon(lat, lon, entry.path) {
+				seen[entry.fence.Name] = true
+				names[entry.fence.NormalizedName] = true
+			}
+			return true
+		},
+	)
 	return names
 }
 

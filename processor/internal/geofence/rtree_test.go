@@ -175,15 +175,14 @@ func TestMatchedAreaNames(t *testing.T) {
 	// UKC campus point - should get lowercased names
 	names := si.MatchedAreaNames(51.297267, 1.069734)
 
-	sort.Strings(names)
 	if len(names) != 2 {
 		t.Fatalf("Expected 2 area names, got %d: %v", len(names), names)
 	}
-	if names[0] != "canterbury" {
-		t.Errorf("Expected 'canterbury', got %q", names[0])
+	if !names["canterbury"] {
+		t.Errorf("Expected 'canterbury' in names, got %v", names)
 	}
-	if names[1] != "ukc" {
-		t.Errorf("Expected 'ukc', got %q", names[1])
+	if !names["ukc"] {
+		t.Errorf("Expected 'ukc' in names, got %v", names)
 	}
 }
 
@@ -200,7 +199,7 @@ func TestMatchedAreaNamesUnderscoreReplacement(t *testing.T) {
 	si := NewSpatialIndex(fences)
 
 	names := si.MatchedAreaNames(51.0, 0.0)
-	if len(names) != 1 || names[0] != "dover road" {
+	if len(names) != 1 || !names["dover road"] {
 		t.Errorf("Expected 'dover road', got %v", names)
 	}
 }

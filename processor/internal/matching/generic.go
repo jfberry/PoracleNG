@@ -24,7 +24,7 @@ type trackingUserData struct {
 func ValidateHumansGeneric(
 	trackings []trackingUserData,
 	lat, lon float64,
-	matchedAreaNames []string,
+	matchedAreaNames map[string]bool,
 	strictAreasEnabled bool,
 	humans map[string]*db.Human,
 	blockedAlertType string,

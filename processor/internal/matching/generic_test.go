@@ -17,7 +17,7 @@ func TestValidateHumansGenericBasic(t *testing.T) {
 
 	result := ValidateHumansGeneric(
 		trackings, 51.0, 0.0,
-		[]string{"testarea"},
+		map[string]bool{"testarea": true},
 		false, humans, "lure",
 	)
 
@@ -37,7 +37,7 @@ func TestValidateHumansGenericDisabled(t *testing.T) {
 
 	result := ValidateHumansGeneric(
 		trackings, 51.0, 0.0,
-		[]string{"testarea"},
+		map[string]bool{"testarea": true},
 		false, humans, "lure",
 	)
 
@@ -57,7 +57,7 @@ func TestValidateHumansGenericAdminDisable(t *testing.T) {
 
 	result := ValidateHumansGeneric(
 		trackings, 51.0, 0.0,
-		[]string{"testarea"},
+		map[string]bool{"testarea": true},
 		false, humans, "lure",
 	)
 
@@ -77,7 +77,7 @@ func TestValidateHumansGenericWrongProfile(t *testing.T) {
 
 	result := ValidateHumansGeneric(
 		trackings, 51.0, 0.0,
-		[]string{"testarea"},
+		map[string]bool{"testarea": true},
 		false, humans, "lure",
 	)
 
@@ -97,7 +97,7 @@ func TestValidateHumansGenericDedup(t *testing.T) {
 
 	result := ValidateHumansGeneric(
 		trackings, 51.0, 0.0,
-		[]string{"testarea"},
+		map[string]bool{"testarea": true},
 		false, humans, "lure",
 	)
 
@@ -118,7 +118,7 @@ func TestValidateHumansGenericStrictAreaRestriction(t *testing.T) {
 	// Area matches but restriction doesn't
 	result := ValidateHumansGeneric(
 		trackings, 51.0, 0.0,
-		[]string{"testarea"},
+		map[string]bool{"testarea": true},
 		true, humans, "lure",
 	)
 
@@ -129,7 +129,7 @@ func TestValidateHumansGenericStrictAreaRestriction(t *testing.T) {
 	// Both match
 	result = ValidateHumansGeneric(
 		trackings, 51.0, 0.0,
-		[]string{"testarea", "restricted_zone"},
+		map[string]bool{"testarea": true, "restricted_zone": true},
 		true, humans, "lure",
 	)
 
@@ -151,7 +151,7 @@ func TestValidateHumansGenericDistanceCheck(t *testing.T) {
 	// Within distance
 	result := ValidateHumansGeneric(
 		trackings, 51.5001, 0.0,
-		[]string{"testarea"},
+		map[string]bool{"testarea": true},
 		false, humans, "lure",
 	)
 
@@ -162,7 +162,7 @@ func TestValidateHumansGenericDistanceCheck(t *testing.T) {
 	// Too far
 	result = ValidateHumansGeneric(
 		trackings, 51.6, 0.0,
-		[]string{"testarea"},
+		map[string]bool{"testarea": true},
 		false, humans, "lure",
 	)
 
@@ -184,7 +184,7 @@ func TestValidateHumansGenericMultipleUsers(t *testing.T) {
 
 	result := ValidateHumansGeneric(
 		trackings, 51.0, 0.0,
-		[]string{"testarea"},
+		map[string]bool{"testarea": true},
 		false, humans, "lure",
 	)
 
@@ -197,13 +197,13 @@ func TestAreaOverlap(t *testing.T) {
 	tests := []struct {
 		name     string
 		human    []string
-		matched  []string
+		matched  map[string]bool
 		expected bool
 	}{
-		{"match", []string{"london"}, []string{"london", "paris"}, true},
-		{"no match", []string{"berlin"}, []string{"london", "paris"}, false},
-		{"exact match required", []string{"London"}, []string{"london"}, false},
-		{"empty human areas", nil, []string{"london"}, false},
+		{"match", []string{"london"}, map[string]bool{"london": true, "paris": true}, true},
+		{"no match", []string{"berlin"}, map[string]bool{"london": true, "paris": true}, false},
+		{"exact match required", []string{"London"}, map[string]bool{"london": true}, false},
+		{"empty human areas", nil, map[string]bool{"london": true}, false},
 		{"empty matched areas", []string{"london"}, nil, false},
 	}
 
@@ -282,7 +282,7 @@ func TestValidateHumansGenericMultipleAreas(t *testing.T) {
 	// Point in Area A only
 	result := ValidateHumansGeneric(
 		trackings, 51.0, -0.5,
-		[]string{"areaa"},
+		map[string]bool{"areaa": true},
 		false, humans, "lure",
 	)
 	if len(result) != 0 {
@@ -292,7 +292,7 @@ func TestValidateHumansGenericMultipleAreas(t *testing.T) {
 	// Point in Area B
 	result = ValidateHumansGeneric(
 		trackings, 51.0, 0.5,
-		[]string{"areab"},
+		map[string]bool{"areab": true},
 		false, humans, "lure",
 	)
 	if len(result) != 1 {

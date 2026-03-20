@@ -9,6 +9,7 @@ import (
 // Fence represents a geofence area.
 type Fence struct {
 	Name             string         `json:"name"`
+	NormalizedName   string         `json:"-"` // lowercased, underscores replaced with spaces (computed at load)
 	ID               int            `json:"id"`
 	Color            string         `json:"color"`
 	Path             [][2]float64   `json:"path,omitempty"`

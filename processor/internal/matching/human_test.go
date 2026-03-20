@@ -20,7 +20,7 @@ func TestValidateHumansAreaMatch(t *testing.T) {
 	result := ValidateHumans(
 		[]*db.MonsterTracking{monster},
 		51.5, -0.1,
-		[]string{"london", "paris"},
+		map[string]bool{"london": true, "paris": true},
 		false,
 		map[string]*db.Human{"user1": human},
 	)
@@ -44,7 +44,7 @@ func TestValidateHumansNoAreaMatch(t *testing.T) {
 	result := ValidateHumans(
 		[]*db.MonsterTracking{monster},
 		51.5, -0.1,
-		[]string{"london", "paris"},
+		map[string]bool{"london": true, "paris": true},
 		false,
 		map[string]*db.Human{"user1": human},
 	)
@@ -70,7 +70,7 @@ func TestValidateHumansStrictAreaRestriction(t *testing.T) {
 	result := ValidateHumans(
 		[]*db.MonsterTracking{monster},
 		51.5, -0.1,
-		[]string{"london"},
+		map[string]bool{"london": true},
 		true,
 		map[string]*db.Human{"user1": human},
 	)
@@ -83,7 +83,7 @@ func TestValidateHumansStrictAreaRestriction(t *testing.T) {
 	result = ValidateHumans(
 		[]*db.MonsterTracking{monster},
 		51.5, -0.1,
-		[]string{"london", "central london"},
+		map[string]bool{"london": true, "central london": true},
 		true,
 		map[string]*db.Human{"user1": human},
 	)
@@ -109,7 +109,7 @@ func TestValidateHumansDistance(t *testing.T) {
 	result := ValidateHumans(
 		[]*db.MonsterTracking{monster},
 		51.5001, -0.1,
-		[]string{"london"},
+		map[string]bool{"london": true},
 		false,
 		map[string]*db.Human{"user1": human},
 	)
@@ -122,7 +122,7 @@ func TestValidateHumansDistance(t *testing.T) {
 	result = ValidateHumans(
 		[]*db.MonsterTracking{monster},
 		51.51, -0.1,
-		[]string{"london"},
+		map[string]bool{"london": true},
 		false,
 		map[string]*db.Human{"user1": human},
 	)

@@ -2,7 +2,6 @@ package matching
 
 import (
 	"math"
-	"slices"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -14,7 +13,7 @@ import (
 func ValidateHumans(
 	monsterList []*db.MonsterTracking,
 	monsterLat, monsterLon float64,
-	matchedAreaNames []string,
+	matchedAreaNames map[string]bool,
 	strictAreasEnabled bool,
 	humans map[string]*db.Human,
 ) []webhook.MatchedUser {
@@ -106,7 +105,7 @@ func ValidateHumansForRaid(
 	trackingIDs []string,
 	trackingData []raidUserData,
 	raidLat, raidLon float64,
-	matchedAreaNames []string,
+	matchedAreaNames map[string]bool,
 	strictAreasEnabled bool,
 	humans map[string]*db.Human,
 	blockedAlertType string,
@@ -198,9 +197,9 @@ type raidUserData struct {
 	IsSpecificGym bool
 }
 
-func areaOverlap(humanAreas []string, matchedAreas []string) bool {
+func areaOverlap(humanAreas []string, matchedAreas map[string]bool) bool {
 	for _, ha := range humanAreas {
-		if slices.Contains(matchedAreas, ha) {
+		if matchedAreas[ha] {
 			return true
 		}
 	}

@@ -96,7 +96,7 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) []webhook.MatchedUser
 func validateHumansForGym(
 	trackings []trackingUserData,
 	lat, lon float64,
-	matchedAreaNames []string,
+	matchedAreaNames map[string]bool,
 	strictAreasEnabled bool,
 	humans map[string]*db.Human,
 	gymTrackings []*db.GymTracking,
