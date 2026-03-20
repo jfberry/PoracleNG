@@ -144,8 +144,7 @@ class Raid extends Controller {
 					await weatherCommon.calculateForecastImpact(data, this.GameData, null, this.weatherData, data.end, this.config)
 
 					for (const cares of whoCares) {
-						if (cares.rsvp_changes === 0 && !data.firstNotification) continue // eslint-disable-line no-continue
-						if (cares.rsvp_changes === 2 && (!data.rsvps || data.rsvps?.length === 0)) continue // eslint-disable-line no-continue
+						// RSVP filtering is handled by the processor
 
 						const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
 						if (rateLimitTtr) continue // eslint-disable-line no-continue
@@ -335,8 +334,7 @@ class Raid extends Controller {
 				data.staticmap = data.staticMap // deprecated
 
 				for (const cares of whoCares) {
-					if (cares.rsvp_changes === 0 && !data.firstNotification) continue // eslint-disable-line no-continue
-					if (cares.rsvp_changes === 2 && (!data.rsvps || data.rsvps?.length === 0)) continue // eslint-disable-line no-continue
+					// RSVP filtering is handled by the processor
 
 					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
 					if (rateLimitTtr) continue // eslint-disable-line no-continue

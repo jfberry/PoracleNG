@@ -83,6 +83,25 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			matched = ps.raidMatcher.MatchEgg(eggData, st)
 		}
 
+		// Filter by RSVP preference before sending
+		hasRSVPs := len(raid.RSVPs) > 0
+		filtered := matched[:0]
+		for _, m := range matched {
+			switch m.RSVPChanges {
+			case 0: // "no rsvp" — only first notification
+				if !isFirstNotification {
+					continue
+				}
+			case 2: // "rsvp only" — only when RSVPs present
+				if !hasRSVPs {
+					continue
+				}
+			}
+			// case 1: "rsvp" — always notify (first + changes)
+			filtered = append(filtered, m)
+		}
+		matched = filtered
+
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("raid").Inc()
 			metrics.MatchedUsers.WithLabelValues("raid").Add(float64(len(matched)))

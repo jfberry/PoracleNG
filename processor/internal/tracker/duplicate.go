@@ -9,7 +9,9 @@ import (
 
 // DuplicateCache provides deduplication for webhooks.
 type DuplicateCache struct {
-	cache *ttlcache.Cache[string, bool]
+	cache     *ttlcache.Cache[string, bool]
+	raidCache *ttlcache.Cache[string, *RaidCacheResult]
+	gymBattle *ttlcache.Cache[string, bool] // battle cooldown (5 min TTL)
 }
 
 // NewDuplicateCache creates a new duplicate detection cache.
@@ -18,13 +20,25 @@ func NewDuplicateCache() *DuplicateCache {
 		ttlcache.WithTTL[string, bool](90*time.Minute),
 		ttlcache.WithDisableTouchOnHit[string, bool](),
 	)
+	raidCache := ttlcache.New[string, *RaidCacheResult](
+		ttlcache.WithTTL[string, *RaidCacheResult](90*time.Minute),
+		ttlcache.WithDisableTouchOnHit[string, *RaidCacheResult](),
+	)
+	gymBattle := ttlcache.New[string, bool](
+		ttlcache.WithTTL[string, bool](5*time.Minute),
+		ttlcache.WithDisableTouchOnHit[string, bool](),
+	)
 	go cache.Start()
-	return &DuplicateCache{cache: cache}
+	go raidCache.Start()
+	go gymBattle.Start()
+	return &DuplicateCache{cache: cache, raidCache: raidCache, gymBattle: gymBattle}
 }
 
-// Close stops the cache eviction goroutine.
+// Close stops all cache eviction goroutines.
 func (dc *DuplicateCache) Close() {
 	dc.cache.Stop()
+	dc.raidCache.Stop()
+	dc.gymBattle.Stop()
 }
 
 // CheckPokemon returns true if this pokemon was already seen (duplicate).
@@ -71,19 +85,56 @@ type RaidRSVP struct {
 
 // CheckRaid returns (isDuplicate, isFirstNotification) for a raid webhook.
 // Key: {gym_id}:{end}:{pokemon_id}
+// On first sight: stores RSVPs and returns (false, true).
+// On re-notification: compares RSVPs. If changed, updates cache and returns (false, false).
+// If unchanged: returns (true, false) — true duplicate.
 func (dc *DuplicateCache) CheckRaid(gymID string, end int64, pokemonID int, rsvps []RaidRSVP) (bool, bool) {
 	key := fmt.Sprintf("%s:%d:%d", gymID, end, pokemonID)
 
-	existing := dc.cache.Get(key)
+	existing := dc.raidCache.Get(key)
 	if existing == nil {
 		// First time seeing this raid
-		dc.cache.Set(key, true, 90*time.Minute)
+		dc.raidCache.Set(key, &RaidCacheResult{RSVPs: rsvps}, 90*time.Minute)
 		return false, true
 	}
 
-	// For now, allow re-notification (RSVP change detection is handled by alerter)
-	// TODO: implement full RSVP comparison here
+	prev := existing.Value()
+
+	if rsvpChanged(prev.RSVPs, rsvps) {
+		// RSVP data changed — update cache, allow re-notification
+		dc.raidCache.Set(key, &RaidCacheResult{RSVPs: rsvps}, 90*time.Minute)
+		return false, false
+	}
+
+	// No RSVP change — true duplicate
 	return true, false
+}
+
+// rsvpChanged compares old and new RSVP slices. Returns true if there's any
+// difference in timeslot count, going_count, or maybe_count.
+// Mirrors the original JS logic: only compares timeslots present in the new data.
+func rsvpChanged(oldRSVPs, newRSVPs []RaidRSVP) bool {
+	if len(newRSVPs) > len(oldRSVPs) {
+		return true
+	}
+
+	for _, nr := range newRSVPs {
+		found := false
+		for _, or := range oldRSVPs {
+			if nr.Timeslot == or.Timeslot {
+				found = true
+				if nr.GoingCount != or.GoingCount || nr.MaybeCount != or.MaybeCount {
+					return true
+				}
+				break
+			}
+		}
+		if !found {
+			// New timeslot not in old data
+			return true
+		}
+	}
+	return false
 }
 
 // CheckInvasion returns true if this invasion was already seen (duplicate).
@@ -170,4 +221,14 @@ func (dc *DuplicateCache) CheckNest(nestID int64, pokemonID int, resetTime int64
 	}
 	dc.cache.Set(key, true, time.Duration(remaining)*time.Second)
 	return false
+}
+
+// GymInBattleCooldown checks if a gym is within the 5-minute battle cooldown.
+// If inBattle is true, starts/refreshes the cooldown.
+// Returns true if the gym is still in the cooldown period.
+func (dc *DuplicateCache) GymInBattleCooldown(gymID string, inBattle bool) bool {
+	if inBattle {
+		dc.gymBattle.Set(gymID, true, 5*time.Minute)
+	}
+	return dc.gymBattle.Get(gymID) != nil
 }

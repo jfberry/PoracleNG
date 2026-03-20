@@ -47,10 +47,19 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		// Resolve in-battle
 		inBattle := bool(gym.IsInBattle) || bool(gym.InBattle)
 
+		// Battle cooldown: during battles, Golbat sends frequent updates.
+		// Skip if same team + same slots and within 5-min battle cooldown.
+		battleCooldown := ps.duplicates.GymInBattleCooldown(gymID, inBattle)
+
 		// Update gym state and get old state
 		oldState := ps.gymState.Update(gymID, teamID, gym.SlotsAvailable, inBattle, gym.LastOwnerID)
 		if oldState == nil {
 			l.Debug("Gym first seen, no change detection yet")
+			return
+		}
+
+		if battleCooldown && oldState.TeamID == teamID && oldState.SlotsAvailable == gym.SlotsAvailable {
+			l.Debug("Gym battle cooldown, no team/slot change, skipping")
 			return
 		}
 
