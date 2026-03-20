@@ -64,16 +64,15 @@ class TileserverPregen {
 		const url = `${this.config.geocoding.staticProviderURL}/${mapType}/poracle-${templateType}${type}?pregenerate=true&regeneratable=true`
 		this.stats.inFlight++
 		metrics.tileInFlight.inc()
+		const timeoutMs = this.config.tuning.tileserverTimeout || 10000
+		const source = axios.CancelToken.source()
+		const timeout = setTimeout(() => {
+			source.cancel(`Timeout waiting for response - ${timeoutMs}ms`)
+		}, timeoutMs)
+
 		try {
 			this.log.debug(`${logReference}: Pre-generating static map ${url}`)
 			const hrstart = process.hrtime()
-
-			const timeoutMs = this.config.tuning.tileserverTimeout || 10000
-			const source = axios.CancelToken.source()
-			const timeout = setTimeout(() => {
-				source.cancel(`Timeout waiting for response - ${timeoutMs}ms`)
-				// Timeout Logic
-			}, timeoutMs)
 
 			const result = await axios.post(url, data, { cancelToken: source.token })
 			clearTimeout(timeout)
@@ -124,6 +123,7 @@ class TileserverPregen {
 			}
 			return null
 		} finally {
+			clearTimeout(timeout)
 			this.stats.inFlight--
 			metrics.tileInFlight.dec()
 		}

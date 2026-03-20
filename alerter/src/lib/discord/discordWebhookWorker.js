@@ -60,6 +60,7 @@ class DiscordWebhookWorker {
 		let retry
 		let res
 		let retryCount = 0
+		const maxRetries = 5
 
 		do {
 			retry = false
@@ -69,31 +70,30 @@ class DiscordWebhookWorker {
 				if (res.status === 429) {
 					metrics.discordRateLimits.inc({ source: 'webhook' })
 					this.logs.discord.warn(`${senderId} WEBHOOK 429 Rate limit [Discord Webhook] retryCount ${retryCount} x-ratelimit-bucket ${res.headers['x-ratelimit-bucket']} retry after ${res.headers['retry-after']} limit ${res.headers['x-ratelimit-limit']} global ${res.headers['x-ratelimit-global']} reset after ${res.headers['x-ratelimit-reset-after']} `)
-					//	const resetAfter = res.headers["x-ratelimit-reset-after"]
 
 					const retryAfterMs = res.headers['retry-after']
 					if (!res.headers.via) {
 						this.logs.discord.error(`${senderId} WEBHOOK 429 Rate limit [Discord Webhook] TELL @JABES ON DISCORD THIS COULD BE FROM CLOUDFLARE: ${retryAfterMs}`)
 					}
-					await this.sleep(+retryAfterMs + Math.random() * 5000)
+					await this.sleep(+retryAfterMs + Math.random() * 2000)
 					retry = true
 					retryCount++
 				}
 			} catch (err) {
-				// Cancel indicates we hit the timeout, which we will retry (but only up to 5 times)
-				if (err instanceof axios.Cancel && retryCount < 5) {
-					this.logs.discord.warn(`${senderId} WEBHOOK Timeout, will retry...`)
-					await this.sleep(2500 + Math.random() * 7500)
+				if (err instanceof axios.Cancel && retryCount < maxRetries) {
+					const backoffMs = Math.min(1000 * (2 ** retryCount), 15000) + Math.random() * 1000
+					this.logs.discord.warn(`${senderId} WEBHOOK Timeout, retry ${retryCount + 1}/${maxRetries} in ${Math.round(backoffMs)}ms`)
+					await this.sleep(backoffMs)
 					retry = true
 					retryCount++
 				} else {
 					throw err
 				}
 			}
-		} while (retry === true && retryCount < 10)
+		} while (retry === true && retryCount < maxRetries)
 
 		if (retry) {
-			this.logs.discord.warn(`${senderId} WEBHOOK given up sending after retries`)
+			this.logs.discord.warn(`${senderId} WEBHOOK given up sending after ${retryCount} retries`)
 		}
 		return res
 	}

@@ -1,4 +1,5 @@
 const Controller = require('./controller')
+const nightTime = require('./common/nightTime')
 
 class Weather extends Controller {
 	/**
@@ -39,7 +40,7 @@ class Weather extends Controller {
 
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 
-			require('./common/nightTime').setNightTime(data, this.config)
+			nightTime.setNightTime(data, this.config)
 
 			// Generate tile once before the loop if we don't need pokemon on the map
 			if (pregenerateTile && !this.config.weather.showAlteredPokemonStaticMap) {

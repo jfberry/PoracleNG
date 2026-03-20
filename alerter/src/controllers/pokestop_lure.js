@@ -1,4 +1,6 @@
 const Controller = require('./controller')
+const nightTime = require('./common/nightTime')
+
 /**
  * Controller for processing pokestop webhooks
  * Alerts on lures
@@ -77,7 +79,7 @@ class Lure extends Controller {
 				})
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, this.config)
+				nightTime.setNightTime(data, this.config)
 
 				await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'lureTypeId', 'style'])
 				data.intersection = await this.obtainIntersection(data)

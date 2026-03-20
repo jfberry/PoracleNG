@@ -2,6 +2,9 @@ const moment = require('moment-timezone')
 require('moment-precise-range-plugin')
 
 const Controller = require('./controller')
+const nightTime = require('./common/nightTime')
+const weatherCommon = require('./common/weather')
+const evolutionCalculator = require('./common/evolutionCalculator')
 
 class Maxbattle extends Controller {
 	async handleMatched(obj, matchedUsers, matchedAreas) {
@@ -111,13 +114,13 @@ class Maxbattle extends Controller {
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, this.config)
+				nightTime.setNightTime(data, this.config)
 				await this.getStaticMapUrl(logReference, data, 'maxbattle', ['battle_pokemon_id', 'latitude', 'longitude', 'battle_pokemon_form', 'battle_level', 'imgUrl', 'style'])
 				data.intersection = await this.obtainIntersection(data)
 				data.staticmap = data.staticMap // deprecated
 				data.types = monster.types.map((type) => type.id)
 
-				await require('./common/weather').calculateForecastImpact(data, this.GameData, null, this.weatherData, data.battle_end, this.config)
+				await weatherCommon.calculateForecastImpact(data, this.GameData, null, this.weatherData, data.battle_end, this.config)
 
 				for (const cares of whoCares) {
 					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
@@ -173,8 +176,8 @@ class Maxbattle extends Controller {
 						data.boostWeatherName = data.boosted ? translator.translate(this.GameData.utilData.weather[data.weather].name) : ''
 						data.boostWeatherEmoji = data.boosted ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weather].emoji, platform)) : ''
 
-						require('./common/evolutionCalculator').setEvolutions(data, this.GameData, this.log, logReference, translator, this.emojiLookup, platform, monster)
-						require('./common/weather').setNextWeatherText(data, translator, this.GameData, this.emojiLookup, platform)
+						evolutionCalculator.setEvolutions(data, this.GameData, this.log, logReference, translator, this.emojiLookup, platform, monster)
+						weatherCommon.setNextWeatherText(data, translator, this.GameData, this.emojiLookup, platform)
 
 						/* Weakness calculations */
 						const typeInfo = this.GameData.types

@@ -1,4 +1,6 @@
 const Controller = require('./controller')
+const nightTime = require('./common/nightTime')
+const weather = require('./common/weather')
 
 class Invasion extends Controller {
 	async handleMatched(obj, matchedUsers, matchedAreas) {
@@ -110,7 +112,7 @@ class Invasion extends Controller {
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, this.config)
+				nightTime.setNightTime(data, this.config)
 
 				data.intersection = await this.obtainIntersection(data)
 
@@ -137,7 +139,7 @@ class Invasion extends Controller {
 					if (platform === 'webhook') platform = 'discord'
 
 					data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup('grunt-unknown', platform))
-					require('./common/weather').setGameWeather(data, translator, this.GameData, this.emojiLookup, platform, currentCellWeather)
+					weather.setGameWeather(data, translator, this.GameData, this.emojiLookup, platform, currentCellWeather)
 
 					if (((data.grunt_type === 0) || !data.grunt_type) && (data.displayTypeId >= 7)) {
 						data.gruntName = translator.translate(data.displayTypeId && this.GameData.utilData.pokestopEvent[data.displayTypeId].name ? this.GameData.utilData.pokestopEvent[data.displayTypeId].name : '')

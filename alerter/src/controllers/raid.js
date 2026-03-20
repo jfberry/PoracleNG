@@ -1,4 +1,7 @@
 const Controller = require('./controller')
+const nightTime = require('./common/nightTime')
+const weatherCommon = require('./common/weather')
+const evolutionCalculator = require('./common/evolutionCalculator')
 
 class Raid extends Controller {
 	/**
@@ -132,13 +135,13 @@ class Raid extends Controller {
 					const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 					const jobs = []
 
-					require('./common/nightTime').setNightTime(data, this.config)
+					nightTime.setNightTime(data, this.config)
 					await this.getStaticMapUrl(logReference, data, 'raid', ['pokemon_id', 'latitude', 'longitude', 'form', 'level', 'imgUrl', 'style'])
 					data.intersection = await this.obtainIntersection(data)
 					data.staticmap = data.staticMap // deprecated
 					data.types = monster.types.map((type) => type.id)
 
-					await require('./common/weather').calculateForecastImpact(data, this.GameData, null, this.weatherData, data.end, this.config)
+					await weatherCommon.calculateForecastImpact(data, this.GameData, null, this.weatherData, data.end, this.config)
 
 					for (const cares of whoCares) {
 						if (cares.rsvp_changes === 0 && !data.firstNotification) continue // eslint-disable-line no-continue
@@ -205,8 +208,8 @@ class Raid extends Controller {
 						data.boostWeatherName = data.boosted ? translator.translate(this.GameData.utilData.weather[data.weather].name) : ''
 						data.boostWeatherEmoji = data.boosted ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weather].emoji, platform)) : ''
 
-						require('./common/evolutionCalculator').setEvolutions(data, this.GameData, this.log, logReference, translator, this.emojiLookup, platform, monster)
-						require('./common/weather').setNextWeatherText(data, translator, this.GameData, this.emojiLookup, platform)
+						evolutionCalculator.setEvolutions(data, this.GameData, this.log, logReference, translator, this.emojiLookup, platform, monster)
+						weatherCommon.setNextWeatherText(data, translator, this.GameData, this.emojiLookup, platform)
 
 						// Weakness calculations
 						const typeInfo = this.GameData.types
@@ -327,7 +330,7 @@ class Raid extends Controller {
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, this.config)
+				nightTime.setNightTime(data, this.config)
 				await this.getStaticMapUrl(logReference, data, 'raid', ['latitude', 'longitude', 'level', 'imgUrl'])
 				data.staticmap = data.staticMap // deprecated
 

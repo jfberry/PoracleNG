@@ -1,4 +1,5 @@
 const Controller = require('./controller')
+const nightTime = require('./common/nightTime')
 
 /**
  * Controller for processing gym webhooks
@@ -82,7 +83,7 @@ class Gym extends Controller {
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, this.config)
+				nightTime.setNightTime(data, this.config)
 
 				await this.getStaticMapUrl(logReference, data, 'gym', ['teamId', 'latitude', 'longitude', 'imgUrl', 'style'])
 				data.intersection = await this.obtainIntersection(data)

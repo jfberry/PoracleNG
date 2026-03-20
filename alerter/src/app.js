@@ -162,7 +162,12 @@ async function syncDiscordRole() {
 	setTimeout(syncDiscordRole, config.discord.checkRoleInterval * 3600000)
 }
 
+let shuttingDown = false
+
 function handleShutdown() {
+	if (shuttingDown) return
+	shuttingDown = true
+
 	log.info('Poracle shutdown - draining queues...')
 
 	// Stop accepting new matched payloads
@@ -171,22 +176,24 @@ function handleShutdown() {
 	// Wait for message queues to drain (up to 10s)
 	const drainStart = Date.now()
 	const maxDrainMs = 10000
-	const drainInterval = setInterval(() => {
+	const drainInterval = setInterval(async () => {
 		const discordDepth = discordWorkers.reduce((sum, w) => sum + w.discordQueue.length, 0)
 		const telegramDepth = (telegram ? telegram.telegramQueue.length : 0)
 			+ (telegramChannel ? telegramChannel.telegramQueue.length : 0)
 		const webhookDepth = discordWebhookWorker ? discordWebhookWorker.webhookQueue.length : 0
 		const totalDepth = discordDepth + telegramDepth + webhookDepth
 
-		if (totalDepth === 0 || (Date.now() - drainStart) > maxDrainMs) {
-			clearInterval(drainInterval)
-			if (totalDepth > 0) {
-				log.warn(`Poracle shutdown - ${totalDepth} messages still in queue after ${maxDrainMs}ms, proceeding`)
-			} else {
-				log.info('Poracle shutdown - queues drained')
-			}
+		if (totalDepth > 0 && (Date.now() - drainStart) <= maxDrainMs) return
+		clearInterval(drainInterval)
 
-			log.info('Poracle shutdown - saving cache')
+		if (totalDepth > 0) {
+			log.warn(`Poracle shutdown - ${totalDepth} messages still in queue after ${maxDrainMs}ms, proceeding`)
+		} else {
+			log.info('Poracle shutdown - queues drained')
+		}
+
+		log.info('Poracle shutdown - saving cache')
+		try {
 			const workerSaves = []
 			for (const worker of discordWorkers) {
 				workerSaves.push(worker.saveTimeouts())
@@ -194,16 +201,12 @@ function handleShutdown() {
 			if (telegram) workerSaves.push(telegram.saveTimeouts())
 			if (telegramChannel) workerSaves.push(telegramChannel.saveTimeouts())
 			if (discordWebhookWorker) workerSaves.push(discordWebhookWorker.saveTimeouts())
-
-			Promise.all(workerSaves)
-				.then(() => {
-					log.info('Poracle shutdown - complete')
-					process.exit()
-				}).catch((err) => {
-					log.error(`Poracle shutdown - Error saving files ${err}`)
-					process.exit()
-				})
+			await Promise.all(workerSaves)
+			log.info('Poracle shutdown - complete')
+		} catch (err) {
+			log.error(`Poracle shutdown - Error saving files ${err}`)
 		}
+		process.exit()
 	}, 250)
 }
 
@@ -587,8 +590,6 @@ async function handleMatchedAlarms() {
 		fastify.matchedWebhooks.info(`${payload.type} ${JSON.stringify(payload)}`)
 		hookQueue.push(payload)
 		alarmProcessor.run(processOne, async (err) => {
-			// eslint-disable-next-line no-console
-			console.error(err)
 			log.error('alarmProcessor exception', err)
 		})
 		setImmediate(handleMatchedAlarms)

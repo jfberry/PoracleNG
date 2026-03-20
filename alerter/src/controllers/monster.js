@@ -1,4 +1,6 @@
 const Controller = require('./controller')
+const nightTime = require('./common/nightTime')
+const evolutionCalculator = require('./common/evolutionCalculator')
 
 class Monster extends Controller {
 	getAlteringWeathers(types, boostStatus) {
@@ -266,7 +268,7 @@ class Monster extends Controller {
 
 				const jobs = []
 
-				require('./common/nightTime').setNightTime(data, this.config)
+				nightTime.setNightTime(data, this.config)
 
 				data.intersection = await this.obtainIntersection(data)
 
@@ -410,7 +412,7 @@ class Monster extends Controller {
 					data.emojiString = e.join('')
 					data.typeEmoji = data.emojiString
 
-					require('./common/evolutionCalculator').setEvolutions(data, this.GameData, this.log, logReference, translator, this.emojiLookup, platform, monster)
+					evolutionCalculator.setEvolutions(data, this.GameData, this.log, logReference, translator, this.emojiLookup, platform, monster)
 
 					const createPvpDisplay = (leagueCap, leagueData, maxRank, minCp) => {
 						const displayList = []
