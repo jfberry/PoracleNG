@@ -23,7 +23,6 @@ npm-debug.log
 .env
 .idea/
 node_modules/*
-package-lock.json
 potato/*
 src/lib/db/poracle.sqlite
 .geoCache
