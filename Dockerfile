@@ -9,7 +9,7 @@ COPY processor/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o poracle-processor ./cmd/processor
 
 # ---- Stage 2: Install Node.js alerter dependencies ----
-FROM node:24-alpine AS node-builder
+FROM node:25-alpine AS node-builder
 
 RUN apk add --no-cache python3 make g++ git
 
@@ -18,7 +18,7 @@ COPY alerter/package.json ./
 RUN npm install --omit=dev --ignore-scripts && npm rebuild
 
 # ---- Stage 3: Runtime image ----
-FROM node:24-alpine
+FROM node:25-alpine
 
 RUN apk add --no-cache curl bash tini tzdata
 
