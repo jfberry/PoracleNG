@@ -147,7 +147,9 @@ exports.run = async (client, msg, args, options) => {
 
 		// Build enrichment fields that the processor would normally provide
 		const enrichment = {}
-		const tz = geoTz.find(hook.latitude, hook.longitude)[0].toString()
+		const lat = hook.latitude ?? hook.new?.location?.lat ?? hook.old?.location?.lat
+		const lon = hook.longitude ?? hook.new?.location?.lon ?? hook.old?.location?.lon
+		const tz = geoTz.find(lat, lon)[0].toString()
 
 		const formatTime = (unix) => moment(unix * 1000).tz(tz).format(client.config.locale.time)
 		const formatDate = (unix) => moment(unix * 1000).tz(tz).format(client.config.locale.date)
