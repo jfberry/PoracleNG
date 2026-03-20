@@ -249,6 +249,8 @@ exports.fortUpdateRowText = fortUpdateRowText
 exports.currentAreaText = currentAreaText
 
 exports.run = async (client, msg, args, options) => {
+	const logReference = Math.random().toString().slice(2, 11)
+
 	try {
 		const util = client.createUtil(msg, options)
 
@@ -460,6 +462,7 @@ exports.run = async (client, msg, args, options) => {
 		await msg.replyWithAttachment(translator.translate('Tracking list is quite long. Here it is as a file:'), filepath)
 		fs.unlinkSync(filepath)
 	} catch (err) {
-		client.log.error(`${msg.content} command unhappy: `, err)
+		client.log.error(`${logReference}: tracked command unhappy:`, err)
+		msg.reply(`There was a problem making these changes, the administrator can find the details with reference ${logReference}`)
 	}
 }
