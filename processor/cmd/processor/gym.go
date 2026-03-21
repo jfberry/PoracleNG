@@ -91,12 +91,22 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 
 			enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldState.TeamID, gymID)
 
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched) {
+					perLang[lang] = ps.enricher.GymTranslate(enrichment, teamID, oldState.TeamID, lang)
+				}
+			}
+
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "gym",
-				Message:      raw,
-				Enrichment:   enrichment,
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  "gym",
+				Message:               raw,
+				Enrichment:            enrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
 			})
 		} else {
 			l.Debugf("Gym %s changed and 0 humans cared", gym.Name)

@@ -80,12 +80,24 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			l.Infof("Invasion grunt %s at %s and %d humans cared",
 				gruntType, inv.Name, len(matched))
 
+			baseEnrichment := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID)
+
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched) {
+					perLang[lang] = ps.enricher.InvasionTranslate(baseEnrichment, gruntTypeID, lang)
+				}
+			}
+
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "invasion",
-				Message:      raw,
-				Enrichment:   ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID),
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  "invasion",
+				Message:               raw,
+				Enrichment:            baseEnrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
 			})
 		} else {
 			l.Debugf("Invasion grunt %s at %s and 0 humans cared", gruntType, inv.Name)

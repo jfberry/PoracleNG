@@ -62,12 +62,22 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 
 			enrichment := ps.enricher.Lure(&lure)
 
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched) {
+					perLang[lang] = ps.enricher.LureTranslate(enrichment, lure.LureID, lang)
+				}
+			}
+
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "lure",
-				Message:      raw,
-				Enrichment:   enrichment,
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  "lure",
+				Message:               raw,
+				Enrichment:            enrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
 			})
 		} else {
 			l.Debugf("Lure %d at %s and 0 humans cared", lure.LureID, lure.Name)

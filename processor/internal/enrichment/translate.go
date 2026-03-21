@@ -168,9 +168,13 @@ func addWeatherFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translat
 	if boosted {
 		m["boostWeatherId"] = weatherID
 		m["boostWeatherName"] = TranslateWeatherName(tr, weatherID)
+		if wInfo, ok := gd.Util.Weather[weatherID]; ok {
+			m["boostWeatherEmojiKey"] = wInfo.Emoji
+		}
 	} else {
 		m["boostWeatherId"] = ""
 		m["boostWeatherName"] = ""
+		m["boostWeatherEmojiKey"] = ""
 	}
 }
 

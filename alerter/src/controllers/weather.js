@@ -4,7 +4,7 @@ const nightTime = require('./common/nightTime')
 class Weather extends Controller {
 	/**
 	 * Handle a pre-matched weather change from the processor.
-	 * matchedUsers: [{id, name, type, language, template, clean, ping}]
+	 * matchedUsers: [{id, name, type, language, template, clean, ping, active_pokemons}]
 	 * matchedAreas: [{name, displayInMatches, group}]
 	 */
 	async handleMatched(obj, matchedUsers, matchedAreas) {
@@ -51,9 +51,7 @@ class Weather extends Controller {
 			}
 
 			data.oldWeatherId = data.old_gameplay_condition > 0 ? data.old_gameplay_condition : ''
-			data.oldWeatherNameEng = data.oldWeatherId ? this.GameData.utilData.weather[data.oldWeatherId].name : ''
 			data.weatherId = data.gameplay_condition ? data.gameplay_condition : ''
-			data.weatherNameEng = data.weatherId ? this.GameData.utilData.weather[data.weatherId].name : ''
 			data.condition = data.gameplay_condition
 
 			data.matchedAreas = matchedAreas.map((a) => ({ name: a.name, displayInMatches: a.displayInMatches, group: a.group }))
@@ -95,13 +93,23 @@ class Weather extends Controller {
 				let [platform] = cares.type.split(':')
 				if (platform === 'webhook') platform = 'discord'
 
-				data.oldWeatherName = data.oldWeatherNameEng ? translator.translate(data.oldWeatherNameEng) : ''
+				// TODO: Weather change payloads do not yet have per-language enrichment from the processor.
+				// Once the processor sends perLanguageEnrichment for weather, replace these GameData lookups
+				// with: const langEnrichment = this.getLanguageEnrichment(data, language)
+				// and use langEnrichment.oldWeatherName, langEnrichment.newWeatherName, etc.
+				const oldWeatherNameEng = data.oldWeatherId ? this.GameData.utilData.weather[data.oldWeatherId].name : ''
+				const weatherNameEng = data.weatherId ? this.GameData.utilData.weather[data.weatherId].name : ''
+
+				data.oldWeatherName = oldWeatherNameEng ? translator.translate(oldWeatherNameEng) : ''
 				data.oldWeatherEmojiEng = data.oldWeatherId ? this.emojiLookup.lookup(this.GameData.utilData.weather[data.oldWeatherId].emoji, platform) : ''
-				data.oldWeatherEmoji = data.oldWeatherNameEng ? translator.translate(data.oldWeatherEmojiEng) : ''
+				data.oldWeatherEmoji = oldWeatherNameEng ? translator.translate(data.oldWeatherEmojiEng) : ''
 				data.weatherCellId = data.s2_cell_id
-				data.weatherName = data.weatherNameEng ? translator.translate(data.weatherNameEng) : ''
+				data.weatherName = weatherNameEng ? translator.translate(weatherNameEng) : ''
 				data.weatherEmojiEng = data.weatherId ? this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherId].emoji, platform) : ''
 				data.weatherEmoji = data.weatherEmojiEng ? translator.translate(data.weatherEmojiEng) : ''
+
+				// TODO: Active pokemon names should come from per-language enrichment once available.
+				// Currently using GameData lookups as the processor does not yet enrich these per language.
 				if (data.activePokemons) {
 					data.activePokemons.forEach((pok) => {
 						const mon = this.GameData.monsters[`${pok.pokemon_id}_${pok.form}`]

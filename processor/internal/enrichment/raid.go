@@ -119,7 +119,13 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 	addTeamFields(m, gd, tr, raid.TeamID)
 
 	// Weather
-	m["gameWeatherName"] = TranslateWeatherName(tr, base["gameWeatherId"].(int))
+	gameWeatherID := base["gameWeatherId"].(int)
+	m["gameWeatherName"] = TranslateWeatherName(tr, gameWeatherID)
+	if gameWeatherID > 0 {
+		if wInfo, ok := gd.Util.Weather[gameWeatherID]; ok {
+			m["gameWeatherEmojiKey"] = wInfo.Emoji
+		}
+	}
 
 	// Level name
 	if levelName, ok := base["levelNameEng"].(string); ok {

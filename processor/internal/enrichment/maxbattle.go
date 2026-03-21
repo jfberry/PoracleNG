@@ -67,7 +67,13 @@ func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.Maxbattle
 	gd := e.GameData
 	tr := e.Translations.For(lang)
 
-	m["gameWeatherName"] = TranslateWeatherName(tr, base["gameWeatherId"].(int))
+	gameWeatherID := base["gameWeatherId"].(int)
+	m["gameWeatherName"] = TranslateWeatherName(tr, gameWeatherID)
+	if gameWeatherID > 0 {
+		if wInfo, ok := gd.Util.Weather[gameWeatherID]; ok {
+			m["gameWeatherEmojiKey"] = wInfo.Emoji
+		}
+	}
 
 	if levelName, ok := base["levelNameEng"].(string); ok {
 		m["levelName"] = tr.T(levelName)

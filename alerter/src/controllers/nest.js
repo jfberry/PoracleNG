@@ -14,18 +14,6 @@ class Nest extends Controller {
 			data.latitude = data.lat
 
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
-			data.appleMapUrl = `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
-			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
-			if (this.config.general.rdmURL) {
-				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@${data.latitude}/@${data.longitude}/18`
-			}
-			if (this.config.general.reactMapURL) {
-				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/nests/${data.nest_id}`
-			}
-			if (this.config.general.rocketMadURL) {
-				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
-			}
 			data.name = this.escapeJsonString(data.name)
 
 			// tth, disappearDate, disappearTime, resetDate, resetTime provided by processor enrichment
@@ -39,18 +27,9 @@ class Nest extends Controller {
 			data.matched = data.matchedAreas.map((x) => (x.name || x).toLowerCase())
 
 			data.form ??= 0
-			const monster = this.GameData.monsters[`${data.pokemon_id}_${data.form}`] || this.GameData.monsters[`${data.pokemon_id}_0`]
-			if (!monster) {
-				this.log.warn(`${logReference}: [matched] Couldn't find monster in:`, data)
-				return
-			}
-
 			data.nestName = this.escapeJsonString(data.name)
 			data.pokemonId = data.pokemon_id
-			data.nameEng = monster.name
-			data.formId = monster.form.id
-			data.formNameEng = monster.form.name
-			data.color = this.GameData.utilData.types[monster.types[0].name].color
+			data.formId = data.form
 			data.pokemonCount = data.pokemon_count
 			data.pokemonSpawnAvg = data.pokemon_avg
 
@@ -93,9 +72,19 @@ class Nest extends Controller {
 				let [platform] = cares.type.split(':')
 				if (platform === 'webhook') platform = 'discord'
 
-				// full build
-				data.name = translator.translate(data.nameEng)
-				data.formName = translator.translate(data.formNameEng)
+				// Pre-translated names from processor per-language enrichment
+				const langEnrichment = this.getLanguageEnrichment(data, language)
+				data.name = langEnrichment.name
+				data.formName = langEnrichment.formName || ''
+				data.fullName = langEnrichment.fullName
+				data.typeName = langEnrichment.typeName || ''
+				data.color = langEnrichment.color
+
+				// Per-platform emoji lookups
+				const typeEmojiKeys = data.typeEmojiKeys || []
+				data.emoji = typeEmojiKeys.map((key) => translator.translate(this.emojiLookup.lookup(key, platform)))
+				data.emojiString = data.emoji.join('')
+				data.typeEmoji = data.emojiString
 				data.shinyPossibleEmoji = data.shinyPossible ? translator.translate(this.emojiLookup.lookup('shiny', platform)) : ''
 
 				const view = {

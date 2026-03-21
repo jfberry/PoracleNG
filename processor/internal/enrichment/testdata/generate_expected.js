@@ -261,6 +261,80 @@ function processRaid(msg) {
 	return result
 }
 
+function processGym(msg) {
+	const teamId = msg.team_id ?? msg.team ?? 0
+	const team = GameData.utilData.teams[teamId]
+	return {
+		teamId,
+		teamName: team?.name || '',
+		teamColor: team?.color || '',
+		teamEmojiKey: team?.emoji || '',
+		slotsAvailable: msg.slots_available ?? 0,
+	}
+}
+
+function processInvasion(msg) {
+	const gruntTypeId = msg.incident_grunt_type || msg.grunt_type || 0
+	const grunt = GameData.grunts?.[gruntTypeId]
+	const result = {
+		gruntTypeId,
+		gruntName: grunt?.grunt || '',
+		gruntType: grunt?.type || '',
+		gruntGender: grunt?.gender || 0,
+		gruntActive: grunt?.active || false,
+	}
+	// Reward pokemon from first slot encounters
+	if (grunt?.encounters) {
+		const firstRewards = []
+		for (const slotKey of ['first', 'second', 'third']) {
+			const slot = grunt.encounters[slotKey]
+			if (slot && slot.length > 0) {
+				for (const enc of slot) {
+					const mon = GameData.monsters[`${enc.id}_${enc.form}`] || GameData.monsters[`${enc.id}_0`]
+					firstRewards.push({
+						id: enc.id,
+						form: enc.form || 0,
+						slot: slotKey,
+						nameEng: mon?.name || `Pokemon ${enc.id}`,
+					})
+				}
+			}
+		}
+		result.encounters = firstRewards
+	}
+	return result
+}
+
+function processMaxbattle(msg) {
+	const battleLevel = msg.battle_level || 0
+	const pokemonId = msg.battle_pokemon_id || 0
+	const form = msg.battle_pokemon_form || 0
+	const result = {
+		battleLevel,
+		levelNameEng: GameData.utilData.maxbattleLevels?.[battleLevel] || '',
+		pokemonId,
+		form,
+	}
+	if (pokemonId > 0) {
+		const monster = GameData.monsters[`${pokemonId}_${form}`] || GameData.monsters[`${pokemonId}_0`]
+		if (monster) {
+			const typeIds = monster.types.map((t) => t.id)
+			const typeNames = monster.types.map((t) => t.name)
+			Object.assign(result, {
+				nameEng: monster.name,
+				formNameEng: monster.form.name,
+				typeIds,
+				typeNames,
+				baseAttack: monster.stats.baseAttack,
+				baseDefense: monster.stats.baseDefense,
+				baseStamina: monster.stats.baseStamina,
+				weaknesses: computeWeaknesses(typeNames),
+			})
+		}
+	}
+	return result
+}
+
 async function main() {
 	const logFile = process.argv[2] || path.resolve(__dirname, '../../../../logs/webhooks.log')
 	const maxPerType = parseInt(process.argv[3] || '50', 10)
@@ -269,6 +343,9 @@ async function main() {
 	const pokemonNeeds = { encountered: 15, unencountered: 5, pvp: 10, boosted: 5, mega: 3, disguise: 3 }
 	const pokemonHas = { encountered: 0, unencountered: 0, pvp: 0, boosted: 0, mega: 0, disguise: 0, total: 0 }
 	const raidCount = { total: 0 }
+	const gymCount = { total: 0 }
+	const invasionCount = { total: 0 }
+	const maxbattleCount = { total: 0 }
 	const results = []
 
 	const rl = readline.createInterface({ input: fs.createReadStream(logFile) })
@@ -318,6 +395,27 @@ async function main() {
 				results.push({ type: 'raid', message: entry.message, expected })
 				raidCount.total++
 			}
+		} else if ((entry.type === 'gym' || entry.type === 'gym_details') && gymCount.total < maxPerType) {
+			const expected = processGym(entry.message)
+			if (expected) {
+				results.push({ type: 'gym', message: entry.message, expected })
+				gymCount.total++
+			}
+		} else if ((entry.type === 'invasion' || entry.type === 'pokestop') && invasionCount.total < maxPerType) {
+			const msg = entry.message
+			if (msg.incident_grunt_type || msg.grunt_type) {
+				const expected = processInvasion(msg)
+				if (expected) {
+					results.push({ type: 'invasion', message: msg, expected })
+					invasionCount.total++
+				}
+			}
+		} else if (entry.type === 'max_battle' && maxbattleCount.total < maxPerType) {
+			const expected = processMaxbattle(entry.message)
+			if (expected) {
+				results.push({ type: 'max_battle', message: entry.message, expected })
+				maxbattleCount.total++
+			}
 		}
 	}
 
@@ -326,6 +424,9 @@ async function main() {
 	console.log(`Wrote ${results.length} test cases to ${outPath}`)
 	console.log(`  Pokemon: ${pokemonHas.total} (enc:${pokemonHas.encountered} unenc:${pokemonHas.unencountered} pvp:${pokemonHas.pvp} boost:${pokemonHas.boosted} mega:${pokemonHas.mega} disguise:${pokemonHas.disguise})`)
 	console.log(`  Raids: ${raidCount.total}`)
+	console.log(`  Gyms: ${gymCount.total}`)
+	console.log(`  Invasions: ${invasionCount.total}`)
+	console.log(`  Max Battles: ${maxbattleCount.total}`)
 }
 
 main().catch((err) => { console.error(err); process.exit(1) })

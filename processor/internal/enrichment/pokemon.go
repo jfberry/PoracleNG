@@ -299,7 +299,13 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		weather = pokemon.Weather
 	}
 	addWeatherFields(m, gd, tr, monster.Types, weather)
-	m["gameWeatherName"] = TranslateWeatherName(tr, m["gameWeatherId"].(int))
+	gameWeatherID := m["gameWeatherId"].(int)
+	m["gameWeatherName"] = TranslateWeatherName(tr, gameWeatherID)
+	if gameWeatherID > 0 {
+		if wInfo, ok := gd.Util.Weather[gameWeatherID]; ok {
+			m["gameWeatherEmojiKey"] = wInfo.Emoji
+		}
+	}
 
 	// Generation name
 	addGenerationFields(m, gd, tr, pokemon.PokemonID, pokemon.Form)

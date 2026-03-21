@@ -1,6 +1,5 @@
 const Controller = require('./controller')
 const nightTime = require('./common/nightTime')
-const weather = require('./common/weather')
 
 class Invasion extends Controller {
 	async handleMatched(obj, matchedUsers, matchedAreas) {
@@ -11,17 +10,19 @@ class Invasion extends Controller {
 			const logReference = data.pokestop_id
 
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
-			data.appleMapUrl = `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
-			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
+
+			// Map URLs are pre-computed by the Go processor enrichment
+			data.googleMapUrl = data.googleMapUrl || `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
+			data.appleMapUrl = data.appleMapUrl || `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
+			data.wazeMapUrl = data.wazeMapUrl || `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
 			if (this.config.general.rdmURL) {
-				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@pokestop/${data.pokestop_id}`
+				data.rdmUrl = data.rdmUrl || `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@pokestop/${data.pokestop_id}`
 			}
 			if (this.config.general.reactMapURL) {
-				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/pokestops/${data.pokestop_id}`
+				data.reactMapUrl = data.reactMapUrl || `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/pokestops/${data.pokestop_id}`
 			}
 			if (this.config.general.rocketMadURL) {
-				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
+				data.rocketMadUrl = data.rocketMadUrl || `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
 			}
 			data.name = data.name ? this.escapeJsonString(data.name) : this.escapeJsonString(data.pokestop_name)
 			data.pokestopName = data.name
@@ -46,6 +47,7 @@ class Invasion extends Controller {
 			data.matchedAreas = matchedAreas || []
 			data.matched = data.matchedAreas.map((x) => (x.name || x).toLowerCase())
 
+			// gruntTypeId resolution — use processor enrichment if available, else resolve locally
 			data.gruntTypeId = 0
 			if (data.incident_grunt_type && (data.incident_grunt_type !== 352)) {
 				data.gruntTypeId = data.incident_grunt_type
@@ -56,22 +58,25 @@ class Invasion extends Controller {
 				data.displayTypeId = 8
 			}
 
-			data.gender = 0
+			// Defaults before per-language enrichment
+			data.gender = data.gruntGender || 0
 			data.gruntName = ''
 			data.gruntTypeColor = 'BABABA'
 			data.gruntRewards = ''
 			data.gruntRewardsList = {}
 
+			// Use processor-provided gruntType if available, else look up from GameData
 			if (data.gruntTypeId) {
-				data.gender = 0
+				data.gender = data.gruntGender || 0
 				data.gruntName = 'Grunt'
-				data.gruntType = 'Mixed'
+				data.gruntType = data.gruntType || 'Mixed'
 				data.gruntRewards = ''
-				if (data.gruntTypeId in this.GameData.grunts) {
-					const gruntType = this.GameData.grunts[data.gruntTypeId]
-					data.gruntName = (gruntType.type !== gruntType.name) ? `${gruntType.type} ${gruntType.grunt}` : gruntType.name
-					data.gender = gruntType.gender
-					data.gruntType = gruntType.type
+				if (!data.gruntType || data.gruntType === 'Mixed') {
+					if (data.gruntTypeId in this.GameData.grunts) {
+						const gruntType = this.GameData.grunts[data.gruntTypeId]
+						data.gruntType = gruntType.type
+						data.gender = gruntType.gender
+					}
 				}
 			}
 
@@ -126,24 +131,35 @@ class Invasion extends Controller {
 					let [platform] = cares.type.split(':')
 					if (platform === 'webhook') platform = 'discord'
 
+					// Per-language enrichment from processor
+					const langEnrichment = this.getLanguageEnrichment(data, language)
+
+					// Weather: use langEnrichment for name, still need emoji per platform
+					data.gameWeatherId = this.GameData.utilData.weather[currentCellWeather] ? currentCellWeather : ''
+					data.gameWeatherName = langEnrichment.gameWeatherName || ''
+					data.gameWeatherEmoji = this.GameData.utilData.weather[currentCellWeather] ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[currentCellWeather].emoji, platform)) : ''
+					data.gameweather = data.gameWeatherName // deprecated
+					data.gameweatheremoji = data.gameWeatherEmoji // deprecated
+
 					data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup('grunt-unknown', platform))
-					weather.setGameWeather(data, translator, this.GameData, this.emojiLookup, platform, currentCellWeather)
 
 					if (((data.grunt_type === 0) || !data.grunt_type) && (data.displayTypeId >= 7)) {
 						data.gruntName = translator.translate(data.displayTypeId && this.GameData.utilData.pokestopEvent[data.displayTypeId].name ? this.GameData.utilData.pokestopEvent[data.displayTypeId].name : '')
 						data.gruntTypeEmoji = translator.translate(this.emojiLookup.lookup(this.GameData.utilData.pokestopEvent[data.displayTypeId].emoji, platform))
 					}
 
-					// full build
+					// Full grunt build with rewards/lineup
 					if (data.gruntTypeId) {
-						data.gender = 0
-						data.gruntName = translator.translate('Grunt')
-						data.gruntType = translator.translate('Mixed')
+						// Use processor-provided translated grunt name + type name
+						data.gruntName = langEnrichment.gruntName || translator.translate('Grunt')
+						data.gruntType = langEnrichment.gruntTypeName || translator.translate('Mixed')
+						data.gender = data.gruntGender || 0
 						data.gruntRewards = ''
+
 						if (data.gruntTypeId in this.GameData.grunts) {
 							const gruntType = this.GameData.grunts[data.gruntTypeId]
 							const type = gruntType.type === 'Metal' ? 'Steel' : gruntType.type
-							data.gruntName = translator.translate(`${type} ${gruntType.grunt}`)
+
 							data.gender = gruntType.gender
 							data.genderDataEng = this.GameData.utilData.genders[data.gender]
 							if (!data.genderDataEng) {
@@ -155,8 +171,11 @@ class Invasion extends Controller {
 							if (type in this.GameData.utilData.types) {
 								data.gruntTypeColor = this.GameData.utilData.types[type].color
 							}
-							data.gruntType = translator.translate(type)
 
+							// TODO: Migrate reward/lineup building to processor per-language enrichment.
+							// The processor currently only sends basic gruntRewards IDs; the structured
+							// gruntRewardsList with first/second/third slots, chance percentages, and
+							// translated names is too complex to half-migrate. Keep GameData lookups for now.
 							let gruntRewards = ''
 							let gruntRewardsformNormalised = ''
 							const gruntRewardsList = {}

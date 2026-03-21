@@ -177,8 +177,8 @@ class Monster extends Controller {
 					data.shinyPossibleEmoji = data.shinyPossible ? translator.translate(this.emojiLookup.lookup('shiny', platform)) : ''
 					data.quickMoveEmoji = langEnrichment.quickMoveTypeEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.quickMoveTypeEmojiKey, platform)) : ''
 					data.chargeMoveEmoji = langEnrichment.chargeMoveTypeEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.chargeMoveTypeEmojiKey, platform)) : ''
-					data.boostWeatherEmoji = data.boostWeatherId ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.boostWeatherId]?.emoji || '', platform)) : ''
-					data.gameWeatherEmoji = this.GameData.utilData.weather[data.gameWeatherId] ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.gameWeatherId].emoji, platform)) : ''
+					data.boostWeatherEmoji = langEnrichment.boostWeatherEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.boostWeatherEmojiKey, platform)) : ''
+					data.gameWeatherEmoji = langEnrichment.gameWeatherEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.gameWeatherEmojiKey, platform)) : ''
 
 					// Type emoji array (resolve emoji keys per platform)
 					const typeEmojiKeys = data.typeEmojiKeys || []
@@ -211,17 +211,19 @@ class Monster extends Controller {
 
 					// Weather change text (using pre-computed weatherCurrent/weatherNext from processor)
 					if (data.weatherNext) {
+						const weatherNextInfo = this.GameData.utilData.weather[data.weatherNext] || {}
+						const weatherCurrentInfo = data.weatherCurrent ? (this.GameData.utilData.weather[data.weatherCurrent] || {}) : null
 						if (!data.weatherCurrent) {
-							data.weatherChange = `⚠️ ${translator.translate('Possible weather change at')} ${data.weatherChangeTime} : ➡️ ${translator.translate(this.GameData.utilData.weather[data.weatherNext].name)} ${translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherNext].emoji, platform))}`
+							data.weatherChange = `⚠️ ${translator.translate('Possible weather change at')} ${data.weatherChangeTime} : ➡️ ${translator.translate(weatherNextInfo.name)} ${translator.translate(this.emojiLookup.lookup(weatherNextInfo.emoji, platform))}`
 							data.weatherCurrentName = translator.translate('unknown')
 							data.weatherCurrentEmoji = '❓'
 						} else {
-							data.weatherChange = `⚠️ ${translator.translate('Possible weather change at')} ${data.weatherChangeTime} : ${translator.translate(this.GameData.utilData.weather[data.weatherCurrent].name)} ${translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherCurrent].emoji, platform))} ➡️ ${translator.translate(this.GameData.utilData.weather[data.weatherNext].name)} ${translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherNext].emoji, platform))}`
-							data.weatherCurrentName = translator.translate(this.GameData.utilData.weather[data.weatherCurrent].name)
-							data.weatherCurrentEmoji = translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherCurrent].emoji, platform))
+							data.weatherChange = `⚠️ ${translator.translate('Possible weather change at')} ${data.weatherChangeTime} : ${translator.translate(weatherCurrentInfo.name)} ${translator.translate(this.emojiLookup.lookup(weatherCurrentInfo.emoji, platform))} ➡️ ${translator.translate(weatherNextInfo.name)} ${translator.translate(this.emojiLookup.lookup(weatherNextInfo.emoji, platform))}`
+							data.weatherCurrentName = translator.translate(weatherCurrentInfo.name)
+							data.weatherCurrentEmoji = translator.translate(this.emojiLookup.lookup(weatherCurrentInfo.emoji, platform))
 						}
-						data.weatherNextName = translator.translate(this.GameData.utilData.weather[data.weatherNext].name)
-						data.weatherNextEmoji = translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherNext].emoji, platform))
+						data.weatherNextName = translator.translate(weatherNextInfo.name)
+						data.weatherNextEmoji = translator.translate(this.emojiLookup.lookup(weatherNextInfo.emoji, platform))
 					}
 
 					// PVP display list — names/stats/computed fields are pre-enriched by processor,

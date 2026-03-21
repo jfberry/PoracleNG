@@ -16,18 +16,6 @@ class FortUpdate extends Controller {
 
 			data.fortType = data.new?.type || data.old?.type || 'unknown'
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
-			data.appleMapUrl = `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
-			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
-			if (this.config.general.rdmURL) {
-				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@${data.latitude}/@${data.longitude}/18`
-			}
-			if (this.config.general.reactMapURL) {
-				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/${data.fortType}s/${data.id}/18`
-			}
-			if (this.config.general.rocketMadURL) {
-				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
-			}
 			data.name = this.escapeJsonString(data.name)
 
 			// tth, disappearDate, disappearTime, resetDate, resetTime provided by processor enrichment

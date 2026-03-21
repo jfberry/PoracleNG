@@ -64,12 +64,22 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 
 			enrichment := ps.enricher.Nest(&nest)
 
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched) {
+					perLang[lang] = ps.enricher.NestTranslate(enrichment, nest.PokemonID, nest.Form, lang)
+				}
+			}
+
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "nest",
-				Message:      raw,
-				Enrichment:   enrichment,
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  "nest",
+				Message:               raw,
+				Enrichment:            enrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
 			})
 		} else {
 			l.Debugf("Nest pokemon %d (avg %.1f) and 0 humans cared",
