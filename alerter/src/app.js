@@ -12,9 +12,6 @@ const fastify = require('fastify')({
 const { Telegraf } = require('telegraf')
 const path = require('path')
 const chokidar = require('chokidar')
-const moment = require('moment-timezone')
-const geoTz = require('geo-tz')
-const schedule = require('node-schedule')
 const telegramCommandParser = require('./lib/telegram/middleware/commandParser')
 const telegramController = require('./lib/telegram/middleware/controller')
 const DiscordReconciliation = require('./lib/discord/discordReconciliation')
@@ -504,81 +501,6 @@ async function currentStatus() {
 		mainRssMb,
 	}
 }
-
-schedule.scheduleJob({ minute: [0, 10, 20, 30, 40, 50] }, async () => {			// Run every 10 minutes - note if this changes then check below also needs to change
-	try {
-		log.verbose('Profile Check: Checking for active profile changes')
-		const humans = await query.selectAllQuery('humans', { enabled: 1, admin_disable: 0 })
-		const profilesToCheck = await query.mysteryQuery('SELECT * FROM profiles WHERE LENGTH(active_hours)>5 ORDER BY id, profile_no')
-
-		let lastId = null
-		for (const profile of profilesToCheck) {
-			const human = humans.find((x) => x.id === profile.id)
-
-			// eslint-disable-next-line no-continue
-			if (!human) continue
-
-			let nowForHuman = moment()
-			if (human.latitude) {
-				nowForHuman = moment().tz(geoTz.find(human.latitude, human.longitude)[0].toString())
-			}
-
-			if (profile.id !== lastId) {
-				const timings = JSON.parse(profile.active_hours)
-				const nowHour = nowForHuman.hour()
-				const nowMinutes = nowForHuman.minutes()
-				const nowDow = nowForHuman.isoWeekday()
-				const yesterdayDow = +nowDow === 1 ? 7 : nowDow - 1
-
-				const active = timings.some((row) => {
-					const rowHours = +row.hours
-					const rowMins = +row.mins
-					const rowDay = +row.day
-
-					return (rowDay === nowDow && rowHours === nowHour && nowMinutes >= row.mins && (nowMinutes - rowMins) < 10) // within 10 minutes in same hour
-						|| (nowMinutes < 10 && rowDay === nowDow && rowHours === nowHour - 1 && rowMins > 50) // first 10 minutes of new hour
-						|| (nowHour === 0 && nowMinutes < 10 && rowDay === yesterdayDow && rowHours === 23 && rowMins > 50) // first 10 minutes of day
-				})
-
-				if (active) {
-					if (human.current_profile_no !== profile.profile_no) {
-						const userTranslator = translatorFactory.Translator(human.language || config.general.locale)
-
-						const job = {
-							type: human.type,
-							target: human.id,
-							name: human.name,
-							ping: '',
-							clean: false,
-							message: { content: userTranslator.translateFormat('I have set your profile to: {0}', profile.name) },
-							logReference: '',
-							tth: { hours: 1, minutes: 0, seconds: 0 },
-						}
-
-						if (['discord:user', 'discord:channel', 'webhook'].includes(job.type)) fastify.discordQueue.push(job)
-						if (['telegram:user', 'telegram:channel', 'telegram:group'].includes(job.type)) fastify.telegramQueue.push(job)
-
-						log.info(`Profile Check: Setting ${profile.id} to profile ${profile.profile_no} - ${profile.name}`)
-
-						lastId = profile.id
-						await query.updateQuery(
-							'humans',
-							{
-								current_profile_no: profile.profile_no,
-								area: profile.area,
-								latitude: profile.latitude,
-								longitude: profile.longitude,
-							},
-							{ id: profile.id },
-						)
-					}
-				}
-			}
-		}
-	} catch (err) {
-		log.error('Error setting profiles', err)
-	}
-})
 
 async function run() {
 	process.on('SIGINT', handleShutdown)

@@ -2,5 +2,6 @@
   "rate_limit.reached": "Das Limit von {0} Benachrichtigungen innerhalb von {1} Sekunden wurde erreicht.",
   "rate_limit.banned_soft": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, nutze {0}start um diese wieder zu aktivieren",
   "rate_limit.banned_hard": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, kontaktiere einen Administrator um diese wieder zu aktivieren",
-  "rate_limit.shame": "<@{0}> wurde wegen zu häufiger Überschreitung des Nachrichtenlimits deaktiviert!"
+  "rate_limit.shame": "<@{0}> wurde wegen zu häufiger Überschreitung des Nachrichtenlimits deaktiviert!",
+  "profile.switched": "Profil gewechselt auf: {0}"
 }

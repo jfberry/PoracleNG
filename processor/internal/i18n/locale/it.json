@@ -2,5 +2,6 @@
   "rate_limit.reached": "Hai raggiunto il limite di {0} messaggi in {1} secondi",
   "rate_limit.banned_soft": "Hai violato il limite di velocità troppe volte nelle ultime 24h. I tuoi messaggi sono adesso stoppati, utilizza {0}start per riprendere",
   "rate_limit.banned_hard": "Hai violato il limite di velocità troppe volte nelle ultime 24h. I tuoi messaggi sono adesso stoppati, contatta un amministratore per riprendere",
-  "rate_limit.shame": "<@{0}> è stato disattivato per aver superato il limite di messaggi troppe volte!"
+  "rate_limit.shame": "<@{0}> è stato disattivato per aver superato il limite di messaggi troppe volte!",
+  "profile.switched": "Ho settato il tuo profilo su: {0}"
 }

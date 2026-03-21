@@ -56,7 +56,6 @@
     "node-cache": "^5.1.2",
     "node-fetch-native": "^1.6.7",
     "node-geocoder": "^4.4.1",
-    "node-schedule": "^2.1.1",
     "nodes2ts": "^4.0.2",
     "point-in-polygon": "^1.1.0",
     "prom-client": "^15.1.3",

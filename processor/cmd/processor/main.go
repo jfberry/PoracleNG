@@ -92,6 +92,10 @@ func main() {
 		log.Infof("Weather change alerts enabled")
 	}
 
+	// Profile auto-switch scheduler
+	go proc.runProfileScheduler()
+	log.Infof("Profile scheduler enabled (10-minute interval)")
+
 	// HTTP server
 	mux := http.NewServeMux()
 
