@@ -345,11 +345,28 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 // This removes the need for GameData.monsters lookups in the alerter's
 // createPvpDisplay per-user loop.
 func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, pokemon *webhook.PokemonWebhook) {
-	if pokemon.PVP == nil {
+	// Collect league data from both new (pvp) and legacy (pvp_rankings_*_league) fields
+	leagueMap := make(map[string][]webhook.PVPRankEntry)
+	if pokemon.PVP != nil {
+		for league, entries := range pokemon.PVP {
+			leagueMap[league] = append(leagueMap[league], entries...)
+		}
+	}
+	if pokemon.PVPRankingsGreatLeague != nil {
+		leagueMap["great"] = append(leagueMap["great"], pokemon.PVPRankingsGreatLeague...)
+	}
+	if pokemon.PVPRankingsUltraLeague != nil {
+		leagueMap["ultra"] = append(leagueMap["ultra"], pokemon.PVPRankingsUltraLeague...)
+	}
+	if pokemon.PVPRankingsLittleLeague != nil {
+		leagueMap["little"] = append(leagueMap["little"], pokemon.PVPRankingsLittleLeague...)
+	}
+
+	if len(leagueMap) == 0 {
 		return
 	}
 
-	for leagueName, entries := range pokemon.PVP {
+	for leagueName, entries := range leagueMap {
 		enriched := make([]map[string]any, 0, len(entries))
 		for _, rank := range entries {
 			if rank.Rank <= 0 {
