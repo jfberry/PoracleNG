@@ -2,5 +2,6 @@
   "rate_limit.reached": "You have reached the limit of {0} messages over {1} seconds",
   "rate_limit.banned_soft": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, use {0}start to resume",
   "rate_limit.banned_hard": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, contact an administrator to resume",
-  "rate_limit.shame": "<@{0}> has had their Poracle tracking disabled for exceeding the rate limit too many times!"
+  "rate_limit.shame": "<@{0}> has had their Poracle tracking disabled for exceeding the rate limit too many times!",
+  "profile.switched": "I have set your profile to: {0}"
 }
