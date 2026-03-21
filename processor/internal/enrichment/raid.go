@@ -139,7 +139,7 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		}
 
 		// Pokemon name
-		TranslateMonsterNames(m, gd, tr, raid.PokemonID, raid.Form, raid.Evolution)
+		TranslateMonsterNamesEng(m, gd, tr, e.Translations, raid.PokemonID, raid.Form, raid.Evolution)
 
 		// Type names
 		TranslateTypeNames(m, tr, monster.Types)

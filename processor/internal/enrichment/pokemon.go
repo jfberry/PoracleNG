@@ -279,7 +279,7 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 	}
 
 	// Pokemon name, form name, full name
-	TranslateMonsterNames(m, gd, tr, pokemon.PokemonID, pokemon.Form, 0)
+	TranslateMonsterNamesEng(m, gd, tr, e.Translations, pokemon.PokemonID, pokemon.Form, 0)
 
 	// Type names
 	TranslateTypeNames(m, tr, monster.Types)

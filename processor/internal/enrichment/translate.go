@@ -10,20 +10,29 @@ import (
 
 // TranslateMonsterNames adds translated pokemon/form names to the enrichment map.
 // Uses pogo-translations identifier keys: poke_{id}, form_{formId}.
+// Also sets *Eng fields using the English translator from the bundle.
 func TranslateMonsterNames(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, pokemonID, form, evolution int) {
+	translateMonsterNamesWithEng(m, gd, tr, nil, pokemonID, form, evolution)
+}
+
+// TranslateMonsterNamesEng is like TranslateMonsterNames but also sets *Eng
+// fields using the English translator from the bundle.
+func TranslateMonsterNamesEng(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, bundle *i18n.Bundle, pokemonID, form, evolution int) {
+	translateMonsterNamesWithEng(m, gd, tr, bundle, pokemonID, form, evolution)
+}
+
+func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, bundle *i18n.Bundle, pokemonID, form, evolution int) {
 	nameKeys := gd.MonsterNameKeys(pokemonID, form, evolution)
 
-	// Pokemon name
+	// Translated name
 	name := tr.T(nameKeys.PokemonKey)
 	m["name"] = name
-	m["nameEng"] = tr.T(nameKeys.PokemonKey) // TODO: use English translator
 
 	// Form name
 	formName := ""
 	formNormalised := ""
 	if nameKeys.FormKey != "" {
 		formName = tr.T(nameKeys.FormKey)
-		// Normalize: "Normal" or empty → "", else keep
 		if formName != "" && !isNormalForm(formName) {
 			formNormalised = formName
 		}
@@ -31,17 +40,38 @@ func TranslateMonsterNames(m map[string]any, gd *gamedata.GameData, tr *i18n.Tra
 	m["formName"] = formName
 	m["formNormalised"] = formNormalised
 
-	// Full name: "Bulbasaur" or "Vulpix Alola"
+	// Full name
 	fullName := name
 	if formNormalised != "" {
 		fullName = name + " " + formNormalised
 	}
-
-	// Apply mega name pattern if evolution present
 	if evolution > 0 {
 		fullName = i18n.Format(nameKeys.MegaNamePattern, fullName)
 	}
 	m["fullName"] = fullName
+
+	// English names for templates that show both translated + English
+	if bundle != nil {
+		enTr := bundle.For("en")
+		enName := enTr.T(nameKeys.PokemonKey)
+		enFormNormalised := ""
+		if nameKeys.FormKey != "" {
+			enForm := enTr.T(nameKeys.FormKey)
+			if enForm != "" && !isNormalForm(enForm) {
+				enFormNormalised = enForm
+			}
+		}
+		enFullName := enName
+		if enFormNormalised != "" {
+			enFullName = enName + " " + enFormNormalised
+		}
+		if evolution > 0 {
+			enFullName = i18n.Format(nameKeys.MegaNamePattern, enFullName)
+		}
+		m["nameEng"] = enName
+		m["formNormalisedEng"] = enFormNormalised
+		m["fullNameEng"] = enFullName
+	}
 }
 
 // isNormalForm returns true if a form name is "Normal" in any common language.

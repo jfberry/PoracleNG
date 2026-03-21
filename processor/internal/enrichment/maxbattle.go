@@ -80,7 +80,7 @@ func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.Maxbattle
 	}
 
 	if mb.BattlePokemonID > 0 {
-		TranslateMonsterNames(m, gd, tr, mb.BattlePokemonID, mb.BattlePokemonForm, 0)
+		TranslateMonsterNamesEng(m, gd, tr, e.Translations, mb.BattlePokemonID, mb.BattlePokemonForm, 0)
 		monster := gd.GetMonster(mb.BattlePokemonID, mb.BattlePokemonForm)
 		if monster != nil {
 			TranslateTypeNames(m, tr, monster.Types)

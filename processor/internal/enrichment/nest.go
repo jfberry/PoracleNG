@@ -43,7 +43,7 @@ func (e *Enricher) NestTranslate(base map[string]any, pokemonID, form int, lang 
 	}
 
 	tr := e.Translations.For(lang)
-	TranslateMonsterNames(m, e.GameData, tr, pokemonID, form, 0)
+	TranslateMonsterNamesEng(m, e.GameData, tr, e.Translations, pokemonID, form, 0)
 
 	monster := e.GameData.GetMonster(pokemonID, form)
 	if monster != nil {

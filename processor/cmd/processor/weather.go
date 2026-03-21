@@ -108,13 +108,42 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 
 		// Build weather change message
 		msg, _ := json.Marshal(change)
+		enrichment := ps.enricher.Weather(change.Latitude, change.Longitude)
+
+		// Per-language enrichment for weather names and active pokemon names
+		var perLang map[string]map[string]any
+		if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+			perLang = make(map[string]map[string]any)
+			for _, lang := range distinctLanguages(matched) {
+				// Collect active pokemon from the first user with this language
+				var activePokemons []webhook.ActivePokemonEntry
+				for _, u := range matched {
+					uLang := u.Language
+					if uLang == "" {
+						uLang = "en"
+					}
+					if uLang == lang && len(u.ActivePokemons) > 0 {
+						activePokemons = u.ActivePokemons
+						break
+					}
+				}
+				perLang[lang] = ps.enricher.WeatherTranslate(
+					enrichment,
+					change.OldGameplayCondition,
+					change.GameplayCondition,
+					activePokemons,
+					lang,
+				)
+			}
+		}
 
 		ps.sender.Send(webhook.OutboundPayload{
-			Type:         "weather_change",
-			Message:      msg,
-			Enrichment:   ps.enricher.Weather(change.Latitude, change.Longitude),
-			MatchedAreas: matchedAreas,
-			MatchedUsers: matched,
+			Type:                  "weather_change",
+			Message:               msg,
+			Enrichment:            enrichment,
+			PerLanguageEnrichment: perLang,
+			MatchedAreas:          matchedAreas,
+			MatchedUsers:          matched,
 		})
 	}
 }
