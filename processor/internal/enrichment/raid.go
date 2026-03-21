@@ -1,6 +1,7 @@
 package enrichment
 
 import (
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -51,6 +52,116 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 			}
 		}
 		m["rsvps"] = rsvpTimes
+	}
+
+	// Map URLs
+	e.addMapURLs(m, raid.Latitude, raid.Longitude, "gyms", raid.GymID)
+
+	// Game data enrichment
+	if e.GameData != nil {
+		gd := e.GameData
+
+		// Team color
+		if info, ok := gd.Util.Teams[raid.TeamID]; ok {
+			m["gymColor"] = info.Color
+		}
+
+		// Raid level name
+		if levelName, ok := gd.Util.RaidLevels[raid.Level]; ok {
+			m["levelNameEng"] = levelName
+		}
+
+		if raid.PokemonID > 0 {
+			monster := gd.GetMonster(raid.PokemonID, raid.Form)
+			if monster != nil {
+				m["types"] = monster.Types
+				m["typeEmojiKeys"] = gd.GetTypeEmojiKeys(monster.Types)
+				m["baseStats"] = map[string]int{
+					"baseAttack":  monster.Attack,
+					"baseDefense": monster.Defense,
+					"baseStamina": monster.Stamina,
+				}
+
+				// Generation
+				gen := gd.GetGeneration(raid.PokemonID, raid.Form)
+				m["generation"] = gen
+				if info := gd.GetGenerationInfo(gen); info != nil {
+					m["generationRoman"] = info.Roman
+				}
+
+				// Weakness
+				m["weaknessList"] = gamedata.CalculateWeaknesses(monster.Types, gd.Types)
+
+				// Weather boost
+				m["boostingWeatherIds"] = gd.GetBoostingWeathers(monster.Types)
+			}
+		}
+	}
+
+	return m
+}
+
+// RaidTranslate adds per-language translated fields to a raid enrichment map.
+func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook, lang string) map[string]any {
+	if e.GameData == nil || e.Translations == nil {
+		return base
+	}
+
+	m := make(map[string]any, len(base)+15)
+	for k, v := range base {
+		m[k] = v
+	}
+
+	gd := e.GameData
+	tr := e.Translations.For(lang)
+
+	// Team
+	addTeamFields(m, gd, tr, raid.TeamID)
+
+	// Weather
+	m["gameWeatherName"] = TranslateWeatherName(tr, base["gameWeatherId"].(int))
+
+	// Level name
+	if levelName, ok := base["levelNameEng"].(string); ok {
+		m["levelName"] = tr.T(levelName)
+	}
+
+	if raid.PokemonID > 0 {
+		monster := gd.GetMonster(raid.PokemonID, raid.Form)
+		if monster == nil {
+			return m
+		}
+
+		// Pokemon name
+		TranslateMonsterNames(m, gd, tr, raid.PokemonID, raid.Form, raid.Evolution)
+
+		// Type names
+		TranslateTypeNames(m, tr, monster.Types)
+
+		// Moves
+		addMoveFields(m, gd, tr, raid.Move1, raid.Move2)
+
+		// Weather boost
+		weather := base["gameWeatherId"].(int)
+		addWeatherFields(m, gd, tr, monster.Types, weather)
+
+		// Generation
+		addGenerationFields(m, gd, tr, raid.PokemonID, raid.Form)
+
+		// Gender
+		addGenderFields(m, gd, tr, raid.Gender)
+
+		// Evolution name
+		if raid.Evolution > 0 {
+			if info, ok := gd.Util.Evolution[raid.Evolution]; ok {
+				m["evolutionName"] = tr.T(info.Name)
+			}
+		}
+
+		// Weakness
+		if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
+			m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr)
+		}
 	}
 
 	return m

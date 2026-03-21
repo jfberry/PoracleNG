@@ -442,6 +442,17 @@ class Controller extends EventEmitter {
 		}
 	}
 
+	/**
+	 * Get per-language enrichment from the processor.
+	 * Contains pre-translated game data names (pokemon, moves, types, weather, etc.)
+	 * so the controller can skip GameData lookups and translator.translate() calls.
+	 * The controller still needs to do emoji lookups per platform.
+	 */
+	// eslint-disable-next-line class-methods-use-this
+	getLanguageEnrichment(data, language) {
+		return data.perLanguageEnrichment[language] // eslint-disable-line no-underscore-dangle
+	}
+
 	findIvColor(iv) {
 		// it must be perfect if none of the ifs kick in
 		// orange / legendary

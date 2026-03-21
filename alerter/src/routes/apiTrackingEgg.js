@@ -1,7 +1,10 @@
 const { diff } = require('deep-object-diff')
 
+const path = require('path')
+const fs = require('fs')
 const trackedCommand = require('../lib/poracleMessage/commands/tracked')
-const { raidLevels } = require('../util/util.json')
+
+const { raidLevels } = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../resources/data/util.json')))
 
 module.exports = async (fastify, options) => {
 	fastify.get('/api/tracking/egg/:id', options, async (req) => {

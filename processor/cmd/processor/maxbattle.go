@@ -75,7 +75,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "max_battle",
 				Message:      raw,
-				Enrichment:   ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd),
+				Enrichment:   ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb),
 				MatchedAreas: matchedAreas,
 				MatchedUsers: matched,
 			})

@@ -1,0 +1,969 @@
+{
+	"powerUpCost": {
+		"1":{
+			"stardust":200,
+			"candy":1
+		},
+		"1.5":{
+			"stardust":200,
+			"candy":1
+		},
+		"2":{
+			"stardust":200,
+			"candy":1
+		},
+		"2.5":{
+			"stardust":200,
+			"candy":1
+		},
+		"3":{
+			"stardust":400,
+			"candy":1
+		},
+		"3.5":{
+			"stardust":400,
+			"candy":1
+		},
+		"4":{
+			"stardust":400,
+			"candy":1
+		},
+		"4.5":{
+			"stardust":400,
+			"candy":1
+		},
+		"5":{
+			"stardust":600,
+			"candy":1
+		},
+		"5.5":{
+			"stardust":600,
+			"candy":1
+		},
+		"6":{
+			"stardust":600,
+			"candy":1
+		},
+		"6.5":{
+			"stardust":600,
+			"candy":1
+		},
+		"7":{
+			"stardust":800,
+			"candy":1
+		},
+		"7.5":{
+			"stardust":800,
+			"candy":1
+		},
+		"8":{
+			"stardust":800,
+			"candy":1
+		},
+		"8.5":{
+			"stardust":800,
+			"candy":1
+		},
+		"9":{
+			"stardust":1000,
+			"candy":1
+		},
+		"9.5":{
+			"stardust":1000,
+			"candy":1
+		},
+		"10":{
+			"stardust":1000,
+			"candy":1
+		},
+		"10.5":{
+			"stardust":1000,
+			"candy":1
+		},
+		"11":{
+			"stardust":1300,
+			"candy":2
+		},
+		"11.5":{
+			"stardust":1300,
+			"candy":2
+		},
+		"12":{
+			"stardust":1300,
+			"candy":2
+		},
+		"12.5":{
+			"stardust":1300,
+			"candy":2
+		},
+		"13":{
+			"stardust":1600,
+			"candy":2
+		},
+		"13.5":{
+			"stardust":1600,
+			"candy":2
+		},
+		"14":{
+			"stardust":1600,
+			"candy":2
+		},
+		"14.5":{
+			"stardust":1600,
+			"candy":2
+		},
+		"15":{
+			"stardust":1900,
+			"candy":2
+		},
+		"15.5":{
+			"stardust":1900,
+			"candy":2
+		},
+		"16":{
+			"stardust":1900,
+			"candy":2
+		},
+		"16.5":{
+			"stardust":1900,
+			"candy":2
+		},
+		"17":{
+			"stardust":2200,
+			"candy":2
+		},
+		"17.5":{
+			"stardust":2200,
+			"candy":2
+		},
+		"18":{
+			"stardust":2200,
+			"candy":2
+		},
+		"18.5":{
+			"stardust":2200,
+			"candy":2
+		},
+		"19":{
+			"stardust":2500,
+			"candy":2
+		},
+		"19.5":{
+			"stardust":2500,
+			"candy":2
+		},
+		"20":{
+			"stardust":2500,
+			"candy":2
+		},
+		"20.5":{
+			"stardust":2500,
+			"candy":2
+		},
+		"21":{
+			"stardust":3000,
+			"candy":3
+		},
+		"21.5":{
+			"stardust":3000,
+			"candy":3
+		},
+		"22":{
+			"stardust":3000,
+			"candy":3
+		},
+		"22.5":{
+			"stardust":3000,
+			"candy":3
+		},
+		"23":{
+			"stardust":3500,
+			"candy":3
+		},
+		"23.5":{
+			"stardust":3500,
+			"candy":3
+		},
+		"24":{
+			"stardust":3500,
+			"candy":3
+		},
+		"24.5":{
+			"stardust":3500,
+			"candy":3
+		},
+		"25":{
+			"stardust":4000,
+			"candy":3
+		},
+		"25.5":{
+			"stardust":4000,
+			"candy":3
+		},
+		"26":{
+			"stardust":4000,
+			"candy":4
+		},
+		"26.5":{
+			"stardust":4000,
+			"candy":4
+		},
+		"27":{
+			"stardust":4500,
+			"candy":4
+		},
+		"27.5":{
+			"stardust":4500,
+			"candy":4
+		},
+		"28":{
+			"stardust":4500,
+			"candy":4
+		},
+		"28.5":{
+			"stardust":4500,
+			"candy":4
+		},
+		"29":{
+			"stardust":5000,
+			"candy":4
+		},
+		"29.5":{
+			"stardust":5000,
+			"candy":4
+		},
+		"30":{
+			"stardust":5000,
+			"candy":4
+		},
+		"30.5":{
+			"stardust":5000,
+			"candy":4
+		},
+		"31":{
+			"stardust":6000,
+			"candy":6
+		},
+		"31.5":{
+			"stardust":6000,
+			"candy":6
+		},
+		"32":{
+			"stardust":6000,
+			"candy":6
+		},
+		"32.5":{
+			"stardust":6000,
+			"candy":6
+		},
+		"33":{
+			"stardust":7000,
+			"candy":8
+		},
+		"33.5":{
+			"stardust":7000,
+			"candy":8
+		},
+		"34":{
+			"stardust":7000,
+			"candy":8
+		},
+		"34.5":{
+			"stardust":7000,
+			"candy":8
+		},
+		"35":{
+			"stardust":8000,
+			"candy":10
+		},
+		"35.5":{
+			"stardust":8000,
+			"candy":10
+		},
+		"36":{
+			"stardust":8000,
+			"candy":10
+		},
+		"36.5":{
+			"stardust":8000,
+			"candy":10
+		},
+		"37":{
+			"stardust":9000,
+			"candy":12
+		},
+		"37.5":{
+			"stardust":9000,
+			"candy":12
+		},
+		"38":{
+			"stardust":9000,
+			"candy":12
+		},
+		"38.5":{
+			"stardust":9000,
+			"candy":12
+		},
+		"39":{
+			"stardust":10000,
+			"candy":15
+		},
+		"39.5":{
+			"stardust":10000,
+			"candy":15
+		},
+		"40":{
+			"stardust":10000,
+			"xlCandy":10
+		},
+		"40.5":{
+			"stardust":10000,
+			"xlCandy":10
+		},
+		"41":{
+			"stardust":11000,
+			"xlCandy":10
+		},
+		"41.5":{
+			"stardust":11000,
+			"xlCandy":10
+		},
+		"42":{
+			"stardust":11000,
+			"xlCandy":12
+		},
+		"42.5":{
+			"stardust":11000,
+			"xlCandy":12
+		},
+		"43":{
+			"stardust":12000,
+			"xlCandy":12
+		},
+		"43.5":{
+			"stardust":12000,
+			"xlCandy":12
+		},
+		"44":{
+			"stardust":12000,
+			"xlCandy":15
+		},
+		"44.5":{
+			"stardust":12000,
+			"xlCandy":15
+		},
+		"45":{
+			"stardust":13000,
+			"xlCandy":15
+		},
+		"45.5":{
+			"stardust":13000,
+			"xlCandy":15
+		},
+		"46":{
+			"stardust":13000,
+			"xlCandy":17
+		},
+		"46.5":{
+			"stardust":13000,
+			"xlCandy":17
+		},
+		"47":{
+			"stardust":14000,
+			"xlCandy":17
+		},
+		"47.5":{
+			"stardust":14000,
+			"xlCandy":17
+		},
+		"48":{
+			"stardust":14000,
+			"xlCandy":20
+		},
+		"48.5":{
+			"stardust":14000,
+			"xlCandy":20
+		},
+		"49":{
+			"stardust":15000,
+			"xlCandy":20
+		},
+		"49.5":{
+			"stardust":15000,
+			"xlCandy":20
+		}
+	},
+	"languageNames": {
+		"en": "english",
+		"fr": "french",
+		"es": "spanish",
+		"it": "italian",
+		"de": "german",
+		"ja": "japanese",
+		"ko": "korean",
+		"pl": "polish",
+		"ru": "russian",
+		"fi": "finnish",
+		"se": "swedish",
+		"nb-no": "norwegian"
+	},
+	"cpMultipliers": {
+		"1": 0.0939999967813492,
+		"2": 0.166397869586945,
+		"3": 0.215732470154762,
+		"4": 0.255720049142838,
+		"5": 0.290249884128571,
+		"6": 0.321087598800659,
+		"7": 0.349212676286697,
+		"8": 0.375235587358475,
+		"9": 0.399567276239395,
+		"10": 0.422500014305115,
+		"11": 0.443107545375824,
+		"12": 0.46279838681221,
+		"13": 0.481684952974319,
+		"14": 0.499858438968658,
+		"15": 0.517393946647644,
+		"16": 0.534354329109192,
+		"17": 0.550792694091797,
+		"18": 0.566754519939423,
+		"19": 0.582278907299042,
+		"20": 0.597400009632111,
+		"21": 0.61215728521347,
+		"22": 0.626567125320435,
+		"23": 0.6406529545784,
+		"24": 0.654435634613037,
+		"25": 0.667934000492096,
+		"26": 0.681164920330048,
+		"27": 0.694143652915955,
+		"28": 0.706884205341339,
+		"29": 0.719399094581604,
+		"30": 0.731700003147125,
+		"31": 0.737769484519958,
+		"32": 0.743789434432983,
+		"33": 0.749761044979095,
+		"34": 0.75568550825119,
+		"35": 0.761563837528229,
+		"36": 0.767397165298462,
+		"37": 0.773186504840851,
+		"38": 0.778932750225067,
+		"39": 0.784636974334717,
+		"40": 0.790300011634827,
+		"41": 0.795300006866455,
+		"42": 0.800300002098084,
+		"43": 0.805299997329712,
+		"44": 0.810299992561340,
+		"45": 0.815299987792969,
+		"46": 0.820299983024597,
+		"47": 0.825299978256226,
+		"48": 0.830299973487854,
+		"49": 0.835300028324127,
+		"50": 0.840300023555756,
+		"51": 0.845300018787384,
+		"52": 0.850300014019012,
+		"53": 0.855300009250641,
+		"54": 0.860300004482269,
+		"55": 0.865299999713897,
+		"1.5": 0.135137432089339,
+		"2.5": 0.192650913155325,
+		"3.5": 0.236572651424822,
+		"4.5": 0.273530372106572,
+		"5.5": 0.306057381389863,
+		"6.5": 0.335445031996451,
+		"7.5": 0.362457736609939,
+		"8.5": 0.387592407713878,
+		"9.5": 0.4111935532161,
+		"10.5": 0.432926420512509,
+		"11.5": 0.453059948165049,
+		"12.5": 0.472336085311278,
+		"13.5": 0.490855807179549,
+		"14.5": 0.5087017489616,
+		"15.5": 0.525942516110322,
+		"16.5": 0.542635753803599,
+		"17.5": 0.558830584490385,
+		"18.5": 0.57456912814537,
+		"19.5": 0.589887907888945,
+		"20.5": 0.604823648665171,
+		"21.5": 0.619404107958234,
+		"22.5": 0.633649178748576,
+		"23.5": 0.647580971386554,
+		"24.5": 0.661219265805859,
+		"25.5": 0.674581885647492,
+		"26.5": 0.687684901255373,
+		"27.5": 0.700542901033063,
+		"28.5": 0.713169074873823,
+		"29.5": 0.725575586915154,
+		"30.5": 0.734741038550429,
+		"31.5": 0.740785579737136,
+		"32.5": 0.746781197247765,
+		"33.5": 0.752729099732281,
+		"34.5": 0.758630370209851,
+		"35.5": 0.76448604959218,
+		"36.5": 0.770297293677362,
+		"37.5": 0.776064947064992,
+		"38.5": 0.781790050767666,
+		"39.5": 0.787473608513275,
+		"40.5": 0.792803950958808,
+		"41.5": 0.797803921486970,
+		"42.5": 0.802803892322847,
+		"43.5": 0.807803863460723,
+		"44.5": 0.812803834895027,
+		"45.5": 0.817803806620319,
+		"46.5": 0.822803778631297,
+		"47.5": 0.827803750922783,
+		"48.5": 0.832803753381377,
+		"49.5": 0.837803755931570,
+		"50.5": 0.842803729034748,
+		"51.5": 0.847803702398935,
+		"52.5": 0.852803676019539,
+		"53.5": 0.857803649892077,
+		"54.5": 0.862803624012169
+	},
+	"lures": {
+		"501": {
+			"name": "Normal Lure",
+			"emoji": "lure-normal",
+			"color": "D000C0"
+		},
+		"502": {
+			"name": "Glacial Lure",
+			"emoji": "lure-glacial",
+			"color": "2973DD"
+		},
+		"503": {
+			"name": "Mossy Lure",
+			"emoji": "lure-mossy",
+			"color": "86A630"
+		},
+		"504": {
+			"name": "Magnetic Lure",
+			"emoji": "lure-magnetic",
+			"color": "9FA6C1"
+		},
+		"505": {
+			"name": "Rainy Lure",
+			"emoji": "lure-rainy",
+			"color": "03D7FC"
+		},
+		"506": {
+			"name": "Sparkly Lure",
+			"emoji": "lure-sparkly",
+			"color": "F9E418"
+		}
+	},
+	"genders": {
+		"0": {
+			"name": "",
+			"emoji": ""
+		},
+		"1": {
+			"name": "male",
+			"emoji": "gender-male"
+		},
+		"2": {
+			"name": "female",
+			"emoji": "gender-female"
+		},
+		"3": {
+			"name": "genderless",
+			"emoji": "gender-none"
+		}
+	},
+	"rarity": {
+		"1": "Common",
+		"2": "Uncommon",
+		"3": "Rare",
+		"4": "Very-Rare",
+		"5": "Ultra-Rare",
+		"6": "Unseen"
+	},
+	"size": {
+		"1": "XXS",
+		"2": "XS",
+		"3": "M",
+		"4": "XL",
+		"5": "XXL"
+	},
+	"megaName": {
+		"0": "{0}",
+		"1": "Mega {0}",
+		"2": "Mega {0} X",
+		"3": "Mega {0} Y",
+		"4": "Primal {0}",
+		"5": "Mega {0} Z"
+	},
+	"evolution": {
+		"0": {
+			"name": ""
+		},
+		"1": {
+			"name": "Mega"
+		},
+		"2": {
+			"name": "Mega X"
+		},
+		"3": {
+			"name": "Mega Y"
+		},
+		"4": {
+			"name": "Primal"
+		},
+		"5": {
+			"name": "Mega Z"
+		}
+	},
+	"throwType": {
+		"10": "Nice",
+		"11": "Great",
+		"12": "Excellent"
+	},
+	"teams": {
+		"0": {
+			"name": "Uncontested",
+			"color": "BABABA",
+			"emoji": "team-uncontested"
+		},
+		"1": {
+			"name": "Mystic",
+			"color": "3B4CCA",
+			"emoji": "team-mystic"
+		},
+		"2": {
+			"name": "Valor",
+			"color": "CC0000",
+			"emoji": "team-valor"
+		},
+		"3": {
+			"name": "Instinct",
+			"color": "FFDE00",
+			"emoji": "team-instinct"
+		},
+		"4": {
+			"name": "Any team",
+			"color": "93C7B2"
+		}
+	},
+	"types": {
+		"Grass": {
+			"id": 12,
+			"emoji": "type-grass",
+			"color": "78C850"
+		},
+		"Poison": {
+			"id": 4,
+			"emoji": "type-poison",
+			"color": "A040A0"
+		},
+		"Fire": {
+			"id": 10,
+			"emoji": "type-fire",
+			"color": "F08030"
+		},
+		"Flying": {
+			"id": 3,
+			"emoji": "type-flying",
+			"color": "A890F0"
+		},
+		"Water": {
+			"id": 11,
+			"emoji": "type-water",
+			"color": "6890F0"
+		},
+		"Bug": {
+			"id": 7,
+			"emoji": "type-bug",
+			"color": "A8B820"
+		},
+		"Normal": {
+			"id": 1,
+			"emoji": "type-normal",
+			"color": "A8A878"
+		},
+		"Dark": {
+			"id": 17,
+			"emoji": "type-dark",
+			"color": "705848"
+		},
+		"Electric": {
+			"id": 13,
+			"emoji": "type-electric",
+			"color": "F8D030"
+		},
+		"Rock": {
+			"id": 6,
+			"emoji": "type-rock",
+			"color": "B8A038"
+		},
+		"Ground": {
+			"id": 5,
+			"emoji": "type-ground",
+			"color": "E0C068"
+		},
+		"Fairy": {
+			"id": 18,
+			"emoji": "type-fairy",
+			"color": "EE99AC"
+		},
+		"Fighting": {
+			"id": 2,
+			"emoji": "type-fighting",
+			"color": "C03028"
+		},
+		"Psychic": {
+			"id": 14,
+			"emoji": "type-psychic",
+			"color": "F85888"
+		},
+		"Steel": {
+			"id": 9,
+			"emoji": "type-steel",
+			"color": "B8B8D0"
+		},
+		"Ice": {
+			"id": 15,
+			"emoji": "type-ice",
+			"color": "98D8D8"
+		},
+		"Ghost": {
+			"id": 8,
+			"emoji": "type-ghost",
+			"color": "705898"
+		},
+		"Dragon": {
+			"id": 16,
+			"emoji": "type-dragon",
+			"color": "7038F8"
+		}
+	},
+	"weather": {
+		"0": {
+			"name": "",
+			"emoji": ""
+		},
+		"1": {
+			"name": "sunny",
+			"emoji": "weather-sunny"
+		},
+		"2": {
+			"name": "rain",
+			"emoji": "weather-rain"
+		},
+		"3": {
+			"name": "partly cloudy",
+			"emoji": "weather-partly-cloudy"
+		},
+		"4": {
+			"name": "cloudy",
+			"emoji": "weather-cloudy"
+		},
+		"5": {
+			"name": "windy",
+			"emoji": "weather-windy"
+		},
+		"6": {
+			"name": "snow",
+			"emoji": "weather-snow"
+		},
+		"7": {
+			"name": "fog",
+			"emoji": "weather-fog"
+		}
+	},
+	"weatherTypeBoost": {
+		"1": [5,10,12],
+		"2": [7,11,13],
+		"3": [1,6],
+		"4": [2,4,18],
+		"5": [3,14,16],
+		"6": [9,15],
+		"7": [8,17]
+	},
+	"genData": {
+		"1": {
+			"min": 1,
+			"max": 151,
+			"name": "Kanto",
+			"roman": "I"
+		},
+		"2": {
+			"min": 152,
+			"max": 251,
+			"name": "Johto",
+			"roman": "II"
+		},
+		"3": {
+			"min": 252,
+			"max": 386,
+			"name": "Hoenn",
+			"roman": "III"
+		},
+		"4": {
+			"min": 387,
+			"max": 493,
+			"name": "Sinnoh",
+			"roman": "IV"
+		},
+		"5": {
+			"min": 494,
+			"max": 649,
+			"name": "Unova",
+			"roman": "V"
+		},
+		"6": {
+			"min": 650,
+			"max": 721,
+			"name": "Kalos",
+			"roman": "VI"
+		},
+		"7": {
+			"min": 722,
+			"max": 809,
+			"name": "Alola",
+			"roman": "VII"
+		},
+		"8": {
+			"min": 810,
+			"max": 905,
+			"name": "Galar",
+			"roman": "VIII"
+		},
+		"9": {
+			"min":906,
+			"max":1010,
+			"name": "Paldea",
+			"roman": "IX"
+		}
+	},
+	"genException": {
+		"19_46": "7",
+		"20_48": "7",
+		"26_50": "7",
+		"27_52": "7",
+		"28_54": "7",
+		"37_56": "7",
+		"38_58": "7",
+		"50_60": "7",
+		"51_62": "7",
+		"52_64": "7",
+		"52_2335": "8",
+		"53_66": "7",
+		"74_68": "7",
+		"75_70": "7",
+		"76_72": "7",
+		"77_2336": "8",
+		"78_2337": "8",
+		"79_2582": "8",
+		"80_2583": "8",
+		"83_2338": "8",
+		"88_74": "7",
+		"89_76": "7",
+		"103_78": "7",
+		"105_80": "7",
+		"110_944": "8",
+		"122_2339": "8",
+		"199_2584": "8",
+		"222_2340": "8",
+		"263_946": "8",
+		"264_948": "8",
+		"554_2341": "8",
+		"555_2342": "8",
+		"555_2343": "8",
+		"562_2344": "8",
+		"618_2345": "8"
+	},
+	"raidLevels": {
+		"1": "Level 1",
+		"2": "Level 2",
+		"3": "Level 3",
+		"4": "Level 4",
+		"5": "Legendary",
+		"6": "Mega",
+		"7": "Mega Legendary",
+		"8": "Ultra Beast",
+		"9": "Elite",
+		"10": "Primal",
+		"11": "Level 1 Shadow",
+		"12": "Level 2 Shadow",
+		"13": "Level 3 Shadow",
+		"14": "Level 4 Shadow",
+		"15": "Shadow Legendary"
+	},
+	"maxbattleLevels": {
+		"1": "1 Star Max Battle",
+		"2": "2 Star Max Battle",
+		"3": "3 Star Max Battle",
+		"4": "4 Star Max Battle",
+		"5": "Legendary Max Battle",
+		"7": "Gigantamax Battle",
+		"8": "Legendary Gigantamax Battle"
+	},
+	"emojis": {
+		"lure-normal": "\ud83d\udccd",
+		"lure-glacial": "\u2744",
+		"lure-mossy": "\uD83C\uDF43",
+		"lure-magnetic": "\uD83E\uDDF2",
+		"lure-rainy": "\uD83D\uDCA7",
+		"lure-sparkly": "\ud83c\udf1f",
+		"gender-male": "\u2642",
+		"gender-female": "\u2640",
+		"gender-none": "\u26a7",
+		"weather-sunny": "\u2600",
+		"weather-rain": "\uD83C\uDF27",
+		"weather-partly-cloudy": "\uD83C\uDF24",
+		"weather-cloudy": "\u2601",
+		"weather-windy": "\uD83E\uDE81",
+		"weather-snow": "\u2603",
+		"weather-fog": "\uD83C\uDF2B",
+		"type-grass": "🌿",
+		"type-poison": "☠",
+		"type-fire": "🔥",
+		"type-flying": "🐦",
+		"type-water": "💧",
+		"type-bug": "🐛",
+		"type-normal": "⭕",
+		"type-dark": "🌑",
+		"type-electric": "⚡",
+		"type-rock": "🗿",
+		"type-ground": "⛰️",
+		"type-fairy": "🦋",
+		"type-fighting": "👊",
+		"type-psychic": "🔮",
+		"type-steel": "🔩",
+		"type-ice": "❄",
+		"type-ghost": "👻",
+		"type-dragon": "🐲",
+		"grunt-unknown": "❓",
+		"team-uncontested": "\u26AA",
+		"team-mystic": "\uD83D\uDD35",
+		"team-valor": "\uD83D\uDD34",
+		"team-instinct": "\uD83D\uDFE1",
+		"shiny": "✨",
+		"north": "\u2b06\ufe0f",
+		"northwest": "\u2197\ufe0f",
+		"west": "\u27a1\ufe0f",
+		"southwest": "\u2198\ufe0f",
+		"south":"\u2b07\ufe0f",
+		"southeast": "\u2199\ufe0f",
+		"east": "\u2b05\ufe0f",
+		"northeast": "\u2196\ufe0f",
+		"incident-goldstop": "🪙",
+		"incident-kecleon": "🦎",
+		"incident-showcase": "🏆"
+	},
+	"pokestopEvent": {
+		"7": {
+			"name": "Gold-Stop",
+			"color": "F9E418",
+			"emoji": "incident-goldstop"
+		},
+		"8": {
+			"name": "Kecleon",
+			"color": "B3CA78",
+			"emoji": "incident-kecleon"
+		},
+		"9": {
+			"name": "Showcase",
+			"color": "03AEB6",
+			"emoji": "incident-showcase"
+		}
+	}
+}

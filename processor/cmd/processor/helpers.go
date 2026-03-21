@@ -14,6 +14,23 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
+// distinctLanguages returns the unique language codes from matched users.
+func distinctLanguages(matched []webhook.MatchedUser) []string {
+	seen := make(map[string]bool, 4)
+	var langs []string
+	for _, m := range matched {
+		lang := m.Language
+		if lang == "" {
+			lang = "en"
+		}
+		if !seen[lang] {
+			seen[lang] = true
+			langs = append(langs, lang)
+		}
+	}
+	return langs
+}
+
 // buildMatchedAreas converts geofence areas to webhook MatchedArea structs.
 func buildMatchedAreas(areas []geofence.MatchedArea) []webhook.MatchedArea {
 	result := make([]webhook.MatchedArea, len(areas))

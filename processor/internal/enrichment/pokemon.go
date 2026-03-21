@@ -1,20 +1,50 @@
 package enrichment
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // Pokemon builds enrichment fields for a pokemon webhook.
+// Returns a base enrichment map (universal fields) and, if GameData is loaded,
+// also includes game data enrichment (types, weakness, stats, maps, etc.).
 func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) map[string]any {
 	m := map[string]any{
 		"rarityGroup":      processed.RarityGroup,
 		"pvpBestRank":      processed.PVPBestRank,
 		"pvpEvolutionData": processed.PVPEvoData,
+	}
+
+	// Best rank per league (scalar convenience for templates)
+	if processed.PVPBestRank != nil {
+		for league, ranks := range processed.PVPBestRank {
+			bestRank := 4096
+			bestCP := 0
+			for _, r := range ranks {
+				if r.Rank < bestRank {
+					bestRank = r.Rank
+					bestCP = r.CP
+				}
+			}
+			switch league {
+			case 500:
+				m["bestLittleLeagueRank"] = bestRank
+				m["bestLittleLeagueRankCP"] = bestCP
+			case 1500:
+				m["bestGreatLeagueRank"] = bestRank
+				m["bestGreatLeagueRankCP"] = bestCP
+			case 2500:
+				m["bestUltraLeagueRank"] = bestRank
+				m["bestUltraLeagueRankCP"] = bestCP
+			}
+		}
 	}
 
 	// Shiny rate and shiny possible
@@ -69,5 +99,409 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		m["cell_coords"] = geo.GetCellCoords(pokemon.Latitude, pokemon.Longitude, 15)
 	}
 
+	// Encountered status
+	encountered := pokemon.IndividualAttack != nil
+	m["encountered"] = encountered
+
+	// Compute IV/stats fields
+	if encountered {
+		atk, def, sta := *pokemon.IndividualAttack, 0, 0
+		if pokemon.IndividualDefense != nil {
+			def = *pokemon.IndividualDefense
+		}
+		if pokemon.IndividualStamina != nil {
+			sta = *pokemon.IndividualStamina
+		}
+		iv := float64(atk+def+sta) / 0.45
+		m["iv"] = fmt.Sprintf("%.2f", iv)
+		m["atk"] = atk
+		m["def"] = def
+		m["sta"] = sta
+		m["cp"] = pokemon.CP
+		m["level"] = pokemon.PokemonLevel
+
+		// IV color
+		m["ivColor"] = gamedata.FindIvColor(iv, e.IvColors)
+
+		// Catch rates
+		m["catchBase"] = fmt.Sprintf("%.2f", pokemon.BaseCatch*100)
+		m["catchGreat"] = fmt.Sprintf("%.2f", pokemon.GreatCatch*100)
+		m["catchUltra"] = fmt.Sprintf("%.2f", pokemon.UltraCatch*100)
+	} else {
+		m["iv"] = -1
+		m["atk"] = 0
+		m["def"] = 0
+		m["sta"] = 0
+		m["cp"] = 0
+		m["level"] = 0
+		m["catchBase"] = 0
+		m["catchGreat"] = 0
+		m["catchUltra"] = 0
+	}
+
+	// Seen type
+	m["seenType"] = computeSeenType(pokemon)
+
+	// Game data enrichment (types, weakness, stats, maps, generation, etc.)
+	if e.GameData != nil {
+		e.enrichPokemonGameData(m, pokemon, encountered)
+	}
+
 	return m
+}
+
+// enrichPokemonGameData adds game data enrichment fields that are universal
+// (not per-language). Per-language fields are added by PokemonTranslate.
+func (e *Enricher) enrichPokemonGameData(m map[string]any, pokemon *webhook.PokemonWebhook, encountered bool) {
+	gd := e.GameData
+	monster := gd.GetMonster(pokemon.PokemonID, pokemon.Form)
+	if monster == nil {
+		return
+	}
+
+	// Types
+	m["types"] = monster.Types
+	m["typeEmojiKeys"] = gd.GetTypeEmojiKeys(monster.Types)
+	m["color"] = gd.GetTypeColor(monster.Types)
+
+	// Base stats
+	m["baseStats"] = map[string]int{
+		"baseAttack":  monster.Attack,
+		"baseDefense": monster.Defense,
+		"baseStamina": monster.Stamina,
+	}
+
+	// Generation
+	gen := gd.GetGeneration(pokemon.PokemonID, pokemon.Form)
+	m["generation"] = gen
+	if info := gd.GetGenerationInfo(gen); info != nil {
+		m["generationRoman"] = info.Roman
+	}
+
+	// Weather boost
+	weather := pokemon.BoostedWeather
+	if weather == 0 {
+		weather = pokemon.Weather
+	}
+	m["boostingWeatherIds"] = gd.GetBoostingWeathers(monster.Types)
+	m["alteringWeathers"] = gd.GetAlteringWeathers(monster.Types, weather)
+
+	// Weakness calculation
+	m["weaknessList"] = gamedata.CalculateWeaknesses(monster.Types, gd.Types)
+
+	// Weather forecast impact
+	if pokemon.DisappearTime > 0 {
+		nextHourTS, _ := m["nextHourTimestamp"].(int64)
+		if nextHourTS > 0 && pokemon.DisappearTime > nextHourTS {
+			forecastCurrent, _ := m["weatherForecastCurrent"].(int)
+			forecastNext, _ := m["weatherForecastNext"].(int)
+			weather := pokemon.BoostedWeather
+			if weather == 0 {
+				weather = pokemon.Weather
+			}
+
+			if forecastNext > 0 {
+				pokemonShouldBeBoosted := forecastCurrent > 0 && gd.IsBoostedByWeather(monster.Types, forecastCurrent)
+
+				boostMayChange := (weather > 0 && forecastNext != weather) ||
+					(forecastCurrent > 0 && forecastNext != forecastCurrent) ||
+					(pokemonShouldBeBoosted && weather == 0)
+
+				if boostMayChange {
+					pokemonWillBeBoosted := gd.IsBoostedByWeather(monster.Types, forecastNext)
+
+					if (weather > 0 && !pokemonWillBeBoosted) || (weather == 0 && pokemonWillBeBoosted) {
+						if pokemonShouldBeBoosted && weather == 0 {
+							m["weatherCurrent"] = 0
+						} else if weather > 0 {
+							m["weatherCurrent"] = weather
+						} else {
+							m["weatherCurrent"] = forecastCurrent
+						}
+						m["weatherNext"] = forecastNext
+					}
+				}
+			}
+		}
+	}
+
+	// Map URLs
+	e.addMapURLs(m, pokemon.Latitude, pokemon.Longitude, "pokemon", pokemon.EncounterID)
+
+	// Move type emoji keys for encountered pokemon
+	if encountered {
+		if quickMove := gd.GetMove(pokemon.Move1); quickMove != nil && quickMove.TypeID > 0 {
+			if ti, ok := gd.Types[quickMove.TypeID]; ok {
+				m["quickMoveTypeEmojiKey"] = ti.Emoji
+			}
+		}
+		if chargeMove := gd.GetMove(pokemon.Move2); chargeMove != nil && chargeMove.TypeID > 0 {
+			if ti, ok := gd.Types[chargeMove.TypeID]; ok {
+				m["chargeMoveTypeEmojiKey"] = ti.Emoji
+			}
+		}
+	}
+
+	// Disguise pokemon info
+	if pokemon.DisplayPokemonID > 0 && pokemon.DisplayPokemonID != pokemon.PokemonID {
+		m["disguisePokemonId"] = pokemon.DisplayPokemonID
+		m["disguiseFormId"] = pokemon.DisplayForm
+	}
+
+	// Evolution data
+	m["hasEvolutions"] = len(monster.Evolutions) > 0
+	m["hasMegaEvolutions"] = len(monster.TempEvolutions) > 0
+
+	// Legendary/mythic/ultra beast flags
+	m["legendary"] = monster.Legendary
+	m["mythic"] = monster.Mythic
+	m["ultraBeast"] = monster.UltraBeast
+}
+
+// PokemonTranslate adds per-language translated fields to a pokemon enrichment map.
+// Call this once per distinct language among matched users.
+func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.PokemonWebhook, lang string) map[string]any {
+	if e.GameData == nil || e.Translations == nil {
+		return base
+	}
+
+	// Clone base map for this language
+	m := make(map[string]any, len(base)+20)
+	for k, v := range base {
+		m[k] = v
+	}
+
+	gd := e.GameData
+	tr := e.Translations.For(lang)
+	monster := gd.GetMonster(pokemon.PokemonID, pokemon.Form)
+	if monster == nil {
+		return m
+	}
+
+	// Pokemon name, form name, full name
+	TranslateMonsterNames(m, gd, tr, pokemon.PokemonID, pokemon.Form, 0)
+
+	// Type names
+	TranslateTypeNames(m, tr, monster.Types)
+
+	// Move names
+	encountered, _ := base["encountered"].(bool)
+	if encountered {
+		addMoveFields(m, gd, tr, pokemon.Move1, pokemon.Move2)
+	} else {
+		m["quickMoveName"] = ""
+		m["chargeMoveName"] = ""
+	}
+
+	// Weather names
+	weather := pokemon.BoostedWeather
+	if weather == 0 {
+		weather = pokemon.Weather
+	}
+	addWeatherFields(m, gd, tr, monster.Types, weather)
+	m["gameWeatherName"] = TranslateWeatherName(tr, m["gameWeatherId"].(int))
+
+	// Generation name
+	addGenerationFields(m, gd, tr, pokemon.PokemonID, pokemon.Form)
+
+	// Gender name
+	addGenderFields(m, gd, tr, pokemon.Gender)
+
+	// Rarity name
+	rarityGroup, _ := base["rarityGroup"].(int)
+	addRarityFields(m, gd, tr, rarityGroup)
+
+	// Size name
+	addSizeFields(m, gd, tr, pokemon.Size)
+
+	// Translated weakness list
+	if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
+		m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr)
+	}
+
+	// Evolution chain
+	evolutions, megaEvolutions := e.buildEvolutions(gd, tr, pokemon.PokemonID, pokemon.Form)
+	m["evolutions"] = evolutions
+	m["megaEvolutions"] = megaEvolutions
+
+	// Disguise name
+	if dpID, ok := base["disguisePokemonId"].(int); ok {
+		dpForm, _ := base["disguiseFormId"].(int)
+		disguiseM := make(map[string]any)
+		TranslateMonsterNames(disguiseM, gd, tr, dpID, dpForm, 0)
+		m["disguisePokemonName"] = disguiseM["name"]
+		m["disguiseFormName"] = disguiseM["formName"]
+	}
+
+	// Pre-enrich PVP rank entries with translated names and computed fields.
+	// The alerter only needs to do per-user filter matching on these.
+	e.enrichPvpRankings(m, gd, tr, pokemon)
+
+	return m
+}
+
+// enrichPvpRankings pre-enriches PVP ranking entries with translated pokemon
+// names, form names, base stats, percentage formatting, and levelWithCap.
+// This removes the need for GameData.monsters lookups in the alerter's
+// createPvpDisplay per-user loop.
+func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, pokemon *webhook.PokemonWebhook) {
+	if pokemon.PVP == nil {
+		return
+	}
+
+	for leagueName, entries := range pokemon.PVP {
+		enriched := make([]map[string]any, 0, len(entries))
+		for _, rank := range entries {
+			if rank.Rank <= 0 {
+				continue
+			}
+
+			entry := map[string]any{
+				"rank":      rank.Rank,
+				"cp":        rank.CP,
+				"level":     rank.Level,
+				"cap":       rank.Cap,
+				"capped":    rank.Capped,
+				"pokemon":   rank.Pokemon,
+				"form":      rank.Form,
+				"evolution": rank.Evolution,
+				"percentage": rank.Percentage,
+			}
+
+			// Computed fields
+			if rank.Percentage <= 1 {
+				entry["percentageFormatted"] = fmt.Sprintf("%.2f", rank.Percentage*100)
+			} else {
+				entry["percentageFormatted"] = fmt.Sprintf("%.2f", rank.Percentage)
+			}
+
+			if rank.Cap > 0 && !rank.Capped {
+				entry["levelWithCap"] = fmt.Sprintf("%v/%d", rank.Level, rank.Cap)
+			} else {
+				entry["levelWithCap"] = rank.Level
+			}
+
+			// Monster name + stats lookup
+			formID := rank.Form
+			mon := gd.GetMonster(rank.Pokemon, formID)
+			if mon != nil {
+				nameInfo := make(map[string]any)
+				TranslateMonsterNames(nameInfo, gd, tr, rank.Pokemon, formID, rank.Evolution)
+				entry["name"] = nameInfo["name"]
+				entry["fullName"] = nameInfo["fullName"]
+				entry["formName"] = nameInfo["formName"]
+				entry["formNormalised"] = nameInfo["formNormalised"]
+				entry["baseStats"] = map[string]int{
+					"baseAttack":  mon.Attack,
+					"baseDefense": mon.Defense,
+					"baseStamina": mon.Stamina,
+				}
+			} else {
+				entry["name"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
+				entry["fullName"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
+				entry["formName"] = ""
+				entry["formNormalised"] = ""
+				entry["baseStats"] = map[string]int{
+					"baseAttack": 0, "baseDefense": 0, "baseStamina": 0,
+				}
+			}
+
+			enriched = append(enriched, entry)
+		}
+		m[fmt.Sprintf("pvpEnriched_%s_league", leagueName)] = enriched
+	}
+}
+
+// buildEvolutions walks the evolution tree from GameData and returns translated
+// evolution and mega evolution info for use in templates.
+func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, pokemonID, form int) ([]map[string]any, []map[string]any) {
+	monster := gd.GetMonster(pokemonID, form)
+	if monster == nil {
+		return nil, nil
+	}
+
+	var evolutions []map[string]any
+	var megaEvolutions []map[string]any
+
+	// Walk evolution chain (max depth 10 to prevent cycles)
+	var walk func(m *gamedata.Monster, depth int)
+	walk = func(m *gamedata.Monster, depth int) {
+		if depth >= 10 {
+			return
+		}
+		for _, evo := range m.Evolutions {
+			evoMon := gd.GetMonster(evo.PokemonID, evo.FormID)
+			if evoMon == nil {
+				continue
+			}
+
+			nameInfo := make(map[string]any)
+			TranslateMonsterNames(nameInfo, gd, tr, evo.PokemonID, evo.FormID, 0)
+			TranslateTypeNames(nameInfo, tr, evoMon.Types)
+			nameInfo["id"] = evo.PokemonID
+			nameInfo["form"] = evo.FormID
+			nameInfo["typeEmojiKeys"] = gd.GetTypeEmojiKeys(evoMon.Types)
+			nameInfo["baseStats"] = map[string]int{
+				"baseAttack":  evoMon.Attack,
+				"baseDefense": evoMon.Defense,
+				"baseStamina": evoMon.Stamina,
+			}
+			evolutions = append(evolutions, nameInfo)
+			walk(evoMon, depth+1)
+		}
+		for _, te := range m.TempEvolutions {
+			types := te.Types
+			if len(types) == 0 {
+				types = m.Types
+			}
+
+			megaInfo := make(map[string]any)
+			// Mega name: apply pattern like "Mega {0}"
+			baseName := tr.T(gamedata.PokemonTranslationKey(m.PokemonID))
+			pattern := "{0}"
+			if p, ok := gd.Util.MegaName[te.TempEvoID]; ok {
+				pattern = p
+			}
+			megaInfo["fullName"] = i18n.Format(pattern, baseName)
+			megaInfo["evolution"] = te.TempEvoID
+			megaInfo["typeEmojiKeys"] = gd.GetTypeEmojiKeys(types)
+			TranslateTypeNames(megaInfo, tr, types)
+			megaInfo["baseStats"] = map[string]int{
+				"baseAttack":  te.Attack,
+				"baseDefense": te.Defense,
+				"baseStamina": te.Stamina,
+			}
+			megaEvolutions = append(megaEvolutions, megaInfo)
+		}
+	}
+
+	walk(monster, 0)
+	return evolutions, megaEvolutions
+}
+
+func computeSeenType(pokemon *webhook.PokemonWebhook) string {
+	if pokemon.SeenType != "" {
+		switch pokemon.SeenType {
+		case "nearby_stop":
+			return "pokestop"
+		case "nearby_cell":
+			return "cell"
+		case "lure", "lure_wild":
+			return "lure"
+		case "lure_encounter", "encounter", "wild":
+			return pokemon.SeenType
+		}
+		return ""
+	}
+	if pokemon.PokestopID == "None" && pokemon.SpawnpointID == "None" {
+		return "cell"
+	}
+	encountered := pokemon.IndividualAttack != nil
+	if pokemon.PokestopID == "None" {
+		if encountered {
+			return "encounter"
+		}
+		return "wild"
+	}
+	return "pokestop"
 }

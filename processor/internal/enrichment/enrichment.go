@@ -3,7 +3,9 @@ package enrichment
 import (
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
@@ -23,6 +25,13 @@ type ShinyRateProvider interface {
 	GetShinyRate(pokemonID int) float64
 }
 
+// MapConfig holds the map URL configuration for enrichment.
+type MapConfig struct {
+	RdmURL       string
+	ReactMapURL  string
+	RocketMadURL string
+}
+
 // Enricher computes additional fields to accompany webhook messages
 // sent to the alerter. The enrichment map is sent alongside the original
 // raw message so neither needs to be re-encoded.
@@ -33,6 +42,10 @@ type Enricher struct {
 	ForecastProvider ForecastProvider  // optional; triggers AccuWeather fetch
 	ShinyProvider    ShinyRateProvider // optional; provides shiny rates
 	EventChecker     *PogoEventChecker
+	GameData         *gamedata.GameData  // game master data for enrichment
+	Translations     *i18n.Bundle        // translations for per-language enrichment
+	MapConfig        *MapConfig          // map URL configuration
+	IvColors         []string            // Discord IV color hex strings (6 thresholds)
 }
 
 // New creates a new Enricher.
@@ -61,4 +74,32 @@ func addSunTimes(m map[string]any, lat, lon float64, tz string) {
 	m["nightTime"] = sunTimes.NightTime
 	m["dawnTime"] = sunTimes.DawnTime
 	m["duskTime"] = sunTimes.DuskTime
+}
+
+// addMapURLs adds all map URL fields to the enrichment map.
+func (e *Enricher) addMapURLs(m map[string]any, lat, lon float64, entityType, entityID string) {
+	m["appleMapUrl"] = geo.AppleMapURL(lat, lon)
+	m["googleMapUrl"] = geo.GoogleMapURL(lat, lon)
+	m["wazeMapUrl"] = geo.WazeMapURL(lat, lon)
+
+	if e.MapConfig == nil {
+		return
+	}
+
+	if e.MapConfig.RdmURL != "" {
+		m["rdmUrl"] = normalizeTrailingSlash(e.MapConfig.RdmURL) + "@" + entityType + "/" + entityID
+	}
+	if e.MapConfig.ReactMapURL != "" {
+		m["reactMapUrl"] = normalizeTrailingSlash(e.MapConfig.ReactMapURL) + "id/" + entityType + "/" + entityID
+	}
+	if e.MapConfig.RocketMadURL != "" {
+		m["rocketMadUrl"] = normalizeTrailingSlash(e.MapConfig.RocketMadURL) + "?lat=" + geo.FormatCoord(lat) + "&lon=" + geo.FormatCoord(lon) + "&zoom=18.0"
+	}
+}
+
+func normalizeTrailingSlash(url string) string {
+	if len(url) > 0 && url[len(url)-1] != '/' {
+		return url + "/"
+	}
+	return url
 }

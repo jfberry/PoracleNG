@@ -226,18 +226,20 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 
 	strictAreas := cfg.Area.Enabled && cfg.Area.StrictLocations
 
+	// Load full game data from raw masterfile + util.json
+	gd, err := gamedata.Load(cfg.BaseDir)
+	if err != nil {
+		log.Warnf("Failed to load game data: %s (enrichment will be limited)", err)
+	} else {
+		log.Infof("Game data loaded: %d monsters, %d moves, %d types", len(gd.Monsters), len(gd.Moves), len(gd.Types))
+	}
+
 	var activePokemon *tracker.ActivePokemonTracker
 	var pokemonTypes *gamedata.PokemonTypes
-	if cfg.Weather.ShowAlteredPokemon {
-		monstersPath := cfg.ResolvePath("resources/data/monsters.json")
-		pt, err := gamedata.LoadPokemonTypes(monstersPath)
-		if err != nil {
-			log.Errorf("Failed to load pokemon types from %s: %s (active pokemon tracking disabled)", monstersPath, err)
-		} else {
-			pokemonTypes = pt
-			activePokemon = tracker.NewActivePokemonTracker(50)
-			log.Infof("Active pokemon tracking enabled with %s", monstersPath)
-		}
+	if cfg.Weather.ShowAlteredPokemon && gd != nil {
+		pokemonTypes = gamedata.PokemonTypesFromGameData(gd.Monsters)
+		activePokemon = tracker.NewActivePokemonTracker(50)
+		log.Info("Active pokemon tracking enabled (from game data)")
 	}
 
 	if !geo.IsLocaleSupported(cfg.Locale.TimeFormat) {
@@ -255,6 +257,16 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		weatherTracker,
 		eventChecker,
 	)
+
+	// Wire game data and translations into enricher
+	enricher.GameData = gd
+	enricher.Translations = i18n.Load(cfg.BaseDir)
+	enricher.MapConfig = &enrichment.MapConfig{
+		RdmURL:       cfg.General.RdmURL,
+		ReactMapURL:  cfg.General.ReactMapURL,
+		RocketMadURL: cfg.General.RocketMadURL,
+	}
+	enricher.IvColors = cfg.Discord.IvColors
 
 	// Stats tracker (rarity + shiny, shared rolling window)
 	statsTracker := tracker.NewStatsTracker(tracker.StatsConfig{
@@ -280,9 +292,6 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		enricher.ForecastProvider = awClient
 		log.Infof("AccuWeather forecast enabled with %d API keys", len(cfg.Weather.AccuWeatherAPIKeys))
 	}
-
-	// Load translations: embedded defaults → resources/locale → alerter/locale → config/custom.*.json
-	translations := i18n.Load(cfg.BaseDir)
 
 	// Build rate limiter overrides map from config array
 	overrides := make(map[string]int, len(cfg.AlertLimits.Overrides))
@@ -329,7 +338,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		activePokemon:   activePokemon,
 		pokemonTypes:    pokemonTypes,
 		rateLimiter:     rateLimiter,
-		translations:    translations,
+		translations:    enricher.Translations,
 		workerPool:      make(chan struct{}, cfg.Tuning.WorkerPoolSize),
 	}
 }

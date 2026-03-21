@@ -132,12 +132,23 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			l.Infof("%s level %d on %s appeared at [%.3f,%.3f] and %d humans cared",
 				msgType, raid.Level, gymName, raid.Latitude, raid.Longitude, len(matched))
 
+			baseEnrichment := ps.enricher.Raid(&raid, isFirstNotification)
+
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched) {
+					perLang[lang] = ps.enricher.RaidTranslate(baseEnrichment, &raid, lang)
+				}
+			}
+
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         msgType,
-				Message:      raw,
-				Enrichment:   ps.enricher.Raid(&raid, isFirstNotification),
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  msgType,
+				Message:               raw,
+				Enrichment:            baseEnrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
 			})
 		} else {
 			l.Debugf("Raid/egg level %d appeared at [%.3f,%.3f] and 0 humans cared",

@@ -4,7 +4,7 @@ const { log } = require('./logger')
 
 const RESOURCES_DATA = path.resolve(__dirname, '../../../resources/data')
 
-const GameData = { utilData: require('../util/util.json') }
+const GameData = { utilData: JSON.parse(fs.readFileSync(path.join(RESOURCES_DATA, 'util.json'))) }
 const neededFiles = ['monsters', 'moves', 'items', 'grunts', 'questTypes', 'types', 'translations']
 
 neededFiles.forEach((file) => {

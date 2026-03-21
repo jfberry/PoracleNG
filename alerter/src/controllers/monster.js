@@ -1,210 +1,80 @@
 const Controller = require('./controller')
-const nightTime = require('./common/nightTime')
-const evolutionCalculator = require('./common/evolutionCalculator')
 
 class Monster extends Controller {
-	getAlteringWeathers(types, boostStatus) {
-		const boostingWeathers = types.map((type) => parseInt(Object.keys(this.GameData.utilData.weatherTypeBoost).find((key) => this.GameData.utilData.weatherTypeBoost[key].includes(type)), 10))
-		const nonBoostingWeathers = [1, 2, 3, 4, 5, 6, 7].filter((weather) => !boostingWeathers.includes(weather))
-		if (boostStatus > 0) return nonBoostingWeathers
-		return boostingWeathers
-	}
-
 	/**
 	 * Handle a pre-matched pokemon payload from the Go processor.
-	 * Skips whoCares — uses the provided matched users directly.
-	 * Performs data enrichment, template rendering, and message creation.
+	 * All game data lookups, translations, weakness calculations, generation,
+	 * weather forecast impact, evolution chains, IV color, map URLs, and
+	 * best PVP ranks are pre-computed by the processor.
+	 *
+	 * This controller handles:
+	 * - Per-platform emoji lookups (using emoji keys from enrichment)
+	 * - PVP display list building (per-user filter matching)
+	 * - Icon URL fetching (uicons)
+	 * - Geocoding + static map (external I/O)
+	 * - Weather change text formatting (using pre-translated weather names)
+	 * - Template rendering
 	 */
 	async handleMatched(obj, matchedUsers, matchedAreas) {
 		const data = obj
 		try {
 			const logReference = data.encounter_id
-
 			const minTth = this.config.general.alertMinimumTime || 0
 
+			// All these fields are pre-computed by the Go processor enrichment:
+			// data.encountered, data.iv, data.atk, data.def, data.sta, data.cp, data.level
+			// data.catchBase, data.catchGreat, data.catchUltra
+			// data.types, data.color, data.ivColor, data.generation, data.generationRoman
+			// data.gameWeatherId, data.alteringWeathers, data.weaknessList
+			// data.seenType, data.cell_coords
+			// data.googleMapUrl, data.appleMapUrl, data.wazeMapUrl, data.rdmUrl, data.reactMapUrl, data.rocketMadUrl
+			// data.disappearTime, data.tth, data.weatherChangeTime
+			// data.weatherCurrent, data.weatherNext (forecast impact)
+			// data.pvpBestRank, data.pvpEvolutionData
+			// data.bestGreatLeagueRank, data.bestUltraLeagueRank, data.bestLittleLeagueRank
+			// data.shinyPossible, data.shinyStats
+			// data.hasEvolutions, data.hasMegaEvolutions
+			// data.baseStats
+
 			data.form ??= 0
-			const monster = this.GameData.monsters[`${data.pokemon_id}_${data.form}`] || this.GameData.monsters[`${data.pokemon_id}_0`]
+			const { encountered } = data
 
-			if (!monster) {
-				this.log.warn(`${data.encounter_id}: [matched] Couldn't find monster in:`, data)
-				return []
-			}
-
-			// Use processor-provided weather data
-			const currentCellWeather = data.gameWeatherId || 0
-
-			const encountered = data.encountered !== undefined ? data.encountered : !(!(['string', 'number'].includes(typeof data.individual_attack) && (+data.individual_attack + 1))
-				|| !(['string', 'number'].includes(typeof data.individual_defense) && (+data.individual_defense + 1))
-				|| !(['string', 'number'].includes(typeof data.individual_stamina) && (+data.individual_stamina + 1)))
-
+			// Field aliases for backward compat
 			if (data.pokestop_name) data.pokestop_name = this.escapeJsonString(data.pokestop_name)
 			data.pokestopName = data.pokestop_name
 			data.pokemonId = data.pokemon_id
 			data.encounterId = data.encounter_id
-			// eslint-disable-next-line prefer-destructuring
-			data.generation = this.GameData.utilData.genException[`${data.pokemon_id}_${data.form}`] || Object.entries(this.GameData.utilData.genData).find(([, genData]) => data.pokemonId >= genData.min && data.pokemonId <= genData.max)[0]
-			data.generationNameEng = this.GameData.utilData.genData[data.generation].name
-			data.generationRoman = this.GameData.utilData.genData[data.generation].roman
-			data.nameEng = monster.name
-			data.formNameEng = monster.form.name
 			data.formId = data.form
-			// Use processor-provided computed fields if available, else compute
-			if (data.iv === undefined) data.iv = encountered ? ((data.individual_attack + data.individual_defense + data.individual_stamina) / 0.45).toFixed(2) : -1
-			if (data.atk === undefined) data.atk = encountered ? data.individual_attack : 0
-			if (data.def === undefined) data.def = encountered ? data.individual_defense : 0
-			if (data.sta === undefined) data.sta = encountered ? data.individual_stamina : 0
-			if (data.base_catch) data.capture_1 = data.base_catch
-			if (data.great_catch) data.capture_2 = data.great_catch
-			if (data.ultra_catch) data.capture_3 = data.ultra_catch
-			if (data.verified) data.disappear_time_verified = data.verified
-			data.catchBase = encountered ? (data.capture_1 * 100).toFixed(2) : 0
-			data.catchGreat = encountered ? (data.capture_2 * 100).toFixed(2) : 0
-			data.catchUltra = encountered ? (data.capture_3 * 100).toFixed(2) : 0
-			if (data.cp === undefined) data.cp = encountered ? data.cp : 0
-			if (data.level === undefined) data.level = encountered ? data.pokemon_level : 0
-			data.quickMoveId = encountered ? data.move_1 : 0
-			data.chargeMoveId = encountered ? data.move_2 : 0
+			data.quickMoveId = data.quickMoveId ?? (encountered ? data.move_1 : 0)
+			data.chargeMoveId = data.chargeMoveId ?? (encountered ? data.move_2 : 0)
 			data.size = data.size ?? 0
-			data.quickMoveNameEng = encountered && this.GameData.moves[data.quickMoveId] ? this.GameData.moves[data.quickMoveId].name : ''
-			data.chargeMoveNameEng = encountered && this.GameData.moves[data.chargeMoveId] ? this.GameData.moves[data.chargeMoveId].name : ''
-			data.height = encountered && data.height ? data.height.toFixed(2) : 0
-			data.weight = encountered && data.weight ? data.weight.toFixed(2) : 0
-			data.genderDataEng = this.GameData.utilData.genders[data.gender]
-			data.genderNameEng = data.genderDataEng.name
+			data.height = encountered && data.height ? (+data.height).toFixed(2) : 0
+			data.weight = encountered && data.weight ? (+data.weight).toFixed(2) : 0
 			if (data.boosted_weather) data.weather = data.boosted_weather
 			if (!data.weather) data.weather = 0
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.appleMapUrl = `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
-			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
-			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
-			if (this.config.general.rdmURL) {
-				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@pokemon/${data.encounter_id}`
-			}
-			if (this.config.general.reactMapURL) {
-				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/pokemon/${data.encounter_id}`
-			}
-			if (this.config.general.rocketMadURL) {
-				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
-			}
-			data.color = this.GameData.utilData.types[monster.types[0].name].color
-			data.ivColor = this.findIvColor(data.iv)
 			if (data.tthSeconds === undefined) data.tthSeconds = data.disappear_time - Date.now() / 1000
-			// tth and disappearTime are pre-computed by the Go processor
-			data.confirmedTime = data.disappear_time_verified
-			data.distime = data.disappearTime // deprecated
-			data.individual_attack = data.atk // deprecated
-			data.individual_defense = data.def // deprecated
-			data.individual_stamina = data.sta // deprecated
-			data.pokemon_level = data.level // deprecated
-			data.move_1 = data.quickMoveId // deprecated
-			data.move_2 = data.chargeMoveId // deprecated
-			data.applemap = data.appleMapUrl // deprecated
-			data.mapurl = data.googleMapUrl // deprecated
-			data.ivcolor = data.ivColor // deprecated
-			data.types = monster.types.map((type) => type.id)
-			data.alteringWeathers = this.getAlteringWeathers(data.types, data.weather)
-			// Use processor-provided rarity group
-			if (data.rarityGroup === undefined) data.rarityGroup = -1
-			data.rarityNameEng = this.GameData.utilData.rarity[data.rarityGroup] ? this.GameData.utilData.rarity[data.rarityGroup] : ''
-			data.sizeNameEng = data.size && this.GameData.utilData.size[data.size] ? this.GameData.utilData.size[data.size] : ''
+			data.confirmedTime = data.disappear_time_verified || data.verified
 			data.pvpPokemonId = data.pokemon_id
 			data.pvpFormId = data.form
-			// Use processor-provided PVP data
 			if (!data.pvpEvolutionData) data.pvpEvolutionData = {}
-			if (data.shinyPossible === undefined) data.shinyPossible = this.shinyPossible.isShinyPossible(data.pokemonId, data.formId)
 			data.shinyStats = data.shinyStats ? Math.round(data.shinyStats) : null
 
-			// PVP rank calculation from webhook PVP data (same as handle())
-			if (data.pvp) {
-				for (const league of Object.keys(data.pvp)) {
-					data[`pvp_rankings_${league}_league`] = data.pvp[league].filter((x) => this.config.pvp.includeMegaEvolution || !x.evolution)
-				}
-			}
-
-			if (!data.pvpBestRank) data.pvpBestRank = {}
-
-			const capsConsidered = this.config.pvp.levelCaps ?? [50]
-
-			const rankCalculator = (league, leagueData, minCp) => {
-				const best = Object.fromEntries(capsConsidered.map((x) => [x, { rank: 4096, cp: 0 }]))
-				if (leagueData) {
-					for (const stats of leagueData) {
-						const caps = []
-						if (!stats.cap && !stats.capped) {
-							caps.push(50)
-						} else if (stats.capped) {
-							caps.push(...capsConsidered.filter((x) => x >= stats.cap))
-						} else {
-							caps.push(stats.cap)
-						}
-						for (const cap of caps) {
-							if (!capsConsidered.includes(cap)) continue // eslint-disable-line no-continue
-							if (stats.rank && stats.rank < best[cap].rank) {
-								best[cap].rank = stats.rank
-								best[cap].cp = stats.cp || 0
-							} else if (stats.rank && stats.cp && stats.rank === best[cap].rank && stats.cp > best[cap].cp) {
-								best[cap].cp = stats.cp
-							}
-						}
-
-						if (!stats.evolution && this.config.pvp.pvpEvolutionDirectTracking && stats.rank && stats.cp && stats.pokemon !== data.pokemon_id && stats.rank <= this.config.pvp.pvpFilterMaxRank && stats.cp >= minCp) {
-							const newEvo = {
-								rank: stats.rank,
-								percentage: stats.percentage,
-								pokemon: stats.pokemon,
-								form: stats.form || 0,
-								level: stats.level,
-								cp: stats.cp,
-								caps: stats.capped ? capsConsidered.filter((x) => x >= stats.cap) : (stats.cap && capsConsidered.includes(stats.cap) ? [stats.cap] : null), // eslint-disable-line no-nested-ternary
-							}
-							if (data.pvpEvolutionData[stats.pokemon] && data.pvpEvolutionData[stats.pokemon][league]) {
-								data.pvpEvolutionData[stats.pokemon][league].push(newEvo)
-							} else {
-								const leagueStats = {}
-								leagueStats[league] = [newEvo]
-								data.pvpEvolutionData[stats.pokemon] = { ...data.pvpEvolutionData[stats.pokemon], ...leagueStats }
-							}
-						}
-					}
-
-					const bestRanks = []
-					for (const [cap, details] of Object.entries(best)) {
-						let found = false
-						for (const bestRank of bestRanks) {
-							if (bestRank.cp === details.cp && bestRank.rank === details.rank) {
-								bestRank.caps.push(cap)
-								found = true
-								break
-							}
-						}
-						if (!found) {
-							bestRanks.push({ ...details, caps: [cap] })
-						}
-					}
-					data.pvpBestRank[league] = bestRanks
-				}
-
-				return {
-					rank: Math.min(...Object.values(best).map((x) => x.rank)),
-					cp: Math.min(...Object.values(best).map((x) => x.cp)),
-				}
-			}
-
-			const ultraPvp = rankCalculator(2500, data.pvp_rankings_ultra_league, this.config.pvp.pvpFilterUltraMinCP)
-			data.bestUltraLeagueRank = ultraPvp.rank
-			data.bestUltraLeagueRankCP = ultraPvp.cp
-
-			const greatPvp = rankCalculator(1500, data.pvp_rankings_great_league, this.config.pvp.pvpFilterGreatMinCP)
-			data.bestGreatLeagueRank = greatPvp.rank
-			data.bestGreatLeagueRankCP = greatPvp.cp
-
-			const littlePvp = rankCalculator(500, data.pvp_rankings_little_league, this.config.pvp.pvpFilterLittleMinCP)
-			data.bestLittleLeagueRank = littlePvp.rank
-			data.bestLittleLeagueRankCP = littlePvp.cp
+			// Deprecated aliases
+			data.distime = data.disappearTime
+			data.individual_attack = data.atk
+			data.individual_defense = data.def
+			data.individual_stamina = data.sta
+			data.pokemon_level = data.level
+			data.move_1 = data.quickMoveId
+			data.move_2 = data.chargeMoveId
+			data.applemap = data.appleMapUrl
+			data.mapurl = data.googleMapUrl
+			data.ivcolor = data.ivColor
 
 			// Stop handling if it already disappeared or is about to go away
 			if ((data.tth.firstDateWasLater || data.tthSeconds < minTth)) {
-				this.log.verbose(`${data.encounter_id}: [matched] ${monster.name} already disappeared or is about to go away`)
+				this.log.verbose(`${data.encounter_id}: [matched] pokemon ${data.pokemon_id} already disappeared or is about to go away`)
 				return []
 			}
 
@@ -215,14 +85,14 @@ class Monster extends Controller {
 			const whoCares = matchedUsers
 
 			if (whoCares.length) {
-				this.log.info(`${data.encounter_id}: [matched] ${monster.name}{${encountered ? `${data.cp}/${data.iv}` : '?'}} at [${data.latitude.toFixed(3)},${data.longitude.toFixed(3)}] areas (${data.matched}) and ${whoCares.length} humans cared.`)
+				this.log.info(`${data.encounter_id}: [matched] pokemon ${data.pokemon_id}{${encountered ? `${data.cp}/${data.iv}` : '?'}} at [${data.latitude.toFixed(3)},${data.longitude.toFixed(3)}] areas (${data.matched}) and ${whoCares.length} humans cared.`)
 			} else {
-				this.log.verbose(`${data.encounter_id}: [matched] ${monster.name} at [${data.latitude.toFixed(3)},${data.longitude.toFixed(3)}] with 0 humans`)
+				this.log.verbose(`${data.encounter_id}: [matched] pokemon ${data.pokemon_id} at [${data.latitude.toFixed(3)},${data.longitude.toFixed(3)}] with 0 humans`)
 				return []
 			}
 
-			// From here, same as handle() post-whoCares: data enrichment + message creation
 			try {
+				// Consolidate alerts per user (merge PVP filters)
 				const consolidatedAlerts = []
 				for (const alert of whoCares) {
 					let existingAlert = consolidatedAlerts.find((x) => x.id === alert.id)
@@ -239,43 +109,15 @@ class Monster extends Controller {
 					}
 				}
 
-				if (data.display_pokemon_id && data.display_pokemon_id !== data.pokemon_id) {
-					data.display_form ??= 0
-					const displayMonster = this.GameData.monsters[`${data.display_pokemon_id}_${data.display_form}`] || this.GameData.monsters[`${data.display_pokemon_id}_0`]
-					if (displayMonster) {
-						data.disguisePokemonNameEng = displayMonster.name
-						if (displayMonster.form) data.disguideFormNameEng = displayMonster.form.name
-					}
-				}
-
+				// External I/O (icons, geocoding, static maps)
 				if (this.imgUicons) data.imgUrl = await this.imgUicons.pokemonIcon(data.pokemon_id, data.form, 0, data.gender, data.costume, 0, data.shinyPossible && this.config.general.requestShinyImages) || this.config.fallbacks?.imgUrl
 				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokemonIcon(data.pokemon_id, data.form, 0, data.gender, data.costume, 0, data.shinyPossible && this.config.general.requestShinyImages) || this.config.fallbacks?.imgUrl
 				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokemonIcon(data.pokemon_id, data.form, 0, data.gender, data.costume, 0, data.shinyPossible && this.config.general.requestShinyImages)
 
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
-
 				const jobs = []
 
-				nightTime.setNightTime(data, this.config)
-
 				data.intersection = await this.obtainIntersection(data)
-
-				if (data.seen_type) {
-					switch (data.seen_type) {
-						case 'nearby_stop': data.seenType = 'pokestop'; break
-						case 'nearby_cell': data.seenType = 'cell'; break
-						case 'lure':
-						case 'lure_wild': data.seenType = 'lure'; break
-						case 'lure_encounter':
-						case 'encounter':
-						case 'wild': data.seenType = data.seen_type; break
-						default: break
-					}
-				} else if (data.pokestop_id === 'None' && data.spawnpoint_id === 'None') data.seenType = 'cell'
-				else if (data.pokestop_id === 'None') data.seenType = encountered ? 'encounter' : 'wild'
-				else data.seenType = 'pokestop'
-
-				// cell_coords are pre-computed by the Go processor
 
 				await this.getStaticMapUrl(
 					logReference,
@@ -285,33 +127,6 @@ class Monster extends Controller {
 					['pokemon_id', 'display_pokemon_id', 'latitude', 'longitude', 'verified', 'costume', 'form', 'pokemonId', 'generation', 'weather', 'confirmedTime', 'shinyPossible', 'seenType', 'seen_type', 'cell_coords', 'imgUrl', 'imgUrlAlt', 'nightTime', 'duskTime', 'dawnTime', 'style'],
 				)
 				data.staticmap = data.staticMap // deprecated
-
-				// Weather forecast (current/next provided by Go processor enrichment)
-				if (this.config.weather.enableWeatherForecast && data.nextHourTimestamp && data.disappear_time > data.nextHourTimestamp) {
-					const weatherForecast = { current: data.weatherForecastCurrent || 0, next: data.weatherForecastNext || 0 }
-
-					let pokemonShouldBeBoosted = false
-					let pokemonWillBeBoosted = false
-					const currentBoostedTypes = weatherForecast.current ? this.GameData.utilData.weatherTypeBoost[weatherForecast.current] : []
-					const forecastBoostedTypes = weatherForecast.next ? this.GameData.utilData.weatherTypeBoost[weatherForecast.next] : []
-					if (weatherForecast.current > 0 && currentBoostedTypes.filter((boostedType) => data.types.includes(boostedType)).length > 0) pokemonShouldBeBoosted = true
-					if (weatherForecast.next > 0 && ((data.weather > 0 && weatherForecast.next !== data.weather) || (weatherForecast.current > 0 && weatherForecast.next !== weatherForecast.current) || (pokemonShouldBeBoosted && data.weather === 0))) {
-						const weatherChangeTime = data.weatherChangeTime || ''
-						pokemonWillBeBoosted = forecastBoostedTypes.filter((boostedType) => data.types.includes(boostedType)).length > 0 ? 1 : 0
-						if (data.weather > 0 && !pokemonWillBeBoosted || data.weather === 0 && pokemonWillBeBoosted) {
-							weatherForecast.current = data.weather > 0 ? data.weather : weatherForecast.current
-							if (pokemonShouldBeBoosted && data.weather === 0) {
-								data.weatherCurrent = 0
-							} else {
-								data.weatherCurrent = weatherForecast.current
-							}
-							data.weatherChangeTime = weatherChangeTime
-							data.weatherNext = weatherForecast.next
-						}
-					}
-				}
-
-				// Future event fields are pre-computed by the Go processor enrichment
 
 				// Lookup pokestop name if needed
 				if (this.config.general.populatePokestopName && !data.pokestopName && data.pokestop_id && this.scannerQuery) {
@@ -326,48 +141,75 @@ class Monster extends Controller {
 					let [platform] = cares.type.split(':')
 					if (platform === 'webhook') platform = 'discord'
 
-					data.name = translator.translate(monster.name)
-					data.formName = translator.translate(monster.form.name)
-					if (data.disguisePokemonNameEng) data.disguisePokemonName = translator.translate(data.disguisePokemonNameEng)
-					if (data.disguiseFormNameEng) data.disguiseFormName = translator.translate(data.disguiseFormNameEng)
+					// Pre-translated names and game data from processor per-language enrichment
+					const langEnrichment = this.getLanguageEnrichment(data, language)
+					data.name = langEnrichment.name
+					data.formName = langEnrichment.formName || ''
+					data.formNormalised = langEnrichment.formNormalised || ''
+					data.fullName = langEnrichment.fullName
+					data.quickMoveName = langEnrichment.quickMoveName || ''
+					data.chargeMoveName = langEnrichment.chargeMoveName || ''
+					data.boosted = langEnrichment.boosted
+					data.boostWeatherId = langEnrichment.boostWeatherId
+					data.boostWeatherName = langEnrichment.boostWeatherName || ''
+					data.generationName = langEnrichment.generationName || ''
+					data.genderName = langEnrichment.genderName || ''
+					data.rarityName = langEnrichment.rarityName || ''
+					data.sizeName = langEnrichment.sizeName || ''
+					data.gameWeatherName = langEnrichment.gameWeatherName || ''
+					data.typeName = langEnrichment.typeName || ''
+					if (langEnrichment.disguisePokemonName) data.disguisePokemonName = langEnrichment.disguisePokemonName
+					if (langEnrichment.disguiseFormName) data.disguiseFormName = langEnrichment.disguiseFormName
+					if (langEnrichment.weaknessList) data.weaknessList = langEnrichment.weaknessList
 
-					data.formNormalisedEng = data.formNameEng === 'Normal' ? '' : data.formNameEng
-					data.formNormalised = translator.translate(data.formNormalisedEng)
+					// Evolutions and mega evolutions (pre-computed by processor per language)
+					data.evolutions = langEnrichment.evolutions || []
+					data.hasEvolutions = data.evolutions.length > 0
+					data.megaEvolutions = langEnrichment.megaEvolutions || []
+					data.hasMegaEvolutions = data.megaEvolutions.length > 0
 
-					data.fullNameEng = data.nameEng.concat(data.formNormalisedEng ? ' ' : '', data.formNormalisedEng)
-					data.fullName = data.name.concat(data.formNormalised ? ' ' : '', data.formNormalised)
-
+					// Per-platform emoji lookups (using emoji keys from enrichment)
 					data.genderData = {
-						name: translator.translate(data.genderDataEng.name),
-						emoji: translator.translate(this.emojiLookup.lookup(data.genderDataEng.emoji, platform)),
+						name: data.genderName,
+						emoji: langEnrichment.genderEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.genderEmojiKey, platform)) : '',
 					}
-					data.genderName = data.genderData.name
 					data.genderEmoji = data.genderData.emoji
 					data.shinyPossibleEmoji = data.shinyPossible ? translator.translate(this.emojiLookup.lookup('shiny', platform)) : ''
-					data.rarityName = translator.translate(data.rarityNameEng)
-					data.sizeName = translator.translate(data.sizeNameEng)
-					data.quickMoveName = encountered && this.GameData.moves[data.quickMoveId] ? translator.translate(this.GameData.moves[data.quickMoveId].name) : ''
-					data.quickMoveEmoji = this.GameData.moves[data.quickMoveId] && this.GameData.utilData.types[this.GameData.moves[data.quickMoveId].type] ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.types[this.GameData.moves[data.quickMoveId].type].emoji, platform)) : ''
-					data.chargeMoveName = encountered && this.GameData.moves[data.chargeMoveId] ? translator.translate(this.GameData.moves[data.chargeMoveId].name) : ''
-					data.chargeMoveEmoji = this.GameData.moves[data.chargeMoveId] && this.GameData.utilData.types[this.GameData.moves[data.chargeMoveId].type] ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.types[this.GameData.moves[data.chargeMoveId].type].emoji, platform)) : ''
-					data.boosted = !!data.weather
-					data.generationName = translator.translate(data.generationNameEng)
-					data.boostWeatherId = data.weather ? data.weather : ''
-					data.boostWeatherName = data.weather ? translator.translate(this.GameData.utilData.weather[data.weather].name) : ''
-					data.boostWeatherEmoji = data.weather ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weather].emoji, platform)) : ''
-					data.gameWeatherId = this.GameData.utilData.weather[currentCellWeather] ? currentCellWeather : ''
-					data.gameWeatherName = this.GameData.utilData.weather[currentCellWeather] ? translator.translate(this.GameData.utilData.weather[currentCellWeather].name) : ''
-					data.gameWeatherEmoji = this.GameData.utilData.weather[currentCellWeather] ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[currentCellWeather].emoji, platform)) : ''
-					data.formname = data.formName // deprecated
-					data.quickMove = data.quickMoveName // deprecated
-					data.chargeMove = data.chargeMoveName // deprecated
-					data.move1emoji = data.quickMoveEmoji // deprecated
-					data.move2emoji = data.chargeMoveEmoji // deprecated
-					data.boost = data.boostWeatherName // deprecated
-					data.boostemoji = data.boostWeatherEmoji // deprecated
-					data.gameweather = data.gameWeatherName // deprecated
-					data.gameweatheremoji = data.gameWeatherEmoji // deprecated
+					data.quickMoveEmoji = langEnrichment.quickMoveTypeEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.quickMoveTypeEmojiKey, platform)) : ''
+					data.chargeMoveEmoji = langEnrichment.chargeMoveTypeEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.chargeMoveTypeEmojiKey, platform)) : ''
+					data.boostWeatherEmoji = data.boostWeatherId ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.boostWeatherId]?.emoji || '', platform)) : ''
+					data.gameWeatherEmoji = this.GameData.utilData.weather[data.gameWeatherId] ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.gameWeatherId].emoji, platform)) : ''
 
+					// Type emoji array (resolve emoji keys per platform)
+					const typeEmojiKeys = data.typeEmojiKeys || []
+					data.emoji = typeEmojiKeys.map((key) => translator.translate(this.emojiLookup.lookup(key, platform)))
+					data.emojiString = data.emoji.join('')
+					data.typeEmoji = data.emojiString
+
+					// Evolution type emoji (resolve keys per platform)
+					for (const evo of data.evolutions) {
+						if (evo.typeEmojiKeys) {
+							evo.typeEmoji = evo.typeEmojiKeys.map((key) => translator.translate(this.emojiLookup.lookup(key, platform))).join('')
+						}
+					}
+					for (const mega of data.megaEvolutions) {
+						if (mega.typeEmojiKeys) {
+							mega.typeEmoji = mega.typeEmojiKeys.map((key) => translator.translate(this.emojiLookup.lookup(key, platform))).join('')
+						}
+					}
+
+					// Deprecated aliases
+					data.formname = data.formName
+					data.quickMove = data.quickMoveName
+					data.chargeMove = data.chargeMoveName
+					data.move1emoji = data.quickMoveEmoji
+					data.move2emoji = data.chargeMoveEmoji
+					data.boost = data.boostWeatherName
+					data.boostemoji = data.boostWeatherEmoji
+					data.gameweather = data.gameWeatherName
+					data.gameweatheremoji = data.gameWeatherEmoji
+
+					// Weather change text (using pre-computed weatherCurrent/weatherNext from processor)
 					if (data.weatherNext) {
 						if (!data.weatherCurrent) {
 							data.weatherChange = `⚠️ ${translator.translate('Possible weather change at')} ${data.weatherChangeTime} : ➡️ ${translator.translate(this.GameData.utilData.weather[data.weatherNext].name)} ${translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherNext].emoji, platform))}`
@@ -382,67 +224,29 @@ class Monster extends Controller {
 						data.weatherNextEmoji = translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherNext].emoji, platform))
 					}
 
-					const e = []
-					const n = []
-					monster.types.forEach((type) => {
-						e.push(translator.translate(this.emojiLookup.lookup(this.GameData.utilData.types[type.name].emoji, platform)))
-						n.push(type.name)
-					})
-					data.emoji = e
-					data.typeNameEng = n
-					data.typeName = data.typeNameEng.map((type) => translator.translate(type)).join(', ')
-					data.emojiString = e.join('')
-					data.typeEmoji = data.emojiString
-
-					evolutionCalculator.setEvolutions(data, this.GameData, this.log, logReference, translator, this.emojiLookup, platform, monster)
-
+					// PVP display list — names/stats/computed fields are pre-enriched by processor,
+					// only per-user filter matching remains here.
 					const createPvpDisplay = (leagueCap, leagueData, maxRank, minCp) => {
 						const displayList = []
 						for (const rank of leagueData) {
 							if (rank.rank <= maxRank && rank.cp >= minCp) {
-								const displayRank = {}
-								displayRank.rank = +rank.rank
-								displayRank.formId = +rank.form || 0
-								displayRank.evolution = rank.evolution
-								displayRank.level = +rank.level
-								displayRank.cap = rank.cap
-								displayRank.capped = rank.capped
-								displayRank.levelWithCap = displayRank.cap && !displayRank.capped ? `${displayRank.level}/${displayRank.cap}` : displayRank.level
-								displayRank.cp = rank.cp
-								displayRank.pokemonId = +rank.pokemon
-								displayRank.percentage = rank.percentage <= 1 ? (rank.percentage * 100).toFixed(2) : rank.percentage.toFixed(2)
-
-								let monsterName
-								let formName
-								let stats
-								let mon = this.GameData.monsters[`${displayRank.pokemonId}_${displayRank.formId}`]
-								if (!mon) {
-									mon = this.GameData.monsters[`${displayRank.pokemonId}_0`]
-									if (!mon) {
-										monsterName = `${translator.translate('Unknown monster')} ${displayRank.pokemonId}`
-										stats = { baseAttack: 0, baseDefense: 0, baseStamina: 0 }
-									} else {
-										monsterName = mon.name
-										stats = monster.stats
-									}
-									formName = `${displayRank.formId}`
-								} else {
-									monsterName = mon.name
-									formName = mon.form.name
-									if (formName === undefined || formName === 'Normal') formName = ''
-									stats = monster.stats
-								}
-								displayRank.baseStats = stats
-								displayRank.nameEng = monsterName
-								displayRank.formEng = formName
-								displayRank.name = translator.translate(monsterName)
-								displayRank.form = translator.translate(formName)
-								if (displayRank.evolution) {
-									displayRank.fullNameEng = translator.format(this.GameData.utilData.megaName[displayRank.evolution], displayRank.nameEng.concat(displayRank.formEng ? ' ' : '', displayRank.formEng))
-									displayRank.fullName = translator.translateFormat(this.GameData.utilData.megaName[displayRank.evolution], displayRank.name.concat(displayRank.form ? ' ' : '', displayRank.form))
-								} else {
-									displayRank.fullNameEng = displayRank.nameEng.concat(displayRank.formEng ? ' ' : '', displayRank.formEng)
-									displayRank.fullName = displayRank.name.concat(displayRank.form ? ' ' : '', displayRank.form)
+								const displayRank = {
+									rank: +rank.rank,
+									formId: +rank.form || 0,
+									evolution: rank.evolution,
+									level: +rank.level,
+									cap: rank.cap,
+									capped: rank.capped,
+									levelWithCap: rank.levelWithCap ?? (+rank.cap && !rank.capped ? `${+rank.level}/${rank.cap}` : +rank.level),
+									cp: rank.cp,
+									pokemonId: +rank.pokemon,
+									percentage: rank.percentageFormatted ?? (rank.percentage <= 1 ? (rank.percentage * 100).toFixed(2) : rank.percentage.toFixed(2)),
+									// Pre-enriched by processor (names, stats)
+									baseStats: rank.baseStats || { baseAttack: 0, baseDefense: 0, baseStamina: 0 },
+									name: rank.name || `Pokemon ${rank.pokemon}`,
+									fullName: rank.fullName || `Pokemon ${rank.pokemon}`,
+									formName: rank.formName || '',
+									formNormalised: rank.formNormalised || '',
 								}
 
 								displayRank.matchesUserTrack = false
@@ -479,15 +283,18 @@ class Monster extends Controller {
 							}
 						}
 						best.name = Array.from(new Set(best.list.map((x) => x.fullName))).join(', ')
-						best.nameEng = Array.from(new Set(best.list.map((x) => x.fullNameEng))).join(', ')
 						return best
 					}
 
-					data.pvpGreat = data.pvp_rankings_great_league ? createPvpDisplay(1500, data.pvp_rankings_great_league, this.config.pvp.pvpDisplayMaxRank, this.config.pvp.pvpDisplayGreatMinCP) : null
+					// Use pre-enriched PVP data from processor (names/stats already resolved)
+					const pvpGreatData = langEnrichment.pvpEnriched_great_league || data.pvp_rankings_great_league
+					const pvpUltraData = langEnrichment.pvpEnriched_ultra_league || data.pvp_rankings_ultra_league
+					const pvpLittleData = langEnrichment.pvpEnriched_little_league || data.pvp_rankings_little_league
+					data.pvpGreat = pvpGreatData ? createPvpDisplay(1500, pvpGreatData, this.config.pvp.pvpDisplayMaxRank, this.config.pvp.pvpDisplayGreatMinCP) : null
 					data.pvpGreatBest = calculateBestInfo(data.pvpGreat)
-					data.pvpUltra = data.pvp_rankings_ultra_league ? createPvpDisplay(2500, data.pvp_rankings_ultra_league, this.config.pvp.pvpDisplayMaxRank, this.config.pvp.pvpDisplayUltraMinCP) : null
+					data.pvpUltra = pvpUltraData ? createPvpDisplay(2500, pvpUltraData, this.config.pvp.pvpDisplayMaxRank, this.config.pvp.pvpDisplayUltraMinCP) : null
 					data.pvpUltraBest = calculateBestInfo(data.pvpUltra)
-					data.pvpLittle = data.pvp_rankings_little_league ? createPvpDisplay(500, data.pvp_rankings_little_league, this.config.pvp.pvpDisplayMaxRank, this.config.pvp.pvpDisplayLittleMinCP) : null
+					data.pvpLittle = pvpLittleData ? createPvpDisplay(500, pvpLittleData, this.config.pvp.pvpDisplayMaxRank, this.config.pvp.pvpDisplayLittleMinCP) : null
 					data.pvpLittleBest = calculateBestInfo(data.pvpLittle)
 					data.pvpAvailable = data.pvpGreat !== null || data.pvpUltra !== null || data.pvpLittle !== null
 					data.userHasPvpTracks = !!cares.filters.length
@@ -500,7 +307,7 @@ class Monster extends Controller {
 						...geoResult,
 						...data,
 						id: data.pokemon_id,
-						baseStats: monster.stats,
+						baseStats: data.baseStats,
 						time: data.disappearTime,
 						tthh: data.tth.hours,
 						tthm: data.tth.minutes,

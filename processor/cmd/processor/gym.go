@@ -89,7 +89,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			l.Infof("Gym %s changed (team %d->%d) and %d humans cared",
 				gym.Name, oldState.TeamID, teamID, len(matched))
 
-			enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude)
+			enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldState.TeamID, gymID)
 
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "gym",

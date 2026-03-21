@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	Processor      ProcessorConfig      `toml:"processor"`
+	General        GeneralConfig        `toml:"general"`
 	Database       DatabaseConfig       `toml:"database"`
 	Geofence       GeofenceConfig       `toml:"geofence"`
 	PVP            PVPConfig            `toml:"pvp"`
@@ -26,6 +27,14 @@ type Config struct {
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
+}
+
+// GeneralConfig holds settings from the [general] section used by the processor
+// for map URL generation and other enrichment features.
+type GeneralConfig struct {
+	RdmURL       string `toml:"rdmURL"`
+	ReactMapURL  string `toml:"reactMapURL"`
+	RocketMadURL string `toml:"rocketMadURL"`
 }
 
 type LocaleConfig struct {
@@ -61,7 +70,8 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Prefix string `toml:"prefix"`
+	Prefix   string   `toml:"prefix"`
+	IvColors []string `toml:"iv_colors"`
 }
 
 // ListenAddr returns the host:port listen address.

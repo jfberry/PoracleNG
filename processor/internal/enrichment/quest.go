@@ -7,7 +7,7 @@ import (
 )
 
 // Quest builds enrichment fields for a quest webhook.
-func (e *Enricher) Quest(lat, lon float64) map[string]any {
+func (e *Enricher) Quest(lat, lon float64, pokestopID string) map[string]any {
 	m := make(map[string]any)
 
 	endOfDay := geo.EndOfDay(lat, lon)
@@ -15,6 +15,9 @@ func (e *Enricher) Quest(lat, lon float64) map[string]any {
 	m["disappearTime"] = geo.FormatTime(endOfDay, tz, e.TimeLayout)
 	m["disappear_time"] = endOfDay
 	m["tth"] = geo.ComputeTTH(endOfDay)
+
+	// Map URLs
+	e.addMapURLs(m, lat, lon, "pokestops", pokestopID)
 
 	// Future event check
 	if e.EventChecker != nil {

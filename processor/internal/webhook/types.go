@@ -175,12 +175,13 @@ type MatchedUser struct {
 
 // OutboundPayload is sent from processor to alerter.
 type OutboundPayload struct {
-	Type         string          `json:"type"`
-	Message      json.RawMessage `json:"message"`
-	Enrichment   map[string]any  `json:"enrichment,omitempty"`
-	MatchedAreas []MatchedArea   `json:"matched_areas"`
-	MatchedUsers []MatchedUser   `json:"matched_users"`
-	OldState     *EncounterOld   `json:"old_state,omitempty"`
+	Type                   string                    `json:"type"`
+	Message                json.RawMessage           `json:"message"`
+	Enrichment             map[string]any            `json:"enrichment,omitempty"`
+	PerLanguageEnrichment  map[string]map[string]any `json:"per_language_enrichment,omitempty"` // lang → enrichment
+	MatchedAreas           []MatchedArea             `json:"matched_areas"`
+	MatchedUsers           []MatchedUser             `json:"matched_users"`
+	OldState               *EncounterOld             `json:"old_state,omitempty"`
 }
 
 // EncounterOld holds old state for pokemon_changed events.

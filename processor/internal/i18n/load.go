@@ -10,12 +10,13 @@ import (
 )
 
 // Load creates a Bundle with translations from multiple sources, merged in
-// order (later wins) to match the alerter's precedence:
+// order (later wins):
 //
-//  1. Embedded locale JSON    — bundled processor-specific messages
-//  2. resources/locale/*.json — game data translations (pogo-translations)
-//  3. alerter/locale/*.json   — alerter message translations
-//  4. config/custom.*.json    — admin overrides per locale
+//  1. Embedded locale JSON       — bundled processor-specific messages
+//  2. resources/gamelocale/*.json — game data translations (pogo-translations identifier keys)
+//  3. resources/locale/*.json    — game data translations (enRefMerged, for backward compat)
+//  4. alerter/locale/*.json      — alerter message translations
+//  5. config/custom.*.json       — admin overrides per locale
 func Load(baseDir string) *Bundle {
 	b := NewBundle()
 
@@ -33,19 +34,25 @@ func Load(baseDir string) *Bundle {
 		return b
 	}
 
-	// 2. resources/locale/*.json (game data translations)
+	// 2. resources/gamelocale/*.json (identifier-key game data translations)
+	gameLocaleDir := filepath.Join(baseDir, "resources", "gamelocale")
+	if err := b.LoadJSONDir(gameLocaleDir); err != nil {
+		log.Debugf("i18n: no gamelocale dir at %s", gameLocaleDir)
+	}
+
+	// 3. resources/locale/*.json (enRefMerged game data translations, backward compat)
 	resourcesDir := filepath.Join(baseDir, "resources", "locale")
 	if err := b.LoadJSONDir(resourcesDir); err != nil {
 		log.Debugf("i18n: no resources locale dir at %s", resourcesDir)
 	}
 
-	// 3. alerter/locale/*.json (alerter message translations)
+	// 4. alerter/locale/*.json (alerter message translations)
 	alerterDir := filepath.Join(baseDir, "alerter", "locale")
 	if err := b.LoadJSONDir(alerterDir); err != nil {
 		log.Debugf("i18n: no alerter locale dir at %s", alerterDir)
 	}
 
-	// 4. config/custom.{locale}.json (admin overrides)
+	// 5. config/custom.{locale}.json (admin overrides)
 	configDir := filepath.Join(baseDir, "config")
 	entries, err := os.ReadDir(configDir)
 	if err == nil {

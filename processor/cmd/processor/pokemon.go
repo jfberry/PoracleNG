@@ -148,12 +148,24 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			l.Infof("Pokemon %d appeared at [%.3f,%.3f] and %d humans cared",
 				pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude, len(matched))
 
+			baseEnrichment := ps.enricher.Pokemon(&pokemon, processed)
+
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched) {
+					perLang[lang] = ps.enricher.PokemonTranslate(baseEnrichment, &pokemon, lang)
+				}
+			}
+
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "pokemon",
-				Message:      raw,
-				Enrichment:   ps.enricher.Pokemon(&pokemon, processed),
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  "pokemon",
+				Message:               raw,
+				Enrichment:            baseEnrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
 			})
 		} else {
 			l.Debugf("Pokemon %d appeared at [%.3f,%.3f] and 0 humans cared",

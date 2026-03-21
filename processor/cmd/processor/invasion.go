@@ -52,6 +52,12 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		}
 		gruntType := matching.ResolveGruntType(inv.IncidentGruntType, inv.GruntType, displayType)
 
+		// Resolve the raw grunt type integer for enrichment lookups
+		gruntTypeID := inv.IncidentGruntType
+		if gruntTypeID == 0 || gruntTypeID == 352 {
+			gruntTypeID = inv.GruntType
+		}
+
 		data := &matching.InvasionData{
 			PokestopID: inv.PokestopID,
 			GruntType:  gruntType,
@@ -77,7 +83,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "invasion",
 				Message:      raw,
-				Enrichment:   ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration),
+				Enrichment:   ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID),
 				MatchedAreas: matchedAreas,
 				MatchedUsers: matched,
 			})
