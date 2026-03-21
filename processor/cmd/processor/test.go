@@ -67,6 +67,11 @@ func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webho
 		}
 	}
 
+	var perUser map[string]map[string]any
+	if ps.enricher.PVPDisplay != nil && perLang != nil {
+		perUser = ps.enricher.PokemonPerUser(perLang, matched)
+	}
+
 	log.Infof("[Test] Pokemon %d at [%.3f,%.3f] → %s %s", pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude, target.Type, target.ID)
 
 	ps.sender.Send(webhook.OutboundPayload{
@@ -74,6 +79,7 @@ func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webho
 		Message:               raw,
 		Enrichment:            enrichment,
 		PerLanguageEnrichment: perLang,
+		PerUserEnrichment:     perUser,
 		MatchedAreas:          []webhook.MatchedArea{},
 		MatchedUsers:          matched,
 	})
@@ -132,7 +138,11 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 		gruntTypeID = inv.GruntType
 	}
 
-	enrichment := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID)
+	displayType := inv.DisplayType
+	if displayType == 0 {
+		displayType = inv.IncidentDisplayType
+	}
+	enrichment := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any
@@ -159,7 +169,11 @@ func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook
 		return fmt.Errorf("parse quest: %w", err)
 	}
 
-	enrichment := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID)
+	rewards := make([]matching.QuestRewardData, 0, len(quest.Rewards))
+	for _, r := range quest.Rewards {
+		rewards = append(rewards, parseQuestReward(r))
+	}
+	enrichment := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
 
 	ps.sender.Send(webhook.OutboundPayload{
 		Type:         "quest",
@@ -186,7 +200,8 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 		teamID = gym.Team
 	}
 
-	enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gymID)
+	inBattle := bool(gym.IsInBattle) || bool(gym.InBattle)
+	enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, inBattle, false, gymID)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any

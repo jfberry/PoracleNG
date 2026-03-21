@@ -142,6 +142,19 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	// Seen type
 	m["seenType"] = computeSeenType(pokemon)
 
+	// Icon URLs
+	shinyPossible, _ := m["shinyPossible"].(bool)
+	shiny := shinyPossible && e.RequestShinyImages
+	if e.ImgUicons != nil {
+		m["imgUrl"] = e.ImgUicons.PokemonIcon(pokemon.PokemonID, pokemon.Form, 0, pokemon.Gender, pokemon.Costume, 0, shiny)
+	}
+	if e.ImgUiconsAlt != nil {
+		m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(pokemon.PokemonID, pokemon.Form, 0, pokemon.Gender, pokemon.Costume, 0, shiny)
+	}
+	if e.StickerUicons != nil {
+		m["stickerUrl"] = e.StickerUicons.PokemonIcon(pokemon.PokemonID, pokemon.Form, 0, pokemon.Gender, pokemon.Costume, 0, shiny)
+	}
+
 	// Game data enrichment (types, weakness, stats, maps, generation, etc.)
 	if e.GameData != nil {
 		e.enrichPokemonGameData(m, pokemon, encountered)

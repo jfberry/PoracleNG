@@ -56,9 +56,7 @@ class Weather extends Controller {
 
 			data.matchedAreas = matchedAreas.map((a) => ({ name: a.name, displayInMatches: a.displayInMatches, group: a.group }))
 			data.matched = data.matchedAreas.map((x) => x.name.toLowerCase())
-			if (this.imgUicons) data.imgUrl = await this.imgUicons.weatherIcon(data.condition) || this.config.fallbacks?.imgUrlWeather
-			if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.weatherIcon(data.condition) || this.config.fallbacks?.imgUrlWeather
-			if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.weatherIcon(data.condition)
+			// Icon URLs are pre-computed by the processor enrichment
 
 			const jobs = []
 			// weatherTth is pre-computed by the Go processor
@@ -68,13 +66,9 @@ class Weather extends Controller {
 				this.log.debug(`${logReference}: Weather alert being generated for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`)
 
 				// Populate activePokemons from processor payload
+				// Active pokemon icon URLs are pre-computed by the processor enrichment
 				if (cares.active_pokemons && cares.active_pokemons.length > 0) {
 					data.activePokemons = cares.active_pokemons.slice()
-					if (this.imgUicons) {
-						for (const mon of data.activePokemons) {
-							mon.imgUrl = await this.imgUicons.pokemonIcon(mon.pokemon_id, mon.form)
-						}
-					}
 				} else {
 					data.activePokemons = null
 				}

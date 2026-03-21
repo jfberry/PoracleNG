@@ -80,7 +80,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			l.Infof("Invasion grunt %s at %s and %d humans cared",
 				gruntType, inv.Name, len(matched))
 
-			baseEnrichment := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID)
+			baseEnrichment := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any

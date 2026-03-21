@@ -18,6 +18,17 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
 	m["resetTime"] = geo.FormatTime(nest.ResetTime, tz, e.TimeLayout)
 	m["resetDate"] = geo.FormatTime(nest.ResetTime, tz, e.DateLayout)
 
+	// Icon URLs
+	if e.ImgUicons != nil {
+		m["imgUrl"] = e.ImgUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
+	}
+	if e.ImgUiconsAlt != nil {
+		m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
+	}
+	if e.StickerUicons != nil {
+		m["stickerUrl"] = e.StickerUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
+	}
+
 	// Game data enrichment
 	if e.GameData != nil {
 		monster := e.GameData.GetMonster(nest.PokemonID, nest.Form)

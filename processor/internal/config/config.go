@@ -32,9 +32,13 @@ type Config struct {
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
-	RdmURL       string `toml:"rdm_url"`
-	ReactMapURL  string `toml:"react_map_url"`
-	RocketMadURL string `toml:"rocket_mad_url"`
+	RdmURL             string `toml:"rdm_url"`
+	ReactMapURL        string `toml:"react_map_url"`
+	RocketMadURL       string `toml:"rocket_mad_url"`
+	ImgURL             string `toml:"img_url"`
+	ImgURLAlt          string `toml:"img_url_alt"`
+	StickerURL         string `toml:"sticker_url"`
+	RequestShinyImages bool   `toml:"request_shiny_images"`
 }
 
 type LocaleConfig struct {
@@ -119,6 +123,11 @@ type PVPConfig struct {
 	PVPFilterUltraMinCP        int   `toml:"pvp_filter_ultra_min_cp"`
 	PVPFilterLittleMinCP       int   `toml:"pvp_filter_little_min_cp"`
 	IncludeMegaEvolution       bool  `toml:"include_mega_evolution"`
+	DisplayMaxRank             int   `toml:"display_max_rank"`
+	DisplayGreatMinCP          int   `toml:"display_great_min_cp"`
+	DisplayUltraMinCP          int   `toml:"display_ultra_min_cp"`
+	DisplayLittleMinCP         int   `toml:"display_little_min_cp"`
+	FilterByTrack              bool  `toml:"filter_by_track"`
 }
 
 type WeatherConfig struct {
@@ -302,6 +311,18 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if cfg.PVP.PVPQueryMaxRank == 0 {
 		cfg.PVP.PVPQueryMaxRank = 100
+	}
+	if cfg.PVP.DisplayMaxRank == 0 {
+		cfg.PVP.DisplayMaxRank = 10
+	}
+	if cfg.PVP.DisplayGreatMinCP == 0 {
+		cfg.PVP.DisplayGreatMinCP = 1400
+	}
+	if cfg.PVP.DisplayUltraMinCP == 0 {
+		cfg.PVP.DisplayUltraMinCP = 2350
+	}
+	if cfg.PVP.DisplayLittleMinCP == 0 {
+		cfg.PVP.DisplayLittleMinCP = 450
 	}
 
 	// Logging defaults — file logging is on by default for the processor

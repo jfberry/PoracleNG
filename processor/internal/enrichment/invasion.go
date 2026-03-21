@@ -6,7 +6,7 @@ import (
 )
 
 // Invasion builds enrichment fields for an invasion webhook.
-func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID string, gruntTypeID int) map[string]any {
+func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID string, gruntTypeID, displayType, lureID int) map[string]any {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
@@ -18,6 +18,30 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	if expiration > 0 {
 		m["disappearTime"] = geo.FormatTime(expiration, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(expiration)
+	}
+
+	// Icon URLs: event invasions (displayType >= 7 with no grunt) use pokestop icon,
+	// regular invasions use invasion icon
+	if (gruntTypeID == 0) && displayType >= 7 {
+		if e.ImgUicons != nil {
+			m["imgUrl"] = e.ImgUicons.PokestopIcon(lureID, true, displayType, false)
+		}
+		if e.ImgUiconsAlt != nil {
+			m["imgUrlAlt"] = e.ImgUiconsAlt.PokestopIcon(lureID, true, displayType, false)
+		}
+		if e.StickerUicons != nil {
+			m["stickerUrl"] = e.StickerUicons.PokestopIcon(lureID, true, displayType, false)
+		}
+	} else {
+		if e.ImgUicons != nil {
+			m["imgUrl"] = e.ImgUicons.InvasionIcon(gruntTypeID)
+		}
+		if e.ImgUiconsAlt != nil {
+			m["imgUrlAlt"] = e.ImgUiconsAlt.InvasionIcon(gruntTypeID)
+		}
+		if e.StickerUicons != nil {
+			m["stickerUrl"] = e.StickerUicons.InvasionIcon(gruntTypeID)
+		}
 	}
 
 	// Map URLs

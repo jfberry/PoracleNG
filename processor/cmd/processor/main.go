@@ -33,6 +33,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/resources"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
+	"github.com/pokemon/poracleng/processor/internal/uicons"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -268,6 +269,25 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		RocketMadURL: cfg.General.RocketMadURL,
 	}
 	enricher.IvColors = cfg.Discord.IvColors
+	enricher.PVPDisplay = &enrichment.PVPDisplayConfig{
+		MaxRank:       cfg.PVP.DisplayMaxRank,
+		GreatMinCP:    cfg.PVP.DisplayGreatMinCP,
+		UltraMinCP:    cfg.PVP.DisplayUltraMinCP,
+		LittleMinCP:   cfg.PVP.DisplayLittleMinCP,
+		FilterByTrack: cfg.PVP.FilterByTrack,
+	}
+
+	// Icon resolvers
+	if cfg.General.ImgURL != "" {
+		enricher.ImgUicons = uicons.New(cfg.General.ImgURL, "png")
+	}
+	if cfg.General.ImgURLAlt != "" {
+		enricher.ImgUiconsAlt = uicons.New(cfg.General.ImgURLAlt, "png")
+	}
+	if cfg.General.StickerURL != "" {
+		enricher.StickerUicons = uicons.New(cfg.General.StickerURL, "webp")
+	}
+	enricher.RequestShinyImages = cfg.General.RequestShinyImages
 
 	// Stats tracker (rarity + shiny, shared rolling window)
 	statsTracker := tracker.NewStatsTracker(tracker.StatsConfig{

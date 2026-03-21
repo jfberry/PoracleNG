@@ -5,13 +5,25 @@ import (
 )
 
 // Gym builds enrichment fields for a gym webhook.
-func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID int, gymID string) map[string]any {
+func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, inBattle, ex bool, gymID string) map[string]any {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
 	m["conqueredTime"] = geo.FormatNow(tz, e.TimeLayout)
 	m["tth"] = geo.TTH{Hours: 1}
 	addSunTimes(m, lat, lon, tz)
+
+	// Icon URLs
+	trainerCount := 6 - slotsAvailable
+	if e.ImgUicons != nil {
+		m["imgUrl"] = e.ImgUicons.GymIcon(teamID, trainerCount, inBattle, ex)
+	}
+	if e.ImgUiconsAlt != nil {
+		m["imgUrlAlt"] = e.ImgUiconsAlt.GymIcon(teamID, trainerCount, inBattle, ex)
+	}
+	if e.StickerUicons != nil {
+		m["stickerUrl"] = e.StickerUicons.GymIcon(teamID, trainerCount, inBattle, ex)
+	}
 
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "gyms", gymID)

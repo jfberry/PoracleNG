@@ -20,6 +20,31 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 	cellID := tracker.GetWeatherCellID(raid.Latitude, raid.Longitude)
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
 
+	// Icon URLs
+	if raid.PokemonID > 0 {
+		// Hatched raid pokemon icon
+		if e.ImgUicons != nil {
+			m["imgUrl"] = e.ImgUicons.PokemonIcon(raid.PokemonID, raid.Form, raid.Evolution, raid.Gender, raid.Costume, raid.Alignment, false)
+		}
+		if e.ImgUiconsAlt != nil {
+			m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(raid.PokemonID, raid.Form, raid.Evolution, raid.Gender, raid.Costume, raid.Alignment, false)
+		}
+		if e.StickerUicons != nil {
+			m["stickerUrl"] = e.StickerUicons.PokemonIcon(raid.PokemonID, raid.Form, raid.Evolution, raid.Gender, raid.Costume, raid.Alignment, false)
+		}
+	} else {
+		// Egg icon
+		if e.ImgUicons != nil {
+			m["imgUrl"] = e.ImgUicons.EggIcon(raid.Level, false, false)
+		}
+		if e.ImgUiconsAlt != nil {
+			m["imgUrlAlt"] = e.ImgUiconsAlt.EggIcon(raid.Level, false, false)
+		}
+		if e.StickerUicons != nil {
+			m["stickerUrl"] = e.StickerUicons.EggIcon(raid.Level, false, false)
+		}
+	}
+
 	if raid.PokemonID > 0 {
 		// Hatched raid: disappearTime from end, tth from now to end
 		m["disappearTime"] = geo.FormatTime(raid.End, tz, e.TimeLayout)

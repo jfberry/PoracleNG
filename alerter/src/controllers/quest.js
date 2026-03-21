@@ -75,32 +75,7 @@ class Quest extends Controller {
 			data.imgUrl = 'https://s3.amazonaws.com/com.cartodb.users-assets.production/production/jonmrich/assets/20150203194453red_pin.png'
 			data.stickerUrl = ''
 
-			if (data.rewardData.monsters.length > 0) {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.pokemonIcon(data.rewardData.monsters[0].pokemonId, data.rewardData.monsters[0].formId, 0, 0, 0, 0, data.isShiny || (data.shinyPossible && this.config.general.requestShinyImages))
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokemonIcon(data.rewardData.monsters[0].pokemonId, data.rewardData.monsters[0].formId, 0, 0, 0, 0, data.isShiny || (data.shinyPossible && this.config.general.requestShinyImages))
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokemonIcon(data.rewardData.monsters[0].pokemonId, data.rewardData.monsters[0].formId, 0, 0, 0, 0, data.isShiny || (data.shinyPossible && this.config.general.requestShinyImages))
-			}
-
-			if (data.rewardData.items.length > 0) {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.rewardItemIcon(data.rewardData.items[0].id, data.rewardData.items[0].amount)
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.rewardItemIcon(data.rewardData.items[0].id, data.rewardData.items[0].amount)
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.rewardItemIcon(data.rewardData.items[0].id, data.rewardData.items[0].amount)
-			}
-			if (data.dustAmount) {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.rewardStardustIcon(data.rewardData.dustAmount)
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.rewardStardustIcon(data.rewardData.dustAmount)
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.rewardStardustIcon(data.rewardData.dustAmount)
-			}
-			if (data.rewardData.energyMonsters.length > 0) {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.rewardMegaEnergyIcon(data.rewardData.energyMonsters[0].pokemonId, data.rewardData.energyMonsters[0].amount)
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.rewardMegaEnergyIcon(data.rewardData.energyMonsters[0].pokemonId, data.rewardData.energyMonsters[0].amount)
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.rewardMegaEnergyIcon(data.rewardData.energyMonsters[0].pokemonId, data.rewardData.energyMonsters[0].amount)
-			}
-			if (data.rewardData.candy.length > 0) {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.rewardCandyIcon(data.rewardData.candy[0].pokemonId, data.rewardData.candy[0].amount)
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.rewardCandyIcon(data.rewardData.candy[0].pokemonId, data.rewardData.candy[0].amount)
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.rewardCandyIcon(data.rewardData.candy[0].pokemonId, data.rewardData.candy[0].amount)
-			}
+			// Icon URLs are pre-computed by the processor enrichment based on reward type
 
 			data.imgUrl = data.imgUrl || this.config.fallbacks?.imgUrlPokestop
 			data.imgUrlAlt = data.imgUrlAlt || this.config.fallbacks?.imgUrlPokestop
@@ -265,22 +240,18 @@ class Quest extends Controller {
 
 	async getQuest(item, language) {
 		let str
-		if (item.quest_task && !this.config.general.ignoreMADQuestString) {
-			str = item.quest_task
-		} else {
-			language = !this.GameData.translations[language] ? 'en' : language
-			const questinfo = `quest_title_${item.title.toLowerCase()}`
-			const questTitle = this.GameData.translations[language].questTitles
-			if (item.title) {
-				try {
-					str = questTitle[questinfo]
-					if (str.toLowerCase().includes('{{amount_0}}') && item.target) {
-						str = str.replace('{{amount_0}}', item.target)
-					}
-				} catch {
-					str = this.GameData.translations[language].questTypes.quest_0
-					this.log.warn(`Missing Task for ${questinfo}`)
+		language = !this.GameData.translations[language] ? 'en' : language
+		const questinfo = `quest_title_${item.title.toLowerCase()}`
+		const questTitle = this.GameData.translations[language].questTitles
+		if (item.title) {
+			try {
+				str = questTitle[questinfo]
+				if (str.toLowerCase().includes('{{amount_0}}') && item.target) {
+					str = str.replace('{{amount_0}}', item.target)
 				}
+			} catch {
+				str = this.GameData.translations[language].questTypes.quest_0
+				this.log.warn(`Missing Task for ${questinfo}`)
 			}
 		}
 		return str

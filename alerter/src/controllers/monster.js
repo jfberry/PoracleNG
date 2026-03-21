@@ -92,27 +92,7 @@ class Monster extends Controller {
 			}
 
 			try {
-				// Consolidate alerts per user (merge PVP filters)
-				const consolidatedAlerts = []
-				for (const alert of whoCares) {
-					let existingAlert = consolidatedAlerts.find((x) => x.id === alert.id)
-					if (!existingAlert) {
-						existingAlert = { ...alert, filters: [] }
-						consolidatedAlerts.push(existingAlert)
-					}
-					if (alert.pvp_ranking_worst < 4096) {
-						existingAlert.filters.push({
-							pvp_ranking_league: alert.pvp_ranking_league,
-							pvp_ranking_worst: alert.pvp_ranking_worst,
-							pvp_ranking_cap: alert.pvp_ranking_cap,
-						})
-					}
-				}
-
-				// External I/O (icons, geocoding, static maps)
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.pokemonIcon(data.pokemon_id, data.form, 0, data.gender, data.costume, 0, data.shinyPossible && this.config.general.requestShinyImages) || this.config.fallbacks?.imgUrl
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokemonIcon(data.pokemon_id, data.form, 0, data.gender, data.costume, 0, data.shinyPossible && this.config.general.requestShinyImages) || this.config.fallbacks?.imgUrl
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokemonIcon(data.pokemon_id, data.form, 0, data.gender, data.costume, 0, data.shinyPossible && this.config.general.requestShinyImages)
+				// Icon URLs are pre-computed by the processor enrichment (imgUrl, imgUrlAlt, stickerUrl)
 
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
@@ -128,12 +108,19 @@ class Monster extends Controller {
 				)
 				data.staticmap = data.staticMap // deprecated
 
-				// Lookup pokestop name if needed
 				if (this.config.general.populatePokestopName && !data.pokestopName && data.pokestop_id && this.scannerQuery) {
 					data.pokestopName = this.escapeJsonString(await this.scannerQuery.getPokestopName(data.pokestop_id))
 				}
 
-				for (const cares of consolidatedAlerts) {
+				// Deduplicate matched users by ID (processor consolidates PVP filters)
+				const seen = new Set()
+				const uniqueUsers = whoCares.filter((u) => {
+					if (seen.has(u.id)) return false
+					seen.add(u.id)
+					return true
+				})
+
+				for (const cares of uniqueUsers) {
 					this.log.debug(`${logReference}: [matched] Creating monster alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`)
 
 					const language = cares.language || this.config.general.locale
@@ -141,75 +128,60 @@ class Monster extends Controller {
 					let [platform] = cares.type.split(':')
 					if (platform === 'webhook') platform = 'discord'
 
-					// Pre-translated names and game data from processor per-language enrichment
-					const langEnrichment = this.getLanguageEnrichment(data, language)
-					data.name = langEnrichment.name
-					data.formName = langEnrichment.formName || ''
-					data.formNormalised = langEnrichment.formNormalised || ''
-					data.fullName = langEnrichment.fullName
-					data.quickMoveName = langEnrichment.quickMoveName || ''
-					data.chargeMoveName = langEnrichment.chargeMoveName || ''
-					data.boosted = langEnrichment.boosted
-					data.boostWeatherId = langEnrichment.boostWeatherId
-					data.boostWeatherName = langEnrichment.boostWeatherName || ''
-					data.generationName = langEnrichment.generationName || ''
-					data.genderName = langEnrichment.genderName || ''
-					data.rarityName = langEnrichment.rarityName || ''
-					data.sizeName = langEnrichment.sizeName || ''
-					data.gameWeatherName = langEnrichment.gameWeatherName || ''
-					data.typeName = langEnrichment.typeName || ''
-					if (langEnrichment.disguisePokemonName) data.disguisePokemonName = langEnrichment.disguisePokemonName
-					if (langEnrichment.disguiseFormName) data.disguiseFormName = langEnrichment.disguiseFormName
-					if (langEnrichment.weaknessList) data.weaknessList = langEnrichment.weaknessList
+					// Merge per-language enrichment (translated names) + per-user enrichment (PVP, distance)
+					const langE = this.getLanguageEnrichment(data, language)
+					const userE = data.perUserEnrichment?.[cares.id] || {}
+					Object.assign(data, langE, userE)
 
-					// Evolutions and mega evolutions (pre-computed by processor per language)
-					data.evolutions = langEnrichment.evolutions || []
-					data.hasEvolutions = data.evolutions.length > 0
-					data.megaEvolutions = langEnrichment.megaEvolutions || []
-					data.hasMegaEvolutions = data.megaEvolutions.length > 0
-
-					// Per-platform emoji lookups (using emoji keys from enrichment)
+					// Per-platform emoji lookups (only thing that varies by platform)
 					data.genderData = {
-						name: data.genderName,
-						emoji: langEnrichment.genderEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.genderEmojiKey, platform)) : '',
+						name: data.genderName || '',
+						emoji: data.genderEmojiKey ? translator.translate(this.emojiLookup.lookup(data.genderEmojiKey, platform)) : '',
 					}
 					data.genderEmoji = data.genderData.emoji
 					data.shinyPossibleEmoji = data.shinyPossible ? translator.translate(this.emojiLookup.lookup('shiny', platform)) : ''
-					data.quickMoveEmoji = langEnrichment.quickMoveTypeEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.quickMoveTypeEmojiKey, platform)) : ''
-					data.chargeMoveEmoji = langEnrichment.chargeMoveTypeEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.chargeMoveTypeEmojiKey, platform)) : ''
-					data.boostWeatherEmoji = langEnrichment.boostWeatherEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.boostWeatherEmojiKey, platform)) : ''
-					data.gameWeatherEmoji = langEnrichment.gameWeatherEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.gameWeatherEmojiKey, platform)) : ''
+					data.quickMoveEmoji = data.quickMoveTypeEmojiKey ? translator.translate(this.emojiLookup.lookup(data.quickMoveTypeEmojiKey, platform)) : ''
+					data.chargeMoveEmoji = data.chargeMoveTypeEmojiKey ? translator.translate(this.emojiLookup.lookup(data.chargeMoveTypeEmojiKey, platform)) : ''
+					data.boostWeatherEmoji = data.boostWeatherEmojiKey ? translator.translate(this.emojiLookup.lookup(data.boostWeatherEmojiKey, platform)) : ''
+					data.gameWeatherEmoji = data.gameWeatherEmojiKey ? translator.translate(this.emojiLookup.lookup(data.gameWeatherEmojiKey, platform)) : ''
+					data.bearingEmoji = data.bearingEmojiKey ? this.emojiLookup.lookup(data.bearingEmojiKey, platform) : ''
 
-					// Type emoji array (resolve emoji keys per platform)
+					// Type emoji array
 					const typeEmojiKeys = data.typeEmojiKeys || []
 					data.emoji = typeEmojiKeys.map((key) => translator.translate(this.emojiLookup.lookup(key, platform)))
 					data.emojiString = data.emoji.join('')
 					data.typeEmoji = data.emojiString
 
-					// Evolution type emoji (resolve keys per platform)
-					for (const evo of data.evolutions) {
-						if (evo.typeEmojiKeys) {
-							evo.typeEmoji = evo.typeEmojiKeys.map((key) => translator.translate(this.emojiLookup.lookup(key, platform))).join('')
+					// Evolution type emoji
+					if (data.evolutions) {
+						for (const evo of data.evolutions) {
+							if (evo.typeEmojiKeys) {
+								evo.typeEmoji = evo.typeEmojiKeys.map((key) => translator.translate(this.emojiLookup.lookup(key, platform))).join('')
+							}
 						}
 					}
-					for (const mega of data.megaEvolutions) {
-						if (mega.typeEmojiKeys) {
-							mega.typeEmoji = mega.typeEmojiKeys.map((key) => translator.translate(this.emojiLookup.lookup(key, platform))).join('')
+					if (data.megaEvolutions) {
+						for (const mega of data.megaEvolutions) {
+							if (mega.typeEmojiKeys) {
+								mega.typeEmoji = mega.typeEmojiKeys.map((key) => translator.translate(this.emojiLookup.lookup(key, platform))).join('')
+							}
 						}
 					}
 
-					// Deprecated aliases
-					data.formname = data.formName
-					data.quickMove = data.quickMoveName
-					data.chargeMove = data.chargeMoveName
-					data.move1emoji = data.quickMoveEmoji
-					data.move2emoji = data.chargeMoveEmoji
-					data.boost = data.boostWeatherName
-					data.boostemoji = data.boostWeatherEmoji
-					data.gameweather = data.gameWeatherName
-					data.gameweatheremoji = data.gameWeatherEmoji
+					// Weakness emoji
+					if (data.weaknessList) {
+						for (const cat of data.weaknessList) {
+							if (cat.types) {
+								const typeEmoji = cat.types.map((t) => {
+									const emojiKey = t.emojiKey || (this.GameData.utilData.types ? Object.values(this.GameData.utilData.types).find((ti) => ti.id === t.typeId)?.emoji : null)
+									return emojiKey ? translator.translate(this.emojiLookup.lookup(emojiKey, platform)) : ''
+								}).join('')
+								cat.typeEmoji = typeEmoji
+							}
+						}
+					}
 
-					// Weather change text (using pre-computed weatherCurrent/weatherNext from processor)
+					// Weather change text
 					if (data.weatherNext) {
 						const weatherNextInfo = this.GameData.utilData.weather[data.weatherNext] || {}
 						const weatherCurrentInfo = data.weatherCurrent ? (this.GameData.utilData.weather[data.weatherCurrent] || {}) : null
@@ -226,84 +198,16 @@ class Monster extends Controller {
 						data.weatherNextEmoji = translator.translate(this.emojiLookup.lookup(weatherNextInfo.emoji, platform))
 					}
 
-					// PVP display list — names/stats/computed fields are pre-enriched by processor,
-					// only per-user filter matching remains here.
-					const createPvpDisplay = (leagueCap, leagueData, maxRank, minCp) => {
-						const displayList = []
-						for (const rank of leagueData) {
-							if (rank.rank <= maxRank && rank.cp >= minCp) {
-								const displayRank = {
-									rank: +rank.rank,
-									formId: +rank.form || 0,
-									evolution: rank.evolution,
-									level: +rank.level,
-									cap: rank.cap,
-									capped: rank.capped,
-									levelWithCap: rank.levelWithCap ?? (+rank.cap && !rank.capped ? `${+rank.level}/${rank.cap}` : +rank.level),
-									cp: rank.cp,
-									pokemonId: +rank.pokemon,
-									percentage: rank.percentageFormatted ?? (rank.percentage <= 1 ? (rank.percentage * 100).toFixed(2) : rank.percentage.toFixed(2)),
-									// Pre-enriched by processor (names, stats)
-									baseStats: rank.baseStats || { baseAttack: 0, baseDefense: 0, baseStamina: 0 },
-									name: rank.name || `Pokemon ${rank.pokemon}`,
-									fullName: rank.fullName || `Pokemon ${rank.pokemon}`,
-									formName: rank.formName || '',
-									formNormalised: rank.formNormalised || '',
-								}
-
-								displayRank.matchesUserTrack = false
-								if (cares.filters.length) {
-									displayRank.passesFilter = false
-									for (const filter of cares.filters) {
-										if ((filter.pvp_ranking_league === leagueCap || filter.pvp_ranking_league === 0)
-											&& (filter.pvp_ranking_cap === 0 || filter.pvp_ranking_cap === displayRank.cap || displayRank.capped)
-											&& (filter.pvp_ranking_worst >= displayRank.rank)) {
-											displayRank.passesFilter = true
-											displayRank.matchesUserTrack = true
-										}
-									}
-								} else {
-									displayRank.passesFilter = true
-								}
-								if (!this.config.pvp.filterByTrack || displayRank.passesFilter) {
-									displayList.push(displayRank)
-								}
-							}
-						}
-						return displayList.length ? displayList : null
-					}
-
-					const calculateBestInfo = (ranks) => {
-						if (!ranks) return null
-						const best = { rank: 4096, list: [] }
-						for (const result of ranks) {
-							if (result.rank === best.rank) {
-								best.list.push(result)
-							} else if (result.rank < best.rank) {
-								best.rank = result.rank
-								best.list = [result]
-							}
-						}
-						best.name = Array.from(new Set(best.list.map((x) => x.fullName))).join(', ')
-						return best
-					}
-
-					// Use pre-enriched PVP data from processor (names/stats already resolved)
-					const pvpGreatData = langEnrichment.pvpEnriched_great_league || data.pvp_rankings_great_league
-					const pvpUltraData = langEnrichment.pvpEnriched_ultra_league || data.pvp_rankings_ultra_league
-					const pvpLittleData = langEnrichment.pvpEnriched_little_league || data.pvp_rankings_little_league
-					data.pvpGreat = pvpGreatData ? createPvpDisplay(1500, pvpGreatData, this.config.pvp.pvpDisplayMaxRank, this.config.pvp.pvpDisplayGreatMinCP) : null
-					data.pvpGreatBest = calculateBestInfo(data.pvpGreat)
-					data.pvpUltra = pvpUltraData ? createPvpDisplay(2500, pvpUltraData, this.config.pvp.pvpDisplayMaxRank, this.config.pvp.pvpDisplayUltraMinCP) : null
-					data.pvpUltraBest = calculateBestInfo(data.pvpUltra)
-					data.pvpLittle = pvpLittleData ? createPvpDisplay(500, pvpLittleData, this.config.pvp.pvpDisplayMaxRank, this.config.pvp.pvpDisplayLittleMinCP) : null
-					data.pvpLittleBest = calculateBestInfo(data.pvpLittle)
-					data.pvpAvailable = data.pvpGreat !== null || data.pvpUltra !== null || data.pvpLittle !== null
-					data.userHasPvpTracks = !!cares.filters.length
-
-					data.distance = cares.distance ?? ''
-					data.bearing = cares.bearing ?? ''
-					data.bearingEmoji = cares.cardinalDirection ? this.emojiLookup.lookup(cares.cardinalDirection, platform) : ''
+					// Deprecated aliases
+					data.formname = data.formName
+					data.quickMove = data.quickMoveName
+					data.chargeMove = data.chargeMoveName
+					data.move1emoji = data.quickMoveEmoji
+					data.move2emoji = data.chargeMoveEmoji
+					data.boost = data.boostWeatherName
+					data.boostemoji = data.boostWeatherEmoji
+					data.gameweather = data.gameWeatherName
+					data.gameweatheremoji = data.gameWeatherEmoji
 
 					const view = {
 						...geoResult,
@@ -316,12 +220,7 @@ class Monster extends Controller {
 						tths: data.tth.seconds,
 						now: new Date(),
 						nowISO: new Date().toISOString(),
-						pvpUserRanking: cares.pvp_ranking_worst === 4096 ? 0 : cares.pvp_ranking_worst,
 						areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
-						pvpDisplayMaxRank: this.config.pvp.pvpDisplayMaxRank,
-						pvpDisplayGreatMinCP: this.config.pvp.pvpDisplayGreatMinCP,
-						pvpDisplayUltraMinCP: this.config.pvp.pvpDisplayUltraMinCP,
-						pvpDisplayLittleMinCP: this.config.pvp.pvpDisplayLittleMinCP,
 					}
 
 					const templateType = (data.iv === -1) ? 'monsterNoIv' : 'monster'

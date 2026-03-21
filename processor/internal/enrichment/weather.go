@@ -34,6 +34,17 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 	gd := e.GameData
 	tr := e.Translations.For(lang)
 
+	// Icon URLs
+	if e.ImgUicons != nil {
+		m["imgUrl"] = e.ImgUicons.WeatherIcon(newWeatherID)
+	}
+	if e.ImgUiconsAlt != nil {
+		m["imgUrlAlt"] = e.ImgUiconsAlt.WeatherIcon(newWeatherID)
+	}
+	if e.StickerUicons != nil {
+		m["stickerUrl"] = e.StickerUicons.WeatherIcon(newWeatherID)
+	}
+
 	// Weather names and emoji keys
 	m["oldWeatherName"] = TranslateWeatherName(tr, oldWeatherID)
 	m["weatherName"] = TranslateWeatherName(tr, newWeatherID)
@@ -69,6 +80,10 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 			entry["formNormalised"] = nameInfo["formNormalised"]
 			entry["fullName"] = nameInfo["fullName"]
 			entry["fullNameEng"] = nameInfo["fullNameEng"]
+			// Active pokemon icon URLs
+			if e.ImgUicons != nil {
+				entry["imgUrl"] = e.ImgUicons.PokemonIcon(pok.PokemonID, pok.Form, 0, 0, 0, 0, false)
+			}
 			enrichedPokemon[i] = entry
 		}
 		m["enrichedActivePokemons"] = enrichedPokemon

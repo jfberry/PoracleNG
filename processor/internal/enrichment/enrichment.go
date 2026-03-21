@@ -7,6 +7,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
+	"github.com/pokemon/poracleng/processor/internal/uicons"
 )
 
 // WeatherProvider looks up weather conditions for an S2 cell.
@@ -32,6 +33,15 @@ type MapConfig struct {
 	RocketMadURL string
 }
 
+// PVPDisplayConfig holds configuration for per-user PVP display filtering.
+type PVPDisplayConfig struct {
+	MaxRank       int
+	GreatMinCP    int
+	UltraMinCP    int
+	LittleMinCP   int
+	FilterByTrack bool
+}
+
 // Enricher computes additional fields to accompany webhook messages
 // sent to the alerter. The enrichment map is sent alongside the original
 // raw message so neither needs to be re-encoded.
@@ -45,7 +55,12 @@ type Enricher struct {
 	GameData         *gamedata.GameData  // game master data for enrichment
 	Translations     *i18n.Bundle        // translations for per-language enrichment
 	MapConfig        *MapConfig          // map URL configuration
-	IvColors         []string            // Discord IV color hex strings (6 thresholds)
+	IvColors           []string            // Discord IV color hex strings (6 thresholds)
+	PVPDisplay         *PVPDisplayConfig   // PVP display filtering config
+	ImgUicons          *uicons.Uicons      // Primary icon resolver
+	ImgUiconsAlt       *uicons.Uicons      // Alternative icon resolver
+	StickerUicons      *uicons.Uicons      // Sticker icon resolver (webp)
+	RequestShinyImages bool                 // Whether to request shiny icon variants
 }
 
 // New creates a new Enricher.

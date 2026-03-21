@@ -51,9 +51,7 @@ class Lure extends Controller {
 			}
 
 			try {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokestopIcon(data.lureTypeId)
+				// Icon URLs are pre-computed by the processor enrichment
 
 				const geoResult = await this.getAddress({
 					lat: data.latitude,

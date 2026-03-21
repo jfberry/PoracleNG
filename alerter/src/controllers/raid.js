@@ -98,9 +98,7 @@ class Raid extends Controller {
 				}
 
 				try {
-					if (this.imgUicons) data.imgUrl = await this.imgUicons.pokemonIcon(data.pokemon_id, data.form, data.evolution, data.gender, data.costume, data.alignment || 0, data.shinyPossible && this.config.general.requestShinyImages) || this.config.fallbacks?.imgUrlGym
-					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokemonIcon(data.pokemon_id, data.form, data.evolution, data.gender, data.costume, data.alignment || 0, data.shinyPossible && this.config.general.requestShinyImages) || this.config.fallbacks?.imgUrlGym
-					if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokemonIcon(data.pokemon_id, data.form, data.evolution, data.gender, data.costume, data.alignment || 0, data.shinyPossible && this.config.general.requestShinyImages)
+					// Icon URLs are pre-computed by the processor enrichment
 
 					const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 					const jobs = []
@@ -288,9 +286,7 @@ class Raid extends Controller {
 			}
 
 			try {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.eggIcon(data.level) || this.config.fallbacks?.imgUrlEgg
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.eggIcon(data.level) || this.config.fallbacks?.imgUrlEgg
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.eggIcon(data.level)
+				// Icon URLs are pre-computed by the processor enrichment
 
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []

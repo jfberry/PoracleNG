@@ -89,7 +89,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			l.Infof("Gym %s changed (team %d->%d) and %d humans cared",
 				gym.Name, oldState.TeamID, teamID, len(matched))
 
-			enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldState.TeamID, gymID)
+			enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldState.TeamID, gym.SlotsAvailable, inBattle, false, gymID)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any

@@ -201,6 +201,7 @@ type OutboundPayload struct {
 	Message                json.RawMessage           `json:"message"`
 	Enrichment             map[string]any            `json:"enrichment,omitempty"`
 	PerLanguageEnrichment  map[string]map[string]any `json:"per_language_enrichment,omitempty"` // lang → enrichment
+	PerUserEnrichment      map[string]map[string]any `json:"per_user_enrichment,omitempty"`     // userId → enrichment
 	MatchedAreas           []MatchedArea             `json:"matched_areas"`
 	MatchedUsers           []MatchedUser             `json:"matched_users"`
 	OldState               *EncounterOld             `json:"old_state,omitempty"`

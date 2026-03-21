@@ -283,9 +283,12 @@ async function processOne(payload) {
 			Object.assign(payload.message, payload.enrichment)
 		}
 
-		// Attach per-language enrichment for controllers to use
+		// Attach per-language and per-user enrichment for controllers to use
 		if (payload.per_language_enrichment) {
 			payload.message.perLanguageEnrichment = payload.per_language_enrichment // eslint-disable-line no-param-reassign
+		}
+		if (payload.per_user_enrichment) {
+			payload.message.perUserEnrichment = payload.per_user_enrichment // eslint-disable-line no-param-reassign
 		}
 
 		switch (payload.type) {

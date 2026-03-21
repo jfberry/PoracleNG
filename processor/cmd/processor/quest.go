@@ -71,7 +71,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "quest",
 				Message:      raw,
-				Enrichment:   ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID),
+				Enrichment:   ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards),
 				MatchedAreas: matchedAreas,
 				MatchedUsers: matched,
 			})

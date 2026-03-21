@@ -71,9 +71,7 @@ class Maxbattle extends Controller {
 			this.log.info(`${logReference}: Maxbattle level ${data.level} on ${data.stationName} at [${data.latitude.toFixed(3)},${data.longitude.toFixed(3)}] and ${whoCares.length} humans cared.`)
 
 			try {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.pokemonIcon(data.pokemonId, data.form, data.evolution, data.gender, data.costume, data.alignment || 0, data.shinyPossible && this.config.general.requestShinyImages, data.bread) || this.config.fallbacks?.imgUrlStation
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokemonIcon(data.pokemonId, data.form, data.evolution, data.gender, data.costume, data.alignment || 0, data.shinyPossible && this.config.general.requestShinyImages, data.bread) || this.config.fallbacks?.imgUrlStation
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokemonIcon(data.pokemonId, data.form, data.evolution, data.gender, data.costume, data.alignment || 0, data.shinyPossible && this.config.general.requestShinyImages, data.bread)
+				// Icon URLs are pre-computed by the processor enrichment
 
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []

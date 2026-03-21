@@ -22,6 +22,19 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 		m["tth"] = geo.ComputeTTH(battleEnd)
 	}
 
+	// Icon URLs
+	if mb != nil && mb.BattlePokemonID > 0 {
+		if e.ImgUicons != nil {
+			m["imgUrl"] = e.ImgUicons.PokemonIcon(mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonGender, mb.BattlePokemonCostume, mb.BattlePokemonAlignment, false)
+		}
+		if e.ImgUiconsAlt != nil {
+			m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonGender, mb.BattlePokemonCostume, mb.BattlePokemonAlignment, false)
+		}
+		if e.StickerUicons != nil {
+			m["stickerUrl"] = e.StickerUicons.PokemonIcon(mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonGender, mb.BattlePokemonCostume, mb.BattlePokemonAlignment, false)
+		}
+	}
+
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "pokestops", mb.ID)
 

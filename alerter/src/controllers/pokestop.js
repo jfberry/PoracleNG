@@ -98,15 +98,7 @@ class Invasion extends Controller {
 			}
 
 			try {
-				if (((data.grunt_type === 0) || !data.grunt_type) && (data.displayTypeId >= 7)) {
-					if (this.imgUicons) data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId, true, data.displayTypeId) || this.config.fallbacks?.imgUrlPokestop
-					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId, true, data.displayTypeId) || this.config.fallbacks?.imgUrlPokestop
-					if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokestopIcon(data.lureTypeId, true, data.displayTypeId)
-				} else {
-					if (this.imgUicons) data.imgUrl = await this.imgUicons.invasionIcon(data.gruntTypeId) || this.config.fallbacks?.imgUrlPokestop
-					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.invasionIcon(data.gruntTypeId) || this.config.fallbacks?.imgUrlPokestop
-					if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.invasionIcon(data.gruntTypeId)
-				}
+				// Icon URLs are pre-computed by the processor enrichment
 
 				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []

@@ -16,6 +16,17 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) map[string]any {
 		addSunTimes(m, lure.Latitude, lure.Longitude, tz)
 	}
 
+	// Icon URLs
+	if e.ImgUicons != nil {
+		m["imgUrl"] = e.ImgUicons.PokestopIcon(lure.LureID, false, 0, false)
+	}
+	if e.ImgUiconsAlt != nil {
+		m["imgUrlAlt"] = e.ImgUiconsAlt.PokestopIcon(lure.LureID, false, 0, false)
+	}
+	if e.StickerUicons != nil {
+		m["stickerUrl"] = e.StickerUicons.PokestopIcon(lure.LureID, false, 0, false)
+	}
+
 	// Map URLs
 	e.addMapURLs(m, lure.Latitude, lure.Longitude, "pokestops", lure.PokestopID)
 

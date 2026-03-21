@@ -159,11 +159,17 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				}
 			}
 
+			var perUser map[string]map[string]any
+			if ps.enricher.PVPDisplay != nil && perLang != nil {
+				perUser = ps.enricher.PokemonPerUser(perLang, matched)
+			}
+
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:                  "pokemon",
 				Message:               raw,
 				Enrichment:            baseEnrichment,
 				PerLanguageEnrichment: perLang,
+				PerUserEnrichment:     perUser,
 				MatchedAreas:          matchedAreas,
 				MatchedUsers:          matched,
 			})
