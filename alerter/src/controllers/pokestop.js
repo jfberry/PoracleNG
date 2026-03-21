@@ -115,9 +115,6 @@ class Invasion extends Controller {
 
 				data.intersection = await this.obtainIntersection(data)
 
-				// Get current cell weather from enrichment (provided by Go processor)
-				const currentCellWeather = data.gameWeatherId || 0
-
 				await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'gruntTypeId', 'displayTypeId', 'style'])
 				data.staticmap = data.staticMap // deprecated
 
@@ -134,10 +131,9 @@ class Invasion extends Controller {
 					// Per-language enrichment from processor
 					const langEnrichment = this.getLanguageEnrichment(data, language)
 
-					// Weather: use langEnrichment for name, still need emoji per platform
-					data.gameWeatherId = this.GameData.utilData.weather[currentCellWeather] ? currentCellWeather : ''
+					// Weather: pre-translated name and emoji key from processor
 					data.gameWeatherName = langEnrichment.gameWeatherName || ''
-					data.gameWeatherEmoji = this.GameData.utilData.weather[currentCellWeather] ? translator.translate(this.emojiLookup.lookup(this.GameData.utilData.weather[currentCellWeather].emoji, platform)) : ''
+					data.gameWeatherEmoji = langEnrichment.gameWeatherEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.gameWeatherEmojiKey, platform)) : ''
 					data.gameweather = data.gameWeatherName // deprecated
 					data.gameweatheremoji = data.gameWeatherEmoji // deprecated
 
