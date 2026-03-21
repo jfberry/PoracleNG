@@ -29,6 +29,28 @@ func (fb *FlexBool) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// FlexString handles JSON values that may arrive as a string or a number.
+// Older scanners sent some IDs (e.g. spawnpoint_id) as integers; newer ones
+// send hex strings. This accepts either and stores the result as a string.
+type FlexString string
+
+func (fs *FlexString) UnmarshalJSON(data []byte) error {
+	s := string(data)
+	if s == "null" {
+		*fs = ""
+		return nil
+	}
+	// Try as quoted string first
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*fs = FlexString(str)
+		return nil
+	}
+	// Must be a bare number — use the raw representation
+	*fs = FlexString(s)
+	return nil
+}
+
 // InboundWebhook represents a single webhook entry from Golbat.
 type InboundWebhook struct {
 	Type    string          `json:"type"`
@@ -62,8 +84,8 @@ type PokemonWebhook struct {
 	DisplayPokemonID      int     `json:"display_pokemon_id"`
 	DisplayForm           int     `json:"display_form"`
 	SeenType              string  `json:"seen_type"`
-	PokestopID            string  `json:"pokestop_id"`
-	SpawnpointID          string  `json:"spawnpoint_id"`
+	PokestopID            string     `json:"pokestop_id"`
+	SpawnpointID          FlexString `json:"spawnpoint_id"`
 	PokestopName          string  `json:"pokestop_name"`
 	BaseCatch             float64 `json:"base_catch"`
 	GreatCatch            float64 `json:"great_catch"`
