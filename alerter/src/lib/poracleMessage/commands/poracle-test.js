@@ -78,26 +78,27 @@ exports.run = async (client, msg, args, options) => {
 			if (hook.longitude) hook.longitude = human.longitude
 		}
 
-		// Freshen test data timestamps
+		// Freshen test data timestamps (must be integer unix seconds for Go processor)
+		const nowSecs = Math.floor(Date.now() / 1000)
 		switch (hookType) {
 			case 'pokemon': {
 				if (disapearTimeOverwrite !== null) {
 					const tz = geoTz.find(hook.latitude, hook.longitude)[0].toString()
 					hook.disappear_time = moment.tz(disapearTimeOverwrite.toUpperCase(), tz).unix()
 				} else {
-					hook.disappear_time = Date.now() / 1000 + 10 * 60
+					hook.disappear_time = nowSecs + 10 * 60
 				}
 				break
 			}
 			case 'raid': {
-				hook.start = Date.now() / 1000 + 10 * 60
+				hook.start = nowSecs + 10 * 60
 				hook.end = hook.start + 30 * 60
 				break
 			}
 			case 'pokestop': {
-				if (hook.incident_expiration) hook.incident_expiration = Date.now() / 1000 + 10 * 60
-				if (hook.incident_expire_timestamp) hook.incident_expire_timestamp = Date.now() / 1000 + 10 * 60
-				if (hook.lure_expiration) hook.lure_expiration = Date.now() / 1000 + 5 * 60
+				if (hook.incident_expiration) hook.incident_expiration = nowSecs + 10 * 60
+				if (hook.incident_expire_timestamp) hook.incident_expire_timestamp = nowSecs + 10 * 60
+				if (hook.lure_expiration) hook.lure_expiration = nowSecs + 5 * 60
 				break
 			}
 			case 'quest': {
@@ -118,9 +119,9 @@ exports.run = async (client, msg, args, options) => {
 				break
 			}
 			case 'max_battle': {
-				hook.battle_start = Date.now() / 1000 - 1 * 60
+				hook.battle_start = nowSecs - 1 * 60
 				hook.start_time = hook.battle_start
-				hook.battle_end = Date.now() / 1000 + 120 * 60
+				hook.battle_end = nowSecs + 120 * 60
 				hook.end_time = hook.battle_end
 				break
 			}
