@@ -128,6 +128,7 @@ func main() {
 	mux.HandleFunc("/api/stats/shiny", api.HandleStats(func() any { return proc.stats.ExportShinyStats() }))
 	mux.HandleFunc("/api/stats/shiny-possible", api.HandleStats(func() any { return proc.stats.ExportShinyPossible() }))
 	mux.HandleFunc("/health", api.HandleHealth())
+	mux.HandleFunc("/api/test", api.HandleTest(proc))
 
 	// Proxy unhandled /api/ requests to the alerter (tracking, config, humans, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
