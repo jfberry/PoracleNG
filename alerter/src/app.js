@@ -5,7 +5,6 @@ const { writeHeapSnapshot } = require('v8')
 
 const fs = require('fs')
 const util = require('util')
-const NodeCache = require('node-cache')
 const fastify = require('fastify')({
 	bodyLimit: 52428800,
 	routerOptions: { maxParamLength: 256 },
@@ -202,10 +201,6 @@ async function processPossibleShiny() {
 	setTimeout(processPossibleShiny, 5 * 60 * 1000) // 5 mins
 }
 
-const UserRateChecker = require('./userRateLimit')
-
-const rateChecker = new UserRateChecker(config)
-
 function notifyProcessorReload() {
 	if (config.processor.url) {
 		const axios = require('axios')
@@ -215,118 +210,10 @@ function notifyProcessorReload() {
 	}
 }
 
-async function processMessages(msgs) {
-	let newRateLimits = false
-
+function processMessages(msgs) {
 	for (const msg of msgs) {
-		const destinationId = msg.type === 'webhook' ? msg.name : msg.target
-		const destinationType = msg.type
-		const rate = rateChecker.validateMessage(destinationId, destinationType)
-
-		let queueMessage
-		let logMessage = null
-		let shameMessage = null
-
-		if (!msg.alwaysSend && !rate.passMessage) {
-			if (rate.justBreached) {
-				const userTranslator = translatorFactory.Translator(msg.language || config.general.locale)
-				queueMessage = {
-					...msg,
-					message: { content: userTranslator.translateFormat('You have reached the limit of {0} messages over {1} seconds', rate.messageLimit, rate.messageTimeout) },
-					emoji: [],
-				}
-				log.info(`${msg.logReference}: Stopping alerts (Rate limit) for ${msg.type} ${msg.target} ${msg.name} Time to release: ${rate.resetTime}`)
-
-				if (config.alertLimits.maxLimitsBeforeStop) {
-					const userCheck = rateChecker.userIsBanned(destinationId, destinationType)
-					if (!userCheck.canContinue) {
-						queueMessage = {
-							...msg,
-							message: {
-								content: userTranslator.translateFormat(
-									config.alertLimits.disableOnStop
-										? 'You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, contact an administrator to resume'
-										: 'You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, use {0}start to resume',
-									['discord:user', 'discord:channel', 'webhook'].includes(msg.type) ? config.discord.prefix : '/',
-								),
-							},
-							emoji: [],
-						}
-
-						log.info(`${msg.logReference}: Stopping alerts [until restart] (Rate limit) for ${msg.type} ${msg.target} ${msg.name}`)
-
-						logMessage = `Stopped alerts (rate-limit exceeded too many times) for target ${destinationType} ${destinationId} ${msg.name} ${msg.type === 'discord:user' ? `<@${destinationId}>` : ''}`
-						if (msg.type === 'discord:user') {
-							shameMessage = userTranslator.translateFormat('<@{0}> has had their Poracle tracking disabled for exceeding the rate limit too many times!', destinationId)
-						}
-
-						try {
-							if (config.alertLimits.disableOnStop) {
-								// This acts like the admin de-registered the user rather than when losing a role so user does not get auto re-registered
-								await query.updateQuery('humans', { admin_disable: 1, disabled_date: null }, { id: msg.target })
-							} else {
-								await query.updateQuery('humans', { enabled: 0 }, { id: msg.target })
-							}
-							notifyProcessorReload()
-						} catch (err) {
-							log.error('Failed to stop user messages', err)
-						}
-					}
-				}
-
-				newRateLimits = true
-			} else {
-				log.info(`${msg.logReference}: Intercepted and stopped message for user (Rate limit) for ${msg.type} ${msg.target} ${msg.name} Time to release: ${rate.resetTime}`)
-				metrics.rateLimited.inc()
-				queueMessage = null
-			}
-		} else {
-			queueMessage = msg
-		}
-
-		if (queueMessage) {
-			if (['discord:user', 'discord:channel', 'webhook'].includes(queueMessage.type)) fastify.discordQueue.push(queueMessage)
-			if (['telegram:user', 'telegram:channel', 'telegram:group'].includes(queueMessage.type)) fastify.telegramQueue.push(queueMessage)
-			if (logMessage && config.discord.dmLogChannelID) {
-				fastify.discordQueue.push({
-					lat: 0,
-					lon: 0,
-					message: {
-						content: logMessage,
-					},
-					target: config.discord.dmLogChannelID,
-					type: 'discord:channel',
-					name: 'Log channel',
-					tth: { hours: 0, minutes: config.discord.dmLogChannelDeletionTime, seconds: 0 },
-					clean: config.discord.dmLogChannelDeletionTime > 0,
-					emoji: '',
-					logReference: queueMessage.logReference,
-					language: config.general.locale,
-				})
-			}
-			if (shameMessage && config.alertLimits.shameChannel) {
-				fastify.discordQueue.push({
-					lat: 0,
-					lon: 0,
-					message: {
-						content: shameMessage,
-					},
-					target: config.alertLimits.shameChannel,
-					type: 'discord:channel',
-					name: 'Shame channel',
-					tth: { hours: 0, minutes: 0, seconds: 0 },
-					clean: false,
-					emoji: '',
-					logReference: queueMessage.logReference,
-					language: config.general.locale,
-				})
-			}
-		}
-	}
-
-	if (newRateLimits) {
-		const badguys = rateChecker.getBadBoys()
-		updateBadGuys(badguys) // eslint-disable-line no-use-before-define
+		if (['discord:user', 'discord:channel', 'webhook'].includes(msg.type)) fastify.discordQueue.push(msg)
+		if (['telegram:user', 'telegram:channel', 'telegram:group'].includes(msg.type)) fastify.telegramQueue.push(msg)
 	}
 }
 
@@ -345,8 +232,6 @@ const MaxbattleController = require('./controllers/maxbattle')
 const CachingGeocoder = require('./lib/cachingGeocoder')
 
 const mustache = require('./lib/handlebars')()
-
-const rateLimitedUserCache = new NodeCache({ stdTTL: config.alertLimits.timingPeriod })
 
 const matchedShinyPossible = new ShinyPossible(log)
 const cachingGeocoder = new CachingGeocoder(config, log, mustache, 'geoCache-matched')
@@ -371,16 +256,16 @@ const stubStatsData = {
 	receiveStatsBroadcast: () => {},
 }
 
-const monsterController = new MonsterController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const raidController = new RaidController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const weatherController = new WeatherController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, null, null, null)
-const pokestopController = new PokestopController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const pokestopLureController = new PokestopLureController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const questController = new QuestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const gymController = new GymController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const nestController = new NestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const fortUpdateController = new FortUpdateController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const maxbattleController = new MaxbattleController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const monsterController = new MonsterController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const raidController = new RaidController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const weatherController = new WeatherController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, null, null, null)
+const pokestopController = new PokestopController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const pokestopLureController = new PokestopLureController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const questController = new QuestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const gymController = new GymController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const nestController = new NestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const fortUpdateController = new FortUpdateController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const maxbattleController = new MaxbattleController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
 
 const allControllers = [monsterController, raidController, weatherController, pokestopController, pokestopLureController, questController, gymController, nestController, fortUpdateController, maxbattleController]
 
@@ -509,13 +394,6 @@ async function processOne(payload) {
 
 	metrics.messageCreateDuration.observe({ controller_type: payload.type }, (performance.now() - processStart) / 1000)
 	eventsProcessed++
-}
-
-function updateBadGuys(badguys) {
-	rateLimitedUserCache.flushAll()
-	for (const guy of badguys) {
-		rateLimitedUserCache.set(guy.key, guy.ttlTimeout, Math.max((guy.ttlTimeout - Date.now()) / 1000, 1))
-	}
 }
 
 function aggregateTileStats() {

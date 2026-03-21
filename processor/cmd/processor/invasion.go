@@ -62,6 +62,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 
 		st := ps.stateMgr.Get()
 		matched := ps.invasionMatcher.Match(data, st)
+		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("invasion").Inc()

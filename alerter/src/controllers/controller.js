@@ -14,7 +14,7 @@ const GetIntersection = require('../lib/getIntersection')
 const EmojiLookup = require('../lib/emojiLookup')
 
 class Controller extends EventEmitter {
-	constructor(log, db, geocoder, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache, weatherData, statsData, eventProviders) {
+	constructor(log, db, geocoder, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache, weatherData, statsData, eventProviders) { // discordCache param kept for backward compat but unused
 		super()
 		this.db = db
 		this.scannerQuery = scannerQuery
@@ -23,7 +23,6 @@ class Controller extends EventEmitter {
 		this.dts = dts
 		this.geofence = geofence
 		this.GameData = GameData
-		this.discordCache = discordCache
 		this.translatorFactory = translatorFactory
 		this.translator = translatorFactory ? this.translatorFactory.default : null
 		this.mustache = mustache
@@ -255,16 +254,6 @@ class Controller extends EventEmitter {
 			}
 		}
 		data.staticMap = data.staticMap || this.config.fallbacks?.staticMap
-	}
-
-	isRateLimited(id) {
-		return !!this.discordCache.get(id)
-	}
-
-	getRateLimitTimeToRelease(id) {
-		const ttl = this.discordCache.get(id)
-		if (!ttl) return 0
-		return Math.max((ttl - Date.now()) / 1000, 0)
 	}
 
 	async geolocate(locationString) {

@@ -57,6 +57,9 @@ processor/                      # Go binary
     state/                      # Immutable state snapshot with atomic RWMutex swap
     webhook/                    # HTTP receiver (POST /), sender (batched to alerter), types
     api/                        # Processor API endpoints (/health, /api/reload, /api/stats/*)
+    ratelimit/                  # Per-destination message rate limiting
+    i18n/                       # Translation system (flat JSON, identifier keys, {0} placeholders)
+      locale/                   # Embedded locale files (en.json, de.json, ...)
 
 alerter/                        # Node.js application
   src/
@@ -326,6 +329,89 @@ Templates are Handlebars files in `config/dts.json` or external `.json` template
 Selection chain: exact match (type + template ID + platform + language) → fallback to default template → fallback to any platform match.
 
 Templates receive the full view object with all enriched data. Common fields: `{{name}}`, `{{iv}}`, `{{cp}}`, `{{level}}`, `{{time}}` (disappear time), `{{tthh}}:{{tthm}}:{{tths}}` (time remaining), `{{addr}}` (address), `{{mapurl}}` (Google Maps), `{{imgUrl}}` (pokemon icon), `{{staticMap}}` (map tile).
+
+## Translation / i18n
+
+### Two systems (migrating)
+
+The alerter and processor currently use different translation approaches. As logic moves from alerter to processor, new code uses the processor's system. Both will coexist until the migration is complete.
+
+**Alerter (legacy)** — `alerter/src/util/translate.js`
+- Flat JSON files with **English text as keys**: `{"You have reached the limit of {0} messages": "Das Limit von {0}..."}`
+- Placeholders: `{0}`, `{1}`, ... replaced by `Translator.format()`
+- Merge order: `resources/locale/{lang}.json` → `alerter/locale/{lang}.json` → `config/custom.{lang}.json`
+- Game data (pokemon names, moves) and UI messages share the same key-value namespace
+- Problem: changing English wording breaks all translations; no namespacing
+
+**Processor (new)** — `processor/internal/i18n/`
+- Flat JSON files with **dotted identifier keys**: `{"rate_limit.reached": "Das Limit von {0}..."}`
+- Same `{0}` placeholder syntax as the alerter, so translated strings are compatible
+- English is a first-class locale file (`en.json`), not hardcoded in source
+- Merge order (later wins):
+  1. Embedded (`processor/internal/i18n/locale/*.json`) — bundled processor messages
+  2. `resources/locale/*.json` — game data from pogo-translations
+  3. `alerter/locale/*.json` — shared alerter strings (also used by the alerter)
+  4. `config/custom.{lang}.json` — admin overrides
+- Identifier keys are stable: renaming English text doesn't break translations
+- Dotted namespacing: `rate_limit.reached`, `pokemon.name.1`, etc.
+
+### Locale file format
+
+All locale files (both systems) are flat JSON: `{"key": "translated string"}`. This is intentional — the same files are consumed by the Go processor, Node alerter, and React web frontend. The format is directly supported by Crowdin, Transifex, and Weblate.
+
+### Placeholder convention
+
+Both systems use `{0}`, `{1}`, ... for positional arguments. In Go:
+```go
+tr := ps.translations.For(user.Language)
+msg := tr.Tf("rate_limit.reached", result.Limit, ps.cfg.AlertLimits.TimingPeriod)
+```
+
+### Adding new translated strings
+
+1. Add the identifier and English text to `processor/internal/i18n/locale/en.json`
+2. Add translations to each `{lang}.json` in the same directory
+3. Use `tr.T("key")` or `tr.Tf("key", args...)` at the call site
+4. Strings are embedded in the binary at build time; admin overrides via `config/custom.{lang}.json`
+
+### File locations
+
+```
+processor/internal/i18n/
+  i18n.go                       # Bundle, Translator, Format(), JSON loader
+  embed.go                      # go:embed directive for locale/*.json
+  load.go                       # Load() — multi-layer merge from all sources
+  locale/
+    en.json                     # English (source of truth for new identifier keys)
+    de.json, fr.json, ...       # Bundled translations
+
+resources/locale/               # Game data translations (pogo-translations)
+  en.json, de.json, ...         # Pokemon names, moves, types, etc. by numeric ID
+
+alerter/locale/                 # Alerter message translations (English-as-key format)
+  de.json, fr.json, ...         # Legacy format, merged into processor bundle at layer 3
+
+config/custom.{lang}.json       # Admin overrides (highest priority)
+```
+
+### Migration plan
+
+As code moves from alerter to processor:
+1. New processor strings use identifier keys (`rate_limit.reached`, not English sentences)
+2. Game data translations (`poke_1`, `move_14`, etc.) are loaded from `resources/locale/` — same source as the alerter
+3. The alerter's English-as-key strings in `alerter/locale/` are merged at layer 3, so they remain available if the processor ever needs them during the transition
+4. Eventually the alerter's `translate.js` will also switch to identifier keys, unifying both systems
+
+### Crowdin integration
+
+Translation management uses Crowdin (free for open-source). See `crowdin.yml` in the project root for the configuration. The workflow:
+
+1. Source files (English) are uploaded to Crowdin from `processor/internal/i18n/locale/en.json`
+2. Translators work in the Crowdin web UI
+3. Crowdin creates a PR with updated `{lang}.json` files when translations are complete
+4. The PR is reviewed and merged normally
+
+To set up (one-time): create a Crowdin project, connect the GitHub repo, and add the `crowdin.yml` config. See below for the config file.
 
 ## Configuration
 

@@ -123,12 +123,6 @@ class FortUpdate extends Controller {
 				return []
 			}
 
-			let discordCacheBad = true
-			whoCares.forEach((cares) => {
-				if (!this.isRateLimited(cares.id)) discordCacheBad = false
-			})
-			if (discordCacheBad) return []
-
 			data.stickerUrl = data.imgUrl
 
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
@@ -156,12 +150,6 @@ class FortUpdate extends Controller {
 			for (const cares of whoCares) {
 				this.log.debug(`${logReference}: [matched] Creating fort update alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-				const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-				if (rateLimitTtr) {
-					this.log.verbose(`${logReference}: [matched] Not creating fort update (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-					// eslint-disable-next-line no-continue
-					continue
-				}
 				this.log.verbose(`${logReference}: [matched] Creating fort update alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
 				const language = cares.language || this.config.general.locale

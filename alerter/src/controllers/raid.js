@@ -121,12 +121,6 @@ class Raid extends Controller {
 					return []
 				}
 
-				let discordCacheBad = true
-				whoCares.forEach((cares) => {
-					if (!this.isRateLimited(cares.id)) discordCacheBad = false
-				})
-				if (discordCacheBad) return []
-
 				try {
 					if (this.imgUicons) data.imgUrl = await this.imgUicons.pokemonIcon(data.pokemon_id, data.form, data.evolution, data.gender, data.costume, data.alignment || 0, data.shinyPossible && this.config.general.requestShinyImages) || this.config.fallbacks?.imgUrlGym
 					if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokemonIcon(data.pokemon_id, data.form, data.evolution, data.gender, data.costume, data.alignment || 0, data.shinyPossible && this.config.general.requestShinyImages) || this.config.fallbacks?.imgUrlGym
@@ -145,9 +139,6 @@ class Raid extends Controller {
 
 					for (const cares of whoCares) {
 						// RSVP filtering is handled by the processor
-
-						const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-						if (rateLimitTtr) continue // eslint-disable-line no-continue
 
 						const language = cares.language || this.config.general.locale
 						const translator = this.translatorFactory.Translator(language)
@@ -315,12 +306,6 @@ class Raid extends Controller {
 				return []
 			}
 
-			let discordCacheBad = true
-			whoCares.forEach((cares) => {
-				if (!this.isRateLimited(cares.id)) discordCacheBad = false
-			})
-			if (discordCacheBad) return []
-
 			try {
 				if (this.imgUicons) data.imgUrl = await this.imgUicons.eggIcon(data.level) || this.config.fallbacks?.imgUrlEgg
 				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.eggIcon(data.level) || this.config.fallbacks?.imgUrlEgg
@@ -335,9 +320,6 @@ class Raid extends Controller {
 
 				for (const cares of whoCares) {
 					// RSVP filtering is handled by the processor
-
-					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-					if (rateLimitTtr) continue // eslint-disable-line no-continue
 
 					const language = cares.language || this.config.general.locale
 					const translator = this.translatorFactory.Translator(language)

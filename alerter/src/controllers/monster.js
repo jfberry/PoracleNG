@@ -223,18 +223,6 @@ class Monster extends Controller {
 
 			// From here, same as handle() post-whoCares: data enrichment + message creation
 			try {
-				let discordCacheBad = true
-				whoCares.forEach((cares) => {
-					if (!this.isRateLimited(cares.id)) discordCacheBad = false
-				})
-
-				if (discordCacheBad) {
-					whoCares.forEach((cares) => {
-						this.log.verbose(`${logReference}: [matched] Not creating monster alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name}`)
-					})
-					return []
-				}
-
 				const consolidatedAlerts = []
 				for (const alert of whoCares) {
 					let existingAlert = consolidatedAlerts.find((x) => x.id === alert.id)
@@ -332,12 +320,6 @@ class Monster extends Controller {
 
 				for (const cares of consolidatedAlerts) {
 					this.log.debug(`${logReference}: [matched] Creating monster alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`)
-
-					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-					if (rateLimitTtr) {
-						this.log.verbose(`${logReference}: [matched] Not creating monster alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-						continue // eslint-disable-line no-continue
-					}
 
 					const language = cares.language || this.config.general.locale
 					const translator = this.translatorFactory.Translator(language)

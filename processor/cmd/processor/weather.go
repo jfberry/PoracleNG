@@ -83,6 +83,8 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			matched = append(matched, mu)
 		}
 
+		matched = ps.filterRateLimited(matched)
+
 		if len(matched) == 0 {
 			l.Debugf("Weather changed to %d (from %d, source=%s) but no users have affected pokemon",
 				change.GameplayCondition, change.OldGameplayCondition, change.Source)

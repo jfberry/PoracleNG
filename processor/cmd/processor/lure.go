@@ -48,6 +48,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 
 		st := ps.stateMgr.Get()
 		matched := ps.lureMatcher.Match(data, st)
+		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("lure").Inc()

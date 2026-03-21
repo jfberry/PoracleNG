@@ -70,12 +70,6 @@ class Gym extends Controller {
 				return []
 			}
 
-			let discordCacheBad = true
-			whoCares.forEach((cares) => {
-				if (!this.isRateLimited(cares.id)) discordCacheBad = false
-			})
-			if (discordCacheBad) return []
-
 			try {
 				if (this.imgUicons) data.imgUrl = await this.imgUicons.gymIcon(data.teamId, 6 - data.slotsAvailable, data.inBattle, data.ex) || this.config.fallbacks?.imgUrlGym
 				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.gymIcon(data.teamId, 6 - data.slotsAvailable, data.inBattle, data.ex)
@@ -93,12 +87,6 @@ class Gym extends Controller {
 				for (const cares of whoCares) {
 					this.log.debug(`${logReference}: [matched] Creating gym alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-					if (rateLimitTtr) {
-						this.log.verbose(`${logReference}: [matched] Not creating gym alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-						// eslint-disable-next-line no-continue
-						continue
-					}
 					this.log.verbose(`${logReference}: [matched] Creating gym alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
 					const language = cares.language || this.config.general.locale

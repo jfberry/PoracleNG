@@ -75,6 +75,22 @@ var (
 		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 	})
 
+	// Rate limiting metrics
+	RateLimitDropped = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_processor_rate_limit_dropped_total",
+		Help: "Messages dropped by rate limiter",
+	})
+
+	RateLimitBreaches = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_processor_rate_limit_breaches_total",
+		Help: "Number of rate limit breach events (user notified)",
+	})
+
+	RateLimitDisabled = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_processor_rate_limit_disabled_total",
+		Help: "Users disabled for exceeding rate limit violation threshold",
+	})
+
 	// AccuWeather metrics
 	AccuWeatherRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "poracle_processor_accuweather_requests_total",
