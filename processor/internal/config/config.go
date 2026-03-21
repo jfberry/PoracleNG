@@ -32,9 +32,9 @@ type Config struct {
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
-	RdmURL       string `toml:"rdmURL"`
-	ReactMapURL  string `toml:"reactMapURL"`
-	RocketMadURL string `toml:"rocketMadURL"`
+	RdmURL       string `toml:"rdm_url"`
+	ReactMapURL  string `toml:"react_map_url"`
+	RocketMadURL string `toml:"rocket_mad_url"`
 }
 
 type LocaleConfig struct {
