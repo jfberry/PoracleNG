@@ -22,12 +22,14 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
+	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	"github.com/pokemon/poracleng/processor/internal/resources"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -201,6 +203,8 @@ type ProcessorService struct {
 	activePokemon   *tracker.ActivePokemonTracker
 	pokemonTypes    *gamedata.PokemonTypes
 	enricher        *enrichment.Enricher
+	rateLimiter     *ratelimit.Limiter
+	translations    *i18n.Bundle
 	workerPool      chan struct{}
 	wg              sync.WaitGroup
 }
@@ -273,6 +277,24 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		log.Infof("AccuWeather forecast enabled with %d API keys", len(cfg.Weather.AccuWeatherAPIKeys))
 	}
 
+	// Load translations: embedded defaults → resources/locale → alerter/locale → config/custom.*.json
+	translations := i18n.Load(cfg.BaseDir)
+
+	// Build rate limiter overrides map from config array
+	overrides := make(map[string]int, len(cfg.AlertLimits.Overrides))
+	for _, o := range cfg.AlertLimits.Overrides {
+		overrides[o.Target] = o.Limit
+	}
+	rateLimiter := ratelimit.New(ratelimit.Config{
+		TimingPeriod:        cfg.AlertLimits.TimingPeriod,
+		DMLimit:             cfg.AlertLimits.DMLimit,
+		ChannelLimit:        cfg.AlertLimits.ChannelLimit,
+		MaxLimitsBeforeStop: cfg.AlertLimits.MaxLimitsBeforeStop,
+		DisableOnStop:       cfg.AlertLimits.DisableOnStop,
+		Overrides:           overrides,
+		ShameChannel:        cfg.AlertLimits.ShameChannel,
+	})
+
 	return &ProcessorService{
 		cfg:      cfg,
 		stateMgr: stateMgr,
@@ -302,6 +324,8 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		pvpCfg:          pvpCfg,
 		activePokemon:   activePokemon,
 		pokemonTypes:    pokemonTypes,
+		rateLimiter:     rateLimiter,
+		translations:    translations,
 		workerPool:      make(chan struct{}, cfg.Tuning.WorkerPoolSize),
 	}
 }
@@ -310,6 +334,7 @@ func (ps *ProcessorService) Close() {
 	ps.wg.Wait()
 	ps.sender.Close()
 	ps.duplicates.Close()
+	ps.rateLimiter.Close()
 }
 
 // Ensure ProcessorService implements webhook.Processor

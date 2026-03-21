@@ -90,13 +90,6 @@ class Weather extends Controller {
 				}
 				data.staticmap = data.staticMap // deprecated
 
-				const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-				if (rateLimitTtr) {
-					this.log.verbose(`${logReference}: Not creating weather alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-					// eslint-disable-next-line no-continue
-					continue
-				}
-
 				const language = cares.language || this.config.general.locale
 				const translator = this.translatorFactory.Translator(language)
 				let [platform] = cares.type.split(':')

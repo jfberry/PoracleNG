@@ -20,6 +20,9 @@ type Config struct {
 	Locale         LocaleConfig         `toml:"locale"`
 	Logging        LoggingConfig        `toml:"logging"`
 	WebhookLogging WebhookLoggingConfig `toml:"webhookLogging"`
+	AlertLimits    AlertLimitsConfig    `toml:"alert_limits"`
+	Alerter        AlerterConfig        `toml:"alerter"`
+	Discord        DiscordConfig        `toml:"discord"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
@@ -48,6 +51,17 @@ type ProcessorConfig struct {
 	Port        int      `toml:"port"`
 	AlerterURL  string   `toml:"alerter_url"`
 	IPWhitelist []string `toml:"ip_whitelist"`
+	APISecret   string   `toml:"api_secret"` // Alerter API secret (read from [alerter] section)
+}
+
+// AlerterConfig reads the [alerter] section so the processor can authenticate to alerter APIs.
+type AlerterConfig struct {
+	APISecret string `toml:"api_secret"`
+}
+
+// DiscordConfig reads the [discord] section for fields the processor needs.
+type DiscordConfig struct {
+	Prefix string `toml:"prefix"`
 }
 
 // ListenAddr returns the host:port listen address.
@@ -135,6 +149,21 @@ type AreaConfig struct {
 	StrictLocations bool `toml:"strict_locations"`
 }
 
+type AlertLimitsConfig struct {
+	TimingPeriod        int                  `toml:"timing_period"`
+	DMLimit             int                  `toml:"dm_limit"`
+	ChannelLimit        int                  `toml:"channel_limit"`
+	MaxLimitsBeforeStop int                  `toml:"max_limits_before_stop"`
+	DisableOnStop       bool                 `toml:"disable_on_stop"`
+	ShameChannel        string               `toml:"shame_channel"`
+	Overrides           []AlertLimitOverride `toml:"overrides"`
+}
+
+type AlertLimitOverride struct {
+	Target string `toml:"target"`
+	Limit  int    `toml:"limit"`
+}
+
 type WebhookLoggingConfig struct {
 	Enabled    bool   `toml:"enabled"`
 	Filename   string `toml:"filename"`
@@ -185,6 +214,11 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
+	}
+
+	// Copy alerter api_secret to processor config for API authentication
+	if cfg.Alerter.APISecret != "" && cfg.Processor.APISecret == "" {
+		cfg.Processor.APISecret = cfg.Alerter.APISecret
 	}
 
 	// Validate required fields
@@ -281,6 +315,25 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if cfg.Logging.MaxBackups == 0 {
 		cfg.Logging.MaxBackups = 5
+	}
+
+	// Discord defaults
+	if cfg.Discord.Prefix == "" {
+		cfg.Discord.Prefix = "!"
+	}
+
+	// Alert limits defaults
+	if cfg.AlertLimits.TimingPeriod == 0 {
+		cfg.AlertLimits.TimingPeriod = 240
+	}
+	if cfg.AlertLimits.DMLimit == 0 {
+		cfg.AlertLimits.DMLimit = 20
+	}
+	if cfg.AlertLimits.ChannelLimit == 0 {
+		cfg.AlertLimits.ChannelLimit = 40
+	}
+	if cfg.AlertLimits.MaxLimitsBeforeStop == 0 {
+		cfg.AlertLimits.MaxLimitsBeforeStop = 10
 	}
 
 	// Resolve log filenames relative to project root (BaseDir)

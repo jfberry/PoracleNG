@@ -62,12 +62,6 @@ class Nest extends Controller {
 				return []
 			}
 
-			let discordCacheBad = true
-			whoCares.forEach((cares) => {
-				if (!this.isRateLimited(cares.id)) discordCacheBad = false
-			})
-			if (discordCacheBad) return []
-
 			data.shinyPossible = this.shinyPossible.isShinyPossible(data.pokemonId, data.formId)
 
 			if (this.imgUicons) data.imgUrl = await this.imgUicons.pokemonIcon(data.pokemon_id, data.form, 0, 0, 0, 0, data.shinyPossible && this.config.general.requestShinyImages)
@@ -92,12 +86,6 @@ class Nest extends Controller {
 			for (const cares of whoCares) {
 				this.log.debug(`${logReference}: [matched] Creating nest alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-				const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-				if (rateLimitTtr) {
-					this.log.verbose(`${logReference}: [matched] Not creating nest (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-					// eslint-disable-next-line no-continue
-					continue
-				}
 				this.log.verbose(`${logReference}: [matched] Creating nest alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
 				const language = cares.language || this.config.general.locale

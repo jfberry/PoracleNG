@@ -72,13 +72,6 @@ class Quest extends Controller {
 				return []
 			}
 
-			let discordCacheBad = true
-			whoCares.forEach((cares) => {
-				if (!this.isRateLimited(cares.id)) discordCacheBad = false
-			})
-
-			if (discordCacheBad) return []
-
 			data.imgUrl = 'https://s3.amazonaws.com/com.cartodb.users-assets.production/production/jonmrich/assets/20150203194453red_pin.png'
 			data.stickerUrl = ''
 
@@ -128,12 +121,6 @@ class Quest extends Controller {
 			for (const cares of whoCares) {
 				this.log.debug(`${logReference}: [matched] Creating quest alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-				const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-				if (rateLimitTtr) {
-					this.log.verbose(`${logReference}: [matched] Not creating quest alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-					// eslint-disable-next-line no-continue
-					continue
-				}
 				this.log.verbose(`${logReference}: [matched] Creating quest alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
 				const language = cares.language || this.config.general.locale

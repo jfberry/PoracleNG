@@ -83,6 +83,9 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			matched = ps.raidMatcher.MatchEgg(eggData, st)
 		}
 
+		// Filter by rate limit
+		matched = ps.filterRateLimited(matched)
+
 		// Filter by RSVP preference before sending
 		hasRSVPs := len(raid.RSVPs) > 0
 		filtered := matched[:0]

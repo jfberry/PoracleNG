@@ -62,12 +62,6 @@ class Lure extends Controller {
 				return []
 			}
 
-			let discordCacheBad = true
-			whoCares.forEach((cares) => {
-				if (!this.isRateLimited(cares.id)) discordCacheBad = false
-			})
-			if (discordCacheBad) return []
-
 			try {
 				if (this.imgUicons) data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
 				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
@@ -89,12 +83,6 @@ class Lure extends Controller {
 				for (const cares of whoCares) {
 					this.log.debug(`${logReference}: [matched] Creating lure alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-					if (rateLimitTtr) {
-						this.log.verbose(`${logReference}: [matched] Not creating lure alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-						// eslint-disable-next-line no-continue
-						continue
-					}
 					this.log.verbose(`${logReference}: [matched] Creating lure alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
 					const language = cares.language || this.config.general.locale
