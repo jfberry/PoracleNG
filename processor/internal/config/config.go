@@ -359,6 +359,9 @@ func Load(baseDir string) (*Config, error) {
 				Type: "golbat",
 			},
 		},
+		Geocoding: GeocodingConfig{
+			CacheDetail: 3,
+		},
 		General: GeneralConfig{
 			ImgURL:     "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS",
 			StickerURL: "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle",

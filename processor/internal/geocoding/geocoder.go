@@ -54,9 +54,6 @@ type Geocoder struct {
 // New creates a new Geocoder from the given config.
 func New(config Config) (*Geocoder, error) {
 	// Defaults
-	if config.CacheDetail == 0 {
-		config.CacheDetail = 3
-	}
 	if config.Timeout == 0 {
 		config.Timeout = 5000
 	}
