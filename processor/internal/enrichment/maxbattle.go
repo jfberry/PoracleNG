@@ -83,7 +83,7 @@ func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.Maxbattle
 	gd := e.GameData
 	tr := e.Translations.For(lang)
 
-	gameWeatherID := base["gameWeatherId"].(int)
+	gameWeatherID := toInt(base["gameWeatherId"])
 	m["gameWeatherName"] = TranslateWeatherName(tr, gameWeatherID)
 	if gameWeatherID > 0 {
 		if wInfo, ok := gd.Util.Weather[gameWeatherID]; ok {
@@ -100,7 +100,7 @@ func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.Maxbattle
 		monster := gd.GetMonster(mb.BattlePokemonID, mb.BattlePokemonForm)
 		if monster != nil {
 			TranslateTypeNames(m, tr, monster.Types)
-			addWeatherFields(m, gd, tr, monster.Types, base["gameWeatherId"].(int))
+			addWeatherFields(m, gd, tr, monster.Types, toInt(base["gameWeatherId"]))
 			if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
 				m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr)
 			}

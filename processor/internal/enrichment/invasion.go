@@ -85,7 +85,7 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
-	gameWeatherID := base["gameWeatherId"].(int)
+	gameWeatherID := toInt(base["gameWeatherId"])
 	m["gameWeatherName"] = TranslateWeatherName(tr, gameWeatherID)
 	if gameWeatherID > 0 {
 		if wInfo, ok := gd.Util.Weather[gameWeatherID]; ok {

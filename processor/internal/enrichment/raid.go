@@ -147,7 +147,7 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 	addTeamFields(m, gd, tr, raid.TeamID)
 
 	// Weather
-	gameWeatherID := base["gameWeatherId"].(int)
+	gameWeatherID := toInt(base["gameWeatherId"])
 	m["gameWeatherName"] = TranslateWeatherName(tr, gameWeatherID)
 	if gameWeatherID > 0 {
 		if wInfo, ok := gd.Util.Weather[gameWeatherID]; ok {
@@ -176,7 +176,7 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		addMoveFields(m, gd, tr, raid.Move1, raid.Move2)
 
 		// Weather boost
-		weather := base["gameWeatherId"].(int)
+		weather := toInt(base["gameWeatherId"])
 		addWeatherFields(m, gd, tr, monster.Types, weather)
 
 		// Generation

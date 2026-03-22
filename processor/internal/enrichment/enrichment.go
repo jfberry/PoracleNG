@@ -136,8 +136,14 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 	m["staticmap"] = url // deprecated alias
 }
 
-// Common pregen fields shared by all tile types
-var pregenCommon = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "nightTime", "duskTime", "dawnTime", "style"}
+// pregenBase builds a new pregenKeys slice from the common base fields plus extras.
+// Returns a fresh slice each time — safe for concurrent use.
+func pregenBase(extras ...string) []string {
+	base := []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "nightTime", "duskTime", "dawnTime", "style"}
+	result := make([]string, len(base), len(base)+len(extras))
+	copy(result, base)
+	return append(result, extras...)
+}
 
 // staticMapFieldsForType returns the field lists for non-pregenerate (keys) and
 // pregenerate (pregenKeys) modes, matching the alerter's per-controller field lists.
@@ -145,28 +151,28 @@ func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string)
 	switch maptype {
 	case "monster":
 		keys = []string{"pokemon_id", "latitude", "longitude", "form", "costume", "imgUrl", "imgUrlAlt", "style"}
-		pregenKeys = append(pregenCommon, "pokemon_id", "display_pokemon_id", "verified", "costume", "form", "pokemonId", "generation", "weather", "confirmedTime", "shinyPossible", "seenType", "seen_type", "cell_coords")
+		pregenKeys = pregenBase("pokemon_id", "display_pokemon_id", "verified", "costume", "form", "pokemonId", "generation", "weather", "confirmedTime", "shinyPossible", "seenType", "seen_type", "cell_coords")
 	case "raid":
 		keys = []string{"pokemon_id", "latitude", "longitude", "form", "level", "imgUrl", "style"}
-		pregenKeys = append(pregenCommon, "pokemon_id", "form", "level")
+		pregenKeys = pregenBase("pokemon_id", "form", "level")
 	case "pokestop":
 		keys = []string{"latitude", "longitude", "imgUrl", "gruntTypeId", "displayTypeId", "style"}
-		pregenKeys = append(pregenCommon, "gruntTypeId", "displayTypeId", "lureTypeId")
+		pregenKeys = pregenBase("gruntTypeId", "displayTypeId", "lureTypeId")
 	case "quest":
 		keys = []string{"latitude", "longitude", "imgUrl", "style"}
-		pregenKeys = append(pregenCommon[:0:0], pregenCommon...) // copy base
+		pregenKeys = pregenBase()
 	case "gym":
 		keys = []string{"latitude", "longitude", "imgUrl", "team_id", "style"}
-		pregenKeys = append(pregenCommon, "team_id", "slotsAvailable", "inBattle", "ex")
+		pregenKeys = pregenBase("team_id", "slotsAvailable", "inBattle", "ex")
 	case "nest":
 		keys = []string{"pokemon_id", "latitude", "longitude", "form", "imgUrl", "style"}
-		pregenKeys = append(pregenCommon, "pokemon_id", "form", "pokemonSpawnAvg")
+		pregenKeys = pregenBase("pokemon_id", "form", "pokemonSpawnAvg")
 	case "weather":
 		keys = []string{"latitude", "longitude", "gameplay_condition", "imgUrl", "style"}
-		pregenKeys = append(pregenCommon, "gameplay_condition")
+		pregenKeys = pregenBase("gameplay_condition")
 	case "maxbattle":
 		keys = []string{"latitude", "longitude", "imgUrl", "battle_level", "style"}
-		pregenKeys = append(pregenCommon, "battle_level", "battle_pokemon_id")
+		pregenKeys = pregenBase("battle_level", "battle_pokemon_id")
 	case "fort-update":
 		keys = []string{"latitude", "longitude", "style"}
 		pregenKeys = []string{"latitude", "longitude", "nightTime", "duskTime", "dawnTime", "style"}

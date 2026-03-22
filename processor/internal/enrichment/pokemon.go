@@ -315,7 +315,7 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		weather = pokemon.Weather
 	}
 	addWeatherFields(m, gd, tr, monster.Types, weather)
-	gameWeatherID := m["gameWeatherId"].(int)
+	gameWeatherID := toInt(m["gameWeatherId"])
 	m["gameWeatherName"] = TranslateWeatherName(tr, gameWeatherID)
 	if gameWeatherID > 0 {
 		if wInfo, ok := gd.Util.Weather[gameWeatherID]; ok {

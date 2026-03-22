@@ -41,6 +41,7 @@ type Uicons struct {
 	url       string
 	imageType string
 	index     atomic.Pointer[Index]
+	client    *http.Client
 }
 
 // NewWithIndex creates a Uicons with a pre-loaded index, for testing.
@@ -67,6 +68,7 @@ func New(url, imageType string) *Uicons {
 	u := &Uicons{
 		url:       url,
 		imageType: imageType,
+		client:    &http.Client{Timeout: fetchTimeout},
 	}
 	// Fetch immediately, then schedule refresh
 	u.fetchIndex()
@@ -84,8 +86,7 @@ func (u *Uicons) refreshLoop() {
 
 func (u *Uicons) fetchIndex() {
 	indexURL := u.url + "/index.json"
-	client := &http.Client{Timeout: fetchTimeout}
-	resp, err := client.Get(indexURL)
+	resp, err := u.client.Get(indexURL)
 	if err != nil {
 		log.Warnf("uicons: failed to fetch %s: %v", indexURL, err)
 		return
