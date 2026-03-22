@@ -31,6 +31,7 @@ module.exports = async (fastify, options) => {
 		const nest = await fastify.query.selectAllQuery('nests', { id, profile_no: currentProfileNo })
 		const gym = await fastify.query.selectAllQuery('gym', { id, profile_no: currentProfileNo })
 		const maxbattle = await fastify.query.selectAllQuery('maxbattle', { id, profile_no: currentProfileNo })
+		const fort = await fastify.query.selectAllQuery('forts', { id, profile_no: currentProfileNo })
 		const profile = await fastify.query.selectOneQuery('profiles', { id, profile_no: currentProfileNo })
 
 		return {
@@ -45,6 +46,7 @@ module.exports = async (fastify, options) => {
 			nest,
 			quest,
 			maxbattle,
+			fort,
 			profile,
 		}
 	})
@@ -79,6 +81,7 @@ module.exports = async (fastify, options) => {
 		const nest = await fastify.query.selectAllQuery('nests', { id })
 		const gym = await fastify.query.selectAllQuery('gym', { id })
 		const maxbattle = await fastify.query.selectAllQuery('maxbattle', { id })
+		const fort = await fastify.query.selectAllQuery('forts', { id })
 		const profile = await fastify.query.selectAllQuery('profiles', { id })
 
 		const language = human.language || fastify.config.general.locale
@@ -88,6 +91,7 @@ module.exports = async (fastify, options) => {
 		const raidWithDesc = await Promise.all(raid.map(async (row) => ({ ...row, description: await tracked.raidRowText(fastify.config, translator, fastify.GameData, row, fastify.scannerQuery) })))
 		const eggWithDesc = await Promise.all(egg.map(async (row) => ({ ...row, description: await tracked.eggRowText(fastify.config, translator, fastify.GameData, row, fastify.scannerQuery) })))
 		const maxbattleWithDesc = await Promise.all(maxbattle.map(async (row) => ({ ...row, description: await tracked.maxbattleRowText(fastify.config, translator, fastify.GameData, row, fastify.scannerQuery) })))
+		const fortWithDesc = fort.map((row) => ({ ...row, description: tracked.fortUpdateRowText(fastify.config, translator, fastify.GameData, row) }))
 
 		return {
 			status: 'ok',
@@ -101,6 +105,7 @@ module.exports = async (fastify, options) => {
 			nest,
 			quest,
 			maxbattle: maxbattleWithDesc,
+			fort: fortWithDesc,
 			profile,
 		}
 	})
