@@ -99,14 +99,8 @@ class Monster extends Controller {
 
 				data.intersection = await this.obtainIntersection(data)
 
-				await this.getStaticMapUrl(
-					logReference,
-					data,
-					'monster',
-					['pokemon_id', 'latitude', 'longitude', 'form', 'costume', 'imgUrl', 'imgUrlAlt', 'style'],
-					['pokemon_id', 'display_pokemon_id', 'latitude', 'longitude', 'verified', 'costume', 'form', 'pokemonId', 'generation', 'weather', 'confirmedTime', 'shinyPossible', 'seenType', 'seen_type', 'cell_coords', 'imgUrl', 'imgUrlAlt', 'nightTime', 'duskTime', 'dawnTime', 'style'],
-				)
-				data.staticmap = data.staticMap // deprecated
+				// Static map is pre-computed by the processor enrichment
+				data.staticmap = data.staticMap // deprecated alias
 
 				if (this.config.general.populatePokestopName && !data.pokestopName && data.pokestop_id && this.scannerQuery) {
 					data.pokestopName = this.escapeJsonString(await this.scannerQuery.getPokestopName(data.pokestop_id))

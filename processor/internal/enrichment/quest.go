@@ -23,6 +23,11 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 	// Icon URLs based on first reward type
 	e.addQuestIconURLs(m, rewards)
 
+	// Static map tile
+	m["latitude"] = lat
+	m["longitude"] = lon
+	e.addStaticMap(m, "quest")
+
 	// Future event check
 	if e.EventChecker != nil {
 		now := time.Now().Unix()

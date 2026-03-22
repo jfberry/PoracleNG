@@ -6,6 +6,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
 )
@@ -57,10 +58,11 @@ type Enricher struct {
 	MapConfig        *MapConfig          // map URL configuration
 	IvColors           []string            // Discord IV color hex strings (6 thresholds)
 	PVPDisplay         *PVPDisplayConfig   // PVP display filtering config
-	ImgUicons          *uicons.Uicons      // Primary icon resolver
-	ImgUiconsAlt       *uicons.Uicons      // Alternative icon resolver
-	StickerUicons      *uicons.Uicons      // Sticker icon resolver (webp)
-	RequestShinyImages bool                 // Whether to request shiny icon variants
+	ImgUicons          *uicons.Uicons        // Primary icon resolver
+	ImgUiconsAlt       *uicons.Uicons        // Alternative icon resolver
+	StickerUicons      *uicons.Uicons        // Sticker icon resolver (webp)
+	RequestShinyImages bool                   // Whether to request shiny icon variants
+	StaticMap          *staticmap.Resolver    // Static map tile resolver (nil = disabled)
 }
 
 // New creates a new Enricher.
@@ -117,4 +119,54 @@ func normalizeTrailingSlash(url string) string {
 		return url + "/"
 	}
 	return url
+}
+
+// addStaticMap adds a staticMap URL to the enrichment map if the resolver is configured.
+// Only the fields required by the tileserver are sent, matching the alerter's per-type
+// keys/pregenKeys field lists.
+func (e *Enricher) addStaticMap(m map[string]any, maptype string) {
+	if e.StaticMap != nil {
+		keys, pregenKeys := staticMapFieldsForType(maptype)
+		url := e.StaticMap.GetStaticMapURL(maptype, m, keys, pregenKeys)
+		m["staticMap"] = url
+		m["staticmap"] = url // deprecated alias
+	}
+}
+
+// staticMapFieldsForType returns the field lists for non-pregenerate (keys) and
+// pregenerate (pregenKeys) modes, matching the alerter's per-controller field lists.
+func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string) {
+	switch maptype {
+	case "monster":
+		keys = []string{"pokemon_id", "latitude", "longitude", "form", "costume", "imgUrl", "imgUrlAlt", "style"}
+		pregenKeys = []string{"pokemon_id", "display_pokemon_id", "latitude", "longitude", "verified", "costume", "form", "pokemonId", "generation", "weather", "confirmedTime", "shinyPossible", "seenType", "seen_type", "cell_coords", "imgUrl", "imgUrlAlt", "nightTime", "duskTime", "dawnTime", "style"}
+	case "raid":
+		keys = []string{"pokemon_id", "latitude", "longitude", "form", "level", "imgUrl", "style"}
+		pregenKeys = []string{"pokemon_id", "latitude", "longitude", "form", "level", "imgUrl", "imgUrlAlt", "nightTime", "duskTime", "dawnTime", "style"}
+	case "pokestop":
+		keys = []string{"latitude", "longitude", "imgUrl", "gruntTypeId", "displayTypeId", "style"}
+		pregenKeys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "gruntTypeId", "displayTypeId", "lureTypeId", "nightTime", "duskTime", "dawnTime", "style"}
+	case "quest":
+		keys = []string{"latitude", "longitude", "imgUrl", "style"}
+		pregenKeys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "nightTime", "duskTime", "dawnTime", "style"}
+	case "gym":
+		keys = []string{"latitude", "longitude", "imgUrl", "team_id", "style"}
+		pregenKeys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "team_id", "slotsAvailable", "inBattle", "ex", "nightTime", "duskTime", "dawnTime", "style"}
+	case "nest":
+		keys = []string{"pokemon_id", "latitude", "longitude", "form", "imgUrl", "style"}
+		pregenKeys = []string{"pokemon_id", "latitude", "longitude", "form", "imgUrl", "imgUrlAlt", "pokemonSpawnAvg", "nightTime", "duskTime", "dawnTime", "style"}
+	case "weather":
+		keys = []string{"latitude", "longitude", "gameplay_condition", "imgUrl", "style"}
+		pregenKeys = []string{"latitude", "longitude", "gameplay_condition", "imgUrl", "imgUrlAlt", "nightTime", "duskTime", "dawnTime", "style"}
+	case "maxbattle":
+		keys = []string{"latitude", "longitude", "imgUrl", "battle_level", "style"}
+		pregenKeys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "battle_level", "battle_pokemon_id", "nightTime", "duskTime", "dawnTime", "style"}
+	case "fort-update":
+		keys = []string{"latitude", "longitude", "style"}
+		pregenKeys = []string{"latitude", "longitude", "nightTime", "duskTime", "dawnTime", "style"}
+	default:
+		keys = []string{"latitude", "longitude"}
+		pregenKeys = []string{"latitude", "longitude"}
+	}
+	return
 }

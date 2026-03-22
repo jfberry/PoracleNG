@@ -31,7 +31,9 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	"github.com/pokemon/poracleng/processor/internal/resources"
+	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -280,6 +282,9 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	// Icon resolvers
 	if cfg.General.ImgURL != "" {
 		enricher.ImgUicons = uicons.New(cfg.General.ImgURL, "png")
+		log.Infof("Uicons enabled: %s", cfg.General.ImgURL)
+	} else {
+		log.Warn("No img_url configured in [general] — icon URLs will not be resolved")
 	}
 	if cfg.General.ImgURLAlt != "" {
 		enricher.ImgUiconsAlt = uicons.New(cfg.General.ImgURLAlt, "png")
@@ -288,6 +293,66 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		enricher.StickerUicons = uicons.New(cfg.General.StickerURL, "webp")
 	}
 	enricher.RequestShinyImages = cfg.General.RequestShinyImages
+
+	// Scanner DB and static map tile resolver
+	var scannerInstance scanner.Scanner
+	if cfg.Database.Scanner.Configured() {
+		var err error
+		scannerDSN := cfg.Database.Scanner.DSN()
+		switch cfg.Database.Scanner.Type {
+		case "rdm":
+			scannerInstance, err = scanner.NewRDM(scannerDSN)
+		default: // "golbat" or empty
+			scannerInstance, err = scanner.NewGolbat(scannerDSN)
+		}
+		if err != nil {
+			log.Warnf("Failed to connect to scanner DB: %s (static maps with stops disabled)", err)
+		} else {
+			log.Infof("Scanner DB connected (%s)", cfg.Database.Scanner.Type)
+		}
+	}
+
+	if cfg.Geocoding.StaticProvider != "" && cfg.Geocoding.StaticProvider != "none" {
+		smCfg := staticmap.Config{
+			Provider:                   cfg.Geocoding.StaticProvider,
+			ProviderURL:                cfg.Geocoding.StaticProviderURL,
+			StaticKeys:                 cfg.Geocoding.StaticKey,
+			Width:                      cfg.Geocoding.Width,
+			Height:                     cfg.Geocoding.Height,
+			Zoom:                       cfg.Geocoding.Zoom,
+			MapType:                    cfg.Geocoding.MapType,
+			DayStyle:                   cfg.Geocoding.DayStyle,
+			DawnStyle:                  cfg.Geocoding.DawnStyle,
+			DuskStyle:                  cfg.Geocoding.DuskStyle,
+			NightStyle:                 cfg.Geocoding.NightStyle,
+			Scanner:                    scannerInstance,
+			ImgUicons:                  enricher.ImgUicons,
+			FallbackURL:                cfg.Fallbacks.StaticMap,
+			StaticMapType:              cfg.Geocoding.StaticMapType,
+			TileserverConcurrency:      cfg.Tuning.TileserverConcurrency,
+			TileserverTimeout:          cfg.Tuning.TileserverTimeout,
+			TileserverFailureThreshold: cfg.Tuning.TileserverFailureThreshold,
+			TileserverCooldownMs:       cfg.Tuning.TileserverCooldownMs,
+		}
+
+		// Convert tileserver settings
+		if len(cfg.Geocoding.TileserverSettings) > 0 {
+			smCfg.TileserverSettings = make(map[string]staticmap.TileTypeConfig, len(cfg.Geocoding.TileserverSettings))
+			for k, v := range cfg.Geocoding.TileserverSettings {
+				smCfg.TileserverSettings[k] = staticmap.TileTypeConfig{
+					Type:         v.Type,
+					IncludeStops: v.IncludeStops,
+					Width:        v.Width,
+					Height:       v.Height,
+					Zoom:         v.Zoom,
+					Pregenerate:  v.Pregenerate,
+				}
+			}
+		}
+
+		enricher.StaticMap = staticmap.New(smCfg)
+		log.Infof("Static map provider: %s", cfg.Geocoding.StaticProvider)
+	}
 
 	// Stats tracker (rarity + shiny, shared rolling window)
 	statsTracker := tracker.NewStatsTracker(tracker.StatsConfig{

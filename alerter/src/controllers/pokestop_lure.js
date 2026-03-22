@@ -61,10 +61,9 @@ class Lure extends Controller {
 
 				nightTime.setNightTime(data, this.config)
 
-				await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'lureTypeId', 'style'])
+				// Static map is pre-computed by the processor enrichment
+				data.staticmap = data.staticMap // deprecated alias
 				data.intersection = await this.obtainIntersection(data)
-
-				data.staticmap = data.staticMap // deprecated
 
 				for (const cares of whoCares) {
 					this.log.debug(`${logReference}: [matched] Creating lure alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)

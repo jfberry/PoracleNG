@@ -104,9 +104,9 @@ class Raid extends Controller {
 					const jobs = []
 
 					nightTime.setNightTime(data, this.config)
-					await this.getStaticMapUrl(logReference, data, 'raid', ['pokemon_id', 'latitude', 'longitude', 'form', 'level', 'imgUrl', 'style'])
+					// Static map is pre-computed by the processor enrichment
+					data.staticmap = data.staticMap // deprecated alias
 					data.intersection = await this.obtainIntersection(data)
-					data.staticmap = data.staticMap // deprecated
 
 					for (const cares of whoCares) {
 						// RSVP filtering is handled by the processor
@@ -292,8 +292,8 @@ class Raid extends Controller {
 				const jobs = []
 
 				nightTime.setNightTime(data, this.config)
-				await this.getStaticMapUrl(logReference, data, 'raid', ['latitude', 'longitude', 'level', 'imgUrl'])
-				data.staticmap = data.staticMap // deprecated
+				// Static map is pre-computed by the processor enrichment
+				data.staticmap = data.staticMap // deprecated alias
 
 				for (const cares of whoCares) {
 					// RSVP filtering is handled by the processor

@@ -132,8 +132,8 @@ class FortUpdate extends Controller {
 			data.map_longitude = position.longitude
 			data.map_latitude = position.latitude
 
-			await this.getStaticMapUrl(logReference, data, 'fort-update', ['map_latitude', 'map_longitude', 'longitude', 'latitude', 'zoom', 'imgUrl', 'isEditLocation', 'oldLatitude', 'oldLongitude', 'newLatitude', 'newLongitude'])
-			data.staticmap = data.staticMap // deprecated
+			// Static map is pre-computed by the processor enrichment
+			data.staticmap = data.staticMap // deprecated alias
 
 			for (const cares of whoCares) {
 				this.log.debug(`${logReference}: [matched] Creating fort update alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)

@@ -14,5 +14,10 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string) map[string]any {
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "pokestops", fortID)
 
+	// Static map tile
+	m["latitude"] = lat
+	m["longitude"] = lon
+	e.addStaticMap(m, "fort-update")
+
 	return m
 }

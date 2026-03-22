@@ -24,6 +24,8 @@ type Config struct {
 	AlertLimits    AlertLimitsConfig    `toml:"alert_limits"`
 	Alerter        AlerterConfig        `toml:"alerter"`
 	Discord        DiscordConfig        `toml:"discord"`
+	Geocoding      GeocodingConfig      `toml:"geocoding"`
+	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
@@ -32,13 +34,14 @@ type Config struct {
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
-	RdmURL             string `toml:"rdm_url"`
-	ReactMapURL        string `toml:"react_map_url"`
-	RocketMadURL       string `toml:"rocket_mad_url"`
-	ImgURL             string `toml:"img_url"`
-	ImgURLAlt          string `toml:"img_url_alt"`
-	StickerURL         string `toml:"sticker_url"`
-	RequestShinyImages bool   `toml:"request_shiny_images"`
+	RdmURL               string `toml:"rdm_url"`
+	ReactMapURL          string `toml:"react_map_url"`
+	RocketMadURL         string `toml:"rocket_mad_url"`
+	ImgURL               string `toml:"img_url"`
+	ImgURLAlt            string `toml:"img_url_alt"`
+	StickerURL           string `toml:"sticker_url"`
+	RequestShinyImages   bool   `toml:"request_shiny_images"`
+	PopulatePokestopName bool   `toml:"populate_pokestop_name"`
 }
 
 type LocaleConfig struct {
@@ -84,11 +87,40 @@ func (p ProcessorConfig) ListenAddr() string {
 }
 
 type DatabaseConfig struct {
+	Host     string          `toml:"host"`
+	Port     int             `toml:"port"`
+	User     string          `toml:"user"`
+	Password string          `toml:"password"`
+	Database string          `toml:"database"`
+	Scanner  ScannerDBConfig `toml:"scanner"`
+}
+
+// ScannerDBConfig holds configuration for the scanner database connection.
+type ScannerDBConfig struct {
 	Host     string `toml:"host"`
 	Port     int    `toml:"port"`
 	User     string `toml:"user"`
 	Password string `toml:"password"`
 	Database string `toml:"database"`
+	Type     string `toml:"type"` // "golbat" (default) or "rdm"
+}
+
+// DSN returns a MySQL DSN string for the scanner database.
+func (s ScannerDBConfig) DSN() string {
+	host := s.Host
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := s.Port
+	if port == 0 {
+		port = 3306
+	}
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true", s.User, s.Password, host, port, s.Database)
+}
+
+// Configured returns true if the scanner database has been configured with at least a user and database.
+func (s ScannerDBConfig) Configured() bool {
+	return s.User != "" && s.Database != ""
 }
 
 // DSN returns a MySQL DSN string built from the individual fields.
@@ -156,11 +188,15 @@ type StatsConfig struct {
 }
 
 type TuningConfig struct {
-	ReloadIntervalSecs  int `toml:"reload_interval_secs"`
-	EncounterCacheTTL   int `toml:"encounter_cache_ttl"`
-	WorkerPoolSize      int `toml:"worker_pool_size"`
-	BatchSize           int `toml:"batch_size"`
-	FlushIntervalMillis int `toml:"flush_interval_millis"`
+	ReloadIntervalSecs         int `toml:"reload_interval_secs"`
+	EncounterCacheTTL          int `toml:"encounter_cache_ttl"`
+	WorkerPoolSize             int `toml:"worker_pool_size"`
+	BatchSize                  int `toml:"batch_size"`
+	FlushIntervalMillis        int `toml:"flush_interval_millis"`
+	TileserverConcurrency      int `toml:"tileserver_concurrency"`
+	TileserverTimeout          int `toml:"tileserver_timeout"`          // ms
+	TileserverFailureThreshold int `toml:"tileserver_failure_threshold"`
+	TileserverCooldownMs       int `toml:"tileserver_cooldown_ms"`
 }
 
 type AreaConfig struct {
@@ -192,6 +228,38 @@ type WebhookLoggingConfig struct {
 	Compress   bool   `toml:"compress"`
 }
 
+// GeocodingConfig holds settings from the [geocoding] section for static map generation.
+type GeocodingConfig struct {
+	StaticProvider    string                       `toml:"static_provider"`
+	StaticProviderURL string                       `toml:"static_provider_url"`
+	StaticKey         []string                     `toml:"static_key"`
+	Width             int                          `toml:"width"`
+	Height            int                          `toml:"height"`
+	Zoom              int                          `toml:"zoom"`
+	MapType           string                       `toml:"type"`
+	DayStyle          string                       `toml:"day_style"`
+	DawnStyle         string                       `toml:"dawn_style"`
+	DuskStyle         string                       `toml:"dusk_style"`
+	NightStyle        string                       `toml:"night_style"`
+	TileserverSettings map[string]TileserverConfig `toml:"tileserver_settings"`
+	StaticMapType     map[string]string            `toml:"static_map_type"`
+}
+
+// TileserverConfig holds per-tile-type settings under [geocoding.tileserver_settings.*].
+type TileserverConfig struct {
+	Type         string `toml:"type"`
+	IncludeStops bool   `toml:"include_stops"`
+	Width        int    `toml:"width"`
+	Height       int    `toml:"height"`
+	Zoom         int    `toml:"zoom"`
+	Pregenerate  bool   `toml:"pregenerate"`
+}
+
+// FallbacksConfig holds fallback URLs from the [fallbacks] section.
+type FallbacksConfig struct {
+	StaticMap string `toml:"static_map"`
+}
+
 // ResolvePath resolves a path relative to the config file's directory.
 // Absolute paths are returned as-is.
 func (c *Config) ResolvePath(p string) string {
@@ -219,9 +287,13 @@ func Load(baseDir string) (*Config, error) {
 			AlerterURL: "http://localhost:3031",
 		},
 		PVP: PVPConfig{
-			PVPQueryMaxRank:  100,
-			PVPFilterMaxRank: 100,
-			LevelCaps:        []int{50},
+			PVPQueryMaxRank:    100,
+			PVPFilterMaxRank:   100,
+			LevelCaps:          []int{50},
+			DisplayMaxRank:     10,
+			DisplayGreatMinCP:  1400,
+			DisplayUltraMinCP:  2350,
+			DisplayLittleMinCP: 450,
 		},
 		Tuning: TuningConfig{
 			ReloadIntervalSecs:  60,
@@ -229,6 +301,49 @@ func Load(baseDir string) (*Config, error) {
 			WorkerPoolSize:      4,
 			BatchSize:           50,
 			FlushIntervalMillis: 100,
+		},
+		Stats: StatsConfig{
+			MinSampleSize:       10000,
+			WindowHours:         8,
+			RefreshIntervalMins: 5,
+			Uncommon:            1.0,
+			Rare:                0.5,
+			VeryRare:            0.03,
+			UltraRare:           0.01,
+		},
+		Locale: LocaleConfig{
+			TimeFormat: "en-gb",
+			Time:       "LTS",
+			Date:       "L",
+		},
+		Weather: WeatherConfig{
+			ShowAlteredPokemonMaxCount: 10,
+			AccuWeatherDayQuota:        50,
+			ForecastRefreshInterval:    8,
+			LocalFirstFetchHOD:         3,
+		},
+		Logging: LoggingConfig{
+			Filename:           "logs/processor.log",
+			FileLoggingEnabled: true,
+			MaxSize:            50,
+			MaxAge:             30,
+			MaxBackups:         5,
+		},
+		Discord: DiscordConfig{
+			Prefix: "!",
+		},
+		AlertLimits: AlertLimitsConfig{
+			TimingPeriod:        240,
+			DMLimit:             20,
+			ChannelLimit:        40,
+			MaxLimitsBeforeStop: 10,
+		},
+		General: GeneralConfig{
+			ImgURL:     "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS",
+			StickerURL: "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle",
+		},
+		Fallbacks: FallbacksConfig{
+			StaticMap: "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png",
 		},
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
@@ -264,107 +379,21 @@ func Load(baseDir string) (*Config, error) {
 		cfg.Geofence.Koji.CacheDir = filepath.Join(configDir, cfg.Geofence.Koji.CacheDir)
 	}
 
-	if cfg.Stats.MinSampleSize == 0 {
-		cfg.Stats.MinSampleSize = 10000
-	}
-	if cfg.Stats.WindowHours == 0 {
-		cfg.Stats.WindowHours = 8
-	}
-	if cfg.Stats.RefreshIntervalMins == 0 {
-		cfg.Stats.RefreshIntervalMins = 5
-	}
-	if cfg.Stats.Uncommon == 0 {
-		cfg.Stats.Uncommon = 1.0
-	}
-	if cfg.Stats.Rare == 0 {
-		cfg.Stats.Rare = 0.5
-	}
-	if cfg.Stats.VeryRare == 0 {
-		cfg.Stats.VeryRare = 0.03
-	}
-	if cfg.Stats.UltraRare == 0 {
-		cfg.Stats.UltraRare = 0.01
-	}
-	if cfg.Locale.TimeFormat == "" {
-		cfg.Locale.TimeFormat = "en-gb"
-	}
-	if cfg.Locale.Time == "" {
-		cfg.Locale.Time = "LTS"
-	}
-	if cfg.Locale.Date == "" {
-		cfg.Locale.Date = "L"
-	}
-	if cfg.Weather.ShowAlteredPokemonMaxCount == 0 {
-		cfg.Weather.ShowAlteredPokemonMaxCount = 10
-	}
-	if cfg.Weather.AccuWeatherDayQuota == 0 {
-		cfg.Weather.AccuWeatherDayQuota = 50
-	}
-	if cfg.Weather.ForecastRefreshInterval == 0 {
-		cfg.Weather.ForecastRefreshInterval = 8
-	}
-	if cfg.Weather.LocalFirstFetchHOD == 0 {
-		cfg.Weather.LocalFirstFetchHOD = 3
-	}
+	// Conditional defaults that depend on other config values
 	if cfg.PVP.PVPQueryMaxRank == 0 {
 		cfg.PVP.PVPQueryMaxRank = cfg.PVP.PVPFilterMaxRank
 	}
 	if cfg.PVP.PVPQueryMaxRank == 0 {
 		cfg.PVP.PVPQueryMaxRank = 100
 	}
-	if cfg.PVP.DisplayMaxRank == 0 {
-		cfg.PVP.DisplayMaxRank = 10
-	}
-	if cfg.PVP.DisplayGreatMinCP == 0 {
-		cfg.PVP.DisplayGreatMinCP = 1400
-	}
-	if cfg.PVP.DisplayUltraMinCP == 0 {
-		cfg.PVP.DisplayUltraMinCP = 2350
-	}
-	if cfg.PVP.DisplayLittleMinCP == 0 {
-		cfg.PVP.DisplayLittleMinCP = 450
-	}
 
-	// Logging defaults — file logging is on by default for the processor
-	// Resolve level: prefer 'level', fall back to 'log_level' or 'console_log_level' (from migrated configs)
+	// Logging level fallback chain: level → log_level → console_log_level (migrated configs)
 	if cfg.Logging.Level == "" {
 		if cfg.Logging.LogLevel != "" {
 			cfg.Logging.Level = cfg.Logging.LogLevel
 		} else if cfg.Logging.ConsoleLogLevel != "" {
 			cfg.Logging.Level = cfg.Logging.ConsoleLogLevel
 		}
-	}
-	if cfg.Logging.Filename == "" {
-		cfg.Logging.Filename = "logs/processor.log"
-		cfg.Logging.FileLoggingEnabled = true
-	}
-	if cfg.Logging.MaxSize == 0 {
-		cfg.Logging.MaxSize = 50
-	}
-	if cfg.Logging.MaxAge == 0 {
-		cfg.Logging.MaxAge = 30
-	}
-	if cfg.Logging.MaxBackups == 0 {
-		cfg.Logging.MaxBackups = 5
-	}
-
-	// Discord defaults
-	if cfg.Discord.Prefix == "" {
-		cfg.Discord.Prefix = "!"
-	}
-
-	// Alert limits defaults
-	if cfg.AlertLimits.TimingPeriod == 0 {
-		cfg.AlertLimits.TimingPeriod = 240
-	}
-	if cfg.AlertLimits.DMLimit == 0 {
-		cfg.AlertLimits.DMLimit = 20
-	}
-	if cfg.AlertLimits.ChannelLimit == 0 {
-		cfg.AlertLimits.ChannelLimit = 40
-	}
-	if cfg.AlertLimits.MaxLimitsBeforeStop == 0 {
-		cfg.AlertLimits.MaxLimitsBeforeStop = 10
 	}
 
 	// Resolve log filenames relative to project root (BaseDir)

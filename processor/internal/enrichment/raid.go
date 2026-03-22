@@ -82,6 +82,11 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 	// Map URLs
 	e.addMapURLs(m, raid.Latitude, raid.Longitude, "gyms", raid.GymID)
 
+	// Static map tile
+	m["latitude"] = raid.Latitude
+	m["longitude"] = raid.Longitude
+	e.addStaticMap(m, "raid")
+
 	// Game data enrichment
 	if e.GameData != nil {
 		gd := e.GameData

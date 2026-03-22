@@ -83,8 +83,8 @@ class Quest extends Controller {
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 			const jobs = []
 
-			await this.getStaticMapUrl(logReference, data, 'quest', ['latitude', 'longitude', 'imgUrl'])
-			data.staticmap = data.staticMap // deprecated
+			// Static map is pre-computed by the processor enrichment
+			data.staticmap = data.staticMap // deprecated alias
 
 			if (data.rewardData.monsters.length > 0) {
 				data.baseStats = Object.values(this.GameData.monsters).some((mon) => data.rewardData.monsters[0].pokemonId === mon.id && data.rewardData.monsters[0].formId === mon.form.id) ? Object.values(this.GameData.monsters).filter((mon) => data.rewardData.monsters[0].pokemonId === mon.id && data.rewardData.monsters[0].formId === mon.form.id)[0].stats : ''

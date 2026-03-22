@@ -29,6 +29,11 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
 		m["stickerUrl"] = e.StickerUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
 	}
 
+	// Static map tile
+	m["latitude"] = nest.Latitude
+	m["longitude"] = nest.Longitude
+	e.addStaticMap(m, "nest")
+
 	// Game data enrichment
 	if e.GameData != nil {
 		monster := e.GameData.GetMonster(nest.PokemonID, nest.Form)

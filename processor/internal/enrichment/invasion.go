@@ -47,6 +47,11 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "pokestops", pokestopID)
 
+	// Static map tile
+	m["latitude"] = lat
+	m["longitude"] = lon
+	e.addStaticMap(m, "pokestop")
+
 	// Grunt data
 	if e.GameData != nil {
 		grunt := e.GameData.GetGrunt(gruntTypeID)

@@ -57,8 +57,8 @@ class Nest extends Controller {
 			data.map_longitude = position.longitude
 			data.map_latitude = position.latitude
 
-			await this.getStaticMapUrl(logReference, data, 'nest', ['map_latitude', 'map_longitude', 'zoom', 'imgUrl', 'poly_path'])
-			data.staticmap = data.staticMap // deprecated
+			// Static map is pre-computed by the processor enrichment
+			data.staticmap = data.staticMap // deprecated alias
 
 			for (const cares of whoCares) {
 				this.log.debug(`${logReference}: [matched] Creating nest alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)

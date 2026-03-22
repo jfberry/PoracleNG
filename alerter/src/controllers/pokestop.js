@@ -107,8 +107,8 @@ class Invasion extends Controller {
 
 				data.intersection = await this.obtainIntersection(data)
 
-				await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'gruntTypeId', 'displayTypeId', 'style'])
-				data.staticmap = data.staticMap // deprecated
+				// Static map is pre-computed by the processor enrichment
+				data.staticmap = data.staticMap // deprecated alias
 
 				for (const cares of whoCares) {
 					this.log.debug(`${logReference}: [matched] Creating invasion alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)

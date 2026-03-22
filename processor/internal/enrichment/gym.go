@@ -28,6 +28,11 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, 
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "gyms", gymID)
 
+	// Static map tile
+	m["latitude"] = lat
+	m["longitude"] = lon
+	e.addStaticMap(m, "gym")
+
 	// Game data enrichment
 	if e.GameData != nil {
 		if info, ok := e.GameData.Util.Teams[teamID]; ok {

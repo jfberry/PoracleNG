@@ -160,6 +160,11 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		e.enrichPokemonGameData(m, pokemon, encountered)
 	}
 
+	// Static map tile
+	m["latitude"] = pokemon.Latitude
+	m["longitude"] = pokemon.Longitude
+	e.addStaticMap(m, "monster")
+
 	return m
 }
 

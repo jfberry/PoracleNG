@@ -77,9 +77,9 @@ class Maxbattle extends Controller {
 				const jobs = []
 
 				nightTime.setNightTime(data, this.config)
-				await this.getStaticMapUrl(logReference, data, 'maxbattle', ['battle_pokemon_id', 'latitude', 'longitude', 'battle_pokemon_form', 'battle_level', 'imgUrl', 'style'])
+				// Static map is pre-computed by the processor enrichment
+				data.staticmap = data.staticMap // deprecated alias
 				data.intersection = await this.obtainIntersection(data)
-				data.staticmap = data.staticMap // deprecated
 
 				for (const cares of whoCares) {
 					const language = cares.language || this.config.general.locale
