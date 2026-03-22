@@ -23,6 +23,9 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 	// Icon URLs based on first reward type
 	e.addQuestIconURLs(m, rewards)
 
+	// Reverse geocoding
+	e.addGeoResult(m, lat, lon)
+
 	// Static map tile
 	e.addStaticMap(m, "quest", lat, lon, nil)
 

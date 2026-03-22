@@ -37,7 +37,6 @@ class Controller extends EventEmitter {
 		this.imgUiconsAlt = this.config.general.imgUrlAlt ? new Uicons((this.config.general.imagesAlt && this.config.general.imagesAlt[this.constructor.name.toLowerCase()]) || this.config.general.imgUrlAlt, 'png', this.log) : null
 		this.stickerUicons = this.config.general.stickerUrl ? new Uicons((this.config.general.stickers && this.config.general.stickers[this.constructor.name.toLowerCase()]) || this.config.general.stickerUrl, 'webp', this.log) : null
 		this.dtsCache = {}
-		this.geocoder = geocoder
 		this.shortener = this.getShortener()
 	}
 
@@ -256,19 +255,6 @@ class Controller extends EventEmitter {
 		data.staticMap = data.staticMap || this.config.fallbacks?.staticMap
 	}
 
-	async geolocate(locationString) {
-		if (this.config.geocoding.provider.toLowerCase() === 'none') {
-			return []
-		}
-
-		try {
-			const geocoder = this.getGeocoder()
-			return await geocoder.geocode(locationString)
-		} catch (err) {
-			throw { source: 'geolocate', err }
-		}
-	}
-
 	// eslint-disable-next-line class-methods-use-this
 	escapeJsonString(s) {
 		if (!s) return s
@@ -285,14 +271,6 @@ class Controller extends EventEmitter {
 			/<S<(.*?)>S>/g,
 			async (match, name) => this.shortener.getShortlink(name),
 		)
-	}
-
-	async getAddress(locationObject) {
-		const addr = await this.geocoder.getAddress(locationObject)
-		for (const key of Object.keys(addr)) {
-			if (typeof addr[key] === 'string') addr[key] = this.escapeJsonString(addr[key])
-		}
-		return addr
 	}
 
 	async obtainIntersection(data) {

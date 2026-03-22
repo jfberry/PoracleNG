@@ -53,10 +53,6 @@ class Lure extends Controller {
 			try {
 				// Icon URLs are pre-computed by the processor enrichment
 
-				const geoResult = await this.getAddress({
-					lat: data.latitude,
-					lon: data.longitude,
-				})
 				const jobs = []
 
 				nightTime.setNightTime(data, this.config)
@@ -83,7 +79,6 @@ class Lure extends Controller {
 					data.lureTypeEmoji = data.lureEmojiKey ? this.emojiLookup.lookup(data.lureEmojiKey, platform) : ''
 
 					const view = {
-						...geoResult,
 						...data,
 						time: data.distime,
 						tthh: data.tth.hours,

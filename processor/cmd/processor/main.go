@@ -8,6 +8,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path/filepath"
 	_ "time/tzdata" // embed IANA timezone database as fallback
 	"os/signal"
 	"strings"
@@ -24,9 +25,10 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
-	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/geocoding"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
@@ -134,6 +136,7 @@ func main() {
 	mux.HandleFunc("/api/stats/shiny-possible", api.HandleStats(func() any { return proc.stats.ExportShinyPossible() }))
 	mux.HandleFunc("/health", api.HandleHealth())
 	mux.HandleFunc("/api/test", api.HandleTest(proc))
+	mux.HandleFunc("/api/geocode/forward", api.HandleGeocode(proc.enricher.Geocoder))
 
 	// Proxy unhandled /api/ requests to the alerter (tracking, config, humans, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
@@ -180,6 +183,11 @@ func main() {
 				ts := proc.enricher.StaticMap.GetStats()
 				statusParts = append(statusParts, fmt.Sprintf("Tiles: %d calls avg:%dms err:%d", ts.Calls, ts.AvgMs(), ts.Errors))
 				proc.enricher.StaticMap.ResetStats()
+			}
+			if proc.enricher.Geocoder != nil {
+				gs := proc.enricher.Geocoder.GetStats()
+				statusParts = append(statusParts, fmt.Sprintf("Geo: %d calls avg:%dms hits:%d err:%d", gs.Calls, gs.AvgMs(), gs.Hits, gs.Errors))
+				proc.enricher.Geocoder.ResetStats()
 			}
 			log.Infof("[Status] %s", strings.Join(statusParts, " | "))
 		}
@@ -376,6 +384,31 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		log.Infof("Static map provider: %s", cfg.Geocoding.StaticProvider)
 	}
 
+	// Geocoder (reverse address lookups)
+	var geocoder *geocoding.Geocoder
+	if cfg.Geocoding.Provider != "" && cfg.Geocoding.Provider != "none" {
+		var err error
+		geocoder, err = geocoding.New(geocoding.Config{
+			Provider:         cfg.Geocoding.Provider,
+			ProviderURL:      cfg.Geocoding.ProviderURL,
+			GeocodingKeys:    cfg.Geocoding.GeocodingKey,
+			CacheDetail:      cfg.Geocoding.CacheDetail,
+			CachePath:        filepath.Join(cfg.BaseDir, "config", ".cache", "geocache"),
+			ForwardOnly:      cfg.Geocoding.ForwardOnly,
+			AddressFormat:    cfg.Locale.AddressFormat,
+			Timeout:          cfg.Tuning.GeocodingTimeout,
+			FailureThreshold: cfg.Tuning.GeocodingFailureThreshold,
+			CooldownMs:       cfg.Tuning.GeocodingCooldownMs,
+			Concurrency:      cfg.Tuning.GeocodingConcurrency,
+		})
+		if err != nil {
+			log.Warnf("Geocoder init failed: %s", err)
+		} else if geocoder != nil {
+			enricher.Geocoder = geocoder
+			log.Infof("Geocoder enabled: %s", cfg.Geocoding.Provider)
+		}
+	}
+
 	// Stats tracker (rarity + shiny, shared rolling window)
 	statsTracker := tracker.NewStatsTracker(tracker.StatsConfig{
 		MinSampleSize:       cfg.Stats.MinSampleSize,
@@ -461,6 +494,9 @@ func (ps *ProcessorService) Close() {
 	ps.sender.Close()
 	ps.duplicates.Close()
 	ps.rateLimiter.Close()
+	if ps.enricher.Geocoder != nil {
+		ps.enricher.Geocoder.Close()
+	}
 }
 
 // Ensure ProcessorService implements webhook.Processor

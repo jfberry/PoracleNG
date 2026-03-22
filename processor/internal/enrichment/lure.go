@@ -30,6 +30,9 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) map[string]any {
 	// Map URLs
 	e.addMapURLs(m, lure.Latitude, lure.Longitude, "pokestops", lure.PokestopID)
 
+	// Reverse geocoding
+	e.addGeoResult(m, lure.Latitude, lure.Longitude)
+
 	// Static map tile
 	e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, nil)
 

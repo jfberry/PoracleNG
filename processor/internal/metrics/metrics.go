@@ -114,6 +114,21 @@ var (
 		Help: "Concurrent tile requests",
 	})
 
+	// Geocoding metrics
+	GeocodeDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "poracle_processor_geocode_seconds",
+		Help:    "Geocoding request latency",
+		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+	})
+	GeocodeTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_processor_geocode_total",
+		Help: "Geocoding outcomes",
+	}, []string{"result"})
+	GeocodeInFlight = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_processor_geocode_in_flight",
+		Help: "Concurrent geocode requests",
+	})
+
 	// AccuWeather metrics
 	AccuWeatherRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "poracle_processor_accuweather_requests_total",

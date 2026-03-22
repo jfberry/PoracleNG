@@ -17,6 +17,9 @@ func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, showAlteredP
 		addSunTimes(m, lat, lon, tz)
 	}
 
+	// Reverse geocoding
+	e.addGeoResult(m, lat, lon)
+
 	// Generate base weather tile (used when showAlteredPokemonStaticMap is false)
 	if !showAlteredPokemonStaticMap {
 		e.addStaticMap(m, "weather", lat, lon, map[string]any{

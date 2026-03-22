@@ -65,6 +65,9 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
 		}
 	}
 
+	// Reverse geocoding
+	e.addGeoResult(m, nest.Latitude, nest.Longitude)
+
 	// Static map tile — use autopositioned center if available, else original coords
 	mapLat, mapLon := nest.Latitude, nest.Longitude
 	if autoLat, ok := m["map_latitude"].(float64); ok {

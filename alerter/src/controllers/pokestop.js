@@ -100,7 +100,6 @@ class Invasion extends Controller {
 			try {
 				// Icon URLs are pre-computed by the processor enrichment
 
-				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
 				nightTime.setNightTime(data, this.config)
@@ -256,7 +255,6 @@ class Invasion extends Controller {
 					}
 
 					const view = {
-						...geoResult,
 						...data,
 						time: data.distime,
 						tthd: data.tth.days,

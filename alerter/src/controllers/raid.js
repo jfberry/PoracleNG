@@ -100,7 +100,6 @@ class Raid extends Controller {
 				try {
 					// Icon URLs are pre-computed by the processor enrichment
 
-					const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 					const jobs = []
 
 					nightTime.setNightTime(data, this.config)
@@ -229,7 +228,6 @@ class Raid extends Controller {
 						}
 
 						const view = {
-							...geoResult,
 							...data,
 							pokemonName: data.pokemonName,
 							id: data.pokemon_id,
@@ -288,7 +286,6 @@ class Raid extends Controller {
 			try {
 				// Icon URLs are pre-computed by the processor enrichment
 
-				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
 				nightTime.setNightTime(data, this.config)
@@ -315,7 +312,6 @@ class Raid extends Controller {
 					data.gameWeatherEmoji = langEnrichment.gameWeatherEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.gameWeatherEmojiKey, platform)) : ''
 
 					const view = {
-						...geoResult,
 						...data,
 						id: data.pokemon_id,
 						time: data.hatchtime,

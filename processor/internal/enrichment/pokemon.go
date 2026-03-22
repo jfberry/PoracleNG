@@ -160,6 +160,9 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		e.enrichPokemonGameData(m, pokemon, encountered)
 	}
 
+	// Reverse geocoding
+	e.addGeoResult(m, pokemon.Latitude, pokemon.Longitude)
+
 	// Static map tile
 	weather := pokemon.BoostedWeather
 	if weather == 0 {

@@ -45,7 +45,6 @@ class Nest extends Controller {
 
 			// Icon URLs are pre-computed by the processor enrichment
 
-			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 			const jobs = []
 
 			// Autoposition (zoom, map_latitude, map_longitude) is now computed by the
@@ -80,7 +79,6 @@ class Nest extends Controller {
 				data.shinyPossibleEmoji = data.shinyPossible ? translator.translate(this.emojiLookup.lookup('shiny', platform)) : ''
 
 				const view = {
-					...geoResult,
 					...data,
 					time: data.distime,
 					tthd: data.tth.days,

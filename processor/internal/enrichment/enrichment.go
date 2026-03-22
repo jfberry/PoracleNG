@@ -5,6 +5,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -63,6 +64,7 @@ type Enricher struct {
 	StickerUicons      *uicons.Uicons        // Sticker icon resolver (webp)
 	RequestShinyImages bool                   // Whether to request shiny icon variants
 	StaticMap          *staticmap.Resolver    // Static map tile resolver (nil = disabled)
+	Geocoder           *geocoding.Geocoder    // Reverse geocoder (nil = disabled)
 }
 
 // New creates a new Enricher.
@@ -119,6 +121,31 @@ func normalizeTrailingSlash(url string) string {
 		return url + "/"
 	}
 	return url
+}
+
+// addGeoResult performs a reverse geocode lookup and adds address fields to the
+// enrichment map. This should be called BEFORE addStaticMap so that static map
+// templates can reference address fields.
+func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
+	if e.Geocoder == nil {
+		return
+	}
+	addr := e.Geocoder.GetAddress(lat, lon)
+	if addr == nil {
+		return
+	}
+	m["addr"] = addr.Addr
+	m["flag"] = addr.Flag
+	m["streetName"] = addr.StreetName
+	m["streetNumber"] = addr.StreetNumber
+	m["city"] = addr.City
+	m["state"] = addr.State
+	m["zipcode"] = addr.Zipcode
+	m["country"] = addr.Country
+	m["countryCode"] = addr.CountryCode
+	m["neighbourhood"] = addr.Neighbourhood
+	m["suburb"] = addr.Suburb
+	m["formattedAddress"] = addr.FormattedAddress
 }
 
 // addStaticMap generates a static map tile URL and adds it to the enrichment map.

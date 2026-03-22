@@ -1,3 +1,4 @@
+const axios = require('axios')
 const helpCommand = require('./help')
 
 exports.run = async (client, msg, args, options) => {
@@ -66,7 +67,14 @@ exports.run = async (client, msg, args, options) => {
 					await msg.react(translator.translate('🙅'))
 					return await msg.reply(`${translator.translate('Oops, you need to specify more than just a city name to locate accurately your position')}`)
 				}
-				const locations = await client.query.geolocate(search)
+				let locations
+				try {
+					const resp = await axios.get(`${client.config.processor.url}/api/geocode/forward?q=${encodeURIComponent(search)}`)
+					locations = resp.data
+				} catch (err) {
+					client.log.error(`Forward geocode failed: ${err.message}`)
+					return await msg.react(translator.translate('🙅'))
+				}
 				if (locations === undefined || locations.length === 0) {
 					return await msg.react(translator.translate('🙅'))
 				}

@@ -47,6 +47,9 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "pokestops", pokestopID)
 
+	// Reverse geocoding
+	e.addGeoResult(m, lat, lon)
+
 	// Static map tile
 	e.addStaticMap(m, "pokestop", lat, lon, map[string]any{
 		"gruntTypeId":   gruntTypeID,

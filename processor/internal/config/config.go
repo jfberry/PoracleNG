@@ -45,9 +45,10 @@ type GeneralConfig struct {
 }
 
 type LocaleConfig struct {
-	TimeFormat string `toml:"timeformat"`
-	Time       string `toml:"time"`
-	Date       string `toml:"date"`
+	TimeFormat    string `toml:"timeformat"`
+	Time          string `toml:"time"`
+	Date          string `toml:"date"`
+	AddressFormat string `toml:"address_format"`
 }
 
 type LoggingConfig struct {
@@ -198,6 +199,10 @@ type TuningConfig struct {
 	TileserverTimeout          int `toml:"tileserver_timeout"`          // ms
 	TileserverFailureThreshold int `toml:"tileserver_failure_threshold"`
 	TileserverCooldownMs       int `toml:"tileserver_cooldown_ms"`
+	GeocodingConcurrency       int `toml:"geocoding_concurrency"`
+	GeocodingTimeout           int `toml:"geocoding_timeout"`            // ms
+	GeocodingFailureThreshold  int `toml:"geocoding_failure_threshold"`
+	GeocodingCooldownMs        int `toml:"geocoding_cooldown_ms"`
 }
 
 type AreaConfig struct {
@@ -229,8 +234,17 @@ type WebhookLoggingConfig struct {
 	Compress   bool   `toml:"compress"`
 }
 
-// GeocodingConfig holds settings from the [geocoding] section for static map generation.
+// GeocodingConfig holds settings from the [geocoding] section for static map generation
+// and address geocoding.
 type GeocodingConfig struct {
+	// Address geocoding provider
+	Provider     string   `toml:"provider"`      // "none", "nominatim", "google"
+	ProviderURL  string   `toml:"provider_url"`  // nominatim URL
+	GeocodingKey []string `toml:"geocoding_key"` // google API keys
+	CacheDetail  int      `toml:"cache_detail"`  // decimal places for cache key rounding (default 3)
+	ForwardOnly  bool     `toml:"forward_only"`  // if true, skip reverse geocoding
+
+	// Static map tile provider
 	StaticProvider    string                       `toml:"static_provider"`
 	StaticProviderURL string                       `toml:"static_provider_url"`
 	StaticKey         []string                     `toml:"static_key"`
@@ -313,9 +327,10 @@ func Load(baseDir string) (*Config, error) {
 			UltraRare:           0.01,
 		},
 		Locale: LocaleConfig{
-			TimeFormat: "en-gb",
-			Time:       "LTS",
-			Date:       "L",
+			TimeFormat:    "en-gb",
+			Time:          "LTS",
+			Date:          "L",
+			AddressFormat: "{{{streetName}}} {{streetNumber}}",
 		},
 		Weather: WeatherConfig{
 			ShowAlteredPokemonMaxCount: 10,
@@ -338,6 +353,11 @@ func Load(baseDir string) (*Config, error) {
 			DMLimit:             20,
 			ChannelLimit:        40,
 			MaxLimitsBeforeStop: 10,
+		},
+		Database: DatabaseConfig{
+			Scanner: ScannerDBConfig{
+				Type: "golbat",
+			},
 		},
 		General: GeneralConfig{
 			ImgURL:     "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS",

@@ -94,7 +94,6 @@ class Monster extends Controller {
 			try {
 				// Icon URLs are pre-computed by the processor enrichment (imgUrl, imgUrlAlt, stickerUrl)
 
-				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
 				data.intersection = await this.obtainIntersection(data)
@@ -204,7 +203,6 @@ class Monster extends Controller {
 					data.gameweatheremoji = data.gameWeatherEmoji
 
 					const view = {
-						...geoResult,
 						...data,
 						id: data.pokemon_id,
 						baseStats: data.baseStats,

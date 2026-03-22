@@ -56,7 +56,6 @@ class Gym extends Controller {
 			try {
 				// Icon URLs are pre-computed by the processor enrichment
 
-				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
 				nightTime.setNightTime(data, this.config)
@@ -90,7 +89,6 @@ class Gym extends Controller {
 					data.previousControlTeamEmoji = translator.translate(data.previousControlTeamEmojiEng)
 
 					const view = {
-						...geoResult,
 						...data,
 						time: data.distime,
 						tthh: data.tth.hours,

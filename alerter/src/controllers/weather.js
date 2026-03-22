@@ -18,8 +18,6 @@ class Weather extends Controller {
 
 			this.log.info(`${logReference}: Weather change received from processor: ${data.old_gameplay_condition} -> ${data.gameplay_condition} (source=${data.source})`)
 
-			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
-
 			nightTime.setNightTime(data, this.config)
 
 			data.oldWeatherId = data.old_gameplay_condition > 0 ? data.old_gameplay_condition : ''
@@ -79,7 +77,6 @@ class Weather extends Controller {
 
 				const view = {
 					...data,
-					...geoResult,
 					id: data.s2_cell_id,
 					areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
 					now: new Date(),

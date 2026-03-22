@@ -38,6 +38,9 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "pokestops", mb.ID)
 
+	// Reverse geocoding
+	e.addGeoResult(m, lat, lon)
+
 	// Static map tile
 	e.addStaticMap(m, "maxbattle", lat, lon, map[string]any{
 		"battle_level":      mb.BattleLevel,

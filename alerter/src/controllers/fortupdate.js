@@ -113,7 +113,6 @@ class FortUpdate extends Controller {
 
 			data.stickerUrl = data.imgUrl
 
-			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 			const jobs = []
 
 			// Autoposition (zoom, map_latitude, map_longitude) is now computed by the
@@ -132,7 +131,6 @@ class FortUpdate extends Controller {
 				if (platform === 'webhook') platform = 'discord'
 
 				const view = {
-					...geoResult,
 					...data,
 					tthd: data.tth?.days || 0,
 					tthh: data.tth?.hours || 0,

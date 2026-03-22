@@ -73,7 +73,6 @@ class Maxbattle extends Controller {
 			try {
 				// Icon URLs are pre-computed by the processor enrichment
 
-				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
 				nightTime.setNightTime(data, this.config)
@@ -177,7 +176,6 @@ class Maxbattle extends Controller {
 					}
 
 					const view = {
-						...geoResult,
 						...data,
 						id: data.pokemonId,
 						baseStats: data.baseStats || {},

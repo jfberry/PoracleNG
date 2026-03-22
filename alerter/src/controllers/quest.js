@@ -80,7 +80,6 @@ class Quest extends Controller {
 			data.imgUrl = data.imgUrl || this.config.fallbacks?.imgUrlPokestop
 			data.imgUrlAlt = data.imgUrlAlt || this.config.fallbacks?.imgUrlPokestop
 
-			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 			const jobs = []
 
 			// Static map is pre-computed by the processor enrichment
@@ -199,7 +198,6 @@ class Quest extends Controller {
 				data.shinyPossibleEmoji = data.shinyPossible ? translator.translate(this.emojiLookup.lookup('shiny', platform)) : ''
 
 				const view = {
-					...geoResult,
 					...data,
 					...data.rewardData,
 					lat: +data.latitude.toFixed(4),

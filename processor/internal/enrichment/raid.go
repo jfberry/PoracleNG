@@ -82,6 +82,9 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 	// Map URLs
 	e.addMapURLs(m, raid.Latitude, raid.Longitude, "gyms", raid.GymID)
 
+	// Reverse geocoding
+	e.addGeoResult(m, raid.Latitude, raid.Longitude)
+
 	// Static map tile
 	e.addStaticMap(m, "raid", raid.Latitude, raid.Longitude, map[string]any{
 		"pokemon_id": raid.PokemonID,
