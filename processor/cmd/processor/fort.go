@@ -65,8 +65,8 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(lat, lon)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Fort update %s (%s, %s) and %d humans cared",
-				fort.FortName(), fort.FortType(), fort.ChangeType, len(matched))
+			l.Infof("Fort update %s (%s, %s) areas(%s) and %d humans cared",
+				fort.FortName(), fort.FortType(), fort.ChangeType, areaNames(matchedAreas), len(matched))
 
 			enrichment := ps.enricher.FortUpdate(lat, lon, fortID, &fort)
 

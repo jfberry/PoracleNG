@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -73,6 +74,21 @@ type Config struct {
 	FallbackURL string
 }
 
+// Stats holds tile generation statistics for periodic logging.
+type Stats struct {
+	Calls   int64
+	TotalMs int64
+	Errors  int64
+}
+
+// AvgMs returns the average duration in milliseconds, or 0 if no calls.
+func (s Stats) AvgMs() int64 {
+	if s.Calls == 0 {
+		return 0
+	}
+	return s.TotalMs / s.Calls
+}
+
 // Resolver generates static map URLs for different providers.
 type Resolver struct {
 	config Config
@@ -83,6 +99,27 @@ type Resolver struct {
 	consecutiveErrors int
 	circuitOpenSince  time.Time
 	mu                sync.Mutex
+
+	// Stats counters for periodic logging
+	statCalls   atomic.Int64
+	statTotalMs atomic.Int64
+	statErrors  atomic.Int64
+}
+
+// GetStats returns the current tile generation statistics.
+func (r *Resolver) GetStats() Stats {
+	return Stats{
+		Calls:   r.statCalls.Load(),
+		TotalMs: r.statTotalMs.Load(),
+		Errors:  r.statErrors.Load(),
+	}
+}
+
+// ResetStats resets all tile generation statistics to zero.
+func (r *Resolver) ResetStats() {
+	r.statCalls.Store(0)
+	r.statTotalMs.Store(0)
+	r.statErrors.Store(0)
 }
 
 // New creates a new static map Resolver.
@@ -347,6 +384,7 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 	resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		r.recordError()
+		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
 		log.Warnf("staticmap: pregenerate request failed: %s", err)
@@ -357,6 +395,7 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		r.recordError()
+		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
 		log.Warnf("staticmap: read pregenerate response: %s", err)
@@ -365,6 +404,7 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 
 	if resp.StatusCode != http.StatusOK {
 		r.recordError()
+		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
 		log.Warnf("staticmap: pregenerate %s got status %d: %s (sent fields: %v)", reqURL, resp.StatusCode, string(respBody), mapKeys(data))
@@ -374,6 +414,7 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 	result := strings.TrimSpace(string(respBody))
 	if result == "" || strings.Contains(result, "<") {
 		r.recordError()
+		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
 		log.Warnf("staticmap: pregenerate got invalid response: %s", result)
@@ -383,6 +424,8 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 	duration := time.Since(start)
 	metrics.TileDuration.Observe(duration.Seconds())
 	metrics.TileTotal.WithLabelValues("success").Inc()
+	r.statCalls.Add(1)
+	r.statTotalMs.Add(duration.Milliseconds())
 
 	// Reset circuit breaker on success
 	r.mu.Lock()

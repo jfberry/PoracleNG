@@ -61,8 +61,8 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(lure.Latitude, lure.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Lure %d at %s and %d humans cared",
-				lure.LureID, lure.Name, len(matched))
+			l.Infof("%s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
+				ps.lureName(lure.LureID), lure.Name, lure.Latitude, lure.Longitude, areaNames(matchedAreas), len(matched))
 
 			enrichment := ps.enricher.Lure(&lure)
 
@@ -84,7 +84,8 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 				MatchedUsers:          matched,
 			})
 		} else {
-			l.Debugf("Lure %d at %s and 0 humans cared", lure.LureID, lure.Name)
+			l.Debugf("%s at %s [%.3f,%.3f] and 0 humans cared",
+				ps.lureName(lure.LureID), lure.Name, lure.Latitude, lure.Longitude)
 		}
 	}()
 	return nil

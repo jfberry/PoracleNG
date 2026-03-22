@@ -3,16 +3,75 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
+
+// pokemonName returns a human-readable pokemon name for logging.
+// Uses English translation from the i18n bundle, falling back to "Pokemon {id}".
+func (ps *ProcessorService) pokemonName(pokemonID, form int) string {
+	if ps.enricher.Translations != nil {
+		tr := ps.enricher.Translations.For("en")
+		key := gamedata.PokemonTranslationKey(pokemonID)
+		name := tr.T(key)
+		if name != "" && name != key {
+			return name
+		}
+	}
+	return fmt.Sprintf("Pokemon %d", pokemonID)
+}
+
+// teamName returns a human-readable team name for logging.
+func (ps *ProcessorService) teamName(teamID int) string {
+	if ps.enricher.GameData != nil && ps.enricher.GameData.Util != nil {
+		if info, ok := ps.enricher.GameData.Util.Teams[teamID]; ok {
+			return info.Name
+		}
+	}
+	return fmt.Sprintf("team %d", teamID)
+}
+
+// weatherName returns a human-readable weather name for logging.
+func (ps *ProcessorService) weatherName(weatherID int) string {
+	if ps.enricher.GameData != nil && ps.enricher.GameData.Util != nil {
+		if info, ok := ps.enricher.GameData.Util.Weather[weatherID]; ok {
+			return info.Name
+		}
+	}
+	return fmt.Sprintf("weather %d", weatherID)
+}
+
+// lureName returns a human-readable lure name for logging.
+func (ps *ProcessorService) lureName(lureID int) string {
+	if ps.enricher.GameData != nil && ps.enricher.GameData.Util != nil {
+		if info, ok := ps.enricher.GameData.Util.Lures[lureID]; ok {
+			return info.Name
+		}
+	}
+	return fmt.Sprintf("Lure %d", lureID)
+}
+
+// areaNames returns a comma-separated string of matched area names for logging.
+func areaNames(areas []webhook.MatchedArea) string {
+	if len(areas) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(areas))
+	for _, a := range areas {
+		names = append(names, a.Name)
+	}
+	return strings.Join(names, ",")
+}
 
 // distinctLanguages returns the unique language codes from matched users.
 func distinctLanguages(matched []webhook.MatchedUser) []string {

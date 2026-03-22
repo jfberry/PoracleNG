@@ -91,9 +91,6 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			continue
 		}
 
-		l.Infof("Weather changed to %d (from %d, source=%s) and %d users have affected pokemon",
-			change.GameplayCondition, change.OldGameplayCondition, change.Source, len(matched))
-
 		// Build matched areas from cell center
 		st := ps.stateMgr.Get()
 		areas := st.Geofence.PointInAreas(change.Latitude, change.Longitude)
@@ -105,6 +102,10 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				Group:            a.Group,
 			}
 		}
+
+		l.Infof("Weather changed %s -> %s (source=%s) areas(%s) and %d users have affected pokemon",
+			ps.weatherName(change.OldGameplayCondition), ps.weatherName(change.GameplayCondition),
+			change.Source, areaNames(matchedAreas), len(matched))
 
 		// Build weather change message
 		msg, _ := json.Marshal(change)

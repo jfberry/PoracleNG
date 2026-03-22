@@ -63,8 +63,8 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(nest.Latitude, nest.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Nest pokemon %d (avg %.1f) and %d humans cared",
-				nest.PokemonID, nest.PokemonAvg, len(matched))
+			l.Infof("Nest %s (avg %.1f/hr) areas(%s) and %d humans cared",
+				ps.pokemonName(nest.PokemonID, nest.Form), nest.PokemonAvg, areaNames(matchedAreas), len(matched))
 
 			enrichment := ps.enricher.Nest(&nest)
 
@@ -86,8 +86,8 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 				MatchedUsers:          matched,
 			})
 		} else {
-			l.Debugf("Nest pokemon %d (avg %.1f) and 0 humans cared",
-				nest.PokemonID, nest.PokemonAvg)
+			l.Debugf("Nest %s (avg %.1f/hr) and 0 humans cared",
+				ps.pokemonName(nest.PokemonID, nest.Form), nest.PokemonAvg)
 		}
 	}()
 	return nil

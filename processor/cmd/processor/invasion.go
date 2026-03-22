@@ -81,8 +81,8 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(inv.Latitude, inv.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Invasion grunt %s at %s and %d humans cared",
-				gruntType, inv.Name, len(matched))
+			l.Infof("Invasion grunt %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
+				gruntType, inv.Name, inv.Latitude, inv.Longitude, areaNames(matchedAreas), len(matched))
 
 			baseEnrichment := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0)
 
@@ -104,7 +104,8 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 				MatchedUsers:          matched,
 			})
 		} else {
-			l.Debugf("Invasion grunt %s at %s and 0 humans cared", gruntType, inv.Name)
+			l.Debugf("Invasion grunt %s at %s [%.3f,%.3f] and 0 humans cared",
+				gruntType, inv.Name, inv.Latitude, inv.Longitude)
 		}
 	}()
 	return nil

@@ -73,8 +73,9 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(mb.Latitude, mb.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Maxbattle level %d pokemon %d at %s and %d humans cared",
-				mb.BattleLevel, mb.BattlePokemonID, mb.Name, len(matched))
+			l.Infof("Maxbattle L%d %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
+				mb.BattleLevel, ps.pokemonName(mb.BattlePokemonID, mb.BattlePokemonForm),
+				mb.Name, mb.Latitude, mb.Longitude, areaNames(matchedAreas), len(matched))
 
 			enrichment := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb)
 
@@ -96,8 +97,9 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 				MatchedUsers:          matched,
 			})
 		} else {
-			l.Debugf("Maxbattle level %d pokemon %d at %s and 0 humans cared",
-				mb.BattleLevel, mb.BattlePokemonID, mb.Name)
+			l.Debugf("Maxbattle L%d %s at %s [%.3f,%.3f] and 0 humans cared",
+				mb.BattleLevel, ps.pokemonName(mb.BattlePokemonID, mb.BattlePokemonForm),
+				mb.Name, mb.Latitude, mb.Longitude)
 		}
 	}()
 	return nil

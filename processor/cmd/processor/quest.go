@@ -70,7 +70,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(quest.Latitude, quest.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Quest at %s and %d humans cared", quest.Name, len(matched))
+			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))
 
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "quest",

@@ -90,8 +90,8 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(gym.Latitude, gym.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Gym %s changed (team %d->%d) and %d humans cared",
-				gym.Name, oldState.TeamID, teamID, len(matched))
+			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
+				gym.Name, ps.teamName(oldState.TeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))
 
 			enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldState.TeamID, gym.SlotsAvailable, inBattle, false, gymID)
 

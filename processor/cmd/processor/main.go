@@ -162,6 +162,15 @@ func main() {
 				metrics.StateReloads.WithLabelValues("success").Inc()
 			}
 			metrics.StateReloadDuration.Observe(time.Since(start).Seconds())
+
+			// Log tileserver stats since last reload
+			if proc.enricher.StaticMap != nil {
+				ts := proc.enricher.StaticMap.GetStats()
+				if ts.Calls > 0 || ts.Errors > 0 {
+					log.Infof("Tile stats: %d calls avg:%dms errors:%d", ts.Calls, ts.AvgMs(), ts.Errors)
+				}
+				proc.enricher.StaticMap.ResetStats()
+			}
 		}
 	}()
 

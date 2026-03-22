@@ -149,8 +149,15 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				}
 			}
 
-			l.Infof("Pokemon %d appeared at [%.3f,%.3f] and %d humans cared",
-				pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude, len(matched))
+			if processed.Encountered {
+				l.Infof("%s{CP%d/IV%.0f%%} at [%.3f,%.3f] areas(%s) and %d humans cared",
+					ps.pokemonName(pokemon.PokemonID, pokemon.Form), processed.CP, processed.IV,
+					pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
+			} else {
+				l.Infof("%s appeared at [%.3f,%.3f] areas(%s) and %d humans cared",
+					ps.pokemonName(pokemon.PokemonID, pokemon.Form),
+					pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
+			}
 
 			baseEnrichment := ps.enricher.Pokemon(&pokemon, processed)
 
@@ -178,8 +185,15 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				MatchedUsers:          matched,
 			})
 		} else {
-			l.Debugf("Pokemon %d appeared at [%.3f,%.3f] and 0 humans cared",
-				pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude)
+			if processed.Encountered {
+				l.Debugf("%s{CP%d/IV%.0f%%} appeared at [%.3f,%.3f] and 0 humans cared",
+					ps.pokemonName(pokemon.PokemonID, pokemon.Form), processed.CP, processed.IV,
+					pokemon.Latitude, pokemon.Longitude)
+			} else {
+				l.Debugf("%s appeared at [%.3f,%.3f] and 0 humans cared",
+					ps.pokemonName(pokemon.PokemonID, pokemon.Form),
+					pokemon.Latitude, pokemon.Longitude)
+			}
 		}
 
 		// Handle pokemon change
@@ -194,7 +208,9 @@ func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessag
 	// Re-match with new state and send as pokemon_changed
 	oldIV := float64(change.Old.ATK+change.Old.DEF+change.Old.STA) / 0.45
 
-	l.Infof("Pokemon changed from %d to %d", change.Old.PokemonID, change.New.PokemonID)
+	l.Infof("Pokemon changed from %s to %s",
+		ps.pokemonName(change.Old.PokemonID, change.Old.Form),
+		ps.pokemonName(change.New.PokemonID, change.New.Form))
 
 	ps.sender.Send(webhook.OutboundPayload{
 		Type:    "pokemon_changed",
