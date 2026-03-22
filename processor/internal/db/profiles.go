@@ -14,10 +14,39 @@ type ProfileKey struct {
 }
 
 // ActiveHourEntry represents a time-of-day rule for auto-switching profiles.
+// Fields may be stored as numbers or strings in the DB JSON, so we use
+// a custom UnmarshalJSON that handles both.
 type ActiveHourEntry struct {
-	Day   int `json:"day"`   // ISO weekday: 1=Monday, 7=Sunday
-	Hours int `json:"hours"`
-	Mins  int `json:"mins"`
+	Day   int
+	Hours int
+	Mins  int
+}
+
+func (e *ActiveHourEntry) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		Day   json.Number `json:"day"`
+		Hours json.Number `json:"hours"`
+		Mins  json.Number `json:"mins"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	day, err := raw.Day.Int64()
+	if err != nil {
+		return err
+	}
+	hours, err := raw.Hours.Int64()
+	if err != nil {
+		return err
+	}
+	mins, err := raw.Mins.Int64()
+	if err != nil {
+		return err
+	}
+	e.Day = int(day)
+	e.Hours = int(hours)
+	e.Mins = int(mins)
+	return nil
 }
 
 // Profile represents a row from the profiles table.
