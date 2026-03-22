@@ -87,7 +87,7 @@ func (et *EncounterTracker) evictionLoop() {
 	}
 }
 
-const maxEncounterAge int64 = 4 * 60 * 60 // 4 hours in seconds
+const maxEncounterAge int64 = 1 * 60 * 60 // 1 hour in seconds
 
 func (et *EncounterTracker) evict() {
 	et.mu.Lock()
