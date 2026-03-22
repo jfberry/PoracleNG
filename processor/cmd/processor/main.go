@@ -369,14 +369,19 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		if len(cfg.Geocoding.TileserverSettings) > 0 {
 			smCfg.TileserverSettings = make(map[string]staticmap.TileTypeConfig, len(cfg.Geocoding.TileserverSettings))
 			for k, v := range cfg.Geocoding.TileserverSettings {
-				smCfg.TileserverSettings[k] = staticmap.TileTypeConfig{
-					Type:         v.Type,
-					IncludeStops: v.IncludeStops,
-					Width:        v.Width,
-					Height:       v.Height,
-					Zoom:         v.Zoom,
-					Pregenerate:  v.Pregenerate,
+				tc := staticmap.TileTypeConfig{
+					Type:   v.Type,
+					Width:  v.Width,
+					Height: v.Height,
+					Zoom:   v.Zoom,
 				}
+				if v.IncludeStops != nil {
+					tc.IncludeStops = v.IncludeStops
+				}
+				if v.Pregenerate != nil {
+					tc.Pregenerate = v.Pregenerate
+				}
+				smCfg.TileserverSettings[k] = tc
 			}
 		}
 

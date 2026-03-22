@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+func boolPtr(v bool) *bool { return &v }
+
 func TestLimits(t *testing.T) {
 	// Test the Web Mercator bounds calculation at a known location
 	// Canterbury, UK: 51.28, 1.08
@@ -149,7 +151,7 @@ func TestGetConfigForTileType(t *testing.T) {
 	r := New(Config{
 		Provider: "tileservercache",
 		TileserverSettings: map[string]TileTypeConfig{
-			"default": {Type: "staticMap", Width: 600, Height: 300, Zoom: 14, Pregenerate: true},
+			"default": {Type: "staticMap", Width: 600, Height: 300, Zoom: 14, Pregenerate: boolPtr(true)},
 			"raid":    {Width: 800, Height: 400},
 		},
 	})
@@ -190,7 +192,7 @@ func TestGetConfigForTileTypeStaticMapType(t *testing.T) {
 	if opts.Type != "myCustomTemplate" {
 		t.Errorf("type = %q, want myCustomTemplate", opts.Type)
 	}
-	if !opts.Pregenerate {
+	if !boolVal(opts.Pregenerate) {
 		t.Error("expected pregenerate=true")
 	}
 
@@ -199,7 +201,7 @@ func TestGetConfigForTileTypeStaticMapType(t *testing.T) {
 	if opts.Type != "nonPregenTemplate" {
 		t.Errorf("type = %q, want nonPregenTemplate", opts.Type)
 	}
-	if opts.Pregenerate {
+	if boolVal(opts.Pregenerate) {
 		t.Error("expected pregenerate=false (had * prefix)")
 	}
 }

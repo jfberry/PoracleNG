@@ -26,13 +26,23 @@ import (
 )
 
 // TileTypeConfig holds per-tile-type configuration for tileservercache.
+// Boolean fields use *bool so that empty/absent config sections don't
+// override defaults (nil = not set, non-nil = explicitly set).
 type TileTypeConfig struct {
-	Type         string `json:"type" toml:"type"`                   // staticMap or multiStaticMap
-	IncludeStops bool   `json:"includeStops" toml:"include_stops"`
-	Width        int    `json:"width" toml:"width"`
-	Height       int    `json:"height" toml:"height"`
-	Zoom         int    `json:"zoom" toml:"zoom"`
-	Pregenerate  bool   `json:"pregenerate" toml:"pregenerate"`
+	Type         string
+	IncludeStops *bool
+	Width        int
+	Height       int
+	Zoom         int
+	Pregenerate  *bool
+}
+
+// boolVal returns the value of a *bool, defaulting to false if nil.
+func boolVal(b *bool) bool {
+	if b == nil {
+		return false
+	}
+	return *b
 }
 
 // Config holds all static map configuration.
@@ -205,7 +215,7 @@ func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon
 	tileOpts := r.getConfigForTileType(maptype)
 
 	// If includeStops and pregenerate, fetch nearby stops from scanner
-	if tileOpts.IncludeStops && tileOpts.Pregenerate && r.config.Scanner != nil {
+	if boolVal(tileOpts.IncludeStops) && boolVal(tileOpts.Pregenerate) && r.config.Scanner != nil {
 		bounds := limits(lat, lon, tileOpts.Width, tileOpts.Height, tileOpts.Zoom)
 		stops, err := r.config.Scanner.GetStopData(bounds[0], bounds[1], bounds[2], bounds[3])
 		if err != nil {
@@ -240,7 +250,7 @@ func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon
 		return ""
 	}
 
-	if !tileOpts.Pregenerate {
+	if !boolVal(tileOpts.Pregenerate) {
 		return r.getTileURL(maptype, filterFields(data, keys), tileOpts.Type)
 	}
 	// For pregenerate, include nearbyStops/uiconPokestopUrl plus the pregenKeys
@@ -258,13 +268,14 @@ func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon
 // config for the given alert type.
 func (r *Resolver) getConfigForTileType(maptype string) TileTypeConfig {
 	// Start with defaults
+	t, f := true, false
 	opts := TileTypeConfig{
 		Type:        "staticMap",
-		IncludeStops: false,
+		IncludeStops: &f,
 		Width:        500,
 		Height:       250,
 		Zoom:         15,
-		Pregenerate:  true,
+		Pregenerate:  &t,
 	}
 
 	// Apply global default overrides
@@ -281,10 +292,10 @@ func (r *Resolver) getConfigForTileType(maptype string) TileTypeConfig {
 		if smType, ok := r.config.StaticMapType[configTemplate]; ok {
 			if strings.HasPrefix(smType, "*") {
 				opts.Type = smType[1:]
-				opts.Pregenerate = false
+				opts.Pregenerate = &f
 			} else {
 				opts.Type = smType
-				opts.Pregenerate = true
+				opts.Pregenerate = &t
 			}
 		}
 	}
@@ -297,7 +308,7 @@ func (r *Resolver) getConfigForTileType(maptype string) TileTypeConfig {
 	return opts
 }
 
-// mergeOpts applies non-zero values from src to dst.
+// mergeOpts applies non-zero/non-nil values from src to dst.
 func mergeOpts(dst *TileTypeConfig, src TileTypeConfig) {
 	if src.Type != "" {
 		dst.Type = src.Type
@@ -311,9 +322,12 @@ func mergeOpts(dst *TileTypeConfig, src TileTypeConfig) {
 	if src.Zoom > 0 {
 		dst.Zoom = src.Zoom
 	}
-	// Booleans are always copied (they default to false which is meaningful)
-	dst.IncludeStops = src.IncludeStops
-	dst.Pregenerate = src.Pregenerate
+	if src.IncludeStops != nil {
+		dst.IncludeStops = src.IncludeStops
+	}
+	if src.Pregenerate != nil {
+		dst.Pregenerate = src.Pregenerate
+	}
 }
 
 // getTileURL builds a non-pregenerated tile URL with query parameters.

@@ -261,13 +261,14 @@ type GeocodingConfig struct {
 }
 
 // TileserverConfig holds per-tile-type settings under [geocoding.tileserver_settings.*].
+// Booleans use *bool so empty TOML sections don't override defaults.
 type TileserverConfig struct {
 	Type         string `toml:"type"`
-	IncludeStops bool   `toml:"include_stops"`
+	IncludeStops *bool  `toml:"include_stops"`
 	Width        int    `toml:"width"`
 	Height       int    `toml:"height"`
 	Zoom         int    `toml:"zoom"`
-	Pregenerate  bool   `toml:"pregenerate"`
+	Pregenerate  *bool  `toml:"pregenerate"`
 }
 
 // FallbacksConfig holds fallback URLs from the [fallbacks] section.
