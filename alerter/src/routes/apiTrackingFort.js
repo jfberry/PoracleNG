@@ -3,7 +3,7 @@ const { diff } = require('deep-object-diff')
 const trackedCommand = require('../lib/poracleMessage/commands/tracked')
 
 module.exports = async (fastify, options) => {
-	fastify.get('/api/tracking/gym/:id', options, async (req) => {
+	fastify.get('/api/tracking/fort/:id', options, async (req) => {
 		fastify.logger.info(`API: ${req.ip} ${req.routeOptions.method} ${req.routeOptions.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
@@ -24,17 +24,17 @@ module.exports = async (fastify, options) => {
 		const language = human.language || fastify.config.general.locale
 		const translator = fastify.translatorFactory.Translator(language)
 
-		const gyms = await fastify.query.selectAllQuery('gym', { id: req.params.id, profile_no: req.query.profile_no || human.current_profile_no })
+		const forts = await fastify.query.selectAllQuery('forts', { id: req.params.id, profile_no: req.query.profile_no || human.current_profile_no })
 
-		const gymWithDesc = await Promise.all(gyms.map(async (row) => ({ ...row, description: await trackedCommand.gymRowText(fastify.config, translator, fastify.GameData, row, fastify.scannerQuery) })))
+		const fortWithDesc = forts.map((row) => ({ ...row, description: trackedCommand.fortUpdateRowText(fastify.config, translator, fastify.GameData, row) }))
 
 		return {
 			status: 'ok',
-			gym: gymWithDesc,
+			fort: fortWithDesc,
 		}
 	})
 
-	fastify.delete('/api/tracking/gym/:id/byUid/:uid', options, async (req) => {
+	fastify.delete('/api/tracking/fort/:id/byUid/:uid', options, async (req) => {
 		fastify.logger.info(`API: ${req.ip} ${req.routeOptions.method} ${req.routeOptions.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
@@ -45,7 +45,7 @@ module.exports = async (fastify, options) => {
 			return { status: 'authError', reason: 'incorrect or missing api secret' }
 		}
 
-		await fastify.query.deleteQuery('gym', { id: req.params.id, uid: req.params.uid })
+		await fastify.query.deleteQuery('forts', { id: req.params.id, uid: req.params.uid })
 		if (fastify.triggerReloadAlerts) fastify.triggerReloadAlerts()
 
 		return {
@@ -53,7 +53,7 @@ module.exports = async (fastify, options) => {
 		}
 	})
 
-	fastify.post('/api/tracking/gym/:id', options, async (req) => {
+	fastify.post('/api/tracking/fort/:id', options, async (req) => {
 		fastify.logger.info(`API: ${req.ip} ${req.routeOptions.method} ${req.routeOptions.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
@@ -84,27 +84,36 @@ module.exports = async (fastify, options) => {
 
 		const defaultTo = ((value, x) => ((value === undefined) ? x : value))
 
-		const insert = insertReq.map((row) => {
-			const team = +row.team
-			if (row.team === undefined || team < 0 || team > 4) {
-				throw new Error('Invalid team')
+		const validFortTypes = ['pokestop', 'gym', 'everything']
+
+		const insert = []
+		for (const row of insertReq) {
+			const fortType = row.fort_type || 'everything'
+			if (!validFortTypes.includes(fortType)) {
+				return { status: 'error', message: `Invalid fort_type: ${fortType} (must be pokestop, gym, or everything)` }
 			}
-			return {
+
+			let changeTypes = row.change_types
+			if (Array.isArray(changeTypes)) {
+				changeTypes = JSON.stringify(changeTypes)
+			} else if (changeTypes === undefined || changeTypes === null) {
+				changeTypes = '[]'
+			}
+
+			insert.push({
 				id,
 				profile_no: currentProfileNo,
 				ping: '',
 				template: (row.template || fastify.config.general.defaultTemplateName).toString(),
 				distance: +defaultTo(row.distance, 0),
-				clean: +defaultTo(row.clean, 0),
-				team,
-				slot_changes: +defaultTo(row.slot_changes, 0),
-				battle_changes: +defaultTo(row.battle_changes, 0),
-				gym_id: row.gym_id,
-			}
-		})
+				fort_type: fortType,
+				include_empty: !!defaultTo(row.include_empty, false),
+				change_types: changeTypes,
+			})
+		}
 
 		try {
-			const tracked = await fastify.query.selectAllQuery('gym', { id, profile_no: currentProfileNo })
+			const tracked = await fastify.query.selectAllQuery('forts', { id, profile_no: currentProfileNo })
 
 			const updates = []
 			const alreadyPresent = []
@@ -112,17 +121,16 @@ module.exports = async (fastify, options) => {
 			for (let i = insert.length - 1; i >= 0; i--) {
 				const toInsert = insert[i]
 
-				for (const existing of tracked.filter((x) => x.team === toInsert.team)) {
+				for (const existing of tracked.filter((x) => x.fort_type === toInsert.fort_type)) {
 					const differences = diff(existing, toInsert)
 
 					switch (Object.keys(differences).length) {
 						case 1:		// No differences (only UID)
-							// No need to insert
 							alreadyPresent.push(toInsert)
 							insert.splice(i, 1)
 							break
 						case 2:		// One difference (something + uid)
-							if (Object.keys(differences).some((x) => ['distance', 'template', 'clean', 'slot_changes', 'battle_changes'].includes(x))) {
+							if (Object.keys(differences).some((x) => ['distance', 'template', 'include_empty', 'change_types'].includes(x))) {
 								updates.push({
 									...toInsert,
 									uid: existing.uid,
@@ -142,18 +150,18 @@ module.exports = async (fastify, options) => {
 				message = translator.translateFormat('I have made a lot of changes. See {0}{1} for details', '!', /* util.prefix, */ translator.translate('tracked'))
 			} else {
 				for (const i of alreadyPresent) {
-					message = message.concat(translator.translate('Unchanged: '), await trackedCommand.gymRowText(fastify.config, translator, fastify.GameData, i, fastify.scannerQuery), '\n')
+					message = message.concat(translator.translate('Unchanged: '), trackedCommand.fortUpdateRowText(fastify.config, translator, fastify.GameData, i), '\n')
 				}
 				for (const i of updates) {
-					message = message.concat(translator.translate('Updated: '), await trackedCommand.gymRowText(fastify.config, translator, fastify.GameData, i, fastify.scannerQuery), '\n')
+					message = message.concat(translator.translate('Updated: '), trackedCommand.fortUpdateRowText(fastify.config, translator, fastify.GameData, i), '\n')
 				}
 				for (const i of insert) {
-					message = message.concat(translator.translate('New: '), await trackedCommand.gymRowText(fastify.config, translator, fastify.GameData, i, fastify.scannerQuery), '\n')
+					message = message.concat(translator.translate('New: '), trackedCommand.fortUpdateRowText(fastify.config, translator, fastify.GameData, i), '\n')
 				}
 			}
 
 			await fastify.query.deleteWhereInQuery(
-				'gym',
+				'forts',
 				{
 					id,
 					profile_no: currentProfileNo,
@@ -162,11 +170,9 @@ module.exports = async (fastify, options) => {
 				'uid',
 			)
 
-			const insertResult = await fastify.query.insertQuery('gym', [...insert, ...updates], 'uid')
+			const insertResult = await fastify.query.insertQuery('forts', [...insert, ...updates], 'uid')
 			const newUids = Array.isArray(insertResult) ? insertResult.map((r) => (typeof r === 'object' ? r.uid : r)) : []
 			if (fastify.triggerReloadAlerts) fastify.triggerReloadAlerts()
-
-			// Send message to user
 
 			if (!silent) {
 				const data = [{
@@ -206,7 +212,7 @@ module.exports = async (fastify, options) => {
 		}
 	})
 
-	fastify.post('/api/tracking/gym/:id/delete', options, async (req) => {
+	fastify.post('/api/tracking/fort/:id/delete', options, async (req) => {
 		fastify.logger.info(`API: ${req.ip} ${req.routeOptions.method} ${req.routeOptions.url}`)
 
 		if (fastify.config.server.ipWhitelist.length && !fastify.config.server.ipWhitelist.includes(req.ip)) return { webserver: 'unhappy', reason: `ip ${req.ip} not in whitelist` }
@@ -220,7 +226,7 @@ module.exports = async (fastify, options) => {
 		let deleteUids = req.body
 		if (!Array.isArray(deleteUids)) deleteUids = [deleteUids]
 
-		await fastify.query.deleteWhereInQuery('gym', {
+		await fastify.query.deleteWhereInQuery('forts', {
 			id: req.params.id,
 		}, deleteUids, 'uid')
 		if (fastify.triggerReloadAlerts) fastify.triggerReloadAlerts()
