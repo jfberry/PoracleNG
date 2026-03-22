@@ -215,6 +215,8 @@ type ProcessorService struct {
 	translations    *i18n.Bundle
 	workerPool      chan struct{}
 	wg              sync.WaitGroup
+	ctx             context.Context
+	cancel          context.CancelFunc
 }
 
 func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *sqlx.DB) *ProcessorService {
@@ -394,10 +396,14 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		ShameChannel:        cfg.AlertLimits.ShameChannel,
 	})
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	return &ProcessorService{
 		cfg:      cfg,
 		stateMgr: stateMgr,
 		database: database,
+		ctx:      ctx,
+		cancel:   cancel,
 		enricher: enricher,
 		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
 		weather:      weatherTracker,
@@ -430,6 +436,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 }
 
 func (ps *ProcessorService) Close() {
+	ps.cancel()
 	ps.wg.Wait()
 	ps.sender.Close()
 	ps.duplicates.Close()

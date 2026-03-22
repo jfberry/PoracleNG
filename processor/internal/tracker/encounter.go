@@ -15,6 +15,7 @@ type EncounterState struct {
 	DEF           int
 	STA           int
 	DisappearTime int64
+	InsertedAt    int64 // unix timestamp when this entry was first created
 }
 
 // EncounterChange holds old and new state when a change is detected.
@@ -49,6 +50,7 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState) (
 	if !exists {
 		// First sighting
 		cp := newState
+		cp.InsertedAt = time.Now().Unix()
 		et.entries[encounterID] = &cp
 		return true, nil
 	}
@@ -85,13 +87,16 @@ func (et *EncounterTracker) evictionLoop() {
 	}
 }
 
+const maxEncounterAge int64 = 4 * 60 * 60 // 4 hours in seconds
+
 func (et *EncounterTracker) evict() {
 	et.mu.Lock()
 	defer et.mu.Unlock()
 
 	now := time.Now().Unix()
 	for id, state := range et.entries {
-		if state.DisappearTime > 0 && now > state.DisappearTime+300 {
+		if (state.DisappearTime > 0 && now > state.DisappearTime+300) ||
+			(state.InsertedAt > 0 && now-state.InsertedAt > maxEncounterAge) {
 			delete(et.entries, id)
 		}
 	}

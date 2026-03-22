@@ -38,6 +38,13 @@ type Human struct {
 	Language         string
 	CurrentProfileNo int
 	BlockedAlerts    string
+	BlockedAlertsSet map[string]bool // parsed from BlockedAlerts JSON
+}
+
+// SetBlockedAlerts sets both the raw BlockedAlerts string and the parsed BlockedAlertsSet.
+func (h *Human) SetBlockedAlerts(jsonStr string) {
+	h.BlockedAlerts = jsonStr
+	h.BlockedAlertsSet = parseBlockedAlerts(jsonStr)
 }
 
 // LoadHumans loads all enabled, non-admin-disabled humans from the database.
@@ -65,6 +72,7 @@ func LoadHumans(db *sqlx.DB) (map[string]*Human, error) {
 			Language:         r.Language.String,
 			CurrentProfileNo: r.CurrentProfileNo,
 			BlockedAlerts:    r.BlockedAlerts.String,
+			BlockedAlertsSet: parseBlockedAlerts(r.BlockedAlerts.String),
 			Area:             parseAndNormalizeAreas(r.Area),
 		}
 		if r.AreaRestriction.Valid {
@@ -73,6 +81,24 @@ func LoadHumans(db *sqlx.DB) (map[string]*Human, error) {
 		humans[h.ID] = h
 	}
 	return humans, nil
+}
+
+func parseBlockedAlerts(jsonStr string) map[string]bool {
+	if jsonStr == "" {
+		return nil
+	}
+	var alerts []string
+	if err := json.Unmarshal([]byte(jsonStr), &alerts); err != nil {
+		return nil
+	}
+	if len(alerts) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(alerts))
+	for _, a := range alerts {
+		set[strings.ToLower(a)] = true
+	}
+	return set
 }
 
 func parseAndNormalizeAreas(jsonStr string) []string {

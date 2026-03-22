@@ -212,7 +212,7 @@ func TestGymSpecificGym(t *testing.T) {
 
 func TestGymBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = `["gym","raid"]`
+	human.SetBlockedAlerts(`["gym","raid"]`)
 	gym := &db.GymTracking{
 		ID: "user1", ProfileNo: 1, Team: 4,
 		Distance: 0, Template: "1",
@@ -235,7 +235,7 @@ func TestGymBlockedAlerts(t *testing.T) {
 // Verify that blocking "specificgym" does NOT block regular gym alerts
 func TestGymBlockedSpecificGymNotGym(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = `["specificgym"]`
+	human.SetBlockedAlerts(`["specificgym"]`)
 	gym := &db.GymTracking{
 		ID: "user1", ProfileNo: 1, Team: 4,
 		Distance: 0, Template: "1",

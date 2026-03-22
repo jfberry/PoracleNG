@@ -94,12 +94,14 @@ func (s *Sender) flush() {
 	resp, err := s.client.Post(s.alerterURL+"/api/matched", "application/json", bytes.NewReader(data))
 	metrics.SenderFlushDuration.Observe(time.Since(start).Seconds())
 
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		log.Errorf("Failed to send to alerter (%d items): %s", len(toSend), err)
 		metrics.SenderBatches.WithLabelValues("error").Inc()
 		return
 	}
-	resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
 		log.Errorf("Alerter returned status %d (%d items)", resp.StatusCode, len(toSend))

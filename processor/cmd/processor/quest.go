@@ -14,7 +14,11 @@ import (
 )
 
 func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
-	ps.workerPool <- struct{}{}
+	select {
+	case ps.workerPool <- struct{}{}:
+	case <-ps.ctx.Done():
+		return nil
+	}
 	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {

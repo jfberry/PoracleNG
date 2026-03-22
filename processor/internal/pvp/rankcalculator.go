@@ -11,6 +11,7 @@ type LeagueRank struct {
 	Rank int   `json:"rank"`
 	CP   int   `json:"cp"`
 	Caps []int `json:"caps,omitempty"`
+	Form int   `json:"form,omitempty"`
 }
 
 // PVPResult holds processed PVP data for a pokemon.
@@ -153,15 +154,13 @@ func calculateLeague(league int, leagueData []webhook.PVPRankEntry, capsConsider
 				Rank: stats.Rank,
 				CP:   stats.CP,
 				Caps: evoCaps,
+				Form: stats.Form,
 			}
 
-			form := stats.Form
 			if _, ok := evoData[stats.Pokemon]; !ok {
 				evoData[stats.Pokemon] = make(map[int][]LeagueRank)
 			}
 			evoData[stats.Pokemon][league] = append(evoData[stats.Pokemon][league], evoRank)
-			// Store form in the rank entry for matching
-			_ = form
 		}
 	}
 

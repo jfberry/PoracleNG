@@ -432,7 +432,7 @@ func TestPokemonMatchPVPEvolutionDirect(t *testing.T) {
 
 func TestPokemonMatchBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = `["monster","pvp"]`
+	human.SetBlockedAlerts(`["monster","pvp"]`)
 
 	monster := makeMonster("user1", 25)
 

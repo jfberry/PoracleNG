@@ -219,7 +219,7 @@ func TestEggMatchLevel90(t *testing.T) {
 
 func TestRaidBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = `["raid"]`
+	human.SetBlockedAlerts(`["raid"]`)
 	raid := &db.RaidTracking{
 		ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
 		Team: 4, Exclusive: false, Form: 0, Evolution: 9000,
@@ -388,7 +388,7 @@ func TestRaidMatchWrongLevel(t *testing.T) {
 
 func TestRaidSpecificGymBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = `["specificgym"]`
+	human.SetBlockedAlerts(`["specificgym"]`)
 	raid := &db.RaidTracking{
 		ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
 		Team: 4, Exclusive: false, Form: 0, Evolution: 9000,
@@ -413,7 +413,7 @@ func TestRaidSpecificGymBlockedAlerts(t *testing.T) {
 
 func TestEggBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = `["egg"]`
+	human.SetBlockedAlerts(`["egg"]`)
 	egg := &db.EggTracking{
 		ID: "user1", ProfileNo: 1, Level: 5,
 		Team: 4, Exclusive: false,
