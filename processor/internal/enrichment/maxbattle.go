@@ -39,7 +39,10 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	e.addMapURLs(m, lat, lon, "pokestops", mb.ID)
 
 	// Static map tile
-	e.addStaticMap(m, "maxbattle", lat, lon)
+	e.addStaticMap(m, "maxbattle", lat, lon, map[string]any{
+		"battle_level":      mb.BattleLevel,
+		"battle_pokemon_id": mb.BattlePokemonID,
+	})
 
 	// Game data enrichment
 	if e.GameData != nil && mb != nil {

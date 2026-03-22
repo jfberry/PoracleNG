@@ -49,7 +49,7 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.For
 		mapLat = position.Latitude
 		mapLon = position.Longitude
 	}
-	e.addStaticMap(m, "fort-update", mapLat, mapLon)
+	e.addStaticMap(m, "fort-update", mapLat, mapLon, nil)
 
 	return m
 }

@@ -83,7 +83,11 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 	e.addMapURLs(m, raid.Latitude, raid.Longitude, "gyms", raid.GymID)
 
 	// Static map tile
-	e.addStaticMap(m, "raid", raid.Latitude, raid.Longitude)
+	e.addStaticMap(m, "raid", raid.Latitude, raid.Longitude, map[string]any{
+		"pokemon_id": raid.PokemonID,
+		"form":       raid.Form,
+		"level":      raid.Level,
+	})
 
 	// Game data enrichment
 	if e.GameData != nil {

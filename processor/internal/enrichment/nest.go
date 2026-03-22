@@ -71,7 +71,12 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
 		mapLat = autoLat
 		mapLon = m["map_longitude"].(float64)
 	}
-	e.addStaticMap(m, "nest", mapLat, mapLon)
+	// Static map tile
+	e.addStaticMap(m, "nest", mapLat, mapLon, map[string]any{
+		"pokemon_id":      nest.PokemonID,
+		"form":            nest.Form,
+		"pokemonSpawnAvg": nest.PokemonAvg,
+	})
 
 	// Game data enrichment
 	if e.GameData != nil {

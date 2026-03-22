@@ -48,7 +48,11 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	e.addMapURLs(m, lat, lon, "pokestops", pokestopID)
 
 	// Static map tile
-	e.addStaticMap(m, "pokestop", lat, lon)
+	e.addStaticMap(m, "pokestop", lat, lon, map[string]any{
+		"gruntTypeId":   gruntTypeID,
+		"displayTypeId": displayType,
+		"lureTypeId":    lureID,
+	})
 
 	// Grunt data
 	if e.GameData != nil {

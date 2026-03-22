@@ -6,7 +6,7 @@ import (
 )
 
 // Weather builds enrichment fields for a weather change event.
-func (e *Enricher) Weather(lat, lon float64, showAlteredPokemonStaticMap bool) map[string]any {
+func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, showAlteredPokemonStaticMap bool) map[string]any {
 	m := make(map[string]any)
 
 	nextHour := geo.NextHourBoundary()
@@ -19,7 +19,9 @@ func (e *Enricher) Weather(lat, lon float64, showAlteredPokemonStaticMap bool) m
 
 	// Generate base weather tile (used when showAlteredPokemonStaticMap is false)
 	if !showAlteredPokemonStaticMap {
-		e.addStaticMap(m, "weather", lat, lon)
+		e.addStaticMap(m, "weather", lat, lon, map[string]any{
+			"gameplay_condition": gameplayCondition,
+		})
 	}
 
 	return m
@@ -98,7 +100,9 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 			m["activePokemons"] = enrichedPokemon
 			lat, _ := base["latitude"].(float64)
 			lon, _ := base["longitude"].(float64)
-			e.addStaticMap(m, "weather", lat, lon)
+			e.addStaticMap(m, "weather", lat, lon, map[string]any{
+				"gameplay_condition": newWeatherID,
+			})
 		}
 	}
 

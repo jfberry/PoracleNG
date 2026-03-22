@@ -161,7 +161,21 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	}
 
 	// Static map tile
-	e.addStaticMap(m, "monster", pokemon.Latitude, pokemon.Longitude)
+	weather := pokemon.BoostedWeather
+	if weather == 0 {
+		weather = pokemon.Weather
+	}
+	e.addStaticMap(m, "monster", pokemon.Latitude, pokemon.Longitude, map[string]any{
+		"pokemon_id":         pokemon.PokemonID,
+		"display_pokemon_id": pokemon.DisplayPokemonID,
+		"pokemonId":          pokemon.PokemonID,
+		"costume":            pokemon.Costume,
+		"form":               pokemon.Form,
+		"verified":           pokemon.DisappearTimeVerified || pokemon.Verified,
+		"confirmedTime":      pokemon.DisappearTimeVerified || pokemon.Verified,
+		"weather":            weather,
+		"seen_type":          pokemon.SeenType,
+	})
 
 	return m
 }

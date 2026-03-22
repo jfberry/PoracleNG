@@ -122,16 +122,24 @@ func normalizeTrailingSlash(url string) string {
 }
 
 // addStaticMap generates a static map tile URL and adds it to the enrichment map.
-// Sets latitude/longitude on the map before generating, then generates the tile
-// using only the fields required by the tileserver for this alert type.
-func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64) {
+// It builds a merged view of enrichment fields plus explicit webhook fields for the
+// tileserver call, without polluting the enrichment map with raw webhook data.
+func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any) {
 	if e.StaticMap == nil {
 		return
 	}
-	m["latitude"] = lat
-	m["longitude"] = lon
+	// Build tileserver payload from enrichment + webhook fields
+	merged := make(map[string]any, len(m)+len(webhookFields)+2)
+	for k, v := range m {
+		merged[k] = v
+	}
+	for k, v := range webhookFields {
+		merged[k] = v
+	}
+	merged["latitude"] = lat
+	merged["longitude"] = lon
 	keys, pregenKeys := staticMapFieldsForType(maptype)
-	url := e.StaticMap.GetStaticMapURL(maptype, m, keys, pregenKeys)
+	url := e.StaticMap.GetStaticMapURL(maptype, merged, keys, pregenKeys)
 	m["staticMap"] = url
 	m["staticmap"] = url // deprecated alias
 }
