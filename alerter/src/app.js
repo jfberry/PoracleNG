@@ -226,12 +226,12 @@ const GymController = require('./controllers/gym')
 const NestController = require('./controllers/nest')
 const FortUpdateController = require('./controllers/fortupdate')
 const MaxbattleController = require('./controllers/maxbattle')
-const CachingGeocoder = require('./lib/cachingGeocoder')
+// Geocoding is now handled by the Go processor
 
 const mustache = require('./lib/handlebars')()
 
 const matchedShinyPossible = new ShinyPossible(log)
-const cachingGeocoder = new CachingGeocoder(config, log, mustache, 'geoCache-matched')
+const cachingGeocoder = null // geocoding handled by processor
 
 const eventParsers = {
 	shinyPossible: matchedShinyPossible,
@@ -422,7 +422,7 @@ function resetAllStats() {
 	for (const ctrl of allControllers) {
 		if (ctrl.tileserverPregen) ctrl.tileserverPregen.resetStats()
 	}
-	cachingGeocoder.resetStats()
+	// geocoder stats handled by processor
 }
 
 process.on('SIGUSR2', () => {
@@ -481,13 +481,11 @@ async function currentStatus() {
 	const mainMemMb = Math.round(mainMem.heapUsed / 1048576)
 	const mainRssMb = Math.round(mainMem.rss / 1048576)
 
-	const geoStats = cachingGeocoder.getStats()
 	const tileStats = aggregateTileStats()
 	const eps = +(eventsProcessed / 60).toFixed(1)
 	eventsProcessed = 0
 
 	let matchedInfo = ` | Matched: ${eps}/s q:${hookQueue.length} a:${alarmProcessor.running.length}`
-	matchedInfo += ` geo(${geoStats.calls} avg:${geoStats.avgMs}ms fly:${geoStats.inFlight} hit:${geoStats.cacheHits} err:${geoStats.errors})`
 	matchedInfo += ` tile(${tileStats.calls} avg:${tileStats.avgMs}ms fly:${tileStats.inFlight} err:${tileStats.errors})`
 
 	resetAllStats()
