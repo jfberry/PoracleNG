@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	_ "time/tzdata" // embed IANA timezone database as fallback
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -163,14 +165,23 @@ func main() {
 			}
 			metrics.StateReloadDuration.Observe(time.Since(start).Seconds())
 
-			// Log tileserver stats since last reload
+			// Periodic status summary
+			webhooks := metrics.IntervalWebhooks.Swap(0)
+			matched := metrics.IntervalMatched.Swap(0)
+			intervalSecs := float64(cfg.Tuning.ReloadIntervalSecs)
+			webhooksPerMin := float64(webhooks) / intervalSecs * 60
+			matchedPerMin := float64(matched) / intervalSecs * 60
+
+			statusParts := []string{
+				fmt.Sprintf("Webhooks: %.0f/min", webhooksPerMin),
+				fmt.Sprintf("Matched: %.0f/min", matchedPerMin),
+			}
 			if proc.enricher.StaticMap != nil {
 				ts := proc.enricher.StaticMap.GetStats()
-				if ts.Calls > 0 || ts.Errors > 0 {
-					log.Infof("Tile stats: %d calls avg:%dms errors:%d", ts.Calls, ts.AvgMs(), ts.Errors)
-				}
+				statusParts = append(statusParts, fmt.Sprintf("Tiles: %d calls avg:%dms err:%d", ts.Calls, ts.AvgMs(), ts.Errors))
 				proc.enricher.StaticMap.ResetStats()
 			}
+			log.Infof("[Status] %s", strings.Join(statusParts, " | "))
 		}
 	}()
 

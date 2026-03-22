@@ -70,6 +70,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		metrics.WebhooksReceived.WithLabelValues(hook.Type).Inc()
+		metrics.IntervalWebhooks.Add(1)
 
 		switch hook.Type {
 		case "pokemon":

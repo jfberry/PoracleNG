@@ -1,8 +1,16 @@
 package metrics
 
 import (
+	"sync/atomic"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+// IntervalCounters tracks counts between periodic log resets.
+var (
+	IntervalWebhooks atomic.Int64
+	IntervalMatched  atomic.Int64
 )
 
 var (

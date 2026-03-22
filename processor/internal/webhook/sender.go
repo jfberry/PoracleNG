@@ -45,6 +45,7 @@ func (s *Sender) Send(payload OutboundPayload) {
 	s.mu.Unlock()
 
 	metrics.SenderQueueDepth.Set(float64(depth))
+	metrics.IntervalMatched.Add(1)
 
 	if shouldFlush {
 		s.flush()
