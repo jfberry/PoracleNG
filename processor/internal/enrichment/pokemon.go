@@ -396,14 +396,14 @@ func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr
 			}
 
 			entry := map[string]any{
-				"rank":      rank.Rank,
-				"cp":        rank.CP,
-				"level":     rank.Level,
-				"cap":       rank.Cap,
-				"capped":    rank.Capped,
-				"pokemon":   rank.Pokemon,
-				"form":      rank.Form,
-				"evolution": rank.Evolution,
+				"rank":       rank.Rank,
+				"cp":         rank.CP,
+				"level":      rank.Level,
+				"cap":        rank.Cap,
+				"capped":     rank.Capped,
+				"pokemon":    rank.Pokemon,
+				"form":       rank.Form,
+				"evolution":  rank.Evolution,
 				"percentage": rank.Percentage,
 			}
 
@@ -532,6 +532,7 @@ func computeSeenType(pokemon *webhook.PokemonWebhook) string {
 		}
 		return ""
 	}
+	/* This is to support RDM */
 	if pokemon.PokestopID == "None" && pokemon.SpawnpointID == "None" {
 		return "cell"
 	}

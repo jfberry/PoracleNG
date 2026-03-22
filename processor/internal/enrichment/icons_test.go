@@ -102,9 +102,9 @@ func TestRaidIconURLs_AltAndSticker(t *testing.T) {
 		Pokemon: map[string]bool{"150.webp": true, "0.webp": true},
 	})
 	e := &Enricher{
-		ImgUicons:     testUicons(),
-		ImgUiconsAlt:  alt,
-		StickerUicons: sticker,
+		ImgUicons:       testUicons(),
+		ImgUiconsAlt:    alt,
+		StickerUicons:   sticker,
 		WeatherProvider: &mockWeather{},
 		TimeLayout:      "15:04:05",
 	}
@@ -155,9 +155,9 @@ func TestMaxbattleIconURLs_NoPokemon(t *testing.T) {
 	e := newTestEnricher()
 
 	mb := &webhook.MaxbattleWebhook{
-		ID:               "mb1",
-		BattlePokemonID:  0,
-		BattleEnd:        time.Now().Add(30 * time.Minute).Unix(),
+		ID:              "mb1",
+		BattlePokemonID: 0,
+		BattleEnd:       time.Now().Add(30 * time.Minute).Unix(),
 	}
 	m := e.Maxbattle(52.5, 13.4, mb.BattleEnd, mb)
 
@@ -329,8 +329,8 @@ func TestWeatherIconURLs(t *testing.T) {
 	e.Translations = newTestBundle()
 	e.GameData = newTestGameData()
 
-	base := e.Weather(52.5, 13.4)
-	m := e.WeatherTranslate(base, 1, 3, nil, "en")
+	base := e.Weather(52.5, 13.4, false)
+	m := e.WeatherTranslate(base, 1, 3, nil, "en", false)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -348,8 +348,8 @@ func TestWeatherIconURLs_NilUicons(t *testing.T) {
 		Translations:    newTestBundle(),
 		GameData:        newTestGameData(),
 	}
-	base := e.Weather(52.5, 13.4)
-	m := e.WeatherTranslate(base, 1, 3, nil, "en")
+	base := e.Weather(52.5, 13.4, false)
+	m := e.WeatherTranslate(base, 1, 3, nil, "en", false)
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")
