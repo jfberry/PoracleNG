@@ -108,7 +108,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 
 		// Build weather change message
 		msg, _ := json.Marshal(change)
-		enrichment := ps.enricher.Weather(change.Latitude, change.Longitude)
+		enrichment := ps.enricher.Weather(change.Latitude, change.Longitude, ps.cfg.Weather.ShowAlteredPokemonStaticMap)
 
 		// Per-language enrichment for weather names and active pokemon names
 		var perLang map[string]map[string]any
@@ -133,6 +133,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 					change.GameplayCondition,
 					activePokemons,
 					lang,
+					ps.cfg.Weather.ShowAlteredPokemonStaticMap,
 				)
 			}
 		}

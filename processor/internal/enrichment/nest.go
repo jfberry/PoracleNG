@@ -1,7 +1,13 @@
 package enrichment
 
 import (
+	"encoding/json"
+	"math"
+
+	log "github.com/sirupsen/logrus"
+
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -29,10 +35,43 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
 		m["stickerUrl"] = e.StickerUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
 	}
 
-	// Static map tile
-	m["latitude"] = nest.Latitude
-	m["longitude"] = nest.Longitude
-	e.addStaticMap(m, "nest")
+	// Autoposition from polygon paths
+	if len(nest.PolyPath) > 0 {
+		var rawPolygons [][][2]float64
+		if err := json.Unmarshal(nest.PolyPath, &rawPolygons); err != nil {
+			log.Debugf("nest: failed to parse poly_path: %s", err)
+		} else {
+			var polygons [][]staticmap.LatLon
+			for _, rawPoly := range rawPolygons {
+				var poly []staticmap.LatLon
+				for _, pt := range rawPoly {
+					poly = append(poly, staticmap.LatLon{
+						Latitude:  pt[0],
+						Longitude: pt[1],
+					})
+				}
+				polygons = append(polygons, poly)
+			}
+
+			position := staticmap.Autoposition(staticmap.AutopositionShape{
+				Polygons: polygons,
+			}, 500, 250, 1.25, 17.5)
+
+			if position != nil {
+				m["zoom"] = math.Min(position.Zoom, 16)
+				m["map_latitude"] = position.Latitude
+				m["map_longitude"] = position.Longitude
+			}
+		}
+	}
+
+	// Static map tile — use autopositioned center if available, else original coords
+	mapLat, mapLon := nest.Latitude, nest.Longitude
+	if autoLat, ok := m["map_latitude"].(float64); ok {
+		mapLat = autoLat
+		mapLon = m["map_longitude"].(float64)
+	}
+	e.addStaticMap(m, "nest", mapLat, mapLon)
 
 	// Game data enrichment
 	if e.GameData != nil {

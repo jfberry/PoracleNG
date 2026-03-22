@@ -91,6 +91,21 @@ var (
 		Help: "Users disabled for exceeding rate limit violation threshold",
 	})
 
+	// Tileserver metrics
+	TileDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "poracle_processor_tile_seconds",
+		Help:    "Tileserver request latency",
+		Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+	})
+	TileTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_processor_tile_total",
+		Help: "Tile generation outcomes",
+	}, []string{"result"})
+	TileInFlight = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_processor_tile_in_flight",
+		Help: "Concurrent tile requests",
+	})
+
 	// AccuWeather metrics
 	AccuWeatherRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "poracle_processor_accuweather_requests_total",

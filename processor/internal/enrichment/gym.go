@@ -29,9 +29,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, 
 	e.addMapURLs(m, lat, lon, "gyms", gymID)
 
 	// Static map tile
-	m["latitude"] = lat
-	m["longitude"] = lon
-	e.addStaticMap(m, "gym")
+	e.addStaticMap(m, "gym", lat, lon)
 
 	// Game data enrichment
 	if e.GameData != nil {

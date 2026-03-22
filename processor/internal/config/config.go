@@ -165,8 +165,9 @@ type PVPConfig struct {
 type WeatherConfig struct {
 	EnableInference            bool   `toml:"enable_inference"`
 	ChangeAlert                bool   `toml:"change_alert"`
-	ShowAlteredPokemon         bool   `toml:"show_altered_pokemon"`
-	ShowAlteredPokemonMaxCount int `toml:"show_altered_pokemon_max_count"`
+	ShowAlteredPokemon              bool `toml:"show_altered_pokemon"`
+	ShowAlteredPokemonMaxCount      int  `toml:"show_altered_pokemon_max_count"`
+	ShowAlteredPokemonStaticMap     bool `toml:"show_altered_pokemon_static_map"`
 
 	// AccuWeather forecast
 	EnableForecast          bool     `toml:"enable_forecast"`

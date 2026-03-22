@@ -6,7 +6,7 @@ import (
 )
 
 // Weather builds enrichment fields for a weather change event.
-func (e *Enricher) Weather(lat, lon float64) map[string]any {
+func (e *Enricher) Weather(lat, lon float64, showAlteredPokemonStaticMap bool) map[string]any {
 	m := make(map[string]any)
 
 	nextHour := geo.NextHourBoundary()
@@ -17,11 +17,16 @@ func (e *Enricher) Weather(lat, lon float64) map[string]any {
 		addSunTimes(m, lat, lon, tz)
 	}
 
+	// Generate base weather tile (used when showAlteredPokemonStaticMap is false)
+	if !showAlteredPokemonStaticMap {
+		e.addStaticMap(m, "weather", lat, lon)
+	}
+
 	return m
 }
 
 // WeatherTranslate adds per-language translated fields for a weather change.
-func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeatherID int, activePokemons []webhook.ActivePokemonEntry, lang string) map[string]any {
+func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeatherID int, activePokemons []webhook.ActivePokemonEntry, lang string, showAlteredPokemonStaticMap bool) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
 		return base
 	}
@@ -87,6 +92,14 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 			enrichedPokemon[i] = entry
 		}
 		m["enrichedActivePokemons"] = enrichedPokemon
+
+		// Generate per-user tile with active pokemon data when configured
+		if showAlteredPokemonStaticMap {
+			m["activePokemons"] = enrichedPokemon
+			lat, _ := base["latitude"].(float64)
+			lon, _ := base["longitude"].(float64)
+			e.addStaticMap(m, "weather", lat, lon)
+		}
 	}
 
 	return m

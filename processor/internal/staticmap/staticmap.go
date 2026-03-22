@@ -19,6 +19,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
 )
@@ -308,11 +309,17 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 		elapsed := time.Since(r.circuitOpenSince)
 		if elapsed < time.Duration(r.config.TileserverCooldownMs)*time.Millisecond {
 			r.mu.Unlock()
+			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
+			log.Debugf("staticmap: circuit breaker open for %s, skipping tile", maptype)
 			return ""
 		}
 		// Half-open: allow one probe
 	}
 	r.mu.Unlock()
+
+	metrics.TileInFlight.Inc()
+	defer metrics.TileInFlight.Dec()
+	start := time.Now()
 
 	mapPath := "staticmap"
 	templateType := ""
@@ -327,6 +334,7 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 	body, err := json.Marshal(data)
 	if err != nil {
 		log.Warnf("staticmap: marshal data: %s", err)
+		metrics.TileTotal.WithLabelValues("error").Inc()
 		return ""
 	}
 
@@ -339,6 +347,8 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 	resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		r.recordError()
+		metrics.TileTotal.WithLabelValues("error").Inc()
+		metrics.TileDuration.Observe(time.Since(start).Seconds())
 		log.Warnf("staticmap: pregenerate request failed: %s", err)
 		return ""
 	}
@@ -347,12 +357,16 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		r.recordError()
+		metrics.TileTotal.WithLabelValues("error").Inc()
+		metrics.TileDuration.Observe(time.Since(start).Seconds())
 		log.Warnf("staticmap: read pregenerate response: %s", err)
 		return ""
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		r.recordError()
+		metrics.TileTotal.WithLabelValues("error").Inc()
+		metrics.TileDuration.Observe(time.Since(start).Seconds())
 		log.Warnf("staticmap: pregenerate %s got status %d: %s (sent fields: %v)", reqURL, resp.StatusCode, string(respBody), mapKeys(data))
 		return ""
 	}
@@ -360,9 +374,15 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 	result := strings.TrimSpace(string(respBody))
 	if result == "" || strings.Contains(result, "<") {
 		r.recordError()
+		metrics.TileTotal.WithLabelValues("error").Inc()
+		metrics.TileDuration.Observe(time.Since(start).Seconds())
 		log.Warnf("staticmap: pregenerate got invalid response: %s", result)
 		return ""
 	}
+
+	duration := time.Since(start)
+	metrics.TileDuration.Observe(duration.Seconds())
+	metrics.TileTotal.WithLabelValues("success").Inc()
 
 	// Reset circuit breaker on success
 	r.mu.Lock()
@@ -371,10 +391,13 @@ func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, s
 
 	// If the result is already a full URL, return it directly
 	if strings.HasPrefix(result, "http") {
+		log.Debugf("staticmap: tile generated %s (%dms)", result, duration.Milliseconds())
 		return result
 	}
 	// Otherwise construct the URL from the tileserver base + pregenerated path
-	return fmt.Sprintf("%s/%s/pregenerated/%s", r.config.ProviderURL, mapPath, result)
+	tileURL := fmt.Sprintf("%s/%s/pregenerated/%s", r.config.ProviderURL, mapPath, result)
+	log.Debugf("staticmap: tile generated %s (%dms)", tileURL, duration.Milliseconds())
+	return tileURL
 }
 
 // recordError increments the consecutive error counter and opens the circuit if threshold reached.
@@ -449,6 +472,147 @@ func filterFields(data map[string]any, allowed []string) map[string]any {
 		}
 	}
 	return result
+}
+
+// LatLon represents a geographic coordinate.
+type LatLon struct {
+	Latitude  float64
+	Longitude float64
+}
+
+// Circle represents a geographic circle with a radius in meters.
+type Circle struct {
+	Latitude  float64
+	Longitude float64
+	RadiusM   float64
+}
+
+// AutopositionShape holds collections of geographic shapes for autoposition calculation.
+type AutopositionShape struct {
+	Markers  []LatLon
+	Polygons [][]LatLon // each polygon is a path of points
+	Circles  []Circle
+}
+
+// AutopositionResult holds the computed zoom and center point.
+type AutopositionResult struct {
+	Zoom      float64
+	Latitude  float64
+	Longitude float64
+}
+
+// Autoposition calculates the optimal zoom level and center lat/lon for a map tile
+// that fits all given shapes within the specified pixel dimensions.
+// Ported from the JS tileserverPregen.autoposition() function.
+func Autoposition(shapes AutopositionShape, width, height int, margin, defaultZoom float64) *AutopositionResult {
+	w := float64(width) / margin
+	h := float64(height) / margin
+
+	var objs [][2]float64
+
+	// Expand circles to their bounding points
+	for _, c := range shapes.Circles {
+		objs = append(objs,
+			[2]float64{adjustLatitude(c.Latitude, -c.RadiusM), c.Longitude},
+			[2]float64{adjustLatitude(c.Latitude, c.RadiusM), c.Longitude},
+			[2]float64{c.Latitude, adjustLongitude(c.Latitude, c.Longitude, -c.RadiusM)},
+			[2]float64{c.Latitude, adjustLongitude(c.Latitude, c.Longitude, c.RadiusM)},
+		)
+	}
+
+	// Add markers
+	for _, m := range shapes.Markers {
+		objs = append(objs, [2]float64{m.Latitude, m.Longitude})
+	}
+
+	// Add polygon vertices
+	for _, poly := range shapes.Polygons {
+		for _, pt := range poly {
+			objs = append(objs, [2]float64{pt.Latitude, pt.Longitude})
+		}
+	}
+
+	if len(objs) == 0 {
+		return nil
+	}
+
+	// Compute bounding box
+	minLat, maxLat := objs[0][0], objs[0][0]
+	minLon, maxLon := objs[0][1], objs[0][1]
+	for _, o := range objs[1:] {
+		if o[0] < minLat {
+			minLat = o[0]
+		}
+		if o[0] > maxLat {
+			maxLat = o[0]
+		}
+		if o[1] < minLon {
+			minLon = o[1]
+		}
+		if o[1] > maxLon {
+			maxLon = o[1]
+		}
+	}
+
+	latitude := minLat + (maxLat-minLat)/2.0
+	longitude := minLon + (maxLon-minLon)/2.0
+
+	// If all points are the same, return default zoom
+	if maxLat == minLat && maxLon == minLon {
+		return &AutopositionResult{
+			Zoom:      defaultZoom,
+			Latitude:  latitude,
+			Longitude: longitude,
+		}
+	}
+
+	latFraction := (latRad(maxLat) - latRad(minLat)) / math.Pi
+	angle := maxLon - minLon
+	if angle < 0.0 {
+		angle += 360.0
+	}
+	lonFraction := angle / 360.0
+
+	latZoom := zoomCalc(h, latFraction)
+	lonZoom := zoomCalc(w, lonFraction)
+	z := latZoom
+	if lonZoom < z {
+		z = lonZoom
+	}
+
+	return &AutopositionResult{
+		Zoom:      z,
+		Latitude:  latitude,
+		Longitude: longitude,
+	}
+}
+
+// adjustLatitude shifts a latitude by the given distance in meters.
+func adjustLatitude(lat, distanceM float64) float64 {
+	const earth = 6378.137 // radius of the earth in km
+	m := (1.0 / ((2.0 * math.Pi / 360.0) * earth)) / 1000.0 // 1 meter in degrees
+	return lat + (distanceM * m)
+}
+
+// adjustLongitude shifts a longitude by the given distance in meters, accounting for latitude.
+func adjustLongitude(lat, lon, distanceM float64) float64 {
+	const earth = 6378.137
+	m := (1.0 / ((2.0 * math.Pi / 360.0) * earth)) / 1000.0
+	return lon + (distanceM*m)/math.Cos(lat*(math.Pi/180.0))
+}
+
+// latRad converts latitude to radians in the Mercator projection.
+func latRad(lat float64) float64 {
+	sinLat := math.Sin(lat * math.Pi / 180.0)
+	rad := math.Log((1.0+sinLat)/(1.0-sinLat)) / 2.0
+	return math.Max(math.Min(rad, math.Pi), -math.Pi) / 2.0
+}
+
+// zoomCalc computes the zoom level for a given pixel size and fraction.
+func zoomCalc(px, fraction float64) float64 {
+	z := math.Log2(px / 256.0 / fraction)
+	// Round to two decimal places
+	return math.Round(z*100) / 100
 }
 
 // getFloat extracts a float64 from a map value.

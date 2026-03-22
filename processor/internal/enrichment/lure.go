@@ -31,9 +31,7 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) map[string]any {
 	e.addMapURLs(m, lure.Latitude, lure.Longitude, "pokestops", lure.PokestopID)
 
 	// Static map tile
-	m["latitude"] = lure.Latitude
-	m["longitude"] = lure.Longitude
-	e.addStaticMap(m, "pokestop")
+	e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude)
 
 	// Lure data from util.json
 	if e.GameData != nil {

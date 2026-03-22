@@ -328,3 +328,148 @@ func TestTileserverFieldFiltering(t *testing.T) {
 		t.Errorf("filtered URL should contain pokemon_id: %q", url)
 	}
 }
+
+func TestAutopositionSingleMarker(t *testing.T) {
+	result := Autoposition(AutopositionShape{
+		Markers: []LatLon{{Latitude: 51.28, Longitude: 1.08}},
+	}, 500, 250, 1.25, 17.5)
+
+	if result == nil {
+		t.Fatal("expected non-nil result for single marker")
+	}
+	if result.Zoom != 17.5 {
+		t.Errorf("single marker zoom = %f, want default 17.5", result.Zoom)
+	}
+	if result.Latitude != 51.28 {
+		t.Errorf("latitude = %f, want 51.28", result.Latitude)
+	}
+	if result.Longitude != 1.08 {
+		t.Errorf("longitude = %f, want 1.08", result.Longitude)
+	}
+}
+
+func TestAutopositionTwoMarkers(t *testing.T) {
+	result := Autoposition(AutopositionShape{
+		Markers: []LatLon{
+			{Latitude: 51.28, Longitude: 1.08},
+			{Latitude: 51.29, Longitude: 1.09},
+		},
+	}, 500, 250, 1.25, 17.5)
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	// Center should be midpoint
+	if math.Abs(result.Latitude-51.285) > 0.001 {
+		t.Errorf("center lat = %f, want ~51.285", result.Latitude)
+	}
+	if math.Abs(result.Longitude-1.085) > 0.001 {
+		t.Errorf("center lon = %f, want ~1.085", result.Longitude)
+	}
+	// Zoom should be less than default (need to fit two points)
+	if result.Zoom >= 17.5 {
+		t.Errorf("zoom = %f, should be < 17.5 for spread markers", result.Zoom)
+	}
+	if result.Zoom <= 0 {
+		t.Errorf("zoom = %f, should be positive", result.Zoom)
+	}
+}
+
+func TestAutopositionPolygon(t *testing.T) {
+	result := Autoposition(AutopositionShape{
+		Polygons: [][]LatLon{
+			{
+				{Latitude: 51.27, Longitude: 1.07},
+				{Latitude: 51.27, Longitude: 1.09},
+				{Latitude: 51.29, Longitude: 1.09},
+				{Latitude: 51.29, Longitude: 1.07},
+			},
+		},
+	}, 500, 250, 1.25, 17.5)
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if math.Abs(result.Latitude-51.28) > 0.001 {
+		t.Errorf("center lat = %f, want ~51.28", result.Latitude)
+	}
+	if result.Zoom >= 17.5 {
+		t.Errorf("zoom = %f, should be < 17.5 for polygon", result.Zoom)
+	}
+}
+
+func TestAutopositionCircle(t *testing.T) {
+	result := Autoposition(AutopositionShape{
+		Circles: []Circle{
+			{Latitude: 51.28, Longitude: 1.08, RadiusM: 500},
+		},
+	}, 500, 250, 1.25, 17.5)
+
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if math.Abs(result.Latitude-51.28) > 0.01 {
+		t.Errorf("center lat = %f, want ~51.28", result.Latitude)
+	}
+	// 500m radius needs lower zoom than default
+	if result.Zoom >= 17.5 {
+		t.Errorf("zoom = %f, should be < 17.5 for 500m circle", result.Zoom)
+	}
+}
+
+func TestAutopositionEmpty(t *testing.T) {
+	result := Autoposition(AutopositionShape{}, 500, 250, 1.25, 17.5)
+	if result != nil {
+		t.Error("expected nil for empty shapes")
+	}
+}
+
+func TestAutopositionWiderSpreadLowerZoom(t *testing.T) {
+	close := Autoposition(AutopositionShape{
+		Markers: []LatLon{
+			{Latitude: 51.28, Longitude: 1.08},
+			{Latitude: 51.281, Longitude: 1.081},
+		},
+	}, 500, 250, 1.25, 17.5)
+
+	far := Autoposition(AutopositionShape{
+		Markers: []LatLon{
+			{Latitude: 51.0, Longitude: 1.0},
+			{Latitude: 51.5, Longitude: 1.5},
+		},
+	}, 500, 250, 1.25, 17.5)
+
+	if close == nil || far == nil {
+		t.Fatal("expected non-nil results")
+	}
+	if far.Zoom >= close.Zoom {
+		t.Errorf("wider spread (zoom=%f) should have lower zoom than close (zoom=%f)", far.Zoom, close.Zoom)
+	}
+}
+
+func TestAdjustLatitude(t *testing.T) {
+	lat := adjustLatitude(51.28, 1000) // 1km north
+	if lat <= 51.28 {
+		t.Errorf("1km north should increase latitude: got %f", lat)
+	}
+	if math.Abs(lat-51.28) > 0.02 { // ~1km is ~0.009 degrees
+		t.Errorf("1km adjustment too large: %f", lat-51.28)
+	}
+
+	lat = adjustLatitude(51.28, -1000) // 1km south
+	if lat >= 51.28 {
+		t.Errorf("1km south should decrease latitude: got %f", lat)
+	}
+}
+
+func TestAdjustLongitude(t *testing.T) {
+	lon := adjustLongitude(51.28, 1.08, 1000) // 1km east
+	if lon <= 1.08 {
+		t.Errorf("1km east should increase longitude: got %f", lon)
+	}
+
+	lon = adjustLongitude(51.28, 1.08, -1000) // 1km west
+	if lon >= 1.08 {
+		t.Errorf("1km west should decrease longitude: got %f", lon)
+	}
+}

@@ -255,7 +255,7 @@ func (ps *ProcessorService) processTestFort(raw json.RawMessage, target webhook.
 		return fmt.Errorf("parse fort: %w", err)
 	}
 
-	enrichment := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID())
+	enrichment := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID(), &fort)
 
 	ps.sender.Send(webhook.OutboundPayload{
 		Type:         "fort_update",

@@ -48,14 +48,8 @@ class Nest extends Controller {
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 			const jobs = []
 
-			// Attempt to calculate best position for nest
-			const position = this.tileserverPregen.autoposition({
-				polygons:
-					JSON.parse(data.poly_path).map((x) => ({ path: x })),
-			}, 500, 250)
-			data.zoom = Math.min(position.zoom, 16)
-			data.map_longitude = position.longitude
-			data.map_latitude = position.latitude
+			// Autoposition (zoom, map_latitude, map_longitude) is now computed by the
+			// Go processor enrichment and arrives in the data object.
 
 			// Static map is pre-computed by the processor enrichment
 			data.staticmap = data.staticMap // deprecated alias

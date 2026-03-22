@@ -116,21 +116,8 @@ class FortUpdate extends Controller {
 			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 			const jobs = []
 
-			// Attempt to calculate best position for map
-			const markers = []
-			if (data.old?.location?.lat) {
-				markers.push({ latitude: data.old.location.lat, longitude: data.old.location.lon })
-			}
-			if (data.new?.location?.lat) {
-				markers.push({ latitude: data.new.location.lat, longitude: data.new.location.lon })
-			}
-
-			const position = this.tileserverPregen.autoposition({
-				markers,
-			}, 500, 250)
-			data.zoom = Math.min(position.zoom, 16)
-			data.map_longitude = position.longitude
-			data.map_latitude = position.latitude
+			// Autoposition (zoom, map_latitude, map_longitude) is now computed by the
+			// Go processor enrichment and arrives in the data object.
 
 			// Static map is pre-computed by the processor enrichment
 			data.staticmap = data.staticMap // deprecated alias

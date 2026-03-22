@@ -24,9 +24,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 	e.addQuestIconURLs(m, rewards)
 
 	// Static map tile
-	m["latitude"] = lat
-	m["longitude"] = lon
-	e.addStaticMap(m, "quest")
+	e.addStaticMap(m, "quest", lat, lon)
 
 	// Future event check
 	if e.EventChecker != nil {

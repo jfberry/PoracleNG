@@ -274,13 +274,14 @@ type GymWebhook struct {
 
 // NestWebhook mirrors a nest webhook message.
 type NestWebhook struct {
-	NestID     int64   `json:"nest_id"`
-	PokemonID  int     `json:"pokemon_id"`
-	Form       int     `json:"form"`
-	PokemonAvg float64 `json:"pokemon_avg"`
-	Latitude   float64 `json:"latitude"`
-	Longitude  float64 `json:"longitude"`
-	ResetTime  int64   `json:"reset_time"`
+	NestID     int64           `json:"nest_id"`
+	PokemonID  int             `json:"pokemon_id"`
+	Form       int             `json:"form"`
+	PokemonAvg float64         `json:"pokemon_avg"`
+	Latitude   float64         `json:"latitude"`
+	Longitude  float64         `json:"longitude"`
+	ResetTime  int64           `json:"reset_time"`
+	PolyPath   json.RawMessage `json:"poly_path"`
 }
 
 // MaxbattleWebhook mirrors Golbat's max_battle webhook message.
