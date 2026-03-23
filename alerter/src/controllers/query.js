@@ -1,6 +1,5 @@
 const inside = require('point-in-polygon')
 const cp = require('child_process')
-const TileserverPregen = require('../lib/tileserverPregen')
 
 class Query {
 	constructor(log, db, config, geofence) {
@@ -9,7 +8,6 @@ class Query {
 		this.log = log
 		this.cp = cp
 		this.geofence = geofence
-		this.tileserverPregen = new TileserverPregen(config, log)
 	}
 
 	pointInArea(point) {

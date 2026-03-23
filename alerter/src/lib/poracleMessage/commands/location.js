@@ -104,31 +104,31 @@ exports.run = async (client, msg, args, options) => {
 			const maplink = `https://maps.google.com/maps?q=${lat},${lon}`
 			message = `👋, ${translator.translate('I set ')}${target.name}${translator.translate('\'s location to the following coordinates in')}${placeConfirmation}:\n${maplink}`
 
-			if (platform === 'discord' && client.config.geocoding.staticProvider.toLowerCase() === 'tileservercache') {
-				const tileServerOptions = client.query.tileserverPregen.getConfigForTileType('location')
-				if (tileServerOptions.type !== 'none') {
-					// Could also use logic to not pregenerate
-					staticMap = await client.query.tileserverPregen.getPregeneratedTileURL('location', 'location', {
-						latitude: lat,
-						longitude: lon,
-					}, tileServerOptions.type)
+			if (platform === 'discord' && client.config.processor?.url) {
+				try {
+					const resp = await axios.get(`${client.config.processor.url}/api/geofence/locationMap/${lat}/${lon}`, { timeout: 10000 })
+					if (resp.data.status === 'ok' && resp.data.url) {
+						staticMap = resp.data.url
 
-					message = {
-						embeds: [{
-							color: 0x00ff00,
-							title: translator.translate('New location'),
-							description: `${translator.translate('I set ')}${target.name}${translator.translate('\'s location to the following coordinates in')}${placeConfirmation}`,
-							image: {
-								url: staticMap,
-							},
-							url: maplink,
-						}],
-					}
+						message = {
+							embeds: [{
+								color: 0x00ff00,
+								title: translator.translate('New location'),
+								description: `${translator.translate('I set ')}${target.name}${translator.translate('\'s location to the following coordinates in')}${placeConfirmation}`,
+								image: {
+									url: staticMap,
+								},
+								url: maplink,
+							}],
+						}
 
-					if (client.config.discord.uploadEmbedImages) {
-						message.embeds[0].image.url = 'attachment://image.png'
-						message.files = [{ attachment: staticMap, name: 'image.png' }]
+						if (client.config.discord.uploadEmbedImages) {
+							message.embeds[0].image.url = 'attachment://image.png'
+							message.files = [{ attachment: staticMap, name: 'image.png' }]
+						}
 					}
+				} catch (err) {
+					client.log.error(`Failed to generate location tile: ${err.message}`)
 				}
 			}
 		}

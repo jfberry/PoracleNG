@@ -4,7 +4,6 @@ const path = require('path')
 const fs = require('fs')
 const { getConfigDir } = require('../lib/configResolver')
 const Uicons = require('../lib/uicons')
-const TileserverPregen = require('../lib/tileserverPregen')
 const replaceAsync = require('../util/stringReplaceAsync')
 const HideUriShortener = require('../lib/hideuriUrlShortener')
 const ShlinkUriShortener = require('../lib/shlinkUrlShortener')
@@ -30,7 +29,6 @@ class Controller extends EventEmitter {
 		this.statsData = statsData
 		this.shinyPossible = eventProviders && eventProviders.shinyPossible
 		//		this.controllerData = weatherCacheData || {}
-		this.tileserverPregen = new TileserverPregen(this.config, this.log)
 		this.getIntersection = new GetIntersection(this.config, this.log)
 		this.emojiLookup = new EmojiLookup(GameData.utilData.emojis)
 		this.imgUicons = this.config.general.imgUrl ? new Uicons((this.config.general.images && this.config.general.images[this.constructor.name.toLowerCase()]) || this.config.general.imgUrl, 'png', this.log) : null
@@ -187,72 +185,6 @@ class Controller extends EventEmitter {
 		}
 
 		return message
-	}
-
-	async getStaticMapUrl(logReference, data, maptype, keys, pregenKeys) {
-		switch (this.config.geocoding.staticProvider.toLowerCase()) {
-			case 'tileservercache': {
-				const tileServerOptions = this.tileserverPregen.getConfigForTileType(maptype)
-
-				if (tileServerOptions.includeStops && tileServerOptions.pregenerate && this.scannerQuery) {
-					const limits = this.tileserverPregen.limits(data.latitude, data.longitude, tileServerOptions.width, tileServerOptions.height, tileServerOptions.zoom)
-					data.nearbyStops = await this.scannerQuery.getStopData(limits[0][0], limits[0][1], limits[1][0], limits[1][1])
-					if (data.nearbyStops && this.imgUicons) {
-						data.uiconPokestopUrl = await this.imgUicons.pokestopIcon(0)
-						for (const stop of data.nearbyStops) {
-							switch (stop.type) {
-								case 'gym': {
-									stop.imgUrl = await this.imgUicons.gymIcon(stop.teamId, 6 - stop.slots, false, false) || this.config.fallbacks?.imgUrlGym
-									break
-								}
-								case 'stop': {
-									break
-								}
-								default:
-							}
-						}
-					}
-				}
-
-				if (tileServerOptions.type && tileServerOptions.type !== 'none') {
-					if (!tileServerOptions.pregenerate) {
-						data.staticMap = await this.tileserverPregen.getTileURL(
-							logReference,
-							maptype,
-							Object.fromEntries(Object.entries(data)
-								.filter(([field]) => keys.includes(field))),
-							tileServerOptions.type,
-						)
-					} else {
-						data.staticMap = await this.tileserverPregen.getPregeneratedTileURL(
-							logReference,
-							maptype,
-							pregenKeys ? Object.fromEntries(Object.entries(data).filter(([field]) => ['nearbyStops', 'uiconPokestopUrl'].includes(field) || pregenKeys.includes(field))) : data,
-							tileServerOptions.type,
-						)
-					}
-				}
-
-				break
-			}
-
-			case 'google': {
-				data.staticMap = `https://maps.googleapis.com/maps/api/staticmap?center=${data.latitude},${data.longitude}&markers=color:red|${data.latitude},${data.longitude}&maptype=${this.config.geocoding.type}&zoom=${this.config.geocoding.zoom}&size=${this.config.geocoding.width}x${this.config.geocoding.height}&key=${this.config.geocoding.staticKey[~~(this.config.geocoding.staticKey.length * Math.random())]}`
-				break
-			}
-			case 'osm': {
-				data.staticMap = `https://www.mapquestapi.com/staticmap/v5/map?locations=${data.latitude},${data.longitude}&size=${this.config.geocoding.width},${this.config.geocoding.height}&defaultMarker=marker-md-3B5998-22407F&zoom=${this.config.geocoding.zoom}&key=${this.config.geocoding.staticKey[~~(this.config.geocoding.staticKey.length * Math.random())]}`
-				break
-			}
-			case 'mapbox': {
-				data.staticMap = `https://api.mapbox.com/styles/v1/mapbox/streets-v10/static/url-https%3A%2F%2Fi.imgur.com%2FMK4NUzI.png(${data.longitude},${data.latitude})/${data.longitude},${data.latitude},${this.config.geocoding.zoom},0,0/${this.config.geocoding.width}x${this.config.geocoding.height}?access_token=${this.config.geocoding.staticKey[~~(this.config.geocoding.staticKey.length * Math.random())]}`
-				break
-			}
-			default: {
-				data.staticMap = ''
-			}
-		}
-		data.staticMap = data.staticMap || this.config.fallbacks?.staticMap
 	}
 
 	// eslint-disable-next-line class-methods-use-this

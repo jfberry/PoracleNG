@@ -218,7 +218,7 @@ func TestGetTileURL(t *testing.T) {
 		"pokemon_id": 25,
 	}
 
-	url := r.getTileURL("monster", data, "staticMap")
+	url := r.GetTileURL("monster", data, "staticMap")
 	if !strings.Contains(url, "tiles.example.com/staticmap/poracle-monster") {
 		t.Errorf("expected tileserver URL, got %q", url)
 	}
@@ -233,7 +233,7 @@ func TestGetTileURLMulti(t *testing.T) {
 		ProviderURL: "https://tiles.example.com",
 	})
 
-	url := r.getTileURL("monster", map[string]any{}, "multiStaticMap")
+	url := r.GetTileURL("monster", map[string]any{}, "multiStaticMap")
 	if !strings.Contains(url, "multistaticmap/poracle-multi-monster") {
 		t.Errorf("expected multi URL, got %q", url)
 	}
@@ -262,7 +262,7 @@ func TestCircuitBreaker(t *testing.T) {
 	r.mu.Unlock()
 
 	// Pregenerate should return empty during cooldown
-	result := r.getPregeneratedTileURL("monster", map[string]any{}, "staticMap")
+	result := r.GetPregeneratedTileURL("monster", map[string]any{}, "staticMap")
 	if result != "" {
 		t.Errorf("expected empty during circuit break, got %q", result)
 	}
@@ -321,7 +321,7 @@ func TestTileserverFieldFiltering(t *testing.T) {
 	}
 
 	keys := []string{"pokemon_id", "latitude", "longitude"}
-	url := r.getTileURL("monster", filterFields(data, keys), "staticMap")
+	url := r.GetTileURL("monster", filterFields(data, keys), "staticMap")
 
 	if strings.Contains(url, "secret") {
 		t.Errorf("filtered URL should not contain 'secret': %q", url)

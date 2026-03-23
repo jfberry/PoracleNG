@@ -138,6 +138,22 @@ func main() {
 	mux.HandleFunc("/api/test", api.HandleTest(proc))
 	mux.HandleFunc("/api/geocode/forward", api.HandleGeocode(proc.enricher.Geocoder))
 
+	// Geofence data and tile generation endpoints
+	tileDeps := api.TileDeps{
+		StaticMap: proc.enricher.StaticMap,
+		StateMgr:  stateMgr,
+		ImgUicons: proc.enricher.ImgUicons,
+		Weather:   proc.weather,
+	}
+	mux.HandleFunc("GET /api/geofence/all/hash", api.HandleGeofenceHash(stateMgr))
+	mux.HandleFunc("GET /api/geofence/all/geojson", api.HandleGeofenceGeoJSON(stateMgr))
+	mux.HandleFunc("GET /api/geofence/all", api.HandleGeofenceAll(stateMgr))
+	mux.HandleFunc("GET /api/geofence/weatherMap/{lat}/{lon}", api.HandleWeatherMap(tileDeps))
+	mux.HandleFunc("GET /api/geofence/locationMap/{lat}/{lon}", api.HandleLocationMap(tileDeps))
+	mux.HandleFunc("GET /api/geofence/distanceMap/{lat}/{lon}/{distance}", api.HandleDistanceMap(tileDeps))
+	mux.HandleFunc("POST /api/geofence/overviewMap", api.HandleOverviewMap(tileDeps))
+	mux.HandleFunc("GET /api/geofence/{area}/map", api.HandleGeofenceAreaMap(tileDeps))
+
 	// Proxy unhandled /api/ requests to the alerter (tracking, config, humans, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
 

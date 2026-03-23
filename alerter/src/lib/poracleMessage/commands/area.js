@@ -1,5 +1,5 @@
+const axios = require('axios')
 const helpCommand = require('./help')
-const geofenceTileGenerator = require('../../geofenceTileGenerator')
 const trackedCommand = require('./tracked')
 
 exports.run = async (client, msg, args, options) => {
@@ -174,46 +174,44 @@ exports.run = async (client, msg, args, options) => {
 				break
 			}
 			case 'overview': {
-				if (client.config.geocoding.staticProvider.toLowerCase() === 'tileservercache') {
-					const staticMap = await geofenceTileGenerator.generateGeofenceOverviewTile(
-						client.geofence.geofence,
-						client.query.tileserverPregen,
-						args.length >= 2 ? args : JSON.parse(human.area),
-					)
-					if (staticMap) {
-						await msg.replyWithImageUrl(
-							translator.translateFormat('Overview display'),
-							null,
-							staticMap,
-						)
+				if (client.config.processor?.url) {
+					try {
+						const areas = args.length >= 2 ? args : JSON.parse(human.area)
+						const resp = await axios.post(`${client.config.processor.url}/api/geofence/overviewMap`, { areas }, { timeout: 10000 })
+						if (resp.data.status === 'ok' && resp.data.url) {
+							await msg.replyWithImageUrl(
+								translator.translateFormat('Overview display'),
+								null,
+								resp.data.url,
+							)
+						}
+					} catch (err) {
+						client.log.error(`Failed to generate overview tile: ${err.message}`)
 					}
 				}
 				break
 			}
 			case 'show': {
-				if (client.config.geocoding.staticProvider.toLowerCase() === 'tileservercache') {
+				if (client.config.processor?.url) {
 					const areas = args.length >= 2 ? args : JSON.parse(human.area)
 					for (const area of areas) {
 						let staticMap
 
-						if (area.match(client.re.dRe)) {
-							if (+human.latitude === 0 || +human.longitude === 0) {
-								await msg.reply(translator.translate('You have not set a location yet'))
+						try {
+							if (area.match(client.re.dRe)) {
+								if (+human.latitude === 0 || +human.longitude === 0) {
+									await msg.reply(translator.translate('You have not set a location yet'))
+								} else {
+									const [, , distance] = area.match(client.re.dRe)
+									const resp = await axios.get(`${client.config.processor.url}/api/geofence/distanceMap/${human.latitude}/${human.longitude}/${distance}`, { timeout: 10000 })
+									if (resp.data.status === 'ok') staticMap = resp.data.url
+								}
 							} else {
-								const [, , distance] = area.match(client.re.dRe)
-								staticMap = await geofenceTileGenerator.generateDistanceTile(
-									client.query.tileserverPregen,
-									human.latitude,
-									human.longitude,
-									distance,
-								)
+								const resp = await axios.get(`${client.config.processor.url}/api/geofence/${encodeURIComponent(area)}/map`, { timeout: 10000 })
+								if (resp.data.status === 'ok') staticMap = resp.data.url
 							}
-						} else {
-							staticMap = await geofenceTileGenerator.generateGeofenceTile(
-								client.geofence.geofence,
-								client.query.tileserverPregen,
-								area,
-							)
+						} catch (err) {
+							client.log.error(`Failed to generate tile for area ${area}: ${err.message}`)
 						}
 
 						if (staticMap) {

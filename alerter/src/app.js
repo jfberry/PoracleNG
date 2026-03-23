@@ -401,28 +401,8 @@ async function processOne(payload) {
 	eventsProcessed++
 }
 
-function aggregateTileStats() {
-	const agg = {
-		calls: 0, totalMs: 0, inFlight: 0, errors: 0,
-	}
-	for (const ctrl of allControllers) {
-		if (ctrl.tileserverPregen) {
-			const s = ctrl.tileserverPregen.getStats()
-			agg.calls += s.calls
-			agg.totalMs += s.totalMs
-			agg.inFlight += s.inFlight
-			agg.errors += s.errors
-		}
-	}
-	agg.avgMs = agg.calls > 0 ? Math.round(agg.totalMs / agg.calls) : 0
-	return agg
-}
-
 function resetAllStats() {
-	for (const ctrl of allControllers) {
-		if (ctrl.tileserverPregen) ctrl.tileserverPregen.resetStats()
-	}
-	// geocoder stats handled by processor
+	// tile and geocoder stats handled by processor
 }
 
 process.on('SIGUSR2', () => {
@@ -481,12 +461,10 @@ async function currentStatus() {
 	const mainMemMb = Math.round(mainMem.heapUsed / 1048576)
 	const mainRssMb = Math.round(mainMem.rss / 1048576)
 
-	const tileStats = aggregateTileStats()
 	const eps = +(eventsProcessed / 60).toFixed(1)
 	eventsProcessed = 0
 
-	let matchedInfo = ` | Matched: ${eps}/s q:${hookQueue.length} a:${alarmProcessor.running.length}`
-	matchedInfo += ` tile(${tileStats.calls} avg:${tileStats.avgMs}ms fly:${tileStats.inFlight} err:${tileStats.errors})`
+	const matchedInfo = ` | Matched: ${eps}/s q:${hookQueue.length} a:${alarmProcessor.running.length}`
 
 	resetAllStats()
 

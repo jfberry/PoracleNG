@@ -251,7 +251,7 @@ func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon
 	}
 
 	if !boolVal(tileOpts.Pregenerate) {
-		return r.getTileURL(maptype, filterFields(data, keys), tileOpts.Type)
+		return r.GetTileURL(maptype, filterFields(data, keys), tileOpts.Type)
 	}
 	// For pregenerate, include nearbyStops/uiconPokestopUrl plus the pregenKeys
 	filtered := filterFields(data, pregenKeys)
@@ -261,7 +261,7 @@ func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon
 	if v, ok := data["uiconPokestopUrl"]; ok {
 		filtered["uiconPokestopUrl"] = v
 	}
-	return r.getPregeneratedTileURL(maptype, filtered, tileOpts.Type)
+	return r.GetPregeneratedTileURL(maptype, filtered, tileOpts.Type)
 }
 
 // getConfigForTileType merges default, per-staticMapType, and per-tileserverSettings
@@ -330,8 +330,8 @@ func mergeOpts(dst *TileTypeConfig, src TileTypeConfig) {
 	}
 }
 
-// getTileURL builds a non-pregenerated tile URL with query parameters.
-func (r *Resolver) getTileURL(maptype string, data map[string]any, staticMapType string) string {
+// GetTileURL builds a non-pregenerated tile URL with query parameters.
+func (r *Resolver) GetTileURL(maptype string, data map[string]any, staticMapType string) string {
 	mapPath := "staticmap"
 	templateType := ""
 	if strings.EqualFold(staticMapType, "multistaticmap") {
@@ -352,8 +352,8 @@ func (r *Resolver) getTileURL(maptype string, data map[string]any, staticMapType
 	return u.String()
 }
 
-// getPregeneratedTileURL POSTs data to the tileserver to pregenerate a tile.
-func (r *Resolver) getPregeneratedTileURL(maptype string, data map[string]any, staticMapType string) string {
+// GetPregeneratedTileURL POSTs data to the tileserver to pregenerate a tile.
+func (r *Resolver) GetPregeneratedTileURL(maptype string, data map[string]any, staticMapType string) string {
 	// Circuit breaker check
 	r.mu.Lock()
 	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {

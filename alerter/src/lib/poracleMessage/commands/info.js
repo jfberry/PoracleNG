@@ -1,9 +1,8 @@
+const { S2 } = require('s2-geometry')
 const moment = require('moment-timezone')
 const geoTz = require('geo-tz')
 const EmojiLookup = require('../../emojiLookup')
 const helpCommand = require('./help')
-const weatherTileGenerator = require('../../weatherTileGenerator')
-const Uicons = require('../../uicons')
 
 exports.run = async (client, msg, args, options) => {
 	try {
@@ -208,7 +207,8 @@ exports.run = async (client, msg, args, options) => {
 					}
 				}
 
-				const weatherCellId = weatherTileGenerator.getWeatherCellId(latitude, longitude)
+				const weatherCellKey = S2.latLngToKey(latitude, longitude, 10)
+				const weatherCellId = S2.keyToId(weatherCellKey)
 
 				// Fetch weather data for this cell from the Go processor on demand
 				const axios = require('axios')
@@ -230,10 +230,13 @@ exports.run = async (client, msg, args, options) => {
 
 				const weatherId = weatherInfo[currentHourTimestamp]
 				let staticMap = null
-				if (client.config.geocoding.staticProvider === 'tileservercache' && client.config.general.imgUrl) {
-					const imgUicons = new Uicons(client.config.general.imgUrl, 'png', client.log)
-
-					staticMap = await weatherTileGenerator.generateWeatherTile(client.query.tileserverPregen, weatherCellId, weatherId, imgUicons)
+				if (client.config.processor?.url) {
+					try {
+						const resp = await axios.get(`${client.config.processor.url}/api/geofence/weatherMap/${latitude}/${longitude}`, { params: { weather: weatherId }, timeout: 10000 })
+						if (resp.data.status === 'ok') staticMap = resp.data.url
+					} catch (err) {
+						client.log.error(`Failed to generate weather tile: ${err.message}`)
+					}
 				}
 
 				// Build forecast information
