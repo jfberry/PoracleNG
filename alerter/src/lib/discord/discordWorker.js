@@ -173,18 +173,21 @@ class Worker {
 			}
 
 			coerceEmbedColor(data.message.embed)
-
-			if (this.config.discord.uploadEmbedImages && data.message.embed && data.message.embed.image && data.message.embed.image.url) {
-				const { url } = data.message.embed.image
-				data.message.embed.image.url = 'attachment://map.png'
-				data.message.files = [{ attachment: url, name: 'map.png' }]
-			}
-
-			const startTime = performance.now()
 			if (data.message.embed) {
 				data.message.embeds = [data.message.embed]
 				delete data.message.embed
 			}
+			if (data.message.embeds) {
+				for (const embed of data.message.embeds) coerceEmbedColor(embed)
+			}
+
+			if (this.config.discord.uploadEmbedImages && data.message.embeds && data.message.embeds.length && data.message.embeds[0].image && data.message.embeds[0].image.url) {
+				const { url } = data.message.embeds[0].image
+				data.message.embeds[0].image.url = 'attachment://map.png'
+				data.message.files = [{ attachment: url, name: 'map.png' }]
+			}
+
+			const startTime = performance.now()
 
 			this.logs.discord.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} USER Sending discord message`, data.message)
 
@@ -253,18 +256,21 @@ class Worker {
 			this.logs.discord.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL Sending discord message`, data.message)
 
 			coerceEmbedColor(data.message.embed)
-
-			if (this.config.discord.uploadEmbedImages && data.message.embed && data.message.embed.image && data.message.embed.image.url) {
-				const { url } = data.message.embed.image
-				data.message.embed.image.url = 'attachment://map.png'
-				data.message.files = [{ attachment: url, name: 'map.png' }]
-			}
-
-			const startTime = performance.now()
 			if (data.message.embed) {
 				data.message.embeds = [data.message.embed]
 				delete data.message.embed
 			}
+			if (data.message.embeds) {
+				for (const embed of data.message.embeds) coerceEmbedColor(embed)
+			}
+
+			if (this.config.discord.uploadEmbedImages && data.message.embeds && data.message.embeds.length && data.message.embeds[0].image && data.message.embeds[0].image.url) {
+				const { url } = data.message.embeds[0].image
+				data.message.embeds[0].image.url = 'attachment://map.png'
+				data.message.files = [{ attachment: url, name: 'map.png' }]
+			}
+
+			const startTime = performance.now()
 			const msg = await channel.send(data.message)
 			const endTime = performance.now();
 			(this.config.logger.timingStats ? this.logs.discord.verbose : this.logs.discord.debug)(`${logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL (${endTime - startTime} ms)`)

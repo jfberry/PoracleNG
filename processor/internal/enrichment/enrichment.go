@@ -203,8 +203,8 @@ func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string)
 		keys = []string{"pokemon_id", "latitude", "longitude", "form", "imgUrl", "style"}
 		pregenKeys = pregenBase("pokemon_id", "form", "pokemonSpawnAvg")
 	case "weather":
-		keys = []string{"latitude", "longitude", "gameplay_condition", "imgUrl", "style"}
-		pregenKeys = pregenBase("gameplay_condition")
+		keys = []string{"latitude", "longitude", "gameplay_condition", "coords", "imgUrl", "style"}
+		pregenKeys = pregenBase("gameplay_condition", "coords")
 	case "maxbattle":
 		keys = []string{"latitude", "longitude", "imgUrl", "battle_level", "style"}
 		pregenKeys = pregenBase("battle_level", "battle_pokemon_id")

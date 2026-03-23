@@ -329,7 +329,7 @@ func TestWeatherIconURLs(t *testing.T) {
 	e.Translations = newTestBundle()
 	e.GameData = newTestGameData()
 
-	base := e.Weather(52.5, 13.4, 3, false)
+	base := e.Weather(52.5, 13.4, 3, nil, false)
 	m := e.WeatherTranslate(base, 1, 3, nil, "en", false)
 
 	imgUrl, ok := m["imgUrl"].(string)
@@ -348,7 +348,7 @@ func TestWeatherIconURLs_NilUicons(t *testing.T) {
 		Translations:    newTestBundle(),
 		GameData:        newTestGameData(),
 	}
-	base := e.Weather(52.5, 13.4, 3, false)
+	base := e.Weather(52.5, 13.4, 3, nil, false)
 	m := e.WeatherTranslate(base, 1, 3, nil, "en", false)
 
 	if _, ok := m["imgUrl"]; ok {

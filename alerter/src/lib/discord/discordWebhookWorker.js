@@ -102,13 +102,22 @@ class DiscordWebhookWorker {
 		const data = firstData
 		const alertStartTime = performance.now()
 		if (!data.target.match(hookRegex)) return this.logs.discord.warn(`Webhook, ${data.name} does not look like a link, exiting`)
-		if (data.message.embed && data.message.embed.color) {
+		if (data.message.embed && typeof data.message.embed.color === 'string') {
 			data.message.embed.color = parseInt(data.message.embed.color.replace(/^#/, ''), 16)
 		}
 
 		if (data.message.embed) {
 			data.message.embeds = [data.message.embed]
 			delete data.message.embed
+		}
+
+		// Also coerce color in embeds[] (plural) format
+		if (data.message.embeds) {
+			for (const embed of data.message.embeds) {
+				if (embed && typeof embed.color === 'string') {
+					embed.color = parseInt(embed.color.replace(/^#/, ''), 16)
+				}
+			}
 		}
 		try {
 			const msgDeletionMs = ((data.tth.days * 86400) + (data.tth.hours * 3600) + (data.tth.minutes * 60) + data.tth.seconds) * 1000
@@ -134,7 +143,7 @@ class DiscordWebhookWorker {
 					copyMessage.embeds[0].image.url = 'attachment://map.png'
 
 					const response = await axios.get(imageUrl, { responseType: 'arraybuffer' })
-					const buffer = Buffer.from(response.data, 'utf-8')
+					const buffer = Buffer.from(response.data)
 
 					const formData = new FormData()
 					formData.append('payload_json', JSON.stringify(copyMessage))

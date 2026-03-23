@@ -6,8 +6,15 @@ import (
 )
 
 // Weather builds enrichment fields for a weather change event.
-func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, showAlteredPokemonStaticMap bool) map[string]any {
+func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, coords [][2]float64, showAlteredPokemonStaticMap bool) map[string]any {
 	m := make(map[string]any)
+
+	// Store lat/lon and coords for use by per-language enrichment
+	m["latitude"] = lat
+	m["longitude"] = lon
+	if len(coords) > 0 {
+		m["coords"] = coords
+	}
 
 	nextHour := geo.NextHourBoundary()
 	m["weatherTth"] = geo.ComputeTTH(nextHour)
@@ -22,9 +29,13 @@ func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, showAlteredP
 
 	// Generate base weather tile (used when showAlteredPokemonStaticMap is false)
 	if !showAlteredPokemonStaticMap {
-		e.addStaticMap(m, "weather", lat, lon, map[string]any{
+		webhookFields := map[string]any{
 			"gameplay_condition": gameplayCondition,
-		})
+		}
+		if len(coords) > 0 {
+			webhookFields["coords"] = coords
+		}
+		e.addStaticMap(m, "weather", lat, lon, webhookFields)
 	}
 
 	return m
@@ -103,9 +114,13 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 			m["activePokemons"] = enrichedPokemon
 			lat, _ := base["latitude"].(float64)
 			lon, _ := base["longitude"].(float64)
-			e.addStaticMap(m, "weather", lat, lon, map[string]any{
+			webhookFields := map[string]any{
 				"gameplay_condition": newWeatherID,
-			})
+			}
+			if coords, ok := base["coords"]; ok {
+				webhookFields["coords"] = coords
+			}
+			e.addStaticMap(m, "weather", lat, lon, webhookFields)
 		}
 	}
 

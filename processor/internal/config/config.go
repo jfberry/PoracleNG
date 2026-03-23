@@ -347,7 +347,8 @@ func Load(baseDir string) (*Config, error) {
 			MaxBackups:         5,
 		},
 		Discord: DiscordConfig{
-			Prefix: "!",
+			Prefix:   "!",
+			IvColors: []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"},
 		},
 		AlertLimits: AlertLimitsConfig{
 			TimingPeriod:        240,
