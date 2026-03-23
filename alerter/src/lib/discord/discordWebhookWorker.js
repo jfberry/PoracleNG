@@ -102,20 +102,22 @@ class DiscordWebhookWorker {
 		const data = firstData
 		const alertStartTime = performance.now()
 		if (!data.target.match(hookRegex)) return this.logs.discord.warn(`Webhook, ${data.name} does not look like a link, exiting`)
-		if (data.message.embed && typeof data.message.embed.color === 'string') {
-			data.message.embed.color = parseInt(data.message.embed.color.replace(/^#/, ''), 16)
-		}
-
+		// Normalize embed → embeds[]
 		if (data.message.embed) {
 			data.message.embeds = [data.message.embed]
 			delete data.message.embed
 		}
 
-		// Also coerce color in embeds[] (plural) format
+		// Coerce color strings in embeds[] — detect hex (#A040A0 / 6-char A040A0) vs decimal (1216493)
 		if (data.message.embeds) {
 			for (const embed of data.message.embeds) {
 				if (embed && typeof embed.color === 'string') {
-					embed.color = parseInt(embed.color.replace(/^#/, ''), 16)
+					const c = embed.color.trim()
+					if (c.startsWith('#') || c.length === 6) {
+						embed.color = parseInt(c.replace(/^#/, ''), 16)
+					} else {
+						embed.color = parseInt(c, 10)
+					}
 				}
 			}
 		}
@@ -188,7 +190,7 @@ class DiscordWebhookWorker {
 				metrics.messagesFailed.inc({ destination_type: 'webhook' })
 				const fails = (this.consecutiveFails.get(data.target) || 0) + 1
 				this.consecutiveFails.set(data.target, fails)
-				this.logs.discord.warn(`${logReference}: ${data.name} WEBHOOK Got ${res.status} ${res.statusText}`)
+				this.logs.discord.warn(`${logReference}: ${data.name} WEBHOOK Got ${res.status} ${res.statusText} ${JSON.stringify(res.data)}`)
 				this.logs.discord.warn(`${logReference}: ${JSON.stringify(data.message)}`)
 			} else {
 				metrics.messagesSent.inc({ destination_type: 'webhook' })

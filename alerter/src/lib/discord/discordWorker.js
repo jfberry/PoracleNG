@@ -18,7 +18,12 @@ const noop = () => { }
 
 function coerceEmbedColor(embed) {
 	if (embed && typeof embed.color === 'string') {
-		embed.color = parseInt(embed.color.replace(/^#/, ''), 16)
+		const c = embed.color.trim()
+		if (c.startsWith('#') || c.length === 6) {
+			embed.color = parseInt(c.replace(/^#/, ''), 16)
+		} else {
+			embed.color = parseInt(c, 10)
+		}
 	}
 }
 
