@@ -3,6 +3,8 @@ package webhook
 import (
 	"encoding/json"
 	"strconv"
+
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 // FlexBool handles JSON booleans that may arrive as true/false or 0/1.
@@ -205,6 +207,7 @@ type OutboundPayload struct {
 	MatchedAreas           []MatchedArea             `json:"matched_areas"`
 	MatchedUsers           []MatchedUser             `json:"matched_users"`
 	OldState               *EncounterOld             `json:"old_state,omitempty"`
+	TilePending            *staticmap.TilePending    `json:"-"` // async tile, resolved by sender before flush
 }
 
 // EncounterOld holds old state for pokemon_changed events.

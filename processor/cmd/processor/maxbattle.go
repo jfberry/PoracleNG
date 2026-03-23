@@ -77,7 +77,9 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 				mb.BattleLevel, ps.pokemonName(mb.BattlePokemonID, mb.BattlePokemonForm),
 				mb.Name, mb.Latitude, mb.Longitude, areaNames(matchedAreas), len(matched))
 
+			ps.enricher.ResetTilePending()
 			enrichment := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb)
+			tilePending := ps.enricher.LastTilePending
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
@@ -95,6 +97,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 				PerLanguageEnrichment: perLang,
 				MatchedAreas:          matchedAreas,
 				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
 			l.Debugf("Maxbattle L%d %s at %s [%.3f,%.3f] and 0 humans cared",

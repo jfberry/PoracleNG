@@ -68,7 +68,9 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			l.Infof("Fort update %s (%s, %s) areas(%s) and %d humans cared",
 				fort.FortName(), fort.FortType(), fort.ChangeType, areaNames(matchedAreas), len(matched))
 
+			ps.enricher.ResetTilePending()
 			enrichment := ps.enricher.FortUpdate(lat, lon, fortID, &fort)
+			tilePending := ps.enricher.LastTilePending
 
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "fort_update",
@@ -76,6 +78,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 				Enrichment:   enrichment,
 				MatchedAreas: matchedAreas,
 				MatchedUsers: matched,
+				TilePending:  tilePending,
 			})
 		} else {
 			l.Debugf("Fort update %s (%s, %s) and 0 humans cared",

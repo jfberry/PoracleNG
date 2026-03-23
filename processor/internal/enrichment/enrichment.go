@@ -65,6 +65,17 @@ type Enricher struct {
 	RequestShinyImages bool                   // Whether to request shiny icon variants
 	StaticMap          *staticmap.Resolver    // Static map tile resolver (nil = disabled)
 	Geocoder           *geocoding.Geocoder    // Reverse geocoder (nil = disabled)
+
+	// LastTilePending is set by the most recent addStaticMap call.
+	// Webhook handlers should read this after calling enrichment functions
+	// and attach it to the OutboundPayload. Reset with ResetTilePending().
+	// Safe for single-goroutine use (one handler per enricher call).
+	LastTilePending *staticmap.TilePending
+}
+
+// ResetTilePending clears any pending tile from a previous enrichment call.
+func (e *Enricher) ResetTilePending() {
+	e.LastTilePending = nil
 }
 
 // New creates a new Enricher.
@@ -149,11 +160,12 @@ func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
 }
 
 // addStaticMap generates a static map tile URL and adds it to the enrichment map.
-// It builds a merged view of enrichment fields plus explicit webhook fields for the
-// tileserver call, without polluting the enrichment map with raw webhook data.
-func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any) {
+// For async-capable providers (tileservercache pregenerate), returns a TilePending
+// that the sender resolves before flushing. For instant providers, sets the URL
+// directly and returns nil.
+func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any) *staticmap.TilePending {
 	if e.StaticMap == nil {
-		return
+		return nil
 	}
 	// Build tileserver payload from enrichment + webhook fields
 	merged := make(map[string]any, len(m)+len(webhookFields)+2)
@@ -166,9 +178,17 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 	merged["latitude"] = lat
 	merged["longitude"] = lon
 	keys, pregenKeys := staticMapFieldsForType(maptype)
-	url := e.StaticMap.GetStaticMapURL(maptype, merged, keys, pregenKeys)
+
+	url, pending := e.StaticMap.GetStaticMapURLAsync(maptype, merged, keys, pregenKeys, m)
+	if pending != nil {
+		// Tile will be resolved async by the sender
+		e.LastTilePending = pending
+		return pending
+	}
+	// Instant URL (non-pregen or non-tileservercache)
 	m["staticMap"] = url
 	m["staticmap"] = url // deprecated alias
+	return nil
 }
 
 // pregenBase builds a new pregenKeys slice from the common base fields plus extras.

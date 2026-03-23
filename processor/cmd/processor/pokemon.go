@@ -159,7 +159,9 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 					pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
 			}
 
+			ps.enricher.ResetTilePending()
 			baseEnrichment := ps.enricher.Pokemon(&pokemon, processed)
+			tilePending := ps.enricher.LastTilePending
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
@@ -183,6 +185,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				PerUserEnrichment:     perUser,
 				MatchedAreas:          matchedAreas,
 				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
 			if processed.Encountered {

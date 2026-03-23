@@ -84,7 +84,9 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			l.Infof("Invasion grunt %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				gruntType, inv.Name, inv.Latitude, inv.Longitude, areaNames(matchedAreas), len(matched))
 
+			ps.enricher.ResetTilePending()
 			baseEnrichment := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0)
+			tilePending := ps.enricher.LastTilePending
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
@@ -102,6 +104,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 				PerLanguageEnrichment: perLang,
 				MatchedAreas:          matchedAreas,
 				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
 			l.Debugf("Invasion grunt %s at %s [%.3f,%.3f] and 0 humans cared",

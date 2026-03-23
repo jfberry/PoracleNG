@@ -356,6 +356,18 @@ encounter_cache_ttl = 3600
 worker_pool_size = 4
 batch_size = 50
 flush_interval_millis = 100
+# Tileserver tuning — controls how the processor generates static map tiles
+# Tiles are generated asynchronously: webhook handlers submit tile requests to a
+# queue and dedicated tile workers POST to the tileserver in the background.
+# Webhook payloads are held in the sender until their tile resolves or the deadline
+# expires (fallback URL used). This prevents slow tileservers from blocking webhook
+# processing.
+tileserver_concurrency = 2               # tile worker goroutines (parallel tileserver POSTs)
+tileserver_timeout = 10000               # HTTP timeout per tile POST (ms)
+tileserver_queue_size = 100              # max pending tile requests; overflow uses fallback URL
+tileserver_deadline = 10000              # max time a payload waits for its tile before using fallback (ms)
+tileserver_failure_threshold = 5         # consecutive errors before circuit breaker opens
+tileserver_cooldown_ms = 30000           # how long circuit breaker stays open before retrying (ms)
 # Alerter tuning
 max_database_connections = 15            # max database connections (per worker)
 concurrent_matched_processors = 10       # pre-matched payloads processed concurrently

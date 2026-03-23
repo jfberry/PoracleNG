@@ -79,6 +79,8 @@ type Config struct {
 	TileserverTimeout          int // ms (default 10000)
 	TileserverFailureThreshold int // consecutive errors before circuit opens (default 5)
 	TileserverCooldownMs       int // ms to keep circuit open (default 30000)
+	TileQueueSize              int // async tile request queue depth (default 100)
+	TileDeadlineMs             int // max time a payload waits for its tile (default 5000)
 
 	// Fallback URL if tile generation fails
 	FallbackURL string
@@ -99,11 +101,37 @@ func (s Stats) AvgMs() int64 {
 	return s.TotalMs / s.Calls
 }
 
+// TilePending represents an in-flight tile generation request.
+// The sender checks Result (non-blocking) to see if the tile is ready.
+type TilePending struct {
+	Result   chan string     // receives tile URL when done (buffered, size 1)
+	Deadline time.Time      // if not resolved by this time, use Fallback
+	Fallback string         // fallback URL if deadline expires or generation fails
+	target   map[string]any // enrichment map to write staticMap/staticmap into
+}
+
+// Apply writes the resolved tile URL into the enrichment map.
+func (tp *TilePending) Apply(url string) {
+	if tp.target != nil {
+		tp.target["staticMap"] = url
+		tp.target["staticmap"] = url
+	}
+}
+
+// tileRequest is an internal work item for the tile queue.
+type tileRequest struct {
+	pending       *TilePending
+	maptype       string
+	data          map[string]any
+	staticMapType string
+}
+
 // Resolver generates static map URLs for different providers.
 type Resolver struct {
-	config Config
-	client *http.Client
-	sem    chan struct{} // concurrency limiter for tileserver requests
+	config    Config
+	client    *http.Client
+	tileQueue chan tileRequest // async tile generation queue
+	done      chan struct{}    // signals tile workers to stop
 
 	// Circuit breaker state
 	consecutiveErrors int
@@ -153,15 +181,84 @@ func New(config Config) *Resolver {
 		config.Zoom = 15
 	}
 	if config.TileserverConcurrency <= 0 {
-		config.TileserverConcurrency = 10
+		config.TileserverConcurrency = 2
+	}
+	if config.TileQueueSize <= 0 {
+		config.TileQueueSize = 100
+	}
+	if config.TileDeadlineMs <= 0 {
+		config.TileDeadlineMs = 10000
 	}
 
-	return &Resolver{
+	r := &Resolver{
 		config: config,
 		client: &http.Client{
 			Timeout: time.Duration(config.TileserverTimeout) * time.Millisecond,
 		},
-		sem: make(chan struct{}, config.TileserverConcurrency),
+		tileQueue: make(chan tileRequest, config.TileQueueSize),
+		done:      make(chan struct{}),
+	}
+
+	// Start tile worker goroutines
+	for range config.TileserverConcurrency {
+		go r.tileWorker()
+	}
+
+	return r
+}
+
+// Close stops tile workers. Call on shutdown.
+func (r *Resolver) Close() {
+	close(r.done)
+}
+
+// TileDeadline returns the configured deadline duration for async tile requests.
+func (r *Resolver) TileDeadline() time.Duration {
+	return time.Duration(r.config.TileDeadlineMs) * time.Millisecond
+}
+
+// SubmitTile queues an async tile generation request and returns a TilePending.
+// The caller should NOT block on the result — the sender will resolve it.
+// For non-pregenerate or non-tileservercache providers, returns nil (URL set synchronously).
+func (r *Resolver) SubmitTile(maptype string, data map[string]any, staticMapType string, target map[string]any) *TilePending {
+	pending := &TilePending{
+		Result:   make(chan string, 1),
+		Deadline: time.Now().Add(r.TileDeadline()),
+		Fallback: r.config.FallbackURL,
+		target:   target,
+	}
+
+	select {
+	case r.tileQueue <- tileRequest{pending: pending, maptype: maptype, data: data, staticMapType: staticMapType}:
+		// queued successfully
+	default:
+		// queue full, resolve immediately with fallback
+		pending.Result <- r.config.FallbackURL
+		metrics.TileTotal.WithLabelValues("queue_full").Inc()
+		log.Warnf("staticmap: tile queue full, using fallback for %s", maptype)
+	}
+
+	return pending
+}
+
+// tileWorker drains the tile queue and generates tiles.
+func (r *Resolver) tileWorker() {
+	for {
+		select {
+		case req := <-r.tileQueue:
+			if time.Now().After(req.pending.Deadline) {
+				req.pending.Result <- req.pending.Fallback
+				metrics.TileTotal.WithLabelValues("deadline").Inc()
+				continue
+			}
+			url := r.generatePregenTile(req.maptype, req.data, req.staticMapType)
+			if url == "" {
+				url = req.pending.Fallback
+			}
+			req.pending.Result <- url
+		case <-r.done:
+			return
+		}
 	}
 }
 
@@ -210,7 +307,80 @@ func (r *Resolver) GetStaticMapURL(maptype string, data map[string]any, keys, pr
 	return result
 }
 
-// tileserverCache handles the tileservercache provider.
+// GetStaticMapURLAsync returns a static map URL for webhook enrichment.
+// For instant providers (google, osm, mapbox, non-pregen tileservercache), returns (url, nil).
+// For pregenerate tileservercache, returns ("", pending) — the sender resolves the pending.
+// target is the enrichment map where staticMap/staticmap will be written by the pending.
+func (r *Resolver) GetStaticMapURLAsync(maptype string, data map[string]any, keys, pregenKeys []string, target map[string]any) (string, *TilePending) {
+	provider := strings.ToLower(r.config.Provider)
+
+	if provider != "tileservercache" {
+		// Non-tileservercache: instant URL, no async
+		return r.GetStaticMapURL(maptype, data, keys, pregenKeys), nil
+	}
+
+	return r.tileserverCacheAsync(maptype, data, keys, pregenKeys, target)
+}
+
+// tileserverCacheAsync handles async tile generation for tileservercache pregenerate mode.
+func (r *Resolver) tileserverCacheAsync(maptype string, data map[string]any, keys, pregenKeys []string, target map[string]any) (string, *TilePending) {
+	tileOpts := r.getConfigForTileType(maptype)
+
+	lat, _ := getFloat(data, "latitude")
+	lon, _ := getFloat(data, "longitude")
+
+	// Fetch nearby stops (synchronous scanner query — fast DB lookup)
+	if boolVal(tileOpts.IncludeStops) && boolVal(tileOpts.Pregenerate) && r.config.Scanner != nil {
+		bounds := limits(lat, lon, tileOpts.Width, tileOpts.Height, tileOpts.Zoom)
+		stops, err := r.config.Scanner.GetStopData(bounds[0], bounds[1], bounds[2], bounds[3])
+		if err != nil {
+			log.Warnf("staticmap: failed to get stop data: %s", err)
+		} else {
+			stopData := make([]map[string]any, 0, len(stops))
+			for _, s := range stops {
+				entry := map[string]any{
+					"latitude":  s.Latitude,
+					"longitude": s.Longitude,
+					"type":      s.Type,
+				}
+				if s.Type == "gym" {
+					entry["teamId"] = s.TeamID
+					entry["slots"] = s.Slots
+					if r.config.ImgUicons != nil {
+						trainerCount := 6 - s.Slots
+						entry["imgUrl"] = r.config.ImgUicons.GymIcon(s.TeamID, trainerCount, false, false)
+					}
+				}
+				stopData = append(stopData, entry)
+			}
+			data["nearbyStops"] = stopData
+			if r.config.ImgUicons != nil {
+				data["uiconPokestopUrl"] = r.config.ImgUicons.PokestopIcon(0, false, 0, false)
+			}
+		}
+	}
+
+	if tileOpts.Type == "" || tileOpts.Type == "none" {
+		return "", nil
+	}
+
+	if !boolVal(tileOpts.Pregenerate) {
+		// Non-pregenerate: instant URL construction
+		return r.GetTileURL(maptype, filterFields(data, keys), tileOpts.Type), nil
+	}
+
+	// Pregenerate: submit to async tile queue
+	filtered := filterFields(data, pregenKeys)
+	if v, ok := data["nearbyStops"]; ok {
+		filtered["nearbyStops"] = v
+	}
+	if v, ok := data["uiconPokestopUrl"]; ok {
+		filtered["uiconPokestopUrl"] = v
+	}
+	return "", r.SubmitTile(maptype, filtered, tileOpts.Type, target)
+}
+
+// tileserverCache handles the tileservercache provider (synchronous, for API endpoints).
 func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon float64, keys, pregenKeys []string) string {
 	tileOpts := r.getConfigForTileType(maptype)
 
@@ -352,8 +522,16 @@ func (r *Resolver) GetTileURL(maptype string, data map[string]any, staticMapType
 	return u.String()
 }
 
-// GetPregeneratedTileURL POSTs data to the tileserver to pregenerate a tile.
+// GetPregeneratedTileURL synchronously POSTs data to the tileserver to pregenerate a tile.
+// Used by tile API endpoints that need a blocking result.
+// For webhook enrichment, use SubmitTile instead (async via tile worker pool).
 func (r *Resolver) GetPregeneratedTileURL(maptype string, data map[string]any, staticMapType string) string {
+	return r.generatePregenTile(maptype, data, staticMapType)
+}
+
+// generatePregenTile does the actual HTTP POST to the tileserver.
+// Called by both the synchronous GetPregeneratedTileURL and the async tile workers.
+func (r *Resolver) generatePregenTile(maptype string, data map[string]any, staticMapType string) string {
 	// Circuit breaker check
 	r.mu.Lock()
 	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
@@ -390,10 +568,6 @@ func (r *Resolver) GetPregeneratedTileURL(maptype string, data map[string]any, s
 	}
 
 	log.Debugf("staticmap: POST %s type=%s%s fields=%v", reqURL, templateType, maptype, mapKeys(data))
-
-	// Acquire concurrency slot
-	r.sem <- struct{}{}
-	defer func() { <-r.sem }()
 
 	resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
 	if err != nil {

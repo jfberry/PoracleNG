@@ -385,6 +385,8 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 			TileserverTimeout:          cfg.Tuning.TileserverTimeout,
 			TileserverFailureThreshold: cfg.Tuning.TileserverFailureThreshold,
 			TileserverCooldownMs:       cfg.Tuning.TileserverCooldownMs,
+			TileQueueSize:              cfg.Tuning.TileserverQueueSize,
+			TileDeadlineMs:             cfg.Tuning.TileserverDeadlineMs,
 		}
 
 		// Convert tileserver settings
@@ -518,6 +520,9 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 func (ps *ProcessorService) Close() {
 	ps.cancel()
 	ps.wg.Wait()
+	if ps.enricher.StaticMap != nil {
+		ps.enricher.StaticMap.Close()
+	}
 	ps.sender.Close()
 	ps.duplicates.Close()
 	ps.rateLimiter.Close()

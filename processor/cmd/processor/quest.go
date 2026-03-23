@@ -72,12 +72,17 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))
 
+			ps.enricher.ResetTilePending()
+			enrichment := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
+			tilePending := ps.enricher.LastTilePending
+
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "quest",
 				Message:      raw,
-				Enrichment:   ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards),
+				Enrichment:   enrichment,
 				MatchedAreas: matchedAreas,
 				MatchedUsers: matched,
+				TilePending:  tilePending,
 			})
 		} else {
 			l.Debugf("Quest at %s and 0 humans cared", quest.Name)

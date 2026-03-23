@@ -93,7 +93,9 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
 				gym.Name, ps.teamName(oldState.TeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))
 
+			ps.enricher.ResetTilePending()
 			enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldState.TeamID, gym.SlotsAvailable, inBattle, false, gymID)
+			tilePending := ps.enricher.LastTilePending
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
@@ -111,6 +113,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 				PerLanguageEnrichment: perLang,
 				MatchedAreas:          matchedAreas,
 				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
 			l.Debugf("Gym %s changed and 0 humans cared", gym.Name)
