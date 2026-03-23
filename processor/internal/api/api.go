@@ -7,6 +7,23 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// RequireSecret returns middleware that checks the x-poracle-secret header.
+// If secret is empty, all requests are allowed (no auth configured).
+func RequireSecret(secret string, next http.HandlerFunc) http.HandlerFunc {
+	if secret == "" {
+		return next
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Poracle-Secret") != secret {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{"status": "authError", "reason": "incorrect or missing api secret"})
+			return
+		}
+		next(w, r)
+	}
+}
+
 // HandleReload returns a handler that triggers a state reload.
 func HandleReload(reloadFn func() error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

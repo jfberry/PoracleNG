@@ -189,7 +189,7 @@ async function processPossibleShiny() {
 	log.info('ShinyPossible: Fetching shiny-possible data from processor')
 
 	try {
-		const file = await shinyPossible.download(config.processor.url)
+		const file = await shinyPossible.download(config.processor.url, config.processor.headers)
 		matchedShinyPossible.loadMap(file) // eslint-disable-line no-use-before-define
 	} catch (err) {
 		log.error(`ShinyPossible: Failed to fetch from processor: ${err.message}`)
@@ -201,7 +201,7 @@ async function processPossibleShiny() {
 function notifyProcessorReload() {
 	if (config.processor.url) {
 		const axios = require('axios')
-		axios.post(`${config.processor.url}/api/reload`).catch((err) => {
+		axios.post(`${config.processor.url}/api/reload`, null, { headers: config.processor.headers }).catch((err) => {
 			log.error(`Failed to notify processor of reload: ${err.message}`)
 		})
 	}

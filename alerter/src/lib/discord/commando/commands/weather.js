@@ -32,7 +32,7 @@ exports.run = async (client, msg, command) => {
 		const clean = command[1] ? command[1].includes('clean') : false
 		const template = command[1] && command[1].find((arg) => arg.match(client.re.templateRe)) ? command[1].find((arg) => arg.match(client.re.templateRe))[0].replace(client.translator.translate('template'), '') : 1
 		const axios = require('axios')
-		const resp = await axios.get(`${client.config.processor.url}/api/geocode/forward?q=${encodeURIComponent(command[0].join(' '))}`)
+		const resp = await axios.get(`${client.config.processor.url}/api/geocode/forward?q=${encodeURIComponent(command[0].join(' '))}`, { headers: client.config.processor.headers })
 		const [location] = resp.data
 		if (!location) return await msg.reply(`${client.translator.translate('404 no locations found:')} ${command[0].join(' ')}`)
 		const key = client.S2.latLngToKey(location.latitude, location.longitude, 10)

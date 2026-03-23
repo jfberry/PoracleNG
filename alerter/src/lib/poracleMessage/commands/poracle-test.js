@@ -150,7 +150,7 @@ exports.run = async (client, msg, args, options) => {
 			}, {
 				headers: {
 					'Content-Type': 'application/json',
-					...(client.config.server.apiSecret ? { 'X-Poracle-Secret': client.config.server.apiSecret } : {}),
+					...client.config.processor.headers,
 				},
 				timeout: 10000,
 			})

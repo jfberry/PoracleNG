@@ -14,8 +14,8 @@ class ShinyPossible {
 	 * @returns {Promise<any>}
 	 */
 	// eslint-disable-next-line class-methods-use-this
-	async download(processorUrl) {
-		const resp = await axios.get(`${processorUrl}/api/stats/shiny-possible`, { timeout: 5000 })
+	async download(processorUrl, headers) {
+		const resp = await axios.get(`${processorUrl}/api/stats/shiny-possible`, { timeout: 5000, headers })
 		return resp.data
 	}
 

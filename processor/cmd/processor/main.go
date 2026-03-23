@@ -126,17 +126,20 @@ func main() {
 	webhookHandler := webhook.NewHandler(proc, webhookLogger)
 	mux.Handle("/", webhookHandler)
 
-	// API endpoints
-	mux.HandleFunc("/api/reload", api.HandleReload(func() error {
+	// API endpoints (protected by x-poracle-secret when configured)
+	secret := cfg.Processor.APISecret
+	auth := func(h http.HandlerFunc) http.HandlerFunc { return api.RequireSecret(secret, h) }
+
+	mux.HandleFunc("/api/reload", auth(api.HandleReload(func() error {
 		return state.Load(stateMgr, database, cfg.Geofence)
-	}))
-	mux.HandleFunc("/api/weather", api.HandleWeather(proc.weather))
-	mux.HandleFunc("/api/stats/rarity", api.HandleStats(func() any { return proc.stats.ExportGroups() }))
-	mux.HandleFunc("/api/stats/shiny", api.HandleStats(func() any { return proc.stats.ExportShinyStats() }))
-	mux.HandleFunc("/api/stats/shiny-possible", api.HandleStats(func() any { return proc.stats.ExportShinyPossible() }))
+	})))
+	mux.HandleFunc("/api/weather", auth(api.HandleWeather(proc.weather)))
+	mux.HandleFunc("/api/stats/rarity", auth(api.HandleStats(func() any { return proc.stats.ExportGroups() })))
+	mux.HandleFunc("/api/stats/shiny", auth(api.HandleStats(func() any { return proc.stats.ExportShinyStats() })))
+	mux.HandleFunc("/api/stats/shiny-possible", auth(api.HandleStats(func() any { return proc.stats.ExportShinyPossible() })))
 	mux.HandleFunc("/health", api.HandleHealth())
-	mux.HandleFunc("/api/test", api.HandleTest(proc))
-	mux.HandleFunc("/api/geocode/forward", api.HandleGeocode(proc.enricher.Geocoder))
+	mux.HandleFunc("/api/test", auth(api.HandleTest(proc)))
+	mux.HandleFunc("/api/geocode/forward", auth(api.HandleGeocode(proc.enricher.Geocoder)))
 
 	// Geofence data and tile generation endpoints
 	tileDeps := api.TileDeps{
@@ -145,14 +148,14 @@ func main() {
 		ImgUicons: proc.enricher.ImgUicons,
 		Weather:   proc.weather,
 	}
-	mux.HandleFunc("GET /api/geofence/all/hash", api.HandleGeofenceHash(stateMgr))
-	mux.HandleFunc("GET /api/geofence/all/geojson", api.HandleGeofenceGeoJSON(stateMgr))
-	mux.HandleFunc("GET /api/geofence/all", api.HandleGeofenceAll(stateMgr))
-	mux.HandleFunc("GET /api/geofence/weatherMap/{lat}/{lon}", api.HandleWeatherMap(tileDeps))
-	mux.HandleFunc("GET /api/geofence/locationMap/{lat}/{lon}", api.HandleLocationMap(tileDeps))
-	mux.HandleFunc("GET /api/geofence/distanceMap/{lat}/{lon}/{distance}", api.HandleDistanceMap(tileDeps))
-	mux.HandleFunc("POST /api/geofence/overviewMap", api.HandleOverviewMap(tileDeps))
-	mux.HandleFunc("GET /api/geofence/{area}/map", api.HandleGeofenceAreaMap(tileDeps))
+	mux.HandleFunc("GET /api/geofence/all/hash", auth(api.HandleGeofenceHash(stateMgr)))
+	mux.HandleFunc("GET /api/geofence/all/geojson", auth(api.HandleGeofenceGeoJSON(stateMgr)))
+	mux.HandleFunc("GET /api/geofence/all", auth(api.HandleGeofenceAll(stateMgr)))
+	mux.HandleFunc("GET /api/geofence/weatherMap/{lat}/{lon}", auth(api.HandleWeatherMap(tileDeps)))
+	mux.HandleFunc("GET /api/geofence/locationMap/{lat}/{lon}", auth(api.HandleLocationMap(tileDeps)))
+	mux.HandleFunc("GET /api/geofence/distanceMap/{lat}/{lon}/{distance}", auth(api.HandleDistanceMap(tileDeps)))
+	mux.HandleFunc("POST /api/geofence/overviewMap", auth(api.HandleOverviewMap(tileDeps)))
+	mux.HandleFunc("GET /api/geofence/{area}/map", auth(api.HandleGeofenceAreaMap(tileDeps)))
 
 	// Proxy unhandled /api/ requests to the alerter (tracking, config, humans, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))

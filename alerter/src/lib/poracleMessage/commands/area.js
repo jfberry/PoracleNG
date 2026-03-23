@@ -177,7 +177,7 @@ exports.run = async (client, msg, args, options) => {
 				if (client.config.processor?.url) {
 					try {
 						const areas = args.length >= 2 ? args : JSON.parse(human.area)
-						const resp = await axios.post(`${client.config.processor.url}/api/geofence/overviewMap`, { areas }, { timeout: 10000 })
+						const resp = await axios.post(`${client.config.processor.url}/api/geofence/overviewMap`, { areas }, { timeout: 10000, headers: client.config.processor.headers })
 						if (resp.data.status === 'ok' && resp.data.url) {
 							await msg.replyWithImageUrl(
 								translator.translateFormat('Overview display'),
@@ -203,11 +203,11 @@ exports.run = async (client, msg, args, options) => {
 									await msg.reply(translator.translate('You have not set a location yet'))
 								} else {
 									const [, , distance] = area.match(client.re.dRe)
-									const resp = await axios.get(`${client.config.processor.url}/api/geofence/distanceMap/${human.latitude}/${human.longitude}/${distance}`, { timeout: 10000 })
+									const resp = await axios.get(`${client.config.processor.url}/api/geofence/distanceMap/${human.latitude}/${human.longitude}/${distance}`, { timeout: 10000, headers: client.config.processor.headers })
 									if (resp.data.status === 'ok') staticMap = resp.data.url
 								}
 							} else {
-								const resp = await axios.get(`${client.config.processor.url}/api/geofence/${encodeURIComponent(area)}/map`, { timeout: 10000 })
+								const resp = await axios.get(`${client.config.processor.url}/api/geofence/${encodeURIComponent(area)}/map`, { timeout: 10000, headers: client.config.processor.headers })
 								if (resp.data.status === 'ok') staticMap = resp.data.url
 							}
 						} catch (err) {

@@ -69,7 +69,7 @@ exports.run = async (client, msg, args, options) => {
 				}
 				let locations
 				try {
-					const resp = await axios.get(`${client.config.processor.url}/api/geocode/forward?q=${encodeURIComponent(search)}`)
+					const resp = await axios.get(`${client.config.processor.url}/api/geocode/forward?q=${encodeURIComponent(search)}`, { headers: client.config.processor.headers })
 					locations = resp.data
 				} catch (err) {
 					client.log.error(`Forward geocode failed: ${err.message}`)
@@ -106,7 +106,7 @@ exports.run = async (client, msg, args, options) => {
 
 			if (platform === 'discord' && client.config.processor?.url) {
 				try {
-					const resp = await axios.get(`${client.config.processor.url}/api/geofence/locationMap/${lat}/${lon}`, { timeout: 10000 })
+					const resp = await axios.get(`${client.config.processor.url}/api/geofence/locationMap/${lat}/${lon}`, { timeout: 10000, headers: client.config.processor.headers })
 					if (resp.data.status === 'ok' && resp.data.url) {
 						staticMap = resp.data.url
 
