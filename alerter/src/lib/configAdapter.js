@@ -222,19 +222,19 @@ function adaptConfig(toml) {
 
 	// ---- reconciliation ----
 	config.reconciliation = convertKeys(toml.reconciliation || {})
-	defaults(config.reconciliation, {
-		discord: {
-			updateUserNames: false,
-			removeInvalidUsers: true,
-			registerNewUsers: false,
-			updateChannelNames: true,
-			updateChannelNotes: false,
-			unregisterMissingChannels: false,
-		},
-		telegram: {
-			updateUserNames: false,
-			removeInvalidUsers: true,
-		},
+	if (!config.reconciliation.discord) config.reconciliation.discord = {}
+	if (!config.reconciliation.telegram) config.reconciliation.telegram = {}
+	defaults(config.reconciliation.discord, {
+		updateUserNames: false,
+		removeInvalidUsers: true,
+		registerNewUsers: false,
+		updateChannelNames: true,
+		updateChannelNotes: false,
+		unregisterMissingChannels: false,
+	})
+	defaults(config.reconciliation.telegram, {
+		updateUserNames: false,
+		removeInvalidUsers: true,
 	})
 
 	// ---- areaSecurity ----
