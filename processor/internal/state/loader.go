@@ -29,6 +29,18 @@ func Load(manager *Manager, database *sqlx.DB, geofenceCfg config.GeofenceConfig
 		return fmt.Errorf("load geofences: %w", err)
 	}
 
+	for _, f := range fences {
+		if len(f.Multipath) > 0 {
+			parts := make([]int, len(f.Multipath))
+			for i, p := range f.Multipath {
+				parts[i] = len(p)
+			}
+			log.Infof("Geofence: %s (multi-polygon, %d parts: %v points)", f.Name, len(f.Multipath), parts)
+		} else {
+			log.Infof("Geofence: %s (polygon, %d points)", f.Name, len(f.Path))
+		}
+	}
+
 	s := &State{
 		Humans:    data.Humans,
 		Monsters:  data.Monsters,
