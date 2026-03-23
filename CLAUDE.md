@@ -197,6 +197,8 @@ Enrichment is computed in three layers:
 
 The enrichment payload sent to the alerter includes `enrichment` (base), `perLanguageEnrichment` (keyed by language code), and `perUserEnrichment` (keyed by user ID). The alerter merges these via `getLanguageEnrichment()` and per-user data lookup.
 
+**Language fallback**: When a user has no `language` set in the humans table, the processor falls back to `[general] locale` from config (not hardcoded `"en"`). The alerter does the same via `config.general.locale`. These must match — if they don't, the per-language enrichment lookup will miss and translated names (fullName, etc.) will be empty.
+
 **Timezone note**: The Docker image must have `tzdata` installed (Alpine). The Go binary also embeds `time/tzdata` as fallback.
 
 ### 5. Sending to Alerter
@@ -239,7 +241,7 @@ All game data lookups, translations, geocoding, static maps, icon URLs, weakness
 
 ### 8. Delivery
 
-**Discord embed format note**: DTS templates may use either `embed` (singular, legacy) or `embeds` (plural array, modern). All Discord workers normalize `embed` → `embeds[]` before sending and coerce string `color` values (hex like `"A040A0"` or `"#A040A0"`) to integers. The `uploadEmbedImages` feature downloads the tile from `embeds[0].image.url` and re-uploads as an attachment.
+**Discord embed format note**: DTS templates may use either `embed` (singular, legacy) or `embeds` (plural array, modern). All Discord workers normalize `embed` → `embeds[]` before sending and coerce string `color` values to integers. Color detection: `#`-prefixed or exactly 6 chars → hex (e.g. `"#A040A0"`, `"A040A0"`); anything else → decimal (e.g. `"1216493"`). The `uploadEmbedImages` feature downloads the tile from `embeds[0].image.url` and re-uploads as an attachment; if the download fails, the message is sent with the URL in the embed instead.
 
 **Discord DM/Channel** (`discordWorker.js`):
 - `FairPromiseQueue`: max N concurrent sends, max 1 per destination (prevents flooding one user)
@@ -316,8 +318,8 @@ Reconciliation syncs Discord role membership with Poracle user registration. Con
 - The alerter also checks IP whitelist/blacklist before authentication
 
 **Unprotected endpoints**:
-- `GET /health` — health check (no auth)
-- `GET /metrics` — Prometheus metrics (no auth)
+- `GET /health` — health check
+- `GET /metrics` — Prometheus metrics
 - `POST /` — webhook receiver from Golbat (no auth, Golbat doesn't authenticate)
 
 **Internal calls** (alerter → processor):
@@ -398,7 +400,8 @@ All alerter API endpoints:
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/` | Receive webhooks from Golbat |
-| POST | `/api/reload` | Trigger state reload |
+| GET/POST | `/api/reload` | Trigger DB state reload (preserves geofences) |
+| GET/POST | `/api/geofence/reload` | Full reload including geofence files/Koji |
 | POST | `/api/test` | Generate test alert (poracle-test) |
 | GET | `/api/weather` | Get weather data for an S2 cell |
 | GET | `/api/geocode/forward` | Forward geocode lookup |
@@ -444,9 +447,13 @@ State is loaded from MySQL into an immutable snapshot, then atomically swapped:
 2. Build `state.State` struct with indexed data (MonsterIndex for O(1) pokemon lookup)
 3. `manager.Set(newState)` — atomic swap via `sync.RWMutex`
 4. All webhook handlers call `manager.Get()` to get current snapshot
-5. Reload triggered every `reload_interval_secs` (default 60s) or via `POST /api/reload`
+5. Reload triggered every `reload_interval_secs` (default 60s) or via `/api/reload`
 
-Tracking API routes (`apiTracking*.js`) call `triggerReloadAlerts()` after mutations to push changes to the processor immediately.
+**Two reload modes:**
+- **`state.Load()`** — DB only, reuses existing geofence data. Used by `/api/reload`, periodic timer, and tracking API mutations via `triggerReloadAlerts()`
+- **`state.LoadWithGeofences()`** — full reload including geofence files and Koji fetch. Used at startup and `/api/geofence/reload`
+
+Tracking API routes (`apiTracking*.js`) call `triggerReloadAlerts()` after mutations to push changes to the processor immediately. All 10 tracking types (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle) trigger reloads on create/update/delete.
 
 ## Template System (DTS)
 
