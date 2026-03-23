@@ -115,7 +115,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 		var perLang map[string]map[string]any
 		if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 			perLang = make(map[string]map[string]any)
-			for _, lang := range distinctLanguages(matched) {
+			for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
 				// Collect active pokemon from the first user with this language
 				var activePokemons []webhook.ActivePokemonEntry
 				for _, u := range matched {

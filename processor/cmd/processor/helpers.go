@@ -74,13 +74,17 @@ func areaNames(areas []webhook.MatchedArea) string {
 }
 
 // distinctLanguages returns the unique language codes from matched users.
-func distinctLanguages(matched []webhook.MatchedUser) []string {
+// Users with no language set fall back to defaultLocale.
+func distinctLanguages(matched []webhook.MatchedUser, defaultLocale string) []string {
+	if defaultLocale == "" {
+		defaultLocale = "en"
+	}
 	seen := make(map[string]bool, 4)
 	var langs []string
 	for _, m := range matched {
 		lang := m.Language
 		if lang == "" {
-			lang = "en"
+			lang = defaultLocale
 		}
 		if !seen[lang] {
 			seen[lang] = true

@@ -360,7 +360,16 @@ class Controller extends EventEmitter {
 	 */
 	// eslint-disable-next-line class-methods-use-this
 	getLanguageEnrichment(data, language) {
-		return data.perLanguageEnrichment[language] // eslint-disable-line no-underscore-dangle
+		if (!data.perLanguageEnrichment) {
+			this.log.warn(`No perLanguageEnrichment available (requested ${language})`)
+			return {}
+		}
+		const enrichment = data.perLanguageEnrichment[language]
+		if (!enrichment) {
+			this.log.warn(`No perLanguageEnrichment for language ${language} (available: ${Object.keys(data.perLanguageEnrichment).join(',')})`)
+			return {}
+		}
+		return enrichment
 	}
 
 	findIvColor(iv) {
