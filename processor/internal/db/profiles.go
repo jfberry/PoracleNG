@@ -2,6 +2,8 @@ package db
 
 import (
 	"encoding/json"
+	"fmt"
+	"strconv"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/jmoiron/sqlx"
@@ -14,8 +16,8 @@ type ProfileKey struct {
 }
 
 // ActiveHourEntry represents a time-of-day rule for auto-switching profiles.
-// Fields may be stored as numbers or strings in the DB JSON, so we use
-// a custom UnmarshalJSON that handles both.
+// Fields may be stored as numbers or strings in the DB JSON (including
+// zero-padded strings like "00"), so we decode into interface{} and coerce.
 type ActiveHourEntry struct {
 	Day   int
 	Hours int
@@ -23,30 +25,36 @@ type ActiveHourEntry struct {
 }
 
 func (e *ActiveHourEntry) UnmarshalJSON(b []byte) error {
-	var raw struct {
-		Day   json.Number `json:"day"`
-		Hours json.Number `json:"hours"`
-		Mins  json.Number `json:"mins"`
-	}
+	var raw map[string]interface{}
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
-	day, err := raw.Day.Int64()
-	if err != nil {
-		return err
+	var err error
+	if e.Day, err = flexToInt(raw["day"]); err != nil {
+		return fmt.Errorf("day: %w", err)
 	}
-	hours, err := raw.Hours.Int64()
-	if err != nil {
-		return err
+	if e.Hours, err = flexToInt(raw["hours"]); err != nil {
+		return fmt.Errorf("hours: %w", err)
 	}
-	mins, err := raw.Mins.Int64()
-	if err != nil {
-		return err
+	if e.Mins, err = flexToInt(raw["mins"]); err != nil {
+		return fmt.Errorf("mins: %w", err)
 	}
-	e.Day = int(day)
-	e.Hours = int(hours)
-	e.Mins = int(mins)
 	return nil
+}
+
+// flexToInt converts a JSON value that may be a number (9), a string ("9"),
+// or a zero-padded string ("00") to an int.
+func flexToInt(v interface{}) (int, error) {
+	switch val := v.(type) {
+	case float64:
+		return int(val), nil
+	case string:
+		return strconv.Atoi(val)
+	case nil:
+		return 0, nil
+	default:
+		return 0, fmt.Errorf("unexpected type %T", v)
+	}
 }
 
 // Profile represents a row from the profiles table.
