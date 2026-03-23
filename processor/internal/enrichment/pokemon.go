@@ -2,6 +2,7 @@ package enrichment
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -51,7 +52,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	if e.ShinyProvider != nil {
 		rate := e.ShinyProvider.GetShinyRate(pokemon.PokemonID)
 		if rate > 0 {
-			m["shinyStats"] = rate
+			m["shinyStats"] = int(math.Round(rate))
 			m["shinyPossible"] = true
 		} else {
 			m["shinyPossible"] = false
