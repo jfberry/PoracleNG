@@ -8,15 +8,18 @@
   "scale": 1,
 
   "polygons": [
+    #for(polygon in polygons):
+    #if(index != 0):,#endif
     {
       "fill_color": "rgba(46,204,113,0.3)",
       "stroke_color": "rgba(46,204,113)",
       "stroke_width": 2,
       "path": [
-        #for(coord in coords):
+        #for(coord in polygon):
         #if(index != 0):,#endif[#index(coord, 0), #index(coord, 1)]
         #endfor
       ]
     }
+    #endfor
   ]
 }

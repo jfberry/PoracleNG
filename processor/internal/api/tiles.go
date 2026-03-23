@@ -47,6 +47,30 @@ func findFence(fences []geofence.Fence, name string) *geofence.Fence {
 	return nil
 }
 
+// fencePaths returns all polygon paths for a fence (single or multipath).
+func fencePaths(f *geofence.Fence) [][][2]float64 {
+	if len(f.Multipath) > 0 {
+		return f.Multipath
+	}
+	if len(f.Path) > 0 {
+		return [][][2]float64{f.Path}
+	}
+	return nil
+}
+
+// fenceAutopositionPolygons converts fence paths to LatLon polygons for autoposition.
+func fenceAutopositionPolygons(paths [][][2]float64) [][]staticmap.LatLon {
+	polygons := make([][]staticmap.LatLon, len(paths))
+	for i, path := range paths {
+		polygon := make([]staticmap.LatLon, len(path))
+		for j, p := range path {
+			polygon[j] = staticmap.LatLon{Latitude: p[0], Longitude: p[1]}
+		}
+		polygons[i] = polygon
+	}
+	return polygons
+}
+
 // HandleGeofenceAreaMap returns a tile of a single geofence area polygon.
 // GET /api/geofence/{area}/map
 func HandleGeofenceAreaMap(deps TileDeps) http.HandlerFunc {
@@ -64,19 +88,19 @@ func HandleGeofenceAreaMap(deps TileDeps) http.HandlerFunc {
 
 		st := deps.StateMgr.Get()
 		fence := findFence(st.Fences, areaName)
-		if fence == nil || len(fence.Path) == 0 {
+		if fence == nil {
 			jsonError(w, http.StatusNotFound, "area not found")
 			return
 		}
 
-		// Convert path to LatLon for autoposition
-		polygon := make([]staticmap.LatLon, len(fence.Path))
-		for i, p := range fence.Path {
-			polygon[i] = staticmap.LatLon{Latitude: p[0], Longitude: p[1]}
+		paths := fencePaths(fence)
+		if len(paths) == 0 {
+			jsonError(w, http.StatusNotFound, "area has no polygon data")
+			return
 		}
 
 		pos := staticmap.Autoposition(staticmap.AutopositionShape{
-			Polygons: [][]staticmap.LatLon{polygon},
+			Polygons: fenceAutopositionPolygons(paths),
 		}, 500, 250, 1.25, 17.5)
 
 		if pos == nil {
@@ -88,7 +112,7 @@ func HandleGeofenceAreaMap(deps TileDeps) http.HandlerFunc {
 			"zoom":      pos.Zoom,
 			"latitude":  pos.Latitude,
 			"longitude": pos.Longitude,
-			"coords":    fence.Path,
+			"polygons":  paths,
 		}
 
 		tileURL := deps.StaticMap.GetPregeneratedTileURL("area", data, "staticMap")
@@ -182,7 +206,7 @@ func HandleOverviewMap(deps TileDeps) http.HandlerFunc {
 		// Find matching fences preserving order
 		var fences []*geofence.Fence
 		for _, name := range body.Areas {
-			if f := findFence(st.Fences, name); f != nil && len(f.Path) > 0 {
+			if f := findFence(st.Fences, name); f != nil && len(fencePaths(f)) > 0 {
 				fences = append(fences, f)
 			}
 		}
@@ -191,18 +215,14 @@ func HandleOverviewMap(deps TileDeps) http.HandlerFunc {
 			return
 		}
 
-		// Build polygons for autoposition
-		var polygons [][]staticmap.LatLon
+		// Build polygons for autoposition (flatten all paths from all fences)
+		var autoPolygons [][]staticmap.LatLon
 		for _, f := range fences {
-			polygon := make([]staticmap.LatLon, len(f.Path))
-			for i, p := range f.Path {
-				polygon[i] = staticmap.LatLon{Latitude: p[0], Longitude: p[1]}
-			}
-			polygons = append(polygons, polygon)
+			autoPolygons = append(autoPolygons, fenceAutopositionPolygons(fencePaths(f))...)
 		}
 
 		pos := staticmap.Autoposition(staticmap.AutopositionShape{
-			Polygons: polygons,
+			Polygons: autoPolygons,
 		}, 1024, 768, 1.25, 17.5)
 
 		if pos == nil {
@@ -210,12 +230,15 @@ func HandleOverviewMap(deps TileDeps) http.HandlerFunc {
 			return
 		}
 
-		// Build colored fence polygons
-		tilePolygons := make([]map[string]any, len(fences))
+		// Build flat list of colored polygons — multipath fences get multiple entries with the same color
+		var tilePolygons []map[string]any
 		for i, f := range fences {
-			tilePolygons[i] = map[string]any{
-				"color": rainbow(len(fences), i),
-				"path":  f.Path,
+			color := rainbow(len(fences), i)
+			for _, path := range fencePaths(f) {
+				tilePolygons = append(tilePolygons, map[string]any{
+					"color": color,
+					"path":  path,
+				})
 			}
 		}
 
