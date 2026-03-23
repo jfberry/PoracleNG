@@ -138,19 +138,23 @@ class DiscordWebhookWorker {
 				const startDownloadTime = performance.now()
 
 				if (this.config.discord.uploadEmbedImages && data.message.embeds && data.message.embeds.length && data.message.embeds[0].image && data.message.embeds[0].image.url) {
-					const copyMessage = JSON.parse(JSON.stringify(data.message))
-					const imageUrl = copyMessage.embeds[0].image.url
-					copyMessage.embeds[0].image.url = 'attachment://map.png'
+					try {
+						const copyMessage = JSON.parse(JSON.stringify(data.message))
+						const imageUrl = copyMessage.embeds[0].image.url
+						copyMessage.embeds[0].image.url = 'attachment://map.png'
 
-					const response = await axios.get(imageUrl, { responseType: 'arraybuffer' })
-					const buffer = Buffer.from(response.data)
+						const response = await axios.get(imageUrl, { responseType: 'arraybuffer' })
+						const buffer = Buffer.from(response.data)
 
-					const formData = new FormData()
-					formData.append('payload_json', JSON.stringify(copyMessage))
-					formData.append('file', buffer, 'map.png')
+						const formData = new FormData()
+						formData.append('payload_json', JSON.stringify(copyMessage))
+						formData.append('file', buffer, 'map.png')
 
-					headers = formData.getHeaders()
-					uploadData = formData
+						headers = formData.getHeaders()
+						uploadData = formData
+					} catch (downloadErr) {
+						this.logs.discord.warn(`${logReference}: ${data.name} WEBHOOK image download failed: ${downloadErr.message} — sending without upload`)
+					}
 				}
 
 				const source = axios.CancelToken.source()
@@ -203,7 +207,7 @@ class DiscordWebhookWorker {
 			}
 		} catch (err) {
 			metrics.messagesFailed.inc({ destination_type: 'webhook' })
-			this.logs.discord.error(`${data.logReference}: ${data.name} WEBHOOK failed`, util.inspect(err))
+			this.logs.discord.error(`${data.logReference}: ${data.name} WEBHOOK failed: ${err.message || util.inspect(err)}`)
 		}
 		return true
 	}
