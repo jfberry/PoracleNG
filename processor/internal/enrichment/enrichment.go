@@ -209,8 +209,9 @@ func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string)
 		keys = []string{"latitude", "longitude", "imgUrl", "battle_level", "style"}
 		pregenKeys = pregenBase("battle_level", "battle_pokemon_id")
 	case "fort-update":
-		keys = []string{"latitude", "longitude", "style"}
-		pregenKeys = []string{"latitude", "longitude", "nightTime", "duskTime", "dawnTime", "style"}
+		keys = []string{"latitude", "longitude", "isEditLocation", "fortType", "map_latitude", "map_longitude", "oldLatitude", "oldLongitude", "zoom", "style"}
+		pregenKeys = []string{"latitude", "longitude", "nightTime", "duskTime", "dawnTime", "style",
+			"isEditLocation", "fortType", "map_latitude", "map_longitude", "oldLatitude", "oldLongitude", "zoom"}
 	default:
 		keys = []string{"latitude", "longitude"}
 		pregenKeys = []string{"latitude", "longitude"}
