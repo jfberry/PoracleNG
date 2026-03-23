@@ -121,7 +121,10 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				for _, u := range matched {
 					uLang := u.Language
 					if uLang == "" {
-						uLang = "en"
+						uLang = ps.cfg.General.Locale
+						if uLang == "" {
+							uLang = "en"
+						}
 					}
 					if uLang == lang && len(u.ActivePokemons) > 0 {
 						activePokemons = u.ActivePokemons
