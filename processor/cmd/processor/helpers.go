@@ -241,9 +241,9 @@ func (ps *ProcessorService) disableUser(user webhook.MatchedUser, result ratelim
 	}()
 }
 
-// reloadState reloads the in-memory state from the database.
+// reloadState reloads the in-memory state from the database (preserves geofences).
 func (ps *ProcessorService) reloadState() error {
-	return state.Load(ps.stateMgr, ps.database, ps.cfg.Geofence)
+	return state.Load(ps.stateMgr, ps.database)
 }
 
 // postMessageToAlerter sends a message via the alerter's POST /api/postMessage endpoint.

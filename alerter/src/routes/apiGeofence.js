@@ -25,11 +25,12 @@ module.exports = async (fastify, options) => {
 			return { status: 'authError', reason: 'incorrect or missing api secret' }
 		}
 
-		// Trigger processor reload (re-fetches Koji geofences + reloads state)
+		// Trigger processor geofence reload (re-fetches Koji geofences + reloads state)
 		const processorUrl = fastify.config.processor?.url
 		if (processorUrl) {
 			try {
-				const res = await fetch(`${processorUrl}/api/reload`, { method: 'POST' })
+				const headers = fastify.config.processor?.headers || {}
+				const res = await fetch(`${processorUrl}/api/geofence/reload`, { method: 'POST', headers })
 				if (!res.ok) {
 					fastify.logger.error(`Processor reload returned ${res.status}`)
 					return { status: 'error', reason: `processor returned ${res.status}` }

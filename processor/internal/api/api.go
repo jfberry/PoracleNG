@@ -27,7 +27,7 @@ func RequireSecret(secret string, next http.HandlerFunc) http.HandlerFunc {
 // HandleReload returns a handler that triggers a state reload.
 func HandleReload(reloadFn func() error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		if r.Method != http.MethodPost && r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}

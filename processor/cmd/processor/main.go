@@ -84,8 +84,8 @@ func main() {
 
 	stateMgr := state.NewManager()
 
-	// Initial load
-	if err := state.Load(stateMgr, database, cfg.Geofence); err != nil {
+	// Initial load (includes geofences)
+	if err := state.LoadWithGeofences(stateMgr, database, cfg.Geofence); err != nil {
 		log.Fatalf("Failed to load initial state: %s", err)
 	}
 
@@ -131,7 +131,10 @@ func main() {
 	auth := func(h http.HandlerFunc) http.HandlerFunc { return api.RequireSecret(secret, h) }
 
 	mux.HandleFunc("/api/reload", auth(api.HandleReload(func() error {
-		return state.Load(stateMgr, database, cfg.Geofence)
+		return state.Load(stateMgr, database)
+	})))
+	mux.HandleFunc("/api/geofence/reload", auth(api.HandleReload(func() error {
+		return state.LoadWithGeofences(stateMgr, database, cfg.Geofence)
 	})))
 	mux.HandleFunc("/api/weather", auth(api.HandleWeather(proc.weather)))
 	mux.HandleFunc("/api/stats/rarity", auth(api.HandleStats(func() any { return proc.stats.ExportGroups() })))
@@ -179,7 +182,7 @@ func main() {
 		for range ticker.C {
 			log.Debugf("Periodic reload triggered")
 			start := time.Now()
-			if err := state.Load(stateMgr, database, cfg.Geofence); err != nil {
+			if err := state.Load(stateMgr, database); err != nil {
 				log.Errorf("Periodic reload failed: %s", err)
 				metrics.StateReloads.WithLabelValues("error").Inc()
 			} else {
