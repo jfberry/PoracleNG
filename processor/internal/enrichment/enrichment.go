@@ -191,47 +191,56 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 	return nil
 }
 
-// pregenBase builds a new pregenKeys slice from the common base fields plus extras.
-// Returns a fresh slice each time — safe for concurrent use.
-func pregenBase(extras ...string) []string {
-	base := []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "nightTime", "duskTime", "dawnTime", "style"}
-	result := make([]string, len(base), len(base)+len(extras))
-	copy(result, base)
-	return append(result, extras...)
-}
-
 // staticMapFieldsForType returns the field lists for non-pregenerate (keys) and
-// pregenerate (pregenKeys) modes, matching the alerter's per-controller field lists.
+// pregenerate (pregenKeys) modes.
+//
+// Both use the same base set of fields. Pregenerate adds nightTime/duskTime/dawnTime
+// (not useful in a URL) and large array fields like nearbyStops and activePokemons.
 func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string) {
+	// Common fields included in both modes
+	common := []string{"latitude", "longitude", "imgUrl", "imgUrlAlt",
+		"nightTime", "duskTime", "dawnTime", "style"}
+
 	switch maptype {
 	case "monster":
-		keys = []string{"pokemon_id", "latitude", "longitude", "form", "costume", "imgUrl", "imgUrlAlt", "style"}
-		pregenKeys = pregenBase("pokemon_id", "display_pokemon_id", "verified", "costume", "form", "pokemonId", "generation", "weather", "confirmedTime", "shinyPossible", "seenType", "seen_type", "cell_coords")
+		typeFields := []string{"pokemon_id", "display_pokemon_id", "form", "costume", "pokemonId",
+			"generation", "weather", "confirmedTime", "shinyPossible", "seenType", "seen_type", "verified",
+			"cell_coords"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
 	case "raid":
-		keys = []string{"pokemon_id", "latitude", "longitude", "form", "level", "teamId", "evolution", "costume", "imgUrl", "imgUrlAlt", "style"}
-		pregenKeys = pregenBase("pokemon_id", "form", "level", "teamId", "evolution", "costume")
+		typeFields := []string{"pokemon_id", "form", "level", "teamId", "evolution", "costume"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
 	case "pokestop":
-		keys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "gruntTypeId", "displayTypeId", "style"}
-		pregenKeys = pregenBase("gruntTypeId", "displayTypeId", "lureTypeId")
+		typeFields := []string{"gruntTypeId", "displayTypeId", "lureTypeId"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
 	case "quest":
-		keys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "style"}
-		pregenKeys = pregenBase()
+		keys = common
+		pregenKeys = keys
 	case "gym":
-		keys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "team_id", "style"}
-		pregenKeys = pregenBase("team_id", "slotsAvailable", "inBattle", "ex")
+		typeFields := []string{"team_id", "slotsAvailable", "inBattle", "ex"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
 	case "nest":
-		keys = []string{"pokemon_id", "latitude", "longitude", "form", "imgUrl", "imgUrlAlt", "style"}
-		pregenKeys = pregenBase("pokemon_id", "form", "pokemonSpawnAvg")
+		typeFields := []string{"pokemon_id", "form", "pokemonSpawnAvg"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
 	case "weather":
-		keys = []string{"latitude", "longitude", "gameplay_condition", "coords", "activePokemons", "imgUrl", "imgUrlAlt", "style"}
-		pregenKeys = pregenBase("gameplay_condition", "coords", "activePokemons")
+		typeFields := []string{"gameplay_condition", "coords"}
+		keys = append(common, typeFields...)
+		// Pregen adds activePokemons (large array, not suitable for URL)
+		pregenKeys = append(append([]string{}, keys...), "activePokemons")
 	case "maxbattle":
-		keys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "battle_level", "style"}
-		pregenKeys = pregenBase("battle_level", "battle_pokemon_id")
+		typeFields := []string{"battle_level", "battle_pokemon_id"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
 	case "fort-update":
-		keys = []string{"latitude", "longitude", "isEditLocation", "fortType", "map_latitude", "map_longitude", "oldLatitude", "oldLongitude", "zoom", "style"}
-		pregenKeys = []string{"latitude", "longitude", "nightTime", "duskTime", "dawnTime", "style",
-			"isEditLocation", "fortType", "map_latitude", "map_longitude", "oldLatitude", "oldLongitude", "zoom"}
+		typeFields := []string{"isEditLocation", "fortType", "map_latitude", "map_longitude",
+			"oldLatitude", "oldLongitude", "zoom"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
 	default:
 		keys = []string{"latitude", "longitude"}
 		pregenKeys = []string{"latitude", "longitude"}

@@ -369,7 +369,7 @@ func (r *Resolver) tileserverCacheAsync(maptype string, data map[string]any, key
 		return r.GetTileURL(maptype, filterFields(data, keys), tileOpts.Type), nil
 	}
 
-	// Pregenerate: submit to async tile queue
+	// Pregenerate: filter to pregen keys + nearbyStops to keep payload reasonable
 	filtered := filterFields(data, pregenKeys)
 	if v, ok := data["nearbyStops"]; ok {
 		filtered["nearbyStops"] = v
@@ -423,7 +423,7 @@ func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon
 	if !boolVal(tileOpts.Pregenerate) {
 		return r.GetTileURL(maptype, filterFields(data, keys), tileOpts.Type)
 	}
-	// For pregenerate, include nearbyStops/uiconPokestopUrl plus the pregenKeys
+	// Pregenerate: filter to pregen keys + nearbyStops to keep payload reasonable
 	filtered := filterFields(data, pregenKeys)
 	if v, ok := data["nearbyStops"]; ok {
 		filtered["nearbyStops"] = v
