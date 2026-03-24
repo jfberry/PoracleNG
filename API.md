@@ -188,12 +188,34 @@ Force a state reload (same as POST /api/reload).
 
 ### Raid Tracking
 
+Raid tracking supports three input modes. Each request object uses **one** of these:
+
+**Mode 1: Track by level** — set `level` (pokemon_id defaults to 9000):
+```json
+{"level": 5, "team": 4, "distance": 500}
+```
+
+`level` can be a single int or an array — each level becomes a separate tracking rule:
+```json
+{"level": [1, 3, 5], "team": 4}
+```
+
+Use `level: 90` for all levels.
+
+**Mode 2: Track specific pokemon** — set `pokemon_id` (level is ignored):
+```json
+{"pokemon_id": 150, "form": 0, "distance": 500}
+```
+
+**Mode 3: Track multiple pokemon** — use `pokemon_form` array. Each entry becomes a separate tracking rule with `level=9000`. Do NOT use `pokemon_id`/`form`/`level` with this mode:
+```json
+{"pokemon_form": [{"pokemon_id": 150, "form": 0}, {"pokemon_id": 151, "form": 0}], "distance": 500}
+```
+
+**Common fields (used with all modes):**
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `pokemon_id` | int | 9000 | Pokemon ID (9000 = any, track by level) |
-| `level` | int/int[] | required if pokemon_id=9000 | Raid level(s) |
-| `pokemon_form` | array | | Array of `{pokemon_id, form}` objects |
-| `form` | int | 0 | Form ID |
 | `team` | int | 4 | Gym team (0-3 specific, 4=any) |
 | `exclusive` | bool | false | EX raid only |
 | `move` | int | 9000 | Move ID filter (9000=any) |
@@ -206,13 +228,21 @@ Force a state reload (same as POST /api/reload).
 
 ### Egg Tracking
 
+`level` is required. It can be a single int or an array — each level becomes a separate tracking rule. Use `90` for all levels.
+
+```json
+{"level": 5, "team": 4}
+{"level": [1, 3, 5]}
+{"level": 90}
+```
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `level` | int/int[] | required | Egg level(s) (90=all) |
 | `team` | int | 4 | Gym team (0-3 specific, 4=any) |
 | `exclusive` | bool | false | EX gym only |
 | `gym_id` | string | null | Specific gym ID |
-| `rsvp_changes` | int | 0 | RSVP mode |
+| `rsvp_changes` | int | 0 | RSVP mode (0=without, 1=including, 2=only) |
 | `distance` | int | 0 | Distance |
 | `template` | string | config default | DTS template |
 | `clean` | bool | false | Auto-delete |
@@ -274,11 +304,16 @@ Force a state reload (same as POST /api/reload).
 
 ### Fort Update Tracking
 
+```json
+{"fort_type": "pokestop", "change_types": ["name", "location"], "distance": 500}
+{"fort_type": "everything", "include_empty": true}
+```
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `fort_type` | string | "everything" | Type: "pokestop", "gym", or "everything" |
-| `include_empty` | bool | false | Include empty changes |
-| `change_types` | string/array | "[]" | Change types: "location", "name", "image_url", "removal", "new" |
+| `include_empty` | bool | false | Include changes with no name/description |
+| `change_types` | string[] | [] | Change types to track: "location", "name", "image_url", "removal", "new" |
 | `distance` | int | 0 | Distance |
 | `template` | string | config default | DTS template |
 
