@@ -33,8 +33,12 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) map[string]any {
 	// Reverse geocoding
 	e.addGeoResult(m, lure.Latitude, lure.Longitude)
 
-	// Static map tile
-	e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, nil)
+	// Static map tile — only pass non-zero lureTypeId so tileserver template nil checks work
+	var tileFields map[string]any
+	if lure.LureID != 0 {
+		tileFields = map[string]any{"lureTypeId": lure.LureID}
+	}
+	e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields)
 
 	// Lure data from util.json
 	if e.GameData != nil {

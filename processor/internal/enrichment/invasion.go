@@ -50,12 +50,18 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	// Reverse geocoding
 	e.addGeoResult(m, lat, lon)
 
-	// Static map tile
-	e.addStaticMap(m, "pokestop", lat, lon, map[string]any{
-		"gruntTypeId":   gruntTypeID,
-		"displayTypeId": displayType,
-		"lureTypeId":    lureID,
-	})
+	// Static map tile — only pass non-zero IDs so tileserver template nil checks work
+	tileFields := make(map[string]any)
+	if gruntTypeID != 0 {
+		tileFields["gruntTypeId"] = gruntTypeID
+	}
+	if displayType != 0 {
+		tileFields["displayTypeId"] = displayType
+	}
+	if lureID != 0 {
+		tileFields["lureTypeId"] = lureID
+	}
+	e.addStaticMap(m, "pokestop", lat, lon, tileFields)
 
 	// Grunt data
 	if e.GameData != nil {
