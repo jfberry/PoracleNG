@@ -62,6 +62,16 @@ This builds the Go processor binary and runs `npm install` for the alerter. You 
 
 ### 3. Start
 
+**With pm2 (recommended for production):**
+
+```sh
+pm2 start ecosystem.config.js
+```
+
+The included `ecosystem.config.js` sets `kill_timeout: 10000` (10 seconds) to allow graceful shutdown of Discord/Telegram queues. The default pm2 timeout of 1.6 seconds is too short and can leave orphaned processes.
+
+**Without pm2:**
+
 ```sh
 ./start.sh
 ```
@@ -229,38 +239,35 @@ processor_url = "http://localhost:3030"
 
 ## API Endpoints
 
-### Processor
+All API endpoints are available through the processor (default port 3030). External tools like PoracleWeb only need to know the processor's address. See [API.md](API.md) for the full reference with request/response examples.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/` | Receive Golbat webhooks |
-| POST | `/api/reload` | Trigger in-memory data reload |
-| GET | `/api/weather` | Current weather state |
-| GET | `/api/stats/rarity` | Pokemon rarity groups |
-| GET | `/api/stats/shiny` | Shiny rate statistics |
-| GET | `/api/stats/shiny-possible` | Pokemon observed as shiny |
-| GET | `/health` | Health check |
-| GET | `/metrics` | Prometheus metrics |
-| Various | `/api/*` | Proxied to alerter (tracking, config, humans, profiles, etc.) |
+### Processor (Go)
 
-The processor reverse-proxies any `/api/` request it doesn't handle natively to the alerter. This means external tools like PoracleWeb only need to know about the processor's address — all tracking, config, and user management APIs are transparently forwarded.
+| Category | Endpoints | Description |
+|----------|-----------|-------------|
+| Webhooks | `POST /` | Receive Golbat webhooks |
+| State | `GET/POST /api/reload`, `/api/geofence/reload` | Reload tracking rules / geofences |
+| Tracking | `/api/tracking/{type}/{id}` | CRUD for all 10 tracking types (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle) |
+| Humans | `/api/humans/*` | User management (areas, location, start/stop, create) |
+| Profiles | `/api/profiles/*` | Profile CRUD (create, delete, copy, update hours) |
+| Geofence | `/api/geofence/*` | Geofence data (all, hash, geojson) and tile generation |
+| Stats | `/api/stats/*` | Rarity, shiny rate, shiny possible |
+| Weather | `GET /api/weather` | Weather cell data |
+| Geocoding | `GET /api/geocode/forward` | Forward geocode lookup |
+| Test | `POST /api/test` | Test webhook simulation |
+| Health | `GET /health`, `GET /metrics` | Health check and Prometheus metrics |
 
-### Alerter
+### Alerter (Node.js, proxied through processor)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/matched` | Receive pre-matched results from processor |
-| Various | `/api/tracking/*` | User tracking management |
-| Various | `/api/humans/*` | User management (location, areas, profiles) |
-| Various | `/api/profiles/*` | Profile CRUD |
-| GET | `/api/config/*` | Configuration queries (PoracleWeb) |
-| GET | `/api/masterdata/*` | Game master data |
-| GET | `/api/geofence/*` | Geofence tile maps |
-| POST | `/api/postMessage` | Direct message posting |
-| GET | `/health` | Health check |
-| GET | `/metrics` | Prometheus metrics |
+| Category | Endpoints | Description |
+|----------|-----------|-------------|
+| Delivery | `POST /api/matched` | Receive pre-matched results from processor |
+| Messages | `POST /api/postMessage` | Direct message delivery to Discord/Telegram |
+| Discord | `/api/humans/{id}/roles/*` | Discord role management (requires Discord.js client) |
+| Config | `GET /api/config/*` | Server config and template metadata |
+| Game data | `GET /api/masterdata/*` | Pokemon and grunt master data |
 
-Both components expose `/health` and `/metrics` endpoints on their respective ports. Prometheus can scrape both to monitor the full pipeline (processor on port 3030, alerter on port 3031 by default).
+The processor proxies unhandled `/api/*` requests to the alerter transparently. Both components expose `/health` and `/metrics` on their respective ports for Prometheus monitoring.
 
 ## Monitoring
 

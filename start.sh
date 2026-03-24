@@ -14,12 +14,12 @@ graceful_kill() {
 	[ -z "$pid" ] && return
 	kill "$pid" 2>/dev/null || return
 	local i=0
-	while [ $i -lt 10 ] && kill -0 "$pid" 2>/dev/null; do
+	while [ $i -lt 8 ] && kill -0 "$pid" 2>/dev/null; do
 		sleep 1
 		i=$((i + 1))
 	done
 	if kill -0 "$pid" 2>/dev/null; then
-		echo "[start] $name did not stop after 10s, sending SIGKILL"
+		echo "[start] $name did not stop after 8s, sending SIGKILL"
 		kill -9 "$pid" 2>/dev/null
 	fi
 	wait "$pid" 2>/dev/null
@@ -91,7 +91,7 @@ HEALTH_URL="http://${HEALTH_HOST}:${PROC_PORT}/health"
 # ---- Start processor ----
 
 echo "[start] Starting processor..."
-"$PROCESSOR_BIN" -basedir "$ROOT" 2>&1 | sed -u 's/^/[processor] /' &
+"$PROCESSOR_BIN" -basedir "$ROOT" &
 PROCESSOR_PID=$!
 
 # Wait for processor health endpoint
@@ -118,8 +118,10 @@ fi
 # ---- Start alerter ----
 
 echo "[start] Starting alerter..."
-(cd "$ALERTER_DIR" && node src/app.js) 2>&1 | sed -u 's/^/[alerter] /' &
+cd "$ALERTER_DIR"
+node src/app.js &
 ALERTER_PID=$!
+cd "$ROOT"
 
 echo "[start] Both components running (processor=$PROCESSOR_PID, alerter=$ALERTER_PID)"
 
