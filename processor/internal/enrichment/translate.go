@@ -33,7 +33,7 @@ func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i
 	formNormalised := ""
 	if nameKeys.FormKey != "" {
 		formName = tr.T(nameKeys.FormKey)
-		if formName != "" && !isNormalForm(formName) {
+		if formName != "" && !IsNormalForm(formName) {
 			formNormalised = formName
 		}
 	}
@@ -57,7 +57,7 @@ func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i
 		enFormNormalised := ""
 		if nameKeys.FormKey != "" {
 			enForm := enTr.T(nameKeys.FormKey)
-			if enForm != "" && !isNormalForm(enForm) {
+			if enForm != "" && !IsNormalForm(enForm) {
 				enFormNormalised = enForm
 			}
 		}
@@ -74,9 +74,9 @@ func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i
 	}
 }
 
-// isNormalForm returns true if a form name is "Normal" in any common language.
+// IsNormalForm returns true if a form name is "Normal" in any common language.
 // The form_0 key typically translates to "Normal" or equivalent.
-func isNormalForm(name string) bool {
+func IsNormalForm(name string) bool {
 	lower := strings.ToLower(name)
 	return lower == "normal" || lower == "unset" || lower == ""
 }

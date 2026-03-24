@@ -302,9 +302,9 @@ func TestIsNormalForm(t *testing.T) {
 		{"Galarian", false},
 	}
 	for _, tt := range tests {
-		got := isNormalForm(tt.input)
+		got := IsNormalForm(tt.input)
 		if got != tt.want {
-			t.Errorf("isNormalForm(%q) = %v, want %v", tt.input, got, tt.want)
+			t.Errorf("IsNormalForm(%q) = %v, want %v", tt.input, got, tt.want)
 		}
 	}
 }
