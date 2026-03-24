@@ -74,8 +74,11 @@ func translateMoveName(tr *i18n.Translator, gd *gamedata.GameData, moveID int) s
 
 // resolveGymName looks up a gym name from the scanner, falling back to the raw ID.
 func resolveGymName(s scanner.Scanner, gymID string) string {
-	if s == nil || gymID == "" {
+	if gymID == "" {
 		return ""
+	}
+	if s == nil {
+		return gymID
 	}
 	name, err := s.GetGymName(gymID)
 	if err != nil || name == "" {
@@ -86,8 +89,11 @@ func resolveGymName(s scanner.Scanner, gymID string) string {
 
 // resolvePokestopName looks up a pokestop/station name from the scanner, falling back to the raw ID.
 func resolvePokestopName(s scanner.Scanner, stationID string) string {
-	if s == nil || stationID == "" {
+	if stationID == "" {
 		return ""
+	}
+	if s == nil {
+		return stationID
 	}
 	name, err := s.GetPokestopName(stationID)
 	if err != nil || name == "" {
