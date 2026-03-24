@@ -18,7 +18,12 @@ const noop = () => { }
 
 function coerceEmbedColor(embed) {
 	if (embed && typeof embed.color === 'string') {
-		embed.color = parseInt(embed.color.replace(/^#/, ''), 16)
+		const c = embed.color.trim()
+		if (c.startsWith('#') || c.length === 6) {
+			embed.color = parseInt(c.replace(/^#/, ''), 16)
+		} else {
+			embed.color = parseInt(c, 10)
+		}
 	}
 }
 
@@ -156,7 +161,9 @@ class Worker {
 		let user = this.client.users.cache.get(data.target)
 		let msgDeletionMs = 0
 		if (data.clean) {
-			const tth = data.tth || { days: 0, hours: 0, minutes: 0, seconds: 0 }
+			const tth = data.tth || {
+				days: 0, hours: 0, minutes: 0, seconds: 0,
+			}
 			msgDeletionMs = ((tth.days * 86400) + (tth.hours * 3600) + (tth.minutes * 60) + tth.seconds) * 1000
 		}
 
@@ -171,18 +178,21 @@ class Worker {
 			}
 
 			coerceEmbedColor(data.message.embed)
-
-			if (this.config.discord.uploadEmbedImages && data.message.embed && data.message.embed.image && data.message.embed.image.url) {
-				const { url } = data.message.embed.image
-				data.message.embed.image.url = 'attachment://map.png'
-				data.message.files = [{ attachment: url, name: 'map.png' }]
-			}
-
-			const startTime = performance.now()
 			if (data.message.embed) {
 				data.message.embeds = [data.message.embed]
 				delete data.message.embed
 			}
+			if (data.message.embeds) {
+				for (const embed of data.message.embeds) coerceEmbedColor(embed)
+			}
+
+			if (this.config.discord.uploadEmbedImages && data.message.embeds && data.message.embeds.length && data.message.embeds[0].image && data.message.embeds[0].image.url) {
+				const { url } = data.message.embeds[0].image
+				data.message.embeds[0].image.url = 'attachment://map.png'
+				data.message.files = [{ attachment: url, name: 'map.png' }]
+			}
+
+			const startTime = performance.now()
 
 			this.logs.discord.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} USER Sending discord message`, data.message)
 
@@ -242,25 +252,30 @@ class Worker {
 			const channel = await this.client.channels.fetch(data.target)
 			let msgDeletionMs = this.config.discord.messageDeleteDelay || 0
 			if (data.clean) {
-				const tth = data.tth || { days: 0, hours: 0, minutes: 0, seconds: 0 }
+				const tth = data.tth || {
+					days: 0, hours: 0, minutes: 0, seconds: 0,
+				}
 				msgDeletionMs += ((tth.days * 86400) + (tth.hours * 3600) + (tth.minutes * 60) + tth.seconds) * 1000
 			}
 			if (!channel) return this.logs.discord.warn(`${logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL not found`)
 			this.logs.discord.debug(`${logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL Sending discord message`, data.message)
 
 			coerceEmbedColor(data.message.embed)
-
-			if (this.config.discord.uploadEmbedImages && data.message.embed && data.message.embed.image && data.message.embed.image.url) {
-				const { url } = data.message.embed.image
-				data.message.embed.image.url = 'attachment://map.png'
-				data.message.files = [{ attachment: url, name: 'map.png' }]
-			}
-
-			const startTime = performance.now()
 			if (data.message.embed) {
 				data.message.embeds = [data.message.embed]
 				delete data.message.embed
 			}
+			if (data.message.embeds) {
+				for (const embed of data.message.embeds) coerceEmbedColor(embed)
+			}
+
+			if (this.config.discord.uploadEmbedImages && data.message.embeds && data.message.embeds.length && data.message.embeds[0].image && data.message.embeds[0].image.url) {
+				const { url } = data.message.embeds[0].image
+				data.message.embeds[0].image.url = 'attachment://map.png'
+				data.message.files = [{ attachment: url, name: 'map.png' }]
+			}
+
+			const startTime = performance.now()
 			const msg = await channel.send(data.message)
 			const endTime = performance.now();
 			(this.config.logger.timingStats ? this.logs.discord.verbose : this.logs.discord.debug)(`${logReference}: #${this.id} -> ${data.name} ${data.target} CHANNEL (${endTime - startTime} ms)`)
