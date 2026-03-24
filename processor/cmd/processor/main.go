@@ -241,6 +241,7 @@ func main() {
 	mux.HandleFunc("POST /api/tracking/maxbattle/{id}/delete", auth(api.HandleBulkDeleteMaxbattle(trackingDeps)))
 	// Aggregate tracking endpoints
 	mux.HandleFunc("GET /api/tracking/all/{id}", auth(api.HandleGetAllTracking(trackingDeps)))
+	mux.HandleFunc("GET /api/tracking/allProfiles/{id}", auth(api.HandleGetAllProfilesTracking(trackingDeps)))
 
 	// Human endpoints
 	mux.HandleFunc("GET /api/humans/one/{id}", auth(api.HandleGetOneHuman(trackingDeps)))

@@ -611,3 +611,153 @@ func InsertMaxbattle(db *sqlx.DB, mb *MaxbattleTrackingAPI) (int64, error) {
 	}
 	return uid, nil
 }
+
+// ---------------------------------------------------------------------------
+// Select*ByID — query by user ID only (all profiles, no profile_no filter)
+// ---------------------------------------------------------------------------
+
+// SelectMonstersByID returns all monster trackings for a given human (all profiles).
+func SelectMonstersByID(db *sqlx.DB, id string) ([]MonsterTrackingAPI, error) {
+	var monsters []MonsterTrackingAPI
+	err := db.Select(&monsters,
+		`SELECT uid, id, profile_no, ping, clean, distance,
+		        COALESCE(template, '1') AS template, pokemon_id, form,
+		        min_iv, max_iv, min_cp, max_cp, min_level, max_level,
+		        atk, def, sta, max_atk, max_def, max_sta,
+		        gender, min_weight, max_weight, min_time,
+		        rarity, max_rarity, size, max_size,
+		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
+		        pvp_ranking_min_cp, pvp_ranking_cap
+		 FROM monsters WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select monsters for %s: %w", id, err)
+	}
+	return monsters, nil
+}
+
+// SelectRaidsByID returns all raid trackings for a given human (all profiles).
+func SelectRaidsByID(db *sqlx.DB, id string) ([]RaidTrackingAPI, error) {
+	var raids []RaidTrackingAPI
+	err := db.Select(&raids,
+		`SELECT uid, id, profile_no, ping, clean, distance,
+		        COALESCE(template, '1') AS template, team, pokemon_id, form,
+		        level, exclusive, move, evolution, gym_id, rsvp_changes
+		 FROM raid WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select raids for %s: %w", id, err)
+	}
+	return raids, nil
+}
+
+// SelectEggsByID returns all egg trackings for a given human (all profiles).
+func SelectEggsByID(db *sqlx.DB, id string) ([]EggTrackingAPI, error) {
+	var eggs []EggTrackingAPI
+	err := db.Select(&eggs,
+		`SELECT uid, id, profile_no, ping, clean, distance,
+		        COALESCE(template, '1') AS template, team, level, exclusive,
+		        gym_id, rsvp_changes
+		 FROM egg WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select eggs for %s: %w", id, err)
+	}
+	return eggs, nil
+}
+
+// SelectQuestsByID returns all quest trackings for a given human (all profiles).
+func SelectQuestsByID(db *sqlx.DB, id string) ([]QuestTrackingAPI, error) {
+	var quests []QuestTrackingAPI
+	err := db.Select(&quests,
+		`SELECT uid, id, profile_no, ping, clean, reward,
+		        COALESCE(template, '1') AS template, shiny, reward_type,
+		        distance, COALESCE(form, 0) AS form,
+		        COALESCE(amount, 0) AS amount
+		 FROM quest WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select quests for %s: %w", id, err)
+	}
+	return quests, nil
+}
+
+// SelectInvasionsByID returns all invasion trackings for a given human (all profiles).
+func SelectInvasionsByID(db *sqlx.DB, id string) ([]InvasionTrackingAPI, error) {
+	var invasions []InvasionTrackingAPI
+	err := db.Select(&invasions,
+		`SELECT uid, id, profile_no, ping, clean, distance,
+		        COALESCE(template, '1') AS template, gender, grunt_type
+		 FROM invasion WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select invasions for %s: %w", id, err)
+	}
+	return invasions, nil
+}
+
+// SelectLuresByID returns all lure trackings for a given human (all profiles).
+func SelectLuresByID(db *sqlx.DB, id string) ([]LureTrackingAPI, error) {
+	var lures []LureTrackingAPI
+	err := db.Select(&lures,
+		`SELECT uid, id, profile_no, ping, clean, distance,
+		        COALESCE(template, '1') AS template, lure_id
+		 FROM lures WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select lures for %s: %w", id, err)
+	}
+	return lures, nil
+}
+
+// SelectNestsByID returns all nest trackings for a given human (all profiles).
+func SelectNestsByID(db *sqlx.DB, id string) ([]NestTrackingAPI, error) {
+	var nests []NestTrackingAPI
+	err := db.Select(&nests,
+		`SELECT uid, id, profile_no, ping, clean, distance,
+		        COALESCE(template, '1') AS template, pokemon_id,
+		        min_spawn_avg, COALESCE(form, 0) AS form
+		 FROM nests WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select nests for %s: %w", id, err)
+	}
+	return nests, nil
+}
+
+// SelectGymsByID returns all gym trackings for a given human (all profiles).
+func SelectGymsByID(db *sqlx.DB, id string) ([]GymTrackingAPI, error) {
+	var gyms []GymTrackingAPI
+	err := db.Select(&gyms,
+		`SELECT uid, id, profile_no, ping, clean, distance,
+		        COALESCE(template, '1') AS template, team, slot_changes,
+		        gym_id, COALESCE(battle_changes, false) AS battle_changes
+		 FROM gym WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select gyms for %s: %w", id, err)
+	}
+	return gyms, nil
+}
+
+// SelectMaxbattlesByID returns all maxbattle trackings for a given human (all profiles).
+func SelectMaxbattlesByID(db *sqlx.DB, id string) ([]MaxbattleTrackingAPI, error) {
+	var maxbattles []MaxbattleTrackingAPI
+	err := db.Select(&maxbattles,
+		`SELECT uid, id, profile_no, ping, clean, distance,
+		        COALESCE(template, '1') AS template, pokemon_id, form,
+		        level, move, gmax, evolution, station_id
+		 FROM maxbattle WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select maxbattles for %s: %w", id, err)
+	}
+	return maxbattles, nil
+}
+
+// SelectFortsByID returns all fort trackings for a given human (all profiles).
+func SelectFortsByID(db *sqlx.DB, id string) ([]FortTrackingAPI, error) {
+	var forts []FortTrackingAPI
+	err := db.Select(&forts,
+		`SELECT uid, id, profile_no, ping, distance,
+		        COALESCE(template, '1') AS template,
+		        COALESCE(fort_type, 'everything') AS fort_type,
+		        COALESCE(include_empty, true) AS include_empty,
+		        COALESCE(change_types, '[]') AS change_types
+		 FROM forts WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("select forts for %s: %w", id, err)
+	}
+	return forts, nil
+}
