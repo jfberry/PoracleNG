@@ -211,22 +211,22 @@ func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string)
 		keys = []string{"pokemon_id", "latitude", "longitude", "form", "level", "teamId", "evolution", "costume", "imgUrl", "imgUrlAlt", "style"}
 		pregenKeys = pregenBase("pokemon_id", "form", "level", "teamId", "evolution", "costume")
 	case "pokestop":
-		keys = []string{"latitude", "longitude", "imgUrl", "gruntTypeId", "displayTypeId", "style"}
+		keys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "gruntTypeId", "displayTypeId", "style"}
 		pregenKeys = pregenBase("gruntTypeId", "displayTypeId", "lureTypeId")
 	case "quest":
-		keys = []string{"latitude", "longitude", "imgUrl", "style"}
+		keys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "style"}
 		pregenKeys = pregenBase()
 	case "gym":
-		keys = []string{"latitude", "longitude", "imgUrl", "team_id", "style"}
+		keys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "team_id", "style"}
 		pregenKeys = pregenBase("team_id", "slotsAvailable", "inBattle", "ex")
 	case "nest":
-		keys = []string{"pokemon_id", "latitude", "longitude", "form", "imgUrl", "style"}
+		keys = []string{"pokemon_id", "latitude", "longitude", "form", "imgUrl", "imgUrlAlt", "style"}
 		pregenKeys = pregenBase("pokemon_id", "form", "pokemonSpawnAvg")
 	case "weather":
-		keys = []string{"latitude", "longitude", "gameplay_condition", "coords", "activePokemons", "imgUrl", "style"}
+		keys = []string{"latitude", "longitude", "gameplay_condition", "coords", "activePokemons", "imgUrl", "imgUrlAlt", "style"}
 		pregenKeys = pregenBase("gameplay_condition", "coords", "activePokemons")
 	case "maxbattle":
-		keys = []string{"latitude", "longitude", "imgUrl", "battle_level", "style"}
+		keys = []string{"latitude", "longitude", "imgUrl", "imgUrlAlt", "battle_level", "style"}
 		pregenKeys = pregenBase("battle_level", "battle_pokemon_id")
 	case "fort-update":
 		keys = []string{"latitude", "longitude", "isEditLocation", "fortType", "map_latitude", "map_longitude", "oldLatitude", "oldLongitude", "zoom", "style"}
