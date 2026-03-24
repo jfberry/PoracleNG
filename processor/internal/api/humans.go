@@ -1,12 +1,12 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/community"
@@ -573,7 +573,7 @@ func HandleCreateHuman(deps *TrackingDeps) http.HandlerFunc {
 				lang = "en"
 			}
 		}
-		human.Language = sql.NullString{String: lang, Valid: true}
+		human.Language = null.StringFrom(lang)
 
 		if body.Notes != "" {
 			human.Notes = body.Notes
@@ -607,10 +607,7 @@ func HandleCreateHuman(deps *TrackingDeps) http.HandlerFunc {
 				communityAreas := community.FilterAreas(
 					deps.Config.Area.Communities, communities, allAreas)
 				restrictionJSON, _ := json.Marshal(communityAreas)
-				human.AreaRestriction = sql.NullString{
-					String: string(restrictionJSON),
-					Valid:  true,
-				}
+				human.AreaRestriction = null.StringFrom(string(restrictionJSON))
 			}
 		}
 

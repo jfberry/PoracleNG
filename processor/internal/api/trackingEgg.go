@@ -1,12 +1,12 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -170,9 +170,9 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 				exclusive = n != 0
 			}
 
-			var gymID sql.NullString
+			var gymID null.String
 			if req.GymID != nil && *req.GymID != "" {
-				gymID = sql.NullString{String: *req.GymID, Valid: true}
+				gymID = null.StringFrom(*req.GymID)
 			}
 
 			rsvpChanges := 0
@@ -363,7 +363,7 @@ func toEggTracking(api *db.EggTrackingAPI) *db.EggTracking {
 		Team:        api.Team,
 		Level:       api.Level,
 		Exclusive:   api.Exclusive,
-		GymID:       api.GymID,
+		GymID:       api.GymID.NullString,
 		RSVPChanges: api.RSVPChanges,
 	}
 }

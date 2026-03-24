@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/guregu/null/v6"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -429,8 +430,8 @@ type RaidTrackingAPI struct {
 	Exclusive   bool           `db:"exclusive"    json:"exclusive"`
 	Move        int            `db:"move"         json:"move"`
 	Evolution   int            `db:"evolution"    json:"evolution"`
-	GymID       sql.NullString `db:"gym_id"       json:"gym_id"`
-	RSVPChanges int            `db:"rsvp_changes" json:"rsvp_changes"`
+	GymID       null.String `db:"gym_id"       json:"gym_id"`
+	RSVPChanges int         `db:"rsvp_changes" json:"rsvp_changes"`
 }
 
 // SelectRaidsByIDProfile returns all raid trackings for a given human and profile.
@@ -478,8 +479,8 @@ type EggTrackingAPI struct {
 	Team        int            `db:"team"         json:"team"         diff:"match"`
 	Level       int            `db:"level"        json:"level"`
 	Exclusive   bool           `db:"exclusive"    json:"exclusive"`
-	GymID       sql.NullString `db:"gym_id"       json:"gym_id"`
-	RSVPChanges int            `db:"rsvp_changes" json:"rsvp_changes"`
+	GymID       null.String `db:"gym_id"       json:"gym_id"`
+	RSVPChanges int         `db:"rsvp_changes" json:"rsvp_changes"`
 }
 
 // SelectEggsByIDProfile returns all egg trackings for a given human and profile.

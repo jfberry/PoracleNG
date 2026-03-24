@@ -1,12 +1,12 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -140,7 +140,7 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 		}
 
 		// Helper to build common fields from a request row
-		buildRaidCommon := func(req raidInsertRequest) (template string, distance int, team int, clean bool, exclusive bool, move int, evolution int, gymID sql.NullString, rsvpChanges int) {
+		buildRaidCommon := func(req raidInsertRequest) (template string, distance int, team int, clean bool, exclusive bool, move int, evolution int, gymID null.String, rsvpChanges int) {
 			template = defaultTemplate
 			if req.Template != nil {
 				switch v := req.Template.(type) {
@@ -191,7 +191,7 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 			}
 
 			if req.GymID != nil && *req.GymID != "" {
-				gymID = sql.NullString{String: *req.GymID, Valid: true}
+				gymID = null.StringFrom(*req.GymID)
 			}
 
 			if req.RSVPChanges != nil {
@@ -455,7 +455,7 @@ func toRaidTracking(api *db.RaidTrackingAPI) *db.RaidTracking {
 		Exclusive:   api.Exclusive,
 		Move:        api.Move,
 		Evolution:   api.Evolution,
-		GymID:       api.GymID,
+		GymID:       api.GymID.NullString,
 		RSVPChanges: api.RSVPChanges,
 	}
 }

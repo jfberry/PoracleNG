@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/guregu/null/v6"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -18,14 +19,14 @@ type HumanFull struct {
 	Longitude           float64        `db:"longitude" json:"longitude"`
 	Fails               int            `db:"fails" json:"fails"`
 	LastChecked         sql.NullTime   `db:"last_checked" json:"last_checked"`
-	Language            sql.NullString `db:"language" json:"language"`
+	Language            null.String `db:"language" json:"language"`
 	AdminDisable        int            `db:"admin_disable" json:"admin_disable"`
 	DisabledDate        sql.NullTime   `db:"disabled_date" json:"disabled_date"`
 	CurrentProfileNo    int            `db:"current_profile_no" json:"current_profile_no"`
 	CommunityMembership string         `db:"community_membership" json:"community_membership"`
-	AreaRestriction     sql.NullString `db:"area_restriction" json:"area_restriction"`
+	AreaRestriction     null.String `db:"area_restriction" json:"area_restriction"`
 	Notes               string         `db:"notes" json:"notes"`
-	BlockedAlerts       sql.NullString `db:"blocked_alerts" json:"blocked_alerts"`
+	BlockedAlerts       null.String `db:"blocked_alerts" json:"blocked_alerts"`
 }
 
 // ProfileRow represents a row from the profiles table.
