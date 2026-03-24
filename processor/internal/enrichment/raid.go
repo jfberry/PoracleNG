@@ -90,6 +90,9 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 		"pokemon_id": raid.PokemonID,
 		"form":       raid.Form,
 		"level":      raid.Level,
+		"teamId":     raid.TeamID,
+		"evolution":  raid.Evolution,
+		"costume":    raid.Costume,
 	})
 
 	// Game data enrichment

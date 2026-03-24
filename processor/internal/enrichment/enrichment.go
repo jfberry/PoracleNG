@@ -208,8 +208,8 @@ func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string)
 		keys = []string{"pokemon_id", "latitude", "longitude", "form", "costume", "imgUrl", "imgUrlAlt", "style"}
 		pregenKeys = pregenBase("pokemon_id", "display_pokemon_id", "verified", "costume", "form", "pokemonId", "generation", "weather", "confirmedTime", "shinyPossible", "seenType", "seen_type", "cell_coords")
 	case "raid":
-		keys = []string{"pokemon_id", "latitude", "longitude", "form", "level", "imgUrl", "style"}
-		pregenKeys = pregenBase("pokemon_id", "form", "level")
+		keys = []string{"pokemon_id", "latitude", "longitude", "form", "level", "teamId", "evolution", "costume", "imgUrl", "imgUrlAlt", "style"}
+		pregenKeys = pregenBase("pokemon_id", "form", "level", "teamId", "evolution", "costume")
 	case "pokestop":
 		keys = []string{"latitude", "longitude", "imgUrl", "gruntTypeId", "displayTypeId", "style"}
 		pregenKeys = pregenBase("gruntTypeId", "displayTypeId", "lureTypeId")
