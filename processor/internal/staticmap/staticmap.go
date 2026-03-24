@@ -230,7 +230,7 @@ func (r *Resolver) SubmitTile(maptype string, data map[string]any, staticMapType
 
 	select {
 	case r.tileQueue <- tileRequest{pending: pending, maptype: maptype, data: data, staticMapType: staticMapType}:
-		// queued successfully
+		metrics.TileQueueDepth.Set(float64(len(r.tileQueue)))
 	default:
 		// queue full, resolve immediately with fallback
 		pending.Result <- r.config.FallbackURL
@@ -246,6 +246,7 @@ func (r *Resolver) tileWorker() {
 	for {
 		select {
 		case req := <-r.tileQueue:
+			metrics.TileQueueDepth.Set(float64(len(r.tileQueue)))
 			if time.Now().After(req.pending.Deadline) {
 				req.pending.Result <- req.pending.Fallback
 				metrics.TileTotal.WithLabelValues("deadline").Inc()

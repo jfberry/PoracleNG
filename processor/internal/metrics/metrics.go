@@ -113,6 +113,10 @@ var (
 		Name: "poracle_processor_tile_in_flight",
 		Help: "Concurrent tile requests",
 	})
+	TileQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_processor_tile_queue_depth",
+		Help: "Pending tile requests in async queue",
+	})
 
 	// Geocoding metrics
 	GeocodeDuration = promauto.NewHistogram(prometheus.HistogramOpts{
