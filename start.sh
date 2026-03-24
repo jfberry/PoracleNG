@@ -59,7 +59,7 @@ fi
 # Node modules
 if [ ! -d "$ALERTER_DIR/node_modules" ]; then
 	echo "[start] Node modules not found, installing..."
-	(cd "$ALERTER_DIR" && npm install) || fail "npm install failed"
+	(cd "$ALERTER_DIR" && npm ci) || fail "npm ci failed"
 	echo "[start] Node modules installed"
 fi
 
