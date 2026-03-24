@@ -242,6 +242,20 @@ func main() {
 	// Aggregate tracking endpoints
 	mux.HandleFunc("GET /api/tracking/all/{id}", auth(api.HandleGetAllTracking(trackingDeps)))
 
+	// Human endpoints
+	mux.HandleFunc("GET /api/humans/one/{id}", auth(api.HandleGetOneHuman(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/start", auth(api.HandleStartHuman(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/stop", auth(api.HandleStopHuman(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/adminDisabled", auth(api.HandleAdminDisabled(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/switchProfile/{profile}", auth(api.HandleSwitchProfile(trackingDeps)))
+
+	// Profile endpoints
+	mux.HandleFunc("GET /api/profiles/{id}", auth(api.HandleGetProfiles(trackingDeps)))
+	mux.HandleFunc("DELETE /api/profiles/{id}/byProfileNo/{profile_no}", auth(api.HandleDeleteProfile(trackingDeps)))
+	mux.HandleFunc("POST /api/profiles/{id}/add", auth(api.HandleAddProfile(trackingDeps)))
+	mux.HandleFunc("POST /api/profiles/{id}/update", auth(api.HandleUpdateProfile(trackingDeps)))
+	mux.HandleFunc("POST /api/profiles/{id}/copy/{from}/{to}", auth(api.HandleCopyProfile(trackingDeps)))
+
 	// Proxy unhandled /api/ requests to the alerter (config, humans, profiles, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
 
