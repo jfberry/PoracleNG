@@ -248,6 +248,11 @@ func main() {
 	mux.HandleFunc("POST /api/humans/{id}/stop", auth(api.HandleStopHuman(trackingDeps)))
 	mux.HandleFunc("POST /api/humans/{id}/adminDisabled", auth(api.HandleAdminDisabled(trackingDeps)))
 	mux.HandleFunc("POST /api/humans/{id}/switchProfile/{profile}", auth(api.HandleSwitchProfile(trackingDeps)))
+	mux.HandleFunc("GET /api/humans/{id}/checkLocation/{lat}/{lon}", auth(api.HandleCheckLocation(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/setLocation/{lat}/{lon}", auth(api.HandleSetLocation(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/setAreas", auth(api.HandleSetAreas(trackingDeps)))
+	mux.HandleFunc("POST /api/humans", auth(api.HandleCreateHuman(trackingDeps)))
+	mux.HandleFunc("GET /api/humans/{id}", auth(api.HandleGetHumanAreas(trackingDeps)))
 
 	// Profile endpoints
 	mux.HandleFunc("GET /api/profiles/{id}", auth(api.HandleGetProfiles(trackingDeps)))

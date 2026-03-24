@@ -303,6 +303,64 @@ func CopyProfile(dbx *sqlx.DB, id string, fromProfile, toProfile int) error {
 	return nil
 }
 
+// UpdateHumanLocation updates the latitude and longitude on both the humans
+// table and the matching profile row.
+func UpdateHumanLocation(dbx *sqlx.DB, id string, lat, lon float64, profileNo int) error {
+	if _, err := dbx.Exec(
+		`UPDATE humans SET latitude = ?, longitude = ? WHERE id = ?`,
+		lat, lon, id); err != nil {
+		return fmt.Errorf("update human location %s: %w", id, err)
+	}
+	if _, err := dbx.Exec(
+		`UPDATE profiles SET latitude = ?, longitude = ? WHERE id = ? AND profile_no = ?`,
+		lat, lon, id, profileNo); err != nil {
+		return fmt.Errorf("update profile location %s/%d: %w", id, profileNo, err)
+	}
+	return nil
+}
+
+// UpdateHumanAreas updates the area JSON on both the humans table and the
+// matching profile row.
+func UpdateHumanAreas(dbx *sqlx.DB, id string, areaJSON string, profileNo int) error {
+	if _, err := dbx.Exec(
+		`UPDATE humans SET area = ? WHERE id = ?`,
+		areaJSON, id); err != nil {
+		return fmt.Errorf("update human areas %s: %w", id, err)
+	}
+	if _, err := dbx.Exec(
+		`UPDATE profiles SET area = ? WHERE id = ? AND profile_no = ?`,
+		areaJSON, id, profileNo); err != nil {
+		return fmt.Errorf("update profile areas %s/%d: %w", id, profileNo, err)
+	}
+	return nil
+}
+
+// CreateHuman inserts a new human record into the humans table.
+func CreateHuman(dbx *sqlx.DB, h *HumanFull) error {
+	_, err := dbx.Exec(
+		`INSERT INTO humans (id, name, type, enabled, area, latitude, longitude, admin_disable, language, current_profile_no, community_membership, area_restriction, notes)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		h.ID, h.Name, h.Type, h.Enabled, h.Area, h.Latitude, h.Longitude,
+		h.AdminDisable, h.Language, h.CurrentProfileNo,
+		h.CommunityMembership, h.AreaRestriction, h.Notes)
+	if err != nil {
+		return fmt.Errorf("insert human %s: %w", h.ID, err)
+	}
+	return nil
+}
+
+// CreateDefaultProfile inserts profile_no=1 for a new human.
+func CreateDefaultProfile(dbx *sqlx.DB, id, name, area string, lat, lon float64) error {
+	_, err := dbx.Exec(
+		`INSERT INTO profiles (id, profile_no, name, area, latitude, longitude)
+		 VALUES (?, 1, ?, ?, ?, ?)`,
+		id, name, area, lat, lon)
+	if err != nil {
+		return fmt.Errorf("insert default profile for %s: %w", id, err)
+	}
+	return nil
+}
+
 // joinStrings joins strings with a separator (avoids importing strings package just for this).
 func joinStrings(s []string, sep string) string {
 	if len(s) == 0 {
