@@ -14,7 +14,9 @@ Golbat ──webhook──▶ Processor (Go :3030) ──matched──▶ Alerte
 ```
 
 - The **Processor** receives raw webhooks from Golbat, matches them against all user tracking rules in memory, and forwards only the matched results to the alerter.
-- The **Alerter** receives pre-matched results, renders templates (DTS), performs geocoding, generates static maps, and delivers messages to Discord and Telegram. It also handles user commands and notifies the processor to reload when tracking data changes.
+- The **Alerter** receives pre-matched results, renders templates (DTS), and delivers messages to Discord and Telegram. It also handles user commands (Discord bot and Telegram bot).
+
+**Migrating from PoracleJS?** See [Migrating from PoracleJS](#migrating-from-poraclejs) for an automated migration script and what has changed.
 
 ## Quick Start
 
@@ -58,7 +60,7 @@ See `config/config.example.toml` for the full list of settings with documentatio
 make build
 ```
 
-This builds the Go processor binary and runs `npm install` for the alerter. You can also build each component separately with `make build-processor` or `make install-alerter`.
+This builds the Go processor binary and runs `npm ci` for the alerter. You can also build each component separately with `make build-processor` or `make install-alerter`.
 
 ### 3. Start
 
@@ -217,7 +219,7 @@ The script will:
 
 **Webhook destination changes.** Golbat must now send webhooks to the **processor** (default port 3030), not the old alerter port. The processor matches and forwards results to the alerter internally.
 
-**Two components to run.** You now start both the processor and the alerter. The processor must be running before the alerter can receive matched results.
+**Single entry point.** Both the processor and alerter start together via `start.sh` (or `pm2 start ecosystem.config.js`). The processor must be running before the alerter can receive matched results. External tools like PoracleWeb only need the processor's address — all APIs are available through it.
 
 **New URL settings.** Both components need to know where the other is listening:
 
@@ -236,6 +238,12 @@ processor_url = "http://localhost:3030"
 **Scanner type.** MAD scanner support has been removed. The default scanner type is now `golbat`. If you use RDM, add `scanner_type = "rdm"` under `[database]`.
 
 **Logs directory.** Both components now write to `logs/` at the project root instead of `alerter/logs/`.
+
+**pm2 users.** Use the included `ecosystem.config.js` instead of `pm2 start start.sh` directly — it sets `kill_timeout: 10000` (10s) to allow graceful shutdown of message queues. The default pm2 timeout of 1.6s can leave orphaned processes.
+
+**Tileserver templates.** The processor now generates static map tiles instead of the alerter. The same tileservercache templates work, but available fields have changed slightly. See [TILESERVER.md](TILESERVER.md) for the complete field reference per alert type.
+
+**DTS templates.** Templates have access to both pre-translated Poracle fields (recommended) and raw webhook fields. See [DTS.md](DTS.md) for the full field reference.
 
 ## API Endpoints
 
