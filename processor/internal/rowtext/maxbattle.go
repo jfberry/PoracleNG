@@ -16,7 +16,7 @@ func (g *Generator) MaxbattleRowText(tr *i18n.Translator, maxbattle *db.Maxbattl
 	if maxbattle.StationID != nil {
 		stationID = *maxbattle.StationID
 	}
-	stationNameText := resolvePokestopName(g.Scanner, stationID)
+	stationNameText := resolveStationName(g.Scanner, stationID)
 
 	if maxbattle.PokemonID == 9000 {
 		// Generic level maxbattle

@@ -88,5 +88,11 @@
   "tracking.including_empty": "including empty changes",
   "tracking.any": "любой",
   "tracking.male": "М",
-  "tracking.female": "Ж"
+  "tracking.female": "Ж",
+
+  "tracking.unchanged": "Без изменений: ",
+  "tracking.updated": "Обновлено: ",
+  "tracking.new": "Добавлено: ",
+  "tracking.bulk_changes": "I have made a lot of changes. See {0}{1} for details",
+  "tracking.tracked": "отслеживаемое"
 }

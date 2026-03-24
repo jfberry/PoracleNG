@@ -16,4 +16,5 @@ type Scanner interface {
 	GetStopData(minLat, minLon, maxLat, maxLon float64) ([]StopData, error)
 	GetPokestopName(pokestopID string) (string, error)
 	GetGymName(gymID string) (string, error)
+	GetStationName(stationID string) (string, error)
 }

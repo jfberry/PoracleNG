@@ -102,6 +102,16 @@ func (s *GolbatScanner) GetGymName(gymID string) (string, error) {
 	return name, err
 }
 
+// GetStationName returns the name of a max battle station by ID.
+func (s *GolbatScanner) GetStationName(stationID string) (string, error) {
+	var name string
+	err := s.db.Get(&name, "SELECT name FROM station WHERE id = ?", stationID)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return name, err
+}
+
 // Close closes the underlying database connection.
 func (s *GolbatScanner) Close() error {
 	return s.db.Close()

@@ -88,5 +88,11 @@
   "tracking.including_empty": "including empty changes",
   "tracking.any": "tout",
   "tracking.male": "mâle",
-  "tracking.female": "femelle"
+  "tracking.female": "femelle",
+
+  "tracking.unchanged": "Non modifié : ",
+  "tracking.updated": "Modifié : ",
+  "tracking.new": "Nouveau : ",
+  "tracking.bulk_changes": "I have made a lot of changes. See {0}{1} for details",
+  "tracking.tracked": "suivi"
 }

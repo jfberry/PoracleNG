@@ -87,15 +87,15 @@ func resolveGymName(s scanner.Scanner, gymID string) string {
 	return name
 }
 
-// resolvePokestopName looks up a pokestop/station name from the scanner, falling back to the raw ID.
-func resolvePokestopName(s scanner.Scanner, stationID string) string {
+// resolveStationName looks up a max battle station name from the scanner, falling back to the raw ID.
+func resolveStationName(s scanner.Scanner, stationID string) string {
 	if stationID == "" {
 		return ""
 	}
 	if s == nil {
 		return stationID
 	}
-	name, err := s.GetPokestopName(stationID)
+	name, err := s.GetStationName(stationID)
 	if err != nil || name == "" {
 		return stationID
 	}

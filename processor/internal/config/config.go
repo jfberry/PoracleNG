@@ -34,7 +34,8 @@ type Config struct {
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
-	Locale               string `toml:"locale"` // default language code (e.g. "en", "pl")
+	Locale               string `toml:"locale"`                // default language code (e.g. "en", "pl")
+	DefaultTemplateName  any    `toml:"default_template_name"` // default DTS template (typically 1 or "1")
 	RdmURL               string `toml:"rdm_url"`
 	ReactMapURL          string `toml:"react_map_url"`
 	RocketMadURL         string `toml:"rocket_mad_url"`
