@@ -53,7 +53,9 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
+		matchStart := time.Now()
 		matched := ps.nestMatcher.Match(data, st)
+		metrics.MatchingDuration.WithLabelValues("nest").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {

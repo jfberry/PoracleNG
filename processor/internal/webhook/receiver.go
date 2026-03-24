@@ -60,6 +60,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metrics.WebhookBatchSize.Observe(float64(len(hooks)))
+
 	for _, hook := range hooks {
 		// Log each individual webhook as one line: {"type":"pokemon","message":{...}}
 		if h.webhookLogger != nil {

@@ -9,6 +9,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
 // Load reloads tracking data from the database while preserving the existing
@@ -46,6 +47,7 @@ func Load(manager *Manager, database *sqlx.DB) error {
 	}
 
 	manager.Set(s)
+	recordStateMetrics(s)
 
 	log.Infof("State loaded: %d humans, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences",
 		len(data.Humans), len(data.Raids), len(data.Eggs),
@@ -103,6 +105,7 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 	}
 
 	manager.Set(s)
+	recordStateMetrics(s)
 
 	log.Infof("State loaded: %d humans, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences",
 		len(data.Humans), len(data.Raids), len(data.Eggs),
@@ -110,4 +113,21 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 		len(data.Gyms), len(data.Nests), len(data.Forts), len(data.Maxbattles), len(fences))
 
 	return nil
+}
+
+func recordStateMetrics(s *State) {
+	metrics.StateHumans.Set(float64(len(s.Humans)))
+	if s.Monsters != nil {
+		metrics.StateTrackingRules.WithLabelValues("pokemon").Set(float64(s.Monsters.Total))
+	}
+	metrics.StateTrackingRules.WithLabelValues("raid").Set(float64(len(s.Raids)))
+	metrics.StateTrackingRules.WithLabelValues("egg").Set(float64(len(s.Eggs)))
+	metrics.StateTrackingRules.WithLabelValues("invasion").Set(float64(len(s.Invasions)))
+	metrics.StateTrackingRules.WithLabelValues("quest").Set(float64(len(s.Quests)))
+	metrics.StateTrackingRules.WithLabelValues("lure").Set(float64(len(s.Lures)))
+	metrics.StateTrackingRules.WithLabelValues("gym").Set(float64(len(s.Gyms)))
+	metrics.StateTrackingRules.WithLabelValues("nest").Set(float64(len(s.Nests)))
+	metrics.StateTrackingRules.WithLabelValues("fort").Set(float64(len(s.Forts)))
+	metrics.StateTrackingRules.WithLabelValues("maxbattle").Set(float64(len(s.Maxbattles)))
+	metrics.StateGeofences.Set(float64(len(s.Fences)))
 }

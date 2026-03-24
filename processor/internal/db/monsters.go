@@ -44,6 +44,7 @@ type MonsterIndex struct {
 	ByPokemonID   map[int][]*MonsterTracking // keyed by pokemon_id (0 = catch-all)
 	PVPSpecific   map[int][]*MonsterTracking // keyed by pvp_ranking_league, pokemon_id != 0
 	PVPEverything map[int][]*MonsterTracking // keyed by pvp_ranking_league, pokemon_id == 0
+	Total         int                        // total number of monster tracking rules
 }
 
 // LoadMonsters loads all monster trackings and builds indexed structures.
@@ -85,5 +86,6 @@ func LoadMonsters(db *sqlx.DB) (*MonsterIndex, error) {
 			idx.ByPokemonID[m.PokemonID] = append(idx.ByPokemonID[m.PokemonID], m)
 		}
 	}
+	idx.Total = len(monsters)
 	return idx, nil
 }

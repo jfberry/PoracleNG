@@ -80,7 +80,9 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
+		matchStart := time.Now()
 		matched := ps.gymMatcher.Match(data, st)
+		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {

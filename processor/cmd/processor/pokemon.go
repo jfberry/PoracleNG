@@ -92,7 +92,9 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		// Match
 		st := ps.stateMgr.Get()
+		matchStart := time.Now()
 		matched := ps.pokemonMatcher.Match(processed, st)
+		metrics.MatchingDuration.WithLabelValues("pokemon").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {

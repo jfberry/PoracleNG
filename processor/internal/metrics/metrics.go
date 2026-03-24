@@ -153,4 +153,38 @@ var (
 		Name: "poracle_processor_accuweather_key_usage_today",
 		Help: "Number of API calls made today per key",
 	}, []string{"key_index"})
+
+	// State size metrics
+	StateHumans = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_humans",
+		Help: "Number of humans loaded in state",
+	})
+	StateTrackingRules = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_tracking_rules",
+		Help: "Number of tracking rules loaded in state",
+	}, []string{"type"})
+	StateGeofences = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_geofences",
+		Help: "Number of geofences loaded in state",
+	})
+
+	// Webhook batch size
+	WebhookBatchSize = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "poracle_processor_webhook_batch_size",
+		Help:    "Number of items per inbound webhook POST from Golbat",
+		Buckets: []float64{1, 5, 10, 25, 50, 100, 250, 500, 1000},
+	})
+
+	// Matching duration (just the Match() call, excluding parse/enrich/send)
+	MatchingDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_processor_matching_seconds",
+		Help:    "Time to match a webhook against tracking rules",
+		Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25},
+	}, []string{"type"})
+
+	// Build info
+	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "poracle_processor_build_info",
+		Help: "Build information",
+	}, []string{"version", "commit", "date"})
 )

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"runtime/debug"
 	"path/filepath"
 	_ "time/tzdata" // embed IANA timezone database as fallback
 	"os/signal"
@@ -46,6 +47,11 @@ import (
 func main() {
 	baseDir := flag.String("basedir", "..", "path to project root directory")
 	flag.Parse()
+
+	// Register build info from Go's embedded VCS metadata
+	buildVersion, buildCommit, buildDate := readBuildInfo()
+	metrics.BuildInfo.WithLabelValues(buildVersion, buildCommit, buildDate).Set(1)
+	log.Infof("Poracle processor %s (commit %s, built %s)", buildVersion, buildCommit, buildDate)
 
 	cfg, err := config.Load(*baseDir)
 	if err != nil {
@@ -234,6 +240,34 @@ func main() {
 	server.Shutdown(ctx)
 	proc.Close()
 	log.Infof("Shutdown complete")
+}
+
+func readBuildInfo() (version, commit, date string) {
+	version, commit, date = "dev", "unknown", "unknown"
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if len(s.Value) > 8 {
+				commit = s.Value[:8]
+			} else {
+				commit = s.Value
+			}
+		case "vcs.time":
+			date = s.Value
+		case "vcs.modified":
+			if s.Value == "true" {
+				commit += "-dirty"
+			}
+		}
+	}
+	return
 }
 
 // ProcessorService ties together all matching/tracking components.
