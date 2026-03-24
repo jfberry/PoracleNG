@@ -271,7 +271,10 @@ The processor proxies unhandled `/api/*` requests to the alerter transparently. 
 
 ## Monitoring
 
-An importable Grafana dashboard for the Prometheus metrics exposed by both services is included at `monitoring/grafana/poracle-observability-dashboard.json`.
+Two importable Grafana dashboards for the Prometheus metrics exposed by both services are included:
+
+- `monitoring/grafana/poracle-operations-lite-dashboard.json` for a concise day-to-day operations view
+- `monitoring/grafana/poracle-observability-dashboard.json` for the complete observability view
 
 There is also an example Prometheus scrape config at `monitoring/prometheus.yml.example`. If you are using [Zapdos](https://github.com/UnownHash/Zapdos), add `poracle_processor` and `poracle_alerter` jobs to `Zapdos/vmagnet/prometheus.yml`.
 
@@ -279,7 +282,7 @@ Then:
 
 1. Point Prometheus at the processor and alerter `/metrics` endpoints.
 2. Add Prometheus as a Grafana data source.
-3. Import `monitoring/grafana/poracle-observability-dashboard.json`.
+3. Import `monitoring/grafana/poracle-operations-lite-dashboard.json` for a compact operational view, or `monitoring/grafana/poracle-observability-dashboard.json` for the full dashboard.
 
 ## Connections Summary
 
