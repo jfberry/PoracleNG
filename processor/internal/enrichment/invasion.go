@@ -1,7 +1,12 @@
 package enrichment
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
@@ -71,6 +76,16 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 			m["gruntType"] = grunt.Type
 			m["gruntGender"] = grunt.Gender
 
+			// Type color and emoji key — map "Metal" to "Steel" for JS compatibility
+			typeLookup := grunt.Type
+			if typeLookup == "Metal" {
+				typeLookup = "Steel"
+			}
+			if typeInfo, ok := e.GameData.Util.Types[typeLookup]; ok {
+				m["gruntTypeColor"] = typeInfo.Color
+				m["gruntTypeEmojiKey"] = typeInfo.Emoji
+			}
+
 			// Reward pokemon IDs for first slot
 			firstRewards := grunt.EncountersByPosition("first")
 			if len(firstRewards) > 0 {
@@ -79,6 +94,15 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 					rewardIDs[i] = map[string]int{"pokemon_id": r.ID, "form": r.FormID}
 				}
 				m["gruntRewards"] = rewardIDs
+			}
+		}
+
+		// Event invasions (gruntTypeID == 0 && displayType >= 7) use PokestopEvent data
+		if gruntTypeID == 0 && displayType >= 7 {
+			if eventInfo, ok := e.GameData.Util.PokestopEvent[displayType]; ok {
+				m["gruntType"] = eventInfo.Name
+				m["gruntTypeColor"] = eventInfo.Color
+				m["gruntTypeEmojiKey"] = eventInfo.Emoji
 			}
 		}
 	}
@@ -114,5 +138,91 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 		m["gruntTypeName"] = tr.T(grunt.Type)
 	}
 
+	// Gender name and emoji
+	gruntGender := toInt(base["gruntGender"])
+	if genderInfo, ok := gd.Util.Genders[gruntGender]; ok {
+		m["genderName"] = tr.T(genderInfo.Name)
+		m["genderEmojiKey"] = genderInfo.Emoji
+	}
+
+	// Build gruntRewardsList with translated pokemon names
+	if grunt != nil {
+		type rewardSlot struct {
+			chance     int
+			encounters []gamedata.GruntEncounterEntry
+		}
+
+		var slots []rewardSlot
+
+		if grunt.SecondReward {
+			second := grunt.EncountersByPosition("second")
+			if len(second) > 0 {
+				first := grunt.EncountersByPosition("first")
+				slots = append(slots, rewardSlot{chance: 85, encounters: first})
+				slots = append(slots, rewardSlot{chance: 15, encounters: second})
+			}
+		}
+
+		if len(slots) == 0 && grunt.ThirdReward {
+			third := grunt.EncountersByPosition("third")
+			if len(third) > 0 {
+				slots = append(slots, rewardSlot{chance: 100, encounters: third})
+			}
+		}
+
+		if len(slots) == 0 {
+			first := grunt.EncountersByPosition("first")
+			if len(first) > 0 {
+				slots = append(slots, rewardSlot{chance: 100, encounters: first})
+			}
+		}
+
+		if len(slots) > 0 {
+			rewardsList := make([]map[string]any, 0, len(slots))
+			var rewardsTextParts []string
+
+			for _, slot := range slots {
+				monsters := e.translateEncounterSlot(slot.encounters, gd, tr)
+				entry := map[string]any{
+					"chance":   slot.chance,
+					"monsters": monsters,
+				}
+				rewardsList = append(rewardsList, entry)
+
+				// Build flat text
+				names := make([]string, len(monsters))
+				for i, mon := range monsters {
+					names[i] = fmt.Sprintf("%v", mon["fullName"])
+				}
+				joined := strings.Join(names, ", ")
+				if len(slots) > 1 {
+					rewardsTextParts = append(rewardsTextParts, fmt.Sprintf("%d%%: %s", slot.chance, joined))
+				} else {
+					rewardsTextParts = append(rewardsTextParts, joined)
+				}
+			}
+
+			m["gruntRewardsList"] = rewardsList
+			m["gruntRewards"] = strings.Join(rewardsTextParts, "\n")
+		}
+	}
+
 	return m
+}
+
+// translateEncounterSlot translates a slice of grunt encounter entries into enrichment maps.
+func (e *Enricher) translateEncounterSlot(entries []gamedata.GruntEncounterEntry, gd *gamedata.GameData, tr *i18n.Translator) []map[string]any {
+	result := make([]map[string]any, len(entries))
+	for i, enc := range entries {
+		nameInfo := make(map[string]any)
+		TranslateMonsterNames(nameInfo, gd, tr, enc.ID, enc.FormID, 0)
+		result[i] = map[string]any{
+			"id":       enc.ID,
+			"formId":   enc.FormID,
+			"name":     nameInfo["name"],
+			"formName": nameInfo["formName"],
+			"fullName": nameInfo["fullName"],
+		}
+	}
+	return result
 }
