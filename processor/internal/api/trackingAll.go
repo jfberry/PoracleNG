@@ -226,6 +226,14 @@ func HandleGetAllTracking(deps *TrackingDeps) http.HandlerFunc {
 			return
 		}
 
+		// Fetch full human record for the response (includes lat/lon/area)
+		humanFull, err := db.SelectOneHumanFull(deps.DB, human.ID)
+		if err != nil {
+			log.Errorf("Tracking API: get full human: %s", err)
+			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			return
+		}
+
 		wantDesc := isTruthy(r.URL.Query().Get("includeDescriptions"))
 		var tr *i18n.Translator
 		if wantDesc {
@@ -233,7 +241,7 @@ func HandleGetAllTracking(deps *TrackingDeps) http.HandlerFunc {
 		}
 
 		result := map[string]any{
-			"human": human,
+			"human": humanFull,
 		}
 
 		if pokemon, err := db.SelectMonstersByIDProfile(deps.DB, human.ID, profileNo); err == nil {
