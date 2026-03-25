@@ -1070,7 +1070,9 @@
   },
   {
     "type": "quest",
-    "message": {
+    "test": "quest-item",
+    "location": "current",
+    "webhook": {
       "pokestop_id": "fd736d3db37d490982dfdafc73080644.16",
       "latitude": 34.194092,
       "longitude": -118.390491,
@@ -1094,7 +1096,9 @@
   },
   {
     "type": "quest",
-    "message": {
+    "test": "quest-stardust",
+    "location": "current",
+    "webhook": {
       "pokestop_id": "4273655acfdc4b5380f3d217232367ff.16",
       "latitude": 33.774889,
       "longitude": -118.192531,
@@ -1117,7 +1121,9 @@
   },
   {
     "type": "quest",
-    "message": {
+    "test": "quest-pokemon",
+    "location": "current",
+    "webhook": {
       "pokestop_id": "5097de24a7963096a02b4c74e8cf15d3.16",
       "latitude": 34.708228,
       "longitude": -118.084413,
@@ -1146,7 +1152,9 @@
   },
   {
     "type": "quest",
-    "message": {
+    "test": "quest-energy",
+    "location": "current",
+    "webhook": {
       "pokestop_id": "165f3490ca074a81991da14fbe476bf6.16",
       "latitude": 33.774315,
       "longitude": -117.940854,
