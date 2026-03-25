@@ -137,11 +137,11 @@ function enrichPvpRankings(msg) {
 		result[league] = entries.filter((e) => e.rank > 0).map((rank) => {
 			const formId = rank.form || 0
 			const mon = GameData.monsters[`${rank.pokemon}_${formId}`] || GameData.monsters[`${rank.pokemon}_0`]
+			const pctFormatted = rank.percentage <= 1 ? (rank.percentage * 100).toFixed(2) : rank.percentage.toFixed(2)
 			const entry = {
 				rank: rank.rank, cp: rank.cp, level: rank.level, cap: rank.cap, capped: rank.capped,
-				pokemon: rank.pokemon, form: rank.form, evolution: rank.evolution, percentage: rank.percentage,
+				pokemon: rank.pokemon, form: rank.form, evolution: rank.evolution, percentage: pctFormatted,
 			}
-			entry.percentageFormatted = rank.percentage <= 1 ? (rank.percentage * 100).toFixed(2) : rank.percentage.toFixed(2)
 			if (rank.cap && !rank.capped) {
 				entry.levelWithCap = `${rank.level}/${rank.cap}`
 			} else {

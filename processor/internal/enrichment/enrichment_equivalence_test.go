@@ -105,8 +105,7 @@ type pvpRankExpected struct {
 	BaseAttack  int     `json:"baseAttack"`
 	BaseDefense int     `json:"baseDefense"`
 	BaseStamina int     `json:"baseStamina"`
-	Percentage  float64 `json:"percentage"`
-	PercentageFormatted string `json:"percentageFormatted"`
+	Percentage string `json:"percentage"`
 }
 
 type gymExpected struct {
@@ -468,17 +467,9 @@ func TestPokemonEnrichmentEquivalence(t *testing.T) {
 									league, jsRank.Rank, jsRank.Pokemon, pvpMon.Attack, jsRank.BaseAttack)
 							}
 						}
-						// Verify percentage formatting
-						var expectedPct string
-						if jsRank.Percentage <= 1 {
-							expectedPct = fmt.Sprintf("%.2f", jsRank.Percentage*100)
-						} else {
-							expectedPct = fmt.Sprintf("%.2f", jsRank.Percentage)
-						}
-						if expectedPct != jsRank.PercentageFormatted {
-							// Float rounding can differ by 1 ULP at last decimal between Go and JS
-							t.Logf("pvp %s rank %d percentage rounding: Go=%q JS=%q (benign float diff)",
-								league, jsRank.Rank, expectedPct, jsRank.PercentageFormatted)
+						// Verify percentage is a formatted string (e.g. "89.81")
+						if jsRank.Percentage == "" {
+							t.Errorf("pvp %s rank %d percentage is empty", league, jsRank.Rank)
 						}
 					}
 				}

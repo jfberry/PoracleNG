@@ -413,6 +413,14 @@ func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr
 				continue
 			}
 
+			// Format percentage: Golbat sends 0-1 fraction, templates expect 0-100
+			var pctFormatted string
+			if rank.Percentage <= 1 {
+				pctFormatted = fmt.Sprintf("%.2f", rank.Percentage*100)
+			} else {
+				pctFormatted = fmt.Sprintf("%.2f", rank.Percentage)
+			}
+
 			entry := map[string]any{
 				"rank":       rank.Rank,
 				"cp":         rank.CP,
@@ -422,14 +430,7 @@ func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr
 				"pokemon":    rank.Pokemon,
 				"form":       rank.Form,
 				"evolution":  rank.Evolution,
-				"percentage": rank.Percentage,
-			}
-
-			// Computed fields
-			if rank.Percentage <= 1 {
-				entry["percentageFormatted"] = fmt.Sprintf("%.2f", rank.Percentage*100)
-			} else {
-				entry["percentageFormatted"] = fmt.Sprintf("%.2f", rank.Percentage)
+				"percentage": pctFormatted,
 			}
 
 			if rank.Cap > 0 && !rank.Capped {
