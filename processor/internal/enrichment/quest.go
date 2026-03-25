@@ -1,12 +1,17 @@
 package enrichment
 
 import (
+	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // QuestRewardData holds structured reward data for quest enrichment.
@@ -122,6 +127,140 @@ func buildQuestRewardData(rewards []matching.QuestRewardData) QuestRewardData {
 		}
 	}
 	return result
+}
+
+// QuestTranslate adds per-language translated fields for quest enrichment.
+func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebhook, lang string) map[string]any {
+	if e.Translations == nil {
+		return base
+	}
+
+	m := make(map[string]any, len(base)+20)
+	for k, v := range base {
+		m[k] = v
+	}
+
+	tr := e.Translations.For(lang)
+	enTr := e.Translations.For("en")
+	gd := e.GameData
+
+	// Quest title
+	titleKey := "quest_title_" + strings.ToLower(quest.Title)
+	namedArgs := map[string]string{"amount_0": strconv.Itoa(quest.Target)}
+	m["questString"] = tr.TfNamed(titleKey, namedArgs)
+	m["questStringEng"] = enTr.TfNamed(titleKey, namedArgs)
+
+	// Extract reward data stored by Quest() base enrichment
+	var rewardData QuestRewardData
+	if rd, ok := base["_rewardData"]; ok {
+		rewardData, _ = rd.(QuestRewardData)
+	}
+
+	// Monster reward names
+	var monsterNames, monsterNamesEng []string
+	if gd != nil && len(rewardData.Monsters) > 0 {
+		monsterList := make([]map[string]any, len(rewardData.Monsters))
+		for i, mon := range rewardData.Monsters {
+			nameInfo := make(map[string]any)
+			TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, mon.PokemonID, mon.FormID, 0)
+			monsterList[i] = map[string]any{
+				"pokemonId":   mon.PokemonID,
+				"formId":      mon.FormID,
+				"shiny":       mon.Shiny,
+				"name":        nameInfo["name"],
+				"formName":    nameInfo["formName"],
+				"fullName":    nameInfo["fullName"],
+				"nameEng":     nameInfo["nameEng"],
+				"fullNameEng": nameInfo["fullNameEng"],
+			}
+			if fn, ok := nameInfo["fullName"].(string); ok {
+				monsterNames = append(monsterNames, fn)
+			}
+			if fn, ok := nameInfo["fullNameEng"].(string); ok {
+				monsterNamesEng = append(monsterNamesEng, fn)
+			}
+		}
+		m["monsterList"] = monsterList
+	}
+	m["monsterNames"] = strings.Join(monsterNames, ", ")
+	m["monsterNamesEng"] = strings.Join(monsterNamesEng, ", ")
+
+	// Item names
+	var itemNames, itemNamesEng []string
+	for _, item := range rewardData.Items {
+		name := TranslateItemName(tr, item.ID)
+		nameEng := TranslateItemName(enTr, item.ID)
+		if item.Amount > 1 {
+			itemNames = append(itemNames, fmt.Sprintf("%d %s", item.Amount, name))
+			itemNamesEng = append(itemNamesEng, fmt.Sprintf("%d %s", item.Amount, nameEng))
+		} else {
+			itemNames = append(itemNames, name)
+			itemNamesEng = append(itemNamesEng, nameEng)
+		}
+	}
+	m["itemNames"] = strings.Join(itemNames, ", ")
+	m["itemNamesEng"] = strings.Join(itemNamesEng, ", ")
+
+	// Stardust
+	var dustText, dustTextEng string
+	if rewardData.DustAmount > 0 {
+		dustName := tr.T("quest_reward_3")
+		dustNameEng := enTr.T("quest_reward_3")
+		dustText = fmt.Sprintf("%d %s", rewardData.DustAmount, dustName)
+		dustTextEng = fmt.Sprintf("%d %s", rewardData.DustAmount, dustNameEng)
+	}
+	m["dustText"] = dustText
+	m["dustTextEng"] = dustTextEng
+
+	// Mega energy names
+	var energyNames, energyNamesEng []string
+	for _, e := range rewardData.EnergyMonsters {
+		pokeName := tr.T(gamedata.PokemonTranslationKey(e.PokemonID))
+		pokeNameEng := enTr.T(gamedata.PokemonTranslationKey(e.PokemonID))
+		energyLabel := tr.T("quest_reward_12")
+		energyLabelEng := enTr.T("quest_reward_12")
+		energyNames = append(energyNames, fmt.Sprintf("%d %s %s", e.Amount, pokeName, energyLabel))
+		energyNamesEng = append(energyNamesEng, fmt.Sprintf("%d %s %s", e.Amount, pokeNameEng, energyLabelEng))
+	}
+	m["energyMonstersNames"] = strings.Join(energyNames, ", ")
+	m["energyMonstersNamesEng"] = strings.Join(energyNamesEng, ", ")
+
+	// Candy names
+	var candyNames, candyNamesEng []string
+	for _, c := range rewardData.Candy {
+		pokeName := tr.T(gamedata.PokemonTranslationKey(c.PokemonID))
+		pokeNameEng := enTr.T(gamedata.PokemonTranslationKey(c.PokemonID))
+		candyLabel := tr.T("quest_reward_4")
+		candyLabelEng := enTr.T("quest_reward_4")
+		candyNames = append(candyNames, fmt.Sprintf("%d %s %s", c.Amount, pokeName, candyLabel))
+		candyNamesEng = append(candyNamesEng, fmt.Sprintf("%d %s %s", c.Amount, pokeNameEng, candyLabelEng))
+	}
+	m["candyMonstersNames"] = strings.Join(candyNames, ", ")
+	m["candyMonstersNamesEng"] = strings.Join(candyNamesEng, ", ")
+
+	// Reward string (join all non-empty reward parts)
+	var rewardParts, rewardPartsEng []string
+	for _, s := range []string{strings.Join(monsterNames, ", "), dustText, strings.Join(itemNames, ", "), strings.Join(energyNames, ", "), strings.Join(candyNames, ", ")} {
+		if s != "" {
+			rewardParts = append(rewardParts, s)
+		}
+	}
+	for _, s := range []string{strings.Join(monsterNamesEng, ", "), dustTextEng, strings.Join(itemNamesEng, ", "), strings.Join(energyNamesEng, ", "), strings.Join(candyNamesEng, ", ")} {
+		if s != "" {
+			rewardPartsEng = append(rewardPartsEng, s)
+		}
+	}
+	m["rewardString"] = strings.Join(rewardParts, ", ")
+	m["rewardStringEng"] = strings.Join(rewardPartsEng, ", ")
+
+	// Shiny emoji key
+	if sp, ok := base["shinyPossible"]; ok {
+		if b, ok := sp.(bool); ok && b {
+			m["shinyPossibleEmojiKey"] = "shiny"
+		}
+	}
+
+	return m
 }
 
 // addQuestIconURLs resolves icon URLs based on the quest reward type.
