@@ -39,9 +39,10 @@ type Geocoder struct {
 	sem      chan struct{} // concurrency limiter
 
 	// Circuit breaker state
-	consecutiveErrors int
-	circuitOpenSince  time.Time
-	mu                sync.Mutex
+	consecutiveErrors   int
+	circuitOpenSince    time.Time
+	halfOpenProbeActive bool
+	mu                  sync.Mutex
 
 	// Stats counters for periodic logging
 	statCalls         atomic.Int64
@@ -124,14 +125,21 @@ func (g *Geocoder) GetAddress(lat, lon float64) *Address {
 	// Circuit breaker check
 	g.mu.Lock()
 	if g.consecutiveErrors >= g.config.FailureThreshold {
-		elapsed := time.Since(g.circuitOpenSince)
-		if elapsed < time.Duration(g.config.CooldownMs)*time.Millisecond {
+		cooldown := time.Duration(g.config.CooldownMs) * time.Millisecond
+		if time.Since(g.circuitOpenSince) < cooldown {
 			g.mu.Unlock()
 			g.statCircuitBreaks.Add(1)
 			metrics.GeocodeTotal.WithLabelValues("circuit_break").Inc()
 			return unknownAddress()
 		}
-		// Half-open: allow one probe request
+		// Half-open: allow exactly one probe request
+		if g.halfOpenProbeActive {
+			g.mu.Unlock()
+			g.statCircuitBreaks.Add(1)
+			metrics.GeocodeTotal.WithLabelValues("circuit_break").Inc()
+			return unknownAddress()
+		}
+		g.halfOpenProbeActive = true
 	}
 	g.mu.Unlock()
 
@@ -161,6 +169,7 @@ func (g *Geocoder) GetAddress(lat, lon float64) *Address {
 	// Success — reset circuit breaker
 	g.mu.Lock()
 	g.consecutiveErrors = 0
+	g.halfOpenProbeActive = false
 	g.mu.Unlock()
 
 	g.statCalls.Add(1)
@@ -225,6 +234,7 @@ func (g *Geocoder) recordError() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.consecutiveErrors++
+	g.halfOpenProbeActive = false
 	if g.consecutiveErrors >= g.config.FailureThreshold {
 		g.circuitOpenSince = time.Now()
 	}

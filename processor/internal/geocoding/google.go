@@ -69,9 +69,14 @@ func (g *Google) Reverse(lat, lon float64) (*Address, error) {
 
 	resp, err := g.client.Get(u)
 	if err != nil {
-		return nil, fmt.Errorf("google geocode: request failed: %w", err)
+		return nil, fmt.Errorf("google geocode: request failed (key redacted)")
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		io.Copy(io.Discard, resp.Body)
+		return nil, fmt.Errorf("google geocode: HTTP %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -132,22 +137,27 @@ func (g *Google) Forward(query string) ([]ForwardResult, error) {
 
 	resp, err := g.client.Get(u)
 	if err != nil {
-		return nil, fmt.Errorf("google geocode: request failed: %w", err)
+		return nil, fmt.Errorf("google geocode forward: request failed (key redacted)")
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		io.Copy(io.Discard, resp.Body)
+		return nil, fmt.Errorf("google geocode forward: HTTP %d", resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("google geocode: read body: %w", err)
+		return nil, fmt.Errorf("google geocode forward: read body: %w", err)
 	}
 
 	var gResp googleResponse
 	if err := json.Unmarshal(body, &gResp); err != nil {
-		return nil, fmt.Errorf("google geocode: unmarshal: %w", err)
+		return nil, fmt.Errorf("google geocode forward: unmarshal: %w", err)
 	}
 
 	if gResp.Status != "OK" {
-		return nil, fmt.Errorf("google geocode: status=%s", gResp.Status)
+		return nil, fmt.Errorf("google geocode forward: status=%s", gResp.Status)
 	}
 
 	out := make([]ForwardResult, 0, len(gResp.Results))

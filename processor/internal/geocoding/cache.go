@@ -8,6 +8,7 @@ import (
 
 	"github.com/akrylysov/pogreb"
 	"github.com/jellydator/ttlcache/v3"
+	log "github.com/sirupsen/logrus"
 )
 
 // Cache is a two-layer geocoding cache: in-memory ttlcache backed by an
@@ -86,7 +87,9 @@ func (c *Cache) Set(key string, addr *Address) {
 	if err != nil {
 		return
 	}
-	_ = c.disk.Put([]byte(key), data)
+	if err := c.disk.Put([]byte(key), data); err != nil {
+		log.Debugf("geocache: disk write failed for %s: %s", key, err)
+	}
 }
 
 // Close stops the memory cache eviction loop and closes the disk database.
