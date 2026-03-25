@@ -9,6 +9,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -16,7 +17,7 @@ import (
 // Pokemon builds enrichment fields for a pokemon webhook.
 // Returns a base enrichment map (universal fields) and, if GameData is loaded,
 // also includes game data enrichment (types, weakness, stats, maps, etc.).
-func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) map[string]any {
+func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) (map[string]any, *staticmap.TilePending) {
 	m := map[string]any{
 		"rarityGroup":      processed.RarityGroup,
 		"pvpBestRank":      processed.PVPBestRank,
@@ -169,7 +170,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	if weather == 0 {
 		weather = pokemon.Weather
 	}
-	e.addStaticMap(m, "monster", pokemon.Latitude, pokemon.Longitude, map[string]any{
+	pending := e.addStaticMap(m, "monster", pokemon.Latitude, pokemon.Longitude, map[string]any{
 		"pokemon_id":         pokemon.PokemonID,
 		"display_pokemon_id": pokemon.DisplayPokemonID,
 		"pokemonId":          pokemon.PokemonID,
@@ -181,7 +182,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		"seen_type":          pokemon.SeenType,
 	})
 
-	return m
+	return m, pending
 }
 
 // enrichPokemonGameData adds game data enrichment fields that are universal

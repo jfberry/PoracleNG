@@ -2,11 +2,12 @@ package enrichment
 
 import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // Lure builds enrichment fields for a lure webhook.
-func (e *Enricher) Lure(lure *webhook.LureWebhook) map[string]any {
+func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	if lure.LureExpiration > 0 {
@@ -38,7 +39,7 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) map[string]any {
 	if lure.LureID != 0 {
 		tileFields = map[string]any{"lureTypeId": lure.LureID}
 	}
-	e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields)
+	pending := e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields)
 
 	// Lure data from util.json
 	if e.GameData != nil {
@@ -48,7 +49,7 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) map[string]any {
 		}
 	}
 
-	return m
+	return m, pending
 }
 
 // LureTranslate adds per-language translated fields.

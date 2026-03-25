@@ -109,9 +109,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 
 		// Build weather change message
 		msg, _ := json.Marshal(change)
-		ps.enricher.ResetTilePending()
-		baseEnrichment := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap)
-		baseTilePending := ps.enricher.LastTilePending
+		baseEnrichment, baseTilePending := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap)
 
 		// Per-user: each gets their own payload with per-language enrichment and tile
 		for _, user := range matched {
@@ -126,8 +124,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			var perLang map[string]map[string]any
 			var tilePending = baseTilePending
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-				ps.enricher.ResetTilePending()
-				langEnrichment := ps.enricher.WeatherTranslate(
+				langEnrichment, userTilePending := ps.enricher.WeatherTranslate(
 					baseEnrichment,
 					change.OldGameplayCondition,
 					change.GameplayCondition,
@@ -135,7 +132,6 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 					lang,
 					ps.cfg.Weather.ShowAlteredPokemonStaticMap,
 				)
-				userTilePending := ps.enricher.LastTilePending
 				if userTilePending != nil {
 					tilePending = userTilePending
 				}

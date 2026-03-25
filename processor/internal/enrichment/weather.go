@@ -2,11 +2,12 @@ package enrichment
 
 import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // Weather builds enrichment fields for a weather change event.
-func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, coords [][2]float64, showAlteredPokemonStaticMap bool) map[string]any {
+func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, coords [][2]float64, showAlteredPokemonStaticMap bool) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	// Store lat/lon and coords for use by per-language enrichment
@@ -24,10 +25,24 @@ func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, coords [][2]
 		addSunTimes(m, lat, lon, tz)
 	}
 
+	// Icon URLs (based on new weather condition)
+	if gameplayCondition > 0 {
+		if e.ImgUicons != nil {
+			m["imgUrl"] = e.ImgUicons.WeatherIcon(gameplayCondition)
+		}
+		if e.ImgUiconsAlt != nil {
+			m["imgUrlAlt"] = e.ImgUiconsAlt.WeatherIcon(gameplayCondition)
+		}
+		if e.StickerUicons != nil {
+			m["stickerUrl"] = e.StickerUicons.WeatherIcon(gameplayCondition)
+		}
+	}
+
 	// Reverse geocoding
 	e.addGeoResult(m, lat, lon)
 
 	// Generate base weather tile (used when showAlteredPokemonStaticMap is false)
+	var pending *staticmap.TilePending
 	if !showAlteredPokemonStaticMap {
 		webhookFields := map[string]any{
 			"gameplay_condition": gameplayCondition,
@@ -35,16 +50,16 @@ func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, coords [][2]
 		if len(coords) > 0 {
 			webhookFields["coords"] = coords
 		}
-		e.addStaticMap(m, "weather", lat, lon, webhookFields)
+		pending = e.addStaticMap(m, "weather", lat, lon, webhookFields)
 	}
 
-	return m
+	return m, pending
 }
 
 // WeatherTranslate adds per-language translated fields for a weather change.
-func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeatherID int, activePokemons []webhook.ActivePokemonEntry, lang string, showAlteredPokemonStaticMap bool) map[string]any {
+func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeatherID int, activePokemons []webhook.ActivePokemonEntry, lang string, showAlteredPokemonStaticMap bool) (map[string]any, *staticmap.TilePending) {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return base, nil
 	}
 
 	m := make(map[string]any, len(base)+10)
@@ -54,17 +69,6 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
-
-	// Icon URLs
-	if e.ImgUicons != nil {
-		m["imgUrl"] = e.ImgUicons.WeatherIcon(newWeatherID)
-	}
-	if e.ImgUiconsAlt != nil {
-		m["imgUrlAlt"] = e.ImgUiconsAlt.WeatherIcon(newWeatherID)
-	}
-	if e.StickerUicons != nil {
-		m["stickerUrl"] = e.StickerUicons.WeatherIcon(newWeatherID)
-	}
 
 	// Weather names and emoji keys
 	m["oldWeatherName"] = TranslateWeatherName(tr, oldWeatherID)
@@ -81,6 +85,7 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 	}
 
 	// Active pokemon names
+	var pending *staticmap.TilePending
 	if len(activePokemons) > 0 {
 		enrichedPokemon := make([]map[string]any, len(activePokemons))
 		for i, pok := range activePokemons {
@@ -120,9 +125,9 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 			if coords, ok := base["coords"]; ok {
 				webhookFields["coords"] = coords
 			}
-			e.addStaticMap(m, "weather", lat, lon, webhookFields)
+			pending = e.addStaticMap(m, "weather", lat, lon, webhookFields)
 		}
 	}
 
-	return m
+	return m, pending
 }

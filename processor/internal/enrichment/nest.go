@@ -12,7 +12,7 @@ import (
 )
 
 // Nest builds enrichment fields for a nest webhook.
-func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
+func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	expiration := nest.ResetTime + 7*24*60*60
@@ -75,7 +75,7 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
 		mapLon = m["map_longitude"].(float64)
 	}
 	// Static map tile
-	e.addStaticMap(m, "nest", mapLat, mapLon, map[string]any{
+	pending := e.addStaticMap(m, "nest", mapLat, mapLon, map[string]any{
 		"pokemon_id":      nest.PokemonID,
 		"form":            nest.Form,
 		"pokemonSpawnAvg": nest.PokemonAvg,
@@ -91,7 +91,7 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
 		}
 	}
 
-	return m
+	return m, pending
 }
 
 // NestTranslate adds per-language translated fields.

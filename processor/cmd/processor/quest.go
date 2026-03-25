@@ -74,9 +74,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))
 
-			ps.enricher.ResetTilePending()
-			enrichment := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
-			tilePending := ps.enricher.LastTilePending
+			enrichment, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
 
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "quest",

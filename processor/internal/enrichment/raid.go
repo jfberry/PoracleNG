@@ -3,12 +3,13 @@ package enrichment
 import (
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // Raid builds enrichment fields for a raid or egg webhook.
-func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[string]any {
+func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 	m["firstNotification"] = firstNotification
 
@@ -86,7 +87,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 	e.addGeoResult(m, raid.Latitude, raid.Longitude)
 
 	// Static map tile
-	e.addStaticMap(m, "raid", raid.Latitude, raid.Longitude, map[string]any{
+	pending := e.addStaticMap(m, "raid", raid.Latitude, raid.Longitude, map[string]any{
 		"pokemon_id": raid.PokemonID,
 		"form":       raid.Form,
 		"level":      raid.Level,
@@ -136,7 +137,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) map[s
 		}
 	}
 
-	return m
+	return m, pending
 }
 
 // RaidTranslate adds per-language translated fields to a raid enrichment map.

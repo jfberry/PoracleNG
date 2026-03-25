@@ -68,9 +68,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 			l.Infof("Nest %s (avg %.1f/hr) areas(%s) and %d humans cared",
 				ps.pokemonName(nest.PokemonID, nest.Form), nest.PokemonAvg, areaNames(matchedAreas), len(matched))
 
-			ps.enricher.ResetTilePending()
-			enrichment := ps.enricher.Nest(&nest)
-			tilePending := ps.enricher.LastTilePending
+			enrichment, tilePending := ps.enricher.Nest(&nest)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any

@@ -2,10 +2,11 @@ package enrichment
 
 import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 // Gym builds enrichment fields for a gym webhook.
-func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, inBattle, ex bool, gymID string) map[string]any {
+func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, inBattle, ex bool, gymID string) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
@@ -32,7 +33,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, 
 	e.addGeoResult(m, lat, lon)
 
 	// Static map tile
-	e.addStaticMap(m, "gym", lat, lon, map[string]any{
+	pending := e.addStaticMap(m, "gym", lat, lon, map[string]any{
 		"team_id":        teamID,
 		"slotsAvailable": slotsAvailable,
 		"inBattle":       inBattle,
@@ -46,7 +47,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, 
 		}
 	}
 
-	return m
+	return m, pending
 }
 
 // GymTranslate adds per-language translated fields.

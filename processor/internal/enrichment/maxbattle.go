@@ -3,12 +3,13 @@ package enrichment
 import (
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // Maxbattle builds enrichment fields for a maxbattle webhook.
-func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.MaxbattleWebhook) map[string]any {
+func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.MaxbattleWebhook) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
@@ -35,6 +36,11 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 		}
 	}
 
+	if mb == nil {
+		e.addGeoResult(m, lat, lon)
+		return m, nil
+	}
+
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "pokestops", mb.ID)
 
@@ -42,13 +48,13 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	e.addGeoResult(m, lat, lon)
 
 	// Static map tile
-	e.addStaticMap(m, "maxbattle", lat, lon, map[string]any{
+	pending := e.addStaticMap(m, "maxbattle", lat, lon, map[string]any{
 		"battle_level":      mb.BattleLevel,
 		"battle_pokemon_id": mb.BattlePokemonID,
 	})
 
 	// Game data enrichment
-	if e.GameData != nil && mb != nil {
+	if e.GameData != nil {
 		gd := e.GameData
 
 		// Level name
@@ -72,12 +78,12 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 		}
 	}
 
-	return m
+	return m, pending
 }
 
 // MaxbattleTranslate adds per-language translated fields.
 func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.MaxbattleWebhook, lang string) map[string]any {
-	if e.GameData == nil || e.Translations == nil {
+	if e.GameData == nil || e.Translations == nil || mb == nil {
 		return base
 	}
 

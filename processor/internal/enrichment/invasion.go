@@ -2,11 +2,12 @@ package enrichment
 
 import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
 // Invasion builds enrichment fields for an invasion webhook.
-func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID string, gruntTypeID, displayType, lureID int) map[string]any {
+func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID string, gruntTypeID, displayType, lureID int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
@@ -61,7 +62,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	if lureID != 0 {
 		tileFields["lureTypeId"] = lureID
 	}
-	e.addStaticMap(m, "pokestop", lat, lon, tileFields)
+	pending := e.addStaticMap(m, "pokestop", lat, lon, tileFields)
 
 	// Grunt data
 	if e.GameData != nil {
@@ -82,7 +83,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 		}
 	}
 
-	return m
+	return m, pending
 }
 
 // InvasionTranslate adds per-language translated fields.

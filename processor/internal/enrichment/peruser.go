@@ -1,7 +1,6 @@
 package enrichment
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -40,6 +39,9 @@ func (e *Enricher) PokemonPerUser(
 		m := make(map[string]any, 16)
 
 		lang := cu.Language
+		if lang == "" {
+			lang = e.DefaultLocale
+		}
 		if lang == "" {
 			lang = "en"
 		}
@@ -222,8 +224,6 @@ func toInt(v any) int {
 		return int(n)
 	case float64:
 		return int(n)
-	case fmt.Stringer:
-		return 0
 	default:
 		return 0
 	}

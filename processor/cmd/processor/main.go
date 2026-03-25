@@ -378,6 +378,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	if cfg.General.StickerURL != "" {
 		enricher.StickerUicons = uicons.New(cfg.General.StickerURL, "webp")
 	}
+	enricher.DefaultLocale = cfg.General.Locale
 	enricher.RequestShinyImages = cfg.General.RequestShinyImages
 
 	// Scanner DB and static map tile resolver

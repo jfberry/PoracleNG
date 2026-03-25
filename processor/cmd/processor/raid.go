@@ -144,9 +144,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 					raid.Level, gymName, raid.Latitude, raid.Longitude, areaNames(matchedAreas), len(matched))
 			}
 
-			ps.enricher.ResetTilePending()
-			baseEnrichment := ps.enricher.Raid(&raid, isFirstNotification)
-			tilePending := ps.enricher.LastTilePending
+			baseEnrichment, tilePending := ps.enricher.Raid(&raid, isFirstNotification)
 
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {

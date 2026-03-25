@@ -62,20 +62,10 @@ type Enricher struct {
 	ImgUicons          *uicons.Uicons        // Primary icon resolver
 	ImgUiconsAlt       *uicons.Uicons        // Alternative icon resolver
 	StickerUicons      *uicons.Uicons        // Sticker icon resolver (webp)
+	DefaultLocale      string                   // Fallback locale when user has no language set
 	RequestShinyImages bool                   // Whether to request shiny icon variants
 	StaticMap          *staticmap.Resolver    // Static map tile resolver (nil = disabled)
 	Geocoder           *geocoding.Geocoder    // Reverse geocoder (nil = disabled)
-
-	// LastTilePending is set by the most recent addStaticMap call.
-	// Webhook handlers should read this after calling enrichment functions
-	// and attach it to the OutboundPayload. Reset with ResetTilePending().
-	// Safe for single-goroutine use (one handler per enricher call).
-	LastTilePending *staticmap.TilePending
-}
-
-// ResetTilePending clears any pending tile from a previous enrichment call.
-func (e *Enricher) ResetTilePending() {
-	e.LastTilePending = nil
 }
 
 // New creates a new Enricher.
@@ -182,7 +172,6 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 	url, pending := e.StaticMap.GetStaticMapURLAsync(maptype, merged, keys, pregenKeys, m)
 	if pending != nil {
 		// Tile will be resolved async by the sender
-		e.LastTilePending = pending
 		return pending
 	}
 	// Instant URL (non-pregen or non-tileservercache)

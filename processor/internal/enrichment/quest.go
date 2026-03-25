@@ -5,10 +5,11 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 // Quest builds enrichment fields for a quest webhook.
-func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching.QuestRewardData) map[string]any {
+func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching.QuestRewardData) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	endOfDay := geo.EndOfDay(lat, lon)
@@ -27,7 +28,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 	e.addGeoResult(m, lat, lon)
 
 	// Static map tile
-	e.addStaticMap(m, "quest", lat, lon, nil)
+	pending := e.addStaticMap(m, "quest", lat, lon, nil)
 
 	// Future event check
 	if e.EventChecker != nil {
@@ -40,7 +41,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 		}
 	}
 
-	return m
+	return m, pending
 }
 
 // addQuestIconURLs resolves icon URLs based on the quest reward type.
