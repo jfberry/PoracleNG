@@ -170,6 +170,12 @@ The handler creates a `matching.*Data` struct and calls the matcher. All matcher
 
 **Cardinal direction labels are intentionally mirrored** vs standard compass directions (e.g. 45° bearing returns `"northwest"` not `"northeast"`). These strings are only used as emoji lookup keys into `util.json`, where `"northwest"` maps to the northeast-pointing arrow emoji. The user sees the correct arrow — the raw string is never displayed in templates. This convention is inherited from the original JS `getBearingEmoji`.
 
+**Unencountered pokemon skip encounter-only stat filters.** When a pokemon is not encountered, Golbat omits CP, level, IVs, and weight. If a tracking rule constrains any of these beyond their defaults (`min_cp > 0`, `max_cp < 9000`, `min_level > 0`, `max_level < 55`, individual IVs, weight), the rule is skipped for unencountered pokemon. Rules with default stat values still match. This differs from the JS alerter where `undefined` → `NaN` silently passed all comparisons (both min and max), but produces more correct behavior.
+
+**PVP evolution caps: nil means "match any cap".** When Golbat sends PVP evolution data with `cap == 0 && !capped` (the "not ohbem" case), the evolution entry's `Caps` is nil. In the matcher, this bypasses the cap filter entirely (matching any `pvp_ranking_cap` value). This matches JS behavior where `caps: null` short-circuits the cap check. The best-rank path (non-evolution) defaults to `[50]` for the same case, which is a different but equally correct behavior since best-rank entries are pre-filtered by configured level caps.
+
+**Debounced state reload** (`ProcessorService.triggerReload`): All reload triggers — periodic timer excluded — use a centralized 500ms debounce timer. This coalesces burst mutations (e.g. PoracleWeb adding 50 tracking rules, or multiple rate-limit disables in the same window) into a single DB reload. Sources: API tracking mutations, rate-limit user disable, profile scheduler. The periodic timer runs its own direct `state.Load()` since it already operates on a fixed interval.
+
 ### 4. Enrichment
 
 Enrichment is computed in three layers:
