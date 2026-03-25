@@ -158,22 +158,22 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			clean := false
+			var clean db.IntBool
 			if req.Clean != nil {
 				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = n != 0
+				clean = db.IntBool(n != 0)
 			}
 
-			slotChanges := false
+			var slotChanges db.IntBool
 			if req.SlotChanges != nil {
 				n, _ := strconv.Atoi(string(*req.SlotChanges))
-				slotChanges = n != 0
+				slotChanges = db.IntBool(n != 0)
 			}
 
-			battleChanges := false
+			var battleChanges db.IntBool
 			if req.BattleChanges != nil {
 				n, _ := strconv.Atoi(string(*req.BattleChanges))
-				battleChanges = n != 0
+				battleChanges = db.IntBool(n != 0)
 			}
 
 			var gymID *string
@@ -345,12 +345,12 @@ func toGymTracking(api *db.GymTrackingAPI) *db.GymTracking {
 		ID:            api.ID,
 		ProfileNo:     api.ProfileNo,
 		Ping:          api.Ping,
-		Clean:         api.Clean,
+		Clean:         bool(api.Clean),
 		Distance:      api.Distance,
 		Template:      api.Template,
 		Team:          api.Team,
-		SlotChanges:   api.SlotChanges,
-		BattleChanges: api.BattleChanges,
+		SlotChanges:   bool(api.SlotChanges),
+		BattleChanges: bool(api.BattleChanges),
 		GymID:         api.GymID,
 	}
 }

@@ -170,10 +170,10 @@ func HandleCreateMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			clean := false
+			var clean db.IntBool
 			if req.Clean != nil {
 				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = n != 0
+				clean = db.IntBool(n != 0)
 			}
 
 			form := 0
@@ -311,7 +311,7 @@ func toMaxbattleTracking(api *db.MaxbattleTrackingAPI) *db.MaxbattleTracking {
 		ID:        api.ID,
 		ProfileNo: api.ProfileNo,
 		Ping:      api.Ping,
-		Clean:     api.Clean,
+		Clean:     bool(api.Clean),
 		Distance:  api.Distance,
 		Template:  api.Template,
 		PokemonID: api.PokemonID,

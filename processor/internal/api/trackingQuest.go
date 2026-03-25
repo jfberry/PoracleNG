@@ -170,10 +170,10 @@ func HandleCreateQuest(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			clean := false
+			var clean db.IntBool
 			if req.Clean != nil {
 				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = n != 0
+				clean = db.IntBool(n != 0)
 			}
 
 			form := 0
@@ -182,10 +182,10 @@ func HandleCreateQuest(deps *TrackingDeps) http.HandlerFunc {
 				form = n
 			}
 
-			shiny := false
+			var shiny db.IntBool
 			if req.Shiny != nil {
 				n, _ := strconv.Atoi(string(*req.Shiny))
-				shiny = n != 0
+				shiny = db.IntBool(n != 0)
 			}
 
 			amount := 0
@@ -359,13 +359,13 @@ func toQuestTracking(api *db.QuestTrackingAPI) *db.QuestTracking {
 		ID:         api.ID,
 		ProfileNo:  api.ProfileNo,
 		Ping:       api.Ping,
-		Clean:      api.Clean,
+		Clean:      bool(api.Clean),
 		Distance:   api.Distance,
 		Template:   api.Template,
 		RewardType: api.RewardType,
 		Reward:     api.Reward,
 		Form:       api.Form,
-		Shiny:      api.Shiny,
+		Shiny:      bool(api.Shiny),
 		Amount:     api.Amount,
 	}
 }

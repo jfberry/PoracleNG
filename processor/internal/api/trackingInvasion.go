@@ -151,10 +151,10 @@ func HandleCreateInvasion(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			clean := false
+			var clean db.IntBool
 			if req.Clean != nil {
 				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = n != 0
+				clean = db.IntBool(n != 0)
 			}
 
 			gender := 0
@@ -325,7 +325,7 @@ func toInvasionTracking(api *db.InvasionTrackingAPI) *db.InvasionTracking {
 		ID:        api.ID,
 		ProfileNo: api.ProfileNo,
 		Ping:      api.Ping,
-		Clean:     api.Clean,
+		Clean:     bool(api.Clean),
 		Distance:  api.Distance,
 		Template:  api.Template,
 		Gender:    api.Gender,

@@ -158,16 +158,16 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			clean := false
+			var clean db.IntBool
 			if req.Clean != nil {
 				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = n != 0
+				clean = db.IntBool(n != 0)
 			}
 
-			exclusive := false
+			var exclusive db.IntBool
 			if req.Exclusive != nil {
 				n, _ := strconv.Atoi(string(*req.Exclusive))
-				exclusive = n != 0
+				exclusive = db.IntBool(n != 0)
 			}
 
 			var gymID null.String
@@ -357,12 +357,12 @@ func toEggTracking(api *db.EggTrackingAPI) *db.EggTracking {
 		ID:          api.ID,
 		ProfileNo:   api.ProfileNo,
 		Ping:        api.Ping,
-		Clean:       api.Clean,
+		Clean:       bool(api.Clean),
 		Distance:    api.Distance,
 		Template:    api.Template,
 		Team:        api.Team,
 		Level:       api.Level,
-		Exclusive:   api.Exclusive,
+		Exclusive:   bool(api.Exclusive),
 		GymID:       api.GymID.NullString,
 		RSVPChanges: api.RSVPChanges,
 	}

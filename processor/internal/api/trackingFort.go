@@ -159,9 +159,9 @@ func HandleCreateFort(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			includeEmpty := false
+			var includeEmpty db.IntBool
 			if req.IncludeEmpty != nil {
-				includeEmpty = *req.IncludeEmpty
+				includeEmpty = db.IntBool(*req.IncludeEmpty)
 			}
 
 			changeTypes := "[]"
@@ -340,7 +340,7 @@ func toFortTracking(api *db.FortTrackingAPI) *db.FortTracking {
 		Distance:     api.Distance,
 		Template:     api.Template,
 		FortType:     api.FortType,
-		IncludeEmpty: api.IncludeEmpty,
+		IncludeEmpty: bool(api.IncludeEmpty),
 		ChangeTypes:  api.ChangeTypes,
 	}
 }
