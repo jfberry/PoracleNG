@@ -275,36 +275,41 @@ func TestInvasionTranslateRewardsTwoSlots(t *testing.T) {
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 1}
 	m := e.InvasionTranslate(base, 44, "en")
 
-	rewardsList, ok := m["gruntRewardsList"].([]map[string]any)
+	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
 		t.Fatal("gruntRewardsList not set or wrong type")
 	}
-	if len(rewardsList) != 2 {
-		t.Fatalf("gruntRewardsList has %d entries, want 2", len(rewardsList))
-	}
 
 	// First slot: 85%
-	if rewardsList[0]["chance"] != 85 {
-		t.Errorf("slot 0 chance = %v, want 85", rewardsList[0]["chance"])
+	firstSlot, ok := rewardsList["first"].(map[string]any)
+	if !ok {
+		t.Fatal("gruntRewardsList.first not set")
 	}
-	monsters0, ok := rewardsList[0]["monsters"].([]map[string]any)
+	if firstSlot["chance"] != 85 {
+		t.Errorf("first chance = %v, want 85", firstSlot["chance"])
+	}
+	monsters0, ok := firstSlot["monsters"].([]map[string]any)
 	if !ok || len(monsters0) == 0 {
-		t.Fatal("slot 0 monsters not set")
+		t.Fatal("first monsters not set")
 	}
 	if monsters0[0]["id"] != 650 {
-		t.Errorf("slot 0 monster id = %v, want 650", monsters0[0]["id"])
+		t.Errorf("first monster id = %v, want 650", monsters0[0]["id"])
 	}
 	if monsters0[0]["fullName"] != "Chespin" {
-		t.Errorf("slot 0 monster fullName = %q, want %q", monsters0[0]["fullName"], "Chespin")
+		t.Errorf("first monster fullName = %q, want %q", monsters0[0]["fullName"], "Chespin")
 	}
 
 	// Second slot: 15%
-	if rewardsList[1]["chance"] != 15 {
-		t.Errorf("slot 1 chance = %v, want 15", rewardsList[1]["chance"])
+	secondSlot, ok := rewardsList["second"].(map[string]any)
+	if !ok {
+		t.Fatal("gruntRewardsList.second not set")
 	}
-	monsters1, ok := rewardsList[1]["monsters"].([]map[string]any)
+	if secondSlot["chance"] != 15 {
+		t.Errorf("second chance = %v, want 15", secondSlot["chance"])
+	}
+	monsters1, ok := secondSlot["monsters"].([]map[string]any)
 	if !ok || len(monsters1) == 0 {
-		t.Fatal("slot 1 monsters not set")
+		t.Fatal("second monsters not set")
 	}
 	if monsters1[0]["id"] != 598 {
 		t.Errorf("slot 1 monster id = %v, want 598", monsters1[0]["id"])
@@ -361,15 +366,17 @@ func TestInvasionTranslateRewardsSingleSlot(t *testing.T) {
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
 	m := e.InvasionTranslate(base, 44, "en")
 
-	rewardsList, ok := m["gruntRewardsList"].([]map[string]any)
+	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
 		t.Fatal("gruntRewardsList not set or wrong type")
 	}
-	if len(rewardsList) != 1 {
-		t.Fatalf("gruntRewardsList has %d entries, want 1", len(rewardsList))
+	firstSlot, ok := rewardsList["first"].(map[string]any)
+	if !ok {
+		t.Fatal("gruntRewardsList.first not set")
 	}
-	if rewardsList[0]["chance"] != 100 {
-		t.Errorf("slot 0 chance = %v, want 100", rewardsList[0]["chance"])
+	_ = firstSlot
+	if firstSlot["chance"] != 100 {
+		t.Errorf("slot 0 chance = %v, want 100", firstSlot["chance"])
 	}
 
 	// Single slot should NOT contain "%" in the text
@@ -424,19 +431,21 @@ func TestInvasionTranslateRewardsThirdSlotFallback(t *testing.T) {
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
 	m := e.InvasionTranslate(base, 44, "en")
 
-	rewardsList, ok := m["gruntRewardsList"].([]map[string]any)
+	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
 		t.Fatal("gruntRewardsList not set or wrong type")
 	}
-	if len(rewardsList) != 1 {
-		t.Fatalf("gruntRewardsList has %d entries, want 1", len(rewardsList))
+	firstSlot, ok := rewardsList["first"].(map[string]any)
+	if !ok {
+		t.Fatal("gruntRewardsList.first not set")
 	}
-	if rewardsList[0]["chance"] != 100 {
-		t.Errorf("slot 0 chance = %v, want 100", rewardsList[0]["chance"])
+	_ = firstSlot
+	if firstSlot["chance"] != 100 {
+		t.Errorf("slot 0 chance = %v, want 100", firstSlot["chance"])
 	}
 
 	// Should use third slot pokemon (ID: 3), not first slot
-	monsters, ok := rewardsList[0]["monsters"].([]map[string]any)
+	monsters, ok := firstSlot["monsters"].([]map[string]any)
 	if !ok || len(monsters) == 0 {
 		t.Fatal("monsters not set")
 	}

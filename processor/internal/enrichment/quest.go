@@ -87,8 +87,15 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 	if len(rewardData.Items) > 0 {
 		m["itemAmount"] = rewardData.Items[0].Amount
 	}
+	// Deprecated aliases for backwards compatibility
+	if len(rewardData.EnergyMonsters) > 0 {
+		m["energyAmount"] = rewardData.EnergyMonsters[0].Amount
+	}
+	if len(rewardData.Candy) > 0 {
+		m["candyAmount"] = rewardData.Candy[0].Amount
+	}
 
-	// Shiny possible for pokemon rewards
+	// Shiny possible and base stats for pokemon rewards
 	if len(rewardData.Monsters) > 0 {
 		m["isShiny"] = rewardData.Monsters[0].Shiny
 		if e.ShinyProvider != nil {
@@ -98,9 +105,18 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 				m["shinyStats"] = int(math.Round(rate))
 			}
 		}
+		// Base stats for pokemon reward (used by calculateCp Handlebars helper)
+		if e.GameData != nil {
+			mon := e.GameData.GetMonster(rewardData.Monsters[0].PokemonID, rewardData.Monsters[0].FormID)
+			if mon != nil {
+				m["baseStats"] = map[string]int{
+					"baseAttack":  mon.Attack,
+					"baseDefense": mon.Defense,
+					"baseStamina": mon.Stamina,
+				}
+			}
+		}
 	}
-
-	m["_rewardData"] = rewardData // internal: used by QuestTranslate, not sent to alerter
 
 	return m, pending
 }
@@ -130,7 +146,7 @@ func buildQuestRewardData(rewards []matching.QuestRewardData) QuestRewardData {
 }
 
 // QuestTranslate adds per-language translated fields for quest enrichment.
-func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebhook, lang string) map[string]any {
+func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebhook, rewards []matching.QuestRewardData, lang string) map[string]any {
 	if e.Translations == nil {
 		return base
 	}
@@ -150,11 +166,8 @@ func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebho
 	m["questString"] = tr.TfNamed(titleKey, namedArgs)
 	m["questStringEng"] = enTr.TfNamed(titleKey, namedArgs)
 
-	// Extract reward data stored by Quest() base enrichment
-	var rewardData QuestRewardData
-	if rd, ok := base["_rewardData"]; ok {
-		rewardData, _ = rd.(QuestRewardData)
-	}
+	// Build reward data from matching rewards
+	rewardData := buildQuestRewardData(rewards)
 
 	// Monster reward names
 	var monsterNames, monsterNamesEng []string

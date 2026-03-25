@@ -81,7 +81,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.QuestTranslate(enrichment, &quest, lang)
+					perLang[lang] = ps.enricher.QuestTranslate(enrichment, &quest, rewards, lang)
 				}
 			}
 

@@ -165,21 +165,22 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 		}
 
 		if len(slots) > 0 {
-			rewardsList := make([]map[string]any, 0, len(slots))
+			// Build object with first/second keys (matching DTS template expectations)
+			slotNames := []string{"first", "second", "third"}
+			rewardsList := make(map[string]any, len(slots))
 			var rewardsTextParts []string
 
-			for _, slot := range slots {
+			for i, slot := range slots {
 				monsters := e.translateEncounterSlot(slot.encounters, gd, tr)
-				entry := map[string]any{
+				rewardsList[slotNames[i]] = map[string]any{
 					"chance":   slot.chance,
 					"monsters": monsters,
 				}
-				rewardsList = append(rewardsList, entry)
 
 				// Build flat text
 				names := make([]string, len(monsters))
-				for i, mon := range monsters {
-					names[i], _ = mon["fullName"].(string)
+				for j, mon := range monsters {
+					names[j], _ = mon["fullName"].(string)
 				}
 				joined := strings.Join(names, ", ")
 				if len(slots) > 1 {
@@ -190,7 +191,7 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 			}
 
 			m["gruntRewardsList"] = rewardsList
-			m["gruntRewards"] = strings.Join(rewardsTextParts, "\n")
+			m["gruntRewards"] = strings.Join(rewardsTextParts, "\\n")
 		}
 	}
 

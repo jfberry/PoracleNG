@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -38,11 +39,9 @@ func TestQuestTranslateTitle(t *testing.T) {
 		Target: 10,
 	}
 
-	base := map[string]any{
-		"_rewardData": QuestRewardData{},
-	}
+	base := map[string]any{}
 
-	m := e.QuestTranslate(base, quest, "en")
+	m := e.QuestTranslate(base, quest, nil, "en")
 
 	if m["questString"] != "Catch 10 Pokémon" {
 		t.Errorf("questString = %q, want %q", m["questString"], "Catch 10 Pokémon")
@@ -73,11 +72,9 @@ func TestQuestTranslateTitleGerman(t *testing.T) {
 		Target: 10,
 	}
 
-	base := map[string]any{
-		"_rewardData": QuestRewardData{},
-	}
+	base := map[string]any{}
 
-	m := e.QuestTranslate(base, quest, "de")
+	m := e.QuestTranslate(base, quest, nil, "de")
 
 	if m["questString"] != "Fange 10 Pokémon." {
 		t.Errorf("questString = %q, want %q", m["questString"], "Fange 10 Pokémon.")
@@ -111,13 +108,10 @@ func TestQuestTranslatePokemonReward(t *testing.T) {
 		Target: 1,
 	}
 
-	base := map[string]any{
-		"_rewardData": QuestRewardData{
-			Monsters: []QuestMonsterReward{{PokemonID: 25, FormID: 0}},
-		},
-	}
+	rewards := []matching.QuestRewardData{{Type: 7, PokemonID: 25, FormID: 0}}
+	base := map[string]any{}
 
-	m := e.QuestTranslate(base, quest, "en")
+	m := e.QuestTranslate(base, quest, rewards, "en")
 
 	monsterNames, _ := m["monsterNames"].(string)
 	if !strings.Contains(monsterNames, "Pikachu") {
@@ -154,13 +148,10 @@ func TestQuestTranslateItemReward(t *testing.T) {
 		Target: 1,
 	}
 
-	base := map[string]any{
-		"_rewardData": QuestRewardData{
-			Items: []QuestItemReward{{ID: 701, Amount: 6}},
-		},
-	}
+	rewards := []matching.QuestRewardData{{Type: 2, ItemID: 701, Amount: 6}}
+	base := map[string]any{}
 
-	m := e.QuestTranslate(base, quest, "en")
+	m := e.QuestTranslate(base, quest, rewards, "en")
 
 	itemNames, _ := m["itemNames"].(string)
 	if itemNames != "6 Razz Berry" {
@@ -186,13 +177,10 @@ func TestQuestTranslateStardustReward(t *testing.T) {
 		Target: 1,
 	}
 
-	base := map[string]any{
-		"_rewardData": QuestRewardData{
-			DustAmount: 200,
-		},
-	}
+	rewards := []matching.QuestRewardData{{Type: 3, Amount: 200}}
+	base := map[string]any{"dustAmount": 200}
 
-	m := e.QuestTranslate(base, quest, "en")
+	m := e.QuestTranslate(base, quest, rewards, "en")
 
 	rewardString, _ := m["rewardString"].(string)
 	if !strings.Contains(rewardString, "200 Stardust") {
@@ -224,13 +212,10 @@ func TestQuestTranslateMegaEnergyReward(t *testing.T) {
 		Target: 1,
 	}
 
-	base := map[string]any{
-		"_rewardData": QuestRewardData{
-			EnergyMonsters: []QuestEnergyReward{{PokemonID: 9, Amount: 10}},
-		},
-	}
+	rewards := []matching.QuestRewardData{{Type: 12, PokemonID: 9, Amount: 10}}
+	base := map[string]any{}
 
-	m := e.QuestTranslate(base, quest, "en")
+	m := e.QuestTranslate(base, quest, rewards, "en")
 
 	energyNames, _ := m["energyMonstersNames"].(string)
 	if energyNames != "10 Blastoise Mega Energy" {
@@ -263,14 +248,13 @@ func TestQuestTranslateRewardString(t *testing.T) {
 		Target: 1,
 	}
 
-	base := map[string]any{
-		"_rewardData": QuestRewardData{
-			Monsters:   []QuestMonsterReward{{PokemonID: 25, FormID: 0}},
-			DustAmount: 500,
-		},
+	rewards := []matching.QuestRewardData{
+		{Type: 7, PokemonID: 25, FormID: 0},
+		{Type: 3, Amount: 500},
 	}
+	base := map[string]any{"dustAmount": 500}
 
-	m := e.QuestTranslate(base, quest, "en")
+	m := e.QuestTranslate(base, quest, rewards, "en")
 
 	rewardString, _ := m["rewardString"].(string)
 	if !strings.Contains(rewardString, "Pikachu") {
