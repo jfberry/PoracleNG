@@ -51,12 +51,13 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, 
 }
 
 // GymTranslate adds per-language translated fields.
-func (e *Enricher) GymTranslate(base map[string]any, teamID, oldTeamID int, lang string) map[string]any {
+// lastOwnerID is the team ID of the last controller (from webhook last_owner_id).
+func (e *Enricher) GymTranslate(base map[string]any, teamID, oldTeamID, lastOwnerID int, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
 		return base
 	}
 
-	m := make(map[string]any, len(base)+6)
+	m := make(map[string]any, len(base)+8)
 	for k, v := range base {
 		m[k] = v
 	}
@@ -67,6 +68,12 @@ func (e *Enricher) GymTranslate(base map[string]any, teamID, oldTeamID int, lang
 		if info, ok := e.GameData.Util.Teams[oldTeamID]; ok {
 			m["oldTeamName"] = tr.T(info.Name)
 			m["oldTeamEmojiKey"] = info.Emoji
+		}
+	}
+	// Previous controller's team (from webhook last_owner_id — may differ from old_team_id)
+	if lastOwnerID >= 0 {
+		if info, ok := e.GameData.Util.Teams[lastOwnerID]; ok {
+			m["previousControlName"] = tr.T(info.Name)
 		}
 	}
 
