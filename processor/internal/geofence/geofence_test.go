@@ -54,6 +54,32 @@ func TestLoadGeofenceFilePoracleFormat(t *testing.T) {
 	}
 }
 
+func TestLoadGeofenceFilePorFormatExplicitFalse(t *testing.T) {
+	content := `[
+		{
+			"name": "Hidden",
+			"userSelectable": false,
+			"displayInMatches": false,
+			"path": [[51.0, 0.0], [51.0, 1.0], [52.0, 1.0], [52.0, 0.0]]
+		}
+	]`
+
+	path := writeTempFile(t, content, "poracle_false_*.json")
+	fences, err := LoadGeofenceFile(path)
+	if err != nil {
+		t.Fatalf("LoadGeofenceFile failed: %v", err)
+	}
+	if len(fences) != 1 {
+		t.Fatalf("Expected 1 fence, got %d", len(fences))
+	}
+	if fences[0].UserSelectable {
+		t.Error("UserSelectable should be false when explicitly set")
+	}
+	if fences[0].DisplayInMatches {
+		t.Error("DisplayInMatches should be false when explicitly set")
+	}
+}
+
 func TestLoadGeofenceFileGeoJSON(t *testing.T) {
 	content := `{
 		"type": "FeatureCollection",
