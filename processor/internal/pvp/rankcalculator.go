@@ -134,6 +134,8 @@ func calculateLeague(league int, leagueData []webhook.PVPRankEntry, capsConsider
 		if stats.Evolution == 0 && cfg.PVPEvolutionDirectTracking && stats.Rank > 0 && stats.CP > 0 &&
 			stats.Pokemon != pokemonID && stats.Rank <= cfg.PVPFilterMaxRank && stats.CP >= minCP {
 			var evoCaps []int
+			// Cap assignment mirrors JS: capped → all caps >= cap, explicit cap → [cap],
+			// neither (not ohbem) → nil (matches any cap in matcher, same as JS null)
 			if stats.Capped {
 				for _, c := range capsConsidered {
 					if c >= stats.Cap {
@@ -162,9 +164,12 @@ func calculateLeague(league int, leagueData []webhook.PVPRankEntry, capsConsider
 		}
 	}
 
-	// Consolidate best ranks
+	// Consolidate best ranks (skip sentinel 4096 entries — no matching PVP data for that cap)
 	var bestRanks []LeagueRank
 	for cap, details := range best {
+		if details.rank >= 4096 {
+			continue
+		}
 		found := false
 		for i := range bestRanks {
 			if bestRanks[i].CP == details.cp && bestRanks[i].Rank == details.rank {
