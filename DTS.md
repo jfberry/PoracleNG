@@ -38,6 +38,7 @@ These fields are available in every template:
 | `suburb` | string | Suburb name |
 | `flag` | string | Country flag emoji |
 | `staticMap` | string | Static map tile image URL |
+| `staticmap` | string | *Deprecated* — alias for `staticMap` |
 | `imgUrl` | string | Primary icon URL |
 | `imgUrlAlt` | string | Alternative icon URL |
 | `stickerUrl` | string | Sticker image URL |
