@@ -522,7 +522,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		ctx:      ctx,
 		cancel:   cancel,
 		enricher: enricher,
-		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
+		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Processor.APISecret, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),
 		encounters:   tracker.NewEncounterTracker(),
@@ -555,10 +555,12 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 func (ps *ProcessorService) Close() {
 	ps.cancel()
 	ps.wg.Wait()
+	// Sender must close before resolver: sender's final flush may need
+	// tile workers still running to resolve pending tiles within deadline.
+	ps.sender.Close()
 	if ps.enricher.StaticMap != nil {
 		ps.enricher.StaticMap.Close()
 	}
-	ps.sender.Close()
 	ps.duplicates.Close()
 	ps.rateLimiter.Close()
 	if ps.enricher.Geocoder != nil {

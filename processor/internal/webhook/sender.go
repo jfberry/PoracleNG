@@ -3,6 +3,7 @@ package webhook
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -16,23 +17,27 @@ import (
 // Payloads with pending tiles are held until the tile resolves or a deadline expires.
 type Sender struct {
 	alerterURL    string
+	apiSecret     string
 	client        *http.Client
 	mu            sync.Mutex
 	batch         []OutboundPayload
 	batchSize     int
 	flushInterval time.Duration
 	done          chan struct{}
+	wg            sync.WaitGroup
 }
 
 // NewSender creates a new matched result sender.
-func NewSender(alerterURL string, batchSize int, flushIntervalMillis int) *Sender {
+func NewSender(alerterURL string, apiSecret string, batchSize int, flushIntervalMillis int) *Sender {
 	s := &Sender{
 		alerterURL:    alerterURL,
+		apiSecret:     apiSecret,
 		client:        &http.Client{Timeout: 10 * time.Second},
 		batchSize:     batchSize,
 		flushInterval: time.Duration(flushIntervalMillis) * time.Millisecond,
 		done:          make(chan struct{}),
 	}
+	s.wg.Add(1)
 	go s.flushLoop()
 	return s
 }
@@ -51,9 +56,11 @@ func (s *Sender) Send(payload OutboundPayload) {
 	// so pending tiles have time to resolve
 }
 
-// Close stops the sender and flushes remaining items.
+// Close stops the flush loop, resolves any remaining pending tiles, and flushes.
 func (s *Sender) Close() {
 	close(s.done)
+	s.wg.Wait() // wait for flushLoop to exit before touching batch
+
 	// Force-resolve any remaining pending tiles with fallback
 	s.mu.Lock()
 	for i := range s.batch {
@@ -72,6 +79,7 @@ func (s *Sender) Close() {
 }
 
 func (s *Sender) flushLoop() {
+	defer s.wg.Done()
 	ticker := time.NewTicker(s.flushInterval)
 	defer ticker.Stop()
 	for {
@@ -143,11 +151,25 @@ func (s *Sender) sendBatch(batch []OutboundPayload) {
 	}
 
 	start := time.Now()
-	resp, err := s.client.Post(s.alerterURL+"/api/matched", "application/json", bytes.NewReader(data))
+	req, err := http.NewRequest(http.MethodPost, s.alerterURL+"/api/matched", bytes.NewReader(data))
+	if err != nil {
+		log.Errorf("Failed to create request: %s", err)
+		metrics.SenderBatches.WithLabelValues("error").Inc()
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if s.apiSecret != "" {
+		req.Header.Set("X-Poracle-Secret", s.apiSecret)
+	}
+
+	resp, err := s.client.Do(req)
 	metrics.SenderFlushDuration.Observe(time.Since(start).Seconds())
 
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() {
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+		}()
 	}
 	if err != nil {
 		log.Errorf("Failed to send to alerter (%d items): %s", len(batch), err)

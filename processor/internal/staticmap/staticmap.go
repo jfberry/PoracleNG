@@ -132,11 +132,13 @@ type Resolver struct {
 	client    *http.Client
 	tileQueue chan tileRequest // async tile generation queue
 	done      chan struct{}    // signals tile workers to stop
+	wg        sync.WaitGroup  // tracks tile worker goroutines
 
 	// Circuit breaker state
-	consecutiveErrors int
-	circuitOpenSince  time.Time
-	mu                sync.Mutex
+	consecutiveErrors    int
+	circuitOpenSince     time.Time
+	halfOpenProbeActive  bool // true when a half-open probe request is in flight
+	mu                   sync.Mutex
 
 	// Stats counters for periodic logging
 	statCalls   atomic.Int64
@@ -201,15 +203,27 @@ func New(config Config) *Resolver {
 
 	// Start tile worker goroutines
 	for range config.TileserverConcurrency {
+		r.wg.Add(1)
 		go r.tileWorker()
 	}
 
 	return r
 }
 
-// Close stops tile workers. Call on shutdown.
+// Close stops tile workers and drains any remaining queued tile requests.
 func (r *Resolver) Close() {
 	close(r.done)
+	r.wg.Wait() // wait for all tile workers to finish
+
+	// Drain remaining tile requests with fallback URLs
+	for {
+		select {
+		case req := <-r.tileQueue:
+			req.pending.Result <- req.pending.Fallback
+		default:
+			return
+		}
+	}
 }
 
 // TileDeadline returns the configured deadline duration for async tile requests.
@@ -243,6 +257,7 @@ func (r *Resolver) SubmitTile(maptype string, data map[string]any, staticMapType
 
 // tileWorker drains the tile queue and generates tiles.
 func (r *Resolver) tileWorker() {
+	defer r.wg.Done()
 	for {
 		select {
 		case req := <-r.tileQueue:
@@ -324,42 +339,9 @@ func (r *Resolver) GetStaticMapURLAsync(maptype string, data map[string]any, key
 }
 
 // tileserverCacheAsync handles async tile generation for tileservercache pregenerate mode.
+// Does NOT mutate the input data map — nearby stops are added to the filtered copy.
 func (r *Resolver) tileserverCacheAsync(maptype string, data map[string]any, keys, pregenKeys []string, target map[string]any) (string, *TilePending) {
 	tileOpts := r.getConfigForTileType(maptype)
-
-	lat, _ := getFloat(data, "latitude")
-	lon, _ := getFloat(data, "longitude")
-
-	// Fetch nearby stops (synchronous scanner query — fast DB lookup)
-	if boolVal(tileOpts.IncludeStops) && boolVal(tileOpts.Pregenerate) && r.config.Scanner != nil {
-		bounds := limits(lat, lon, tileOpts.Width, tileOpts.Height, tileOpts.Zoom)
-		stops, err := r.config.Scanner.GetStopData(bounds[0], bounds[1], bounds[2], bounds[3])
-		if err != nil {
-			log.Warnf("staticmap: failed to get stop data: %s", err)
-		} else {
-			stopData := make([]map[string]any, 0, len(stops))
-			for _, s := range stops {
-				entry := map[string]any{
-					"latitude":  s.Latitude,
-					"longitude": s.Longitude,
-					"type":      s.Type,
-				}
-				if s.Type == "gym" {
-					entry["teamId"] = s.TeamID
-					entry["slots"] = s.Slots
-					if r.config.ImgUicons != nil {
-						trainerCount := 6 - s.Slots
-						entry["imgUrl"] = r.config.ImgUicons.GymIcon(s.TeamID, trainerCount, false, false)
-					}
-				}
-				stopData = append(stopData, entry)
-			}
-			data["nearbyStops"] = stopData
-			if r.config.ImgUicons != nil {
-				data["uiconPokestopUrl"] = r.config.ImgUicons.PokestopIcon(0, false, 0, false)
-			}
-		}
-	}
 
 	if tileOpts.Type == "" || tileOpts.Type == "none" {
 		return "", nil
@@ -370,52 +352,19 @@ func (r *Resolver) tileserverCacheAsync(maptype string, data map[string]any, key
 		return r.GetTileURL(maptype, filterFields(data, keys), tileOpts.Type), nil
 	}
 
-	// Pregenerate: filter to pregen keys + nearbyStops to keep payload reasonable
+	// Pregenerate: filter to pregen keys
 	filtered := filterFields(data, pregenKeys)
-	if v, ok := data["nearbyStops"]; ok {
-		filtered["nearbyStops"] = v
-	}
-	if v, ok := data["uiconPokestopUrl"]; ok {
-		filtered["uiconPokestopUrl"] = v
-	}
+
+	// Fetch nearby stops into the filtered copy (not the shared data map)
+	r.addNearbyStops(filtered, data, tileOpts)
+
 	return "", r.SubmitTile(maptype, filtered, tileOpts.Type, target)
 }
 
 // tileserverCache handles the tileservercache provider (synchronous, for API endpoints).
+// Does NOT mutate the input data map — nearby stops are added to the filtered copy.
 func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon float64, keys, pregenKeys []string) string {
 	tileOpts := r.getConfigForTileType(maptype)
-
-	// If includeStops and pregenerate, fetch nearby stops from scanner
-	if boolVal(tileOpts.IncludeStops) && boolVal(tileOpts.Pregenerate) && r.config.Scanner != nil {
-		bounds := limits(lat, lon, tileOpts.Width, tileOpts.Height, tileOpts.Zoom)
-		stops, err := r.config.Scanner.GetStopData(bounds[0], bounds[1], bounds[2], bounds[3])
-		if err != nil {
-			log.Warnf("staticmap: failed to get stop data: %s", err)
-		} else {
-			// Add icon URLs for gyms
-			stopData := make([]map[string]any, 0, len(stops))
-			for _, s := range stops {
-				entry := map[string]any{
-					"latitude":  s.Latitude,
-					"longitude": s.Longitude,
-					"type":      s.Type,
-				}
-				if s.Type == "gym" {
-					entry["teamId"] = s.TeamID
-					entry["slots"] = s.Slots
-					if r.config.ImgUicons != nil {
-						trainerCount := 6 - s.Slots
-						entry["imgUrl"] = r.config.ImgUicons.GymIcon(s.TeamID, trainerCount, false, false)
-					}
-				}
-				stopData = append(stopData, entry)
-			}
-			data["nearbyStops"] = stopData
-			if r.config.ImgUicons != nil {
-				data["uiconPokestopUrl"] = r.config.ImgUicons.PokestopIcon(0, false, 0, false)
-			}
-		}
-	}
 
 	if tileOpts.Type == "" || tileOpts.Type == "none" {
 		return ""
@@ -424,15 +373,52 @@ func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon
 	if !boolVal(tileOpts.Pregenerate) {
 		return r.GetTileURL(maptype, filterFields(data, keys), tileOpts.Type)
 	}
-	// Pregenerate: filter to pregen keys + nearbyStops to keep payload reasonable
+
+	// Pregenerate: filter to pregen keys
 	filtered := filterFields(data, pregenKeys)
-	if v, ok := data["nearbyStops"]; ok {
-		filtered["nearbyStops"] = v
-	}
-	if v, ok := data["uiconPokestopUrl"]; ok {
-		filtered["uiconPokestopUrl"] = v
-	}
+
+	// Fetch nearby stops into the filtered copy (not the shared data map)
+	r.addNearbyStops(filtered, data, tileOpts)
+
 	return r.GetPregeneratedTileURL(maptype, filtered, tileOpts.Type)
+}
+
+// addNearbyStops fetches nearby stops from the scanner DB and adds them to the target map.
+func (r *Resolver) addNearbyStops(target, data map[string]any, tileOpts TileTypeConfig) {
+	if !boolVal(tileOpts.IncludeStops) || r.config.Scanner == nil {
+		return
+	}
+
+	lat, _ := getFloat(data, "latitude")
+	lon, _ := getFloat(data, "longitude")
+	bounds := limits(lat, lon, tileOpts.Width, tileOpts.Height, tileOpts.Zoom)
+	stops, err := r.config.Scanner.GetStopData(bounds[0], bounds[1], bounds[2], bounds[3])
+	if err != nil {
+		log.Warnf("staticmap: failed to get stop data: %s", err)
+		return
+	}
+
+	stopData := make([]map[string]any, 0, len(stops))
+	for _, s := range stops {
+		entry := map[string]any{
+			"latitude":  s.Latitude,
+			"longitude": s.Longitude,
+			"type":      s.Type,
+		}
+		if s.Type == "gym" {
+			entry["teamId"] = s.TeamID
+			entry["slots"] = s.Slots
+			if r.config.ImgUicons != nil {
+				trainerCount := 6 - s.Slots
+				entry["imgUrl"] = r.config.ImgUicons.GymIcon(s.TeamID, trainerCount, false, false)
+			}
+		}
+		stopData = append(stopData, entry)
+	}
+	target["nearbyStops"] = stopData
+	if r.config.ImgUicons != nil {
+		target["uiconPokestopUrl"] = r.config.ImgUicons.PokestopIcon(0, false, 0, false)
+	}
 }
 
 // getConfigForTileType merges default, per-staticMapType, and per-tileserverSettings
@@ -537,13 +523,20 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 	r.mu.Lock()
 	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
 		elapsed := time.Since(r.circuitOpenSince)
-		if elapsed < time.Duration(r.config.TileserverCooldownMs)*time.Millisecond {
+		cooldown := time.Duration(r.config.TileserverCooldownMs) * time.Millisecond
+		if elapsed < cooldown {
 			r.mu.Unlock()
 			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
 			log.Debugf("staticmap: circuit breaker open for %s, skipping tile", maptype)
 			return ""
 		}
-		// Half-open: allow one probe
+		// Half-open: allow exactly one probe request
+		if r.halfOpenProbeActive {
+			r.mu.Unlock()
+			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
+			return ""
+		}
+		r.halfOpenProbeActive = true
 	}
 	r.mu.Unlock()
 
@@ -619,6 +612,7 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 	// Reset circuit breaker on success
 	r.mu.Lock()
 	r.consecutiveErrors = 0
+	r.halfOpenProbeActive = false
 	r.mu.Unlock()
 
 	// If the result is already a full URL, return it directly
@@ -637,6 +631,7 @@ func (r *Resolver) recordError() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.consecutiveErrors++
+	r.halfOpenProbeActive = false
 	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
 		r.circuitOpenSince = time.Now()
 	}
