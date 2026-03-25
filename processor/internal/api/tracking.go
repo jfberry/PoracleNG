@@ -2,12 +2,15 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"reflect"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -57,11 +60,28 @@ func lookupHuman(deps *TrackingDeps, r *http.Request) (*db.HumanAPI, int, error)
 	return human, profileNo, nil
 }
 
-// reloadState triggers a state reload from the database.
+// reloadDebouncer coalesces rapid state reload requests into a single reload.
+// When multiple API mutations happen in quick succession (e.g. PoracleWeb adding
+// 50 tracking rules), only one actual DB reload runs per debounce window.
+var reloadDebouncer = struct {
+	mu    sync.Mutex
+	timer *time.Timer
+}{}
+
+// reloadState triggers a debounced state reload from the database.
+// Multiple calls within 500ms are coalesced into a single reload.
 func reloadState(deps *TrackingDeps) {
-	if err := state.Load(deps.StateMgr, deps.DB); err != nil {
-		log.Errorf("Tracking API: state reload failed: %s", err)
+	reloadDebouncer.mu.Lock()
+	defer reloadDebouncer.mu.Unlock()
+
+	if reloadDebouncer.timer != nil {
+		reloadDebouncer.timer.Stop()
 	}
+	reloadDebouncer.timer = time.AfterFunc(500*time.Millisecond, func() {
+		if err := state.Load(deps.StateMgr, deps.DB); err != nil {
+			log.Errorf("Tracking API: state reload failed: %s", err)
+		}
+	})
 }
 
 // sendConfirmation posts a message to the alerter's /api/postMessage endpoint.
@@ -94,8 +114,11 @@ func sendConfirmation(deps *TrackingDeps, human *db.HumanAPI, message, language 
 			return
 		}
 
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
 		url := deps.AlerterURL + "/api/postMessage"
-		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
 			log.Errorf("Tracking API: create confirmation request: %s", err)
 			return

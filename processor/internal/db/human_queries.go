@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/guregu/null/v6"
 	"github.com/jmoiron/sqlx"
@@ -292,8 +293,8 @@ func CopyProfile(dbx *sqlx.DB, id string, fromProfile, toProfile int) error {
 		query := fmt.Sprintf(
 			"INSERT INTO `%s` (%s) SELECT %s FROM `%s` WHERE id = ? AND profile_no = ?",
 			table,
-			joinStrings(insertCols, ", "),
-			joinStrings(selectCols, ", "),
+			strings.Join(insertCols, ", "),
+			strings.Join(selectCols, ", "),
 			table)
 
 		_, err = dbx.Exec(query, id, fromProfile)
@@ -362,14 +363,4 @@ func CreateDefaultProfile(dbx *sqlx.DB, id, name, area string, lat, lon float64)
 	return nil
 }
 
-// joinStrings joins strings with a separator (avoids importing strings package just for this).
-func joinStrings(s []string, sep string) string {
-	if len(s) == 0 {
-		return ""
-	}
-	result := s[0]
-	for _, v := range s[1:] {
-		result += sep + v
-	}
-	return result
-}
+
