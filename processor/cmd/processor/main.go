@@ -189,6 +189,7 @@ func main() {
 		Translations: proc.enricher.Translations,
 		AlerterURL:   cfg.Processor.AlerterURL,
 		APISecret:    cfg.Processor.APISecret,
+		ReloadFunc:   proc.triggerReload,
 	}
 	// Pokemon (monster) tracking
 	mux.HandleFunc("GET /api/tracking/pokemon/{id}", apiRoute("tracking/pokemon", api.HandleGetMonster(trackingDeps)))

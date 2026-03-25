@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -31,6 +30,7 @@ type TrackingDeps struct {
 	Translations *i18n.Bundle
 	AlerterURL   string // e.g. "http://localhost:3031"
 	APISecret    string // for X-Poracle-Secret on alerter calls
+	ReloadFunc   func() // triggers debounced state reload (from ProcessorService.triggerReload)
 }
 
 // lookupHuman resolves the human from the {id} path parameter and the profile_no
@@ -60,28 +60,12 @@ func lookupHuman(deps *TrackingDeps, r *http.Request) (*db.HumanAPI, int, error)
 	return human, profileNo, nil
 }
 
-// reloadDebouncer coalesces rapid state reload requests into a single reload.
-// When multiple API mutations happen in quick succession (e.g. PoracleWeb adding
-// 50 tracking rules), only one actual DB reload runs per debounce window.
-var reloadDebouncer = struct {
-	mu    sync.Mutex
-	timer *time.Timer
-}{}
-
-// reloadState triggers a debounced state reload from the database.
-// Multiple calls within 500ms are coalesced into a single reload.
+// reloadState triggers a debounced state reload via the centralized
+// ProcessorService.triggerReload (shared with rate-limit disable, profile scheduler, etc.).
 func reloadState(deps *TrackingDeps) {
-	reloadDebouncer.mu.Lock()
-	defer reloadDebouncer.mu.Unlock()
-
-	if reloadDebouncer.timer != nil {
-		reloadDebouncer.timer.Stop()
+	if deps.ReloadFunc != nil {
+		deps.ReloadFunc()
 	}
-	reloadDebouncer.timer = time.AfterFunc(500*time.Millisecond, func() {
-		if err := state.Load(deps.StateMgr, deps.DB); err != nil {
-			log.Errorf("Tracking API: state reload failed: %s", err)
-		}
-	})
 }
 
 // sendConfirmation posts a message to the alerter's /api/postMessage endpoint.
