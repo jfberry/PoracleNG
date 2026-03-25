@@ -78,9 +78,9 @@ func makeMonster(id string, pokemonID int) *db.MonsterTracking {
 		MinIV:           -1,
 		MaxIV:           100,
 		MinCP:           0,
-		MaxCP:           9999,
+		MaxCP:           defaultMaxCP,
 		MinLevel:        0,
-		MaxLevel:        40,
+		MaxLevel:        defaultMaxLevel,
 		ATK:             0,
 		DEF:             0,
 		STA:             0,
@@ -89,7 +89,7 @@ func makeMonster(id string, pokemonID int) *db.MonsterTracking {
 		MaxSTA:          15,
 		Gender:          0,
 		MinWeight:       0,
-		MaxWeight:       99999999,
+		MaxWeight:       defaultMaxWeight,
 		MinTime:         0,
 		Rarity:          -1,
 		MaxRarity:       6,
@@ -275,6 +275,70 @@ func TestPokemonMatchGenderFilter(t *testing.T) {
 	matched = matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for male, got %d", len(matched))
+	}
+}
+
+func TestPokemonUnencounteredDefaultFilters(t *testing.T) {
+	// Unencountered pokemon should match tracking rules with default stat filters
+	human := makeHuman("user1")
+	monster := makeMonster("user1", 25)
+
+	st := makeTestState([]*db.MonsterTracking{monster}, map[string]*db.Human{"user1": human})
+	matcher := &PokemonMatcher{PVPQueryMaxRank: 100}
+
+	pokemon := &ProcessedPokemon{
+		PokemonID: 25, Form: 0, IV: -1, Encountered: false,
+		Gender: 1, Size: 1, RarityGroup: 1, TTHSeconds: 600,
+		Latitude: 51.0, Longitude: 0.0,
+		PVPBestRank: make(map[int][]pvp.LeagueRank),
+		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
+	}
+
+	matched := matcher.Match(pokemon, st)
+	if len(matched) != 1 {
+		t.Errorf("Unencountered with default filters should match, got %d", len(matched))
+	}
+}
+
+func TestPokemonUnencounteredStatFilters(t *testing.T) {
+	// Unencountered pokemon should NOT match when stat filters are set
+	human := makeHuman("user1")
+
+	pokemon := &ProcessedPokemon{
+		PokemonID: 25, Form: 0, IV: -1, Encountered: false,
+		Gender: 1, Size: 1, RarityGroup: 1, TTHSeconds: 600,
+		Latitude: 51.0, Longitude: 0.0,
+		PVPBestRank: make(map[int][]pvp.LeagueRank),
+		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
+	}
+
+	matcher := &PokemonMatcher{PVPQueryMaxRank: 100}
+
+	tests := []struct {
+		name    string
+		modify  func(m *db.MonsterTracking)
+	}{
+		{"maxlevel10", func(m *db.MonsterTracking) { m.MaxLevel = 10 }},
+		{"minlevel20", func(m *db.MonsterTracking) { m.MinLevel = 20 }},
+		{"maxcp500", func(m *db.MonsterTracking) { m.MaxCP = 500 }},
+		{"mincp100", func(m *db.MonsterTracking) { m.MinCP = 100 }},
+		{"maxatk0", func(m *db.MonsterTracking) { m.MaxATK = 0 }},
+		{"minatk10", func(m *db.MonsterTracking) { m.ATK = 10 }},
+		{"maxweight1000", func(m *db.MonsterTracking) { m.MaxWeight = 1000 }},
+		{"minweight500", func(m *db.MonsterTracking) { m.MinWeight = 500 }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			monster := makeMonster("user1", 25)
+			tt.modify(monster)
+			st := makeTestState([]*db.MonsterTracking{monster}, map[string]*db.Human{"user1": human})
+
+			matched := matcher.Match(pokemon, st)
+			if len(matched) != 0 {
+				t.Errorf("Unencountered should not match %s filter, got %d", tt.name, len(matched))
+			}
+		})
 	}
 }
 

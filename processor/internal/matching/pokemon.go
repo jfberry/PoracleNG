@@ -9,6 +9,15 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
+// Default max values for tracking rule filters. These match the defaults
+// set by the !track command when no max filter is specified.
+const (
+	defaultMaxCP     = 9000
+	defaultMaxLevel  = 55
+	defaultMaxStat   = 15 // ATK, DEF, STA
+	defaultMaxWeight = 9000000
+)
+
 // ProcessedPokemon holds computed fields for matching.
 type ProcessedPokemon struct {
 	PokemonID   int
@@ -179,7 +188,7 @@ func (m *PokemonMatcher) matchMonsters(
 			}
 		}
 
-		// IV range
+		// IV range (IV is -1 for unencountered, min_iv defaults to -1)
 		if data.IV < float64(monster.MinIV) {
 			continue
 		}
@@ -190,50 +199,67 @@ func (m *PokemonMatcher) matchMonsters(
 		if data.TTHSeconds < float64(monster.MinTime) {
 			continue
 		}
-		// CP range
-		if data.CP < monster.MinCP {
-			continue
-		}
-		if data.CP > monster.MaxCP {
-			continue
-		}
-		// Gender (0 = any)
+
+		// Gender (0 = any) — available for both encountered and unencountered
 		if monster.Gender != 0 && monster.Gender != data.Gender {
 			continue
 		}
-		// Level range
-		if data.Level < monster.MinLevel {
-			continue
-		}
-		if data.Level > monster.MaxLevel {
-			continue
-		}
-		// IV stat ranges
-		if data.ATK < monster.ATK {
-			continue
-		}
-		if data.DEF < monster.DEF {
-			continue
-		}
-		if data.STA < monster.STA {
-			continue
-		}
-		if data.ATK > monster.MaxATK {
-			continue
-		}
-		if data.DEF > monster.MaxDEF {
-			continue
-		}
-		if data.STA > monster.MaxSTA {
-			continue
-		}
-		// Weight (stored as weight * 1000)
-		weight := int(data.Weight * 1000)
-		if weight < monster.MinWeight {
-			continue
-		}
-		if weight > monster.MaxWeight {
-			continue
+
+		// Encounter-only stat filters: CP, level, individual IVs, weight.
+		// For unencountered pokemon these values are unknown (Golbat omits them).
+		// If the tracking rule constrains any of these beyond their defaults,
+		// skip the match — the user cares about a stat we don't have data for.
+		if !data.Encountered {
+			if monster.MinCP > 0 || monster.MaxCP < defaultMaxCP ||
+				monster.MinLevel > 0 || monster.MaxLevel < defaultMaxLevel ||
+				monster.ATK > 0 || monster.MaxATK < defaultMaxStat ||
+				monster.DEF > 0 || monster.MaxDEF < defaultMaxStat ||
+				monster.STA > 0 || monster.MaxSTA < defaultMaxStat ||
+				monster.MinWeight > 0 || monster.MaxWeight < defaultMaxWeight {
+				continue
+			}
+		} else {
+			// CP range
+			if data.CP < monster.MinCP {
+				continue
+			}
+			if data.CP > monster.MaxCP {
+				continue
+			}
+			// Level range
+			if data.Level < monster.MinLevel {
+				continue
+			}
+			if data.Level > monster.MaxLevel {
+				continue
+			}
+			// IV stat ranges
+			if data.ATK < monster.ATK {
+				continue
+			}
+			if data.DEF < monster.DEF {
+				continue
+			}
+			if data.STA < monster.STA {
+				continue
+			}
+			if data.ATK > monster.MaxATK {
+				continue
+			}
+			if data.DEF > monster.MaxDEF {
+				continue
+			}
+			if data.STA > monster.MaxSTA {
+				continue
+			}
+			// Weight (stored as weight * 1000)
+			weight := int(data.Weight * 1000)
+			if weight < monster.MinWeight {
+				continue
+			}
+			if weight > monster.MaxWeight {
+				continue
+			}
 		}
 		// Rarity
 		if data.RarityGroup < monster.Rarity {
