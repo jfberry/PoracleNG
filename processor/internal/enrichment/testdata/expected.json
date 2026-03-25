@@ -6405,8 +6405,6 @@
     },
     "expected": {
       "gruntTypeId": 23,
-      "gruntName": "Grunt",
-      "gruntType": "Grass",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -6464,7 +6462,9 @@
           "slot": "third",
           "nameEng": "Trevenant"
         }
-      ]
+      ],
+      "typeId": 12,
+      "categoryId": 2
     }
   },
   {
@@ -6569,8 +6569,6 @@
     },
     "expected": {
       "gruntTypeId": 31,
-      "gruntName": "Grunt",
-      "gruntType": "Normal",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -6628,7 +6626,9 @@
           "slot": "third",
           "nameEng": "Ursaring"
         }
-      ]
+      ],
+      "typeId": 1,
+      "categoryId": 2
     }
   },
   {
@@ -6654,8 +6654,6 @@
     },
     "expected": {
       "gruntTypeId": 38,
-      "gruntName": "Grunt",
-      "gruntType": "Water",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -6713,7 +6711,9 @@
           "slot": "third",
           "nameEng": "Tentacruel"
         }
-      ]
+      ],
+      "typeId": 11,
+      "categoryId": 2
     }
   },
   {
@@ -7001,8 +7001,6 @@
     },
     "expected": {
       "gruntTypeId": 32,
-      "gruntName": "Grunt",
-      "gruntType": "Poison",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -7060,7 +7058,9 @@
           "slot": "third",
           "nameEng": "Weezing"
         }
-      ]
+      ],
+      "typeId": 4,
+      "categoryId": 2
     }
   },
   {
@@ -7327,8 +7327,6 @@
     },
     "expected": {
       "gruntTypeId": 29,
-      "gruntName": "Grunt",
-      "gruntType": "Metal",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -7386,7 +7384,9 @@
           "slot": "third",
           "nameEng": "Aggron"
         }
-      ]
+      ],
+      "typeId": 0,
+      "categoryId": 2
     }
   },
   {
@@ -7412,8 +7412,6 @@
     },
     "expected": {
       "gruntTypeId": 26,
-      "gruntName": "Grunt",
-      "gruntType": "Ice",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -7471,7 +7469,9 @@
           "slot": "third",
           "nameEng": "Froslass"
         }
-      ]
+      ],
+      "typeId": 15,
+      "categoryId": 2
     }
   },
   {
@@ -7497,8 +7497,6 @@
     },
     "expected": {
       "gruntTypeId": 38,
-      "gruntName": "Grunt",
-      "gruntType": "Water",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -7556,7 +7554,9 @@
           "slot": "third",
           "nameEng": "Tentacruel"
         }
-      ]
+      ],
+      "typeId": 11,
+      "categoryId": 2
     }
   },
   {
@@ -7582,8 +7582,6 @@
     },
     "expected": {
       "gruntTypeId": 38,
-      "gruntName": "Grunt",
-      "gruntType": "Water",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -7641,7 +7639,9 @@
           "slot": "third",
           "nameEng": "Tentacruel"
         }
-      ]
+      ],
+      "typeId": 11,
+      "categoryId": 2
     }
   },
   {
@@ -7708,8 +7708,6 @@
     },
     "expected": {
       "gruntTypeId": 37,
-      "gruntName": "Grunt",
-      "gruntType": "Rock",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -7767,7 +7765,9 @@
           "slot": "third",
           "nameEng": "Golem"
         }
-      ]
+      ],
+      "typeId": 6,
+      "categoryId": 2
     }
   },
   {
@@ -7834,8 +7834,6 @@
     },
     "expected": {
       "gruntTypeId": 14,
-      "gruntName": "Grunt",
-      "gruntType": "Fairy",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -7893,7 +7891,9 @@
           "slot": "third",
           "nameEng": "Weezing"
         }
-      ]
+      ],
+      "typeId": 18,
+      "categoryId": 2
     }
   },
   {
@@ -7919,8 +7919,6 @@
     },
     "expected": {
       "gruntTypeId": 4,
-      "gruntName": "Grunt",
-      "gruntType": "Mixed",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -7978,7 +7976,9 @@
           "slot": "third",
           "nameEng": "Blastoise"
         }
-      ]
+      ],
+      "typeId": 0,
+      "categoryId": 2
     }
   },
   {
@@ -8208,8 +8208,6 @@
     },
     "expected": {
       "gruntTypeId": 23,
-      "gruntName": "Grunt",
-      "gruntType": "Grass",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -8267,7 +8265,9 @@
           "slot": "third",
           "nameEng": "Trevenant"
         }
-      ]
+      ],
+      "typeId": 12,
+      "categoryId": 2
     }
   },
   {
@@ -8277,7 +8277,7 @@
       "pokestop_id": "bfbd23784c4848c5a9b42d7dfb17a33d.16",
       "latitude": 51.276516,
       "longitude": 1.083945,
-      "pokestop_name": "St George’s Garden",
+      "pokestop_name": "St George\u2019s Garden",
       "url": "https://lh3.googleusercontent.com/2xYbRlW0Y93OFqCO3Gt3ChStl304tRx8o5bTxpbpz2It_HDasdRSM7kM-h-_Nm8rWpwJZQpxXGLVeTh2h0Y1VWxutA",
       "enabled": true,
       "start": 1774376415,
@@ -8293,8 +8293,6 @@
     },
     "expected": {
       "gruntTypeId": 23,
-      "gruntName": "Grunt",
-      "gruntType": "Grass",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -8352,7 +8350,9 @@
           "slot": "third",
           "nameEng": "Trevenant"
         }
-      ]
+      ],
+      "typeId": 12,
+      "categoryId": 2
     }
   },
   {
@@ -8378,8 +8378,6 @@
     },
     "expected": {
       "gruntTypeId": 39,
-      "gruntName": "Grunt",
-      "gruntType": "Water",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -8413,7 +8411,9 @@
           "slot": "third",
           "nameEng": "Gyarados"
         }
-      ]
+      ],
+      "typeId": 11,
+      "categoryId": 2
     }
   },
   {
@@ -8439,8 +8439,6 @@
     },
     "expected": {
       "gruntTypeId": 49,
-      "gruntName": "Grunt",
-      "gruntType": "Electric",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -8498,7 +8496,9 @@
           "slot": "third",
           "nameEng": "Ampharos"
         }
-      ]
+      ],
+      "typeId": 13,
+      "categoryId": 2
     }
   },
   {
@@ -8524,8 +8524,6 @@
     },
     "expected": {
       "gruntTypeId": 31,
-      "gruntName": "Grunt",
-      "gruntType": "Normal",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -8583,7 +8581,9 @@
           "slot": "third",
           "nameEng": "Ursaring"
         }
-      ]
+      ],
+      "typeId": 1,
+      "categoryId": 2
     }
   },
   {
@@ -8725,8 +8725,6 @@
     },
     "expected": {
       "gruntTypeId": 7,
-      "gruntName": "Grunt",
-      "gruntType": "Bug",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -8784,7 +8782,9 @@
           "slot": "third",
           "nameEng": "Scolipede"
         }
-      ]
+      ],
+      "typeId": 7,
+      "categoryId": 2
     }
   },
   {
@@ -9024,8 +9024,6 @@
     },
     "expected": {
       "gruntTypeId": 14,
-      "gruntName": "Grunt",
-      "gruntType": "Fairy",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -9083,7 +9081,9 @@
           "slot": "third",
           "nameEng": "Weezing"
         }
-      ]
+      ],
+      "typeId": 18,
+      "categoryId": 2
     }
   },
   {
@@ -9152,8 +9152,6 @@
     },
     "expected": {
       "gruntTypeId": 29,
-      "gruntName": "Grunt",
-      "gruntType": "Metal",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -9211,7 +9209,9 @@
           "slot": "third",
           "nameEng": "Aggron"
         }
-      ]
+      ],
+      "typeId": 0,
+      "categoryId": 2
     }
   },
   {
@@ -9280,8 +9280,6 @@
     },
     "expected": {
       "gruntTypeId": 16,
-      "gruntName": "Grunt",
-      "gruntType": "Fighting",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -9339,7 +9337,9 @@
           "slot": "third",
           "nameEng": "Infernape"
         }
-      ]
+      ],
+      "typeId": 2,
+      "categoryId": 2
     }
   },
   {
@@ -9486,8 +9486,6 @@
     },
     "expected": {
       "gruntTypeId": 29,
-      "gruntName": "Grunt",
-      "gruntType": "Metal",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -9545,7 +9543,9 @@
           "slot": "third",
           "nameEng": "Aggron"
         }
-      ]
+      ],
+      "typeId": 0,
+      "categoryId": 2
     }
   },
   {
@@ -9655,8 +9655,6 @@
     },
     "expected": {
       "gruntTypeId": 37,
-      "gruntName": "Grunt",
-      "gruntType": "Rock",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -9714,7 +9712,9 @@
           "slot": "third",
           "nameEng": "Golem"
         }
-      ]
+      ],
+      "typeId": 6,
+      "categoryId": 2
     }
   },
   {
@@ -9783,8 +9783,6 @@
     },
     "expected": {
       "gruntTypeId": 35,
-      "gruntName": "Grunt",
-      "gruntType": "Psychic",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -9842,7 +9840,9 @@
           "slot": "third",
           "nameEng": "Malamar"
         }
-      ]
+      ],
+      "typeId": 14,
+      "categoryId": 2
     }
   },
   {
@@ -9911,8 +9911,6 @@
     },
     "expected": {
       "gruntTypeId": 35,
-      "gruntName": "Grunt",
-      "gruntType": "Psychic",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -9970,7 +9968,9 @@
           "slot": "third",
           "nameEng": "Malamar"
         }
-      ]
+      ],
+      "typeId": 14,
+      "categoryId": 2
     }
   },
   {
@@ -10233,8 +10233,6 @@
     },
     "expected": {
       "gruntTypeId": 37,
-      "gruntName": "Grunt",
-      "gruntType": "Rock",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -10292,14 +10290,16 @@
           "slot": "third",
           "nameEng": "Golem"
         }
-      ]
+      ],
+      "typeId": 6,
+      "categoryId": 2
     }
   },
   {
     "type": "raid",
     "message": {
       "gym_id": "c6fa47a8616c370e8dc58522db2467e3.16",
-      "gym_name": "St. Mary’s Community Centre",
+      "gym_name": "St. Mary\u2019s Community Centre",
       "gym_url": "https://lh3.googleusercontent.com/AOlfRyySJ9BwMXx0W1AC2BJR-JPgjyd46ngSJfXw_SDfJwhUwjdB9F05VPnYhNnyimfKUShc-9rkzTH1B3m8To6F2GWtMj3JsgEsxId6",
       "latitude": 51.16014,
       "longitude": 0.884436,
@@ -10602,8 +10602,6 @@
     },
     "expected": {
       "gruntTypeId": 29,
-      "gruntName": "Grunt",
-      "gruntType": "Metal",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -10661,7 +10659,9 @@
           "slot": "third",
           "nameEng": "Aggron"
         }
-      ]
+      ],
+      "typeId": 0,
+      "categoryId": 2
     }
   },
   {
@@ -10687,8 +10687,6 @@
     },
     "expected": {
       "gruntTypeId": 14,
-      "gruntName": "Grunt",
-      "gruntType": "Fairy",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -10746,7 +10744,9 @@
           "slot": "third",
           "nameEng": "Weezing"
         }
-      ]
+      ],
+      "typeId": 18,
+      "categoryId": 2
     }
   },
   {
@@ -10772,8 +10772,6 @@
     },
     "expected": {
       "gruntTypeId": 25,
-      "gruntName": "Grunt",
-      "gruntType": "Ground",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -10831,7 +10829,9 @@
           "slot": "third",
           "nameEng": "Hippowdon"
         }
-      ]
+      ],
+      "typeId": 5,
+      "categoryId": 2
     }
   },
   {
@@ -10857,8 +10857,6 @@
     },
     "expected": {
       "gruntTypeId": 10,
-      "gruntName": "Grunt",
-      "gruntType": "Dark",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -10904,7 +10902,9 @@
           "slot": "third",
           "nameEng": "Hydreigon"
         }
-      ]
+      ],
+      "typeId": 17,
+      "categoryId": 2
     }
   },
   {
@@ -10930,8 +10930,6 @@
     },
     "expected": {
       "gruntTypeId": 12,
-      "gruntName": "Grunt",
-      "gruntType": "Dragon",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -10989,7 +10987,9 @@
           "slot": "third",
           "nameEng": "Garchomp"
         }
-      ]
+      ],
+      "typeId": 16,
+      "categoryId": 2
     }
   },
   {
@@ -11186,8 +11186,6 @@
     },
     "expected": {
       "gruntTypeId": 23,
-      "gruntName": "Grunt",
-      "gruntType": "Grass",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -11245,7 +11243,9 @@
           "slot": "third",
           "nameEng": "Trevenant"
         }
-      ]
+      ],
+      "typeId": 12,
+      "categoryId": 2
     }
   },
   {
@@ -11271,8 +11271,6 @@
     },
     "expected": {
       "gruntTypeId": 35,
-      "gruntName": "Grunt",
-      "gruntType": "Psychic",
       "gruntGender": 1,
       "gruntActive": true,
       "encounters": [
@@ -11330,7 +11328,9 @@
           "slot": "third",
           "nameEng": "Malamar"
         }
-      ]
+      ],
+      "typeId": 14,
+      "categoryId": 2
     }
   },
   {
@@ -11655,8 +11655,6 @@
     },
     "expected": {
       "gruntTypeId": 16,
-      "gruntName": "Grunt",
-      "gruntType": "Fighting",
       "gruntGender": 2,
       "gruntActive": true,
       "encounters": [
@@ -11714,7 +11712,9 @@
           "slot": "third",
           "nameEng": "Infernape"
         }
-      ]
+      ],
+      "typeId": 2,
+      "categoryId": 2
     }
   }
 ]

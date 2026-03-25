@@ -73,34 +73,31 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	if e.GameData != nil {
 		grunt := e.GameData.GetGrunt(gruntTypeID)
 		if grunt != nil {
-			m["gruntType"] = grunt.Type
+			m["gruntTypeID"] = grunt.TypeID
 			m["gruntGender"] = grunt.Gender
 
-			// Type color and emoji key — map "Metal" to "Steel" for JS compatibility
-			typeLookup := grunt.Type
-			if typeLookup == "Metal" {
-				typeLookup = "Steel"
-			}
-			if typeInfo, ok := e.GameData.Util.Types[typeLookup]; ok {
-				m["gruntTypeColor"] = typeInfo.Color
-				m["gruntTypeEmojiKey"] = typeInfo.Emoji
+			// Type color and emoji key via TypeInfo (keyed by numeric type ID)
+			if grunt.TypeID > 0 {
+				if typeInfo, ok := e.GameData.Types[grunt.TypeID]; ok {
+					m["gruntTypeColor"] = typeInfo.Color
+					m["gruntTypeEmojiKey"] = typeInfo.Emoji
+				}
 			}
 
 			// Reward pokemon IDs for first slot
-			firstRewards := grunt.EncountersByPosition("first")
-			if len(firstRewards) > 0 {
-				rewardIDs := make([]map[string]int, len(firstRewards))
-				for i, r := range firstRewards {
+			if len(grunt.Team[0]) > 0 {
+				rewardIDs := make([]map[string]int, len(grunt.Team[0]))
+				for i, r := range grunt.Team[0] {
 					rewardIDs[i] = map[string]int{"pokemon_id": r.ID, "form": r.FormID}
 				}
-				m["gruntRewards"] = rewardIDs
+				m["gruntRewardIDs"] = rewardIDs
 			}
 		}
 
 		// Event invasions (gruntTypeID == 0 && displayType >= 7) use PokestopEvent data
 		if gruntTypeID == 0 && displayType >= 7 {
 			if eventInfo, ok := e.GameData.Util.PokestopEvent[displayType]; ok {
-				m["gruntType"] = eventInfo.Name
+				m["gruntTypeID"] = 0
 				m["gruntTypeColor"] = eventInfo.Color
 				m["gruntTypeEmojiKey"] = eventInfo.Emoji
 			}
@@ -134,16 +131,16 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 	// Grunt name
 	grunt := e.GameData.GetGrunt(gruntTypeID)
 	if grunt != nil {
-		m["gruntName"] = tr.T(grunt.Name)
-		m["gruntTypeName"] = tr.T(grunt.Type)
+		m["gruntName"] = tr.T(grunt.CategoryKey())
+		if typeKey := grunt.TypeKey(); typeKey != "" {
+			m["gruntTypeName"] = tr.T(typeKey)
+		} else {
+			m["gruntTypeName"] = ""
+		}
 	}
 
-	// Gender name and emoji
-	gruntGender := toInt(base["gruntGender"])
-	if genderInfo, ok := gd.Util.Genders[gruntGender]; ok {
-		m["genderName"] = tr.T(genderInfo.Name)
-		m["genderEmojiKey"] = genderInfo.Emoji
-	}
+	// Gender name and emoji (uses shared helper for consistent fallbacks)
+	addGenderFields(m, gd, tr, toInt(base["gruntGender"]))
 
 	// Build gruntRewardsList with translated pokemon names
 	if grunt != nil {
@@ -154,27 +151,17 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 
 		var slots []rewardSlot
 
-		if grunt.SecondReward {
-			second := grunt.EncountersByPosition("second")
-			if len(second) > 0 {
-				first := grunt.EncountersByPosition("first")
-				slots = append(slots, rewardSlot{chance: 85, encounters: first})
-				slots = append(slots, rewardSlot{chance: 15, encounters: second})
-			}
+		if grunt.HasRewardSlot(1) && len(grunt.Team[1]) > 0 {
+			slots = append(slots, rewardSlot{chance: 85, encounters: grunt.Team[0]})
+			slots = append(slots, rewardSlot{chance: 15, encounters: grunt.Team[1]})
 		}
 
-		if len(slots) == 0 && grunt.ThirdReward {
-			third := grunt.EncountersByPosition("third")
-			if len(third) > 0 {
-				slots = append(slots, rewardSlot{chance: 100, encounters: third})
-			}
+		if len(slots) == 0 && grunt.HasRewardSlot(2) && len(grunt.Team[2]) > 0 {
+			slots = append(slots, rewardSlot{chance: 100, encounters: grunt.Team[2]})
 		}
 
-		if len(slots) == 0 {
-			first := grunt.EncountersByPosition("first")
-			if len(first) > 0 {
-				slots = append(slots, rewardSlot{chance: 100, encounters: first})
-			}
+		if len(slots) == 0 && len(grunt.Team[0]) > 0 {
+			slots = append(slots, rewardSlot{chance: 100, encounters: grunt.Team[0]})
 		}
 
 		if len(slots) > 0 {
@@ -192,7 +179,7 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 				// Build flat text
 				names := make([]string, len(monsters))
 				for i, mon := range monsters {
-					names[i] = fmt.Sprintf("%v", mon["fullName"])
+					names[i], _ = mon["fullName"].(string)
 				}
 				joined := strings.Join(names, ", ")
 				if len(slots) > 1 {
