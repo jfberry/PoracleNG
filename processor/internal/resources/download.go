@@ -93,6 +93,11 @@ func downloadRawMaster(rawDir string) {
 	}
 
 	for category, data := range master {
+		// Skip invasions — we use classic.json from downloadGrunts instead
+		// of the raw masterfile's formatted invasion data
+		if category == "invasions" {
+			continue
+		}
 		path := filepath.Join(rawDir, category+".json")
 		if err := os.WriteFile(path, data, 0o644); err != nil {
 			log.Warnf("[Resources] Could not write %s: %s", path, err)
