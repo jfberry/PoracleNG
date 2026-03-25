@@ -572,9 +572,38 @@ The processor uses the **raw masterfile** (`master-latest-raw.json`) from Master
 
 Key differences from poracle-v2: raw uses numeric type IDs everywhere (no string-to-ID conversion), has populated invasion encounters, richer move data (PvP stats), and is 3x smaller (2.1MB vs 5.9MB).
 
+**Grunt/invasion data** uses `classic.json` from WatWowMap/event-info (downloaded to `resources/rawdata/invasions.json`). This format uses numeric type IDs (`character.type.id`) and proto template strings (`CHARACTER_GRASS_GRUNT_MALE`), NOT English name strings. Translation uses identifier keys: `poke_type_{typeID}` for grunt type ("Grass"→"Pflanze"), `character_category_{categoryID}` for grunt category ("Grunt"→"Rüpel"). CategoryID is derived from the template string at load time. The alerter's `formatted.json` (English strings) is NOT used by the processor.
+
 Shared data: `resources/data/util.json` provides UI constants (teams, genders, types with colors/emoji, weather, generation ranges, raid levels, lures, pokestop events). Used by both processor (`gamedata.LoadUtilData`) and alerter (`GameData.utilData`).
 
-Pokemon translations come from pogo-translations identifier keys (`poke_1`, `move_14`, `form_46`, `poke_type_1`) loaded into `resources/locale/` and merged into the processor's i18n bundle.
+Pokemon translations come from pogo-translations identifier keys (`poke_1`, `move_14`, `form_46`, `poke_type_1`) loaded into `resources/locale/` and merged into the processor's i18n bundle. Game data identifier keys (`character_category_*`, `poke_type_*`, `costume_*`, `alignment_*`) come from `resources/gamelocale/` which is layer 2 in the i18n merge chain.
+
+### Translation key sources
+
+| Data | Key format | Source | Example |
+|------|-----------|--------|---------|
+| Pokemon names | `poke_{id}` | resources/locale/ (pogo-translations) | `poke_25` → "Pikachu" |
+| Form names | `form_{formId}` | resources/locale/ | `form_65` → "Alolan" |
+| Move names | `move_{moveId}` | resources/locale/ | `move_14` → "Hyper Beam" |
+| Type names | `poke_type_{typeId}` | resources/gamelocale/ | `poke_type_12` → "Grass" |
+| Grunt category | `character_category_{id}` | resources/gamelocale/ | `character_category_2` → "Grunt" |
+| Weather names | `weather_{id}` | resources/locale/ | `weather_1` → "Clear" |
+| UI strings | `rate_limit.*`, `tracking.*` | processor/internal/i18n/locale/ (embedded) | `rate_limit.reached` |
+
+### Enrichment migration status
+
+| Type | Base | Per-Language | Per-User | Status |
+|------|------|-------------|----------|--------|
+| Pokemon | ✅ | ✅ names, PVP, weakness, evolutions | ✅ PVP display, distance | Complete |
+| Raid/Egg | ✅ | ✅ names, moves, weakness, weather | — | Complete |
+| Invasion | ✅ | ✅ grunt name/type, gender, rewards list | — | Complete |
+| Quest | ✅ base only | ❌ no QuestTranslate | — | **Blocked** — needs sample webhooks |
+| Lure | ✅ | ✅ lure name | — | Complete |
+| Gym | ✅ | ✅ team names, previousControlName | — | Complete |
+| Nest | ✅ | ✅ pokemon name | — | Complete |
+| Fort | ✅ | — (no language-specific data) | — | Complete |
+| Maxbattle | ✅ | ✅ names, moves, weakness, weather forecast | — | Complete |
+| Weather | ✅ | ✅ weather names, active pokemon | — | Complete |
 
 ## Database
 
