@@ -50,12 +50,26 @@ func (t *Translator) Tf(key string, args ...any) string {
 	return Format(t.T(key), args...)
 }
 
+// TfNamed translates a key and substitutes %{name} placeholders from the map.
+func (t *Translator) TfNamed(key string, values map[string]string) string {
+	return FormatNamed(t.T(key), values)
+}
+
 // Lang returns the locale code for this translator.
 func (t *Translator) Lang() string {
 	if t == nil {
 		return "en"
 	}
 	return t.lang
+}
+
+// FormatNamed replaces %{name} placeholders in a string with values from a map.
+// Used for gamelocale translations that use named placeholders like %{amount_0}, %{pokemon}.
+func FormatNamed(s string, values map[string]string) string {
+	for k, v := range values {
+		s = strings.ReplaceAll(s, "%{"+k+"}", v)
+	}
+	return s
 }
 
 // Format replaces {0}, {1}, ... placeholders in s with the given args.

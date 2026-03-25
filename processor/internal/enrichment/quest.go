@@ -1,12 +1,47 @@
 package enrichment
 
 import (
+	"math"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
+
+// QuestRewardData holds structured reward data for quest enrichment.
+type QuestRewardData struct {
+	Monsters       []QuestMonsterReward
+	Items          []QuestItemReward
+	DustAmount     int
+	EnergyMonsters []QuestEnergyReward
+	Candy          []QuestCandyReward
+}
+
+// QuestMonsterReward holds a pokemon encounter reward.
+type QuestMonsterReward struct {
+	PokemonID int
+	FormID    int
+	Shiny     bool
+}
+
+// QuestItemReward holds an item reward.
+type QuestItemReward struct {
+	ID     int
+	Amount int
+}
+
+// QuestEnergyReward holds a mega energy reward.
+type QuestEnergyReward struct {
+	PokemonID int
+	Amount    int
+}
+
+// QuestCandyReward holds a candy reward.
+type QuestCandyReward struct {
+	PokemonID int
+	Amount    int
+}
 
 // Quest builds enrichment fields for a quest webhook.
 func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching.QuestRewardData) (map[string]any, *staticmap.TilePending) {
@@ -41,7 +76,52 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 		}
 	}
 
+	// Structure reward data for per-language enrichment
+	rewardData := buildQuestRewardData(rewards)
+	m["dustAmount"] = rewardData.DustAmount
+	if len(rewardData.Items) > 0 {
+		m["itemAmount"] = rewardData.Items[0].Amount
+	}
+
+	// Shiny possible for pokemon rewards
+	if len(rewardData.Monsters) > 0 {
+		m["isShiny"] = rewardData.Monsters[0].Shiny
+		if e.ShinyProvider != nil {
+			rate := e.ShinyProvider.GetShinyRate(rewardData.Monsters[0].PokemonID)
+			m["shinyPossible"] = rate > 0
+			if rate > 0 {
+				m["shinyStats"] = int(math.Round(rate))
+			}
+		}
+	}
+
+	m["_rewardData"] = rewardData // internal: used by QuestTranslate, not sent to alerter
+
 	return m, pending
+}
+
+// buildQuestRewardData structures raw matching rewards into typed objects.
+func buildQuestRewardData(rewards []matching.QuestRewardData) QuestRewardData {
+	var result QuestRewardData
+	for _, r := range rewards {
+		switch r.Type {
+		case 2: // Item
+			result.Items = append(result.Items, QuestItemReward{ID: r.ItemID, Amount: r.Amount})
+		case 3: // Stardust
+			result.DustAmount = r.Amount
+		case 4: // Candy
+			result.Candy = append(result.Candy, QuestCandyReward{PokemonID: r.PokemonID, Amount: r.Amount})
+		case 7: // Pokemon encounter
+			result.Monsters = append(result.Monsters, QuestMonsterReward{
+				PokemonID: r.PokemonID, FormID: r.FormID, Shiny: r.Shiny,
+			})
+		case 12: // Mega energy
+			result.EnergyMonsters = append(result.EnergyMonsters, QuestEnergyReward{
+				PokemonID: r.PokemonID, Amount: r.Amount,
+			})
+		}
+	}
+	return result
 }
 
 // addQuestIconURLs resolves icon URLs based on the quest reward type.
