@@ -1,8 +1,6 @@
 package pvp
 
 import (
-	"strconv"
-
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -201,11 +199,9 @@ func filterMega(entries []webhook.PVPRankEntry, includeMega bool) []webhook.PVPR
 }
 
 // CapsContain checks if the caps list contains a specific cap value.
-// Handles string comparison as in the JS code.
 func CapsContain(caps []int, target int) bool {
-	targetStr := strconv.Itoa(target)
 	for _, c := range caps {
-		if strconv.Itoa(c) == targetStr {
+		if c == target {
 			return true
 		}
 	}

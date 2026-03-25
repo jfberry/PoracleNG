@@ -43,7 +43,7 @@ func ProcessPokemonWebhook(pokemon *webhook.PokemonWebhook, rarityGroup int, pvp
 		atk = *pokemon.IndividualAttack
 		def = *pokemon.IndividualDefense
 		sta = *pokemon.IndividualStamina
-		iv = float64(atk+def+sta) / 0.45
+		iv = float64(atk+def+sta) / 0.45 // sum of IVs (0-45) to percentage (0-100)
 		cp = pokemon.CP
 		level = pokemon.PokemonLevel
 		weight = pokemon.Weight

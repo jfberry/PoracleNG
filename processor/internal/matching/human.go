@@ -101,7 +101,6 @@ func ValidateHumans(
 
 // ValidateHumansForRaid filters matched raid/egg trackings against human criteria.
 func ValidateHumansForRaid(
-	trackingIDs []string,
 	trackingData []raidUserData,
 	raidLat, raidLon float64,
 	matchedAreaNames map[string]bool,
@@ -109,7 +108,7 @@ func ValidateHumansForRaid(
 	humans map[string]*db.Human,
 	blockedAlertType string,
 ) []webhook.MatchedUser {
-	if len(trackingIDs) == 0 {
+	if len(trackingData) == 0 {
 		return nil
 	}
 
