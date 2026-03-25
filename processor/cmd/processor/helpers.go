@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -233,17 +235,25 @@ func (ps *ProcessorService) disableUser(user webhook.MatchedUser, result ratelim
 		})
 	}
 
-	// Trigger state reload so user is removed from matching
-	go func() {
-		if err := ps.reloadState(); err != nil {
-			log.Errorf("Rate limit: failed to reload state after disabling user %s: %s", user.ID, err)
-		}
-	}()
+	// Trigger debounced state reload so user is removed from matching
+	ps.triggerReload()
 }
 
-// reloadState reloads the in-memory state from the database (preserves geofences).
-func (ps *ProcessorService) reloadState() error {
-	return state.Load(ps.stateMgr, ps.database)
+// triggerReload schedules a debounced state reload. Multiple calls within 500ms
+// are coalesced into a single reload. Safe to call from any goroutine.
+// Used by: rate-limit disable, profile scheduler, and (on api branch) tracking mutations.
+func (ps *ProcessorService) triggerReload() {
+	ps.reloadMu.Lock()
+	defer ps.reloadMu.Unlock()
+
+	if ps.reloadTimer != nil {
+		ps.reloadTimer.Stop()
+	}
+	ps.reloadTimer = time.AfterFunc(500*time.Millisecond, func() {
+		if err := state.Load(ps.stateMgr, ps.database); err != nil {
+			log.Errorf("Debounced state reload failed: %s", err)
+		}
+	})
 }
 
 // postMessageToAlerter sends a message via the alerter's POST /api/postMessage endpoint.
@@ -264,12 +274,12 @@ func (ps *ProcessorService) postMessageToAlerter(msg postMessage) {
 		req.Header.Set("X-Poracle-Secret", ps.cfg.Processor.APISecret)
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := ps.alerterClient.Do(req)
 	if err != nil {
 		log.Errorf("Rate limit: failed to send postMessage to alerter: %s", err)
 		return
 	}
+	io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		log.Errorf("Rate limit: alerter returned status %d for postMessage", resp.StatusCode)

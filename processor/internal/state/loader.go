@@ -49,8 +49,8 @@ func Load(manager *Manager, database *sqlx.DB) error {
 	manager.Set(s)
 	recordStateMetrics(s)
 
-	log.Infof("State loaded: %d humans, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences",
-		len(data.Humans), len(data.Raids), len(data.Eggs),
+	log.Infof("State loaded: %d humans, %d pokemon, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences",
+		len(data.Humans), data.Monsters.Total, len(data.Raids), len(data.Eggs),
 		len(data.Invasions), len(data.Quests), len(data.Lures),
 		len(data.Gyms), len(data.Nests), len(data.Forts), len(data.Maxbattles), len(fences))
 
@@ -107,8 +107,8 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 	manager.Set(s)
 	recordStateMetrics(s)
 
-	log.Infof("State loaded: %d humans, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences",
-		len(data.Humans), len(data.Raids), len(data.Eggs),
+	log.Infof("State loaded: %d humans, %d pokemon, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences",
+		len(data.Humans), data.Monsters.Total, len(data.Raids), len(data.Eggs),
 		len(data.Invasions), len(data.Quests), len(data.Lures),
 		len(data.Gyms), len(data.Nests), len(data.Forts), len(data.Maxbattles), len(fences))
 

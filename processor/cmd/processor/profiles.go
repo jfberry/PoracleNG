@@ -123,9 +123,7 @@ func (ps *ProcessorService) checkProfileSwitches() {
 	}
 
 	if needsReload {
-		if err := ps.reloadState(); err != nil {
-			log.Errorf("Profile scheduler: failed to reload state: %s", err)
-		}
+		ps.triggerReload()
 	}
 }
 

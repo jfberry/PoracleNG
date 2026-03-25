@@ -297,6 +297,9 @@ type ProcessorService struct {
 	enricher        *enrichment.Enricher
 	rateLimiter     *ratelimit.Limiter
 	translations    *i18n.Bundle
+	alerterClient   *http.Client
+	reloadMu        sync.Mutex
+	reloadTimer     *time.Timer
 	workerPool      chan struct{}
 	wg              sync.WaitGroup
 	ctx             context.Context
@@ -519,7 +522,8 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		database: database,
 		ctx:      ctx,
 		cancel:   cancel,
-		enricher: enricher,
+		enricher:      enricher,
+		alerterClient: &http.Client{Timeout: 5 * time.Second},
 		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Processor.APISecret, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),
