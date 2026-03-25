@@ -587,8 +587,13 @@ Pokemon translations come from pogo-translations identifier keys (`poke_1`, `mov
 | Move names | `move_{moveId}` | resources/locale/ | `move_14` → "Hyper Beam" |
 | Type names | `poke_type_{typeId}` | resources/gamelocale/ | `poke_type_12` → "Grass" |
 | Grunt category | `character_category_{id}` | resources/gamelocale/ | `character_category_2` → "Grunt" |
+| Quest titles | `quest_title_{title}` | resources/gamelocale/ | `quest_title_quest_catch_pokemon_plural` → "Catch %{amount_0} Pokémon" |
+| Item names | `item_{id}` | resources/gamelocale/ | `item_701` → "Razz Berry" |
+| Reward type names | `quest_reward_{type}` | resources/gamelocale/ | `quest_reward_3` → "Stardust" |
 | Weather names | `weather_{id}` | resources/locale/ | `weather_1` → "Clear" |
 | UI strings | `rate_limit.*`, `tracking.*` | processor/internal/i18n/locale/ (embedded) | `rate_limit.reached` |
+
+**Named placeholders**: gamelocale strings use `%{name}` placeholders (e.g. `%{amount_0}`, `%{pokemon}`), not `{0}` positional. The `FormatNamed()` / `TfNamed()` functions in `processor/internal/i18n/` handle these. The processor's own embedded strings (`rate_limit.*` etc.) use `{0}` positional via `Format()` / `Tf()`.
 
 ### Enrichment migration status
 
@@ -597,7 +602,7 @@ Pokemon translations come from pogo-translations identifier keys (`poke_1`, `mov
 | Pokemon | ✅ | ✅ names, PVP, weakness, evolutions | ✅ PVP display, distance | Complete |
 | Raid/Egg | ✅ | ✅ names, moves, weakness, weather | — | Complete |
 | Invasion | ✅ | ✅ grunt name/type, gender, rewards list | — | Complete |
-| Quest | ✅ base only | ❌ no QuestTranslate | — | **Blocked** — needs sample webhooks |
+| Quest | ✅ | ✅ quest title, reward names, summary strings | — | Complete |
 | Lure | ✅ | ✅ lure name | — | Complete |
 | Gym | ✅ | ✅ team names, previousControlName | — | Complete |
 | Nest | ✅ | ✅ pokemon name | — | Complete |
