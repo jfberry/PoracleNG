@@ -1,6 +1,8 @@
 package ratelimit
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -233,5 +235,46 @@ func TestResultLimit(t *testing.T) {
 	r = l.Check("chan1", "discord:channel")
 	if r.Limit != 10 {
 		t.Fatalf("channel limit should be 10, got %d", r.Limit)
+	}
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	l := New(Config{TimingPeriod: 60, DMLimit: 100, ChannelLimit: 100})
+	defer l.Close()
+
+	var wg sync.WaitGroup
+	var allowed atomic.Int64
+
+	for range 200 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := l.Check("user1", "discord:user")
+			if r.Allowed {
+				allowed.Add(1)
+			}
+		}()
+	}
+
+	wg.Wait()
+	if allowed.Load() != 100 {
+		t.Fatalf("expected exactly 100 allowed, got %d", allowed.Load())
+	}
+}
+
+func TestTelegramGroupGetsChannelLimit(t *testing.T) {
+	l := New(Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5})
+	defer l.Close()
+
+	// telegram:group should use channel limit (5), not DM limit (2)
+	for i := 0; i < 5; i++ {
+		r := l.Check("group1", "telegram:group")
+		if !r.Allowed {
+			t.Fatalf("telegram group message %d should be allowed (channel limit 5)", i+1)
+		}
+	}
+	r := l.Check("group1", "telegram:group")
+	if r.Allowed {
+		t.Fatal("6th telegram group message should not be allowed")
 	}
 }

@@ -508,9 +508,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		DMLimit:             cfg.AlertLimits.DMLimit,
 		ChannelLimit:        cfg.AlertLimits.ChannelLimit,
 		MaxLimitsBeforeStop: cfg.AlertLimits.MaxLimitsBeforeStop,
-		DisableOnStop:       cfg.AlertLimits.DisableOnStop,
 		Overrides:           overrides,
-		ShameChannel:        cfg.AlertLimits.ShameChannel,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

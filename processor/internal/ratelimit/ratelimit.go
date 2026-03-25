@@ -11,9 +11,7 @@ type Config struct {
 	DMLimit             int            // messages per window for DM users (default 20)
 	ChannelLimit        int            // messages per window for channels (default 40)
 	MaxLimitsBeforeStop int            // violations in 24h before disable (default 10)
-	DisableOnStop       bool           // admin_disable vs enabled=0
 	Overrides           map[string]int // per-destination limit overrides
-	ShameChannel        string         // discord channel for shame messages
 }
 
 // RateResult is returned by Check.
@@ -110,11 +108,12 @@ func (l *Limiter) Check(destinationID, destinationType string) RateResult {
 		return result
 	}
 
-	// Over the limit
+	// Over the limit — only the first message past the limit triggers JustBreached.
+	// This ensures exactly one notification per window and one violation increment
+	// per window, preventing notification spam while still tracking repeated offences.
 	if c.count == limit+1 {
 		result.JustBreached = true
-		// Track 24h violations
-		result.Banned = l.incrementViolation(destinationID)
+		result.Banned = l.incrementViolation(destinationID, now)
 	}
 
 	return result
@@ -133,8 +132,7 @@ func (l *Limiter) limitFor(destinationID, destinationType string) int {
 
 // incrementViolation tracks 24h violations. Returns true if user should be banned.
 // Must be called with l.mu held.
-func (l *Limiter) incrementViolation(destinationID string) bool {
-	now := time.Now()
+func (l *Limiter) incrementViolation(destinationID string, now time.Time) bool {
 	v := l.violations[destinationID]
 	if v == nil || now.Sub(v.windowAt) >= 24*time.Hour {
 		v = &violation{count: 0, windowAt: now}
@@ -144,6 +142,10 @@ func (l *Limiter) incrementViolation(destinationID string) bool {
 	return v.count >= l.cfg.MaxLimitsBeforeStop
 }
 
+// isUserType returns true for destination types that should use the DM limit.
+// All other types (discord:channel, telegram:channel, telegram:group, webhook)
+// use the channel limit — they are multi-user destinations where higher
+// throughput is expected.
 func isUserType(t string) bool {
 	return t == "discord:user" || t == "telegram:user"
 }
