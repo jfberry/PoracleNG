@@ -166,6 +166,10 @@ The handler creates a `matching.*Data` struct and calls the matcher. All matcher
    - Strict area restriction (if configured)
 4. Returns `[]MatchedUser` with destination info (id, type, template, clean, ping, distance)
 
+**Pokemon matching intentionally does NOT deduplicate by user ID.** A single user can appear multiple times in the result — once per matching tracking rule (basic IV, PVP great league, PVP ultra league, PVP evolution, etc.). Each entry carries different `PVPRankingLeague`, `PVPRankingWorst`, and `PVPRankingCap` values. This metadata flows into `consolidateUsers()` in per-user enrichment, which merges entries by user ID and collects their PVP filters to build the per-user PVP display list. The alerter then deduplicates by user ID (`monster.js` lines 108-114) to send exactly one message per user. All other matchers (raid, egg, invasion, quest, etc.) deduplicate in the matcher itself since they don't carry per-tracking PVP metadata.
+
+**Cardinal direction labels are intentionally mirrored** vs standard compass directions (e.g. 45° bearing returns `"northwest"` not `"northeast"`). These strings are only used as emoji lookup keys into `util.json`, where `"northwest"` maps to the northeast-pointing arrow emoji. The user sees the correct arrow — the raw string is never displayed in templates. This convention is inherited from the original JS `getBearingEmoji`.
+
 ### 4. Enrichment
 
 Enrichment is computed in three layers:
