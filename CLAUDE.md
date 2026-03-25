@@ -574,6 +574,19 @@ Key differences from poracle-v2: raw uses numeric type IDs everywhere (no string
 
 **Grunt/invasion data** uses `classic.json` from WatWowMap/event-info (downloaded to `resources/rawdata/invasions.json`). This format uses numeric type IDs (`character.type.id`) and proto template strings (`CHARACTER_GRASS_GRUNT_MALE`), NOT English name strings. Translation uses identifier keys: `poke_type_{typeID}` for grunt type ("Grass"→"Pflanze"), `character_category_{categoryID}` for grunt category ("Grunt"→"Rüpel"). CategoryID is derived from the template string at load time. The alerter's `formatted.json` (English strings) is NOT used by the processor.
 
+**Important: resource download collision.** The raw masterfile (`master-latest-raw.json`) also contains an `"invasions"` category in the old formatted.json format. `downloadRawMaster` skips this category to avoid overwriting the `classic.json` saved by `downloadGrunts`. If this skip is removed, the processor will silently load empty grunt data.
+
+### Resource directory layout
+
+Both processor and alerter resources are downloaded at processor startup (`resources.Download`). The two processes use different directories:
+
+| Directory | Format | Consumer | Contents |
+|-----------|--------|----------|----------|
+| `resources/data/` | poracle-v2 (English names) | Alerter only | monsters.json, grunts.json, items.json, translations.json, util.json |
+| `resources/rawdata/` | Raw masterfile + classic.json | Processor only | pokemon.json, moves.json, types.json, invasions.json (classic), weather.json |
+| `resources/locale/` | enRefMerged (English-as-key) | Both (layer 3 in i18n merge) | en.json, de.json, ... (pogo-translations) |
+| `resources/gamelocale/` | Identifier keys | Processor only (layer 2 in i18n merge) | en.json, de.json, ... (quest_title_*, poke_type_*, item_*, character_category_*) |
+
 Shared data: `resources/data/util.json` provides UI constants (teams, genders, types with colors/emoji, weather, generation ranges, raid levels, lures, pokestop events). Used by both processor (`gamedata.LoadUtilData`) and alerter (`GameData.utilData`).
 
 Pokemon translations come from pogo-translations identifier keys (`poke_1`, `move_14`, `form_46`, `poke_type_1`) loaded into `resources/locale/` and merged into the processor's i18n bundle. Game data identifier keys (`character_category_*`, `poke_type_*`, `costume_*`, `alignment_*`) come from `resources/gamelocale/` which is layer 2 in the i18n merge chain.
