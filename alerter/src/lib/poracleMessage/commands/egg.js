@@ -1,5 +1,6 @@
 const helpCommand = require('./help')
 const trackedCommand = require('./tracked')
+const { reportUnrecognizedArgs } = require('../commandUtil')
 
 exports.run = async (client, msg, args, options) => {
 	const logReference = Math.random().toString().slice(2, 11)
@@ -48,22 +49,53 @@ exports.run = async (client, msg, args, options) => {
 		let rsvpChanges = 0
 		const levelSet = new Set()
 		const pings = msg.getPings()
+		const consumed = new Set()
 
 		args.forEach((element) => {
-			if (element === 'ex') exclusive = 1
-			else if (element.match(client.re.levelRe)) levelSet.add(+element.match(client.re.levelRe)[2])
-			else if (element.match(client.re.templateRe)) [,, template] = element.match(client.re.templateRe)
-			else if (element.match(client.re.dRe)) [,, distance] = element.match(client.re.dRe)
-			else if (element === 'instinct' || element === 'yellow') team = 3
-			else if (element === 'valor' || element === 'red') team = 2
-			else if (element === 'mystic' || element === 'blue') team = 1
-			else if (element === 'harmony' || element === 'gray') team = 0
-			else if (element === 'everything') Object.keys(client.GameData.utilData.raidLevels).forEach((x) => levelSet.add(+x))
-			else if (element === 'clean') clean = true
-			else if (element === 'no rsvp') rsvpChanges = 0
-			else if (element === 'rsvp') rsvpChanges = 1
-			else if (element === 'rsvp only') rsvpChanges = 2
+			if (element === 'ex') {
+				exclusive = 1
+				consumed.add(element)
+			} else if (element.match(client.re.levelRe)) {
+				levelSet.add(+element.match(client.re.levelRe)[2])
+				consumed.add(element)
+			} else if (element.match(client.re.templateRe)) {
+				[,, template] = element.match(client.re.templateRe)
+				consumed.add(element)
+			} else if (element.match(client.re.dRe)) {
+				[,, distance] = element.match(client.re.dRe)
+				consumed.add(element)
+			} else if (element === 'instinct' || element === 'yellow') {
+				team = 3
+				consumed.add(element)
+			} else if (element === 'valor' || element === 'red') {
+				team = 2
+				consumed.add(element)
+			} else if (element === 'mystic' || element === 'blue') {
+				team = 1
+				consumed.add(element)
+			} else if (element === 'harmony' || element === 'gray') {
+				team = 0
+				consumed.add(element)
+			} else if (element === 'everything') {
+				Object.keys(client.GameData.utilData.raidLevels).forEach((x) => levelSet.add(+x))
+				consumed.add(element)
+			} else if (element === 'clean') {
+				clean = true
+				consumed.add(element)
+			} else if (element === 'no rsvp') {
+				rsvpChanges = 0
+				consumed.add(element)
+			} else if (element === 'rsvp') {
+				rsvpChanges = 1
+				consumed.add(element)
+			} else if (element === 'rsvp only') {
+				rsvpChanges = 2
+				consumed.add(element)
+			}
 		})
+
+		if (remove) consumed.add('remove')
+		if (reportUnrecognizedArgs(msg, translator, args, consumed)) return
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
 		if (client.config.tracking.maxDistance !== 0 && distance > client.config.tracking.maxDistance && !msg.isFromAdmin) distance = client.config.tracking.maxDistance
 		if (distance > 0 && !userHasLocation && !remove) {

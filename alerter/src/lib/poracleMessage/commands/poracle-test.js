@@ -1,6 +1,6 @@
 const geoTz = require('geo-tz')
 const moment = require('moment-timezone')
-require('moment-precise-range-plugin')
+const axios = require('axios')
 const { loadExampleJson, loadUserConfigJson } = require('../../configResolver')
 
 exports.run = async (client, msg, args, options) => {
@@ -48,12 +48,9 @@ exports.run = async (client, msg, args, options) => {
 			return await msg.reply(message)
 		}
 		// Create extra command argument 'disapeardt' RegEx for 'poracle-test' command.
-		// Added here instead of regex.js, because there is no use in other commands.
-		// datetime format: "YYYY-MM-DDTHH:mm:ss" e.g. 2024-08-13T23:01:00
 		const disapeardtReStr = '^(disapeardt):?([2][0][0-9][0-9]-([0][0-9]|[1][0-2])-([0-2][0-9]|[3][0-1])t([0-1][0-9]|[2][0-3]):[0-5][0-9]:[0-5][0-9])'
 		const disapeardtRe = RegExp(disapeardtReStr, 'i')
 		let disapearTimeOverwrite = null
-		// check and handle additional arguments used by 'poracle-test' command
 		for (let i = args.length - 1; i >= 0; i--) {
 			if (args[i].match(client.re.templateRe)) {
 				[, , template] = args[i].match(client.re.templateRe)
@@ -75,44 +72,33 @@ exports.run = async (client, msg, args, options) => {
 		}
 
 		const hook = dataItem.webhook
-		hook.poracleTest = {
-			type: target.type,
-			id: target.id,
-			name: target.name,
-			latitude: human.latitude,
-			longitude: human.longitude,
-			language,
-			template,
-		}
 
 		if (dataItem.location !== 'keep') {
 			if (hook.latitude) hook.latitude = human.latitude
 			if (hook.longitude) hook.longitude = human.longitude
 		}
 
-		// Freshen test data
+		// Freshen test data timestamps (must be integer unix seconds for Go processor)
+		const nowSecs = Math.floor(Date.now() / 1000)
 		switch (hookType) {
 			case 'pokemon': {
 				if (disapearTimeOverwrite !== null) {
-					// get timezone of pokemon location
 					const tz = geoTz.find(hook.latitude, hook.longitude)[0].toString()
-					// calculate timestamp based on provided time as localtime matching to pokemon location
-					// disapearTimeOverwrite string was converted to lowwercase so we need to change back to upper case ('t' -> 'T')
 					hook.disappear_time = moment.tz(disapearTimeOverwrite.toUpperCase(), tz).unix()
 				} else {
-					hook.disappear_time = Date.now() / 1000 + 10 * 60
+					hook.disappear_time = nowSecs + 10 * 60
 				}
 				break
 			}
 			case 'raid': {
-				hook.start = Date.now() / 1000 + 10 * 60
+				hook.start = nowSecs + 10 * 60
 				hook.end = hook.start + 30 * 60
 				break
 			}
 			case 'pokestop': {
-				if (hook.incident_expiration) hook.incident_expiration = Date.now() / 1000 + 10 * 60
-				if (hook.incident_expire_timestamp) hook.incident_expire_timestamp = Date.now() / 1000 + 10 * 60
-				if (hook.lure_expiration) hook.lure_expiration = Date.now() / 1000 + 5 * 60
+				if (hook.incident_expiration) hook.incident_expiration = nowSecs + 10 * 60
+				if (hook.incident_expire_timestamp) hook.incident_expire_timestamp = nowSecs + 10 * 60
+				if (hook.lure_expiration) hook.lure_expiration = nowSecs + 5 * 60
 				break
 			}
 			case 'quest': {
@@ -124,7 +110,6 @@ exports.run = async (client, msg, args, options) => {
 					hook.old.location.lon = human.longitude
 				}
 				if (hook.new?.location) {
-					// Approximately 100m away
 					hook.new.location.lat = human.latitude + 0.001
 					hook.new.location.lon = human.longitude + 0.001
 				}
@@ -134,9 +119,9 @@ exports.run = async (client, msg, args, options) => {
 				break
 			}
 			case 'max_battle': {
-				hook.battle_start = Date.now() / 1000 - 1 * 60
+				hook.battle_start = nowSecs - 1 * 60
 				hook.start_time = hook.battle_start
-				hook.battle_end = Date.now() / 1000 + 120 * 60
+				hook.battle_end = nowSecs + 120 * 60
 				hook.end_time = hook.battle_end
 				break
 			}
@@ -145,105 +130,37 @@ exports.run = async (client, msg, args, options) => {
 
 		await msg.reply(`Queueing ${hookType} test hook [${testId}] template [${template}]`)
 
-		// Build enrichment fields that the processor would normally provide
-		const enrichment = {}
-		const lat = hook.latitude ?? hook.new?.location?.lat ?? hook.old?.location?.lat
-		const lon = hook.longitude ?? hook.new?.location?.lon ?? hook.old?.location?.lon
-		const tz = geoTz.find(lat, lon)[0].toString()
-
-		const formatTime = (unix) => moment(unix * 1000).tz(tz).format(client.config.locale.time)
-		const formatDate = (unix) => moment(unix * 1000).tz(tz).format(client.config.locale.date)
-		const computeTth = (unix) => moment.preciseDiff(Date.now(), unix * 1000, true)
-
-		switch (hookType) {
-			case 'pokemon': {
-				enrichment.disappearTime = formatTime(hook.disappear_time)
-				enrichment.tth = computeTth(hook.disappear_time)
-				const weatherChangeTS = hook.disappear_time - (hook.disappear_time % 3600)
-				enrichment.weatherChangeTime = formatTime(weatherChangeTS)
-				break
+		// Send to processor for enrichment via POST /api/test
+		// The processor runs the webhook through the full enrichment pipeline
+		// and sends the result back via /api/matched to the alerter
+		const processorUrl = client.config.processor.url
+		try {
+			const response = await axios.post(`${processorUrl}/api/test`, {
+				type: dataItem.type,
+				webhook: hook,
+				target: {
+					id: target.id,
+					name: target.name,
+					type: target.type,
+					language,
+					template,
+					latitude: human.latitude,
+					longitude: human.longitude,
+				},
+			}, {
+				headers: {
+					'Content-Type': 'application/json',
+					...client.config.processor.headers,
+				},
+				timeout: 10000,
+			})
+			if (response.data?.status !== 'ok') {
+				client.log.warn(`poracle-test: processor returned: ${JSON.stringify(response.data)}`)
 			}
-			case 'raid': {
-				if (hook.pokemon_id > 0) {
-					enrichment.disappearTime = formatTime(hook.end)
-					enrichment.tth = computeTth(hook.end)
-					const weatherChangeTS = hook.end - (hook.end % 3600)
-					enrichment.weatherChangeTime = formatTime(weatherChangeTS)
-				} else {
-					enrichment.hatchTime = formatTime(hook.start)
-					enrichment.tth = computeTth(hook.start)
-				}
-				break
-			}
-			case 'pokestop': {
-				const expiration = hook.incident_expiration || hook.incident_expire_timestamp
-				if (expiration) {
-					enrichment.disappearTime = formatTime(expiration)
-					enrichment.tth = computeTth(expiration)
-				}
-				if (hook.lure_expiration) {
-					enrichment.disappearTime = formatTime(hook.lure_expiration)
-					enrichment.tth = computeTth(hook.lure_expiration)
-				}
-				break
-			}
-			case 'quest': {
-				const endOfDay = moment().tz(tz).endOf('day').unix()
-				enrichment.disappearTime = formatTime(endOfDay)
-				enrichment.tth = computeTth(endOfDay)
-				break
-			}
-			case 'gym': {
-				enrichment.conqueredTime = moment().tz(tz).format(client.config.locale.time)
-				enrichment.tth = {
-					days: 0, hours: 1, minutes: 0, seconds: 0,
-				}
-				break
-			}
-			case 'nest': {
-				const nestExpiration = hook.reset_time + (7 * 24 * 60 * 60)
-				enrichment.tth = computeTth(nestExpiration)
-				enrichment.disappearTime = formatTime(nestExpiration)
-				enrichment.disappearDate = formatDate(nestExpiration)
-				enrichment.resetTime = formatTime(hook.reset_time)
-				enrichment.resetDate = formatDate(hook.reset_time)
-				break
-			}
-			case 'fort_update': {
-				const fortExpiration = hook.reset_time + (7 * 24 * 60 * 60)
-				enrichment.tth = computeTth(fortExpiration)
-				enrichment.disappearTime = formatTime(fortExpiration)
-				enrichment.disappearDate = formatDate(fortExpiration)
-				enrichment.resetTime = formatTime(hook.reset_time)
-				enrichment.resetDate = formatDate(hook.reset_time)
-				break
-			}
-			case 'max_battle': {
-				enrichment.disappearTime = formatTime(hook.battle_end)
-				enrichment.tth = computeTth(hook.battle_end)
-				break
-			}
-			default:
+		} catch (err) {
+			client.log.error(`poracle-test: failed to POST to processor ${processorUrl}/api/test:`, err.message)
+			await msg.reply(`Failed to send test to processor: ${err.message}`)
 		}
-
-		client.addToMatchedQueue({
-			type: dataItem.type,
-			message: hook,
-			enrichment,
-			matched_users: [{
-				id: target.id,
-				name: target.name,
-				type: target.type,
-				language,
-				latitude: human.latitude,
-				longitude: human.longitude,
-				template,
-				clean: false,
-				ping: '',
-				distance: 0,
-			}],
-			matched_areas: [],
-		})
 	} catch (err) {
 		client.log.error(`poracle-test command ${msg.content} unhappy:`, err)
 	}

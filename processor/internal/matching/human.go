@@ -2,7 +2,6 @@ package matching
 
 import (
 	"math"
-	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -37,7 +36,7 @@ func ValidateHumans(
 		if !h.Enabled || h.AdminDisable {
 			continue
 		}
-		if strings.Contains(h.BlockedAlerts, `"monster"`) {
+		if h.BlockedAlertsSet["monster"] {
 			continue
 		}
 		validHumans[id] = h
@@ -102,7 +101,6 @@ func ValidateHumans(
 
 // ValidateHumansForRaid filters matched raid/egg trackings against human criteria.
 func ValidateHumansForRaid(
-	trackingIDs []string,
 	trackingData []raidUserData,
 	raidLat, raidLon float64,
 	matchedAreaNames map[string]bool,
@@ -110,7 +108,7 @@ func ValidateHumansForRaid(
 	humans map[string]*db.Human,
 	blockedAlertType string,
 ) []webhook.MatchedUser {
-	if len(trackingIDs) == 0 {
+	if len(trackingData) == 0 {
 		return nil
 	}
 
@@ -124,7 +122,7 @@ func ValidateHumansForRaid(
 		if !ok || !human.Enabled || human.AdminDisable {
 			continue
 		}
-		if strings.Contains(human.BlockedAlerts, `"`+blockedAlertType+`"`) {
+		if human.BlockedAlertsSet[blockedAlertType] {
 			continue
 		}
 		if td.ProfileNo != human.CurrentProfileNo {
@@ -133,7 +131,7 @@ func ValidateHumansForRaid(
 
 		// Specific gym tracking - check specificgym block
 		if td.IsSpecificGym {
-			if strings.Contains(human.BlockedAlerts, `"specificgym"`) {
+			if human.BlockedAlertsSet["specificgym"] {
 				continue
 			}
 		} else {

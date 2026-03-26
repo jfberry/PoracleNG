@@ -50,6 +50,9 @@ func NewSpatialIndex(fences []Fence) *SpatialIndex {
 
 // PointInAreas returns all geofence areas that contain the given point.
 func (si *SpatialIndex) PointInAreas(lat, lon float64) []MatchedArea {
+	if si == nil {
+		return nil
+	}
 	var results []MatchedArea
 	seen := make(map[string]bool)
 
@@ -74,6 +77,9 @@ func (si *SpatialIndex) PointInAreas(lat, lon float64) []MatchedArea {
 
 // MatchedAreaNames returns a set of normalized area names for a point.
 func (si *SpatialIndex) MatchedAreaNames(lat, lon float64) map[string]bool {
+	if si == nil {
+		return nil
+	}
 	names := make(map[string]bool)
 	seen := make(map[string]bool)
 

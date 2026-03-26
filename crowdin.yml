@@ -1,0 +1,38 @@
+# Crowdin configuration for PoracleNG
+# Docs: https://crowdin.github.io/crowdin-cli/configuration
+#
+# Setup:
+#   1. Create a Crowdin project at https://crowdin.com (free for open-source)
+#   2. Go to Project Settings → API → copy the project ID
+#   3. Go to Account Settings → API → create a personal access token
+#   4. Set environment variables:
+#        export CROWDIN_PROJECT_ID="your-project-id"
+#        export CROWDIN_PERSONAL_TOKEN="your-token"
+#   5. Install CLI: npm install -g @crowdin/cli
+#   6. Upload sources: crowdin upload sources
+#   7. Download translations: crowdin download
+#
+# GitHub integration (recommended):
+#   - Install the Crowdin GitHub App on the repo
+#   - Crowdin will automatically create PRs when translations are updated
+#   - Configure the integration in Crowdin: Project Settings → Integrations → GitHub
+#   - Set the branch to "l10n_main" (Crowdin's default PR branch)
+#
+# Adding a new source file:
+#   - Add a new entry under `files:` below
+#   - Run `crowdin upload sources` to push it
+#   - Translators will see the new strings in the Crowdin UI
+
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+
+files:
+  # Processor messages (identifier keys — new format)
+  - source: /processor/internal/i18n/locale/en.json
+    translation: /processor/internal/i18n/locale/%locale%.json
+    type: json
+
+  # Alerter messages (English-as-key — legacy format, will migrate to identifier keys)
+  - source: /alerter/locale/en.json
+    translation: /alerter/locale/%locale%.json
+    type: json

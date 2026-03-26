@@ -131,7 +131,7 @@ func TestLureMatchDistance(t *testing.T) {
 
 func TestLureBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = `["lure"]`
+	human.SetBlockedAlerts(`["lure"]`)
 	lure := &db.LureTracking{
 		ID: "user1", ProfileNo: 1, LureID: 0,
 		Distance: 0, Template: "1",

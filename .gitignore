@@ -1,2 +1,24 @@
 .DS_Store
+
+# User config (config.example.toml is tracked, user configs are not)
 config/config.toml
+config/*.toml
+config/dts.json
+config/dts/
+config/.cache/
+config/custom.*.json
+
+# Runtime logs
+logs/
+
+# Compiled binaries
+processor/poracle-processor
+
+# Downloaded resources (fetched at startup)
+resources/rawdata/
+resources/gamelocale/
+resources/data/
+resources/locale/
+
+# Node
+node_modules/

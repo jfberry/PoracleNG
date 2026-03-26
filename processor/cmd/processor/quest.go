@@ -14,7 +14,11 @@ import (
 )
 
 func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
-	ps.workerPool <- struct{}{}
+	select {
+	case ps.workerPool <- struct{}{}:
+	case <-ps.ctx.Done():
+		return nil
+	}
 	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
@@ -56,7 +60,10 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
+		matchStart := time.Now()
 		matched := ps.questMatcher.Match(data, st)
+		metrics.MatchingDuration.WithLabelValues("quest").Observe(time.Since(matchStart).Seconds())
+		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("quest").Inc()
@@ -65,14 +72,27 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(quest.Latitude, quest.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Quest at %s and %d humans cared", quest.Name, len(matched))
+			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))
+
+			enrichment, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
+
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
+					perLang[lang] = ps.enricher.QuestTranslate(enrichment, &quest, rewards, lang)
+				}
+			}
 
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "quest",
-				Message:      raw,
-				Enrichment:   ps.enricher.Quest(quest.Latitude, quest.Longitude),
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  "quest",
+				Message:               raw,
+				Enrichment:            enrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
 			l.Debugf("Quest at %s and 0 humans cared", quest.Name)

@@ -194,7 +194,7 @@ func TestFortMatchEmpty(t *testing.T) {
 
 func TestFortBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = `["forts"]`
+	human.SetBlockedAlerts(`["forts"]`)
 	fort := &db.FortTracking{
 		ID: "user1", ProfileNo: 1, FortType: "everything",
 		ChangeTypes: "[]",

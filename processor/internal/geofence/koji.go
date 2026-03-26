@@ -8,9 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
+
+var kojiClient = &http.Client{Timeout: 30 * time.Second}
 
 // FetchKojiGeofences downloads geofence data from HTTP URLs using a Koji bearer token,
 // caching the results locally. If a fetch fails, the cached version (if any) is preserved.
@@ -54,7 +57,7 @@ func fetchKojiFence(url, bearerToken, cacheDir string) error {
 	req.Header.Set("Authorization", "Bearer "+bearerToken)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := kojiClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("fetch: %w", err)
 	}

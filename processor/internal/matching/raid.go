@@ -44,7 +44,6 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) []webhook.Match
 	}
 
 	matchedAreaNames := st.Geofence.MatchedAreaNames(raid.Latitude, raid.Longitude)
-	var trackingIDs []string
 	var trackingData []raidUserData
 
 	exVal := 0
@@ -90,7 +89,6 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) []webhook.Match
 			continue
 		}
 
-		trackingIDs = append(trackingIDs, r.ID)
 		trackingData = append(trackingData, raidUserData{
 			HumanID:       r.ID,
 			ProfileNo:     r.ProfileNo,
@@ -104,7 +102,6 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) []webhook.Match
 	}
 
 	return ValidateHumansForRaid(
-		trackingIDs,
 		trackingData,
 		raid.Latitude, raid.Longitude,
 		matchedAreaNames,
@@ -122,7 +119,6 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) []webhook.MatchedU
 	}
 
 	matchedAreaNames := st.Geofence.MatchedAreaNames(egg.Latitude, egg.Longitude)
-	var trackingIDs []string
 	var trackingData []raidUserData
 
 	exVal := 0
@@ -155,7 +151,6 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) []webhook.MatchedU
 			continue
 		}
 
-		trackingIDs = append(trackingIDs, e.ID)
 		trackingData = append(trackingData, raidUserData{
 			HumanID:       e.ID,
 			ProfileNo:     e.ProfileNo,
@@ -169,7 +164,6 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) []webhook.MatchedU
 	}
 
 	return ValidateHumansForRaid(
-		trackingIDs,
 		trackingData,
 		egg.Latitude, egg.Longitude,
 		matchedAreaNames,

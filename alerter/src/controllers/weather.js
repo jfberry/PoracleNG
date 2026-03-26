@@ -4,63 +4,29 @@ const nightTime = require('./common/nightTime')
 class Weather extends Controller {
 	/**
 	 * Handle a pre-matched weather change from the processor.
-	 * matchedUsers: [{id, name, type, language, template, clean, ping}]
+	 * matchedUsers: [{id, name, type, language, template, clean, ping, active_pokemons}]
 	 * matchedAreas: [{name, displayInMatches, group}]
 	 */
 	async handleMatched(obj, matchedUsers, matchedAreas) {
-		let pregenerateTile = false
 		const data = obj
 		try {
 			// locale handled by Go processor
 			const logReference = data.s2_cell_id
 
-			switch (this.config.geocoding.staticProvider.toLowerCase()) {
-				case 'tileservercache': {
-					pregenerateTile = true
-					break
-				}
-				case 'google': {
-					data.staticMap = `https://maps.googleapis.com/maps/api/staticmap?center=${data.latitude},${data.longitude}&markers=color:red|${data.latitude},${data.longitude}&maptype=${this.config.geocoding.type}&zoom=${this.config.geocoding.zoom}&size=${this.config.geocoding.width}x${this.config.geocoding.height}&key=${this.config.geocoding.staticKey[~~(this.config.geocoding.staticKey.length * Math.random())]}`
-					break
-				}
-				case 'osm': {
-					data.staticMap = `https://www.mapquestapi.com/staticmap/v5/map?locations=${data.latitude},${data.longitude}&size=${this.config.geocoding.width},${this.config.geocoding.height}&defaultMarker=marker-md-3B5998-22407F&zoom=${this.config.geocoding.zoom}&key=${this.config.geocoding.staticKey[~~(this.config.geocoding.staticKey.length * Math.random())]}`
-					break
-				}
-				case 'mapbox': {
-					data.staticMap = `https://api.mapbox.com/styles/v1/mapbox/streets-v10/static/url-https%3A%2F%2Fi.imgur.com%2FMK4NUzI.png(${data.longitude},${data.latitude})/${data.longitude},${data.latitude},${this.config.geocoding.zoom},0,0/${this.config.geocoding.width}x${this.config.geocoding.height}?access_token=${this.config.geocoding.staticKey[~~(this.config.geocoding.staticKey.length * Math.random())]}`
-					break
-				}
-				default: {
-					data.staticMap = ''
-				}
-			}
+			// Static map tile generation (including per-user pokemon tiles) is now
+			// handled by the Go processor enrichment. The URL arrives in data.staticMap.
 
 			this.log.info(`${logReference}: Weather change received from processor: ${data.old_gameplay_condition} -> ${data.gameplay_condition} (source=${data.source})`)
 
-			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
-
 			nightTime.setNightTime(data, this.config)
 
-			// Generate tile once before the loop if we don't need pokemon on the map
-			if (pregenerateTile && !this.config.weather.showAlteredPokemonStaticMap) {
-				const tileServerOptions = this.tileserverPregen.getConfigForTileType('weather')
-				if (tileServerOptions.type !== 'none') {
-					data.staticMap = await this.tileserverPregen.getPregeneratedTileURL(logReference, 'weather', data, tileServerOptions.type)
-				}
-			}
-
 			data.oldWeatherId = data.old_gameplay_condition > 0 ? data.old_gameplay_condition : ''
-			data.oldWeatherNameEng = data.oldWeatherId ? this.GameData.utilData.weather[data.oldWeatherId].name : ''
 			data.weatherId = data.gameplay_condition ? data.gameplay_condition : ''
-			data.weatherNameEng = data.weatherId ? this.GameData.utilData.weather[data.weatherId].name : ''
 			data.condition = data.gameplay_condition
 
 			data.matchedAreas = matchedAreas.map((a) => ({ name: a.name, displayInMatches: a.displayInMatches, group: a.group }))
 			data.matched = data.matchedAreas.map((x) => x.name.toLowerCase())
-			if (this.imgUicons) data.imgUrl = await this.imgUicons.weatherIcon(data.condition) || this.config.fallbacks?.imgUrlWeather
-			if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.weatherIcon(data.condition) || this.config.fallbacks?.imgUrlWeather
-			if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.weatherIcon(data.condition)
+			// Icon URLs are pre-computed by the processor enrichment
 
 			const jobs = []
 			// weatherTth is pre-computed by the Go processor
@@ -70,57 +36,38 @@ class Weather extends Controller {
 				this.log.debug(`${logReference}: Weather alert being generated for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`)
 
 				// Populate activePokemons from processor payload
+				// Active pokemon icon URLs are pre-computed by the processor enrichment
 				if (cares.active_pokemons && cares.active_pokemons.length > 0) {
 					data.activePokemons = cares.active_pokemons.slice()
-					if (this.imgUicons) {
-						for (const mon of data.activePokemons) {
-							mon.imgUrl = await this.imgUicons.pokemonIcon(mon.pokemon_id, mon.form)
-						}
-					}
 				} else {
 					data.activePokemons = null
 				}
 
-				// Generate tile per-user when pokemon should appear on the map
-				if (pregenerateTile && this.config.weather.showAlteredPokemonStaticMap) {
-					const tileServerOptions = this.tileserverPregen.getConfigForTileType('weather')
-					if (tileServerOptions.type !== 'none') {
-						data.staticMap = await this.tileserverPregen.getPregeneratedTileURL(logReference, 'weather', data, tileServerOptions.type)
-					}
+				// Per-user static map with active pokemon is now generated by processor
+				// enrichment (per-language enrichment includes staticMap when
+				// show_altered_pokemon_static_map is enabled).
+				const langEnrichmentForTile = this.getLanguageEnrichment(data, cares.language || this.config.general.locale)
+				if (langEnrichmentForTile.staticMap) {
+					data.staticMap = langEnrichmentForTile.staticMap
 				}
 				data.staticmap = data.staticMap // deprecated
-
-				const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-				if (rateLimitTtr) {
-					this.log.verbose(`${logReference}: Not creating weather alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-					// eslint-disable-next-line no-continue
-					continue
-				}
 
 				const language = cares.language || this.config.general.locale
 				const translator = this.translatorFactory.Translator(language)
 				let [platform] = cares.type.split(':')
 				if (platform === 'webhook') platform = 'discord'
 
-				data.oldWeatherName = data.oldWeatherNameEng ? translator.translate(data.oldWeatherNameEng) : ''
-				data.oldWeatherEmojiEng = data.oldWeatherId ? this.emojiLookup.lookup(this.GameData.utilData.weather[data.oldWeatherId].emoji, platform) : ''
-				data.oldWeatherEmoji = data.oldWeatherNameEng ? translator.translate(data.oldWeatherEmojiEng) : ''
+				// Pre-translated weather names and active pokemon from processor
+				const langEnrichment = this.getLanguageEnrichment(data, language)
+				data.oldWeatherName = langEnrichment.oldWeatherName || ''
+				data.weatherName = langEnrichment.weatherName || ''
+				data.oldWeatherEmoji = langEnrichment.oldWeatherEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.oldWeatherEmojiKey, platform)) : ''
+				data.weatherEmoji = langEnrichment.weatherEmojiKey ? translator.translate(this.emojiLookup.lookup(langEnrichment.weatherEmojiKey, platform)) : ''
 				data.weatherCellId = data.s2_cell_id
-				data.weatherName = data.weatherNameEng ? translator.translate(data.weatherNameEng) : ''
-				data.weatherEmojiEng = data.weatherId ? this.emojiLookup.lookup(this.GameData.utilData.weather[data.weatherId].emoji, platform) : ''
-				data.weatherEmoji = data.weatherEmojiEng ? translator.translate(data.weatherEmojiEng) : ''
-				if (data.activePokemons) {
-					data.activePokemons.forEach((pok) => {
-						const mon = this.GameData.monsters[`${pok.pokemon_id}_${pok.form}`]
-							|| this.GameData.monsters[`${pok.pokemon_id}_0`] || {}
-						pok.nameEng = mon.name || ''
-						pok.name = translator.translate(pok.nameEng || `Pokemon ${pok.pokemon_id}`)
-						pok.formNameEng = mon.form?.name || ''
-						pok.formNormalisedEng = pok.formNameEng === 'Normal' ? '' : pok.formNameEng
-						pok.formNormalised = translator.translate(pok.formNormalisedEng)
-						pok.formName = translator.translate(pok.formNameEng)
-						pok.fullNameEng = pok.nameEng.concat(pok.formNormalisedEng ? ' ' : '', pok.formNormalisedEng)
-					})
+
+				// Active pokemon with pre-translated names from processor
+				if (langEnrichment.enrichedActivePokemons && langEnrichment.enrichedActivePokemons.length > 0) {
+					data.activePokemons = langEnrichment.enrichedActivePokemons.slice()
 				}
 
 				data.weather = data.weatherName // deprecated
@@ -130,7 +77,6 @@ class Weather extends Controller {
 
 				const view = {
 					...data,
-					...geoResult,
 					id: data.s2_cell_id,
 					areas: data.matchedAreas.filter((area) => area.displayInMatches).map((area) => area.name).join(', '),
 					now: new Date(),

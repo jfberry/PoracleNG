@@ -72,8 +72,12 @@ function adaptConfig(toml) {
 	if (!alerter.processor_url) {
 		throw new Error('Config error: [alerter] processor_url is required (e.g. "http://localhost:3030")')
 	}
+	const processorSecret = alerter.api_secret || ''
 	config.processor = {
 		url: alerter.processor_url,
+		secret: processorSecret,
+		// Headers to include in all alerter→processor API calls
+		headers: processorSecret ? { 'X-Poracle-Secret': processorSecret } : {},
 	}
 
 	// ---- database ----

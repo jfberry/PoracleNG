@@ -14,7 +14,9 @@ Golbat ──webhook──▶ Processor (Go :3030) ──matched──▶ Alerte
 ```
 
 - The **Processor** receives raw webhooks from Golbat, matches them against all user tracking rules in memory, and forwards only the matched results to the alerter.
-- The **Alerter** receives pre-matched results, renders templates (DTS), performs geocoding, generates static maps, and delivers messages to Discord and Telegram. It also handles user commands and notifies the processor to reload when tracking data changes.
+- The **Alerter** receives pre-matched results, renders templates (DTS), and delivers messages to Discord and Telegram. It also handles user commands (Discord bot and Telegram bot).
+
+**Migrating from PoracleJS?** See [Migrating from PoracleJS](#migrating-from-poraclejs) for an automated migration script and what has changed.
 
 ## Quick Start
 
@@ -58,9 +60,19 @@ See `config/config.example.toml` for the full list of settings with documentatio
 make build
 ```
 
-This builds the Go processor binary and runs `npm install` for the alerter. You can also build each component separately with `make build-processor` or `make install-alerter`.
+This builds the Go processor binary and runs `npm ci` for the alerter. You can also build each component separately with `make build-processor` or `make install-alerter`.
 
 ### 3. Start
+
+**With pm2 (recommended for production):**
+
+```sh
+pm2 start ecosystem.config.js
+```
+
+The included `ecosystem.config.js` sets `kill_timeout: 10000` (10 seconds) to allow graceful shutdown of Discord/Telegram queues. The default pm2 timeout of 1.6 seconds is too short and can leave orphaned processes.
+
+**Without pm2:**
 
 ```sh
 ./start.sh
@@ -207,7 +219,7 @@ The script will:
 
 **Webhook destination changes.** Golbat must now send webhooks to the **processor** (default port 3030), not the old alerter port. The processor matches and forwards results to the alerter internally.
 
-**Two components to run.** You now start both the processor and the alerter. The processor must be running before the alerter can receive matched results.
+**Single entry point.** Both the processor and alerter start together via `start.sh` (or `pm2 start ecosystem.config.js`). The processor must be running before the alerter can receive matched results. External tools like PoracleWeb only need the processor's address — all APIs are available through it.
 
 **New URL settings.** Both components need to know where the other is listening:
 
@@ -227,44 +239,50 @@ processor_url = "http://localhost:3030"
 
 **Logs directory.** Both components now write to `logs/` at the project root instead of `alerter/logs/`.
 
+**pm2 users.** Use the included `ecosystem.config.js` instead of `pm2 start start.sh` directly — it sets `kill_timeout: 10000` (10s) to allow graceful shutdown of message queues. The default pm2 timeout of 1.6s can leave orphaned processes.
+
+**Tileserver templates.** The processor now generates static map tiles instead of the alerter. The same tileservercache templates work, but available fields have changed slightly. See [TILESERVER.md](TILESERVER.md) for the complete field reference per alert type.
+
+**DTS templates.** Templates have access to both pre-translated Poracle fields (recommended) and raw webhook fields. See [DTS.md](DTS.md) for the full field reference.
+
 ## API Endpoints
 
-### Processor
+All API endpoints are available through the processor (default port 3030). External tools like PoracleWeb only need to know the processor's address. See [API.md](API.md) for the full reference with request/response examples.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/` | Receive Golbat webhooks |
-| POST | `/api/reload` | Trigger in-memory data reload |
-| GET | `/api/weather` | Current weather state |
-| GET | `/api/stats/rarity` | Pokemon rarity groups |
-| GET | `/api/stats/shiny` | Shiny rate statistics |
-| GET | `/api/stats/shiny-possible` | Pokemon observed as shiny |
-| GET | `/health` | Health check |
-| GET | `/metrics` | Prometheus metrics |
-| Various | `/api/*` | Proxied to alerter (tracking, config, humans, profiles, etc.) |
+### Processor (Go)
 
-The processor reverse-proxies any `/api/` request it doesn't handle natively to the alerter. This means external tools like PoracleWeb only need to know about the processor's address — all tracking, config, and user management APIs are transparently forwarded.
+| Category | Endpoints | Description |
+|----------|-----------|-------------|
+| Webhooks | `POST /` | Receive Golbat webhooks |
+| State | `GET/POST /api/reload`, `/api/geofence/reload` | Reload tracking rules / geofences |
+| Tracking | `/api/tracking/{type}/{id}` | CRUD for all 10 tracking types (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle) |
+| Humans | `/api/humans/*` | User management (areas, location, start/stop, create) |
+| Profiles | `/api/profiles/*` | Profile CRUD (create, delete, copy, update hours) |
+| Geofence | `/api/geofence/*` | Geofence data (all, hash, geojson) and tile generation |
+| Stats | `/api/stats/*` | Rarity, shiny rate, shiny possible |
+| Weather | `GET /api/weather` | Weather cell data |
+| Geocoding | `GET /api/geocode/forward` | Forward geocode lookup |
+| Test | `POST /api/test` | Test webhook simulation |
+| Health | `GET /health`, `GET /metrics` | Health check and Prometheus metrics |
 
-### Alerter
+### Alerter (Node.js, proxied through processor)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/matched` | Receive pre-matched results from processor |
-| Various | `/api/tracking/*` | User tracking management |
-| Various | `/api/humans/*` | User management (location, areas, profiles) |
-| Various | `/api/profiles/*` | Profile CRUD |
-| GET | `/api/config/*` | Configuration queries (PoracleWeb) |
-| GET | `/api/masterdata/*` | Game master data |
-| GET | `/api/geofence/*` | Geofence tile maps |
-| POST | `/api/postMessage` | Direct message posting |
-| GET | `/health` | Health check |
-| GET | `/metrics` | Prometheus metrics |
+| Category | Endpoints | Description |
+|----------|-----------|-------------|
+| Delivery | `POST /api/matched` | Receive pre-matched results from processor |
+| Messages | `POST /api/postMessage` | Direct message delivery to Discord/Telegram |
+| Discord | `/api/humans/{id}/roles/*` | Discord role management (requires Discord.js client) |
+| Config | `GET /api/config/*` | Server config and template metadata |
+| Game data | `GET /api/masterdata/*` | Pokemon and grunt master data |
 
-Both components expose `/health` and `/metrics` endpoints on their respective ports. Prometheus can scrape both to monitor the full pipeline (processor on port 3030, alerter on port 3031 by default).
+The processor proxies unhandled `/api/*` requests to the alerter transparently. Both components expose `/health` and `/metrics` on their respective ports for Prometheus monitoring.
 
 ## Monitoring
 
-An importable Grafana dashboard for the Prometheus metrics exposed by both services is included at `monitoring/grafana/poracle-observability-dashboard.json`.
+Two importable Grafana dashboards for the Prometheus metrics exposed by both services are included:
+
+- `monitoring/grafana/poracle-operations-lite-dashboard.json` for a concise day-to-day operations view
+- `monitoring/grafana/poracle-observability-dashboard.json` for the complete observability view
 
 There is also an example Prometheus scrape config at `monitoring/prometheus.yml.example`. If you are using [Zapdos](https://github.com/UnownHash/Zapdos), add `poracle_processor` and `poracle_alerter` jobs to `Zapdos/vmagnet/prometheus.yml`.
 
@@ -272,7 +290,7 @@ Then:
 
 1. Point Prometheus at the processor and alerter `/metrics` endpoints.
 2. Add Prometheus as a Grafana data source.
-3. Import `monitoring/grafana/poracle-observability-dashboard.json`.
+3. Import `monitoring/grafana/poracle-operations-lite-dashboard.json` for a compact operational view, or `monitoring/grafana/poracle-observability-dashboard.json` for the full dashboard.
 
 ## Connections Summary
 

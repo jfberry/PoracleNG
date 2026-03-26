@@ -12,7 +12,11 @@ import (
 )
 
 func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
-	ps.workerPool <- struct{}{}
+	select {
+	case ps.workerPool <- struct{}{}:
+	case <-ps.ctx.Done():
+		return nil
+	}
 	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
@@ -76,7 +80,10 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
+		matchStart := time.Now()
 		matched := ps.gymMatcher.Match(data, st)
+		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(matchStart).Seconds())
+		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("gym").Inc()
@@ -85,17 +92,28 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(gym.Latitude, gym.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Gym %s changed (team %d->%d) and %d humans cared",
-				gym.Name, oldState.TeamID, teamID, len(matched))
+			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
+				gym.Name, ps.teamName(oldState.TeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))
 
-			enrichment := ps.enricher.Gym(gym.Latitude, gym.Longitude)
+			enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldState.TeamID, gym.SlotsAvailable, inBattle, false, gymID)
+
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
+					perLang[lang] = ps.enricher.GymTranslate(enrichment, teamID, oldState.TeamID, gym.LastOwnerID, lang)
+				}
+			}
 
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "gym",
-				Message:      raw,
-				Enrichment:   enrichment,
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  "gym",
+				Message:               raw,
+				Enrichment:            enrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
 			l.Debugf("Gym %s changed and 0 humans cared", gym.Name)

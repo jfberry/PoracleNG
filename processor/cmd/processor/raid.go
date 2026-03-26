@@ -13,7 +13,11 @@ import (
 )
 
 func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
-	ps.workerPool <- struct{}{}
+	select {
+	case ps.workerPool <- struct{}{}:
+	case <-ps.ctx.Done():
+		return nil
+	}
 	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
@@ -54,6 +58,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 
 		var matched []webhook.MatchedUser
 
+		matchStart := time.Now()
 		if raid.PokemonID > 0 {
 			// Raid with boss
 			raidData := &matching.RaidData{
@@ -82,6 +87,10 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			}
 			matched = ps.raidMatcher.MatchEgg(eggData, st)
 		}
+		metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(matchStart).Seconds())
+
+		// Filter by rate limit
+		matched = ps.filterRateLimited(matched)
 
 		// Filter by RSVP preference before sending
 		hasRSVPs := len(raid.RSVPs) > 0
@@ -126,19 +135,43 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				gymName = raid.Name
 			}
 
-			l.Infof("%s level %d on %s appeared at [%.3f,%.3f] and %d humans cared",
-				msgType, raid.Level, gymName, raid.Latitude, raid.Longitude, len(matched))
+			if raid.PokemonID > 0 {
+				l.Infof("Raid %s L%d on %s at [%.3f,%.3f] areas(%s) and %d humans cared",
+					ps.pokemonName(raid.PokemonID, raid.Form), raid.Level, gymName,
+					raid.Latitude, raid.Longitude, areaNames(matchedAreas), len(matched))
+			} else {
+				l.Infof("Egg L%d on %s at [%.3f,%.3f] areas(%s) and %d humans cared",
+					raid.Level, gymName, raid.Latitude, raid.Longitude, areaNames(matchedAreas), len(matched))
+			}
+
+			baseEnrichment, tilePending := ps.enricher.Raid(&raid, isFirstNotification)
+
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
+					perLang[lang] = ps.enricher.RaidTranslate(baseEnrichment, &raid, lang)
+				}
+			}
 
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         msgType,
-				Message:      raw,
-				Enrichment:   ps.enricher.Raid(&raid, isFirstNotification),
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  msgType,
+				Message:               raw,
+				Enrichment:            baseEnrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
-			l.Debugf("Raid/egg level %d appeared at [%.3f,%.3f] and 0 humans cared",
-				raid.Level, raid.Latitude, raid.Longitude)
+			if raid.PokemonID > 0 {
+				l.Debugf("Raid %s L%d at [%.3f,%.3f] and 0 humans cared",
+					ps.pokemonName(raid.PokemonID, raid.Form), raid.Level,
+					raid.Latitude, raid.Longitude)
+			} else {
+				l.Debugf("Egg L%d at [%.3f,%.3f] and 0 humans cared",
+					raid.Level, raid.Latitude, raid.Longitude)
+			}
 		}
 	}()
 	return nil

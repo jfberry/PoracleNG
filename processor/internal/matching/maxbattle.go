@@ -1,8 +1,6 @@
 package matching
 
 import (
-	"strings"
-
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -92,7 +90,7 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) []webhook
 	for _, td := range trackings {
 		if td.IsSpecificStation {
 			human := st.Humans[td.HumanID]
-			if human != nil && strings.Contains(human.BlockedAlerts, "specificstation") {
+			if human != nil && human.BlockedAlertsSet["specificstation"] {
 				continue
 			}
 		}

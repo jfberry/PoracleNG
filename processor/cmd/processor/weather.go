@@ -83,14 +83,13 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			matched = append(matched, mu)
 		}
 
+		matched = ps.filterRateLimited(matched)
+
 		if len(matched) == 0 {
 			l.Debugf("Weather changed to %d (from %d, source=%s) but no users have affected pokemon",
 				change.GameplayCondition, change.OldGameplayCondition, change.Source)
 			continue
 		}
-
-		l.Infof("Weather changed to %d (from %d, source=%s) and %d users have affected pokemon",
-			change.GameplayCondition, change.OldGameplayCondition, change.Source, len(matched))
 
 		// Build matched areas from cell center
 		st := ps.stateMgr.Get()
@@ -104,15 +103,50 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			}
 		}
 
+		l.Infof("Weather changed %s -> %s (source=%s) areas(%s) and %d users have affected pokemon",
+			ps.weatherName(change.OldGameplayCondition), ps.weatherName(change.GameplayCondition),
+			change.Source, areaNames(matchedAreas), len(matched))
+
 		// Build weather change message
 		msg, _ := json.Marshal(change)
+		baseEnrichment, baseTilePending := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap)
 
-		ps.sender.Send(webhook.OutboundPayload{
-			Type:         "weather_change",
-			Message:      msg,
-			Enrichment:   ps.enricher.Weather(change.Latitude, change.Longitude),
-			MatchedAreas: matchedAreas,
-			MatchedUsers: matched,
-		})
+		// Per-user: each gets their own payload with per-language enrichment and tile
+		for _, user := range matched {
+			lang := user.Language
+			if lang == "" {
+				lang = ps.cfg.General.Locale
+				if lang == "" {
+					lang = "en"
+				}
+			}
+
+			var perLang map[string]map[string]any
+			var tilePending = baseTilePending
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				langEnrichment, userTilePending := ps.enricher.WeatherTranslate(
+					baseEnrichment,
+					change.OldGameplayCondition,
+					change.GameplayCondition,
+					user.ActivePokemons,
+					lang,
+					ps.cfg.Weather.ShowAlteredPokemonStaticMap,
+				)
+				if userTilePending != nil {
+					tilePending = userTilePending
+				}
+				perLang = map[string]map[string]any{lang: langEnrichment}
+			}
+
+			ps.sender.Send(webhook.OutboundPayload{
+				Type:                  "weather_change",
+				Message:               msg,
+				Enrichment:            baseEnrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          []webhook.MatchedUser{user},
+				TilePending:           tilePending,
+			})
+		}
 	}
 }

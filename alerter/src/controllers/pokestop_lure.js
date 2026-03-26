@@ -14,18 +14,6 @@ class Lure extends Controller {
 			const logReference = data.pokestop_id
 
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
-			data.appleMapUrl = `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
-			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
-			if (this.config.general.rdmURL) {
-				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@pokestop/${data.pokestop_id}`
-			}
-			if (this.config.general.reactMapURL) {
-				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/pokestops/${data.pokestop_id}`
-			}
-			if (this.config.general.rocketMadURL) {
-				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
-			}
 			data.name = data.name ? this.escapeJsonString(data.name) : this.escapeJsonString(data.pokestop_name)
 			data.pokestopName = data.name
 			data.url = data.url || this.config.fallbacks?.pokestopUrl
@@ -51,64 +39,46 @@ class Lure extends Controller {
 				data.lureTypeId = data.lure_id
 			}
 
-			data.lureTypeColor = this.GameData.utilData.lures[data.lure_id].color
-			data.lureTypeNameEng = this.GameData.utilData.lures[data.lure_id].name
+			// lureColor and lureEmojiKey provided by processor base enrichment
+			data.lureTypeColor = data.lureColor
 
 			const whoCares = matchedUsers
 
 			if (whoCares.length) {
-				this.log.info(`${logReference}: [matched] Lure of type ${data.lureTypeNameEng} at ${data.pokestopName} and ${whoCares.length} humans cared.`)
+				this.log.info(`${logReference}: [matched] Lure at ${data.pokestopName} and ${whoCares.length} humans cared.`)
 			} else {
 				return []
 			}
 
-			let discordCacheBad = true
-			whoCares.forEach((cares) => {
-				if (!this.isRateLimited(cares.id)) discordCacheBad = false
-			})
-			if (discordCacheBad) return []
-
 			try {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
-				if (this.imgUiconsAlt) data.imgUrlAlt = await this.imgUiconsAlt.pokestopIcon(data.lureTypeId) || this.config.fallbacks?.imgUrlPokestop
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.pokestopIcon(data.lureTypeId)
+				// Icon URLs are pre-computed by the processor enrichment
 
-				const geoResult = await this.getAddress({
-					lat: data.latitude,
-					lon: data.longitude,
-				})
 				const jobs = []
 
 				nightTime.setNightTime(data, this.config)
 
-				await this.getStaticMapUrl(logReference, data, 'pokestop', ['latitude', 'longitude', 'imgUrl', 'lureTypeId', 'style'])
+				// Static map is pre-computed by the processor enrichment
+				data.staticmap = data.staticMap // deprecated alias
 				data.intersection = await this.obtainIntersection(data)
-
-				data.staticmap = data.staticMap // deprecated
 
 				for (const cares of whoCares) {
 					this.log.debug(`${logReference}: [matched] Creating lure alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-					if (rateLimitTtr) {
-						this.log.verbose(`${logReference}: [matched] Not creating lure alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-						// eslint-disable-next-line no-continue
-						continue
-					}
 					this.log.verbose(`${logReference}: [matched] Creating lure alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
 					const language = cares.language || this.config.general.locale
-					const translator = this.translatorFactory.Translator(language)
 					let [platform] = cares.type.split(':')
 					if (platform === 'webhook') platform = 'discord'
 
-					// full build
-					data.lureTypeName = translator.translate(data.lureTypeNameEng)
+					// Pre-translated names from processor per-language enrichment
+					const langEnrichment = this.getLanguageEnrichment(data, language)
+					data.lureTypeName = langEnrichment.lureTypeName
 					data.lureType = data.lureTypeName
-					data.lureTypeEmoji = this.emojiLookup.lookup(this.GameData.utilData.lures[data.lure_id].emoji, platform)
+
+					// Per-platform emoji lookup (using emoji key from base enrichment)
+					data.lureTypeEmoji = data.lureEmojiKey ? this.emojiLookup.lookup(data.lureEmojiKey, platform) : ''
 
 					const view = {
-						...geoResult,
 						...data,
 						time: data.distime,
 						tthh: data.tth.hours,

@@ -14,7 +14,11 @@ import (
 )
 
 func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
-	ps.workerPool <- struct{}{}
+	select {
+	case ps.workerPool <- struct{}{}:
+	case <-ps.ctx.Done():
+		return nil
+	}
 	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
@@ -88,7 +92,10 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		// Match
 		st := ps.stateMgr.Get()
+		matchStart := time.Now()
 		matched := ps.pokemonMatcher.Match(processed, st)
+		metrics.MatchingDuration.WithLabelValues("pokemon").Observe(time.Since(matchStart).Seconds())
+		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
@@ -144,19 +151,52 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				}
 			}
 
-			l.Infof("Pokemon %d appeared at [%.3f,%.3f] and %d humans cared",
-				pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude, len(matched))
+			if processed.Encountered {
+				l.Infof("%s{CP%d/IV%.0f%%} at [%.3f,%.3f] areas(%s) and %d humans cared",
+					ps.pokemonName(pokemon.PokemonID, pokemon.Form), processed.CP, processed.IV,
+					pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
+			} else {
+				l.Infof("%s appeared at [%.3f,%.3f] areas(%s) and %d humans cared",
+					ps.pokemonName(pokemon.PokemonID, pokemon.Form),
+					pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
+			}
+
+			baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed)
+
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
+					perLang[lang] = ps.enricher.PokemonTranslate(baseEnrichment, &pokemon, lang)
+				}
+			}
+
+			var perUser map[string]map[string]any
+			if ps.enricher.PVPDisplay != nil && perLang != nil {
+				perUser = ps.enricher.PokemonPerUser(perLang, matched)
+			}
 
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "pokemon",
-				Message:      raw,
-				Enrichment:   ps.enricher.Pokemon(&pokemon, processed),
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  "pokemon",
+				Message:               raw,
+				Enrichment:            baseEnrichment,
+				PerLanguageEnrichment: perLang,
+				PerUserEnrichment:     perUser,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
-			l.Debugf("Pokemon %d appeared at [%.3f,%.3f] and 0 humans cared",
-				pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude)
+			if processed.Encountered {
+				l.Debugf("%s{CP%d/IV%.0f%%} appeared at [%.3f,%.3f] and 0 humans cared",
+					ps.pokemonName(pokemon.PokemonID, pokemon.Form), processed.CP, processed.IV,
+					pokemon.Latitude, pokemon.Longitude)
+			} else {
+				l.Debugf("%s appeared at [%.3f,%.3f] and 0 humans cared",
+					ps.pokemonName(pokemon.PokemonID, pokemon.Form),
+					pokemon.Latitude, pokemon.Longitude)
+			}
 		}
 
 		// Handle pokemon change
@@ -171,7 +211,9 @@ func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessag
 	// Re-match with new state and send as pokemon_changed
 	oldIV := float64(change.Old.ATK+change.Old.DEF+change.Old.STA) / 0.45
 
-	l.Infof("Pokemon changed from %d to %d", change.Old.PokemonID, change.New.PokemonID)
+	l.Infof("Pokemon changed from %s to %s",
+		ps.pokemonName(change.Old.PokemonID, change.Old.Form),
+		ps.pokemonName(change.New.PokemonID, change.New.Form))
 
 	ps.sender.Send(webhook.OutboundPayload{
 		Type:    "pokemon_changed",

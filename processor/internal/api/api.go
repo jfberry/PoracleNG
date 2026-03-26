@@ -3,14 +3,63 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
+
+// InstrumentAPI wraps a handler to record request duration and count metrics.
+// The endpoint label is normalised to collapse path parameters (e.g. /api/tracking/pokemon/123 → /api/tracking/pokemon/{id}).
+func InstrumentAPI(endpoint string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		sw := &statusWriter{ResponseWriter: w, status: 200}
+		next(sw, r)
+		duration := time.Since(start).Seconds()
+		method := r.Method
+		status := "ok"
+		if sw.status >= 400 {
+			status = "error"
+		}
+		metrics.APIRequestDuration.WithLabelValues(method, endpoint).Observe(duration)
+		metrics.APIRequestsTotal.WithLabelValues(method, endpoint, status).Inc()
+	}
+}
+
+// statusWriter captures the HTTP status code written by the handler.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (sw *statusWriter) WriteHeader(code int) {
+	sw.status = code
+	sw.ResponseWriter.WriteHeader(code)
+}
+
+// RequireSecret returns middleware that checks the x-poracle-secret header.
+// If secret is empty, all requests are allowed (no auth configured).
+func RequireSecret(secret string, next http.HandlerFunc) http.HandlerFunc {
+	if secret == "" {
+		return next
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Poracle-Secret") != secret {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{"status": "authError", "reason": "incorrect or missing api secret"})
+			return
+		}
+		next(w, r)
+	}
+}
 
 // HandleReload returns a handler that triggers a state reload.
 func HandleReload(reloadFn func() error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		if r.Method != http.MethodPost && r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}

@@ -1,13 +1,18 @@
 package enrichment
 
 import (
+	"encoding/json"
+	"math"
+
+	log "github.com/sirupsen/logrus"
+
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // Nest builds enrichment fields for a nest webhook.
-// Expiration is reset_time + 7 days.
-func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
+func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	expiration := nest.ResetTime + 7*24*60*60
@@ -18,6 +23,95 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) map[string]any {
 	m["disappearDate"] = geo.FormatTime(expiration, tz, e.DateLayout)
 	m["resetTime"] = geo.FormatTime(nest.ResetTime, tz, e.TimeLayout)
 	m["resetDate"] = geo.FormatTime(nest.ResetTime, tz, e.DateLayout)
+
+	// Icon URLs
+	if e.ImgUicons != nil {
+		m["imgUrl"] = e.ImgUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
+	}
+	if e.ImgUiconsAlt != nil {
+		m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
+	}
+	if e.StickerUicons != nil {
+		m["stickerUrl"] = e.StickerUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
+	}
+
+	// Autoposition from polygon paths
+	if len(nest.PolyPath) > 0 {
+		var rawPolygons [][][2]float64
+		if err := json.Unmarshal(nest.PolyPath, &rawPolygons); err != nil {
+			log.Debugf("nest: failed to parse poly_path: %s", err)
+		} else {
+			var polygons [][]staticmap.LatLon
+			for _, rawPoly := range rawPolygons {
+				var poly []staticmap.LatLon
+				for _, pt := range rawPoly {
+					poly = append(poly, staticmap.LatLon{
+						Latitude:  pt[0],
+						Longitude: pt[1],
+					})
+				}
+				polygons = append(polygons, poly)
+			}
+
+			position := staticmap.Autoposition(staticmap.AutopositionShape{
+				Polygons: polygons,
+			}, 500, 250, 1.25, 17.5)
+
+			if position != nil {
+				m["zoom"] = math.Min(position.Zoom, 16)
+				m["map_latitude"] = position.Latitude
+				m["map_longitude"] = position.Longitude
+			}
+		}
+	}
+
+	// Reverse geocoding
+	e.addGeoResult(m, nest.Latitude, nest.Longitude)
+
+	// Static map tile — use autopositioned center if available, else original coords
+	mapLat, mapLon := nest.Latitude, nest.Longitude
+	if autoLat, ok := m["map_latitude"].(float64); ok {
+		mapLat = autoLat
+		mapLon = m["map_longitude"].(float64)
+	}
+	// Static map tile
+	pending := e.addStaticMap(m, "nest", mapLat, mapLon, map[string]any{
+		"pokemon_id":      nest.PokemonID,
+		"form":            nest.Form,
+		"pokemonSpawnAvg": nest.PokemonAvg,
+	})
+
+	// Game data enrichment
+	if e.GameData != nil {
+		monster := e.GameData.GetMonster(nest.PokemonID, nest.Form)
+		if monster != nil {
+			m["types"] = monster.Types
+			m["color"] = e.GameData.GetTypeColor(monster.Types)
+			m["typeEmojiKeys"] = e.GameData.GetTypeEmojiKeys(monster.Types)
+		}
+	}
+
+	return m, pending
+}
+
+// NestTranslate adds per-language translated fields.
+func (e *Enricher) NestTranslate(base map[string]any, pokemonID, form int, lang string) map[string]any {
+	if e.GameData == nil || e.Translations == nil {
+		return base
+	}
+
+	m := make(map[string]any, len(base)+5)
+	for k, v := range base {
+		m[k] = v
+	}
+
+	tr := e.Translations.For(lang)
+	TranslateMonsterNamesEng(m, e.GameData, tr, e.Translations, pokemonID, form, 0)
+
+	monster := e.GameData.GetMonster(pokemonID, form)
+	if monster != nil {
+		TranslateTypeNames(m, tr, monster.Types)
+	}
 
 	return m
 }

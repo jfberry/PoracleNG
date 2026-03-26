@@ -2,7 +2,6 @@ package matching
 
 import (
 	"math"
-	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -41,7 +40,7 @@ func ValidateHumansGeneric(
 		if !ok || !human.Enabled || human.AdminDisable {
 			continue
 		}
-		if strings.Contains(human.BlockedAlerts, `"`+blockedAlertType+`"`) {
+		if human.BlockedAlertsSet[blockedAlertType] {
 			continue
 		}
 		if td.ProfileNo != human.CurrentProfileNo {

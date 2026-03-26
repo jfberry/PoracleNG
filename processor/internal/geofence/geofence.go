@@ -3,10 +3,13 @@ package geofence
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 )
 
 // Fence represents a geofence area.
+// UserSelectable and DisplayInMatches default to true when absent from JSON.
+// We use a custom UnmarshalJSON to distinguish absent (nil → true) from explicit false.
 type Fence struct {
 	Name             string         `json:"name"`
 	NormalizedName   string         `json:"-"` // lowercased, underscores replaced with spaces (computed at load)
@@ -18,6 +21,37 @@ type Fence struct {
 	Description      string         `json:"description"`
 	UserSelectable   bool           `json:"userSelectable"`
 	DisplayInMatches bool           `json:"displayInMatches"`
+}
+
+// fenceJSON is used for unmarshalling with *bool to detect absent vs explicit false.
+type fenceJSON struct {
+	Name             string         `json:"name"`
+	ID               int            `json:"id"`
+	Color            string         `json:"color"`
+	Path             [][2]float64   `json:"path,omitempty"`
+	Multipath        [][][2]float64 `json:"multipath,omitempty"`
+	Group            string         `json:"group"`
+	Description      string         `json:"description"`
+	UserSelectable   *bool          `json:"userSelectable"`
+	DisplayInMatches *bool          `json:"displayInMatches"`
+}
+
+// UnmarshalJSON handles defaulting UserSelectable and DisplayInMatches to true when absent.
+func (f *Fence) UnmarshalJSON(data []byte) error {
+	var raw fenceJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	f.Name = raw.Name
+	f.ID = raw.ID
+	f.Color = raw.Color
+	f.Path = raw.Path
+	f.Multipath = raw.Multipath
+	f.Group = raw.Group
+	f.Description = raw.Description
+	f.UserSelectable = raw.UserSelectable == nil || *raw.UserSelectable
+	f.DisplayInMatches = raw.DisplayInMatches == nil || *raw.DisplayInMatches
+	return nil
 }
 
 // GeoJSON types for parsing FeatureCollection format.
@@ -62,15 +96,11 @@ func LoadGeofenceFile(path string) ([]Fence, error) {
 		return parseGeoJSON(collection), nil
 	}
 
-	// Try Poracle native format
+	// Try Poracle native format — UnmarshalJSON handles defaulting
+	// UserSelectable and DisplayInMatches to true when absent.
 	var fences []Fence
 	if err := json.Unmarshal(cleaned, &fences); err != nil {
 		return nil, err
-	}
-	// Set defaults
-	for i := range fences {
-		fences[i].UserSelectable = true
-		fences[i].DisplayInMatches = true
 	}
 	return fences, nil
 }
@@ -84,7 +114,7 @@ func parseGeoJSON(collection geoJSONCollection) []Fence {
 		props := feature.Properties
 		name := props.Name
 		if name == "" {
-			name = "geofence" + string(rune('0'+i))
+			name = "geofence" + strconv.Itoa(i)
 		}
 		userSel := true
 		if props.UserSelectable != nil {
