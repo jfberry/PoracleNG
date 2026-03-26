@@ -102,9 +102,23 @@ func AdoptExistingDatabase(db *sql.DB) error {
 
 	log.Info("Database adopted: schema_migrations created at version 1 (initial schema skipped)")
 
-	// TODO: Clean up Knex migration tables once migration is stable
-	// _, _ = db.Exec("DROP TABLE IF EXISTS migrations_lock")
-	// _, _ = db.Exec("DROP TABLE IF EXISTS migrations")
+	// Ensure database default charset matches the existing humans table so that
+	// new tables created by future migrations have compatible column types for
+	// foreign key constraints (errno 150 if charsets don't match).
+	var tableCharset string
+	_ = db.QueryRow(`SELECT CCSA.CHARACTER_SET_NAME
+		FROM information_schema.TABLES T
+		JOIN information_schema.COLLATION_CHARACTER_SET_APPLICABILITY CCSA
+			ON T.TABLE_COLLATION = CCSA.COLLATION_NAME
+		WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = 'humans'`).Scan(&tableCharset)
+	if tableCharset != "" {
+		var dbCharset string
+		_ = db.QueryRow("SELECT DEFAULT_CHARACTER_SET_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE()").Scan(&dbCharset)
+		if dbCharset != tableCharset {
+			log.Infof("Setting database default charset to %s (matching existing tables, was %s)", tableCharset, dbCharset)
+			_, _ = db.Exec(fmt.Sprintf("ALTER DATABASE CHARACTER SET %s", tableCharset))
+		}
+	}
 
 	return nil
 }
