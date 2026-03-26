@@ -52,7 +52,6 @@ func main() {
 	// Register build info from Go's embedded VCS metadata
 	buildVersion, buildCommit, buildDate := readBuildInfo()
 	metrics.BuildInfo.WithLabelValues(buildVersion, buildCommit, buildDate).Set(1)
-	log.Infof("Poracle processor %s (commit %s, built %s)", buildVersion, buildCommit, buildDate)
 
 	cfg, err := config.Load(*baseDir)
 	if err != nil {
@@ -69,6 +68,8 @@ func main() {
 		MaxBackups:         cfg.Logging.MaxBackups,
 		Compress:           cfg.Logging.Compress,
 	})
+
+	log.Infof("Poracle processor %s (commit %s, built %s)", buildVersion, buildCommit, buildDate)
 
 	// Download game resources (monsters, moves, locales, etc.)
 	if err := resources.Download(cfg.BaseDir); err != nil {
