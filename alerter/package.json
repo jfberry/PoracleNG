@@ -1,6 +1,6 @@
 {
   "name": "poracle",
-  "version": "4.8.4",
+  "version": "5.0.0",
   "description": "Webhook processing and personalised discord|telegram alarms",
   "keywords": [
     "poracle",
