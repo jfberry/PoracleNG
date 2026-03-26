@@ -76,7 +76,7 @@ module.exports = async (ctx) => {
 				return await ctx.reply(`${target.id} ${controller.translator.translate('does not seem to be registered. add it with')} /${controller.translator.translate('channel')} ${controller.translator.translate('add')}`)
 			}
 			if (isRegistered) {
-				await controller.query.deleteQuery('humans', { id: target.id })
+				await controller.query.deleteHuman({ id: target.id })
 				await ctx.reply('✅')
 			}
 		}

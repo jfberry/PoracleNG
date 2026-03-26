@@ -60,7 +60,7 @@ exports.run = async (client, msg, [args]) => {
 
 			const isRegistered = await client.query.countQuery('humans', { name: webhookName })
 			if (isRegistered) {
-				await client.query.deleteQuery('humans', {
+				await client.query.deleteHuman({
 					name: webhookName,
 					type: 'webhook',
 				})

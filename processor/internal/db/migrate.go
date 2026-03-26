@@ -12,6 +12,42 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db/migrations"
 )
 
+// DropForeignKeys removes all FK constraints referencing humans(id).
+// Tracking table cleanup is handled by application code instead.
+// Safe to call repeatedly — silently skips constraints that don't exist.
+func DropForeignKeys(db *sql.DB) {
+	fks := []struct{ table, constraint string }{
+		{"profiles", "profiles_id_foreign"},
+		{"monsters", "monsters_id_foreign"},
+		{"raid", "raid_id_foreign"},
+		{"egg", "egg_id_foreign"},
+		{"quest", "quest_id_foreign"},
+		{"invasion", "invasion_id_foreign"},
+		{"lures", "lures_id_foreign"},
+		{"nests", "nests_id_foreign"},
+		{"gym", "gym_id_foreign"},
+		{"forts", "forts_id_foreign"},
+		{"weather", "weather_id_foreign"},
+		{"maxbattle", "maxbattle_id_foreign"},
+	}
+
+	for _, fk := range fks {
+		var count int
+		err := db.QueryRow(`SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+			WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = 'FOREIGN KEY'`,
+			fk.table, fk.constraint).Scan(&count)
+		if err != nil || count == 0 {
+			continue
+		}
+		_, err = db.Exec(fmt.Sprintf("ALTER TABLE `%s` DROP FOREIGN KEY `%s`", fk.table, fk.constraint))
+		if err != nil {
+			log.Warnf("Could not drop FK %s.%s: %s", fk.table, fk.constraint, err)
+		} else {
+			log.Infof("Dropped foreign key %s.%s", fk.table, fk.constraint)
+		}
+	}
+}
+
 // RunMigrations runs all pending database migrations.
 func RunMigrations(db *sql.DB) error {
 	source, err := iofs.New(migrations.FS, ".")
@@ -101,24 +137,6 @@ func AdoptExistingDatabase(db *sql.DB) error {
 	}
 
 	log.Info("Database adopted: schema_migrations created at version 1 (initial schema skipped)")
-
-	// Ensure database default charset matches the existing humans table so that
-	// new tables created by future migrations have compatible column types for
-	// foreign key constraints (errno 150 if charsets don't match).
-	var tableCharset string
-	_ = db.QueryRow(`SELECT CCSA.CHARACTER_SET_NAME
-		FROM information_schema.TABLES T
-		JOIN information_schema.COLLATION_CHARACTER_SET_APPLICABILITY CCSA
-			ON T.TABLE_COLLATION = CCSA.COLLATION_NAME
-		WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = 'humans'`).Scan(&tableCharset)
-	if tableCharset != "" {
-		var dbCharset string
-		_ = db.QueryRow("SELECT DEFAULT_CHARACTER_SET_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE()").Scan(&dbCharset)
-		if dbCharset != tableCharset {
-			log.Infof("Setting database default charset to %s (matching existing tables, was %s)", tableCharset, dbCharset)
-			_, _ = db.Exec(fmt.Sprintf("ALTER DATABASE CHARACTER SET %s", tableCharset))
-		}
-	}
 
 	return nil
 }

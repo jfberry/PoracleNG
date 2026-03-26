@@ -40,6 +40,8 @@ type AllData struct {
 }
 
 // LoadAll loads all tracking data from the database.
+// Tracking rows without a matching human are filtered out in-memory
+// (no FK constraints, so orphaned rows may exist).
 func LoadAll(db *sqlx.DB) (*AllData, error) {
 	humans, err := LoadHumans(db)
 	if err != nil {
@@ -49,6 +51,7 @@ func LoadAll(db *sqlx.DB) (*AllData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load monsters: %w", err)
 	}
+	monsters.FilterOrphans(humans)
 	raids, err := LoadRaids(db)
 	if err != nil {
 		return nil, fmt.Errorf("load raids: %w", err)
@@ -89,6 +92,23 @@ func LoadAll(db *sqlx.DB) (*AllData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load maxbattles: %w", err)
 	}
+
+	// Filter orphaned tracking/profile rows (no matching human)
+	for key := range profiles {
+		if _, ok := humans[key.ID]; !ok {
+			delete(profiles, key)
+		}
+	}
+	raids = filterSlice(raids, humans)
+	eggs = filterSlice(eggs, humans)
+	invasions = filterSlice(invasions, humans)
+	quests = filterSlice(quests, humans)
+	lures = filterSlice(lures, humans)
+	gyms = filterSlice(gyms, humans)
+	nests = filterSlice(nests, humans)
+	forts = filterSlice(forts, humans)
+	maxbattles = filterSlice(maxbattles, humans)
+
 	return &AllData{
 		Humans:    humans,
 		Monsters:  monsters,
@@ -103,4 +123,21 @@ func LoadAll(db *sqlx.DB) (*AllData, error) {
 		Forts:      forts,
 		Maxbattles: maxbattles,
 	}, nil
+}
+
+// idGetter is implemented by all tracking structs (they all have an ID field).
+type idGetter interface {
+	GetID() string
+}
+
+// filterSlice removes tracking entries whose ID is not in the humans map.
+func filterSlice[T idGetter](items []T, humans map[string]*Human) []T {
+	n := 0
+	for _, item := range items {
+		if _, ok := humans[item.GetID()]; ok {
+			items[n] = item
+			n++
+		}
+	}
+	return items[:n]
 }

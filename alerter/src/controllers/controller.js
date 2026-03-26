@@ -338,6 +338,21 @@ class Controller extends EventEmitter {
 		}
 	}
 
+	// Delete human(s) and all their tracking data.
+	// Must be used instead of deleteQuery('humans', ...) since there are no FK CASCADE constraints.
+	// whereClause can be { id: '...' } or { name: '...', type: '...' }.
+	async deleteHuman(whereClause) {
+		const trackingTables = ['monsters', 'raid', 'egg', 'quest', 'invasion', 'weather', 'lures', 'gym', 'nests', 'maxbattle', 'forts', 'profiles']
+		// Find matching human IDs first (whereClause may not be by id)
+		const humans = await this.db('humans').where(whereClause).select('id')
+		for (const human of humans) {
+			for (const table of trackingTables) {
+				await this.db(table).where({ id: human.id }).del()
+			}
+		}
+		await this.db('humans').where(whereClause).del()
+	}
+
 	returnByDatabaseType(data) {
 		switch (this.config.database.client) {
 			case 'pg': {

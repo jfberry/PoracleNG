@@ -55,6 +55,23 @@ func SelectOneHumanFull(db *sqlx.DB, id string) (*HumanFull, error) {
 	return &h, nil
 }
 
+// DeleteHumanAndTracking deletes a human and all their tracking data.
+// Must be used instead of a raw DELETE FROM humans since there are no FK CASCADE constraints.
+func DeleteHumanAndTracking(dbx *sqlx.DB, id string) error {
+	for _, table := range trackingTables {
+		if _, err := dbx.Exec(fmt.Sprintf("DELETE FROM `%s` WHERE id = ?", table), id); err != nil {
+			return fmt.Errorf("delete %s for human %s: %w", table, id, err)
+		}
+	}
+	if _, err := dbx.Exec("DELETE FROM `profiles` WHERE id = ?", id); err != nil {
+		return fmt.Errorf("delete profiles for human %s: %w", id, err)
+	}
+	if _, err := dbx.Exec("DELETE FROM `humans` WHERE id = ?", id); err != nil {
+		return fmt.Errorf("delete human %s: %w", id, err)
+	}
+	return nil
+}
+
 // UpdateHumanEnabled sets the enabled flag on a human.
 func UpdateHumanEnabled(db *sqlx.DB, id string, enabled bool) error {
 	val := 0

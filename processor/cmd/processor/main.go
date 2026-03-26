@@ -82,10 +82,11 @@ func main() {
 	}
 	defer database.Close()
 
-	// Database migrations: adopt existing Knex DB if needed, then run pending migrations
+	// Database migrations: adopt existing Knex DB if needed, drop FK constraints, run pending
 	if err := db.AdoptExistingDatabase(database.DB); err != nil {
 		log.Fatalf("Failed to adopt database: %s", err)
 	}
+	db.DropForeignKeys(database.DB)
 	if err := db.RunMigrations(database.DB); err != nil {
 		log.Fatalf("Failed to run migrations: %s", err)
 	}
