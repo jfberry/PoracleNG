@@ -8,20 +8,14 @@
 #   4. Set environment variables:
 #        export CROWDIN_PROJECT_ID="your-project-id"
 #        export CROWDIN_PERSONAL_TOKEN="your-token"
-#   5. Install CLI: npm install -g @crowdin/cli
-#   6. Upload sources: crowdin upload sources
-#   7. Download translations: crowdin download
+#   5. Upload sources: npx @crowdin/cli upload sources --branch main
+#   6. Upload translations: npx @crowdin/cli upload translations --branch main --auto-approve-imported
+#   7. Download translations: npx @crowdin/cli download --branch main
 #
 # GitHub integration (recommended):
 #   - Install the Crowdin GitHub App on the repo
 #   - Crowdin will automatically create PRs when translations are updated
 #   - Configure the integration in Crowdin: Project Settings → Integrations → GitHub
-#   - Set the branch to "l10n_main" (Crowdin's default PR branch)
-#
-# Adding a new source file:
-#   - Add a new entry under `files:` below
-#   - Run `crowdin upload sources` to push it
-#   - Translators will see the new strings in the Crowdin UI
 
 project_id_env: CROWDIN_PROJECT_ID
 api_token_env: CROWDIN_PERSONAL_TOKEN
@@ -31,3 +25,12 @@ files:
   - source: /processor/internal/i18n/locale/en.json
     translation: /processor/internal/i18n/locale/%locale%.json
     type: json
+    languages_mapping:
+      locale:
+        de: "de"
+        fr: "fr"
+        it: "it"
+        "no": "nb-no"
+        pl: "pl"
+        ru: "ru"
+        sv-SE: "se"
