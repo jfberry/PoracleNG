@@ -27,12 +27,7 @@ project_id_env: CROWDIN_PROJECT_ID
 api_token_env: CROWDIN_PERSONAL_TOKEN
 
 files:
-  # Processor messages (identifier keys — new format)
+  # Processor messages (identifier keys)
   - source: /processor/internal/i18n/locale/en.json
     translation: /processor/internal/i18n/locale/%locale%.json
-    type: json
-
-  # Alerter messages (English-as-key — legacy format, will migrate to identifier keys)
-  - source: /alerter/locale/en.json
-    translation: /alerter/locale/%locale%.json
     type: json
