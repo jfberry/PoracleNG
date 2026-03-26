@@ -1,3 +1,6 @@
+-- Set database default charset for new installs (existing Knex databases skip this migration)
+ALTER DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `humans` (
   `id` varchar(255) NOT NULL,
   `type` varchar(255) NOT NULL,
@@ -17,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `humans` (
   `notes` varchar(255) NOT NULL DEFAULT '',
   `blocked_alerts` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `profiles` (
   `uid` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -31,7 +34,7 @@ CREATE TABLE IF NOT EXISTS `profiles` (
   PRIMARY KEY (`uid`),
   UNIQUE KEY `profile_unique` (`id`,`profile_no`),
   CONSTRAINT `profiles_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `monsters` (
   `id` varchar(255) NOT NULL,
@@ -73,7 +76,7 @@ CREATE TABLE IF NOT EXISTS `monsters` (
   KEY `monsters_pvp_ranking_league_pokemon_id_min_iv_index` (`pvp_ranking_league`,`pokemon_id`,`min_iv`),
   KEY `monsters_pvp_ranking_league_pokemon_id_pvp_ranking_worst_index` (`pvp_ranking_league`,`pokemon_id`,`pvp_ranking_worst`),
   CONSTRAINT `monsters_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `raid` (
   `id` varchar(255) NOT NULL,
@@ -95,7 +98,7 @@ CREATE TABLE IF NOT EXISTS `raid` (
   PRIMARY KEY (`uid`),
   KEY `raid_id_foreign` (`id`),
   CONSTRAINT `raid_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `egg` (
   `id` varchar(255) NOT NULL,
@@ -113,7 +116,7 @@ CREATE TABLE IF NOT EXISTS `egg` (
   PRIMARY KEY (`uid`),
   KEY `egg_id_foreign` (`id`),
   CONSTRAINT `egg_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `quest` (
   `id` varchar(255) NOT NULL,
@@ -131,7 +134,7 @@ CREATE TABLE IF NOT EXISTS `quest` (
   PRIMARY KEY (`uid`),
   KEY `quest_id_foreign` (`id`),
   CONSTRAINT `quest_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `invasion` (
   `id` varchar(255) NOT NULL,
@@ -146,7 +149,7 @@ CREATE TABLE IF NOT EXISTS `invasion` (
   PRIMARY KEY (`uid`),
   UNIQUE KEY `invasion_tracking` (`id`,`profile_no`,`gender`,`grunt_type`),
   CONSTRAINT `invasion_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `lures` (
   `uid` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -160,7 +163,7 @@ CREATE TABLE IF NOT EXISTS `lures` (
   PRIMARY KEY (`uid`),
   UNIQUE KEY `lure_tracking` (`id`,`profile_no`,`lure_id`),
   CONSTRAINT `lures_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `nests` (
   `uid` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -176,7 +179,7 @@ CREATE TABLE IF NOT EXISTS `nests` (
   PRIMARY KEY (`uid`),
   KEY `nests_id_foreign` (`id`),
   CONSTRAINT `nests_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `gym` (
   `uid` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -193,7 +196,7 @@ CREATE TABLE IF NOT EXISTS `gym` (
   PRIMARY KEY (`uid`),
   KEY `gym_id_foreign` (`id`),
   CONSTRAINT `gym_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `forts` (
   `uid` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -208,7 +211,7 @@ CREATE TABLE IF NOT EXISTS `forts` (
   PRIMARY KEY (`uid`),
   KEY `forts_id_foreign` (`id`),
   CONSTRAINT `forts_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS `weather` (
   `id` varchar(255) NOT NULL,
@@ -222,4 +225,4 @@ CREATE TABLE IF NOT EXISTS `weather` (
   PRIMARY KEY (`uid`),
   UNIQUE KEY `weather_tracking` (`id`,`profile_no`,`condition`,`cell`),
   CONSTRAINT `weather_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB;
