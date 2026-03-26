@@ -5,46 +5,82 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
-// Grunt represents a Team Rocket grunt type from the raw masterfile.
+// Grunt represents a Team Rocket grunt type parsed from the classic.json format.
 type Grunt struct {
-	Type         string
-	Gender       int
-	Name         string
-	Active       bool
-	FirstReward  bool
-	SecondReward bool
-	ThirdReward  bool
-	Encounters   []GruntEncounterEntry
+	ID         int
+	Template   string              // e.g. "CHARACTER_GRASS_GRUNT_MALE"
+	Gender     int                 // 1=male, 2=female
+	Boss       bool                // true for leaders (Giovanni, executives)
+	TypeID     int                 // pokemon type ID (12=Grass, 7=Bug, etc.) — 0 if untyped
+	Active     bool                // whether this grunt type is currently active
+	Team       [3][]GruntEncounterEntry // team[0]=slot 1, [1]=slot 2, [2]=slot 3
+	Rewards    []int               // reward-eligible slot indices (e.g. [0,1,2])
+	CategoryID int                 // derived: character_category_{id} translation key
 }
 
 // GruntEncounterEntry holds a pokemon in a grunt encounter slot.
 type GruntEncounterEntry struct {
-	ID       int    `json:"id"`
-	FormID   int    `json:"formId"`
-	Position string `json:"position"` // "first", "second", "third"
+	ID     int `json:"id"`
+	FormID int `json:"formId"`
 }
 
-// EncountersByPosition returns encounters filtered by position.
-func (g *Grunt) EncountersByPosition(position string) []GruntEncounterEntry {
-	var result []GruntEncounterEntry
-	for _, e := range g.Encounters {
-		if e.Position == position {
-			result = append(result, e)
+// HasRewardSlot returns true if the given slot index is reward-eligible.
+func (g *Grunt) HasRewardSlot(slot int) bool {
+	for _, r := range g.Rewards {
+		if r == slot {
+			return true
 		}
 	}
-	return result
+	return false
 }
 
-// LoadGrunts parses the raw masterfile invasions.json.
+// CategoryKey returns the i18n translation key for the grunt category.
+func (g *Grunt) CategoryKey() string {
+	return fmt.Sprintf("character_category_%d", g.CategoryID)
+}
+
+// TypeKey returns the i18n translation key for the grunt's pokemon type.
+// Returns "" if the grunt has no type (e.g. Giovanni).
+func (g *Grunt) TypeKey() string {
+	if g.TypeID == 0 {
+		return ""
+	}
+	return fmt.Sprintf("poke_type_%d", g.TypeID)
+}
+
+// categoryFromTemplate derives the category ID from the character template string.
+func categoryFromTemplate(template string) int {
+	switch {
+	case template == "CHARACTER_GIOVANNI":
+		return 6
+	case strings.HasPrefix(template, "CHARACTER_EXECUTIVE_ARLO"):
+		return 3
+	case strings.HasPrefix(template, "CHARACTER_EXECUTIVE_CLIFF"):
+		return 4
+	case strings.HasPrefix(template, "CHARACTER_EXECUTIVE_SIERRA"):
+		return 5
+	case strings.Contains(template, "GRUNT"):
+		return 2
+	case template == "CHARACTER_BLANCHE",
+		template == "CHARACTER_CANDELA",
+		template == "CHARACTER_SPARK":
+		return 1
+	default:
+		return 0
+	}
+}
+
+// LoadGrunts parses the classic.json invasions format.
 func LoadGrunts(path string) (map[int]*Grunt, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 
-	var raw map[string]rawGrunt
+	var raw map[string]rawClassicGrunt
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
@@ -56,28 +92,57 @@ func LoadGrunts(path string) (map[int]*Grunt, error) {
 			continue
 		}
 
-		grunts[id] = &Grunt{
-			Type:         g.Type,
-			Gender:       g.Gender,
-			Name:         g.Grunt,
-			Active:       g.Active,
-			FirstReward:  g.FirstReward,
-			SecondReward: g.SecondReward,
-			ThirdReward:  g.ThirdReward,
-			Encounters:   g.Encounters,
+		grunt := &Grunt{
+			ID:         id,
+			Template:   g.Character.Template,
+			Gender:     g.Character.Gender,
+			Boss:       g.Character.Boss,
+			TypeID:     g.Character.Type.ID,
+			Active:     g.Active,
+			Rewards:    g.Lineup.Rewards,
+			CategoryID: categoryFromTemplate(g.Character.Template),
 		}
+
+		// Parse team slots (up to 3)
+		for i, slot := range g.Lineup.Team {
+			if i >= 3 {
+				break
+			}
+			entries := make([]GruntEncounterEntry, len(slot))
+			for j, enc := range slot {
+				entries[j] = GruntEncounterEntry{
+					ID:     enc.ID,
+					FormID: enc.Form,
+				}
+			}
+			grunt.Team[i] = entries
+		}
+
+		grunts[id] = grunt
 	}
 
 	return grunts, nil
 }
 
-type rawGrunt struct {
-	Type         string                `json:"type"`
-	Gender       int                   `json:"gender"`
-	Grunt        string                `json:"grunt"`
-	Active       bool                  `json:"active"`
-	FirstReward  bool                  `json:"firstReward"`
-	SecondReward bool                  `json:"secondReward"`
-	ThirdReward  bool                  `json:"thirdReward"`
-	Encounters   []GruntEncounterEntry `json:"encounters"`
+type rawClassicGrunt struct {
+	Active    bool `json:"active"`
+	Character struct {
+		Template string `json:"template"`
+		Gender   int    `json:"gender"`
+		Boss     bool   `json:"boss"`
+		Type     struct {
+			ID   int    `json:"id"`
+			Type string `json:"type"`
+		} `json:"type"`
+	} `json:"character"`
+	Lineup struct {
+		Rewards []int            `json:"rewards"`
+		Team    [][]rawEncounter `json:"team"`
+	} `json:"lineup"`
+}
+
+type rawEncounter struct {
+	ID       int    `json:"id"`
+	Form     int    `json:"form"`
+	Template string `json:"template"`
 }

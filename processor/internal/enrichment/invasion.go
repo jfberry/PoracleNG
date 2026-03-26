@@ -1,7 +1,12 @@
 package enrichment
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
@@ -68,17 +73,33 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	if e.GameData != nil {
 		grunt := e.GameData.GetGrunt(gruntTypeID)
 		if grunt != nil {
-			m["gruntType"] = grunt.Type
+			m["gruntTypeID"] = grunt.TypeID
 			m["gruntGender"] = grunt.Gender
 
+			// Type color and emoji key via TypeInfo (keyed by numeric type ID)
+			if grunt.TypeID > 0 {
+				if typeInfo, ok := e.GameData.Types[grunt.TypeID]; ok {
+					m["gruntTypeColor"] = typeInfo.Color
+					m["gruntTypeEmojiKey"] = typeInfo.Emoji
+				}
+			}
+
 			// Reward pokemon IDs for first slot
-			firstRewards := grunt.EncountersByPosition("first")
-			if len(firstRewards) > 0 {
-				rewardIDs := make([]map[string]int, len(firstRewards))
-				for i, r := range firstRewards {
+			if len(grunt.Team[0]) > 0 {
+				rewardIDs := make([]map[string]int, len(grunt.Team[0]))
+				for i, r := range grunt.Team[0] {
 					rewardIDs[i] = map[string]int{"pokemon_id": r.ID, "form": r.FormID}
 				}
-				m["gruntRewards"] = rewardIDs
+				m["gruntRewardIDs"] = rewardIDs
+			}
+		}
+
+		// Event invasions (gruntTypeID == 0 && displayType >= 7) use PokestopEvent data
+		if gruntTypeID == 0 && displayType >= 7 {
+			if eventInfo, ok := e.GameData.Util.PokestopEvent[displayType]; ok {
+				m["gruntTypeID"] = 0
+				m["gruntTypeColor"] = eventInfo.Color
+				m["gruntTypeEmojiKey"] = eventInfo.Emoji
 			}
 		}
 	}
@@ -110,9 +131,86 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 	// Grunt name
 	grunt := e.GameData.GetGrunt(gruntTypeID)
 	if grunt != nil {
-		m["gruntName"] = tr.T(grunt.Name)
-		m["gruntTypeName"] = tr.T(grunt.Type)
+		m["gruntName"] = tr.T(grunt.CategoryKey())
+		if typeKey := grunt.TypeKey(); typeKey != "" {
+			m["gruntTypeName"] = tr.T(typeKey)
+		} else {
+			m["gruntTypeName"] = ""
+		}
+	}
+
+	// Gender name and emoji (uses shared helper for consistent fallbacks)
+	addGenderFields(m, gd, tr, toInt(base["gruntGender"]))
+
+	// Build gruntRewardsList with translated pokemon names
+	if grunt != nil {
+		type rewardSlot struct {
+			chance     int
+			encounters []gamedata.GruntEncounterEntry
+		}
+
+		var slots []rewardSlot
+
+		if grunt.HasRewardSlot(1) && len(grunt.Team[1]) > 0 {
+			slots = append(slots, rewardSlot{chance: 85, encounters: grunt.Team[0]})
+			slots = append(slots, rewardSlot{chance: 15, encounters: grunt.Team[1]})
+		}
+
+		if len(slots) == 0 && grunt.HasRewardSlot(2) && len(grunt.Team[2]) > 0 {
+			slots = append(slots, rewardSlot{chance: 100, encounters: grunt.Team[2]})
+		}
+
+		if len(slots) == 0 && len(grunt.Team[0]) > 0 {
+			slots = append(slots, rewardSlot{chance: 100, encounters: grunt.Team[0]})
+		}
+
+		if len(slots) > 0 {
+			// Build object with first/second keys (matching DTS template expectations)
+			slotNames := []string{"first", "second", "third"}
+			rewardsList := make(map[string]any, len(slots))
+			var rewardsTextParts []string
+
+			for i, slot := range slots {
+				monsters := e.translateEncounterSlot(slot.encounters, gd, tr)
+				rewardsList[slotNames[i]] = map[string]any{
+					"chance":   slot.chance,
+					"monsters": monsters,
+				}
+
+				// Build flat text
+				names := make([]string, len(monsters))
+				for j, mon := range monsters {
+					names[j], _ = mon["fullName"].(string)
+				}
+				joined := strings.Join(names, ", ")
+				if len(slots) > 1 {
+					rewardsTextParts = append(rewardsTextParts, fmt.Sprintf("%d%%: %s", slot.chance, joined))
+				} else {
+					rewardsTextParts = append(rewardsTextParts, joined)
+				}
+			}
+
+			m["gruntRewardsList"] = rewardsList
+			m["gruntRewards"] = strings.Join(rewardsTextParts, "\\n")
+		}
 	}
 
 	return m
+}
+
+// translateEncounterSlot translates a slice of grunt encounter entries into enrichment maps.
+func (e *Enricher) translateEncounterSlot(entries []gamedata.GruntEncounterEntry, gd *gamedata.GameData, tr *i18n.Translator) []map[string]any {
+	result := make([]map[string]any, len(entries))
+	for i, enc := range entries {
+		nameInfo := make(map[string]any)
+		TranslateMonsterNames(nameInfo, gd, tr, enc.ID, enc.FormID, 0)
+		result[i] = map[string]any{
+			"id":       enc.ID,
+			"formId":   enc.FormID,
+			"name":     nameInfo["name"],
+			"formName": nameInfo["formName"],
+			"fullName": nameInfo["fullName"],
+		}
+	}
+	return result
 }

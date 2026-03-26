@@ -1,8 +1,3 @@
-//
-// Quest controller getReward and getQuest function inspired from PMSF
-//
-// ....because it is smartly done there!!
-
 const Controller = require('./controller')
 const { log } = require('../lib/logger')
 
@@ -15,26 +10,24 @@ class Quest extends Controller {
 			const logReference = data.pokestop_id
 
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
-			data.appleMapUrl = `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
-			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
+
+			// Map URLs are pre-computed by the Go processor enrichment
+			data.googleMapUrl = data.googleMapUrl || `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
+			data.appleMapUrl = data.appleMapUrl || `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
+			data.wazeMapUrl = data.wazeMapUrl || `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
 			if (this.config.general.rdmURL) {
-				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@pokestop/${data.pokestop_id}`
+				data.rdmUrl = data.rdmUrl || `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@pokestop/${data.pokestop_id}`
 			}
 			if (this.config.general.reactMapURL) {
-				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/pokestops/${data.pokestop_id}`
+				data.reactMapUrl = data.reactMapUrl || `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/pokestops/${data.pokestop_id}`
 			}
 			if (this.config.general.rocketMadURL) {
-				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
+				data.rocketMadUrl = data.rocketMadUrl || `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
 			}
 			data.intersection = await this.obtainIntersection(data)
-			// disappearTime is pre-computed by the Go processor
 			data.applemap = data.appleMapUrl // deprecated
 			data.mapurl = data.googleMapUrl // deprecated
 			data.disTime = data.disappearTime // deprecated
-			// tth is pre-computed by the Go processor
-			data.imgUrl = ''
-			data.stickerUrl = ''
 
 			if (data.pokestop_name) {
 				data.pokestop_name = this.escapeJsonString(data.pokestop_name)
@@ -48,18 +41,6 @@ class Quest extends Controller {
 				return []
 			}
 
-			data.questStringEng = await this.getQuest(data, 'en')
-			data.questString = await this.getQuest(data, this.config.general.locale)
-			data.rewardData = await this.getReward(logReference, data)
-			this.log.debug(`${logReference} [matched] Quest: data.questString: ${data.questString}, data.rewardData: ${JSON.stringify(data.rewardData)}`)
-			data.dustAmount = data.rewardData.dustAmount
-			data.isShiny = data.rewardData.monsters.length > 0 ? data.rewardData.monsters[0].shiny : 0
-			data.shinyPossible = data.rewardData.monsters.length > 0 ? this.shinyPossible.isShinyPossible(data.rewardData.monsters[0].pokemonId, data.rewardData.monsters[0].formId) : false
-
-			data.itemAmount = data.rewardData.itemAmount
-			data.energyAmount = data.rewardData.energyMonsters.length > 0 ? data.rewardData.energyMonsters[0].amount : 0 // deprecated
-			data.candyAmount = data.rewardData.candy.length > 0 ? data.rewardData.candy[0].amount : 0 // deprecated
-
 			// Use processor-provided matched areas
 			data.matchedAreas = matchedAreas || []
 			data.matched = data.matchedAreas.map((x) => (x.name || x).toLowerCase())
@@ -72,11 +53,7 @@ class Quest extends Controller {
 				return []
 			}
 
-			data.imgUrl = 'https://s3.amazonaws.com/com.cartodb.users-assets.production/production/jonmrich/assets/20150203194453red_pin.png'
-			data.stickerUrl = ''
-
 			// Icon URLs are pre-computed by the processor enrichment based on reward type
-
 			data.imgUrl = data.imgUrl || this.config.fallbacks?.imgUrlPokestop
 			data.imgUrlAlt = data.imgUrlAlt || this.config.fallbacks?.imgUrlPokestop
 
@@ -85,121 +62,45 @@ class Quest extends Controller {
 			// Static map is pre-computed by the processor enrichment
 			data.staticmap = data.staticMap // deprecated alias
 
-			if (data.rewardData.monsters.length > 0) {
-				data.baseStats = Object.values(this.GameData.monsters).some((mon) => data.rewardData.monsters[0].pokemonId === mon.id && data.rewardData.monsters[0].formId === mon.form.id) ? Object.values(this.GameData.monsters).filter((mon) => data.rewardData.monsters[0].pokemonId === mon.id && data.rewardData.monsters[0].formId === mon.form.id)[0].stats : ''
-				if (!data.baseStats) data.baseStats = Object.values(this.GameData.monsters).some((mon) => data.rewardData.monsters[0].pokemonId === mon.id && !mon.form.id) ? Object.values(this.GameData.monsters).filter((mon) => data.rewardData.monsters[0].pokemonId === mon.id && !mon.form.id)[0].stats : ''
-			}
-
 			// Future event fields are pre-computed by the Go processor enrichment
 
 			for (const cares of whoCares) {
-				this.log.debug(`${logReference}: [matched] Creating quest alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
-
-				this.log.verbose(`${logReference}: [matched] Creating quest alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
+				this.log.debug(`${logReference}: [matched] Creating quest alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`)
 
 				const language = cares.language || this.config.general.locale
 				const translator = this.translatorFactory.Translator(language)
 				let [platform] = cares.type.split(':')
 				if (platform === 'webhook') platform = 'discord'
-				if (language !== this.config.general.locale) {
-					data.questString = await this.getQuest(data, language)
+
+				// Per-language enrichment from processor — all quest/reward data pre-translated
+				const langE = this.getLanguageEnrichment(data, language)
+
+				// Quest title and reward data from processor enrichment
+				data.questString = langE.questString || ''
+				data.questStringEng = langE.questStringEng || ''
+				data.monsterNames = langE.monsterNames || ''
+				data.monsterNamesEng = langE.monsterNamesEng || ''
+				data.itemNames = langE.itemNames || ''
+				data.itemNamesEng = langE.itemNamesEng || ''
+				data.energyMonstersNames = langE.energyMonstersNames || ''
+				data.energyMonstersNamesEng = langE.energyMonstersNamesEng || ''
+				data.candyMonstersNames = langE.candyMonstersNames || ''
+				data.candyMonstersNamesEng = langE.candyMonstersNamesEng || ''
+				data.rewardString = langE.rewardString || ''
+				data.rewardStringEng = langE.rewardStringEng || ''
+
+				// Structured reward data from processor enrichment
+				if (langE.monsterList) data.monsterList = langE.monsterList
+				if (langE.dustText) data.dustText = langE.dustText
+
+				// Shiny emoji — resolve from processor-provided key
+				data.shinyPossibleEmoji = ''
+				if (langE.shinyPossibleEmojiKey) {
+					data.shinyPossibleEmoji = translator.translate(this.emojiLookup.lookup(langE.shinyPossibleEmojiKey, platform))
 				}
-
-				for (const monster of data.rewardData.monsters) {
-					let monsterName
-					let formName
-
-					const mon = Object.values(this.GameData.monsters).find((m) => m.id === monster.pokemonId && m.form.id === monster.formId)
-					if (!mon) {
-						monsterName = `${translator.translate('Unknown monster')} ${monster.pokemonId}`
-						formName = `${monster.formId}`
-					} else {
-						monsterName = mon.name
-						formName = mon.form.name
-						if (formName === undefined || formName === 'Normal') formName = ''
-					}
-
-					monster.nameEng = monsterName
-					monster.formEng = formName
-					monster.name = translator.translate(monsterName)
-					monster.form = translator.translate(formName)
-					monster.fullNameEng = monster.nameEng.concat(monster.formEng ? ' ' : '', monster.formEng)
-					monster.fullName = monster.name.concat(monster.form ? ' ' : '', monster.form)
-				}
-
-				data.monsterNames = data.rewardData.monsters.map((mon) => mon.fullName).join(', ')
-				data.monsterNamesEng = data.rewardData.monsters.map((mon) => mon.fullNameEng).join(', ')
-
-				for (const item of data.rewardData.items) {
-					const i = this.GameData.items[item.id]
-					let itemName
-					if (!i) {
-						itemName = `${translator.translate('Unknown item')} ${item.id}`
-					} else {
-						itemName = i.name
-					}
-					item.nameEng = itemName
-					item.name = translator.translate(itemName)
-				}
-
-				data.itemNames = data.rewardData.items.map((item) => `${item.amount} ${item.name}`).join(', ')
-				data.itemNamesEng = data.rewardData.items.map((item) => `${item.amount} ${item.nameEng}`).join(', ')
-
-				for (const monster of data.rewardData.energyMonsters) {
-					let monsterName
-
-					const mon = Object.values(this.GameData.monsters).find((m) => m.id === monster.pokemonId && !m.form.id)
-					if (!mon) {
-						monsterName = `${translator.translate('Unknown monster')} ${monster.pokemonId}`
-					} else {
-						monsterName = mon.name
-					}
-
-					monster.nameEng = monsterName
-					monster.name = translator.translate(monsterName)
-				}
-
-				data.energyMonstersNames = data.rewardData.energyMonsters.map((item) => `${item.amount} ${item.name} ${translator.translate('Mega Energy')}`).join(', ')
-				data.energyMonstersNamesEng = data.rewardData.energyMonsters.map((item) => `${item.amount} ${item.nameEng} Mega Energy`).join(', ')
-
-				for (const monster of data.rewardData.candy) {
-					let monsterName
-
-					const mon = Object.values(this.GameData.monsters).find((m) => m.id === monster.pokemonId && !m.form.id)
-					if (!mon) {
-						monsterName = `${translator.translate('Unknown monster')} ${monster.pokemonId}`
-					} else {
-						monsterName = mon.name
-					}
-
-					monster.nameEng = monsterName
-					monster.name = translator.translate(monsterName)
-				}
-
-				data.candyMonstersNames = data.rewardData.candy.map((item) => `${item.amount} ${item.name}  ${translator.translate('Candy')}`).join(', ')
-				data.candyMonstersNamesEng = data.rewardData.candy.map((item) => `${item.amount} ${item.nameEng} Candy`).join(', ')
-
-				data.rewardString = [
-					data.monsterNames,
-					data.dustAmount > 0 ? `${data.dustAmount} ${translator.translate('Stardust')}` : '',
-					data.itemNames,
-					data.energyMonstersNames,
-					data.candyMonstersNames,
-				].filter((x) => x).join(', ')
-
-				data.rewardStringEng = [
-					data.monsterNamesEng,
-					data.dustAmount > 0 ? `${data.dustAmount} Stardust` : '',
-					data.itemNamesEng,
-					data.energyMonstersNamesEng,
-					data.candyMonstersNamesEng,
-				].filter((x) => x).join(', ')
-
-				data.shinyPossibleEmoji = data.shinyPossible ? translator.translate(this.emojiLookup.lookup('shiny', platform)) : ''
 
 				const view = {
 					...data,
-					...data.rewardData,
 					lat: +data.latitude.toFixed(4),
 					lon: +data.longitude.toFixed(4),
 					time: data.disappearTime,
@@ -233,64 +134,6 @@ class Quest extends Controller {
 			return jobs
 		} catch (e) {
 			this.log.error(`${data.pokestop_id}: [matched] Can't seem to handle quest: `, e, data)
-		}
-	}
-
-	async getQuest(item, language) {
-		let str
-		language = !this.GameData.translations[language] ? 'en' : language
-		const questinfo = `quest_title_${item.title.toLowerCase()}`
-		const questTitle = this.GameData.translations[language].questTitles
-		if (item.title) {
-			try {
-				str = questTitle[questinfo]
-				if (str.toLowerCase().includes('{{amount_0}}') && item.target) {
-					str = str.replace('{{amount_0}}', item.target)
-				}
-			} catch {
-				str = this.GameData.translations[language].questTypes.quest_0
-				this.log.warn(`Missing Task for ${questinfo}`)
-			}
-		}
-		return str
-	}
-
-	// eslint-disable-next-line class-methods-use-this
-	async getReward(logReference, item) {
-		const monsters = []
-		const items = []
-		let dustAmount = 0
-		const energyMonsters = []
-		const candy = []
-
-		item.rewards.forEach((reward) => {
-			if (reward.type === 2) {
-				items.push({
-					id: reward.info.item_id.toString(),
-					amount: reward.info.amount,
-				})
-			} else if (reward.type === 3) {
-				dustAmount = reward.info.amount
-			} else if (reward.type === 4) {
-				candy.push({
-					pokemonId: reward.info.pokemon_id,
-					amount: reward.info.amount,
-				})
-			} else if (reward.type === 7) {
-				monsters.push({
-					pokemonId: reward.info.pokemon_id,
-					formId: reward.info.form_id ?? 0,
-					shiny: reward.info.shiny ?? false,
-				})
-			} else if (reward.type === 12) {
-				energyMonsters.push({
-					pokemonId: reward.info.pokemon_id,
-					amount: reward.info.amount,
-				})
-			}
-		})
-		return {
-			items, dustAmount, energyMonsters, candy, monsters,
 		}
 	}
 }

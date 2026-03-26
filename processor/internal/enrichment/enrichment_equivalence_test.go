@@ -117,9 +117,9 @@ type gymExpected struct {
 
 type invasionExpected struct {
 	GruntTypeID int              `json:"gruntTypeId"`
-	GruntName   string           `json:"gruntName"`
-	GruntType   string           `json:"gruntType"`
 	GruntGender int              `json:"gruntGender"`
+	TypeID      int              `json:"typeId"`
+	CategoryID  int              `json:"categoryId"`
 	Encounters  []invasionEncExp `json:"encounters"`
 }
 
@@ -598,11 +598,11 @@ func TestInvasionEnrichmentEquivalence(t *testing.T) {
 			if grunt == nil {
 				t.Fatalf("grunt type %d not found in GameData", exp.GruntTypeID)
 			}
-			if grunt.Type != exp.GruntType {
-				t.Errorf("gruntType: Go=%q JS=%q", grunt.Type, exp.GruntType)
+			if grunt.TypeID != exp.TypeID {
+				t.Errorf("typeID: Go=%d expected=%d", grunt.TypeID, exp.TypeID)
 			}
-			if grunt.Name != exp.GruntName {
-				t.Errorf("gruntName: Go=%q JS=%q", grunt.Name, exp.GruntName)
+			if grunt.CategoryID != exp.CategoryID {
+				t.Errorf("categoryID: Go=%d expected=%d", grunt.CategoryID, exp.CategoryID)
 			}
 			if grunt.Gender != exp.GruntGender {
 				t.Errorf("gruntGender: Go=%d JS=%d", grunt.Gender, exp.GruntGender)

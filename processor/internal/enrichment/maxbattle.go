@@ -21,7 +21,16 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	if battleEnd > 0 {
 		m["disappearTime"] = geo.FormatTime(battleEnd, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(battleEnd)
+
+		// Weather change and forecast (same as raid)
+		weatherChangeTS := battleEnd - (battleEnd % 3600)
+		m["weatherChangeTime"] = geo.FormatTime(weatherChangeTS, tz, e.TimeLayout)
 	}
+
+	forecast := e.GetForecast(cellID)
+	m["weatherForecastCurrent"] = forecast.Current
+	m["weatherForecastNext"] = forecast.Next
+	m["nextHourTimestamp"] = tracker.GetNextHourTimestamp()
 
 	// Icon URLs
 	if mb != nil && mb.BattlePokemonID > 0 {

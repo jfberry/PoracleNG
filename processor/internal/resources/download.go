@@ -15,7 +15,7 @@ import (
 const (
 	gameMasterURL    = "https://raw.githubusercontent.com/WatWowMap/Masterfile-Generator/master/master-latest-poracle-v2.json"
 	rawMasterURL     = "https://raw.githubusercontent.com/WatWowMap/Masterfile-Generator/master/master-latest-raw.json"
-	gruntsURL        = "https://raw.githubusercontent.com/WatWowMap/event-info/main/grunts/formatted.json"
+	gruntsURL        = "https://raw.githubusercontent.com/WatWowMap/event-info/main/grunts/classic.json"
 	localeIndex      = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/index.json"
 	localeBaseURL    = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/static/enRefMerged/"
 	localesBaseURL   = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/static/locales/"
@@ -39,8 +39,10 @@ func Download(baseDir string) error {
 	// Poracle-v2 data + enRefMerged locales: used by the alerter only.
 	// Remove these once the alerter is fully migrated to use processor enrichment.
 	downloadGameMaster(dataDir)
-	downloadGrunts(dataDir)
 	downloadLocales(localeDir)
+
+	// Grunt data (classic.json format) saved to rawdata/ for the processor.
+	downloadGrunts(rawDir)
 
 	// Raw masterfile + identifier-key locales: used by the processor.
 	downloadRawMaster(rawDir)
@@ -91,6 +93,11 @@ func downloadRawMaster(rawDir string) {
 	}
 
 	for category, data := range master {
+		// Skip invasions — we use classic.json from downloadGrunts instead
+		// of the raw masterfile's formatted invasion data
+		if category == "invasions" {
+			continue
+		}
 		path := filepath.Join(rawDir, category+".json")
 		if err := os.WriteFile(path, data, 0o644); err != nil {
 			log.Warnf("[Resources] Could not write %s: %s", path, err)
@@ -100,8 +107,8 @@ func downloadRawMaster(rawDir string) {
 	log.Infof("[Resources] Raw Game Master saved (%d categories)", len(master))
 }
 
-func downloadGrunts(dataDir string) {
-	log.Info("[Resources] Fetching latest invasions...")
+func downloadGrunts(rawDir string) {
+	log.Info("[Resources] Fetching latest invasions (classic.json)...")
 
 	body, err := httpGet(gruntsURL)
 	if err != nil {
@@ -109,13 +116,13 @@ func downloadGrunts(dataDir string) {
 		return
 	}
 
-	path := filepath.Join(dataDir, "grunts.json")
+	path := filepath.Join(rawDir, "invasions.json")
 	if err := os.WriteFile(path, body, 0o644); err != nil {
 		log.Warnf("[Resources] Could not write %s: %s", path, err)
 		return
 	}
 
-	log.Info("[Resources] Grunts saved")
+	log.Info("[Resources] Grunts saved (classic.json → rawdata/invasions.json)")
 }
 
 // downloadLocales fetches enRefMerged locale files (English-as-key format) for the alerter.
