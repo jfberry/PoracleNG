@@ -32,6 +32,7 @@ COPY alerter/ alerter/
 COPY --from=node-builder /build/node_modules alerter/node_modules
 
 # Shared files
+COPY resources/ resources/
 COPY config/config.example.toml config/config.example.toml
 COPY start.sh start.sh
 RUN chmod +x start.sh processor/poracle-processor
