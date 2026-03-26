@@ -21,14 +21,9 @@
   "main": "src/app.js",
   "scripts": {
     "dev": "node .",
-    "generate": "node src/util/generateData.js",
-    "koji": "node src/util/koji.js",
-    "init": "node src/init/initConfig.js",
-    "latest": "npm run generate latest && npm run koji && node .",
     "lint": "./node_modules/.bin/eslint ./src --fix",
-    "migrateV3": "node src/init/migrateV3.js",
     "prepare": "husky",
-    "start": "npm run generate && npm run koji && node .",
+    "start": "node .",
     "test": "node test/test",
     "test:commands": "mocha src/lib/poracleMessage/commands/__tests__/*.test.js --timeout 10000"
   },

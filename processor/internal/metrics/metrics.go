@@ -187,4 +187,15 @@ var (
 		Name: "poracle_processor_build_info",
 		Help: "Build information",
 	}, []string{"version", "commit", "date"})
+
+	// API metrics
+	APIRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_processor_api_request_seconds",
+		Help:    "API request duration",
+		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5},
+	}, []string{"method", "endpoint"})
+	APIRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_processor_api_requests_total",
+		Help: "API requests by method, endpoint, and status",
+	}, []string{"method", "endpoint", "status"})
 )

@@ -102,6 +102,11 @@ func (s *RDMScanner) GetGymName(gymID string) (string, error) {
 	return name, err
 }
 
+// GetStationName returns empty for RDM (no station table).
+func (s *RDMScanner) GetStationName(stationID string) (string, error) {
+	return "", nil
+}
+
 // Close closes the underlying database connection.
 func (s *RDMScanner) Close() error {
 	return s.db.Close()

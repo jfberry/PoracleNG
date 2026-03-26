@@ -178,13 +178,21 @@ func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook
 	}
 	enrichment, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
 
+	var perLang map[string]map[string]any
+	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+		perLang = map[string]map[string]any{
+			target.Language: ps.enricher.QuestTranslate(enrichment, &quest, rewards, target.Language),
+		}
+	}
+
 	ps.sender.Send(webhook.OutboundPayload{
-		Type:         "quest",
-		Message:      raw,
-		Enrichment:   enrichment,
-		MatchedAreas: []webhook.MatchedArea{},
-		MatchedUsers: []webhook.MatchedUser{target},
-		TilePending:  tilePending,
+		Type:                  "quest",
+		Message:               raw,
+		Enrichment:            enrichment,
+		PerLanguageEnrichment: perLang,
+		MatchedAreas:          []webhook.MatchedArea{},
+		MatchedUsers:          []webhook.MatchedUser{target},
+		TilePending:           tilePending,
 	})
 	return nil
 }
@@ -211,7 +219,7 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.GymTranslate(enrichment, teamID, 0, target.Language),
+			target.Language: ps.enricher.GymTranslate(enrichment, teamID, 0, 0, target.Language),
 		}
 	}
 

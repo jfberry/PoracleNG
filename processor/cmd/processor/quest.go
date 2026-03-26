@@ -76,13 +76,23 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 			enrichment, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
 
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
+					perLang[lang] = ps.enricher.QuestTranslate(enrichment, &quest, rewards, lang)
+				}
+			}
+
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "quest",
-				Message:      raw,
-				Enrichment:   enrichment,
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
-				TilePending:  tilePending,
+				Type:                  "quest",
+				Message:               raw,
+				Enrichment:            enrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
 			l.Debugf("Quest at %s and 0 humans cared", quest.Name)

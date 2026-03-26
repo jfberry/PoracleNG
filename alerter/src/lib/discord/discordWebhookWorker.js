@@ -122,7 +122,9 @@ class DiscordWebhookWorker {
 			}
 		}
 		try {
-			const tth = data.tth || { days: 0, hours: 0, minutes: 0, seconds: 0 }
+			const tth = data.tth || {
+				days: 0, hours: 0, minutes: 0, seconds: 0,
+			}
 			const msgDeletionMs = ((tth.days * 86400) + (tth.hours * 3600) + (tth.minutes * 60) + tth.seconds) * 1000
 
 			const logReference = data.logReference ? data.logReference : 'Unknown'

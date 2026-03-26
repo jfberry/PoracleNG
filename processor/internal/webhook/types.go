@@ -241,6 +241,10 @@ type QuestWebhook struct {
 	Name       string        `json:"pokestop_name"`
 	Latitude   float64       `json:"latitude"`
 	Longitude  float64       `json:"longitude"`
+	Title      string        `json:"title"`
+	Target     int           `json:"target"`
+	QuestType  int           `json:"type"`
+	Template   string        `json:"template"`
 	Rewards    []QuestReward `json:"rewards"`
 }
 

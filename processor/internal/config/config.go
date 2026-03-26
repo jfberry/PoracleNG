@@ -24,6 +24,7 @@ type Config struct {
 	AlertLimits    AlertLimitsConfig    `toml:"alert_limits"`
 	Alerter        AlerterConfig        `toml:"alerter"`
 	Discord        DiscordConfig        `toml:"discord"`
+	Telegram       TelegramConfig       `toml:"telegram"`
 	Geocoding      GeocodingConfig      `toml:"geocoding"`
 	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 
@@ -34,7 +35,8 @@ type Config struct {
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
-	Locale               string `toml:"locale"` // default language code (e.g. "en", "pl")
+	Locale               string `toml:"locale"`                // default language code (e.g. "en", "pl")
+	DefaultTemplateName  any    `toml:"default_template_name"` // default DTS template (typically 1 or "1")
 	RdmURL               string `toml:"rdm_url"`
 	ReactMapURL          string `toml:"react_map_url"`
 	RocketMadURL         string `toml:"rocket_mad_url"`
@@ -81,6 +83,12 @@ type AlerterConfig struct {
 type DiscordConfig struct {
 	Prefix   string   `toml:"prefix"`
 	IvColors []string `toml:"iv_colors"`
+	Admins   []string `toml:"admins"`
+}
+
+// TelegramConfig reads the [telegram] section for fields the processor needs.
+type TelegramConfig struct {
+	Admins []string `toml:"admins"`
 }
 
 // ListenAddr returns the host:port listen address.
@@ -209,8 +217,24 @@ type TuningConfig struct {
 }
 
 type AreaConfig struct {
-	Enabled         bool `toml:"enabled"`
-	StrictLocations bool `toml:"strict_locations"`
+	Enabled         bool              `toml:"enabled"`
+	StrictLocations bool              `toml:"strict_locations"`
+	Communities     []CommunityConfig `toml:"communities"`
+}
+
+// CommunityConfig represents a community entry under [[area_security.communities]].
+type CommunityConfig struct {
+	Name          string   `toml:"name"`
+	AllowedAreas  []string `toml:"allowed_areas"`
+	LocationFence []string `toml:"location_fence"`
+	Discord       struct {
+		Channels []string `toml:"channels"`
+		UserRole []string `toml:"user_role"`
+	} `toml:"discord"`
+	Telegram struct {
+		Channels []string `toml:"channels"`
+		Admins   []string `toml:"admins"`
+	} `toml:"telegram"`
 }
 
 type AlertLimitsConfig struct {

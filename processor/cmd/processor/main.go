@@ -35,6 +35,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
+	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/resources"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
@@ -132,9 +133,13 @@ func main() {
 	webhookHandler := webhook.NewHandler(proc, webhookLogger)
 	mux.Handle("/", webhookHandler)
 
-	// API endpoints (protected by x-poracle-secret when configured)
+	// API endpoints (protected by x-poracle-secret when configured, with metrics)
 	secret := cfg.Processor.APISecret
 	auth := func(h http.HandlerFunc) http.HandlerFunc { return api.RequireSecret(secret, h) }
+	// apiRoute wraps a handler with auth + instrumentation
+	apiRoute := func(endpoint string, h http.HandlerFunc) http.HandlerFunc {
+		return api.InstrumentAPI(endpoint, auth(h))
+	}
 
 	mux.HandleFunc("/api/reload", auth(api.HandleReload(func() error {
 		return state.Load(stateMgr, database)
@@ -166,7 +171,103 @@ func main() {
 	mux.HandleFunc("POST /api/geofence/overviewMap", auth(api.HandleOverviewMap(tileDeps)))
 	mux.HandleFunc("GET /api/geofence/{area}/map", auth(api.HandleGeofenceAreaMap(tileDeps)))
 
-	// Proxy unhandled /api/ requests to the alerter (tracking, config, humans, etc.)
+	// Tracking CRUD endpoints (registered after proc is created so enricher/scanner are available)
+	defaultTemplate := "1"
+	if cfg.General.DefaultTemplateName != nil {
+		defaultTemplate = fmt.Sprintf("%v", cfg.General.DefaultTemplateName)
+	}
+	trackingDeps := &api.TrackingDeps{
+		DB:           database,
+		StateMgr:     stateMgr,
+		RowText: &rowtext.Generator{
+			GD:                  proc.enricher.GameData,
+			Translations:        proc.enricher.Translations,
+			DefaultTemplateName: defaultTemplate,
+			Scanner:             proc.scanner,
+		},
+		Config:       cfg,
+		Translations: proc.enricher.Translations,
+		AlerterURL:   cfg.Processor.AlerterURL,
+		APISecret:    cfg.Processor.APISecret,
+		ReloadFunc:   proc.triggerReload,
+	}
+	// Pokemon (monster) tracking
+	mux.HandleFunc("GET /api/tracking/pokemon/{id}", apiRoute("tracking/pokemon", api.HandleGetMonster(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/pokemon/{id}", apiRoute("tracking/pokemon", api.HandleCreateMonster(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/pokemon/{id}/byUid/{uid}", apiRoute("tracking/pokemon", api.HandleDeleteMonster(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/pokemon/{id}/delete", apiRoute("tracking/pokemon", api.HandleBulkDeleteMonster(trackingDeps)))
+	mux.HandleFunc("GET /api/tracking/pokemon/refresh", auth(api.HandleReload(func() error {
+		return state.Load(stateMgr, database)
+	})))
+	// Raid tracking
+	mux.HandleFunc("GET /api/tracking/raid/{id}", apiRoute("tracking/raid", api.HandleGetRaid(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/raid/{id}", apiRoute("tracking/raid", api.HandleCreateRaid(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/raid/{id}/byUid/{uid}", apiRoute("tracking/raid", api.HandleDeleteRaid(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/raid/{id}/delete", apiRoute("tracking/raid", api.HandleBulkDeleteRaid(trackingDeps)))
+	// Egg tracking
+	mux.HandleFunc("GET /api/tracking/egg/{id}", apiRoute("tracking/egg", api.HandleGetEgg(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/egg/{id}", apiRoute("tracking/egg", api.HandleCreateEgg(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/egg/{id}/byUid/{uid}", apiRoute("tracking/egg", api.HandleDeleteEgg(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/egg/{id}/delete", apiRoute("tracking/egg", api.HandleBulkDeleteEgg(trackingDeps)))
+	// Quest tracking
+	mux.HandleFunc("GET /api/tracking/quest/{id}", apiRoute("tracking/quest", api.HandleGetQuest(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/quest/{id}", apiRoute("tracking/quest", api.HandleCreateQuest(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/quest/{id}/byUid/{uid}", apiRoute("tracking/quest", api.HandleDeleteQuest(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/quest/{id}/delete", apiRoute("tracking/quest", api.HandleBulkDeleteQuest(trackingDeps)))
+	// Invasion tracking
+	mux.HandleFunc("GET /api/tracking/invasion/{id}", apiRoute("tracking/invasion", api.HandleGetInvasion(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/invasion/{id}", apiRoute("tracking/invasion", api.HandleCreateInvasion(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/invasion/{id}/byUid/{uid}", apiRoute("tracking/invasion", api.HandleDeleteInvasion(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/invasion/{id}/delete", apiRoute("tracking/invasion", api.HandleBulkDeleteInvasion(trackingDeps)))
+	// Lure tracking
+	mux.HandleFunc("GET /api/tracking/lure/{id}", apiRoute("tracking/lure", api.HandleGetLure(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/lure/{id}", apiRoute("tracking/lure", api.HandleCreateLure(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/lure/{id}/byUid/{uid}", apiRoute("tracking/lure", api.HandleDeleteLure(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/lure/{id}/delete", apiRoute("tracking/lure", api.HandleBulkDeleteLure(trackingDeps)))
+	// Nest tracking
+	mux.HandleFunc("GET /api/tracking/nest/{id}", apiRoute("tracking/nest", api.HandleGetNest(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/nest/{id}", apiRoute("tracking/nest", api.HandleCreateNest(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/nest/{id}/byUid/{uid}", apiRoute("tracking/nest", api.HandleDeleteNest(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/nest/{id}/delete", apiRoute("tracking/nest", api.HandleBulkDeleteNest(trackingDeps)))
+	// Gym tracking
+	mux.HandleFunc("GET /api/tracking/gym/{id}", apiRoute("tracking/gym", api.HandleGetGym(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/gym/{id}", apiRoute("tracking/gym", api.HandleCreateGym(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/gym/{id}/byUid/{uid}", apiRoute("tracking/gym", api.HandleDeleteGym(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/gym/{id}/delete", apiRoute("tracking/gym", api.HandleBulkDeleteGym(trackingDeps)))
+	// Fort tracking
+	mux.HandleFunc("GET /api/tracking/fort/{id}", apiRoute("tracking/fort", api.HandleGetFort(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/fort/{id}", apiRoute("tracking/fort", api.HandleCreateFort(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/fort/{id}/byUid/{uid}", apiRoute("tracking/fort", api.HandleDeleteFort(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/fort/{id}/delete", apiRoute("tracking/fort", api.HandleBulkDeleteFort(trackingDeps)))
+	// Maxbattle tracking
+	mux.HandleFunc("GET /api/tracking/maxbattle/{id}", apiRoute("tracking/maxbattle", api.HandleGetMaxbattle(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/maxbattle/{id}", apiRoute("tracking/maxbattle", api.HandleCreateMaxbattle(trackingDeps)))
+	mux.HandleFunc("DELETE /api/tracking/maxbattle/{id}/byUid/{uid}", apiRoute("tracking/maxbattle", api.HandleDeleteMaxbattle(trackingDeps)))
+	mux.HandleFunc("POST /api/tracking/maxbattle/{id}/delete", apiRoute("tracking/maxbattle", api.HandleBulkDeleteMaxbattle(trackingDeps)))
+	// Aggregate tracking endpoints
+	mux.HandleFunc("GET /api/tracking/all/{id}", apiRoute("tracking/all", api.HandleGetAllTracking(trackingDeps)))
+	mux.HandleFunc("GET /api/tracking/allProfiles/{id}", apiRoute("tracking/allProfiles", api.HandleGetAllProfilesTracking(trackingDeps)))
+
+	// Human endpoints
+	mux.HandleFunc("GET /api/humans/one/{id}", apiRoute("humans/one", api.HandleGetOneHuman(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/start", apiRoute("humans/start", api.HandleStartHuman(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/stop", apiRoute("humans/stop", api.HandleStopHuman(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/adminDisabled", apiRoute("humans/adminDisabled", api.HandleAdminDisabled(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/switchProfile/{profile}", apiRoute("humans/switchProfile", api.HandleSwitchProfile(trackingDeps)))
+	mux.HandleFunc("GET /api/humans/{id}/checkLocation/{lat}/{lon}", apiRoute("humans/checkLocation", api.HandleCheckLocation(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/setLocation/{lat}/{lon}", apiRoute("humans/setLocation", api.HandleSetLocation(trackingDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/setAreas", apiRoute("humans/setAreas", api.HandleSetAreas(trackingDeps)))
+	mux.HandleFunc("POST /api/humans", apiRoute("humans/create", api.HandleCreateHuman(trackingDeps)))
+	mux.HandleFunc("GET /api/humans/{id}", apiRoute("humans", api.HandleGetHumanAreas(trackingDeps)))
+
+	// Profile endpoints
+	mux.HandleFunc("GET /api/profiles/{id}", apiRoute("profiles", api.HandleGetProfiles(trackingDeps)))
+	mux.HandleFunc("DELETE /api/profiles/{id}/byProfileNo/{profile_no}", apiRoute("profiles/delete", api.HandleDeleteProfile(trackingDeps)))
+	mux.HandleFunc("POST /api/profiles/{id}/add", apiRoute("profiles/add", api.HandleAddProfile(trackingDeps)))
+	mux.HandleFunc("POST /api/profiles/{id}/update", apiRoute("profiles/update", api.HandleUpdateProfile(trackingDeps)))
+	mux.HandleFunc("POST /api/profiles/{id}/copy/{from}/{to}", apiRoute("profiles/copy", api.HandleCopyProfile(trackingDeps)))
+
+	// Proxy unhandled /api/ requests to the alerter (config, humans, profiles, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
 
 	// Prometheus metrics
@@ -295,6 +396,7 @@ type ProcessorService struct {
 	activePokemon   *tracker.ActivePokemonTracker
 	pokemonTypes    *gamedata.PokemonTypes
 	enricher        *enrichment.Enricher
+	scanner         scanner.Scanner
 	rateLimiter     *ratelimit.Limiter
 	translations    *i18n.Bundle
 	alerterClient   *http.Client
@@ -523,6 +625,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		ctx:      ctx,
 		cancel:   cancel,
 		enricher:      enricher,
+		scanner:       scannerInstance,
 		alerterClient: &http.Client{Timeout: 5 * time.Second},
 		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Processor.APISecret, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
 		weather:      weatherTracker,
