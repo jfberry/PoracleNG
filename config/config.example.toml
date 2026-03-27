@@ -196,9 +196,9 @@ disable_unconfirmed_invasion = false
 
 [discord]
 enabled = true
-activity = "PoracleJS"                   # bot activity text
+activity = "PoracleNG"                   # bot activity text
 worker_status = "invisible"              # available, dnd, idle, invisible
-worker_activity = "PoracleJS Helper"
+worker_activity = "PoracleNG Helper"
 disable_auto_greetings = false           # whether to greet users who get role access
 upload_embed_images = false              # retrieve and upload images direct to discord CDN
 # check_role - check all discord users for role membership every check_role_interval hours

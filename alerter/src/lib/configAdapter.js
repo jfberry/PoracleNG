@@ -288,9 +288,9 @@ function adaptConfig(toml) {
 	// command_security keys are command names — convertKeys already handled snake→camel
 	defaults(config.discord, {
 		enabled: true,
-		activity: 'PoracleJS',
+		activity: 'PoracleNG',
 		workerStatus: 'invisible',
-		workerActivity: 'PoracleJS Helper',
+		workerActivity: 'PoracleNG Helper',
 		disableAutoGreetings: false,
 		uploadEmbedImages: false,
 		checkRole: false,
