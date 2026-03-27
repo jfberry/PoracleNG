@@ -12,11 +12,18 @@ import (
 	"strings"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
 //go:embed worldwide.yaml
 var templatesFS embed.FS
+
+// compiledRule is a pre-compiled regex replacement rule.
+type compiledRule struct {
+	re          *regexp.Regexp
+	replacement string
+}
 
 // countryEntry represents a parsed entry from worldwide.yaml.
 type countryEntry struct {
@@ -25,6 +32,10 @@ type countryEntry struct {
 	UseCountry        string     `yaml:"use_country"`
 	Replace           [][]string `yaml:"replace"`
 	PostformatReplace [][]string `yaml:"postformat_replace"`
+
+	// Pre-compiled regex rules (built at init time)
+	compiledReplace          []compiledRule
+	compiledPostformatReplace []compiledRule
 }
 
 // Formatter formats addresses using OpenCage country-specific templates.
@@ -86,6 +97,9 @@ func newFormatter() (*Formatter, error) {
 			Replace:          mapStrSlices(m, "replace"),
 			PostformatReplace: mapStrSlices(m, "postformat_replace"),
 		}
+
+		entry.compiledReplace = compileRules(entry.Replace)
+		entry.compiledPostformatReplace = compileRules(entry.PostformatReplace)
 
 		upper := strings.ToUpper(key)
 		if upper == "DEFAULT" {
@@ -161,8 +175,8 @@ func (f *Formatter) Format(components map[string]string) string {
 	}
 
 	// Apply input replace rules
-	if len(entry.Replace) > 0 {
-		components = applyReplace(components, entry.Replace)
+	if len(entry.compiledReplace) > 0 {
+		components = applyReplace(components, entry.compiledReplace)
 	}
 
 	// Render template
@@ -181,8 +195,8 @@ func (f *Formatter) Format(components map[string]string) string {
 	}
 
 	// Apply postformat replace rules
-	if len(entry.PostformatReplace) > 0 {
-		result = applyPostformatReplace(result, entry.PostformatReplace)
+	if len(entry.compiledPostformatReplace) > 0 {
+		result = applyPostformatReplace(result, entry.compiledPostformatReplace)
 	}
 
 	// Clean up output
@@ -194,6 +208,7 @@ func (f *Formatter) Format(components map[string]string) string {
 // resolve looks up the country entry, following use_country redirects.
 func (f *Formatter) resolve(cc string) *countryEntry {
 	seen := make(map[string]bool)
+	cc = strings.ToUpper(cc)
 	for {
 		entry, ok := f.countries[cc]
 		if !ok {
@@ -263,40 +278,43 @@ func resolveFirst(inner string, components map[string]string) string {
 	return ""
 }
 
-// applyReplace applies input replacement rules to component values.
-func applyReplace(components map[string]string, rules [][]string) map[string]string {
-	out := make(map[string]string, len(components))
-	for k, v := range components {
-		out[k] = v
-	}
+// compileRules pre-compiles regex replacement rules, logging warnings for invalid patterns.
+func compileRules(rules [][]string) []compiledRule {
+	var compiled []compiledRule
 	for _, rule := range rules {
 		if len(rule) != 2 {
 			continue
 		}
 		re, err := regexp.Compile(rule[0])
 		if err != nil {
+			log.Warnf("ocfmt: invalid regex pattern %q in replacement rule: %s", rule[0], err)
 			continue
 		}
+		compiled = append(compiled, compiledRule{re: re, replacement: rule[1]})
+	}
+	return compiled
+}
+
+// applyReplace applies pre-compiled input replacement rules to component values.
+func applyReplace(components map[string]string, rules []compiledRule) map[string]string {
+	out := make(map[string]string, len(components))
+	for k, v := range components {
+		out[k] = v
+	}
+	for _, rule := range rules {
 		for k, v := range out {
-			if re.MatchString(v) {
-				out[k] = re.ReplaceAllString(v, rule[1])
+			if rule.re.MatchString(v) {
+				out[k] = rule.re.ReplaceAllString(v, rule.replacement)
 			}
 		}
 	}
 	return out
 }
 
-// applyPostformatReplace applies regex replacements to the formatted output.
-func applyPostformatReplace(result string, rules [][]string) string {
+// applyPostformatReplace applies pre-compiled regex replacements to the formatted output.
+func applyPostformatReplace(result string, rules []compiledRule) string {
 	for _, rule := range rules {
-		if len(rule) != 2 {
-			continue
-		}
-		re, err := regexp.Compile(rule[0])
-		if err != nil {
-			continue
-		}
-		result = re.ReplaceAllString(result, rule[1])
+		result = rule.re.ReplaceAllString(result, rule.replacement)
 	}
 	return result
 }
