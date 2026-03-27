@@ -36,6 +36,9 @@ COPY config/config.example.toml config/config.example.toml
 COPY start.sh start.sh
 RUN chmod +x start.sh processor/poracle-processor
 
+# Scripts for PoracleJS migration
+COPY scripts/ scripts/
+
 # Create runtime directories (processor downloads resources at startup)
 RUN mkdir -p config/.cache/geofences resources/data resources/rawdata resources/locale resources/gamelocale alerter/logs alerter/nominatimData logs backups
 
