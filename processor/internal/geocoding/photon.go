@@ -74,6 +74,7 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 	q := u.Query()
 	q.Set("lat", fmt.Sprintf("%f", lat))
 	q.Set("lon", fmt.Sprintf("%f", lon))
+	q.Set("radius", "1")
 	u.RawQuery = q.Encode()
 
 	resp, err := p.client.Get(u.String())
