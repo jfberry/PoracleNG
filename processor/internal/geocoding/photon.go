@@ -119,6 +119,8 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 	countryCode := strings.ToUpper(strings.TrimSpace(props.CountryCode))
 	suburb := firstNonEmpty(components["suburb"], strings.TrimSpace(props.District))
 
+	streetName := photonStreetName(props, components, p.useCompact)
+
 	addr := &Address{
 		Latitude:      resultLat,
 		Longitude:     resultLon,
@@ -127,7 +129,7 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 		State:         firstNonEmpty(strings.TrimSpace(props.State), components["state"]),
 		City:          city,
 		Zipcode:       firstNonEmpty(strings.TrimSpace(props.Postcode), components["postcode"]),
-		StreetName:    firstNonEmpty(strings.TrimSpace(props.Street), components["street"], components["road"]),
+		StreetName:    streetName,
 		StreetNumber:  firstNonEmpty(strings.TrimSpace(props.HouseNumber), components["housenumber"], components["house_number"]),
 		Neighbourhood: strings.TrimSpace(props.District),
 		County:        firstNonEmpty(strings.TrimSpace(props.County), components["county"]),
@@ -187,6 +189,19 @@ func photonComponents(props photonProperties) map[string]string {
 	}
 
 	return components
+}
+
+func photonStreetName(props photonProperties, components map[string]string, useCompact bool) string {
+	streetName := firstNonEmpty(strings.TrimSpace(props.Street), components["street"], components["road"])
+	if !useCompact || streetName != "" {
+		return streetName
+	}
+
+	if strings.EqualFold(strings.TrimSpace(props.Type), "other") {
+		return strings.TrimSpace(props.Name)
+	}
+
+	return streetName
 }
 
 // photonToOCKey maps Photon property names to OpenCage component names.
