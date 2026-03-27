@@ -563,6 +563,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 			Provider:         cfg.Geocoding.Provider,
 			ProviderURL:      cfg.Geocoding.ProviderURL,
 			GeocodingKeys:    cfg.Geocoding.GeocodingKey,
+			PhotonAddrFormat: cfg.Geocoding.PhotonAddrFormat,
 			CacheDetail:      cfg.Geocoding.CacheDetail,
 			CachePath:        filepath.Join(cfg.BaseDir, "config", ".cache", "geocache"),
 			ForwardOnly:      cfg.Geocoding.ForwardOnly,

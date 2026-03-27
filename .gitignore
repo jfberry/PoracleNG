@@ -22,3 +22,6 @@ resources/locale/
 
 # Node
 node_modules/
+
+shell.nix
+.idea/*

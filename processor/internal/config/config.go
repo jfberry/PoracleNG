@@ -265,9 +265,10 @@ type WebhookLoggingConfig struct {
 // and address geocoding.
 type GeocodingConfig struct {
 	// Address geocoding provider
-	Provider     string   `toml:"provider"`      // "none", "nominatim", "google"
-	ProviderURL  string   `toml:"provider_url"`  // nominatim URL
-	GeocodingKey []string `toml:"geocoding_key"` // google API keys
+	Provider         string   `toml:"provider"`              // "none", "nominatim", "photon", "google"
+	ProviderURL      string   `toml:"provider_url"`          // nominatim/photon URL
+	GeocodingKey     []string `toml:"geocoding_key"`         // google API keys
+	PhotonAddrFormat string   `toml:"photon_address_format"` // "opencage" (default) or "compact"
 	CacheDetail  int      `toml:"cache_detail"`  // decimal places for cache key rounding (default 3)
 	ForwardOnly  bool     `toml:"forward_only"`  // if true, skip reverse geocoding
 

@@ -15,6 +15,7 @@ type Address struct {
 	StreetName       string  `json:"streetName"`
 	StreetNumber     string  `json:"streetNumber"`
 	Neighbourhood    string  `json:"neighbourhood"`
+	County           string  `json:"county"`
 	Suburb           string  `json:"suburb"`
 	Town             string  `json:"town"`
 	Village          string  `json:"village"`
