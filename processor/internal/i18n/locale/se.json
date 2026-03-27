@@ -4,37 +4,31 @@
   "rate_limit.banned_hard": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, contact an administrator to resume",
   "rate_limit.shame": "<@{0}> has had their Poracle tracking disabled for exceeding the rate limit too many times!",
   "profile.switched": "I have set your profile to: {0}",
-
   "team_0": "Uncontested",
   "team_1": "Mystic",
   "team_2": "Valor",
   "team_3": "Instinct",
   "team_4": "Any team",
-
   "gender_1": "male",
   "gender_2": "female",
   "gender_3": "genderless",
-
   "size_1": "XXS",
   "size_2": "XS",
   "size_3": "M",
   "size_4": "XL",
   "size_5": "XXL",
-
   "rarity_1": "Common",
   "rarity_2": "Uncommon",
   "rarity_3": "Rare",
   "rarity_4": "Very-Rare",
   "rarity_5": "Ultra-Rare",
   "rarity_6": "Unseen",
-
   "lure_501": "Normal Lure",
   "lure_502": "Glacial Lure",
   "lure_503": "Mossy Lure",
   "lure_504": "Magnetic Lure",
   "lure_505": "Rainy Lure",
   "lure_506": "Sparkly Lure",
-
   "tracking.template_fmt": "template: {0}",
   "tracking.clean": "clean",
   "tracking.distance_fmt": "avstånd: {0}m",
@@ -89,7 +83,6 @@
   "tracking.any": "any",
   "tracking.male": "male",
   "tracking.female": "female",
-
   "tracking.unchanged": "Unchanged: ",
   "tracking.updated": "Updated: ",
   "tracking.new": "New: ",

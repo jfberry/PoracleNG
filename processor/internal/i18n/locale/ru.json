@@ -4,37 +4,31 @@
   "rate_limit.banned_hard": "Достигнут лимит оповещений слишком много раз за 24 часа, оповещения отключены. Обратитесь к администратору для возобновления",
   "rate_limit.shame": "<@{0}> был отключён за слишком частое превышение лимита оповещений!",
   "profile.switched": "Профиль установлен: {0}",
-
   "team_0": "Незахваченные",
   "team_1": "Синие",
   "team_2": "Красные",
   "team_3": "Желтые",
   "team_4": "Any team",
-
   "gender_1": "М",
   "gender_2": "Ж",
   "gender_3": "genderless",
-
   "size_1": "XXS",
   "size_2": "XS",
   "size_3": "M",
   "size_4": "XL",
   "size_5": "XXL",
-
   "rarity_1": "Обычный",
   "rarity_2": "Необычный",
   "rarity_3": "Редкий",
   "rarity_4": "Очень-редкий",
   "rarity_5": "Ультра-редкий",
   "rarity_6": "Невиданный",
-
   "lure_501": "Normal Lure",
   "lure_502": "Glacial Lure",
   "lure_503": "Mossy Lure",
   "lure_504": "Magnetic Lure",
   "lure_505": "Rainy Lure",
   "lure_506": "Sparkly Lure",
-
   "tracking.template_fmt": "template: {0}",
   "tracking.clean": "clean",
   "tracking.distance_fmt": "*Расстояние*: {0}m",
@@ -89,7 +83,6 @@
   "tracking.any": "любой",
   "tracking.male": "М",
   "tracking.female": "Ж",
-
   "tracking.unchanged": "Без изменений: ",
   "tracking.updated": "Обновлено: ",
   "tracking.new": "Добавлено: ",

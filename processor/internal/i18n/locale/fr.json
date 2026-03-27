@@ -4,37 +4,31 @@
   "rate_limit.banned_hard": "Vous avez dépassé le nombre de messages autorisés trop de fois dans les dernières 24h. Vos notifications sont stoppées, contactez un administrateur pour reprendre",
   "rate_limit.shame": "<@{0}> a été désactivé pour avoir dépassé la limite de messages trop de fois !",
   "profile.switched": "Profil mis à jour pour : {0}",
-
   "team_0": "Incontestée",
   "team_1": "Mystic",
   "team_2": "Valor",
   "team_3": "Instinct",
   "team_4": "Any team",
-
   "gender_1": "mâle",
   "gender_2": "femelle",
   "gender_3": "asexué",
-
   "size_1": "XXS",
   "size_2": "XS",
   "size_3": "M",
   "size_4": "XL",
   "size_5": "XXL",
-
   "rarity_1": "Commun",
   "rarity_2": "Peu Commun",
   "rarity_3": "Rare",
   "rarity_4": "Très-Rare",
   "rarity_5": "Ultra-Rare",
   "rarity_6": "Non Vu",
-
   "lure_501": "Leurre Normal",
   "lure_502": "Leurre Glacial",
   "lure_503": "Leurre Moussu",
   "lure_504": "Leurre Magnétique",
   "lure_505": "Leurre Pluvieux",
   "lure_506": "Sparkly Lure",
-
   "tracking.template_fmt": "modèle: {0}",
   "tracking.clean": "clean",
   "tracking.distance_fmt": "distance: {0}m",
@@ -89,7 +83,6 @@
   "tracking.any": "tout",
   "tracking.male": "mâle",
   "tracking.female": "femelle",
-
   "tracking.unchanged": "Non modifié : ",
   "tracking.updated": "Modifié : ",
   "tracking.new": "Nouveau : ",

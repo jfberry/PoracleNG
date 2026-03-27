@@ -4,37 +4,31 @@
   "rate_limit.banned_hard": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, kontaktiere einen Administrator um diese wieder zu aktivieren",
   "rate_limit.shame": "<@{0}> wurde wegen zu häufiger Überschreitung des Nachrichtenlimits deaktiviert!",
   "profile.switched": "Profil gewechselt auf: {0}",
-
   "team_0": "unumkämpft",
   "team_1": "Weisheit",
   "team_2": "Wagemut",
   "team_3": "Intuition",
   "team_4": "Any team",
-
   "gender_1": "männlich",
   "gender_2": "weiblich",
   "gender_3": "geschlechtslos",
-
   "size_1": "XXS",
   "size_2": "XS",
   "size_3": "M",
   "size_4": "XL",
   "size_5": "XXL",
-
   "rarity_1": "häufig",
   "rarity_2": "selten",
   "rarity_3": "Rare",
   "rarity_4": "sehr-rar",
   "rarity_5": "ultra-rar",
   "rarity_6": "ungesehen",
-
   "lure_501": "Normales Lockmodul",
   "lure_502": "Gletscher Lockmodul",
   "lure_503": "Moos Lockmodul",
   "lure_504": "Magnet Lockmodul",
   "lure_505": "Regen Lockmodul",
   "lure_506": "Gold Lockmodul",
-
   "tracking.template_fmt": "vorlage: {0}",
   "tracking.clean": "bereinigen",
   "tracking.distance_fmt": "Entfernung: {0}m",
@@ -89,7 +83,6 @@
   "tracking.any": "_alle_",
   "tracking.male": "männlich",
   "tracking.female": "weiblich",
-
   "tracking.unchanged": "Unverändert: ",
   "tracking.updated": "Aktualisiert: ",
   "tracking.new": "Neu: ",
