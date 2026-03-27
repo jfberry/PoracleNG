@@ -13,7 +13,5 @@ CREATE TABLE IF NOT EXISTS `maxbattle` (
   `ping` text NOT NULL,
   `clean` tinyint(1) NOT NULL DEFAULT 0,
   `template` text NOT NULL,
-  PRIMARY KEY (`uid`),
-  KEY `maxbattle_id_foreign` (`id`),
-  CONSTRAINT `maxbattle_id_foreign` FOREIGN KEY (`id`) REFERENCES `humans` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+  PRIMARY KEY (`uid`)
+) ENGINE=InnoDB;

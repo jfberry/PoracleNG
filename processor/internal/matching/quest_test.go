@@ -642,7 +642,7 @@ func TestQuestSameUserMultipleTrackingsDedup(t *testing.T) {
 
 func TestQuestBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
-	human.BlockedAlerts = `["quest"]`
+	human.SetBlockedAlerts(`["quest"]`)
 	st := makeQuestTestState([]*db.QuestTracking{
 		{ID: "user1", ProfileNo: 1, RewardType: 3, Reward: 100, Template: "1"},
 	}, map[string]*db.Human{"user1": human})

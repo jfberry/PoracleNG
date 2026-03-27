@@ -12,7 +12,11 @@ import (
 )
 
 func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
-	ps.workerPool <- struct{}{}
+	select {
+	case ps.workerPool <- struct{}{}:
+	case <-ps.ctx.Done():
+		return nil
+	}
 	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
@@ -51,7 +55,10 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
+		matchStart := time.Now()
 		matched := ps.fortMatcher.Match(data, st)
+		metrics.MatchingDuration.WithLabelValues("fort_update").Observe(time.Since(matchStart).Seconds())
+		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("fort_update").Inc()
@@ -60,10 +67,10 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(lat, lon)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Fort update %s (%s, %s) and %d humans cared",
-				fort.FortName(), fort.FortType(), fort.ChangeType, len(matched))
+			l.Infof("Fort update %s (%s, %s) areas(%s) and %d humans cared",
+				fort.FortName(), fort.FortType(), fort.ChangeType, areaNames(matchedAreas), len(matched))
 
-			enrichment := ps.enricher.FortUpdate(lat, lon)
+			enrichment, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort)
 
 			ps.sender.Send(webhook.OutboundPayload{
 				Type:         "fort_update",
@@ -71,6 +78,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 				Enrichment:   enrichment,
 				MatchedAreas: matchedAreas,
 				MatchedUsers: matched,
+				TilePending:  tilePending,
 			})
 		} else {
 			l.Debugf("Fort update %s (%s, %s) and 0 humans cared",

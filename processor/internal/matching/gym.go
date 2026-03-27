@@ -2,7 +2,6 @@ package matching
 
 import (
 	"math"
-	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/state"
@@ -122,7 +121,7 @@ func validateHumansForGym(
 		if !ok || !human.Enabled || human.AdminDisable {
 			continue
 		}
-		if strings.Contains(human.BlockedAlerts, `"gym"`) {
+		if human.BlockedAlertsSet["gym"] {
 			continue
 		}
 		if td.ProfileNo != human.CurrentProfileNo {
@@ -131,7 +130,7 @@ func validateHumansForGym(
 
 		isSpecificGym := specificGymUsers[td.HumanID]
 		if isSpecificGym {
-			if strings.Contains(human.BlockedAlerts, `"specificgym"`) {
+			if human.BlockedAlertsSet["specificgym"] {
 				continue
 			}
 		} else {

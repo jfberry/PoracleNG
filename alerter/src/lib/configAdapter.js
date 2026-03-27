@@ -72,8 +72,12 @@ function adaptConfig(toml) {
 	if (!alerter.processor_url) {
 		throw new Error('Config error: [alerter] processor_url is required (e.g. "http://localhost:3030")')
 	}
+	const processorSecret = alerter.api_secret || ''
 	config.processor = {
 		url: alerter.processor_url,
+		secret: processorSecret,
+		// Headers to include in all alerter→processor API calls
+		headers: processorSecret ? { 'X-Poracle-Secret': processorSecret } : {},
 	}
 
 	// ---- database ----
@@ -222,19 +226,19 @@ function adaptConfig(toml) {
 
 	// ---- reconciliation ----
 	config.reconciliation = convertKeys(toml.reconciliation || {})
-	defaults(config.reconciliation, {
-		discord: {
-			updateUserNames: false,
-			removeInvalidUsers: true,
-			registerNewUsers: false,
-			updateChannelNames: true,
-			updateChannelNotes: false,
-			unregisterMissingChannels: false,
-		},
-		telegram: {
-			updateUserNames: false,
-			removeInvalidUsers: true,
-		},
+	if (!config.reconciliation.discord) config.reconciliation.discord = {}
+	if (!config.reconciliation.telegram) config.reconciliation.telegram = {}
+	defaults(config.reconciliation.discord, {
+		updateUserNames: false,
+		removeInvalidUsers: true,
+		registerNewUsers: false,
+		updateChannelNames: true,
+		updateChannelNotes: false,
+		unregisterMissingChannels: false,
+	})
+	defaults(config.reconciliation.telegram, {
+		updateUserNames: false,
+		removeInvalidUsers: true,
 	})
 
 	// ---- areaSecurity ----

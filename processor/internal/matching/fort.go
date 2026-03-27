@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/state"
@@ -74,10 +75,15 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) []webhook.MatchedUs
 // changeTypesMatch checks if any of the actual change types match
 // the tracked change types (stored as JSON array string like '["new","name"]').
 func changeTypesMatch(trackedJSON string, actualChanges []string) bool {
-	tracked := strings.ToLower(trackedJSON)
-	for _, c := range actualChanges {
-		if strings.Contains(tracked, `"`+strings.ToLower(c)+`"`) {
-			return true
+	var tracked []string
+	if err := json.Unmarshal([]byte(trackedJSON), &tracked); err != nil {
+		return false
+	}
+	for _, actual := range actualChanges {
+		for _, t := range tracked {
+			if strings.EqualFold(t, actual) {
+				return true
+			}
 		}
 	}
 	return false

@@ -5,7 +5,6 @@ const { writeHeapSnapshot } = require('v8')
 
 const fs = require('fs')
 const util = require('util')
-const NodeCache = require('node-cache')
 const fastify = require('fastify')({
 	bodyLimit: 52428800,
 	routerOptions: { maxParamLength: 256 },
@@ -13,9 +12,6 @@ const fastify = require('fastify')({
 const { Telegraf } = require('telegraf')
 const path = require('path')
 const chokidar = require('chokidar')
-const moment = require('moment-timezone')
-const geoTz = require('geo-tz')
-const schedule = require('node-schedule')
 const telegramCommandParser = require('./lib/telegram/middleware/commandParser')
 const telegramController = require('./lib/telegram/middleware/controller')
 const DiscordReconciliation = require('./lib/discord/discordReconciliation')
@@ -193,7 +189,7 @@ async function processPossibleShiny() {
 	log.info('ShinyPossible: Fetching shiny-possible data from processor')
 
 	try {
-		const file = await shinyPossible.download(config.processor.url)
+		const file = await shinyPossible.download(config.processor.url, config.processor.headers)
 		matchedShinyPossible.loadMap(file) // eslint-disable-line no-use-before-define
 	} catch (err) {
 		log.error(`ShinyPossible: Failed to fetch from processor: ${err.message}`)
@@ -202,131 +198,19 @@ async function processPossibleShiny() {
 	setTimeout(processPossibleShiny, 5 * 60 * 1000) // 5 mins
 }
 
-const UserRateChecker = require('./userRateLimit')
-
-const rateChecker = new UserRateChecker(config)
-
 function notifyProcessorReload() {
 	if (config.processor.url) {
 		const axios = require('axios')
-		axios.post(`${config.processor.url}/api/reload`).catch((err) => {
+		axios.post(`${config.processor.url}/api/reload`, null, { headers: config.processor.headers }).catch((err) => {
 			log.error(`Failed to notify processor of reload: ${err.message}`)
 		})
 	}
 }
 
-async function processMessages(msgs) {
-	let newRateLimits = false
-
+function processMessages(msgs) {
 	for (const msg of msgs) {
-		const destinationId = msg.type === 'webhook' ? msg.name : msg.target
-		const destinationType = msg.type
-		const rate = rateChecker.validateMessage(destinationId, destinationType)
-
-		let queueMessage
-		let logMessage = null
-		let shameMessage = null
-
-		if (!msg.alwaysSend && !rate.passMessage) {
-			if (rate.justBreached) {
-				const userTranslator = translatorFactory.Translator(msg.language || config.general.locale)
-				queueMessage = {
-					...msg,
-					message: { content: userTranslator.translateFormat('You have reached the limit of {0} messages over {1} seconds', rate.messageLimit, rate.messageTimeout) },
-					emoji: [],
-				}
-				log.info(`${msg.logReference}: Stopping alerts (Rate limit) for ${msg.type} ${msg.target} ${msg.name} Time to release: ${rate.resetTime}`)
-
-				if (config.alertLimits.maxLimitsBeforeStop) {
-					const userCheck = rateChecker.userIsBanned(destinationId, destinationType)
-					if (!userCheck.canContinue) {
-						queueMessage = {
-							...msg,
-							message: {
-								content: userTranslator.translateFormat(
-									config.alertLimits.disableOnStop
-										? 'You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, contact an administrator to resume'
-										: 'You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, use {0}start to resume',
-									['discord:user', 'discord:channel', 'webhook'].includes(msg.type) ? config.discord.prefix : '/',
-								),
-							},
-							emoji: [],
-						}
-
-						log.info(`${msg.logReference}: Stopping alerts [until restart] (Rate limit) for ${msg.type} ${msg.target} ${msg.name}`)
-
-						logMessage = `Stopped alerts (rate-limit exceeded too many times) for target ${destinationType} ${destinationId} ${msg.name} ${msg.type === 'discord:user' ? `<@${destinationId}>` : ''}`
-						if (msg.type === 'discord:user') {
-							shameMessage = userTranslator.translateFormat('<@{0}> has had their Poracle tracking disabled for exceeding the rate limit too many times!', destinationId)
-						}
-
-						try {
-							if (config.alertLimits.disableOnStop) {
-								// This acts like the admin de-registered the user rather than when losing a role so user does not get auto re-registered
-								await query.updateQuery('humans', { admin_disable: 1, disabled_date: null }, { id: msg.target })
-							} else {
-								await query.updateQuery('humans', { enabled: 0 }, { id: msg.target })
-							}
-							notifyProcessorReload()
-						} catch (err) {
-							log.error('Failed to stop user messages', err)
-						}
-					}
-				}
-
-				newRateLimits = true
-			} else {
-				log.info(`${msg.logReference}: Intercepted and stopped message for user (Rate limit) for ${msg.type} ${msg.target} ${msg.name} Time to release: ${rate.resetTime}`)
-				metrics.rateLimited.inc()
-				queueMessage = null
-			}
-		} else {
-			queueMessage = msg
-		}
-
-		if (queueMessage) {
-			if (['discord:user', 'discord:channel', 'webhook'].includes(queueMessage.type)) fastify.discordQueue.push(queueMessage)
-			if (['telegram:user', 'telegram:channel', 'telegram:group'].includes(queueMessage.type)) fastify.telegramQueue.push(queueMessage)
-			if (logMessage && config.discord.dmLogChannelID) {
-				fastify.discordQueue.push({
-					lat: 0,
-					lon: 0,
-					message: {
-						content: logMessage,
-					},
-					target: config.discord.dmLogChannelID,
-					type: 'discord:channel',
-					name: 'Log channel',
-					tth: { hours: 0, minutes: config.discord.dmLogChannelDeletionTime, seconds: 0 },
-					clean: config.discord.dmLogChannelDeletionTime > 0,
-					emoji: '',
-					logReference: queueMessage.logReference,
-					language: config.general.locale,
-				})
-			}
-			if (shameMessage && config.alertLimits.shameChannel) {
-				fastify.discordQueue.push({
-					lat: 0,
-					lon: 0,
-					message: {
-						content: shameMessage,
-					},
-					target: config.alertLimits.shameChannel,
-					type: 'discord:channel',
-					name: 'Shame channel',
-					tth: { hours: 0, minutes: 0, seconds: 0 },
-					clean: false,
-					emoji: '',
-					logReference: queueMessage.logReference,
-					language: config.general.locale,
-				})
-			}
-		}
-	}
-
-	if (newRateLimits) {
-		const badguys = rateChecker.getBadBoys()
-		updateBadGuys(badguys) // eslint-disable-line no-use-before-define
+		if (['discord:user', 'discord:channel', 'webhook'].includes(msg.type)) fastify.discordQueue.push(msg)
+		if (['telegram:user', 'telegram:channel', 'telegram:group'].includes(msg.type)) fastify.telegramQueue.push(msg)
 	}
 }
 
@@ -342,14 +226,12 @@ const GymController = require('./controllers/gym')
 const NestController = require('./controllers/nest')
 const FortUpdateController = require('./controllers/fortupdate')
 const MaxbattleController = require('./controllers/maxbattle')
-const CachingGeocoder = require('./lib/cachingGeocoder')
+// Geocoding is now handled by the Go processor
 
 const mustache = require('./lib/handlebars')()
 
-const rateLimitedUserCache = new NodeCache({ stdTTL: config.alertLimits.timingPeriod })
-
 const matchedShinyPossible = new ShinyPossible(log)
-const cachingGeocoder = new CachingGeocoder(config, log, mustache, 'geoCache-matched')
+const cachingGeocoder = null // geocoding handled by processor
 
 const eventParsers = {
 	shinyPossible: matchedShinyPossible,
@@ -371,16 +253,16 @@ const stubStatsData = {
 	receiveStatsBroadcast: () => {},
 }
 
-const monsterController = new MonsterController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const raidController = new RaidController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const weatherController = new WeatherController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, null, null, null)
-const pokestopController = new PokestopController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const pokestopLureController = new PokestopLureController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const questController = new QuestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const gymController = new GymController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const nestController = new NestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const fortUpdateController = new FortUpdateController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const maxbattleController = new MaxbattleController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, rateLimitedUserCache, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const monsterController = new MonsterController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const raidController = new RaidController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const weatherController = new WeatherController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, null, null, null)
+const pokestopController = new PokestopController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const pokestopLureController = new PokestopLureController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const questController = new QuestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const gymController = new GymController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const nestController = new NestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const fortUpdateController = new FortUpdateController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
+const maxbattleController = new MaxbattleController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
 
 const allControllers = [monsterController, raidController, weatherController, pokestopController, pokestopLureController, questController, gymController, nestController, fortUpdateController, maxbattleController]
 
@@ -399,6 +281,14 @@ async function processOne(payload) {
 		// Merge processor enrichment into message
 		if (payload.enrichment) {
 			Object.assign(payload.message, payload.enrichment)
+		}
+
+		// Attach per-language and per-user enrichment for controllers to use
+		if (payload.per_language_enrichment) {
+			payload.message.perLanguageEnrichment = payload.per_language_enrichment // eslint-disable-line no-param-reassign
+		}
+		if (payload.per_user_enrichment) {
+			payload.message.perUserEnrichment = payload.per_user_enrichment // eslint-disable-line no-param-reassign
 		}
 
 		switch (payload.type) {
@@ -511,35 +401,8 @@ async function processOne(payload) {
 	eventsProcessed++
 }
 
-function updateBadGuys(badguys) {
-	rateLimitedUserCache.flushAll()
-	for (const guy of badguys) {
-		rateLimitedUserCache.set(guy.key, guy.ttlTimeout, Math.max((guy.ttlTimeout - Date.now()) / 1000, 1))
-	}
-}
-
-function aggregateTileStats() {
-	const agg = {
-		calls: 0, totalMs: 0, inFlight: 0, errors: 0,
-	}
-	for (const ctrl of allControllers) {
-		if (ctrl.tileserverPregen) {
-			const s = ctrl.tileserverPregen.getStats()
-			agg.calls += s.calls
-			agg.totalMs += s.totalMs
-			agg.inFlight += s.inFlight
-			agg.errors += s.errors
-		}
-	}
-	agg.avgMs = agg.calls > 0 ? Math.round(agg.totalMs / agg.calls) : 0
-	return agg
-}
-
 function resetAllStats() {
-	for (const ctrl of allControllers) {
-		if (ctrl.tileserverPregen) ctrl.tileserverPregen.resetStats()
-	}
-	cachingGeocoder.resetStats()
+	// tile and geocoder stats handled by processor
 }
 
 process.on('SIGUSR2', () => {
@@ -598,14 +461,10 @@ async function currentStatus() {
 	const mainMemMb = Math.round(mainMem.heapUsed / 1048576)
 	const mainRssMb = Math.round(mainMem.rss / 1048576)
 
-	const geoStats = cachingGeocoder.getStats()
-	const tileStats = aggregateTileStats()
 	const eps = +(eventsProcessed / 60).toFixed(1)
 	eventsProcessed = 0
 
-	let matchedInfo = ` | Matched: ${eps}/s q:${hookQueue.length} a:${alarmProcessor.running.length}`
-	matchedInfo += ` geo(${geoStats.calls} avg:${geoStats.avgMs}ms fly:${geoStats.inFlight} hit:${geoStats.cacheHits} err:${geoStats.errors})`
-	matchedInfo += ` tile(${tileStats.calls} avg:${tileStats.avgMs}ms fly:${tileStats.inFlight} err:${tileStats.errors})`
+	const matchedInfo = ` | Matched: ${eps}/s q:${hookQueue.length} a:${alarmProcessor.running.length}`
 
 	resetAllStats()
 
@@ -626,81 +485,6 @@ async function currentStatus() {
 		mainRssMb,
 	}
 }
-
-schedule.scheduleJob({ minute: [0, 10, 20, 30, 40, 50] }, async () => {			// Run every 10 minutes - note if this changes then check below also needs to change
-	try {
-		log.verbose('Profile Check: Checking for active profile changes')
-		const humans = await query.selectAllQuery('humans', { enabled: 1, admin_disable: 0 })
-		const profilesToCheck = await query.mysteryQuery('SELECT * FROM profiles WHERE LENGTH(active_hours)>5 ORDER BY id, profile_no')
-
-		let lastId = null
-		for (const profile of profilesToCheck) {
-			const human = humans.find((x) => x.id === profile.id)
-
-			// eslint-disable-next-line no-continue
-			if (!human) continue
-
-			let nowForHuman = moment()
-			if (human.latitude) {
-				nowForHuman = moment().tz(geoTz.find(human.latitude, human.longitude)[0].toString())
-			}
-
-			if (profile.id !== lastId) {
-				const timings = JSON.parse(profile.active_hours)
-				const nowHour = nowForHuman.hour()
-				const nowMinutes = nowForHuman.minutes()
-				const nowDow = nowForHuman.isoWeekday()
-				const yesterdayDow = +nowDow === 1 ? 7 : nowDow - 1
-
-				const active = timings.some((row) => {
-					const rowHours = +row.hours
-					const rowMins = +row.mins
-					const rowDay = +row.day
-
-					return (rowDay === nowDow && rowHours === nowHour && nowMinutes >= row.mins && (nowMinutes - rowMins) < 10) // within 10 minutes in same hour
-						|| (nowMinutes < 10 && rowDay === nowDow && rowHours === nowHour - 1 && rowMins > 50) // first 10 minutes of new hour
-						|| (nowHour === 0 && nowMinutes < 10 && rowDay === yesterdayDow && rowHours === 23 && rowMins > 50) // first 10 minutes of day
-				})
-
-				if (active) {
-					if (human.current_profile_no !== profile.profile_no) {
-						const userTranslator = translatorFactory.Translator(human.language || config.general.locale)
-
-						const job = {
-							type: human.type,
-							target: human.id,
-							name: human.name,
-							ping: '',
-							clean: false,
-							message: { content: userTranslator.translateFormat('I have set your profile to: {0}', profile.name) },
-							logReference: '',
-							tth: { hours: 1, minutes: 0, seconds: 0 },
-						}
-
-						if (['discord:user', 'discord:channel', 'webhook'].includes(job.type)) fastify.discordQueue.push(job)
-						if (['telegram:user', 'telegram:channel', 'telegram:group'].includes(job.type)) fastify.telegramQueue.push(job)
-
-						log.info(`Profile Check: Setting ${profile.id} to profile ${profile.profile_no} - ${profile.name}`)
-
-						lastId = profile.id
-						await query.updateQuery(
-							'humans',
-							{
-								current_profile_no: profile.profile_no,
-								area: profile.area,
-								latitude: profile.latitude,
-								longitude: profile.longitude,
-							},
-							{ id: profile.id },
-						)
-					}
-				}
-			}
-		}
-	} catch (err) {
-		log.error('Error setting profiles', err)
-	}
-})
 
 async function run() {
 	process.on('SIGINT', handleShutdown)

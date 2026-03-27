@@ -1,5 +1,6 @@
 const helpCommand = require('./help')
 const trackedCommand = require('./tracked')
+const { reportUnrecognizedArgs } = require('../commandUtil')
 
 exports.run = async (client, msg, args, options) => {
 	const logReference = Math.random().toString().slice(2, 11)
@@ -48,16 +49,35 @@ exports.run = async (client, msg, args, options) => {
 		let clean = false
 		const types = [] // args.filter((arg) => typeArray.includes(arg))
 		const pings = msg.getPings()
+		const consumed = new Set()
 
 		for (const element of args) {
-			if (element.match(client.re.templateRe)) [,, template] = element.match(client.re.templateRe)
-			else if (element.match(client.re.dRe)) [,, distance] = element.match(client.re.dRe)
-			else if (element === 'female') gender = 2
-			else if (element === 'male') gender = 1
-			else if (element === 'clean') clean = true
-			else if (typeArray.includes(element) || element === 'everything') types.push(element)
-			else if (eventArray.includes(element)) types.push(element)
+			if (element.match(client.re.templateRe)) {
+				[,, template] = element.match(client.re.templateRe)
+				consumed.add(element)
+			} else if (element.match(client.re.dRe)) {
+				[,, distance] = element.match(client.re.dRe)
+				consumed.add(element)
+			} else if (element === 'female') {
+				gender = 2
+				consumed.add(element)
+			} else if (element === 'male') {
+				gender = 1
+				consumed.add(element)
+			} else if (element === 'clean') {
+				clean = true
+				consumed.add(element)
+			} else if (typeArray.includes(element) || element === 'everything') {
+				types.push(element)
+				consumed.add(element)
+			} else if (eventArray.includes(element)) {
+				types.push(element)
+				consumed.add(element)
+			}
 		}
+
+		if (remove) consumed.add('remove')
+		if (reportUnrecognizedArgs(msg, translator, args, consumed)) return
 		if (client.config.tracking.defaultDistance !== 0 && distance === 0 && !msg.isFromAdmin) distance = client.config.tracking.defaultDistance
 		if (client.config.tracking.maxDistance !== 0 && distance > client.config.tracking.maxDistance && !msg.isFromAdmin) distance = client.config.tracking.maxDistance
 		if (distance > 0 && !userHasLocation && !remove) {

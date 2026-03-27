@@ -1,8 +1,6 @@
 package pvp
 
 import (
-	"strconv"
-
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -11,6 +9,7 @@ type LeagueRank struct {
 	Rank int   `json:"rank"`
 	CP   int   `json:"cp"`
 	Caps []int `json:"caps,omitempty"`
+	Form int   `json:"form,omitempty"`
 }
 
 // PVPResult holds processed PVP data for a pokemon.
@@ -135,6 +134,8 @@ func calculateLeague(league int, leagueData []webhook.PVPRankEntry, capsConsider
 		if stats.Evolution == 0 && cfg.PVPEvolutionDirectTracking && stats.Rank > 0 && stats.CP > 0 &&
 			stats.Pokemon != pokemonID && stats.Rank <= cfg.PVPFilterMaxRank && stats.CP >= minCP {
 			var evoCaps []int
+			// Cap assignment mirrors JS: capped → all caps >= cap, explicit cap → [cap],
+			// neither (not ohbem) → nil (matches any cap in matcher, same as JS null)
 			if stats.Capped {
 				for _, c := range capsConsidered {
 					if c >= stats.Cap {
@@ -153,21 +154,22 @@ func calculateLeague(league int, leagueData []webhook.PVPRankEntry, capsConsider
 				Rank: stats.Rank,
 				CP:   stats.CP,
 				Caps: evoCaps,
+				Form: stats.Form,
 			}
 
-			form := stats.Form
 			if _, ok := evoData[stats.Pokemon]; !ok {
 				evoData[stats.Pokemon] = make(map[int][]LeagueRank)
 			}
 			evoData[stats.Pokemon][league] = append(evoData[stats.Pokemon][league], evoRank)
-			// Store form in the rank entry for matching
-			_ = form
 		}
 	}
 
-	// Consolidate best ranks
+	// Consolidate best ranks (skip sentinel 4096 entries — no matching PVP data for that cap)
 	var bestRanks []LeagueRank
 	for cap, details := range best {
+		if details.rank >= 4096 {
+			continue
+		}
 		found := false
 		for i := range bestRanks {
 			if bestRanks[i].CP == details.cp && bestRanks[i].Rank == details.rank {
@@ -202,11 +204,9 @@ func filterMega(entries []webhook.PVPRankEntry, includeMega bool) []webhook.PVPR
 }
 
 // CapsContain checks if the caps list contains a specific cap value.
-// Handles string comparison as in the JS code.
 func CapsContain(caps []int, target int) bool {
-	targetStr := strconv.Itoa(target)
 	for _, c := range caps {
-		if strconv.Itoa(c) == targetStr {
+		if c == target {
 			return true
 		}
 	}

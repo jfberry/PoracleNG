@@ -1,9 +1,8 @@
+const { S2 } = require('s2-geometry')
 const moment = require('moment-timezone')
 const geoTz = require('geo-tz')
 const EmojiLookup = require('../../emojiLookup')
 const helpCommand = require('./help')
-const weatherTileGenerator = require('../../weatherTileGenerator')
-const Uicons = require('../../uicons')
 
 exports.run = async (client, msg, args, options) => {
 	try {
@@ -88,7 +87,7 @@ exports.run = async (client, msg, args, options) => {
 				const axios = require('axios')
 				let shinyData
 				try {
-					const resp = await axios.get(`${client.config.processor.url}/api/stats/shiny`, { timeout: 5000 })
+					const resp = await axios.get(`${client.config.processor.url}/api/stats/shiny`, { timeout: 5000, headers: client.config.processor.headers })
 					shinyData = resp.data
 				} catch (err) {
 					client.log.error(`Failed to fetch shiny stats from processor: ${err.message}`)
@@ -117,7 +116,7 @@ exports.run = async (client, msg, args, options) => {
 				const axiosRarity = require('axios')
 				let rarityData
 				try {
-					const resp = await axiosRarity.get(`${client.config.processor.url}/api/stats/rarity`, { timeout: 5000 })
+					const resp = await axiosRarity.get(`${client.config.processor.url}/api/stats/rarity`, { timeout: 5000, headers: client.config.processor.headers })
 					rarityData = resp.data
 				} catch (err) {
 					client.log.error(`Failed to fetch rarity stats from processor: ${err.message}`)
@@ -208,13 +207,14 @@ exports.run = async (client, msg, args, options) => {
 					}
 				}
 
-				const weatherCellId = weatherTileGenerator.getWeatherCellId(latitude, longitude)
+				const weatherCellKey = S2.latLngToKey(latitude, longitude, 10)
+				const weatherCellId = S2.keyToId(weatherCellKey)
 
 				// Fetch weather data for this cell from the Go processor on demand
 				const axios = require('axios')
 				let weatherInfo
 				try {
-					const resp = await axios.get(`${client.config.processor.url}/api/weather`, { params: { cell: weatherCellId }, timeout: 5000 })
+					const resp = await axios.get(`${client.config.processor.url}/api/weather`, { params: { cell: weatherCellId }, timeout: 5000, headers: client.config.processor.headers })
 					weatherInfo = resp.data
 				} catch (err) {
 					client.log.error(`Failed to fetch weather from processor: ${err.message}`)
@@ -230,10 +230,13 @@ exports.run = async (client, msg, args, options) => {
 
 				const weatherId = weatherInfo[currentHourTimestamp]
 				let staticMap = null
-				if (client.config.geocoding.staticProvider === 'tileservercache' && client.config.general.imgUrl) {
-					const imgUicons = new Uicons(client.config.general.imgUrl, 'png', client.log)
-
-					staticMap = await weatherTileGenerator.generateWeatherTile(client.query.tileserverPregen, weatherCellId, weatherId, imgUicons)
+				if (client.config.processor?.url) {
+					try {
+						const resp = await axios.get(`${client.config.processor.url}/api/geofence/weatherMap/${latitude}/${longitude}`, { params: { weather: weatherId }, timeout: 10000, headers: client.config.processor.headers })
+						if (resp.data.status === 'ok') staticMap = resp.data.url
+					} catch (err) {
+						client.log.error(`Failed to generate weather tile: ${err.message}`)
+					}
 				}
 
 				// Build forecast information

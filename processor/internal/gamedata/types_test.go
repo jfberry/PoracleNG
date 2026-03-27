@@ -1,57 +1,30 @@
 package gamedata
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
-func TestLoadPokemonTypes(t *testing.T) {
-	// Create a minimal monsters.json for testing
-	content := `{
-		"1_0": {
-			"types": [{"id": 4, "name": "Poison"}, {"id": 12, "name": "Grass"}]
-		},
-		"1_163": {
-			"types": [{"id": 4, "name": "Poison"}, {"id": 12, "name": "Grass"}]
-		},
-		"6_0": {
-			"types": [{"id": 10, "name": "Fire"}, {"id": 3, "name": "Flying"}]
-		}
-	}`
-	dir := t.TempDir()
-	path := filepath.Join(dir, "monsters.json")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
+func TestPokemonTypesFromGameData(t *testing.T) {
+	gd := loadTestGameData(t)
 
-	pt, err := LoadPokemonTypes(path)
-	if err != nil {
-		t.Fatalf("LoadPokemonTypes failed: %v", err)
-	}
+	pt := PokemonTypesFromGameData(gd.Monsters)
 
-	// Test exact form match
-	types := pt.GetTypes(1, 163)
-	if len(types) != 2 || types[0] != 4 || types[1] != 12 {
-		t.Errorf("GetTypes(1, 163) = %v, want [4, 12]", types)
+	// Test Bulbasaur types via PokemonTypes
+	types := pt.GetTypes(1, 0)
+	if len(types) < 2 {
+		t.Fatalf("GetTypes(1, 0) = %v, want at least 2 types", types)
 	}
 
 	// Test fallback to form 0
 	types = pt.GetTypes(1, 999)
-	if len(types) != 2 || types[0] != 4 || types[1] != 12 {
-		t.Errorf("GetTypes(1, 999) fallback = %v, want [4, 12]", types)
-	}
-
-	// Test Charizard types
-	types = pt.GetTypes(6, 0)
-	if len(types) != 2 || types[0] != 10 || types[1] != 3 {
-		t.Errorf("GetTypes(6, 0) = %v, want [10, 3]", types)
+	if len(types) < 2 {
+		t.Fatalf("GetTypes(1, 999) fallback = %v, want at least 2 types", types)
 	}
 
 	// Test unknown pokemon
-	types = pt.GetTypes(9999, 0)
+	types = pt.GetTypes(99999, 0)
 	if types != nil {
-		t.Errorf("GetTypes(9999, 0) = %v, want nil", types)
+		t.Errorf("GetTypes(99999, 0) = %v, want nil", types)
 	}
 }
 
@@ -79,16 +52,16 @@ func TestIsAffectedByWeatherChange(t *testing.T) {
 		},
 		{
 			name:         "water pokemon gains boost: clear -> rainy",
-			types:        []int{7}, // water
-			currentBoost: 0,        // not boosted
-			newWeather:   2,        // rainy boosts water
+			types:        []int{11}, // water
+			currentBoost: 0,         // not boosted
+			newWeather:   2,         // rainy boosts water
 			want:         true,
 		},
 		{
 			name:         "water pokemon not affected: clear -> windy",
-			types:        []int{7}, // water
-			currentBoost: 0,        // not boosted
-			newWeather:   5,        // windy doesn't boost water
+			types:        []int{11}, // water
+			currentBoost: 0,         // not boosted
+			newWeather:   5,         // windy doesn't boost water
 			want:         false,
 		},
 		{

@@ -16,18 +16,6 @@ class FortUpdate extends Controller {
 
 			data.fortType = data.new?.type || data.old?.type || 'unknown'
 			Object.assign(data, this.config.general.dtsDictionary)
-			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
-			data.appleMapUrl = `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
-			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
-			if (this.config.general.rdmURL) {
-				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@${data.latitude}/@${data.longitude}/18`
-			}
-			if (this.config.general.reactMapURL) {
-				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/${data.fortType}s/${data.id}/18`
-			}
-			if (this.config.general.rocketMadURL) {
-				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
-			}
 			data.name = this.escapeJsonString(data.name)
 
 			// tth, disappearDate, disappearTime, resetDate, resetTime provided by processor enrichment
@@ -123,45 +111,19 @@ class FortUpdate extends Controller {
 				return []
 			}
 
-			let discordCacheBad = true
-			whoCares.forEach((cares) => {
-				if (!this.isRateLimited(cares.id)) discordCacheBad = false
-			})
-			if (discordCacheBad) return []
-
 			data.stickerUrl = data.imgUrl
 
-			const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 			const jobs = []
 
-			// Attempt to calculate best position for map
-			const markers = []
-			if (data.old?.location?.lat) {
-				markers.push({ latitude: data.old.location.lat, longitude: data.old.location.lon })
-			}
-			if (data.new?.location?.lat) {
-				markers.push({ latitude: data.new.location.lat, longitude: data.new.location.lon })
-			}
+			// Autoposition (zoom, map_latitude, map_longitude) is now computed by the
+			// Go processor enrichment and arrives in the data object.
 
-			const position = this.tileserverPregen.autoposition({
-				markers,
-			}, 500, 250)
-			data.zoom = Math.min(position.zoom, 16)
-			data.map_longitude = position.longitude
-			data.map_latitude = position.latitude
-
-			await this.getStaticMapUrl(logReference, data, 'fort-update', ['map_latitude', 'map_longitude', 'longitude', 'latitude', 'zoom', 'imgUrl', 'isEditLocation', 'oldLatitude', 'oldLongitude', 'newLatitude', 'newLongitude'])
-			data.staticmap = data.staticMap // deprecated
+			// Static map is pre-computed by the processor enrichment
+			data.staticmap = data.staticMap // deprecated alias
 
 			for (const cares of whoCares) {
 				this.log.debug(`${logReference}: [matched] Creating fort update alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-				const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-				if (rateLimitTtr) {
-					this.log.verbose(`${logReference}: [matched] Not creating fort update (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-					// eslint-disable-next-line no-continue
-					continue
-				}
 				this.log.verbose(`${logReference}: [matched] Creating fort update alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
 				const language = cares.language || this.config.general.locale
@@ -169,7 +131,6 @@ class FortUpdate extends Controller {
 				if (platform === 'webhook') platform = 'discord'
 
 				const view = {
-					...geoResult,
 					...data,
 					tthd: data.tth?.days || 0,
 					tthh: data.tth?.hours || 0,

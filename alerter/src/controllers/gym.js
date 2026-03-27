@@ -15,18 +15,6 @@ class Gym extends Controller {
 
 			Object.assign(data, this.config.general.dtsDictionary)
 			data.gymId = data.id || data.gym_id
-			data.googleMapUrl = `https://maps.google.com/maps?q=${data.latitude},${data.longitude}`
-			data.appleMapUrl = `https://maps.apple.com/place?coordinate=${data.latitude},${data.longitude}`
-			data.wazeMapUrl = `https://www.waze.com/ul?ll=${data.latitude},${data.longitude}&navigate=yes&zoom=17`
-			if (this.config.general.rdmURL) {
-				data.rdmUrl = `${this.config.general.rdmURL}${!this.config.general.rdmURL.endsWith('/') ? '/' : ''}@gym/${data.gymId}`
-			}
-			if (this.config.general.reactMapURL) {
-				data.reactMapUrl = `${this.config.general.reactMapURL}${!this.config.general.reactMapURL.endsWith('/') ? '/' : ''}id/gyms/${data.gymId}`
-			}
-			if (this.config.general.rocketMadURL) {
-				data.rocketMadUrl = `${this.config.general.rocketMadURL}${!this.config.general.rocketMadURL.endsWith('/') ? '/' : ''}?lat=${data.latitude}&lon=${data.longitude}&zoom=18.0`
-			}
 			if (data.gym_name) data.name = data.gym_name
 			data.name = this.escapeJsonString(data.name)
 			data.gymName = data.name
@@ -50,16 +38,11 @@ class Gym extends Controller {
 			data.teamId = data.team_id ?? data.team ?? 0
 			data.oldTeamId = data.old_team_id ?? 0
 			data.previousControlId = data.last_owner_id ?? 0
-			data.teamNameEng = this.GameData.utilData.teams[data.teamId].name
-			data.oldTeamNameEng = data.old_team_id >= 0 ? this.GameData.utilData.teams[data.old_team_id].name : ''
-			data.previousControlNameEng = data.last_owner_id >= 0 ? this.GameData.utilData.teams[data.last_owner_id].name : ''
-			data.gymColor = this.GameData.utilData.teams[data.teamId].color
 			data.slotsAvailable = data.slots_available
 			data.oldSlotsAvailable = data.old_slots_available
 			data.trainerCount = 6 - data.slotsAvailable
 			data.oldTrainerCount = 6 - data.oldSlotsAvailable
 			data.ex = !!(data.ex_raid_eligible ?? data.is_ex_raid_eligible)
-			data.color = data.gymColor
 			data.inBattle = data.is_in_battle ?? data.in_battle
 
 			const whoCares = matchedUsers
@@ -70,35 +53,20 @@ class Gym extends Controller {
 				return []
 			}
 
-			let discordCacheBad = true
-			whoCares.forEach((cares) => {
-				if (!this.isRateLimited(cares.id)) discordCacheBad = false
-			})
-			if (discordCacheBad) return []
-
 			try {
-				if (this.imgUicons) data.imgUrl = await this.imgUicons.gymIcon(data.teamId, 6 - data.slotsAvailable, data.inBattle, data.ex) || this.config.fallbacks?.imgUrlGym
-				if (this.stickerUicons) data.stickerUrl = await this.stickerUicons.gymIcon(data.teamId, 6 - data.slotsAvailable, data.inBattle, data.ex)
+				// Icon URLs are pre-computed by the processor enrichment
 
-				const geoResult = await this.getAddress({ lat: data.latitude, lon: data.longitude })
 				const jobs = []
 
 				nightTime.setNightTime(data, this.config)
 
-				await this.getStaticMapUrl(logReference, data, 'gym', ['teamId', 'latitude', 'longitude', 'imgUrl', 'style'])
+				// Static map is pre-computed by the processor enrichment
+				data.staticmap = data.staticMap // deprecated alias
 				data.intersection = await this.obtainIntersection(data)
-
-				data.staticmap = data.staticMap // deprecated
 
 				for (const cares of whoCares) {
 					this.log.debug(`${logReference}: [matched] Creating gym alert for ${cares.id} ${cares.name} ${cares.type} ${cares.language} ${cares.template}`, cares)
 
-					const rateLimitTtr = this.getRateLimitTimeToRelease(cares.id)
-					if (rateLimitTtr) {
-						this.log.verbose(`${logReference}: [matched] Not creating gym alert (Rate limit) for ${cares.type} ${cares.id} ${cares.name} Time to release: ${rateLimitTtr}`)
-						// eslint-disable-next-line no-continue
-						continue
-					}
 					this.log.verbose(`${logReference}: [matched] Creating gym alert for ${cares.type} ${cares.id} ${cares.name} ${cares.language} ${cares.template}`)
 
 					const language = cares.language || this.config.general.locale
@@ -106,16 +74,21 @@ class Gym extends Controller {
 					let [platform] = cares.type.split(':')
 					if (platform === 'webhook') platform = 'discord'
 
-					data.teamName = translator.translate(data.teamNameEng)
-					data.oldTeamName = translator.translate(data.oldTeamNameEng)
-					data.previousControlName = translator.translate(data.previousControlNameEng)
-					data.teamEmojiEng = data.teamId >= 0 ? this.emojiLookup.lookup(this.GameData.utilData.teams[data.teamId].emoji, platform) : ''
+					// Pre-translated names from processor per-language enrichment
+					const langEnrichment = this.getLanguageEnrichment(data, language)
+					data.teamName = langEnrichment.teamName
+					data.gymColor = langEnrichment.teamColor
+					data.color = langEnrichment.teamColor
+					data.oldTeamName = langEnrichment.oldTeamName
+					data.previousControlName = langEnrichment.previousControlName || ''
+
+					// Per-platform emoji lookups (using emoji keys from enrichment)
+					data.teamEmojiEng = langEnrichment.teamEmojiKey ? this.emojiLookup.lookup(langEnrichment.teamEmojiKey, platform) : ''
 					data.teamEmoji = translator.translate(data.teamEmojiEng)
-					data.previousControlTeamEmojiEng = data.previousControlId >= 0 ? this.emojiLookup.lookup(this.GameData.utilData.teams[data.previousControlId].emoji, platform) : ''
+					data.previousControlTeamEmojiEng = langEnrichment.oldTeamEmojiKey ? this.emojiLookup.lookup(langEnrichment.oldTeamEmojiKey, platform) : ''
 					data.previousControlTeamEmoji = translator.translate(data.previousControlTeamEmojiEng)
 
 					const view = {
-						...geoResult,
 						...data,
 						time: data.distime,
 						tthh: data.tth.hours,

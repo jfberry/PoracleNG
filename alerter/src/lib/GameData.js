@@ -4,14 +4,28 @@ const { log } = require('./logger')
 
 const RESOURCES_DATA = path.resolve(__dirname, '../../../resources/data')
 
-const GameData = { utilData: require('../util/util.json') }
-const neededFiles = ['monsters', 'moves', 'items', 'grunts', 'questTypes', 'types', 'translations']
+const GameData = {}
+
+// Only load files the alerter actually uses:
+// - util: everywhere (emoji, weather, types, genders, etc.)
+// - monsters: commands (!track, !nest, !raid, !maxbattle, !tracked, script), evolutionCalculator
+// - moves: commands (!track, !maxbattle, !raid, script)
+// - items: commands (!quest, script)
+// - grunts: commands (!invasion), /api/masterdata/grunts
+// Removed: questTypes (unused), types (utilData.types used instead), translations (processor handles)
+const neededFiles = ['util', 'monsters', 'moves', 'items', 'grunts']
 
 neededFiles.forEach((file) => {
+	const filePath = path.join(RESOURCES_DATA, `${file}.json`)
 	try {
-		GameData[file] = JSON.parse(fs.readFileSync(path.join(RESOURCES_DATA, `${file}.json`)))
+		const data = JSON.parse(fs.readFileSync(filePath))
+		if (file === 'util') {
+			GameData.utilData = data
+		} else {
+			GameData[file] = data
+		}
 	} catch (e) {
-		log.error(`Could not find ${file}.json in resources/data/, before starting Poracle you will need to run 'npm run generate' or change your PM2 script to 'script: "npm start"'`)
+		log.error(`Could not load ${filePath}. The processor downloads resource files at startup — ensure the processor has started successfully before the alerter.`)
 		process.exit(9)
 	}
 })

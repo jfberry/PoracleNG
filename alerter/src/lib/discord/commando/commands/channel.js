@@ -73,7 +73,7 @@ exports.run = async (client, msg, [args]) => {
 			if (webhookName) {
 				const webhookRegistered = await client.query.countQuery('humans', { name: webhookName, type: 'webhook' })
 				if (webhookRegistered) {
-					await client.query.deleteQuery('humans', { name: webhookName, type: 'webhook' })
+					await client.query.deleteHuman({ name: webhookName, type: 'webhook' })
 					await msg.react('✅')
 					return
 				}
@@ -90,7 +90,7 @@ exports.run = async (client, msg, [args]) => {
 				return await msg.reply(`${msg.channel.name} ${client.translator.translate('does not seem to be registered. add it with')} ${client.config.discord.prefix}${client.translator.translate('channel')} ${client.translator.translate('add')}`)
 			}
 			if (isRegistered) {
-				await client.query.deleteQuery('humans', { id: target.id })
+				await client.query.deleteHuman({ id: target.id })
 				await msg.react('✅')
 			}
 		}

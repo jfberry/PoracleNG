@@ -3,6 +3,8 @@ package webhook
 import (
 	"encoding/json"
 	"strconv"
+
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 // FlexBool handles JSON booleans that may arrive as true/false or 0/1.
@@ -26,6 +28,28 @@ func (fb *FlexBool) UnmarshalJSON(data []byte) error {
 	}
 	// Try unquoted string
 	*fb = false
+	return nil
+}
+
+// FlexString handles JSON values that may arrive as a string or a number.
+// Older scanners sent some IDs (e.g. spawnpoint_id) as integers; newer ones
+// send hex strings. This accepts either and stores the result as a string.
+type FlexString string
+
+func (fs *FlexString) UnmarshalJSON(data []byte) error {
+	s := string(data)
+	if s == "null" {
+		*fs = ""
+		return nil
+	}
+	// Try as quoted string first
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*fs = FlexString(str)
+		return nil
+	}
+	// Must be a bare number — use the raw representation
+	*fs = FlexString(s)
 	return nil
 }
 
@@ -62,8 +86,8 @@ type PokemonWebhook struct {
 	DisplayPokemonID      int     `json:"display_pokemon_id"`
 	DisplayForm           int     `json:"display_form"`
 	SeenType              string  `json:"seen_type"`
-	PokestopID            string  `json:"pokestop_id"`
-	SpawnpointID          string  `json:"spawnpoint_id"`
+	PokestopID            string     `json:"pokestop_id"`
+	SpawnpointID          FlexString `json:"spawnpoint_id"`
 	PokestopName          string  `json:"pokestop_name"`
 	BaseCatch             float64 `json:"base_catch"`
 	GreatCatch            float64 `json:"great_catch"`
@@ -175,12 +199,15 @@ type MatchedUser struct {
 
 // OutboundPayload is sent from processor to alerter.
 type OutboundPayload struct {
-	Type         string          `json:"type"`
-	Message      json.RawMessage `json:"message"`
-	Enrichment   map[string]any  `json:"enrichment,omitempty"`
-	MatchedAreas []MatchedArea   `json:"matched_areas"`
-	MatchedUsers []MatchedUser   `json:"matched_users"`
-	OldState     *EncounterOld   `json:"old_state,omitempty"`
+	Type                   string                    `json:"type"`
+	Message                json.RawMessage           `json:"message"`
+	Enrichment             map[string]any            `json:"enrichment,omitempty"`
+	PerLanguageEnrichment  map[string]map[string]any `json:"per_language_enrichment,omitempty"` // lang → enrichment
+	PerUserEnrichment      map[string]map[string]any `json:"per_user_enrichment,omitempty"`     // userId → enrichment
+	MatchedAreas           []MatchedArea             `json:"matched_areas"`
+	MatchedUsers           []MatchedUser             `json:"matched_users"`
+	OldState               *EncounterOld             `json:"old_state,omitempty"`
+	TilePending            *staticmap.TilePending    `json:"-"` // async tile, resolved by sender before flush
 }
 
 // EncounterOld holds old state for pokemon_changed events.
@@ -214,6 +241,10 @@ type QuestWebhook struct {
 	Name       string        `json:"pokestop_name"`
 	Latitude   float64       `json:"latitude"`
 	Longitude  float64       `json:"longitude"`
+	Title      string        `json:"title"`
+	Target     int           `json:"target"`
+	QuestType  int           `json:"type"`
+	Template   string        `json:"template"`
 	Rewards    []QuestReward `json:"rewards"`
 }
 
@@ -250,13 +281,14 @@ type GymWebhook struct {
 
 // NestWebhook mirrors a nest webhook message.
 type NestWebhook struct {
-	NestID     int64   `json:"nest_id"`
-	PokemonID  int     `json:"pokemon_id"`
-	Form       int     `json:"form"`
-	PokemonAvg float64 `json:"pokemon_avg"`
-	Latitude   float64 `json:"latitude"`
-	Longitude  float64 `json:"longitude"`
-	ResetTime  int64   `json:"reset_time"`
+	NestID     int64           `json:"nest_id"`
+	PokemonID  int             `json:"pokemon_id"`
+	Form       int             `json:"form"`
+	PokemonAvg float64         `json:"pokemon_avg"`
+	Latitude   float64         `json:"latitude"`
+	Longitude  float64         `json:"longitude"`
+	ResetTime  int64           `json:"reset_time"`
+	PolyPath   json.RawMessage `json:"poly_path"`
 }
 
 // MaxbattleWebhook mirrors Golbat's max_battle webhook message.

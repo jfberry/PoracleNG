@@ -12,7 +12,11 @@ import (
 )
 
 func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
-	ps.workerPool <- struct{}{}
+	select {
+	case ps.workerPool <- struct{}{}:
+	case <-ps.ctx.Done():
+		return nil
+	}
 	metrics.WorkerPoolInUse.Inc()
 	ps.wg.Add(1)
 	go func() {
@@ -52,6 +56,12 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		}
 		gruntType := matching.ResolveGruntType(inv.IncidentGruntType, inv.GruntType, displayType)
 
+		// Resolve the raw grunt type integer for enrichment lookups
+		gruntTypeID := inv.IncidentGruntType
+		if gruntTypeID == 0 || gruntTypeID == 352 {
+			gruntTypeID = inv.GruntType
+		}
+
 		data := &matching.InvasionData{
 			PokestopID: inv.PokestopID,
 			GruntType:  gruntType,
@@ -61,7 +71,10 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
+		matchStart := time.Now()
 		matched := ps.invasionMatcher.Match(data, st)
+		metrics.MatchingDuration.WithLabelValues("invasion").Observe(time.Since(matchStart).Seconds())
+		matched = ps.filterRateLimited(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("invasion").Inc()
@@ -70,18 +83,32 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			areas := st.Geofence.PointInAreas(inv.Latitude, inv.Longitude)
 			matchedAreas := buildMatchedAreas(areas)
 
-			l.Infof("Invasion grunt %s at %s and %d humans cared",
-				gruntType, inv.Name, len(matched))
+			l.Infof("Invasion grunt %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
+				gruntType, inv.Name, inv.Latitude, inv.Longitude, areaNames(matchedAreas), len(matched))
+
+			baseEnrichment, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0)
+
+			// Compute per-language translated enrichment
+			var perLang map[string]map[string]any
+			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
+					perLang[lang] = ps.enricher.InvasionTranslate(baseEnrichment, gruntTypeID, lang)
+				}
+			}
 
 			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "invasion",
-				Message:      raw,
-				Enrichment:   ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration),
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
+				Type:                  "invasion",
+				Message:               raw,
+				Enrichment:            baseEnrichment,
+				PerLanguageEnrichment: perLang,
+				MatchedAreas:          matchedAreas,
+				MatchedUsers:          matched,
+				TilePending:           tilePending,
 			})
 		} else {
-			l.Debugf("Invasion grunt %s at %s and 0 humans cared", gruntType, inv.Name)
+			l.Debugf("Invasion grunt %s at %s [%.3f,%.3f] and 0 humans cared",
+				gruntType, inv.Name, inv.Latitude, inv.Longitude)
 		}
 	}()
 	return nil

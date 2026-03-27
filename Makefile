@@ -12,7 +12,7 @@ build-processor:
 
 # Install alerter Node.js dependencies
 install-alerter:
-	cd alerter && npm install
+	cd alerter && npm ci
 
 # Remove build artifacts
 clean:

@@ -1,7 +1,5 @@
 const inside = require('point-in-polygon')
-const NodeGeocoder = require('node-geocoder')
 const cp = require('child_process')
-const TileserverPregen = require('../lib/tileserverPregen')
 
 class Query {
 	constructor(log, db, config, geofence) {
@@ -10,53 +8,6 @@ class Query {
 		this.log = log
 		this.cp = cp
 		this.geofence = geofence
-		this.tileserverPregen = new TileserverPregen(config, log)
-	}
-
-	getGeocoder() {
-		switch (this.config.geocoding.provider.toLowerCase()) {
-			case 'poracle': {
-				return NodeGeocoder({
-					provider: 'openstreetmap',
-					osmServer: this.config.geocoding.providerURL,
-					formatterPattern: this.config.locale.addressFormat,
-				})
-			}
-			case 'nominatim': {
-				return NodeGeocoder({
-					provider: 'openstreetmap',
-					osmServer: this.config.geocoding.providerURL,
-					formatterPattern: this.config.locale.addressFormat,
-				})
-			}
-			case 'google': {
-				return NodeGeocoder({
-					provider: 'google',
-					httpAdapter: 'https',
-					apiKey: this.config.geocoding.geocodingKey[Math.floor(Math.random() * this.config.geocoding.geocodingKey.length)],
-				})
-			}
-			default:
-			{
-				return NodeGeocoder({
-					provider: 'openstreetmap',
-					formatterPattern: this.config.locale.addressFormat,
-				})
-			}
-		}
-	}
-
-	async geolocate(locationString) {
-		if (this.config.geocoding.provider.toLowerCase() === 'none') {
-			return []
-		}
-
-		try {
-			const geocoder = this.getGeocoder()
-			return await geocoder.geocode(locationString)
-		} catch (err) {
-			throw { source: 'geolocate', err }
-		}
 	}
 
 	pointInArea(point) {

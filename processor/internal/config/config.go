@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	Processor      ProcessorConfig      `toml:"processor"`
+	General        GeneralConfig        `toml:"general"`
 	Database       DatabaseConfig       `toml:"database"`
 	Geofence       GeofenceConfig       `toml:"geofence"`
 	PVP            PVPConfig            `toml:"pvp"`
@@ -20,15 +21,37 @@ type Config struct {
 	Locale         LocaleConfig         `toml:"locale"`
 	Logging        LoggingConfig        `toml:"logging"`
 	WebhookLogging WebhookLoggingConfig `toml:"webhookLogging"`
+	AlertLimits    AlertLimitsConfig    `toml:"alert_limits"`
+	Alerter        AlerterConfig        `toml:"alerter"`
+	Discord        DiscordConfig        `toml:"discord"`
+	Telegram       TelegramConfig       `toml:"telegram"`
+	Geocoding      GeocodingConfig      `toml:"geocoding"`
+	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
 }
 
+// GeneralConfig holds settings from the [general] section used by the processor
+// for map URL generation and other enrichment features.
+type GeneralConfig struct {
+	Locale               string `toml:"locale"`                // default language code (e.g. "en", "pl")
+	DefaultTemplateName  any    `toml:"default_template_name"` // default DTS template (typically 1 or "1")
+	RdmURL               string `toml:"rdm_url"`
+	ReactMapURL          string `toml:"react_map_url"`
+	RocketMadURL         string `toml:"rocket_mad_url"`
+	ImgURL               string `toml:"img_url"`
+	ImgURLAlt            string `toml:"img_url_alt"`
+	StickerURL           string `toml:"sticker_url"`
+	RequestShinyImages   bool   `toml:"request_shiny_images"`
+	PopulatePokestopName bool   `toml:"populate_pokestop_name"`
+}
+
 type LocaleConfig struct {
-	TimeFormat string `toml:"timeformat"`
-	Time       string `toml:"time"`
-	Date       string `toml:"date"`
+	TimeFormat    string `toml:"timeformat"`
+	Time          string `toml:"time"`
+	Date          string `toml:"date"`
+	AddressFormat string `toml:"address_format"`
 }
 
 type LoggingConfig struct {
@@ -48,6 +71,24 @@ type ProcessorConfig struct {
 	Port        int      `toml:"port"`
 	AlerterURL  string   `toml:"alerter_url"`
 	IPWhitelist []string `toml:"ip_whitelist"`
+	APISecret   string   `toml:"api_secret"` // Alerter API secret (read from [alerter] section)
+}
+
+// AlerterConfig reads the [alerter] section so the processor can authenticate to alerter APIs.
+type AlerterConfig struct {
+	APISecret string `toml:"api_secret"`
+}
+
+// DiscordConfig reads the [discord] section for fields the processor needs.
+type DiscordConfig struct {
+	Prefix   string   `toml:"prefix"`
+	IvColors []string `toml:"iv_colors"`
+	Admins   []string `toml:"admins"`
+}
+
+// TelegramConfig reads the [telegram] section for fields the processor needs.
+type TelegramConfig struct {
+	Admins []string `toml:"admins"`
 }
 
 // ListenAddr returns the host:port listen address.
@@ -56,11 +97,40 @@ func (p ProcessorConfig) ListenAddr() string {
 }
 
 type DatabaseConfig struct {
+	Host     string          `toml:"host"`
+	Port     int             `toml:"port"`
+	User     string          `toml:"user"`
+	Password string          `toml:"password"`
+	Database string          `toml:"database"`
+	Scanner  ScannerDBConfig `toml:"scanner"`
+}
+
+// ScannerDBConfig holds configuration for the scanner database connection.
+type ScannerDBConfig struct {
 	Host     string `toml:"host"`
 	Port     int    `toml:"port"`
 	User     string `toml:"user"`
 	Password string `toml:"password"`
 	Database string `toml:"database"`
+	Type     string `toml:"type"` // "golbat" (default) or "rdm"
+}
+
+// DSN returns a MySQL DSN string for the scanner database.
+func (s ScannerDBConfig) DSN() string {
+	host := s.Host
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := s.Port
+	if port == 0 {
+		port = 3306
+	}
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true", s.User, s.Password, host, port, s.Database)
+}
+
+// Configured returns true if the scanner database has been configured with at least a user and database.
+func (s ScannerDBConfig) Configured() bool {
+	return s.User != "" && s.Database != ""
 }
 
 // DSN returns a MySQL DSN string built from the individual fields.
@@ -95,13 +165,19 @@ type PVPConfig struct {
 	PVPFilterUltraMinCP        int   `toml:"pvp_filter_ultra_min_cp"`
 	PVPFilterLittleMinCP       int   `toml:"pvp_filter_little_min_cp"`
 	IncludeMegaEvolution       bool  `toml:"include_mega_evolution"`
+	DisplayMaxRank             int   `toml:"display_max_rank"`
+	DisplayGreatMinCP          int   `toml:"display_great_min_cp"`
+	DisplayUltraMinCP          int   `toml:"display_ultra_min_cp"`
+	DisplayLittleMinCP         int   `toml:"display_little_min_cp"`
+	FilterByTrack              bool  `toml:"filter_by_track"`
 }
 
 type WeatherConfig struct {
 	EnableInference            bool   `toml:"enable_inference"`
 	ChangeAlert                bool   `toml:"change_alert"`
-	ShowAlteredPokemon         bool   `toml:"show_altered_pokemon"`
-	ShowAlteredPokemonMaxCount int `toml:"show_altered_pokemon_max_count"`
+	ShowAlteredPokemon              bool `toml:"show_altered_pokemon"`
+	ShowAlteredPokemonMaxCount      int  `toml:"show_altered_pokemon_max_count"`
+	ShowAlteredPokemonStaticMap     bool `toml:"show_altered_pokemon_static_map"`
 
 	// AccuWeather forecast
 	EnableForecast          bool     `toml:"enable_forecast"`
@@ -123,16 +199,57 @@ type StatsConfig struct {
 }
 
 type TuningConfig struct {
-	ReloadIntervalSecs  int `toml:"reload_interval_secs"`
-	EncounterCacheTTL   int `toml:"encounter_cache_ttl"`
-	WorkerPoolSize      int `toml:"worker_pool_size"`
-	BatchSize           int `toml:"batch_size"`
-	FlushIntervalMillis int `toml:"flush_interval_millis"`
+	ReloadIntervalSecs         int `toml:"reload_interval_secs"`
+	EncounterCacheTTL          int `toml:"encounter_cache_ttl"`
+	WorkerPoolSize             int `toml:"worker_pool_size"`
+	BatchSize                  int `toml:"batch_size"`
+	FlushIntervalMillis        int `toml:"flush_interval_millis"`
+	TileserverConcurrency      int `toml:"tileserver_concurrency"`       // tile worker goroutines (default 2)
+	TileserverTimeout          int `toml:"tileserver_timeout"`           // HTTP POST timeout ms (default 10000)
+	TileserverFailureThreshold int `toml:"tileserver_failure_threshold"` // circuit breaker threshold (default 5)
+	TileserverCooldownMs       int `toml:"tileserver_cooldown_ms"`      // circuit breaker cooldown ms (default 30000)
+	TileserverQueueSize        int `toml:"tileserver_queue_size"`       // async tile queue depth (default 100)
+	TileserverDeadlineMs       int `toml:"tileserver_deadline"`         // max wait for tile before fallback ms (default 5000)
+	GeocodingConcurrency       int `toml:"geocoding_concurrency"`
+	GeocodingTimeout           int `toml:"geocoding_timeout"`            // ms
+	GeocodingFailureThreshold  int `toml:"geocoding_failure_threshold"`
+	GeocodingCooldownMs        int `toml:"geocoding_cooldown_ms"`
 }
 
 type AreaConfig struct {
-	Enabled         bool `toml:"enabled"`
-	StrictLocations bool `toml:"strict_locations"`
+	Enabled         bool              `toml:"enabled"`
+	StrictLocations bool              `toml:"strict_locations"`
+	Communities     []CommunityConfig `toml:"communities"`
+}
+
+// CommunityConfig represents a community entry under [[area_security.communities]].
+type CommunityConfig struct {
+	Name          string   `toml:"name"`
+	AllowedAreas  []string `toml:"allowed_areas"`
+	LocationFence []string `toml:"location_fence"`
+	Discord       struct {
+		Channels []string `toml:"channels"`
+		UserRole []string `toml:"user_role"`
+	} `toml:"discord"`
+	Telegram struct {
+		Channels []string `toml:"channels"`
+		Admins   []string `toml:"admins"`
+	} `toml:"telegram"`
+}
+
+type AlertLimitsConfig struct {
+	TimingPeriod        int                  `toml:"timing_period"`
+	DMLimit             int                  `toml:"dm_limit"`
+	ChannelLimit        int                  `toml:"channel_limit"`
+	MaxLimitsBeforeStop int                  `toml:"max_limits_before_stop"`
+	DisableOnStop       bool                 `toml:"disable_on_stop"`
+	ShameChannel        string               `toml:"shame_channel"`
+	Overrides           []AlertLimitOverride `toml:"overrides"`
+}
+
+type AlertLimitOverride struct {
+	Target string `toml:"target"`
+	Limit  int    `toml:"limit"`
 }
 
 type WebhookLoggingConfig struct {
@@ -142,6 +259,48 @@ type WebhookLoggingConfig struct {
 	MaxAge     int    `toml:"max_age"`
 	MaxBackups int    `toml:"max_backups"`
 	Compress   bool   `toml:"compress"`
+}
+
+// GeocodingConfig holds settings from the [geocoding] section for static map generation
+// and address geocoding.
+type GeocodingConfig struct {
+	// Address geocoding provider
+	Provider     string   `toml:"provider"`      // "none", "nominatim", "google"
+	ProviderURL  string   `toml:"provider_url"`  // nominatim URL
+	GeocodingKey []string `toml:"geocoding_key"` // google API keys
+	CacheDetail  int      `toml:"cache_detail"`  // decimal places for cache key rounding (default 3)
+	ForwardOnly  bool     `toml:"forward_only"`  // if true, skip reverse geocoding
+
+	// Static map tile provider
+	StaticProvider    string                       `toml:"static_provider"`
+	StaticProviderURL string                       `toml:"static_provider_url"`
+	StaticKey         []string                     `toml:"static_key"`
+	Width             int                          `toml:"width"`
+	Height            int                          `toml:"height"`
+	Zoom              int                          `toml:"zoom"`
+	MapType           string                       `toml:"type"`
+	DayStyle          string                       `toml:"day_style"`
+	DawnStyle         string                       `toml:"dawn_style"`
+	DuskStyle         string                       `toml:"dusk_style"`
+	NightStyle        string                       `toml:"night_style"`
+	TileserverSettings map[string]TileserverConfig `toml:"tileserver_settings"`
+	StaticMapType     map[string]string            `toml:"static_map_type"`
+}
+
+// TileserverConfig holds per-tile-type settings under [geocoding.tileserver_settings.*].
+// Booleans use *bool so empty TOML sections don't override defaults.
+type TileserverConfig struct {
+	Type         string `toml:"type"`
+	IncludeStops *bool  `toml:"include_stops"`
+	Width        int    `toml:"width"`
+	Height       int    `toml:"height"`
+	Zoom         int    `toml:"zoom"`
+	Pregenerate  *bool  `toml:"pregenerate"`
+}
+
+// FallbacksConfig holds fallback URLs from the [fallbacks] section.
+type FallbacksConfig struct {
+	StaticMap string `toml:"static_map"`
 }
 
 // ResolvePath resolves a path relative to the config file's directory.
@@ -171,9 +330,13 @@ func Load(baseDir string) (*Config, error) {
 			AlerterURL: "http://localhost:3031",
 		},
 		PVP: PVPConfig{
-			PVPQueryMaxRank:  100,
-			PVPFilterMaxRank: 100,
-			LevelCaps:        []int{50},
+			PVPQueryMaxRank:    100,
+			PVPFilterMaxRank:   100,
+			LevelCaps:          []int{50},
+			DisplayMaxRank:     10,
+			DisplayGreatMinCP:  1400,
+			DisplayUltraMinCP:  2350,
+			DisplayLittleMinCP: 450,
 		},
 		Tuning: TuningConfig{
 			ReloadIntervalSecs:  60,
@@ -182,9 +345,67 @@ func Load(baseDir string) (*Config, error) {
 			BatchSize:           50,
 			FlushIntervalMillis: 100,
 		},
+		Stats: StatsConfig{
+			MinSampleSize:       10000,
+			WindowHours:         8,
+			RefreshIntervalMins: 5,
+			Uncommon:            1.0,
+			Rare:                0.5,
+			VeryRare:            0.03,
+			UltraRare:           0.01,
+		},
+		Locale: LocaleConfig{
+			TimeFormat:    "en-gb",
+			Time:          "LTS",
+			Date:          "L",
+			AddressFormat: "{{{streetName}}} {{streetNumber}}",
+		},
+		Weather: WeatherConfig{
+			ShowAlteredPokemonMaxCount: 10,
+			AccuWeatherDayQuota:        50,
+			ForecastRefreshInterval:    8,
+			LocalFirstFetchHOD:         3,
+		},
+		Logging: LoggingConfig{
+			Filename:           "logs/processor.log",
+			FileLoggingEnabled: true,
+			MaxSize:            50,
+			MaxAge:             30,
+			MaxBackups:         5,
+		},
+		Discord: DiscordConfig{
+			Prefix:   "!",
+			IvColors: []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"},
+		},
+		AlertLimits: AlertLimitsConfig{
+			TimingPeriod:        240,
+			DMLimit:             20,
+			ChannelLimit:        40,
+			MaxLimitsBeforeStop: 10,
+		},
+		Database: DatabaseConfig{
+			Scanner: ScannerDBConfig{
+				Type: "golbat",
+			},
+		},
+		Geocoding: GeocodingConfig{
+			CacheDetail: 3,
+		},
+		General: GeneralConfig{
+			ImgURL:     "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS",
+			StickerURL: "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle",
+		},
+		Fallbacks: FallbacksConfig{
+			StaticMap: "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png",
+		},
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
+	}
+
+	// Copy alerter api_secret to processor config for API authentication
+	if cfg.Alerter.APISecret != "" && cfg.Processor.APISecret == "" {
+		cfg.Processor.APISecret = cfg.Alerter.APISecret
 	}
 
 	// Validate required fields
@@ -211,48 +432,7 @@ func Load(baseDir string) (*Config, error) {
 		cfg.Geofence.Koji.CacheDir = filepath.Join(configDir, cfg.Geofence.Koji.CacheDir)
 	}
 
-	if cfg.Stats.MinSampleSize == 0 {
-		cfg.Stats.MinSampleSize = 10000
-	}
-	if cfg.Stats.WindowHours == 0 {
-		cfg.Stats.WindowHours = 8
-	}
-	if cfg.Stats.RefreshIntervalMins == 0 {
-		cfg.Stats.RefreshIntervalMins = 5
-	}
-	if cfg.Stats.Uncommon == 0 {
-		cfg.Stats.Uncommon = 1.0
-	}
-	if cfg.Stats.Rare == 0 {
-		cfg.Stats.Rare = 0.5
-	}
-	if cfg.Stats.VeryRare == 0 {
-		cfg.Stats.VeryRare = 0.03
-	}
-	if cfg.Stats.UltraRare == 0 {
-		cfg.Stats.UltraRare = 0.01
-	}
-	if cfg.Locale.TimeFormat == "" {
-		cfg.Locale.TimeFormat = "en-gb"
-	}
-	if cfg.Locale.Time == "" {
-		cfg.Locale.Time = "LTS"
-	}
-	if cfg.Locale.Date == "" {
-		cfg.Locale.Date = "L"
-	}
-	if cfg.Weather.ShowAlteredPokemonMaxCount == 0 {
-		cfg.Weather.ShowAlteredPokemonMaxCount = 10
-	}
-	if cfg.Weather.AccuWeatherDayQuota == 0 {
-		cfg.Weather.AccuWeatherDayQuota = 50
-	}
-	if cfg.Weather.ForecastRefreshInterval == 0 {
-		cfg.Weather.ForecastRefreshInterval = 8
-	}
-	if cfg.Weather.LocalFirstFetchHOD == 0 {
-		cfg.Weather.LocalFirstFetchHOD = 3
-	}
+	// Conditional defaults that depend on other config values
 	if cfg.PVP.PVPQueryMaxRank == 0 {
 		cfg.PVP.PVPQueryMaxRank = cfg.PVP.PVPFilterMaxRank
 	}
@@ -260,27 +440,13 @@ func Load(baseDir string) (*Config, error) {
 		cfg.PVP.PVPQueryMaxRank = 100
 	}
 
-	// Logging defaults — file logging is on by default for the processor
-	// Resolve level: prefer 'level', fall back to 'log_level' or 'console_log_level' (from migrated configs)
+	// Logging level fallback chain: level → log_level → console_log_level (migrated configs)
 	if cfg.Logging.Level == "" {
 		if cfg.Logging.LogLevel != "" {
 			cfg.Logging.Level = cfg.Logging.LogLevel
 		} else if cfg.Logging.ConsoleLogLevel != "" {
 			cfg.Logging.Level = cfg.Logging.ConsoleLogLevel
 		}
-	}
-	if cfg.Logging.Filename == "" {
-		cfg.Logging.Filename = "logs/processor.log"
-		cfg.Logging.FileLoggingEnabled = true
-	}
-	if cfg.Logging.MaxSize == 0 {
-		cfg.Logging.MaxSize = 50
-	}
-	if cfg.Logging.MaxAge == 0 {
-		cfg.Logging.MaxAge = 30
-	}
-	if cfg.Logging.MaxBackups == 0 {
-		cfg.Logging.MaxBackups = 5
 	}
 
 	// Resolve log filenames relative to project root (BaseDir)

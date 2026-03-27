@@ -3,8 +3,13 @@ package enrichment
 import (
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/geocoding"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
+	"github.com/pokemon/poracleng/processor/internal/uicons"
 )
 
 // WeatherProvider looks up weather conditions for an S2 cell.
@@ -23,6 +28,22 @@ type ShinyRateProvider interface {
 	GetShinyRate(pokemonID int) float64
 }
 
+// MapConfig holds the map URL configuration for enrichment.
+type MapConfig struct {
+	RdmURL       string
+	ReactMapURL  string
+	RocketMadURL string
+}
+
+// PVPDisplayConfig holds configuration for per-user PVP display filtering.
+type PVPDisplayConfig struct {
+	MaxRank       int
+	GreatMinCP    int
+	UltraMinCP    int
+	LittleMinCP   int
+	FilterByTrack bool
+}
+
 // Enricher computes additional fields to accompany webhook messages
 // sent to the alerter. The enrichment map is sent alongside the original
 // raw message so neither needs to be re-encoded.
@@ -33,6 +54,18 @@ type Enricher struct {
 	ForecastProvider ForecastProvider  // optional; triggers AccuWeather fetch
 	ShinyProvider    ShinyRateProvider // optional; provides shiny rates
 	EventChecker     *PogoEventChecker
+	GameData         *gamedata.GameData  // game master data for enrichment
+	Translations     *i18n.Bundle        // translations for per-language enrichment
+	MapConfig        *MapConfig          // map URL configuration
+	IvColors           []string            // Discord IV color hex strings (6 thresholds)
+	PVPDisplay         *PVPDisplayConfig   // PVP display filtering config
+	ImgUicons          *uicons.Uicons        // Primary icon resolver
+	ImgUiconsAlt       *uicons.Uicons        // Alternative icon resolver
+	StickerUicons      *uicons.Uicons        // Sticker icon resolver (webp)
+	DefaultLocale      string                   // Fallback locale when user has no language set
+	RequestShinyImages bool                   // Whether to request shiny icon variants
+	StaticMap          *staticmap.Resolver    // Static map tile resolver (nil = disabled)
+	Geocoder           *geocoding.Geocoder    // Reverse geocoder (nil = disabled)
 }
 
 // New creates a new Enricher.
@@ -61,4 +94,145 @@ func addSunTimes(m map[string]any, lat, lon float64, tz string) {
 	m["nightTime"] = sunTimes.NightTime
 	m["dawnTime"] = sunTimes.DawnTime
 	m["duskTime"] = sunTimes.DuskTime
+}
+
+// addMapURLs adds all map URL fields to the enrichment map.
+func (e *Enricher) addMapURLs(m map[string]any, lat, lon float64, entityType, entityID string) {
+	m["appleMapUrl"] = geo.AppleMapURL(lat, lon)
+	m["googleMapUrl"] = geo.GoogleMapURL(lat, lon)
+	m["wazeMapUrl"] = geo.WazeMapURL(lat, lon)
+
+	if e.MapConfig == nil {
+		return
+	}
+
+	if e.MapConfig.RdmURL != "" {
+		m["rdmUrl"] = normalizeTrailingSlash(e.MapConfig.RdmURL) + "@" + entityType + "/" + entityID
+	}
+	if e.MapConfig.ReactMapURL != "" {
+		m["reactMapUrl"] = normalizeTrailingSlash(e.MapConfig.ReactMapURL) + "id/" + entityType + "/" + entityID
+	}
+	if e.MapConfig.RocketMadURL != "" {
+		m["rocketMadUrl"] = normalizeTrailingSlash(e.MapConfig.RocketMadURL) + "?lat=" + geo.FormatCoord(lat) + "&lon=" + geo.FormatCoord(lon) + "&zoom=18.0"
+	}
+}
+
+func normalizeTrailingSlash(url string) string {
+	if len(url) > 0 && url[len(url)-1] != '/' {
+		return url + "/"
+	}
+	return url
+}
+
+// addGeoResult performs a reverse geocode lookup and adds address fields to the
+// enrichment map. This should be called BEFORE addStaticMap so that static map
+// templates can reference address fields.
+func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
+	if e.Geocoder == nil {
+		return
+	}
+	addr := e.Geocoder.GetAddress(lat, lon)
+	if addr == nil {
+		return
+	}
+	m["addr"] = addr.Addr
+	m["flag"] = addr.Flag
+	m["streetName"] = addr.StreetName
+	m["streetNumber"] = addr.StreetNumber
+	m["city"] = addr.City
+	m["state"] = addr.State
+	m["zipcode"] = addr.Zipcode
+	m["country"] = addr.Country
+	m["countryCode"] = addr.CountryCode
+	m["neighbourhood"] = addr.Neighbourhood
+	m["suburb"] = addr.Suburb
+	m["formattedAddress"] = addr.FormattedAddress
+}
+
+// addStaticMap generates a static map tile URL and adds it to the enrichment map.
+// For async-capable providers (tileservercache pregenerate), returns a TilePending
+// that the sender resolves before flushing. For instant providers, sets the URL
+// directly and returns nil.
+func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any) *staticmap.TilePending {
+	if e.StaticMap == nil {
+		return nil
+	}
+	// Build tileserver payload from enrichment + webhook fields
+	merged := make(map[string]any, len(m)+len(webhookFields)+2)
+	for k, v := range m {
+		merged[k] = v
+	}
+	for k, v := range webhookFields {
+		merged[k] = v
+	}
+	merged["latitude"] = lat
+	merged["longitude"] = lon
+	keys, pregenKeys := staticMapFieldsForType(maptype)
+
+	url, pending := e.StaticMap.GetStaticMapURLAsync(maptype, merged, keys, pregenKeys, m)
+	if pending != nil {
+		// Tile will be resolved async by the sender
+		return pending
+	}
+	// Instant URL (non-pregen or non-tileservercache)
+	m["staticMap"] = url
+	m["staticmap"] = url // deprecated alias
+	return nil
+}
+
+// staticMapFieldsForType returns the field lists for non-pregenerate (keys) and
+// pregenerate (pregenKeys) modes.
+//
+// Both use the same base set of fields. Pregenerate adds nightTime/duskTime/dawnTime
+// (not useful in a URL) and large array fields like nearbyStops and activePokemons.
+func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string) {
+	// Common fields included in both modes
+	common := []string{"latitude", "longitude", "imgUrl", "imgUrlAlt",
+		"nightTime", "duskTime", "dawnTime", "style"}
+
+	switch maptype {
+	case "monster":
+		typeFields := []string{"pokemon_id", "display_pokemon_id", "form", "costume", "pokemonId",
+			"generation", "weather", "confirmedTime", "shinyPossible", "seenType", "seen_type", "verified",
+			"cell_coords"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
+	case "raid":
+		typeFields := []string{"pokemon_id", "form", "level", "teamId", "evolution", "costume"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
+	case "pokestop":
+		typeFields := []string{"gruntTypeId", "displayTypeId", "lureTypeId"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
+	case "quest":
+		keys = common
+		pregenKeys = keys
+	case "gym":
+		typeFields := []string{"team_id", "slotsAvailable", "inBattle", "ex"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
+	case "nest":
+		typeFields := []string{"pokemon_id", "form", "pokemonSpawnAvg"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
+	case "weather":
+		typeFields := []string{"gameplay_condition", "coords"}
+		keys = append(common, typeFields...)
+		// Pregen adds activePokemons (large array, not suitable for URL)
+		pregenKeys = append(append([]string{}, keys...), "activePokemons")
+	case "maxbattle":
+		typeFields := []string{"battle_level", "battle_pokemon_id"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
+	case "fort-update":
+		typeFields := []string{"isEditLocation", "fortType", "map_latitude", "map_longitude",
+			"oldLatitude", "oldLongitude", "zoom"}
+		keys = append(common, typeFields...)
+		pregenKeys = keys
+	default:
+		keys = []string{"latitude", "longitude"}
+		pregenKeys = []string{"latitude", "longitude"}
+	}
+	return
 }

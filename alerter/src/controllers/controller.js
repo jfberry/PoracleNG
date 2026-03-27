@@ -4,7 +4,6 @@ const path = require('path')
 const fs = require('fs')
 const { getConfigDir } = require('../lib/configResolver')
 const Uicons = require('../lib/uicons')
-const TileserverPregen = require('../lib/tileserverPregen')
 const replaceAsync = require('../util/stringReplaceAsync')
 const HideUriShortener = require('../lib/hideuriUrlShortener')
 const ShlinkUriShortener = require('../lib/shlinkUrlShortener')
@@ -14,7 +13,7 @@ const GetIntersection = require('../lib/getIntersection')
 const EmojiLookup = require('../lib/emojiLookup')
 
 class Controller extends EventEmitter {
-	constructor(log, db, geocoder, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache, weatherData, statsData, eventProviders) {
+	constructor(log, db, geocoder, scannerQuery, config, dts, geofence, GameData, discordCache, translatorFactory, mustache, weatherData, statsData, eventProviders) { // discordCache param kept for backward compat but unused
 		super()
 		this.db = db
 		this.scannerQuery = scannerQuery
@@ -23,7 +22,6 @@ class Controller extends EventEmitter {
 		this.dts = dts
 		this.geofence = geofence
 		this.GameData = GameData
-		this.discordCache = discordCache
 		this.translatorFactory = translatorFactory
 		this.translator = translatorFactory ? this.translatorFactory.default : null
 		this.mustache = mustache
@@ -31,14 +29,12 @@ class Controller extends EventEmitter {
 		this.statsData = statsData
 		this.shinyPossible = eventProviders && eventProviders.shinyPossible
 		//		this.controllerData = weatherCacheData || {}
-		this.tileserverPregen = new TileserverPregen(this.config, this.log)
 		this.getIntersection = new GetIntersection(this.config, this.log)
 		this.emojiLookup = new EmojiLookup(GameData.utilData.emojis)
 		this.imgUicons = this.config.general.imgUrl ? new Uicons((this.config.general.images && this.config.general.images[this.constructor.name.toLowerCase()]) || this.config.general.imgUrl, 'png', this.log) : null
 		this.imgUiconsAlt = this.config.general.imgUrlAlt ? new Uicons((this.config.general.imagesAlt && this.config.general.imagesAlt[this.constructor.name.toLowerCase()]) || this.config.general.imgUrlAlt, 'png', this.log) : null
 		this.stickerUicons = this.config.general.stickerUrl ? new Uicons((this.config.general.stickers && this.config.general.stickers[this.constructor.name.toLowerCase()]) || this.config.general.stickerUrl, 'webp', this.log) : null
 		this.dtsCache = {}
-		this.geocoder = geocoder
 		this.shortener = this.getShortener()
 	}
 
@@ -191,95 +187,6 @@ class Controller extends EventEmitter {
 		return message
 	}
 
-	async getStaticMapUrl(logReference, data, maptype, keys, pregenKeys) {
-		switch (this.config.geocoding.staticProvider.toLowerCase()) {
-			case 'tileservercache': {
-				const tileServerOptions = this.tileserverPregen.getConfigForTileType(maptype)
-
-				if (tileServerOptions.includeStops && tileServerOptions.pregenerate && this.scannerQuery) {
-					const limits = this.tileserverPregen.limits(data.latitude, data.longitude, tileServerOptions.width, tileServerOptions.height, tileServerOptions.zoom)
-					data.nearbyStops = await this.scannerQuery.getStopData(limits[0][0], limits[0][1], limits[1][0], limits[1][1])
-					if (data.nearbyStops && this.imgUicons) {
-						data.uiconPokestopUrl = await this.imgUicons.pokestopIcon(0)
-						for (const stop of data.nearbyStops) {
-							switch (stop.type) {
-								case 'gym': {
-									stop.imgUrl = await this.imgUicons.gymIcon(stop.teamId, 6 - stop.slots, false, false) || this.config.fallbacks?.imgUrlGym
-									break
-								}
-								case 'stop': {
-									break
-								}
-								default:
-							}
-						}
-					}
-				}
-
-				if (tileServerOptions.type && tileServerOptions.type !== 'none') {
-					if (!tileServerOptions.pregenerate) {
-						data.staticMap = await this.tileserverPregen.getTileURL(
-							logReference,
-							maptype,
-							Object.fromEntries(Object.entries(data)
-								.filter(([field]) => keys.includes(field))),
-							tileServerOptions.type,
-						)
-					} else {
-						data.staticMap = await this.tileserverPregen.getPregeneratedTileURL(
-							logReference,
-							maptype,
-							pregenKeys ? Object.fromEntries(Object.entries(data).filter(([field]) => ['nearbyStops', 'uiconPokestopUrl'].includes(field) || pregenKeys.includes(field))) : data,
-							tileServerOptions.type,
-						)
-					}
-				}
-
-				break
-			}
-
-			case 'google': {
-				data.staticMap = `https://maps.googleapis.com/maps/api/staticmap?center=${data.latitude},${data.longitude}&markers=color:red|${data.latitude},${data.longitude}&maptype=${this.config.geocoding.type}&zoom=${this.config.geocoding.zoom}&size=${this.config.geocoding.width}x${this.config.geocoding.height}&key=${this.config.geocoding.staticKey[~~(this.config.geocoding.staticKey.length * Math.random())]}`
-				break
-			}
-			case 'osm': {
-				data.staticMap = `https://www.mapquestapi.com/staticmap/v5/map?locations=${data.latitude},${data.longitude}&size=${this.config.geocoding.width},${this.config.geocoding.height}&defaultMarker=marker-md-3B5998-22407F&zoom=${this.config.geocoding.zoom}&key=${this.config.geocoding.staticKey[~~(this.config.geocoding.staticKey.length * Math.random())]}`
-				break
-			}
-			case 'mapbox': {
-				data.staticMap = `https://api.mapbox.com/styles/v1/mapbox/streets-v10/static/url-https%3A%2F%2Fi.imgur.com%2FMK4NUzI.png(${data.longitude},${data.latitude})/${data.longitude},${data.latitude},${this.config.geocoding.zoom},0,0/${this.config.geocoding.width}x${this.config.geocoding.height}?access_token=${this.config.geocoding.staticKey[~~(this.config.geocoding.staticKey.length * Math.random())]}`
-				break
-			}
-			default: {
-				data.staticMap = ''
-			}
-		}
-		data.staticMap = data.staticMap || this.config.fallbacks?.staticMap
-	}
-
-	isRateLimited(id) {
-		return !!this.discordCache.get(id)
-	}
-
-	getRateLimitTimeToRelease(id) {
-		const ttl = this.discordCache.get(id)
-		if (!ttl) return 0
-		return Math.max((ttl - Date.now()) / 1000, 0)
-	}
-
-	async geolocate(locationString) {
-		if (this.config.geocoding.provider.toLowerCase() === 'none') {
-			return []
-		}
-
-		try {
-			const geocoder = this.getGeocoder()
-			return await geocoder.geocode(locationString)
-		} catch (err) {
-			throw { source: 'geolocate', err }
-		}
-	}
-
 	// eslint-disable-next-line class-methods-use-this
 	escapeJsonString(s) {
 		if (!s) return s
@@ -296,14 +203,6 @@ class Controller extends EventEmitter {
 			/<S<(.*?)>S>/g,
 			async (match, name) => this.shortener.getShortlink(name),
 		)
-	}
-
-	async getAddress(locationObject) {
-		const addr = await this.geocoder.getAddress(locationObject)
-		for (const key of Object.keys(addr)) {
-			if (typeof addr[key] === 'string') addr[key] = this.escapeJsonString(addr[key])
-		}
-		return addr
 	}
 
 	async obtainIntersection(data) {
@@ -439,6 +338,21 @@ class Controller extends EventEmitter {
 		}
 	}
 
+	// Delete human(s) and all their tracking data.
+	// Must be used instead of deleteQuery('humans', ...) since there are no FK CASCADE constraints.
+	// whereClause can be { id: '...' } or { name: '...', type: '...' }.
+	async deleteHuman(whereClause) {
+		const trackingTables = ['monsters', 'raid', 'egg', 'quest', 'invasion', 'weather', 'lures', 'gym', 'nests', 'maxbattle', 'forts', 'profiles']
+		// Find matching human IDs first (whereClause may not be by id)
+		const humans = await this.db('humans').where(whereClause).select('id')
+		for (const human of humans) {
+			for (const table of trackingTables) {
+				await this.db(table).where({ id: human.id }).del()
+			}
+		}
+		await this.db('humans').where(whereClause).del()
+	}
+
 	returnByDatabaseType(data) {
 		switch (this.config.database.client) {
 			case 'pg': {
@@ -451,6 +365,26 @@ class Controller extends EventEmitter {
 				return data
 			}
 		}
+	}
+
+	/**
+	 * Get per-language enrichment from the processor.
+	 * Contains pre-translated game data names (pokemon, moves, types, weather, etc.)
+	 * so the controller can skip GameData lookups and translator.translate() calls.
+	 * The controller still needs to do emoji lookups per platform.
+	 */
+	// eslint-disable-next-line class-methods-use-this
+	getLanguageEnrichment(data, language) {
+		if (!data.perLanguageEnrichment) {
+			this.log.warn(`No perLanguageEnrichment available (requested ${language})`)
+			return {}
+		}
+		const enrichment = data.perLanguageEnrichment[language]
+		if (!enrichment) {
+			this.log.warn(`No perLanguageEnrichment for language ${language} (available: ${Object.keys(data.perLanguageEnrichment).join(',')})`)
+			return {}
+		}
+		return enrichment
 	}
 
 	findIvColor(iv) {
