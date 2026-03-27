@@ -36,8 +36,12 @@ COPY config/config.example.toml config/config.example.toml
 COPY start.sh start.sh
 RUN chmod +x start.sh processor/poracle-processor
 
-# Create runtime directories
-RUN mkdir -p config/.cache/geofences resources/data resources/locale alerter/logs alerter/nominatimData logs backups
+# Create runtime directories (processor downloads resources at startup)
+RUN mkdir -p config/.cache/geofences resources/data resources/rawdata resources/locale resources/gamelocale alerter/logs alerter/nominatimData logs backups
+
+# Static resource files needed by the alerter at startup
+COPY resources/data/util.json resources/data/util.json
+COPY fallbacks/ fallbacks/
 
 # Processor: 3030, Alerter: 3031
 EXPOSE 3030 3031
