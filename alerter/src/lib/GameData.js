@@ -12,8 +12,9 @@ const GameData = {}
 // - moves: commands (!track, !maxbattle, !raid, script)
 // - items: commands (!quest, script)
 // - grunts: commands (!invasion), /api/masterdata/grunts
-// Removed: questTypes (unused), types (utilData.types used instead), translations (processor handles)
-const neededFiles = ['util', 'monsters', 'moves', 'items', 'grunts']
+// - types: commands (!info) — type strengths/weaknesses (distinct from utilData.types which has color/emoji)
+// Removed: questTypes (unused), translations (processor handles)
+const neededFiles = ['util', 'monsters', 'moves', 'items', 'grunts', 'types']
 
 neededFiles.forEach((file) => {
 	const filePath = path.join(RESOURCES_DATA, `${file}.json`)
