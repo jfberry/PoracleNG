@@ -9,6 +9,7 @@ alerter/nominatimData
 processor/poracle-processor
 processor/test_*.sh
 resources/data/*.json
+!resources/data/util.json
 resources/locale/*.json
 config/config.toml
 config/.cache
