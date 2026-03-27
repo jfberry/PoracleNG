@@ -19,10 +19,10 @@ type HumanFull struct {
 	Latitude            float64        `db:"latitude" json:"latitude"`
 	Longitude           float64        `db:"longitude" json:"longitude"`
 	Fails               int            `db:"fails" json:"fails"`
-	LastChecked         sql.NullTime   `db:"last_checked" json:"last_checked"`
+	LastChecked         null.Time   `db:"last_checked" json:"last_checked"`
 	Language            null.String `db:"language" json:"language"`
 	AdminDisable        int            `db:"admin_disable" json:"admin_disable"`
-	DisabledDate        sql.NullTime   `db:"disabled_date" json:"disabled_date"`
+	DisabledDate        null.Time   `db:"disabled_date" json:"disabled_date"`
 	CurrentProfileNo    int            `db:"current_profile_no" json:"current_profile_no"`
 	CommunityMembership string         `db:"community_membership" json:"community_membership"`
 	AreaRestriction     null.String `db:"area_restriction" json:"area_restriction"`
