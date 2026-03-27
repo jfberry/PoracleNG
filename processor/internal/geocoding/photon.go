@@ -106,11 +106,11 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 	props := feature.Properties
 
 	// Extract coordinates from GeoJSON geometry (lon, lat order)
-	var resultLat, resultLon float64
-	if len(feature.Geometry.Coordinates) >= 2 {
-		resultLon = feature.Geometry.Coordinates[0]
-		resultLat = feature.Geometry.Coordinates[1]
+	if len(feature.Geometry.Coordinates) < 2 {
+		return nil, fmt.Errorf("photon: feature missing geometry coordinates")
 	}
+	resultLon := feature.Geometry.Coordinates[0]
+	resultLat := feature.Geometry.Coordinates[1]
 
 	components := photonComponents(props)
 

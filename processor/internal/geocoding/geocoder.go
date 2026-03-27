@@ -15,10 +15,10 @@ type Config struct {
 	Provider         string   // "none", "nominatim", "photon", "google"
 	ProviderURL      string   // nominatim/photon URL
 	GeocodingKeys    []string // google API keys
-	PhotonAddrFormat string   // "opencage" (default) or "compact"
-	CacheDetail   int      // decimal places for cache key rounding (default 3)
-	CachePath     string   // pogreb database path
-	ForwardOnly   bool     // if true, skip reverse geocoding
+	PhotonAddrFormat string // "opencage" (default) or "compact"
+	CacheDetail      int    // decimal places for cache key rounding (default 3)
+	CachePath        string // pogreb database path
+	ForwardOnly      bool   // if true, skip reverse geocoding
 	AddressFormat string   // template for addr field, e.g. "{{{streetName}}} {{streetNumber}}"
 	Timeout       int      // HTTP timeout in ms (default 5000)
 
