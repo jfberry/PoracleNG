@@ -157,6 +157,7 @@ func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
 	m["streetNumber"] = addr.StreetNumber
 	m["city"] = addr.City
 	m["state"] = addr.State
+	m["county"] = addr.County
 	m["zipcode"] = addr.Zipcode
 	m["country"] = addr.Country
 	m["countryCode"] = addr.CountryCode

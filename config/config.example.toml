@@ -294,9 +294,14 @@ register_on_start = false                # whether auto registration is attempte
 
 [geocoding]
 # provider - address lookups: 'none', 'nominatim' (recommended, see
-#   https://github.com/mediagis/nominatim-docker) or 'google'
+#   https://github.com/mediagis/nominatim-docker), 'photon'
+#   (https://github.com/komoot/photon), or 'google'
 provider = "none"
-provider_url = ""
+provider_url = ""                               # nominatim or photon URL, e.g. "https://photon.example.com"
+# photon_address_format - how Photon builds formattedAddress:
+#   "opencage" (default) = country-specific formatting via OpenCage templates
+#   "compact"            = short "suburb: street, city" format
+#photon_address_format = "opencage"
 forward_only = false                     # when true, disable reverse geocoding lookup
 cache_detail = 3                         # decimal places of lon/lat for caching (3 or 4 for 100x more detail)
 # Styles for different times of day using tileservercache
