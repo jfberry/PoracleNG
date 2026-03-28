@@ -5,13 +5,14 @@ PoracleNG includes an optional AI assistant that translates natural language int
 ```
 User: !ask track shiny pikachu with good great league PVP
 Bot:  AI suggests:
-      !track pikachu iv0 great100
-      React ✅ to run, or ❌ to cancel.
+      `!track pikachu iv0 great100`
+
+      Copy and paste to run.
 ```
 
 ## How It Works
 
-The `!ask` command sends the user's text to a local or cloud AI model via the OpenAI-compatible chat completions API. The model uses a system prompt containing the full Poracle command reference to generate correct commands. The bot shows the suggestion and waits for user confirmation before executing.
+The `!ask` command sends the user's text to a local or cloud AI model via the OpenAI-compatible chat completions API. The model uses a system prompt containing the full Poracle command reference to generate correct commands. The bot shows the suggestion for the user to copy and run.
 
 The AI is **never given access** to user data, tracking rules, or the database. It only translates text → commands.
 
@@ -38,7 +39,7 @@ Add to `config/config.toml`:
 enabled = true
 provider_url = "http://localhost:11434/v1"  # Your provider URL
 api_key = ""                                 # Empty for local Ollama
-model = "qwen2.5:1.5b"                      # Model name
+model = "gemma3:12b"                         # Model name
 ```
 
 ### 3. Provider-Specific Setup
@@ -52,10 +53,9 @@ model = "qwen2.5:1.5b"                      # Model name
 curl -fsSL https://ollama.ai/install.sh | sh
 
 # Pull a model (choose one)
-ollama pull qwen2.5:1.5b    # 1GB, fast, good for structured tasks
-ollama pull qwen2.5:3b      # 2GB, better quality
-ollama pull phi3:mini        # 2.2GB, Microsoft, good reasoning
-ollama pull gemma2:2b        # 1.5GB, Google
+ollama pull gemma3:4b      # 3GB, good balance of quality and speed
+ollama pull gemma3:12b     # 8GB, best quality for local use
+ollama pull llama3.1:8b    # 4.5GB, good alternative
 ```
 
 Config:
@@ -64,7 +64,7 @@ Config:
 enabled = true
 provider_url = "http://localhost:11434/v1"
 api_key = ""
-model = "qwen2.5:1.5b"
+model = "gemma3:12b"
 ```
 
 Docker users — add Ollama as a sidecar:
@@ -94,7 +94,7 @@ volumes:
 
 After starting, pull a model inside the container:
 ```bash
-docker exec -it ollama ollama pull qwen2.5:1.5b
+docker exec -it ollama ollama pull gemma3:12b
 ```
 
 #### OpenRouter (Many Models, One API Key)
@@ -103,7 +103,7 @@ docker exec -it ollama ollama pull qwen2.5:1.5b
 
 1. Sign up at https://openrouter.ai
 2. Create an API key in your account settings
-3. Browse models at https://openrouter.ai/models
+3. Add credits (even $1 is enough for thousands of requests)
 
 Config:
 ```toml
@@ -111,11 +111,10 @@ Config:
 enabled = true
 provider_url = "https://openrouter.ai/api/v1"
 api_key = "sk-or-v1-..."
-model = "qwen/qwen-2.5-7b-instruct"
+model = "google/gemma-3-12b-it"
 # Other options:
-# model = "google/gemma-2-2b-it"          # Free
-# model = "meta-llama/llama-3.1-8b-instruct"  # Free
-# model = "anthropic/claude-3.5-haiku"    # Fast, cheap
+# model = "meta-llama/llama-3.1-8b-instruct"
+# model = "mistralai/mistral-small-3.1-24b-instruct"
 ```
 
 #### Groq (Fast, Free Tier)
@@ -146,21 +145,26 @@ model = "gpt-4o-mini"
 
 ## Recommended Models
 
+The system prompt is ~8KB and requires a model that reliably follows system instructions. Models below 7B parameters may ignore the system prompt and generate irrelevant output.
+
 | Use Case | Model | Size | Notes |
 |----------|-------|------|-------|
-| **Budget local** | `qwen2.5:1.5b` | 1GB | Good enough for simple commands |
-| **Quality local** | `qwen2.5:3b` | 2GB | Better at complex multi-filter commands |
-| **Best local** | `qwen2.5:7b` | 4.5GB | Excellent, needs more RAM |
-| **Free cloud** | Groq `llama-3.1-8b-instant` | — | Very fast, free tier |
-| **Cheap cloud** | OpenAI `gpt-4o-mini` | — | Reliable, ~$0.0001 per request |
-| **Best cloud** | Any large model via OpenRouter | — | For complex edge cases |
+| **Best local** | `gemma3:12b` (Ollama) | 8GB | Excellent accuracy, recommended |
+| **Good local** | `gemma3:4b` (Ollama) | 3GB | Good balance of speed and quality |
+| **Good local** | `llama3.1:8b` (Ollama) | 4.5GB | Reliable alternative |
+| **Best cloud** | `google/gemma-3-12b-it` (OpenRouter) | — | Best tested, ~$0.07/M tokens |
+| **Good cloud** | `meta-llama/llama-3.1-8b-instruct` (OpenRouter) | — | Slightly cheaper |
+| **Fast cloud** | Groq `llama-3.1-8b-instant` | — | Very fast, free tier |
+| **Reliable cloud** | OpenAI `gpt-4o-mini` | — | Most reliable, ~$0.15/M tokens |
+
+**Avoid**: `qwen/qwen-2.5-7b-instruct` — intermittently ignores the system prompt and returns SQL or unrelated content.
 
 ## Testing
 
 Test the AI endpoint directly:
 
 ```bash
-curl -X POST http://localhost:3030/api/ai/translate \
+curl -X POST http://localhost:4200/api/ai/translate \
   -H "Content-Type: application/json" \
   -H "X-Poracle-Secret: your-secret" \
   -d '{"message": "track shiny pikachu with good great league PVP"}'
@@ -185,10 +189,10 @@ Then test via Discord/Telegram:
 → Set `[ai] enabled = true` in config.toml and restart.
 
 **Timeout errors**
-→ Local models may take a few seconds on first request (cold start). Increase timeout or use a faster model.
+��� Local models may take a few seconds on first request (cold start). Increase timeout or use a faster model.
 
-**Wrong commands generated**
-→ Try a larger model. The system prompt works best with 3B+ parameter models. Smaller models may miss nuances.
+**Wrong commands generated (SQL, generic advice, etc.)**
+→ Your model is too small or unreliable with system prompts. Switch to `google/gemma-3-12b-it` or `meta-llama/llama-3.1-8b-instruct`. The system prompt requires 7B+ parameter models that reliably follow system instructions.
 
 **Ollama not responding**
 → Check `ollama serve` is running. Test with `curl http://localhost:11434/v1/models`.
@@ -198,10 +202,11 @@ Then test via Discord/Telegram:
 
 ## Customising the System Prompt
 
-The system prompt is embedded in `processor/internal/ai/client.go`. It contains the full Poracle command reference. If you add custom commands or aliases, update the prompt to include them.
+The system prompt is embedded in `processor/internal/ai/prompt.go`. It contains the full Poracle command reference. If you add custom commands or aliases, update the prompt to include them.
 
-The prompt is designed to work with small models (1.5B+) by being explicit and example-heavy. Key principles:
+The prompt is designed to work with 7B+ models by being explicit and example-heavy. Key principles:
 - Low temperature (0.1) for deterministic output
 - Max 256 tokens (commands are short)
-- "Return ONLY the command" instruction prevents explanations
+- User message wrapper reinforces "commands only" instruction
+- Post-processing extracts `!` command lines from noisy model output
 - Many examples cover common phrasings
