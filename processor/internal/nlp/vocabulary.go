@@ -16,7 +16,8 @@ import (
 type PokemonVocab struct {
 	single     map[string]string   // normalized input → canonical lowercase name
 	groups     map[string][]string // group alias → list of canonical names
-	multiWords []string            // multi-word names sorted longest-first
+	multiWords []string            // multi-word lookup keys sorted longest-first
+	multiMap   map[string]string   // multi-word lookup key → canonical name
 }
 
 // Lookup returns the canonical lowercase pokemon name for input, or "" if not found.
@@ -145,7 +146,7 @@ func stripPunctuation(s string) string {
 func buildPokemonVocab(msgs map[string]string, baseDir string) *PokemonVocab {
 	single := make(map[string]string)
 	groups := make(map[string][]string)
-	multiWordSet := make(map[string]bool)
+	multiMap := make(map[string]string) // multi-word variant → canonical name
 
 	// Map from pokemon ID → canonical lowercase name
 	idToName := make(map[int]string)
@@ -178,9 +179,12 @@ func buildPokemonVocab(msgs map[string]string, baseDir string) *PokemonVocab {
 			single[noSpaces] = canonical
 		}
 
-		// Track multi-word names
+		// Track multi-word names — include both canonical and stripped variants
 		if strings.Contains(canonical, " ") || strings.Contains(canonical, "-") {
-			multiWordSet[canonical] = true
+			multiMap[canonical] = canonical
+			if stripped != canonical && strings.Contains(stripped, " ") {
+				multiMap[stripped] = canonical
+			}
 		}
 	}
 
@@ -212,9 +216,9 @@ func buildPokemonVocab(msgs map[string]string, baseDir string) *PokemonVocab {
 	}
 
 	// Build sorted multi-word list (longest first)
-	multiWords := make([]string, 0, len(multiWordSet))
-	for name := range multiWordSet {
-		multiWords = append(multiWords, name)
+	multiWords := make([]string, 0, len(multiMap))
+	for variant := range multiMap {
+		multiWords = append(multiWords, variant)
 	}
 	sort.Slice(multiWords, func(i, j int) bool {
 		if len(multiWords[i]) != len(multiWords[j]) {
@@ -227,6 +231,7 @@ func buildPokemonVocab(msgs map[string]string, baseDir string) *PokemonVocab {
 		single:     single,
 		groups:     groups,
 		multiWords: multiWords,
+		multiMap:   multiMap,
 	}
 }
 

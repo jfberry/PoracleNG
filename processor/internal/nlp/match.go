@@ -30,11 +30,12 @@ func matchTokens(input string, intent string, vocabs *Vocabularies, invasionEven
 	remaining := input
 
 	// --- Phase 1: Multi-word matching (longest first) ---
-	// Try multi-word pokemon names
-	for _, name := range vocabs.Pokemon.MultiWordNames() {
-		if idx := findPhrase(remaining, name); idx >= 0 {
-			result.Pokemon = append(result.Pokemon, name)
-			remaining = removePhrase(remaining, idx, len(name))
+	// Try multi-word pokemon names (includes fuzzy variants like "mr mime" → "mr. mime")
+	for _, variant := range vocabs.Pokemon.MultiWordNames() {
+		if idx := findPhrase(remaining, variant); idx >= 0 {
+			canonical := vocabs.Pokemon.multiMap[variant]
+			result.Pokemon = append(result.Pokemon, canonical)
+			remaining = removePhrase(remaining, idx, len(variant))
 		}
 	}
 

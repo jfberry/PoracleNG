@@ -137,6 +137,13 @@ func TestParserEndToEnd(t *testing.T) {
 
 		// Multiple pokemon
 		{"track hundos for pikachu eevee and dragonite", "!track pikachu iv100\n!track eevee iv100\n!track dragonite iv100"},
+
+		// Multi-word pokemon names (fuzzy matching)
+		{"track mr mime", `!track "mr. mime"`},
+		{"track mr. mime", `!track "mr. mime"`},
+		{"track tapu koko", `!track "tapu koko"`},
+		{"track ho-oh", "!track ho-oh"},
+		{"perfect farfetchd", `!track "farfetch'd" iv100`},
 	}
 
 	for _, tt := range tests {
