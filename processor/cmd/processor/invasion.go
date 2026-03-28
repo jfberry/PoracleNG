@@ -54,13 +54,17 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		if displayType == 0 {
 			displayType = inv.IncidentDisplayType
 		}
-		gruntType := matching.ResolveGruntType(inv.IncidentGruntType, inv.GruntType, displayType)
 
 		// Resolve the raw grunt type integer for enrichment lookups
 		gruntTypeID := inv.IncidentGruntType
 		if gruntTypeID == 0 || gruntTypeID == 352 {
 			gruntTypeID = inv.GruntType
 		}
+
+		// Resolve type name for matching against tracking rules.
+		// The !invasion command stores the English type name lowercased (e.g. "electric")
+		// or event name (e.g. "kecleon"). Two O(1) map lookups — fine for invasion volume.
+		gruntType := matching.ResolveGruntTypeName(gruntTypeID, displayType, ps.enricher.GameData)
 
 		data := &matching.InvasionData{
 			PokestopID: inv.PokestopID,

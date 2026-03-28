@@ -51,6 +51,30 @@ func (g *Grunt) TypeKey() string {
 	return fmt.Sprintf("poke_type_%d", g.TypeID)
 }
 
+// TypeNameFromTemplate extracts the grunt type name from the character template string.
+// Used as a fallback when TypeID is 0 (Metal, Darkness, Mixed grunts).
+// Returns lowercased name matching what the !invasion command stores in the DB.
+func TypeNameFromTemplate(template string) string {
+	// Special cases that don't have a standard pokemon type ID
+	switch {
+	case strings.Contains(template, "METAL"):
+		return "metal"
+	case strings.Contains(template, "DARKNESS"):
+		return "darkness"
+	case strings.Contains(template, "GRUNTB"):
+		return "gruntb"
+	case template == "CHARACTER_GRUNT_MALE" || template == "CHARACTER_GRUNT_FEMALE":
+		return "mixed"
+	}
+	// Typed grunts: CHARACTER_{TYPE}_GRUNT_{GENDER} → extract type
+	// e.g. CHARACTER_ELECTRIC_GRUNT_FEMALE → electric
+	t := strings.TrimPrefix(template, "CHARACTER_")
+	if idx := strings.Index(t, "_GRUNT"); idx > 0 {
+		return strings.ToLower(t[:idx])
+	}
+	return strings.ToLower(template)
+}
+
 // categoryFromTemplate derives the category ID from the character template string.
 func categoryFromTemplate(template string) int {
 	switch {
