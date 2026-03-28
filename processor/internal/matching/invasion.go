@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -65,16 +66,33 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) []webhook.M
 	)
 }
 
-// ResolveGruntType returns the grunt type string from the webhook fields.
-func ResolveGruntType(incidentGruntType, gruntType, displayType int) string {
-	if displayType >= 7 {
+// ResolveGruntTypeName returns the type name for matching against tracking rules.
+// The !invasion command stores the lowercased English type name (e.g. "electric", "water"),
+// event name (e.g. "kecleon"), or "everything" as a catch-all.
+// This function maps the numeric grunt/display IDs → name via GameData.
+func ResolveGruntTypeName(gruntTypeID, displayType int, gd *gamedata.GameData) string {
+	// Event invasions (Kecleon, Showcase, etc.) — match by event name
+	if displayType >= 7 && gd != nil {
+		if evtInfo, ok := gd.Util.PokestopEvent[displayType]; ok {
+			return strings.ToLower(evtInfo.Name)
+		}
 		return fmt.Sprintf("e%d", displayType)
 	}
-	if incidentGruntType > 0 && incidentGruntType != 352 {
-		return fmt.Sprintf("%d", incidentGruntType)
+	if gruntTypeID == 0 {
+		return "0"
 	}
-	if gruntType > 0 {
-		return fmt.Sprintf("%d", gruntType)
+	// Regular grunts — match by pokemon type name or template-derived name
+	if gd != nil {
+		if grunt, ok := gd.Grunts[gruntTypeID]; ok {
+			// Typed grunts (Electric, Water, etc.) — resolve via TypeID
+			if grunt.TypeID > 0 {
+				if typeInfo, ok := gd.Types[grunt.TypeID]; ok {
+					return strings.ToLower(typeInfo.Name)
+				}
+			}
+			// Untyped grunts (Metal, Darkness, Mixed) — derive from template
+			return gamedata.TypeNameFromTemplate(grunt.Template)
+		}
 	}
-	return "0"
+	return fmt.Sprintf("%d", gruntTypeID)
 }

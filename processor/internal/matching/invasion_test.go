@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/state"
 )
@@ -219,28 +220,60 @@ func TestInvasionRealWorldData(t *testing.T) {
 	}
 }
 
-func TestResolveGruntType(t *testing.T) {
+func TestResolveGruntTypeName(t *testing.T) {
+	gd := &gamedata.GameData{
+		Grunts: map[int]*gamedata.Grunt{
+			4:  {TypeID: 0, Template: "CHARACTER_GRUNT_MALE"},          // Mixed
+			5:  {TypeID: 0, Template: "CHARACTER_GRUNT_FEMALE"},        // Mixed
+			8:  {TypeID: 0, Template: "CHARACTER_DARKNESS_GRUNT_FEMALE"}, // Darkness
+			23: {TypeID: 12, Template: "CHARACTER_GRASS_GRUNT_MALE"},   // Grass
+			28: {TypeID: 0, Template: "CHARACTER_METAL_GRUNT_FEMALE"},  // Metal
+			49: {TypeID: 13, Template: "CHARACTER_ELECTRIC_GRUNT_FEMALE"}, // Electric
+			50: {TypeID: 13, Template: "CHARACTER_ELECTRIC_GRUNT_MALE"},   // Electric
+		},
+		Types: map[int]*gamedata.TypeInfo{
+			13: {Name: "Electric"},
+			12: {Name: "Grass"},
+		},
+		Util: &gamedata.UtilData{
+			PokestopEvent: map[int]gamedata.EventInfo{
+				7: {Name: "Gold-Stop"},
+				8: {Name: "Kecleon"},
+				9: {Name: "Showcase"},
+			},
+		},
+	}
+
 	tests := []struct {
-		name          string
-		incidentGrunt int
-		gruntType     int
-		displayType   int
-		expected      string
+		name        string
+		gruntTypeID int
+		displayType int
+		expected    string
 	}{
-		{"display type >= 7", 0, 0, 7, "e7"},
-		{"display type >= 7 overrides grunt", 49, 0, 8, "e8"},
-		{"incident grunt type used", 49, 0, 1, "49"},
-		{"incident grunt 352 ignored", 352, 29, 1, "29"},
-		{"fallback to gruntType", 0, 29, 1, "29"},
-		{"all zero", 0, 0, 0, "0"},
+		{"kecleon event", 0, 8, "kecleon"},
+		{"showcase event", 0, 9, "showcase"},
+		{"gold-stop event", 0, 7, "gold-stop"},
+		{"event overrides grunt", 49, 8, "kecleon"},
+		{"electric grunt", 49, 1, "electric"},
+		{"grass grunt", 23, 1, "grass"},
+		{"metal grunt (TypeID=0)", 28, 1, "metal"},
+		{"darkness grunt (TypeID=0)", 8, 1, "darkness"},
+		{"mixed grunt (TypeID=0)", 4, 1, "mixed"},
+		{"unknown grunt falls back to ID", 999, 1, "999"},
+		{"zero grunt", 0, 0, "0"},
+		{"nil gamedata falls back to ID", 50, 1, "50"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ResolveGruntType(tt.incidentGrunt, tt.gruntType, tt.displayType)
+			testGD := gd
+			if tt.name == "nil gamedata falls back to ID" {
+				testGD = nil
+			}
+			got := ResolveGruntTypeName(tt.gruntTypeID, tt.displayType, testGD)
 			if got != tt.expected {
-				t.Errorf("ResolveGruntType(%d, %d, %d) = %q, want %q",
-					tt.incidentGrunt, tt.gruntType, tt.displayType, got, tt.expected)
+				t.Errorf("ResolveGruntTypeName(%d, %d) = %q, want %q",
+					tt.gruntTypeID, tt.displayType, got, tt.expected)
 			}
 		})
 	}
