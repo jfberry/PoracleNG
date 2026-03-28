@@ -63,6 +63,28 @@ func (t *Translator) Lang() string {
 	return t.lang
 }
 
+// Messages returns a copy of all translation keys and values.
+func (t *Translator) Messages() map[string]string {
+	if t == nil || t.messages == nil {
+		return nil
+	}
+	result := make(map[string]string, len(t.messages))
+	for k, v := range t.messages {
+		result[k] = v
+	}
+	return result
+}
+
+// NewTranslator creates a Translator with the given locale and messages.
+// Intended for testing and vocabulary building where a full Bundle is not needed.
+func NewTranslator(lang string, msgs map[string]string) *Translator {
+	m := make(map[string]string, len(msgs))
+	for k, v := range msgs {
+		m[k] = v
+	}
+	return &Translator{lang: lang, messages: m}
+}
+
 // FormatNamed replaces %{name} placeholders in a string with values from a map.
 // Used for gamelocale translations that use named placeholders like %{amount_0}, %{pokemon}.
 func FormatNamed(s string, values map[string]string) string {
