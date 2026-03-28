@@ -88,7 +88,7 @@ func DetectIntent(normalized string, invasionEvents map[string]bool) IntentResul
 	}
 	tokens = strings.Fields(joined)
 
-	// --- Multi-word intent: "max battle" ---
+	// --- Multi-word intent: "max battle", "raid egg(s)" ---
 	tokens = detectMultiWordIntent(tokens, &result)
 
 	// --- Implicit filter injection for gigantamax ---
@@ -150,12 +150,17 @@ func removeIntentKeywords(tokens []string, invasionEvents map[string]bool) []str
 	return filtered
 }
 
-// detectMultiWordIntent handles "max battle" → "maxbattle".
+// detectMultiWordIntent handles compound intent phrases:
+// "max battle" → "maxbattle", "raid egg(s)" → "egg".
 func detectMultiWordIntent(tokens []string, result *IntentResult) []string {
 	for i := 0; i < len(tokens)-1; i++ {
 		if tokens[i] == "max" && tokens[i+1] == "battle" {
 			result.CommandType = "maxbattle"
-			// Remove both tokens.
+			return append(tokens[:i], tokens[i+2:]...)
+		}
+		// "raid egg" / "raid eggs" → egg intent (consume both tokens)
+		if tokens[i] == "raid" && (tokens[i+1] == "egg" || tokens[i+1] == "eggs") {
+			result.CommandType = "egg"
 			return append(tokens[:i], tokens[i+2:]...)
 		}
 	}
