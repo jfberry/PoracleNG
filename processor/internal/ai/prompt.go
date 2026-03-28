@@ -272,6 +272,18 @@ trash    = maxiv50 or similar low IV
 "stop tracking dragonite"
 !track remove dragonite
 
+"pokemon between 95 and 99 IV"
+!track everything iv95-99
+
+"low IV pokemon for PVP"
+!track everything iv0-50 great100
+
+"level 20 to 30 pokemon"
+!track everything level20-30
+
+"CP between 1400 and 1500 for great league"
+!track everything cp1400-1500
+
 === RULES ===
 
 1. Return ONLY Poracle commands. No explanations. No markdown. No backticks.
