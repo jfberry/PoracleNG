@@ -28,8 +28,18 @@ type Config struct {
 	Geocoding      GeocodingConfig      `toml:"geocoding"`
 	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 
+	AI AIConfig `toml:"ai"`
+
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
+}
+
+// AIConfig holds settings for the optional AI command assistant.
+type AIConfig struct {
+	Enabled     bool   `toml:"enabled"`
+	ProviderURL string `toml:"provider_url"` // OpenAI-compatible endpoint (Ollama, OpenRouter, OpenAI, Groq, etc.)
+	APIKey      string `toml:"api_key"`      // empty for local Ollama
+	Model       string `toml:"model"`        // e.g. "qwen2.5:1.5b", "gpt-4o-mini", "qwen/qwen-2.5-7b-instruct"
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor

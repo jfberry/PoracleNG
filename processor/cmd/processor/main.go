@@ -22,6 +22,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/pokemon/poracleng/processor/internal/ai"
 	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -156,6 +157,16 @@ func main() {
 	mux.HandleFunc("/health", api.HandleHealth())
 	mux.HandleFunc("/api/test", auth(api.HandleTest(proc)))
 	mux.HandleFunc("/api/geocode/forward", auth(api.HandleGeocode(proc.enricher.Geocoder)))
+
+	// AI command assistant (optional)
+	var aiClient *ai.Client
+	if cfg.AI.Enabled {
+		aiClient = ai.New(cfg.AI.ProviderURL, cfg.AI.APIKey, cfg.AI.Model)
+		if aiClient != nil {
+			log.Infof("AI assistant enabled: model=%s provider=%s", cfg.AI.Model, cfg.AI.ProviderURL)
+		}
+	}
+	mux.HandleFunc("/api/ai/translate", auth(api.HandleAI(aiClient)))
 
 	// Geofence data and tile generation endpoints
 	tileDeps := api.TileDeps{
