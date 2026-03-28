@@ -66,10 +66,19 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		// or event name (e.g. "kecleon"). Two O(1) map lookups — fine for invasion volume.
 		gruntType := matching.ResolveGruntTypeName(gruntTypeID, displayType, ps.enricher.GameData)
 
+		// Gender comes from game data (the grunt definition), not the webhook.
+		// Golbat doesn't send gender in invasion webhooks.
+		gender := inv.Gender
+		if gender == 0 && ps.enricher.GameData != nil {
+			if grunt, ok := ps.enricher.GameData.Grunts[gruntTypeID]; ok {
+				gender = grunt.Gender
+			}
+		}
+
 		data := &matching.InvasionData{
 			PokestopID: inv.PokestopID,
 			GruntType:  gruntType,
-			Gender:     inv.Gender,
+			Gender:     gender,
 			Latitude:   inv.Latitude,
 			Longitude:  inv.Longitude,
 		}
