@@ -61,8 +61,9 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		m["weatherForecastNext"] = forecast.Next
 		m["nextHourTimestamp"] = tracker.GetNextHourTimestamp()
 	} else {
-		// Egg: hatchTime from start, tth from now to start
+		// Egg: hatchTime from start, tth from now to start, disappearTime from end
 		m["hatchTime"] = geo.FormatTime(raid.Start, tz, e.TimeLayout)
+		m["disappearTime"] = geo.FormatTime(raid.End, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(raid.Start)
 	}
 
