@@ -70,11 +70,15 @@ func (c *Client) TranslateCommand(userRequest string) (string, error) {
 		return "", fmt.Errorf("AI not configured")
 	}
 
+	// Wrap the user message with a reinforcement prefix to help smaller models
+	// stay on task and not generate conversational responses.
+	wrappedMessage := "Convert this to Poracle command(s). Reply with ONLY the command(s), nothing else:\n" + userRequest
+
 	req := chatRequest{
 		Model: c.model,
 		Messages: []chatMessage{
 			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: userRequest},
+			{Role: "user", Content: wrappedMessage},
 		},
 		Temperature: 0.1, // low temperature for deterministic command output
 		MaxTokens:   256,
@@ -129,5 +133,39 @@ func (c *Client) TranslateCommand(userRequest string) (string, error) {
 		return "", fmt.Errorf("no response from model")
 	}
 
-	return strings.TrimSpace(chatResp.Choices[0].Message.Content), nil
+	raw := strings.TrimSpace(chatResp.Choices[0].Message.Content)
+	return extractCommands(raw), nil
+}
+
+// extractCommands pulls valid Poracle commands from the model's response.
+// If the response contains lines starting with '!', only those are returned.
+// This handles models that add explanatory text despite being told not to.
+func extractCommands(raw string) string {
+	// Strip markdown code fences if present
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+
+	lines := strings.Split(raw, "\n")
+	var commands []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Strip numbered list prefixes like "1. ", "2) ", etc.
+		for len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
+			line = line[1:]
+		}
+		line = strings.TrimLeft(line, ".) ")
+		if strings.HasPrefix(line, "!") {
+			commands = append(commands, line)
+		} else if strings.HasPrefix(line, "ERROR:") {
+			return line
+		}
+	}
+
+	if len(commands) > 0 {
+		return strings.Join(commands, "\n")
+	}
+
+	// No command lines found — return raw response (may be an error message)
+	return raw
 }
