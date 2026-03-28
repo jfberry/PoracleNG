@@ -484,3 +484,15 @@ webhooks = false                         # matched webhook log (can be quite lar
 discord = true                           # outbound messages to discord users and channels
 telegram = true                          # outbound messages to telegram users, groups and channels
 pvp = false                              # pvp info/calculations (at verbose level)
+
+# ---- AI Command Assistant ----
+# Optional: translates natural language into Poracle commands via !ask
+# Works with any OpenAI-compatible API: Ollama (local), OpenRouter, OpenAI, Groq, etc.
+[ai]
+enabled = false
+# provider_url = "http://localhost:11434/v1"            # Ollama (local, free)
+# provider_url = "https://openrouter.ai/api/v1"        # OpenRouter (many models)
+# provider_url = "https://api.groq.com/openai/v1"      # Groq (fast, free tier)
+# provider_url = "https://api.openai.com/v1"            # OpenAI
+api_key = ""                                             # empty for local Ollama
+model = ""                                               # e.g. "qwen2.5:1.5b", "gpt-4o-mini"
