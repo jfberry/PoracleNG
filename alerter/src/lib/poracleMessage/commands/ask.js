@@ -23,15 +23,28 @@ exports.run = async (client, msg, args) => {
 			})
 		} catch (err) {
 			if (err.response && err.response.status === 503) {
-				await msg.reply('AI assistant is not configured. Ask an admin to enable it in config.toml.')
+				await msg.reply('`!ask` is not configured. Ask an admin to enable `[ai] enabled = true` in config.toml.')
 				return
 			}
-			client.log.error('AI translate request failed:', err.message)
-			await msg.reply('Failed to reach AI assistant. Is the processor running?')
+			client.log.error('ask translate request failed:', err.message)
+			await msg.reply('Failed to reach the processor. Is it running?')
 			return
 		}
 
 		const { data } = response
+
+		// Ambiguous: show numbered options
+		if (data.status === 'ambiguous') {
+			let preview = `${data.message || 'Did you mean:'}\n`
+			for (let i = 0; i < data.options.length; i++) {
+				preview += `${i + 1}. ${data.options[i].label}: \`${data.options[i].command}\`\n`
+			}
+			preview += '\nCopy and paste the command you want.'
+			await msg.reply(preview)
+			return
+		}
+
+		// Error
 		if (data.status !== 'ok' || !data.command) {
 			await msg.reply(`Sorry, I couldn't translate that: ${data.error || 'unknown error'}`)
 			return
@@ -39,15 +52,14 @@ exports.run = async (client, msg, args) => {
 
 		const { command } = data
 
-		// Check if the AI returned an error message
 		if (command.startsWith('ERROR:')) {
 			await msg.reply(command)
 			return
 		}
 
-		// Show the suggested commands for the user to copy and run
+		// Show suggested commands
 		const commands = command.split('\n').filter((c) => c.trim())
-		let preview = '**AI suggests:**\n'
+		let preview = '**Suggested command(s):**\n'
 		for (const cmd of commands) {
 			preview += `\`${cmd}\`\n`
 		}
