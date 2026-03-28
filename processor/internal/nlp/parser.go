@@ -40,6 +40,26 @@ func NewParser(tr *i18n.Translator, baseDir string, invasionEvents map[string]bo
 	}
 }
 
+// shortcutPhrases maps common natural language phrases to direct commands.
+// Checked before the main NLP pipeline.
+var shortcutPhrases = map[string]string{
+	"stop":                          "!stop",
+	"stop alerts":                   "!stop",
+	"pause":                         "!stop",
+	"pause alerts":                  "!stop",
+	"show me what i'm tracking":     "!tracked",
+	"show me what im tracking":      "!tracked",
+	"show tracking":                 "!tracked",
+	"what am i tracking":            "!tracked",
+	"whats tracked":                 "!tracked",
+	"list tracking":                 "!tracked",
+	"my tracking":                   "!tracked",
+	"tracked":                       "!tracked",
+	"help":                          "!help",
+	"start":                         "!poracle",
+	"register":                      "!poracle",
+}
+
 // Parse converts natural language input into Poracle command(s).
 func (p *Parser) Parse(input string) ParseResult {
 	if strings.TrimSpace(input) == "" {
@@ -47,6 +67,12 @@ func (p *Parser) Parse(input string) ParseResult {
 			Status: "error",
 			Error:  "empty input",
 		}
+	}
+
+	// Check shortcut phrases first
+	lowered := strings.ToLower(strings.TrimSpace(input))
+	if cmd, ok := shortcutPhrases[lowered]; ok {
+		return ParseResult{Status: "ok", Command: cmd}
 	}
 
 	// Step 1: Normalize

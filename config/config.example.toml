@@ -491,6 +491,7 @@ pvp = false                              # pvp info/calculations (at verbose lev
 # Optionally falls back to an AI model for unrecognized input.
 [ai]
 enabled = false                                          # enables !ask command (NLP parser)
+suggest_on_dm = false                                    # suggest commands for any unrecognised DM
 fallback_to_ai = false                                   # if NLP can't parse, try AI model
 # provider_url = "http://localhost:11434/v1"             # only needed if fallback_to_ai = true
 # provider_url = "https://openrouter.ai/api/v1"         # OpenRouter (many models)

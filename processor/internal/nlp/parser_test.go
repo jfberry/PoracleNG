@@ -159,6 +159,37 @@ func TestParserEndToEnd(t *testing.T) {
 	}
 }
 
+func TestParserShortcuts(t *testing.T) {
+	p := newTestParser()
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"stop", "!stop"},
+		{"Stop", "!stop"},
+		{"STOP", "!stop"},
+		{"stop alerts", "!stop"},
+		{"pause", "!stop"},
+		{"show me what i'm tracking", "!tracked"},
+		{"what am i tracking", "!tracked"},
+		{"tracked", "!tracked"},
+		{"help", "!help"},
+		{"start", "!poracle"},
+		{"register", "!poracle"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := p.Parse(tt.input)
+			if result.Status != "ok" {
+				t.Fatalf("Parse(%q) status=%q error=%q", tt.input, result.Status, result.Error)
+			}
+			if result.Command != tt.want {
+				t.Errorf("Parse(%q) = %q, want %q", tt.input, result.Command, tt.want)
+			}
+		})
+	}
+}
+
 func TestParserEmptyInput(t *testing.T) {
 	p := newTestParser()
 	result := p.Parse("")

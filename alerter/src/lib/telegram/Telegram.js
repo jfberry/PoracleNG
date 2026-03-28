@@ -118,7 +118,23 @@ class Telegram extends EventEmitter {
 
 	async processCommand(ctx) {
 		const { command } = ctx.state
-		if (!command) return
+
+		// Plain text DM (no /command prefix) — try NLP suggestion
+		if (!command) {
+			if (ctx.update.message && ctx.update.message.chat.type === 'private'
+					&& this.config.ai && this.config.ai.suggestOnDm) {
+				const text = (ctx.update.message.text || '').trim()
+				if (text) {
+					const suggestCommand = require('../poracleMessage/suggestCommand')
+					const suggestion = await suggestCommand(this.config, text, '/')
+					if (suggestion) {
+						ctx.reply(suggestion)
+					}
+				}
+			}
+			return
+		}
+
 		if (command.bot && command.bot.toLowerCase() !== ctx.botInfo.username.toLowerCase()) return
 		if (Object.keys(this.commands).includes(command.command)) {
 			ctx.poracleAddMessageQueue = (queue) => this.emit('sendMessages', queue)
@@ -127,9 +143,21 @@ class Telegram extends EventEmitter {
 
 			return this.commands[command.command](ctx)
 		}
-		if (ctx.update.message.chat.type === 'private'
-				&& this.config.telegram.unrecognisedCommandMessage) {
-			ctx.reply(this.config.telegram.unrecognisedCommandMessage)
+
+		// Unrecognised /command in DM — try NLP suggestion
+		if (ctx.update.message.chat.type === 'private') {
+			if (this.config.ai && this.config.ai.suggestOnDm) {
+				const suggestCommand = require('../poracleMessage/suggestCommand')
+				const text = command.args || command.command
+				const suggestion = await suggestCommand(this.config, text)
+				if (suggestion) {
+					ctx.reply(suggestion)
+					return
+				}
+			}
+			if (this.config.telegram.unrecognisedCommandMessage) {
+				ctx.reply(this.config.telegram.unrecognisedCommandMessage)
+			}
 		}
 	}
 

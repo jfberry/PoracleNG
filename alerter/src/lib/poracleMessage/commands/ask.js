@@ -1,10 +1,17 @@
 const axios = require('axios')
 
+function replacePrefix(command, prefix) {
+	if (!prefix || prefix === '!') return command
+	return command.replace(/^!/gm, prefix)
+}
+
 exports.run = async (client, msg, args) => {
 	try {
+		const prefix = msg.prefix || client.config.discord.prefix || '!'
+
 		const question = args.join(' ').trim()
 		if (!question) {
-			await msg.reply('Usage: `!ask <what you want to track in plain English>`\nExample: `!ask track shiny pikachu with good PVP`')
+			await msg.reply(`Usage: \`${prefix}ask <what you want to track in plain English>\`\nExample: \`${prefix}ask track perfect dragonite nearby\``)
 			return
 		}
 
@@ -23,7 +30,7 @@ exports.run = async (client, msg, args) => {
 			})
 		} catch (err) {
 			if (err.response && err.response.status === 503) {
-				await msg.reply('`!ask` is not configured. Ask an admin to enable `[ai] enabled = true` in config.toml.')
+				await msg.reply(`\`${prefix}ask\` is not configured. Ask an admin to enable \`[ai] enabled = true\` in config.toml.`)
 				return
 			}
 			client.log.error('ask translate request failed:', err.message)
@@ -33,18 +40,17 @@ exports.run = async (client, msg, args) => {
 
 		const { data } = response
 
-		// Ambiguous: show numbered options
 		if (data.status === 'ambiguous') {
 			let preview = `${data.message || 'Did you mean:'}\n`
 			for (let i = 0; i < data.options.length; i++) {
-				preview += `${i + 1}. ${data.options[i].label}: \`${data.options[i].command}\`\n`
+				const cmd = replacePrefix(data.options[i].command, prefix)
+				preview += `${i + 1}. ${data.options[i].label}: \`${cmd}\`\n`
 			}
 			preview += '\nCopy and paste the command you want.'
 			await msg.reply(preview)
 			return
 		}
 
-		// Error
 		if (data.status !== 'ok' || !data.command) {
 			await msg.reply(`Sorry, I couldn't translate that: ${data.error || 'unknown error'}`)
 			return
@@ -57,11 +63,10 @@ exports.run = async (client, msg, args) => {
 			return
 		}
 
-		// Show suggested commands
 		const commands = command.split('\n').filter((c) => c.trim())
 		let preview = '**Suggested command(s):**\n'
 		for (const cmd of commands) {
-			preview += `\`${cmd}\`\n`
+			preview += `\`${replacePrefix(cmd, prefix)}\`\n`
 		}
 		preview += '\nCopy and paste to run.'
 

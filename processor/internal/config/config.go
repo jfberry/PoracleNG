@@ -37,6 +37,7 @@ type Config struct {
 // AIConfig holds settings for the optional AI command assistant.
 type AIConfig struct {
 	Enabled      bool   `toml:"enabled"`
+	SuggestOnDM  bool   `toml:"suggest_on_dm"`  // suggest commands for unrecognised DMs
 	FallbackToAI bool   `toml:"fallback_to_ai"` // if NLP parser fails, try AI model
 	ProviderURL  string `toml:"provider_url"`    // OpenAI-compatible endpoint (Ollama, OpenRouter, OpenAI, Groq, etc.)
 	APIKey       string `toml:"api_key"`         // empty for local Ollama

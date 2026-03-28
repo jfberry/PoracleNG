@@ -1,3 +1,5 @@
+const suggestCommand = require('../../../poracleMessage/suggestCommand')
+
 module.exports = async (client, msg) => {
 	try {
 		// Ignore all bots
@@ -85,8 +87,22 @@ module.exports = async (client, msg) => {
 				}
 			}
 		}
-		if (msg.channel.isDMBased() && !recognisedCommand && client.config.discord.unrecognisedCommandMessage) {
-			msg.reply(client.config.discord.unrecognisedCommandMessage)
+
+		// DM with unrecognised or no command: try NLP suggestion if enabled
+		if (msg.channel.isDMBased() && !recognisedCommand) {
+			if (client.config.ai && client.config.ai.suggestOnDm) {
+				const text = msg.content.startsWith(client.config.discord.prefix)
+					? msg.content.slice(client.config.discord.prefix.length).trim()
+					: msg.content.trim()
+				const suggestion = await suggestCommand(client.config, text, client.config.discord.prefix)
+				if (suggestion) {
+					msg.reply(suggestion)
+					return
+				}
+			}
+			if (client.config.discord.unrecognisedCommandMessage) {
+				msg.reply(client.config.discord.unrecognisedCommandMessage)
+			}
 		}
 	} catch (err) {
 		client.logs.discord.error('Error during message event', err)

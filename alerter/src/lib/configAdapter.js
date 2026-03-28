@@ -80,6 +80,13 @@ function adaptConfig(toml) {
 		headers: processorSecret ? { 'X-Poracle-Secret': processorSecret } : {},
 	}
 
+	// ---- ai (!ask / NLP suggestion) ----
+	const aiConfig = toml.ai || {}
+	config.ai = {
+		enabled: !!aiConfig.enabled,
+		suggestOnDm: !!aiConfig.suggest_on_dm,
+	}
+
 	// ---- database ----
 	const db = toml.database || {}
 	if (!db.user || !db.database) {
