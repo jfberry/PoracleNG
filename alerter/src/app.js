@@ -79,7 +79,7 @@ if (config.discord.enabled) {
 		if (config.discord.token[key]) {
 			discordWorkers.push(new DiscordWorker(config.discord.token[key], key + 1, config, logs, true, (key
 				? { status: config.discord.workerStatus || 'invisible', activity: config.discord.workerActivity ?? 'PoracleHelper' }
-				: { status: 'available', activity: config.discord.activity ?? 'PoracleJS' }), query))
+				: { status: 'available', activity: config.discord.activity ?? 'PoracleNG' }), query))
 		}
 	}
 	fastify.decorate('discordWorker', discordWorkers[0])
@@ -672,7 +672,7 @@ function startPoracle() {
 
 const NODE_MAJOR_VERSION = process.versions.node.split('.')[0]
 if (NODE_MAJOR_VERSION < 16) {
-	log.warn('PoracleJS requires Node 16 - please upgrade')
+	log.warn('PoracleNG requires Node 16 - please upgrade')
 	process.exit(1)
 }
 

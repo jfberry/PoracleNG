@@ -12,7 +12,7 @@ services:
       - ./poracledb:/var/lib/mysql
 
   poracle:
-    image: ghcr.io/jfberry/poracleng:latest
+    image: ghcr.io/jfberry/poracleng:main
     restart: always
     ports:
       - "127.0.0.1:3030:3030"   # Processor (webhook receiver + API)

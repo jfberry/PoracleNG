@@ -1,3 +1,7 @@
+<p align="center">
+  <img width="200" src="https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/starchy.svg?sanitize=true">
+</p>
+
 # PoracleNG
 
 PoracleNG splits Poracle into two components: a high-performance **Processor** (Go) that receives webhooks and performs all user matching in memory, and an **Alerter** (Node.js) that handles template rendering and message delivery to Discord and Telegram.
@@ -95,6 +99,32 @@ Configure Golbat to send webhooks to the **processor** (not the alerter):
 ```
 http://<your-host>:3030/
 ```
+
+### Docker
+
+A pre-built Docker image is available:
+
+```yaml
+# docker-compose.yml
+services:
+  poracle:
+    image: ghcr.io/jfberry/poracleng:main
+    ports:
+      - "3030:3030"
+      - "3031:3031"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    restart: unless-stopped
+```
+
+Create `config/config.toml` (see step 1 above), then:
+
+```sh
+docker compose up -d
+```
+
+The processor downloads game data on first startup. Logs are written to the `logs/` volume.
 
 ## Configuration
 
@@ -202,18 +232,39 @@ max_age = 7              # days to keep log files
 
 ## Migrating from PoracleJS
 
-An automated migration script converts your existing PoracleJS configuration:
+> **Prerequisite:** Make sure you are on the latest PoracleJS so that your database schema is up to date before migrating.
+
+An automated migration script converts your existing PoracleJS configuration. You can run it directly or via Docker.
+
+### Bare metal
 
 ```sh
 node scripts/migrate-from-poracle.js
 ```
 
-The script will:
+When prompted, enter the path to your existing PoracleJS installation.
 
-1. **Ask** for the path to your existing PoracleJS installation
-2. **Copy customized data files** (DTS, aliases, geofences, etc.) into `config/`, skipping any that are unchanged from Poracle's defaults
-3. **Convert your `local.json`** overrides into the unified `config/config.toml`, stripping obsolete settings
-4. **Print instructions** for the manual steps below
+### Docker
+
+```sh
+docker run --rm -it \
+  -v /path/to/your/poraclejs:/oldporacle \
+  -v /path/to/your/poracleng/config:/app/config \
+  ghcr.io/jfberry/poracleng:main \
+  node scripts/migrate-from-poracle.js
+```
+
+When prompted for `Path to your existing PoracleJS installation:` enter `/oldporacle`.
+
+> **Note:** The migrated config files may be owned by `root` depending on your Docker setup — you may need to `chown` them before editing.
+
+### What the script does
+
+1. **Copies customized data files** (DTS, aliases, geofences, etc.) into `config/`, skipping any that are unchanged from Poracle's defaults
+2. **Converts your `local.json`** overrides into the unified `config/config.toml`, stripping obsolete settings
+3. **Prints instructions** for the manual steps below
+
+After migrating, review `config/config.toml` for any incorrect ports or values, ensure your volumes are mounted correctly, and start PoracleNG.
 
 ### What changes
 
