@@ -495,4 +495,4 @@ enabled = false
 # provider_url = "https://api.groq.com/openai/v1"      # Groq (fast, free tier)
 # provider_url = "https://api.openai.com/v1"            # OpenAI
 api_key = ""                                             # empty for local Ollama
-model = ""                                               # e.g. "qwen2.5:1.5b", "gpt-4o-mini"
+model = ""                                               # e.g. "google/gemma-3-12b-it", "qwen2.5:7b"
