@@ -36,10 +36,11 @@ type Config struct {
 
 // AIConfig holds settings for the optional AI command assistant.
 type AIConfig struct {
-	Enabled     bool   `toml:"enabled"`
-	ProviderURL string `toml:"provider_url"` // OpenAI-compatible endpoint (Ollama, OpenRouter, OpenAI, Groq, etc.)
-	APIKey      string `toml:"api_key"`      // empty for local Ollama
-	Model       string `toml:"model"`        // e.g. "qwen2.5:1.5b", "gpt-4o-mini", "qwen/qwen-2.5-7b-instruct"
+	Enabled      bool   `toml:"enabled"`
+	FallbackToAI bool   `toml:"fallback_to_ai"` // if NLP parser fails, try AI model
+	ProviderURL  string `toml:"provider_url"`    // OpenAI-compatible endpoint (Ollama, OpenRouter, OpenAI, Groq, etc.)
+	APIKey       string `toml:"api_key"`         // empty for local Ollama
+	Model        string `toml:"model"`           // e.g. "google/gemma-3-12b-it", "qwen2.5:7b"
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor
