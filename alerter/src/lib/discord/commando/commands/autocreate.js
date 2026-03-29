@@ -1,4 +1,4 @@
-const { PermissionFlagsBits } = require('discord.js')
+const { ChannelType, PermissionFlagsBits } = require('discord.js')
 const PoracleDiscordMessage = require('../../poracleDiscordMessage')
 const PoracleDiscordState = require('../../poracleDiscordState')
 const { loadConfigJson } = require('../../../configResolver')
@@ -10,6 +10,49 @@ function format(str, args) {
 		newStr = newStr.replace(new RegExp(`\\{${i}\\}`, 'gm'), args[i])
 	}
 	return newStr
+}
+
+const rolePermissionMap = {
+	view: PermissionFlagsBits.ViewChannel,
+	viewHistory: PermissionFlagsBits.ReadMessageHistory,
+	send: PermissionFlagsBits.SendMessages,
+	react: PermissionFlagsBits.AddReactions,
+	pingEveryone: PermissionFlagsBits.MentionEveryone,
+	embedLinks: PermissionFlagsBits.EmbedLinks,
+	attachFiles: PermissionFlagsBits.AttachFiles,
+	sendTTS: PermissionFlagsBits.SendTTSMessages,
+	externalEmoji: PermissionFlagsBits.UseExternalEmojis,
+	externalStickers: PermissionFlagsBits.UseExternalStickers,
+	createPublicThreads: PermissionFlagsBits.CreatePublicThreads,
+	createPrivateThreads: PermissionFlagsBits.CreatePrivateThreads,
+	sendThreads: PermissionFlagsBits.SendMessagesInThreads,
+	slashCommands: PermissionFlagsBits.UseApplicationCommands,
+	connect: PermissionFlagsBits.Connect,
+	speak: PermissionFlagsBits.Speak,
+	autoMic: PermissionFlagsBits.UseVAD,
+	stream: PermissionFlagsBits.Stream,
+	vcActivities: PermissionFlagsBits.UseEmbeddedActivities,
+	prioritySpeaker: PermissionFlagsBits.PrioritySpeaker,
+	createInvite: PermissionFlagsBits.CreateInstantInvite,
+	channels: PermissionFlagsBits.ManageChannels,
+	messages: PermissionFlagsBits.ManageMessages,
+	roles: PermissionFlagsBits.ManageRoles,
+	webhooks: PermissionFlagsBits.ManageWebhooks,
+	threads: PermissionFlagsBits.ManageThreads,
+	events: PermissionFlagsBits.ManageEvents,
+	mute: PermissionFlagsBits.MuteMembers,
+	deafen: PermissionFlagsBits.DeafenMembers,
+	move: PermissionFlagsBits.MoveMembers,
+}
+
+function addRolePermissions(role, allowed, deny) {
+	for (const [key, permissionFlag] of Object.entries(rolePermissionMap)) {
+		if (role[key] === true) {
+			allowed.push(permissionFlag)
+		} else if (role[key] === false) {
+			deny.push(permissionFlag)
+		}
+	}
 }
 
 exports.run = async (client, msg, [args]) => {
@@ -79,7 +122,7 @@ exports.run = async (client, msg, [args]) => {
 		let categoryId
 		if (template.definition.category) {
 			const categoryOptions = {
-				type: 'GUILD_CATEGORY',
+				type: ChannelType.GuildCategory,
 			}
 
 			const categoryName = format(template.definition.category.categoryName, args)
@@ -104,168 +147,17 @@ exports.run = async (client, msg, [args]) => {
 							permissions: [],
 						})
 					}
-					if (role.view) {
-						allowed.push('VIEW_CHANNEL')
-					} else if (role.view === false) {
-						deny.push('VIEW_CHANNEL')
-					}
-					if (role.viewHistory) {
-						allowed.push('READ_MESSAGE_HISTORY')
-					} else if (role.viewHistory === false) {
-						deny.push('READ_MESSAGE_HISTORY')
-					}
-					if (role.send) {
-						allowed.push('SEND_MESSAGES')
-					} else if (role.send === false) {
-						deny.push('SEND_MESSAGES')
-					}
-					if (role.react) {
-						allowed.push('ADD_REACTIONS')
-					} else if (role.react === false) {
-						deny.push('ADD_REACTIONS')
-					}
-					if (role.pingEveryone) {
-						allowed.push('MENTION_EVERYONE')
-					} else if (role.pingEveryone === false) {
-						deny.push('MENTION_EVERYONE')
-					}
-					if (role.embedLinks) {
-						allowed.push('EMBED_LINKS')
-					} else if (role.embedLinks === false) {
-						deny.push('EMBED_LINKS')
-					}
-					if (role.attachFiles) {
-						allowed.push('ATTACH_FILES')
-					} else if (role.attachFiles === false) {
-						deny.push('ATTACH_FILES')
-					}
-					if (role.sendTTS) {
-						allowed.push('SEND_TTS_MESSAGES')
-					} else if (role.sendTTS === false) {
-						deny.push('SEND_TTS_MESSAGES')
-					}
-					if (role.externalEmoji) {
-						allowed.push('USE_EXTERNAL_EMOJIS')
-					} else if (role.externalEmoji === false) {
-						deny.push('USE_EXTERNAL_EMOJIS')
-					}
-					if (role.externalStickers) {
-						allowed.push('USE_EXTERNAL_STICKERS')
-					} else if (role.externalStickers === false) {
-						deny.push('USE_EXTERNAL_STICKERS')
-					}
-					if (role.createPublicThreads) {
-						allowed.push('CREATE_PUBLIC_THREADS')
-					} else if (role.createPublicThreads === false) {
-						deny.push('CREATE_PUBLIC_THREADS')
-					}
-					if (role.createPrivateThreads) {
-						allowed.push('CREATE_PRIVATE_THREADS')
-					} else if (role.createPrivateThreads === false) {
-						deny.push('CREATE_PRIVATE_THREADS')
-					}
-					if (role.sendThreads) {
-						allowed.push('SEND_MESSAGES_IN_THREADS')
-					} else if (role.sendThreads === false) {
-						deny.push('SEND_MESSAGES_IN_THREADS')
-					}
-					if (role.slashCommands) {
-						allowed.push('USE_APPLICATION_COMMANDS')
-					} else if (role.slashCommands === false) {
-						deny.push('USE_APPLICATION_COMMANDS')
-					}
-					if (role.connect) {
-						allowed.push('CONNECT')
-					} else if (role.connect === false) {
-						deny.push('CONNECT')
-					}
-					if (role.speak) {
-						allowed.push('SPEAK')
-					} else if (role.speak === false) {
-						deny.push('SPEAK')
-					}
-					if (role.autoMic) {
-						allowed.push('USE_VAD')
-					} else if (role.autoMic === false) {
-						deny.push('USE_VAD')
-					}
-					if (role.stream) {
-						allowed.push('STREAM')
-					} else if (role.stream === false) {
-						deny.push('STREAM')
-					}
-					/*           if (role.soundboard) {
-						allowed.push('USE_SOUNDBOARD')
-					} else if (role.soundboard === false) {
-						deny.push('USE_SOUNDBOARD')
-					} */ // future use, v9 API
-					if (role.vcActivities) {
-						allowed.push('START_EMBEDDED_ACTIVITIES')
-					} else if (role.vcActivities === false) {
-						deny.push('START_EMBEDDED_ACTIVITIES')
-					}
-					if (role.prioritySpeaker) {
-						allowed.push('PRIORITY_SPEAKER')
-					} else if (role.prioritySpeaker === false) {
-						deny.push('PRIORITY_SPEAKER')
-					}
-					if (role.createInvite) {
-						allowed.push('CREATE_INSTANT_INVITE')
-					} else if (role.createInvite === false) {
-						deny.push('CREATE_INSTANT_INVITE')
-					}
-					if (role.channels) {
-						allowed.push('MANAGE_CHANNELS')
-					} else if (role.channels === false) {
-						deny.push('MANAGE_CHANNELS')
-					}
-					if (role.messages) {
-						allowed.push('MANAGE_MESSAGES')
-					} else if (role.messages === false) {
-						deny.push('MANAGE_MESSAGES')
-					}
-					if (role.roles) {
-						allowed.push('MANAGE_ROLES')
-					} else if (role.roles === false) {
-						deny.push('MANAGE_ROLES')
-					}
-					if (role.webhooks) {
-						allowed.push('MANAGE_WEBHOOKS')
-					} else if (role.webhooks === false) {
-						deny.push('MANAGE_WEBHOOKS')
-					}
-					if (role.threads) {
-						allowed.push('MANAGE_THREADS')
-					} else if (role.threads === false) {
-						deny.push('MANAGE_THREADS')
-					}
-					if (role.events) {
-						allowed.push('MANAGE_EVENTS')
-					} else if (role.events === false) {
-						deny.push('MANAGE_EVENTS')
-					}
-					if (role.mute) {
-						allowed.push('MUTE_MEMBERS')
-					} else if (role.mute === false) {
-						deny.push('MUTE_MEMBERS')
-					}
-					if (role.deafen) {
-						allowed.push('DEAFEN_MEMBERS')
-					} else if (role.deafen === false) {
-						deny.push('DEAFEN_MEMBERS')
-					}
-					if (role.move) {
-						allowed.push('MOVE_MEMBERS')
-					} else if (role.move === false) {
-						deny.push('MOVE_MEMBERS')
-					}
+					addRolePermissions(role, allowed, deny)
 					roleOverwrites.push({ id: roleId, allow: allowed, deny })
 				}
 				categoryOptions.permissionOverwrites = roleOverwrites
 			}
 
-			// create category in discord
-			const category = await guild.channels.create(categoryName, categoryOptions)
+			// discord.js v14 expects a single create payload with the channel name included
+			const category = await guild.channels.create({
+				name: categoryName,
+				...categoryOptions,
+			})
 			await msg.reply(`>> Creating ${categoryName}`)
 			categoryId = category.id
 		}
@@ -273,9 +165,9 @@ exports.run = async (client, msg, [args]) => {
 		for (const channelDefinition of template.definition.channels) {
 			const channelOptions = {}
 			if (channelDefinition.channelType === 'text') {
-				channelOptions.type = 'GUILD_TEXT'
+				channelOptions.type = ChannelType.GuildText
 			} else if (channelDefinition.channelType === 'voice') {
-				channelOptions.type = 'GUILD_VOICE'
+				channelOptions.type = ChannelType.GuildVoice
 			}
 			if (categoryId) {
 				channelOptions.parent = categoryId
@@ -307,168 +199,17 @@ exports.run = async (client, msg, [args]) => {
 							permissions: [],
 						})
 					}
-					if (role.view) {
-						allowed.push('VIEW_CHANNEL')
-					} else if (role.view === false) {
-						deny.push('VIEW_CHANNEL')
-					}
-					if (role.viewHistory) {
-						allowed.push('READ_MESSAGE_HISTORY')
-					} else if (role.viewHistory === false) {
-						deny.push('READ_MESSAGE_HISTORY')
-					}
-					if (role.send) {
-						allowed.push('SEND_MESSAGES')
-					} else if (role.send === false) {
-						deny.push('SEND_MESSAGES')
-					}
-					if (role.react) {
-						allowed.push('ADD_REACTIONS')
-					} else if (role.react === false) {
-						deny.push('ADD_REACTIONS')
-					}
-					if (role.pingEveryone) {
-						allowed.push('MENTION_EVERYONE')
-					} else if (role.pingEveryone === false) {
-						deny.push('MENTION_EVERYONE')
-					}
-					if (role.embedLinks) {
-						allowed.push('EMBED_LINKS')
-					} else if (role.embedLinks === false) {
-						deny.push('EMBED_LINKS')
-					}
-					if (role.attachFiles) {
-						allowed.push('ATTACH_FILES')
-					} else if (role.attachFiles === false) {
-						deny.push('ATTACH_FILES')
-					}
-					if (role.sendTTS) {
-						allowed.push('SEND_TTS_MESSAGES')
-					} else if (role.sendTTS === false) {
-						deny.push('SEND_TTS_MESSAGES')
-					}
-					if (role.externalEmoji) {
-						allowed.push('USE_EXTERNAL_EMOJIS')
-					} else if (role.externalEmoji === false) {
-						deny.push('USE_EXTERNAL_EMOJIS')
-					}
-					if (role.externalStickers) {
-						allowed.push('USE_EXTERNAL_STICKERS')
-					} else if (role.externalStickers === false) {
-						deny.push('USE_EXTERNAL_STICKERS')
-					}
-					if (role.createPublicThreads) {
-						allowed.push('CREATE_PUBLIC_THREADS')
-					} else if (role.createPublicThreads === false) {
-						deny.push('CREATE_PUBLIC_THREADS')
-					}
-					if (role.createPrivateThreads) {
-						allowed.push('CREATE_PRIVATE_THREADS')
-					} else if (role.createPrivateThreads === false) {
-						deny.push('CREATE_PRIVATE_THREADS')
-					}
-					if (role.sendThreads) {
-						allowed.push('SEND_MESSAGES_IN_THREADS')
-					} else if (role.sendThreads === false) {
-						deny.push('SEND_MESSAGES_IN_THREADS')
-					}
-					if (role.slashCommands) {
-						allowed.push('USE_APPLICATION_COMMANDS')
-					} else if (role.slashCommands === false) {
-						deny.push('USE_APPLICATION_COMMANDS')
-					}
-					if (role.connect) {
-						allowed.push('CONNECT')
-					} else if (role.connect === false) {
-						deny.push('CONNECT')
-					}
-					if (role.speak) {
-						allowed.push('SPEAK')
-					} else if (role.speak === false) {
-						deny.push('SPEAK')
-					}
-					if (role.autoMic) {
-						allowed.push('USE_VAD')
-					} else if (role.autoMic === false) {
-						deny.push('USE_VAD')
-					}
-					if (role.stream) {
-						allowed.push('STREAM')
-					} else if (role.stream === false) {
-						deny.push('STREAM')
-					}
-					/*           if (role.soundboard) {
-						allowed.push('USE_SOUNDBOARD')
-					} else if (role.soundboard === false) {
-						deny.push('USE_SOUNDBOARD')
-					} */ // future use, v9 API
-					if (role.vcActivities) {
-						allowed.push('START_EMBEDDED_ACTIVITIES')
-					} else if (role.vcActivities === false) {
-						deny.push('START_EMBEDDED_ACTIVITIES')
-					}
-					if (role.prioritySpeaker) {
-						allowed.push('PRIORITY_SPEAKER')
-					} else if (role.prioritySpeaker === false) {
-						deny.push('PRIORITY_SPEAKER')
-					}
-					if (role.createInvite) {
-						allowed.push('CREATE_INSTANT_INVITE')
-					} else if (role.createInvite === false) {
-						deny.push('CREATE_INSTANT_INVITE')
-					}
-					if (role.channels) {
-						allowed.push('MANAGE_CHANNELS')
-					} else if (role.channels === false) {
-						deny.push('MANAGE_CHANNELS')
-					}
-					if (role.messages) {
-						allowed.push('MANAGE_MESSAGES')
-					} else if (role.messages === false) {
-						deny.push('MANAGE_MESSAGES')
-					}
-					if (role.roles) {
-						allowed.push('MANAGE_ROLES')
-					} else if (role.roles === false) {
-						deny.push('MANAGE_ROLES')
-					}
-					if (role.webhooks) {
-						allowed.push('MANAGE_WEBHOOKS')
-					} else if (role.webhooks === false) {
-						deny.push('MANAGE_WEBHOOKS')
-					}
-					if (role.threads) {
-						allowed.push('MANAGE_THREADS')
-					} else if (role.threads === false) {
-						deny.push('MANAGE_THREADS')
-					}
-					if (role.events) {
-						allowed.push('MANAGE_EVENTS')
-					} else if (role.events === false) {
-						deny.push('MANAGE_EVENTS')
-					}
-					if (role.mute) {
-						allowed.push('MUTE_MEMBERS')
-					} else if (role.mute === false) {
-						deny.push('MUTE_MEMBERS')
-					}
-					if (role.deafen) {
-						allowed.push('DEAFEN_MEMBERS')
-					} else if (role.deafen === false) {
-						deny.push('DEAFEN_MEMBERS')
-					}
-					if (role.move) {
-						allowed.push('MOVE_MEMBERS')
-					} else if (role.move === false) {
-						deny.push('MOVE_MEMBERS')
-					}
+					addRolePermissions(role, allowed, deny)
 					roleOverwrites.push({ id: roleId, allow: allowed, deny })
 				}
 				channelOptions.permissionOverwrites = roleOverwrites
 			}
 
-			// create channel in discord
-			const channel = await guild.channels.create(channelName, channelOptions)
+			// discord.js v14 expects a single create payload with the channel name included
+			const channel = await guild.channels.create({
+				name: channelName,
+				...channelOptions,
+			})
 			await msg.reply(`>> Creating ${channelName}`)
 
 			// exit loop if simple text channel

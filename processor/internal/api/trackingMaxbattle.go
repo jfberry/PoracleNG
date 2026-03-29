@@ -74,16 +74,16 @@ func HandleDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 
 // maxbattleInsertRequest represents a single maxbattle tracking row from the POST body.
 type maxbattleInsertRequest struct {
-	PokemonID *json.Number `json:"pokemon_id"`
-	Level     *json.Number `json:"level"`
-	Distance  *json.Number `json:"distance"`
-	Template  any          `json:"template"`
-	Clean     *json.Number `json:"clean"`
-	Form      *json.Number `json:"form"`
-	Move      *json.Number `json:"move"`
-	Gmax      *json.Number `json:"gmax"`
-	Evolution *json.Number `json:"evolution"`
-	StationID *string      `json:"station_id"`
+	PokemonID flexInt  `json:"pokemon_id"`
+	Level     flexInt  `json:"level"`
+	Distance  flexInt  `json:"distance"`
+	Template  any      `json:"template"`
+	Clean     flexBool `json:"clean"`
+	Form      flexInt  `json:"form"`
+	Move      flexInt  `json:"move"`
+	Gmax      flexBool `json:"gmax"`
+	Evolution flexInt  `json:"evolution"`
+	StationID *string  `json:"station_id"`
 }
 
 // HandleCreateMaxbattle returns the POST /api/tracking/maxbattle/{id} handler.
@@ -132,29 +132,18 @@ func HandleCreateMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 
 		insert := make([]db.MaxbattleTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
-			pokemonID := 9000
-			if req.PokemonID != nil {
-				n, _ := strconv.Atoi(string(*req.PokemonID))
-				pokemonID = n
-			}
+			pokemonID := req.PokemonID.intValue(9000)
 
 			level := 9000
 			if pokemonID == 9000 {
-				if req.Level != nil {
-					n, _ := strconv.Atoi(string(*req.Level))
-					level = n
-				}
+				level = req.Level.intValue(9000)
 				if level < 1 {
 					trackingJSONError(w, http.StatusBadRequest, "Invalid level (must be specified if no pokemon_id)")
 					return
 				}
 			}
 
-			distance := 0
-			if req.Distance != nil {
-				n, _ := strconv.Atoi(string(*req.Distance))
-				distance = n
-			}
+			distance := req.Distance.intValue(0)
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -170,35 +159,11 @@ func HandleCreateMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			var clean db.IntBool
-			if req.Clean != nil {
-				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = db.IntBool(n != 0)
-			}
-
-			form := 0
-			if req.Form != nil {
-				n, _ := strconv.Atoi(string(*req.Form))
-				form = n
-			}
-
-			move := 9000
-			if req.Move != nil {
-				n, _ := strconv.Atoi(string(*req.Move))
-				move = n
-			}
-
-			gmax := 0
-			if req.Gmax != nil {
-				n, _ := strconv.Atoi(string(*req.Gmax))
-				gmax = n
-			}
-
-			evolution := 9000
-			if req.Evolution != nil {
-				n, _ := strconv.Atoi(string(*req.Evolution))
-				evolution = n
-			}
+			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			form := req.Form.intValue(0)
+			move := req.Move.intValue(9000)
+			gmax := req.Gmax.intValue(0)
+			evolution := req.Evolution.intValue(9000)
 
 			var stationID *string
 			if req.StationID != nil && *req.StationID != "" {

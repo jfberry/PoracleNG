@@ -176,6 +176,96 @@ func translatorFor(deps *TrackingDeps, human *db.HumanAPI) *i18n.Translator {
 	return deps.Translations.For(lang)
 }
 
+// flexBool is a JSON type that accepts booleans (true/false) and numbers (0/1),
+// coercing both to an integer value. This handles third-party clients like
+// ReactMap that send boolean values where Poracle expects 0/1 integers.
+type flexBool struct {
+	value *int
+}
+
+func (f *flexBool) UnmarshalJSON(data []byte) error {
+	s := string(data)
+	switch s {
+	case "null":
+		f.value = nil
+		return nil
+	case "true":
+		v := 1
+		f.value = &v
+		return nil
+	case "false":
+		v := 0
+		f.value = &v
+		return nil
+	}
+	var n json.Number
+	if err := json.Unmarshal(data, &n); err == nil {
+		i, _ := strconv.Atoi(n.String())
+		f.value = &i
+		return nil
+	}
+	return fmt.Errorf("flexBool: cannot unmarshal %s", s)
+}
+
+func (f flexBool) intValue(defaultVal int) int {
+	if f.value == nil {
+		return defaultVal
+	}
+	return *f.value
+}
+
+func (f flexBool) isSet() bool {
+	return f.value != nil
+}
+
+// flexInt is a JSON type that accepts numbers, booleans, and strings,
+// coercing all to an integer value. Handles ReactMap sending booleans
+// for fields like slot_changes, battle_changes.
+type flexInt struct {
+	value *int
+}
+
+func (f *flexInt) UnmarshalJSON(data []byte) error {
+	s := string(data)
+	switch s {
+	case "null":
+		f.value = nil
+		return nil
+	case "true":
+		v := 1
+		f.value = &v
+		return nil
+	case "false":
+		v := 0
+		f.value = &v
+		return nil
+	}
+	var n json.Number
+	if err := json.Unmarshal(data, &n); err == nil {
+		i, _ := strconv.Atoi(n.String())
+		f.value = &i
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		i, _ := strconv.Atoi(str)
+		f.value = &i
+		return nil
+	}
+	return fmt.Errorf("flexInt: cannot unmarshal %s", s)
+}
+
+func (f flexInt) intValue(defaultVal int) int {
+	if f.value == nil {
+		return defaultVal
+	}
+	return *f.value
+}
+
+func (f flexInt) isSet() bool {
+	return f.value != nil
+}
+
 // diffTracking compares two tracking structs using `diff` struct tags.
 //
 // Tag values:

@@ -79,11 +79,11 @@ func HandleDeleteFort(deps *TrackingDeps) http.HandlerFunc {
 
 // fortInsertRequest represents a single fort tracking row from the POST body.
 type fortInsertRequest struct {
-	FortType     *string `json:"fort_type"`
-	Distance     *int    `json:"distance"`
-	Template     any     `json:"template"`
-	IncludeEmpty *bool   `json:"include_empty"`
-	ChangeTypes  any     `json:"change_types"`
+	FortType     *string  `json:"fort_type"`
+	Distance     flexInt  `json:"distance"`
+	Template     any      `json:"template"`
+	IncludeEmpty flexBool `json:"include_empty"`
+	ChangeTypes  any      `json:"change_types"`
 }
 
 // HandleCreateFort returns the POST /api/tracking/fort/{id} handler.
@@ -140,10 +140,7 @@ func HandleCreateFort(deps *TrackingDeps) http.HandlerFunc {
 				return
 			}
 
-			distance := 0
-			if req.Distance != nil {
-				distance = *req.Distance
-			}
+			distance := req.Distance.intValue(0)
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -159,10 +156,7 @@ func HandleCreateFort(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			var includeEmpty db.IntBool
-			if req.IncludeEmpty != nil {
-				includeEmpty = db.IntBool(*req.IncludeEmpty)
-			}
+			includeEmpty := db.IntBool(req.IncludeEmpty.intValue(0) != 0)
 
 			changeTypes := "[]"
 			if req.ChangeTypes != nil {

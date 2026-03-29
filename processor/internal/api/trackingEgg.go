@@ -76,13 +76,13 @@ func HandleDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
 // eggInsertRequest represents a single egg tracking row from the POST body.
 type eggInsertRequest struct {
 	Level       json.RawMessage `json:"level"`
-	Distance    *json.Number    `json:"distance"`
+	Distance    flexInt         `json:"distance"`
 	Template    any             `json:"template"`
-	Clean       *json.Number    `json:"clean"`
-	Team        *json.Number    `json:"team"`
-	Exclusive   *json.Number    `json:"exclusive"`
+	Clean       flexBool        `json:"clean"`
+	Team        flexInt         `json:"team"`
+	Exclusive   flexBool        `json:"exclusive"`
 	GymID       *string         `json:"gym_id"`
-	RSVPChanges *json.Number    `json:"rsvp_changes"`
+	RSVPChanges flexInt         `json:"rsvp_changes"`
 }
 
 // HandleCreateEgg returns the POST /api/tracking/egg/{id} handler.
@@ -144,43 +144,24 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			distance := 0
-			if req.Distance != nil {
-				n, _ := strconv.Atoi(string(*req.Distance))
-				distance = n
+			distance := req.Distance.intValue(0)
+
+			team := req.Team.intValue(4)
+			if team < 0 || team > 4 {
+				team = 4
 			}
 
-			team := 4
-			if req.Team != nil {
-				n, _ := strconv.Atoi(string(*req.Team))
-				if n >= 0 && n <= 4 {
-					team = n
-				}
-			}
-
-			var clean db.IntBool
-			if req.Clean != nil {
-				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = db.IntBool(n != 0)
-			}
-
-			var exclusive db.IntBool
-			if req.Exclusive != nil {
-				n, _ := strconv.Atoi(string(*req.Exclusive))
-				exclusive = db.IntBool(n != 0)
-			}
+			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			exclusive := db.IntBool(req.Exclusive.intValue(0) != 0)
 
 			var gymID null.String
 			if req.GymID != nil && *req.GymID != "" {
 				gymID = null.StringFrom(*req.GymID)
 			}
 
-			rsvpChanges := 0
-			if req.RSVPChanges != nil {
-				n, _ := strconv.Atoi(string(*req.RSVPChanges))
-				if n >= 0 && n <= 2 {
-					rsvpChanges = n
-				}
+			rsvpChanges := req.RSVPChanges.intValue(0)
+			if rsvpChanges < 0 || rsvpChanges > 2 {
+				rsvpChanges = 0
 			}
 
 			// Level expansion
