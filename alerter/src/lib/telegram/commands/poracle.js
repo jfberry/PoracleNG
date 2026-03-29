@@ -1,3 +1,4 @@
+const axios = require('axios')
 const communityLogic = require('../../communityLogic')
 
 module.exports = async (ctx) => {
@@ -107,25 +108,30 @@ module.exports = async (ctx) => {
 			await ctx.reply(`${controller.config.telegram.groupWelcomeText.replace('{user}', ctx.update.message.from.first_name.replace(/[_*[\]`]/g, ((m) => `\\${m}`)))}`, { parse_mode: 'Markdown' })
 		}
 
-		const dts = controller.dts.find((template) => template.type === 'greeting' && template.platform === 'telegram' && template.default)
-		if (dts) {
-			const message = dts.template
-			const view = { prefix: '/' }
-
-			let messageText = ''
-			if (message.embed) {
-				if (message.embed.title) messageText = messageText.concat(`${message.embed.title}\n`)
-				if (message.embed.description) messageText = messageText.concat(`${message.embed.description}\n`)
-			}
-
-			const compiledMustache = client.mustache.compile(JSON.stringify(message))
-			const greeting = JSON.parse(compiledMustache(view))
-
-			const { fields } = greeting.embed
-			fields.forEach((field) => {
-				messageText = messageText.concat(`\n\n${field.name}\n\n${field.value}`)
+		try {
+			const resp = await axios.post(`${client.config.processor.url}/api/dts/render`, {
+				type: 'greeting',
+				platform: 'telegram',
+				language: '',
+				view: { prefix: '/' },
+			}, {
+				headers: { 'Content-Type': 'application/json', ...client.config.processor.headers },
+				timeout: 5000,
 			})
-			await ctx.telegram.sendMessage(telegramUser.id, messageText, { parse_mode: 'Markdown' })
+			if (resp.data.status === 'ok' && resp.data.message) {
+				const greeting = resp.data.message
+				let messageText = ''
+				if (greeting.embed && greeting.embed.fields) {
+					for (const field of greeting.embed.fields) {
+						messageText = messageText.concat(`\n\n${field.name}\n\n${field.value}`)
+					}
+				}
+				if (messageText) {
+					await ctx.telegram.sendMessage(telegramUser.id, messageText, { parse_mode: 'Markdown' })
+				}
+			}
+		} catch (err) {
+			client.logs.telegram.warn(`Greeting render failed: ${err.message}`)
 		}
 		await ctx.telegram.sendMessage(telegramUser.id, client.config.telegram.botWelcomeText, { parse_mode: 'Markdown' })
 

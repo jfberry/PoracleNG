@@ -1,4 +1,4 @@
-const mustache = require('handlebars')
+const axios = require('axios')
 const emojiStrip = require('../../util/emojiStrip')
 const communityLogic = require('../communityLogic')
 
@@ -16,29 +16,39 @@ class TelegramReconciliation {
 		this.config = config
 		this.query = query
 		this.dts = dts
-		this.mustache = mustache
 	}
 
 	async sendGreetings(id) {
 		if (!this.config.telegram.disableAutoGreetings) {
-			const greetingDts = this.dts.find((template) => template.type === 'greeting' && template.platform === 'telegram' && template.default)
-			if (greetingDts) {
-				const view = { prefix: '/' }
-				const compileMustache = this.mustache.compile(JSON.stringify(greetingDts.template))
-				const greeting = JSON.parse(compileMustache(view))
+			try {
+				const resp = await axios.post(`${this.config.processor.url}/api/dts/render`, {
+					type: 'greeting',
+					platform: 'telegram',
+					language: '',
+					view: { prefix: '/' },
+				}, {
+					headers: { 'Content-Type': 'application/json', ...this.config.processor.headers },
+					timeout: 5000,
+				})
+				if (resp.data.status === 'ok' && resp.data.message) {
+					const greeting = resp.data.message
+					let messageText = ''
+					const fields = (greeting.embed && greeting.embed.fields) || []
 
-				let messageText = ''
-				const { fields } = greeting.embed
-
-				for (const field of fields) {
-					const fieldLine = `\n\n${field.name}\n\n${field.value}`
-					if (messageText.length + fieldLine.length > 1024) {
-						await this.telegraf.telegram.sendMessage(id, messageText)
-						messageText = ''
+					for (const field of fields) {
+						const fieldLine = `\n\n${field.name}\n\n${field.value}`
+						if (messageText.length + fieldLine.length > 1024) {
+							await this.telegraf.telegram.sendMessage(id, messageText)
+							messageText = ''
+						}
+						messageText = messageText.concat(fieldLine)
 					}
-					messageText = messageText.concat(fieldLine)
+					if (messageText) {
+						await this.telegraf.telegram.sendMessage(id, messageText)
+					}
 				}
-				await this.telegraf.telegram.sendMessage(id, messageText)
+			} catch (err) {
+				this.log.warn(`Greeting render failed: ${err.message}`)
 			}
 		}
 	}

@@ -1,3 +1,4 @@
+const axios = require('axios')
 const communityLogic = require('../../../communityLogic')
 
 exports.run = async (client, msg) => {
@@ -93,20 +94,26 @@ exports.run = async (client, msg) => {
 
 		client.logs.log.info(`${client.emojiStrip(msg.author.username)} Registered!`)
 
-		let greetingDts = client.dts.find((template) => template.type === 'greeting' && template.platform === 'discord' && template.language === language)
-		if (!greetingDts) {
-			greetingDts = client.dts.find((template) => template.type === 'greeting' && template.platform === 'discord' && template.default)
-		}
-
-		if (greetingDts) {
-			const view = { prefix: client.config.discord.prefix }
-			const greeting = client.mustache.compile(JSON.stringify(greetingDts.template))
-			const discordMsgToSend = JSON.parse(greeting(view))
-			if (discordMsgToSend.embed) {
-				discordMsgToSend.embeds = [discordMsgToSend.embed]
-				delete discordMsgToSend.embed
+		try {
+			const resp = await axios.post(`${client.config.processor.url}/api/dts/render`, {
+				type: 'greeting',
+				platform: 'discord',
+				language,
+				view: { prefix: client.config.discord.prefix },
+			}, {
+				headers: { 'Content-Type': 'application/json', ...client.config.processor.headers },
+				timeout: 5000,
+			})
+			if (resp.data.status === 'ok' && resp.data.message) {
+				const discordMsgToSend = resp.data.message
+				if (discordMsgToSend.embed) {
+					discordMsgToSend.embeds = [discordMsgToSend.embed]
+					delete discordMsgToSend.embed
+				}
+				await msg.author.send(discordMsgToSend)
 			}
-			await msg.author.send(discordMsgToSend)
+		} catch (err) {
+			client.logs.log.warn(`Greeting render failed: ${err.message}`)
 		}
 	} catch (err) {
 		client.logs.log.error('!poracle command errored with:', err)
