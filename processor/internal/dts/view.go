@@ -184,6 +184,7 @@ var aliasMapping = []struct {
 	// Pokestop: snake_case → camelCase
 	{"pokestopName", "pokestop_name"},
 	{"pokestopUrl", "pokestop_url"},
+	{"name", "pokestop_name"}, // for invasion/quest/lure; won't overwrite pokemon "name" from enrichment
 	{"url", "pokestop_url"},
 	// Gym
 	{"gymName", "gym_name"},
