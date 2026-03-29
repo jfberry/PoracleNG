@@ -1,6 +1,7 @@
 const { S2 } = require('s2-geometry')
 const moment = require('moment-timezone')
 const geoTz = require('geo-tz')
+const axios = require('axios')
 const EmojiLookup = require('../../emojiLookup')
 const helpCommand = require('./help')
 
@@ -69,12 +70,37 @@ exports.run = async (client, msg, args, options) => {
 			}
 			case 'dts': {
 				if (msg.isFromAdmin) {
-					let s = 'Your loaded DTS looks like this:\n'
-					for (const dts of client.dts) {
-						s += `type: ${dts.type} platform: ${dts.platform} id: ${dts.id} language: ${dts.language}\n`
+					if (!client.config.processor.url) {
+						await msg.reply('DTS information is not available - processor URL is not configured')
+						break
 					}
+					try {
+						const resp = await axios.get(`${client.config.processor.url}/api/config/templates`, {
+							timeout: 5000,
+							headers: client.config.processor.headers,
+						})
+						if (resp.data.status !== 'ok') {
+							await msg.reply('Failed to fetch DTS information from processor')
+							break
+						}
 
-					await msg.reply(s)
+						let s = 'Your loaded DTS looks like this:\n'
+						// Response is keyed by platform -> type -> language -> [ids]
+						const entries = Object.entries(resp.data).filter(([key]) => key !== 'status')
+						for (const [plat, types] of entries) {
+							for (const [type, languages] of Object.entries(types)) {
+								for (const [lang, ids] of Object.entries(languages)) {
+									for (const id of ids) {
+										s += `type: ${type} platform: ${plat} id: ${id} language: ${lang === '%' ? '' : lang}\n`
+									}
+								}
+							}
+						}
+						await msg.reply(s)
+					} catch (err) {
+						client.log.error(`Failed to fetch template config from processor: ${err.message}`)
+						await msg.reply('Failed to fetch DTS information from processor')
+					}
 				}
 				break
 			}
@@ -84,7 +110,6 @@ exports.run = async (client, msg, args, options) => {
 					return msg.reply(translator.translate('Shiny information is not available - processor URL is not configured'))
 				}
 
-				const axios = require('axios')
 				let shinyData
 				try {
 					const resp = await axios.get(`${client.config.processor.url}/api/stats/shiny`, { timeout: 5000, headers: client.config.processor.headers })
@@ -211,7 +236,6 @@ exports.run = async (client, msg, args, options) => {
 				const weatherCellId = S2.keyToId(weatherCellKey)
 
 				// Fetch weather data for this cell from the Go processor on demand
-				const axios = require('axios')
 				let weatherInfo
 				try {
 					const resp = await axios.get(`${client.config.processor.url}/api/weather`, { params: { cell: weatherCellId }, timeout: 5000, headers: client.config.processor.headers })

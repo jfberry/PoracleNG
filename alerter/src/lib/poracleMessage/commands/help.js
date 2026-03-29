@@ -1,33 +1,37 @@
-function getDts(client, language, platform, helpSubject) {
-	// 1. Help template, right language, right platform
-	let dts = client.dts.find((template) => template.type === 'help' && template.id === helpSubject && template.platform === platform && template.language === language)
-	// 2. Help template, right language, platform is empty (ie any platform
-	if (!dts) {
-		dts = client.dts.find((template) => template.type === 'help' && template.id === helpSubject && template.platform === '' && template.language === language)
-	}
-	// 3. Help template, right platform, marked as default
-	if (!dts) {
-		dts = client.dts.find((template) => template.type === 'help' && template.id === helpSubject && template.platform === platform && template.default)
-	}
-	// 4. Help template, marked as default, platform is empty (ie any platform)
-	if (!dts) {
-		dts = client.dts.find((template) => template.type === 'help' && template.id === helpSubject && template.platform === '' && template.default)
-	}
+const axios = require('axios')
 
-	return dts
-}
+async function renderTemplate(client, type, id, platform, language, view) {
+	if (!client.config.processor.url) return null
 
-function isHelpAvailable(client, language, target, helpSubject) {
-	let platform = target.type.split(':')[0]
-	if (platform === 'webhook') platform = 'discord'
+	try {
+		const resp = await axios.post(`${client.config.processor.url}/api/dts/render`, {
+			type,
+			id: id || '',
+			platform,
+			language,
+			view: view || {},
+		}, { headers: { 'Content-Type': 'application/json', ...client.config.processor.headers }, timeout: 5000 })
 
-	return getDts(client, language, platform, helpSubject)
+		if (resp.data.status === 'ok' && resp.data.message) {
+			return resp.data.message
+		}
+	} catch (err) {
+		if (err.response && err.response.status === 404) {
+			return null
+		}
+		client.log.warn(`DTS render failed for ${type}/${id}: ${err.message}`)
+	}
+	return null
 }
 
 async function provideSingleLineHelp(client, msg, util, language, target, commandName) {
 	const translator = client.translatorFactory.Translator(language)
 
-	if (isHelpAvailable(client, language, target, commandName)) {
+	let platform = target.type.split(':')[0]
+	if (platform === 'webhook') platform = 'discord'
+
+	const helpAvailable = await renderTemplate(client, 'help', commandName, platform, language, {})
+	if (helpAvailable) {
 		await msg.reply(translator.translateFormat('Use `{0}{1} {2}` for more details on this command', util.prefix, translator.translate('help'), translator.translate(commandName)), { style: 'markdown' })
 	} else {
 		await msg.reply(translator.translateFormat('Use `{0}{1}` for more help', util.prefix, translator.translate('help')), { style: 'markdown' })
@@ -67,44 +71,30 @@ exports.run = async (client, msg, args, options) => {
 		let platform = target.type.split(':')[0]
 		if (platform === 'webhook') platform = 'discord'
 
-		let dts
+		const view = { prefix: util.prefix }
+		let message
 
 		if (args[0]) {
-			dts = getDts(client, helpLanguage, platform, args[0])
+			message = await renderTemplate(client, 'help', args[0], platform, helpLanguage, view)
 		} else {
-			// choose appropriate generalised greeting text
-			dts = client.dts.find((template) => template.type === 'greeting' && template.platform === platform && template.language === helpLanguage)
-			if (!dts) {
-				dts = client.dts.find((template) => template.type === 'greeting' && template.platform === platform && template.default)
-			}
-			if (!dts) {
-				dts = client.dts.find((template) => template.type === 'greeting' && template.platform === '' && template.language === helpLanguage)
-			}
-			if (!dts) {
-				dts = client.dts.find((template) => template.type === 'greeting' && template.platform === '' && template.default)
-			}
+			message = await renderTemplate(client, 'greeting', '', platform, helpLanguage, view)
 		}
 
-		if (!dts) {
-			await msg.react('🙅')
+		if (!message) {
+			await msg.react('\u{1F645}')
 			return
 		}
-		const message = dts.template
 
 		if (message.embed) {
 			if (message.embed.title) message.embed.title = ''
 			if (message.embed.description) message.embed.description = ''
 		}
 
-		const view = { prefix: util.prefix }
-		const mustache = client.mustache.compile(JSON.stringify(message))
-		const greeting = JSON.parse(mustache(view))
-
 		if (platform === 'discord') {
-			await msg.reply(greeting)
+			await msg.reply(message)
 		} else {
 			let messageText = ''
-			const { fields } = greeting.embed
+			const fields = (message.embed && message.embed.fields) || []
 
 			for (const field of fields) {
 				const fieldLine = `\n\n${field.name}\n\n${field.value}`
@@ -114,7 +104,9 @@ exports.run = async (client, msg, args, options) => {
 				}
 				messageText = messageText.concat(fieldLine)
 			}
-			await msg.reply(messageText, { style: 'markdown' })
+			if (messageText) {
+				await msg.reply(messageText, { style: 'markdown' })
+			}
 		}
 	} catch (err) {
 		client.log.error('help command unhappy:', err)
