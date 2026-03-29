@@ -418,3 +418,18 @@ func (f *FortWebhook) FortName() string {
 	}
 	return ""
 }
+
+// DeliveryJob represents a rendered alert ready for delivery to Discord/Telegram.
+type DeliveryJob struct {
+	Lat          string         `json:"lat"`
+	Lon          string         `json:"lon"`
+	Message      any            `json:"message"`     // parsed JSON (map or string)
+	Target       string         `json:"target"`
+	Type         string         `json:"type"`         // "discord:user", "telegram:group", etc.
+	Name         string         `json:"name"`
+	TTH          map[string]any `json:"tth"`
+	Clean        bool           `json:"clean"`
+	Emoji        []string       `json:"emoji"`
+	LogReference string         `json:"logReference"`
+	Language     string         `json:"language"`
+}

@@ -154,8 +154,8 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				}
 			}
 
-			mergeWebhookFields(baseEnrichment, raw)
 			if ps.dtsRenderer != nil {
+				mergeWebhookFields(baseEnrichment, raw)
 				if tilePending != nil {
 					wait := time.Until(tilePending.Deadline)
 					if wait <= 0 {

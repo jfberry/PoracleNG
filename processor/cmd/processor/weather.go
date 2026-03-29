@@ -6,7 +6,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -113,11 +112,11 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 		msg, _ := json.Marshal(change)
 		baseEnrichment, baseTilePending := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap)
 
-		// Merge raw webhook fields into enrichment (templates access both)
-		mergeWebhookFields(baseEnrichment, msg)
-
 		// Per-user: each gets their own payload with per-language enrichment and tile
 		if ps.dtsRenderer != nil {
+			// Merge raw webhook fields into enrichment (templates access both)
+			mergeWebhookFields(baseEnrichment, msg)
+
 			// Resolve base tile
 			if baseTilePending != nil {
 				wait := time.Until(baseTilePending.Deadline)
@@ -132,7 +131,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				}
 			}
 
-			var allJobs []dts.DeliveryJob
+			var allJobs []webhook.DeliveryJob
 			for _, user := range matched {
 				lang := user.Language
 				if lang == "" {

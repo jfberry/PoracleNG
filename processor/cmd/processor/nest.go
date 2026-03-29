@@ -80,8 +80,8 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 				}
 			}
 
-			mergeWebhookFields(enrichment, raw)
 			if ps.dtsRenderer != nil {
+				mergeWebhookFields(enrichment, raw)
 				if tilePending != nil {
 					wait := time.Until(tilePending.Deadline)
 					if wait <= 0 {

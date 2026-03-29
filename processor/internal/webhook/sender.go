@@ -189,9 +189,7 @@ func (s *Sender) sendBatch(batch []OutboundPayload) {
 
 // DeliverMessages POSTs pre-rendered delivery jobs directly to the alerter's
 // /api/deliverMessages endpoint, bypassing the matched→controller pipeline.
-// The jobs parameter is typically []dts.DeliveryJob but accepts any to avoid
-// an import cycle (dts already imports webhook).
-func (s *Sender) DeliverMessages(jobs any) error {
+func (s *Sender) DeliverMessages(jobs []DeliveryJob) error {
 	body, err := json.Marshal(jobs)
 	if err != nil {
 		return fmt.Errorf("marshal delivery jobs: %w", err)

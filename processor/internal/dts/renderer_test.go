@@ -731,22 +731,26 @@ func TestRenderAlertMultipleUsers(t *testing.T) {
 		t.Fatalf("expected 3 jobs, got %d", len(jobs))
 	}
 
+	// Build a map of target -> content for order-independent assertions
+	jobContent := make(map[string]string, len(jobs))
+	for _, j := range jobs {
+		msg := j.Message.(map[string]any)
+		jobContent[j.Target] = msg["content"].(string)
+	}
+
 	// Discord users get discord template
-	msg0 := jobs[0].Message.(map[string]any)
-	if msg0["content"] != "Grunt: Grass Grunt" {
-		t.Errorf("expected discord template, got %v", msg0["content"])
+	if jobContent["d1"] != "Grunt: Grass Grunt" {
+		t.Errorf("expected discord template for d1, got %v", jobContent["d1"])
 	}
 
 	// Telegram user gets telegram template
-	msg1 := jobs[1].Message.(map[string]any)
-	if msg1["content"] != "TG Grunt: Grass Grunt" {
-		t.Errorf("expected telegram template, got %v", msg1["content"])
+	if jobContent["t1"] != "TG Grunt: Grass Grunt" {
+		t.Errorf("expected telegram template for t1, got %v", jobContent["t1"])
 	}
 
-	// Second discord user
-	msg2 := jobs[2].Message.(map[string]any)
-	if msg2["content"] != "Grunt: Grass Grunt" {
-		t.Errorf("expected discord template for channel, got %v", msg2["content"])
+	// Second discord user (channel)
+	if jobContent["d2"] != "Grunt: Grass Grunt" {
+		t.Errorf("expected discord template for d2 (channel), got %v", jobContent["d2"])
 	}
 }
 

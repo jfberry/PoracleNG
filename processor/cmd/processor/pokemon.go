@@ -177,8 +177,8 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				perUser = ps.enricher.PokemonPerUser(perLang, matched)
 			}
 
-			mergeWebhookFields(baseEnrichment, raw)
 			if ps.dtsRenderer != nil {
+				mergeWebhookFields(baseEnrichment, raw)
 				// Resolve pending tile before rendering (the old path does this in the sender batch)
 				if tilePending != nil {
 					wait := time.Until(tilePending.Deadline)

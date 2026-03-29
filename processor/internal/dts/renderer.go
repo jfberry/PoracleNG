@@ -14,21 +14,6 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
-// DeliveryJob represents a rendered alert ready for delivery.
-type DeliveryJob struct {
-	Lat          string         `json:"lat"`
-	Lon          string         `json:"lon"`
-	Message      any            `json:"message"`     // parsed JSON (map or string)
-	Target       string         `json:"target"`
-	Type         string         `json:"type"`         // "discord:user", "telegram:group", etc.
-	Name         string         `json:"name"`
-	TTH          map[string]any `json:"tth"`
-	Clean        bool           `json:"clean"`
-	Emoji        []string       `json:"emoji"`
-	LogReference string         `json:"logReference"`
-	Language     string         `json:"language"`
-}
-
 // RendererConfig holds configuration for creating a Renderer.
 type RendererConfig struct {
 	ConfigDir     string
@@ -104,7 +89,7 @@ func (r *Renderer) RenderPokemon(
 	matchedAreas []webhook.MatchedArea,
 	isEncountered bool,
 	logReference string,
-) []DeliveryJob {
+) []webhook.DeliveryJob {
 	// 1. Check TTH
 	if r.isBelowMinAlertTime(enrichment) {
 		return nil
@@ -132,7 +117,7 @@ func (r *Renderer) RenderAlert(
 	matchedUsers []webhook.MatchedUser,
 	matchedAreas []webhook.MatchedArea,
 	logReference string,
-) []DeliveryJob {
+) []webhook.DeliveryJob {
 	if r.isBelowMinAlertTime(enrichment) {
 		return nil
 	}
@@ -155,12 +140,26 @@ func (r *Renderer) renderForUsers(
 	users []webhook.MatchedUser,
 	areas []webhook.MatchedArea,
 	logReference string,
-) []DeliveryJob {
+) []webhook.DeliveryJob {
 	tthMap, _ := extractTTH(enrichment)
 	lat := truncateCoord(toFloat(enrichment["latitude"]))
 	lon := truncateCoord(toFloat(enrichment["longitude"]))
 
-	var jobs []DeliveryJob
+	// Per-call Shlink cache: avoids redundant HTTP requests when many users
+	// receive the same template with identical URLs.
+	var shlinkCache map[string]string
+	if r.shortener != nil {
+		shlinkCache = make(map[string]string)
+	}
+
+	// Group-render optimization for non-pokemon types: when there is no per-user
+	// enrichment, users with the same (template, platform, language) get identical
+	// rendered output. Render once per group and clone the result.
+	if perUserEnrichment == nil {
+		return r.renderGrouped(templateType, enrichment, perLangEnrichment, users, areas, logReference, tthMap, lat, lon, shlinkCache)
+	}
+
+	var jobs []webhook.DeliveryJob
 
 	for _, user := range users {
 		// a. Determine platform
@@ -206,7 +205,7 @@ func (r *Renderer) renderForUsers(
 		}
 
 		// g. Post-process: shorten URLs
-		rendered = ShortenMarkers(rendered, r.shortener)
+		rendered = ShortenMarkersWithCache(rendered, r.shortener, shlinkCache)
 
 		// Parse JSON result
 		var message any
@@ -236,7 +235,7 @@ func (r *Renderer) renderForUsers(
 		}
 
 		// h. Build DeliveryJob
-		jobs = append(jobs, DeliveryJob{
+		jobs = append(jobs, webhook.DeliveryJob{
 			Lat:          lat,
 			Lon:          lon,
 			Message:      message,
@@ -252,6 +251,143 @@ func (r *Renderer) renderForUsers(
 	}
 
 	return jobs
+}
+
+// renderGroupKey identifies a unique (template, platform, language) combination.
+type renderGroupKey struct {
+	templateID string
+	platform   string
+	language   string
+}
+
+// renderGrouped renders once per unique (template, platform, language) group and
+// creates DeliveryJobs for all users in that group. This avoids redundant template
+// execution and URL shortening when there is no per-user enrichment.
+func (r *Renderer) renderGrouped(
+	templateType string,
+	enrichment map[string]any,
+	perLangEnrichment map[string]map[string]any,
+	users []webhook.MatchedUser,
+	areas []webhook.MatchedArea,
+	logReference string,
+	tthMap map[string]any,
+	lat, lon string,
+	shlinkCache map[string]string,
+) []webhook.DeliveryJob {
+	// Group users by rendering key
+	type groupEntry struct {
+		key   renderGroupKey
+		users []webhook.MatchedUser
+	}
+	groupOrder := make([]renderGroupKey, 0, 4)
+	groupMap := make(map[renderGroupKey]*groupEntry, 4)
+
+	for _, user := range users {
+		platform := platformFromType(user.Type)
+		language := user.Language
+		if language == "" {
+			language = r.locale
+		}
+		key := renderGroupKey{templateID: user.Template, platform: platform, language: language}
+		if g, ok := groupMap[key]; ok {
+			g.users = append(g.users, user)
+		} else {
+			groupOrder = append(groupOrder, key)
+			groupMap[key] = &groupEntry{key: key, users: []webhook.MatchedUser{user}}
+		}
+	}
+
+	var jobs []webhook.DeliveryJob
+
+	for _, key := range groupOrder {
+		g := groupMap[key]
+
+		// Render once for this group
+		perLang := mapOrEmpty(perLangEnrichment, key.language)
+		view := r.viewBuilder.BuildPokemonView(enrichment, perLang, nil, key.platform, areas)
+
+		tmpl := r.templates.Get(templateType, key.platform, key.templateID, key.language)
+
+		var rendered string
+		if tmpl == nil {
+			rendered = fallbackMessage(templateType, key.platform, key.templateID, key.language)
+		} else {
+			df := raymond.NewDataFrame()
+			df.Set("language", key.language)
+			df.Set("platform", key.platform)
+			df.Set("altLanguage", "en")
+
+			result, err := tmpl.ExecWith(view, df)
+			if err != nil {
+				log.Errorf("dts: render %s for group (%s/%s/%s): %v", templateType, key.platform, key.templateID, key.language, err)
+				rendered = fallbackMessage(templateType, key.platform, key.templateID, key.language)
+			} else {
+				rendered = result
+			}
+		}
+
+		rendered = ShortenMarkersWithCache(rendered, r.shortener, shlinkCache)
+
+		var message any
+		if err := json.Unmarshal([]byte(rendered), &message); err != nil {
+			log.Errorf("dts: parse rendered JSON for group (%s/%s/%s): %v (raw: %.200s)", key.platform, key.templateID, key.language, err, rendered)
+			message = fallbackMessageObject(templateType, key.platform, key.templateID, key.language)
+		}
+
+		// Extract emoji once for the group
+		var emojiSlice []string
+		if raw, ok := view["emoji"]; ok {
+			switch v := raw.(type) {
+			case []string:
+				emojiSlice = v
+			case []any:
+				for _, item := range v {
+					if s, ok := item.(string); ok {
+						emojiSlice = append(emojiSlice, s)
+					}
+				}
+			}
+		}
+
+		// Create a job for each user in the group
+		for _, user := range g.users {
+			// Clone message if user has a ping (to avoid mutating the shared object)
+			userMessage := message
+			if user.Ping != "" {
+				userMessage = cloneMessage(message)
+				appendPing(userMessage, user.Ping)
+			}
+
+			jobs = append(jobs, webhook.DeliveryJob{
+				Lat:          lat,
+				Lon:          lon,
+				Message:      userMessage,
+				Target:       user.ID,
+				Type:         user.Type,
+				Name:         user.Name,
+				TTH:          tthMap,
+				Clean:        user.Clean,
+				Emoji:        emojiSlice,
+				LogReference: logReference,
+				Language:     key.language,
+			})
+		}
+	}
+
+	return jobs
+}
+
+// cloneMessage creates a shallow copy of a map[string]any message so that
+// appendPing doesn't mutate the shared rendered object.
+func cloneMessage(msg any) any {
+	if m, ok := msg.(map[string]any); ok {
+		clone := make(map[string]any, len(m))
+		for k, v := range m {
+			clone[k] = v
+		}
+		return clone
+	}
+	return msg
 }
 
 // truncateCoord formats a coordinate as a string, truncated to 8 characters.
