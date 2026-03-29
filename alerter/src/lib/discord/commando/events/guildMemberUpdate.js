@@ -12,7 +12,6 @@ module.exports = async (client, oldPresence) => {
 			client.logs.log,
 			client.config,
 			client.query,
-			client.dts,
 		)
 
 		await dr.reconcileSingleUser(

@@ -3,7 +3,6 @@ const path = require('path')
 const fs = require('fs')
 const fsp = require('fs').promises
 const NodeCache = require('node-cache')
-const mustache = require('handlebars')
 const { performance } = require('perf_hooks')
 const { getConfigDir } = require('../configResolver')
 
@@ -15,7 +14,7 @@ const metrics = require('../metrics')
 const noop = () => {}
 
 class Telegram extends EventEmitter {
-	constructor(id, config, logs, GameData, PoracleInfo, dts, geofence, controller, query, scannerQuery, telegraf, translatorFactory, commandParser, re, rehydrateTimeouts = false) {
+	constructor(id, config, logs, GameData, PoracleInfo, geofence, controller, query, scannerQuery, telegraf, translatorFactory, commandParser, re, rehydrateTimeouts = false) {
 		super()
 		this.config = config
 		this.logs = logs
@@ -41,7 +40,7 @@ class Telegram extends EventEmitter {
 		this.queueProcessor = new FairPromiseQueue(this.telegramQueue, this.config.tuning.concurrentTelegramDestinationsPerBot, ((entry) => entry.target))
 		this.bot
 			.use(commandParser(this.translatorFactory))
-			.use(controller(query, scannerQuery, dts, logs, GameData, PoracleInfo, geofence, config, re, translatorFactory, emojiStrip, mustache))
+			.use(controller(query, scannerQuery, logs, GameData, PoracleInfo, geofence, config, re, translatorFactory, emojiStrip))
 
 		this.commands = {}
 	}

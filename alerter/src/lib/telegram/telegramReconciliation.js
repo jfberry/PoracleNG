@@ -10,12 +10,11 @@ const haveSameContents = (a, b) => {
 }
 
 class TelegramReconciliation {
-	constructor(telegraf, log, config, query, dts) {
+	constructor(telegraf, log, config, query) {
 		this.telegraf = telegraf
 		this.log = log
 		this.config = config
 		this.query = query
-		this.dts = dts
 	}
 
 	async sendGreetings(id) {

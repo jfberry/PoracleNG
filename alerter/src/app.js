@@ -22,7 +22,7 @@ const { Config } = require('./lib/configFetcher')
 const GameData = require('./lib/GameData')
 
 const {
-	config, knex, scannerKnex, dts, geofence, translatorFactory,
+	config, knex, scannerKnex, geofence, translatorFactory,
 } = Config()
 
 const PoracleInfo = {}
@@ -57,13 +57,12 @@ fastify.decorate('knex', knex)
 fastify.decorate('GameData', GameData)
 fastify.decorate('query', query)
 fastify.decorate('scannerQuery', scannerQuery)
-fastify.decorate('dts', dts)
 fastify.decorate('geofence', geofence)
 fastify.decorate('translatorFactory', translatorFactory)
 fastify.decorate('discordQueue', [])
 fastify.decorate('telegramQueue', [])
 
-const discordCommando = config.discord.enabled ? new DiscordCommando(config.discord.token[0], query, scannerQuery, config, logs, GameData, PoracleInfo, dts, geofence, translatorFactory) : null
+const discordCommando = config.discord.enabled ? new DiscordCommando(config.discord.token[0], query, scannerQuery, config, logs, GameData, PoracleInfo, geofence, translatorFactory) : null
 const discordWorkers = []
 let discordWebhookWorker
 let telegram
@@ -82,10 +81,10 @@ if (config.discord.enabled) {
 }
 
 if (config.telegram.enabled) {
-	telegram = new TelegramWorker('1', config, logs, GameData, PoracleInfo, dts, geofence, telegramController, query, scannerQuery, telegraf, translatorFactory, telegramCommandParser, re, true)
+	telegram = new TelegramWorker('1', config, logs, GameData, PoracleInfo, geofence, telegramController, query, scannerQuery, telegraf, translatorFactory, telegramCommandParser, re, true)
 
 	if (telegrafChannel) {
-		telegramChannel = new TelegramWorker('2', config, logs, GameData, PoracleInfo, dts, geofence, telegramController, query, scannerQuery, telegrafChannel, translatorFactory, telegramCommandParser, re, true)
+		telegramChannel = new TelegramWorker('2', config, logs, GameData, PoracleInfo, geofence, telegramController, query, scannerQuery, telegrafChannel, translatorFactory, telegramCommandParser, re, true)
 	}
 }
 
@@ -94,7 +93,7 @@ let telegramReconciliation
 async function syncTelegramMembership() {
 	try {
 		if (!telegramReconciliation) {
-			telegramReconciliation = new TelegramReconciliation(telegraf, log, config, query, dts)
+			telegramReconciliation = new TelegramReconciliation(telegraf, log, config, query)
 		}
 		log.verbose('Verification of Telegram group membership for Poracle users starting...')
 
@@ -124,7 +123,7 @@ async function syncDiscordRole() {
 				setTimeout(syncDiscordRole, 30000)
 				return
 			}
-			discordReconciliation = new DiscordReconciliation(worker.client, log, config, query, dts)
+			discordReconciliation = new DiscordReconciliation(worker.client, log, config, query)
 		}
 		// "updateChannelNames": true,
 		// 	"updateChannelNotes": true,
@@ -262,25 +261,6 @@ async function run() {
 			geofence.geofence = newGeofence.geofence
 		} catch (err) {
 			log.error('Error reloading geofence', err)
-		}
-	})
-
-	const { getConfigDir } = require('./lib/configResolver')
-	const cfgDir = getConfigDir()
-	chokidar.watch([
-		path.join(cfgDir, 'dts.json'),
-		path.join(cfgDir, 'dts'),
-	], {
-		awaitWriteFinish: true,
-	}).on('change', () => {
-		log.info('Change in DTS detected, triggering reload')
-		try {
-			const newDts = require('./lib/dtsloader').readDtsFiles()
-
-			// This splice mechanism replaces array in place (relies on no caching)
-			dts.splice(0, dts.length, ...newDts)
-		} catch (err) {
-			log.error('Error reloading dts', err)
 		}
 	})
 

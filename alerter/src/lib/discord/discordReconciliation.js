@@ -12,13 +12,12 @@ const haveSameContents = (a, b) => {
 }
 
 class DiscordReconciliation {
-	constructor(client, log, config, query, dts) {
+	constructor(client, log, config, query) {
 		this.client = client
 		this.log = log
 		this.config = config
 		this.query = query
 		this.client = client
-		this.dts = dts
 	}
 
 	async sendGreetings(id) {

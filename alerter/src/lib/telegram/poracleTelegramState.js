@@ -1,5 +1,4 @@
 const { diff } = require('deep-object-diff')
-const mustache = require('handlebars')
 const PoracleTelegramUtil = require('./poracleTelegramUtil')
 const PoracleTelegramMessage = require('./poracleTelegramMessage')
 
@@ -7,7 +6,6 @@ class PoracleTelegramState {
 	constructor(ctx) {
 		this.query = ctx.state.controller.query
 		this.scannerQuery = ctx.state.controller.scannerQuery
-		this.dts = ctx.state.controller.dts
 		this.log = ctx.state.controller.logs.command
 		this.GameData = ctx.state.controller.GameData
 		this.PoracleInfo = ctx.state.controller.PoracleInfo
@@ -17,7 +15,6 @@ class PoracleTelegramState {
 		this.translator = ctx.state.controller.translator
 		this.translatorFactory = ctx.state.controller.translatorFactory
 		this.config = ctx.state.controller.config
-		this.mustache = mustache
 		this.updatedDiff = diff
 		this.addToMessageQueue = ctx.poracleAddMessageQueue
 		this.addToMatchedQueue = ctx.poracleAddMatchedQueue

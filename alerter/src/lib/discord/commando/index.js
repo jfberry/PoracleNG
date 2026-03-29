@@ -7,13 +7,12 @@ const {
 const { EventEmitter } = require('events')
 const fs = require('fs')
 const { S2 } = require('s2-geometry')
-const mustache = require('handlebars')
 const { diff } = require('deep-object-diff')
 
 const emojiStrip = require('../../../util/emojiStrip')
 
 class DiscordCommando extends EventEmitter {
-	constructor(token, query, scannerQuery, config, logs, GameData, PoracleInfo, dts, geofence, translatorFactory) {
+	constructor(token, query, scannerQuery, config, logs, GameData, PoracleInfo, geofence, translatorFactory) {
 		super()
 
 		this.token = token
@@ -24,7 +23,6 @@ class DiscordCommando extends EventEmitter {
 		this.GameData = GameData
 		this.PoracleInfo = PoracleInfo
 		this.updatedDiff = diff
-		this.dts = dts
 		this.geofence = geofence
 		this.translatorFactory = translatorFactory
 		this.translator = translatorFactory.default
@@ -89,12 +87,10 @@ class DiscordCommando extends EventEmitter {
 			this.client.scannerQuery = this.scannerQuery
 			this.client.emojiStrip = emojiStrip
 			this.client.logs = this.logs
-			this.client.dts = this.dts
 			this.client.re = this.re
 			this.client.geofence = this.geofence
 			this.client.GameData = this.GameData
 			this.client.PoracleInfo = this.PoracleInfo
-			this.client.mustache = mustache
 			this.client.translatorFactory = this.translatorFactory
 			this.client.updatedDiff = diff
 			this.client.translator = this.translator

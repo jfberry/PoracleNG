@@ -20,7 +20,6 @@ module.exports = async (ctx) => {
 				controller.logs.log,
 				controller.config,
 				controller.query,
-				controller.dts,
 			)
 			await telegramReconciliation.syncTelegramUser(id, true, false)
 		}
