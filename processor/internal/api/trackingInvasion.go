@@ -74,11 +74,11 @@ func HandleDeleteInvasion(deps *TrackingDeps) http.HandlerFunc {
 
 // invasionInsertRequest represents a single invasion tracking row from the POST body.
 type invasionInsertRequest struct {
-	GruntType *string      `json:"grunt_type"`
-	Distance  *json.Number `json:"distance"`
-	Template  any          `json:"template"`
-	Clean     *json.Number `json:"clean"`
-	Gender    *json.Number `json:"gender"`
+	GruntType *string  `json:"grunt_type"`
+	Distance  flexInt  `json:"distance"`
+	Template  any      `json:"template"`
+	Clean     flexBool `json:"clean"`
+	Gender    flexInt  `json:"gender"`
 }
 
 // HandleCreateInvasion returns the POST /api/tracking/invasion/{id} handler.
@@ -131,11 +131,7 @@ func HandleCreateInvasion(deps *TrackingDeps) http.HandlerFunc {
 				return
 			}
 
-			distance := 0
-			if req.Distance != nil {
-				n, _ := strconv.Atoi(string(*req.Distance))
-				distance = n
-			}
+			distance := req.Distance.intValue(0)
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -151,17 +147,8 @@ func HandleCreateInvasion(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			var clean db.IntBool
-			if req.Clean != nil {
-				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = db.IntBool(n != 0)
-			}
-
-			gender := 0
-			if req.Gender != nil {
-				n, _ := strconv.Atoi(string(*req.Gender))
-				gender = n
-			}
+			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			gender := req.Gender.intValue(0)
 
 			insert = append(insert, db.InvasionTrackingAPI{
 				ID:        human.ID,

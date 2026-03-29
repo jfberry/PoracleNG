@@ -88,10 +88,10 @@ func HandleDeleteLure(deps *TrackingDeps) http.HandlerFunc {
 
 // lureInsertRequest represents a single lure tracking row from the POST body.
 type lureInsertRequest struct {
-	LureID   *json.Number `json:"lure_id"`
-	Distance *json.Number `json:"distance"`
-	Template any          `json:"template"`
-	Clean    *json.Number `json:"clean"`
+	LureID   flexInt  `json:"lure_id"`
+	Distance flexInt  `json:"distance"`
+	Template any      `json:"template"`
+	Clean    flexBool `json:"clean"`
 }
 
 // HandleCreateLure returns the POST /api/tracking/lure/{id} handler.
@@ -142,25 +142,13 @@ func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
 		// Build normalized insert rows
 		insert := make([]db.LureTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
-			lureID := 0
-			if req.LureID != nil {
-				n, err := strconv.Atoi(string(*req.LureID))
-				if err != nil {
-					trackingJSONError(w, http.StatusBadRequest, "invalid lure_id value")
-					return
-				}
-				lureID = n
-			}
+			lureID := req.LureID.intValue(0)
 			if !validLureIDs[lureID] {
 				trackingJSONError(w, http.StatusBadRequest, "Unrecognised lure_id value")
 				return
 			}
 
-			distance := 0
-			if req.Distance != nil {
-				n, _ := strconv.Atoi(string(*req.Distance))
-				distance = n
-			}
+			distance := req.Distance.intValue(0)
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -176,11 +164,7 @@ func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			var clean db.IntBool
-			if req.Clean != nil {
-				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = db.IntBool(n != 0)
-			}
+			clean := db.IntBool(req.Clean.intValue(0) != 0)
 
 			insert = append(insert, db.LureTrackingAPI{
 				ID:        human.ID,
