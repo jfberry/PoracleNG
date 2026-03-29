@@ -19,16 +19,15 @@ Processor (Go, port 3030)
     |            icon URLs (uicons), reverse geocoding, weakness, generation, evolution chains
     |      Per-language: translated pokemon/move/type/weather names (using pogo-translations)
     |      Per-user: PVP display lists, distance/bearing
-    |  - Batches matched results and POSTs to alerter
+    |  - Renders DTS Handlebars templates (raymond/v2) into Discord/Telegram messages
+    |  - Batches pre-rendered delivery jobs and POSTs to alerter
     |  - Also proxies /api/* to alerter (so external tools only need one endpoint)
     |  - Serves geofence data, tile generation, and geocoding APIs
     v
 Alerter (Node.js/Fastify, port 3031)
-    |  POST /api/matched (batch of matched payloads)
-    |  - Routes each payload to the appropriate controller by type
-    |  - Controller does: per-platform emoji lookups, night time, template rendering
-    |  - Renders Handlebars DTS templates into Discord/Telegram messages
-    |  - Queues messages for delivery
+    |  POST /api/deliverMessages (pre-rendered delivery jobs)
+    |  - Pure message delivery queue — no controllers, no template rendering
+    |  - Routes jobs directly to Discord/Telegram delivery workers
     v
 Discord / Telegram
     (DM, channel, webhook, group)
@@ -72,26 +71,19 @@ processor/                      # Go binary
     uicons/                     # Icon URL resolution (pokemon, raid, gym, weather) with scheduled index refresh
     staticmap/                  # Static map tile generation (tileservercache, google, osm, mapbox)
     geocoding/                  # Reverse/forward geocoding (nominatim, google) with pogreb + ttlcache
+    dts/                        # DTS template rendering (Handlebars via raymond/v2), helpers, emoji, view builder, Shlink shortener
     scanner/                    # Scanner DB interface (RDM, Golbat) for nearby stops
 
-alerter/                        # Node.js application
+alerter/                        # Node.js application (pure delivery queue)
   src/
-    app.js                      # Entry point, Fastify server, matched queue loop
-    controllers/
-      controller.js             # Base class: template rendering, emoji lookup, getLanguageEnrichment
-      monster.js                # Pokemon alert: per-platform emoji, template rendering (all data pre-computed by processor)
-      raid.js                   # Raid + egg alerts
-      fortupdate.js             # Fort name/image/location change alerts
-      maxbattle.js              # Max battle alerts
-      quest.js, gym.js, nest.js, pokestop.js, pokestop_lure.js, weather.js
-      common/                   # Shared: night time
+    app.js                      # Entry point, Fastify server, delivery queue loop
     lib/
       discord/
         commando/
           index.js              # Discord bot setup, command registration
           events/messageCreate.js  # Command parser (underscore→space, pipe groups, translation)
           commands/              # Admin commands (poracle, channel, webhook, autocreate, role, etc.)
-        discordWorker.js        # DM + channel delivery, FairPromiseQueue, clean message deletion
+        discordWorker.js        # DM + channel delivery, clean message deletion
         discordWebhookWorker.js # Webhook URL delivery with retry/rate-limit handling
         poracleDiscordState.js  # State wrapper passed to command handlers
         poracleDiscordUtil.js   # buildTarget, commandAllowed, permission checks
@@ -102,12 +94,11 @@ alerter/                        # Node.js application
       poracleMessage/
         commands/               # User commands: track, raid, egg, quest, nest, lure, gym, fort, invasion, maxbattle, etc.
         commandUtil.js          # Shared: reportUnrecognizedArgs
-      FairPromiseQueue.js       # Concurrency limiter: max N concurrent, 1 per destination
       configAdapter.js          # TOML → internal config conversion (snake_case → camelCase)
       configResolver.js         # Config/fallback file resolution, config directory
       geofenceLoader.js         # GeoJSON/Poracle fence parser, R-tree builder
     routes/
-      postMatched.js            # POST /api/matched — receives batches from processor
+      deliverMessages.js        # POST /api/deliverMessages — receives pre-rendered delivery jobs from processor
       apiTracking.js            # GET /api/tracking/all/:id — all tracking for a user
       apiTrackingMonster.js     # CRUD for pokemon tracking (pattern for all types)
       apiTrackingRaid.js, apiTrackingEgg.js, ...  # Per-type tracking CRUD
@@ -166,7 +157,7 @@ The handler creates a `matching.*Data` struct and calls the matcher. All matcher
    - Strict area restriction (if configured)
 4. Returns `[]MatchedUser` with destination info (id, type, template, clean, ping, distance)
 
-**Pokemon matching intentionally does NOT deduplicate by user ID.** A single user can appear multiple times in the result — once per matching tracking rule (basic IV, PVP great league, PVP ultra league, PVP evolution, etc.). Each entry carries different `PVPRankingLeague`, `PVPRankingWorst`, and `PVPRankingCap` values. This metadata flows into `consolidateUsers()` in per-user enrichment, which merges entries by user ID and collects their PVP filters to build the per-user PVP display list. The alerter then deduplicates by user ID (`monster.js` lines 108-114) to send exactly one message per user. All other matchers (raid, egg, invasion, quest, etc.) deduplicate in the matcher itself since they don't carry per-tracking PVP metadata.
+**Pokemon matching intentionally does NOT deduplicate by user ID.** A single user can appear multiple times in the result — once per matching tracking rule (basic IV, PVP great league, PVP ultra league, PVP evolution, etc.). Each entry carries different `PVPRankingLeague`, `PVPRankingWorst`, and `PVPRankingCap` values. This metadata flows into `consolidateUsers()` in per-user enrichment, which merges entries by user ID and collects their PVP filters to build the per-user PVP display list. The processor deduplicates by user ID after consolidation to render and send exactly one message per user. All other matchers (raid, egg, invasion, quest, etc.) deduplicate in the matcher itself since they don't carry per-tracking PVP metadata.
 
 **Cardinal direction labels are intentionally mirrored** vs standard compass directions (e.g. 45° bearing returns `"northwest"` not `"northeast"`). These strings are only used as emoji lookup keys into `util.json`, where `"northwest"` maps to the northeast-pointing arrow emoji. The user sees the correct arrow — the raw string is never displayed in templates. This convention is inherited from the original JS `getBearingEmoji`.
 
@@ -197,7 +188,7 @@ Enrichment is computed in three layers:
 
 **Per-language enrichment** (computed once per distinct language among matched users):
 - Translated pokemon/form/move/type/weather/team/generation names using pogo-translations identifier keys (`poke_1`, `move_14`, `form_46`, etc.)
-- Emoji keys for per-platform resolution by the alerter
+- Emoji keys for per-platform resolution during DTS view building
 - Weakness list with translated type names
 - Evolution/mega evolution entries with translated names
 
@@ -205,69 +196,45 @@ Enrichment is computed in three layers:
 - PVP display lists filtered by user's tracking criteria
 - Distance and bearing from user's location
 
-The enrichment payload sent to the alerter includes `enrichment` (base), `perLanguageEnrichment` (keyed by language code), and `perUserEnrichment` (keyed by user ID). The alerter merges these via `getLanguageEnrichment()` and per-user data lookup.
+The enrichment is structured as `enrichment` (base), `perLanguageEnrichment` (keyed by language code), and `perUserEnrichment` (keyed by user ID). The processor's DTS view builder merges these layers when constructing the template context for each user.
 
 **Language fallback**: When a user has no `language` set in the humans table, the processor falls back to `[general] locale` from config (not hardcoded `"en"`). The alerter does the same via `config.general.locale`. These must match — if they don't, the per-language enrichment lookup will miss and translated names (fullName, etc.) will be empty.
 
 **Timezone note**: The Docker image must have `tzdata` installed (Alpine). The Go binary also embeds `time/tzdata` as fallback.
 
-### 5. Sending to Alerter
+### 5. Template Rendering (Processor)
 
-`webhook/sender.go` batches `OutboundPayload` objects and POSTs them to `{alerter_url}/api/matched`:
-```json
-[{
-  "type": "pokemon",
-  "message": {... raw Golbat webhook ...},
-  "enrichment": {"disappearTime": "05:00:00", "tth": {"hours": 1, ...}, "gameWeatherId": 3, ...},
-  "matched_areas": [{"name": "Berlin", ...}],
-  "matched_users": [{"id": "123", "type": "discord:user", "template": "1", ...}]
-}]
-```
+The processor renders DTS templates directly using `mailgun/raymond/v2` (Handlebars for Go):
+
+1. Raw webhook fields merged into enrichment via `mergeWebhookFields()`
+2. Pending static map tile resolved (blocking wait with deadline)
+3. For each matched user: build view (enrichment + per-lang + per-user + emoji + aliases), select DTS template, render with raymond, URL-shorten `<S< ... >S>` markers, parse JSON result, append ping
+4. **Group rendering optimization**: for non-pokemon types, users with the same (template, platform, language) share a single render — only per-user fields (distance, bearing, PVP display) are patched afterward
+5. Pre-rendered delivery jobs POSTed to alerter `POST /api/deliverMessages`
 
 Default batch: 50 items or 100ms flush interval, whichever comes first.
 
-### 6. Alerter Processing
+### 6. Delivery (Alerter)
 
-`app.js` receives batches at `POST /api/matched`, pushes each payload to `matchedQueue`. A 100ms interval loop shifts items to an internal `hookQueue` processed by a `PromiseQueue` (default concurrency 10).
+The alerter is a pure delivery queue. `POST /api/deliverMessages` pushes pre-rendered jobs directly to Discord/Telegram delivery workers. There are no controllers, no template rendering, and no Handlebars dependency.
 
-`processOne()` merges `payload.enrichment` into `payload.message` via `Object.assign`, then routes by type to the controller's `handleMatched()`.
-
-### 7. Controller Rendering
-
-Each controller (e.g., `monster.js`) receives `(data, matchedUsers, matchedAreas)` where data already contains all enrichment from the processor. Controllers are now thin:
-
-1. **Checks TTH** — drops if already expired or below `alert_minimum_time`
-2. **Per-user message loop**:
-   - Merge per-language enrichment via `getLanguageEnrichment(data, language)`
-   - Merge per-user enrichment from `data.perUserEnrichment[userId]`
-   - Look up per-platform emoji (using emoji keys from enrichment — the only thing that varies by platform)
-   - Night time calculation
-   - Build the template view object with all computed fields
-   - Call `createMessage()` which renders the Handlebars DTS template
-   - Build a job: `{target, type, message, tth, clean, ...}`
-3. **Returns jobs array** — pushed to Discord or Telegram queue by `processMessages()`
-
-All game data lookups, translations, geocoding, static maps, icon URLs, weakness calculations, PVP display, map URLs, and evolution chains are pre-computed by the processor. The alerter only resolves emoji per platform and renders templates.
-
-### 8. Delivery
+### 7. Message Delivery
 
 **Discord embed format note**: DTS templates may use either `embed` (singular, legacy) or `embeds` (plural array, modern). All Discord workers normalize `embed` → `embeds[]` before sending and coerce string `color` values to integers. Color detection: `#`-prefixed or exactly 6 chars → hex (e.g. `"#A040A0"`, `"A040A0"`); anything else → decimal (e.g. `"1216493"`). The `uploadEmbedImages` feature downloads the tile from `embeds[0].image.url` and re-uploads as an attachment; if the download fails, the message is sent with the URL in the embed instead.
 
 **Discord DM/Channel** (`discordWorker.js`):
-- `FairPromiseQueue`: max N concurrent sends, max 1 per destination (prevents flooding one user)
+- Max N concurrent sends, max 1 per destination (prevents flooding one user)
 - Sends via Discord.js client (`user.send()` or `channel.send()`)
 - Optionally uploads map image as attachment
 - If `clean: true`, schedules message deletion after TTH
 - Consecutive failure tracking: in-memory counter, disables user after threshold
 
 **Discord Webhook** (`discordWebhookWorker.js`):
-- Same FairPromiseQueue pattern
 - POSTs to webhook URL via axios
 - Handles 429 rate limits with retry-after + jitter backoff
 - Can upload images as multipart form data
 
 **Telegram** (`Telegram.js`):
-- Same FairPromiseQueue pattern
 - Supports configurable send order: sticker, photo, text, venue, location
 - Text supports MarkdownV2, HTML, or Markdown parse modes
 - Handles 429 rate limits with retry (up to 5 attempts)
@@ -425,6 +392,8 @@ All alerter API endpoints:
 | GET | `/api/geofence/locationMap/{lat}/{lon}` | Location pin tile |
 | POST | `/api/geofence/overviewMap` | Multi-area overview tile |
 | GET | `/api/geofence/weatherMap/{lat}/{lon}` | Weather S2 cell tile |
+| GET | `/api/config/templates` | DTS template list (?includeDescriptions=true) |
+| POST | `/api/dts/render` | Render a DTS template with provided data |
 | GET | `/health` | Health check |
 | GET | `/metrics` | Prometheus metrics |
 
@@ -432,7 +401,7 @@ All alerter API endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/matched` | Receive matched payloads from processor |
+| POST | `/api/deliverMessages` | Receive pre-rendered delivery jobs from processor |
 | GET | `/api/tracking/all/:id` | All tracking for a user (all types) |
 | GET | `/api/tracking/pokemon/:id` | Pokemon tracking list |
 | POST | `/api/tracking/pokemon/:id` | Add pokemon tracking |
@@ -446,6 +415,10 @@ All alerter API endpoints:
 | GET | `/api/masterdata/grunts` | Grunt types |
 
 The same CRUD pattern (GET list, POST create, DELETE by uid, PATCH by uid) applies to: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle.
+
+**Flexible JSON type coercion**: All tracking CRUD POST endpoints (`/api/tracking/{type}/{id}`) accept flexible JSON types for numeric and boolean fields. Third-party clients like ReactMap may send `"clean": false` (boolean) instead of `"clean": 0` (number). The `flexBool` and `flexInt` custom JSON types in `processor/internal/api/tracking.go` handle this coercion transparently:
+- `flexBool`: accepts `true`/`false`, `0`/`1`, `"0"`/`"1"` — coerces to int (0 or 1)
+- `flexInt`: accepts numbers, booleans, quoted strings — coerces to int
 
 The processor proxies all `/api/*` requests to the alerter, so external tools only need to know the processor's address.
 
@@ -463,13 +436,60 @@ State is loaded from MySQL into an immutable snapshot, then atomically swapped:
 - **`state.Load()`** — DB only, reuses existing geofence data. Used by `/api/reload`, periodic timer, and tracking API mutations via `triggerReloadAlerts()`
 - **`state.LoadWithGeofences()`** — full reload including geofence files and Koji fetch. Used at startup and `/api/geofence/reload`
 
-Tracking API routes (`apiTracking*.js`) call `triggerReloadAlerts()` after mutations to push changes to the processor immediately. All 10 tracking types (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle) trigger reloads on create/update/delete.
+Tracking API routes call `triggerReload()` after mutations to push changes immediately. All 10 tracking types (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle) trigger reloads on create/update/delete.
 
 ## Template System (DTS)
 
-Templates are Handlebars files in `config/dts.json` or external `.json` template files. The DTS (Data Template System) maps alert types to platform-specific message formats.
+DTS (Data Template System) templates are Handlebars templates rendered by the Go processor using `mailgun/raymond/v2`. Templates define per-platform message formats for each alert type.
 
-Selection chain: exact match (type + template ID + platform + language) → fallback to default template → fallback to any platform match.
+### Template Loading
+
+Templates are loaded from `config/dts.json` (or `fallbacks/dts.json` as fallback). Each template entry may use:
+- Inline template strings directly in the JSON
+- `"templateFile": "path/to/file.json"` — external file reference
+- `"@include": "path/to/partial.json"` — include directive for shared partials
+- Array values for multi-line `description` fields — joined with newlines
+
+### Template Selection Chain
+
+Template selection uses a 5-level fallback (first match wins):
+
+1. Exact match: type + template ID + platform + language
+2. Template + platform: type + template ID + platform (any language)
+3. Default + language: type + default template + platform + language
+4. Default: type + default template + platform
+5. Any platform: type + template ID (first platform match)
+
+### Handlebars Helpers
+
+The processor registers ~47 Handlebars helpers via `dts/helpers.go`:
+- **Comparison**: `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `and`, `or`, `not`, `isPokemon`
+- **Math**: `add`, `subtract`, `multiply`, `divide`, `round`, `roundPokemon`, `floor`, `ceil`, `abs`, `toFixed`
+- **String**: `contains`, `split`, `trim`, `join`, `concat`, `lowercase`, `uppercase`, `capitalizePokemon`, `replace`
+- **Array**: `len`
+- **Formatting**: `pad`, `pokemonPad`, `pokemon3Pad`, `pokemonPadPokemon`
+- **Game data**: pokemon/move/type/evolution/mega lookups, emoji resolution, map URL builders
+
+### Emoji Resolution
+
+Per-platform emoji resolution uses `config/emoji.json` (or `fallbacks/emoji.json`) and `resources/data/util.json`. Enrichment provides emoji keys (e.g., `emojiWeather`, `emojiTeam`, `emojiDirection`), and the view builder resolves these to platform-specific strings (Discord custom emoji syntax, Telegram unicode, etc.) via explicit key mapping. The `getEmoji(key, platform)` function looks up the emoji by exact key — no suffix-guessing heuristics.
+
+### View Builder
+
+The view builder (`dts/view.go`) assembles the template context for each user:
+1. Merge base enrichment fields
+2. Merge per-language enrichment (translated names, weakness, evolutions)
+3. Merge per-user enrichment (PVP display, distance, bearing)
+4. Resolve emoji keys to platform-specific strings
+5. Apply field aliases (camelCase mappings for backward compatibility with existing DTS templates)
+6. Compute derived fields (TTH recalculation, area list formatting, mega evolution name)
+7. JSON-escape all string values for safe embedding in JSON template output
+
+**`SetEscapeHTML(false)`** is required on the raymond template engine. DTS templates produce JSON output, and the default HTML escaping would corrupt `<` characters in Handlebars expressions and URL parameters.
+
+### Shlink URL Shortening
+
+Templates can wrap URLs in `<S< ... >S>` markers. After rendering, the processor scans for these markers and replaces each with a shortened URL via a configured Shlink instance. If Shlink is unavailable, the original URL is preserved.
 
 Templates receive the full view object with all enriched data. Common fields: `{{name}}`, `{{iv}}`, `{{cp}}`, `{{level}}`, `{{time}}` (disappear time), `{{tthh}}:{{tthm}}:{{tths}}` (time remaining), `{{addr}}` (address), `{{mapurl}}` (Google Maps), `{{imgUrl}}` (pokemon icon), `{{staticMap}}` (map tile).
 
