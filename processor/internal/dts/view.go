@@ -193,6 +193,9 @@ var aliasMapping = []struct {
 	{"lureTypeColor", "lureColor"},
 	// Invasion — alerter controller mapped gruntTypeName → gruntType
 	{"gruntType", "gruntTypeName"},
+	// Move name shorthand aliases
+	{"quickMove", "quickMoveName"},
+	{"chargeMove", "chargeMoveName"},
 	// Emoji shorthand aliases
 	{"boostemoji", "boostWeatherEmoji"},
 }
