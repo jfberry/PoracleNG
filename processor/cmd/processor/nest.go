@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -79,15 +80,43 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 				}
 			}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  "nest",
-				Message:               raw,
-				Enrichment:            enrichment,
-				PerLanguageEnrichment: perLang,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          matched,
-				TilePending:           tilePending,
-			})
+			if ps.dtsRenderer != nil {
+				if tilePending != nil {
+					wait := time.Until(tilePending.Deadline)
+					if wait <= 0 {
+						wait = time.Millisecond
+					}
+					select {
+					case url := <-tilePending.Result:
+						tilePending.Apply(url)
+					case <-time.After(wait):
+						tilePending.Apply(tilePending.Fallback)
+					}
+				}
+				jobs := ps.dtsRenderer.RenderAlert(
+					"nest",
+					enrichment,
+					perLang,
+					matched,
+					matchedAreas,
+					fmt.Sprintf("%d", nest.NestID),
+				)
+				if len(jobs) > 0 {
+					if err := ps.sender.DeliverMessages(jobs); err != nil {
+						l.Errorf("Failed to deliver rendered messages: %s", err)
+					}
+				}
+			} else {
+				ps.sender.Send(webhook.OutboundPayload{
+					Type:                  "nest",
+					Message:               raw,
+					Enrichment:            enrichment,
+					PerLanguageEnrichment: perLang,
+					MatchedAreas:          matchedAreas,
+					MatchedUsers:          matched,
+					TilePending:           tilePending,
+				})
+			}
 		} else {
 			l.Debugf("Nest %s (avg %.1f/hr) and 0 humans cared",
 				ps.pokemonName(nest.PokemonID, nest.Form), nest.PokemonAvg)

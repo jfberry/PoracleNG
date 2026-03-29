@@ -154,15 +154,43 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				}
 			}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  msgType,
-				Message:               raw,
-				Enrichment:            baseEnrichment,
-				PerLanguageEnrichment: perLang,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          matched,
-				TilePending:           tilePending,
-			})
+			if ps.dtsRenderer != nil {
+				if tilePending != nil {
+					wait := time.Until(tilePending.Deadline)
+					if wait <= 0 {
+						wait = time.Millisecond
+					}
+					select {
+					case url := <-tilePending.Result:
+						tilePending.Apply(url)
+					case <-time.After(wait):
+						tilePending.Apply(tilePending.Fallback)
+					}
+				}
+				jobs := ps.dtsRenderer.RenderAlert(
+					msgType,
+					baseEnrichment,
+					perLang,
+					matched,
+					matchedAreas,
+					raid.GymID,
+				)
+				if len(jobs) > 0 {
+					if err := ps.sender.DeliverMessages(jobs); err != nil {
+						l.Errorf("Failed to deliver rendered messages: %s", err)
+					}
+				}
+			} else {
+				ps.sender.Send(webhook.OutboundPayload{
+					Type:                  msgType,
+					Message:               raw,
+					Enrichment:            baseEnrichment,
+					PerLanguageEnrichment: perLang,
+					MatchedAreas:          matchedAreas,
+					MatchedUsers:          matched,
+					TilePending:           tilePending,
+				})
+			}
 		} else {
 			if raid.PokemonID > 0 {
 				l.Debugf("Raid %s L%d at [%.3f,%.3f] and 0 humans cared",

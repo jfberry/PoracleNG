@@ -106,15 +106,43 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 				}
 			}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  "gym",
-				Message:               raw,
-				Enrichment:            enrichment,
-				PerLanguageEnrichment: perLang,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          matched,
-				TilePending:           tilePending,
-			})
+			if ps.dtsRenderer != nil {
+				if tilePending != nil {
+					wait := time.Until(tilePending.Deadline)
+					if wait <= 0 {
+						wait = time.Millisecond
+					}
+					select {
+					case url := <-tilePending.Result:
+						tilePending.Apply(url)
+					case <-time.After(wait):
+						tilePending.Apply(tilePending.Fallback)
+					}
+				}
+				jobs := ps.dtsRenderer.RenderAlert(
+					"gym",
+					enrichment,
+					perLang,
+					matched,
+					matchedAreas,
+					gymID,
+				)
+				if len(jobs) > 0 {
+					if err := ps.sender.DeliverMessages(jobs); err != nil {
+						l.Errorf("Failed to deliver rendered messages: %s", err)
+					}
+				}
+			} else {
+				ps.sender.Send(webhook.OutboundPayload{
+					Type:                  "gym",
+					Message:               raw,
+					Enrichment:            enrichment,
+					PerLanguageEnrichment: perLang,
+					MatchedAreas:          matchedAreas,
+					MatchedUsers:          matched,
+					TilePending:           tilePending,
+				})
+			}
 		} else {
 			l.Debugf("Gym %s changed and 0 humans cared", gym.Name)
 		}

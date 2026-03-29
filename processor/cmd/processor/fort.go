@@ -72,14 +72,42 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 
 			enrichment, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort)
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "fort_update",
-				Message:      raw,
-				Enrichment:   enrichment,
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
-				TilePending:  tilePending,
-			})
+			if ps.dtsRenderer != nil {
+				if tilePending != nil {
+					wait := time.Until(tilePending.Deadline)
+					if wait <= 0 {
+						wait = time.Millisecond
+					}
+					select {
+					case url := <-tilePending.Result:
+						tilePending.Apply(url)
+					case <-time.After(wait):
+						tilePending.Apply(tilePending.Fallback)
+					}
+				}
+				jobs := ps.dtsRenderer.RenderAlert(
+					"fort-update",
+					enrichment,
+					nil,
+					matched,
+					matchedAreas,
+					fortID,
+				)
+				if len(jobs) > 0 {
+					if err := ps.sender.DeliverMessages(jobs); err != nil {
+						l.Errorf("Failed to deliver rendered messages: %s", err)
+					}
+				}
+			} else {
+				ps.sender.Send(webhook.OutboundPayload{
+					Type:         "fort_update",
+					Message:      raw,
+					Enrichment:   enrichment,
+					MatchedAreas: matchedAreas,
+					MatchedUsers: matched,
+					TilePending:  tilePending,
+				})
+			}
 		} else {
 			l.Debugf("Fort update %s (%s, %s) and 0 humans cared",
 				fort.FortName(), fort.FortType(), fort.ChangeType)
