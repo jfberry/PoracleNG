@@ -177,16 +177,33 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				perUser = ps.enricher.PokemonPerUser(perLang, matched)
 			}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  "pokemon",
-				Message:               raw,
-				Enrichment:            baseEnrichment,
-				PerLanguageEnrichment: perLang,
-				PerUserEnrichment:     perUser,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          matched,
-				TilePending:           tilePending,
-			})
+			if ps.dtsRenderer != nil {
+				jobs := ps.dtsRenderer.RenderPokemon(
+					baseEnrichment,
+					perLang,
+					perUser,
+					matched,
+					matchedAreas,
+					processed.Encountered,
+					pokemon.EncounterID,
+				)
+				if len(jobs) > 0 {
+					if err := ps.sender.DeliverMessages(jobs); err != nil {
+						l.Errorf("Failed to deliver rendered messages: %s", err)
+					}
+				}
+			} else {
+				ps.sender.Send(webhook.OutboundPayload{
+					Type:                  "pokemon",
+					Message:               raw,
+					Enrichment:            baseEnrichment,
+					PerLanguageEnrichment: perLang,
+					PerUserEnrichment:     perUser,
+					MatchedAreas:          matchedAreas,
+					MatchedUsers:          matched,
+					TilePending:           tilePending,
+				})
+			}
 		} else {
 			if processed.Encountered {
 				l.Debugf("%s{CP%d/IV%.0f%%} appeared at [%.3f,%.3f] and 0 humans cared",

@@ -24,6 +24,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -398,6 +399,7 @@ type ProcessorService struct {
 	activePokemon   *tracker.ActivePokemonTracker
 	pokemonTypes    *gamedata.PokemonTypes
 	enricher        *enrichment.Enricher
+	dtsRenderer     *dts.Renderer
 	scanner         scanner.Scanner
 	rateLimiter     *ratelimit.Limiter
 	translations    *i18n.Bundle
@@ -618,6 +620,29 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		Overrides:           overrides,
 	})
 
+	// DTS renderer (optional — renders templates in Go instead of sending to alerter)
+	var dtsRenderer *dts.Renderer
+	if cfg.Processor.RenderDTS {
+		var utilEmojis map[string]string
+		if gd != nil {
+			utilEmojis = gd.Util.Emojis
+		}
+		dtsRenderer, err = dts.NewRenderer(dts.RendererConfig{
+			ConfigDir:     filepath.Join(cfg.BaseDir, "config"),
+			FallbackDir:   filepath.Join(cfg.BaseDir, "fallbacks"),
+			GameData:      gd,
+			Translations:  enricher.Translations,
+			UtilEmojis:    utilEmojis,
+			DefaultLocale: cfg.General.Locale,
+		})
+		if err != nil {
+			log.Warnf("DTS rendering disabled: %s", err)
+			dtsRenderer = nil
+		} else {
+			log.Infof("DTS rendering enabled in processor")
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ProcessorService{
@@ -627,6 +652,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		ctx:      ctx,
 		cancel:   cancel,
 		enricher:      enricher,
+		dtsRenderer:   dtsRenderer,
 		scanner:       scannerInstance,
 		alerterClient: &http.Client{Timeout: 5 * time.Second},
 		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Processor.APISecret, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
