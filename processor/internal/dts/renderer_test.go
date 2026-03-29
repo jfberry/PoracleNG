@@ -601,6 +601,225 @@ func TestAppendPing(t *testing.T) {
 	appendPing("not a map", "<@user>")
 }
 
+// --- RenderAlert tests ---
+
+func TestRenderAlertBasicRaid(t *testing.T) {
+	entries := []DTSEntry{
+		{
+			Type:     "raid",
+			ID:       "1",
+			Platform: "discord",
+			Default:  true,
+			Template: map[string]any{"content": "Raid: {{name}} L{{level}}"},
+		},
+	}
+	r := newTestRenderer(t, entries)
+
+	enrichment := map[string]any{
+		"name":      "Mewtwo",
+		"level":     5,
+		"latitude":  51.123456,
+		"longitude": 13.654321,
+		"tth": map[string]any{
+			"hours":        0,
+			"minutes":      45,
+			"seconds":      0,
+			"totalSeconds": 2700,
+		},
+	}
+
+	users := []webhook.MatchedUser{
+		{ID: "user1", Name: "TestUser", Type: "discord:user", Template: "1", Language: "en"},
+	}
+
+	jobs := r.RenderAlert("raid", enrichment, nil, users, nil, "raid-ref")
+
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+
+	job := jobs[0]
+	msg, ok := job.Message.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map message, got %T", job.Message)
+	}
+	content, _ := msg["content"].(string)
+	if content != "Raid: Mewtwo L5" {
+		t.Errorf("expected 'Raid: Mewtwo L5', got %q", content)
+	}
+	if job.Target != "user1" {
+		t.Errorf("expected target user1, got %q", job.Target)
+	}
+	if job.LogReference != "raid-ref" {
+		t.Errorf("expected logReference raid-ref, got %q", job.LogReference)
+	}
+}
+
+func TestRenderAlertNoPerLangEnrichment(t *testing.T) {
+	// Fort updates have no per-language enrichment
+	entries := []DTSEntry{
+		{
+			Type:     "fort-update",
+			ID:       "1",
+			Platform: "discord",
+			Default:  true,
+			Template: map[string]any{"content": "Fort changed: {{pokestop_name}}"},
+		},
+	}
+	r := newTestRenderer(t, entries)
+
+	enrichment := map[string]any{
+		"pokestop_name": "Central Park Gym",
+		"latitude":      40.785091,
+		"longitude":     -73.968285,
+	}
+
+	users := []webhook.MatchedUser{
+		{ID: "u1", Type: "discord:user", Template: "1", Language: "en"},
+	}
+
+	// No TTH, no per-language enrichment
+	jobs := r.RenderAlert("fort-update", enrichment, nil, users, nil, "")
+
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+
+	msg := jobs[0].Message.(map[string]any)
+	content := msg["content"].(string)
+	if content != "Fort changed: Central Park Gym" {
+		t.Errorf("expected 'Fort changed: Central Park Gym', got %q", content)
+	}
+}
+
+func TestRenderAlertMultipleUsers(t *testing.T) {
+	entries := []DTSEntry{
+		{
+			Type:     "invasion",
+			ID:       "1",
+			Platform: "discord",
+			Default:  true,
+			Template: map[string]any{"content": "Grunt: {{gruntName}}"},
+		},
+		{
+			Type:     "invasion",
+			ID:       "1",
+			Platform: "telegram",
+			Default:  true,
+			Template: map[string]any{"content": "TG Grunt: {{gruntName}}"},
+		},
+	}
+	r := newTestRenderer(t, entries)
+
+	enrichment := map[string]any{
+		"latitude":  0.0,
+		"longitude": 0.0,
+		"tth":       map[string]any{"totalSeconds": 600},
+	}
+	perLang := map[string]map[string]any{
+		"en": {"gruntName": "Grass Grunt"},
+	}
+	users := []webhook.MatchedUser{
+		{ID: "d1", Type: "discord:user", Template: "1", Language: "en"},
+		{ID: "t1", Type: "telegram:user", Template: "1", Language: "en"},
+		{ID: "d2", Type: "discord:channel", Template: "1", Language: "en"},
+	}
+
+	jobs := r.RenderAlert("invasion", enrichment, perLang, users, nil, "")
+
+	if len(jobs) != 3 {
+		t.Fatalf("expected 3 jobs, got %d", len(jobs))
+	}
+
+	// Discord users get discord template
+	msg0 := jobs[0].Message.(map[string]any)
+	if msg0["content"] != "Grunt: Grass Grunt" {
+		t.Errorf("expected discord template, got %v", msg0["content"])
+	}
+
+	// Telegram user gets telegram template
+	msg1 := jobs[1].Message.(map[string]any)
+	if msg1["content"] != "TG Grunt: Grass Grunt" {
+		t.Errorf("expected telegram template, got %v", msg1["content"])
+	}
+
+	// Second discord user
+	msg2 := jobs[2].Message.(map[string]any)
+	if msg2["content"] != "Grunt: Grass Grunt" {
+		t.Errorf("expected discord template for channel, got %v", msg2["content"])
+	}
+}
+
+func TestRenderAlertTTHExpiry(t *testing.T) {
+	entries := []DTSEntry{
+		{
+			Type:     "quest",
+			ID:       "1",
+			Platform: "discord",
+			Default:  true,
+			Template: map[string]any{"content": "Quest found"},
+		},
+	}
+
+	configDir := t.TempDir()
+	fallbackDir := t.TempDir()
+	writeTestDTS(t, configDir, entries)
+
+	r, err := NewRenderer(RendererConfig{
+		ConfigDir:     configDir,
+		FallbackDir:   fallbackDir,
+		DefaultLocale: "en",
+		MinAlertTime:  60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	enrichment := map[string]any{
+		"latitude":  0.0,
+		"longitude": 0.0,
+		"tth":       map[string]any{"totalSeconds": 30}, // below minimum
+	}
+	users := []webhook.MatchedUser{
+		{ID: "u1", Type: "discord:user", Template: "1"},
+	}
+
+	jobs := r.RenderAlert("quest", enrichment, nil, users, nil, "")
+	if len(jobs) != 0 {
+		t.Fatalf("expected 0 jobs for expired TTH, got %d", len(jobs))
+	}
+}
+
+func TestRenderAlertNoDeduplication(t *testing.T) {
+	// RenderAlert should NOT deduplicate users (unlike RenderPokemon)
+	entries := []DTSEntry{
+		{
+			Type:     "raid",
+			ID:       "1",
+			Platform: "discord",
+			Default:  true,
+			Template: map[string]any{"content": "raid"},
+		},
+	}
+	r := newTestRenderer(t, entries)
+
+	enrichment := map[string]any{
+		"latitude":  0.0,
+		"longitude": 0.0,
+		"tth":       map[string]any{"totalSeconds": 600},
+	}
+	// Same user ID appears twice — RenderAlert should keep both
+	users := []webhook.MatchedUser{
+		{ID: "u1", Type: "discord:user", Template: "1"},
+		{ID: "u1", Type: "discord:user", Template: "1"},
+	}
+
+	jobs := r.RenderAlert("raid", enrichment, nil, users, nil, "")
+	if len(jobs) != 2 {
+		t.Fatalf("expected 2 jobs (no dedup), got %d", len(jobs))
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
 }

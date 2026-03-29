@@ -94,6 +94,8 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 }
 
 // RenderPokemon renders pokemon alerts for all matched users and returns delivery jobs.
+// Pokemon has special handling: user deduplication (the alerter historically deduped,
+// but the renderer does it here) and template type selection based on encounter status.
 func (r *Renderer) RenderPokemon(
 	enrichment map[string]any,
 	perLangEnrichment map[string]map[string]any,
@@ -104,21 +106,63 @@ func (r *Renderer) RenderPokemon(
 	logReference string,
 ) []DeliveryJob {
 	// 1. Check TTH
-	tthMap, tthSeconds := extractTTH(enrichment)
-	if r.minAlertSec > 0 && tthSeconds > 0 && tthSeconds < r.minAlertSec {
+	if r.isBelowMinAlertTime(enrichment) {
 		return nil
 	}
 
 	// 2. Deduplicate users: keep first occurrence per user ID
 	uniqueUsers := deduplicateUsers(matchedUsers)
 
-	// 3. Extract lat/lon for jobs
+	// 3. Select template type based on encounter status
+	templateType := "monster"
+	if !isEncountered {
+		templateType = "monsterNoIv"
+	}
+
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, uniqueUsers, matchedAreas, logReference)
+}
+
+// RenderAlert renders alerts for any non-pokemon type and returns delivery jobs.
+// Unlike RenderPokemon, this does not deduplicate users or select template type
+// dynamically — the caller provides the template type directly.
+func (r *Renderer) RenderAlert(
+	templateType string,
+	enrichment map[string]any,
+	perLangEnrichment map[string]map[string]any,
+	matchedUsers []webhook.MatchedUser,
+	matchedAreas []webhook.MatchedArea,
+	logReference string,
+) []DeliveryJob {
+	if r.isBelowMinAlertTime(enrichment) {
+		return nil
+	}
+
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, matchedUsers, matchedAreas, logReference)
+}
+
+// isBelowMinAlertTime checks whether the TTH in enrichment is below the configured minimum.
+func (r *Renderer) isBelowMinAlertTime(enrichment map[string]any) bool {
+	_, tthSeconds := extractTTH(enrichment)
+	return r.minAlertSec > 0 && tthSeconds > 0 && tthSeconds < r.minAlertSec
+}
+
+// renderForUsers is the shared rendering loop that produces DeliveryJobs for each user.
+func (r *Renderer) renderForUsers(
+	templateType string,
+	enrichment map[string]any,
+	perLangEnrichment map[string]map[string]any,
+	perUserEnrichment map[string]map[string]any,
+	users []webhook.MatchedUser,
+	areas []webhook.MatchedArea,
+	logReference string,
+) []DeliveryJob {
+	tthMap, _ := extractTTH(enrichment)
 	lat := truncateCoord(toFloat(enrichment["latitude"]))
 	lon := truncateCoord(toFloat(enrichment["longitude"]))
 
 	var jobs []DeliveryJob
 
-	for _, user := range uniqueUsers {
+	for _, user := range users {
 		// a. Determine platform
 		platform := platformFromType(user.Type)
 
@@ -135,29 +179,18 @@ func (r *Renderer) RenderPokemon(
 		perUser := mapOrEmpty(perUserEnrichment, user.ID)
 
 		// e. Build view
-		view := r.viewBuilder.BuildPokemonView(enrichment, perLang, perUser, platform, matchedAreas)
+		view := r.viewBuilder.BuildPokemonView(enrichment, perLang, perUser, platform, areas)
 
-		// f. Select template type
-		templateType := "monster"
-		if !isEncountered {
-			templateType = "monsterNoIv"
-		}
-
-		// g. Get template
+		// f. Get template (with monsterNoIv -> monster fallback)
 		tmpl := r.templates.Get(templateType, platform, user.Template, language)
-		if tmpl == nil {
-			// Try fallback to "monster" if monsterNoIv not found
-			if templateType == "monsterNoIv" {
-				tmpl = r.templates.Get("monster", platform, user.Template, language)
-			}
+		if tmpl == nil && templateType == "monsterNoIv" {
+			tmpl = r.templates.Get("monster", platform, user.Template, language)
 		}
 
 		var rendered string
 		if tmpl == nil {
-			// h. Fallback error message
 			rendered = fallbackMessage(templateType, platform, user.Template, language)
 		} else {
-			// i. Set up data frame with language/platform for helpers
 			df := raymond.NewDataFrame()
 			df.Set("language", language)
 			df.Set("platform", platform)
@@ -172,7 +205,7 @@ func (r *Renderer) RenderPokemon(
 			}
 		}
 
-		// j. Post-process: shorten URLs
+		// g. Post-process: shorten URLs
 		rendered = ShortenMarkers(rendered, r.shortener)
 
 		// Parse JSON result
@@ -202,7 +235,7 @@ func (r *Renderer) RenderPokemon(
 			}
 		}
 
-		// k. Build DeliveryJob
+		// h. Build DeliveryJob
 		jobs = append(jobs, DeliveryJob{
 			Lat:          lat,
 			Lon:          lon,
