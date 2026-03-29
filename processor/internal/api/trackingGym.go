@@ -74,13 +74,13 @@ func HandleDeleteGym(deps *TrackingDeps) http.HandlerFunc {
 
 // gymInsertRequest represents a single gym tracking row from the POST body.
 type gymInsertRequest struct {
-	Team          *json.Number `json:"team"`
-	Distance      *json.Number `json:"distance"`
-	Template      any          `json:"template"`
-	Clean         *json.Number `json:"clean"`
-	SlotChanges   *json.Number `json:"slot_changes"`
-	BattleChanges *json.Number `json:"battle_changes"`
-	GymID         *string      `json:"gym_id"`
+	Team          flexInt  `json:"team"`
+	Distance      flexInt  `json:"distance"`
+	Template      any      `json:"template"`
+	Clean         flexBool `json:"clean"`
+	SlotChanges   flexBool `json:"slot_changes"`
+	BattleChanges flexBool `json:"battle_changes"`
+	GymID         *string  `json:"gym_id"`
 }
 
 // HandleCreateGym returns the POST /api/tracking/gym/{id} handler.
@@ -128,21 +128,17 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 
 		insert := make([]db.GymTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
-			if req.Team == nil {
+			if !req.Team.isSet() {
 				trackingJSONError(w, http.StatusBadRequest, "Invalid team")
 				return
 			}
-			team, _ := strconv.Atoi(string(*req.Team))
+			team := req.Team.intValue(0)
 			if team < 0 || team > 4 {
 				trackingJSONError(w, http.StatusBadRequest, "Invalid team")
 				return
 			}
 
-			distance := 0
-			if req.Distance != nil {
-				n, _ := strconv.Atoi(string(*req.Distance))
-				distance = n
-			}
+			distance := req.Distance.intValue(0)
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -158,23 +154,9 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			var clean db.IntBool
-			if req.Clean != nil {
-				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = db.IntBool(n != 0)
-			}
-
-			var slotChanges db.IntBool
-			if req.SlotChanges != nil {
-				n, _ := strconv.Atoi(string(*req.SlotChanges))
-				slotChanges = db.IntBool(n != 0)
-			}
-
-			var battleChanges db.IntBool
-			if req.BattleChanges != nil {
-				n, _ := strconv.Atoi(string(*req.BattleChanges))
-				battleChanges = db.IntBool(n != 0)
-			}
+			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			slotChanges := db.IntBool(req.SlotChanges.intValue(0) != 0)
+			battleChanges := db.IntBool(req.BattleChanges.intValue(0) != 0)
 
 			var gymID *string
 			if req.GymID != nil {

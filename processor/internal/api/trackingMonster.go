@@ -75,49 +75,38 @@ func HandleDeleteMonster(deps *TrackingDeps) http.HandlerFunc {
 // monsterInsertRequest represents a single monster tracking row from the POST body.
 // The JS handler has a cleanRow function that applies defaults and validates.
 type monsterInsertRequest struct {
-	UID             *json.Number `json:"uid"`
-	PokemonID       *json.Number `json:"pokemon_id"`
-	ProfileNo       *json.Number `json:"profile_no"`
-	Distance        *json.Number `json:"distance"`
-	Template        any          `json:"template"`
-	Clean           *json.Number `json:"clean"`
-	Form            *json.Number `json:"form"`
-	MinIV           *json.Number `json:"min_iv"`
-	MaxIV           *json.Number `json:"max_iv"`
-	MinCP           *json.Number `json:"min_cp"`
-	MaxCP           *json.Number `json:"max_cp"`
-	MinLevel        *json.Number `json:"min_level"`
-	MaxLevel        *json.Number `json:"max_level"`
-	ATK             *json.Number `json:"atk"`
-	DEF             *json.Number `json:"def"`
-	STA             *json.Number `json:"sta"`
-	MaxATK          *json.Number `json:"max_atk"`
-	MaxDEF          *json.Number `json:"max_def"`
-	MaxSTA          *json.Number `json:"max_sta"`
-	Gender          *json.Number `json:"gender"`
-	MinWeight       *json.Number `json:"min_weight"`
-	MaxWeight       *json.Number `json:"max_weight"`
-	MinTime         *json.Number `json:"min_time"`
-	Rarity          *json.Number `json:"rarity"`
-	MaxRarity       *json.Number `json:"max_rarity"`
-	Size            *json.Number `json:"size"`
-	MaxSize         *json.Number `json:"max_size"`
-	PVPRankingLeague *json.Number `json:"pvp_ranking_league"`
-	PVPRankingBest   *json.Number `json:"pvp_ranking_best"`
-	PVPRankingWorst  *json.Number `json:"pvp_ranking_worst"`
-	PVPRankingMinCP  *json.Number `json:"pvp_ranking_min_cp"`
-	PVPRankingCap    *json.Number `json:"pvp_ranking_cap"`
-}
-
-func jsonNumInt(n *json.Number, def int) int {
-	if n == nil {
-		return def
-	}
-	v, err := strconv.Atoi(string(*n))
-	if err != nil {
-		return def
-	}
-	return v
+	UID              flexInt  `json:"uid"`
+	PokemonID        flexInt  `json:"pokemon_id"`
+	ProfileNo        flexInt  `json:"profile_no"`
+	Distance         flexInt  `json:"distance"`
+	Template         any      `json:"template"`
+	Clean            flexBool `json:"clean"`
+	Form             flexInt  `json:"form"`
+	MinIV            flexInt  `json:"min_iv"`
+	MaxIV            flexInt  `json:"max_iv"`
+	MinCP            flexInt  `json:"min_cp"`
+	MaxCP            flexInt  `json:"max_cp"`
+	MinLevel         flexInt  `json:"min_level"`
+	MaxLevel         flexInt  `json:"max_level"`
+	ATK              flexInt  `json:"atk"`
+	DEF              flexInt  `json:"def"`
+	STA              flexInt  `json:"sta"`
+	MaxATK           flexInt  `json:"max_atk"`
+	MaxDEF           flexInt  `json:"max_def"`
+	MaxSTA           flexInt  `json:"max_sta"`
+	Gender           flexInt  `json:"gender"`
+	MinWeight        flexInt  `json:"min_weight"`
+	MaxWeight        flexInt  `json:"max_weight"`
+	MinTime          flexInt  `json:"min_time"`
+	Rarity           flexInt  `json:"rarity"`
+	MaxRarity        flexInt  `json:"max_rarity"`
+	Size             flexInt  `json:"size"`
+	MaxSize          flexInt  `json:"max_size"`
+	PVPRankingLeague flexInt  `json:"pvp_ranking_league"`
+	PVPRankingBest   flexInt  `json:"pvp_ranking_best"`
+	PVPRankingWorst  flexInt  `json:"pvp_ranking_worst"`
+	PVPRankingMinCP  flexInt  `json:"pvp_ranking_min_cp"`
+	PVPRankingCap    flexInt  `json:"pvp_ranking_cap"`
 }
 
 // HandleCreateMonster returns the POST /api/tracking/pokemon/{id} handler.
@@ -167,13 +156,13 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 
 		// cleanRow: apply defaults and validate, matching the JS cleanRow function.
 		cleanRow := func(req monsterInsertRequest) (db.MonsterTrackingAPI, error) {
-			if req.PokemonID == nil {
+			if !req.PokemonID.isSet() {
 				return db.MonsterTrackingAPI{}, errPokemonIDRequired
 			}
 
-			pokemonID := jsonNumInt(req.PokemonID, 0)
+			pokemonID := req.PokemonID.intValue(0)
 
-			distance := jsonNumInt(req.Distance, 0)
+			distance := req.Distance.intValue(0)
 			const maxDistanceDefault = 40000000 // circumference of Earth
 			if distance > maxDistanceDefault {
 				distance = maxDistanceDefault
@@ -194,8 +183,8 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 			}
 
 			pNo := profileNo
-			if req.ProfileNo != nil {
-				pNo = jsonNumInt(req.ProfileNo, profileNo)
+			if req.ProfileNo.isSet() {
+				pNo = req.ProfileNo.intValue(profileNo)
 			}
 
 			row := db.MonsterTrackingAPI{
@@ -205,37 +194,37 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 				Template:         template,
 				PokemonID:        pokemonID,
 				Distance:         distance,
-				MinIV:            jsonNumInt(req.MinIV, -1),
-				MaxIV:            jsonNumInt(req.MaxIV, 100),
-				MinCP:            jsonNumInt(req.MinCP, 0),
-				MaxCP:            jsonNumInt(req.MaxCP, 9000),
-				MinLevel:         jsonNumInt(req.MinLevel, 0),
-				MaxLevel:         jsonNumInt(req.MaxLevel, 55),
-				ATK:              jsonNumInt(req.ATK, 0),
-				DEF:              jsonNumInt(req.DEF, 0),
-				STA:              jsonNumInt(req.STA, 0),
-				MaxATK:           jsonNumInt(req.MaxATK, 15),
-				MaxDEF:           jsonNumInt(req.MaxDEF, 15),
-				MaxSTA:           jsonNumInt(req.MaxSTA, 15),
-				Gender:           jsonNumInt(req.Gender, 0),
-				Form:             jsonNumInt(req.Form, 0),
-				Clean:            db.IntBool(jsonNumInt(req.Clean, 0) != 0),
-				MinWeight:        jsonNumInt(req.MinWeight, 0),
-				MaxWeight:        jsonNumInt(req.MaxWeight, 9000000),
-				MinTime:          jsonNumInt(req.MinTime, 0),
-				Rarity:           jsonNumInt(req.Rarity, -1),
-				MaxRarity:        jsonNumInt(req.MaxRarity, 6),
-				Size:             jsonNumInt(req.Size, -1),
-				MaxSize:          jsonNumInt(req.MaxSize, 5),
-				PVPRankingLeague: jsonNumInt(req.PVPRankingLeague, 0),
-				PVPRankingBest:   jsonNumInt(req.PVPRankingBest, 1),
-				PVPRankingWorst:  jsonNumInt(req.PVPRankingWorst, 4096),
-				PVPRankingMinCP:  jsonNumInt(req.PVPRankingMinCP, 0),
-				PVPRankingCap:    jsonNumInt(req.PVPRankingCap, 0),
+				MinIV:            req.MinIV.intValue(-1),
+				MaxIV:            req.MaxIV.intValue(100),
+				MinCP:            req.MinCP.intValue(0),
+				MaxCP:            req.MaxCP.intValue(9000),
+				MinLevel:         req.MinLevel.intValue(0),
+				MaxLevel:         req.MaxLevel.intValue(55),
+				ATK:              req.ATK.intValue(0),
+				DEF:              req.DEF.intValue(0),
+				STA:              req.STA.intValue(0),
+				MaxATK:           req.MaxATK.intValue(15),
+				MaxDEF:           req.MaxDEF.intValue(15),
+				MaxSTA:           req.MaxSTA.intValue(15),
+				Gender:           req.Gender.intValue(0),
+				Form:             req.Form.intValue(0),
+				Clean:            db.IntBool(req.Clean.intValue(0) != 0),
+				MinWeight:        req.MinWeight.intValue(0),
+				MaxWeight:        req.MaxWeight.intValue(9000000),
+				MinTime:          req.MinTime.intValue(0),
+				Rarity:           req.Rarity.intValue(-1),
+				MaxRarity:        req.MaxRarity.intValue(6),
+				Size:             req.Size.intValue(-1),
+				MaxSize:          req.MaxSize.intValue(5),
+				PVPRankingLeague: req.PVPRankingLeague.intValue(0),
+				PVPRankingBest:   req.PVPRankingBest.intValue(1),
+				PVPRankingWorst:  req.PVPRankingWorst.intValue(4096),
+				PVPRankingMinCP:  req.PVPRankingMinCP.intValue(0),
+				PVPRankingCap:    req.PVPRankingCap.intValue(0),
 			}
 
-			if req.UID != nil {
-				row.UID = int64(jsonNumInt(req.UID, 0))
+			if req.UID.isSet() {
+				row.UID = int64(req.UID.intValue(0))
 			}
 
 			return row, nil
@@ -251,7 +240,7 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 				trackingJSONError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			if req.UID != nil {
+			if req.UID.isSet() {
 				updates = append(updates, row)
 			} else {
 				insert = append(insert, row)

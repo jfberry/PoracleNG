@@ -76,19 +76,19 @@ func HandleDeleteRaid(deps *TrackingDeps) http.HandlerFunc {
 // raidInsertRequest represents a single raid tracking row from the POST body.
 // Supports pokemon_form array expansion and level array expansion.
 type raidInsertRequest struct {
-	PokemonID   *json.Number     `json:"pokemon_id"`
+	PokemonID   flexInt          `json:"pokemon_id"`
 	PokemonForm []pokemonFormPair `json:"pokemon_form"`
 	Level       json.RawMessage  `json:"level"`
-	Distance    *json.Number     `json:"distance"`
+	Distance    flexInt          `json:"distance"`
 	Template    any              `json:"template"`
-	Clean       *json.Number     `json:"clean"`
-	Team        *json.Number     `json:"team"`
-	Exclusive   *json.Number     `json:"exclusive"`
-	Form        *json.Number     `json:"form"`
-	Move        *json.Number     `json:"move"`
-	Evolution   *json.Number     `json:"evolution"`
+	Clean       flexBool         `json:"clean"`
+	Team        flexInt          `json:"team"`
+	Exclusive   flexBool         `json:"exclusive"`
+	Form        flexInt          `json:"form"`
+	Move        flexInt          `json:"move"`
+	Evolution   flexInt          `json:"evolution"`
 	GymID       *string          `json:"gym_id"`
-	RSVPChanges *json.Number     `json:"rsvp_changes"`
+	RSVPChanges flexInt          `json:"rsvp_changes"`
 }
 
 type pokemonFormPair struct {
@@ -155,50 +155,25 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			if req.Distance != nil {
-				n, _ := strconv.Atoi(string(*req.Distance))
-				distance = n
+			distance = req.Distance.intValue(0)
+
+			team = req.Team.intValue(4)
+			if team < 0 || team > 4 {
+				team = 4
 			}
 
-			team = 4
-			if req.Team != nil {
-				n, _ := strconv.Atoi(string(*req.Team))
-				if n >= 0 && n <= 4 {
-					team = n
-				}
-			}
-
-			if req.Clean != nil {
-				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = db.IntBool(n != 0)
-			}
-
-			if req.Exclusive != nil {
-				n, _ := strconv.Atoi(string(*req.Exclusive))
-				exclusive = db.IntBool(n != 0)
-			}
-
-			move = 9000
-			if req.Move != nil {
-				n, _ := strconv.Atoi(string(*req.Move))
-				move = n
-			}
-
-			evolution = 9000
-			if req.Evolution != nil {
-				n, _ := strconv.Atoi(string(*req.Evolution))
-				evolution = n
-			}
+			clean = db.IntBool(req.Clean.intValue(0) != 0)
+			exclusive = db.IntBool(req.Exclusive.intValue(0) != 0)
+			move = req.Move.intValue(9000)
+			evolution = req.Evolution.intValue(9000)
 
 			if req.GymID != nil && *req.GymID != "" {
 				gymID = null.StringFrom(*req.GymID)
 			}
 
-			if req.RSVPChanges != nil {
-				n, _ := strconv.Atoi(string(*req.RSVPChanges))
-				if n >= 0 && n <= 2 {
-					rsvpChanges = n
-				}
+			n := req.RSVPChanges.intValue(0)
+			if n >= 0 && n <= 2 {
+				rsvpChanges = n
 			}
 
 			return
@@ -235,17 +210,8 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 			// Level expansion
 			levels := parseLevelArray(req.Level)
 
-			pokemonID := 9000
-			if req.PokemonID != nil {
-				n, _ := strconv.Atoi(string(*req.PokemonID))
-				pokemonID = n
-			}
-
-			form := 0
-			if req.Form != nil {
-				n, _ := strconv.Atoi(string(*req.Form))
-				form = n
-			}
+			pokemonID := req.PokemonID.intValue(9000)
+			form := req.Form.intValue(0)
 
 			for _, lvl := range levels {
 				level := 9000

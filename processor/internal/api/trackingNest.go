@@ -74,12 +74,12 @@ func HandleDeleteNest(deps *TrackingDeps) http.HandlerFunc {
 
 // nestInsertRequest represents a single nest tracking row from the POST body.
 type nestInsertRequest struct {
-	PokemonID   *json.Number `json:"pokemon_id"`
-	Distance    *json.Number `json:"distance"`
-	Template    any          `json:"template"`
-	Clean       *json.Number `json:"clean"`
-	MinSpawnAvg *json.Number `json:"min_spawn_avg"`
-	Form        *json.Number `json:"form"`
+	PokemonID   flexInt  `json:"pokemon_id"`
+	Distance    flexInt  `json:"distance"`
+	Template    any      `json:"template"`
+	Clean       flexBool `json:"clean"`
+	MinSpawnAvg flexInt  `json:"min_spawn_avg"`
+	Form        flexInt  `json:"form"`
 }
 
 // HandleCreateNest returns the POST /api/tracking/nest/{id} handler.
@@ -127,17 +127,8 @@ func HandleCreateNest(deps *TrackingDeps) http.HandlerFunc {
 
 		insert := make([]db.NestTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
-			pokemonID := 0
-			if req.PokemonID != nil {
-				n, _ := strconv.Atoi(string(*req.PokemonID))
-				pokemonID = n
-			}
-
-			distance := 0
-			if req.Distance != nil {
-				n, _ := strconv.Atoi(string(*req.Distance))
-				distance = n
-			}
+			pokemonID := req.PokemonID.intValue(0)
+			distance := req.Distance.intValue(0)
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -153,23 +144,9 @@ func HandleCreateNest(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			var clean db.IntBool
-			if req.Clean != nil {
-				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = db.IntBool(n != 0)
-			}
-
-			minSpawnAvg := 0
-			if req.MinSpawnAvg != nil {
-				n, _ := strconv.Atoi(string(*req.MinSpawnAvg))
-				minSpawnAvg = n
-			}
-
-			form := 0
-			if req.Form != nil {
-				n, _ := strconv.Atoi(string(*req.Form))
-				form = n
-			}
+			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			minSpawnAvg := req.MinSpawnAvg.intValue(0)
+			form := req.Form.intValue(0)
 
 			insert = append(insert, db.NestTrackingAPI{
 				ID:          human.ID,

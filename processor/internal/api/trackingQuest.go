@@ -79,14 +79,14 @@ func HandleDeleteQuest(deps *TrackingDeps) http.HandlerFunc {
 
 // questInsertRequest represents a single quest tracking row from the POST body.
 type questInsertRequest struct {
-	RewardType *json.Number `json:"reward_type"`
-	Reward     *json.Number `json:"reward"`
-	Distance   *json.Number `json:"distance"`
-	Template   any          `json:"template"`
-	Clean      *json.Number `json:"clean"`
-	Form       *json.Number `json:"form"`
-	Shiny      *json.Number `json:"shiny"`
-	Amount     *json.Number `json:"amount"`
+	RewardType flexInt  `json:"reward_type"`
+	Reward     flexInt  `json:"reward"`
+	Distance   flexInt  `json:"distance"`
+	Template   any      `json:"template"`
+	Clean      flexBool `json:"clean"`
+	Form       flexInt  `json:"form"`
+	Shiny      flexBool `json:"shiny"`
+	Amount     flexInt  `json:"amount"`
 }
 
 // HandleCreateQuest returns the POST /api/tracking/quest/{id} handler.
@@ -134,27 +134,14 @@ func HandleCreateQuest(deps *TrackingDeps) http.HandlerFunc {
 
 		insert := make([]db.QuestTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
-			rewardType := 0
-			if req.RewardType != nil {
-				n, _ := strconv.Atoi(string(*req.RewardType))
-				rewardType = n
-			}
+			rewardType := req.RewardType.intValue(0)
 			if !validRewardTypes[rewardType] {
 				trackingJSONError(w, http.StatusBadRequest, "Unrecognised reward_type value")
 				return
 			}
 
-			reward := 0
-			if req.Reward != nil {
-				n, _ := strconv.Atoi(string(*req.Reward))
-				reward = n
-			}
-
-			distance := 0
-			if req.Distance != nil {
-				n, _ := strconv.Atoi(string(*req.Distance))
-				distance = n
-			}
+			reward := req.Reward.intValue(0)
+			distance := req.Distance.intValue(0)
 
 			template := defaultTemplate
 			if req.Template != nil {
@@ -170,29 +157,10 @@ func HandleCreateQuest(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			var clean db.IntBool
-			if req.Clean != nil {
-				n, _ := strconv.Atoi(string(*req.Clean))
-				clean = db.IntBool(n != 0)
-			}
-
-			form := 0
-			if req.Form != nil {
-				n, _ := strconv.Atoi(string(*req.Form))
-				form = n
-			}
-
-			var shiny db.IntBool
-			if req.Shiny != nil {
-				n, _ := strconv.Atoi(string(*req.Shiny))
-				shiny = db.IntBool(n != 0)
-			}
-
-			amount := 0
-			if req.Amount != nil {
-				n, _ := strconv.Atoi(string(*req.Amount))
-				amount = n
-			}
+			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			form := req.Form.intValue(0)
+			shiny := db.IntBool(req.Shiny.intValue(0) != 0)
+			amount := req.Amount.intValue(0)
 
 			insert = append(insert, db.QuestTrackingAPI{
 				ID:         human.ID,
