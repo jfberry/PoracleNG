@@ -270,6 +270,12 @@ func main() {
 	mux.HandleFunc("POST /api/profiles/{id}/update", apiRoute("profiles/update", api.HandleUpdateProfile(trackingDeps)))
 	mux.HandleFunc("POST /api/profiles/{id}/copy/{from}/{to}", apiRoute("profiles/copy", api.HandleCopyProfile(trackingDeps)))
 
+	// DTS template endpoints
+	if proc.dtsRenderer != nil {
+		mux.HandleFunc("GET /api/config/templates", auth(api.HandleTemplateConfig(proc.dtsRenderer.Templates())))
+		mux.HandleFunc("POST /api/dts/render", auth(api.HandleDTSRender(proc.dtsRenderer.Templates())))
+	}
+
 	// Proxy unhandled /api/ requests to the alerter (config, humans, profiles, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
 
@@ -638,7 +644,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		log.Warnf("DTS renderer initialization failed: %s", err)
 		dtsRenderer = nil
 	} else {
-		log.Infof("DTS rendering enabled")
+		dtsRenderer.Templates().LogSummary()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

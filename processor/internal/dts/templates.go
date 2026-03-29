@@ -20,6 +20,9 @@ type DTSEntry struct {
 	Platform     string `json:"platform"`
 	Language     string `json:"language"`
 	Default      bool   `json:"default"`
+	Hidden       bool   `json:"hidden"`
+	Name         string `json:"name,omitempty"`
+	Description  string `json:"description,omitempty"`
 	Template     any    `json:"template"`
 	TemplateFile string `json:"templateFile"`
 }
@@ -269,6 +272,106 @@ func processTemplateValue(v any, configDir string) any {
 		return resolveIncludes(val, configDir)
 	default:
 		return val
+	}
+}
+
+// TemplateInfo holds metadata about a single template for API responses.
+type TemplateInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// TemplateMetadata returns template metadata grouped by platform → type → language.
+// Hidden entries are excluded. When includeDescriptions is false, each language maps
+// to a list of ID strings. When true, maps to a list of TemplateInfo objects.
+// Empty language strings are replaced with "%" (matching alerter convention).
+func (ts *TemplateStore) TemplateMetadata(includeDescriptions bool) map[string]any {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	// platform -> type -> language -> list
+	result := make(map[string]any)
+
+	for _, e := range ts.entries {
+		if e.Hidden {
+			continue
+		}
+
+		platform := e.Platform
+		lang := e.Language
+		if lang == "" {
+			lang = "%"
+		}
+
+		// Get or create platform map
+		platformMap, ok := result[platform].(map[string]any)
+		if !ok {
+			platformMap = make(map[string]any)
+			result[platform] = platformMap
+		}
+
+		// Get or create type map
+		typeMap, ok := platformMap[e.Type].(map[string]any)
+		if !ok {
+			typeMap = make(map[string]any)
+			platformMap[e.Type] = typeMap
+		}
+
+		if includeDescriptions {
+			existing, _ := typeMap[lang].([]TemplateInfo)
+			typeMap[lang] = append(existing, TemplateInfo{
+				ID:          e.ID.String(),
+				Name:        e.Name,
+				Description: e.Description,
+			})
+		} else {
+			existing, _ := typeMap[lang].([]string)
+			typeMap[lang] = append(existing, e.ID.String())
+		}
+	}
+
+	return result
+}
+
+// LogSummary logs a summary of loaded templates and warns about types missing defaults.
+func (ts *TemplateStore) LogSummary() {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	total := len(ts.entries)
+	discordCount := 0
+	telegramCount := 0
+	for _, e := range ts.entries {
+		switch e.Platform {
+		case "discord":
+			discordCount++
+		case "telegram":
+			telegramCount++
+		}
+	}
+
+	log.Infof("DTS loaded: %d templates (%d discord, %d telegram)", total, discordCount, telegramCount)
+
+	// Check for types missing default templates per platform
+	// Collect all (type, platform) pairs that have entries
+	type typePlatform struct {
+		typ      string
+		platform string
+	}
+	seen := make(map[typePlatform]bool)
+	hasDefault := make(map[typePlatform]bool)
+	for _, e := range ts.entries {
+		key := typePlatform{e.Type, e.Platform}
+		seen[key] = true
+		if e.Default {
+			hasDefault[key] = true
+		}
+	}
+	for key := range seen {
+		if !hasDefault[key] {
+			log.Warnf("DTS: no default template for type=%q platform=%q", key.typ, key.platform)
+		}
 	}
 }
 
