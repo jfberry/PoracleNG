@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -112,41 +114,108 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 		baseEnrichment, baseTilePending := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap)
 
 		// Per-user: each gets their own payload with per-language enrichment and tile
-		for _, user := range matched {
-			lang := user.Language
-			if lang == "" {
-				lang = ps.cfg.General.Locale
+		if ps.dtsRenderer != nil {
+			// Resolve base tile
+			if baseTilePending != nil {
+				wait := time.Until(baseTilePending.Deadline)
+				if wait <= 0 {
+					wait = time.Millisecond
+				}
+				select {
+				case url := <-baseTilePending.Result:
+					baseTilePending.Apply(url)
+				case <-time.After(wait):
+					baseTilePending.Apply(baseTilePending.Fallback)
+				}
+			}
+
+			var allJobs []dts.DeliveryJob
+			for _, user := range matched {
+				lang := user.Language
 				if lang == "" {
-					lang = "en"
+					lang = ps.cfg.General.Locale
+					if lang == "" {
+						lang = "en"
+					}
 				}
-			}
 
-			var perLang map[string]map[string]any
-			var tilePending = baseTilePending
-			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-				langEnrichment, userTilePending := ps.enricher.WeatherTranslate(
+				var perLang map[string]map[string]any
+				if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+					langEnrichment, userTilePending := ps.enricher.WeatherTranslate(
+						baseEnrichment,
+						change.OldGameplayCondition,
+						change.GameplayCondition,
+						user.ActivePokemons,
+						lang,
+						ps.cfg.Weather.ShowAlteredPokemonStaticMap,
+					)
+					if userTilePending != nil {
+						wait := time.Until(userTilePending.Deadline)
+						if wait <= 0 {
+							wait = time.Millisecond
+						}
+						select {
+						case url := <-userTilePending.Result:
+							userTilePending.Apply(url)
+						case <-time.After(wait):
+							userTilePending.Apply(userTilePending.Fallback)
+						}
+					}
+					perLang = map[string]map[string]any{lang: langEnrichment}
+				}
+
+				jobs := ps.dtsRenderer.RenderAlert(
+					"weatherchange",
 					baseEnrichment,
-					change.OldGameplayCondition,
-					change.GameplayCondition,
-					user.ActivePokemons,
-					lang,
-					ps.cfg.Weather.ShowAlteredPokemonStaticMap,
+					perLang,
+					[]webhook.MatchedUser{user},
+					matchedAreas,
+					change.S2CellID,
 				)
-				if userTilePending != nil {
-					tilePending = userTilePending
-				}
-				perLang = map[string]map[string]any{lang: langEnrichment}
+				allJobs = append(allJobs, jobs...)
 			}
+			if len(allJobs) > 0 {
+				if err := ps.sender.DeliverMessages(allJobs); err != nil {
+					l.Errorf("Failed to deliver weather messages: %s", err)
+				}
+			}
+		} else {
+			for _, user := range matched {
+				lang := user.Language
+				if lang == "" {
+					lang = ps.cfg.General.Locale
+					if lang == "" {
+						lang = "en"
+					}
+				}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  "weather_change",
-				Message:               msg,
-				Enrichment:            baseEnrichment,
-				PerLanguageEnrichment: perLang,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          []webhook.MatchedUser{user},
-				TilePending:           tilePending,
-			})
+				var perLang map[string]map[string]any
+				var tilePending = baseTilePending
+				if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+					langEnrichment, userTilePending := ps.enricher.WeatherTranslate(
+						baseEnrichment,
+						change.OldGameplayCondition,
+						change.GameplayCondition,
+						user.ActivePokemons,
+						lang,
+						ps.cfg.Weather.ShowAlteredPokemonStaticMap,
+					)
+					if userTilePending != nil {
+						tilePending = userTilePending
+					}
+					perLang = map[string]map[string]any{lang: langEnrichment}
+				}
+
+				ps.sender.Send(webhook.OutboundPayload{
+					Type:                  "weather_change",
+					Message:               msg,
+					Enrichment:            baseEnrichment,
+					PerLanguageEnrichment: perLang,
+					MatchedAreas:          matchedAreas,
+					MatchedUsers:          []webhook.MatchedUser{user},
+					TilePending:           tilePending,
+				})
+			}
 		}
 	}
 }
