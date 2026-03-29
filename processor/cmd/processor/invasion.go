@@ -110,44 +110,34 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 				}
 			}
 
-			if ps.dtsRenderer != nil {
-				// Merge raw webhook fields into enrichment (templates access both)
-				mergeWebhookFields(baseEnrichment, raw)
-				if tilePending != nil {
-					wait := time.Until(tilePending.Deadline)
-					if wait <= 0 {
-						wait = time.Millisecond
-					}
-					select {
-					case url := <-tilePending.Result:
-						tilePending.Apply(url)
-					case <-time.After(wait):
-						tilePending.Apply(tilePending.Fallback)
-					}
+			if ps.dtsRenderer == nil {
+				return // DTS renderer not available
+			}
+			mergeWebhookFields(baseEnrichment, raw)
+			if tilePending != nil {
+				wait := time.Until(tilePending.Deadline)
+				if wait <= 0 {
+					wait = time.Millisecond
 				}
-				jobs := ps.dtsRenderer.RenderAlert(
-					"invasion",
-					baseEnrichment,
-					perLang,
-					matched,
-					matchedAreas,
-					inv.PokestopID,
-				)
-				if len(jobs) > 0 {
-					if err := ps.sender.DeliverMessages(jobs); err != nil {
-						l.Errorf("Failed to deliver rendered messages: %s", err)
-					}
+				select {
+				case url := <-tilePending.Result:
+					tilePending.Apply(url)
+				case <-time.After(wait):
+					tilePending.Apply(tilePending.Fallback)
 				}
-			} else {
-				ps.sender.Send(webhook.OutboundPayload{
-					Type:                  "invasion",
-					Message:               raw,
-					Enrichment:            baseEnrichment,
-					PerLanguageEnrichment: perLang,
-					MatchedAreas:          matchedAreas,
-					MatchedUsers:          matched,
-					TilePending:           tilePending,
-				})
+			}
+			jobs := ps.dtsRenderer.RenderAlert(
+				"invasion",
+				baseEnrichment,
+				perLang,
+				matched,
+				matchedAreas,
+				inv.PokestopID,
+			)
+			if len(jobs) > 0 {
+				if err := ps.sender.DeliverMessages(jobs); err != nil {
+					l.Errorf("Failed to deliver rendered messages: %s", err)
+				}
 			}
 		} else {
 			l.Debugf("Invasion grunt %s at %s [%.3f,%.3f] and 0 humans cared",

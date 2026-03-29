@@ -177,46 +177,35 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				perUser = ps.enricher.PokemonPerUser(perLang, matched)
 			}
 
-			if ps.dtsRenderer != nil {
-				mergeWebhookFields(baseEnrichment, raw)
-				// Resolve pending tile before rendering (the old path does this in the sender batch)
-				if tilePending != nil {
-					wait := time.Until(tilePending.Deadline)
-					if wait <= 0 {
-						wait = time.Millisecond
-					}
-					select {
-					case url := <-tilePending.Result:
-						tilePending.Apply(url)
-					case <-time.After(wait):
-						tilePending.Apply(tilePending.Fallback)
-					}
+			if ps.dtsRenderer == nil {
+				return // DTS renderer not available
+			}
+			mergeWebhookFields(baseEnrichment, raw)
+			if tilePending != nil {
+				wait := time.Until(tilePending.Deadline)
+				if wait <= 0 {
+					wait = time.Millisecond
 				}
-				jobs := ps.dtsRenderer.RenderPokemon(
-					baseEnrichment,
-					perLang,
-					perUser,
-					matched,
-					matchedAreas,
-					processed.Encountered,
-					pokemon.EncounterID,
-				)
-				if len(jobs) > 0 {
-					if err := ps.sender.DeliverMessages(jobs); err != nil {
-						l.Errorf("Failed to deliver rendered messages: %s", err)
-					}
+				select {
+				case url := <-tilePending.Result:
+					tilePending.Apply(url)
+				case <-time.After(wait):
+					tilePending.Apply(tilePending.Fallback)
 				}
-			} else {
-				ps.sender.Send(webhook.OutboundPayload{
-					Type:                  "pokemon",
-					Message:               raw,
-					Enrichment:            baseEnrichment,
-					PerLanguageEnrichment: perLang,
-					PerUserEnrichment:     perUser,
-					MatchedAreas:          matchedAreas,
-					MatchedUsers:          matched,
-					TilePending:           tilePending,
-				})
+			}
+			jobs := ps.dtsRenderer.RenderPokemon(
+				baseEnrichment,
+				perLang,
+				perUser,
+				matched,
+				matchedAreas,
+				processed.Encountered,
+				pokemon.EncounterID,
+			)
+			if len(jobs) > 0 {
+				if err := ps.sender.DeliverMessages(jobs); err != nil {
+					l.Errorf("Failed to deliver rendered messages: %s", err)
+				}
 			}
 		} else {
 			if processed.Encountered {

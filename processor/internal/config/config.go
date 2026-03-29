@@ -72,7 +72,6 @@ type ProcessorConfig struct {
 	AlerterURL  string   `toml:"alerter_url"`
 	IPWhitelist []string `toml:"ip_whitelist"`
 	APISecret   string   `toml:"api_secret"` // Alerter API secret (read from [alerter] section)
-	RenderDTS   bool     `toml:"render_dts"` // render DTS templates in processor instead of alerter
 }
 
 // AlerterConfig reads the [alerter] section so the processor can authenticate to alerter APIs.

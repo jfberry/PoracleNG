@@ -620,27 +620,25 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		Overrides:           overrides,
 	})
 
-	// DTS renderer (optional — renders templates in Go instead of sending to alerter)
+	// DTS renderer — renders templates in Go and delivers via /api/deliverMessages
 	var dtsRenderer *dts.Renderer
-	if cfg.Processor.RenderDTS {
-		var utilEmojis map[string]string
-		if gd != nil {
-			utilEmojis = gd.Util.Emojis
-		}
-		dtsRenderer, err = dts.NewRenderer(dts.RendererConfig{
-			ConfigDir:     filepath.Join(cfg.BaseDir, "config"),
-			FallbackDir:   filepath.Join(cfg.BaseDir, "fallbacks"),
-			GameData:      gd,
-			Translations:  enricher.Translations,
-			UtilEmojis:    utilEmojis,
-			DefaultLocale: cfg.General.Locale,
-		})
-		if err != nil {
-			log.Warnf("DTS rendering disabled: %s", err)
-			dtsRenderer = nil
-		} else {
-			log.Infof("DTS rendering enabled in processor")
-		}
+	var utilEmojis map[string]string
+	if gd != nil {
+		utilEmojis = gd.Util.Emojis
+	}
+	dtsRenderer, err = dts.NewRenderer(dts.RendererConfig{
+		ConfigDir:     filepath.Join(cfg.BaseDir, "config"),
+		FallbackDir:   filepath.Join(cfg.BaseDir, "fallbacks"),
+		GameData:      gd,
+		Translations:  enricher.Translations,
+		UtilEmojis:    utilEmojis,
+		DefaultLocale: cfg.General.Locale,
+	})
+	if err != nil {
+		log.Warnf("DTS renderer initialization failed: %s", err)
+		dtsRenderer = nil
+	} else {
+		log.Infof("DTS rendering enabled")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

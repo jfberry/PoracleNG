@@ -72,42 +72,34 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 
 			enrichment, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort)
 
-			if ps.dtsRenderer != nil {
-				mergeWebhookFields(enrichment, raw)
-				if tilePending != nil {
-					wait := time.Until(tilePending.Deadline)
-					if wait <= 0 {
-						wait = time.Millisecond
-					}
-					select {
-					case url := <-tilePending.Result:
-						tilePending.Apply(url)
-					case <-time.After(wait):
-						tilePending.Apply(tilePending.Fallback)
-					}
+			if ps.dtsRenderer == nil {
+				return // DTS renderer not available
+			}
+			mergeWebhookFields(enrichment, raw)
+			if tilePending != nil {
+				wait := time.Until(tilePending.Deadline)
+				if wait <= 0 {
+					wait = time.Millisecond
 				}
-				jobs := ps.dtsRenderer.RenderAlert(
-					"fort-update",
-					enrichment,
-					nil,
-					matched,
-					matchedAreas,
-					fortID,
-				)
-				if len(jobs) > 0 {
-					if err := ps.sender.DeliverMessages(jobs); err != nil {
-						l.Errorf("Failed to deliver rendered messages: %s", err)
-					}
+				select {
+				case url := <-tilePending.Result:
+					tilePending.Apply(url)
+				case <-time.After(wait):
+					tilePending.Apply(tilePending.Fallback)
 				}
-			} else {
-				ps.sender.Send(webhook.OutboundPayload{
-					Type:         "fort_update",
-					Message:      raw,
-					Enrichment:   enrichment,
-					MatchedAreas: matchedAreas,
-					MatchedUsers: matched,
-					TilePending:  tilePending,
-				})
+			}
+			jobs := ps.dtsRenderer.RenderAlert(
+				"fort-update",
+				enrichment,
+				nil,
+				matched,
+				matchedAreas,
+				fortID,
+			)
+			if len(jobs) > 0 {
+				if err := ps.sender.DeliverMessages(jobs); err != nil {
+					l.Errorf("Failed to deliver rendered messages: %s", err)
+				}
 			}
 		} else {
 			l.Debugf("Fort update %s (%s, %s) and 0 humans cared",
