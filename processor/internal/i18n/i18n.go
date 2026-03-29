@@ -83,6 +83,12 @@ func Format(s string, args ...any) string {
 	})
 }
 
+// NewTranslator creates a Translator for the given locale with pre-populated messages.
+// Useful for testing or building translators outside the Bundle merge pipeline.
+func NewTranslator(lang string, msgs map[string]string) *Translator {
+	return &Translator{lang: lang, messages: msgs}
+}
+
 // Bundle holds translators for all loaded locales.
 type Bundle struct {
 	mu          sync.RWMutex
@@ -94,6 +100,16 @@ func NewBundle() *Bundle {
 	return &Bundle{
 		translators: make(map[string]*Translator),
 	}
+}
+
+// AddTranslator adds a pre-built Translator to the bundle.
+// If a translator for the same locale already exists, its messages are merged
+// (new keys override existing ones).
+func (b *Bundle) AddTranslator(t *Translator) {
+	if t == nil {
+		return
+	}
+	b.merge(t.lang, t.messages)
 }
 
 // LoadJSONDir loads all .json files from a directory, merging into existing
