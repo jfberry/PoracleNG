@@ -423,7 +423,7 @@ func (f *FortWebhook) FortName() string {
 type DeliveryJob struct {
 	Lat          string         `json:"lat"`
 	Lon          string         `json:"lon"`
-	Message      any            `json:"message"`     // parsed JSON (map or string)
+	Message      json.RawMessage `json:"message"`     // pre-rendered JSON from DTS template
 	Target       string         `json:"target"`
 	Type         string         `json:"type"`         // "discord:user", "telegram:group", etc.
 	Name         string         `json:"name"`

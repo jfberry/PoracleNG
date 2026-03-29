@@ -110,13 +110,10 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 // InvasionTranslate adds per-language translated fields.
 func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+5)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 15) // only translated fields; caller merges base + perLang
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)

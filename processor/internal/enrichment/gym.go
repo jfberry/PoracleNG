@@ -54,13 +54,10 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, 
 // lastOwnerID is the team ID of the last controller (from webhook last_owner_id).
 func (e *Enricher) GymTranslate(base map[string]any, teamID, oldTeamID, lastOwnerID int, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+8)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 8) // only translated fields; caller merges base + perLang
 
 	tr := e.Translations.For(lang)
 	addTeamFields(m, e.GameData, tr, teamID)

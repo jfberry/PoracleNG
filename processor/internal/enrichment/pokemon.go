@@ -297,14 +297,10 @@ func (e *Enricher) enrichPokemonGameData(m map[string]any, pokemon *webhook.Poke
 // Call this once per distinct language among matched users.
 func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.PokemonWebhook, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	// Clone base map for this language
-	m := make(map[string]any, len(base)+20)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 20) // only translated fields; caller merges base + perLang
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
@@ -334,7 +330,7 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		weather = pokemon.Weather
 	}
 	addWeatherFields(m, gd, tr, monster.Types, weather)
-	gameWeatherID := toInt(m["gameWeatherId"])
+	gameWeatherID := toInt(base["gameWeatherId"])
 	m["gameWeatherName"] = TranslateWeatherName(tr, gameWeatherID)
 	if gameWeatherID > 0 {
 		if wInfo, ok := gd.Util.Weather[gameWeatherID]; ok {

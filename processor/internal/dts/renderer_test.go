@@ -74,10 +74,7 @@ func TestRenderPokemonBasic(t *testing.T) {
 	}
 
 	job := jobs[0]
-	msg, ok := job.Message.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map message, got %T", job.Message)
-	}
+	msg := parseMessage(t, job.Message)
 	content, _ := msg["content"].(string)
 	if content != "Pikachu 100%" {
 		t.Errorf("expected 'Pikachu 100%%', got %q", content)
@@ -130,7 +127,7 @@ func TestRenderPokemonMonsterNoIv(t *testing.T) {
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
-	msg := jobs[0].Message.(map[string]any)
+	msg := parseMessage(t, jobs[0].Message)
 	if msg["content"] != "Bulbasaur with IV" {
 		t.Errorf("expected encountered template, got %v", msg["content"])
 	}
@@ -140,7 +137,7 @@ func TestRenderPokemonMonsterNoIv(t *testing.T) {
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
-	msg = jobs[0].Message.(map[string]any)
+	msg = parseMessage(t, jobs[0].Message)
 	if msg["content"] != "Bulbasaur no IV" {
 		t.Errorf("expected noIv template, got %v", msg["content"])
 	}
@@ -182,7 +179,7 @@ func TestRenderPokemonMultiUser(t *testing.T) {
 	}
 
 	// First job: discord
-	msg0 := jobs[0].Message.(map[string]any)
+	msg0 := parseMessage(t, jobs[0].Message)
 	if msg0["content"] != "discord: Eevee" {
 		t.Errorf("expected discord template, got %v", msg0["content"])
 	}
@@ -191,7 +188,7 @@ func TestRenderPokemonMultiUser(t *testing.T) {
 	}
 
 	// Second job: telegram
-	msg1 := jobs[1].Message.(map[string]any)
+	msg1 := parseMessage(t, jobs[1].Message)
 	if msg1["content"] != "telegram: Eevee" {
 		t.Errorf("expected telegram template, got %v", msg1["content"])
 	}
@@ -257,7 +254,7 @@ func TestRenderPokemonPing(t *testing.T) {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
 
-	msg := jobs[0].Message.(map[string]any)
+	msg := parseMessage(t, jobs[0].Message)
 	content := msg["content"].(string)
 	expected := "Found Dragonite <@&12345>"
 	if content != expected {
@@ -333,7 +330,7 @@ func TestRenderPokemonMissingTemplate(t *testing.T) {
 		t.Fatalf("expected 1 fallback job, got %d", len(jobs))
 	}
 
-	msg := jobs[0].Message.(map[string]any)
+	msg := parseMessage(t, jobs[0].Message)
 	content, _ := msg["content"].(string)
 	if content == "" {
 		t.Error("expected fallback content, got empty string")
@@ -416,7 +413,7 @@ func TestRenderPokemonWebhookPlatform(t *testing.T) {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
 	// The template was found using "discord" platform
-	msg := jobs[0].Message.(map[string]any)
+	msg := parseMessage(t, jobs[0].Message)
 	if msg["content"] != "Snorlax" {
 		t.Errorf("expected Snorlax, got %v", msg["content"])
 	}
@@ -453,7 +450,7 @@ func TestRenderPokemonAreas(t *testing.T) {
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
-	msg := jobs[0].Message.(map[string]any)
+	msg := parseMessage(t, jobs[0].Message)
 	content := msg["content"].(string)
 	expected := "Geodude in Berlin, Munich"
 	if content != expected {
@@ -639,10 +636,7 @@ func TestRenderAlertBasicRaid(t *testing.T) {
 	}
 
 	job := jobs[0]
-	msg, ok := job.Message.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map message, got %T", job.Message)
-	}
+	msg := parseMessage(t, job.Message)
 	content, _ := msg["content"].(string)
 	if content != "Raid: Mewtwo L5" {
 		t.Errorf("expected 'Raid: Mewtwo L5', got %q", content)
@@ -685,7 +679,7 @@ func TestRenderAlertNoPerLangEnrichment(t *testing.T) {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
 
-	msg := jobs[0].Message.(map[string]any)
+	msg := parseMessage(t, jobs[0].Message)
 	content := msg["content"].(string)
 	if content != "Fort changed: Central Park Gym" {
 		t.Errorf("expected 'Fort changed: Central Park Gym', got %q", content)
@@ -734,7 +728,7 @@ func TestRenderAlertMultipleUsers(t *testing.T) {
 	// Build a map of target -> content for order-independent assertions
 	jobContent := make(map[string]string, len(jobs))
 	for _, j := range jobs {
-		msg := j.Message.(map[string]any)
+		msg := parseMessage(t, j.Message)
 		jobContent[j.Target] = msg["content"].(string)
 	}
 
@@ -822,6 +816,16 @@ func TestRenderAlertNoDeduplication(t *testing.T) {
 	if len(jobs) != 2 {
 		t.Fatalf("expected 2 jobs (no dedup), got %d", len(jobs))
 	}
+}
+
+// parseMessage unmarshals a json.RawMessage into map[string]any for test assertions.
+func parseMessage(t *testing.T, raw json.RawMessage) map[string]any {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("failed to parse message JSON: %v (raw: %s)", err, string(raw))
+	}
+	return m
 }
 
 func contains(s, substr string) bool {

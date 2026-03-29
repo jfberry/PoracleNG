@@ -55,13 +55,10 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 // LureTranslate adds per-language translated fields.
 func (e *Enricher) LureTranslate(base map[string]any, lureID int, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+3)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 3) // only translated fields; caller merges base + perLang
 
 	tr := e.Translations.For(lang)
 	if info, ok := e.GameData.Util.Lures[lureID]; ok {

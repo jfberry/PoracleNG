@@ -210,16 +210,16 @@ func (r *Renderer) renderForUsers(
 		// g. Post-process: shorten URLs
 		rendered = ShortenMarkersWithCache(rendered, r.shortener, shlinkCache)
 
-		// Parse JSON result
-		var message any
-		if err := json.Unmarshal([]byte(rendered), &message); err != nil {
-			log.Errorf("dts: parse rendered JSON for user %s: %v (raw: %.200s)", user.ID, err, rendered)
-			message = fallbackMessageObject(templateType, platform, user.Template, language)
+		// Validate rendered JSON
+		rawMessage := json.RawMessage(rendered)
+		if !json.Valid(rawMessage) {
+			log.Errorf("dts: invalid rendered JSON for user %s (raw: %.200s)", user.ID, rendered)
+			rawMessage = fallbackMessageRaw(templateType, platform, user.Template, language)
 		}
 
 		// Append ping to content
 		if user.Ping != "" {
-			appendPing(message, user.Ping)
+			rawMessage = appendPingToRaw(rawMessage, user.Ping)
 		}
 
 		// Extract emoji from view
@@ -241,7 +241,7 @@ func (r *Renderer) renderForUsers(
 		jobs = append(jobs, webhook.DeliveryJob{
 			Lat:          lat,
 			Lon:          lon,
-			Message:      message,
+			Message:      rawMessage,
 			Target:       user.ID,
 			Type:         user.Type,
 			Name:         user.Name,
@@ -331,10 +331,10 @@ func (r *Renderer) renderGrouped(
 
 		rendered = ShortenMarkersWithCache(rendered, r.shortener, shlinkCache)
 
-		var message any
-		if err := json.Unmarshal([]byte(rendered), &message); err != nil {
-			log.Errorf("dts: parse rendered JSON for group (%s/%s/%s): %v (raw: %.200s)", key.platform, key.templateID, key.language, err, rendered)
-			message = fallbackMessageObject(templateType, key.platform, key.templateID, key.language)
+		rawMessage := json.RawMessage(rendered)
+		if !json.Valid(rawMessage) {
+			log.Errorf("dts: invalid rendered JSON for group (%s/%s/%s) (raw: %.200s)", key.platform, key.templateID, key.language, rendered)
+			rawMessage = fallbackMessageRaw(templateType, key.platform, key.templateID, key.language)
 		}
 
 		// Extract emoji once for the group
@@ -354,11 +354,11 @@ func (r *Renderer) renderGrouped(
 
 		// Create a job for each user in the group
 		for _, user := range g.users {
-			// Clone message if user has a ping (to avoid mutating the shared object)
-			userMessage := message
+			// json.RawMessage is a []byte — shared safely when no ping.
+			// For users with a ping, parse+modify+re-serialize.
+			userMessage := rawMessage
 			if user.Ping != "" {
-				userMessage = cloneMessage(message)
-				appendPing(userMessage, user.Ping)
+				userMessage = appendPingToRaw(rawMessage, user.Ping)
 			}
 
 			jobs = append(jobs, webhook.DeliveryJob{
@@ -381,7 +381,9 @@ func (r *Renderer) renderGrouped(
 }
 
 // cloneMessage creates a shallow copy of a map[string]any message so that
-// appendPing doesn't mutate the shared rendered object.
+// mutations (like appendPing) don't affect the shared rendered object.
+// Only top-level keys are copied; nested maps/slices are shared by reference.
+// This is safe because appendPing only replaces the top-level "content" key.
 func cloneMessage(msg any) any {
 	if m, ok := msg.(map[string]any); ok {
 		clone := make(map[string]any, len(m))
@@ -509,6 +511,34 @@ func appendPing(message any, ping string) {
 			m["content"] = ping
 		}
 	}
+}
+
+// appendPingToRaw parses a JSON message, appends ping to "content", and re-serializes.
+// If parsing fails, the original raw message is returned unchanged.
+func appendPingToRaw(raw json.RawMessage, ping string) json.RawMessage {
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return raw
+	}
+	if content, ok := m["content"].(string); ok {
+		m["content"] = content + " " + ping
+	} else {
+		m["content"] = ping
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
+// fallbackMessageRaw returns a json.RawMessage for a fallback error message.
+func fallbackMessageRaw(templateType, platform, templateID, language string) json.RawMessage {
+	obj := map[string]string{
+		"content": fmt.Sprintf("Template not found: %s/%s/%s/%s", templateType, platform, templateID, language),
+	}
+	b, _ := json.Marshal(obj)
+	return b
 }
 
 func mapKeys(m map[string]map[string]any) []string {

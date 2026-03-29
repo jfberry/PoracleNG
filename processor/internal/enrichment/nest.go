@@ -97,13 +97,10 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.T
 // NestTranslate adds per-language translated fields.
 func (e *Enricher) NestTranslate(base map[string]any, pokemonID, form int, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+5)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 5) // only translated fields; caller merges base + perLang
 
 	tr := e.Translations.For(lang)
 	TranslateMonsterNamesEng(m, e.GameData, tr, e.Translations, pokemonID, form, 0)

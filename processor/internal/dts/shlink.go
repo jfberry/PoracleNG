@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -109,6 +110,9 @@ var shortenMarkerRe = regexp.MustCompile(`<S<(.+?)>S>`)
 // If shortener is nil, the markers are stripped and the raw URLs inside are preserved.
 // If the text contains no markers, it is returned unchanged.
 func ShortenMarkers(text string, shortener *ShlinkShortener) string {
+	if !strings.Contains(text, "<S<") {
+		return text
+	}
 	return ShortenMarkersWithCache(text, shortener, nil)
 }
 
@@ -117,6 +121,9 @@ func ShortenMarkers(text string, shortener *ShlinkShortener) string {
 // When cache is non-nil, shortened results are stored and reused across calls.
 // This is useful when many users receive the same template with identical URLs.
 func ShortenMarkersWithCache(text string, shortener *ShlinkShortener, cache map[string]string) string {
+	if !strings.Contains(text, "<S<") {
+		return text
+	}
 	return shortenMarkerRe.ReplaceAllStringFunc(text, func(match string) string {
 		sub := shortenMarkerRe.FindStringSubmatch(match)
 		if len(sub) < 2 {

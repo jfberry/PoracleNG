@@ -330,9 +330,10 @@ func TestWeatherIconURLs(t *testing.T) {
 	e.GameData = newTestGameData()
 
 	base, _ := e.Weather(52.5, 13.4, 3, nil, false)
-	m, _ := e.WeatherTranslate(base, 1, 3, nil, "en", false)
+	// WeatherTranslate returns only translated fields; imgUrl is in base enrichment
+	_ = e // suppress unused warning for translate call
 
-	imgUrl, ok := m["imgUrl"].(string)
+	imgUrl, ok := base["imgUrl"].(string)
 	if !ok || imgUrl == "" {
 		t.Fatal("weather should have imgUrl")
 	}

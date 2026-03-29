@@ -93,13 +93,10 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 // MaxbattleTranslate adds per-language translated fields.
 func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.MaxbattleWebhook, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil || mb == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+10)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 10) // only translated fields; caller merges base + perLang
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)

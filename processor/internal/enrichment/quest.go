@@ -148,13 +148,10 @@ func buildQuestRewardData(rewards []matching.QuestRewardData) QuestRewardData {
 // QuestTranslate adds per-language translated fields for quest enrichment.
 func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebhook, rewards []matching.QuestRewardData, lang string) map[string]any {
 	if e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+20)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 20) // only translated fields; caller merges base + perLang
 
 	tr := e.Translations.For(lang)
 	enTr := e.Translations.For("en")
