@@ -181,10 +181,9 @@ var aliasMapping = []struct {
 	// Map URL aliases
 	{"mapurl", "googleMapUrl"},
 	{"applemap", "appleMapUrl"},
-	// Pokestop: snake_case → camelCase + name alias
+	// Pokestop: snake_case → camelCase
 	{"pokestopName", "pokestop_name"},
 	{"pokestopUrl", "pokestop_url"},
-	{"name", "pokestop_name"}, // many controllers set data.name = data.pokestop_name
 	{"url", "pokestop_url"},
 	// Gym
 	{"gymName", "gym_name"},
@@ -192,11 +191,21 @@ var aliasMapping = []struct {
 	{"gymColor", "gym_color"},
 	// Lure
 	{"lureTypeColor", "lureColor"},
+	// Invasion — alerter controller mapped gruntTypeName → gruntType
+	{"gruntType", "gruntTypeName"},
+	// Emoji shorthand aliases
+	{"boostemoji", "boostWeatherEmoji"},
 }
 
 // addAliases adds backward-compatible field aliases to the view.
+// Only sets the alias if the target field doesn't already exist,
+// preventing overwrite of enrichment values (e.g. "name" from pokemon
+// enrichment should not be overwritten by pokestop_name alias).
 func addAliases(view map[string]any) {
 	for _, a := range aliasMapping {
+		if _, exists := view[a.alias]; exists {
+			continue // don't overwrite existing values
+		}
 		if v, ok := view[a.source]; ok {
 			view[a.alias] = v
 		}
