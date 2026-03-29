@@ -66,11 +66,13 @@ func mergeMaps(dst, src map[string]any) {
 	}
 }
 
-// emojiKeyMapping maps enrichment emoji key fields to their resolved output fields.
-var emojiKeyMapping = []struct {
+// singleEmojiKeys lists all enrichment fields that contain a single emoji key string.
+// Each is resolved via emoji.Lookup(key, platform) and stored without the "Key" suffix.
+var singleEmojiKeys = []struct {
 	keyField    string
 	outputField string
 }{
+	// Pokemon / Raid / Maxbattle
 	{"genderEmojiKey", "genderEmoji"},
 	{"quickMoveTypeEmojiKey", "quickMoveEmoji"},
 	{"chargeMoveTypeEmojiKey", "chargeMoveEmoji"},
@@ -78,6 +80,25 @@ var emojiKeyMapping = []struct {
 	{"gameWeatherEmojiKey", "gameWeatherEmoji"},
 	{"bearingEmojiKey", "bearingEmoji"},
 	{"shinyPossibleEmojiKey", "shinyPossibleEmoji"},
+	// Invasion
+	{"gruntTypeEmojiKey", "gruntTypeEmoji"},
+	// Lure
+	{"lureEmojiKey", "lureTypeEmoji"},
+	// Gym
+	{"teamEmojiKey", "teamEmoji"},
+	{"oldTeamEmojiKey", "previousControlTeamEmoji"},
+	// Weather
+	{"weatherEmojiKey", "weatherEmoji"},
+	{"oldWeatherEmojiKey", "oldWeatherEmoji"},
+}
+
+// arrayEmojiKeys lists enrichment fields that contain arrays of emoji key strings.
+var arrayEmojiKeys = []struct {
+	keyField    string
+	outputField string
+}{
+	{"typeEmojiKeys", "typeEmojis"},
+	{"boostingWeatherEmojiKeys", "boostingWeatherEmojis"},
 }
 
 // resolveEmoji converts emoji key fields to resolved emoji strings using the platform.
@@ -86,47 +107,89 @@ func (vb *ViewBuilder) resolveEmoji(view map[string]any, platform string) {
 		return
 	}
 
-	for _, m := range emojiKeyMapping {
+	// Single emoji keys
+	for _, m := range singleEmojiKeys {
 		if key, ok := view[m.keyField].(string); ok && key != "" {
 			view[m.outputField] = vb.emoji.Lookup(key, platform)
 		}
 	}
 
-	// typeEmojiKeys ([]string or []any) → emoji ([]string) + emojiString (joined)
-	if raw, ok := view["typeEmojiKeys"]; ok {
-		var keys []string
-		switch v := raw.(type) {
-		case []string:
-			keys = v
-		case []any:
-			for _, item := range v {
-				if s, ok := item.(string); ok {
-					keys = append(keys, s)
-				}
-			}
+	// Array emoji keys
+	for _, m := range arrayEmojiKeys {
+		resolved := vb.resolveEmojiArray(view[m.keyField], platform)
+		if resolved != nil {
+			view[m.outputField] = resolved
 		}
-		var resolved []string
-		for _, key := range keys {
-			resolved = append(resolved, vb.emoji.Lookup(key, platform))
-		}
+	}
+
+	// Special case: typeEmojiKeys also populates "emoji" and "emojiString" (backward compat)
+	if resolved := vb.resolveEmojiArray(view["typeEmojiKeys"], platform); resolved != nil {
 		view["emoji"] = resolved
 		view["emojiString"] = strings.Join(resolved, "")
 	}
+
+	// Build genderData map if genderName or genderEmoji are present
+	genderName, _ := view["genderName"].(string)
+	genderEmoji, _ := view["genderEmoji"].(string)
+	if genderName != "" || genderEmoji != "" {
+		view["genderData"] = map[string]any{
+			"name":  genderName,
+			"emoji": genderEmoji,
+		}
+	}
+}
+
+// resolveEmojiArray resolves an array of emoji keys to emoji strings.
+func (vb *ViewBuilder) resolveEmojiArray(raw any, platform string) []string {
+	if raw == nil {
+		return nil
+	}
+	var keys []string
+	switch v := raw.(type) {
+	case []string:
+		keys = v
+	case []any:
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				keys = append(keys, s)
+			}
+		}
+	default:
+		return nil
+	}
+	resolved := make([]string, len(keys))
+	for i, key := range keys {
+		resolved[i] = vb.emoji.Lookup(key, platform)
+	}
+	return resolved
 }
 
 // aliasMapping maps alias names to their source fields.
+// These cover both backward-compat aliases and snake_case → camelCase conversions
+// that the alerter controllers used to do manually.
 var aliasMapping = []struct {
 	alias  string
 	source string
 }{
+	// Pokemon aliases
 	{"formname", "formName"},
-	{"mapurl", "googleMapUrl"},
-	{"applemap", "appleMapUrl"},
 	{"ivcolor", "ivColor"},
 	{"distime", "disappearTime"},
 	{"individual_attack", "atk"},
 	{"individual_defense", "def"},
 	{"individual_stamina", "sta"},
+	// Map URL aliases
+	{"mapurl", "googleMapUrl"},
+	{"applemap", "appleMapUrl"},
+	// Pokestop: snake_case → camelCase + name alias
+	{"pokestopName", "pokestop_name"},
+	{"pokestopUrl", "pokestop_url"},
+	{"name", "pokestop_name"}, // many controllers set data.name = data.pokestop_name
+	{"url", "pokestop_url"},
+	// Gym
+	{"gymName", "gym_name"},
+	// Raid
+	{"gymColor", "gym_color"},
 }
 
 // addAliases adds backward-compatible field aliases to the view.
