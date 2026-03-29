@@ -222,7 +222,7 @@ type EncounterOld struct {
 // InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.
 type InvasionWebhook struct {
 	PokestopID              string  `json:"pokestop_id"`
-	Name                    string  `json:"name"`
+	Name                    string  `json:"pokestop_name"`
 	Latitude                float64 `json:"latitude"`
 	Longitude               float64 `json:"longitude"`
 	IncidentExpiration      int64   `json:"incident_expiration"`
