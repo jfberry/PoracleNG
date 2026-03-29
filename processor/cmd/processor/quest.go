@@ -85,6 +85,9 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 				}
 			}
 
+			// Merge raw webhook fields into enrichment (templates access both)
+			mergeWebhookFields(enrichment, raw)
+
 			if ps.dtsRenderer != nil {
 				if tilePending != nil {
 					wait := time.Until(tilePending.Deadline)

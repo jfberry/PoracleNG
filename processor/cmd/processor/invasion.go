@@ -110,6 +110,9 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 				}
 			}
 
+			// Merge raw webhook fields into enrichment (templates access both)
+			mergeWebhookFields(baseEnrichment, raw)
+
 			if ps.dtsRenderer != nil {
 				if tilePending != nil {
 					wait := time.Until(tilePending.Deadline)

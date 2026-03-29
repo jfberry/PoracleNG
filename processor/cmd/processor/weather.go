@@ -113,6 +113,9 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 		msg, _ := json.Marshal(change)
 		baseEnrichment, baseTilePending := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap)
 
+		// Merge raw webhook fields into enrichment (templates access both)
+		mergeWebhookFields(baseEnrichment, msg)
+
 		// Per-user: each gets their own payload with per-language enrichment and tile
 		if ps.dtsRenderer != nil {
 			// Resolve base tile

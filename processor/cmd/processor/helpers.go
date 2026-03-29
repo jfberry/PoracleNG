@@ -96,6 +96,22 @@ func distinctLanguages(matched []webhook.MatchedUser, defaultLocale string) []st
 	return langs
 }
 
+// mergeWebhookFields deserialises the raw webhook JSON into the enrichment map.
+// Enrichment values take precedence — only webhook fields not already in the map are added.
+// This mirrors the alerter's Object.assign(payload.message, payload.enrichment) pattern
+// where templates can access both raw webhook fields and computed enrichment.
+func mergeWebhookFields(enrichment map[string]any, raw json.RawMessage) {
+	var webhook map[string]any
+	if err := json.Unmarshal(raw, &webhook); err != nil {
+		return
+	}
+	for k, v := range webhook {
+		if _, exists := enrichment[k]; !exists {
+			enrichment[k] = v
+		}
+	}
+}
+
 // buildMatchedAreas converts geofence areas to webhook MatchedArea structs.
 func buildMatchedAreas(areas []geofence.MatchedArea) []webhook.MatchedArea {
 	result := make([]webhook.MatchedArea, len(areas))

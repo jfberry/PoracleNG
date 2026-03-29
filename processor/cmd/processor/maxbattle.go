@@ -90,6 +90,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 				}
 			}
 
+			mergeWebhookFields(enrichment, raw)
 			if ps.dtsRenderer != nil {
 				if tilePending != nil {
 					wait := time.Until(tilePending.Deadline)

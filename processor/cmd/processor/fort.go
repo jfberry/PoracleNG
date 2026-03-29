@@ -72,6 +72,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 
 			enrichment, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort)
 
+			mergeWebhookFields(enrichment, raw)
 			if ps.dtsRenderer != nil {
 				if tilePending != nil {
 					wait := time.Until(tilePending.Deadline)
