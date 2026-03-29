@@ -3,6 +3,7 @@ package webhook
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -184,4 +185,43 @@ func (s *Sender) sendBatch(batch []OutboundPayload) {
 		log.Debugf("Sent batch of %d items to alerter", len(batch))
 		metrics.SenderBatches.WithLabelValues("success").Inc()
 	}
+}
+
+// DeliverMessages POSTs pre-rendered delivery jobs directly to the alerter's
+// /api/deliverMessages endpoint, bypassing the matched→controller pipeline.
+// The jobs parameter is typically []dts.DeliveryJob but accepts any to avoid
+// an import cycle (dts already imports webhook).
+func (s *Sender) DeliverMessages(jobs any) error {
+	body, err := json.Marshal(jobs)
+	if err != nil {
+		return fmt.Errorf("marshal delivery jobs: %w", err)
+	}
+	if len(body) <= 2 { // "[]" or "null"
+		return nil
+	}
+
+	url := s.alerterURL + "/api/deliverMessages"
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create deliver request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if s.apiSecret != "" {
+		req.Header.Set("X-Poracle-Secret", s.apiSecret)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("deliver messages: %w", err)
+	}
+	defer func() {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("deliver messages HTTP %d", resp.StatusCode)
+	}
+
+	return nil
 }
