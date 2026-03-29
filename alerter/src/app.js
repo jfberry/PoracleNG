@@ -17,7 +17,6 @@ const telegramController = require('./lib/telegram/middleware/controller')
 const DiscordReconciliation = require('./lib/discord/discordReconciliation')
 const TelegramReconciliation = require('./lib/telegram/telegramReconciliation')
 const scannerFactory = require('./lib/scanner/scannerFactory')
-const ShinyPossible = require('./lib/shinyLoader')
 
 const { Config } = require('./lib/configFetcher')
 const GameData = require('./lib/GameData')
@@ -50,12 +49,9 @@ const re = require('./util/regex')(translatorFactory)
 const Query = require('./controllers/query')
 
 const query = new Query(logs.controller, knex, config, geofence)
-const shinyPossible = new ShinyPossible(logs.log)
 
 logs.setWorkerId('MAIN')
 fastify.decorate('logger', logs.log)
-fastify.decorate('controllerLog', logs.controller)
-fastify.decorate('matchedWebhooks', logs.matchedWebhooks)
 fastify.decorate('config', config)
 fastify.decorate('knex', knex)
 fastify.decorate('GameData', GameData)
@@ -66,7 +62,6 @@ fastify.decorate('geofence', geofence)
 fastify.decorate('translatorFactory', translatorFactory)
 fastify.decorate('discordQueue', [])
 fastify.decorate('telegramQueue', [])
-fastify.decorate('matchedQueue', [])
 
 const discordCommando = config.discord.enabled ? new DiscordCommando(config.discord.token[0], query, scannerQuery, config, logs, GameData, PoracleInfo, dts, geofence, translatorFactory) : null
 const discordWorkers = []
@@ -180,24 +175,6 @@ function handleShutdown() {
 		.finally(() => process.exit())
 }
 
-async function processPossibleShiny() {
-	if (!config.processor || !config.processor.url) {
-		log.warn('ShinyPossible: processor URL not configured, skipping')
-		return
-	}
-
-	log.info('ShinyPossible: Fetching shiny-possible data from processor')
-
-	try {
-		const file = await shinyPossible.download(config.processor.url, config.processor.headers)
-		matchedShinyPossible.loadMap(file) // eslint-disable-line no-use-before-define
-	} catch (err) {
-		log.error(`ShinyPossible: Failed to fetch from processor: ${err.message}`)
-	}
-
-	setTimeout(processPossibleShiny, 5 * 60 * 1000) // 5 mins
-}
-
 function notifyProcessorReload() {
 	if (config.processor.url) {
 		const axios = require('axios')
@@ -214,224 +191,9 @@ function processMessages(msgs) {
 	}
 }
 
-// Matched processing — inlined from matchedWorker.js (no more worker threads)
-const PromiseQueue = require('./lib/PromiseQueue')
-const MonsterController = require('./controllers/monster')
-const RaidController = require('./controllers/raid')
-const WeatherController = require('./controllers/weather')
-const PokestopController = require('./controllers/pokestop')
-const PokestopLureController = require('./controllers/pokestop_lure')
-const QuestController = require('./controllers/quest')
-const GymController = require('./controllers/gym')
-const NestController = require('./controllers/nest')
-const FortUpdateController = require('./controllers/fortupdate')
-const MaxbattleController = require('./controllers/maxbattle')
-// Geocoding is now handled by the Go processor
-
-const mustache = require('./lib/handlebars')()
-
-const matchedShinyPossible = new ShinyPossible(log)
-const cachingGeocoder = null // geocoding handled by processor
-
-const eventParsers = {
-	shinyPossible: matchedShinyPossible,
-}
-
-// Stub weatherData/statsData since the processor provides this data
-const stubWeatherData = {
-	getWeatherCellId: () => '',
-	checkWeatherOnMonster: () => {},
-	getCurrentWeatherInCell: () => 0,
-	getWeatherTimes: () => ({ nextHourTimestamp: 0 }),
-	getWeatherForecast: async () => ({ current: 0, next: 0 }),
-	receiveWeatherBroadcast: () => {},
-}
-
-const stubStatsData = {
-	rarityGroups: {},
-	shinyData: {},
-	receiveStatsBroadcast: () => {},
-}
-
-const monsterController = new MonsterController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const raidController = new RaidController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const weatherController = new WeatherController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, null, null, null)
-const pokestopController = new PokestopController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const pokestopLureController = new PokestopLureController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const questController = new QuestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const gymController = new GymController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const nestController = new NestController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const fortUpdateController = new FortUpdateController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-const maxbattleController = new MaxbattleController(logs.controller, knex, cachingGeocoder, scannerQuery, config, dts, geofence, GameData, null, translatorFactory, mustache, stubWeatherData, stubStatsData, eventParsers)
-
-const allControllers = [monsterController, raidController, weatherController, pokestopController, pokestopLureController, questController, gymController, nestController, fortUpdateController, maxbattleController]
-
-const hookQueue = []
-let eventsProcessed = 0
-const concurrentProcessors = config.tuning.concurrentMatchedProcessorsPerWorker || config.tuning.concurrentWebhookProcessorsPerWorker || 10
-const alarmProcessor = new PromiseQueue(hookQueue, concurrentProcessors)
-
-async function processOne(payload) {
-	let queueAddition = []
-	const processStart = performance.now()
-
-	try {
-		if ((Math.random() * 1000) > 995) log.verbose(`MatchedQueue is currently ${hookQueue.length}`)
-
-		// Merge processor enrichment into message
-		if (payload.enrichment) {
-			Object.assign(payload.message, payload.enrichment)
-		}
-
-		// Attach per-language and per-user enrichment for controllers to use
-		if (payload.per_language_enrichment) {
-			payload.message.perLanguageEnrichment = payload.per_language_enrichment // eslint-disable-line no-param-reassign
-		}
-		if (payload.per_user_enrichment) {
-			payload.message.perUserEnrichment = payload.per_user_enrichment // eslint-disable-line no-param-reassign
-		}
-
-		switch (payload.type) {
-			case 'pokemon': {
-				const result = await monsterController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error('Missing result from pokemon matched processor', { data: payload.message })
-				}
-				break
-			}
-			case 'raid':
-			case 'egg': {
-				const result = await raidController.handleMatched(payload.message, payload.matched_users, payload.matched_areas, payload.type)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error(`Missing result from ${payload.type} matched processor`, { data: payload.message })
-				}
-				break
-			}
-			case 'weather_change': {
-				const result = await weatherController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error('Missing result from weather_change matched processor', { data: payload.message })
-				}
-				break
-			}
-			case 'invasion': {
-				const result = await pokestopController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error('Missing result from invasion matched processor', { data: payload.message })
-				}
-				break
-			}
-			case 'lure': {
-				const result = await pokestopLureController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error('Missing result from lure matched processor', { data: payload.message })
-				}
-				break
-			}
-			case 'quest': {
-				const result = await questController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error('Missing result from quest matched processor', { data: payload.message })
-				}
-				break
-			}
-			case 'gym': {
-				const result = await gymController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error('Missing result from gym matched processor', { data: payload.message })
-				}
-				break
-			}
-			case 'nest': {
-				const result = await nestController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error('Missing result from nest matched processor', { data: payload.message })
-				}
-				break
-			}
-			case 'fort_update': {
-				const result = await fortUpdateController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error('Missing result from fort_update matched processor', { data: payload.message })
-				}
-				break
-			}
-			case 'max_battle': {
-				const result = await maxbattleController.handleMatched(payload.message, payload.matched_users, payload.matched_areas)
-				if (result) {
-					queueAddition = result
-				} else {
-					log.error('Missing result from maxbattle matched processor', { data: payload.message })
-				}
-				break
-			}
-			default:
-				log.debug(`Unhandled matched type ${payload.type}`)
-		}
-
-		if (queueAddition && queueAddition.length) {
-			for (const msg of queueAddition) {
-				metrics.messagesCreated.inc({ controller_type: payload.type, destination_type: msg.type })
-			}
-			processMessages(queueAddition)
-		}
-	} catch (err) {
-		log.error('Matched processor error', err)
-	}
-
-	metrics.messageCreateDuration.observe({ controller_type: payload.type }, (performance.now() - processStart) / 1000)
-	eventsProcessed++
-}
-
-function resetAllStats() {
-	// tile and geocoder stats handled by processor
-}
-
 process.on('SIGUSR2', () => {
 	writeHeapSnapshot()
 })
-
-const matchedMaxQueueSize = config.tuning.matchedWorkerMaxQueueSize || 5000
-
-async function handleMatchedAlarms() {
-	if (fastify.matchedQueue.length) {
-		if ((Math.random() * 1000) > 995) fastify.logger.verbose(`Inbound MatchedQueue is currently ${fastify.matchedQueue.length}`)
-
-		// Backpressure: if queue depth is too high, wait before processing more
-		const totalDepth = hookQueue.length + alarmProcessor.running.length
-		if (totalDepth >= matchedMaxQueueSize) {
-			if ((Math.random() * 1000) > 990) fastify.logger.warn(`Backpressure active: queue depth ${totalDepth} >= limit ${matchedMaxQueueSize}, inbound queue ${fastify.matchedQueue.length}`)
-			metrics.backpressureEvents.inc()
-			return
-		}
-
-		const payload = fastify.matchedQueue.shift()
-		fastify.matchedWebhooks.info(`${payload.type} ${JSON.stringify(payload)}`)
-		hookQueue.push(payload)
-		alarmProcessor.run(processOne, async (err) => {
-			log.error('alarmProcessor exception', err)
-		})
-		setImmediate(handleMatchedAlarms)
-	}
-}
 
 async function currentStatus() {
 	let discordQueueLength = 0
@@ -461,21 +223,12 @@ async function currentStatus() {
 	const mainMemMb = Math.round(mainMem.heapUsed / 1048576)
 	const mainRssMb = Math.round(mainMem.rss / 1048576)
 
-	const eps = +(eventsProcessed / 60).toFixed(1)
-	eventsProcessed = 0
-
-	const matchedInfo = ` | Matched: ${eps}/s q:${hookQueue.length} a:${alarmProcessor.running.length}`
-
-	resetAllStats()
-
 	// Update prometheus gauges
-	metrics.matchedQueueDepth.set(fastify.matchedQueue.length)
-	metrics.hookQueueDepth.set(hookQueue.length)
 	metrics.discordQueueDepth.set(discordQueueLength)
 	metrics.discordWebhookQueueDepth.set(webhookQueueLength)
 	metrics.telegramQueueDepth.set(telegramQueueLength)
 
-	const infoMessage = `[Main] Queues: Matched inbound:${fastify.matchedQueue.length}${matchedInfo} | Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength} | heap:${mainMemMb}MB rss:${mainRssMb}MB`
+	const infoMessage = `[Main] Queues: Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength} | heap:${mainMemMb}MB rss:${mainRssMb}MB`
 	log.info(infoMessage)
 
 	PoracleInfo.status = {
@@ -490,8 +243,6 @@ async function run() {
 	process.on('SIGINT', handleShutdown)
 	process.on('SIGTERM', handleShutdown)
 
-	setTimeout(processPossibleShiny, 30000)
-
 	let watchGeofence = Array.isArray(config.geofence.path)
 		? config.geofence.path
 		: [config.geofence.path]
@@ -505,11 +256,6 @@ async function run() {
 		log.info('Change in geofence detected, triggering reload')
 		try {
 			const newGeofence = require('./lib/geofenceLoader').readAllGeofenceFiles(config)
-
-			// Reload in matched controllers
-			for (const ctrl of allControllers) {
-				ctrl.setGeofence(newGeofence)
-			}
 
 			// Update main geofence reference
 			geofence.rbush = newGeofence.rbush
@@ -530,11 +276,6 @@ async function run() {
 		log.info('Change in DTS detected, triggering reload')
 		try {
 			const newDts = require('./lib/dtsloader').readDtsFiles()
-
-			// Reload in matched controllers
-			for (const ctrl of allControllers) {
-				ctrl.setDts(newDts)
-			}
 
 			// This splice mechanism replaces array in place (relies on no caching)
 			dts.splice(0, dts.length, ...newDts)
@@ -599,11 +340,6 @@ async function run() {
 			processMessages(res)
 		})
 
-		discordCommando.on('addMatchedQueue', (res) => {
-			fastify.matchedQueue.push(res)
-			handleMatchedAlarms()
-		})
-
 		discordCommando.on('refreshAlertCache', () => {
 			fastify.triggerReloadAlerts()
 		})
@@ -641,11 +377,6 @@ async function run() {
 			processMessages(res)
 		})
 
-		telegram.on('addMatchedQueue', (res) => {
-			fastify.matchedQueue.push(res)
-			handleMatchedAlarms()
-		})
-
 		telegram.on('refreshAlertCache', () => {
 			fastify.triggerReloadAlerts()
 		})
@@ -666,7 +397,6 @@ async function run() {
 
 function startPoracle() {
 	run()
-	setInterval(handleMatchedAlarms, 100)
 	setInterval(currentStatus, 60000)
 }
 

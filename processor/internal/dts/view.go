@@ -190,6 +190,8 @@ var aliasMapping = []struct {
 	{"gymName", "gym_name"},
 	// Raid
 	{"gymColor", "gym_color"},
+	// Lure
+	{"lureTypeColor", "lureColor"},
 }
 
 // addAliases adds backward-compatible field aliases to the view.
