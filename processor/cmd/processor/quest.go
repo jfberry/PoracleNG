@@ -88,7 +88,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			if ps.dtsRenderer == nil {
 				return // DTS renderer not available
 			}
-			mergeWebhookFields(enrichment, raw)
+			webhookFields := parseWebhookFields(raw)
 			if tilePending != nil {
 				wait := time.Until(tilePending.Deadline)
 				if wait <= 0 {
@@ -105,6 +105,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 				"quest",
 				enrichment,
 				perLang,
+				webhookFields,
 				matched,
 				matchedAreas,
 				quest.PokestopID,

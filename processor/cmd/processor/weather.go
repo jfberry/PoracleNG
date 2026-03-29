@@ -117,7 +117,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			return // DTS renderer not available
 		}
 
-		mergeWebhookFields(baseEnrichment, msg)
+		webhookFields := parseWebhookFields(msg)
 
 		// Resolve base tile
 		if baseTilePending != nil {
@@ -172,6 +172,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				"weatherchange",
 				baseEnrichment,
 				perLang,
+				webhookFields,
 				[]webhook.MatchedUser{user},
 				matchedAreas,
 				change.S2CellID,

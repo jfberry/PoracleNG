@@ -75,7 +75,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			if ps.dtsRenderer == nil {
 				return // DTS renderer not available
 			}
-			mergeWebhookFields(enrichment, raw)
+			webhookFields := parseWebhookFields(raw)
 			if tilePending != nil {
 				wait := time.Until(tilePending.Deadline)
 				if wait <= 0 {
@@ -92,6 +92,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 				"fort-update",
 				enrichment,
 				nil,
+				webhookFields,
 				matched,
 				matchedAreas,
 				fortID,

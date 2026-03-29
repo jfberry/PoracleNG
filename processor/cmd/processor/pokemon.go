@@ -180,7 +180,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			if ps.dtsRenderer == nil {
 				return // DTS renderer not available
 			}
-			mergeWebhookFields(baseEnrichment, raw)
+			webhookFields := parseWebhookFields(raw)
 			if tilePending != nil {
 				wait := time.Until(tilePending.Deadline)
 				if wait <= 0 {
@@ -194,9 +194,11 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				}
 			}
 			jobs := ps.dtsRenderer.RenderPokemon(
+
 				baseEnrichment,
 				perLang,
 				perUser,
+				webhookFields,
 				matched,
 				matchedAreas,
 				processed.Encountered,

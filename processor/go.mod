@@ -44,3 +44,5 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/mailgun/raymond/v2 => github.com/jfberry/raymond/v2 v2.0.49-0.20260329212654-2ddb78607986

@@ -88,6 +88,7 @@ func (r *Renderer) RenderPokemon(
 	enrichment map[string]any,
 	perLangEnrichment map[string]map[string]any,
 	perUserEnrichment map[string]map[string]any,
+	webhookFields map[string]any,
 	matchedUsers []webhook.MatchedUser,
 	matchedAreas []webhook.MatchedArea,
 	isEncountered bool,
@@ -107,7 +108,7 @@ func (r *Renderer) RenderPokemon(
 		templateType = "monsterNoIv"
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, uniqueUsers, matchedAreas, logReference)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, uniqueUsers, matchedAreas, logReference)
 }
 
 // RenderAlert renders alerts for any non-pokemon type and returns delivery jobs.
@@ -117,6 +118,7 @@ func (r *Renderer) RenderAlert(
 	templateType string,
 	enrichment map[string]any,
 	perLangEnrichment map[string]map[string]any,
+	webhookFields map[string]any,
 	matchedUsers []webhook.MatchedUser,
 	matchedAreas []webhook.MatchedArea,
 	logReference string,
@@ -125,7 +127,7 @@ func (r *Renderer) RenderAlert(
 		return nil
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, matchedUsers, matchedAreas, logReference)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, matchedUsers, matchedAreas, logReference)
 }
 
 // isBelowMinAlertTime checks whether the TTH in enrichment is below the configured minimum.
@@ -140,6 +142,7 @@ func (r *Renderer) renderForUsers(
 	enrichment map[string]any,
 	perLangEnrichment map[string]map[string]any,
 	perUserEnrichment map[string]map[string]any,
+	webhookFields map[string]any,
 	users []webhook.MatchedUser,
 	areas []webhook.MatchedArea,
 	logReference string,
@@ -159,7 +162,7 @@ func (r *Renderer) renderForUsers(
 	// enrichment, users with the same (template, platform, language) get identical
 	// rendered output. Render once per group and clone the result.
 	if perUserEnrichment == nil {
-		return r.renderGrouped(templateType, enrichment, perLangEnrichment, users, areas, logReference, tthMap, lat, lon, shlinkCache)
+		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, users, areas, logReference, tthMap, lat, lon, shlinkCache)
 	}
 
 	var jobs []webhook.DeliveryJob
@@ -180,8 +183,8 @@ func (r *Renderer) renderForUsers(
 		// d. Per-user enrichment
 		perUser := mapOrEmpty(perUserEnrichment, user.ID)
 
-		// e. Build view
-		view := r.viewBuilder.BuildPokemonView(enrichment, perLang, perUser, platform, areas)
+		// e. Build layered view (zero-copy — no map merging)
+		view := NewLayeredView(r.viewBuilder, enrichment, perLang, perUser, webhookFields, platform, areas)
 
 		// f. Get template (with monsterNoIv -> monster fallback)
 		tmpl := r.templates.Get(templateType, platform, user.Template, language)
@@ -224,7 +227,7 @@ func (r *Renderer) renderForUsers(
 
 		// Extract emoji from view
 		var emojiSlice []string
-		if raw, ok := view["emoji"]; ok {
+		if raw, ok := view.GetField("emoji"); ok {
 			switch v := raw.(type) {
 			case []string:
 				emojiSlice = v
@@ -270,6 +273,7 @@ func (r *Renderer) renderGrouped(
 	templateType string,
 	enrichment map[string]any,
 	perLangEnrichment map[string]map[string]any,
+	webhookFields map[string]any,
 	users []webhook.MatchedUser,
 	areas []webhook.MatchedArea,
 	logReference string,
@@ -307,7 +311,7 @@ func (r *Renderer) renderGrouped(
 
 		// Render once for this group
 		perLang := mapOrEmpty(perLangEnrichment, key.language)
-		view := r.viewBuilder.BuildPokemonView(enrichment, perLang, nil, key.platform, areas)
+		view := NewLayeredView(r.viewBuilder, enrichment, perLang, nil, webhookFields, key.platform, areas)
 
 		tmpl := r.templates.Get(templateType, key.platform, key.templateID, key.language)
 
@@ -339,7 +343,7 @@ func (r *Renderer) renderGrouped(
 
 		// Extract emoji once for the group
 		var emojiSlice []string
-		if raw, ok := view["emoji"]; ok {
+		if raw, ok := view.GetField("emoji"); ok {
 			switch v := raw.(type) {
 			case []string:
 				emojiSlice = v
