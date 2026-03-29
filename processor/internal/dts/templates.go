@@ -1,6 +1,7 @@
 package dts
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -234,13 +235,17 @@ func resolveTemplate(entry DTSEntry, configDir string) (string, error) {
 	// Join arrays and resolve @include directives
 	templateObj = processTemplateValue(templateObj, configDir)
 
-	// JSON.stringify the processed template object
-	result, err := json.Marshal(templateObj)
-	if err != nil {
+	// JSON.stringify the processed template object.
+	// Use Encoder with SetEscapeHTML(false) to preserve <, >, & in Handlebars
+	// expressions like {{#compare x '<' 100}}.
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(templateObj); err != nil {
 		return "", fmt.Errorf("marshal template: %w", err)
 	}
 
-	return string(result), nil
+	return strings.TrimSpace(buf.String()), nil
 }
 
 // processTemplateValue recursively walks the template object, joining arrays
