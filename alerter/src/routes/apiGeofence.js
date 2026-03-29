@@ -41,6 +41,17 @@ module.exports = async (fastify, options) => {
 			}
 		}
 
+		// Also reload alerter's local geofence data so commands see the new areas
+		try {
+			const geofenceLoader = require('../lib/geofenceLoader')
+			const newGeofence = geofenceLoader.readAllGeofenceFiles(fastify.config)
+			fastify.geofence.rbush = newGeofence.rbush
+			fastify.geofence.geofence = newGeofence.geofence
+			fastify.logger.info('Alerter geofence reloaded after processor reload')
+		} catch (err) {
+			fastify.logger.error('Failed to reload alerter geofence', err)
+		}
+
 		return { status: 'ok' }
 	})
 }
