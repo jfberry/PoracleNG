@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -103,11 +104,9 @@ func (r *Renderer) RenderPokemon(
 	logReference string,
 ) []DeliveryJob {
 	// 1. Check TTH
-	tthMap := extractTTH(enrichment)
-	if r.minAlertSec > 0 {
-		if secs, ok := toTTHSeconds(tthMap); ok && secs < r.minAlertSec {
-			return nil
-		}
+	tthMap, tthSeconds := extractTTH(enrichment)
+	if r.minAlertSec > 0 && tthSeconds > 0 && tthSeconds < r.minAlertSec {
+		return nil
 	}
 
 	// 2. Deduplicate users: keep first occurrence per user ID
@@ -255,25 +254,52 @@ func deduplicateUsers(users []webhook.MatchedUser) []webhook.MatchedUser {
 	return result
 }
 
-// extractTTH extracts the tth map from enrichment.
-func extractTTH(enrichment map[string]any) map[string]any {
-	if raw, ok := enrichment["tth"]; ok {
-		if m, ok := raw.(map[string]any); ok {
-			return m
-		}
+// extractTTH extracts the tth data from enrichment, returning a map for the delivery job
+// and the total seconds for expiry checking. Handles both geo.TTH struct and map[string]any.
+func extractTTH(enrichment map[string]any) (tthMap map[string]any, totalSeconds int) {
+	raw, ok := enrichment["tth"]
+	if !ok {
+		return nil, 0
 	}
-	return nil
-}
 
-// toTTHSeconds extracts the total seconds from a tth map.
-func toTTHSeconds(tth map[string]any) (int, bool) {
-	if tth == nil {
-		return 0, false
+	switch tth := raw.(type) {
+	case geo.TTH:
+		secs := tth.Days*86400 + tth.Hours*3600 + tth.Minutes*60 + tth.Seconds
+		if tth.FirstDateWasLater {
+			secs = 0
+		}
+		return map[string]any{
+			"days": tth.Days, "hours": tth.Hours,
+			"minutes": tth.Minutes, "seconds": tth.Seconds,
+			"firstDateWasLater": tth.FirstDateWasLater,
+		}, secs
+	case *geo.TTH:
+		if tth == nil {
+			return nil, 0
+		}
+		secs := tth.Days*86400 + tth.Hours*3600 + tth.Minutes*60 + tth.Seconds
+		if tth.FirstDateWasLater {
+			secs = 0
+		}
+		return map[string]any{
+			"days": tth.Days, "hours": tth.Hours,
+			"minutes": tth.Minutes, "seconds": tth.Seconds,
+			"firstDateWasLater": tth.FirstDateWasLater,
+		}, secs
+	case map[string]any:
+		secs := 0
+		if v, ok := tth["totalSeconds"]; ok {
+			secs = int(toFloat(v))
+		} else {
+			secs = int(toFloat(tth["days"]))*86400 + int(toFloat(tth["hours"]))*3600 +
+				int(toFloat(tth["minutes"]))*60 + int(toFloat(tth["seconds"]))
+		}
+		if b, ok := tth["firstDateWasLater"].(bool); ok && b {
+			secs = 0
+		}
+		return tth, secs
 	}
-	if v, ok := tth["totalSeconds"]; ok {
-		return int(toFloat(v)), true
-	}
-	return 0, false
+	return nil, 0
 }
 
 // mapOrEmpty returns the sub-map for the given key, or an empty map if not found.

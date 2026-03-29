@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -149,16 +150,32 @@ func addComputedFields(view map[string]any, areas []webhook.MatchedArea) {
 		view["time"] = v
 	}
 
-	// Extract tth components
+	// Extract tth components — handle both geo.TTH struct and map[string]any
 	if tthRaw, ok := view["tth"]; ok {
-		if tthMap, ok := tthRaw.(map[string]any); ok {
-			if v, ok := tthMap["hours"]; ok {
+		switch tth := tthRaw.(type) {
+		case geo.TTH:
+			view["tthd"] = tth.Days
+			view["tthh"] = tth.Hours
+			view["tthm"] = tth.Minutes
+			view["tths"] = tth.Seconds
+		case *geo.TTH:
+			if tth != nil {
+				view["tthd"] = tth.Days
+				view["tthh"] = tth.Hours
+				view["tthm"] = tth.Minutes
+				view["tths"] = tth.Seconds
+			}
+		case map[string]any:
+			if v, ok := tth["days"]; ok {
+				view["tthd"] = v
+			}
+			if v, ok := tth["hours"]; ok {
 				view["tthh"] = v
 			}
-			if v, ok := tthMap["minutes"]; ok {
+			if v, ok := tth["minutes"]; ok {
 				view["tthm"] = v
 			}
-			if v, ok := tthMap["seconds"]; ok {
+			if v, ok := tth["seconds"]; ok {
 				view["tths"] = v
 			}
 		}
