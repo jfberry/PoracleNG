@@ -178,6 +178,19 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			}
 
 			if ps.dtsRenderer != nil {
+				// Resolve pending tile before rendering (the old path does this in the sender batch)
+				if tilePending != nil {
+					wait := time.Until(tilePending.Deadline)
+					if wait <= 0 {
+						wait = time.Millisecond
+					}
+					select {
+					case url := <-tilePending.Result:
+						tilePending.Apply(url)
+					case <-time.After(wait):
+						tilePending.Apply(tilePending.Fallback)
+					}
+				}
 				jobs := ps.dtsRenderer.RenderPokemon(
 					baseEnrichment,
 					perLang,
