@@ -214,6 +214,8 @@ type TuningConfig struct {
 	GeocodingTimeout           int `toml:"geocoding_timeout"`            // ms
 	GeocodingFailureThreshold  int `toml:"geocoding_failure_threshold"`
 	GeocodingCooldownMs        int `toml:"geocoding_cooldown_ms"`
+	RenderPoolSize             int `toml:"render_pool_size"`
+	RenderQueueSize            int `toml:"render_queue_size"`
 }
 
 type AreaConfig struct {
@@ -344,6 +346,8 @@ func Load(baseDir string) (*Config, error) {
 			WorkerPoolSize:      4,
 			BatchSize:           50,
 			FlushIntervalMillis: 100,
+			RenderPoolSize:      8,
+			RenderQueueSize:     100,
 		},
 		Stats: StatsConfig{
 			MinSampleSize:       10000,

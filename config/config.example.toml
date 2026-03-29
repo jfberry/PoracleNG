@@ -368,6 +368,8 @@ tileserver_queue_size = 100              # max pending tile requests; overflow u
 tileserver_deadline = 10000              # max time a payload waits for its tile before using fallback (ms)
 tileserver_failure_threshold = 5         # consecutive errors before circuit breaker opens
 tileserver_cooldown_ms = 30000           # how long circuit breaker stays open before retrying (ms)
+render_pool_size = 8                             # concurrent render goroutines
+render_queue_size = 100                          # max buffered render jobs
 # Alerter tuning
 max_database_connections = 15            # max database connections (per worker)
 concurrent_matched_processors = 10       # pre-matched payloads processed concurrently

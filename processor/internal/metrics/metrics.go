@@ -198,4 +198,31 @@ var (
 		Name: "poracle_processor_api_requests_total",
 		Help: "API requests by method, endpoint, and status",
 	}, []string{"method", "endpoint", "status"})
+
+	// Render queue metrics
+	RenderQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_render_queue_depth",
+		Help: "Current number of items in the render queue",
+	})
+
+	RenderQueueCapacity = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_render_queue_capacity",
+		Help: "Configured render queue capacity",
+	})
+
+	RenderDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "poracle_render_duration_seconds",
+		Help:    "Time to process a render job (tile + render + deliver)",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5},
+	})
+
+	RenderTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_render_total",
+		Help: "Total render jobs processed",
+	}, []string{"status"})
+
+	RenderTileSkipped = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_render_tile_skipped_total",
+		Help: "Tiles skipped due to render queue pressure",
+	})
 )
