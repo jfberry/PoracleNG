@@ -135,7 +135,14 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 		if typeKey := grunt.TypeKey(); typeKey != "" {
 			m["gruntTypeName"] = tr.T(typeKey)
 		} else {
-			m["gruntTypeName"] = ""
+			// Untyped grunts (Metal, Darkness, Mixed) — derive name from template string
+			derived := gamedata.TypeNameFromTemplate(grunt.Template)
+			if derived != "" {
+				// Capitalize first letter for display
+				m["gruntTypeName"] = strings.ToUpper(derived[:1]) + derived[1:]
+			} else {
+				m["gruntTypeName"] = ""
+			}
 		}
 	}
 
