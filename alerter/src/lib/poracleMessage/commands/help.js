@@ -1,5 +1,41 @@
 const axios = require('axios')
 
+// Cache of available help template IDs per platform, populated on first check.
+// Key: "platform:id" → true
+let helpTemplateCache = null
+
+async function loadHelpTemplateCache(client) {
+	if (helpTemplateCache) return
+	helpTemplateCache = new Set()
+	try {
+		const resp = await axios.get(`${client.config.processor.url}/api/config/templates`, {
+			headers: client.config.processor.headers,
+			timeout: 5000,
+		})
+		if (resp.data.status === 'ok') {
+			for (const [platform, types] of Object.entries(resp.data)) {
+				if (platform === 'status') continue
+				const helpTemplates = types.help
+				if (!helpTemplates) continue
+				for (const [, ids] of Object.entries(helpTemplates)) {
+					for (const id of ids) {
+						helpTemplateCache.add(`${platform}:${id}`)
+					}
+				}
+			}
+		}
+	} catch (err) {
+		client.log.warn(`Failed to load help template cache: ${err.message}`)
+	}
+}
+
+function isHelpAvailable(client, language, target, helpSubject) {
+	if (!helpTemplateCache) return false
+	let platform = target.type.split(':')[0]
+	if (platform === 'webhook') platform = 'discord'
+	return helpTemplateCache.has(`${platform}:${helpSubject}`)
+}
+
 async function renderTemplate(client, type, id, platform, language, view) {
 	if (!client.config.processor.url) return null
 
@@ -27,11 +63,9 @@ async function renderTemplate(client, type, id, platform, language, view) {
 async function provideSingleLineHelp(client, msg, util, language, target, commandName) {
 	const translator = client.translatorFactory.Translator(language)
 
-	let platform = target.type.split(':')[0]
-	if (platform === 'webhook') platform = 'discord'
+	await loadHelpTemplateCache(client)
 
-	const helpAvailable = await renderTemplate(client, 'help', commandName, platform, language, {})
-	if (helpAvailable) {
+	if (isHelpAvailable(client, language, target, commandName)) {
 		await msg.reply(translator.translateFormat('Use `{0}{1} {2}` for more details on this command', util.prefix, translator.translate('help'), translator.translate(commandName)), { style: 'markdown' })
 	} else {
 		await msg.reply(translator.translateFormat('Use `{0}{1}` for more help', util.prefix, translator.translate('help')), { style: 'markdown' })
