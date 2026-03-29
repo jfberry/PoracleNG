@@ -262,12 +262,28 @@ func processTemplateValue(v any, configDir string) any {
 		}
 		return out
 	case []any:
-		// Join array elements to a single string
-		var sb strings.Builder
+		// Only join arrays of strings (DTS convention for multi-line descriptions).
+		// Arrays containing objects (like embed.fields) must be preserved as arrays.
+		allStrings := true
 		for _, elem := range val {
-			sb.WriteString(fmt.Sprintf("%v", elem))
+			if _, ok := elem.(string); !ok {
+				allStrings = false
+				break
+			}
 		}
-		return resolveIncludes(sb.String(), configDir)
+		if allStrings {
+			var sb strings.Builder
+			for _, elem := range val {
+				sb.WriteString(elem.(string))
+			}
+			return resolveIncludes(sb.String(), configDir)
+		}
+		// Recurse into non-string arrays (e.g. fields array)
+		out := make([]any, len(val))
+		for i, elem := range val {
+			out[i] = processTemplateValue(elem, configDir)
+		}
+		return out
 	case string:
 		return resolveIncludes(val, configDir)
 	default:
