@@ -197,10 +197,19 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		// Gender
 		addGenderFields(m, gd, tr, raid.Gender)
 
-		// Evolution name
+		// Evolution name + megaName
 		if raid.Evolution > 0 {
 			if info, ok := gd.Util.Evolution[raid.Evolution]; ok {
 				m["evolutionName"] = tr.T(info.Name)
+			}
+			// megaName = fullName when evolved (mega/primal)
+			if fn, ok := m["fullName"].(string); ok {
+				m["megaName"] = fn
+			}
+		} else {
+			// megaName = base pokemon name when not evolved
+			if n, ok := m["name"].(string); ok {
+				m["megaName"] = n
 			}
 		}
 

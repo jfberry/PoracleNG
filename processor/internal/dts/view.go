@@ -167,38 +167,73 @@ func (vb *ViewBuilder) resolveEmojiArray(raw any, platform string) []string {
 // aliasMapping maps alias names to their source fields.
 // These cover both backward-compat aliases and snake_case → camelCase conversions
 // that the alerter controllers used to do manually.
+// aliasMapping maps DTS template field names to their enrichment source fields.
+// These cover the field renamings that the alerter controllers used to do.
+// Only applied when the alias doesn't already exist (won't overwrite enrichment values).
 var aliasMapping = []struct {
 	alias  string
 	source string
 }{
-	// Pokemon aliases
+	// === Common across types ===
+	{"mapurl", "googleMapUrl"},
+	{"applemap", "appleMapUrl"},
+	{"distime", "disappearTime"},
+	{"staticmap", "staticMap"},
+	{"matched", "matchedAreaNames"}, // lowercase area names array
+
+	// === Pokemon (monster) ===
 	{"formname", "formName"},
 	{"ivcolor", "ivColor"},
-	{"distime", "disappearTime"},
 	{"individual_attack", "atk"},
 	{"individual_defense", "def"},
 	{"individual_stamina", "sta"},
-	// Map URL aliases
-	{"mapurl", "googleMapUrl"},
-	{"applemap", "appleMapUrl"},
-	// Pokestop: snake_case → camelCase
-	{"pokestopName", "pokestop_name"},
-	{"pokestopUrl", "pokestop_url"},
-	{"name", "pokestop_name"}, // for invasion/quest/lure; won't overwrite pokemon "name" from enrichment
-	{"url", "pokestop_url"},
-	// Gym
-	{"gymName", "gym_name"},
-	// Raid
-	{"gymColor", "gym_color"},
-	// Lure
-	{"lureTypeColor", "lureColor"},
-	// Invasion — alerter controller mapped gruntTypeName → gruntType
-	{"gruntType", "gruntTypeName"},
-	// Move name shorthand aliases
 	{"quickMove", "quickMoveName"},
 	{"chargeMove", "chargeMoveName"},
-	// Emoji shorthand aliases
 	{"boostemoji", "boostWeatherEmoji"},
+	{"gameweather", "gameWeatherId"},
+	{"gameweatheremoji", "gameWeatherEmoji"},
+	{"move1emoji", "quickMoveEmoji"},
+	{"move2emoji", "chargeMoveEmoji"},
+	{"pokemonId", "pokemon_id"},
+
+	// === Pokestop-based (invasion/quest/lure) ===
+	{"pokestopName", "pokestop_name"},
+	{"pokestopUrl", "pokestop_url"},
+	{"name", "pokestop_name"},   // won't overwrite pokemon/nest "name" from enrichment
+	{"url", "pokestop_url"},
+
+	// === Raid / Egg ===
+	{"gymName", "gym_name"},
+	{"gymUrl", "gym_url"},
+	{"gymColor", "gym_color"},
+	{"gymId", "gym_id"},
+	{"teamId", "team_id"},
+	// megaName is computed in RaidTranslate enrichment
+	{"hatchtime", "hatchTime"},
+	{"ex", "is_ex_raid_eligible"},
+	{"move1", "quickMoveName"},
+	{"move2", "chargeMoveName"},
+
+	// === Invasion ===
+	{"gruntType", "gruntTypeName"},
+
+	// === Lure ===
+	{"lureTypeColor", "lureColor"},
+	{"lureType", "lureTypeName"},
+
+	// === Nest ===
+	{"nestName", "nest_name"},
+
+	// === Gym ===
+	{"oldTeamName", "previousControlName"},
+	{"oldTeamId", "previousControlId"},
+
+	// === Weather ===
+	{"oldweather", "oldWeatherId"},
+	{"oldweatheremoji", "oldWeatherEmoji"},
+	{"weatheremoji", "weatherEmoji"},
+	{"condition", "gameplayCondition"},
+	{"weatherCellId", "s2_cell_id"},
 }
 
 // addAliases adds backward-compatible field aliases to the view.
@@ -277,7 +312,7 @@ func addComputedFields(view map[string]any, areas []webhook.MatchedArea) {
 // escapeUserContent sanitizes fields that may contain user-generated text
 // to prevent JSON injection or formatting issues.
 func escapeUserContent(view map[string]any) {
-	for _, field := range []string{"pokestop_name", "pokestop_url"} {
+	for _, field := range []string{"pokestop_name", "pokestop_url", "gym_name", "name"} {
 		if v, ok := view[field].(string); ok {
 			view[field] = escapeJSONString(v)
 		}
