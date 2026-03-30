@@ -1,8 +1,11 @@
 # DTS Template Field Reference
 
-DTS (Data Template System) templates use Handlebars syntax to render alert messages for Discord and Telegram. This document lists all fields available in each template type.
+DTS (Data Template System) templates use Handlebars syntax to render alert messages for Discord and Telegram. Templates are rendered by the Go processor using [jfberry/raymond](https://github.com/jfberry/raymond) (a fork of mailgun/raymond with a `FieldResolver` interface for zero-copy view lookup).
 
-Templates are JSON files that use `{{fieldName}}` placeholders. They are loaded from `config/dts.json` or external template files.
+Templates are loaded from `config/dts.json` (with `fallbacks/dts.json` as fallback) plus additional JSON files from `config/dts/`. Each entry may use:
+- Inline `template` object — JSON with `{{fieldName}}` placeholders
+- `"templateFile": "dts/filename.txt"` — external file read as raw Handlebars text (allows non-JSON constructs like unquoted Handlebars expressions in value positions)
+- `"@include filename"` — include directive for shared partials
 
 ## Poracle Fields vs Raw Webhook Fields
 
@@ -219,6 +222,7 @@ Hatched raid with a boss pokemon.
 | **`teamName`** | | string | Translated team name (recommended) |
 | `teamNameEng` | | string | English team name |
 | **`gymColor`** | | string | Team color hex |
+| `color` | | string | Same as gymColor (deprecated alias) |
 | `teamEmoji` | | string | Team emoji |
 | `ex` | `ex_raid_eligible` | bool | EX raid eligible |
 
@@ -418,6 +422,7 @@ Unhatched raid egg.
 | `teamName` | string | Translated new team name |
 | `oldTeamName` | string | Translated previous team name |
 | `gymColor` | string | New team color hex |
+| `color` | string | Same as gymColor (deprecated alias) |
 | `teamEmoji` | string | New team emoji |
 | `previousControlTeamEmoji` | string | Previous team emoji |
 | `slotsAvailable` | int | Available defender slots |
@@ -467,6 +472,7 @@ Unhatched raid egg.
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `color` | string | Max battle color hex (D000C0) |
 | `stationId` | string | Battle station ID |
 | `stationName` | string | Station name |
 | `pokemonId` | int | Battle pokemon ID |
@@ -576,18 +582,19 @@ Each `activePokemons` entry:
 
 ## Handlebars Helpers
 
-Templates can use these built-in Handlebars helpers:
+Templates can use built-in Handlebars block helpers plus ~47 custom helpers registered by the processor:
 
-| Helper | Usage | Description |
-|--------|-------|-------------|
-| `{{#if field}}` | Conditional | Render block if field is truthy |
-| `{{#unless field}}` | Conditional | Render block if field is falsy |
-| `{{#each array}}` | Iteration | Loop over array, `{{this}}` for current item |
-| `{{#eq a b}}` | Comparison | Render if a equals b |
-| `{{#isnt a b}}` | Comparison | Render if a does not equal b |
-| `{{round value}}` | Formatting | Round number to nearest integer |
-| `{{floor value}}` | Formatting | Floor number |
-| `{{ceil value}}` | Formatting | Ceil number |
+**Built-in:**
+- `{{#if field}}` / `{{#unless field}}` — conditional rendering
+- `{{#each array}}` — iteration (`{{this}}` for current item, `{{@index}}` for index)
+
+**Comparison:** `{{#eq a b}}`, `{{#ne a b}}`, `{{#gt a b}}`, `{{#lt a b}}`, `{{#gte a b}}`, `{{#lte a b}}`, `{{#and a b}}`, `{{#or a b}}`, `{{#not a}}`
+
+**Math:** `{{add a b}}`, `{{subtract a b}}`, `{{multiply a b}}`, `{{divide a b}}`, `{{round v}}`, `{{floor v}}`, `{{ceil v}}`, `{{abs v}}`, `{{toFixed v decimals}}`
+
+**String:** `{{contains str sub}}`, `{{split str sep}}`, `{{trim str}}`, `{{join arr sep}}`, `{{concat a b ...}}`, `{{lowercase str}}`, `{{uppercase str}}`, `{{replace str old new}}`
+
+**Formatting:** `{{pad value width}}`, `{{len array}}`
 
 ## Example Template
 

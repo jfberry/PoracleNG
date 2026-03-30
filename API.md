@@ -604,11 +604,11 @@ Forward geocode a location name to coordinates.
 
 ---
 
-## Message Delivery
+## Confirmation Messages
 
 ### POST /api/postMessage
 
-Send a message directly to a user via Discord or Telegram. Used internally by the processor for confirmation messages.
+Send a confirmation message to a user via Discord or Telegram. Used internally by the processor for API operation confirmations (e.g. tracking added/removed). Handled by the alerter (proxied through the processor).
 
 ```json
 [{
