@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -112,28 +112,13 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 		msg, _ := json.Marshal(change)
 		baseEnrichment, baseTilePending := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap)
 
-		// Per-user: each gets their own payload with per-language enrichment and tile
-		if ps.dtsRenderer == nil {
-			return // DTS renderer not available
+		// Per-user: each gets their own render job with per-language enrichment and tile
+		if ps.renderCh == nil {
+			continue
 		}
 
 		webhookFields := parseWebhookFields(msg)
 
-		// Resolve base tile
-		if baseTilePending != nil {
-			wait := time.Until(baseTilePending.Deadline)
-			if wait <= 0 {
-				wait = time.Millisecond
-			}
-			select {
-			case url := <-baseTilePending.Result:
-				baseTilePending.Apply(url)
-			case <-time.After(wait):
-				baseTilePending.Apply(baseTilePending.Fallback)
-			}
-		}
-
-		var allJobs []webhook.DeliveryJob
 		for _, user := range matched {
 			lang := user.Language
 			if lang == "" {
@@ -144,8 +129,10 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			}
 
 			var perLang map[string]map[string]any
+			var userTilePending *staticmap.TilePending
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-				langEnrichment, userTilePending := ps.enricher.WeatherTranslate(
+				var langEnrichment map[string]any
+				langEnrichment, userTilePending = ps.enricher.WeatherTranslate(
 					baseEnrichment,
 					change.OldGameplayCondition,
 					change.GameplayCondition,
@@ -153,35 +140,24 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 					lang,
 					ps.cfg.Weather.ShowAlteredPokemonStaticMap,
 				)
-				if userTilePending != nil {
-					wait := time.Until(userTilePending.Deadline)
-					if wait <= 0 {
-						wait = time.Millisecond
-					}
-					select {
-					case url := <-userTilePending.Result:
-						userTilePending.Apply(url)
-					case <-time.After(wait):
-						userTilePending.Apply(userTilePending.Fallback)
-					}
-				}
 				perLang = map[string]map[string]any{lang: langEnrichment}
 			}
 
-			jobs := ps.dtsRenderer.RenderAlert(
-				"weatherchange",
-				baseEnrichment,
-				perLang,
-				webhookFields,
-				[]webhook.MatchedUser{user},
-				matchedAreas,
-				change.S2CellID,
-			)
-			allJobs = append(allJobs, jobs...)
-		}
-		if len(allJobs) > 0 {
-			if err := ps.sender.DeliverMessages(allJobs); err != nil {
-				l.Errorf("Failed to deliver weather messages: %s", err)
+			// Use per-user tile if available, otherwise base tile
+			tp := baseTilePending
+			if userTilePending != nil {
+				tp = userTilePending
+			}
+
+			ps.renderCh <- RenderJob{
+				TemplateType:      "weatherchange",
+				Enrichment:        baseEnrichment,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      []webhook.MatchedUser{user},
+				MatchedAreas:      matchedAreas,
+				TilePending:       tp,
+				LogReference:      change.S2CellID,
 			}
 		}
 	}

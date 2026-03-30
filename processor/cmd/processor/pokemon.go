@@ -177,37 +177,22 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				perUser = ps.enricher.PokemonPerUser(perLang, matched)
 			}
 
-			if ps.dtsRenderer == nil {
-				return // DTS renderer not available
+			if ps.renderCh == nil {
+				return
 			}
 			webhookFields := parseWebhookFields(raw)
-			if tilePending != nil {
-				wait := time.Until(tilePending.Deadline)
-				if wait <= 0 {
-					wait = time.Millisecond
-				}
-				select {
-				case url := <-tilePending.Result:
-					tilePending.Apply(url)
-				case <-time.After(wait):
-					tilePending.Apply(tilePending.Fallback)
-				}
-			}
-			jobs := ps.dtsRenderer.RenderPokemon(
 
-				baseEnrichment,
-				perLang,
-				perUser,
-				webhookFields,
-				matched,
-				matchedAreas,
-				processed.Encountered,
-				pokemon.EncounterID,
-			)
-			if len(jobs) > 0 {
-				if err := ps.sender.DeliverMessages(jobs); err != nil {
-					l.Errorf("Failed to deliver rendered messages: %s", err)
-				}
+			ps.renderCh <- RenderJob{
+				IsPokemon:         true,
+				IsEncountered:     processed.Encountered,
+				Enrichment:        baseEnrichment,
+				PerLangEnrichment: perLang,
+				PerUserEnrichment: perUser,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TilePending:       tilePending,
+				LogReference:      pokemon.EncounterID,
 			}
 		} else {
 			if processed.Encountered {

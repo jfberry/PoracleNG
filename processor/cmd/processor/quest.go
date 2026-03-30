@@ -85,35 +85,20 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 				}
 			}
 
-			if ps.dtsRenderer == nil {
-				return // DTS renderer not available
+			if ps.renderCh == nil {
+				return
 			}
 			webhookFields := parseWebhookFields(raw)
-			if tilePending != nil {
-				wait := time.Until(tilePending.Deadline)
-				if wait <= 0 {
-					wait = time.Millisecond
-				}
-				select {
-				case url := <-tilePending.Result:
-					tilePending.Apply(url)
-				case <-time.After(wait):
-					tilePending.Apply(tilePending.Fallback)
-				}
-			}
-			jobs := ps.dtsRenderer.RenderAlert(
-				"quest",
-				enrichment,
-				perLang,
-				webhookFields,
-				matched,
-				matchedAreas,
-				quest.PokestopID,
-			)
-			if len(jobs) > 0 {
-				if err := ps.sender.DeliverMessages(jobs); err != nil {
-					l.Errorf("Failed to deliver rendered messages: %s", err)
-				}
+
+			ps.renderCh <- RenderJob{
+				TemplateType:      "quest",
+				Enrichment:        enrichment,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TilePending:       tilePending,
+				LogReference:      quest.PokestopID,
 			}
 		} else {
 			l.Debugf("Quest at %s and 0 humans cared", quest.Name)

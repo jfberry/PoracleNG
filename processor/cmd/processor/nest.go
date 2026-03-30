@@ -80,35 +80,20 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 				}
 			}
 
-			if ps.dtsRenderer == nil {
-				return // DTS renderer not available
+			if ps.renderCh == nil {
+				return
 			}
 			webhookFields := parseWebhookFields(raw)
-			if tilePending != nil {
-				wait := time.Until(tilePending.Deadline)
-				if wait <= 0 {
-					wait = time.Millisecond
-				}
-				select {
-				case url := <-tilePending.Result:
-					tilePending.Apply(url)
-				case <-time.After(wait):
-					tilePending.Apply(tilePending.Fallback)
-				}
-			}
-			jobs := ps.dtsRenderer.RenderAlert(
-				"nest",
-				enrichment,
-				perLang,
-				webhookFields,
-				matched,
-				matchedAreas,
-				fmt.Sprintf("%d", nest.NestID),
-			)
-			if len(jobs) > 0 {
-				if err := ps.sender.DeliverMessages(jobs); err != nil {
-					l.Errorf("Failed to deliver rendered messages: %s", err)
-				}
+
+			ps.renderCh <- RenderJob{
+				TemplateType:      "nest",
+				Enrichment:        enrichment,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TilePending:       tilePending,
+				LogReference:      fmt.Sprintf("%d", nest.NestID),
 			}
 		} else {
 			l.Debugf("Nest %s (avg %.1f/hr) and 0 humans cared",

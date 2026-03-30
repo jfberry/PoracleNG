@@ -110,35 +110,20 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 				}
 			}
 
-			if ps.dtsRenderer == nil {
-				return // DTS renderer not available
+			if ps.renderCh == nil {
+				return
 			}
 			webhookFields := parseWebhookFields(raw)
-			if tilePending != nil {
-				wait := time.Until(tilePending.Deadline)
-				if wait <= 0 {
-					wait = time.Millisecond
-				}
-				select {
-				case url := <-tilePending.Result:
-					tilePending.Apply(url)
-				case <-time.After(wait):
-					tilePending.Apply(tilePending.Fallback)
-				}
-			}
-			jobs := ps.dtsRenderer.RenderAlert(
-				"invasion",
-				baseEnrichment,
-				perLang,
-				webhookFields,
-				matched,
-				matchedAreas,
-				inv.PokestopID,
-			)
-			if len(jobs) > 0 {
-				if err := ps.sender.DeliverMessages(jobs); err != nil {
-					l.Errorf("Failed to deliver rendered messages: %s", err)
-				}
+
+			ps.renderCh <- RenderJob{
+				TemplateType:      "invasion",
+				Enrichment:        baseEnrichment,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TilePending:       tilePending,
+				LogReference:      inv.PokestopID,
 			}
 		} else {
 			l.Debugf("Invasion grunt %s at %s [%.3f,%.3f] and 0 humans cared",
