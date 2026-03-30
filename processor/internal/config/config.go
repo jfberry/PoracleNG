@@ -81,6 +81,7 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
+	Token              []string `toml:"token"`
 	Prefix             string   `toml:"prefix"`
 	IvColors           []string `toml:"iv_colors"`
 	Admins             []string `toml:"admins"`
@@ -90,6 +91,7 @@ type DiscordConfig struct {
 
 // TelegramConfig reads the [telegram] section for fields the processor needs.
 type TelegramConfig struct {
+	Token  []string `toml:"token"`
 	Admins []string `toml:"admins"`
 }
 

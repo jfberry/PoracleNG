@@ -26,6 +26,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
@@ -113,6 +114,43 @@ func main() {
 		go proc.renderWorker()
 	}
 	log.Infof("Render pool started: %d workers, queue size %d", poolSize, cfg.Tuning.RenderQueueSize)
+
+	// Initialize delivery dispatcher
+	discordToken := ""
+	if len(cfg.Discord.Token) > 0 {
+		discordToken = cfg.Discord.Token[0]
+	}
+	telegramToken := ""
+	if len(cfg.Telegram.Token) > 0 {
+		telegramToken = cfg.Telegram.Token[0]
+	}
+
+	if discordToken != "" || telegramToken != "" {
+		var err error
+		proc.dispatcher, err = delivery.NewDispatcher(delivery.DispatcherConfig{
+			DiscordToken:  discordToken,
+			TelegramToken: telegramToken,
+			UploadImages:  cfg.Discord.UploadEmbedImages,
+			DeleteDelayMs: cfg.Discord.MessageDeleteDelay,
+			QueueSize:     cfg.Tuning.DeliveryQueueSize,
+			CacheDir:      filepath.Join(cfg.BaseDir, "config", ".cache"),
+			Queue: delivery.QueueConfig{
+				ConcurrentDiscord:  cfg.Tuning.ConcurrentDiscordDestinations,
+				ConcurrentWebhook:  cfg.Tuning.ConcurrentDiscordWebhooks,
+				ConcurrentTelegram: cfg.Tuning.ConcurrentTelegramDestinations,
+			},
+		})
+		if err != nil {
+			log.Warnf("Delivery dispatcher init failed: %s", err)
+		} else {
+			proc.dispatcher.Start()
+			log.Infof("Delivery dispatcher started: discord=%d webhook=%d telegram=%d queue=%d",
+				cfg.Tuning.ConcurrentDiscordDestinations,
+				cfg.Tuning.ConcurrentDiscordWebhooks,
+				cfg.Tuning.ConcurrentTelegramDestinations,
+				cfg.Tuning.DeliveryQueueSize)
+		}
+	}
 
 	// Weather change consumer
 	if cfg.Weather.ChangeAlert {
@@ -343,6 +381,12 @@ func main() {
 				statusParts = append(statusParts, fmt.Sprintf("RenderQ: %d/%d", depth, cap(proc.renderCh)))
 				metrics.RenderQueueDepth.Set(float64(depth))
 			}
+			if proc.dispatcher != nil {
+				statusParts = append(statusParts, fmt.Sprintf("DeliveryQ: %d Tracked: %d",
+					proc.dispatcher.QueueDepth(), proc.dispatcher.TrackerSize()))
+				metrics.DeliveryQueueDepth.Set(float64(proc.dispatcher.QueueDepth()))
+				metrics.DeliveryTrackerSize.Set(float64(proc.dispatcher.TrackerSize()))
+			}
 			log.Infof("[Status] %s", strings.Join(statusParts, " | "))
 		}
 	}()
@@ -422,6 +466,7 @@ type ProcessorService struct {
 	pokemonTypes    *gamedata.PokemonTypes
 	enricher        *enrichment.Enricher
 	dtsRenderer     *dts.Renderer
+	dispatcher      *delivery.Dispatcher
 	scanner         scanner.Scanner
 	rateLimiter     *ratelimit.Limiter
 	translations    *i18n.Bundle
@@ -719,6 +764,10 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 func (ps *ProcessorService) Close() {
 	ps.cancel()
 	ps.wg.Wait()
+	if ps.dispatcher != nil {
+		ps.dispatcher.Stop()
+		log.Info("Delivery dispatcher stopped")
+	}
 	if ps.renderCh != nil {
 		close(ps.renderCh)
 		ps.renderWg.Wait()

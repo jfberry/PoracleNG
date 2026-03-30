@@ -1,10 +1,12 @@
 package main
 
 import (
+	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -96,12 +98,54 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 
 	// 3. Deliver rendered messages.
 	if len(jobs) > 0 {
-		if err := ps.sender.DeliverMessages(jobs); err != nil {
-			log.Warnf("[%s] Failed to deliver %d messages: %s", job.LogReference, len(jobs), err)
-			metrics.RenderTotal.WithLabelValues("error").Inc()
-			return
+		if ps.dispatcher != nil {
+			for _, j := range jobs {
+				ps.dispatcher.Dispatch(&delivery.Job{
+					Target:       j.Target,
+					Type:         j.Type,
+					Message:      j.Message,
+					TTH:          tthFromMap(j.TTH),
+					Clean:        j.Clean,
+					Name:         j.Name,
+					LogReference: j.LogReference,
+					Lat:          parseCoordFloat(j.Lat),
+					Lon:          parseCoordFloat(j.Lon),
+				})
+			}
+		} else {
+			// Fallback: HTTP POST to alerter (existing path)
+			if err := ps.sender.DeliverMessages(jobs); err != nil {
+				log.Warnf("[%s] Failed to deliver %d messages: %s", job.LogReference, len(jobs), err)
+				metrics.RenderTotal.WithLabelValues("error").Inc()
+				return
+			}
 		}
 	}
 
 	metrics.RenderTotal.WithLabelValues("ok").Inc()
+}
+
+func tthFromMap(m map[string]any) delivery.TTH {
+	return delivery.TTH{
+		Days:    intFromAny(m["days"]),
+		Hours:   intFromAny(m["hours"]),
+		Minutes: intFromAny(m["minutes"]),
+		Seconds: intFromAny(m["seconds"]),
+	}
+}
+
+func intFromAny(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
+}
+
+func parseCoordFloat(s string) float64 {
+	f, _ := strconv.ParseFloat(s, 64)
+	return f
 }
