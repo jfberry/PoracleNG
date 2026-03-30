@@ -266,21 +266,86 @@ func (r *Registry) Lookup(key string) Command {
 }
 ```
 
-### Keyword Resolution
+### User Language + English Fallback
 
-Argument keywords (remove, everything, clean, team names, etc.) use the same model. Commands check for keywords by identifier key, not by English text:
+The command name is resolved from the global multi-language lookup (all configured languages). But argument parsing uses only **two languages**: the user's configured language from the database, plus English as a universal fallback. This avoids cross-language collisions while allowing users to mix their language with English (which is how most bilingual communities actually use Poracle).
 
 ```go
-// In a command handler:
-if ctx.ArgPatterns.MatchKeyword(args, "arg.remove") {
-    // user typed "remove" (en), "entfernen" (de), "supprimer" (fr), etc.
-}
-if ctx.ArgPatterns.MatchTeam(args) == "valor" {
-    // user typed "valor", "rot", "rouge", etc. → resolved to team ID
+func (b *Bot) handleCommand(userID, text string) {
+    // 1. Resolve command name (multi-language lookup — no ambiguity for identifier keys)
+    cmdKey := parser.LookupCommand(tokens[0])
+
+    // 2. Get user's language from DB (or config default locale if unregistered)
+    lang := getUserLanguage(userID) // "de", "fr", "en", etc.
+
+    // 3. Parse arguments using user's language + English fallback
+    params := command.Params()
+    parsed := parser.MatchArgs(tokens[1:], params, lang)
 }
 ```
 
-The `keywordMap` works identically to `commandMap`: all translations of `arg.remove` across all languages map to the key `"arg.remove"`. The command code never compares against English strings — it compares against identifier keys.
+### Concrete Example
+
+Poracle has 3 languages configured: English, German, French. User `James` has `language = "de"`.
+
+James types: `!track relaxo iv100 d500 remove`
+
+**Command lookup:** `"track"` matches English entry in global map → `cmd.track`. We don't need to detect language here — we already know James speaks German from the DB.
+
+**Argument matching** — the `!track` command declares its parameter types. The parser walks args trying each type's matcher with German (de) + English (en) fallback:
+
+| Token | Matchers tried | Result |
+|-------|---------------|--------|
+| `relaxo` | Prefix patterns (iv, cp, d...) → no match. Keywords (de: entfernen, alles...) → no. Keywords (en: remove, everything...) → no. Pokemon names (de) → **"Relaxo" = Snorlax ID 143** ✅ |
+| `iv100` | IV prefix matcher → **min_iv=100** ✅ |
+| `d500` | Distance matcher (de: entfernung) → no. Distance matcher (en: d) → **distance=500** ✅ |
+| `remove` | Keywords (de: entfernen) → no. Keywords (en: remove) → **arg.remove** ✅ |
+
+James could equally type `!track relaxo iv100 entfernung500 entfernen` — German keywords matched via user language. Or mix: `!verfolgen relaxo iv100 d500 entfernen` — German command name, English distance, German remove. Both work.
+
+**French user `Marie`** with `language = "fr"` types: `!suivre ronflex iv100 d500 supprimer`
+
+| Token | Result |
+|-------|--------|
+| `suivre` | Command map → `cmd.track` |
+| `ronflex` | Pokemon names (fr) → Snorlax ID 143 ✅ |
+| `iv100` | IV matcher (structural, same in all languages) ✅ |
+| `d500` | Distance matcher (en fallback) ✅ |
+| `supprimer` | Keywords (fr) → `arg.remove` ✅ |
+
+**Key:** Only two languages are tried per user (their language + English), never all three. French keywords never interfere with German parsing. The only collision risk is between the user's language and English, which is a much smaller surface area.
+
+**Unregistered users** (before `!poracle`): fall back to `[general] locale` from config.
+```
+
+### Typed Parameter Matchers
+
+Instead of a flat keyword map (which has the same collision problem as reverse translation), each command declares what **parameter types** it accepts. The parser tries each declared type's matcher against the args, using the detected language.
+
+```go
+// Each command declares its parameter schema
+func (c *TrackCommand) Params() []ParamType {
+    return []ParamType{
+        PokemonName,    // matches pokemon names in user's language → ID
+        TypeName,       // matches type names → type ID
+        FormPrefix,     // matches form:<name> → form ID
+        GenPrefix,      // matches gen<N> → generation int
+        IVRange,        // matches iv<min>-<max> → min, max
+        CPRange,        // matches cp<min>-<max> → min, max
+        Distance,       // matches d<N> → meters int
+        Template,       // matches t:<name> → template string
+        PVPLeague,      // matches great<rank>, ultra<rank> → league, rank
+        Gender,         // matches male/female/genderless (translated) → gender int
+        Keyword,        // matches remove, everything, clean, individually (translated)
+    }
+}
+```
+
+Each `ParamType` matcher knows how to match a token using the translator for the detected language. Pokemon names are only tried in commands that accept them. Team names only in commands that accept teams. No global ambiguity.
+
+**Priority ordering** matters: prefix patterns (`iv100`, `cp2500`, `d500`, `form:alola`) are tried first since they're structurally unambiguous. Then bare keywords (`remove`, `clean`, `male`). Then pokemon/type names last as the fallback catch-all. A token consumed by one matcher is removed from the list so later matchers don't re-match it.
+
+This is the same model as the alerter's `!track` command (which uses `parameterDefinition` with ordered regex patterns), but formalized as a type system shared across all commands.
 
 ### Pokemon Resolver
 
@@ -379,8 +444,10 @@ Currently the processor calls `POST /api/postMessage` on the alerter for trackin
 Move from alerter to processor:
 
 - `GET /api/config/poracleWeb` — serve config subset from already-loaded TOML config
-- `GET /api/masterdata/monsters` — serve from `gamedata.GameData` (pokemon with names/forms/types)
-- `GET /api/masterdata/grunts` — serve from `gamedata.GameData` (invasion data)
+- `GET /api/masterdata/monsters` — serve the poracle-v2 format `resources/data/monsters.json` (already downloaded at startup). PoracleWeb expects this legacy format. Serve the file directly rather than converting from raw masterfile.
+- `GET /api/masterdata/grunts` — serve `resources/data/grunts.json` (already downloaded). Same legacy format for PoracleWeb compatibility.
+
+**Note:** These endpoints serve the old poracle-v2 format for backward compatibility with PoracleWeb. New raw masterfile APIs for updated clients will be added in a later phase when PoracleWeb is updated. The processor's internal command processing uses the raw masterfile via `gamedata.GameData`, not these legacy endpoints.
 
 ---
 
