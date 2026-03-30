@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // DiscordRateLimiter tracks per-destination rate limits and a global 50 req/sec token bucket.
@@ -116,6 +118,11 @@ func (rl *DiscordRateLimiter) Wait(target string) {
 		sleepUntil := tl.resetAt
 		rl.mu.Unlock()
 		if d := time.Until(sleepUntil); d > 0 {
+			if d > 5*time.Second {
+				log.Infof("discord: rate limit wait %.1fs for %s", d.Seconds(), target)
+			} else {
+				log.Debugf("discord: rate limit wait %.1fs for %s", d.Seconds(), target)
+			}
 			time.Sleep(d)
 		}
 	} else {

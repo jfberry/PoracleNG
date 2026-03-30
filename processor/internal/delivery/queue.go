@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -128,6 +129,12 @@ func (fq *FairQueue) processJob(job *Job) {
 	}
 
 	// 3. Send new message
+	destKind := strings.ToUpper(strings.TrimPrefix(job.Type, platform+":"))
+	if destKind == "" {
+		destKind = strings.ToUpper(job.Type)
+	}
+	log.Infof("%s: -> %s %s %s Sending %s message", job.LogReference, job.Name, job.Target, destKind, platform)
+
 	sent, err := sender.Send(context.Background(), job)
 	if err != nil {
 		var permErr *PermanentError
