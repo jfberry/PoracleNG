@@ -225,4 +225,36 @@ var (
 		Name: "poracle_render_tile_skipped_total",
 		Help: "Tiles skipped due to render queue pressure",
 	})
+
+	// Delivery metrics
+	DeliveryTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_delivery_total",
+		Help: "Total messages delivered",
+	}, []string{"platform", "status"})
+
+	DeliveryDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_delivery_duration_seconds",
+		Help:    "Time to deliver a message",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10},
+	}, []string{"platform"})
+
+	DeliveryQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_queue_depth",
+		Help: "Current items in delivery queue",
+	})
+
+	DeliveryTrackerSize = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_tracker_size",
+		Help: "Messages tracked for clean/edit",
+	})
+
+	DeliveryCleanTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_delivery_clean_total",
+		Help: "Messages successfully deleted (clean)",
+	})
+
+	DeliveryRateLimited = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_delivery_rate_limited_total",
+		Help: "Rate-limited delivery attempts",
+	}, []string{"platform"})
 )

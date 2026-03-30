@@ -81,9 +81,11 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Prefix   string   `toml:"prefix"`
-	IvColors []string `toml:"iv_colors"`
-	Admins   []string `toml:"admins"`
+	Prefix             string   `toml:"prefix"`
+	IvColors           []string `toml:"iv_colors"`
+	Admins             []string `toml:"admins"`
+	UploadEmbedImages  bool     `toml:"upload_embed_images"`
+	MessageDeleteDelay int      `toml:"message_delete_delay"` // extra ms for clean TTH on channels
 }
 
 // TelegramConfig reads the [telegram] section for fields the processor needs.
@@ -216,6 +218,12 @@ type TuningConfig struct {
 	GeocodingCooldownMs        int `toml:"geocoding_cooldown_ms"`
 	RenderPoolSize             int `toml:"render_pool_size"`
 	RenderQueueSize            int `toml:"render_queue_size"`
+
+	// Delivery tuning
+	ConcurrentDiscordDestinations  int `toml:"concurrent_discord_destinations"`
+	ConcurrentTelegramDestinations int `toml:"concurrent_telegram_destinations"`
+	ConcurrentDiscordWebhooks      int `toml:"concurrent_discord_webhooks"`
+	DeliveryQueueSize              int `toml:"delivery_queue_size"`
 }
 
 type AreaConfig struct {
@@ -341,13 +349,17 @@ func Load(baseDir string) (*Config, error) {
 			DisplayLittleMinCP: 450,
 		},
 		Tuning: TuningConfig{
-			ReloadIntervalSecs:  60,
-			EncounterCacheTTL:   3600,
-			WorkerPoolSize:      4,
-			BatchSize:           50,
-			FlushIntervalMillis: 100,
-			RenderPoolSize:      8,
-			RenderQueueSize:     100,
+			ReloadIntervalSecs:             60,
+			EncounterCacheTTL:              3600,
+			WorkerPoolSize:                 4,
+			BatchSize:                      50,
+			FlushIntervalMillis:            100,
+			RenderPoolSize:                 8,
+			RenderQueueSize:                100,
+			ConcurrentDiscordDestinations:  10,
+			ConcurrentTelegramDestinations: 10,
+			ConcurrentDiscordWebhooks:      10,
+			DeliveryQueueSize:              200,
 		},
 		Stats: StatsConfig{
 			MinSampleSize:       10000,
