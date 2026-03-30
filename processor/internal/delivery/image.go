@@ -87,6 +87,11 @@ func coerceEmbedColor(embed map[string]any) {
 		return
 	}
 
+	if str == "" {
+		delete(embed, "color")
+		return
+	}
+
 	stripped := strings.TrimPrefix(str, "#")
 	if isHexColor(stripped) {
 		if n, err := strconv.ParseInt(stripped, 16, 64); err == nil {
@@ -98,8 +103,10 @@ func coerceEmbedColor(embed map[string]any) {
 	// Try decimal.
 	if n, err := strconv.ParseInt(str, 10, 64); err == nil {
 		embed["color"] = n
+	} else {
+		// Unparseable — remove to avoid Discord 400 error.
+		delete(embed, "color")
 	}
-	// If nothing parsed, leave the original string.
 }
 
 // isHexColor returns true if s is exactly 6 hex characters.
