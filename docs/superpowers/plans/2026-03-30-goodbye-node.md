@@ -429,6 +429,20 @@ For testing commands before bots are wired up:
 // Response: {"status": "ok", "replies": [{"text": "...", "react": "✅"}]}
 ```
 
+### Existing Processor Code Reused by Commands
+
+The processor already has significant infrastructure that commands will use directly:
+
+- **`internal/api/tracking.go`** — `diffTracking()` reflection-based comparison (insert/update/duplicate detection), all tracking CRUD helpers, `flexBool`/`flexInt` coercion. Commands don't reimplement diff logic — they populate typed structs and call the existing functions.
+- **`internal/rowtext/`** — Human-readable description generators for all 10 tracking types (`MonsterRowText`, `RaidRowText`, `EggRowText`, etc.). Used by `!tracked` for listing and by tracking commands for confirmation messages.
+- **`internal/db/`** — Typed structs (`db.MonsterTracking`, `db.RaidTracking`, etc.) with field definitions. Commands parse args into these structs.
+- **`internal/gamedata/`** — Raw masterfile data (pokemon, moves, types, items, grunts, util). Commands use this for name resolution, type lookups, generation ranges.
+- **`internal/i18n/`** — Translation bundle with identifier keys. Commands use this for translating keywords and reply messages.
+- **`internal/geofence/`** — Spatial index for area validation and point-in-polygon checks.
+- **`internal/delivery/`** — Dispatcher for sending confirmation replies directly (replaces alerter's `postMessage`).
+
+The command framework's job is essentially: **parse text args → populate typed DB structs → call existing CRUD/diff → format reply using rowtext**. The heavy lifting is already done.
+
 ### Confirmation Messages
 
 Currently the processor calls `POST /api/postMessage` on the alerter for tracking confirmation messages. Instead, send them through the existing `delivery.Dispatcher`:
