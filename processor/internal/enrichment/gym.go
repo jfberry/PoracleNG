@@ -44,6 +44,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, 
 	if e.GameData != nil {
 		if info, ok := e.GameData.Util.Teams[teamID]; ok {
 			m["gymColor"] = info.Color
+			m["color"] = info.Color // deprecated alias
 		}
 	}
 

@@ -104,6 +104,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		// Team color
 		if info, ok := gd.Util.Teams[raid.TeamID]; ok {
 			m["gymColor"] = info.Color
+			m["color"] = info.Color // deprecated alias
 		}
 
 		// Raid level name

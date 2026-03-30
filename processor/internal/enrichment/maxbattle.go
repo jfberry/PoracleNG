@@ -62,6 +62,8 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 		"battle_pokemon_id": mb.BattlePokemonID,
 	})
 
+	m["color"] = "D000C0" // hardcoded maxbattle color (matches alerter)
+
 	// Game data enrichment
 	if e.GameData != nil {
 		gd := e.GameData
