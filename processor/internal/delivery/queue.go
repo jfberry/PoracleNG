@@ -98,12 +98,16 @@ func (fq *FairQueue) processJob(job *Job) {
 	sem <- struct{}{}
 	defer func() { <-sem }()
 
+	platform := PlatformFromType(job.Type)
+
 	// Track per-platform in-flight count
 	counter := fq.counterFor(job.Type)
 	counter.Add(1)
-	defer counter.Add(-1)
-
-	platform := PlatformFromType(job.Type)
+	metrics.DeliveryInFlight.WithLabelValues(platform).Inc()
+	defer func() {
+		counter.Add(-1)
+		metrics.DeliveryInFlight.WithLabelValues(platform).Dec()
+	}()
 	sender, ok := fq.senders[platform]
 	if !ok {
 		log.Warnf("delivery: no sender for platform %q (type=%s)", platform, job.Type)

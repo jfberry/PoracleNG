@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -85,20 +86,26 @@ func (u *Uicons) refreshLoop() {
 }
 
 func (u *Uicons) fetchIndex() {
+	start := time.Now()
 	indexURL := u.url + "/index.json"
 	resp, err := u.client.Get(indexURL)
 	if err != nil {
 		log.Warnf("uicons: failed to fetch %s: %v", indexURL, err)
+		metrics.UiconsRefreshTotal.WithLabelValues("error").Inc()
+		metrics.UiconsRefreshDuration.Observe(time.Since(start).Seconds())
 		return
 	}
 	defer resp.Body.Close()
+	metrics.UiconsRefreshDuration.Observe(time.Since(start).Seconds())
 
 	if resp.StatusCode == http.StatusNotFound {
 		log.Debugf("uicons: got 404 for %s (no index available)", indexURL)
+		metrics.UiconsRefreshTotal.WithLabelValues("not_found").Inc()
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
 		log.Warnf("uicons: unexpected status %d for %s", resp.StatusCode, indexURL)
+		metrics.UiconsRefreshTotal.WithLabelValues("error").Inc()
 		return
 	}
 
@@ -154,6 +161,7 @@ func (u *Uicons) fetchIndex() {
 		idx.RewardMega = map[string]bool{}
 	}
 
+	metrics.UiconsRefreshTotal.WithLabelValues("ok").Inc()
 	log.Infof("uicons: loaded index from %s (%d pokemon icons)", indexURL, len(idx.Pokemon))
 	u.index.Store(idx)
 }

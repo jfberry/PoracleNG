@@ -9,6 +9,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
 // DiscordRateLimiter tracks per-destination rate limits and a global 50 req/sec token bucket.
@@ -124,6 +126,7 @@ func (rl *DiscordRateLimiter) Wait(target string) {
 				log.Debugf("discord: rate limit wait %.1fs for %s", d.Seconds(), target)
 			}
 			time.Sleep(d)
+			metrics.DeliveryRateLimitWait.WithLabelValues("discord").Observe(d.Seconds())
 		}
 	} else {
 		rl.mu.Unlock()

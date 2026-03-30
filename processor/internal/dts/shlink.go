@@ -10,6 +10,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
 // ShlinkShortener shortens URLs via a Shlink (https://shlink.io/) instance.
@@ -47,8 +49,10 @@ type shlinkResponse struct {
 // On any error (network, non-200, parse) the original URL is returned.
 func (s *ShlinkShortener) Shorten(longURL string) string {
 	if s == nil || s.url == "" || s.apiKey == "" {
+		metrics.ShlinkTotal.WithLabelValues("disabled").Inc()
 		return longURL
 	}
+	start := time.Now()
 
 	reqBody := shlinkRequest{
 		LongURL:      longURL,
@@ -76,30 +80,39 @@ func (s *ShlinkShortener) Shorten(longURL string) string {
 	resp, err := s.client.Do(req)
 	if err != nil {
 		log.Warnf("shlink: request failed: %v", err)
+		metrics.ShlinkTotal.WithLabelValues("error").Inc()
+		metrics.ShlinkDuration.Observe(time.Since(start).Seconds())
 		return longURL
 	}
 	defer resp.Body.Close()
 
+	metrics.ShlinkDuration.Observe(time.Since(start).Seconds())
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		log.Warnf("shlink: unexpected status %d for %s", resp.StatusCode, longURL)
+		metrics.ShlinkTotal.WithLabelValues("error").Inc()
 		return longURL
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Warnf("shlink: read response: %v", err)
+		metrics.ShlinkTotal.WithLabelValues("error").Inc()
 		return longURL
 	}
 
 	var result shlinkResponse
 	if err := json.Unmarshal(respBytes, &result); err != nil {
 		log.Warnf("shlink: parse response: %v", err)
+		metrics.ShlinkTotal.WithLabelValues("error").Inc()
 		return longURL
 	}
 
 	if result.ShortURL == "" {
+		metrics.ShlinkTotal.WithLabelValues("error").Inc()
 		return longURL
 	}
+	metrics.ShlinkTotal.WithLabelValues("ok").Inc()
 	return result.ShortURL
 }
 
@@ -135,6 +148,7 @@ func ShortenMarkersWithCache(text string, shortener *ShlinkShortener, cache map[
 		}
 		if cache != nil {
 			if cached, ok := cache[rawURL]; ok {
+				metrics.ShlinkTotal.WithLabelValues("cache_hit").Inc()
 				return cached
 			}
 		}

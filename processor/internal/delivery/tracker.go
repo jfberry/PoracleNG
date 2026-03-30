@@ -44,6 +44,7 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 		if reason != ttlcache.EvictionReasonExpired {
 			return
 		}
+		metrics.DeliveryTrackerEvictions.Inc()
 		msg := item.Value()
 		if !msg.Clean {
 			return

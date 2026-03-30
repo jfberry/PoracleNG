@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	raymond "github.com/mailgun/raymond/v2"
 	log "github.com/sirupsen/logrus"
@@ -11,6 +12,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -201,12 +203,16 @@ func (r *Renderer) renderForUsers(
 			df.Set("platform", platform)
 			df.Set("altLanguage", "en")
 
+			tStart := time.Now()
 			result, err := tmpl.ExecWith(view, df)
+			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
 				log.Errorf("dts: render %s for user %s: %v", templateType, user.ID, err)
 				rendered = fallbackMessage(templateType, platform, user.Template, language)
+				metrics.TemplateTotal.WithLabelValues(templateType, "error").Inc()
 			} else {
 				rendered = result
+				metrics.TemplateTotal.WithLabelValues(templateType, "ok").Inc()
 			}
 		}
 
@@ -324,12 +330,16 @@ func (r *Renderer) renderGrouped(
 			df.Set("platform", key.platform)
 			df.Set("altLanguage", "en")
 
+			tStart := time.Now()
 			result, err := tmpl.ExecWith(view, df)
+			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
 				log.Errorf("dts: render %s for group (%s/%s/%s): %v", templateType, key.platform, key.templateID, key.language, err)
 				rendered = fallbackMessage(templateType, key.platform, key.templateID, key.language)
+				metrics.TemplateTotal.WithLabelValues(templateType, "error").Inc()
 			} else {
 				rendered = result
+				metrics.TemplateTotal.WithLabelValues(templateType, "ok").Inc()
 			}
 		}
 

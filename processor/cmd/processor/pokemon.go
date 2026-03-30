@@ -161,6 +161,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 					pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
 			}
 
+			enrichStart := time.Now()
 			baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed)
 
 			// Compute per-language translated enrichment
@@ -176,6 +177,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			if ps.enricher.PVPDisplay != nil && perLang != nil {
 				perUser = ps.enricher.PokemonPerUser(perLang, matched)
 			}
+			metrics.EnrichmentDuration.WithLabelValues("pokemon").Observe(time.Since(enrichStart).Seconds())
 
 			if ps.renderCh == nil {
 				return
@@ -222,15 +224,7 @@ func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessag
 		ps.pokemonName(change.Old.PokemonID, change.Old.Form),
 		ps.pokemonName(change.New.PokemonID, change.New.Form))
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:    "pokemon_changed",
-		Message: raw,
-		OldState: &webhook.EncounterOld{
-			PokemonID: change.Old.PokemonID,
-			Form:      change.Old.Form,
-			Weather:   change.Old.Weather,
-			CP:        change.Old.CP,
-			IV:        oldIV,
-		},
-	})
+	// TODO: Route pokemon_changed through render queue with EditKey for message editing.
+	// For now, skip delivery — the old alerter path no longer has controllers to handle it.
+	_ = oldIV
 }
