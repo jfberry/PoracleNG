@@ -103,6 +103,17 @@ func main() {
 	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
 
+	// Start render pool workers
+	poolSize := cfg.Tuning.RenderPoolSize
+	if poolSize < 1 {
+		poolSize = 8
+	}
+	for i := 0; i < poolSize; i++ {
+		proc.renderWg.Add(1)
+		go proc.renderWorker()
+	}
+	log.Infof("Render pool started: %d workers, queue size %d", poolSize, cfg.Tuning.RenderQueueSize)
+
 	// Weather change consumer
 	if cfg.Weather.ChangeAlert {
 		go proc.consumeWeatherChanges()
@@ -327,6 +338,11 @@ func main() {
 				statusParts = append(statusParts, fmt.Sprintf("Geo: %d calls avg:%dms hits:%d err:%d", gs.Calls, gs.AvgMs(), gs.Hits, gs.Errors))
 				proc.enricher.Geocoder.ResetStats()
 			}
+			if proc.renderCh != nil {
+				depth := len(proc.renderCh)
+				statusParts = append(statusParts, fmt.Sprintf("RenderQ: %d/%d", depth, cap(proc.renderCh)))
+				metrics.RenderQueueDepth.Set(float64(depth))
+			}
 			log.Infof("[Status] %s", strings.Join(statusParts, " | "))
 		}
 	}()
@@ -410,6 +426,8 @@ type ProcessorService struct {
 	rateLimiter     *ratelimit.Limiter
 	translations    *i18n.Bundle
 	alerterClient   *http.Client
+	renderCh        chan RenderJob
+	renderWg        sync.WaitGroup
 	reloadMu        sync.Mutex
 	reloadTimer     *time.Timer
 	workerPool      chan struct{}
@@ -647,6 +665,14 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		dtsRenderer.Templates().LogSummary()
 	}
 
+	// Start render pool for async tile resolution + DTS rendering + delivery
+	renderQueueSize := cfg.Tuning.RenderQueueSize
+	if renderQueueSize < 1 {
+		renderQueueSize = 100
+	}
+	renderCh := make(chan RenderJob, renderQueueSize)
+	metrics.RenderQueueCapacity.Set(float64(renderQueueSize))
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ProcessorService{
@@ -655,6 +681,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		database: database,
 		ctx:      ctx,
 		cancel:   cancel,
+		renderCh: renderCh,
 		enricher:      enricher,
 		dtsRenderer:   dtsRenderer,
 		scanner:       scannerInstance,
@@ -692,6 +719,11 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 func (ps *ProcessorService) Close() {
 	ps.cancel()
 	ps.wg.Wait()
+	if ps.renderCh != nil {
+		close(ps.renderCh)
+		ps.renderWg.Wait()
+		log.Info("Render pool stopped")
+	}
 	// Sender must close before resolver: sender's final flush may need
 	// tile workers still running to resolve pending tiles within deadline.
 	ps.sender.Close()
