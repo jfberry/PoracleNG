@@ -10,6 +10,9 @@ import (
 func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
+	// Pokestop name — lure webhook uses "name" field, normalize to pokestop_name
+	m["pokestop_name"] = lure.Name
+
 	if lure.LureExpiration > 0 {
 		tz := geo.GetTimezone(lure.Latitude, lure.Longitude)
 		m["disappearTime"] = geo.FormatTime(lure.LureExpiration, tz, e.TimeLayout)
