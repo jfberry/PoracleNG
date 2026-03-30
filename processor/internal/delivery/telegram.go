@@ -304,11 +304,13 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 				return 0, fmt.Errorf("decoding telegram response: %w", err)
 			}
 			if tgResp.OK {
+				log.Debugf("telegram: %s to %s ok (msg %d)", method, body["chat_id"], tgResp.Result.MessageID)
 				return tgResp.Result.MessageID, nil
 			}
 		}
 
 		if resp.StatusCode == http.StatusForbidden {
+			log.Warnf("telegram: permanent error for %s %s: %s", method, body["chat_id"], respBody)
 			return 0, &PermanentError{
 				Err:    fmt.Errorf("telegram %s: forbidden (status 403): %s", method, respBody),
 				Reason: "user blocked bot or bot was removed",
@@ -322,6 +324,7 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 			if tgResp.Parameters != nil && tgResp.Parameters.RetryAfter > 0 {
 				retryAfter = tgResp.Parameters.RetryAfter
 			}
+			log.Warnf("telegram: 429 rate limited for %s %s, retry_after=%ds (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
 			select {
 			case <-ctx.Done():
 				return 0, ctx.Err()
@@ -331,6 +334,7 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 		}
 
 		if attempt < maxRetries {
+			log.Warnf("telegram: %s to %s failed (attempt %d/%d): status=%d", method, body["chat_id"], attempt+1, maxRetries+1, resp.StatusCode)
 			time.Sleep(time.Second)
 			continue
 		}

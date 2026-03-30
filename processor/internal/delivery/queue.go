@@ -31,6 +31,9 @@ type FairQueue struct {
 	webhookSem  chan struct{}
 	telegramSem chan struct{}
 
+	// Per-destination locks ensure max 1 in-flight send per target
+	destLocks sync.Map // target string → *sync.Mutex
+
 	// Per-platform in-flight counters for metrics
 	discordInFlight  atomic.Int64
 	webhookInFlight  atomic.Int64
@@ -83,7 +86,13 @@ func (fq *FairQueue) worker() {
 }
 
 func (fq *FairQueue) processJob(job *Job) {
-	// 1. Acquire platform semaphore
+	// 1. Acquire per-destination lock (ensures max 1 send per target)
+	lockI, _ := fq.destLocks.LoadOrStore(job.Target, &sync.Mutex{})
+	destLock := lockI.(*sync.Mutex)
+	destLock.Lock()
+	defer destLock.Unlock()
+
+	// 2. Acquire platform semaphore (limits global concurrency per platform)
 	sem := fq.semaphoreFor(job.Type)
 	sem <- struct{}{}
 	defer func() { <-sem }()
@@ -102,17 +111,19 @@ func (fq *FairQueue) processJob(job *Job) {
 
 	start := time.Now()
 
-	// 2. If job has EditKey, try editing existing message first
+	// If job has EditKey, try editing existing message first
 	if job.EditKey != "" {
 		existing := fq.tracker.LookupEdit(job.EditKey)
 		if existing != nil {
+			log.Debugf("delivery: attempting edit for key=%s target=%s", job.EditKey, job.Target)
 			if err := sender.Edit(context.Background(), existing.SentID, job.Message); err == nil {
+				log.Debugf("delivery: edit succeeded for key=%s", job.EditKey)
 				metrics.DeliveryTotal.WithLabelValues(platform, "edit_ok").Inc()
 				metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 				return
 			}
 			// Edit failed — fall through to send new message
-			log.Debugf("delivery: edit failed for %s, sending new message", job.EditKey)
+			log.Debugf("delivery: edit failed for key=%s, sending new message", job.EditKey)
 		}
 	}
 

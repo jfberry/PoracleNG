@@ -84,11 +84,33 @@ func (tb *tokenBucket) timeUntilAvailable() time.Duration {
 	return time.Duration(deficit/tb.rate*1000) * time.Millisecond
 }
 
+// Cleanup removes stale rate limit entries whose reset time has passed.
+func (rl *DiscordRateLimiter) Cleanup() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := time.Now()
+	for key, limit := range rl.targets {
+		if limit.resetAt.Before(now) {
+			delete(rl.targets, key)
+		}
+	}
+}
+
 // Wait blocks until the target is not rate-limited and a global token is available.
 // It is safe to call from a single goroutine per destination (fair queue pattern).
 func (rl *DiscordRateLimiter) Wait(target string) {
-	// Check per-target limit.
+	// Clean up stale entries if the map has grown large.
 	rl.mu.Lock()
+	if len(rl.targets) > 1000 {
+		now := time.Now()
+		for key, limit := range rl.targets {
+			if limit.resetAt.Before(now) {
+				delete(rl.targets, key)
+			}
+		}
+	}
+
+	// Check per-target limit.
 	tl, exists := rl.targets[target]
 	if exists && tl.remaining <= 0 {
 		sleepUntil := tl.resetAt

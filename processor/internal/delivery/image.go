@@ -14,15 +14,20 @@ import (
 )
 
 // DownloadImage fetches an image from the given URL with a 10-second timeout.
+// It creates a dedicated client to avoid mutating the shared client's timeout.
 func DownloadImage(client *http.Client, url string) ([]byte, error) {
-	if client == nil {
-		client = &http.Client{}
+	// Use a separate client with short timeout for image downloads.
+	// Reuse the transport for connection pooling.
+	var transport http.RoundTripper
+	if client != nil {
+		transport = client.Transport
 	}
-	origTimeout := client.Timeout
-	client.Timeout = 10 * time.Second
-	defer func() { client.Timeout = origTimeout }()
+	imgClient := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
+	}
 
-	resp, err := client.Get(url) //nolint:noctx
+	resp, err := imgClient.Get(url) //nolint:noctx
 	if err != nil {
 		return nil, fmt.Errorf("image download failed: %w", err)
 	}

@@ -53,6 +53,7 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 		if !ok {
 			return
 		}
+		log.Infof("delivery: clean delete %s/%s", msg.Type, msg.Target)
 		go func() {
 			if err := sender.Delete(context.Background(), msg.SentID); err != nil {
 				log.Warnf("delivery: clean delete failed for %s: %v", msg.SentID, err)
@@ -127,6 +128,7 @@ func (mt *MessageTracker) Save() error {
 		return err
 	}
 
+	log.Infof("delivery: tracker saved %d entries to disk", len(entries))
 	return os.WriteFile(filepath.Join(mt.cacheDir, "delivery-tracker.json"), data, 0o644)
 }
 
@@ -149,10 +151,13 @@ func (mt *MessageTracker) Load() error {
 	}
 
 	now := time.Now()
+	expiredClean := 0
+	active := 0
 	for _, entry := range entries {
 		if entry.ExpiresAt.Before(now) {
 			// Expired entry
 			if entry.Message.Clean {
+				expiredClean++
 				msg := entry.Message
 				platform := PlatformFromType(msg.Type)
 				sender, ok := mt.senders[platform]
@@ -171,6 +176,7 @@ func (mt *MessageTracker) Load() error {
 			continue
 		}
 
+		active++
 		remaining := entry.ExpiresAt.Sub(now)
 		mt.cache.Set(entry.Key, &TrackedMessage{
 			SentID: entry.Message.SentID,
@@ -180,6 +186,7 @@ func (mt *MessageTracker) Load() error {
 		}, remaining)
 	}
 
+	log.Infof("delivery: tracker loaded %d entries (%d expired clean, %d active)", len(entries), expiredClean, active)
 	return nil
 }
 

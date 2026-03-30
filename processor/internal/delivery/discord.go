@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const defaultDiscordBaseURL = "https://discord.com/api/v10"
@@ -154,6 +156,7 @@ func (ds *DiscordSender) ensureDMChannel(ctx context.Context, userID string) (st
 	}
 
 	ds.dmChannels.Store(userID, result.ID)
+	log.Infof("discord: created DM channel %s for user %s", result.ID, userID)
 	return result.ID, nil
 }
 
@@ -171,6 +174,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 
 	if ds.uploadImages {
 		if imageURL := ExtractEmbedImageURL(normalized); imageURL != "" {
+			log.Debugf("discord: uploading embed image for bot/%s", channelID)
 			if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
 				normalized = ReplaceEmbedImageURL(normalized)
 				buf, ct, err := BuildMultipartMessage(normalized, imageData, "files[0]")
@@ -178,8 +182,9 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 					reqBody = buf
 					contentType = ct
 				}
+			} else {
+				log.Debugf("discord: image download failed for %s, sending without: %v", channelID, err)
 			}
-			// On image download/build failure, fall through to send without image upload.
 		}
 	}
 
@@ -206,6 +211,7 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 
 	if ds.uploadImages {
 		if imageURL := ExtractEmbedImageURL(normalized); imageURL != "" {
+			log.Debugf("discord: uploading embed image for webhook/%s", webhookURL)
 			if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
 				normalized = ReplaceEmbedImageURL(normalized)
 				buf, ct, err := BuildMultipartMessage(normalized, imageData, "file")
@@ -213,6 +219,8 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 					reqBody = buf
 					contentType = ct
 				}
+			} else {
+				log.Debugf("discord: image download failed for %s, sending without: %v", webhookURL, err)
 			}
 		}
 	}
@@ -234,6 +242,8 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 		return nil, fmt.Errorf("reading request body: %w", err)
 	}
 
+	log.Debugf("discord: sending to %s", rateLimitKey)
+
 	const maxRetries = 5
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
@@ -246,6 +256,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 
 		resp, err := ds.doRequest(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes), contentType, auth)
 		if err != nil {
+			log.Warnf("discord: send to %s failed (attempt %d/%d): %v", rateLimitKey, attempt+1, maxRetries+1, err)
 			if attempt < maxRetries {
 				time.Sleep(time.Duration(attempt+1) * time.Second)
 				continue
@@ -268,6 +279,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 			if err := json.Unmarshal(respBody, &result); err != nil {
 				return nil, fmt.Errorf("decoding response: %w", err)
 			}
+			log.Debugf("discord: delivered to %s (msg %s)", rateLimitKey, result.ID)
 			return &SentMessage{ID: rateLimitKey + ":" + result.ID}, nil
 		}
 
@@ -277,6 +289,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 			}
 			json.Unmarshal(respBody, &rateLimitResp) //nolint:errcheck
 			d := ParseRetryAfter(rateLimitResp.RetryAfter)
+			log.Warnf("discord: 429 rate limited for %s, retry_after=%.1fs (attempt %d/%d)", rateLimitKey, rateLimitResp.RetryAfter, attempt+1, maxRetries+1)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -287,6 +300,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 
 		code := extractErrorCode(respBody)
 		if code == 50007 || code == 10003 || code == 10013 {
+			log.Warnf("discord: permanent error for %s: %s (code: %d)", rateLimitKey, truncate(string(respBody), 200), code)
 			return nil, &PermanentError{
 				Err:    fmt.Errorf("discord error %d: %s", code, respBody),
 				Reason: fmt.Sprintf("discord error code %d", code),
@@ -294,6 +308,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 		}
 
 		if resp.StatusCode >= 500 && attempt < maxRetries {
+			log.Warnf("discord: send to %s failed (attempt %d/%d): status=%d %s", rateLimitKey, attempt+1, maxRetries+1, resp.StatusCode, truncate(string(respBody), 200))
 			time.Sleep(time.Duration(attempt+1) * time.Second)
 			continue
 		}
@@ -327,4 +342,12 @@ func extractErrorCode(body []byte) int {
 		return errResp.Code
 	}
 	return 0
+}
+
+// truncate returns s truncated to maxLen characters, with "..." appended if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
