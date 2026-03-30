@@ -55,8 +55,8 @@ func NewLayeredView(
 	// Resolve emoji (small map, only populated keys)
 	lv.emoji = vb.resolveEmojiMap(base, perLang, platform)
 
-	// Build computed fields (small map)
-	lv.computed = buildComputedFields(base, perLang, areas)
+	// Build computed fields (small map — needs resolved emoji for genderData)
+	lv.computed = buildComputedFields(base, perLang, lv.emoji, areas)
 
 	// Resolve emoji arrays into computed (they're []string, not simple strings)
 	for _, m := range arrayEmojiKeys {
@@ -230,7 +230,7 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang map[string]any, platform st
 }
 
 // buildComputedFields creates the small set of derived fields.
-func buildComputedFields(base, perLang map[string]any, areas []webhook.MatchedArea) map[string]any {
+func buildComputedFields(base, perLang map[string]any, emoji map[string]string, areas []webhook.MatchedArea) map[string]any {
 	m := make(map[string]any, 16)
 
 	// id = pokemon_id
@@ -295,17 +295,14 @@ func buildComputedFields(base, perLang map[string]any, areas []webhook.MatchedAr
 	}
 	m["areas"] = strings.Join(areaNames, ", ")
 
-	// genderData (needs to be assembled from components)
+	// genderData (assembled from perLang name + resolved emoji)
 	genderName := ""
-	genderEmoji := ""
 	if perLang != nil {
 		if n, ok := perLang["genderName"].(string); ok {
 			genderName = n
 		}
-		if e, ok := perLang["genderEmoji"].(string); ok {
-			genderEmoji = e
-		}
 	}
+	genderEmoji := emoji["genderEmoji"] // from resolved emoji map
 	if genderName != "" || genderEmoji != "" {
 		m["genderData"] = map[string]any{
 			"name":  genderName,
