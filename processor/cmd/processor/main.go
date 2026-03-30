@@ -117,12 +117,12 @@ func main() {
 
 	// Initialize delivery dispatcher
 	discordToken := ""
-	if len(cfg.Discord.Token) > 0 {
-		discordToken = cfg.Discord.Token[0]
+	if tokens := cfg.Discord.DiscordTokens(); len(tokens) > 0 {
+		discordToken = tokens[0]
 	}
 	telegramToken := ""
-	if len(cfg.Telegram.Token) > 0 {
-		telegramToken = cfg.Telegram.Token[0]
+	if tokens := cfg.Telegram.TelegramTokens(); len(tokens) > 0 {
+		telegramToken = tokens[0]
 	}
 
 	if discordToken != "" || telegramToken != "" {
@@ -382,9 +382,15 @@ func main() {
 				metrics.RenderQueueDepth.Set(float64(depth))
 			}
 			if proc.dispatcher != nil {
-				statusParts = append(statusParts, fmt.Sprintf("DeliveryQ: %d Tracked: %d",
-					proc.dispatcher.QueueDepth(), proc.dispatcher.TrackerSize()))
+				statusParts = append(statusParts, fmt.Sprintf("Delivery: Discord:%d+%d Telegram:%d Tracked:%d",
+					proc.dispatcher.DiscordDepth(),
+					proc.dispatcher.WebhookDepth(),
+					proc.dispatcher.TelegramDepth(),
+					proc.dispatcher.TrackerSize()))
 				metrics.DeliveryQueueDepth.Set(float64(proc.dispatcher.QueueDepth()))
+				metrics.DeliveryDiscordQueueDepth.Set(float64(proc.dispatcher.DiscordDepth()))
+				metrics.DeliveryWebhookQueueDepth.Set(float64(proc.dispatcher.WebhookDepth()))
+				metrics.DeliveryTelegramQueueDepth.Set(float64(proc.dispatcher.TelegramDepth()))
 				metrics.DeliveryTrackerSize.Set(float64(proc.dispatcher.TrackerSize()))
 			}
 			log.Infof("[Status] %s", strings.Join(statusParts, " | "))

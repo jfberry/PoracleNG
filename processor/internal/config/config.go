@@ -81,7 +81,7 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Token              []string `toml:"token"`
+	Token              any      `toml:"token"` // string or []string
 	Prefix             string   `toml:"prefix"`
 	IvColors           []string `toml:"iv_colors"`
 	Admins             []string `toml:"admins"`
@@ -89,10 +89,39 @@ type DiscordConfig struct {
 	MessageDeleteDelay int      `toml:"message_delete_delay"` // extra ms for clean TTH on channels
 }
 
+// DiscordTokens returns the discord tokens as a string slice.
+func (c DiscordConfig) DiscordTokens() []string {
+	return tomlTokens(c.Token)
+}
+
 // TelegramConfig reads the [telegram] section for fields the processor needs.
 type TelegramConfig struct {
-	Token  []string `toml:"token"`
+	Token  any      `toml:"token"` // string or []string
 	Admins []string `toml:"admins"`
+}
+
+// TelegramTokens returns the telegram tokens as a string slice.
+func (c TelegramConfig) TelegramTokens() []string {
+	return tomlTokens(c.Token)
+}
+
+// tomlTokens normalizes a TOML token field (bare string or array) into a string slice.
+func tomlTokens(v any) []string {
+	switch t := v.(type) {
+	case string:
+		if t != "" {
+			return []string{t}
+		}
+	case []any:
+		var tokens []string
+		for _, elem := range t {
+			if s, ok := elem.(string); ok && s != "" {
+				tokens = append(tokens, s)
+			}
+		}
+		return tokens
+	}
+	return nil
 }
 
 // ListenAddr returns the host:port listen address.

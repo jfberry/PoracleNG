@@ -80,3 +80,12 @@ func (d *Dispatcher) QueueDepth() int { return len(d.ch) }
 
 // TrackerSize returns the number of messages being tracked.
 func (d *Dispatcher) TrackerSize() int { return d.tracker.Size() }
+
+// DiscordDepth returns the number of discord jobs currently in-flight.
+func (d *Dispatcher) DiscordDepth() int { return d.queue.DiscordDepth() }
+
+// WebhookDepth returns the number of webhook jobs currently in-flight.
+func (d *Dispatcher) WebhookDepth() int { return d.queue.WebhookDepth() }
+
+// TelegramDepth returns the number of telegram jobs currently in-flight.
+func (d *Dispatcher) TelegramDepth() int { return d.queue.TelegramDepth() }

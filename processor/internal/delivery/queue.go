@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/metrics"
@@ -29,6 +30,11 @@ type FairQueue struct {
 	discordSem  chan struct{}
 	webhookSem  chan struct{}
 	telegramSem chan struct{}
+
+	// Per-platform in-flight counters for metrics
+	discordInFlight  atomic.Int64
+	webhookInFlight  atomic.Int64
+	telegramInFlight atomic.Int64
 }
 
 // NewFairQueue creates a FairQueue that reads jobs from ch and dispatches them
@@ -81,6 +87,11 @@ func (fq *FairQueue) processJob(job *Job) {
 	sem := fq.semaphoreFor(job.Type)
 	sem <- struct{}{}
 	defer func() { <-sem }()
+
+	// Track per-platform in-flight count
+	counter := fq.counterFor(job.Type)
+	counter.Add(1)
+	defer counter.Add(-1)
 
 	platform := PlatformFromType(job.Type)
 	sender, ok := fq.senders[platform]
@@ -157,3 +168,25 @@ func (fq *FairQueue) semaphoreFor(jobType string) chan struct{} {
 		return fq.discordSem
 	}
 }
+
+func (fq *FairQueue) counterFor(jobType string) *atomic.Int64 {
+	if jobType == "webhook" {
+		return &fq.webhookInFlight
+	}
+	platform := PlatformFromType(jobType)
+	switch platform {
+	case "telegram":
+		return &fq.telegramInFlight
+	default:
+		return &fq.discordInFlight
+	}
+}
+
+// DiscordDepth returns the number of discord jobs currently in-flight.
+func (fq *FairQueue) DiscordDepth() int { return int(fq.discordInFlight.Load()) }
+
+// WebhookDepth returns the number of webhook jobs currently in-flight.
+func (fq *FairQueue) WebhookDepth() int { return int(fq.webhookInFlight.Load()) }
+
+// TelegramDepth returns the number of telegram jobs currently in-flight.
+func (fq *FairQueue) TelegramDepth() int { return int(fq.telegramInFlight.Load()) }

@@ -257,4 +257,18 @@ var (
 		Name: "poracle_delivery_rate_limited_total",
 		Help: "Rate-limited delivery attempts",
 	}, []string{"platform"})
+
+	// Per-platform queue depths
+	DeliveryDiscordQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_discord_queue_depth",
+		Help: "Current discord delivery queue depth",
+	})
+	DeliveryWebhookQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_webhook_queue_depth",
+		Help: "Current discord webhook delivery queue depth",
+	})
+	DeliveryTelegramQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_telegram_queue_depth",
+		Help: "Current telegram delivery queue depth",
+	})
 )
