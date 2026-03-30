@@ -34,14 +34,11 @@ const telegrafChannel = config.telegram.channelToken ? new Telegraf(config.teleg
 
 const scannerQuery = scannerFactory.createScanner(scannerKnex, config.database.scannerType)
 
-const DiscordWorker = require('./lib/discord/discordWorker')
-const DiscordWebhookWorker = require('./lib/discord/discordWebhookWorker')
 const DiscordCommando = require('./lib/discord/commando')
 
 const TelegramWorker = require('./lib/telegram/Telegram')
 
 const logs = require('./lib/logger')
-const metrics = require('./lib/metrics')
 
 const { log } = logs
 const re = require('./util/regex')(translatorFactory)
@@ -59,26 +56,10 @@ fastify.decorate('query', query)
 fastify.decorate('scannerQuery', scannerQuery)
 fastify.decorate('geofence', geofence)
 fastify.decorate('translatorFactory', translatorFactory)
-fastify.decorate('discordQueue', [])
-fastify.decorate('telegramQueue', [])
 
 const discordCommando = config.discord.enabled ? new DiscordCommando(config.discord.token[0], query, scannerQuery, config, logs, GameData, PoracleInfo, geofence, translatorFactory) : null
-const discordWorkers = []
-let discordWebhookWorker
 let telegram
 let telegramChannel
-
-if (config.discord.enabled) {
-	for (let key = 0; key < config.discord.token.length; key++) {
-		if (config.discord.token[key]) {
-			discordWorkers.push(new DiscordWorker(config.discord.token[key], key + 1, config, logs, true, (key
-				? { status: config.discord.workerStatus || 'invisible', activity: config.discord.workerActivity ?? 'PoracleHelper' }
-				: { status: 'available', activity: config.discord.activity ?? 'PoracleNG' }), query))
-		}
-	}
-	fastify.decorate('discordWorker', discordWorkers[0])
-	discordWebhookWorker = new DiscordWebhookWorker(config, logs, true, query)
-}
 
 if (config.telegram.enabled) {
 	telegram = new TelegramWorker('1', config, logs, GameData, PoracleInfo, geofence, telegramController, query, scannerQuery, telegraf, translatorFactory, telegramCommandParser, re, true)
@@ -117,13 +98,12 @@ let discordReconciliation
 async function syncDiscordRole() {
 	try {
 		if (!discordReconciliation) {
-			const worker = discordWorkers[0]
-			if (!worker || worker.busy) {
+			if (!discordCommando || !discordCommando.client || !discordCommando.client.isReady()) {
 				// try again in 30 seconds
 				setTimeout(syncDiscordRole, 30000)
 				return
 			}
-			discordReconciliation = new DiscordReconciliation(worker.client, log, config, query)
+			discordReconciliation = new DiscordReconciliation(discordCommando.client, log, config, query)
 		}
 		// "updateChannelNames": true,
 		// 	"updateChannelNotes": true,
@@ -158,20 +138,8 @@ function handleShutdown() {
 	if (shuttingDown) return
 	shuttingDown = true
 
-	log.info('Poracle shutdown - saving cache')
-
-	const workerSaves = []
-	for (const worker of discordWorkers) {
-		workerSaves.push(worker.saveTimeouts())
-	}
-	if (telegram) workerSaves.push(telegram.saveTimeouts())
-	if (telegramChannel) workerSaves.push(telegramChannel.saveTimeouts())
-	if (discordWebhookWorker) workerSaves.push(discordWebhookWorker.saveTimeouts())
-
-	Promise.all(workerSaves)
-		.then(() => log.info('Poracle shutdown - complete'))
-		.catch((err) => log.error(`Poracle shutdown - Error saving files ${err}`))
-		.finally(() => process.exit())
+	log.info('Poracle shutdown - complete')
+	process.exit()
 }
 
 function notifyProcessorReload() {
@@ -184,10 +152,14 @@ function notifyProcessorReload() {
 }
 
 function processMessages(msgs) {
-	for (const msg of msgs) {
-		if (['discord:user', 'discord:channel', 'webhook'].includes(msg.type)) fastify.discordQueue.push(msg)
-		if (['telegram:user', 'telegram:channel', 'telegram:group'].includes(msg.type)) fastify.telegramQueue.push(msg)
+	if (!config.processor.url) {
+		log.warn('Cannot deliver command messages: processor URL not configured')
+		return
 	}
+	const axios = require('axios')
+	axios.post(`${config.processor.url}/api/deliverMessages`, msgs, { headers: config.processor.headers }).catch((err) => {
+		log.error(`Failed to deliver command messages to processor: ${err.message}`)
+	})
 }
 
 process.on('SIGUSR2', () => {
@@ -195,44 +167,15 @@ process.on('SIGUSR2', () => {
 })
 
 async function currentStatus() {
-	let discordQueueLength = 0
-
-	// eslint-disable-next-line no-sequences
-	const queueCount = (queue) => queue.map((x) => x.target).reduce((r, c) => (r[c] = (r[c] || 0) + 1, r), {})
-
-	const queueSummary = {}
-
-	for (const w of discordWorkers) {
-		discordQueueLength += w.discordQueue.length
-		Object.assign(queueSummary, queueCount(w.discordQueue))
-	}
-
-	const telegramQueueLength = (telegram ? telegram.telegramQueue.length : 0)
-		+ (telegramChannel ? telegramChannel.telegramQueue.length : 0)
-
-	const webhookQueueLength = discordWebhookWorker ? discordWebhookWorker.webhookQueue.length : 0
-	Object.assign(
-		queueSummary,
-		telegram ? queueCount(telegram.telegramQueue) : {},
-		telegramChannel ? queueCount(telegramChannel.telegramQueue) : {},
-		discordWebhookWorker ? queueCount(discordWebhookWorker.webhookQueue) : {},
-	)
-
 	const mainMem = process.memoryUsage()
 	const mainMemMb = Math.round(mainMem.heapUsed / 1048576)
 	const mainRssMb = Math.round(mainMem.rss / 1048576)
 
-	// Update prometheus gauges
-	metrics.discordQueueDepth.set(discordQueueLength)
-	metrics.discordWebhookQueueDepth.set(webhookQueueLength)
-	metrics.telegramQueueDepth.set(telegramQueueLength)
-
-	const infoMessage = `[Main] Queues: Discord: ${discordQueueLength} + ${webhookQueueLength} | Telegram: ${telegramQueueLength} | heap:${mainMemMb}MB rss:${mainRssMb}MB`
+	const infoMessage = `[Main] heap:${mainMemMb}MB rss:${mainRssMb}MB`
 	log.info(infoMessage)
 
 	PoracleInfo.status = {
 		queueInfo: infoMessage,
-		queueSummary,
 		mainMemoryMb: mainMemMb,
 		mainRssMb,
 	}
@@ -266,51 +209,14 @@ async function run() {
 
 	if (config.discord.enabled) {
 		try {
-			log.info('Starting discord workers')
+			log.info('Starting discord commando')
 
 			await discordCommando.start()
-			for (const discordWorker of discordWorkers) {
-				await discordWorker.start()
-			}
-			await discordWebhookWorker.start()
 
-			fastify.decorate('discordClient', discordWorkers[0].client)
+			fastify.decorate('discordClient', discordCommando.client)
 		} catch (err) {
-			log.error('Error starting discord workers', err)
+			log.error('Error starting discord commando', err)
 		}
-
-		setInterval(() => {
-			if (!fastify.discordQueue.length) {
-				return
-			}
-
-			// Dequeue onto individual queues as fast as possible
-			while (fastify.discordQueue.length) {
-				const { target, type } = fastify.discordQueue[0]
-				let discordWorker
-				if (type === 'webhook') {
-					discordWorker = discordWebhookWorker
-				} else {
-					// see if target has dedicated worker
-					discordWorker = discordWorkers.find((workerr) => workerr.users.includes(target))
-					if (!discordWorker) {
-						let busyestWorkerHumanCount = Number.POSITIVE_INFINITY
-						let laziestWorkerId
-						Object.keys(discordWorkers).map((i) => {
-							if (discordWorkers[i].userCount < busyestWorkerHumanCount) {
-								busyestWorkerHumanCount = discordWorkers[i].userCount
-								laziestWorkerId = i
-							}
-						})
-						busyestWorkerHumanCount = Number.POSITIVE_INFINITY
-						discordWorker = discordWorkers[laziestWorkerId]
-						discordWorker.addUser(target)
-					}
-				}
-
-				discordWorker.work(fastify.discordQueue.shift())
-			}
-		}, 100)
 
 		if (config.discord.checkRole && config.discord.checkRoleInterval && config.discord.guilds) {
 			setTimeout(syncDiscordRole, 10000)
@@ -327,27 +233,13 @@ async function run() {
 
 	if (config.telegram.enabled) {
 		try {
-			log.info('Starting telegram workers')
+			log.info('Starting telegram bot')
 
 			await telegram.start()
 			if (telegramChannel) await telegramChannel.start()
 		} catch (err) {
-			log.error('Error starting discord workers', err)
+			log.error('Error starting telegram bot', err)
 		}
-		setInterval(() => {
-			if (!fastify.telegramQueue.length) {
-				return
-			}
-
-			while (fastify.telegramQueue.length) {
-				let telegramWorker = telegram
-				if (telegramChannel && ['telegram:channel', 'telegram:group'].includes(fastify.telegramQueue[0].type)) {
-					telegramWorker = telegramChannel
-				}
-
-				telegramWorker.work(fastify.telegramQueue.shift())
-			}
-		}, 100)
 
 		if (config.telegram.checkRole && config.telegram.checkRoleInterval) {
 			setTimeout(syncTelegramMembership, 30000)

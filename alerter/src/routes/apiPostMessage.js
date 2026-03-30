@@ -10,6 +10,10 @@ module.exports = async (fastify, options) => {
 			return { status: 'authError', reason: 'incorrect or missing api secret' }
 		}
 
+		if (!fastify.config.processor?.url) {
+			return { status: 'error', message: 'processor URL not configured' }
+		}
+
 		let data = req.body
 		if (!Array.isArray(data)) data = [data]
 
@@ -27,10 +31,13 @@ module.exports = async (fastify, options) => {
 			language: x.language || fastify.config.general.locale,
 		}))
 
-		data.forEach((job) => {
-			if (['discord:user', 'discord:channel', 'webhook'].includes(job.type)) fastify.discordQueue.push(job)
-			if (['telegram:user', 'telegram:channel'].includes(job.type)) fastify.telegramQueue.push(job)
-		})
+		try {
+			const axios = require('axios')
+			await axios.post(`${fastify.config.processor.url}/api/deliverMessages`, data, { headers: fastify.config.processor.headers })
+		} catch (err) {
+			fastify.logger.error(`Failed to forward postMessage to processor: ${err.message}`)
+			return { status: 'error', message: 'failed to forward to processor' }
+		}
 
 		if (!reply.sent) return { status: 'ok' }
 	})

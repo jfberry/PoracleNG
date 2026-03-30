@@ -98,27 +98,23 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 
 	// 3. Deliver rendered messages.
 	if len(jobs) > 0 {
-		if ps.dispatcher != nil {
-			for _, j := range jobs {
-				ps.dispatcher.Dispatch(&delivery.Job{
-					Target:       j.Target,
-					Type:         j.Type,
-					Message:      j.Message,
-					TTH:          tthFromMap(j.TTH),
-					Clean:        j.Clean,
-					Name:         j.Name,
-					LogReference: j.LogReference,
-					Lat:          parseCoordFloat(j.Lat),
-					Lon:          parseCoordFloat(j.Lon),
-				})
-			}
-		} else {
-			// Fallback: HTTP POST to alerter (existing path)
-			if err := ps.sender.DeliverMessages(jobs); err != nil {
-				log.Warnf("[%s] Failed to deliver %d messages: %s", job.LogReference, len(jobs), err)
-				metrics.RenderTotal.WithLabelValues("error").Inc()
-				return
-			}
+		if ps.dispatcher == nil {
+			log.Warnf("[%s] Delivery dispatcher not configured, dropping %d messages", job.LogReference, len(jobs))
+			metrics.RenderTotal.WithLabelValues("error").Inc()
+			return
+		}
+		for _, j := range jobs {
+			ps.dispatcher.Dispatch(&delivery.Job{
+				Target:       j.Target,
+				Type:         j.Type,
+				Message:      j.Message,
+				TTH:          tthFromMap(j.TTH),
+				Clean:        j.Clean,
+				Name:         j.Name,
+				LogReference: j.LogReference,
+				Lat:          parseCoordFloat(j.Lat),
+				Lon:          parseCoordFloat(j.Lon),
+			})
 		}
 	}
 
