@@ -773,14 +773,18 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 func (ps *ProcessorService) Close() {
 	ps.cancel()
 	ps.wg.Wait()
-	if ps.dispatcher != nil {
-		ps.dispatcher.Stop()
-		log.Info("Delivery dispatcher stopped")
-	}
+	log.Info("Webhook workers stopped")
+
+	// Close render channel BEFORE dispatcher — render workers feed into dispatcher.
+	// Order: webhook workers → render channel → render workers → dispatcher → delivery
 	if ps.renderCh != nil {
 		close(ps.renderCh)
 		ps.renderWg.Wait()
 		log.Info("Render pool stopped")
+	}
+	if ps.dispatcher != nil {
+		ps.dispatcher.Stop()
+		log.Info("Delivery dispatcher stopped")
 	}
 	// Sender must close before resolver: sender's final flush may need
 	// tile workers still running to resolve pending tiles within deadline.
