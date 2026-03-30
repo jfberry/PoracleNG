@@ -1,0 +1,107 @@
+package main
+
+import (
+	"time"
+
+	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
+)
+
+// RenderJob holds everything needed to resolve a tile, render DTS templates,
+// and deliver the resulting messages. Webhook handlers enqueue these into
+// ps.renderCh so the I/O-heavy work happens off the worker goroutine.
+type RenderJob struct {
+	TemplateType      string
+	Enrichment        map[string]any
+	PerLangEnrichment map[string]map[string]any
+	PerUserEnrichment map[string]map[string]any
+	WebhookFields     map[string]any
+	MatchedUsers      []webhook.MatchedUser
+	MatchedAreas      []webhook.MatchedArea
+	TilePending       *staticmap.TilePending
+	IsEncountered     bool   // pokemon only
+	IsPokemon         bool   // true = RenderPokemon, false = RenderAlert
+	LogReference      string
+}
+
+// renderWorker processes render jobs from the shared channel until it is closed.
+func (ps *ProcessorService) renderWorker() {
+	defer ps.renderWg.Done()
+	for job := range ps.renderCh {
+		start := time.Now()
+		ps.processRenderJob(job)
+		metrics.RenderDuration.Observe(time.Since(start).Seconds())
+	}
+}
+
+// processRenderJob resolves the pending tile (if any), renders DTS templates,
+// and delivers the resulting messages to the alerter.
+func (ps *ProcessorService) processRenderJob(job RenderJob) {
+	// 1. Resolve tile with queue-pressure awareness.
+	if job.TilePending != nil {
+		queueLen := len(ps.renderCh)
+		queueCap := cap(ps.renderCh)
+		if queueCap > 0 && float64(queueLen)/float64(queueCap) > 0.8 {
+			// Queue is under pressure — skip waiting for tile, use fallback.
+			job.TilePending.Apply(job.TilePending.Fallback)
+			metrics.RenderTileSkipped.Inc()
+		} else {
+			// Wait for tile to resolve or deadline to expire.
+			select {
+			case url := <-job.TilePending.Result:
+				if url != "" {
+					job.TilePending.Apply(url)
+				} else {
+					job.TilePending.Apply(job.TilePending.Fallback)
+				}
+			case <-time.After(time.Until(job.TilePending.Deadline)):
+				job.TilePending.Apply(job.TilePending.Fallback)
+			}
+		}
+	}
+
+	// 2. Render templates.
+	var jobs []webhook.DeliveryJob
+	if ps.dtsRenderer == nil {
+		log.Warnf("[%s] DTS renderer not available, skipping render", job.LogReference)
+		metrics.RenderTotal.WithLabelValues("error").Inc()
+		return
+	}
+
+	if job.IsPokemon {
+		jobs = ps.dtsRenderer.RenderPokemon(
+			job.Enrichment,
+			job.PerLangEnrichment,
+			job.PerUserEnrichment,
+			job.WebhookFields,
+			job.MatchedUsers,
+			job.MatchedAreas,
+			job.IsEncountered,
+			job.LogReference,
+		)
+	} else {
+		jobs = ps.dtsRenderer.RenderAlert(
+			job.TemplateType,
+			job.Enrichment,
+			job.PerLangEnrichment,
+			job.WebhookFields,
+			job.MatchedUsers,
+			job.MatchedAreas,
+			job.LogReference,
+		)
+	}
+
+	// 3. Deliver rendered messages.
+	if len(jobs) > 0 {
+		if err := ps.sender.DeliverMessages(jobs); err != nil {
+			log.Warnf("[%s] Failed to deliver %d messages: %s", job.LogReference, len(jobs), err)
+			metrics.RenderTotal.WithLabelValues("error").Inc()
+			return
+		}
+	}
+
+	metrics.RenderTotal.WithLabelValues("ok").Inc()
+}
