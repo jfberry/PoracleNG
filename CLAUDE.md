@@ -14,23 +14,19 @@ Processor (Go, port 3030)
     |  - Parses webhooks (pokemon, raid, invasion, quest, lure, gym, nest, fort_update, max_battle, weather)
     |  - Loads tracking rules from MySQL into memory, atomically swaps on reload
     |  - Matches each webhook against all tracking rules (geofence, distance, filters)
-    |  - Enriches with computed fields:
-    |      Base: timezone-aware times, weather, PVP ranks, rarity, IV, map URLs, static map tiles,
-    |            icon URLs (uicons), reverse geocoding, weakness, generation, evolution chains
-    |      Per-language: translated pokemon/move/type/weather names (using pogo-translations)
-    |      Per-user: PVP display lists, distance/bearing
-    |  - Renders DTS Handlebars templates (raymond/v2) into Discord/Telegram messages
-    |  - Batches pre-rendered delivery jobs and POSTs to alerter
-    |  - Also proxies /api/* to alerter (so external tools only need one endpoint)
-    |  - Serves geofence data, tile generation, and geocoding APIs
+    |  - Enriches with computed fields (three layers: base, per-language, per-user)
+    |  - Renders DTS Handlebars templates (jfberry/raymond) into Discord/Telegram messages
+    |  - Delivers messages directly via Discord REST API and Telegram Bot API
+    |  - Serves all /api/* endpoints (tracking CRUD, humans, profiles, geofence, tiles, config)
+    |  - Proxies unhandled /api/* to alerter (for remaining alerter-only routes)
     v
 Alerter (Node.js/Fastify, port 3031)
-    |  POST /api/deliverMessages (pre-rendered delivery jobs)
-    |  - Pure message delivery queue — no controllers, no template rendering
-    |  - Routes jobs directly to Discord/Telegram delivery workers
+    |  - Discord bot (command processing, reconciliation)
+    |  - Telegram bot (command processing)
+    |  - POST /api/postMessage — sends confirmation messages from processor API operations
     v
 Discord / Telegram
-    (DM, channel, webhook, group)
+    (DM, channel, webhook, group, thread)
 ```
 
 Both processes run together via `start.sh` (or Docker). The processor starts first, waits for health check, then the alerter starts.
@@ -40,11 +36,13 @@ Both processes run together via `start.sh` (or Docker). The processor starts fir
 ```
 processor/                      # Go binary
   cmd/processor/
-    main.go                     # Entry point, component init, HTTP server
+    main.go                     # Entry point, component init, HTTP server, render pool
     pokemon.go                  # Pokemon webhook handler
     raid.go                     # Raid/egg webhook handler
     fort.go                     # Fort update webhook handler
     maxbattle.go                # Max battle webhook handler
+    render.go                   # Render pool: processRenderJob, delivery job construction
+    test.go                     # poracle-test handlers (all 9 types)
     ...                         # One file per webhook type
   internal/
     config/                     # TOML config loader
@@ -63,34 +61,54 @@ processor/                      # Go binary
     pvp/                        # PVP rank calculator (from Golbat webhook data)
     tracker/                    # Weather cells, encounter changes, duplicates, rarity stats
     state/                      # Immutable state snapshot with atomic RWMutex swap
-    webhook/                    # HTTP receiver (POST /), sender (batched to alerter), types
-    api/                        # Processor API endpoints (/health, /api/reload, /api/stats/*, geofence, tiles)
-    ratelimit/                  # Per-destination message rate limiting
+    webhook/                    # HTTP receiver (POST /), types
+    api/                        # All /api/* endpoints: tracking CRUD, humans, profiles, geofence, tiles, config, reload, test
+      tracking.go               # Shared tracking CRUD helpers, diff logic, flexBool/flexInt types
+      trackingMonster.go        # Pokemon tracking endpoints
+      trackingRaid.go, ...      # Per-type tracking endpoints (10 types)
+    delivery/                   # Go-native message delivery (Discord REST, Telegram Bot API)
+      dispatcher.go             # Top-level orchestrator: Dispatch, Start, Stop
+      queue.go                  # FairQueue with per-destination mutex, per-platform semaphores
+      discord.go                # Discord REST sender: DM, channel, thread, webhook, image upload
+      telegram.go               # Telegram REST sender: sticker, photo, text, venue, location
+      ratelimit.go              # Per-route Discord rate limiting + global 50 req/sec token bucket
+      tracker.go                # MessageTracker: TTL-based clean deletion, edit key lookup, disk persistence
+      image.go                  # Image download, multipart builder, embed normalization
+      delivery.go               # Core types: Job, SentMessage, Sender interface, PermanentError
+    ratelimit/                  # Per-destination alert rate limiting (not Discord API rate limiting)
     i18n/                       # Translation system (flat JSON, identifier keys, {0} placeholders)
       locale/                   # Embedded locale files (en.json, de.json, ...)
     uicons/                     # Icon URL resolution (pokemon, raid, gym, weather) with scheduled index refresh
     staticmap/                  # Static map tile generation (tileservercache, google, osm, mapbox)
     geocoding/                  # Reverse/forward geocoding (nominatim, google) with pogreb + ttlcache
-    dts/                        # DTS template rendering (Handlebars via raymond/v2), helpers, emoji, view builder, Shlink shortener
+    dts/                        # DTS template rendering (Handlebars via jfberry/raymond)
+      renderer.go               # RenderPokemon, RenderAlert, renderForUsers, renderGrouped
+      layered_view.go           # LayeredView implementing raymond.FieldResolver (zero-copy 8-layer lookup)
+      view.go                   # View builder: alias mapping, emoji resolution, computed fields
+      helpers.go                # ~47 Handlebars helpers (comparison, math, string, game data)
+      emoji.go                  # Per-platform emoji resolution
+      templates.go              # Template loading, selection chain, templateFile (raw text), @include
+      shlink.go                 # URL shortening via Shlink
     scanner/                    # Scanner DB interface (RDM, Golbat) for nearby stops
+    rowtext/                    # Tracking rule description generator (for API confirmation messages)
 
-alerter/                        # Node.js application (pure delivery queue)
+alerter/                        # Node.js application (command processing + reconciliation)
   src/
-    app.js                      # Entry point, Fastify server, delivery queue loop
+    app.js                      # Entry point, Fastify server, Discord/Telegram bot startup
     lib/
       discord/
         commando/
           index.js              # Discord bot setup, command registration
           events/messageCreate.js  # Command parser (underscore→space, pipe groups, translation)
           commands/              # Admin commands (poracle, channel, webhook, autocreate, role, etc.)
-        discordWorker.js        # DM + channel delivery, clean message deletion
-        discordWebhookWorker.js # Webhook URL delivery with retry/rate-limit handling
+        discordReconciliation.js # Discord role sync
         poracleDiscordState.js  # State wrapper passed to command handlers
         poracleDiscordUtil.js   # buildTarget, commandAllowed, permission checks
         poracleDiscordMessage.js # Message abstraction (reply, react, replyWithAttachment)
       telegram/
-        Telegram.js             # Bot setup, message delivery (sticker/photo/text/venue/location)
+        Telegram.js             # Bot setup, command routing (no delivery code)
         poracleTelegramState.js # State wrapper for Telegram commands
+        telegramReconciliation.js # Telegram group membership sync
       poracleMessage/
         commands/               # User commands: track, raid, egg, quest, nest, lure, gym, fort, invasion, maxbattle, etc.
         commandUtil.js          # Shared: reportUnrecognizedArgs
@@ -98,16 +116,11 @@ alerter/                        # Node.js application (pure delivery queue)
       configResolver.js         # Config/fallback file resolution, config directory
       geofenceLoader.js         # GeoJSON/Poracle fence parser, R-tree builder
     routes/
-      deliverMessages.js        # POST /api/deliverMessages — receives pre-rendered delivery jobs from processor
-      apiTracking.js            # GET /api/tracking/all/:id — all tracking for a user
-      apiTrackingMonster.js     # CRUD for pokemon tracking (pattern for all types)
-      apiTrackingRaid.js, apiTrackingEgg.js, ...  # Per-type tracking CRUD
-      apiHumans.js              # User management, area assignment
-      apiProfiles.js            # Profile CRUD
+      apiPostMessage.js         # POST /api/postMessage — delivers confirmation messages from processor
+      apiHumans.js              # User management (Discord role operations)
       apiConfig.js              # GET /api/config/poracleWeb — expose config to web UI
       apiMasterData.js          # GET /api/masterdata/monsters, /grunts
-      apiGeofence.js            # Geofence reload (tiles and data served by processor)
-      apiTrackingFort.js        # CRUD for fort tracking
+      apiGeofence.js            # Geofence reload bridge
     util/
       regex.js                  # Command argument regex factory (translated command names)
       translate.js              # Translator class (locale JSON files)
@@ -141,7 +154,7 @@ Golbat POSTs a JSON array to `POST /` on the processor:
 
 Each handler unmarshals the raw JSON into a typed struct (`webhook/types.go`). Duplicate check follows — keyed on encounter ID + CP + disappear time for pokemon, station ID + battle end + pokemon ID for maxbattle, etc. Duplicates are silently dropped.
 
-**Important**: Fort update webhooks use a nested format from Golbat (`change_type`, `edit_types`, `new`/`old` snapshot objects), not flat fields.
+**Important**: Fort update webhooks use a nested format from Golbat (`change_type`, `edit_types`, `new`/`old` snapshot objects), not flat fields. The enrichment layer flattens these into template-friendly fields (`name`, `oldName`, `newName`, `isEditName`, `changeTypeText`, etc.).
 
 ### 3. Matching
 
@@ -161,9 +174,9 @@ The handler creates a `matching.*Data` struct and calls the matcher. All matcher
 
 **Cardinal direction labels are intentionally mirrored** vs standard compass directions (e.g. 45° bearing returns `"northwest"` not `"northeast"`). These strings are only used as emoji lookup keys into `util.json`, where `"northwest"` maps to the northeast-pointing arrow emoji. The user sees the correct arrow — the raw string is never displayed in templates. This convention is inherited from the original JS `getBearingEmoji`.
 
-**Unencountered pokemon skip encounter-only stat filters.** When a pokemon is not encountered, Golbat omits CP, level, IVs, and weight. If a tracking rule constrains any of these beyond their defaults (`min_cp > 0`, `max_cp < 9000`, `min_level > 0`, `max_level < 55`, individual IVs, weight), the rule is skipped for unencountered pokemon. Rules with default stat values still match. This differs from the JS alerter where `undefined` → `NaN` silently passed all comparisons (both min and max), but produces more correct behavior.
+**Unencountered pokemon skip encounter-only stat filters.** When a pokemon is not encountered, Golbat omits CP, level, IVs, and weight. If a tracking rule constrains any of these beyond their defaults (`min_cp > 0`, `max_cp < 9000`, `min_level > 0`, `max_level < 55`, individual IVs, weight), the rule is skipped for unencountered pokemon. Rules with default stat values still match.
 
-**PVP evolution caps: nil means "match any cap".** When Golbat sends PVP evolution data with `cap == 0 && !capped` (the "not ohbem" case), the evolution entry's `Caps` is nil. In the matcher, this bypasses the cap filter entirely (matching any `pvp_ranking_cap` value). This matches JS behavior where `caps: null` short-circuits the cap check. The best-rank path (non-evolution) defaults to `[50]` for the same case, which is a different but equally correct behavior since best-rank entries are pre-filtered by configured level caps.
+**PVP evolution caps: nil means "match any cap".** When Golbat sends PVP evolution data with `cap == 0 && !capped` (the "not ohbem" case), the evolution entry's `Caps` is nil. In the matcher, this bypasses the cap filter entirely (matching any `pvp_ranking_cap` value). This matches JS behavior where `caps: null` short-circuits the cap check. The best-rank path (non-evolution) defaults to `[50]` for the same case.
 
 **Debounced state reload** (`ProcessorService.triggerReload`): All reload triggers — periodic timer excluded — use a centralized 500ms debounce timer. This coalesces burst mutations (e.g. PoracleWeb adding 50 tracking rules, or multiple rate-limit disables in the same window) into a single DB reload. Sources: API tracking mutations, rate-limit user disable, profile scheduler. The periodic timer runs its own direct `state.Load()` since it already operates on a fixed interval.
 
@@ -196,7 +209,7 @@ Enrichment is computed in three layers:
 - PVP display lists filtered by user's tracking criteria
 - Distance and bearing from user's location
 
-The enrichment is structured as `enrichment` (base), `perLanguageEnrichment` (keyed by language code), and `perUserEnrichment` (keyed by user ID). The processor's DTS view builder merges these layers when constructing the template context for each user.
+The enrichment is structured as `enrichment` (base), `perLanguageEnrichment` (keyed by language code), and `perUserEnrichment` (keyed by user ID). The DTS `LayeredView` merges these layers at render time without copying.
 
 **Language fallback**: When a user has no `language` set in the humans table, the processor falls back to `[general] locale` from config (not hardcoded `"en"`). The alerter does the same via `config.general.locale`. These must match — if they don't, the per-language enrichment lookup will miss and translated names (fullName, etc.) will be empty.
 
@@ -204,45 +217,62 @@ The enrichment is structured as `enrichment` (base), `perLanguageEnrichment` (ke
 
 ### 5. Template Rendering (Processor)
 
-The processor renders DTS templates directly using `mailgun/raymond/v2` (Handlebars for Go):
+The processor renders DTS templates using `jfberry/raymond` (a fork of `mailgun/raymond/v2` with a `FieldResolver` interface for zero-copy view lookup):
 
-1. Raw webhook fields merged into enrichment via `mergeWebhookFields()`
-2. Pending static map tile resolved (blocking wait with deadline)
-3. For each matched user: build view (enrichment + per-lang + per-user + emoji + aliases), select DTS template, render with raymond, URL-shorten `<S< ... >S>` markers, parse JSON result, append ping
-4. **Group rendering optimization**: for non-pokemon types, users with the same (template, platform, language) share a single render — only per-user fields (distance, bearing, PVP display) are patched afterward
-5. Pre-rendered delivery jobs POSTed to alerter `POST /api/deliverMessages`
+1. Webhook handler enqueues a `RenderJob` to the render channel (buffered, configurable pool size)
+2. Render worker picks up the job, resolves pending static map tile (blocking wait with deadline)
+3. For each matched user: build `LayeredView` (8-layer priority lookup), select DTS template, render with raymond, URL-shorten `<S< ... >S>` markers, parse JSON result, append ping
+4. **Group rendering optimization**: for non-pokemon types, users with the same (template, platform, language) share a single render — only per-user fields (distance, bearing) are patched afterward
+5. Rendered delivery jobs dispatched directly to the `delivery.Dispatcher`
 
-Default batch: 50 items or 100ms flush interval, whichever comes first.
+**Queue pressure**: When the render channel is >80% full, tile generation is skipped to reduce backpressure.
 
-### 6. Delivery (Alerter)
+**Shutdown ordering**: webhook workers → render channel (close) → render workers (drain) → dispatcher (stop) → sender (close) → static map (close).
 
-The alerter is a pure delivery queue. `POST /api/deliverMessages` pushes pre-rendered jobs directly to Discord/Telegram delivery workers. There are no controllers, no template rendering, and no Handlebars dependency.
+### 6. Message Delivery (Processor)
 
-### 7. Message Delivery
+Delivery is handled entirely by the Go processor via REST APIs — no Node.js delivery workers.
 
-**Discord embed format note**: DTS templates may use either `embed` (singular, legacy) or `embeds` (plural array, modern). All Discord workers normalize `embed` → `embeds[]` before sending and coerce string `color` values to integers. Color detection: `#`-prefixed or exactly 6 chars → hex (e.g. `"#A040A0"`, `"A040A0"`); anything else → decimal (e.g. `"1216493"`). The `uploadEmbedImages` feature downloads the tile from `embeds[0].image.url` and re-uploads as an attachment; if the download fails, the message is sent with the URL in the embed instead.
+**Dispatcher** (`delivery/dispatcher.go`):
+- Receives rendered `delivery.Job` from render workers
+- Routes to platform-specific `Sender` (Discord or Telegram)
+- Manages per-platform concurrency semaphores
 
-**Discord DM/Channel** (`discordWorker.js`):
-- Max N concurrent sends, max 1 per destination (prevents flooding one user)
-- Sends via Discord.js client (`user.send()` or `channel.send()`)
-- Optionally uploads map image as attachment
-- If `clean: true`, schedules message deletion after TTH
-- Consecutive failure tracking: in-memory counter, disables user after threshold
+**FairQueue** (`delivery/queue.go`):
+- Per-destination `sync.Mutex` via `sync.Map` ensures message ordering per channel/user
+- Per-platform semaphores limit concurrent API calls
+- Edit-before-send: if a job has an edit key matching a tracked message, edits instead of sending new
 
-**Discord Webhook** (`discordWebhookWorker.js`):
-- POSTs to webhook URL via axios
-- Handles 429 rate limits with retry-after + jitter backoff
-- Can upload images as multipart form data
+**Discord** (`delivery/discord.go`):
+- Pure REST API (Discord API v10) — no Discord.js/gateway dependency
+- DM channel creation and caching
+- Channel, thread, and webhook sending
+- Image upload as multipart form data (`uploadEmbedImages` feature)
+- `embed` → `embeds[]` normalization, string color → int coercion
+- Permanent error detection (50007 cannot DM, 10003 unknown channel, 10013 unknown user)
+- Consecutive failure tracking: disables user after threshold
 
-**Telegram** (`Telegram.js`):
-- Supports configurable send order: sticker, photo, text, venue, location
-- Text supports MarkdownV2, HTML, or Markdown parse modes
-- Handles 429 rate limits with retry (up to 5 attempts)
-- Clean message deletion via scheduled `deleteMessage()` calls
+**Telegram** (`delivery/telegram.go`):
+- Pure REST Bot API — no Telegraf dependency for delivery
+- Configurable send order: sticker, photo, text, location, venue
+- Parse mode normalization (MarkdownV2, HTML, Markdown)
+- 429 rate limit retry
+
+**Rate Limiting** (`delivery/ratelimit.go`):
+- Per-route Discord rate limits with `X-RateLimit-*` header parsing
+- Global 50 req/sec token bucket
+- `Retry-After` parsing with Dexter's heuristic (>1000 → milliseconds)
+- Cleanup when map >1000 entries
+
+**Message Tracker** (`delivery/tracker.go`):
+- TTL cache (`ttlcache/v3`) keyed by `target:messageID`
+- On TTH expiry: async clean deletion callback
+- Edit key lookup for message updates
+- Disk persistence (save/load) for crash recovery
 
 ## Rate Limiting
 
-Rate limiting is handled by the processor (`internal/ratelimit/`), applied before sending to the alerter:
+Rate limiting is handled by the processor (`internal/ratelimit/`), applied before rendering:
 
 - **Per-destination limits**: Configurable via `[alert_limits]` — `dm_limit` (default 20), `channel_limit` (default 40) per `timing_period` (default 240 minutes)
 - **Implementation**: Sliding window counter per destination ID. When a destination exceeds its limit, the matched payload is dropped and an i18n-translated rate limit message is sent to the user instead.
@@ -252,7 +282,7 @@ Rate limiting is handled by the processor (`internal/ratelimit/`), applied befor
 
 ## Discord Reconciliation
 
-Reconciliation syncs Discord role membership with Poracle user registration. Configured via `[reconciliation.discord]` and triggered by `[discord] check_role = true`.
+Reconciliation syncs Discord role membership with Poracle user registration. This remains in the alerter (requires Discord.js gateway for events). Configured via `[reconciliation.discord]` and triggered by `[discord] check_role = true`.
 
 **Periodic sync** (`syncDiscordRole`, every `check_role_interval` hours):
 1. Loads all `discord:user` humans from DB
@@ -276,10 +306,6 @@ Reconciliation syncs Discord role membership with Poracle user registration. Con
 - Users get `community_membership` and `area_restriction` fields updated based on their roles
 - The processor enforces area restrictions during matching
 
-**Channel reconciliation** (if `update_channel_names` or `unregister_missing_channels`):
-- Verifies registered `discord:channel` entries still exist
-- Updates channel names/notes, disables missing channels
-
 **Key config requirements**:
 - `[discord] check_role = true` and `guilds` must be set
 - `[general] role_check_mode = "disable-user"` for actual removal (default `"ignore"` does nothing)
@@ -292,7 +318,6 @@ Reconciliation syncs Discord role membership with Poracle user registration. Con
 - The processor copies `[alerter] api_secret` to its own config at startup
 - If `api_secret` is empty/unset, auth is disabled (all requests allowed)
 - The `RequireSecret` middleware in `api/api.go` wraps all processor `/api/*` handlers
-- The alerter also checks IP whitelist/blacklist before authentication
 
 **Unprotected endpoints**:
 - `GET /health` — health check
@@ -302,7 +327,6 @@ Reconciliation syncs Discord role membership with Poracle user registration. Con
 **Internal calls** (alerter → processor):
 - All alerter commands that call processor APIs include the secret via `config.processor.headers`
 - The `config.processor.headers` object is pre-built at config load time from `api_secret`
-- The alerter proxy (`/api/` catch-all) forwards the original `X-Poracle-Secret` header from external callers
 
 ## Command System
 
@@ -324,8 +348,8 @@ All tracking commands (track, raid, egg, quest, nest, lure, gym, fort, invasion,
 2. Parse args in `forEach`/`for` loop — match against regex patterns and keywords
 3. Track consumed args in a `Set`, report unrecognized args via `reportUnrecognizedArgs()`
 4. Validate distance/area requirements
-5. Query existing tracking, compute inserts/updates/unchanged
-6. Insert to DB, send confirmation message, react with emoji
+5. POST to processor tracking API (`/api/tracking/{type}/{id}`)
+6. Processor handles DB operations, confirmation messages, and state reload
 
 ### Key Commands
 
@@ -345,7 +369,7 @@ All tracking commands (track, raid, egg, quest, nest, lure, gym, fort, invasion,
 
 `!poracle-test <type>,<test-id> [template:<n>] [language:<code>]`
 
-The alerter POSTs to the processor's `/api/test` endpoint, which loads test webhooks from `fallbacks/testdata.json` (bundled) merged with `config/testdata.json` (user custom), runs full enrichment (including geocoding, static maps, icons), and returns the matched payload for the alerter to render and deliver.
+The alerter POSTs to the processor's `/api/test` endpoint, which loads test webhooks from `fallbacks/testdata.json` (bundled) merged with `config/testdata.json` (user custom), runs full enrichment, renders via the render queue, and delivers directly via the dispatcher.
 
 Supported types: `pokemon`, `raid`, `pokestop`, `gym`, `nest`, `quest`, `fort-update`, `max-battle`
 
@@ -354,25 +378,18 @@ Supported types: `pokemon`, `raid`, `pokestop`, `gym`, `nest`, `quest`, `fort-up
 - **Bundled**: `fallbacks/testdata.json` — sample webhooks for all types with named test IDs
 - **Custom**: `config/testdata.json` — user-provided test webhooks (overrides bundled by test ID)
 - **Webhook logs**: Enable `[webhookLogging]` in config to log raw Golbat webhooks to `logs/webhooks.log` (rotated hourly). These can be replayed or used to create custom test data.
-- **Matched webhook logs**: Enable `[logging.enable_logs] webhooks = true` to log matched payloads sent to the alerter.
 
 ### Unit Tests
 
-- **Processor**: `go test ./...` from `processor/` — 295+ tests covering matching, PVP, game data loading, enrichment equivalence (cross-language JS↔Go), per-user PVP display, translations, icons, static map field filtering, autoposition, circuit breaker
+- **Processor**: `go test ./...` from `processor/` — tests covering matching, PVP, game data loading, enrichment, per-user PVP display, translations, icons, static map field filtering, autoposition, delivery (discord, telegram, queue, tracker, rate limiter, image)
 - **Alerter**: `cd alerter && npm run test:commands` — command argument validation tests (mocha)
 - **Lint**: `cd alerter && npm run lint` — eslint with airbnb-base
 
-## API Patterns
+## API Endpoints
 
-All alerter API endpoints:
-- Require `x-poracle-secret` header (must match `[alerter] api_secret`)
-- Check IP whitelist/blacklist
-- Accept user ID as `:id` URL parameter
-- Return `{status: "ok", ...}` or `{status: "error", message: "..."}` or `{status: "authError", ...}`
+All API endpoints are accessed via the processor (port 3030). The processor handles most endpoints directly; unhandled routes are proxied to the alerter.
 
-### Key Endpoints
-
-**Processor-native endpoints** (handled directly by Go):
+### Processor-native endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -394,33 +411,37 @@ All alerter API endpoints:
 | GET | `/api/geofence/weatherMap/{lat}/{lon}` | Weather S2 cell tile |
 | GET | `/api/config/templates` | DTS template list (?includeDescriptions=true) |
 | POST | `/api/dts/render` | Render a DTS template with provided data |
+| GET | `/api/tracking/all/{id}` | All tracking for a user (all types) |
+| GET | `/api/tracking/allProfiles/{id}` | All tracking across all profiles |
+| GET | `/api/tracking/{type}/{id}` | List tracking rules with descriptions |
+| POST | `/api/tracking/{type}/{id}` | Create/update tracking rules (diff logic) |
+| DELETE | `/api/tracking/{type}/{id}/byUid/{uid}` | Delete single tracking rule |
+| PATCH | `/api/tracking/{type}/{id}/byUid/{uid}` | Update single tracking rule |
+| POST | `/api/tracking/{type}/{id}/delete` | Bulk delete by UID array |
+| GET | `/api/humans/{id}` | User info + available areas |
+| PATCH | `/api/humans/{id}` | Update user (location, area, language, etc.) |
+| DELETE | `/api/humans/{id}` | Delete user and all tracking |
+| GET | `/api/profiles/{id}` | List profiles |
+| POST | `/api/profiles/{id}` | Create/update profile |
+| DELETE | `/api/profiles/{id}/{profileNo}` | Delete profile |
+| POST | `/api/profiles/{id}/copy` | Copy profile |
 | GET | `/health` | Health check |
 | GET | `/metrics` | Prometheus metrics |
 
-**Alerter endpoints** (proxied through processor via `/api/*`):
+Tracking types: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/deliverMessages` | Receive pre-rendered delivery jobs from processor |
-| GET | `/api/tracking/all/:id` | All tracking for a user (all types) |
-| GET | `/api/tracking/pokemon/:id` | Pokemon tracking list |
-| POST | `/api/tracking/pokemon/:id` | Add pokemon tracking |
-| DELETE | `/api/tracking/pokemon/:id/byUid/:uid` | Delete one tracking entry |
-| PATCH | `/api/tracking/pokemon/:id/byUid/:uid` | Update one tracking entry |
-| GET | `/api/humans/:id` | User info + available areas |
-| PATCH | `/api/humans/:id` | Update user (location, area, language, etc.) |
-| GET | `/api/profiles/:id` | List profiles |
-| GET | `/api/config/poracleWeb` | Server config for web UI |
-| GET | `/api/masterdata/monsters` | All pokemon with names, forms, types |
-| GET | `/api/masterdata/grunts` | Grunt types |
-
-The same CRUD pattern (GET list, POST create, DELETE by uid, PATCH by uid) applies to: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle.
-
-**Flexible JSON type coercion**: All tracking CRUD POST endpoints (`/api/tracking/{type}/{id}`) accept flexible JSON types for numeric and boolean fields. Third-party clients like ReactMap may send `"clean": false` (boolean) instead of `"clean": 0` (number). The `flexBool` and `flexInt` custom JSON types in `processor/internal/api/tracking.go` handle this coercion transparently:
+**Flexible JSON type coercion**: All tracking CRUD POST endpoints accept flexible JSON types for numeric and boolean fields. Third-party clients like ReactMap may send `"clean": false` (boolean) instead of `"clean": 0` (number). The `flexBool` and `flexInt` custom JSON types in `processor/internal/api/tracking.go` handle this coercion transparently:
 - `flexBool`: accepts `true`/`false`, `0`/`1`, `"0"`/`"1"` — coerces to int (0 or 1)
 - `flexInt`: accepts numbers, booleans, quoted strings — coerces to int
 
-The processor proxies all `/api/*` requests to the alerter, so external tools only need to know the processor's address.
+### Alerter-only endpoints (proxied)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/postMessage` | Deliver confirmation messages (from processor API operations) |
+| GET | `/api/config/poracleWeb` | Server config for web UI |
+| GET | `/api/masterdata/monsters` | All pokemon with names, forms, types |
+| GET | `/api/masterdata/grunts` | Grunt types |
 
 ## State Management (Processor)
 
@@ -433,22 +454,22 @@ State is loaded from MySQL into an immutable snapshot, then atomically swapped:
 5. Reload triggered every `reload_interval_secs` (default 60s) or via `/api/reload`
 
 **Two reload modes:**
-- **`state.Load()`** — DB only, reuses existing geofence data. Used by `/api/reload`, periodic timer, and tracking API mutations via `triggerReloadAlerts()`
+- **`state.Load()`** — DB only, reuses existing geofence data. Used by `/api/reload`, periodic timer, and tracking API mutations via `triggerReload()`
 - **`state.LoadWithGeofences()`** — full reload including geofence files and Koji fetch. Used at startup and `/api/geofence/reload`
 
-Tracking API routes call `triggerReload()` after mutations to push changes immediately. All 10 tracking types (pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle) trigger reloads on create/update/delete.
+Tracking API routes call `triggerReload()` after mutations to push changes immediately. All 10 tracking types trigger reloads on create/update/delete.
 
 ## Template System (DTS)
 
-DTS (Data Template System) templates are Handlebars templates rendered by the Go processor using `mailgun/raymond/v2`. Templates define per-platform message formats for each alert type.
+DTS (Data Template System) templates are Handlebars templates rendered by the Go processor using `jfberry/raymond` (fork of `mailgun/raymond/v2` with `FieldResolver` interface). Templates define per-platform message formats for each alert type.
 
 ### Template Loading
 
-Templates are loaded from `config/dts.json` (or `fallbacks/dts.json` as fallback). Each template entry may use:
-- Inline template strings directly in the JSON
-- `"templateFile": "path/to/file.json"` — external file reference
-- `"@include": "path/to/partial.json"` — include directive for shared partials
-- Array values for multi-line `description` fields — joined with newlines
+Templates are loaded from `config/dts.json` (or `fallbacks/dts.json` as fallback), plus additional JSON files from `config/dts/` directory. Each template entry may use:
+- Inline `template` object — JSON that gets stringified after processing
+- `"templateFile": "dts/fort_update.txt"` — external file read as raw Handlebars text (NOT parsed as JSON). This allows non-JSON constructs like unquoted Handlebars expressions in value positions.
+- `"@include filename"` — include directive for shared partials (resolved from `config/dts/`)
+- Array values for multi-line `description` fields — joined into strings (only arrays of all strings; arrays containing objects like `embed.fields` are preserved)
 
 ### Template Selection Chain
 
@@ -459,6 +480,21 @@ Template selection uses a 5-level fallback (first match wins):
 3. Default + language: type + default template + platform + language
 4. Default: type + default template + platform
 5. Any platform: type + template ID (first platform match)
+
+### LayeredView (zero-copy template context)
+
+The `LayeredView` implements raymond's `FieldResolver` interface, providing an 8-layer priority lookup without copying maps:
+
+1. **perUser** — PVP display, distance, bearing (per matched user)
+2. **emoji** — platform-specific emoji strings
+3. **perLang** — translated names, weakness, evolutions
+4. **computed** — TTH recalculation, area list, derived fields
+5. **base** — enrichment output (maps, geocoding, weather, game data)
+6. **aliases** — camelCase mappings for backward compatibility with existing DTS templates
+7. **webhook** — raw webhook fields (fallback for any field not in enrichment)
+8. **dtsDict** — user-configured `[general] dts_dictionary` key-value pairs
+
+`SetEscapeHTML(false)` is required on the raymond template engine. DTS templates produce JSON output, and the default HTML escaping would corrupt `<` characters in Handlebars expressions and URL parameters.
 
 ### Handlebars Helpers
 
@@ -474,19 +510,6 @@ The processor registers ~47 Handlebars helpers via `dts/helpers.go`:
 
 Per-platform emoji resolution uses `config/emoji.json` (or `fallbacks/emoji.json`) and `resources/data/util.json`. Enrichment provides emoji keys (e.g., `emojiWeather`, `emojiTeam`, `emojiDirection`), and the view builder resolves these to platform-specific strings (Discord custom emoji syntax, Telegram unicode, etc.) via explicit key mapping. The `getEmoji(key, platform)` function looks up the emoji by exact key — no suffix-guessing heuristics.
 
-### View Builder
-
-The view builder (`dts/view.go`) assembles the template context for each user:
-1. Merge base enrichment fields
-2. Merge per-language enrichment (translated names, weakness, evolutions)
-3. Merge per-user enrichment (PVP display, distance, bearing)
-4. Resolve emoji keys to platform-specific strings
-5. Apply field aliases (camelCase mappings for backward compatibility with existing DTS templates)
-6. Compute derived fields (TTH recalculation, area list formatting, mega evolution name)
-7. JSON-escape all string values for safe embedding in JSON template output
-
-**`SetEscapeHTML(false)`** is required on the raymond template engine. DTS templates produce JSON output, and the default HTML escaping would corrupt `<` characters in Handlebars expressions and URL parameters.
-
 ### Shlink URL Shortening
 
 Templates can wrap URLs in `<S< ... >S>` markers. After rendering, the processor scans for these markers and replaces each with a shortened URL via a configured Shlink instance. If Shlink is unavailable, the original URL is preserved.
@@ -497,14 +520,12 @@ Templates receive the full view object with all enriched data. Common fields: `{
 
 ### Two systems (migrating)
 
-The alerter and processor currently use different translation approaches. As logic moves from alerter to processor, new code uses the processor's system. Both will coexist until the migration is complete.
+The alerter and processor use different translation approaches. As logic moves from alerter to processor, new code uses the processor's system. Both coexist during the migration.
 
 **Alerter (legacy)** — `alerter/src/util/translate.js`
 - Flat JSON files with **English text as keys**: `{"You have reached the limit of {0} messages": "Das Limit von {0}..."}`
 - Placeholders: `{0}`, `{1}`, ... replaced by `Translator.format()`
 - Merge order: `resources/locale/{lang}.json` → `alerter/locale/{lang}.json` → `config/custom.{lang}.json`
-- Game data (pokemon names, moves) and UI messages share the same key-value namespace
-- Problem: changing English wording breaks all translations; no namespacing
 
 **Processor (new)** — `processor/internal/i18n/`
 - Flat JSON files with **dotted identifier keys**: `{"rate_limit.reached": "Das Limit von {0}..."}`
@@ -513,22 +534,9 @@ The alerter and processor currently use different translation approaches. As log
 - Merge order (later wins):
   1. Embedded (`processor/internal/i18n/locale/*.json`) — bundled processor messages
   2. `resources/locale/*.json` — game data from pogo-translations
-  3. `alerter/locale/*.json` — shared alerter strings (also used by the alerter)
+  3. `alerter/locale/*.json` — shared alerter strings
   4. `config/custom.{lang}.json` — admin overrides
 - Identifier keys are stable: renaming English text doesn't break translations
-- Dotted namespacing: `rate_limit.reached`, `pokemon.name.1`, etc.
-
-### Locale file format
-
-All locale files (both systems) are flat JSON: `{"key": "translated string"}`. This is intentional — the same files are consumed by the Go processor, Node alerter, and React web frontend. The format is directly supported by Crowdin, Transifex, and Weblate.
-
-### Placeholder convention
-
-Both systems use `{0}`, `{1}`, ... for positional arguments. In Go:
-```go
-tr := ps.translations.For(user.Language)
-msg := tr.Tf("rate_limit.reached", result.Limit, ps.cfg.AlertLimits.TimingPeriod)
-```
 
 ### Adding new translated strings
 
@@ -536,80 +544,6 @@ msg := tr.Tf("rate_limit.reached", result.Limit, ps.cfg.AlertLimits.TimingPeriod
 2. Add translations to each `{lang}.json` in the same directory
 3. Use `tr.T("key")` or `tr.Tf("key", args...)` at the call site
 4. Strings are embedded in the binary at build time; admin overrides via `config/custom.{lang}.json`
-
-### File locations
-
-```
-processor/internal/i18n/
-  i18n.go                       # Bundle, Translator, Format(), JSON loader
-  embed.go                      # go:embed directive for locale/*.json
-  load.go                       # Load() — multi-layer merge from all sources
-  locale/
-    en.json                     # English (source of truth for new identifier keys)
-    de.json, fr.json, ...       # Bundled translations
-
-resources/locale/               # Game data translations (pogo-translations)
-  en.json, de.json, ...         # Pokemon names, moves, types, etc. by numeric ID
-
-alerter/locale/                 # Alerter message translations (English-as-key format)
-  de.json, fr.json, ...         # Legacy format, merged into processor bundle at layer 3
-
-config/custom.{lang}.json       # Admin overrides (highest priority)
-```
-
-### Migration plan
-
-As code moves from alerter to processor:
-1. New processor strings use identifier keys (`rate_limit.reached`, not English sentences)
-2. Game data translations (`poke_1`, `move_14`, etc.) are loaded from `resources/locale/` — same source as the alerter
-3. The alerter's English-as-key strings in `alerter/locale/` are merged at layer 3, so they remain available if the processor ever needs them during the transition
-4. Eventually the alerter's `translate.js` will also switch to identifier keys, unifying both systems
-
-### Crowdin integration
-
-Translation management uses Crowdin (free for open-source). See `crowdin.yml` in the project root for the configuration. The workflow:
-
-1. Source files (English) are uploaded to Crowdin from `processor/internal/i18n/locale/en.json`
-2. Translators work in the Crowdin web UI
-3. Crowdin creates a PR with updated `{lang}.json` files when translations are complete
-4. The PR is reviewed and merged normally
-
-To set up (one-time): create a Crowdin project, connect the GitHub repo, and add the `crowdin.yml` config. See below for the config file.
-
-## Configuration
-
-Single TOML file at `config/config.toml`, shared by both processor and alerter. See `config/config.example.toml` for all options with comments.
-
-Key sections: `[processor]`, `[alerter]`, `[database]`, `[geofence]`, `[pvp]`, `[weather]`, `[discord]`, `[telegram]`, `[geocoding]`, `[tuning]`, `[tracking]`, `[alert_limits]`, `[stats]`, `[logging]`.
-
-The alerter's `configAdapter.js` converts snake_case TOML keys to camelCase JS objects with sensible defaults.
-
-**configAdapter `defaults()` gotcha**: The `defaults(target, defs)` function is **shallow** — it only sets keys missing from `target`. For nested sections like `[reconciliation.discord]`, if the user sets *any* key, the entire default object is skipped. Nested defaults must be applied individually (e.g., `defaults(config.reconciliation.discord, {...})`).
-
-## Game Data
-
-The processor uses the **raw masterfile** (`master-latest-raw.json`) from Masterfile-Generator, split into `resources/rawdata/` (pokemon, forms, moves, types, items, invasions, weather). The alerter continues using the poracle-v2 format from `resources/data/monsters.json` for command processing and `!tracked` display.
-
-Key differences from poracle-v2: raw uses numeric type IDs everywhere (no string-to-ID conversion), has populated invasion encounters, richer move data (PvP stats), and is 3x smaller (2.1MB vs 5.9MB).
-
-**Grunt/invasion data** uses `classic.json` from WatWowMap/event-info (downloaded to `resources/rawdata/invasions.json`). This format uses numeric type IDs (`character.type.id`) and proto template strings (`CHARACTER_GRASS_GRUNT_MALE`), NOT English name strings. Translation uses identifier keys: `poke_type_{typeID}` for grunt type ("Grass"→"Pflanze"), `character_category_{categoryID}` for grunt category ("Grunt"→"Rüpel"). CategoryID is derived from the template string at load time. The alerter's `formatted.json` (English strings) is NOT used by the processor.
-
-**Important: resource download collision.** The raw masterfile (`master-latest-raw.json`) also contains an `"invasions"` category in the old formatted.json format. `downloadRawMaster` skips this category to avoid overwriting the `classic.json` saved by `downloadGrunts`. If this skip is removed, the processor will silently load empty grunt data.
-
-### Resource directory layout
-
-Both processor and alerter resources are downloaded at processor startup (`resources.Download`). The two processes use different directories:
-
-| Directory | Format | Consumer | Contents |
-|-----------|--------|----------|----------|
-| `resources/data/` | poracle-v2 (English names) | Alerter only | monsters.json, grunts.json, items.json, translations.json, util.json |
-| `resources/rawdata/` | Raw masterfile + classic.json | Processor only | pokemon.json, moves.json, types.json, invasions.json (classic), weather.json |
-| `resources/locale/` | enRefMerged (English-as-key) | Both (layer 3 in i18n merge) | en.json, de.json, ... (pogo-translations) |
-| `resources/gamelocale/` | Identifier keys | Processor only (layer 2 in i18n merge) | en.json, de.json, ... (quest_title_*, poke_type_*, item_*, character_category_*) |
-
-Shared data: `resources/data/util.json` provides UI constants (teams, genders, types with colors/emoji, weather, generation ranges, raid levels, lures, pokestop events). Used by both processor (`gamedata.LoadUtilData`) and alerter (`GameData.utilData`).
-
-Pokemon translations come from pogo-translations identifier keys (`poke_1`, `move_14`, `form_46`, `poke_type_1`) loaded into `resources/locale/` and merged into the processor's i18n bundle. Game data identifier keys (`character_category_*`, `poke_type_*`, `costume_*`, `alignment_*`) come from `resources/gamelocale/` which is layer 2 in the i18n merge chain.
 
 ### Translation key sources
 
@@ -620,28 +554,12 @@ Pokemon translations come from pogo-translations identifier keys (`poke_1`, `mov
 | Move names | `move_{moveId}` | resources/locale/ | `move_14` → "Hyper Beam" |
 | Type names | `poke_type_{typeId}` | resources/gamelocale/ | `poke_type_12` → "Grass" |
 | Grunt category | `character_category_{id}` | resources/gamelocale/ | `character_category_2` → "Grunt" |
-| Quest titles | `quest_title_{title}` | resources/gamelocale/ | `quest_title_quest_catch_pokemon_plural` → "Catch %{amount_0} Pokémon" |
+| Quest titles | `quest_title_{title}` | resources/gamelocale/ | `quest_title_quest_catch_pokemon_plural` → "Catch %{amount_0} Pokemon" |
 | Item names | `item_{id}` | resources/gamelocale/ | `item_701` → "Razz Berry" |
-| Reward type names | `quest_reward_{type}` | resources/gamelocale/ | `quest_reward_3` → "Stardust" |
 | Weather names | `weather_{id}` | resources/locale/ | `weather_1` → "Clear" |
 | UI strings | `rate_limit.*`, `tracking.*` | processor/internal/i18n/locale/ (embedded) | `rate_limit.reached` |
 
-**Named placeholders**: gamelocale strings use `%{name}` placeholders (e.g. `%{amount_0}`, `%{pokemon}`), not `{0}` positional. The `FormatNamed()` / `TfNamed()` functions in `processor/internal/i18n/` handle these. The processor's own embedded strings (`rate_limit.*` etc.) use `{0}` positional via `Format()` / `Tf()`.
-
-### Enrichment migration status
-
-| Type | Base | Per-Language | Per-User | Status |
-|------|------|-------------|----------|--------|
-| Pokemon | ✅ | ✅ names, PVP, weakness, evolutions | ✅ PVP display, distance | Complete |
-| Raid/Egg | ✅ | ✅ names, moves, weakness, weather | — | Complete |
-| Invasion | ✅ | ✅ grunt name/type, gender, rewards list | — | Complete |
-| Quest | ✅ | ✅ quest title, reward names, summary strings | — | Complete |
-| Lure | ✅ | ✅ lure name | — | Complete |
-| Gym | ✅ | ✅ team names, previousControlName | — | Complete |
-| Nest | ✅ | ✅ pokemon name | — | Complete |
-| Fort | ✅ | — (no language-specific data) | — | Complete |
-| Maxbattle | ✅ | ✅ names, moves, weakness, weather forecast | — | Complete |
-| Weather | ✅ | ✅ weather names, active pokemon | — | Complete |
+**Named placeholders**: gamelocale strings use `%{name}` placeholders (e.g. `%{amount_0}`, `%{pokemon}`), not `{0}` positional. The `FormatNamed()` / `TfNamed()` functions in `processor/internal/i18n/` handle these. The processor's own embedded strings use `{0}` positional via `Format()` / `Tf()`.
 
 ## Database
 
@@ -663,6 +581,37 @@ MySQL (or MariaDB). Key tables:
 All tracking tables have: `id` (FK to humans), `profile_no`, `distance`, `template`, `clean`, `ping`.
 
 Migrations in `processor/internal/db/migrations/` (SQL files, run on processor startup).
+
+## Game Data
+
+The processor uses the **raw masterfile** (`master-latest-raw.json`) from Masterfile-Generator, split into `resources/rawdata/` (pokemon, forms, moves, types, items, invasions, weather). The alerter continues using the poracle-v2 format from `resources/data/monsters.json` for command processing and `!tracked` display.
+
+**Grunt/invasion data** uses `classic.json` from WatWowMap/event-info (downloaded to `resources/rawdata/invasions.json`). This format uses numeric type IDs (`character.type.id`) and proto template strings (`CHARACTER_GRASS_GRUNT_MALE`), NOT English name strings. Translation uses identifier keys: `poke_type_{typeID}` for grunt type, `character_category_{categoryID}` for grunt category. The alerter's `formatted.json` (English strings) is NOT used by the processor.
+
+**Important: resource download collision.** The raw masterfile (`master-latest-raw.json`) also contains an `"invasions"` category in the old formatted.json format. `downloadRawMaster` skips this category to avoid overwriting the `classic.json` saved by `downloadGrunts`. If this skip is removed, the processor will silently load empty grunt data.
+
+### Resource directory layout
+
+Both processor and alerter resources are downloaded at processor startup (`resources.Download`). The two processes use different directories:
+
+| Directory | Format | Consumer | Contents |
+|-----------|--------|----------|----------|
+| `resources/data/` | poracle-v2 (English names) | Alerter only | monsters.json, grunts.json, items.json, translations.json, util.json |
+| `resources/rawdata/` | Raw masterfile + classic.json | Processor only | pokemon.json, moves.json, types.json, invasions.json (classic), weather.json |
+| `resources/locale/` | enRefMerged (English-as-key) | Both (layer 3 in i18n merge) | en.json, de.json, ... (pogo-translations) |
+| `resources/gamelocale/` | Identifier keys | Processor only (layer 2 in i18n merge) | en.json, de.json, ... (quest_title_*, poke_type_*, item_*, character_category_*) |
+
+Shared data: `resources/data/util.json` provides UI constants (teams, genders, types with colors/emoji, weather, generation ranges, raid levels, lures, pokestop events). Used by both processor (`gamedata.LoadUtilData`) and alerter (`GameData.utilData`).
+
+## Configuration
+
+Single TOML file at `config/config.toml`, shared by both processor and alerter. See `config/config.example.toml` for all options with comments.
+
+Key sections: `[processor]`, `[alerter]`, `[database]`, `[geofence]`, `[pvp]`, `[weather]`, `[discord]`, `[telegram]`, `[geocoding]`, `[tuning]`, `[tracking]`, `[alert_limits]`, `[stats]`, `[logging]`.
+
+The alerter's `configAdapter.js` converts snake_case TOML keys to camelCase JS objects with sensible defaults.
+
+**configAdapter `defaults()` gotcha**: The `defaults(target, defs)` function is **shallow** — it only sets keys missing from `target`. For nested sections like `[reconciliation.discord]`, if the user sets *any* key, the entire default object is skipped. Nested defaults must be applied individually.
 
 ## Deployment
 

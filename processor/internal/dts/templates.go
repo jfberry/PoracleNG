@@ -242,22 +242,20 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 
 // resolveTemplate produces the Handlebars template string from a DTSEntry.
 func resolveTemplate(entry DTSEntry, configDir string) (string, error) {
-	var templateObj any
-
 	if entry.TemplateFile != "" {
-		// Read external template file
+		// templateFile: read as raw text — the file IS the Handlebars template.
+		// Unlike inline templates (JSON objects that get stringified), templateFiles
+		// may contain non-JSON constructs like unquoted Handlebars expressions in
+		// JSON value positions (e.g. "color": {{#eq fortType 'pokestop'}}123{{/eq}}).
 		path := filepath.Join(configDir, entry.TemplateFile)
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return "", fmt.Errorf("read templateFile %s: %w", entry.TemplateFile, err)
 		}
-		if err := json.Unmarshal(data, &templateObj); err != nil {
-			return "", fmt.Errorf("parse templateFile %s: %w", entry.TemplateFile, err)
-		}
-	} else {
-		templateObj = entry.Template
+		return resolveIncludes(strings.TrimSpace(string(data)), configDir), nil
 	}
 
+	templateObj := entry.Template
 	if templateObj == nil {
 		return "", fmt.Errorf("entry has no template or templateFile")
 	}
