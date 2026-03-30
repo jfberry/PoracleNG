@@ -89,6 +89,33 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil, fmt.Errorf("parse dts.json: %w", err)
 	}
+
+	// Load additional DTS files from config/dts/ directory (matches alerter's dtsloader behavior).
+	// Each JSON file is an array of DTSEntry objects, concatenated to the main list.
+	// Later entries override earlier ones via the template selection chain.
+	dtsDir := filepath.Join(configDir, "dts")
+	dirEntries, err := os.ReadDir(dtsDir)
+	if err == nil {
+		for _, f := range dirEntries {
+			if f.IsDir() || !strings.HasSuffix(f.Name(), ".json") {
+				continue
+			}
+			extraPath := filepath.Join(dtsDir, f.Name())
+			extraData, err := os.ReadFile(extraPath)
+			if err != nil {
+				log.Warnf("dts: failed to read %s: %s", extraPath, err)
+				continue
+			}
+			var extraEntries []DTSEntry
+			if err := json.Unmarshal(extraData, &extraEntries); err != nil {
+				log.Warnf("dts: failed to parse %s: %s", extraPath, err)
+				continue
+			}
+			entries = append(entries, extraEntries...)
+			log.Debugf("dts: loaded %d entries from %s", len(extraEntries), f.Name())
+		}
+	}
+
 	return entries, nil
 }
 
