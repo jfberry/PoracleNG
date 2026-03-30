@@ -148,8 +148,8 @@ func (r *Renderer) renderForUsers(
 	logReference string,
 ) []webhook.DeliveryJob {
 	tthMap, _ := extractTTH(enrichment)
-	lat := truncateCoord(toFloat(enrichment["latitude"]))
-	lon := truncateCoord(toFloat(enrichment["longitude"]))
+	lat := truncateCoord(lookupFloat(enrichment, webhookFields, "latitude"))
+	lon := truncateCoord(lookupFloat(enrichment, webhookFields, "longitude"))
 
 	// Per-call Shlink cache: avoids redundant HTTP requests when many users
 	// receive the same template with identical URLs.
@@ -400,6 +400,32 @@ func cloneMessage(msg any) any {
 }
 
 // truncateCoord formats a coordinate as a string, truncated to 8 characters.
+// lookupFloat finds a float value by key, checking enrichment first then webhookFields.
+func lookupFloat(enrichment, webhookFields map[string]any, key string) float64 {
+	if v, ok := enrichment[key]; ok {
+		return toFloatValue(v)
+	}
+	if webhookFields != nil {
+		if v, ok := webhookFields[key]; ok {
+			return toFloatValue(v)
+		}
+	}
+	return 0
+}
+
+func toFloatValue(v any) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	default:
+		return 0
+	}
+}
+
 func truncateCoord(f float64) string {
 	s := fmt.Sprintf("%f", f)
 	if len(s) > 8 {

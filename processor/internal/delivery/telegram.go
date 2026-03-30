@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const defaultTelegramBaseURL = "https://api.telegram.org"
@@ -69,6 +71,9 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 	if err := json.Unmarshal(job.Message, &msg); err != nil {
 		return nil, fmt.Errorf("parsing telegram message: %w", err)
 	}
+
+	log.Debugf("[telegram] Send to %s: location=%v lat=%.6f lon=%.6f content_len=%d sticker=%q photo=%q send_order=%v",
+		job.Target, msg.Location, job.Lat, job.Lon, len(msg.Content), msg.Sticker, msg.Photo, msg.SendOrder)
 
 	parseMode := normalizeTelegramParseMode(msg.ParseMode)
 	sendOrder := parseSendOrder(msg.SendOrder)
