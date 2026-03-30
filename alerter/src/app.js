@@ -62,10 +62,10 @@ let telegram
 let telegramChannel
 
 if (config.telegram.enabled) {
-	telegram = new TelegramWorker('1', config, logs, GameData, PoracleInfo, geofence, telegramController, query, scannerQuery, telegraf, translatorFactory, telegramCommandParser, re, true)
+	telegram = new TelegramWorker('1', config, logs, GameData, PoracleInfo, geofence, telegramController, query, scannerQuery, telegraf, translatorFactory, telegramCommandParser, re)
 
 	if (telegrafChannel) {
-		telegramChannel = new TelegramWorker('2', config, logs, GameData, PoracleInfo, geofence, telegramController, query, scannerQuery, telegrafChannel, translatorFactory, telegramCommandParser, re, true)
+		telegramChannel = new TelegramWorker('2', config, logs, GameData, PoracleInfo, geofence, telegramController, query, scannerQuery, telegrafChannel, translatorFactory, telegramCommandParser, re)
 	}
 }
 
