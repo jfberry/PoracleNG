@@ -280,19 +280,25 @@ When a new job has `EditKey`:
 
 ## Config
 
+All existing TOML field names are reused — no new config needed except `delivery_queue_size`:
+
 ```toml
 [discord]
-token = ["bot-token-1"]           # existing
-upload_embed_images = true         # download + reupload static map tiles
+token = ["bot-token-1"]                  # existing
+upload_embed_images = false              # existing: download + reupload static map tiles
+message_delete_delay = 0                 # existing: extra ms added to clean TTH (channels only)
 
 [telegram]
-token = ["bot-token-1"]           # existing
+token = ["bot-token-1"]                  # existing
 
 [tuning]
-concurrent_discord_destinations = 10
-concurrent_telegram_destinations = 5
-delivery_queue_size = 200          # buffered channel capacity
+concurrent_discord_destinations = 10     # existing: max concurrent DM/channel sends per bot
+concurrent_telegram_destinations = 10    # existing: max concurrent telegram sends per bot
+concurrent_discord_webhooks = 10         # existing: max concurrent webhook sends
+delivery_queue_size = 200                # NEW: buffered channel capacity for delivery queue
 ```
+
+The processor's `config.go` already reads `[discord]` and `[telegram]` tokens. Additional fields (`upload_embed_images`, `message_delete_delay`, concurrency settings) need to be added to the existing config structs.
 
 ## Integration
 
