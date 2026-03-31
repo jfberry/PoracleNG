@@ -4,6 +4,7 @@
 package telegrambot
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -106,6 +107,9 @@ func (b *Bot) pollUpdates() {
 			if !ok {
 				return
 			}
+			if update.ChannelPost != nil {
+				b.handleChannelPost(update.ChannelPost)
+			}
 			if update.Message != nil {
 				b.handleMessage(update.Message)
 			}
@@ -113,8 +117,29 @@ func (b *Bot) pollUpdates() {
 	}
 }
 
+func (b *Bot) handleChannelPost(m *tgbotapi.Message) {
+	if m.Text != "" && strings.HasPrefix(m.Text, "/identify") {
+		reply := fmt.Sprintf("This channel is id: [ %d ] and your id is: unknown - this is a channel (and can't be used for bot registration)", m.Chat.ID)
+		msg := tgbotapi.NewMessage(m.Chat.ID, reply)
+		b.api.Send(msg)
+	}
+}
+
 func (b *Bot) handleMessage(m *tgbotapi.Message) {
 	if m.From == nil {
+		return
+	}
+
+	// /identify — always respond, no registration required
+	if strings.HasPrefix(m.Text, "/identify") {
+		var reply string
+		if m.Chat.Type == "private" {
+			reply = fmt.Sprintf("This is a private message and your id is: [ %d ]", m.From.ID)
+		} else {
+			reply = fmt.Sprintf("This channel is id: [ %d ] and your id is: [ %d ]", m.Chat.ID, m.From.ID)
+		}
+		msg := tgbotapi.NewMessage(m.Chat.ID, reply)
+		b.api.Send(msg)
 		return
 	}
 
