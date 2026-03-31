@@ -37,6 +37,11 @@ var eggParams = []bot.ParamDef{
 
 func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
+
+	if usage := usageReply(ctx, args, "cmd.egg.usage"); usage != nil {
+		return []bot.Reply{*usage}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, eggParams, ctx.Language)
 
 	// Collect levels from multiple sources

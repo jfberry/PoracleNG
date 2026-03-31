@@ -275,6 +275,17 @@
   "cmd.no_quest_type": "No quest type specified",
   "cmd.removed_n": "Removed {0} tracking rules",
 
+  "cmd.egg.usage": "Valid commands are e.g. `{0}egg level:5`, `{0}egg legendary`, `{0}egg remove everything`",
+  "cmd.raid.usage": "Valid commands are e.g. `{0}raid level:5`, `{0}raid pikachu`, `{0}raid remove everything`",
+  "cmd.track.usage": "Valid commands are e.g. `{0}track pikachu iv:100`, `{0}track everything iv:90`, `{0}track remove pikachu`",
+  "cmd.quest.usage": "Valid commands are e.g. `{0}quest pikachu`, `{0}quest stardust:1000`, `{0}quest energy:charizard`",
+  "cmd.lure.usage": "Valid commands are e.g. `{0}lure glacial`, `{0}lure everything`, `{0}lure remove glacial`",
+  "cmd.gym.usage": "Valid commands are e.g. `{0}gym valor`, `{0}gym everything slot_changes`, `{0}gym remove valor`",
+  "cmd.invasion.usage": "Valid commands are e.g. `{0}invasion everything`, `{0}invasion dragon`, `{0}invasion remove everything`",
+  "cmd.nest.usage": "Valid commands are e.g. `{0}nest pikachu`, `{0}nest everything`, `{0}nest remove pikachu`",
+  "cmd.maxbattle.usage": "Valid commands are e.g. `{0}maxbattle pikachu`, `{0}maxbattle level:3`, `{0}maxbattle remove everything`",
+  "cmd.fort.usage": "Valid commands are e.g. `{0}fort pokestop`, `{0}fort everything`, `{0}fort remove pokestop`",
+
   "cmd.location.removed": "Location removed",
   "cmd.location.specify": "Please specify coordinates or an address",
   "cmd.location.set": "Location set to {0},{1}",

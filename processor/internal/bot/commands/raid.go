@@ -40,6 +40,11 @@ var raidParams = []bot.ParamDef{
 
 func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
+
+	if usage := usageReply(ctx, args, "cmd.raid.usage"); usage != nil {
+		return []bot.Reply{*usage}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, raidParams, ctx.Language)
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {

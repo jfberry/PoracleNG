@@ -34,6 +34,11 @@ var maxbattleParams = []bot.ParamDef{
 
 func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
+
+	if usage := usageReply(ctx, args, "cmd.maxbattle.usage"); usage != nil {
+		return []bot.Reply{*usage}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, maxbattleParams, ctx.Language)
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {

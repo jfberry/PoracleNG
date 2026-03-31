@@ -36,6 +36,11 @@ var questParams = []bot.ParamDef{
 
 func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
+
+	if usage := usageReply(ctx, args, "cmd.quest.usage"); usage != nil {
+		return []bot.Reply{*usage}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, questParams, ctx.Language)
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
