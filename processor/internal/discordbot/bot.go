@@ -6,6 +6,7 @@ package discordbot
 import (
 	"bytes"
 	"encoding/json"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jmoiron/sqlx"
@@ -29,26 +30,28 @@ import (
 
 // Bot is the Discord bot gateway handler.
 type Bot struct {
-	session    *discordgo.Session
-	parser     *bot.Parser
-	registry   *bot.Registry
-	argMatcher *bot.ArgMatcher
-	resolver   *bot.PokemonResolver
-	db         *sqlx.DB
-	cfg        *config.Config
-	stateMgr   *state.Manager
-	gameData   *gamedata.GameData
-	translations *i18n.Bundle
-	dispatcher *delivery.Dispatcher
-	rowText    *rowtext.Generator
-	geocoder   *geocoding.Geocoder
-	staticMap  *staticmap.Resolver
-	weather    *tracker.WeatherTracker
-	stats      *tracker.StatsTracker
-	dts        *dts.TemplateStore
-	emoji      *dts.EmojiLookup
-	nlpParser  *nlp.Parser
-	reloadFunc func()
+	session        *discordgo.Session
+	parser         *bot.Parser
+	registry       *bot.Registry
+	argMatcher     *bot.ArgMatcher
+	resolver       *bot.PokemonResolver
+	db             *sqlx.DB
+	cfg            *config.Config
+	stateMgr       *state.Manager
+	gameData       *gamedata.GameData
+	translations   *i18n.Bundle
+	dispatcher     *delivery.Dispatcher
+	rowText        *rowtext.Generator
+	geocoder       *geocoding.Geocoder
+	staticMap      *staticmap.Resolver
+	weather        *tracker.WeatherTracker
+	stats          *tracker.StatsTracker
+	dts            *dts.TemplateStore
+	emoji          *dts.EmojiLookup
+	nlpParser      *nlp.Parser
+	reloadFunc     func()
+	reconciliation *Reconciliation
+	stopCh         chan struct{}
 }
 
 // Config holds everything needed to create a Discord bot.
@@ -103,6 +106,7 @@ func New(cfg Config) (*Bot, error) {
 		emoji:        cfg.Emoji,
 		nlpParser:    cfg.NLPParser,
 		reloadFunc:   cfg.ReloadFunc,
+		stopCh:       make(chan struct{}),
 	}
 
 	session.Identify.Intents = discordgo.IntentsGuildMessages |
@@ -112,16 +116,31 @@ func New(cfg Config) (*Bot, error) {
 
 	session.AddHandler(b.onMessageCreate)
 
+	// Reconciliation event handlers.
+	session.AddHandler(b.onGuildMemberUpdate)
+	session.AddHandler(b.onGuildMemberRemove)
+	session.AddHandler(b.onChannelDelete)
+
 	if err := session.Open(); err != nil {
 		return nil, err
 	}
 
 	log.Infof("Discord bot connected as %s", session.State.User.Username)
+
+	// Initialize reconciliation if check_role is enabled.
+	if cfg.Cfg.Discord.CheckRole && cfg.DTS != nil {
+		b.reconciliation = NewReconciliation(session, cfg.DB, cfg.Cfg, cfg.Translations, cfg.DTS)
+		go b.reconciliationLoop()
+	}
+
 	return b, nil
 }
 
-// Close disconnects the Discord gateway.
+// Close disconnects the Discord gateway and stops background goroutines.
 func (b *Bot) Close() {
+	if b.stopCh != nil {
+		close(b.stopCh)
+	}
 	if b.session != nil {
 		b.session.Close()
 	}
@@ -386,4 +405,72 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 	}
 }
 
+// onGuildMemberUpdate is called when a guild member's roles change.
+func (b *Bot) onGuildMemberUpdate(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
+	if b.reconciliation == nil || !b.cfg.Discord.CheckRole {
+		return
+	}
+	if m.User == nil {
+		return
+	}
+	go b.reconciliation.ReconcileSingleUser(m.User.ID, b.cfg.Reconciliation.Discord.RemoveInvalidUsers)
+}
 
+// onGuildMemberRemove is called when a member leaves a guild.
+func (b *Bot) onGuildMemberRemove(s *discordgo.Session, m *discordgo.GuildMemberRemove) {
+	if b.reconciliation == nil || !b.cfg.Discord.CheckRole {
+		return
+	}
+	if m.User == nil {
+		return
+	}
+	go b.reconciliation.ReconcileSingleUser(m.User.ID, b.cfg.Reconciliation.Discord.RemoveInvalidUsers)
+}
+
+// onChannelDelete is called when a Discord channel is deleted.
+// If the channel was registered as a tracking target, disable it.
+func (b *Bot) onChannelDelete(s *discordgo.Session, ch *discordgo.ChannelDelete) {
+	if ch == nil {
+		return
+	}
+	_, err := b.db.Exec(
+		`UPDATE humans SET admin_disable = 1, disabled_date = NOW() WHERE id = ? AND type = 'discord:channel'`,
+		ch.ID)
+	if err != nil {
+		log.Warnf("discord bot: disable deleted channel %s: %v", ch.ID, err)
+	}
+}
+
+// reconciliationLoop runs periodic reconciliation at the configured interval.
+func (b *Bot) reconciliationLoop() {
+	interval := time.Duration(b.cfg.Discord.CheckRoleInterval) * time.Hour
+	if interval <= 0 {
+		interval = 6 * time.Hour
+	}
+
+	// Run once at startup after a short delay to let the gateway settle.
+	select {
+	case <-b.stopCh:
+		return
+	case <-time.After(30 * time.Second):
+	}
+	b.runReconciliation()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-b.stopCh:
+			return
+		case <-ticker.C:
+			b.runReconciliation()
+		}
+	}
+}
+
+// runReconciliation executes a full reconciliation cycle.
+func (b *Bot) runReconciliation() {
+	rcfg := b.cfg.Reconciliation.Discord
+	b.reconciliation.SyncDiscordRole(rcfg.RegisterNewUsers, rcfg.UpdateUserNames, rcfg.RemoveInvalidUsers)
+	b.reconciliation.SyncDiscordChannels(rcfg.UpdateChannelNames, rcfg.UpdateChannelNotes, rcfg.UnregisterMissingChannels)
+}
