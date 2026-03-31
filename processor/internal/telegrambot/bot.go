@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
@@ -20,6 +21,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
@@ -46,6 +48,7 @@ type Bot struct {
 	stats      *tracker.StatsTracker
 	dts        *dts.TemplateStore
 	emoji      *dts.EmojiLookup
+	nlpParser  *nlp.Parser
 	reloadFunc func()
 	stopCh     chan struct{}
 }
@@ -70,6 +73,7 @@ type Config struct {
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
 	Emoji        *dts.EmojiLookup
+	NLPParser    *nlp.Parser
 	ReloadFunc   func()
 }
 
@@ -99,6 +103,7 @@ func New(cfg Config) (*Bot, error) {
 		stats:        cfg.Stats,
 		dts:          cfg.DTS,
 		emoji:        cfg.Emoji,
+		nlpParser:    cfg.NLPParser,
 		reloadFunc:   cfg.ReloadFunc,
 		stopCh:       make(chan struct{}),
 	}
@@ -203,6 +208,16 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 
 	for _, cmd := range parsed {
 		if cmd.CommandKey == "" {
+			// Try NLP suggestion for unrecognised DM commands
+			if isDM && b.nlpParser != nil && b.cfg.AI.SuggestOnDM {
+				result := b.nlpParser.Parse(text)
+				suggestion := commands.FormatNLPSuggestion(result, "/")
+				if suggestion != "" {
+					msg := tgbotapi.NewMessage(chatID, suggestion)
+					b.api.Send(msg)
+					continue
+				}
+			}
 			continue // don't spam about unknown commands in Telegram groups
 		}
 
@@ -250,6 +265,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			Stats:        b.stats,
 			DTS:          b.dts,
 			Emoji:        b.emoji,
+			NLP:          b.nlpParser,
 			ReloadFunc:   b.reloadFunc,
 		}
 

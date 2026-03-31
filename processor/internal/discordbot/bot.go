@@ -12,6 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
@@ -19,6 +20,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
@@ -45,6 +47,7 @@ type Bot struct {
 	stats      *tracker.StatsTracker
 	dts        *dts.TemplateStore
 	emoji      *dts.EmojiLookup
+	nlpParser  *nlp.Parser
 	reloadFunc func()
 }
 
@@ -68,6 +71,7 @@ type Config struct {
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
 	Emoji        *dts.EmojiLookup
+	NLPParser    *nlp.Parser
 	ReloadFunc   func()
 }
 
@@ -97,6 +101,7 @@ func New(cfg Config) (*Bot, error) {
 		stats:        cfg.Stats,
 		dts:          cfg.DTS,
 		emoji:        cfg.Emoji,
+		nlpParser:    cfg.NLPParser,
 		reloadFunc:   cfg.ReloadFunc,
 	}
 
@@ -175,6 +180,15 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	for _, cmd := range parsed {
 		if cmd.CommandKey == "" {
 			if isDM {
+				// Try NLP suggestion for unrecognised DM commands
+				if b.nlpParser != nil && b.cfg.AI.SuggestOnDM {
+					result := b.nlpParser.Parse(m.Content)
+					suggestion := commands.FormatNLPSuggestion(result, b.cfg.Discord.Prefix)
+					if suggestion != "" {
+						s.ChannelMessageSend(channelID, suggestion)
+						continue
+					}
+				}
 				s.ChannelMessageSend(channelID, tr.Tf("cmd.unknown", b.cfg.Discord.Prefix+"help"))
 			}
 			continue
@@ -229,6 +243,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			Stats:        b.stats,
 			DTS:          b.dts,
 			Emoji:        b.emoji,
+			NLP:          b.nlpParser,
 			ReloadFunc:   b.reloadFunc,
 		}
 

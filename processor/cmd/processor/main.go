@@ -38,6 +38,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
@@ -381,6 +382,21 @@ func main() {
 	cmdRegistry.Register(&commands.PoracleCommand{})
 	cmdRegistry.Register(&commands.UnregisterCommand{})
 	cmdRegistry.Register(&commands.CommunityCommand{})
+	cmdRegistry.Register(&commands.AskCommand{})
+
+	// NLP parser for !ask command and suggest_on_dm
+	var nlpParser *nlp.Parser
+	if cfg.AI.Enabled {
+		enTr := proc.enricher.Translations.For("en")
+		invasionEvents := make(map[string]bool)
+		if proc.enricher.GameData != nil && proc.enricher.GameData.Util != nil {
+			for _, event := range proc.enricher.GameData.Util.PokestopEvent {
+				invasionEvents[strings.ToLower(event.Name)] = true
+			}
+		}
+		nlpParser = nlp.NewParser(enTr, cfg.BaseDir, invasionEvents)
+		log.Info("NLP command parser initialized")
+	}
 
 	// Command API endpoint (for testing commands without bots)
 	var cmdDTS *dts.TemplateStore
@@ -405,6 +421,7 @@ func main() {
 		Stats:        proc.stats,
 		DTS:          cmdDTS,
 		Emoji:        cmdEmoji,
+		NLPParser:    nlpParser,
 		ReloadFunc:   proc.triggerReload,
 	}
 	mux.HandleFunc("POST /api/command", apiRoute("command", api.HandleCommand(cmdDeps)))
@@ -510,6 +527,7 @@ func main() {
 			Stats:        proc.stats,
 			DTS:          cmdDTS,
 			Emoji:        cmdEmoji,
+			NLPParser:    nlpParser,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {
@@ -542,6 +560,7 @@ func main() {
 			Stats:        proc.stats,
 			DTS:          cmdDTS,
 			Emoji:        cmdEmoji,
+			NLPParser:    nlpParser,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {
