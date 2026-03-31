@@ -275,7 +275,7 @@ func (f flexInt) isSet() bool {
 //   - (no tag)      regular field — any diff here means new insert
 //
 // Both existing and toInsert must be pointers to the same struct type.
-func diffTracking(existing, toInsert any) (noMatch, isDuplicate bool, existingUID int64, isUpdate bool) {
+func DiffTracking(existing, toInsert any) (noMatch, isDuplicate bool, existingUID int64, isUpdate bool) {
 	ev := reflect.ValueOf(existing).Elem()
 	iv := reflect.ValueOf(toInsert).Elem()
 	et := ev.Type()
