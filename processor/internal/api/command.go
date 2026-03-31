@@ -35,6 +35,7 @@ type CommandDeps struct {
 	Weather      *tracker.WeatherTracker
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
+	Emoji        *dts.EmojiLookup
 	ReloadFunc   func()
 }
 
@@ -150,6 +151,7 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 				Weather:      deps.Weather,
 				Stats:        deps.Stats,
 				DTS:          deps.DTS,
+				Emoji:        deps.Emoji,
 				ReloadFunc:   deps.ReloadFunc,
 			}
 

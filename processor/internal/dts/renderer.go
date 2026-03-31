@@ -83,6 +83,9 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 // Templates returns the underlying TemplateStore.
 func (r *Renderer) Templates() *TemplateStore { return r.templates }
 
+// Emoji returns the emoji lookup used by this renderer.
+func (r *Renderer) Emoji() *EmojiLookup { return r.emoji }
+
 // RenderPokemon renders pokemon alerts for all matched users and returns delivery jobs.
 // Pokemon has special handling: user deduplication (the alerter historically deduped,
 // but the renderer does it here) and template type selection based on encounter status.
