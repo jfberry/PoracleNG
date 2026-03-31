@@ -10,11 +10,13 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
 // CommandDeps holds all dependencies needed for command execution.
@@ -30,6 +32,9 @@ type CommandDeps struct {
 	ArgMatcher   *bot.ArgMatcher
 	Parser       *bot.Parser
 	Registry     *bot.Registry
+	Weather      *tracker.WeatherTracker
+	Stats        *tracker.StatsTracker
+	DTS          *dts.TemplateStore
 	ReloadFunc   func()
 }
 
@@ -142,6 +147,9 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 				RowText:      deps.RowText,
 				Resolver:     deps.Resolver,
 				ArgMatcher:   deps.ArgMatcher,
+				Weather:      deps.Weather,
+				Stats:        deps.Stats,
+				DTS:          deps.DTS,
 				ReloadFunc:   deps.ReloadFunc,
 			}
 

@@ -380,6 +380,10 @@ func main() {
 	cmdRegistry.Register(&commands.UserlistCommand{})
 
 	// Command API endpoint (for testing commands without bots)
+	var cmdDTS *dts.TemplateStore
+	if proc.dtsRenderer != nil {
+		cmdDTS = proc.dtsRenderer.Templates()
+	}
 	cmdDeps := &api.CommandDeps{
 		DB:           database,
 		Config:       cfg,
@@ -392,6 +396,9 @@ func main() {
 		ArgMatcher:   cmdArgMatcher,
 		Parser:       cmdParser,
 		Registry:     cmdRegistry,
+		Weather:      proc.weather,
+		Stats:        proc.stats,
+		DTS:          cmdDTS,
 		ReloadFunc:   proc.triggerReload,
 	}
 	mux.HandleFunc("POST /api/command", apiRoute("command", api.HandleCommand(cmdDeps)))
@@ -493,6 +500,9 @@ func main() {
 			Resolver:     cmdResolver,
 			Geocoder:     proc.enricher.Geocoder,
 			StaticMap:    proc.enricher.StaticMap,
+			Weather:      proc.weather,
+			Stats:        proc.stats,
+			DTS:          cmdDTS,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {
@@ -521,6 +531,9 @@ func main() {
 			Resolver:     cmdResolver,
 			Geocoder:     proc.enricher.Geocoder,
 			StaticMap:    proc.enricher.StaticMap,
+			Weather:      proc.weather,
+			Stats:        proc.stats,
+			DTS:          cmdDTS,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {

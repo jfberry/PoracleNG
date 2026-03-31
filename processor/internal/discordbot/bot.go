@@ -14,6 +14,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
@@ -21,6 +22,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
 // Bot is the Discord bot gateway handler.
@@ -39,6 +41,9 @@ type Bot struct {
 	rowText    *rowtext.Generator
 	geocoder   *geocoding.Geocoder
 	staticMap  *staticmap.Resolver
+	weather    *tracker.WeatherTracker
+	stats      *tracker.StatsTracker
+	dts        *dts.TemplateStore
 	reloadFunc func()
 }
 
@@ -58,6 +63,9 @@ type Config struct {
 	Resolver     *bot.PokemonResolver
 	Geocoder     *geocoding.Geocoder
 	StaticMap    *staticmap.Resolver
+	Weather      *tracker.WeatherTracker
+	Stats        *tracker.StatsTracker
+	DTS          *dts.TemplateStore
 	ReloadFunc   func()
 }
 
@@ -83,6 +91,9 @@ func New(cfg Config) (*Bot, error) {
 		rowText:      cfg.RowText,
 		geocoder:     cfg.Geocoder,
 		staticMap:    cfg.StaticMap,
+		weather:      cfg.Weather,
+		stats:        cfg.Stats,
+		dts:          cfg.DTS,
 		reloadFunc:   cfg.ReloadFunc,
 	}
 
@@ -211,6 +222,9 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			ArgMatcher:   b.argMatcher,
 			Geocoder:     b.geocoder,
 			StaticMap:    b.staticMap,
+			Weather:      b.weather,
+			Stats:        b.stats,
+			DTS:          b.dts,
 			ReloadFunc:   b.reloadFunc,
 		}
 
