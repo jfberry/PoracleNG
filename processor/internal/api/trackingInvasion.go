@@ -174,7 +174,7 @@ func HandleCreateInvasion(deps *TrackingDeps) http.HandlerFunc {
 
 		for i := len(insert) - 1; i >= 0; i-- {
 			for _, existing := range tracked {
-				noMatch, isDup, uid, isUpd := diffTracking(&existing, &insert[i])
+				noMatch, isDup, uid, isUpd := DiffTracking(&existing, &insert[i])
 				if noMatch {
 					continue
 				}

@@ -6,6 +6,7 @@ package bot
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
@@ -68,9 +69,26 @@ type CommandContext struct {
 	Dispatcher   *delivery.Dispatcher
 	RowText      *rowtext.Generator
 	Resolver     *PokemonResolver
+	ArgMatcher   *ArgMatcher
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
+}
+
+// DefaultTemplate returns the default template name from config as a string.
+func (ctx *CommandContext) DefaultTemplate() string {
+	if ctx.Config == nil {
+		return "1"
+	}
+	switch v := ctx.Config.General.DefaultTemplateName.(type) {
+	case string:
+		if v != "" {
+			return v
+		}
+	case float64:
+		return fmt.Sprintf("%d", int(v))
+	}
+	return "1"
 }
 
 // Permissions holds resolved permission state for the current command invocation.

@@ -265,7 +265,7 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 				if existing.PokemonID != insert[i].PokemonID {
 					continue
 				}
-				noMatch, isDup, uid, isUpd := diffTracking(&existing, &insert[i])
+				noMatch, isDup, uid, isUpd := DiffTracking(&existing, &insert[i])
 				if noMatch {
 					continue
 				}

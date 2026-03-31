@@ -105,7 +105,7 @@ func TestDiffTrackingDuplicate(t *testing.T) {
 	a := &db.LureTrackingAPI{UID: 1, ID: "u1", ProfileNo: 1, Ping: "", Clean: false, Distance: 500, Template: "1", LureID: 501}
 	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Ping: "", Clean: false, Distance: 500, Template: "1", LureID: 501}
 
-	noMatch, isDup, _, isUpdate := diffTracking(a, b)
+	noMatch, isDup, _, isUpdate := DiffTracking(a, b)
 	if noMatch {
 		t.Error("expected match")
 	}
@@ -121,7 +121,7 @@ func TestDiffTrackingNoMatch(t *testing.T) {
 	a := &db.LureTrackingAPI{UID: 1, ID: "u1", ProfileNo: 1, LureID: 501}
 	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, LureID: 502} // different match key
 
-	noMatch, _, _, _ := diffTracking(a, b)
+	noMatch, _, _, _ := DiffTracking(a, b)
 	if !noMatch {
 		t.Error("expected noMatch for different lure_id")
 	}
@@ -131,7 +131,7 @@ func TestDiffTrackingUpdate(t *testing.T) {
 	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Clean: false, Distance: 500, Template: "1", LureID: 501}
 	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Clean: true, Distance: 1000, Template: "2", LureID: 501}
 
-	noMatch, isDup, uid, isUpdate := diffTracking(a, b)
+	noMatch, isDup, uid, isUpdate := DiffTracking(a, b)
 	if noMatch || isDup {
 		t.Error("expected neither noMatch nor duplicate")
 	}
@@ -148,7 +148,7 @@ func TestDiffTrackingNewInsert(t *testing.T) {
 	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Ping: "role1", LureID: 501}
 	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Ping: "role2", LureID: 501}
 
-	noMatch, isDup, _, isUpdate := diffTracking(a, b)
+	noMatch, isDup, _, isUpdate := DiffTracking(a, b)
 	if noMatch || isDup || isUpdate {
 		t.Error("expected new insert when non-updatable field differs")
 	}
