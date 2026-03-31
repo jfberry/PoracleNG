@@ -138,6 +138,15 @@ func TestArgMatchPrefixSingle(t *testing.T) {
 	}
 }
 
+func TestArgMatchPrefixSingleColon(t *testing.T) {
+	am := newTestArgMatcher()
+	params := []ParamDef{{Type: ParamPrefixSingle, Key: "arg.prefix.d"}}
+	result := am.Match([]string{"d:500"}, params, "en")
+	if result.Singles["d"] != 500 {
+		t.Errorf("d:500 = %d, want 500", result.Singles["d"])
+	}
+}
+
 func TestArgMatchPrefixSingleGerman(t *testing.T) {
 	am := newTestArgMatcher()
 	params := []ParamDef{{Type: ParamPrefixSingle, Key: "arg.prefix.d"}}
@@ -165,6 +174,18 @@ func TestArgMatchPrefixRange(t *testing.T) {
 	result := am.Match([]string{"iv100"}, params, "en")
 	if result.Ranges["iv"].Min != 100 || result.Ranges["iv"].HasMax {
 		t.Errorf("iv = %+v, want {Min:100, HasMax:false}", result.Ranges["iv"])
+	}
+
+	// Colon syntax: iv:55-75
+	result = am.Match([]string{"iv:55-75"}, params, "en")
+	if result.Ranges["iv"].Min != 55 || result.Ranges["iv"].Max != 75 || !result.Ranges["iv"].HasMax {
+		t.Errorf("iv:55-75 = %+v, want {Min:55, Max:75, HasMax:true}", result.Ranges["iv"])
+	}
+
+	// Colon syntax single: iv:90
+	result = am.Match([]string{"iv:90"}, params, "en")
+	if result.Ranges["iv"].Min != 90 || result.Ranges["iv"].HasMax {
+		t.Errorf("iv:90 = %+v, want {Min:90, HasMax:false}", result.Ranges["iv"])
 	}
 
 	// Range — both min and max set, HasMax=true
