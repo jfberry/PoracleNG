@@ -12,6 +12,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
@@ -19,6 +20,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
 // Command is implemented by every bot command handler.
@@ -74,6 +76,9 @@ type CommandContext struct {
 	ArgMatcher   *ArgMatcher
 	Geocoder     *geocoding.Geocoder
 	StaticMap    *staticmap.Resolver
+	Weather      *tracker.WeatherTracker
+	Stats        *tracker.StatsTracker
+	DTS          *dts.TemplateStore
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
