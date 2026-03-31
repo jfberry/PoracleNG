@@ -363,6 +363,7 @@ func setUserAreas(ctx *bot.CommandContext, areas []string) {
 	}
 	ctx.DB.Exec("UPDATE profiles SET area = ? WHERE id = ? AND profile_no = ?",
 		string(areaJSON), ctx.TargetID, ctx.ProfileNo)
+	ctx.TriggerReload()
 }
 
 func resolveAreaDisplayNames(ctx *bot.CommandContext, areas []string) []string {
