@@ -310,10 +310,12 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	// Gender
 	f.gender = parsed.Gender
 
-	// IV
+	// IV — iv50 means min=50 (max stays 100), iv50-80 means min=50 max=80
 	if r, ok := parsed.Ranges["iv"]; ok {
 		f.minIV = r.Min
-		f.maxIV = r.Max
+		if r.HasMax {
+			f.maxIV = r.Max
+		}
 	}
 	if v, ok := parsed.Singles["miniv"]; ok {
 		f.minIV = v
@@ -325,7 +327,9 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	// CP
 	if r, ok := parsed.Ranges["cp"]; ok {
 		f.minCP = r.Min
-		f.maxCP = r.Max
+		if r.HasMax {
+			f.maxCP = r.Max
+		}
 	}
 	if v, ok := parsed.Singles["mincp"]; ok {
 		f.minCP = v
@@ -337,7 +341,9 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	// Level
 	if r, ok := parsed.Ranges["level"]; ok {
 		f.minLevel = r.Min
-		f.maxLevel = r.Max
+		if r.HasMax {
+			f.maxLevel = r.Max
+		}
 	}
 	if v, ok := parsed.Singles["maxlevel"]; ok {
 		f.maxLevel = v
@@ -346,21 +352,27 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	// Stats
 	if r, ok := parsed.Ranges["atk"]; ok {
 		f.atk = r.Min
-		f.maxAtk = r.Max
+		if r.HasMax {
+			f.maxAtk = r.Max
+		}
 	}
 	if v, ok := parsed.Singles["maxatk"]; ok {
 		f.maxAtk = v
 	}
 	if r, ok := parsed.Ranges["def"]; ok {
 		f.def = r.Min
-		f.maxDef = r.Max
+		if r.HasMax {
+			f.maxDef = r.Max
+		}
 	}
 	if v, ok := parsed.Singles["maxdef"]; ok {
 		f.maxDef = v
 	}
 	if r, ok := parsed.Ranges["sta"]; ok {
 		f.sta = r.Min
-		f.maxSta = r.Max
+		if r.HasMax {
+			f.maxSta = r.Max
+		}
 	}
 	if v, ok := parsed.Singles["maxsta"]; ok {
 		f.maxSta = v
@@ -369,7 +381,9 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	// Weight
 	if r, ok := parsed.Ranges["weight"]; ok {
 		f.minWeight = r.Min
-		f.maxWeight = r.Max
+		if r.HasMax {
+			f.maxWeight = r.Max
+		}
 	}
 	if v, ok := parsed.Singles["maxweight"]; ok {
 		f.maxWeight = v
@@ -378,7 +392,9 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	// Rarity
 	if r, ok := parsed.Ranges["rarity"]; ok {
 		f.rarity = r.Min
-		f.maxRarity = r.Max
+		if r.HasMax {
+			f.maxRarity = r.Max
+		}
 	}
 	if v, ok := parsed.Singles["maxrarity"]; ok {
 		f.maxRarity = v
@@ -387,7 +403,9 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	// Size
 	if r, ok := parsed.Ranges["size"]; ok {
 		f.size = r.Min
-		f.maxSize = r.Max
+		if r.HasMax {
+			f.maxSize = r.Max
+		}
 	}
 	if v, ok := parsed.Singles["maxsize"]; ok {
 		f.maxSize = v

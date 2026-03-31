@@ -30,9 +30,11 @@ type ParamDef struct {
 }
 
 // Range holds a min-max pair from a range parameter like iv50-100 or level20-30.
+// When the user provides a single value (e.g. iv50), only Min is set and HasMax is false.
 type Range struct {
-	Min int
-	Max int
+	Min    int
+	Max    int
+	HasMax bool // true when user explicitly provided a max (e.g. iv50-100)
 }
 
 // PVPFilter holds PVP league ranking parameters.
