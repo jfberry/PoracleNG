@@ -17,6 +17,7 @@ func (c *ScriptCommand) Name() string      { return "cmd.script" }
 func (c *ScriptCommand) Aliases() []string { return nil }
 
 func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	prefix := ctx.Config.Discord.Prefix
 	if prefix == "" {
 		prefix = "!"
@@ -109,7 +110,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 
 	text := strings.TrimSpace(sb.String())
 	if text == "" {
-		return []bot.Reply{{Text: "No tracking to export"}}
+		return []bot.Reply{{Text: tr.T("cmd.script.none")}}
 	}
 
 	// Send as file if too long
@@ -119,7 +120,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 	if len(text) > maxLen {
 		return []bot.Reply{{
-			Text: "Here is your tracking script:",
+			Text: tr.T("cmd.script.file"),
 			Attachment: &bot.Attachment{
 				Filename: "tracking_script.txt",
 				Content:  []byte(text),
@@ -345,9 +346,9 @@ func (c *ScriptCommand) questToScript(ctx *bot.CommandContext, prefix string, q 
 	parts = append(parts, prefix+"quest")
 
 	switch q.RewardType {
-	case 3: // stardust
-		if q.Amount > 0 {
-			parts = append(parts, fmt.Sprintf("stardust:%d", q.Amount))
+	case 3: // stardust — minimum amount stored in Reward field
+		if q.Reward > 0 {
+			parts = append(parts, fmt.Sprintf("stardust:%d", q.Reward))
 		} else {
 			parts = append(parts, "stardust")
 		}

@@ -41,6 +41,9 @@ var raidParams = []bot.ParamDef{
 func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	// Extract @mention pings before parsing
+	pings, args := extractPings(args)
+
 	if usage := usageReply(ctx, args, "cmd.raid.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
@@ -108,6 +111,7 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			insert = append(insert, db.RaidTrackingAPI{
 				ID:          ctx.TargetID,
 				ProfileNo:   ctx.ProfileNo,
+				Ping:        pings,
 				PokemonID:   mon.PokemonID,
 				Form:        mon.Form,
 				Level:       9000,
@@ -156,6 +160,7 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			insert = append(insert, db.RaidTrackingAPI{
 				ID:          ctx.TargetID,
 				ProfileNo:   ctx.ProfileNo,
+				Ping:        pings,
 				PokemonID:   9000,
 				Level:       lvl,
 				Team:        team,

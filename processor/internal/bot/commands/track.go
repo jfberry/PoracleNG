@@ -21,6 +21,9 @@ func (c *TrackCommand) Aliases() []string { return nil }
 func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	// Extract @mention pings before parsing
+	pings, args := extractPings(args)
+
 	if usage := usageReply(ctx, args, "cmd.track.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
@@ -74,7 +77,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			ProfileNo:        ctx.ProfileNo,
 			PokemonID:        mon.PokemonID,
 			Form:             mon.Form,
-			Ping:             "",
+			Ping:             pings,
 			Distance:         filters.distance,
 			MinIV:            filters.minIV,
 			MaxIV:            filters.maxIV,

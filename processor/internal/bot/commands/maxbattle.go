@@ -35,6 +35,9 @@ var maxbattleParams = []bot.ParamDef{
 func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	// Extract @mention pings before parsing
+	pings, args := extractPings(args)
+
 	if usage := usageReply(ctx, args, "cmd.maxbattle.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
@@ -94,7 +97,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 			insert = append(insert, db.MaxbattleTrackingAPI{
 				ID:        ctx.TargetID,
 				ProfileNo: ctx.ProfileNo,
-				Ping:      "",
+				Ping:      pings,
 				Template:  template,
 				Distance:  distance,
 				Clean:     db.IntBool(clean),
@@ -133,7 +136,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 			insert = append(insert, db.MaxbattleTrackingAPI{
 				ID:        ctx.TargetID,
 				ProfileNo: ctx.ProfileNo,
-				Ping:      "",
+				Ping:      pings,
 				Template:  template,
 				Distance:  distance,
 				Clean:     db.IntBool(clean),

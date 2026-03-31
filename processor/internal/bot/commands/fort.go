@@ -33,6 +33,9 @@ var fortParams = []bot.ParamDef{
 func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	// Extract @mention pings before parsing
+	pings, args := extractPings(args)
+
 	if usage := usageReply(ctx, args, "cmd.fort.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
@@ -93,7 +96,7 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	insert := []db.FortTrackingAPI{{
 		ID:           ctx.TargetID,
 		ProfileNo:    ctx.ProfileNo,
-		Ping:         "",
+		Ping:         pings,
 		Template:     template,
 		Distance:     distance,
 		FortType:     fortType,

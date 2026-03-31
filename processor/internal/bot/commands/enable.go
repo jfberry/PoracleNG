@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -16,13 +15,13 @@ func (c *EnableCommand) Name() string      { return "cmd.enable" }
 func (c *EnableCommand) Aliases() []string { return nil }
 
 func (c *EnableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	if !ctx.IsAdmin {
-		tr := ctx.Tr()
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
 	}
 
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "Please specify user IDs"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.enable.specify")}}
 	}
 
 	var enabled []string
@@ -43,7 +42,7 @@ func (c *EnableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	if len(enabled) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Enabled: %s", strings.Join(enabled, ", "))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.enable.success", strings.Join(enabled, ", "))}}
 }
 
 // DisableCommand implements !disable — admin disables user(s).
@@ -53,13 +52,13 @@ func (c *DisableCommand) Name() string      { return "cmd.disable" }
 func (c *DisableCommand) Aliases() []string { return nil }
 
 func (c *DisableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	if !ctx.IsAdmin {
-		tr := ctx.Tr()
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
 	}
 
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "Please specify user IDs"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.enable.specify")}}
 	}
 
 	var disabled []string
@@ -79,7 +78,7 @@ func (c *DisableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if len(disabled) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Disabled: %s", strings.Join(disabled, ", "))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.disable.success", strings.Join(disabled, ", "))}}
 }
 
 // stripMention removes Discord mention formatting: <@123> → 123, <@!123> → 123

@@ -5,7 +5,7 @@ package discordbot
 
 import (
 	"bytes"
-	"strings"
+	"encoding/json"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jmoiron/sqlx"
@@ -129,8 +129,17 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	channelID := m.ChannelID
 
 	// Look up user state
-	userLang, profileNo, hasLocation, hasArea, isRegistered := lookupUserState(b.db, m.Author.ID, b.cfg.General.Locale)
+	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserState(b.db, m.Author.ID, b.cfg.General.Locale)
 	isAdmin := bot.IsAdmin(b.cfg, "discord", m.Author.ID)
+
+	// Fetch user's Discord roles for command security and delegated admin checks
+	var userRoles []string
+	if guildID != "" {
+		member, err := s.GuildMember(guildID, m.Author.ID)
+		if err == nil && member != nil {
+			userRoles = member.Roles
+		}
+	}
 
 	// Determine target type
 	targetType := "discord:user"
@@ -147,10 +156,12 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		fences = st.Fences
 	}
 
+	tr := b.translations.For(userLang)
+
 	for _, cmd := range parsed {
 		if cmd.CommandKey == "" {
 			if isDM {
-				s.ChannelMessageSend(channelID, "Unknown command. Try `"+b.cfg.Discord.Prefix+"help`")
+				s.ChannelMessageSend(channelID, tr.Tf("cmd.unknown", b.cfg.Discord.Prefix+"help"))
 			}
 			continue
 		}
@@ -162,14 +173,12 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 		// Registration check — skip for poracle (registration), poracle_test, and version commands
 		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.poracle_test" && cmd.CommandKey != "cmd.version" {
-			tr := b.translations.For(userLang)
 			s.ChannelMessageSend(channelID, tr.T("cmd.not_registered"))
 			continue
 		}
 
-		// Check command security
-		// TODO: fetch user roles from guild for full command_security check
-		if !bot.CommandAllowed(b.cfg, "discord", cmd.CommandKey, m.Author.ID, nil) {
+		// Check command security with user roles
+		if !bot.CommandAllowed(b.cfg, "discord", cmd.CommandKey, m.Author.ID, userRoles) {
 			s.MessageReactionAdd(channelID, m.ID, "🙅")
 			continue
 		}
@@ -204,6 +213,10 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			StaticMap:    b.staticMap,
 			ReloadFunc:   b.reloadFunc,
 		}
+
+		// Populate delegated admin permissions
+		ctx.Permissions.ChannelTracking = bot.CalculateChannelPermissions(
+			b.cfg, m.Author.ID, userRoles, channelID, guildID, "")
 
 		// Handle target override
 		target, remainingArgs, err := bot.BuildTarget(b.db, ctx, cmd.Args)
@@ -263,7 +276,7 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 
 		// Text message
 		if reply.Text != "" {
-			messages := splitMessage(reply.Text, 2000)
+			messages := bot.SplitMessage(reply.Text, 2000)
 			for _, msg := range messages {
 				s.ChannelMessageSend(targetChannel, msg)
 			}
@@ -271,67 +284,29 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 
 		// Embed
 		if len(reply.Embed) > 0 {
-			// TODO: parse embed JSON and send as Discord embed
+			var embed discordgo.MessageEmbed
+			if err := json.Unmarshal(reply.Embed, &embed); err != nil {
+				log.Warnf("discord bot: parse embed JSON: %v", err)
+			} else {
+				if _, err := s.ChannelMessageSendEmbed(targetChannel, &embed); err != nil {
+					log.Warnf("discord bot: send embed: %v", err)
+				}
+			}
 		}
 
 		// Image
 		if reply.ImageURL != "" {
-			// TODO: send as embed with image
+			embed := &discordgo.MessageEmbed{
+				Image: &discordgo.MessageEmbedImage{URL: reply.ImageURL},
+			}
+			if reply.Text != "" {
+				embed.Description = reply.Text
+			}
+			if _, err := s.ChannelMessageSendEmbed(targetChannel, embed); err != nil {
+				log.Warnf("discord bot: send image embed: %v", err)
+			}
 		}
 	}
 }
 
-// splitMessage splits text into chunks that fit within maxLen, splitting at newlines.
-func splitMessage(text string, maxLen int) []string {
-	if len(text) <= maxLen {
-		return []string{text}
-	}
 
-	var messages []string
-	lines := strings.Split(text, "\n")
-	var current strings.Builder
-
-	for _, line := range lines {
-		if current.Len()+len(line)+1 > maxLen && current.Len() > 0 {
-			messages = append(messages, current.String())
-			current.Reset()
-		}
-		if current.Len() > 0 {
-			current.WriteByte('\n')
-		}
-		current.WriteString(line)
-	}
-	if current.Len() > 0 {
-		messages = append(messages, current.String())
-	}
-
-	return messages
-}
-
-// lookupUserState loads basic user info for command context building.
-// isRegistered is true when the user exists in the humans table.
-func lookupUserState(database *sqlx.DB, userID, defaultLocale string) (lang string, profileNo int, hasLocation, hasArea, isRegistered bool) {
-	lang = defaultLocale
-	profileNo = 1
-
-	var h struct {
-		Language  *string `db:"language"`
-		ProfileNo int     `db:"current_profile_no"`
-		Latitude  float64 `db:"latitude"`
-		Longitude float64 `db:"longitude"`
-		Area      *string `db:"area"`
-	}
-	err := database.Get(&h, "SELECT language, current_profile_no, latitude, longitude, area FROM humans WHERE id = ? LIMIT 1", userID)
-	if err != nil {
-		return
-	}
-
-	isRegistered = true
-	if h.Language != nil && *h.Language != "" {
-		lang = *h.Language
-	}
-	profileNo = h.ProfileNo
-	hasLocation = h.Latitude != 0 || h.Longitude != 0
-	hasArea = h.Area != nil && *h.Area != "" && *h.Area != "[]"
-	return
-}

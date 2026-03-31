@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -567,6 +566,6 @@ func ReportUnrecognized(parsed *ParsedArgs, tr *i18n.Translator) *Reply {
 	if len(parsed.Unrecognized) == 0 {
 		return nil
 	}
-	msg := fmt.Sprintf("Unrecognized: %s", strings.Join(parsed.Unrecognized, ", "))
+	msg := tr.Tf("cmd.unrecognized", strings.Join(parsed.Unrecognized, ", "))
 	return &Reply{React: "🙅", Text: msg}
 }

@@ -29,6 +29,9 @@ var invasionParams = []bot.ParamDef{
 func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	// Extract @mention pings before parsing
+	pings, args := extractPings(args)
+
 	if usage := usageReply(ctx, args, "cmd.invasion.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
@@ -53,12 +56,36 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	// Build valid grunt type name set from game data (matching alerter behavior).
 	// The DB stores grunt_type as lowercased English type names like "dragon",
 	// "giovanni", "mixed", "water", etc.
-	validGruntTypes := make(map[string]bool)
+	// Also add simplified names: strip "character_" and "character_executive_" prefixes
+	// so users can type "giovanni" or "arlo" instead of the full template-derived name.
+	validGruntTypes := make(map[string]string) // input name → canonical DB name
 	if ctx.GameData != nil {
 		for _, grunt := range ctx.GameData.Grunts {
-			name := strings.ToLower(gamedata.TypeNameFromTemplate(grunt.Template))
-			if name != "" {
-				validGruntTypes[name] = true
+			canonical := strings.ToLower(gamedata.TypeNameFromTemplate(grunt.Template))
+			if canonical == "" {
+				continue
+			}
+			validGruntTypes[canonical] = canonical
+
+			// Add simplified versions for leaders/executives
+			tmpl := strings.ToLower(grunt.Template)
+			if strings.HasPrefix(tmpl, "character_executive_") {
+				// CHARACTER_EXECUTIVE_ARLO → "arlo"
+				short := strings.TrimPrefix(tmpl, "character_executive_")
+				// Strip gender suffix if present (e.g. "_male", "_female")
+				short = strings.TrimSuffix(short, "_male")
+				short = strings.TrimSuffix(short, "_female")
+				if short != "" {
+					validGruntTypes[short] = canonical
+				}
+			} else if strings.HasPrefix(tmpl, "character_") && !strings.Contains(tmpl, "_grunt") {
+				// CHARACTER_GIOVANNI → "giovanni"
+				short := strings.TrimPrefix(tmpl, "character_")
+				short = strings.TrimSuffix(short, "_male")
+				short = strings.TrimSuffix(short, "_female")
+				if short != "" && short != canonical {
+					validGruntTypes[short] = canonical
+				}
 			}
 		}
 	}
@@ -70,8 +97,8 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	} else {
 		for _, arg := range parsed.Unrecognized {
 			lower := strings.ToLower(arg)
-			if validGruntTypes[lower] {
-				gruntTypes = append(gruntTypes, lower)
+			if canonical, ok := validGruntTypes[lower]; ok {
+				gruntTypes = append(gruntTypes, canonical)
 			}
 		}
 	}
@@ -96,7 +123,7 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		insert = append(insert, db.InvasionTrackingAPI{
 			ID:        ctx.TargetID,
 			ProfileNo: ctx.ProfileNo,
-			Ping:      "",
+			Ping:      pings,
 			Template:  template,
 			Distance:  distance,
 			Clean:     db.IntBool(clean),
