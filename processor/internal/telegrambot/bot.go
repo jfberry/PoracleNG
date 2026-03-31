@@ -270,6 +270,10 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			ctx.ProfileNo = target.ProfileNo
 			ctx.HasLocation = target.HasLocation
 			ctx.HasArea = target.HasArea
+			if target.ExecutionMessage != "" {
+				msg := tgbotapi.NewMessage(chatID, target.ExecutionMessage)
+				b.api.Send(msg)
+			}
 		}
 
 		replies := handler.Run(ctx, remainingArgs)
