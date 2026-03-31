@@ -26,6 +26,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/discordbot"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
@@ -335,41 +336,40 @@ func main() {
 	// Delivery endpoint — accepts pre-rendered jobs from alerter commands (broadcast, etc.)
 	mux.HandleFunc("POST /api/deliverMessages", auth(api.HandleDeliverMessages(proc.dispatcher)))
 
-	// Command endpoint — bot command processing via API (for testing and future bot integration)
-	{
-		languages := cfg.General.AvailableLanguages
-		if len(languages) == 0 {
-			languages = []string{"en"}
-		}
-		prefix := cfg.Discord.Prefix
-		if prefix == "" {
-			prefix = "!"
-		}
-		cmdParser := bot.NewParser(prefix, proc.enricher.Translations, languages)
-		cmdResolver := bot.NewPokemonResolver(proc.enricher.GameData, proc.enricher.Translations, languages, nil)
-		cmdArgMatcher := bot.NewArgMatcher(proc.enricher.Translations, proc.enricher.GameData, cmdResolver, languages)
-		cmdRegistry := bot.NewRegistry()
-		cmdRegistry.Register(&commands.StartCommand{})
-		cmdRegistry.Register(&commands.StopCommand{})
-		cmdRegistry.Register(&commands.EggCommand{})
-		cmdRegistry.Register(&commands.TrackCommand{})
-
-		cmdDeps := &api.CommandDeps{
-			DB:           database,
-			Config:       cfg,
-			StateMgr:     stateMgr,
-			GameData:     proc.enricher.GameData,
-			Translations: proc.enricher.Translations,
-			Dispatcher:   proc.dispatcher,
-			RowText:      trackingDeps.RowText,
-			Resolver:     cmdResolver,
-			ArgMatcher:   cmdArgMatcher,
-			Parser:       cmdParser,
-			Registry:     cmdRegistry,
-			ReloadFunc:   proc.triggerReload,
-		}
-		mux.HandleFunc("POST /api/command", apiRoute("command", api.HandleCommand(cmdDeps)))
+	// Command framework — shared by API endpoint and Discord/Telegram bots
+	cmdLanguages := cfg.General.AvailableLanguages
+	if len(cmdLanguages) == 0 {
+		cmdLanguages = []string{"en"}
 	}
+	cmdPrefix := cfg.Discord.Prefix
+	if cmdPrefix == "" {
+		cmdPrefix = "!"
+	}
+	cmdParser := bot.NewParser(cmdPrefix, proc.enricher.Translations, cmdLanguages)
+	cmdResolver := bot.NewPokemonResolver(proc.enricher.GameData, proc.enricher.Translations, cmdLanguages, nil)
+	cmdArgMatcher := bot.NewArgMatcher(proc.enricher.Translations, proc.enricher.GameData, cmdResolver, cmdLanguages)
+	cmdRegistry := bot.NewRegistry()
+	cmdRegistry.Register(&commands.StartCommand{})
+	cmdRegistry.Register(&commands.StopCommand{})
+	cmdRegistry.Register(&commands.EggCommand{})
+	cmdRegistry.Register(&commands.TrackCommand{})
+
+	// Command API endpoint (for testing commands without bots)
+	cmdDeps := &api.CommandDeps{
+		DB:           database,
+		Config:       cfg,
+		StateMgr:     stateMgr,
+		GameData:     proc.enricher.GameData,
+		Translations: proc.enricher.Translations,
+		Dispatcher:   proc.dispatcher,
+		RowText:      trackingDeps.RowText,
+		Resolver:     cmdResolver,
+		ArgMatcher:   cmdArgMatcher,
+		Parser:       cmdParser,
+		Registry:     cmdRegistry,
+		ReloadFunc:   proc.triggerReload,
+	}
+	mux.HandleFunc("POST /api/command", apiRoute("command", api.HandleCommand(cmdDeps)))
 
 	// Proxy unhandled /api/ requests to the alerter (config, humans, profiles, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
@@ -449,6 +449,32 @@ func main() {
 		}
 	}()
 
+	// Start Discord bot (if token configured)
+	var discordBot *discordbot.Bot
+	discordTokens := cfg.Discord.DiscordTokens()
+	if len(discordTokens) > 0 && discordTokens[0] != "" {
+		dbot, err := discordbot.New(discordbot.Config{
+			Token:        discordTokens[0],
+			DB:           database,
+			Cfg:          cfg,
+			StateMgr:     stateMgr,
+			GameData:     proc.enricher.GameData,
+			Translations: proc.enricher.Translations,
+			Dispatcher:   proc.dispatcher,
+			RowText:      trackingDeps.RowText,
+			Registry:     cmdRegistry,
+			Parser:       cmdParser,
+			ArgMatcher:   cmdArgMatcher,
+			Resolver:     cmdResolver,
+			ReloadFunc:   proc.triggerReload,
+		})
+		if err != nil {
+			log.Warnf("Discord bot failed to start: %v", err)
+		} else {
+			discordBot = dbot
+		}
+	}
+
 	// Start server
 	go func() {
 		log.Infof("Processor starting on %s", cfg.Processor.ListenAddr())
@@ -464,6 +490,10 @@ func main() {
 
 	log.Infof("Shutting down...")
 	close(periodicDone)
+	if discordBot != nil {
+		discordBot.Close()
+		log.Infof("Discord bot disconnected")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	server.Shutdown(ctx)
