@@ -71,7 +71,7 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 			return []bot.Reply{*warn}
 		}
-		return []bot.Reply{{React: "🙅", Text: "No egg levels specified"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_egg_levels")}}
 	}
 
 	// Parse common fields

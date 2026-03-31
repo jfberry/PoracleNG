@@ -42,9 +42,10 @@ func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 }
 
 func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
+	tr := ctx.Tr()
 	available := getAvailableAreas(ctx)
 	if len(available) == 0 {
-		return []bot.Reply{{Text: "No areas available"}}
+		return []bot.Reply{{Text: tr.T("cmd.area.none_available")}}
 	}
 
 	// Get user's current areas
@@ -55,7 +56,7 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("**Available areas:**\n")
+	sb.WriteString(tr.T("cmd.area.available") + "\n")
 	for _, a := range available {
 		marker := ""
 		if currentSet[strings.ToLower(a.Name)] {
@@ -71,8 +72,9 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 }
 
 func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "Please specify area names to add"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.area.specify_add")}}
 	}
 
 	available := getAvailableAreas(ctx)
@@ -108,13 +110,13 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 
 	var reply string
 	if len(added) > 0 {
-		reply = "Added: " + strings.Join(added, ", ")
+		reply = tr.Tf("cmd.area.added", strings.Join(added, ", "))
 	}
 	if len(notFound) > 0 {
 		if reply != "" {
 			reply += "\n"
 		}
-		reply += "Not found: " + strings.Join(notFound, ", ")
+		reply += tr.Tf("cmd.area.not_found", strings.Join(notFound, ", "))
 	}
 
 	react := "✅"
@@ -125,8 +127,9 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 }
 
 func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "Please specify area names to remove"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.area.specify_remove")}}
 	}
 
 	currentAreas := getUserAreas(ctx)
@@ -155,31 +158,33 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 	}
 	text := ""
 	if len(removed) > 0 {
-		text = "Removed: " + strings.Join(removed, ", ")
+		text = tr.Tf("cmd.area.removed", strings.Join(removed, ", "))
 	}
 	return []bot.Reply{{React: react, Text: text}}
 }
 
 func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	// For now, list the user's current areas. Map generation requires tile API access.
 	currentAreas := getUserAreas(ctx)
 	if len(currentAreas) == 0 {
-		return []bot.Reply{{Text: "You have not selected any area yet"}}
+		return []bot.Reply{{Text: tr.T("status.no_areas")}}
 	}
 
 	// Resolve display names
 	displayNames := resolveAreaDisplayNames(ctx, currentAreas)
-	return []bot.Reply{{Text: "Your areas: " + strings.Join(displayNames, ", ")}}
+	return []bot.Reply{{Text: tr.Tf("cmd.area.your_areas", strings.Join(displayNames, ", "))}}
 }
 
 func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	// Overview map generation requires tile API access — return text for now
 	currentAreas := getUserAreas(ctx)
 	if len(currentAreas) == 0 {
-		return []bot.Reply{{Text: "You have not selected any area yet"}}
+		return []bot.Reply{{Text: tr.T("status.no_areas")}}
 	}
 	displayNames := resolveAreaDisplayNames(ctx, currentAreas)
-	return []bot.Reply{{Text: "Your areas: " + strings.Join(displayNames, ", ")}}
+	return []bot.Reply{{Text: tr.Tf("cmd.area.your_areas", strings.Join(displayNames, ", "))}}
 }
 
 type availableArea struct {

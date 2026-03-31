@@ -39,6 +39,7 @@ func (c *ProfileCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 }
 
 func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
+	tr := ctx.Tr()
 	var profiles []struct {
 		ProfileNo int    `db:"profile_no"`
 		Name      string `db:"name"`
@@ -52,14 +53,14 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	if len(profiles) == 0 {
-		return []bot.Reply{{Text: "No profiles configured"}}
+		return []bot.Reply{{Text: tr.T("cmd.profile.none")}}
 	}
 
 	var sb strings.Builder
 	for _, p := range profiles {
 		marker := ""
 		if p.ProfileNo == ctx.ProfileNo {
-			marker = " ← active"
+			marker = " ← " + tr.T("cmd.profile.active")
 		}
 		sb.WriteString(fmt.Sprintf("%d: %s%s\n", p.ProfileNo, p.Name, marker))
 	}
@@ -67,8 +68,9 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 }
 
 func (c *ProfileCommand) addProfile(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "Please specify a profile name"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.specify_name")}}
 	}
 	name := strings.Join(args, " ")
 
@@ -98,21 +100,22 @@ func (c *ProfileCommand) addProfile(ctx *bot.CommandContext, args []string) []bo
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Profile %d: %s created", newNo, name)}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.profile.created", newNo, name)}}
 }
 
 func (c *ProfileCommand) removeProfile(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "Please specify a profile name or number"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.specify")}}
 	}
 
 	profileNo := c.resolveProfileNo(ctx, args[0])
 	if profileNo < 1 {
-		return []bot.Reply{{React: "🙅", Text: "Profile not found"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.not_found")}}
 	}
 
 	if profileNo == 1 {
-		return []bot.Reply{{React: "🙅", Text: "Cannot delete profile 1"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.cannot_delete_1")}}
 	}
 
 	// Delete all tracking for this profile
@@ -129,17 +132,18 @@ func (c *ProfileCommand) removeProfile(ctx *bot.CommandContext, args []string) [
 	}
 
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Profile %d deleted", profileNo)}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.profile.deleted", profileNo)}}
 }
 
 func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "Please specify a profile name or number"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.specify")}}
 	}
 
 	profileNo := c.resolveProfileNo(ctx, strings.Join(args, " "))
 	if profileNo < 1 {
-		return []bot.Reply{{React: "🙅", Text: "Profile not found"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.not_found")}}
 	}
 
 	_, err := ctx.DB.Exec("UPDATE humans SET current_profile_no = ? WHERE id = ?", profileNo, ctx.TargetID)
@@ -150,7 +154,6 @@ func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) [
 
 	ctx.TriggerReload()
 
-	tr := ctx.Tr()
 	return []bot.Reply{{React: "✅", Text: tr.Tf("profile.switched", profileNo)}}
 }
 

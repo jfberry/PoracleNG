@@ -172,5 +172,6 @@ func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, gruntTypes []
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Removed %d invasion tracking rules", len(uids))}}
+	tr := ctx.Tr()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
 }

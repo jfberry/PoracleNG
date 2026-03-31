@@ -29,18 +29,18 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	if human != nil {
 		// Enabled/disabled status
-		enabledText := "enabled"
+		enabledText := tr.T("status.enabled")
 		if !human.Enabled {
-			enabledText = "disabled"
+			enabledText = tr.T("status.disabled")
 		}
-		sb.WriteString(fmt.Sprintf("Your alerts are currently **%s**\n", enabledText))
+		sb.WriteString(tr.Tf("status.alerts_currently", enabledText) + "\n")
 
 		// Location
 		if human.Latitude != 0 || human.Longitude != 0 {
 			mapLink := fmt.Sprintf("https://maps.google.com/maps?q=%f,%f", human.Latitude, human.Longitude)
-			sb.WriteString(fmt.Sprintf("Your location is currently set to %s\n", mapLink))
+			sb.WriteString(tr.Tf("status.location_set", mapLink) + "\n")
 		} else {
-			sb.WriteString("You have not set a location yet\n")
+			sb.WriteString(tr.T("status.no_location") + "\n")
 		}
 
 		// Area
@@ -63,15 +63,15 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 						displayNames = append(displayNames, a)
 					}
 				}
-				sb.WriteString(fmt.Sprintf("You are currently set to receive alarms in %s\n", strings.Join(displayNames, ", ")))
+				sb.WriteString(tr.Tf("status.areas_set", strings.Join(displayNames, ", ")) + "\n")
 			}
 		} else {
-			sb.WriteString("You have not selected any area yet\n")
+			sb.WriteString(tr.T("status.no_areas") + "\n")
 		}
 
 		// Profile
 		if human.ProfileName != "" {
-			sb.WriteString(fmt.Sprintf("Your profile is currently set to: %s\n", human.ProfileName))
+			sb.WriteString(tr.Tf("status.profile_set", human.ProfileName) + "\n")
 		}
 
 		// Blocked alerts
@@ -79,7 +79,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 			var blocked []string
 			json.Unmarshal([]byte(human.BlockedAlerts), &blocked)
 			if len(blocked) > 0 {
-				sb.WriteString(fmt.Sprintf("Blocked alert types: %s\n", strings.Join(blocked, ", ")))
+				sb.WriteString(tr.Tf("status.blocked_alerts", strings.Join(blocked, ", ")) + "\n")
 			}
 		}
 
@@ -91,7 +91,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select monsters: %v", err)
 	} else if len(monsters) > 0 {
-		sb.WriteString("**Pokemon:**\n")
+		sb.WriteString(tr.T("section.pokemon") + "\n")
 		for i := range monsters {
 			mt := monsterAPIToTracking(&monsters[i])
 			sb.WriteString(ctx.RowText.MonsterRowText(tr, mt))
@@ -105,7 +105,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select raids: %v", err)
 	} else if len(raids) > 0 {
-		sb.WriteString("**Raids:**\n")
+		sb.WriteString(tr.T("section.raids") + "\n")
 		for i := range raids {
 			rt := raidAPIToTracking(&raids[i])
 			sb.WriteString(ctx.RowText.RaidRowText(tr, rt))
@@ -119,7 +119,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select eggs: %v", err)
 	} else if len(eggs) > 0 {
-		sb.WriteString("**Eggs:**\n")
+		sb.WriteString(tr.T("section.eggs") + "\n")
 		for i := range eggs {
 			et := eggAPIToTracking(&eggs[i])
 			sb.WriteString(ctx.RowText.EggRowText(tr, et))
@@ -133,7 +133,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select quests: %v", err)
 	} else if len(quests) > 0 {
-		sb.WriteString("**Quests:**\n")
+		sb.WriteString(tr.T("section.quests") + "\n")
 		for i := range quests {
 			qt := questAPIToTracking(&quests[i])
 			sb.WriteString(ctx.RowText.QuestRowText(tr, qt))
@@ -147,7 +147,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select invasions: %v", err)
 	} else if len(invasions) > 0 {
-		sb.WriteString("**Invasions:**\n")
+		sb.WriteString(tr.T("section.invasions") + "\n")
 		for i := range invasions {
 			it := invasionAPIToTracking(&invasions[i])
 			sb.WriteString(ctx.RowText.InvasionRowText(tr, it))
@@ -161,7 +161,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select lures: %v", err)
 	} else if len(lures) > 0 {
-		sb.WriteString("**Lures:**\n")
+		sb.WriteString(tr.T("section.lures") + "\n")
 		for i := range lures {
 			lt := lureAPIToTracking(&lures[i])
 			sb.WriteString(ctx.RowText.LureRowText(tr, lt))
@@ -175,7 +175,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select gyms: %v", err)
 	} else if len(gyms) > 0 {
-		sb.WriteString("**Gyms:**\n")
+		sb.WriteString(tr.T("section.gyms") + "\n")
 		for i := range gyms {
 			gt := gymAPIToTracking(&gyms[i])
 			sb.WriteString(ctx.RowText.GymRowText(tr, gt))
@@ -189,7 +189,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select nests: %v", err)
 	} else if len(nests) > 0 {
-		sb.WriteString("**Nests:**\n")
+		sb.WriteString(tr.T("section.nests") + "\n")
 		for i := range nests {
 			nt := nestAPIToTracking(&nests[i])
 			sb.WriteString(ctx.RowText.NestRowText(tr, nt))
@@ -203,7 +203,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select forts: %v", err)
 	} else if len(forts) > 0 {
-		sb.WriteString("**Fort Updates:**\n")
+		sb.WriteString(tr.T("section.forts") + "\n")
 		for i := range forts {
 			ft := fortAPIToTracking(&forts[i])
 			sb.WriteString(ctx.RowText.FortUpdateRowText(tr, ft))
@@ -217,7 +217,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if err != nil {
 		log.Errorf("tracked: select maxbattles: %v", err)
 	} else if len(maxbattles) > 0 {
-		sb.WriteString("**Max Battles:**\n")
+		sb.WriteString(tr.T("section.maxbattles") + "\n")
 		for i := range maxbattles {
 			mt := maxbattleAPIToTracking(&maxbattles[i])
 			sb.WriteString(ctx.RowText.MaxbattleRowText(tr, mt))
@@ -228,7 +228,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	text := strings.TrimSpace(sb.String())
 	if text == "" {
-		text = "No active tracking"
+		text = tr.T("status.no_tracking")
 	}
 
 	// If too long for a single message, send as file attachment
@@ -238,7 +238,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 	if len(text) > maxLen {
 		return []bot.Reply{{
-			Text: "Tracking list is quite long. Here it is as a file:",
+			Text: tr.T("status.tracking_file"),
 			Attachment: &bot.Attachment{
 				Filename: "tracked.txt",
 				Content:  []byte(text),

@@ -16,5 +16,6 @@ func (c *WeatherCommand) Name() string      { return "cmd.weather" }
 func (c *WeatherCommand) Aliases() []string { return nil }
 
 func (c *WeatherCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
-	return []bot.Reply{{React: "🙅", Text: "Weather tracking is not yet available via this command. Use the alerter command instead."}}
+	tr := ctx.Tr()
+	return []bot.Reply{{React: "🙅", Text: tr.T("cmd.weather.unavailable")}}
 }

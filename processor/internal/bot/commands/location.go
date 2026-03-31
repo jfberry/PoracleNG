@@ -19,6 +19,7 @@ var locationParams = []bot.ParamDef{
 }
 
 func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	parsed := ctx.ArgMatcher.Match(args, locationParams, ctx.Language)
 
 	// Remove location
@@ -29,7 +30,7 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		}
 		ctx.DB.Exec("UPDATE profiles SET latitude = 0, longitude = 0 WHERE id = ? AND profile_no = ?",
 			ctx.TargetID, ctx.ProfileNo)
-		return []bot.Reply{{React: "✅", Text: "Location removed"}}
+		return []bot.Reply{{React: "✅", Text: tr.T("cmd.location.removed")}}
 	}
 
 	var lat, lon float64
@@ -38,7 +39,7 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		lat = parsed.Coords.Lat
 		lon = parsed.Coords.Lon
 	} else {
-		return []bot.Reply{{React: "🙅", Text: "Please specify coordinates or an address"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.location.specify")}}
 	}
 
 	// Set location
@@ -51,5 +52,5 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		lat, lon, ctx.TargetID, ctx.ProfileNo)
 
 	mapLink := fmt.Sprintf("https://maps.google.com/maps?q=%f,%f", lat, lon)
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Location set to %f,%f\n%s", lat, lon, mapLink)}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.location.set", lat, lon) + "\n" + mapLink}}
 }

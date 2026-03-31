@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -57,7 +56,7 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	monsterList := c.resolveMonsters(ctx, parsed)
 
 	if len(monsterList) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "No pokemon specified"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_pokemon")}}
 	}
 
 	if parsed.HasKeyword("arg.remove") {
@@ -239,5 +238,6 @@ func (c *NestCommand) removeNests(ctx *bot.CommandContext, monsterList []bot.Res
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Removed %d nest tracking rules", len(uids))}}
+	tr := ctx.Tr()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
 }
