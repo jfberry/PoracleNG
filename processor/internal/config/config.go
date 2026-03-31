@@ -25,6 +25,7 @@ type Config struct {
 	Alerter        AlerterConfig        `toml:"alerter"`
 	Discord        DiscordConfig        `toml:"discord"`
 	Telegram       TelegramConfig       `toml:"telegram"`
+	Reconciliation ReconciliationConfig `toml:"reconciliation"`
 	Geocoding      GeocodingConfig      `toml:"geocoding"`
 	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 	Tracking       TrackingConfig       `toml:"tracking"`
@@ -38,6 +39,35 @@ type Config struct {
 type AIConfig struct {
 	Enabled     bool `toml:"enabled"`       // enables !ask command
 	SuggestOnDM bool `toml:"suggest_on_dm"` // suggest commands for unrecognised DMs
+}
+
+// ReconciliationConfig holds settings from the [reconciliation] section.
+type ReconciliationConfig struct {
+	Discord  ReconciliationDiscordConfig  `toml:"discord"`
+	Telegram ReconciliationTelegramConfig `toml:"telegram"`
+}
+
+// ReconciliationDiscordConfig holds settings from [reconciliation.discord].
+type ReconciliationDiscordConfig struct {
+	UpdateUserNames           bool `toml:"update_user_names"`
+	RemoveInvalidUsers        bool `toml:"remove_invalid_users"`
+	RegisterNewUsers          bool `toml:"register_new_users"`
+	UpdateChannelNames        bool `toml:"update_channel_names"`
+	UpdateChannelNotes        bool `toml:"update_channel_notes"`
+	UnregisterMissingChannels bool `toml:"unregister_missing_channels"`
+}
+
+// ReconciliationTelegramConfig holds settings from [reconciliation.telegram].
+type ReconciliationTelegramConfig struct {
+	UpdateUserNames    bool `toml:"update_user_names"`
+	RemoveInvalidUsers bool `toml:"remove_invalid_users"`
+}
+
+// RoleSubscriptionEntry represents a [[discord.role_subscriptions]] TOML entry.
+type RoleSubscriptionEntry struct {
+	Guild          string                       `toml:"guild"`
+	Roles          map[string]string            `toml:"roles"`
+	ExclusiveRoles []map[string]string          `toml:"exclusive_roles"`
 }
 
 // TrackingConfig holds settings from the [tracking] section.
@@ -109,10 +139,18 @@ type DiscordConfig struct {
 	Token                   any                  `toml:"token"` // string or []string
 	Prefix                  string               `toml:"prefix"`
 	Channels                []string             `toml:"channels"` // registration channel IDs
+	Guilds                  []string             `toml:"guilds"`
+	UserRole                []string             `toml:"user_role"`
+	CheckRole               bool                 `toml:"check_role"`
+	CheckRoleInterval       int                  `toml:"check_role_interval"` // hours between periodic reconciliation
+	LostRoleMessage         string               `toml:"lost_role_message"`
+	DisableAutoGreetings    bool                 `toml:"disable_auto_greetings"`
+	DmLogChannelID          string               `toml:"dm_log_channel_id"`
 	IvColors                []string             `toml:"iv_colors"`
 	Admins                  []string             `toml:"admins"`
 	UploadEmbedImages       bool                 `toml:"upload_embed_images"`
 	MessageDeleteDelay      int                  `toml:"message_delete_delay"` // extra ms for clean TTH on channels
+	RoleSubscriptions       []RoleSubscriptionEntry `toml:"role_subscriptions"`
 	CommandSecurity         map[string][]string  `toml:"command_security"`
 	DelegatedAdministration DelegatedAdminConfig `toml:"delegated_administration"`
 }
@@ -128,11 +166,26 @@ func (c DiscordConfig) DiscordTokens() []string {
 	return tomlTokens(c.Token)
 }
 
+// RoleSubscriptionMap converts the [[discord.role_subscriptions]] TOML array
+// into a guild-keyed map, matching the alerter's userRoleSubscription format.
+func (c DiscordConfig) RoleSubscriptionMap() map[string]RoleSubscriptionEntry {
+	m := make(map[string]RoleSubscriptionEntry, len(c.RoleSubscriptions))
+	for _, entry := range c.RoleSubscriptions {
+		if entry.Guild != "" {
+			m[entry.Guild] = entry
+		}
+	}
+	return m
+}
+
 // TelegramConfig reads the [telegram] section for fields the processor needs.
 type TelegramConfig struct {
-	Token    any      `toml:"token"` // string or []string
-	Channels []string `toml:"channels"` // registration channel/group IDs
-	Admins   []string `toml:"admins"`
+	Token             any      `toml:"token"` // string or []string
+	Channels          []string `toml:"channels"` // registration channel/group IDs
+	Admins            []string `toml:"admins"`
+	CheckRole         bool     `toml:"check_role"`
+	CheckRoleInterval int      `toml:"check_role_interval"` // hours between periodic reconciliation
+	BotGoodbyeMessage string   `toml:"bot_goodbye_message"`
 }
 
 // TelegramTokens returns the telegram tokens as a string slice.
