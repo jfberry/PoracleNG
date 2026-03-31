@@ -60,6 +60,7 @@ type GeneralConfig struct {
 	ShortlinkProviderKey string         `toml:"shortlink_provider_key"`    // Shlink API key
 	ShortlinkDomain      string         `toml:"shortlink_provider_domain"` // Shlink domain override
 	DTSDictionary        map[string]any `toml:"dts_dictionary"`            // custom key-value pairs for DTS templates
+	AvailableLanguages   []string `toml:"available_languages"`
 }
 
 type LocaleConfig struct {
