@@ -347,6 +347,7 @@ func main() {
 		cmdPrefix = "!"
 	}
 	cmdParser := bot.NewParser(cmdPrefix, proc.enricher.Translations, cmdLanguages)
+	tgParser := bot.NewParser("/", proc.enricher.Translations, cmdLanguages)
 	cmdResolver := bot.NewPokemonResolver(proc.enricher.GameData, proc.enricher.Translations, cmdLanguages, nil)
 	cmdArgMatcher := bot.NewArgMatcher(proc.enricher.Translations, proc.enricher.GameData, cmdResolver, cmdLanguages)
 	cmdRegistry := bot.NewRegistry()
@@ -491,7 +492,7 @@ func main() {
 			Dispatcher:   proc.dispatcher,
 			RowText:      trackingDeps.RowText,
 			Registry:     cmdRegistry,
-			Parser:       cmdParser,
+			Parser:       tgParser,
 			ArgMatcher:   cmdArgMatcher,
 			Resolver:     cmdResolver,
 			ReloadFunc:   proc.triggerReload,
