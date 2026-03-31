@@ -27,9 +27,17 @@ type Config struct {
 	Telegram       TelegramConfig       `toml:"telegram"`
 	Geocoding      GeocodingConfig      `toml:"geocoding"`
 	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
+	Tracking       TrackingConfig       `toml:"tracking"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
+}
+
+// TrackingConfig holds settings from the [tracking] section.
+type TrackingConfig struct {
+	EverythingFlagPermissions string `toml:"everything_flag_permissions"` // "deny", "allow-any", "allow-and-always-individually", "allow-and-ignore-individually"
+	DefaultDistance           int    `toml:"default_distance"`
+	MaxDistance               int    `toml:"max_distance"`
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor
