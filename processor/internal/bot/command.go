@@ -79,6 +79,7 @@ type CommandContext struct {
 	Weather      *tracker.WeatherTracker
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
+	Emoji        *dts.EmojiLookup
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()

@@ -151,12 +151,19 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	tr := ctx.Tr()
 	enTr := ctx.Translations.For("en")
 
-	// Name
+	// Determine platform for emoji resolution
+	platform := strings.SplitN(ctx.TargetType, ":", 2)[0]
+	if platform == "webhook" {
+		platform = "discord"
+	}
+	emoji := ctx.Emoji
+
+	// Name and Pokedex ID
 	pokeName := tr.T(gamedata.PokemonTranslationKey(pokemonID))
 	enName := enTr.T(gamedata.PokemonTranslationKey(pokemonID))
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**#%d %s**", pokemonID, pokeName))
+	sb.WriteString(fmt.Sprintf("**%s**", pokeName))
 	if pokeName != enName {
 		sb.WriteString(fmt.Sprintf(" (%s)", enName))
 	}
@@ -171,14 +178,8 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	}
 	sb.WriteByte('\n')
 
-	// Types
-	if len(mon.Types) > 0 {
-		typeNames := make([]string, 0, len(mon.Types))
-		for _, tid := range mon.Types {
-			typeNames = append(typeNames, tr.T(gamedata.TypeTranslationKey(tid)))
-		}
-		sb.WriteString(tr.Tf("cmd.info.type", strings.Join(typeNames, " / ")) + "\n")
-	}
+	// Pokedex ID
+	sb.WriteString(fmt.Sprintf("%s #%d\n", tr.T("cmd.info.pokedex_id"), pokemonID))
 
 	// Base stats
 	sb.WriteString(tr.Tf("cmd.info.base_stats",
@@ -193,30 +194,104 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		}
 	}
 
-	// Weather boost
-	if ctx.GameData != nil && len(mon.Types) > 0 {
-		boosting := ctx.GameData.GetBoostingWeathers(mon.Types)
-		if len(boosting) > 0 {
-			weatherNames := make([]string, 0, len(boosting))
-			for _, wid := range boosting {
-				weatherNames = append(weatherNames, tr.T(gamedata.WeatherTranslationKey(wid)))
+	// Per-type details: type name, emoji, boosted weather, super effective against
+	for i, tid := range mon.Types {
+		sb.WriteByte('\n')
+		typeLabel := tr.T("cmd.info.primary_type")
+		if i > 0 {
+			typeLabel = tr.T("cmd.info.secondary_type")
+		}
+		sb.WriteString(fmt.Sprintf("**%s**\n", typeLabel))
+
+		typeName := tr.T(gamedata.TypeTranslationKey(tid))
+		typeEmoji := ""
+		if ti, ok := ctx.GameData.Types[tid]; ok && emoji != nil {
+			typeEmoji = emoji.Lookup(ti.Emoji, platform)
+		}
+		if typeEmoji != "" {
+			sb.WriteString(fmt.Sprintf("  %s %s\n", typeEmoji, typeName))
+		} else {
+			sb.WriteString(fmt.Sprintf("  %s\n", typeName))
+		}
+
+		// Boosted by weather
+		singleTypeBoosting := ctx.GameData.GetBoostingWeathers([]int{tid})
+		if len(singleTypeBoosting) > 0 {
+			var weatherParts []string
+			for _, wid := range singleTypeBoosting {
+				wName := tr.T(gamedata.WeatherTranslationKey(wid))
+				wEmoji := ""
+				if wInfo, ok := ctx.GameData.Util.Weather[wid]; ok && emoji != nil {
+					wEmoji = emoji.Lookup(wInfo.Emoji, platform)
+				}
+				if wEmoji != "" {
+					weatherParts = append(weatherParts, wEmoji+" "+wName)
+				} else {
+					weatherParts = append(weatherParts, wName)
+				}
 			}
-			sb.WriteString(tr.Tf("cmd.info.boosted_by", strings.Join(weatherNames, ", ")) + "\n")
+			sb.WriteString(fmt.Sprintf("  %s %s\n", tr.T("cmd.info.boosted_by"), strings.Join(weatherParts, ", ")))
+		}
+
+		// Super effective against: find which types have this type in their Weaknesses
+		var effectiveAgainst []string
+		for otherTID, otherType := range ctx.GameData.Types {
+			for _, wID := range otherType.Weaknesses {
+				if wID == tid {
+					otherName := tr.T(gamedata.TypeTranslationKey(otherTID))
+					otherEmoji := ""
+					if emoji != nil {
+						otherEmoji = emoji.Lookup(otherType.Emoji, platform)
+					}
+					if otherEmoji != "" {
+						effectiveAgainst = append(effectiveAgainst, otherEmoji+" "+otherName)
+					} else {
+						effectiveAgainst = append(effectiveAgainst, otherName)
+					}
+					break
+				}
+			}
+		}
+		if len(effectiveAgainst) > 0 {
+			sort.Strings(effectiveAgainst)
+			sb.WriteString(fmt.Sprintf("  %s %s\n", tr.T("cmd.info.super_effective"), strings.Join(effectiveAgainst, ", ")))
 		}
 	}
 
-	// Evolutions with candy cost
-	if len(mon.Evolutions) > 0 {
-		evoStrs := make([]string, 0, len(mon.Evolutions))
-		for _, evo := range mon.Evolutions {
-			evoName := tr.T(gamedata.PokemonTranslationKey(evo.PokemonID))
-			if evo.CandyCost > 0 {
-				evoStrs = append(evoStrs, fmt.Sprintf("%s (%d candy)", evoName, evo.CandyCost))
-			} else {
-				evoStrs = append(evoStrs, evoName)
-			}
+	// Vulnerability section (defensive weakness/resistance)
+	categories := gamedata.CalculateWeaknesses(mon.Types, ctx.GameData.Types)
+	if len(categories) > 0 {
+		sb.WriteByte('\n')
+
+		// Map multiplier to i18n key
+		multiplierLabels := map[float64]string{
+			4:     "cmd.info.very_vulnerable",
+			2:     "cmd.info.vulnerable",
+			0.5:   "cmd.info.resistant",
+			0.25:  "cmd.info.very_resistant",
+			0.125: "cmd.info.extremely_resistant",
 		}
-		sb.WriteString(tr.Tf("cmd.info.evolves_to", strings.Join(evoStrs, ", ")) + "\n")
+
+		for _, cat := range categories {
+			label, ok := multiplierLabels[cat.Multiplier]
+			if !ok {
+				continue
+			}
+			var typeParts []string
+			for _, tid := range cat.TypeIDs {
+				tName := tr.T(gamedata.TypeTranslationKey(tid))
+				tEmoji := ""
+				if ti, ok := ctx.GameData.Types[tid]; ok && emoji != nil {
+					tEmoji = emoji.Lookup(ti.Emoji, platform)
+				}
+				if tEmoji != "" {
+					typeParts = append(typeParts, tEmoji+" "+tName)
+				} else {
+					typeParts = append(typeParts, tName)
+				}
+			}
+			sb.WriteString(fmt.Sprintf("%s %s\n", tr.T(label), strings.Join(typeParts, ", ")))
+		}
 	}
 
 	// Available forms for tracking
@@ -229,29 +304,30 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		}
 	}
 
+	// Evolutions with candy cost
+	if len(mon.Evolutions) > 0 {
+		sb.WriteByte('\n')
+		evoStrs := make([]string, 0, len(mon.Evolutions))
+		for _, evo := range mon.Evolutions {
+			evoName := tr.T(gamedata.PokemonTranslationKey(evo.PokemonID))
+			if evo.CandyCost > 0 {
+				evoStrs = append(evoStrs, fmt.Sprintf("%s (%d candy)", evoName, evo.CandyCost))
+			} else {
+				evoStrs = append(evoStrs, evoName)
+			}
+		}
+		sb.WriteString(tr.Tf("cmd.info.evolves_to", strings.Join(evoStrs, ", ")) + "\n")
+	}
+
 	// Hundo CP table
 	if mon.Attack > 0 || mon.Defense > 0 || mon.Stamina > 0 {
 		sb.WriteByte('\n')
-		sb.WriteString(tr.T("cmd.info.hundo_cp") + "\n")
+		sb.WriteString("\U0001F4AF " + tr.T("cmd.info.hundo_cp") + "\n")
 		levels := []int{15, 20, 25, 40, 50, 51}
 		levelLabels := []string{"L15", "L20", "L25", "L40", "L50", "L51"}
 		for i, level := range levels {
 			cp := calculateCP(mon.Attack, mon.Defense, mon.Stamina, 15, 15, 15, level)
 			sb.WriteString(fmt.Sprintf("  %s: %d\n", levelLabels[i], cp))
-		}
-	}
-
-	// Weakness calculation
-	categories := gamedata.CalculateWeaknesses(mon.Types, ctx.GameData.Types)
-	if len(categories) > 0 {
-		sb.WriteByte('\n')
-		sb.WriteString(tr.T("cmd.info.weakness") + "\n")
-		for _, cat := range categories {
-			typeNames := make([]string, 0, len(cat.TypeIDs))
-			for _, tid := range cat.TypeIDs {
-				typeNames = append(typeNames, tr.T(gamedata.TypeTranslationKey(tid)))
-			}
-			sb.WriteString(fmt.Sprintf("  %.2gx: %s\n", cat.Multiplier, strings.Join(typeNames, ", ")))
 		}
 	}
 

@@ -45,6 +45,7 @@ type Bot struct {
 	weather    *tracker.WeatherTracker
 	stats      *tracker.StatsTracker
 	dts        *dts.TemplateStore
+	emoji      *dts.EmojiLookup
 	reloadFunc func()
 	stopCh     chan struct{}
 }
@@ -68,6 +69,7 @@ type Config struct {
 	Weather      *tracker.WeatherTracker
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
+	Emoji        *dts.EmojiLookup
 	ReloadFunc   func()
 }
 
@@ -96,6 +98,7 @@ func New(cfg Config) (*Bot, error) {
 		weather:      cfg.Weather,
 		stats:        cfg.Stats,
 		dts:          cfg.DTS,
+		emoji:        cfg.Emoji,
 		reloadFunc:   cfg.ReloadFunc,
 		stopCh:       make(chan struct{}),
 	}
@@ -246,6 +249,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			Weather:      b.weather,
 			Stats:        b.stats,
 			DTS:          b.dts,
+			Emoji:        b.emoji,
 			ReloadFunc:   b.reloadFunc,
 		}
 

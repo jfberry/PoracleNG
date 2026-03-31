@@ -381,8 +381,10 @@ func main() {
 
 	// Command API endpoint (for testing commands without bots)
 	var cmdDTS *dts.TemplateStore
+	var cmdEmoji *dts.EmojiLookup
 	if proc.dtsRenderer != nil {
 		cmdDTS = proc.dtsRenderer.Templates()
+		cmdEmoji = proc.dtsRenderer.Emoji()
 	}
 	cmdDeps := &api.CommandDeps{
 		DB:           database,
@@ -399,6 +401,7 @@ func main() {
 		Weather:      proc.weather,
 		Stats:        proc.stats,
 		DTS:          cmdDTS,
+		Emoji:        cmdEmoji,
 		ReloadFunc:   proc.triggerReload,
 	}
 	mux.HandleFunc("POST /api/command", apiRoute("command", api.HandleCommand(cmdDeps)))
@@ -503,6 +506,7 @@ func main() {
 			Weather:      proc.weather,
 			Stats:        proc.stats,
 			DTS:          cmdDTS,
+			Emoji:        cmdEmoji,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {
@@ -534,6 +538,7 @@ func main() {
 			Weather:      proc.weather,
 			Stats:        proc.stats,
 			DTS:          cmdDTS,
+			Emoji:        cmdEmoji,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {
