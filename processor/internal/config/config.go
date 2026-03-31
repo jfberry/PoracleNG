@@ -28,9 +28,16 @@ type Config struct {
 	Geocoding      GeocodingConfig      `toml:"geocoding"`
 	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 	Tracking       TrackingConfig       `toml:"tracking"`
+	AI             AIConfig             `toml:"ai"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
+}
+
+// AIConfig holds settings for the NLP command assistant.
+type AIConfig struct {
+	Enabled     bool `toml:"enabled"`       // enables !ask command
+	SuggestOnDM bool `toml:"suggest_on_dm"` // suggest commands for unrecognised DMs
 }
 
 // TrackingConfig holds settings from the [tracking] section.

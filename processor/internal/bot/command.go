@@ -17,6 +17,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
@@ -80,6 +81,7 @@ type CommandContext struct {
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
 	Emoji        *dts.EmojiLookup
+	NLP          *nlp.Parser
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()

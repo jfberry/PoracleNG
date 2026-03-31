@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
@@ -36,6 +37,7 @@ type CommandDeps struct {
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
 	Emoji        *dts.EmojiLookup
+	NLPParser    *nlp.Parser
 	ReloadFunc   func()
 }
 
@@ -152,6 +154,7 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 				Stats:        deps.Stats,
 				DTS:          deps.DTS,
 				Emoji:        deps.Emoji,
+				NLP:          deps.NLPParser,
 				ReloadFunc:   deps.ReloadFunc,
 			}
 

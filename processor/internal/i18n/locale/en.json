@@ -414,6 +414,9 @@
   "cmd.community.valid": "These are the valid communities:",
   "cmd.community.no_targets": "No targets listed",
 
+  "cmd.ask": "ask",
+  "cmd.ask.usage": "Ask me in natural language what you want to track, e.g. `{0}ask perfect dragonite`",
+
   "cmd.unrecognized": "Unrecognized: {0}",
   "cmd.unknown": "Unknown command. Try {0}",
   "cmd.no_invasion_type": "No valid invasion types found",
