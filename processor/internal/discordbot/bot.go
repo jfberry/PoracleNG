@@ -253,6 +253,9 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			ctx.ProfileNo = target.ProfileNo
 			ctx.HasLocation = target.HasLocation
 			ctx.HasArea = target.HasArea
+			if target.ExecutionMessage != "" {
+				s.ChannelMessageSend(channelID, target.ExecutionMessage)
+			}
 		}
 
 		replies := handler.Run(ctx, remainingArgs)

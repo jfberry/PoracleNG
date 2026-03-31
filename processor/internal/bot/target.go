@@ -9,14 +9,15 @@ import (
 
 // Target holds the resolved command target — who the command operates on.
 type Target struct {
-	ID          string
-	Name        string
-	Type        string // "discord:user", "discord:channel", "webhook", "telegram:user", "telegram:group"
-	Language    string
-	ProfileNo   int
-	HasLocation bool
-	HasArea     bool
-	IsAdmin     bool
+	ID               string
+	Name             string
+	Type             string // "discord:user", "discord:channel", "webhook", "telegram:user", "telegram:group"
+	Language         string
+	ProfileNo        int
+	HasLocation      bool
+	HasArea          bool
+	IsAdmin          bool
+	ExecutionMessage string // shown to user when target is overridden (admin feature)
 }
 
 // BuildTarget resolves who a command operates on from the args.
@@ -50,6 +51,19 @@ func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []st
 
 	// Default target: the sender themselves
 	if nameOverride == "" && userOverride == "" {
+		// In a channel (not DM) with admin/delegated permissions: target the channel
+		if !ctx.IsDM && (ctx.IsAdmin || ctx.Permissions.ChannelTracking) {
+			target, err := lookupHumanTarget(db, ctx.ChannelID, "discord:channel")
+			if err != nil {
+				// Channel not registered — fall back to self
+				target, err = lookupHumanTarget(db, ctx.TargetID, ctx.TargetType)
+				if err != nil {
+					return nil, remaining, err
+				}
+			}
+			target.IsAdmin = ctx.IsAdmin
+			return target, remaining, nil
+		}
 		target, err := lookupHumanTarget(db, ctx.TargetID, ctx.TargetType)
 		if err != nil {
 			return nil, remaining, err
@@ -66,8 +80,9 @@ func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []st
 	if userOverride != "" {
 		target, err := lookupHumanByID(db, userOverride)
 		if err != nil {
-			return nil, remaining, fmt.Errorf("user %s not found", userOverride)
+			return nil, remaining, fmt.Errorf("user %s not found or not registered", userOverride)
 		}
+		target.ExecutionMessage = fmt.Sprintf("This command is being executed as %s %s", target.ID, target.Name)
 		return target, remaining, nil
 	}
 
@@ -77,6 +92,7 @@ func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []st
 		if err != nil {
 			return nil, remaining, fmt.Errorf("webhook %s not found", nameOverride)
 		}
+		target.ExecutionMessage = fmt.Sprintf("This command is being executed as %s %s", target.Type, target.Name)
 		// Check webhook admin permission
 		if !ctx.IsAdmin && !CanAdminWebhook(ctx.Config, ctx.UserID, nameOverride) {
 			return nil, remaining, fmt.Errorf("no permission to manage webhook %s", nameOverride)
