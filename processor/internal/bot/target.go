@@ -27,10 +27,18 @@ func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []st
 	remaining := make([]string, 0, len(args))
 	var nameOverride, userOverride string
 
-	// Extract name<X> and user<X> from args
+	// Extract name<X> / name:<X> and user<X> / user:<X> from args
 	for _, arg := range args {
+		if strings.HasPrefix(arg, "name:") && len(arg) > 5 {
+			nameOverride = arg[5:]
+			continue
+		}
 		if strings.HasPrefix(arg, "name") && len(arg) > 4 {
 			nameOverride = arg[4:]
+			continue
+		}
+		if strings.HasPrefix(arg, "user:") && len(arg) > 5 {
+			userOverride = arg[5:]
 			continue
 		}
 		if strings.HasPrefix(arg, "user") && len(arg) > 4 {
