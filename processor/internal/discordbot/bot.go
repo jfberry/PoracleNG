@@ -296,14 +296,42 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 			}
 		}
 
-		// Embed
+		// Embed — the JSON is a full Discord message structure:
+		// {"content": "...", "embed": {...}, "embeds": [{...}]}
 		if len(reply.Embed) > 0 {
-			var embed discordgo.MessageEmbed
-			if err := json.Unmarshal(reply.Embed, &embed); err != nil {
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(reply.Embed, &raw); err != nil {
 				log.Warnf("discord bot: parse embed JSON: %v", err)
 			} else {
-				if _, err := s.ChannelMessageSendEmbed(targetChannel, &embed); err != nil {
-					log.Warnf("discord bot: send embed: %v", err)
+				msg := &discordgo.MessageSend{}
+
+				// Content
+				if c, ok := raw["content"]; ok {
+					var content string
+					json.Unmarshal(c, &content)
+					msg.Content = content
+				}
+
+				// Embed (singular) → embeds array
+				if e, ok := raw["embed"]; ok {
+					var embed discordgo.MessageEmbed
+					if json.Unmarshal(e, &embed) == nil {
+						msg.Embeds = []*discordgo.MessageEmbed{&embed}
+					}
+				}
+
+				// Embeds (plural)
+				if e, ok := raw["embeds"]; ok {
+					var embeds []*discordgo.MessageEmbed
+					if json.Unmarshal(e, &embeds) == nil {
+						msg.Embeds = embeds
+					}
+				}
+
+				if msg.Content != "" || len(msg.Embeds) > 0 {
+					if _, err := s.ChannelMessageSendComplex(targetChannel, msg); err != nil {
+						log.Warnf("discord bot: send embed: %v", err)
+					}
 				}
 			}
 		}
