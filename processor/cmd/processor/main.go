@@ -903,7 +903,9 @@ func (ps *ProcessorService) Close() {
 	log.Info("Stopping legacy sender...")
 	// Sender must close before resolver: sender's final flush may need
 	// tile workers still running to resolve pending tiles within deadline.
+	log.Info("Stopping legacy sender...")
 	ps.sender.Close()
+	log.Info("Legacy sender stopped")
 	if ps.enricher.StaticMap != nil {
 		ps.enricher.StaticMap.Close()
 	}
