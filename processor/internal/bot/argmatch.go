@@ -224,16 +224,34 @@ func (am *ArgMatcher) tryMatch(tok string, param ParamDef, lang string, result *
 	return false
 }
 
-// tryPrefixRange matches patterns like "iv100", "iv50-100", "cp2500-3000".
+// stripPrefix tries to strip a prefix from a token, supporting both
+// direct concatenation (iv100) and colon separator (iv:100).
+// Returns the value after the prefix and true, or ("", false) if no match.
+func stripPrefix(tok, prefix string) (string, bool) {
+	// Try with colon first (iv:100)
+	if strings.HasPrefix(tok, prefix+":") {
+		val := tok[len(prefix)+1:]
+		if val != "" {
+			return val, true
+		}
+	}
+	// Try direct concatenation (iv100)
+	if strings.HasPrefix(tok, prefix) {
+		val := tok[len(prefix):]
+		if val != "" {
+			return val, true
+		}
+	}
+	return "", false
+}
+
+// tryPrefixRange matches patterns like "iv100", "iv:100", "iv50-100", "iv:50-100".
 // The prefix is translated (e.g. German "wp" for "cp").
 func (am *ArgMatcher) tryPrefixRange(tok, key, lang string, result *ParsedArgs) bool {
-	prefix := am.resolvePrefix(key, lang)
-	for _, p := range prefix {
-		if !strings.HasPrefix(tok, p) {
-			continue
-		}
-		val := tok[len(p):]
-		if val == "" {
+	prefixes := am.resolvePrefix(key, lang)
+	for _, p := range prefixes {
+		val, ok := stripPrefix(tok, p)
+		if !ok {
 			continue
 		}
 		parts := strings.SplitN(val, "-", 2)
@@ -257,15 +275,12 @@ func (am *ArgMatcher) tryPrefixRange(tok, key, lang string, result *ParsedArgs) 
 	return false
 }
 
-// tryPrefixSingle matches patterns like "d500", "t60", "gen3".
+// tryPrefixSingle matches patterns like "d500", "d:500", "t60", "gen3".
 func (am *ArgMatcher) tryPrefixSingle(tok, key, lang string, result *ParsedArgs) bool {
-	prefix := am.resolvePrefix(key, lang)
-	for _, p := range prefix {
-		if !strings.HasPrefix(tok, p) {
-			continue
-		}
-		val := tok[len(p):]
-		if val == "" {
+	prefixes := am.resolvePrefix(key, lang)
+	for _, p := range prefixes {
+		val, ok := stripPrefix(tok, p)
+		if !ok {
 			continue
 		}
 		n, err := strconv.Atoi(val)
@@ -400,18 +415,15 @@ func (am *ArgMatcher) tryMatchPokemon(tok, lang string, result *ParsedArgs) bool
 
 var pvpRangeRe = regexp.MustCompile(`^(\d{1,4})(?:-(\d{1,4}))?$`)
 
-// tryPVPLeague matches PVP league patterns: great5, ultra10-50, greathigh3, greatcp1400.
+// tryPVPLeague matches PVP league patterns: great5, great:5, ultra10-50, ultra:10-50.
 func (am *ArgMatcher) tryPVPLeague(tok, key, lang string, result *ParsedArgs) bool {
 	// key is one of: arg.prefix.great, arg.prefix.greathigh, arg.prefix.greatcp,
 	//                arg.prefix.ultra, arg.prefix.ultrahigh, arg.prefix.ultracp,
 	//                arg.prefix.little, arg.prefix.littlehigh, arg.prefix.littlecp
-	prefix := am.resolvePrefix(key, lang)
-	for _, p := range prefix {
-		if !strings.HasPrefix(tok, p) {
-			continue
-		}
-		val := tok[len(p):]
-		if val == "" {
+	prefixes := am.resolvePrefix(key, lang)
+	for _, p := range prefixes {
+		val, ok := stripPrefix(tok, p)
+		if !ok {
 			continue
 		}
 
