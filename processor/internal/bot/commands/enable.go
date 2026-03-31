@@ -1,0 +1,100 @@
+package commands
+
+import (
+	"fmt"
+	"strings"
+
+	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/bot"
+)
+
+// EnableCommand implements !enable — admin enables user(s).
+type EnableCommand struct{}
+
+func (c *EnableCommand) Name() string      { return "cmd.enable" }
+func (c *EnableCommand) Aliases() []string { return nil }
+
+func (c *EnableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	if !ctx.IsAdmin {
+		tr := ctx.Tr()
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
+	}
+
+	if len(args) == 0 {
+		return []bot.Reply{{React: "🙅", Text: "Please specify user IDs"}}
+	}
+
+	var enabled []string
+	for _, arg := range args {
+		// Strip mention formatting
+		id := stripMention(arg)
+		if id == "" {
+			continue
+		}
+		_, err := ctx.DB.Exec("UPDATE humans SET admin_disable = 0, disabled_date = NULL WHERE id = ?", id)
+		if err != nil {
+			log.Errorf("enable: %v", err)
+			continue
+		}
+		enabled = append(enabled, id)
+	}
+
+	if len(enabled) == 0 {
+		return []bot.Reply{{React: "👌"}}
+	}
+	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Enabled: %s", strings.Join(enabled, ", "))}}
+}
+
+// DisableCommand implements !disable — admin disables user(s).
+type DisableCommand struct{}
+
+func (c *DisableCommand) Name() string      { return "cmd.disable" }
+func (c *DisableCommand) Aliases() []string { return nil }
+
+func (c *DisableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	if !ctx.IsAdmin {
+		tr := ctx.Tr()
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
+	}
+
+	if len(args) == 0 {
+		return []bot.Reply{{React: "🙅", Text: "Please specify user IDs"}}
+	}
+
+	var disabled []string
+	for _, arg := range args {
+		id := stripMention(arg)
+		if id == "" {
+			continue
+		}
+		_, err := ctx.DB.Exec("UPDATE humans SET admin_disable = 1 WHERE id = ?", id)
+		if err != nil {
+			log.Errorf("disable: %v", err)
+			continue
+		}
+		disabled = append(disabled, id)
+	}
+
+	if len(disabled) == 0 {
+		return []bot.Reply{{React: "👌"}}
+	}
+	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Disabled: %s", strings.Join(disabled, ", "))}}
+}
+
+// stripMention removes Discord mention formatting: <@123> → 123, <@!123> → 123
+func stripMention(s string) string {
+	s = strings.TrimPrefix(s, "<@")
+	s = strings.TrimPrefix(s, "!")
+	s = strings.TrimSuffix(s, ">")
+	if s == "" {
+		return ""
+	}
+	// Validate it's numeric
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return s // might be a name, pass through
+		}
+	}
+	return s
+}
