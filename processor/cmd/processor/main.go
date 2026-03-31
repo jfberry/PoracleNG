@@ -366,6 +366,11 @@ func main() {
 	cmdRegistry.Register(&commands.QuestCommand{})
 	cmdRegistry.Register(&commands.LureCommand{})
 	cmdRegistry.Register(&commands.WeatherCommand{})
+	cmdRegistry.Register(&commands.LanguageCommand{})
+	cmdRegistry.Register(&commands.ProfileCommand{})
+	cmdRegistry.Register(&commands.LocationCommand{})
+	cmdRegistry.Register(&commands.AreaCommand{})
+	cmdRegistry.Register(&commands.ScriptCommand{})
 
 	// Command API endpoint (for testing commands without bots)
 	cmdDeps := &api.CommandDeps{
