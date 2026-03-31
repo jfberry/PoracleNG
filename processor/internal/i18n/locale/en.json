@@ -317,6 +317,9 @@
   "cmd.gym.battle_disabled": "Battle changes tracking is not enabled",
   "cmd.weather.unavailable": "Weather tracking is not yet available via this command",
 
+  "cmd.help.unknown_topic": "No help available for '{0}'. Use `{1}help` for general help.",
+  "cmd.help.no_greeting": "No help template configured. Use `{0}help <command>` for command-specific help.",
+
   "cmd.info.usage": "Valid commands are `{0}info rarity`, `{0}info shiny`, `{0}info weather`, `{0}info moves`, `{0}info items`, `{0}info <pokemon>`",
   "cmd.info.pokemon_not_found": "Pokemon not found: {0}",
   "cmd.info.type": "Type: {0}",

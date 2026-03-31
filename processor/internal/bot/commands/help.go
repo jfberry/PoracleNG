@@ -59,18 +59,21 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 	}
 
 	if tmpl == nil {
-		// No template found — fall back to i18n
-		tr := ctx.Tr()
-		prefix := commandPrefix(ctx)
 		if templateID != "" {
-			// Try the usage key for this specific command
+			// Specific help topic not found — try the usage key for this command
+			tr := ctx.Tr()
+			prefix := commandPrefix(ctx)
 			usageKey := "cmd." + templateID + ".usage"
 			text := tr.Tf(usageKey, prefix)
 			if text != usageKey {
 				return []bot.Reply{{Text: text}}
 			}
+			// Unknown topic
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.help.unknown_topic", templateID, prefix)}}
 		}
-		return []bot.Reply{{Text: tr.Tf("cmd.help.text", prefix)}}
+		// No greeting template
+		tr := ctx.Tr()
+		return []bot.Reply{{Text: tr.Tf("cmd.help.no_greeting", commandPrefix(ctx))}}
 	}
 
 	// Render the template
