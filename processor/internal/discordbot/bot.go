@@ -140,6 +140,19 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	// Parse commands
 	parsed := b.parser.Parse(m.Content)
 	if len(parsed) == 0 {
+		// No prefix match — try NLP suggestion for DMs
+		isDM := m.GuildID == ""
+		if isDM && b.nlpParser != nil && b.cfg.AI.SuggestOnDM {
+			result := b.nlpParser.Parse(m.Content)
+			prefix := b.cfg.Discord.Prefix
+			if prefix == "" {
+				prefix = "!"
+			}
+			suggestion := commands.FormatNLPSuggestion(result, prefix)
+			if suggestion != "" {
+				s.ChannelMessageSend(m.ChannelID, suggestion)
+			}
+		}
 		return
 	}
 

@@ -183,6 +183,16 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 
 	parsed := b.parser.Parse(text)
 	if len(parsed) == 0 {
+		// No prefix match — try NLP suggestion for DMs
+		isDM := m.Chat.Type == "private"
+		if isDM && b.nlpParser != nil && b.cfg.AI.SuggestOnDM {
+			result := b.nlpParser.Parse(text)
+			suggestion := commands.FormatNLPSuggestion(result, "/")
+			if suggestion != "" {
+				msg := tgbotapi.NewMessage(m.Chat.ID, suggestion)
+				b.api.Send(msg)
+			}
+		}
 		return
 	}
 
