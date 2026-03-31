@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -16,11 +17,24 @@ func (c *AreaCommand) Name() string      { return "cmd.area" }
 func (c *AreaCommand) Aliases() []string { return nil }
 
 func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
+
 	if len(args) == 0 {
-		return c.listAreas(ctx)
+		// Show current areas + usage hint
+		currentAreas := getUserAreas(ctx)
+		prefix := commandPrefix(ctx)
+		var text string
+		if len(currentAreas) > 0 {
+			displayNames := resolveAreaDisplayNames(ctx, currentAreas)
+			text = tr.Tf("status.areas_set", strings.Join(displayNames, ", "))
+		} else {
+			text = tr.T("status.no_areas")
+		}
+		text += fmt.Sprintf("\n\nValid commands are `%sarea list`, `%sarea add <areaname>`, `%sarea remove <areaname>`",
+			prefix, prefix, prefix)
+		return []bot.Reply{{Text: text}}
 	}
 
-	// Check first arg for subcommand
 	sub := args[0]
 	rest := args[1:]
 
@@ -48,7 +62,12 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 		return []bot.Reply{{Text: tr.T("cmd.area.none_available")}}
 	}
 
-	// Get user's current areas
+	// Sort alphabetically
+	sort.Slice(available, func(i, j int) bool {
+		return strings.ToLower(available[i].Name) < strings.ToLower(available[j].Name)
+	})
+
+	// Get user's current areas for marking
 	currentAreas := getUserAreas(ctx)
 	currentSet := make(map[string]bool)
 	for _, a := range currentAreas {
@@ -56,17 +75,13 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(tr.T("cmd.area.available") + "\n")
+	sb.WriteString(tr.T("cmd.area.current") + "\n\n")
 	for _, a := range available {
 		marker := ""
 		if currentSet[strings.ToLower(a.Name)] {
 			marker = " ✓"
 		}
-		if a.Group != "" {
-			sb.WriteString(fmt.Sprintf("  [%s] %s%s\n", a.Group, a.Name, marker))
-		} else {
-			sb.WriteString(fmt.Sprintf("  %s%s\n", a.Name, marker))
-		}
+		sb.WriteString(fmt.Sprintf("  %s%s\n", a.Name, marker))
 	}
 	return []bot.Reply{{Text: sb.String()}}
 }
@@ -108,22 +123,25 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 		setUserAreas(ctx, currentAreas)
 	}
 
-	var reply string
+	var parts []string
 	if len(added) > 0 {
-		reply = tr.Tf("cmd.area.added", strings.Join(added, ", "))
+		parts = append(parts, tr.Tf("cmd.area.added", strings.Join(added, ", ")))
 	}
 	if len(notFound) > 0 {
-		if reply != "" {
-			reply += "\n"
-		}
-		reply += tr.Tf("cmd.area.not_found", strings.Join(notFound, ", "))
+		parts = append(parts, tr.Tf("cmd.area.not_found", strings.Join(notFound, ", ")))
+	}
+
+	// Show current areas after change
+	allDisplay := resolveAreaDisplayNames(ctx, getUserAreas(ctx))
+	if len(allDisplay) > 0 {
+		parts = append(parts, tr.Tf("status.areas_set", strings.Join(allDisplay, ", ")))
 	}
 
 	react := "✅"
 	if len(added) == 0 {
 		react = "👌"
 	}
-	return []bot.Reply{{React: react, Text: reply}}
+	return []bot.Reply{{React: react, Text: strings.Join(parts, "\n")}}
 }
 
 func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
@@ -152,38 +170,66 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 		setUserAreas(ctx, remaining)
 	}
 
+	var parts []string
+	if len(removed) > 0 {
+		removedDisplay := resolveAreaDisplayNames(ctx, removed)
+		parts = append(parts, tr.Tf("cmd.area.removed", strings.Join(removedDisplay, ", ")))
+	}
+
+	// Show current areas after change
+	allDisplay := resolveAreaDisplayNames(ctx, getUserAreas(ctx))
+	if len(allDisplay) > 0 {
+		parts = append(parts, tr.Tf("status.areas_set", strings.Join(allDisplay, ", ")))
+	} else {
+		parts = append(parts, tr.T("status.no_areas"))
+	}
+
 	react := "✅"
 	if len(removed) == 0 {
 		react = "👌"
 	}
-	text := ""
-	if len(removed) > 0 {
-		text = tr.Tf("cmd.area.removed", strings.Join(removed, ", "))
-	}
-	return []bot.Reply{{React: react, Text: text}}
+	return []bot.Reply{{React: react, Text: strings.Join(parts, "\n")}}
 }
 
 func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
-	// For now, list the user's current areas. Map generation requires tile API access.
-	currentAreas := getUserAreas(ctx)
-	if len(currentAreas) == 0 {
+	areas := getUserAreas(ctx)
+	if len(args) > 0 {
+		areas = args
+	}
+	if len(areas) == 0 {
 		return []bot.Reply{{Text: tr.T("status.no_areas")}}
 	}
 
-	// Resolve display names
-	displayNames := resolveAreaDisplayNames(ctx, currentAreas)
-	return []bot.Reply{{Text: tr.Tf("cmd.area.your_areas", strings.Join(displayNames, ", "))}}
+	// Generate tiles for each area via processor API
+	var replies []bot.Reply
+	for _, area := range areas {
+		displayName := area
+		for _, f := range ctx.Fences {
+			if strings.EqualFold(f.Name, area) {
+				displayName = f.Name
+				break
+			}
+		}
+		// TODO: call tile generation API for area map
+		replies = append(replies, bot.Reply{
+			Text: tr.Tf("cmd.area.display", displayName),
+		})
+	}
+	return replies
 }
 
 func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
-	// Overview map generation requires tile API access — return text for now
-	currentAreas := getUserAreas(ctx)
-	if len(currentAreas) == 0 {
+	areas := getUserAreas(ctx)
+	if len(args) > 0 {
+		areas = args
+	}
+	if len(areas) == 0 {
 		return []bot.Reply{{Text: tr.T("status.no_areas")}}
 	}
-	displayNames := resolveAreaDisplayNames(ctx, currentAreas)
+	displayNames := resolveAreaDisplayNames(ctx, areas)
+	// TODO: call tile generation API for overview map
 	return []bot.Reply{{Text: tr.Tf("cmd.area.your_areas", strings.Join(displayNames, ", "))}}
 }
 
@@ -219,7 +265,6 @@ func setUserAreas(ctx *bot.CommandContext, areas []string) {
 	if err != nil {
 		log.Errorf("area: update areas: %v", err)
 	}
-	// Also update the current profile
 	ctx.DB.Exec("UPDATE profiles SET area = ? WHERE id = ? AND profile_no = ?",
 		string(areaJSON), ctx.TargetID, ctx.ProfileNo)
 }
