@@ -354,8 +354,18 @@ func main() {
 	cmdRegistry.Register(&commands.StartCommand{})
 	cmdRegistry.Register(&commands.StopCommand{})
 	cmdRegistry.Register(&commands.EggCommand{})
+	cmdRegistry.Register(&commands.RaidCommand{})
 	cmdRegistry.Register(&commands.TrackCommand{})
 	cmdRegistry.Register(&commands.TrackedCommand{})
+	cmdRegistry.Register(&commands.UntrackCommand{})
+	cmdRegistry.Register(&commands.GymCommand{})
+	cmdRegistry.Register(&commands.InvasionCommand{})
+	cmdRegistry.Register(&commands.NestCommand{})
+	cmdRegistry.Register(&commands.FortCommand{})
+	cmdRegistry.Register(&commands.MaxbattleCommand{})
+	cmdRegistry.Register(&commands.QuestCommand{})
+	cmdRegistry.Register(&commands.LureCommand{})
+	cmdRegistry.Register(&commands.WeatherCommand{})
 
 	// Command API endpoint (for testing commands without bots)
 	cmdDeps := &api.CommandDeps{

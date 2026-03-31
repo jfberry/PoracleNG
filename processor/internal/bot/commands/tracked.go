@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -18,6 +20,71 @@ func (c *TrackedCommand) Aliases() []string { return nil }
 func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	var sb strings.Builder
+
+	// Header: human status, location, area, profile
+	human, err := lookupHumanForTracked(ctx)
+	if err != nil {
+		log.Errorf("tracked: lookup human: %v", err)
+	}
+
+	if human != nil {
+		// Enabled/disabled status
+		enabledText := "enabled"
+		if !human.Enabled {
+			enabledText = "disabled"
+		}
+		sb.WriteString(fmt.Sprintf("Your alerts are currently **%s**\n", enabledText))
+
+		// Location
+		if human.Latitude != 0 || human.Longitude != 0 {
+			mapLink := fmt.Sprintf("https://maps.google.com/maps?q=%f,%f", human.Latitude, human.Longitude)
+			sb.WriteString(fmt.Sprintf("Your location is currently set to %s\n", mapLink))
+		} else {
+			sb.WriteString("You have not set a location yet\n")
+		}
+
+		// Area
+		if human.Area != "" && human.Area != "[]" {
+			var areas []string
+			json.Unmarshal([]byte(human.Area), &areas)
+			if len(areas) > 0 {
+				// Resolve display names from geofence
+				displayNames := make([]string, 0, len(areas))
+				for _, a := range areas {
+					found := false
+					for _, f := range ctx.Fences {
+						if strings.EqualFold(f.Name, a) {
+							displayNames = append(displayNames, f.Name)
+							found = true
+							break
+						}
+					}
+					if !found {
+						displayNames = append(displayNames, a)
+					}
+				}
+				sb.WriteString(fmt.Sprintf("You are currently set to receive alarms in %s\n", strings.Join(displayNames, ", ")))
+			}
+		} else {
+			sb.WriteString("You have not selected any area yet\n")
+		}
+
+		// Profile
+		if human.ProfileName != "" {
+			sb.WriteString(fmt.Sprintf("Your profile is currently set to: %s\n", human.ProfileName))
+		}
+
+		// Blocked alerts
+		if human.BlockedAlerts != "" && human.BlockedAlerts != "[]" {
+			var blocked []string
+			json.Unmarshal([]byte(human.BlockedAlerts), &blocked)
+			if len(blocked) > 0 {
+				sb.WriteString(fmt.Sprintf("Blocked alert types: %s\n", strings.Join(blocked, ", ")))
+			}
+		}
+
+		sb.WriteByte('\n')
+	}
 
 	// Pokemon
 	monsters, err := db.SelectMonstersByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
@@ -164,5 +231,75 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		text = "No active tracking"
 	}
 
+	// If too long for a single message, send as file attachment
+	maxLen := 2000
+	if ctx.Platform == "telegram" {
+		maxLen = 4095
+	}
+	if len(text) > maxLen {
+		return []bot.Reply{{
+			Text: "Tracking list is quite long. Here it is as a file:",
+			Attachment: &bot.Attachment{
+				Filename: "tracked.txt",
+				Content:  []byte(text),
+			},
+		}}
+	}
+
 	return []bot.Reply{{Text: text}}
+}
+
+type trackedHuman struct {
+	Enabled       bool
+	Latitude      float64
+	Longitude     float64
+	Area          string
+	ProfileName   string
+	BlockedAlerts string
+}
+
+func lookupHumanForTracked(ctx *bot.CommandContext) (*trackedHuman, error) {
+	var h struct {
+		Enabled       bool    `db:"enabled"`
+		Latitude      float64 `db:"latitude"`
+		Longitude     float64 `db:"longitude"`
+		Area          *string `db:"area"`
+		BlockedAlerts *string `db:"blocked_alerts"`
+	}
+	err := ctx.DB.Get(&h,
+		"SELECT enabled, latitude, longitude, area, blocked_alerts FROM humans WHERE id = ? LIMIT 1",
+		ctx.TargetID)
+	if err != nil {
+		return nil, err
+	}
+
+	area := ""
+	if h.Area != nil {
+		area = *h.Area
+	}
+	blocked := ""
+	if h.BlockedAlerts != nil {
+		blocked = *h.BlockedAlerts
+	}
+
+	// Look up profile name
+	profileName := ""
+	var pn struct {
+		Name string `db:"name"`
+	}
+	err = ctx.DB.Get(&pn,
+		"SELECT name FROM profiles WHERE id = ? AND profile_no = ?",
+		ctx.TargetID, ctx.ProfileNo)
+	if err == nil {
+		profileName = pn.Name
+	}
+
+	return &trackedHuman{
+		Enabled:       h.Enabled,
+		Latitude:      h.Latitude,
+		Longitude:     h.Longitude,
+		Area:          area,
+		ProfileName:   profileName,
+		BlockedAlerts: blocked,
+	}, nil
 }

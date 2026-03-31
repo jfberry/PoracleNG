@@ -38,6 +38,7 @@ type TrackingConfig struct {
 	EverythingFlagPermissions string `toml:"everything_flag_permissions"` // "deny", "allow-any", "allow-and-always-individually", "allow-and-ignore-individually"
 	DefaultDistance           int    `toml:"default_distance"`
 	MaxDistance               int    `toml:"max_distance"`
+	EnableGymBattle           bool   `toml:"enable_gym_battle"`
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor
