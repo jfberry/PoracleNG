@@ -52,6 +52,13 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Resolve PVP
 	pvpLeague, pvpBest, pvpWorst, pvpMinCP, pvpCap := c.parsePVP(parsed)
 
+	// Check PVP permission if PVP filters are present
+	if pvpLeague > 0 {
+		if !bot.CheckFeaturePermission(ctx.Config, ctx.Platform, "pvp", ctx.UserID, nil) {
+			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
+		}
+	}
+
 	// If min_iv is still default (-1) but other IV-related filters are set, default to 0
 	if filters.minIV == -1 && (filters.minCP > 0 || filters.minLevel > 0 ||
 		filters.atk > 0 || filters.def > 0 || filters.sta > 0 ||

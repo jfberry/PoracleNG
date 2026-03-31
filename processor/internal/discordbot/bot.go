@@ -20,6 +20,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 // Bot is the Discord bot gateway handler.
@@ -37,6 +38,7 @@ type Bot struct {
 	dispatcher *delivery.Dispatcher
 	rowText    *rowtext.Generator
 	geocoder   *geocoding.Geocoder
+	staticMap  *staticmap.Resolver
 	reloadFunc func()
 }
 
@@ -55,6 +57,7 @@ type Config struct {
 	ArgMatcher   *bot.ArgMatcher
 	Resolver     *bot.PokemonResolver
 	Geocoder     *geocoding.Geocoder
+	StaticMap    *staticmap.Resolver
 	ReloadFunc   func()
 }
 
@@ -79,6 +82,7 @@ func New(cfg Config) (*Bot, error) {
 		dispatcher:   cfg.Dispatcher,
 		rowText:      cfg.RowText,
 		geocoder:     cfg.Geocoder,
+		staticMap:    cfg.StaticMap,
 		reloadFunc:   cfg.ReloadFunc,
 	}
 
@@ -197,6 +201,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			Resolver:     b.resolver,
 			ArgMatcher:   b.argMatcher,
 			Geocoder:     b.geocoder,
+			StaticMap:    b.staticMap,
 			ReloadFunc:   b.reloadFunc,
 		}
 

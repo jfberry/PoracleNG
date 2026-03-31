@@ -377,6 +377,7 @@ func main() {
 	cmdRegistry.Register(&commands.HelpCommand{})
 	cmdRegistry.Register(&commands.InfoCommand{})
 	cmdRegistry.Register(&commands.PoracleTestCommand{})
+	cmdRegistry.Register(&commands.UserlistCommand{})
 
 	// Command API endpoint (for testing commands without bots)
 	cmdDeps := &api.CommandDeps{
@@ -491,6 +492,7 @@ func main() {
 			ArgMatcher:   cmdArgMatcher,
 			Resolver:     cmdResolver,
 			Geocoder:     proc.enricher.Geocoder,
+			StaticMap:    proc.enricher.StaticMap,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {
@@ -518,6 +520,7 @@ func main() {
 			ArgMatcher:   cmdArgMatcher,
 			Resolver:     cmdResolver,
 			Geocoder:     proc.enricher.Geocoder,
+			StaticMap:    proc.enricher.StaticMap,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {

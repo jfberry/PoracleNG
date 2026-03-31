@@ -18,6 +18,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 // Command is implemented by every bot command handler.
@@ -72,6 +73,7 @@ type CommandContext struct {
 	Resolver     *PokemonResolver
 	ArgMatcher   *ArgMatcher
 	Geocoder     *geocoding.Geocoder
+	StaticMap    *staticmap.Resolver
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()

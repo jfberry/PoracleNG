@@ -21,6 +21,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 // Bot is the Telegram bot polling handler.
@@ -38,6 +39,7 @@ type Bot struct {
 	dispatcher *delivery.Dispatcher
 	rowText    *rowtext.Generator
 	geocoder   *geocoding.Geocoder
+	staticMap  *staticmap.Resolver
 	reloadFunc func()
 	stopCh     chan struct{}
 }
@@ -57,6 +59,7 @@ type Config struct {
 	ArgMatcher   *bot.ArgMatcher
 	Resolver     *bot.PokemonResolver
 	Geocoder     *geocoding.Geocoder
+	StaticMap    *staticmap.Resolver
 	ReloadFunc   func()
 }
 
@@ -81,6 +84,7 @@ func New(cfg Config) (*Bot, error) {
 		dispatcher:   cfg.Dispatcher,
 		rowText:      cfg.RowText,
 		geocoder:     cfg.Geocoder,
+		staticMap:    cfg.StaticMap,
 		reloadFunc:   cfg.ReloadFunc,
 		stopCh:       make(chan struct{}),
 	}
@@ -231,6 +235,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			Resolver:     b.resolver,
 			ArgMatcher:   b.argMatcher,
 			Geocoder:     b.geocoder,
+			StaticMap:    b.staticMap,
 			ReloadFunc:   b.reloadFunc,
 		}
 
