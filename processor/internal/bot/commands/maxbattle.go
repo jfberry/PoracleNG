@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -118,7 +117,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 		}
 
 		if len(levelSet) == 0 {
-			return []bot.Reply{{React: "🙅", Text: "No pokemon or levels specified"}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_levels")}}
 		}
 
 		for lvl := range levelSet {
@@ -140,7 +139,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	}
 
 	if len(insert) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "No pokemon or levels specified"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_levels")}}
 	}
 
 	// Diff against existing
@@ -311,5 +310,6 @@ func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Removed %d maxbattle tracking rules", len(uids))}}
+	tr := ctx.Tr()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
 }

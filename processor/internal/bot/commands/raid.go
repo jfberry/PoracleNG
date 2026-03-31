@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/guregu/null/v6"
@@ -141,7 +140,7 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		}
 
 		if len(levelSet) == 0 {
-			return []bot.Reply{{React: "🙅", Text: "No raid levels or pokemon specified"}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_raid_target")}}
 		}
 
 		for lvl := range levelSet {
@@ -280,5 +279,6 @@ func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArg
 	}
 
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Removed %d raid tracking rules", len(uidsToDelete))}}
+	tr := ctx.Tr()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uidsToDelete))}}
 }

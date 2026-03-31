@@ -12,8 +12,9 @@ func (c *LanguageCommand) Name() string      { return "cmd.language" }
 func (c *LanguageCommand) Aliases() []string { return nil }
 
 func (c *LanguageCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "Please specify a language"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.language.specify")}}
 	}
 
 	input := strings.ToLower(args[0])
@@ -33,7 +34,7 @@ func (c *LanguageCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 
 	if matched == "" {
-		return []bot.Reply{{React: "🙅", Text: "Unknown language. Available: " + strings.Join(available, ", ")}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.language.unknown", strings.Join(available, ", "))}}
 	}
 
 	_, err := ctx.DB.Exec("UPDATE humans SET language = ? WHERE id = ?", matched, ctx.TargetID)

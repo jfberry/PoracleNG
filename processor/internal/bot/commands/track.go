@@ -93,7 +93,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	if len(insert) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "No pokemon specified"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_pokemon")}}
 	}
 
 	// Diff against existing
@@ -588,7 +588,7 @@ func (c *TrackCommand) removeTracking(ctx *bot.CommandContext, parsed *bot.Parse
 
 	var sb strings.Builder
 	if len(removed) > 20 {
-		fmt.Fprintf(&sb, "Removed %d tracking rules", len(removed))
+		sb.WriteString(tr.Tf("cmd.removed_n", len(removed)))
 	} else {
 		for i := range removed {
 			mt := monsterAPIToTracking(&removed[i])

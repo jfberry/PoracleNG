@@ -1,8 +1,6 @@
 package commands
 
 import (
-	"fmt"
-
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/api"
@@ -53,7 +51,7 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	} else if parsed.LureType == 0 && !parsed.HasKeyword("arg.everything") {
 		// Check if a lure type name matched with ID 0 (normal)
 		// If no lure type at all, show error
-		return []bot.Reply{{React: "🙅", Text: "No lure type specified"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_lure_type")}}
 	}
 
 	if parsed.HasKeyword("arg.remove") {
@@ -149,5 +147,6 @@ func removeLures(ctx *bot.CommandContext, lureIDs []int) []bot.Reply {
 	}
 	db.DeleteByUIDs(ctx.DB, "lures", ctx.TargetID, uids)
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Removed %d lure tracking rules", len(uids))}}
+	tr := ctx.Tr()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
 }

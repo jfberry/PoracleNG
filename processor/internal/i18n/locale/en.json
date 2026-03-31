@@ -242,5 +242,67 @@
   "raid.level.elite": "elite",
   "raid.level.primal": "primal",
   "raid.level.shadow": "shadow",
-  "raid.level.shadow_legendary": "shadow legendary"
+  "raid.level.shadow_legendary": "shadow legendary",
+
+  "status.enabled": "enabled",
+  "status.disabled": "disabled",
+  "status.alerts_currently": "Your alerts are currently **{0}**",
+  "status.location_set": "Your location is currently set to {0}",
+  "status.no_location": "You have not set a location yet",
+  "status.areas_set": "You are currently set to receive alarms in {0}",
+  "status.no_areas": "You have not selected any area yet",
+  "status.profile_set": "Your profile is currently set to: {0}",
+  "status.blocked_alerts": "Blocked alert types: {0}",
+  "status.no_tracking": "No active tracking",
+  "status.tracking_file": "Tracking list is quite long. Here it is as a file:",
+
+  "section.pokemon": "**Pokemon:**",
+  "section.raids": "**Raids:**",
+  "section.eggs": "**Eggs:**",
+  "section.quests": "**Quests:**",
+  "section.invasions": "**Invasions:**",
+  "section.lures": "**Lures:**",
+  "section.gyms": "**Gyms:**",
+  "section.nests": "**Nests:**",
+  "section.forts": "**Fort Updates:**",
+  "section.maxbattles": "**Max Battles:**",
+
+  "cmd.no_pokemon": "No pokemon specified",
+  "cmd.no_levels": "No levels specified",
+  "cmd.no_egg_levels": "No egg levels specified",
+  "cmd.no_raid_target": "No raid levels or pokemon specified",
+  "cmd.no_lure_type": "No lure type specified",
+  "cmd.no_quest_type": "No quest type specified",
+  "cmd.removed_n": "Removed {0} tracking rules",
+
+  "cmd.location.removed": "Location removed",
+  "cmd.location.specify": "Please specify coordinates or an address",
+  "cmd.location.set": "Location set to {0},{1}",
+
+  "cmd.area.none_available": "No areas available",
+  "cmd.area.available": "**Available areas:**",
+  "cmd.area.specify_add": "Please specify area names to add",
+  "cmd.area.specify_remove": "Please specify area names to remove",
+  "cmd.area.added": "Added: {0}",
+  "cmd.area.not_found": "Not found: {0}",
+  "cmd.area.removed": "Removed: {0}",
+  "cmd.area.your_areas": "Your areas: {0}",
+
+  "cmd.profile.none": "No profiles configured",
+  "cmd.profile.active": "active",
+  "cmd.profile.specify_name": "Please specify a profile name",
+  "cmd.profile.specify": "Please specify a profile name or number",
+  "cmd.profile.created": "Profile {0}: {1} created",
+  "cmd.profile.deleted": "Profile {0} deleted",
+  "cmd.profile.not_found": "Profile not found",
+  "cmd.profile.cannot_delete_1": "Cannot delete profile 1",
+
+  "cmd.language.specify": "Please specify a language",
+  "cmd.language.unknown": "Unknown language. Available: {0}",
+
+  "cmd.gym.battle_disabled": "Battle changes tracking is not enabled",
+  "cmd.weather.unavailable": "Weather tracking is not yet available via this command",
+
+  "cmd.script.none": "No tracking to export",
+  "cmd.script.file": "Here is your tracking script:"
 }

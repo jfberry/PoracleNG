@@ -1,8 +1,6 @@
 package commands
 
 import (
-	"fmt"
-
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/api"
@@ -51,7 +49,7 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		if ctx.Config.Tracking.EnableGymBattle {
 			battleChanges = true
 		} else {
-			return []bot.Reply{{React: "🙅", Text: "Battle changes tracking is not enabled"}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.gym.battle_disabled")}}
 		}
 	}
 
@@ -174,5 +172,6 @@ func (c *GymCommand) removeGyms(ctx *bot.CommandContext, teams []int) []bot.Repl
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Removed %d gym tracking rules", len(uids))}}
+	tr := ctx.Tr()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
 }

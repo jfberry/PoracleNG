@@ -83,7 +83,7 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if len(removeIDs) == 0 {
-		return []bot.Reply{{React: "👌", Text: "No matching tracking rules found"}}
+		return []bot.Reply{{React: "👌", Text: tr.T("cmd.no_pokemon")}}
 	}
 
 	var uidsToDelete []int64
@@ -108,7 +108,7 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	var sb strings.Builder
 	if len(removed) > 20 {
-		fmt.Fprintf(&sb, "Removed %d tracking rules", len(removed))
+		sb.WriteString(tr.Tf("cmd.removed_n", len(removed)))
 	} else {
 		for i := range removed {
 			mt := monsterAPIToTracking(&removed[i])

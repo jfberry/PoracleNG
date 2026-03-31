@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -138,7 +137,7 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			})
 		}
 	} else {
-		return []bot.Reply{{React: "🙅", Text: "No quest type specified"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_quest_type")}}
 	}
 
 	if parsed.HasKeyword("arg.remove") {
@@ -146,7 +145,7 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	if len(insert) == 0 {
-		return []bot.Reply{{React: "🙅", Text: "No quest type specified"}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_quest_type")}}
 	}
 
 	// Diff against existing
@@ -299,5 +298,6 @@ func (c *QuestCommand) removeQuests(ctx *bot.CommandContext, targets []db.QuestT
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: fmt.Sprintf("Removed %d quest tracking rules", len(uids))}}
+	tr := ctx.Tr()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
 }
