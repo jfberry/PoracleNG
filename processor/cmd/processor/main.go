@@ -383,6 +383,10 @@ func main() {
 	cmdRegistry.Register(&commands.UnregisterCommand{})
 	cmdRegistry.Register(&commands.CommunityCommand{})
 	cmdRegistry.Register(&commands.AskCommand{})
+	cmdRegistry.Register(&commands.BackupCommand{})
+	cmdRegistry.Register(&commands.RestoreCommand{})
+	cmdRegistry.Register(&commands.BroadcastCommand{})
+	cmdRegistry.Register(&commands.ApplyCommand{})
 
 	// NLP parser for !ask command and suggest_on_dm
 	var nlpParser *nlp.Parser

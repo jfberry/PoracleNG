@@ -82,6 +82,7 @@ type CommandContext struct {
 	DTS          *dts.TemplateStore
 	Emoji        *dts.EmojiLookup
 	NLP          *nlp.Parser
+	Registry     *Registry
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()

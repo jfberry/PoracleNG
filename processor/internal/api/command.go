@@ -100,6 +100,9 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 
 		var allReplies []bot.Reply
 
+		// Merge consecutive cmd.apply pipe groups back into single invocations.
+		parsed = bot.MergeApplyGroups(parsed)
+
 		for _, cmd := range parsed {
 			if cmd.CommandKey == "" {
 				// Unknown command
@@ -155,6 +158,7 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 				DTS:          deps.DTS,
 				Emoji:        deps.Emoji,
 				NLP:          deps.NLPParser,
+				Registry:     deps.Registry,
 				ReloadFunc:   deps.ReloadFunc,
 			}
 

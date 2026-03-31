@@ -216,6 +216,9 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 		fences = st.Fences
 	}
 
+	// Merge consecutive cmd.apply pipe groups back into single invocations.
+	parsed = bot.MergeApplyGroups(parsed)
+
 	for _, cmd := range parsed {
 		if cmd.CommandKey == "" {
 			// Try NLP suggestion for unrecognised DM commands
@@ -276,6 +279,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			DTS:          b.dts,
 			Emoji:        b.emoji,
 			NLP:          b.nlpParser,
+			Registry:     b.registry,
 			ReloadFunc:   b.reloadFunc,
 		}
 
