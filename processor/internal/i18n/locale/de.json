@@ -139,6 +139,9 @@
   "arg.stardust": "sternenstaub",
   "arg.energy": "energie",
   "arg.candy": "bonbons",
+  "arg.prefix.stardust": "sternenstaub",
+  "arg.prefix.energy": "energie",
+  "arg.prefix.candy": "bonbons",
 
   "arg.prefix.template": "vorlage",
   "arg.prefix.move": "attacke",
