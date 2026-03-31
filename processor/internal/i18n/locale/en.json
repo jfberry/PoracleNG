@@ -289,6 +289,7 @@
   "cmd.fort.usage": "Valid commands are e.g. `{0}fort pokestop`, `{0}fort everything`, `{0}fort remove pokestop`",
 
   "cmd.location.removed": "Location removed",
+  "cmd.location.usage": "Valid commands are e.g. `{0}location <lat>,<lon>`, `{0}location <your address>`",
   "cmd.location.specify": "Please specify coordinates or an address",
   "cmd.location.set": "Location set to {0},{1}",
 
