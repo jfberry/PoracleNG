@@ -114,6 +114,38 @@ func tokenize(text string) []string {
 	return tokens
 }
 
+// MergeApplyGroups consolidates consecutive cmd.apply ParsedCommands back into
+// a single invocation. The parser pipe-splits "!apply t1 | track pikachu" into
+// separate ParsedCommands, but apply needs all pipe groups at once to resolve
+// targets and execute sub-commands.
+func MergeApplyGroups(cmds []ParsedCommand) []ParsedCommand {
+	if len(cmds) <= 1 {
+		return cmds
+	}
+
+	var result []ParsedCommand
+	i := 0
+	for i < len(cmds) {
+		if cmds[i].CommandKey != "cmd.apply" {
+			result = append(result, cmds[i])
+			i++
+			continue
+		}
+
+		// Collect consecutive cmd.apply entries
+		merged := ParsedCommand{CommandKey: "cmd.apply"}
+		merged.Args = append(merged.Args, cmds[i].Args...)
+		i++
+		for i < len(cmds) && cmds[i].CommandKey == "cmd.apply" {
+			merged.Args = append(merged.Args, "|")
+			merged.Args = append(merged.Args, cmds[i].Args...)
+			i++
+		}
+		result = append(result, merged)
+	}
+	return result
+}
+
 // splitByPipe splits args by the "|" token into groups.
 // Each group gets its own command invocation.
 func splitByPipe(args []string) [][]string {

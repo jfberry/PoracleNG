@@ -209,6 +209,11 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 	tr := b.translations.For(userLang)
 
+	// Merge consecutive cmd.apply pipe groups back into single invocations.
+	// The parser splits "!apply t1 | track pikachu" into separate ParsedCommands,
+	// but apply needs all pipe groups at once.
+	parsed = bot.MergeApplyGroups(parsed)
+
 	for _, cmd := range parsed {
 		// Try Discord-specific commands first (require discordgo session directly)
 		if b.handleDiscordCommand(s, m, cmd.CommandKey, cmd.Args, isDM) {
@@ -281,6 +286,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			DTS:          b.dts,
 			Emoji:        b.emoji,
 			NLP:          b.nlpParser,
+			Registry:     b.registry,
 			ReloadFunc:   b.reloadFunc,
 		}
 
@@ -327,6 +333,12 @@ func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCre
 		return true
 	case "cmd.poracle_id":
 		b.handleIDExport(s, m, args)
+		return true
+	case "cmd.webhook":
+		b.handleWebhook(s, m, args)
+		return true
+	case "cmd.role":
+		b.handleRole(s, m, args)
 		return true
 	default:
 		return false
