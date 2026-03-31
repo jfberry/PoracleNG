@@ -247,6 +247,21 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 
 func (b *Bot) sendReplies(chatID int64, replies []bot.Reply) {
 	for _, reply := range replies {
+		// File attachment
+		if reply.Attachment != nil {
+			doc := tgbotapi.NewDocument(chatID, tgbotapi.FileBytes{
+				Name:  reply.Attachment.Filename,
+				Bytes: reply.Attachment.Content,
+			})
+			if reply.Text != "" {
+				doc.Caption = reply.Text
+			}
+			if _, err := b.api.Send(doc); err != nil {
+				log.Warnf("telegram bot: send document: %v", err)
+			}
+			continue
+		}
+
 		if reply.Text != "" {
 			// Split long messages at 4095 char limit
 			messages := splitMessage(reply.Text, 4095)
