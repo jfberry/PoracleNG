@@ -23,9 +23,9 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 
 	// Parse filter arguments
-	var filterEnabled *bool   // nil = no filter, true = enabled only, false = disabled only
-	var filterPlatform string // "" = all, "discord" or "telegram"
-	var filterType string     // "" = all, or "discord:user", "discord:channel", etc.
+	var filterEnabled *bool
+	var filterPlatform string
+	var filterType string
 
 	for _, arg := range args {
 		switch strings.ToLower(arg) {
@@ -50,41 +50,37 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		}
 	}
 
-	// Query humans table
 	type humanRow struct {
-		ID            string  `db:"id"`
-		Name          string  `db:"name"`
-		Type          string  `db:"type"`
-		Enabled       int     `db:"enabled"`
-		AdminDisable  int     `db:"admin_disable"`
+		ID           string  `db:"id"`
+		Name         string  `db:"name"`
+		Type         string  `db:"type"`
+		Enabled      int     `db:"enabled"`
+		AdminDisable int     `db:"admin_disable"`
+		Area         *string `db:"area"`
 	}
 
 	var rows []humanRow
 	err := ctx.DB.Select(&rows,
-		"SELECT id, COALESCE(name, '') AS name, type, enabled, admin_disable FROM humans ORDER BY type, name")
+		"SELECT id, COALESCE(name, '') AS name, type, enabled, admin_disable, area FROM humans ORDER BY type, name")
 	if err != nil {
 		log.Errorf("userlist: query: %v", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	// Apply filters
 	var filtered []humanRow
 	for _, h := range rows {
-		// Platform filter
-		if filterPlatform != "" {
-			if !strings.HasPrefix(h.Type, filterPlatform+":") {
-				continue
-			}
+		if filterPlatform != "" && !strings.HasPrefix(h.Type, filterPlatform+":") && h.Type != filterPlatform {
+			continue
 		}
-
-		// Type filter
 		if filterType != "" {
-			if !strings.HasSuffix(h.Type, ":"+filterType) {
+			if filterType == "webhook" {
+				if h.Type != "webhook" {
+					continue
+				}
+			} else if !strings.HasSuffix(h.Type, ":"+filterType) {
 				continue
 			}
 		}
-
-		// Enabled filter (a user is effectively disabled if enabled=0 or admin_disable=1)
 		isEnabled := h.Enabled == 1 && h.AdminDisable == 0
 		if filterEnabled != nil {
 			if *filterEnabled && !isEnabled {
@@ -94,7 +90,6 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 				continue
 			}
 		}
-
 		filtered = append(filtered, h)
 	}
 
@@ -103,24 +98,45 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s (%d):\n", tr.T("cmd.userlist.registered"), len(filtered)))
+	sb.WriteString(tr.T("cmd.userlist.registered"))
+	sb.WriteByte('\n')
+
 	for _, h := range filtered {
 		isEnabled := h.Enabled == 1 && h.AdminDisable == 0
-		status := ""
+		disabled := ""
 		if !isEnabled {
-			status = " \xF0\x9F\x9A\xAB" // prohibited sign emoji (U+1F6AB) as UTF-8
+			disabled = " 🚫"
 		}
-		displayName := h.Name
-		if displayName == "" {
-			displayName = h.ID
+
+		area := "[]"
+		if h.Area != nil && *h.Area != "" {
+			area = *h.Area
 		}
-		// Show short type label
-		typeLabel := h.Type
-		parts := strings.SplitN(h.Type, ":", 2)
-		if len(parts) == 2 {
-			typeLabel = parts[1]
+
+		if h.Type == "webhook" {
+			// Webhooks: just show "webhook • name" (no ID, no URL)
+			sb.WriteString(fmt.Sprintf("webhook • %s%s\n", h.Name, disabled))
+		} else {
+			// Users/channels/groups: "type • name [username] | (id) [areas]"
+			displayName := h.Name
+			if displayName == "" {
+				displayName = h.ID
+			}
+			sb.WriteString(fmt.Sprintf("%s • %s | (%s) %s%s\n",
+				h.Type, displayName, h.ID, area, disabled))
 		}
-		sb.WriteString(fmt.Sprintf("  %s — %s (%s)%s\n", h.ID, displayName, typeLabel, status))
 	}
-	return []bot.Reply{{Text: sb.String()}}
+
+	text := sb.String()
+	if len(text) > 2000 {
+		return []bot.Reply{{
+			Text: tr.T("cmd.userlist.registered"),
+			Attachment: &bot.Attachment{
+				Filename: "userlist.txt",
+				Content:  []byte(text),
+			},
+		}}
+	}
+
+	return []bot.Reply{{Text: text}}
 }
