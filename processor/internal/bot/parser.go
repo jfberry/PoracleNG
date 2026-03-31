@@ -1,0 +1,139 @@
+package bot
+
+import (
+	"regexp"
+	"strings"
+
+	"github.com/pokemon/poracleng/processor/internal/i18n"
+)
+
+// ParsedCommand represents one command invocation after parsing.
+type ParsedCommand struct {
+	CommandKey string   // identifier key (e.g. "cmd.track"), empty if unrecognised
+	Args       []string // remaining arguments (lowercased, underscores→spaces)
+}
+
+// Parser handles text → structured commands.
+type Parser struct {
+	prefix     string
+	commandMap map[string]string // lowercased translated name → identifier key
+}
+
+var tokenRe = regexp.MustCompile(`"([^"]*)"|\S+`)
+
+// NewParser builds the multi-language command lookup table.
+// For each cmd.* key in the bundle, all translations across the given languages
+// are mapped to the identifier key. If two languages translate different commands
+// to the same word, the first language in the list wins.
+func NewParser(prefix string, bundle *i18n.Bundle, languages []string) *Parser {
+	cmdMap := make(map[string]string)
+	for _, lang := range languages {
+		tr := bundle.For(lang)
+		if tr == nil {
+			continue
+		}
+		for key, val := range tr.Messages() {
+			if !strings.HasPrefix(key, "cmd.") {
+				continue
+			}
+			lower := strings.ToLower(val)
+			if lower == "" {
+				continue
+			}
+			// First mapping wins — earlier languages have priority
+			if _, exists := cmdMap[lower]; !exists {
+				cmdMap[lower] = key
+			}
+		}
+	}
+	return &Parser{prefix: strings.ToLower(prefix), commandMap: cmdMap}
+}
+
+// Parse splits raw message text into one or more ParsedCommands.
+func (p *Parser) Parse(text string) []ParsedCommand {
+	var results []ParsedCommand
+
+	// Multi-line: split by newlines, each line is independent
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Check prefix (case-insensitive)
+		if len(line) < len(p.prefix) {
+			continue
+		}
+		if strings.ToLower(line[:len(p.prefix)]) != p.prefix {
+			continue
+		}
+		line = line[len(p.prefix):]
+
+		// Tokenize preserving quoted strings
+		tokens := tokenize(line)
+		if len(tokens) == 0 {
+			continue
+		}
+
+		// Look up command name (first token, already lowercased by tokenize)
+		cmdKey := p.commandMap[tokens[0]]
+
+		// Remaining args: underscore→space
+		args := make([]string, 0, len(tokens)-1)
+		for _, tok := range tokens[1:] {
+			args = append(args, strings.ReplaceAll(tok, "_", " "))
+		}
+
+		// Pipe splitting: split args by "|" into groups sharing the same command
+		groups := splitByPipe(args)
+		if len(groups) == 0 {
+			results = append(results, ParsedCommand{CommandKey: cmdKey, Args: nil})
+		} else {
+			for _, group := range groups {
+				results = append(results, ParsedCommand{CommandKey: cmdKey, Args: group})
+			}
+		}
+	}
+
+	return results
+}
+
+// tokenize splits text into tokens, preserving quoted strings.
+// Quotes are stripped from the result. All tokens are lowercased.
+func tokenize(text string) []string {
+	matches := tokenRe.FindAllStringSubmatch(text, -1)
+	tokens := make([]string, 0, len(matches))
+	for _, m := range matches {
+		tok := m[0]
+		if m[1] != "" {
+			tok = m[1] // captured quoted content (without quotes)
+		}
+		tokens = append(tokens, strings.ToLower(tok))
+	}
+	return tokens
+}
+
+// splitByPipe splits args by the "|" token into groups.
+// Each group gets its own command invocation.
+func splitByPipe(args []string) [][]string {
+	if len(args) == 0 {
+		return nil
+	}
+	var groups [][]string
+	current := make([]string, 0)
+	for _, a := range args {
+		if a == "|" {
+			if len(current) > 0 {
+				groups = append(groups, current)
+			}
+			current = make([]string, 0)
+		} else {
+			current = append(current, a)
+		}
+	}
+	if len(current) > 0 {
+		groups = append(groups, current)
+	}
+	return groups
+}
