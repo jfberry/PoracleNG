@@ -21,7 +21,7 @@ func (c *EggCommand) Aliases() []string { return nil }
 
 // eggParams declares the parameter types !egg accepts.
 var eggParams = []bot.ParamDef{
-	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.level"},
+	{Type: bot.ParamPrefixRange, Key: "arg.prefix.level"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
@@ -42,9 +42,15 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Collect levels from multiple sources
 	levelSet := make(map[int]bool)
 
-	// From level<N> prefix
-	if lvl, ok := parsed.Singles["level"]; ok {
-		levelSet[lvl] = true
+	// From level<N> or level<N>-<M> prefix
+	if r, ok := parsed.Ranges["level"]; ok {
+		if r.HasMax {
+			for lvl := r.Min; lvl <= r.Max; lvl++ {
+				levelSet[lvl] = true
+			}
+		} else {
+			levelSet[r.Min] = true
+		}
 	}
 
 	// From raid level names (legendary, mega, shadow, etc.)

@@ -241,16 +241,17 @@ func (am *ArgMatcher) tryPrefixRange(tok, key, lang string, result *ParsedArgs) 
 		if err != nil {
 			continue
 		}
-		max := min
+		shortKey := strings.TrimPrefix(key, "arg.prefix.")
 		if len(parts) == 2 {
-			max, err = strconv.Atoi(parts[1])
+			max, err := strconv.Atoi(parts[1])
 			if err != nil {
 				continue
 			}
+			result.Ranges[shortKey] = Range{Min: min, Max: max, HasMax: true}
+		} else {
+			// Single value: only min is set, max uses the field's default
+			result.Ranges[shortKey] = Range{Min: min, HasMax: false}
 		}
-		// Strip "arg.prefix." to get the short key name
-		shortKey := strings.TrimPrefix(key, "arg.prefix.")
-		result.Ranges[shortKey] = Range{Min: min, Max: max}
 		return true
 	}
 	return false

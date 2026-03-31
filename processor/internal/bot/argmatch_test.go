@@ -161,16 +161,16 @@ func TestArgMatchPrefixRange(t *testing.T) {
 	am := newTestArgMatcher()
 	params := []ParamDef{{Type: ParamPrefixRange, Key: "arg.prefix.iv"}}
 
-	// Single value
+	// Single value — only min set, HasMax=false
 	result := am.Match([]string{"iv100"}, params, "en")
-	if result.Ranges["iv"].Min != 100 || result.Ranges["iv"].Max != 100 {
-		t.Errorf("iv = %+v, want {100, 100}", result.Ranges["iv"])
+	if result.Ranges["iv"].Min != 100 || result.Ranges["iv"].HasMax {
+		t.Errorf("iv = %+v, want {Min:100, HasMax:false}", result.Ranges["iv"])
 	}
 
-	// Range
+	// Range — both min and max set, HasMax=true
 	result = am.Match([]string{"iv50-100"}, params, "en")
-	if result.Ranges["iv"].Min != 50 || result.Ranges["iv"].Max != 100 {
-		t.Errorf("iv = %+v, want {50, 100}", result.Ranges["iv"])
+	if result.Ranges["iv"].Min != 50 || result.Ranges["iv"].Max != 100 || !result.Ranges["iv"].HasMax {
+		t.Errorf("iv = %+v, want {Min:50, Max:100, HasMax:true}", result.Ranges["iv"])
 	}
 }
 

@@ -27,6 +27,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/discordbot"
+	"github.com/pokemon/poracleng/processor/internal/telegrambot"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
@@ -353,6 +354,7 @@ func main() {
 	cmdRegistry.Register(&commands.StopCommand{})
 	cmdRegistry.Register(&commands.EggCommand{})
 	cmdRegistry.Register(&commands.TrackCommand{})
+	cmdRegistry.Register(&commands.TrackedCommand{})
 
 	// Command API endpoint (for testing commands without bots)
 	cmdDeps := &api.CommandDeps{
@@ -475,6 +477,32 @@ func main() {
 		}
 	}
 
+	// Start Telegram bot (if token configured)
+	var telegramBot *telegrambot.Bot
+	telegramTokens := cfg.Telegram.TelegramTokens()
+	if len(telegramTokens) > 0 && telegramTokens[0] != "" {
+		tbot, err := telegrambot.New(telegrambot.Config{
+			Token:        telegramTokens[0],
+			DB:           database,
+			Cfg:          cfg,
+			StateMgr:     stateMgr,
+			GameData:     proc.enricher.GameData,
+			Translations: proc.enricher.Translations,
+			Dispatcher:   proc.dispatcher,
+			RowText:      trackingDeps.RowText,
+			Registry:     cmdRegistry,
+			Parser:       cmdParser,
+			ArgMatcher:   cmdArgMatcher,
+			Resolver:     cmdResolver,
+			ReloadFunc:   proc.triggerReload,
+		})
+		if err != nil {
+			log.Warnf("Telegram bot failed to start: %v", err)
+		} else {
+			telegramBot = tbot
+		}
+	}
+
 	// Start server
 	go func() {
 		log.Infof("Processor starting on %s", cfg.Processor.ListenAddr())
@@ -493,6 +521,10 @@ func main() {
 	if discordBot != nil {
 		discordBot.Close()
 		log.Infof("Discord bot disconnected")
+	}
+	if telegramBot != nil {
+		telegramBot.Close()
+		log.Infof("Telegram bot disconnected")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
