@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/jmoiron/sqlx"
@@ -48,9 +49,10 @@ type Bot struct {
 	stats      *tracker.StatsTracker
 	dts        *dts.TemplateStore
 	emoji      *dts.EmojiLookup
-	nlpParser  *nlp.Parser
-	reloadFunc func()
-	stopCh     chan struct{}
+	nlpParser      *nlp.Parser
+	reloadFunc     func()
+	reconciliation *TelegramReconciliation
+	stopCh         chan struct{}
 }
 
 // Config holds everything needed to create a Telegram bot.
@@ -109,6 +111,12 @@ func New(cfg Config) (*Bot, error) {
 	}
 
 	log.Infof("Telegram bot connected as @%s", api.Self.UserName)
+
+	// Initialize reconciliation if check_role is enabled.
+	if cfg.Cfg.Telegram.CheckRole && cfg.DTS != nil {
+		b.reconciliation = NewTelegramReconciliation(api, cfg.DB, cfg.Cfg, cfg.Translations, cfg.DTS)
+		go b.reconciliationLoop()
+	}
 
 	go b.pollUpdates()
 	return b, nil
@@ -220,6 +228,11 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 	parsed = bot.MergeApplyGroups(parsed)
 
 	for _, cmd := range parsed {
+		// Handle Telegram-specific commands first (require tgbotapi directly).
+		if b.handleTelegramCommand(m, cmd.CommandKey, cmd.Args) {
+			continue
+		}
+
 		if cmd.CommandKey == "" {
 			// Try NLP suggestion for unrecognised DM commands
 			if isDM && b.nlpParser != nil && b.cfg.AI.SuggestOnDM {
@@ -342,6 +355,52 @@ func (b *Bot) sendReplies(chatID int64, replies []bot.Reply) {
 }
 
 
+
+// reconciliationLoop runs periodic reconciliation at the configured interval.
+func (b *Bot) reconciliationLoop() {
+	interval := time.Duration(b.cfg.Telegram.CheckRoleInterval) * time.Hour
+	if interval <= 0 {
+		interval = 6 * time.Hour
+	}
+
+	// Run once at startup after a short delay.
+	select {
+	case <-b.stopCh:
+		return
+	case <-time.After(30 * time.Second):
+	}
+	b.runReconciliation()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-b.stopCh:
+			return
+		case <-ticker.C:
+			b.runReconciliation()
+		}
+	}
+}
+
+// runReconciliation executes a full Telegram reconciliation cycle.
+func (b *Bot) runReconciliation() {
+	rcfg := b.cfg.Reconciliation.Telegram
+	b.reconciliation.SyncTelegramUsers(rcfg.UpdateUserNames, rcfg.RemoveInvalidUsers)
+	b.reconciliation.UpdateTelegramChannels()
+}
+
+// handleTelegramCommand dispatches Telegram-specific commands that require the
+// tgbotapi directly. Returns true if the command was handled.
+func (b *Bot) handleTelegramCommand(m *tgbotapi.Message, cmdKey string, args []string) bool {
+	switch cmdKey {
+	case "cmd.channel":
+		b.handleChannel(m, args)
+		return true
+	default:
+		return false
+	}
+}
 
 func formatInt64(n int64) string {
 	return strconv.FormatInt(n, 10)

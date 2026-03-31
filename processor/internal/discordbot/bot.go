@@ -340,6 +340,12 @@ func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCre
 	case "cmd.role":
 		b.handleRole(s, m, args)
 		return true
+	case "cmd.poracle_emoji":
+		b.handleEmoji(s, m, args)
+		return true
+	case "cmd.autocreate":
+		b.handleAutocreate(s, m, args)
+		return true
 	default:
 		return false
 	}
