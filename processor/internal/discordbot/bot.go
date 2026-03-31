@@ -186,7 +186,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		}
 
 		// Registration check — skip for poracle (registration), poracle_test, and version commands
-		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.poracle_test" && cmd.CommandKey != "cmd.version" {
+		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
 			s.ChannelMessageSend(channelID, tr.T("cmd.not_registered"))
 			continue
 		}

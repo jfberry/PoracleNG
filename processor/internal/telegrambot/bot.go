@@ -212,7 +212,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 		}
 
 		// Registration check — skip for poracle (registration), poracle_test, and version commands
-		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.poracle_test" && cmd.CommandKey != "cmd.version" {
+		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
 			tr := b.translations.For(userLang)
 			replyMsg := tgbotapi.NewMessage(chatID, tr.T("cmd.not_registered"))
 			b.api.Send(replyMsg)
