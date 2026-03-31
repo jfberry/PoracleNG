@@ -210,6 +210,11 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	tr := b.translations.For(userLang)
 
 	for _, cmd := range parsed {
+		// Try Discord-specific commands first (require discordgo session directly)
+		if b.handleDiscordCommand(s, m, cmd.CommandKey, cmd.Args, isDM) {
+			continue
+		}
+
 		if cmd.CommandKey == "" {
 			if isDM {
 				// Try NLP suggestion for unrecognised DM commands
@@ -307,6 +312,24 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 		replies := handler.Run(ctx, remainingArgs)
 		b.sendReplies(s, m, replies)
+	}
+}
+
+// handleDiscordCommand dispatches Discord-specific commands that require the
+// discordgo session directly. Returns true if the command was handled.
+func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCreate, cmdKey string, args []string, isDM bool) bool {
+	switch cmdKey {
+	case "cmd.channel":
+		b.handleChannel(s, m, args)
+		return true
+	case "cmd.poracle_clean":
+		b.handleClean(s, m)
+		return true
+	case "cmd.poracle_id":
+		b.handleIDExport(s, m, args)
+		return true
+	default:
+		return false
 	}
 }
 
