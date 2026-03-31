@@ -40,19 +40,7 @@ func Load(baseDir string) *Bundle {
 		log.Debugf("i18n: no gamelocale dir at %s", gameLocaleDir)
 	}
 
-	// 3. resources/locale/*.json (enRefMerged game data translations, backward compat)
-	resourcesDir := filepath.Join(baseDir, "resources", "locale")
-	if err := b.LoadJSONDir(resourcesDir); err != nil {
-		log.Debugf("i18n: no resources locale dir at %s", resourcesDir)
-	}
-
-	// 4. alerter/locale/*.json (alerter message translations)
-	alerterDir := filepath.Join(baseDir, "alerter", "locale")
-	if err := b.LoadJSONDir(alerterDir); err != nil {
-		log.Debugf("i18n: no alerter locale dir at %s", alerterDir)
-	}
-
-	// 5. config/custom.{locale}.json (admin overrides)
+	// 3. config/custom.{locale}.json (admin overrides)
 	configDir := filepath.Join(baseDir, "config")
 	entries, err := os.ReadDir(configDir)
 	if err == nil {

@@ -121,71 +121,77 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 }
 
 func (c *InfoCommand) listMoves(ctx *bot.CommandContext) []bot.Reply {
-	if ctx.GameData == nil {
-		return []bot.Reply{{React: "🙅"}}
+	if ctx.GameData == nil || len(ctx.GameData.Moves) == 0 {
+		return []bot.Reply{{React: "🙅", Text: "No move data loaded"}}
 	}
 
 	tr := ctx.Tr()
 	var sb strings.Builder
-	sb.WriteString("**Moves:**\n")
 
-	count := 0
-	for id, move := range ctx.GameData.Moves {
+	for id := 1; id <= 1000; id++ {
+		move, ok := ctx.GameData.Moves[id]
+		if !ok {
+			continue
+		}
 		name := tr.T(gamedata.MoveTranslationKey(id))
 		if name == gamedata.MoveTranslationKey(id) {
-			continue // no translation
+			continue // no translation for this move
 		}
 		typeName := ""
 		if move.TypeID > 0 {
 			typeName = tr.T(gamedata.TypeTranslationKey(move.TypeID))
 		}
-		sb.WriteString(fmt.Sprintf("%d: %s (%s)\n", id, name, typeName))
-		count++
-		if count > 100 {
-			sb.WriteString("... (truncated)\n")
-			break
+		if typeName != "" {
+			sb.WriteString(fmt.Sprintf("%s (%s)\n", name, typeName))
+		} else {
+			sb.WriteString(name + "\n")
 		}
 	}
 
 	text := sb.String()
-	if len(text) > 2000 {
-		return []bot.Reply{{
-			Text: "Move list:",
-			Attachment: &bot.Attachment{
-				Filename: "moves.txt",
-				Content:  []byte(text),
-			},
-		}}
+	if text == "" {
+		return []bot.Reply{{React: "🙅", Text: "No move translations found"}}
 	}
-	return []bot.Reply{{Text: text}}
+
+	return []bot.Reply{{
+		Text: fmt.Sprintf("**Moves** (%d):", len(ctx.GameData.Moves)),
+		Attachment: &bot.Attachment{
+			Filename: "moves.txt",
+			Content:  []byte(text),
+		},
+	}}
 }
 
 func (c *InfoCommand) listItems(ctx *bot.CommandContext) []bot.Reply {
-	if ctx.GameData == nil {
-		return []bot.Reply{{React: "🙅"}}
+	if ctx.GameData == nil || len(ctx.GameData.Items) == 0 {
+		return []bot.Reply{{React: "🙅", Text: "No item data loaded"}}
 	}
 
 	tr := ctx.Tr()
 	var sb strings.Builder
-	sb.WriteString("**Items:**\n")
 
-	for id := range ctx.GameData.Items {
+	for id := 1; id <= 2000; id++ {
+		_, ok := ctx.GameData.Items[id]
+		if !ok {
+			continue
+		}
 		name := tr.T(gamedata.ItemTranslationKey(id))
 		if name == gamedata.ItemTranslationKey(id) {
-			name = fmt.Sprintf("Item %d", id)
+			continue // no translation
 		}
-		sb.WriteString(fmt.Sprintf("%d: %s\n", id, name))
+		sb.WriteString(fmt.Sprintf("%s\n", name))
 	}
 
 	text := sb.String()
-	if len(text) > 2000 {
-		return []bot.Reply{{
-			Text: "Item list:",
-			Attachment: &bot.Attachment{
-				Filename: "items.txt",
-				Content:  []byte(text),
-			},
-		}}
+	if text == "" {
+		return []bot.Reply{{React: "🙅", Text: "No item translations found"}}
 	}
-	return []bot.Reply{{Text: text}}
+
+	return []bot.Reply{{
+		Text: fmt.Sprintf("**Items** (%d):", len(ctx.GameData.Items)),
+		Attachment: &bot.Attachment{
+			Filename: "items.txt",
+			Content:  []byte(text),
+		},
+	}}
 }
