@@ -31,6 +31,7 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		}
 		ctx.DB.Exec("UPDATE profiles SET latitude = 0, longitude = 0 WHERE id = ? AND profile_no = ?",
 			ctx.TargetID, ctx.ProfileNo)
+		ctx.TriggerReload()
 		return []bot.Reply{{React: "✅", Text: tr.T("cmd.location.removed")}}
 	}
 
@@ -60,6 +61,7 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 	ctx.DB.Exec("UPDATE profiles SET latitude = ?, longitude = ? WHERE id = ? AND profile_no = ?",
 		lat, lon, ctx.TargetID, ctx.ProfileNo)
+	ctx.TriggerReload()
 
 	mapLink := fmt.Sprintf("https://maps.google.com/maps?q=%f,%f", lat, lon)
 	reply := bot.Reply{React: "✅", Text: tr.Tf("cmd.location.set", lat, lon) + "\n" + mapLink}

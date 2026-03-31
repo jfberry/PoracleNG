@@ -42,6 +42,7 @@ func (c *EnableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	if len(enabled) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
+	ctx.TriggerReload()
 	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.enable.success", strings.Join(enabled, ", "))}}
 }
 
@@ -78,6 +79,7 @@ func (c *DisableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if len(disabled) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
+	ctx.TriggerReload()
 	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.disable.success", strings.Join(disabled, ", "))}}
 }
 

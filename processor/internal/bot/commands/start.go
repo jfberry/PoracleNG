@@ -19,6 +19,7 @@ func (c *StartCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if err != nil {
 		return []bot.Reply{{React: "🙅"}}
 	}
+	ctx.TriggerReload()
 	return []bot.Reply{{React: "✅", Text: tr.T("cmd.start.success")}}
 }
 
@@ -47,5 +48,6 @@ func (c *StopCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if err != nil {
 		return []bot.Reply{{React: "🙅"}}
 	}
+	ctx.TriggerReload()
 	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.stop.success", prefix, tr.T("cmd.start"))}}
 }

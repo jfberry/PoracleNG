@@ -42,5 +42,6 @@ func (c *LanguageCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	return []bot.Reply{{React: "✅"}}
+	ctx.TriggerReload()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.language.changed", matched)}}
 }
