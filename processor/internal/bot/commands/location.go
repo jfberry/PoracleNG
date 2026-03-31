@@ -62,5 +62,16 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		lat, lon, ctx.TargetID, ctx.ProfileNo)
 
 	mapLink := fmt.Sprintf("https://maps.google.com/maps?q=%f,%f", lat, lon)
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.location.set", lat, lon) + "\n" + mapLink}}
+	reply := bot.Reply{React: "✅", Text: tr.Tf("cmd.location.set", lat, lon) + "\n" + mapLink}
+
+	// Generate location pin tile if static map is available
+	if ctx.StaticMap != nil {
+		data := map[string]any{
+			"latitude":  lat,
+			"longitude": lon,
+		}
+		reply.ImageURL = ctx.StaticMap.GetPregeneratedTileURL("location", data, "staticMap")
+	}
+
+	return []bot.Reply{reply}
 }

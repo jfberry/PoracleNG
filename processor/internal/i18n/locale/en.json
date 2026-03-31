@@ -307,6 +307,9 @@
   "cmd.profile.deleted": "Profile {0} deleted",
   "cmd.profile.not_found": "Profile not found",
   "cmd.profile.cannot_delete_1": "Cannot delete profile 1",
+  "cmd.profile.hours_usage": "Usage: profile hours <profileNo> <json>",
+  "cmd.profile.hours_invalid_json": "Invalid JSON for active hours",
+  "cmd.profile.hours_set": "Active hours updated for profile {0}",
 
   "cmd.language.specify": "Please specify a language",
   "cmd.language.unknown": "Unknown language. Available: {0}",
@@ -341,6 +344,7 @@
   "cmd.area.current": "Current configured areas are:",
 
   "cmd.userlist.registered": "These users are registered with Poracle:",
+  "cmd.userlist.none": "No registered users matching your filters.",
   "cmd.channel.added": "Channel added",
   "cmd.webhook.added": "Webhook added",
   "cmd.dm_only": "Please run commands in Direct Messages",

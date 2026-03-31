@@ -19,6 +19,17 @@ func (c *TrackedCommand) Aliases() []string { return nil }
 
 func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
+
+	// !tracked area — show only area info
+	if len(args) > 0 && args[0] == "area" {
+		currentAreas := getUserAreas(ctx)
+		if len(currentAreas) > 0 {
+			displayNames := resolveAreaDisplayNames(ctx, currentAreas)
+			return []bot.Reply{{Text: tr.Tf("status.areas_set", strings.Join(displayNames, ", "))}}
+		}
+		return []bot.Reply{{Text: tr.T("status.no_areas")}}
+	}
+
 	var sb strings.Builder
 
 	// Header: human status, location, area, profile

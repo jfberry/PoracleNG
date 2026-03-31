@@ -180,6 +180,33 @@ func commandSecurityName(cmdKey string) string {
 	}
 }
 
+// CheckFeaturePermission checks whether a user has access to a specific
+// command_security feature key (e.g. "pvp", "specificgym"). These are
+// per-parameter permissions that restrict specific features within a command,
+// not whole-command access.
+func CheckFeaturePermission(cfg *config.Config, platform, featureKey, userID string, userRoles []string) bool {
+	if platform != "discord" {
+		return true
+	}
+	allowedIDs, ok := cfg.Discord.CommandSecurity[featureKey]
+	if !ok || len(allowedIDs) == 0 {
+		return true // not restricted
+	}
+	for _, id := range allowedIDs {
+		if id == userID {
+			return true
+		}
+	}
+	for _, role := range userRoles {
+		for _, id := range allowedIDs {
+			if id == role {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func containsStr(slice []string, s string) bool {
 	for _, v := range slice {
 		if v == s {

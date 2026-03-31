@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 type ProfileCommand struct{}
@@ -32,6 +34,8 @@ func (c *ProfileCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		return c.switchProfile(ctx, rest)
 	case "list":
 		return c.listProfiles(ctx)
+	case "hours":
+		return c.setHours(ctx, rest)
 	default:
 		// Try as switch (profile name or number)
 		return c.switchProfile(ctx, args)
@@ -41,11 +45,12 @@ func (c *ProfileCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 	var profiles []struct {
-		ProfileNo int    `db:"profile_no"`
-		Name      string `db:"name"`
+		ProfileNo   int    `db:"profile_no"`
+		Name        string `db:"name"`
+		ActiveHours string `db:"active_hours"`
 	}
 	err := ctx.DB.Select(&profiles,
-		"SELECT profile_no, name FROM profiles WHERE id = ? ORDER BY profile_no",
+		"SELECT profile_no, name, COALESCE(active_hours, '') AS active_hours FROM profiles WHERE id = ? ORDER BY profile_no",
 		ctx.TargetID)
 	if err != nil {
 		log.Errorf("profile: list: %v", err)
@@ -62,7 +67,11 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		if p.ProfileNo == ctx.ProfileNo {
 			marker = " ← " + tr.T("cmd.profile.active")
 		}
-		sb.WriteString(fmt.Sprintf("%d: %s%s\n", p.ProfileNo, p.Name, marker))
+		sb.WriteString(fmt.Sprintf("%d: %s%s", p.ProfileNo, p.Name, marker))
+		if p.ActiveHours != "" && p.ActiveHours != "[]" {
+			sb.WriteString(fmt.Sprintf(" [hours: %s]", p.ActiveHours))
+		}
+		sb.WriteByte('\n')
 	}
 	return []bot.Reply{{Text: sb.String()}}
 }
@@ -155,6 +164,33 @@ func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) [
 	ctx.TriggerReload()
 
 	return []bot.Reply{{React: "✅", Text: tr.Tf("profile.switched", profileNo)}}
+}
+
+func (c *ProfileCommand) setHours(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
+	if len(args) < 2 {
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.hours_usage")}}
+	}
+
+	profileNo := c.resolveProfileNo(ctx, args[0])
+	if profileNo < 1 {
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.not_found")}}
+	}
+
+	hoursJSON := strings.Join(args[1:], " ")
+
+	// Validate that it's valid JSON (should be an array of active_hours entries)
+	if !json.Valid([]byte(hoursJSON)) {
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.hours_invalid_json")}}
+	}
+
+	if err := db.UpdateProfileHours(ctx.DB, ctx.TargetID, profileNo, hoursJSON); err != nil {
+		log.Errorf("profile: set hours: %v", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+
+	ctx.TriggerReload()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.profile.hours_set", profileNo)}}
 }
 
 func (c *ProfileCommand) resolveProfileNo(ctx *bot.CommandContext, input string) int {

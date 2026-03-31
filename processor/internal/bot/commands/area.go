@@ -3,12 +3,15 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 type AreaCommand struct{}
@@ -201,20 +204,36 @@ func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Re
 		return []bot.Reply{{Text: tr.T("status.no_areas")}}
 	}
 
-	// Generate tiles for each area via processor API
 	var replies []bot.Reply
 	for _, area := range areas {
 		displayName := area
-		for _, f := range ctx.Fences {
-			if strings.EqualFold(f.Name, area) {
-				displayName = f.Name
-				break
+		fence := findFenceByName(ctx.Fences, area)
+		if fence != nil {
+			displayName = fence.Name
+		}
+
+		reply := bot.Reply{Text: tr.Tf("cmd.area.display", displayName)}
+
+		// Generate tile if static map is available and fence found
+		if ctx.StaticMap != nil && fence != nil {
+			paths := areaFencePaths(fence)
+			if len(paths) > 0 {
+				pos := staticmap.Autoposition(staticmap.AutopositionShape{
+					Polygons: areaAutopositionPolygons(paths),
+				}, 500, 250, 1.25, 17.5)
+				if pos != nil {
+					data := map[string]any{
+						"zoom":      pos.Zoom,
+						"latitude":  pos.Latitude,
+						"longitude": pos.Longitude,
+						"polygons":  paths,
+					}
+					reply.ImageURL = ctx.StaticMap.GetPregeneratedTileURL("area", data, "staticMap")
+				}
 			}
 		}
-		// TODO: call tile generation API for area map
-		replies = append(replies, bot.Reply{
-			Text: tr.Tf("cmd.area.display", displayName),
-		})
+
+		replies = append(replies, reply)
 	}
 	return replies
 }
@@ -229,8 +248,48 @@ func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bo
 		return []bot.Reply{{Text: tr.T("status.no_areas")}}
 	}
 	displayNames := resolveAreaDisplayNames(ctx, areas)
-	// TODO: call tile generation API for overview map
-	return []bot.Reply{{Text: tr.Tf("cmd.area.your_areas", strings.Join(displayNames, ", "))}}
+
+	reply := bot.Reply{Text: tr.Tf("cmd.area.your_areas", strings.Join(displayNames, ", "))}
+
+	// Generate overview tile if static map is available
+	if ctx.StaticMap != nil {
+		var fences []*geofence.Fence
+		for _, name := range areas {
+			if f := findFenceByName(ctx.Fences, name); f != nil && len(areaFencePaths(f)) > 0 {
+				fences = append(fences, f)
+			}
+		}
+		if len(fences) > 0 {
+			var autoPolygons [][]staticmap.LatLon
+			for _, f := range fences {
+				autoPolygons = append(autoPolygons, areaAutopositionPolygons(areaFencePaths(f))...)
+			}
+			pos := staticmap.Autoposition(staticmap.AutopositionShape{
+				Polygons: autoPolygons,
+			}, 1024, 768, 1.25, 17.5)
+			if pos != nil {
+				var tilePolygons []map[string]any
+				for i, f := range fences {
+					color := areaRainbow(len(fences), i)
+					for _, path := range areaFencePaths(f) {
+						tilePolygons = append(tilePolygons, map[string]any{
+							"color": color,
+							"path":  path,
+						})
+					}
+				}
+				data := map[string]any{
+					"zoom":      pos.Zoom,
+					"latitude":  pos.Latitude,
+					"longitude": pos.Longitude,
+					"fences":    tilePolygons,
+				}
+				reply.ImageURL = ctx.StaticMap.GetPregeneratedTileURL("areaoverview", data, "staticMap")
+			}
+		}
+	}
+
+	return []bot.Reply{reply}
 }
 
 type availableArea struct {
@@ -267,6 +326,70 @@ func setUserAreas(ctx *bot.CommandContext, areas []string) {
 	}
 	ctx.DB.Exec("UPDATE profiles SET area = ? WHERE id = ? AND profile_no = ?",
 		string(areaJSON), ctx.TargetID, ctx.ProfileNo)
+}
+
+// findFenceByName finds a fence by name (case-insensitive).
+func findFenceByName(fences []geofence.Fence, name string) *geofence.Fence {
+	normalized := strings.ToLower(strings.ReplaceAll(name, "_", " "))
+	for i := range fences {
+		if fences[i].NormalizedName == normalized {
+			return &fences[i]
+		}
+	}
+	return nil
+}
+
+// areaFencePaths returns all polygon paths for a fence (single or multipath).
+func areaFencePaths(f *geofence.Fence) [][][2]float64 {
+	if len(f.Multipath) > 0 {
+		return f.Multipath
+	}
+	if len(f.Path) > 0 {
+		return [][][2]float64{f.Path}
+	}
+	return nil
+}
+
+// areaAutopositionPolygons converts fence paths to LatLon polygons for autoposition.
+func areaAutopositionPolygons(paths [][][2]float64) [][]staticmap.LatLon {
+	polygons := make([][]staticmap.LatLon, len(paths))
+	for i, path := range paths {
+		polygon := make([]staticmap.LatLon, len(path))
+		for j, p := range path {
+			polygon[j] = staticmap.LatLon{Latitude: p[0], Longitude: p[1]}
+		}
+		polygons[i] = polygon
+	}
+	return polygons
+}
+
+// areaRainbow generates evenly-spaced vibrant colours for distinguishing areas.
+func areaRainbow(numSteps, step int) string {
+	h := float64(step) / float64(numSteps)
+	i := int(h * 6)
+	f := h*6 - float64(i)
+	q := 1 - f
+
+	var r, g, b float64
+	switch i % 6 {
+	case 0:
+		r, g, b = 1, f, 0
+	case 1:
+		r, g, b = q, 1, 0
+	case 2:
+		r, g, b = 0, 1, f
+	case 3:
+		r, g, b = 0, q, 1
+	case 4:
+		r, g, b = f, 0, 1
+	case 5:
+		r, g, b = 1, 0, q
+	}
+
+	return fmt.Sprintf("#%02x%02x%02x",
+		int(math.Round(r*255)),
+		int(math.Round(g*255)),
+		int(math.Round(b*255)))
 }
 
 func resolveAreaDisplayNames(ctx *bot.CommandContext, areas []string) []string {
