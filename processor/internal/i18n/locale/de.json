@@ -219,5 +219,6 @@
   "cmd.channel.added": "Kanal hinzugefügt",
   "cmd.webhook.added": "Webhook hinzugefügt",
   "cmd.dm_only": "Befehle müssen als Direktnachrichten an den Poracle-Bot gesendet werden!",
-  "cmd.admin_no_distance": "Warnung: Befehl ohne Distanz erkannt - standard Distanz wird stattdessen verwendet"
+  "cmd.admin_no_distance": "Warnung: Befehl ohne Distanz erkannt - standard Distanz wird stattdessen verwendet",
+  "cmd.not_registered": "Du bist nicht registriert. Bitte registriere dich zuerst."
 }

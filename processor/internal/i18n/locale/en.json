@@ -344,5 +344,6 @@
   "cmd.channel.added": "Channel added",
   "cmd.webhook.added": "Webhook added",
   "cmd.dm_only": "Please run commands in Direct Messages",
-  "cmd.admin_no_distance": "Warning: Admin command detected without distance set - using default distance"
+  "cmd.admin_no_distance": "Warning: Admin command detected without distance set - using default distance",
+  "cmd.not_registered": "You are not registered. Please register first."
 }

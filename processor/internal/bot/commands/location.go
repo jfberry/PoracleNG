@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -38,6 +39,15 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	if parsed.Coords != nil {
 		lat = parsed.Coords.Lat
 		lon = parsed.Coords.Lon
+	} else if len(parsed.Unrecognized) > 0 && ctx.Geocoder != nil {
+		// Try forward geocoding with unrecognized args as an address query
+		query := strings.Join(parsed.Unrecognized, " ")
+		results, err := ctx.Geocoder.Forward(query)
+		if err != nil || len(results) == 0 {
+			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.location.not_found")}}
+		}
+		lat = results[0].Latitude
+		lon = results[0].Longitude
 	} else {
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.location.specify")}}
 	}

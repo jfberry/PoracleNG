@@ -28,6 +28,26 @@ func usageReply(ctx *bot.CommandContext, args []string, usageKey string) *bot.Re
 	return &bot.Reply{Text: tr.Tf(usageKey, commandPrefix(ctx))}
 }
 
+// helpArgReply returns a usage reply if the first argument is "help", or nil otherwise.
+func helpArgReply(ctx *bot.CommandContext, args []string, usageKey string) *bot.Reply {
+	if len(args) > 0 && args[0] == "help" {
+		tr := ctx.Tr()
+		return &bot.Reply{Text: tr.Tf(usageKey, commandPrefix(ctx))}
+	}
+	return nil
+}
+
+// enforceDistance applies default and max distance limits from config.
+func enforceDistance(ctx *bot.CommandContext, distance int) int {
+	if distance == 0 && ctx.Config.Tracking.DefaultDistance > 0 {
+		distance = ctx.Config.Tracking.DefaultDistance
+	}
+	if ctx.Config.Tracking.MaxDistance > 0 && distance > ctx.Config.Tracking.MaxDistance {
+		distance = ctx.Config.Tracking.MaxDistance
+	}
+	return distance
+}
+
 // buildTrackingMessage generates the confirmation message for tracking mutations.
 // The rowFunc callbacks produce row text for each entry by index.
 func buildTrackingMessage(

@@ -13,6 +13,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
@@ -70,6 +71,7 @@ type CommandContext struct {
 	RowText      *rowtext.Generator
 	Resolver     *PokemonResolver
 	ArgMatcher   *ArgMatcher
+	Geocoder     *geocoding.Geocoder
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
