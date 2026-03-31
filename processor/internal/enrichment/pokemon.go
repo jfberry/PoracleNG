@@ -125,6 +125,10 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		// IV color
 		m["ivColor"] = gamedata.FindIvColor(iv, e.IvColors)
 
+		// Weight and height (formatted to 2dp, matching alerter)
+		m["weight"] = fmt.Sprintf("%.2f", pokemon.Weight)
+		m["height"] = fmt.Sprintf("%.2f", pokemon.Height)
+
 		// Catch rates
 		m["catchBase"] = fmt.Sprintf("%.2f", pokemon.BaseCatch*100)
 		m["catchGreat"] = fmt.Sprintf("%.2f", pokemon.GreatCatch*100)
