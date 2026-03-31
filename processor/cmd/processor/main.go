@@ -378,6 +378,9 @@ func main() {
 	cmdRegistry.Register(&commands.InfoCommand{})
 	cmdRegistry.Register(&commands.PoracleTestCommand{})
 	cmdRegistry.Register(&commands.UserlistCommand{})
+	cmdRegistry.Register(&commands.PoracleCommand{})
+	cmdRegistry.Register(&commands.UnregisterCommand{})
+	cmdRegistry.Register(&commands.CommunityCommand{})
 
 	// Command API endpoint (for testing commands without bots)
 	var cmdDTS *dts.TemplateStore
