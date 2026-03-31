@@ -167,6 +167,10 @@
   "status.profile_set": "Aktuell gewähltes Profil: {0}",
   "status.no_tracking": "Keine aktiven Benachrichtigungen",
 
+  "cmd.stop.warn_args": "Der Befehl {0}{1} stoppt alle Warnmeldungen. Ist das gewünscht?",
+  "cmd.stop.success": "Alle Warnmeldungen wurden gestoppt, sie können mit {0}{1} fortgesetzt werden.",
+  "cmd.start.success": "Warnmeldungen wurden wieder aktiviert",
+
   "cmd.no_pokemon": "Fehler: Kein gültiges Pokémon angegeben.",
   "cmd.no_egg_levels": "Fehler: Kein Raid-Ei-Level angegeben.",
   "cmd.no_raid_target": "Fehler: Kein gültiger Raid-Boss oder gültiges Raid-Level angegeben.",

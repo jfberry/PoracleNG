@@ -325,8 +325,8 @@
   "cmd.no_permission.maxbattle": "You do not have permission to track maxbattles",
   "cmd.no_permission.fort": "You do not have permission to track fort changes",
 
-  "cmd.stop.has_args": "All alert messages have been stopped, you can resume them with {0}{1}",
-  "cmd.stop.success": "All alert messages have been stopped",
+  "cmd.stop.warn_args": "The {0}{1} command is used to stop all alert messages, is that what you want?",
+  "cmd.stop.success": "All alert messages have been stopped, you can resume them with {0}{1}",
   "cmd.start.success": "Alert messages resumed",
 
   "cmd.language.changed": "I have changed your language setting to {0}",
