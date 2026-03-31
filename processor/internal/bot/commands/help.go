@@ -98,10 +98,15 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 			return []bot.Reply{{Text: result}}
 		}
 
-		// Clear title and description for help (they're for alert messages, not help)
+		// For help/greeting templates, clear title and description if present
+		// (set to empty string, not delete — Discord requires the field to exist)
 		if embed, ok := msg["embed"].(map[string]any); ok {
-			delete(embed, "title")
-			delete(embed, "description")
+			if _, has := embed["title"]; has {
+				embed["title"] = ""
+			}
+			if _, has := embed["description"]; has {
+				embed["description"] = ""
+			}
 		}
 
 		embedJSON, err := json.Marshal(msg)
