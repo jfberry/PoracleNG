@@ -27,6 +27,11 @@ var gymParams = []bot.ParamDef{
 
 func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
+
+	if usage := usageReply(ctx, args, "cmd.gym.usage"); usage != nil {
+		return []bot.Reply{*usage}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, gymParams, ctx.Language)
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {

@@ -7,6 +7,27 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
 
+// commandPrefix returns the appropriate command prefix for the platform.
+func commandPrefix(ctx *bot.CommandContext) string {
+	if ctx.Platform == "telegram" {
+		return "/"
+	}
+	prefix := ctx.Config.Discord.Prefix
+	if prefix == "" {
+		return "!"
+	}
+	return prefix
+}
+
+// usageReply returns a usage help reply if args are empty, or nil if args are present.
+func usageReply(ctx *bot.CommandContext, args []string, usageKey string) *bot.Reply {
+	if len(args) > 0 {
+		return nil
+	}
+	tr := ctx.Tr()
+	return &bot.Reply{Text: tr.Tf(usageKey, commandPrefix(ctx))}
+}
+
 // buildTrackingMessage generates the confirmation message for tracking mutations.
 // The rowFunc callbacks produce row text for each entry by index.
 func buildTrackingMessage(

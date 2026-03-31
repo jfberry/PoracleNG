@@ -21,6 +21,10 @@ func (c *TrackCommand) Aliases() []string { return nil }
 func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	if usage := usageReply(ctx, args, "cmd.track.usage"); usage != nil {
+		return []bot.Reply{*usage}
+	}
+
 	// Build params list — some are conditional on permissions
 	params := trackParams(ctx)
 
