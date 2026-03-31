@@ -53,51 +53,75 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	clean := parsed.HasKeyword("arg.clean")
 	gender := parsed.Gender
 
-	// Build valid grunt type name set from game data (matching alerter behavior).
-	// The DB stores grunt_type as lowercased English type names like "dragon",
-	// "giovanni", "mixed", "water", etc.
-	// Also add simplified names: strip "character_" and "character_executive_" prefixes
-	// so users can type "giovanni" or "arlo" instead of the full template-derived name.
-	validGruntTypes := make(map[string]string) // input name → canonical DB name
+	// Build valid type name set from multiple sources:
+	// 1. Grunt template-derived names (dragon, giovanni, arlo, mixed, etc.)
+	// 2. Translated pokemon type names via poke_type_{id} (user's language + English)
+	// 3. Pokestop event names (kecleon, showcase, gold-stop)
+	validTypes := make(map[string]string) // input name → canonical DB value
+
 	if ctx.GameData != nil {
+		tr := ctx.Tr()
+		enTr := ctx.Translations.For("en")
+
+		// Grunt types from template strings
 		for _, grunt := range ctx.GameData.Grunts {
 			canonical := strings.ToLower(gamedata.TypeNameFromTemplate(grunt.Template))
 			if canonical == "" {
 				continue
 			}
-			validGruntTypes[canonical] = canonical
+			validTypes[canonical] = canonical
 
-			// Add simplified versions for leaders/executives
+			// Simplified leader/executive names
 			tmpl := strings.ToLower(grunt.Template)
 			if strings.HasPrefix(tmpl, "character_executive_") {
-				// CHARACTER_EXECUTIVE_ARLO → "arlo"
 				short := strings.TrimPrefix(tmpl, "character_executive_")
-				// Strip gender suffix if present (e.g. "_male", "_female")
 				short = strings.TrimSuffix(short, "_male")
 				short = strings.TrimSuffix(short, "_female")
 				if short != "" {
-					validGruntTypes[short] = canonical
+					validTypes[short] = canonical
 				}
 			} else if strings.HasPrefix(tmpl, "character_") && !strings.Contains(tmpl, "_grunt") {
-				// CHARACTER_GIOVANNI → "giovanni"
 				short := strings.TrimPrefix(tmpl, "character_")
 				short = strings.TrimSuffix(short, "_male")
 				short = strings.TrimSuffix(short, "_female")
 				if short != "" && short != canonical {
-					validGruntTypes[short] = canonical
+					validTypes[short] = canonical
+				}
+			}
+
+			// Translated type names for typed grunts (e.g. German "Drache" → "dragon")
+			if grunt.TypeID > 0 {
+				typeKey := gamedata.TypeTranslationKey(grunt.TypeID)
+				translated := strings.ToLower(tr.T(typeKey))
+				if translated != typeKey {
+					validTypes[translated] = canonical
+				}
+				enTranslated := strings.ToLower(enTr.T(typeKey))
+				if enTranslated != typeKey && enTranslated != translated {
+					validTypes[enTranslated] = canonical
+				}
+			}
+		}
+
+		// Pokestop events (kecleon, showcase, gold-stop)
+		if ctx.GameData.Util != nil {
+			for _, event := range ctx.GameData.Util.PokestopEvent {
+				name := strings.ToLower(event.Name)
+				if name != "" {
+					validTypes[name] = name
 				}
 			}
 		}
 	}
 
-	// Match unrecognized args against valid grunt type names.
+	// Match unrecognized args against valid type/event names
 	var gruntTypes []string
 	if parsed.HasKeyword("arg.everything") {
 		gruntTypes = append(gruntTypes, "everything")
 	} else {
 		for _, arg := range parsed.Unrecognized {
 			lower := strings.ToLower(arg)
-			if canonical, ok := validGruntTypes[lower]; ok {
+			if canonical, ok := validTypes[lower]; ok {
 				gruntTypes = append(gruntTypes, canonical)
 			}
 		}
