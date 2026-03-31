@@ -45,6 +45,7 @@ type TrackingConfig struct {
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
 	Locale               string `toml:"locale"`                // default language code (e.g. "en", "pl")
+	RoleCheckMode        string `toml:"role_check_mode"`       // "ignore", "disable-user", "delete"
 	DefaultTemplateName  any    `toml:"default_template_name"` // default DTS template (typically 1 or "1")
 	RdmURL               string `toml:"rdm_url"`
 	ReactMapURL          string `toml:"react_map_url"`
@@ -100,6 +101,7 @@ type AlerterConfig struct {
 type DiscordConfig struct {
 	Token                   any                  `toml:"token"` // string or []string
 	Prefix                  string               `toml:"prefix"`
+	Channels                []string             `toml:"channels"` // registration channel IDs
 	IvColors                []string             `toml:"iv_colors"`
 	Admins                  []string             `toml:"admins"`
 	UploadEmbedImages       bool                 `toml:"upload_embed_images"`
@@ -121,8 +123,9 @@ func (c DiscordConfig) DiscordTokens() []string {
 
 // TelegramConfig reads the [telegram] section for fields the processor needs.
 type TelegramConfig struct {
-	Token  any      `toml:"token"` // string or []string
-	Admins []string `toml:"admins"`
+	Token    any      `toml:"token"` // string or []string
+	Channels []string `toml:"channels"` // registration channel/group IDs
+	Admins   []string `toml:"admins"`
 }
 
 // TelegramTokens returns the telegram tokens as a string slice.

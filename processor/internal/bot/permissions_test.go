@@ -24,10 +24,7 @@ func testConfig() *config.Config {
 				},
 			},
 		},
-		Telegram: struct {
-			Token   any      `toml:"token"`
-			Admins  []string `toml:"admins"`
-		}{
+		Telegram: config.TelegramConfig{
 			Admins: []string{"tg_admin1"},
 		},
 	}

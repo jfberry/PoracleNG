@@ -404,6 +404,16 @@
   "cmd.script.none": "No tracking to export",
   "cmd.script.file": "Here is your tracking script:",
 
+  "cmd.poracle.dm_only_telegram": "Please register in a group, not in a direct message",
+
+  "cmd.unregister.admin_no_targets": "No-one to unregister: as an admin I won't let you unregister yourself",
+  "cmd.unregister.success": "Unregistered: {0}",
+
+  "cmd.community.usage": "Valid commands are `{0}community add <name> <targets>`, `{0}community remove <name> <targets>`, `{0}community clear <targets>`, `{0}community show <targets>`, `{0}community list`",
+  "cmd.community.none": "No communities configured",
+  "cmd.community.valid": "These are the valid communities:",
+  "cmd.community.no_targets": "No targets listed",
+
   "cmd.unrecognized": "Unrecognized: {0}",
   "cmd.unknown": "Unknown command. Try {0}",
   "cmd.no_invasion_type": "No valid invasion types found",
