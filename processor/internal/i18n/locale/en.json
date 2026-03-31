@@ -304,5 +304,34 @@
   "cmd.weather.unavailable": "Weather tracking is not yet available via this command",
 
   "cmd.script.none": "No tracking to export",
-  "cmd.script.file": "Here is your tracking script:"
+  "cmd.script.file": "Here is your tracking script:",
+
+  "cmd.no_permission": "You do not have permission to execute this command",
+  "cmd.no_permission.pokemon": "You do not have permission to track monsters",
+  "cmd.no_permission.gym": "You do not have permission to track gyms",
+  "cmd.no_permission.invasion": "You do not have permission to track invasions",
+  "cmd.no_permission.lure": "You do not have permission to track lures",
+  "cmd.no_permission.maxbattle": "You do not have permission to track maxbattles",
+  "cmd.no_permission.fort": "You do not have permission to track fort changes",
+
+  "cmd.stop.has_args": "All alert messages have been stopped, you can resume them with {0}{1}",
+  "cmd.stop.success": "All alert messages have been stopped",
+  "cmd.start.success": "Alert messages resumed",
+
+  "cmd.language.changed": "I have changed your language setting to {0}",
+  "cmd.language.current": "Current language is set to {0}",
+
+  "cmd.location.not_found": "Could not understand the location",
+  "cmd.location.new": "New location",
+
+  "cmd.area.display": "Area display: {0}",
+  "cmd.area.overview_display": "Overview display",
+  "cmd.area.invalid": "No valid areas. Use `{0}{1} list`",
+  "cmd.area.current": "Current configured areas are:",
+
+  "cmd.userlist.registered": "These users are registered with Poracle:",
+  "cmd.channel.added": "Channel added",
+  "cmd.webhook.added": "Webhook added",
+  "cmd.dm_only": "Please run commands in Direct Messages",
+  "cmd.admin_no_distance": "Warning: Admin command detected without distance set - using default distance"
 }
