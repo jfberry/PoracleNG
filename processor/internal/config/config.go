@@ -88,12 +88,20 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Token              any      `toml:"token"` // string or []string
-	Prefix             string   `toml:"prefix"`
-	IvColors           []string `toml:"iv_colors"`
-	Admins             []string `toml:"admins"`
-	UploadEmbedImages  bool     `toml:"upload_embed_images"`
-	MessageDeleteDelay int      `toml:"message_delete_delay"` // extra ms for clean TTH on channels
+	Token                   any                  `toml:"token"` // string or []string
+	Prefix                  string               `toml:"prefix"`
+	IvColors                []string             `toml:"iv_colors"`
+	Admins                  []string             `toml:"admins"`
+	UploadEmbedImages       bool                 `toml:"upload_embed_images"`
+	MessageDeleteDelay      int                  `toml:"message_delete_delay"` // extra ms for clean TTH on channels
+	CommandSecurity         map[string][]string  `toml:"command_security"`
+	DelegatedAdministration DelegatedAdminConfig `toml:"delegated_administration"`
+}
+
+// DelegatedAdminConfig controls who can manage tracking for channels and webhooks.
+type DelegatedAdminConfig struct {
+	ChannelTracking map[string][]string `toml:"channel_tracking"` // channelID/guildID/categoryID → allowed userIDs/roleIDs
+	WebhookTracking map[string][]string `toml:"webhook_tracking"` // webhookName → allowed userIDs
 }
 
 // DiscordTokens returns the discord tokens as a string slice.
