@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,6 +11,17 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
+
+// cpMultipliers holds the standard CP multiplier values for specific levels
+// used in the hundo CP table display. These are the official PoGO values.
+var cpMultipliers = map[int]float64{
+	15: 0.51739395,
+	20: 0.5974000,
+	25: 0.667934,
+	40: 0.7903,
+	50: 0.84029999,
+	51: 0.84529999,
+}
 
 // InfoCommand implements !info — show pokemon info, type matchups, stats,
 // weather, shiny rates, rarity, moves, items, and admin debug tools.
@@ -26,28 +37,34 @@ func (c *InfoCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	sub := strings.ToLower(args[0])
 
-	switch sub {
-	case "moves":
+	tr := ctx.Tr()
+	enTr := ctx.Translations.For("en")
+	matchSub := func(key string) bool {
+		return sub == strings.ToLower(tr.T(key)) || sub == strings.ToLower(enTr.T(key))
+	}
+
+	switch {
+	case matchSub("cmd.info.sub.moves"):
 		return c.listMoves(ctx)
-	case "items":
+	case matchSub("cmd.info.sub.items"):
 		return c.listItems(ctx)
-	case "shiny":
+	case matchSub("cmd.info.sub.shiny"):
 		return c.shinyStats(ctx)
-	case "rarity":
+	case matchSub("cmd.info.sub.rarity"):
 		return c.rarityStats(ctx)
-	case "weather":
+	case matchSub("cmd.info.sub.weather"):
 		return c.weatherInfo(ctx, args[1:])
-	case "poracle":
+	case matchSub("cmd.info.sub.poracle"):
 		if !ctx.IsAdmin {
 			return []bot.Reply{{React: "🙅"}}
 		}
 		return c.poracleInfo(ctx)
-	case "translate":
+	case matchSub("cmd.info.sub.translate"):
 		if !ctx.IsAdmin {
 			return []bot.Reply{{React: "🙅"}}
 		}
 		return c.translateDebug(ctx, args[1:])
-	case "dts":
+	case matchSub("cmd.info.sub.dts"):
 		if !ctx.IsAdmin {
 			return []bot.Reply{{React: "🙅"}}
 		}
@@ -202,6 +219,28 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		sb.WriteString(tr.Tf("cmd.info.evolves_to", strings.Join(evoStrs, ", ")) + "\n")
 	}
 
+	// Available forms for tracking
+	forms := c.availableForms(ctx, pokemonID)
+	if len(forms) > 0 {
+		sb.WriteByte('\n')
+		sb.WriteString(tr.T("cmd.info.available_forms") + "\n")
+		for _, f := range forms {
+			sb.WriteString("  " + f + "\n")
+		}
+	}
+
+	// Hundo CP table
+	if mon.Attack > 0 || mon.Defense > 0 || mon.Stamina > 0 {
+		sb.WriteByte('\n')
+		sb.WriteString(tr.T("cmd.info.hundo_cp") + "\n")
+		levels := []int{15, 20, 25, 40, 50, 51}
+		levelLabels := []string{"L15", "L20", "L25", "L40", "L50", "L51"}
+		for i, level := range levels {
+			cp := calculateCP(mon.Attack, mon.Defense, mon.Stamina, 15, 15, 15, level)
+			sb.WriteString(fmt.Sprintf("  %s: %d\n", levelLabels[i], cp))
+		}
+	}
+
 	// Weakness calculation
 	categories := gamedata.CalculateWeaknesses(mon.Types, ctx.GameData.Types)
 	if len(categories) > 0 {
@@ -219,6 +258,94 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	return []bot.Reply{{Text: sb.String()}}
 }
 
+// availableForms returns a list of form display strings for a pokemon,
+// formatted as users would type them in tracking commands.
+func (c *InfoCommand) availableForms(ctx *bot.CommandContext, pokemonID int) []string {
+	if ctx.GameData == nil {
+		return nil
+	}
+
+	tr := ctx.Tr()
+	enTr := ctx.Translations.For("en")
+	pokeName := enTr.T(gamedata.PokemonTranslationKey(pokemonID))
+
+	type formEntry struct {
+		formID   int
+		display  string
+		sortName string
+	}
+	var entries []formEntry
+
+	for key, _ := range ctx.GameData.Monsters {
+		if key.ID != pokemonID {
+			continue
+		}
+		if key.Form == 0 {
+			entries = append(entries, formEntry{
+				formID:   0,
+				display:  pokeName,
+				sortName: "",
+			})
+			continue
+		}
+		formName := tr.T(gamedata.FormTranslationKey(key.Form))
+		formKey := gamedata.FormTranslationKey(key.Form)
+		if formName == formKey {
+			// No translation available, use English
+			formName = enTr.T(formKey)
+			if formName == formKey {
+				continue // no translation at all, skip
+			}
+		}
+		// For tracking, users type form names with underscores replacing spaces
+		trackingName := strings.ReplaceAll(strings.ToLower(formName), " ", "_")
+		entries = append(entries, formEntry{
+			formID:   key.Form,
+			display:  fmt.Sprintf("%s form:%s", pokeName, trackingName),
+			sortName: formName,
+		})
+	}
+
+	// Only show if there's more than just the base form
+	if len(entries) <= 1 {
+		return nil
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		// Base form first, then alphabetical
+		if entries[i].formID == 0 {
+			return true
+		}
+		if entries[j].formID == 0 {
+			return true
+		}
+		return entries[i].sortName < entries[j].sortName
+	})
+
+	result := make([]string, len(entries))
+	for i, e := range entries {
+		result[i] = e.display
+	}
+	return result
+}
+
+// calculateCP computes the CP for a pokemon given base stats, IVs, and level.
+// Formula: max(10, floor((baseAtk+ivAtk) * sqrt(baseDef+ivDef) * sqrt(baseSta+ivSta) * cpMulti^2 / 10))
+func calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivSta, level int) int {
+	multi, ok := cpMultipliers[level]
+	if !ok {
+		return 0
+	}
+	atk := float64(baseAtk + ivAtk)
+	def := float64(baseDef + ivDef)
+	sta := float64(baseSta + ivSta)
+	cp := int(math.Floor(atk * math.Sqrt(def) * math.Sqrt(sta) * multi * multi / 10))
+	if cp < 10 {
+		cp = 10
+	}
+	return cp
+}
+
 func (c *InfoCommand) listMoves(ctx *bot.CommandContext) []bot.Reply {
 	if ctx.GameData == nil || len(ctx.GameData.Moves) == 0 {
 		tr := ctx.Tr()
@@ -226,9 +353,13 @@ func (c *InfoCommand) listMoves(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	tr := ctx.Tr()
-	var sb strings.Builder
-	count := 0
 
+	type moveEntry struct {
+		name     string
+		typeName string
+	}
+
+	var entries []moveEntry
 	for id := 1; id <= 1000; id++ {
 		move, ok := ctx.GameData.Moves[id]
 		if !ok {
@@ -242,12 +373,23 @@ func (c *InfoCommand) listMoves(ctx *bot.CommandContext) []bot.Reply {
 		if move.TypeID > 0 {
 			typeName = tr.T(gamedata.TypeTranslationKey(move.TypeID))
 		}
-		if typeName != "" {
-			sb.WriteString(fmt.Sprintf("%s (%s)\n", name, typeName))
+		// For tracking, users type move names with underscores replacing spaces
+		trackingName := strings.ReplaceAll(name, " ", "_")
+		entries = append(entries, moveEntry{name: trackingName, typeName: typeName})
+	}
+
+	// Sort alphabetically
+	sort.Slice(entries, func(i, j int) bool {
+		return strings.ToLower(entries[i].name) < strings.ToLower(entries[j].name)
+	})
+
+	var sb strings.Builder
+	for _, e := range entries {
+		if e.typeName != "" {
+			sb.WriteString(fmt.Sprintf("%s (%s)\n", e.name, e.typeName))
 		} else {
-			sb.WriteString(name + "\n")
+			sb.WriteString(e.name + "\n")
 		}
-		count++
 	}
 
 	text := sb.String()
@@ -256,7 +398,7 @@ func (c *InfoCommand) listMoves(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	return []bot.Reply{{
-		Text: tr.Tf("cmd.info.moves_header", strconv.Itoa(count)),
+		Text: tr.Tf("cmd.info.moves_header", strconv.Itoa(len(entries))),
 		Attachment: &bot.Attachment{
 			Filename: "moves.txt",
 			Content:  []byte(text),
@@ -271,8 +413,10 @@ func (c *InfoCommand) listItems(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	tr := ctx.Tr()
-	var sb strings.Builder
-	count := 0
+
+	// Collect unique item names, deduplicated
+	seen := make(map[string]struct{})
+	var names []string
 
 	for id := 1; id <= 2000; id++ {
 		_, ok := ctx.GameData.Items[id]
@@ -283,8 +427,24 @@ func (c *InfoCommand) listItems(ctx *bot.CommandContext) []bot.Reply {
 		if name == gamedata.ItemTranslationKey(id) {
 			continue // no translation
 		}
-		sb.WriteString(name + "\n")
-		count++
+		// Replace underscores with spaces for readability
+		displayName := strings.ReplaceAll(name, "_", " ")
+		lower := strings.ToLower(displayName)
+		if _, dup := seen[lower]; dup {
+			continue
+		}
+		seen[lower] = struct{}{}
+		names = append(names, displayName)
+	}
+
+	// Sort alphabetically
+	sort.Slice(names, func(i, j int) bool {
+		return strings.ToLower(names[i]) < strings.ToLower(names[j])
+	})
+
+	var sb strings.Builder
+	for _, n := range names {
+		sb.WriteString(n + "\n")
 	}
 
 	text := sb.String()
@@ -293,7 +453,7 @@ func (c *InfoCommand) listItems(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	return []bot.Reply{{
-		Text: tr.Tf("cmd.info.items_header", strconv.Itoa(count)),
+		Text: tr.Tf("cmd.info.items_header", strconv.Itoa(len(names))),
 		Attachment: &bot.Attachment{
 			Filename: "items.txt",
 			Content:  []byte(text),
@@ -585,23 +745,40 @@ func (c *InfoCommand) translateDebug(ctx *bot.CommandContext, args []string) []b
 	return []bot.Reply{{Text: text}}
 }
 
-// dtsInfo lists DTS template configurations (admin only).
+// dtsInfo shows a summary of loaded DTS templates (admin only).
 func (c *InfoCommand) dtsInfo(ctx *bot.CommandContext) []bot.Reply {
 	if ctx.DTS == nil {
 		return []bot.Reply{{Text: "DTS templates not loaded"}}
 	}
 
-	meta := ctx.DTS.TemplateMetadata(true)
-	data, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return []bot.Reply{{React: "🙅"}}
+	tr := ctx.Tr()
+	summary := ctx.DTS.TemplateSummary()
+
+	var sb strings.Builder
+	sb.WriteString(tr.T("cmd.info.dts_summary") + "\n")
+
+	// Sort types for consistent output
+	types := make([]string, 0, len(summary))
+	for t := range summary {
+		types = append(types, t)
+	}
+	sort.Strings(types)
+
+	for _, t := range types {
+		byPlatform := summary[t]
+		// Sort platforms for consistent output
+		platforms := make([]string, 0, len(byPlatform))
+		for p := range byPlatform {
+			platforms = append(platforms, p)
+		}
+		sort.Strings(platforms)
+
+		var parts []string
+		for _, p := range platforms {
+			parts = append(parts, fmt.Sprintf("%s(%d)", p, byPlatform[p]))
+		}
+		sb.WriteString(fmt.Sprintf("  %s: %s\n", t, strings.Join(parts, " ")))
 	}
 
-	return []bot.Reply{{
-		Text: "**DTS Templates:**",
-		Attachment: &bot.Attachment{
-			Filename: "dts_templates.json",
-			Content:  data,
-		},
-	}}
+	return []bot.Reply{{Text: sb.String()}}
 }

@@ -433,6 +433,27 @@ func (ts *TemplateStore) TemplateMetadata(includeDescriptions bool) map[string]a
 	return result
 }
 
+// TemplateSummary returns a map of type → platform → count for loaded templates.
+// Hidden entries are excluded.
+func (ts *TemplateStore) TemplateSummary() map[string]map[string]int {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	result := make(map[string]map[string]int)
+	for _, e := range ts.entries {
+		if e.Hidden {
+			continue
+		}
+		byPlatform, ok := result[e.Type]
+		if !ok {
+			byPlatform = make(map[string]int)
+			result[e.Type] = byPlatform
+		}
+		byPlatform[e.Platform]++
+	}
+	return result
+}
+
 // LogSummary logs a summary of loaded templates and warns about types missing defaults.
 func (ts *TemplateStore) LogSummary() {
 	ts.mu.RLock()
