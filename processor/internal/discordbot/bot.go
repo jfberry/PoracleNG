@@ -15,6 +15,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
@@ -35,6 +36,7 @@ type Bot struct {
 	translations *i18n.Bundle
 	dispatcher *delivery.Dispatcher
 	rowText    *rowtext.Generator
+	geocoder   *geocoding.Geocoder
 	reloadFunc func()
 }
 
@@ -52,6 +54,7 @@ type Config struct {
 	Parser       *bot.Parser
 	ArgMatcher   *bot.ArgMatcher
 	Resolver     *bot.PokemonResolver
+	Geocoder     *geocoding.Geocoder
 	ReloadFunc   func()
 }
 
@@ -75,6 +78,7 @@ func New(cfg Config) (*Bot, error) {
 		translations: cfg.Translations,
 		dispatcher:   cfg.Dispatcher,
 		rowText:      cfg.RowText,
+		geocoder:     cfg.Geocoder,
 		reloadFunc:   cfg.ReloadFunc,
 	}
 
@@ -121,7 +125,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	channelID := m.ChannelID
 
 	// Look up user state
-	userLang, profileNo, hasLocation, hasArea := lookupUserState(b.db, m.Author.ID, b.cfg.General.Locale)
+	userLang, profileNo, hasLocation, hasArea, isRegistered := lookupUserState(b.db, m.Author.ID, b.cfg.General.Locale)
 	isAdmin := bot.IsAdmin(b.cfg, "discord", m.Author.ID)
 
 	// Determine target type
@@ -149,6 +153,13 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 		handler := b.registry.Lookup(cmd.CommandKey)
 		if handler == nil {
+			continue
+		}
+
+		// Registration check — skip for poracle (registration), poracle_test, and version commands
+		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.poracle_test" && cmd.CommandKey != "cmd.version" {
+			tr := b.translations.For(userLang)
+			s.ChannelMessageSend(channelID, tr.T("cmd.not_registered"))
 			continue
 		}
 
@@ -185,6 +196,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			RowText:      b.rowText,
 			Resolver:     b.resolver,
 			ArgMatcher:   b.argMatcher,
+			Geocoder:     b.geocoder,
 			ReloadFunc:   b.reloadFunc,
 		}
 
@@ -292,7 +304,8 @@ func splitMessage(text string, maxLen int) []string {
 }
 
 // lookupUserState loads basic user info for command context building.
-func lookupUserState(database *sqlx.DB, userID, defaultLocale string) (lang string, profileNo int, hasLocation, hasArea bool) {
+// isRegistered is true when the user exists in the humans table.
+func lookupUserState(database *sqlx.DB, userID, defaultLocale string) (lang string, profileNo int, hasLocation, hasArea, isRegistered bool) {
 	lang = defaultLocale
 	profileNo = 1
 
@@ -308,6 +321,7 @@ func lookupUserState(database *sqlx.DB, userID, defaultLocale string) (lang stri
 		return
 	}
 
+	isRegistered = true
 	if h.Language != nil && *h.Language != "" {
 		lang = *h.Language
 	}

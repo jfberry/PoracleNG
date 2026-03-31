@@ -24,6 +24,9 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if usage := usageReply(ctx, args, "cmd.track.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
+	if help := helpArgReply(ctx, args, "cmd.track.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
 
 	// Build params list — some are conditional on permissions
 	params := trackParams(ctx)
@@ -297,6 +300,7 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	if d, ok := parsed.Singles["d"]; ok {
 		f.distance = d
 	}
+	f.distance = enforceDistance(ctx, f.distance)
 
 	// Template
 	if t, ok := parsed.Strings["template"]; ok {

@@ -31,6 +31,9 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if usage := usageReply(ctx, args, "cmd.gym.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
+	if help := helpArgReply(ctx, args, "cmd.gym.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
 
 	parsed := ctx.ArgMatcher.Match(args, gymParams, ctx.Language)
 
@@ -46,6 +49,7 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if d, ok := parsed.Singles["d"]; ok {
 		distance = d
 	}
+	distance = enforceDistance(ctx, distance)
 	clean := parsed.HasKeyword("arg.clean")
 	slotChanges := parsed.HasKeyword("arg.slot_changes")
 
@@ -111,6 +115,9 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			if isUpd {
 				u := insert[i]
 				u.UID = uid
+				// Preserve gym_id from the existing row (gym-specific tracking
+				// is set via the scanner DB, not via user command args)
+				u.GymID = existing.GymID
 				updates = append(updates, u)
 				insert = append(insert[:i], insert[i+1:]...)
 				break

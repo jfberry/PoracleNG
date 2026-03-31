@@ -1,13 +1,14 @@
 package commands
 
 import (
-	"fmt"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 )
 
 // InvasionCommand implements !invasion / !incident — track Team Rocket invasions.
@@ -23,7 +24,6 @@ var invasionParams = []bot.ParamDef{
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
 	{Type: bot.ParamGender},
-	{Type: bot.ParamTypeName},
 }
 
 func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
@@ -32,12 +32,11 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	if usage := usageReply(ctx, args, "cmd.invasion.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
+	if help := helpArgReply(ctx, args, "cmd.invasion.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
 
 	parsed := ctx.ArgMatcher.Match(args, invasionParams, ctx.Language)
-
-	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
-		return []bot.Reply{*warn}
-	}
 
 	template := ctx.DefaultTemplate()
 	if t, ok := parsed.Strings["template"]; ok {
@@ -47,22 +46,45 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	if d, ok := parsed.Singles["d"]; ok {
 		distance = d
 	}
+	distance = enforceDistance(ctx, distance)
 	clean := parsed.HasKeyword("arg.clean")
 	gender := parsed.Gender
 
-	// Resolve grunt types from type names
-	// In the DB, grunt_type is stored as a string like "mixed" or a type name.
-	// Type IDs from ParamTypeName are used to build the grunt_type string.
+	// Build valid grunt type name set from game data (matching alerter behavior).
+	// The DB stores grunt_type as lowercased English type names like "dragon",
+	// "giovanni", "mixed", "water", etc.
+	validGruntTypes := make(map[string]bool)
+	if ctx.GameData != nil {
+		for _, grunt := range ctx.GameData.Grunts {
+			name := strings.ToLower(gamedata.TypeNameFromTemplate(grunt.Template))
+			if name != "" {
+				validGruntTypes[name] = true
+			}
+		}
+	}
+
+	// Match unrecognized args against valid grunt type names.
 	var gruntTypes []string
 	if parsed.HasKeyword("arg.everything") {
-		gruntTypes = append(gruntTypes, "") // empty = everything
-	} else if len(parsed.Types) > 0 {
-		for _, typeID := range parsed.Types {
-			gruntTypes = append(gruntTypes, fmt.Sprintf("%d", typeID))
-		}
+		gruntTypes = append(gruntTypes, "everything")
 	} else {
-		// Default: empty string (any grunt)
-		gruntTypes = append(gruntTypes, "")
+		for _, arg := range parsed.Unrecognized {
+			lower := strings.ToLower(arg)
+			if validGruntTypes[lower] {
+				gruntTypes = append(gruntTypes, lower)
+			}
+		}
+	}
+
+	// If nothing matched, report unrecognized or default to everything
+	if len(gruntTypes) == 0 && !parsed.HasKeyword("arg.remove") {
+		if len(parsed.Unrecognized) > 0 {
+			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_invasion_type")}}
+		}
+		gruntTypes = append(gruntTypes, "everything")
+	}
+	if len(gruntTypes) == 0 {
+		gruntTypes = append(gruntTypes, "everything")
 	}
 
 	if parsed.HasKeyword("arg.remove") {
@@ -164,8 +186,8 @@ func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, gruntTypes []
 
 	var uids []int64
 	for _, existing := range tracked {
-		// Empty string in gtSet means "everything" — remove all
-		if gtSet[""] || gtSet[existing.GruntType] {
+		// "everything" means remove all
+		if gtSet["everything"] || gtSet[existing.GruntType] {
 			uids = append(uids, existing.UID)
 		}
 	}

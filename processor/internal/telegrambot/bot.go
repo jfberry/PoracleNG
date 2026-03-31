@@ -16,6 +16,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
@@ -36,6 +37,7 @@ type Bot struct {
 	translations *i18n.Bundle
 	dispatcher *delivery.Dispatcher
 	rowText    *rowtext.Generator
+	geocoder   *geocoding.Geocoder
 	reloadFunc func()
 	stopCh     chan struct{}
 }
@@ -54,6 +56,7 @@ type Config struct {
 	Parser       *bot.Parser
 	ArgMatcher   *bot.ArgMatcher
 	Resolver     *bot.PokemonResolver
+	Geocoder     *geocoding.Geocoder
 	ReloadFunc   func()
 }
 
@@ -77,6 +80,7 @@ func New(cfg Config) (*Bot, error) {
 		translations: cfg.Translations,
 		dispatcher:   cfg.Dispatcher,
 		rowText:      cfg.RowText,
+		geocoder:     cfg.Geocoder,
 		reloadFunc:   cfg.ReloadFunc,
 		stopCh:       make(chan struct{}),
 	}
@@ -167,7 +171,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 	isDM := m.Chat.Type == "private"
 	chatID := m.Chat.ID
 
-	userLang, profileNo, hasLocation, hasArea := lookupUserState(b.db, userID, b.cfg.General.Locale)
+	userLang, profileNo, hasLocation, hasArea, isRegistered := lookupUserState(b.db, userID, b.cfg.General.Locale)
 	isAdmin := bot.IsAdmin(b.cfg, "telegram", userID)
 
 	targetType := "telegram:user"
@@ -190,6 +194,14 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 
 		handler := b.registry.Lookup(cmd.CommandKey)
 		if handler == nil {
+			continue
+		}
+
+		// Registration check — skip for poracle (registration), poracle_test, and version commands
+		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.poracle_test" && cmd.CommandKey != "cmd.version" {
+			tr := b.translations.For(userLang)
+			replyMsg := tgbotapi.NewMessage(chatID, tr.T("cmd.not_registered"))
+			b.api.Send(replyMsg)
 			continue
 		}
 
@@ -218,6 +230,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			RowText:      b.rowText,
 			Resolver:     b.resolver,
 			ArgMatcher:   b.argMatcher,
+			Geocoder:     b.geocoder,
 			ReloadFunc:   b.reloadFunc,
 		}
 
@@ -298,7 +311,9 @@ func splitMessage(text string, maxLen int) []string {
 	return messages
 }
 
-func lookupUserState(database *sqlx.DB, userID, defaultLocale string) (lang string, profileNo int, hasLocation, hasArea bool) {
+// lookupUserState loads basic user info for command context building.
+// isRegistered is true when the user exists in the humans table.
+func lookupUserState(database *sqlx.DB, userID, defaultLocale string) (lang string, profileNo int, hasLocation, hasArea, isRegistered bool) {
 	lang = defaultLocale
 	profileNo = 1
 	var h struct {
@@ -312,6 +327,7 @@ func lookupUserState(database *sqlx.DB, userID, defaultLocale string) (lang stri
 	if err != nil {
 		return
 	}
+	isRegistered = true
 	if h.Language != nil && *h.Language != "" {
 		lang = *h.Language
 	}

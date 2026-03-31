@@ -38,6 +38,9 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	if usage := usageReply(ctx, args, "cmd.maxbattle.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
+	if help := helpArgReply(ctx, args, "cmd.maxbattle.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
 
 	parsed := ctx.ArgMatcher.Match(args, maxbattleParams, ctx.Language)
 
@@ -53,6 +56,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	if d, ok := parsed.Singles["d"]; ok {
 		distance = d
 	}
+	distance = enforceDistance(ctx, distance)
 	clean := parsed.HasKeyword("arg.clean")
 
 	gmax := 0

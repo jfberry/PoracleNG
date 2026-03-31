@@ -11,6 +11,54 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 )
 
+// matchItemName tries to match unrecognized args against item names from game data
+// using item_{id} translation keys. Returns the item ID or 0 if no match.
+func (c *QuestCommand) matchItemName(ctx *bot.CommandContext, parsed *bot.ParsedArgs) int {
+	if ctx.GameData == nil || len(parsed.Unrecognized) == 0 {
+		return 0
+	}
+
+	tr := ctx.Tr()
+	enTr := ctx.Translations.For("en")
+
+	// Join all unrecognized args into a single string for multi-word item names
+	// e.g. "golden razz berry" from quoted input or separate tokens
+	fullPhrase := strings.ToLower(strings.Join(parsed.Unrecognized, " "))
+
+	for id := range ctx.GameData.Items {
+		key := gamedata.ItemTranslationKey(id)
+		translatedName := strings.ToLower(tr.T(key))
+		enName := strings.ToLower(enTr.T(key))
+
+		// Skip untranslated keys (returns the key itself)
+		if translatedName == strings.ToLower(key) && enName == strings.ToLower(key) {
+			continue
+		}
+
+		if fullPhrase == translatedName || fullPhrase == enName {
+			return id
+		}
+	}
+
+	// Also try matching individual unrecognized args (single-word items)
+	for _, arg := range parsed.Unrecognized {
+		lower := strings.ToLower(arg)
+		for id := range ctx.GameData.Items {
+			key := gamedata.ItemTranslationKey(id)
+			translatedName := strings.ToLower(tr.T(key))
+			enName := strings.ToLower(enTr.T(key))
+			if translatedName == strings.ToLower(key) && enName == strings.ToLower(key) {
+				continue
+			}
+			if lower == translatedName || lower == enName {
+				return id
+			}
+		}
+	}
+
+	return 0
+}
+
 // QuestCommand implements !quest — track quest rewards (pokemon, stardust, items, candy, energy).
 type QuestCommand struct{}
 
@@ -40,6 +88,9 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if usage := usageReply(ctx, args, "cmd.quest.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
+	if help := helpArgReply(ctx, args, "cmd.quest.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
 
 	parsed := ctx.ArgMatcher.Match(args, questParams, ctx.Language)
 
@@ -55,6 +106,7 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if d, ok := parsed.Singles["d"]; ok {
 		distance = d
 	}
+	distance = enforceDistance(ctx, distance)
 	clean := parsed.HasKeyword("arg.clean")
 	shiny := parsed.HasKeyword("arg.shiny")
 
@@ -141,6 +193,9 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				Amount:     0,
 			})
 		}
+	} else if itemID := c.matchItemName(ctx, parsed); itemID > 0 {
+		// Item quest tracking (reward_type = 2)
+		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, 2, itemID, 0, 0))
 	} else {
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_quest_type")}}
 	}

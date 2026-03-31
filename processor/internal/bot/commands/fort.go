@@ -36,6 +36,9 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if usage := usageReply(ctx, args, "cmd.fort.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
+	if help := helpArgReply(ctx, args, "cmd.fort.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
 
 	parsed := ctx.ArgMatcher.Match(args, fortParams, ctx.Language)
 
@@ -51,6 +54,7 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if d, ok := parsed.Singles["d"]; ok {
 		distance = d
 	}
+	distance = enforceDistance(ctx, distance)
 	includeEmpty := parsed.HasKeyword("arg.include_empty")
 
 	// Determine fort_type

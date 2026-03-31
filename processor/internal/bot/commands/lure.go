@@ -28,6 +28,9 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if usage := usageReply(ctx, args, "cmd.lure.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
+	if help := helpArgReply(ctx, args, "cmd.lure.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
 
 	parsed := ctx.ArgMatcher.Match(args, lureParams, ctx.Language)
 
@@ -43,6 +46,7 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if d, ok := parsed.Singles["d"]; ok {
 		distance = d
 	}
+	distance = enforceDistance(ctx, distance)
 	clean := parsed.HasKeyword("arg.clean")
 
 	// Collect lure IDs

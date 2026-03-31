@@ -490,6 +490,7 @@ func main() {
 			Parser:       cmdParser,
 			ArgMatcher:   cmdArgMatcher,
 			Resolver:     cmdResolver,
+			Geocoder:     proc.enricher.Geocoder,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {
@@ -516,6 +517,7 @@ func main() {
 			Parser:       tgParser,
 			ArgMatcher:   cmdArgMatcher,
 			Resolver:     cmdResolver,
+			Geocoder:     proc.enricher.Geocoder,
 			ReloadFunc:   proc.triggerReload,
 		})
 		if err != nil {
