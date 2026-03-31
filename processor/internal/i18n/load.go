@@ -12,15 +12,23 @@ import (
 // Load creates a Bundle with translations from multiple sources, merged in
 // order (later wins):
 //
-//  1. Embedded locale JSON       — bundled processor-specific messages
-//  2. resources/gamelocale/*.json — game data translations (pogo-translations identifier keys)
-//  3. resources/locale/*.json    — game data translations (enRefMerged, for backward compat)
-//  4. alerter/locale/*.json      — alerter message translations
-//  5. config/custom.*.json       — admin overrides per locale
+//  1. resources/gamelocale/*.json — game data translations (pogo-translations identifier keys)
+//  2. Embedded locale JSON       — bundled processor-specific messages (can override game data)
+//  3. config/custom.*.json       — admin overrides per locale
 func Load(baseDir string) *Bundle {
 	b := NewBundle()
 
-	// 1. Embedded defaults (processor/internal/i18n/locale/*.json)
+	if baseDir != "" {
+		// 1. resources/gamelocale/*.json (identifier-key game data translations)
+		gameLocaleDir := filepath.Join(baseDir, "resources", "gamelocale")
+		if err := b.LoadJSONDir(gameLocaleDir); err != nil {
+			log.Debugf("i18n: no gamelocale dir at %s", gameLocaleDir)
+		}
+	}
+
+	// 2. Embedded defaults (processor/internal/i18n/locale/*.json)
+	// Loaded AFTER gamelocale so processor-specific overrides win
+	// (e.g. weather_1: "Sunny" overrides gamelocale's "Clear")
 	sub, err := fs.Sub(embeddedLocales, "locale")
 	if err != nil {
 		log.Errorf("i18n: failed to access embedded locales: %s", err)
@@ -32,12 +40,6 @@ func Load(baseDir string) *Bundle {
 
 	if baseDir == "" {
 		return b
-	}
-
-	// 2. resources/gamelocale/*.json (identifier-key game data translations)
-	gameLocaleDir := filepath.Join(baseDir, "resources", "gamelocale")
-	if err := b.LoadJSONDir(gameLocaleDir); err != nil {
-		log.Debugf("i18n: no gamelocale dir at %s", gameLocaleDir)
 	}
 
 	// 3. config/custom.{locale}.json (admin overrides)
