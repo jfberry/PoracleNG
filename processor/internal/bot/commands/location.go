@@ -21,6 +21,14 @@ var locationParams = []bot.ParamDef{
 
 func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
+
+	if usage := usageReply(ctx, args, "cmd.location.usage"); usage != nil {
+		return []bot.Reply{*usage}
+	}
+	if help := helpArgReply(ctx, args, "cmd.location.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, locationParams, ctx.Language)
 
 	// Remove location
