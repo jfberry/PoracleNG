@@ -55,6 +55,14 @@ func (t *Translator) TfNamed(key string, values map[string]string) string {
 	return FormatNamed(t.T(key), values)
 }
 
+// Messages returns the raw message map for building lookup tables.
+func (t *Translator) Messages() map[string]string {
+	if t == nil || t.messages == nil {
+		return nil
+	}
+	return t.messages
+}
+
 // Lang returns the locale code for this translator.
 func (t *Translator) Lang() string {
 	if t == nil {
