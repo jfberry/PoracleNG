@@ -48,18 +48,10 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 
 	language := ctx.Language
 
-	// Look up the template — the TemplateStore.Get handles the fallback chain:
-	// 1. type + platform + id + language
-	// 2. type + platform + id (any language)
-	// 3. type + platform + default + language
-	// 4. type + platform + default
-	// 5. type + any platform + id
-	var tmpl interface{ Exec(ctx interface{}) (string, error) }
-
-	if templateID != "" {
-		tmpl = ctx.DTS.Get(templateType, platform, templateID, language)
-	} else {
-		// For greeting, use default template
+	// Look up the compiled template
+	var tmpl = ctx.DTS.Get(templateType, platform, templateID, language)
+	if tmpl == nil && templateID == "" {
+		// For greeting with no ID, try common defaults
 		tmpl = ctx.DTS.Get(templateType, platform, "1", language)
 		if tmpl == nil {
 			tmpl = ctx.DTS.Get(templateType, platform, "default", language)
