@@ -52,7 +52,8 @@ type GeneralConfig struct {
 	ImgURLAlt            string `toml:"img_url_alt"`
 	StickerURL           string `toml:"sticker_url"`
 	RequestShinyImages   bool   `toml:"request_shiny_images"`
-	PopulatePokestopName bool   `toml:"populate_pokestop_name"`
+	PopulatePokestopName bool     `toml:"populate_pokestop_name"`
+	AvailableLanguages   []string `toml:"available_languages"`
 }
 
 type LocaleConfig struct {

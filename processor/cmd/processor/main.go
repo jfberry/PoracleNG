@@ -23,6 +23,8 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/pokemon/poracleng/processor/internal/api"
+	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -332,6 +334,42 @@ func main() {
 
 	// Delivery endpoint — accepts pre-rendered jobs from alerter commands (broadcast, etc.)
 	mux.HandleFunc("POST /api/deliverMessages", auth(api.HandleDeliverMessages(proc.dispatcher)))
+
+	// Command endpoint — bot command processing via API (for testing and future bot integration)
+	{
+		languages := cfg.General.AvailableLanguages
+		if len(languages) == 0 {
+			languages = []string{"en"}
+		}
+		prefix := cfg.Discord.Prefix
+		if prefix == "" {
+			prefix = "!"
+		}
+		cmdParser := bot.NewParser(prefix, proc.enricher.Translations, languages)
+		cmdResolver := bot.NewPokemonResolver(proc.enricher.GameData, proc.enricher.Translations, languages, nil)
+		cmdArgMatcher := bot.NewArgMatcher(proc.enricher.Translations, proc.enricher.GameData, cmdResolver, languages)
+		cmdRegistry := bot.NewRegistry()
+		cmdRegistry.Register(&commands.StartCommand{})
+		cmdRegistry.Register(&commands.StopCommand{})
+		cmdRegistry.Register(&commands.EggCommand{})
+		cmdRegistry.Register(&commands.TrackCommand{})
+
+		cmdDeps := &api.CommandDeps{
+			DB:           database,
+			Config:       cfg,
+			StateMgr:     stateMgr,
+			GameData:     proc.enricher.GameData,
+			Translations: proc.enricher.Translations,
+			Dispatcher:   proc.dispatcher,
+			RowText:      trackingDeps.RowText,
+			Resolver:     cmdResolver,
+			ArgMatcher:   cmdArgMatcher,
+			Parser:       cmdParser,
+			Registry:     cmdRegistry,
+			ReloadFunc:   proc.triggerReload,
+		}
+		mux.HandleFunc("POST /api/command", apiRoute("command", api.HandleCommand(cmdDeps)))
+	}
 
 	// Proxy unhandled /api/ requests to the alerter (config, humans, profiles, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
