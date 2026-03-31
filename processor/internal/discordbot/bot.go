@@ -4,6 +4,7 @@
 package discordbot
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -218,20 +219,33 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 			s.MessageReactionAdd(m.ChannelID, m.ID, reply.React)
 		}
 
+		targetChannel := m.ChannelID
+		if reply.IsDM && m.GuildID != "" {
+			ch, err := s.UserChannelCreate(m.Author.ID)
+			if err != nil {
+				log.Warnf("discord bot: create DM channel: %v", err)
+				continue
+			}
+			targetChannel = ch.ID
+		}
+
+		// File attachment
+		if reply.Attachment != nil {
+			msgSend := &discordgo.MessageSend{
+				Content: reply.Text,
+				Files: []*discordgo.File{{
+					Name:   reply.Attachment.Filename,
+					Reader: bytes.NewReader(reply.Attachment.Content),
+				}},
+			}
+			if _, err := s.ChannelMessageSendComplex(targetChannel, msgSend); err != nil {
+				log.Warnf("discord bot: send attachment: %v", err)
+			}
+			continue
+		}
+
 		// Text message
 		if reply.Text != "" {
-			targetChannel := m.ChannelID
-			if reply.IsDM && m.GuildID != "" {
-				// Send as DM
-				ch, err := s.UserChannelCreate(m.Author.ID)
-				if err != nil {
-					log.Warnf("discord bot: create DM channel: %v", err)
-					continue
-				}
-				targetChannel = ch.ID
-			}
-
-			// Split long messages at 2000 char limit
 			messages := splitMessage(reply.Text, 2000)
 			for _, msg := range messages {
 				s.ChannelMessageSend(targetChannel, msg)
