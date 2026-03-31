@@ -244,6 +244,8 @@
   "raid.level.shadow": "shadow",
   "raid.level.shadow_legendary": "shadow legendary",
 
+  "weather_1": "Sunny",
+
   "status.enabled": "enabled",
   "status.disabled": "disabled",
   "status.alerts_currently": "Your alerts are currently **{0}**",
