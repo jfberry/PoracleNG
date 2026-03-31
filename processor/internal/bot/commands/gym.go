@@ -28,6 +28,9 @@ var gymParams = []bot.ParamDef{
 func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	// Extract @mention pings before parsing
+	pings, args := extractPings(args)
+
 	if usage := usageReply(ctx, args, "cmd.gym.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
@@ -83,7 +86,7 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		insert = append(insert, db.GymTrackingAPI{
 			ID:            ctx.TargetID,
 			ProfileNo:     ctx.ProfileNo,
-			Ping:          "",
+			Ping:          pings,
 			Template:      template,
 			Distance:      distance,
 			Team:          team,

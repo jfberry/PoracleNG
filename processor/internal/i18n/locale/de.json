@@ -178,6 +178,12 @@
   "cmd.no_quest_type": "Fehler: Keine gültige Quest angegeben.",
   "cmd.removed_n": "Ich habe {0} Einträge entfernt",
 
+  "cmd.unrecognized": "Unbekannt: {0}",
+  "cmd.unknown": "Unbekannter Befehl. Versuche {0}",
+  "cmd.no_invasion_type": "Fehler: Es wurde kein gültiger Typ einer Team-GO-Rocket-Invasion angegeben.",
+  "cmd.enable.specify": "Bitte Benutzer-IDs angeben",
+  "cmd.enable.success": "Aktiviert: {0}",
+  "cmd.disable.success": "Deaktiviert: {0}",
   "cmd.no_permission": "keine Berechtigung dieses Komando zu benutzen",
   "cmd.no_permission.pokemon": "keine Berechtigung Pokémon zu tracken",
   "cmd.no_permission.gym": "keine Berechtigung Arenen zu tracken",

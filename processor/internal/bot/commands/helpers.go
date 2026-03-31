@@ -37,6 +37,20 @@ func helpArgReply(ctx *bot.CommandContext, args []string, usageKey string) *bot.
 	return nil
 }
 
+// extractPings removes Discord @mention tokens (<@123456789> or <@!123456789>)
+// from args and returns the combined ping string and remaining args.
+func extractPings(args []string) (pings string, remaining []string) {
+	var pingParts []string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "<@") && strings.HasSuffix(arg, ">") {
+			pingParts = append(pingParts, arg)
+		} else {
+			remaining = append(remaining, arg)
+		}
+	}
+	return strings.Join(pingParts, " "), remaining
+}
+
 // enforceDistance applies default and max distance limits from config.
 func enforceDistance(ctx *bot.CommandContext, distance int) int {
 	if distance == 0 && ctx.Config.Tracking.DefaultDistance > 0 {

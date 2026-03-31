@@ -298,9 +298,40 @@ type availableArea struct {
 }
 
 func getAvailableAreas(ctx *bot.CommandContext) []availableArea {
+	if !ctx.Config.Area.Enabled {
+		// No area security — all user-selectable fences
+		var areas []availableArea
+		for _, f := range ctx.Fences {
+			if f.UserSelectable {
+				areas = append(areas, availableArea{Name: f.Name, Group: f.Group})
+			}
+		}
+		return areas
+	}
+
+	// Area security enabled — filter by community membership
+	var communityJSON *string
+	_ = ctx.DB.Get(&communityJSON, "SELECT community_membership FROM humans WHERE id = ? LIMIT 1", ctx.TargetID)
+
+	allowedSet := make(map[string]bool)
+	if communityJSON != nil && *communityJSON != "" {
+		var communities []string
+		if err := json.Unmarshal([]byte(*communityJSON), &communities); err == nil {
+			for _, comm := range communities {
+				for _, cc := range ctx.Config.Area.Communities {
+					if strings.EqualFold(cc.Name, comm) {
+						for _, area := range cc.AllowedAreas {
+							allowedSet[strings.ToLower(area)] = true
+						}
+					}
+				}
+			}
+		}
+	}
+
 	var areas []availableArea
 	for _, f := range ctx.Fences {
-		if f.UserSelectable {
+		if f.UserSelectable && allowedSet[strings.ToLower(f.Name)] {
 			areas = append(areas, availableArea{Name: f.Name, Group: f.Group})
 		}
 	}

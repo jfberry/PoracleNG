@@ -153,13 +153,9 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 
 	text := m.Text
 	if text == "" {
-		// Handle location messages as !location lat,lon
+		// Handle location messages as /location lat,lon
 		if m.Location != nil {
-			prefix := b.cfg.Discord.Prefix
-			if prefix == "" {
-				prefix = "!"
-			}
-			text = prefix + "location " + formatFloat(m.Location.Latitude) + "," + formatFloat(m.Location.Longitude)
+			text = "/location " + formatFloat(m.Location.Latitude) + "," + formatFloat(m.Location.Longitude)
 		}
 		if text == "" {
 			return
@@ -175,7 +171,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 	isDM := m.Chat.Type == "private"
 	chatID := m.Chat.ID
 
-	userLang, profileNo, hasLocation, hasArea, isRegistered := lookupUserState(b.db, userID, b.cfg.General.Locale)
+	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserState(b.db, userID, b.cfg.General.Locale)
 	isAdmin := bot.IsAdmin(b.cfg, "telegram", userID)
 
 	targetType := "telegram:user"
@@ -282,7 +278,7 @@ func (b *Bot) sendReplies(chatID int64, replies []bot.Reply) {
 
 		if reply.Text != "" {
 			// Split long messages at 4095 char limit
-			messages := splitMessage(reply.Text, 4095)
+			messages := bot.SplitMessage(reply.Text, 4095)
 			for _, text := range messages {
 				msg := tgbotapi.NewMessage(chatID, text)
 				if _, err := b.api.Send(msg); err != nil {
@@ -293,54 +289,7 @@ func (b *Bot) sendReplies(chatID int64, replies []bot.Reply) {
 	}
 }
 
-func splitMessage(text string, maxLen int) []string {
-	if len(text) <= maxLen {
-		return []string{text}
-	}
-	var messages []string
-	lines := strings.Split(text, "\n")
-	var current strings.Builder
-	for _, line := range lines {
-		if current.Len()+len(line)+1 > maxLen && current.Len() > 0 {
-			messages = append(messages, current.String())
-			current.Reset()
-		}
-		if current.Len() > 0 {
-			current.WriteByte('\n')
-		}
-		current.WriteString(line)
-	}
-	if current.Len() > 0 {
-		messages = append(messages, current.String())
-	}
-	return messages
-}
 
-// lookupUserState loads basic user info for command context building.
-// isRegistered is true when the user exists in the humans table.
-func lookupUserState(database *sqlx.DB, userID, defaultLocale string) (lang string, profileNo int, hasLocation, hasArea, isRegistered bool) {
-	lang = defaultLocale
-	profileNo = 1
-	var h struct {
-		Language  *string `db:"language"`
-		ProfileNo int     `db:"current_profile_no"`
-		Latitude  float64 `db:"latitude"`
-		Longitude float64 `db:"longitude"`
-		Area      *string `db:"area"`
-	}
-	err := database.Get(&h, "SELECT language, current_profile_no, latitude, longitude, area FROM humans WHERE id = ? LIMIT 1", userID)
-	if err != nil {
-		return
-	}
-	isRegistered = true
-	if h.Language != nil && *h.Language != "" {
-		lang = *h.Language
-	}
-	profileNo = h.ProfileNo
-	hasLocation = h.Latitude != 0 || h.Longitude != 0
-	hasArea = h.Area != nil && *h.Area != "" && *h.Area != "[]"
-	return
-}
 
 func formatInt64(n int64) string {
 	return strconv.FormatInt(n, 10)

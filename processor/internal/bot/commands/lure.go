@@ -25,6 +25,9 @@ var lureParams = []bot.ParamDef{
 func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	// Extract @mention pings before parsing
+	pings, args := extractPings(args)
+
 	if usage := usageReply(ctx, args, "cmd.lure.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
@@ -72,6 +75,7 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		insert = append(insert, db.LureTrackingAPI{
 			ID:        ctx.TargetID,
 			ProfileNo: ctx.ProfileNo,
+			Ping:      pings,
 			LureID:    id,
 			Distance:  distance,
 			Template:  template,

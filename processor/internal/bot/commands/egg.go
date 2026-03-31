@@ -38,6 +38,9 @@ var eggParams = []bot.ParamDef{
 func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	// Extract @mention pings before parsing
+	pings, args := extractPings(args)
+
 	if usage := usageReply(ctx, args, "cmd.egg.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
@@ -130,7 +133,7 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		insert = append(insert, db.EggTrackingAPI{
 			ID:          ctx.TargetID,
 			ProfileNo:   ctx.ProfileNo,
-			Ping:        "",
+			Ping:        pings,
 			Template:    template,
 			Distance:    distance,
 			Team:        team,
