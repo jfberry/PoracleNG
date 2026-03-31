@@ -71,8 +71,10 @@ func (d *Dispatcher) Dispatch(job *Job) {
 
 // Stop closes the job channel, drains remaining jobs, and persists tracker state.
 func (d *Dispatcher) Stop() {
+	log.Info("delivery: stopping dispatcher...")
 	d.queue.Stop()
 	d.tracker.Stop()
+	log.Info("delivery: dispatcher stopped")
 }
 
 // QueueDepth returns the number of jobs waiting in the channel.

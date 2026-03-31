@@ -27,6 +27,10 @@ type FairQueue struct {
 	tracker *MessageTracker
 	wg      sync.WaitGroup
 
+	// Shutdown context — cancelled when Stop() is called, aborts in-flight sends.
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	// Per-platform concurrency semaphores
 	discordSem  chan struct{}
 	webhookSem  chan struct{}
@@ -54,10 +58,13 @@ func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTrack
 		cfg.ConcurrentTelegram = 1
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	return &FairQueue{
 		ch:          ch,
 		senders:     senders,
 		tracker:     tracker,
+		ctx:         ctx,
+		cancel:      cancel,
 		discordSem:  make(chan struct{}, cfg.ConcurrentDiscord),
 		webhookSem:  make(chan struct{}, cfg.ConcurrentWebhook),
 		telegramSem: make(chan struct{}, cfg.ConcurrentTelegram),
@@ -73,10 +80,13 @@ func (fq *FairQueue) Start() {
 	}
 }
 
-// Stop closes the job channel and waits for all workers to finish.
+// Stop cancels in-flight sends, closes the job channel, and waits for workers to finish.
 func (fq *FairQueue) Stop() {
+	fq.cancel()
 	close(fq.ch)
+	log.Info("delivery: waiting for queue workers to drain...")
 	fq.wg.Wait()
+	log.Info("delivery: queue workers drained")
 }
 
 func (fq *FairQueue) worker() {
@@ -121,7 +131,7 @@ func (fq *FairQueue) processJob(job *Job) {
 		existing := fq.tracker.LookupEdit(job.EditKey)
 		if existing != nil {
 			log.Debugf("delivery: attempting edit for key=%s target=%s", job.EditKey, job.Target)
-			if err := sender.Edit(context.Background(), existing.SentID, job.Message); err == nil {
+			if err := sender.Edit(fq.ctx, existing.SentID, job.Message); err == nil {
 				log.Debugf("delivery: edit succeeded for key=%s", job.EditKey)
 				metrics.DeliveryTotal.WithLabelValues(platform, "edit_ok").Inc()
 				metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
@@ -139,7 +149,7 @@ func (fq *FairQueue) processJob(job *Job) {
 	}
 	log.Infof("%s: -> %s %s %s Sending %s message", job.LogReference, job.Name, job.Target, destKind, platform)
 
-	sent, err := sender.Send(context.Background(), job)
+	sent, err := sender.Send(fq.ctx, job)
 	if err != nil {
 		var permErr *PermanentError
 		if errors.As(err, &permErr) {

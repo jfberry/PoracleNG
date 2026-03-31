@@ -324,6 +324,10 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 			if tgResp.Parameters != nil && tgResp.Parameters.RetryAfter > 0 {
 				retryAfter = tgResp.Parameters.RetryAfter
 			}
+			if retryAfter > 60 {
+				log.Warnf("telegram: 429 rate limited for %s %s, retry_after=%ds is excessive — capping to 60s and giving up (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
+				return 0, fmt.Errorf("telegram rate limit too long: %ds", retryAfter)
+			}
 			log.Warnf("telegram: 429 rate limited for %s %s, retry_after=%ds (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
 			select {
 			case <-ctx.Done():

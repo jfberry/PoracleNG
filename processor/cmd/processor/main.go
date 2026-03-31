@@ -343,11 +343,17 @@ func main() {
 	}
 
 	// Periodic reload
+	periodicDone := make(chan struct{})
 	go func() {
 		interval := time.Duration(cfg.Tuning.ReloadIntervalSecs) * time.Second
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		for range ticker.C {
+		for {
+			select {
+			case <-periodicDone:
+				return
+			case <-ticker.C:
+			}
 			log.Debugf("Periodic reload triggered")
 			start := time.Now()
 			if err := state.Load(stateMgr, database); err != nil {
@@ -414,6 +420,7 @@ func main() {
 	<-sigCh
 
 	log.Infof("Shutting down...")
+	close(periodicDone)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	server.Shutdown(ctx)
@@ -783,9 +790,11 @@ func (ps *ProcessorService) Close() {
 		log.Info("Render pool stopped")
 	}
 	if ps.dispatcher != nil {
+		log.Info("Stopping delivery dispatcher...")
 		ps.dispatcher.Stop()
 		log.Info("Delivery dispatcher stopped")
 	}
+	log.Info("Stopping legacy sender...")
 	// Sender must close before resolver: sender's final flush may need
 	// tile workers still running to resolve pending tiles within deadline.
 	ps.sender.Close()
