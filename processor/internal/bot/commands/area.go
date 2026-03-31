@@ -87,9 +87,9 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 	sb.WriteString(tr.T("cmd.area.current") + "\n\n")
 	for _, a := range available {
 		if currentSet[strings.ToLower(a.Name)] {
-			sb.WriteString(fmt.Sprintf("✅ %s\n", a.Name))
+			sb.WriteString(fmt.Sprintf("🟢 %s\n", a.Name))
 		} else {
-			sb.WriteString(fmt.Sprintf("    %s\n", a.Name))
+			sb.WriteString(fmt.Sprintf("⚪ %s\n", a.Name))
 		}
 	}
 	return []bot.Reply{{Text: sb.String()}}
