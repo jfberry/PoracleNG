@@ -371,6 +371,12 @@ func main() {
 	cmdRegistry.Register(&commands.LocationCommand{})
 	cmdRegistry.Register(&commands.AreaCommand{})
 	cmdRegistry.Register(&commands.ScriptCommand{})
+	cmdRegistry.Register(&commands.VersionCommand{})
+	cmdRegistry.Register(&commands.EnableCommand{})
+	cmdRegistry.Register(&commands.DisableCommand{})
+	cmdRegistry.Register(&commands.HelpCommand{})
+	cmdRegistry.Register(&commands.InfoCommand{})
+	cmdRegistry.Register(&commands.PoracleTestCommand{})
 
 	// Command API endpoint (for testing commands without bots)
 	cmdDeps := &api.CommandDeps{
