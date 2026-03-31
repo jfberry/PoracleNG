@@ -25,16 +25,22 @@ func (c *ProfileCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	subcommand := args[0]
 	rest := args[1:]
 
-	switch subcommand {
-	case "add":
+	tr := ctx.Tr()
+	enTr := ctx.Translations.For("en")
+	matchSub := func(key string) bool {
+		return subcommand == strings.ToLower(tr.T(key)) || subcommand == strings.ToLower(enTr.T(key))
+	}
+
+	switch {
+	case matchSub("arg.add"):
 		return c.addProfile(ctx, rest)
-	case "remove", "delete":
+	case matchSub("arg.remove") || subcommand == "delete":
 		return c.removeProfile(ctx, rest)
-	case "switch":
+	case matchSub("arg.switch"):
 		return c.switchProfile(ctx, rest)
-	case "list":
+	case matchSub("arg.list"):
 		return c.listProfiles(ctx)
-	case "hours":
+	case subcommand == "hours":
 		return c.setHours(ctx, rest)
 	default:
 		// Try as switch (profile name or number)
