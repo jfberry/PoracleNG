@@ -19,11 +19,20 @@ var helpersOnce sync.Once
 // It is safe to call multiple times; registration happens only once.
 func RegisterHelpers() {
 	helpersOnce.Do(func() {
+		// Disable HTML escaping — DTS output is JSON for Discord/Telegram, not HTML.
+		// Users can explicitly escape with the {{escape}} helper if needed.
+		raymond.EscapeFunc = func(s string) string { return s }
+
 		registerComparisonHelpers()
 		registerMathHelpers()
 		registerStringHelpers()
 		registerArrayHelpers()
 		registerFormattingHelpers()
+
+		// escape — explicitly HTML-escape a value (for building URLs with user content)
+		raymond.RegisterHelper("escape", func(s string) raymond.SafeString {
+			return raymond.SafeString(raymond.DefaultEscape(s))
+		})
 	})
 }
 

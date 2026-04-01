@@ -40,9 +40,9 @@ require (
 	go.mongodb.org/mongo-driver v1.11.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/mailgun/raymond/v2 => github.com/jfberry/raymond/v2 v2.0.49-0.20260401114215-9e0fbefd75ec
+replace github.com/mailgun/raymond/v2 => github.com/jfberry/raymond/v2 v2.0.49-0.20260401160349-dcb171e8b563
