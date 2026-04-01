@@ -510,29 +510,35 @@ func main() {
 
 	// Start Discord bot (if token configured)
 	var discordBot *discordbot.Bot
+	// Shared bot dependencies — constructed once, passed to both Discord and Telegram bots.
+	sharedBotDeps := bot.BotDeps{
+		DB:           database,
+		Cfg:          cfg,
+		StateMgr:     stateMgr,
+		GameData:     proc.enricher.GameData,
+		Translations: proc.enricher.Translations,
+		Dispatcher:   proc.dispatcher,
+		RowText:      trackingDeps.RowText,
+		Registry:     cmdRegistry,
+		ArgMatcher:   cmdArgMatcher,
+		Resolver:     cmdResolver,
+		Geocoder:     proc.enricher.Geocoder,
+		StaticMap:    proc.enricher.StaticMap,
+		Weather:      proc.weather,
+		Stats:        proc.stats,
+		DTS:          cmdDTS,
+		Emoji:        cmdEmoji,
+		NLPParser:    nlpParser,
+		ReloadFunc:   proc.triggerReload,
+	}
+
 	discordTokens := cfg.Discord.DiscordTokens()
 	if len(discordTokens) > 0 && discordTokens[0] != "" {
+		deps := sharedBotDeps
+		deps.Parser = cmdParser
 		dbot, err := discordbot.New(discordbot.Config{
-			Token:        discordTokens[0],
-			DB:           database,
-			Cfg:          cfg,
-			StateMgr:     stateMgr,
-			GameData:     proc.enricher.GameData,
-			Translations: proc.enricher.Translations,
-			Dispatcher:   proc.dispatcher,
-			RowText:      trackingDeps.RowText,
-			Registry:     cmdRegistry,
-			Parser:       cmdParser,
-			ArgMatcher:   cmdArgMatcher,
-			Resolver:     cmdResolver,
-			Geocoder:     proc.enricher.Geocoder,
-			StaticMap:    proc.enricher.StaticMap,
-			Weather:      proc.weather,
-			Stats:        proc.stats,
-			DTS:          cmdDTS,
-			Emoji:        cmdEmoji,
-			NLPParser:    nlpParser,
-			ReloadFunc:   proc.triggerReload,
+			Token:   discordTokens[0],
+			BotDeps: deps,
 		})
 		if err != nil {
 			log.Warnf("Discord bot failed to start: %v", err)
@@ -545,27 +551,11 @@ func main() {
 	var telegramBot *telegrambot.Bot
 	telegramTokens := cfg.Telegram.TelegramTokens()
 	if len(telegramTokens) > 0 && telegramTokens[0] != "" {
+		deps := sharedBotDeps
+		deps.Parser = tgParser
 		tbot, err := telegrambot.New(telegrambot.Config{
-			Token:        telegramTokens[0],
-			DB:           database,
-			Cfg:          cfg,
-			StateMgr:     stateMgr,
-			GameData:     proc.enricher.GameData,
-			Translations: proc.enricher.Translations,
-			Dispatcher:   proc.dispatcher,
-			RowText:      trackingDeps.RowText,
-			Registry:     cmdRegistry,
-			Parser:       tgParser,
-			ArgMatcher:   cmdArgMatcher,
-			Resolver:     cmdResolver,
-			Geocoder:     proc.enricher.Geocoder,
-			StaticMap:    proc.enricher.StaticMap,
-			Weather:      proc.weather,
-			Stats:        proc.stats,
-			DTS:          cmdDTS,
-			Emoji:        cmdEmoji,
-			NLPParser:    nlpParser,
-			ReloadFunc:   proc.triggerReload,
+			Token:   telegramTokens[0],
+			BotDeps: deps,
 		})
 		if err != nil {
 			log.Warnf("Telegram bot failed to start: %v", err)

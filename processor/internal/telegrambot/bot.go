@@ -57,26 +57,8 @@ type Bot struct {
 
 // Config holds everything needed to create a Telegram bot.
 type Config struct {
-	Token        string
-	DB           *sqlx.DB
-	Cfg          *config.Config
-	StateMgr     *state.Manager
-	GameData     *gamedata.GameData
-	Translations *i18n.Bundle
-	Dispatcher   *delivery.Dispatcher
-	RowText      *rowtext.Generator
-	Registry     *bot.Registry
-	Parser       *bot.Parser
-	ArgMatcher   *bot.ArgMatcher
-	Resolver     *bot.PokemonResolver
-	Geocoder     *geocoding.Geocoder
-	StaticMap    *staticmap.Resolver
-	Weather      *tracker.WeatherTracker
-	Stats        *tracker.StatsTracker
-	DTS          *dts.TemplateStore
-	Emoji        *dts.EmojiLookup
-	NLPParser    *nlp.Parser
-	ReloadFunc   func()
+	Token string
+	bot.BotDeps
 }
 
 // New creates and starts a Telegram bot. Returns the bot (for shutdown) or an error.
@@ -228,6 +210,11 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 	parsed = bot.MergeApplyGroups(parsed)
 
 	for _, cmd := range parsed {
+		// Check disabled commands
+		if isCommandDisabled(b.cfg.General.DisabledCommands, cmd.CommandKey) {
+			continue
+		}
+
 		// Handle Telegram-specific commands first (require tgbotapi directly).
 		if b.handleTelegramCommand(m, cmd.CommandKey, cmd.Args) {
 			continue
@@ -388,6 +375,21 @@ func (b *Bot) runReconciliation() {
 	rcfg := b.cfg.Reconciliation.Telegram
 	b.reconciliation.SyncTelegramUsers(rcfg.UpdateUserNames, rcfg.RemoveInvalidUsers)
 	b.reconciliation.UpdateTelegramChannels()
+}
+
+// isCommandDisabled checks if a command key (e.g. "cmd.track") matches any entry
+// in the disabled_commands list (which uses short names like "track", "raid").
+func isCommandDisabled(disabled []string, cmdKey string) bool {
+	if len(disabled) == 0 {
+		return false
+	}
+	cmdName := strings.TrimPrefix(cmdKey, "cmd.")
+	for _, d := range disabled {
+		if d == cmdName {
+			return true
+		}
+	}
+	return false
 }
 
 // handleTelegramCommand dispatches Telegram-specific commands that require the

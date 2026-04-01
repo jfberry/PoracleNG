@@ -1,6 +1,7 @@
 package discordbot
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 
@@ -12,8 +13,12 @@ import (
 )
 
 var (
-	// nameRe matches name<value> (case-insensitive).
-	nameRe = regexp.MustCompile(`(?i)^name<(\S+)>$`)
+	// nameRe matches name<value>, name:value, or namevalue (case-insensitive).
+	nameRe = regexp.MustCompile(`(?i)^name[:<]?(\S+?)>?$`)
+	// areaRe matches area<value>, area:value (case-insensitive).
+	areaRe = regexp.MustCompile(`(?i)^area[:<]?(\S+?)>?$`)
+	// languageRe matches language<value>, language:value (case-insensitive).
+	languageRe = regexp.MustCompile(`(?i)^language[:<]?(\S+?)>?$`)
 	// webhookURLRe matches a Discord webhook URL or similar HTTP(S) URL in the raw message.
 	webhookURLRe = regexp.MustCompile(`(?i)https?://[-A-Z0-9+&@#/%=~_|$?!:,.]*[-A-Z0-9+&@#/%=~_|$]`)
 )
@@ -27,11 +32,17 @@ func (b *Bot) handleChannel(s *discordgo.Session, m *discordgo.MessageCreate, ar
 	isDM := m.GuildID == ""
 	tr := b.translations.For(b.cfg.General.Locale)
 
-	// Parse name<value> from args
-	var webhookName string
+	// Parse name<value>, area<name>, language<code> from args
+	var webhookName, areaName, language string
 	for _, arg := range args {
 		if match := nameRe.FindStringSubmatch(arg); match != nil {
 			webhookName = match[1]
+		}
+		if match := areaRe.FindStringSubmatch(arg); match != nil {
+			areaName = match[1]
+		}
+		if match := languageRe.FindStringSubmatch(arg); match != nil {
+			language = match[1]
 		}
 	}
 
@@ -53,13 +64,13 @@ func (b *Bot) handleChannel(s *discordgo.Session, m *discordgo.MessageCreate, ar
 	}
 
 	if hasAdd {
-		b.handleChannelAdd(s, m, isDM, webhookName, webhookURL, tr)
+		b.handleChannelAdd(s, m, isDM, webhookName, webhookURL, areaName, language, tr)
 	} else if hasRemove {
 		b.handleChannelRemove(s, m, isDM, webhookName, tr)
 	}
 }
 
-func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate, isDM bool, webhookName, webhookURL string, tr interface{ T(string) string; Tf(string, ...interface{}) string }) {
+func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate, isDM bool, webhookName, webhookURL, areaName, language string, tr interface{ T(string) string; Tf(string, ...interface{}) string }) {
 	// If only one of name/url provided, reject
 	if (webhookName != "" && webhookURL == "") || (webhookName == "" && webhookURL != "") {
 		s.ChannelMessageSend(m.ChannelID, "To add webhooks, provide both a name using the `name` parameter and a url")
@@ -100,13 +111,22 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 
 	// Insert new human
+	area := "[]"
+	if areaName != "" {
+		areaJSON, _ := json.Marshal([]string{areaName})
+		area = string(areaJSON)
+	}
+
 	h := &db.HumanFull{
 		ID:                  targetID,
 		Type:                targetType,
 		Name:                targetName,
 		Enabled:             1,
-		Area:                "[]",
+		Area:                area,
 		CommunityMembership: "[]",
+	}
+	if language != "" {
+		h.Language.SetValid(language)
 	}
 	if err := db.CreateHuman(b.db, h); err != nil {
 		log.Errorf("discord bot: create human for channel/webhook %s: %v", targetID, err)
@@ -184,9 +204,9 @@ func (b *Bot) handleChannelRemove(s *discordgo.Session, m *discordgo.MessageCrea
 	}
 }
 
-// parseGuildArg extracts the value from a guild<id> argument.
+// parseGuildArg extracts the value from a guild<id>, guild:id, or guildid argument.
 func parseGuildArg(args []string) string {
-	re := regexp.MustCompile(`(?i)^guild<(\d{1,20})>$`)
+	re := regexp.MustCompile(`(?i)^guild[:<]?(\d{1,20})>?$`)
 	for _, arg := range args {
 		if match := re.FindStringSubmatch(arg); match != nil {
 			return match[1]

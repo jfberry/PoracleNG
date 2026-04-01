@@ -24,6 +24,30 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
+// BotDeps holds shared dependencies needed by both Discord and Telegram bots.
+// Platform-specific bot Config structs embed this to avoid duplication.
+type BotDeps struct {
+	DB           *sqlx.DB
+	Cfg          *config.Config
+	StateMgr     *state.Manager
+	GameData     *gamedata.GameData
+	Translations *i18n.Bundle
+	Dispatcher   *delivery.Dispatcher
+	RowText      *rowtext.Generator
+	Registry     *Registry
+	Parser       *Parser
+	ArgMatcher   *ArgMatcher
+	Resolver     *PokemonResolver
+	Geocoder     *geocoding.Geocoder
+	StaticMap    *staticmap.Resolver
+	Weather      *tracker.WeatherTracker
+	Stats        *tracker.StatsTracker
+	DTS          *dts.TemplateStore
+	Emoji        *dts.EmojiLookup
+	NLPParser    *nlp.Parser
+	ReloadFunc   func()
+}
+
 // Command is implemented by every bot command handler.
 type Command interface {
 	// Name returns the primary identifier key (e.g. "cmd.track").

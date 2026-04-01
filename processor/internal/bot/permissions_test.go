@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
@@ -139,26 +140,20 @@ func TestBlockedAlerts(t *testing.T) {
 
 	// User with role_raiders: raid is allowed, monster is blocked (needs role_trackers)
 	blocked := BlockedAlerts(cfg, "user1", []string{"role_raiders"})
-	hasRaid := false
-	hasPokemon := false
-	for _, b := range blocked {
-		if b == "raid" {
-			hasRaid = true
-		}
-		if b == "pokemon" {
-			hasPokemon = true
-		}
+	if blocked == nil {
+		t.Fatal("expected non-nil blocked for user with partial roles")
 	}
-	if hasRaid {
+	blockedStr := *blocked
+	if strings.Contains(blockedStr, "raid") {
 		t.Error("raid should not be blocked for role_raiders")
 	}
-	if !hasPokemon {
-		t.Error("pokemon should be blocked (no role_trackers)")
+	if !strings.Contains(blockedStr, "monster") {
+		t.Error("monster should be blocked (no role_trackers)")
 	}
 
 	// User with both roles: nothing blocked
 	blocked = BlockedAlerts(cfg, "user1", []string{"role_raiders", "role_trackers"})
-	if len(blocked) != 0 {
-		t.Errorf("expected no blocked, got %v", blocked)
+	if blocked != nil {
+		t.Errorf("expected nil blocked, got %v", *blocked)
 	}
 }

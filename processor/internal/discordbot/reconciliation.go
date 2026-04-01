@@ -11,6 +11,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -245,7 +246,7 @@ func (r *Reconciliation) ReconcileUser(id string, user *db.HumanFull, discordUse
 	}
 
 	// Compute blocked_alerts from command_security.
-	blocked := r.computeBlockedAlerts(id, roleList)
+	blocked := bot.BlockedAlerts(r.cfg, id, roleList)
 
 	if !r.cfg.Area.Enabled {
 		r.reconcileNonAreaSecurity(id, user, name, roleList, blocked, syncNames, removeInvalidUsers)
@@ -335,7 +336,7 @@ func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *db.HumanFull,
 		}
 
 		if len(updates) > 0 {
-			r.updateHuman(id, updates)
+			bot.UpdateHuman(r.db, id, updates)
 			r.log.Infof("Update user %s %s", id, name)
 		}
 	}
@@ -423,17 +424,17 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *db.HumanFull, na
 		}
 
 		// Check area_restriction changes.
-		if !user.AreaRestriction.Valid || !haveSameContents(areaRestriction, parseJSONStringSlice(user.AreaRestriction.ValueOrZero())) {
+		if !user.AreaRestriction.Valid || !bot.HaveSameContents(areaRestriction, bot.ParseJSONStringSlice(user.AreaRestriction.ValueOrZero())) {
 			updates["area_restriction"] = string(areaRestrictionJSON)
 		}
 
 		// Check community_membership changes.
-		if !haveSameContents(communityList, parseJSONStringSlice(user.CommunityMembership)) {
+		if !bot.HaveSameContents(communityList, bot.ParseJSONStringSlice(user.CommunityMembership)) {
 			updates["community_membership"] = string(communityJSON)
 		}
 
 		if len(updates) > 0 {
-			r.updateHuman(id, updates)
+			bot.UpdateHuman(r.db, id, updates)
 			r.log.Infof("Update user %s %s with communities %v", id, name, communityList)
 		}
 	}
@@ -691,11 +692,11 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 
 		// If there is currently an area restriction for a channel, ensure the location restrictions are correct.
 		if user.AreaRestriction.Valid && user.CommunityMembership != "" {
-			membership := parseJSONStringSlice(user.CommunityMembership)
+			membership := bot.ParseJSONStringSlice(user.CommunityMembership)
 			if len(membership) > 0 {
 				areaRestriction := community.CalculateLocationRestrictions(r.cfg.Area.Communities, membership)
-				existing := parseJSONStringSlice(user.AreaRestriction.ValueOrZero())
-				if !haveSameContents(areaRestriction, existing) {
+				existing := bot.ParseJSONStringSlice(user.AreaRestriction.ValueOrZero())
+				if !bot.HaveSameContents(areaRestriction, existing) {
 					areaRestrictionJSON, _ := json.Marshal(areaRestriction)
 					updates["area_restriction"] = string(areaRestrictionJSON)
 				}
@@ -703,84 +704,12 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 		}
 
 		if len(updates) > 0 {
-			r.updateHuman(user.ID, updates)
+			bot.UpdateHuman(r.db, user.ID, updates)
 			r.log.Infof("Update channel %s %s", user.ID, name)
 		}
 	}
 
 	r.log.Debug("Channel membership to Poracle users complete...")
-}
-
-// computeBlockedAlerts derives the blocked_alerts list from command_security config.
-// For each command, if the user lacks the required role/ID, the command is blocked.
-func (r *Reconciliation) computeBlockedAlerts(userID string, roleList []string) *string {
-	if len(r.cfg.Discord.CommandSecurity) == 0 {
-		return nil
-	}
-
-	commands := []string{"raid", "monster", "gym", "specificgym", "lure", "nest", "egg", "invasion", "pvp", "maxbattle"}
-	var blockedList []string
-
-	for _, cmd := range commands {
-		permissions, ok := r.cfg.Discord.CommandSecurity[cmd]
-		if !ok || len(permissions) == 0 {
-			continue
-		}
-
-		// Check if user ID or any role is in the permissions list.
-		allowed := false
-		for _, perm := range permissions {
-			if perm == userID {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			for _, role := range roleList {
-				for _, perm := range permissions {
-					if perm == role {
-						allowed = true
-						break
-					}
-				}
-				if allowed {
-					break
-				}
-			}
-		}
-
-		if !allowed {
-			blockedList = append(blockedList, cmd)
-		}
-	}
-
-	if len(blockedList) == 0 {
-		return nil
-	}
-
-	blockedJSON, _ := json.Marshal(blockedList)
-	s := string(blockedJSON)
-	return &s
-}
-
-// updateHuman updates selected fields on a human record.
-func (r *Reconciliation) updateHuman(id string, updates map[string]interface{}) {
-	if len(updates) == 0 {
-		return
-	}
-
-	setClauses := make([]string, 0, len(updates))
-	args := make([]interface{}, 0, len(updates)+1)
-	for col, val := range updates {
-		setClauses = append(setClauses, col+" = ?")
-		args = append(args, val)
-	}
-	args = append(args, id)
-
-	query := "UPDATE humans SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
-	if _, err := r.db.Exec(query, args...); err != nil {
-		r.log.Errorf("Update human %s: %v", id, err)
-	}
 }
 
 // --- Helper functions ---
@@ -805,42 +734,6 @@ func hasAnyRole(roleList, required []string) bool {
 		}
 	}
 	return false
-}
-
-// haveSameContents checks if two string slices contain the same elements (order-independent).
-// Matches the JS haveSameContents function.
-func haveSameContents(a, b []string) bool {
-	if len(a) == 0 && len(b) == 0 {
-		return true
-	}
-	if len(a) != len(b) {
-		return false
-	}
-
-	// Count occurrences.
-	counts := make(map[string]int, len(a))
-	for _, v := range a {
-		counts[v]++
-	}
-	for _, v := range b {
-		counts[v]--
-	}
-	for _, c := range counts {
-		if c != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// parseJSONStringSlice parses a JSON string array, returning nil on error.
-func parseJSONStringSlice(s string) []string {
-	if s == "" {
-		return nil
-	}
-	var result []string
-	json.Unmarshal([]byte(s), &result)
-	return result
 }
 
 // nullableStr returns the dereferenced string, or "" if nil.
