@@ -125,7 +125,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	}
 
 	// Look up user state
-	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserState(b.DB, m.Author.ID, b.Cfg.General.Locale)
+	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserStateFromStore(b.Humans, m.Author.ID, b.Cfg.General.Locale)
 	isAdmin := bot.IsAdmin(b.Cfg, "discord", m.Author.ID)
 
 	// User roles are lazily fetched on first need (avoids REST call for disabled/unrecognised commands).
@@ -230,6 +230,8 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			TargetType:   targetType,
 			AreaLogic:    bot.NewAreaLogic(fences, b.Cfg),
 			DB:           b.DB,
+			Humans:       b.Humans,
+			Tracking:     b.Tracking,
 			Config:       b.Cfg,
 			StateMgr:     b.StateMgr,
 			GameData:     b.GameData,
@@ -256,7 +258,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			b.Cfg, m.Author.ID, fetchRoles(), channelID, guildID, "")
 
 		// Handle target override
-		target, remainingArgs, err := bot.BuildTarget(b.DB, ctx, cmd.Args)
+		target, remainingArgs, err := bot.BuildTarget(ctx, cmd.Args)
 		if err != nil {
 			s.MessageReactionAdd(channelID, m.ID, "🙅")
 			s.ChannelMessageSend(channelID, err.Error())

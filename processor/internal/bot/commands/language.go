@@ -37,8 +37,7 @@ func (c *LanguageCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.language.unknown", strings.Join(available, ", "))}}
 	}
 
-	_, err := ctx.DB.Exec("UPDATE humans SET language = ? WHERE id = ?", matched, ctx.TargetID)
-	if err != nil {
+	if err := ctx.Humans.SetLanguage(ctx.TargetID, matched); err != nil {
 		return []bot.Reply{{React: "🙅"}}
 	}
 

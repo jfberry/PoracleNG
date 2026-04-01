@@ -8,9 +8,9 @@ import (
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // EggCommand implements !egg — track raid eggs by level.
@@ -145,70 +145,30 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		})
 	}
 
-	// Diff against existing
-	tracked, err := db.SelectEggsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	// Diff against existing and apply
+	tracked, err := ctx.Tracking.Eggs.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("egg command: select existing: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var updates []db.EggTrackingAPI
-	var alreadyPresent []db.EggTrackingAPI
-
-	for i := len(insert) - 1; i >= 0; i-- {
-		for _, existing := range tracked {
-			noMatch, isDup, uid, isUpd := api.DiffTracking(&existing, &insert[i])
-			if noMatch {
-				continue
-			}
-			if isDup {
-				alreadyPresent = append(alreadyPresent, insert[i])
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-			if isUpd {
-				update := insert[i]
-				update.UID = uid
-				updates = append(updates, update)
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-		}
+	diff, err := store.ApplyDiff(ctx.Tracking.Eggs, ctx.TargetID, tracked, insert,
+		store.EggGetUID, store.EggSetUID)
+	if err != nil {
+		log.Errorf("egg command: apply diff: %s", err)
+		return []bot.Reply{{React: "🙅"}}
 	}
 
 	// Build response message
-	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
-		func(i int) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(&alreadyPresent[i])) },
-		func(i int) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(&updates[i])) },
-		func(i int) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(&insert[i])) },
+	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
+		func(i int) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(&diff.AlreadyPresent[i])) },
+		func(i int) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(&diff.Updates[i])) },
+		func(i int) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(&diff.Inserts[i])) },
 	)
-
-	// Apply changes to DB
-	if len(updates) > 0 {
-		uids := make([]int64, len(updates))
-		for i, u := range updates {
-			uids[i] = u.UID
-		}
-		if err := db.DeleteByUIDs(ctx.DB, "egg", ctx.TargetID, uids); err != nil {
-			log.Errorf("egg command: delete updated: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
-
-	toInsert := make([]db.EggTrackingAPI, 0, len(insert)+len(updates))
-	toInsert = append(toInsert, insert...)
-	toInsert = append(toInsert, updates...)
-
-	for i := range toInsert {
-		if _, err := db.InsertEgg(ctx.DB, &toInsert[i]); err != nil {
-			log.Errorf("egg command: insert: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
 
 	ctx.TriggerReload()
 
-	if len(insert) == 0 && len(updates) == 0 {
+	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		return []bot.Reply{{React: "👌", Text: message}}
 	}
 	return []bot.Reply{{React: "✅", Text: message}}
@@ -216,7 +176,7 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 func (c *EggCommand) removeEggs(ctx *bot.CommandContext, levelSet map[int]bool) []bot.Reply {
 	tr := ctx.Tr()
-	tracked, err := db.SelectEggsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Eggs.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("egg command: select for remove: %s", err)
 		return []bot.Reply{{React: "🙅"}}
@@ -235,7 +195,7 @@ func (c *EggCommand) removeEggs(ctx *bot.CommandContext, levelSet map[int]bool) 
 		return []bot.Reply{{React: "👌"}}
 	}
 
-	if err := db.DeleteByUIDs(ctx.DB, "egg", ctx.TargetID, uidsToDelete); err != nil {
+	if err := ctx.Tracking.Eggs.DeleteByUIDs(ctx.TargetID, uidsToDelete); err != nil {
 		log.Errorf("egg command: delete: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}

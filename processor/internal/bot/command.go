@@ -12,6 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -29,6 +30,8 @@ import (
 // Platform-specific bot Config structs embed this to avoid duplication.
 type BotDeps struct {
 	DB           *sqlx.DB
+	Humans       store.HumanStore
+	Tracking     *store.TrackingStores
 	Cfg          *config.Config
 	StateMgr     *state.Manager
 	GameData     *gamedata.GameData
@@ -92,7 +95,9 @@ type CommandContext struct {
 	AreaLogic *AreaLogic
 
 	// Injected dependencies
-	DB           *sqlx.DB
+	DB           *sqlx.DB          // DEPRECATED — use Humans/Tracking stores. Kept during migration.
+	Humans       store.HumanStore
+	Tracking     *store.TrackingStores
 	Config       *config.Config
 	StateMgr     *state.Manager
 	GameData     *gamedata.GameData

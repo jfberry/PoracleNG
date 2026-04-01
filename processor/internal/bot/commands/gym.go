@@ -3,9 +3,9 @@ package commands
 import (
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // GymCommand implements !gym — track gym team changes, slot changes, and battle changes.
@@ -97,72 +97,66 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		})
 	}
 
-	tracked, err := db.SelectGymsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Gyms.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("gym command: select existing: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var updates, alreadyPresent []db.GymTrackingAPI
-	for i := len(insert) - 1; i >= 0; i-- {
+	// Gym uses a custom diff loop because we need to preserve gym_id from the
+	// existing row (gym-specific tracking is set via scanner DB, not user commands).
+	diff := store.DiffAndClassify(tracked, insert, store.GymGetUID, store.GymSetUID)
+
+	// Preserve gym_id on updates
+	for i := range diff.Updates {
 		for _, existing := range tracked {
-			noMatch, isDup, uid, isUpd := api.DiffTracking(&existing, &insert[i])
-			if noMatch {
-				continue
-			}
-			if isDup {
-				alreadyPresent = append(alreadyPresent, insert[i])
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-			if isUpd {
-				u := insert[i]
-				u.UID = uid
-				// Preserve gym_id from the existing row (gym-specific tracking
-				// is set via the scanner DB, not via user command args)
-				u.GymID = existing.GymID
-				updates = append(updates, u)
-				insert = append(insert[:i], insert[i+1:]...)
+			if store.GymGetUID(&existing) == store.GymGetUID(&diff.Updates[i]) {
+				diff.Updates[i].GymID = existing.GymID
 				break
 			}
 		}
 	}
 
-	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
-		func(i int) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(&alreadyPresent[i])) },
-		func(i int) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(&updates[i])) },
-		func(i int) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(&insert[i])) },
+	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
+		func(i int) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(&diff.AlreadyPresent[i])) },
+		func(i int) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(&diff.Updates[i])) },
+		func(i int) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(&diff.Inserts[i])) },
 	)
 
-	if len(updates) > 0 {
-		uids := make([]int64, len(updates))
-		for i, u := range updates {
-			uids[i] = u.UID
+	// Apply: delete updated UIDs, then insert new + updated
+	if len(diff.Updates) > 0 {
+		uids := make([]int64, len(diff.Updates))
+		for i := range diff.Updates {
+			uids[i] = store.GymGetUID(&diff.Updates[i])
 		}
-		if err := db.DeleteByUIDs(ctx.DB, "gym", ctx.TargetID, uids); err != nil {
+		if err := ctx.Tracking.Gyms.DeleteByUIDs(ctx.TargetID, uids); err != nil {
 			log.Errorf("gym command: delete updated: %s", err)
 			return []bot.Reply{{React: "🙅"}}
 		}
 	}
-
-	toInsert := append(insert, updates...)
-	for i := range toInsert {
-		if _, err := db.InsertGym(ctx.DB, &toInsert[i]); err != nil {
+	for i := range diff.Inserts {
+		if _, err := ctx.Tracking.Gyms.Insert(&diff.Inserts[i]); err != nil {
 			log.Errorf("gym command: insert: %s", err)
+			return []bot.Reply{{React: "🙅"}}
+		}
+	}
+	for i := range diff.Updates {
+		if _, err := ctx.Tracking.Gyms.Insert(&diff.Updates[i]); err != nil {
+			log.Errorf("gym command: insert update: %s", err)
 			return []bot.Reply{{React: "🙅"}}
 		}
 	}
 
 	ctx.TriggerReload()
 	react := "✅"
-	if len(insert) == 0 && len(updates) == 0 {
+	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		react = "👌"
 	}
 	return []bot.Reply{{React: react, Text: message}}
 }
 
 func (c *GymCommand) removeGyms(ctx *bot.CommandContext, teams []int) []bot.Reply {
-	tracked, err := db.SelectGymsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Gyms.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("gym command: select for remove: %s", err)
 		return []bot.Reply{{React: "🙅"}}
@@ -182,7 +176,7 @@ func (c *GymCommand) removeGyms(ctx *bot.CommandContext, teams []int) []bot.Repl
 	if len(uids) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
-	if err := db.DeleteByUIDs(ctx.DB, "gym", ctx.TargetID, uids); err != nil {
+	if err := ctx.Tracking.Gyms.DeleteByUIDs(ctx.TargetID, uids); err != nil {
 		log.Errorf("gym command: delete: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}

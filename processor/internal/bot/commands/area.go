@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 type AreaCommand struct{}
@@ -24,7 +24,7 @@ func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	if len(args) == 0 {
 		// Show current areas + usage hint
-		currentAreas := getUserAreas(ctx)
+		currentAreas := humanAreas(getUserHuman(ctx))
 		prefix := commandPrefix(ctx)
 		var text string
 		if len(currentAreas) > 0 {
@@ -66,8 +66,9 @@ func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
-	currentAreas := getUserAreas(ctx)
-	communities := getUserCommunities(ctx)
+	h := getUserHuman(ctx)
+	currentAreas := humanAreas(h)
+	communities := humanCommunities(ctx, h)
 	available := ctx.AreaLogic.GetAvailableAreasMarked(communities, currentAreas)
 	if len(available) == 0 {
 		return []bot.Reply{{Text: tr.T("cmd.area.none_available")}}
@@ -96,8 +97,9 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.area.specify_add")}}
 	}
 
-	currentAreas := getUserAreas(ctx)
-	communities := getUserCommunities(ctx)
+	h := getUserHuman(ctx)
+	currentAreas := humanAreas(h)
+	communities := humanCommunities(ctx, h)
 	added, notFound, newList := ctx.AreaLogic.AddAreas(currentAreas, communities, args)
 
 	if len(added) > 0 {
@@ -113,7 +115,7 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 	}
 
 	// Show current areas after change
-	allDisplay := ctx.AreaLogic.ResolveDisplayNames(getUserAreas(ctx))
+	allDisplay := ctx.AreaLogic.ResolveDisplayNames(humanAreas(getUserHuman(ctx)))
 	if len(allDisplay) > 0 {
 		parts = append(parts, tr.Tf("status.areas_set", strings.Join(allDisplay, ", ")))
 	}
@@ -131,7 +133,7 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.area.specify_remove")}}
 	}
 
-	currentAreas := getUserAreas(ctx)
+	currentAreas := humanAreas(getUserHuman(ctx))
 	removed, remaining := ctx.AreaLogic.RemoveAreas(currentAreas, args)
 
 	if len(removed) > 0 {
@@ -145,7 +147,7 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 	}
 
 	// Show current areas after change
-	allDisplay := ctx.AreaLogic.ResolveDisplayNames(getUserAreas(ctx))
+	allDisplay := ctx.AreaLogic.ResolveDisplayNames(humanAreas(getUserHuman(ctx)))
 	if len(allDisplay) > 0 {
 		parts = append(parts, tr.Tf("status.areas_set", strings.Join(allDisplay, ", ")))
 	} else {
@@ -161,7 +163,7 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 
 func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
-	areas := getUserAreas(ctx)
+	areas := humanAreas(getUserHuman(ctx))
 	if len(args) > 0 {
 		areas = args
 	}
@@ -205,7 +207,7 @@ func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Re
 
 func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
-	areas := getUserAreas(ctx)
+	areas := humanAreas(getUserHuman(ctx))
 	if len(args) > 0 {
 		areas = args
 	}
@@ -257,37 +259,32 @@ func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bo
 	return []bot.Reply{reply}
 }
 
-// getUserCommunities loads community membership from the DB for area security filtering.
-func getUserCommunities(ctx *bot.CommandContext) []string {
-	if !ctx.Config.Area.Enabled {
+// getUserHuman loads the human record for the command target. Returns nil on error.
+func getUserHuman(ctx *bot.CommandContext) *store.Human {
+	h, err := ctx.Humans.Get(ctx.TargetID)
+	if err != nil || h == nil {
 		return nil
 	}
-	var communityJSON *string
-	_ = ctx.DB.Get(&communityJSON, "SELECT community_membership FROM humans WHERE id = ? LIMIT 1", ctx.TargetID)
-	if communityJSON == nil || *communityJSON == "" {
-		return nil
-	}
-	return bot.ParseCommunityMembership(*communityJSON)
+	return h
 }
 
-func getUserAreas(ctx *bot.CommandContext) []string {
-	var areaJSON *string
-	ctx.DB.Get(&areaJSON, "SELECT area FROM humans WHERE id = ? LIMIT 1", ctx.TargetID)
-	if areaJSON == nil || *areaJSON == "" || *areaJSON == "[]" {
+func humanAreas(h *store.Human) []string {
+	if h == nil {
 		return nil
 	}
-	var areas []string
-	json.Unmarshal([]byte(*areaJSON), &areas)
-	return areas
+	return h.Area
+}
+
+func humanCommunities(ctx *bot.CommandContext, h *store.Human) []string {
+	if !ctx.Config.Area.Enabled || h == nil {
+		return nil
+	}
+	return h.CommunityMembership
 }
 
 func setUserAreas(ctx *bot.CommandContext, areas []string) {
-	areaJSON, _ := json.Marshal(areas)
-	_, err := ctx.DB.Exec("UPDATE humans SET area = ? WHERE id = ?", string(areaJSON), ctx.TargetID)
-	if err != nil {
+	if err := ctx.Humans.SetArea(ctx.TargetID, ctx.ProfileNo, areas); err != nil {
 		log.Errorf("area: update areas: %v", err)
 	}
-	ctx.DB.Exec("UPDATE profiles SET area = ? WHERE id = ? AND profile_no = ?",
-		string(areaJSON), ctx.TargetID, ctx.ProfileNo)
 	ctx.TriggerReload()
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // Target holds the resolved command target — who the command operates on.
@@ -20,23 +20,11 @@ type Target struct {
 	ExecutionMessage string // shown to user when target is overridden (admin feature)
 }
 
-// humanRow is the common set of columns queried when looking up a human target.
-type humanRow struct {
-	ID        string  `db:"id"`
-	Name      string  `db:"name"`
-	Type      string  `db:"type"`
-	Language  *string `db:"language"`
-	ProfileNo int     `db:"current_profile_no"`
-	Latitude  float64 `db:"latitude"`
-	Longitude float64 `db:"longitude"`
-	Area      *string `db:"area"`
-}
-
 // BuildTarget resolves who a command operates on from the args.
 // Admin users can override the target using name<webhookName> or user<userID>.
 // Non-admin commands target the sender.
 // Returns the target, remaining args (with consumed target args removed), and any error.
-func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []string, error) {
+func BuildTarget(ctx *CommandContext, args []string) (*Target, []string, error) {
 	remaining := make([]string, 0, len(args))
 	var nameOverride, userOverride string
 
@@ -61,24 +49,31 @@ func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []st
 		remaining = append(remaining, arg)
 	}
 
+	hs := ctx.Humans
+
 	// Default target: the sender themselves
 	if nameOverride == "" && userOverride == "" {
 		// In a channel (not DM) with admin/delegated permissions: target the channel
 		if !ctx.IsDM && (ctx.IsAdmin || ctx.Permissions.ChannelTracking) {
-			target, err := lookupHumanTarget(db, ctx.ChannelID, "discord:channel")
-			if err != nil {
+			target, err := lookupTarget(hs, ctx.ChannelID)
+			if err != nil || target == nil {
 				// Channel not registered — fall back to self
-				target, err = lookupHumanTarget(db, ctx.TargetID, ctx.TargetType)
+				target, err = lookupTarget(hs, ctx.TargetID)
 				if err != nil {
 					return nil, remaining, err
 				}
 			}
-			target.IsAdmin = ctx.IsAdmin
-			return target, remaining, nil
+			if target != nil {
+				target.IsAdmin = ctx.IsAdmin
+				return target, remaining, nil
+			}
 		}
-		target, err := lookupHumanTarget(db, ctx.TargetID, ctx.TargetType)
+		target, err := lookupTarget(hs, ctx.TargetID)
 		if err != nil {
 			return nil, remaining, err
+		}
+		if target == nil {
+			return nil, remaining, fmt.Errorf("user %s not found", ctx.TargetID)
 		}
 		target.IsAdmin = ctx.IsAdmin
 		return target, remaining, nil
@@ -90,8 +85,8 @@ func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []st
 	}
 
 	if userOverride != "" {
-		target, err := lookupHumanByID(db, userOverride)
-		if err != nil {
+		target, err := lookupTarget(hs, userOverride)
+		if err != nil || target == nil {
 			return nil, remaining, fmt.Errorf("user %s not found or not registered", userOverride)
 		}
 		target.ExecutionMessage = fmt.Sprintf("This command is being executed as %s %s", target.ID, target.Name)
@@ -100,8 +95,12 @@ func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []st
 
 	if nameOverride != "" {
 		// Webhook override: look up by name
-		target, err := lookupHumanByName(db, nameOverride)
-		if err != nil {
+		id, err := hs.LookupWebhookByName(nameOverride)
+		if err != nil || id == "" {
+			return nil, remaining, fmt.Errorf("webhook %s not found", nameOverride)
+		}
+		target, err := lookupTarget(hs, id)
+		if err != nil || target == nil {
 			return nil, remaining, fmt.Errorf("webhook %s not found", nameOverride)
 		}
 		target.ExecutionMessage = fmt.Sprintf("This command is being executed as %s %s", target.Type, target.Name)
@@ -115,52 +114,27 @@ func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []st
 	return nil, remaining, fmt.Errorf("no target resolved")
 }
 
-// lookupHumanTarget loads a human record by ID and type.
-func lookupHumanTarget(db *sqlx.DB, id, typ string) (*Target, error) {
-	var h humanRow
-	err := db.Get(&h, "SELECT id, name, type, language, current_profile_no, latitude, longitude, area FROM humans WHERE id = ? AND type = ?", id, typ)
+// lookupTarget loads a human record by ID and converts to Target.
+func lookupTarget(hs store.HumanStore, id string) (*Target, error) {
+	h, err := hs.Get(id)
 	if err != nil {
 		return nil, err
 	}
-	return humanToTarget(&h), nil
+	if h == nil {
+		return nil, nil
+	}
+	return humanToTarget(h), nil
 }
 
-// lookupHumanByID loads a human record by ID (any type).
-func lookupHumanByID(db *sqlx.DB, id string) (*Target, error) {
-	var h humanRow
-	err := db.Get(&h, "SELECT id, name, type, language, current_profile_no, latitude, longitude, area FROM humans WHERE id = ? LIMIT 1", id)
-	if err != nil {
-		return nil, err
-	}
-	return humanToTarget(&h), nil
-}
-
-// lookupHumanByName loads a human record by name (for webhook lookup).
-func lookupHumanByName(db *sqlx.DB, name string) (*Target, error) {
-	var h humanRow
-	err := db.Get(&h, "SELECT id, name, type, language, current_profile_no, latitude, longitude, area FROM humans WHERE name = ? LIMIT 1", name)
-	if err != nil {
-		return nil, err
-	}
-	return humanToTarget(&h), nil
-}
-
-func humanToTarget(h *humanRow) *Target {
-	lang := ""
-	if h.Language != nil {
-		lang = *h.Language
-	}
+func humanToTarget(h *store.Human) *Target {
 	hasLocation := h.Latitude != 0 || h.Longitude != 0
-	hasArea := false
-	if h.Area != nil && *h.Area != "" && *h.Area != "[]" {
-		hasArea = true
-	}
+	hasArea := len(h.Area) > 0
 	return &Target{
 		ID:          h.ID,
 		Name:        h.Name,
 		Type:        h.Type,
-		Language:    lang,
-		ProfileNo:   h.ProfileNo,
+		Language:    h.Language,
+		ProfileNo:   h.CurrentProfileNo,
 		HasLocation: hasLocation,
 		HasArea:     hasArea,
 	}

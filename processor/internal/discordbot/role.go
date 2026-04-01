@@ -49,7 +49,7 @@ func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args 
 	}
 
 	// Get user language
-	userLang, _, _, _, _ := bot.LookupUserState(b.DB, targetID, b.Cfg.General.Locale)
+	userLang, _, _, _, _ := bot.LookupUserStateFromStore(b.Humans, targetID, b.Cfg.General.Locale)
 	tr := b.Translations.For(userLang)
 
 	// Filter out user override args for subcommand detection

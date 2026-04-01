@@ -162,6 +162,31 @@ func (a *AreaLogic) FindFence(name string) *geofence.Fence {
 	return nil
 }
 
+// ValidateAndPrune removes areas from a user's list that are no longer permitted
+// given their current community membership. When area security is disabled, all
+// areas are valid. Returns the pruned list and the removed areas.
+// Used by reconciliation after community membership changes.
+func (a *AreaLogic) ValidateAndPrune(currentAreas []string, communities []string) (valid []string, removed []string) {
+	if !a.cfg.Area.Enabled {
+		return currentAreas, nil
+	}
+
+	allowedSet := a.buildAllowedSet(communities)
+	if len(allowedSet) == 0 {
+		// No communities → no allowed areas → all removed
+		return nil, currentAreas
+	}
+
+	for _, area := range currentAreas {
+		if allowedSet[strings.ToLower(area)] {
+			valid = append(valid, area)
+		} else {
+			removed = append(removed, area)
+		}
+	}
+	return
+}
+
 // buildAllowedSet builds a set of lowercase area names allowed by the given communities.
 func (a *AreaLogic) buildAllowedSet(communities []string) map[string]bool {
 	allowedSet := make(map[string]bool)

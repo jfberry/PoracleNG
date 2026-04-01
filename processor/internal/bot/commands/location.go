@@ -33,12 +33,9 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 
 	// Remove location
 	if parsed.HasKeyword("arg.remove") {
-		_, err := ctx.DB.Exec("UPDATE humans SET latitude = 0, longitude = 0 WHERE id = ?", ctx.TargetID)
-		if err != nil {
+		if err := ctx.Humans.SetLocation(ctx.TargetID, ctx.ProfileNo, 0, 0); err != nil {
 			return []bot.Reply{{React: "🙅"}}
 		}
-		ctx.DB.Exec("UPDATE profiles SET latitude = 0, longitude = 0 WHERE id = ? AND profile_no = ?",
-			ctx.TargetID, ctx.ProfileNo)
 		ctx.TriggerReload()
 		return []bot.Reply{{React: "✅", Text: tr.T("cmd.location.removed")}}
 	}
@@ -62,13 +59,10 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 
 	// Set location
-	_, err := ctx.DB.Exec("UPDATE humans SET latitude = ?, longitude = ? WHERE id = ?", lat, lon, ctx.TargetID)
-	if err != nil {
+	if err := ctx.Humans.SetLocation(ctx.TargetID, ctx.ProfileNo, lat, lon); err != nil {
 		log.Errorf("location: update human: %v", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
-	ctx.DB.Exec("UPDATE profiles SET latitude = ?, longitude = ? WHERE id = ? AND profile_no = ?",
-		lat, lon, ctx.TargetID, ctx.ProfileNo)
 	ctx.TriggerReload()
 
 	mapLink := fmt.Sprintf("https://maps.google.com/maps?q=%f,%f", lat, lon)

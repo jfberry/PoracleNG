@@ -145,7 +145,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 	isDM := m.Chat.Type == "private"
 	chatID := m.Chat.ID
 
-	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserState(b.DB, userID, b.Cfg.General.Locale)
+	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserStateFromStore(b.Humans, userID, b.Cfg.General.Locale)
 	isAdmin := bot.IsAdmin(b.Cfg, "telegram", userID)
 
 	targetType := bot.TypeTelegramUser
@@ -218,6 +218,8 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			TargetType:   targetType,
 			AreaLogic:    bot.NewAreaLogic(fences, b.Cfg),
 			DB:           b.DB,
+			Humans:       b.Humans,
+			Tracking:     b.Tracking,
 			Config:       b.Cfg,
 			StateMgr:     b.StateMgr,
 			GameData:     b.GameData,
@@ -240,7 +242,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 		}
 
 		// Handle target override
-		target, remainingArgs, err := bot.BuildTarget(b.DB, ctx, cmd.Args)
+		target, remainingArgs, err := bot.BuildTarget(ctx, cmd.Args)
 		if err != nil {
 			msg := tgbotapi.NewMessage(chatID, err.Error())
 			b.api.Send(msg)

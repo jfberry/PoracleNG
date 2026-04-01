@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // HandleGetMonster returns the GET /api/tracking/pokemon/{id} handler.
@@ -61,6 +62,20 @@ func HandleDeleteMonster(deps *TrackingDeps) http.HandlerFunc {
 			return
 		}
 
+		human, profileNo, err := lookupHuman(deps, r)
+		if err != nil || human == nil {
+			if err := db.DeleteByUID(deps.DB, "monsters", id, uid); err != nil {
+				log.Errorf("Tracking API: delete monster: %s", err)
+				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				return
+			}
+			reloadState(deps)
+			trackingJSONOK(w, nil)
+			return
+		}
+
+		existing, _ := db.SelectMonstersByIDProfile(deps.DB, human.ID, profileNo)
+
 		if err := db.DeleteByUID(deps.DB, "monsters", id, uid); err != nil {
 			log.Errorf("Tracking API: delete monster: %s", err)
 			trackingJSONError(w, http.StatusInternalServerError, "database error")
@@ -68,7 +83,21 @@ func HandleDeleteMonster(deps *TrackingDeps) http.HandlerFunc {
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		tr := translatorFor(deps, human)
+		language := resolveLanguage(deps, human)
+		silent := isSilent(r)
+		var message string
+		for _, e := range existing {
+			if e.UID == uid {
+				message = tr.T("tracking.removed") + deps.RowText.MonsterRowText(tr, toMonsterTracking(&e))
+				break
+			}
+		}
+		if !silent && message != "" {
+			sendConfirmation(deps, human, message, language)
+		}
+		trackingJSONOK(w, map[string]any{"message": message})
 	}
 }
 
@@ -248,52 +277,28 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 		}
 
 		// Fetch existing for diff (only for new inserts)
-		tracked, err := db.SelectMonstersByIDProfile(deps.DB, human.ID, profileNo)
+		tracked, err := deps.Tracking.Monsters.SelectByIDProfile(human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: select existing monsters: %s", err)
 			trackingJSONError(w, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		var alreadyPresent []db.MonsterTrackingAPI
+		diff := store.DiffAndClassify(tracked, insert, store.MonsterGetUID, store.MonsterSetUID)
 
-		// Monster JS: filters by pokemon_id before diff, but uses generic diff with no match keys.
-		// Since MonsterTrackingAPI has no diff:"match" fields, diffTracking will compare all
-		// non-skipped fields. We pre-filter by pokemon_id to match the JS behavior.
-		for i := len(insert) - 1; i >= 0; i-- {
-			for _, existing := range tracked {
-				if existing.PokemonID != insert[i].PokemonID {
-					continue
-				}
-				noMatch, isDup, uid, isUpd := DiffTracking(&existing, &insert[i])
-				if noMatch {
-					continue
-				}
-				if isDup {
-					alreadyPresent = append(alreadyPresent, insert[i])
-					insert = append(insert[:i], insert[i+1:]...)
-					break
-				}
-				if isUpd {
-					update := insert[i]
-					update.UID = uid
-					updates = append(updates, update)
-					insert = append(insert[:i], insert[i+1:]...)
-					break
-				}
-			}
-		}
+		// Merge: diff-classified updates go into the explicit updates slice
+		updates = append(updates, diff.Updates...)
 
 		// Build confirmation message
 		var message string
-		totalChanges := len(alreadyPresent) + len(updates) + len(insert)
+		totalChanges := len(diff.AlreadyPresent) + len(updates) + len(diff.Inserts)
 		if totalChanges > 50 {
 			message = tr.Tf("tracking.bulk_changes",
 				deps.Config.Discord.Prefix, tr.T("tracking.tracked"))
 		} else {
 			var sb strings.Builder
-			for i := range alreadyPresent {
-				mt := toMonsterTracking(&alreadyPresent[i])
+			for i := range diff.AlreadyPresent {
+				mt := toMonsterTracking(&diff.AlreadyPresent[i])
 				sb.WriteString(tr.T("tracking.unchanged"))
 				sb.WriteString(deps.RowText.MonsterRowText(tr, mt))
 				sb.WriteByte('\n')
@@ -304,8 +309,8 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 				sb.WriteString(deps.RowText.MonsterRowText(tr, mt))
 				sb.WriteByte('\n')
 			}
-			for i := range insert {
-				mt := toMonsterTracking(&insert[i])
+			for i := range diff.Inserts {
+				mt := toMonsterTracking(&diff.Inserts[i])
 				sb.WriteString(tr.T("tracking.new"))
 				sb.WriteString(deps.RowText.MonsterRowText(tr, mt))
 				sb.WriteByte('\n')
@@ -316,8 +321,8 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 		// JS monster: inserts new rows, then updates existing by uid
 		var newUIDs []int64
 
-		for i := range insert {
-			uid, err := db.InsertMonster(deps.DB, &insert[i])
+		for i := range diff.Inserts {
+			uid, err := deps.Tracking.Monsters.Insert(&diff.Inserts[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert monster: %s", err)
 				trackingJSONError(w, http.StatusInternalServerError, "database error")
@@ -349,9 +354,9 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 		trackingJSONOK(w, map[string]any{
 			"message":        responseMsg,
 			"newUids":        newUIDs,
-			"alreadyPresent": len(alreadyPresent),
+			"alreadyPresent": len(diff.AlreadyPresent),
 			"updates":        len(updates),
-			"insert":         len(insert),
+			"insert":         len(diff.Inserts),
 		})
 	}
 }
@@ -389,6 +394,12 @@ func HandleBulkDeleteMonster(deps *TrackingDeps) http.HandlerFunc {
 			uids = []int64{single}
 		}
 
+		human, profileNo, err := lookupHuman(deps, r)
+		var existing []db.MonsterTrackingAPI
+		if err == nil && human != nil {
+			existing, _ = db.SelectMonstersByIDProfile(deps.DB, human.ID, profileNo)
+		}
+
 		if err := db.DeleteByUIDs(deps.DB, "monsters", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete monsters: %s", err)
 			trackingJSONError(w, http.StatusInternalServerError, "database error")
@@ -396,7 +407,30 @@ func HandleBulkDeleteMonster(deps *TrackingDeps) http.HandlerFunc {
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		var message string
+		if human != nil && len(existing) > 0 {
+			tr := translatorFor(deps, human)
+			language := resolveLanguage(deps, human)
+			silent := isSilent(r)
+			uidSet := make(map[int64]bool, len(uids))
+			for _, u := range uids {
+				uidSet[u] = true
+			}
+			var sb strings.Builder
+			for _, e := range existing {
+				if uidSet[e.UID] {
+					sb.WriteString(tr.T("tracking.removed"))
+					sb.WriteString(deps.RowText.MonsterRowText(tr, toMonsterTracking(&e)))
+					sb.WriteByte('\n')
+				}
+			}
+			message = sb.String()
+			if !silent && message != "" {
+				sendConfirmation(deps, human, message, language)
+			}
+		}
+		trackingJSONOK(w, map[string]any{"message": message})
 	}
 }
 

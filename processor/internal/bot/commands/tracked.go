@@ -8,7 +8,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
-	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 // TrackedCommand implements !tracked — list all active tracking rules.
@@ -22,7 +21,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	// !tracked area — show only area info
 	if len(args) > 0 && args[0] == "area" {
-		currentAreas := getUserAreas(ctx)
+		currentAreas := humanAreas(getUserHuman(ctx))
 		if len(currentAreas) > 0 {
 			displayNames := ctx.AreaLogic.ResolveDisplayNames(currentAreas)
 			return []bot.Reply{{Text: tr.Tf("status.areas_set", strings.Join(displayNames, ", "))}}
@@ -98,7 +97,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Pokemon
-	monsters, err := db.SelectMonstersByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	monsters, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select monsters: %v", err)
 	} else if len(monsters) > 0 {
@@ -112,7 +111,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Raids
-	raids, err := db.SelectRaidsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	raids, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select raids: %v", err)
 	} else if len(raids) > 0 {
@@ -126,7 +125,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Eggs
-	eggs, err := db.SelectEggsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	eggs, err := ctx.Tracking.Eggs.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select eggs: %v", err)
 	} else if len(eggs) > 0 {
@@ -140,7 +139,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Quests
-	quests, err := db.SelectQuestsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	quests, err := ctx.Tracking.Quests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select quests: %v", err)
 	} else if len(quests) > 0 {
@@ -154,7 +153,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Invasions
-	invasions, err := db.SelectInvasionsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	invasions, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select invasions: %v", err)
 	} else if len(invasions) > 0 {
@@ -168,7 +167,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Lures
-	lures, err := db.SelectLuresByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	lures, err := ctx.Tracking.Lures.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select lures: %v", err)
 	} else if len(lures) > 0 {
@@ -182,7 +181,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Gyms
-	gyms, err := db.SelectGymsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	gyms, err := ctx.Tracking.Gyms.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select gyms: %v", err)
 	} else if len(gyms) > 0 {
@@ -196,7 +195,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Nests
-	nests, err := db.SelectNestsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	nests, err := ctx.Tracking.Nests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select nests: %v", err)
 	} else if len(nests) > 0 {
@@ -210,7 +209,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Forts
-	forts, err := db.SelectFortsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	forts, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select forts: %v", err)
 	} else if len(forts) > 0 {
@@ -224,7 +223,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Maxbattles
-	maxbattles, err := db.SelectMaxbattlesByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	maxbattles, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("tracked: select maxbattles: %v", err)
 	} else if len(maxbattles) > 0 {
@@ -270,47 +269,35 @@ type trackedHuman struct {
 }
 
 func lookupHumanForTracked(ctx *bot.CommandContext) (*trackedHuman, error) {
-	var h struct {
-		Enabled       bool    `db:"enabled"`
-		Latitude      float64 `db:"latitude"`
-		Longitude     float64 `db:"longitude"`
-		Area          *string `db:"area"`
-		BlockedAlerts *string `db:"blocked_alerts"`
-	}
-	err := ctx.DB.Get(&h,
-		"SELECT enabled, latitude, longitude, area, blocked_alerts FROM humans WHERE id = ? LIMIT 1",
-		ctx.TargetID)
+	h, err := ctx.Humans.Get(ctx.TargetID)
 	if err != nil {
 		return nil, err
 	}
+	if h == nil {
+		return nil, fmt.Errorf("human %s not found", ctx.TargetID)
+	}
 
-	area := ""
-	if h.Area != nil {
-		area = *h.Area
-	}
-	blocked := ""
-	if h.BlockedAlerts != nil {
-		blocked = *h.BlockedAlerts
-	}
+	areaJSON, _ := json.Marshal(h.Area)
+	blockedJSON, _ := json.Marshal(h.BlockedAlerts)
 
 	// Look up profile name
 	profileName := ""
-	var pn struct {
-		Name string `db:"name"`
-	}
-	err = ctx.DB.Get(&pn,
-		"SELECT name FROM profiles WHERE id = ? AND profile_no = ?",
-		ctx.TargetID, ctx.ProfileNo)
+	profiles, err := ctx.Humans.GetProfiles(ctx.TargetID)
 	if err == nil {
-		profileName = pn.Name
+		for _, p := range profiles {
+			if p.ProfileNo == ctx.ProfileNo {
+				profileName = p.Name
+				break
+			}
+		}
 	}
 
 	return &trackedHuman{
 		Enabled:       h.Enabled,
 		Latitude:      h.Latitude,
 		Longitude:     h.Longitude,
-		Area:          area,
+		Area:          string(areaJSON),
 		ProfileName:   profileName,
-		BlockedAlerts: blocked,
+		BlockedAlerts: string(blockedJSON),
 	}, nil
 }

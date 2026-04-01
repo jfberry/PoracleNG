@@ -671,12 +671,8 @@ func (c *InfoCommand) weatherInfo(ctx *bot.CommandContext, args []string) []bot.
 		}
 	} else {
 		// Look up user's location from DB
-		var human struct {
-			Latitude  float64 `db:"latitude"`
-			Longitude float64 `db:"longitude"`
-		}
-		err := ctx.DB.Get(&human, "SELECT latitude, longitude FROM humans WHERE id = ? LIMIT 1", ctx.TargetID)
-		if err != nil || (human.Latitude == 0 && human.Longitude == 0) {
+		human, err := ctx.Humans.Get(ctx.TargetID)
+		if err != nil || human == nil || (human.Latitude == 0 && human.Longitude == 0) {
 			return []bot.Reply{{Text: tr.T("cmd.info.weather_no_location")}}
 		}
 		lat = human.Latitude

@@ -233,6 +233,72 @@ func TestAreaResolveDisplayNames(t *testing.T) {
 	}
 }
 
+// --- ValidateAndPrune ---
+
+func TestAreaValidateAndPrune_NoSecurity(t *testing.T) {
+	al := NewAreaLogic(testFences(), noSecurityConfig())
+	valid, removed := al.ValidateAndPrune([]string{"downtown", "park", "harbor"}, nil)
+
+	// With area security disabled, all areas are valid
+	if len(valid) != 3 {
+		t.Fatalf("expected 3 valid, got %d", len(valid))
+	}
+	if len(removed) != 0 {
+		t.Fatalf("expected 0 removed, got %d", len(removed))
+	}
+}
+
+func TestAreaValidateAndPrune_WithSecurity(t *testing.T) {
+	al := NewAreaLogic(testFences(), securityConfig())
+
+	// TeamCity allows Downtown and Uptown only
+	valid, removed := al.ValidateAndPrune([]string{"downtown", "park", "harbor"}, []string{"teamcity"})
+
+	if len(valid) != 1 {
+		t.Fatalf("expected 1 valid, got %d: %v", len(valid), valid)
+	}
+	if valid[0] != "downtown" {
+		t.Errorf("expected downtown valid, got %s", valid[0])
+	}
+	if len(removed) != 2 {
+		t.Fatalf("expected 2 removed, got %d: %v", len(removed), removed)
+	}
+}
+
+func TestAreaValidateAndPrune_NoCommunities(t *testing.T) {
+	al := NewAreaLogic(testFences(), securityConfig())
+
+	// No communities = no allowed areas = all removed
+	valid, removed := al.ValidateAndPrune([]string{"downtown", "park"}, nil)
+
+	if len(valid) != 0 {
+		t.Fatalf("expected 0 valid, got %d", len(valid))
+	}
+	if len(removed) != 2 {
+		t.Fatalf("expected 2 removed, got %d", len(removed))
+	}
+}
+
+func TestAreaValidateAndPrune_MultipleCommunities(t *testing.T) {
+	al := NewAreaLogic(testFences(), securityConfig())
+
+	// Both communities = Downtown, Uptown, Park, Harbor all allowed
+	valid, removed := al.ValidateAndPrune(
+		[]string{"downtown", "park", "harbor", "unknown"},
+		[]string{"teamcity", "teamnature"},
+	)
+
+	if len(valid) != 3 {
+		t.Fatalf("expected 3 valid, got %d: %v", len(valid), valid)
+	}
+	if len(removed) != 1 {
+		t.Fatalf("expected 1 removed, got %d: %v", len(removed), removed)
+	}
+	if removed[0] != "unknown" {
+		t.Errorf("expected unknown removed, got %s", removed[0])
+	}
+}
+
 // --- FindFence ---
 
 func TestAreaFindFence(t *testing.T) {

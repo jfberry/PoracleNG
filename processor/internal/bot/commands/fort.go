@@ -5,9 +5,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // FortCommand implements !fort — track fort (pokestop/gym) updates.
@@ -104,75 +104,41 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		ChangeTypes:  changeTypesStr,
 	}}
 
-	tracked, err := db.SelectFortsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("fort command: select existing: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var updates, alreadyPresent []db.FortTrackingAPI
-	for i := len(insert) - 1; i >= 0; i-- {
-		for _, existing := range tracked {
-			noMatch, isDup, uid, isUpd := api.DiffTracking(&existing, &insert[i])
-			if noMatch {
-				continue
-			}
-			if isDup {
-				alreadyPresent = append(alreadyPresent, insert[i])
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-			if isUpd {
-				u := insert[i]
-				u.UID = uid
-				updates = append(updates, u)
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-		}
+	diff, err := store.ApplyDiff(ctx.Tracking.Forts, ctx.TargetID, tracked, insert,
+		store.FortGetUID, store.FortSetUID)
+	if err != nil {
+		log.Errorf("fort command: apply diff: %s", err)
+		return []bot.Reply{{React: "🙅"}}
 	}
 
-	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
+	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
 		func(i int) string {
-			return ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&alreadyPresent[i]))
+			return ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&diff.AlreadyPresent[i]))
 		},
 		func(i int) string {
-			return ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&updates[i]))
+			return ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&diff.Updates[i]))
 		},
 		func(i int) string {
-			return ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&insert[i]))
+			return ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&diff.Inserts[i]))
 		},
 	)
 
-	if len(updates) > 0 {
-		uids := make([]int64, len(updates))
-		for i, u := range updates {
-			uids[i] = u.UID
-		}
-		if err := db.DeleteByUIDs(ctx.DB, "forts", ctx.TargetID, uids); err != nil {
-			log.Errorf("fort command: delete updated: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
-
-	toInsert := append(insert, updates...)
-	for i := range toInsert {
-		if _, err := db.InsertFort(ctx.DB, &toInsert[i]); err != nil {
-			log.Errorf("fort command: insert: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
-
 	ctx.TriggerReload()
 	react := "✅"
-	if len(insert) == 0 && len(updates) == 0 {
+	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		react = "👌"
 	}
 	return []bot.Reply{{React: react, Text: message}}
 }
 
 func (c *FortCommand) removeForts(ctx *bot.CommandContext, fortType string) []bot.Reply {
-	tracked, err := db.SelectFortsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("fort command: select for remove: %s", err)
 		return []bot.Reply{{React: "🙅"}}
@@ -187,7 +153,7 @@ func (c *FortCommand) removeForts(ctx *bot.CommandContext, fortType string) []bo
 	if len(uids) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
-	if err := db.DeleteByUIDs(ctx.DB, "forts", ctx.TargetID, uids); err != nil {
+	if err := ctx.Tracking.Forts.DeleteByUIDs(ctx.TargetID, uids); err != nil {
 		log.Errorf("fort command: delete: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}

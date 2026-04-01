@@ -9,6 +9,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
+	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
@@ -23,6 +24,8 @@ import (
 // CommandDeps holds all dependencies needed for command execution.
 type CommandDeps struct {
 	DB           *sqlx.DB
+	Humans       store.HumanStore
+	Tracking     *store.TrackingStores
 	Config       *config.Config
 	StateMgr     *state.Manager
 	GameData     *gamedata.GameData
@@ -84,7 +87,7 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 		}
 
 		// Look up user in DB for language, profile, location, area
-		userLang, profileNo, hasLocation, hasArea := lookupUserState(deps.DB, req.UserID, deps.Config.General.Locale)
+		userLang, profileNo, hasLocation, hasArea, _ := bot.LookupUserStateFromStore(deps.Humans, req.UserID, deps.Config.General.Locale)
 
 		// Check admin status
 		isAdmin := bot.IsAdmin(deps.Config, req.Platform, req.UserID)
@@ -144,6 +147,8 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 				TargetType:   req.Platform + ":user",
 				AreaLogic:    bot.NewAreaLogic(fences, deps.Config),
 				DB:           deps.DB,
+				Humans:       deps.Humans,
+				Tracking:     deps.Tracking,
 				Config:       deps.Config,
 				StateMgr:     deps.StateMgr,
 				GameData:     deps.GameData,
@@ -164,7 +169,7 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 			}
 
 			// Handle target override (user<id>, name<webhook>)
-			target, remainingArgs, err := bot.BuildTarget(deps.DB, ctx, cmd.Args)
+			target, remainingArgs, err := bot.BuildTarget(ctx, cmd.Args)
 			if err != nil {
 				log.Debugf("command: target resolution failed: %v", err)
 				allReplies = append(allReplies, bot.Reply{React: "🙅", Text: err.Error()})
@@ -191,30 +196,6 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 }
 
 // lookupUserState loads basic user info for command context building.
-func lookupUserState(database *sqlx.DB, userID, defaultLocale string) (lang string, profileNo int, hasLocation, hasArea bool) {
-	lang = defaultLocale
-	profileNo = 1
-
-	var h struct {
-		Language  *string `db:"language"`
-		ProfileNo int     `db:"current_profile_no"`
-		Latitude  float64 `db:"latitude"`
-		Longitude float64 `db:"longitude"`
-		Area      *string `db:"area"`
-	}
-	err := database.Get(&h, "SELECT language, current_profile_no, latitude, longitude, area FROM humans WHERE id = ? LIMIT 1", userID)
-	if err != nil {
-		return // defaults
-	}
-
-	if h.Language != nil && *h.Language != "" {
-		lang = *h.Language
-	}
-	profileNo = h.ProfileNo
-	hasLocation = h.Latitude != 0 || h.Longitude != 0
-	hasArea = h.Area != nil && *h.Area != "" && *h.Area != "[]"
-	return
-}
 
 func writeCommandJSON(w http.ResponseWriter, status int, resp commandResponse) {
 	w.Header().Set("Content-Type", "application/json")

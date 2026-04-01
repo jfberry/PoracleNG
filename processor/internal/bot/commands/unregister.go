@@ -6,7 +6,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
-	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 // UnregisterCommand implements !unregister -- delete user registration and tracking.
@@ -53,7 +52,7 @@ func (c *UnregisterCommand) Run(ctx *bot.CommandContext, args []string) []bot.Re
 
 	var unregistered []string
 	for _, id := range targets {
-		if err := db.DeleteHumanAndTracking(ctx.DB, id); err != nil {
+		if err := ctx.Humans.Delete(id); err != nil {
 			log.Errorf("unregister: delete %s: %v", id, err)
 			continue
 		}

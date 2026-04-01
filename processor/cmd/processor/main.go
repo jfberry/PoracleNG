@@ -46,6 +46,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/resources"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
@@ -88,6 +89,9 @@ func main() {
 		log.Fatalf("Failed to open database: %s", err)
 	}
 	defer database.Close()
+
+	humanStore := store.NewSQLHumanStore(database)
+	trackingStores := store.NewTrackingStores(database)
 
 	// Database migrations: adopt existing Knex DB if needed, drop FK constraints, run pending
 	if err := db.AdoptExistingDatabase(database.DB); err != nil {
@@ -240,6 +244,7 @@ func main() {
 	}
 	trackingDeps := &api.TrackingDeps{
 		DB:           database,
+		Tracking:     trackingStores,
 		StateMgr:     stateMgr,
 		RowText: &rowtext.Generator{
 			GD:                  proc.enricher.GameData,
@@ -411,6 +416,8 @@ func main() {
 	}
 	cmdDeps := &api.CommandDeps{
 		DB:           database,
+		Humans:       humanStore,
+		Tracking:     trackingStores,
 		Config:       cfg,
 		StateMgr:     stateMgr,
 		GameData:     proc.enricher.GameData,
@@ -513,6 +520,8 @@ func main() {
 	// Shared bot dependencies — constructed once, passed to both Discord and Telegram bots.
 	sharedBotDeps := bot.BotDeps{
 		DB:           database,
+		Humans:       humanStore,
+		Tracking:     trackingStores,
 		Cfg:          cfg,
 		StateMgr:     stateMgr,
 		GameData:     proc.enricher.GameData,

@@ -8,7 +8,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
-	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 // CommunityCommand implements !community -- admin-only community management.
@@ -89,7 +88,7 @@ func (c *CommunityCommand) runAddRemove(ctx *bot.CommandContext, args []string, 
 
 	var messages []string
 	for _, id := range targets {
-		human, err := db.SelectOneHumanFull(ctx.DB, id)
+		human, err := ctx.Humans.Get(id)
 		if err != nil {
 			log.Errorf("community: select human %s: %v", id, err)
 			continue
@@ -98,25 +97,17 @@ func (c *CommunityCommand) runAddRemove(ctx *bot.CommandContext, args []string, 
 			continue
 		}
 
-		existingCommunities := bot.ParseCommunityMembership(human.CommunityMembership)
-
 		var newCommunities []string
 		if isAdd {
-			newCommunities = bot.AddCommunity(ctx.Config, existingCommunities, communityName)
+			newCommunities = bot.AddCommunity(ctx.Config, human.CommunityMembership, communityName)
 			messages = append(messages, fmt.Sprintf("Add community %s to target %s %s", communityName, id, human.Name))
 		} else {
-			newCommunities = bot.RemoveCommunity(ctx.Config, existingCommunities, communityName)
+			newCommunities = bot.RemoveCommunity(ctx.Config, human.CommunityMembership, communityName)
 			messages = append(messages, fmt.Sprintf("Remove community %s from target %s %s", communityName, id, human.Name))
 		}
 
 		newRestrictions := bot.CalculateLocationRestrictions(ctx.Config, newCommunities)
-		communityJSON, _ := json.Marshal(newCommunities)
-		restrictionJSON, _ := json.Marshal(newRestrictions)
-
-		_, err = ctx.DB.Exec(
-			"UPDATE humans SET community_membership = ?, area_restriction = ? WHERE id = ?",
-			string(communityJSON), string(restrictionJSON), id)
-		if err != nil {
+		if err := ctx.Humans.SetCommunity(id, newCommunities, newRestrictions); err != nil {
 			log.Errorf("community: update human %s: %v", id, err)
 		}
 	}
@@ -138,7 +129,7 @@ func (c *CommunityCommand) runShow(ctx *bot.CommandContext, args []string) []bot
 
 	var messages []string
 	for _, id := range targets {
-		human, err := db.SelectOneHumanFull(ctx.DB, id)
+		human, err := ctx.Humans.Get(id)
 		if err != nil {
 			log.Errorf("community: select human %s: %v", id, err)
 			continue
@@ -147,13 +138,15 @@ func (c *CommunityCommand) runShow(ctx *bot.CommandContext, args []string) []bot
 			continue
 		}
 
+		communityJSON, _ := json.Marshal(human.CommunityMembership)
 		restriction := "none"
-		if human.AreaRestriction.Valid && human.AreaRestriction.String != "" {
-			restriction = human.AreaRestriction.String
+		if human.AreaRestriction != nil {
+			restrictionJSON, _ := json.Marshal(human.AreaRestriction)
+			restriction = string(restrictionJSON)
 		}
 		messages = append(messages, fmt.Sprintf(
 			"User target %s %s has communities %s location restrictions %s",
-			id, human.Name, human.CommunityMembership, restriction))
+			id, human.Name, string(communityJSON), restriction))
 	}
 
 	if len(messages) == 0 {
@@ -171,9 +164,7 @@ func (c *CommunityCommand) runClear(ctx *bot.CommandContext, args []string) []bo
 
 	var messages []string
 	for _, id := range targets {
-		_, err := ctx.DB.Exec(
-			"UPDATE humans SET community_membership = '[]', area_restriction = NULL WHERE id = ?", id)
-		if err != nil {
+		if err := ctx.Humans.SetCommunity(id, nil, nil); err != nil {
 			log.Errorf("community: clear %s: %v", id, err)
 			continue
 		}
