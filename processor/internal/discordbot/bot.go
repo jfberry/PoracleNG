@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -66,6 +67,9 @@ func New(cfg Config) (*Bot, error) {
 
 	log.Infof("Discord bot connected as %s", session.State.User.Username)
 
+	// Log guild presence and validate config
+	b.logGuildPresence()
+
 	// Initialize reconciliation if check_role is enabled.
 	if cfg.Cfg.Discord.CheckRole && cfg.DTS != nil {
 		b.reconciliation = NewReconciliation(session, cfg.DB, cfg.Cfg, cfg.Translations, cfg.DTS)
@@ -73,6 +77,39 @@ func New(cfg Config) (*Bot, error) {
 	}
 
 	return b, nil
+}
+
+// logGuildPresence logs which guilds the bot is in and warns if
+// config.discord.guilds doesn't match (matching alerter startup behavior).
+func (b *Bot) logGuildPresence() {
+	if b.session.State == nil {
+		return
+	}
+	var names []string
+	presentIDs := make(map[string]bool)
+	for _, g := range b.session.State.Guilds {
+		names = append(names, g.ID+":"+g.Name)
+		presentIDs[g.ID] = true
+	}
+	if len(names) > 0 {
+		log.Infof("Bot is present in guilds %s", strings.Join(names, ", "))
+	}
+
+	configuredGuilds := b.Cfg.Discord.Guilds
+	if len(configuredGuilds) > 0 {
+		allMatch := len(configuredGuilds) == len(presentIDs)
+		if allMatch {
+			for _, gid := range configuredGuilds {
+				if !presentIDs[gid] {
+					allMatch = false
+					break
+				}
+			}
+		}
+		if !allMatch {
+			log.Warn("config.discord.guilds does not contain all guilds bot is present in")
+		}
+	}
 }
 
 // Close disconnects the Discord gateway and stops background goroutines.
