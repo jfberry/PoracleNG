@@ -1,27 +1,20 @@
-.PHONY: all build build-processor install-alerter clean start test
+.PHONY: all build clean start test
 
-# Default: build everything
+# Default: build
 all: build
 
-# Build both components
-build: build-processor install-alerter
-
 # Build the Go processor binary
-build-processor:
+build:
 	cd processor && go build -o poracle-processor ./cmd/processor
-
-# Install alerter Node.js dependencies
-install-alerter:
-	cd alerter && npm ci
 
 # Remove build artifacts
 clean:
 	rm -f processor/poracle-processor
 
-# Start both components via start.sh
+# Start the processor
 start: build
 	./start.sh
 
-# Run processor tests
+# Run all tests
 test:
 	cd processor && go test ./...
