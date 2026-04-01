@@ -406,6 +406,7 @@
   "cmd.script.file": "Here is your tracking script:",
 
   "cmd.poracle.dm_only_telegram": "Please register in a group, not in a direct message",
+  "cmd.poracle.wrong_channel": "This channel is not configured for registration. Please use the designated registration channel.",
 
   "cmd.unregister.admin_no_targets": "No-one to unregister: as an admin I won't let you unregister yourself",
   "cmd.unregister.success": "Unregistered: {0}",

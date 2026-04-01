@@ -86,10 +86,11 @@ func TestPoracleCommand_NotRegistrationChannel(t *testing.T) {
 	cmd := &PoracleCommand{}
 	replies := cmd.Run(ctx, nil)
 
-	// Should silently ignore (nil replies)
-	if len(replies) != 0 {
-		t.Errorf("expected no replies for non-registration channel, got %d", len(replies))
+	// Should tell user to use the right channel
+	if len(replies) != 1 {
+		t.Fatalf("expected 1 reply for non-registration channel, got %d", len(replies))
 	}
+	assertTextContains(t, replies, "not configured for registration")
 }
 
 func TestPoracleCommand_TelegramDM_Rejected(t *testing.T) {
