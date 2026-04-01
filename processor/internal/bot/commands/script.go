@@ -9,6 +9,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	// db types still used for MonsterTrackingAPI etc. struct references
 )
 
 type ScriptCommand struct{}
@@ -23,7 +24,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	var sb strings.Builder
 
 	// Monster tracking → !track commands
-	monsters, err := db.SelectMonstersByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	monsters, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("script: select monsters: %v", err)
 	}
@@ -33,7 +34,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 
 	// Raid tracking
-	raids, err := db.SelectRaidsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	raids, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("script: select raids: %v", err)
 	}
@@ -43,7 +44,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 
 	// Egg tracking
-	eggs, err := db.SelectEggsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	eggs, err := ctx.Tracking.Eggs.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("script: select eggs: %v", err)
 	}
@@ -53,7 +54,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 
 	// Invasion tracking
-	invasions, err := db.SelectInvasionsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	invasions, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("script: select invasions: %v", err)
 	}
@@ -63,7 +64,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 
 	// Lure tracking
-	lures, err := db.SelectLuresByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	lures, err := ctx.Tracking.Lures.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("script: select lures: %v", err)
 	}
@@ -73,7 +74,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 
 	// Nest tracking
-	nests, err := db.SelectNestsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	nests, err := ctx.Tracking.Nests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("script: select nests: %v", err)
 	}
@@ -83,7 +84,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 
 	// Gym tracking
-	gyms, err := db.SelectGymsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	gyms, err := ctx.Tracking.Gyms.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("script: select gyms: %v", err)
 	}
@@ -93,7 +94,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 
 	// Quest tracking
-	quests, err := db.SelectQuestsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	quests, err := ctx.Tracking.Quests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("script: select quests: %v", err)
 	}

@@ -139,15 +139,14 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 	}
 
 	// Look up user location
-	var human struct {
-		Latitude  float64 `db:"latitude"`
-		Longitude float64 `db:"longitude"`
-		Language  *string `db:"language"`
-	}
-	ctx.DB.Get(&human, "SELECT latitude, longitude, language FROM humans WHERE id = ? LIMIT 1", ctx.TargetID)
-
-	if human.Language != nil && *human.Language != "" && language == ctx.Language {
-		language = *human.Language
+	human, _ := ctx.Humans.Get(ctx.TargetID)
+	var humanLat, humanLon float64
+	if human != nil {
+		humanLat = human.Latitude
+		humanLon = human.Longitude
+		if human.Language != "" && language == ctx.Language {
+			language = human.Language
+		}
 	}
 
 	// Deep copy the webhook so we don't mutate the loaded testdata
@@ -159,10 +158,10 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 	// Move location to user's location (unless location: "keep")
 	if dataItem.Location != "keep" {
 		if _, ok := hook["latitude"]; ok {
-			hook["latitude"] = human.Latitude
+			hook["latitude"] = humanLat
 		}
 		if _, ok := hook["longitude"]; ok {
-			hook["longitude"] = human.Longitude
+			hook["longitude"] = humanLon
 		}
 	}
 
@@ -197,8 +196,8 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 				for k, v := range loc {
 					newLoc[k] = v
 				}
-				newLoc["lat"] = human.Latitude
-				newLoc["lon"] = human.Longitude
+				newLoc["lat"] = humanLat
+				newLoc["lon"] = humanLon
 				newOld["location"] = newLoc
 			}
 			hook["old"] = newOld
@@ -213,8 +212,8 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 				for k, v := range loc {
 					newLoc[k] = v
 				}
-				newLoc["lat"] = human.Latitude + 0.001
-				newLoc["lon"] = human.Longitude + 0.001
+				newLoc["lat"] = humanLat + 0.001
+				newLoc["lon"] = humanLon + 0.001
 				newNew["location"] = newLoc
 			}
 			hook["new"] = newNew
@@ -247,8 +246,8 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 			"type":      ctx.TargetType,
 			"language":  language,
 			"template":  template,
-			"latitude":  human.Latitude,
-			"longitude": human.Longitude,
+			"latitude":  humanLat,
+			"longitude": humanLon,
 		},
 	}
 

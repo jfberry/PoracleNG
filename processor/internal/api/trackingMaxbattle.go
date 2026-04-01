@@ -61,6 +61,20 @@ func HandleDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 			return
 		}
 
+		human, profileNo, err := lookupHuman(deps, r)
+		if err != nil || human == nil {
+			if err := db.DeleteByUID(deps.DB, "maxbattle", id, uid); err != nil {
+				log.Errorf("Tracking API: delete maxbattle: %s", err)
+				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				return
+			}
+			reloadState(deps)
+			trackingJSONOK(w, nil)
+			return
+		}
+
+		existing, _ := db.SelectMaxbattlesByIDProfile(deps.DB, human.ID, profileNo)
+
 		if err := db.DeleteByUID(deps.DB, "maxbattle", id, uid); err != nil {
 			log.Errorf("Tracking API: delete maxbattle: %s", err)
 			trackingJSONError(w, http.StatusInternalServerError, "database error")
@@ -68,7 +82,21 @@ func HandleDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		tr := translatorFor(deps, human)
+		language := resolveLanguage(deps, human)
+		silent := isSilent(r)
+		var message string
+		for _, e := range existing {
+			if e.UID == uid {
+				message = tr.T("tracking.removed") + deps.RowText.MaxbattleRowText(tr, toMaxbattleTracking(&e))
+				break
+			}
+		}
+		if !silent && message != "" {
+			sendConfirmation(deps, human, message, language)
+		}
+		trackingJSONOK(w, map[string]any{"message": message})
 	}
 }
 
@@ -205,7 +233,7 @@ func HandleCreateMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 
 		var newUIDs []int64
 		for i := range insert {
-			uid, err := db.InsertMaxbattle(deps.DB, &insert[i])
+			uid, err := deps.Tracking.Maxbattles.Insert(&insert[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert maxbattle: %s", err)
 				trackingJSONError(w, http.StatusInternalServerError, "database error")
@@ -259,6 +287,12 @@ func HandleBulkDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 			uids = []int64{single}
 		}
 
+		human, profileNo, err := lookupHuman(deps, r)
+		var existing []db.MaxbattleTrackingAPI
+		if err == nil && human != nil {
+			existing, _ = db.SelectMaxbattlesByIDProfile(deps.DB, human.ID, profileNo)
+		}
+
 		if err := db.DeleteByUIDs(deps.DB, "maxbattle", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete maxbattles: %s", err)
 			trackingJSONError(w, http.StatusInternalServerError, "database error")
@@ -266,7 +300,30 @@ func HandleBulkDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		var message string
+		if human != nil && len(existing) > 0 {
+			tr := translatorFor(deps, human)
+			language := resolveLanguage(deps, human)
+			silent := isSilent(r)
+			uidSet := make(map[int64]bool, len(uids))
+			for _, u := range uids {
+				uidSet[u] = true
+			}
+			var sb strings.Builder
+			for _, e := range existing {
+				if uidSet[e.UID] {
+					sb.WriteString(tr.T("tracking.removed"))
+					sb.WriteString(deps.RowText.MaxbattleRowText(tr, toMaxbattleTracking(&e)))
+					sb.WriteByte('\n')
+				}
+			}
+			message = sb.String()
+			if !silent && message != "" {
+				sendConfirmation(deps, human, message, language)
+			}
+		}
+		trackingJSONOK(w, map[string]any{"message": message})
 	}
 }
 

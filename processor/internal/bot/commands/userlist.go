@@ -1,12 +1,14 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // UserlistCommand implements !userlist — admin-only listing of registered users.
@@ -50,25 +52,14 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		}
 	}
 
-	type humanRow struct {
-		ID           string  `db:"id"`
-		Name         string  `db:"name"`
-		Type         string  `db:"type"`
-		Enabled      int     `db:"enabled"`
-		AdminDisable int     `db:"admin_disable"`
-		Area         *string `db:"area"`
-	}
-
-	var rows []humanRow
-	err := ctx.DB.Select(&rows,
-		"SELECT id, COALESCE(name, '') AS name, type, enabled, admin_disable, area FROM humans ORDER BY type, name")
+	allHumans, err := ctx.Humans.ListAll()
 	if err != nil {
 		log.Errorf("userlist: query: %v", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var filtered []humanRow
-	for _, h := range rows {
+	var filtered []*store.Human
+	for _, h := range allHumans {
 		if filterPlatform != "" && !strings.HasPrefix(h.Type, filterPlatform+":") && h.Type != filterPlatform {
 			continue
 		}
@@ -81,7 +72,7 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 				continue
 			}
 		}
-		isEnabled := h.Enabled == 1 && h.AdminDisable == 0
+		isEnabled := h.Enabled && !h.AdminDisable
 		if filterEnabled != nil {
 			if *filterEnabled && !isEnabled {
 				continue
@@ -102,22 +93,21 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	sb.WriteByte('\n')
 
 	for _, h := range filtered {
-		isEnabled := h.Enabled == 1 && h.AdminDisable == 0
+		isEnabled := h.Enabled && !h.AdminDisable
 		disabled := ""
 		if !isEnabled {
 			disabled = " 🚫"
 		}
 
-		area := "[]"
-		if h.Area != nil && *h.Area != "" {
-			area = *h.Area
+		areaJSON, _ := json.Marshal(h.Area)
+		area := string(areaJSON)
+		if area == "null" {
+			area = "[]"
 		}
 
 		if h.Type == "webhook" {
-			// Webhooks: just show "webhook • name" (no ID, no URL)
 			sb.WriteString(fmt.Sprintf("webhook • %s%s\n", h.Name, disabled))
 		} else {
-			// Users/channels/groups: "type • name [username] | (id) [areas]"
 			displayName := h.Name
 			if displayName == "" {
 				displayName = h.ID

@@ -12,11 +12,7 @@ func (c *StartCommand) Aliases() []string { return nil }
 
 func (c *StartCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
-	_, err := ctx.DB.Exec(
-		"UPDATE humans SET enabled = 1, fails = 0 WHERE id = ? AND type = ?",
-		ctx.TargetID, ctx.TargetType,
-	)
-	if err != nil {
+	if err := ctx.Humans.SetEnabledWithFails(ctx.TargetID); err != nil {
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
@@ -41,11 +37,7 @@ func (c *StopCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		}}
 	}
 
-	_, err := ctx.DB.Exec(
-		"UPDATE humans SET enabled = 0 WHERE id = ? AND type = ?",
-		ctx.TargetID, ctx.TargetType,
-	)
-	if err != nil {
+	if err := ctx.Humans.SetEnabled(ctx.TargetID, false); err != nil {
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()

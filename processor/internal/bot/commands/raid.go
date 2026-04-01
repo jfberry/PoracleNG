@@ -4,9 +4,9 @@ import (
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // RaidCommand implements !raid — track raid bosses or raid levels.
@@ -163,74 +163,37 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		}
 	}
 
-	// Diff against existing
-	tracked, err := db.SelectRaidsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	// Diff against existing and apply
+	tracked, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("raid command: select existing: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var updates []db.RaidTrackingAPI
-	var alreadyPresent []db.RaidTrackingAPI
-
-	for i := len(insert) - 1; i >= 0; i-- {
-		for _, existing := range tracked {
-			noMatch, isDup, uid, isUpd := api.DiffTracking(&existing, &insert[i])
-			if noMatch {
-				continue
-			}
-			if isDup {
-				alreadyPresent = append(alreadyPresent, insert[i])
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-			if isUpd {
-				update := insert[i]
-				update.UID = uid
-				updates = append(updates, update)
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-		}
+	diff, err := store.ApplyDiff(ctx.Tracking.Raids, ctx.TargetID, tracked, insert,
+		store.RaidGetUID, store.RaidSetUID)
+	if err != nil {
+		log.Errorf("raid command: apply diff: %s", err)
+		return []bot.Reply{{React: "🙅"}}
 	}
 
-	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
-		func(i int) string { return ctx.RowText.RaidRowText(tr, raidAPIToTracking(&alreadyPresent[i])) },
-		func(i int) string { return ctx.RowText.RaidRowText(tr, raidAPIToTracking(&updates[i])) },
-		func(i int) string { return ctx.RowText.RaidRowText(tr, raidAPIToTracking(&insert[i])) },
+	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
+		func(i int) string { return ctx.RowText.RaidRowText(tr, raidAPIToTracking(&diff.AlreadyPresent[i])) },
+		func(i int) string { return ctx.RowText.RaidRowText(tr, raidAPIToTracking(&diff.Updates[i])) },
+		func(i int) string { return ctx.RowText.RaidRowText(tr, raidAPIToTracking(&diff.Inserts[i])) },
 	)
-
-	// Apply
-	if len(updates) > 0 {
-		uids := make([]int64, len(updates))
-		for i, u := range updates {
-			uids[i] = u.UID
-		}
-		if err := db.DeleteByUIDs(ctx.DB, "raid", ctx.TargetID, uids); err != nil {
-			log.Errorf("raid command: delete updated: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
-
-	toInsert := append(insert, updates...)
-	for i := range toInsert {
-		if _, err := db.InsertRaid(ctx.DB, &toInsert[i]); err != nil {
-			log.Errorf("raid command: insert: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
 
 	ctx.TriggerReload()
 
 	react := "✅"
-	if len(insert) == 0 && len(updates) == 0 {
+	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		react = "👌"
 	}
 	return []bot.Reply{{React: react, Text: message}}
 }
 
 func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
-	tracked, err := db.SelectRaidsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("raid command: select for remove: %s", err)
 		return []bot.Reply{{React: "🙅"}}
@@ -274,7 +237,7 @@ func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArg
 		return []bot.Reply{{React: "👌"}}
 	}
 
-	if err := db.DeleteByUIDs(ctx.DB, "raid", ctx.TargetID, uidsToDelete); err != nil {
+	if err := ctx.Tracking.Raids.DeleteByUIDs(ctx.TargetID, uidsToDelete); err != nil {
 		log.Errorf("raid command: delete: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}

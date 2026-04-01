@@ -3,9 +3,9 @@ package commands
 import (
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 type LureCommand struct{}
@@ -83,68 +83,35 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		})
 	}
 
-	tracked, err := db.SelectLuresByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Lures.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("lure command: select existing: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var updates, alreadyPresent []db.LureTrackingAPI
-	for i := len(insert) - 1; i >= 0; i-- {
-		for _, existing := range tracked {
-			noMatch, isDup, uid, isUpd := api.DiffTracking(&existing, &insert[i])
-			if noMatch {
-				continue
-			}
-			if isDup {
-				alreadyPresent = append(alreadyPresent, insert[i])
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-			if isUpd {
-				u := insert[i]
-				u.UID = uid
-				updates = append(updates, u)
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-		}
+	diff, err := store.ApplyDiff(ctx.Tracking.Lures, ctx.TargetID, tracked, insert,
+		store.LureGetUID, store.LureSetUID)
+	if err != nil {
+		log.Errorf("lure command: apply diff: %s", err)
+		return []bot.Reply{{React: "🙅"}}
 	}
 
-	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
-		func(i int) string { return ctx.RowText.LureRowText(tr, lureAPIToTracking(&alreadyPresent[i])) },
-		func(i int) string { return ctx.RowText.LureRowText(tr, lureAPIToTracking(&updates[i])) },
-		func(i int) string { return ctx.RowText.LureRowText(tr, lureAPIToTracking(&insert[i])) },
+	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
+		func(i int) string { return ctx.RowText.LureRowText(tr, lureAPIToTracking(&diff.AlreadyPresent[i])) },
+		func(i int) string { return ctx.RowText.LureRowText(tr, lureAPIToTracking(&diff.Updates[i])) },
+		func(i int) string { return ctx.RowText.LureRowText(tr, lureAPIToTracking(&diff.Inserts[i])) },
 	)
-
-	if len(updates) > 0 {
-		uids := make([]int64, len(updates))
-		for i, u := range updates {
-			uids[i] = u.UID
-		}
-		if err := db.DeleteByUIDs(ctx.DB, "lures", ctx.TargetID, uids); err != nil {
-			log.Errorf("lure command: delete updated: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
-	toInsert := append(insert, updates...)
-	for i := range toInsert {
-		if _, err := db.InsertLure(ctx.DB, &toInsert[i]); err != nil {
-			log.Errorf("lure command: insert: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
 
 	ctx.TriggerReload()
 	react := "✅"
-	if len(insert) == 0 && len(updates) == 0 {
+	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		react = "👌"
 	}
 	return []bot.Reply{{React: react, Text: message}}
 }
 
 func removeLures(ctx *bot.CommandContext, lureIDs []int) []bot.Reply {
-	tracked, err := db.SelectLuresByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Lures.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		return []bot.Reply{{React: "🙅"}}
 	}
@@ -161,7 +128,7 @@ func removeLures(ctx *bot.CommandContext, lureIDs []int) []bot.Reply {
 	if len(uids) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
-	if err := db.DeleteByUIDs(ctx.DB, "lures", ctx.TargetID, uids); err != nil {
+	if err := ctx.Tracking.Lures.DeleteByUIDs(ctx.TargetID, uids); err != nil {
 		log.Errorf("lure command: delete: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}

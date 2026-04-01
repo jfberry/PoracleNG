@@ -5,10 +5,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // MaxbattleCommand implements !maxbattle — track max battles (Dynamax).
@@ -144,69 +144,35 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_levels")}}
 	}
 
-	// Diff against existing
-	tracked, err := db.SelectMaxbattlesByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	// Diff against existing and apply
+	tracked, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("maxbattle command: select existing: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var updates, alreadyPresent []db.MaxbattleTrackingAPI
-	for i := len(insert) - 1; i >= 0; i-- {
-		for _, existing := range tracked {
-			noMatch, isDup, uid, isUpd := api.DiffTracking(&existing, &insert[i])
-			if noMatch {
-				continue
-			}
-			if isDup {
-				alreadyPresent = append(alreadyPresent, insert[i])
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-			if isUpd {
-				u := insert[i]
-				u.UID = uid
-				updates = append(updates, u)
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-		}
+	diff, err := store.ApplyDiff(ctx.Tracking.Maxbattles, ctx.TargetID, tracked, insert,
+		store.MaxbattleGetUID, store.MaxbattleSetUID)
+	if err != nil {
+		log.Errorf("maxbattle command: apply diff: %s", err)
+		return []bot.Reply{{React: "🙅"}}
 	}
 
-	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
+	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
 		func(i int) string {
-			return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&alreadyPresent[i]))
+			return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&diff.AlreadyPresent[i]))
 		},
 		func(i int) string {
-			return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&updates[i]))
+			return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&diff.Updates[i]))
 		},
 		func(i int) string {
-			return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&insert[i]))
+			return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&diff.Inserts[i]))
 		},
 	)
 
-	if len(updates) > 0 {
-		uids := make([]int64, len(updates))
-		for i, u := range updates {
-			uids[i] = u.UID
-		}
-		if err := db.DeleteByUIDs(ctx.DB, "maxbattle", ctx.TargetID, uids); err != nil {
-			log.Errorf("maxbattle command: delete updated: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
-
-	toInsert := append(insert, updates...)
-	for i := range toInsert {
-		if _, err := db.InsertMaxbattle(ctx.DB, &toInsert[i]); err != nil {
-			log.Errorf("maxbattle command: insert: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
-
 	ctx.TriggerReload()
 	react := "✅"
-	if len(insert) == 0 && len(updates) == 0 {
+	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		react = "👌"
 	}
 	return []bot.Reply{{React: react, Text: message}}
@@ -281,7 +247,7 @@ func (c *MaxbattleCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.
 }
 
 func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
-	tracked, err := db.SelectMaxbattlesByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("maxbattle command: select for remove: %s", err)
 		return []bot.Reply{{React: "🙅"}}
@@ -307,7 +273,7 @@ func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot
 	if len(uids) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
-	if err := db.DeleteByUIDs(ctx.DB, "maxbattle", ctx.TargetID, uids); err != nil {
+	if err := ctx.Tracking.Maxbattles.DeleteByUIDs(ctx.TargetID, uids); err != nil {
 		log.Errorf("maxbattle command: delete: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}

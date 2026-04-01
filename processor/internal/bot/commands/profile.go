@@ -10,7 +10,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
-	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 type ProfileCommand struct{}
@@ -53,17 +52,7 @@ func (c *ProfileCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
-	var profiles []struct {
-		ProfileNo   int     `db:"profile_no"`
-		Name        string  `db:"name"`
-		ActiveHours string  `db:"active_hours"`
-		Area        string  `db:"area"`
-		Latitude    float64 `db:"latitude"`
-		Longitude   float64 `db:"longitude"`
-	}
-	err := ctx.DB.Select(&profiles,
-		"SELECT profile_no, name, COALESCE(active_hours, '') AS active_hours, COALESCE(area, '[]') AS area, COALESCE(latitude, 0) AS latitude, COALESCE(longitude, 0) AS longitude FROM profiles WHERE id = ? ORDER BY profile_no",
-		ctx.TargetID)
+	profiles, err := ctx.Humans.GetProfiles(ctx.TargetID)
 	if err != nil {
 		log.Errorf("profile: list: %v", err)
 		return []bot.Reply{{React: "🙅"}}
@@ -88,8 +77,10 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		}
 		sb.WriteString(fmt.Sprintf("%d%s. %s", p.ProfileNo, activeMarker, p.Name))
 
-		if p.Area != "" && p.Area != "[]" {
-			sb.WriteString(fmt.Sprintf(" - areas: %s", p.Area))
+		areaJSON, _ := json.Marshal(p.Area)
+		area := string(areaJSON)
+		if area != "null" && area != "[]" {
+			sb.WriteString(fmt.Sprintf(" - areas: %s", area))
 		}
 
 		if p.Latitude != 0 || p.Longitude != 0 {
@@ -98,7 +89,7 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		sb.WriteByte('\n')
 
 		// Decode and display active hours
-		if p.ActiveHours != "" && p.ActiveHours != "[]" {
+		if p.ActiveHours != "" && p.ActiveHours != "[]" && p.ActiveHours != "{}" {
 			var hours []struct {
 				Day   int    `json:"day"`
 				Hours string `json:"hours"`
@@ -125,30 +116,19 @@ func (c *ProfileCommand) addProfile(ctx *bot.CommandContext, args []string) []bo
 	}
 	name := strings.Join(args, " ")
 
-	// Find next profile number
-	var maxNo int
-	ctx.DB.Get(&maxNo, "SELECT COALESCE(MAX(profile_no), 0) FROM profiles WHERE id = ?", ctx.TargetID)
-	newNo := maxNo + 1
-
-	// Get user's current location/area for the new profile
-	var human struct {
-		Latitude  float64 `db:"latitude"`
-		Longitude float64 `db:"longitude"`
-		Area      *string `db:"area"`
-	}
-	ctx.DB.Get(&human, "SELECT latitude, longitude, area FROM humans WHERE id = ? LIMIT 1", ctx.TargetID)
-
-	area := "[]"
-	if human.Area != nil {
-		area = *human.Area
-	}
-
-	_, err := ctx.DB.Exec(
-		"INSERT INTO profiles (id, profile_no, name, area, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?)",
-		ctx.TargetID, newNo, name, area, human.Latitude, human.Longitude)
-	if err != nil {
+	if err := ctx.Humans.AddProfile(ctx.TargetID, name, ""); err != nil {
 		log.Errorf("profile: add: %v", err)
 		return []bot.Reply{{React: "🙅"}}
+	}
+
+	// Find the new profile number
+	newNo := 0
+	if profiles, err := ctx.Humans.GetProfiles(ctx.TargetID); err == nil {
+		for _, p := range profiles {
+			if strings.EqualFold(p.Name, name) && p.ProfileNo > newNo {
+				newNo = p.ProfileNo
+			}
+		}
 	}
 
 	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.profile.created", newNo, name)}}
@@ -169,17 +149,9 @@ func (c *ProfileCommand) removeProfile(ctx *bot.CommandContext, args []string) [
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.cannot_delete_1")}}
 	}
 
-	// Delete all tracking for this profile
-	for _, table := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "nests", "gym", "forts", "maxbattle"} {
-		ctx.DB.Exec(fmt.Sprintf("DELETE FROM %s WHERE id = ? AND profile_no = ?", table), ctx.TargetID, profileNo)
-	}
-
-	// Delete the profile
-	ctx.DB.Exec("DELETE FROM profiles WHERE id = ? AND profile_no = ?", ctx.TargetID, profileNo)
-
-	// If this was the active profile, switch to 1
-	if profileNo == ctx.ProfileNo {
-		ctx.DB.Exec("UPDATE humans SET current_profile_no = 1 WHERE id = ?", ctx.TargetID)
+	if err := ctx.Humans.DeleteProfile(ctx.TargetID, profileNo); err != nil {
+		log.Errorf("profile: remove: %v", err)
+		return []bot.Reply{{React: "🙅"}}
 	}
 
 	ctx.TriggerReload()
@@ -197,10 +169,13 @@ func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) [
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.not_found")}}
 	}
 
-	_, err := ctx.DB.Exec("UPDATE humans SET current_profile_no = ? WHERE id = ?", profileNo, ctx.TargetID)
+	found, err := ctx.Humans.SwitchProfile(ctx.TargetID, profileNo)
 	if err != nil {
 		log.Errorf("profile: switch: %v", err)
 		return []bot.Reply{{React: "🙅"}}
+	}
+	if !found {
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.not_found")}}
 	}
 
 	ctx.TriggerReload()
@@ -293,7 +268,7 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 
 	data, _ := json.Marshal(entries)
 
-	if err := db.UpdateProfileHours(ctx.DB, ctx.TargetID, ctx.ProfileNo, string(data)); err != nil {
+	if err := ctx.Humans.UpdateProfileHours(ctx.TargetID, ctx.ProfileNo, string(data)); err != nil {
 		log.Errorf("profile: settime: %v", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
@@ -309,13 +284,8 @@ func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Re
 	}
 
 	// Load all profiles for this user.
-	var profiles []struct {
-		ProfileNo int    `db:"profile_no"`
-		Name      string `db:"name"`
-	}
-	if err := ctx.DB.Select(&profiles,
-		"SELECT profile_no, name FROM profiles WHERE id = ? ORDER BY profile_no",
-		ctx.TargetID); err != nil {
+	profiles, err := ctx.Humans.GetProfiles(ctx.TargetID)
+	if err != nil {
 		log.Errorf("profile: copyto: load profiles: %v", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
@@ -368,7 +338,7 @@ func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Re
 		if !hasAll && !nameMatch {
 			continue
 		}
-		if err := db.CopyProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo, p.ProfileNo); err != nil {
+		if err := ctx.Humans.CopyProfile(ctx.TargetID, ctx.ProfileNo, p.ProfileNo); err != nil {
 			log.Errorf("profile: copyto %s profile %d: %v", ctx.TargetID, p.ProfileNo, err)
 			return []bot.Reply{{React: "🙅"}}
 		}
@@ -397,22 +367,26 @@ func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Re
 }
 
 func (c *ProfileCommand) resolveProfileNo(ctx *bot.CommandContext, input string) int {
+	profiles, err := ctx.Humans.GetProfiles(ctx.TargetID)
+	if err != nil {
+		return -1
+	}
+
 	// Try as number
 	if n, err := strconv.Atoi(input); err == nil {
-		var count int
-		ctx.DB.Get(&count, "SELECT COUNT(*) FROM profiles WHERE id = ? AND profile_no = ?", ctx.TargetID, n)
-		if count > 0 {
-			return n
+		for _, p := range profiles {
+			if p.ProfileNo == n {
+				return n
+			}
 		}
 	}
 
 	// Try as name
-	var profileNo int
-	err := ctx.DB.Get(&profileNo,
-		"SELECT profile_no FROM profiles WHERE id = ? AND LOWER(name) = ? LIMIT 1",
-		ctx.TargetID, strings.ToLower(input))
-	if err == nil {
-		return profileNo
+	lower := strings.ToLower(input)
+	for _, p := range profiles {
+		if strings.ToLower(p.Name) == lower {
+			return p.ProfileNo
+		}
 	}
 
 	return -1

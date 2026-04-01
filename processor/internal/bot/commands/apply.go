@@ -79,17 +79,14 @@ func (c *ApplyCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	for _, targ := range targetArgs {
 		// Try by ID
-		var h struct {
-			ID   string `db:"id"`
-			Name string `db:"name"`
-			Type string `db:"type"`
-		}
-		err := ctx.DB.Get(&h, "SELECT id, name, type FROM humans WHERE id = ? LIMIT 1", targ)
-		if err == nil {
+		h, err := ctx.Humans.Get(targ)
+		if err == nil && h != nil {
 			targets = append(targets, targetInfo{ID: h.ID, Name: h.Name, Type: h.Type})
 		}
 
 		// Try by name (webhooks, channels, groups)
+		// This needs a name-based search that HumanStore doesn't expose yet,
+		// so we fall back to direct DB for now.
 		var byName []struct {
 			ID   string `db:"id"`
 			Name string `db:"name"`
@@ -159,16 +156,10 @@ func (c *ApplyCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			targetCtx.TargetType = target.Type
 
 			// Look up target's profile and language
-			var targetProfile struct {
-				ProfileNo int     `db:"current_profile_no"`
-				Language  *string `db:"language"`
-			}
-			if err := ctx.DB.Get(&targetProfile,
-				"SELECT current_profile_no, COALESCE(language, '') as language FROM humans WHERE id = ? LIMIT 1",
-				target.ID); err == nil {
-				targetCtx.ProfileNo = targetProfile.ProfileNo
-				if targetProfile.Language != nil && *targetProfile.Language != "" {
-					targetCtx.Language = *targetProfile.Language
+			if targetHuman, err := ctx.Humans.Get(target.ID); err == nil && targetHuman != nil {
+				targetCtx.ProfileNo = targetHuman.CurrentProfileNo
+				if targetHuman.Language != "" {
+					targetCtx.Language = targetHuman.Language
 				}
 			}
 

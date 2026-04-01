@@ -5,10 +5,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // NestCommand implements !nest — track nesting pokemon.
@@ -90,62 +90,28 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		})
 	}
 
-	tracked, err := db.SelectNestsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Nests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("nest command: select existing: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var updates, alreadyPresent []db.NestTrackingAPI
-	for i := len(insert) - 1; i >= 0; i-- {
-		for _, existing := range tracked {
-			noMatch, isDup, uid, isUpd := api.DiffTracking(&existing, &insert[i])
-			if noMatch {
-				continue
-			}
-			if isDup {
-				alreadyPresent = append(alreadyPresent, insert[i])
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-			if isUpd {
-				u := insert[i]
-				u.UID = uid
-				updates = append(updates, u)
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-		}
+	diff, err := store.ApplyDiff(ctx.Tracking.Nests, ctx.TargetID, tracked, insert,
+		store.NestGetUID, store.NestSetUID)
+	if err != nil {
+		log.Errorf("nest command: apply diff: %s", err)
+		return []bot.Reply{{React: "🙅"}}
 	}
 
-	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
-		func(i int) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(&alreadyPresent[i])) },
-		func(i int) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(&updates[i])) },
-		func(i int) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(&insert[i])) },
+	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
+		func(i int) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(&diff.AlreadyPresent[i])) },
+		func(i int) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(&diff.Updates[i])) },
+		func(i int) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(&diff.Inserts[i])) },
 	)
-
-	if len(updates) > 0 {
-		uids := make([]int64, len(updates))
-		for i, u := range updates {
-			uids[i] = u.UID
-		}
-		if err := db.DeleteByUIDs(ctx.DB, "nests", ctx.TargetID, uids); err != nil {
-			log.Errorf("nest command: delete updated: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
-
-	toInsert := append(insert, updates...)
-	for i := range toInsert {
-		if _, err := db.InsertNest(ctx.DB, &toInsert[i]); err != nil {
-			log.Errorf("nest command: insert: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
 
 	ctx.TriggerReload()
 	react := "✅"
-	if len(insert) == 0 && len(updates) == 0 {
+	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		react = "👌"
 	}
 	return []bot.Reply{{React: react, Text: message}}
@@ -224,7 +190,7 @@ func (c *NestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Parse
 }
 
 func (c *NestCommand) removeNests(ctx *bot.CommandContext, monsterList []bot.ResolvedPokemon) []bot.Reply {
-	tracked, err := db.SelectNestsByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Nests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("nest command: select for remove: %s", err)
 		return []bot.Reply{{React: "🙅"}}
@@ -245,7 +211,7 @@ func (c *NestCommand) removeNests(ctx *bot.CommandContext, monsterList []bot.Res
 	if len(uids) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
-	if err := db.DeleteByUIDs(ctx.DB, "nests", ctx.TargetID, uids); err != nil {
+	if err := ctx.Tracking.Nests.DeleteByUIDs(ctx.TargetID, uids); err != nil {
 		log.Errorf("nest command: delete: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}

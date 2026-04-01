@@ -6,10 +6,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // TrackCommand implements !track — pokemon tracking with IV, PVP, type, gen filters.
@@ -113,70 +113,30 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_pokemon")}}
 	}
 
-	// Diff against existing
-	tracked, err := db.SelectMonstersByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	// Diff against existing and apply
+	tracked, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("track command: select existing: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var updates []db.MonsterTrackingAPI
-	var alreadyPresent []db.MonsterTrackingAPI
-
-	for i := len(insert) - 1; i >= 0; i-- {
-		for _, existing := range tracked {
-			noMatch, isDup, uid, isUpd := api.DiffTracking(&existing, &insert[i])
-			if noMatch {
-				continue
-			}
-			if isDup {
-				alreadyPresent = append(alreadyPresent, insert[i])
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-			if isUpd {
-				update := insert[i]
-				update.UID = uid
-				updates = append(updates, update)
-				insert = append(insert[:i], insert[i+1:]...)
-				break
-			}
-		}
+	diff, err := store.ApplyDiff(ctx.Tracking.Monsters, ctx.TargetID, tracked, insert,
+		store.MonsterGetUID, store.MonsterSetUID)
+	if err != nil {
+		log.Errorf("track command: apply diff: %s", err)
+		return []bot.Reply{{React: "🙅"}}
 	}
 
 	// Build response
-	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
-		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&alreadyPresent[i])) },
-		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&updates[i])) },
-		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&insert[i])) },
+	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
+		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&diff.AlreadyPresent[i])) },
+		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&diff.Updates[i])) },
+		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&diff.Inserts[i])) },
 	)
-
-	// Apply changes
-	if len(updates) > 0 {
-		uids := make([]int64, len(updates))
-		for i, u := range updates {
-			uids[i] = u.UID
-		}
-		if err := db.DeleteByUIDs(ctx.DB, "monsters", ctx.TargetID, uids); err != nil {
-			log.Errorf("track command: delete updated: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
-
-	toInsert := make([]db.MonsterTrackingAPI, 0, len(insert)+len(updates))
-	toInsert = append(toInsert, insert...)
-	toInsert = append(toInsert, updates...)
-
-	for i := range toInsert {
-		if _, err := db.InsertMonster(ctx.DB, &toInsert[i]); err != nil {
-			log.Errorf("track command: insert: %s", err)
-			return []bot.Reply{{React: "🙅"}}
-		}
-	}
 
 	ctx.TriggerReload()
 
-	if len(insert) == 0 && len(updates) == 0 {
+	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		return []bot.Reply{{React: "👌", Text: message}}
 	}
 	return []bot.Reply{{React: "✅", Text: message}}
@@ -543,7 +503,7 @@ func (c *TrackCommand) filterByGenAndType(ctx *bot.CommandContext, monsters []bo
 
 func (c *TrackCommand) removeTracking(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
 	tr := ctx.Tr()
-	tracked, err := db.SelectMonstersByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("track command: select for remove: %s", err)
 		return []bot.Reply{{React: "🙅"}}
@@ -575,7 +535,7 @@ func (c *TrackCommand) removeTracking(ctx *bot.CommandContext, parsed *bot.Parse
 		return []bot.Reply{{React: "👌"}}
 	}
 
-	if err := db.DeleteByUIDs(ctx.DB, "monsters", ctx.TargetID, uidsToDelete); err != nil {
+	if err := ctx.Tracking.Monsters.DeleteByUIDs(ctx.TargetID, uidsToDelete); err != nil {
 		log.Errorf("track command: delete: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}

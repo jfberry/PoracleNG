@@ -31,7 +31,7 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		return []bot.Reply{*warn}
 	}
 
-	tracked, err := db.SelectMonstersByIDProfile(ctx.DB, ctx.TargetID, ctx.ProfileNo)
+	tracked, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("untrack command: select existing: %s", err)
 		return []bot.Reply{{React: "🙅"}}
@@ -99,7 +99,7 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		return []bot.Reply{{React: "👌"}}
 	}
 
-	if err := db.DeleteByUIDs(ctx.DB, "monsters", ctx.TargetID, uidsToDelete); err != nil {
+	if err := ctx.Tracking.Monsters.DeleteByUIDs(ctx.TargetID, uidsToDelete); err != nil {
 		log.Errorf("untrack command: delete: %s", err)
 		return []bot.Reply{{React: "🙅"}}
 	}

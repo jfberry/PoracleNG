@@ -7,7 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
-	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // PoracleCommand implements !poracle -- user registration.
@@ -43,7 +43,7 @@ func (c *PoracleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// Check if user already exists
-	existing, err := db.SelectOneHumanFull(ctx.DB, ctx.UserID)
+	existing, err := ctx.Humans.Get(ctx.UserID)
 	if err != nil {
 		log.Errorf("poracle: select human %s: %v", ctx.UserID, err)
 		return []bot.Reply{{React: "🙅"}}
@@ -55,55 +55,46 @@ func (c *PoracleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	return c.handleNewUser(ctx, communityToAdd)
 }
 
-func (c *PoracleCommand) handleExistingUser(ctx *bot.CommandContext, human *db.HumanFull, communityToAdd string) []bot.Reply {
+func (c *PoracleCommand) handleExistingUser(ctx *bot.CommandContext, human *store.Human, communityToAdd string) []bot.Reply {
 	// Admin-disabled without disabled_date: hard block, don't allow re-enable
-	if human.AdminDisable == 1 && !human.DisabledDate.Valid {
+	if human.AdminDisable && !human.DisabledDate.Valid {
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	updateRequired := false
-	setClauses := make([]string, 0, 4)
-	setArgs := make([]interface{}, 0, 4)
+	fields := make(map[string]any)
 
 	// Re-enable if disabled
-	if human.Enabled == 0 {
-		setClauses = append(setClauses, "enabled = ?", "fails = ?")
-		setArgs = append(setArgs, 1, 0)
-		updateRequired = true
+	if !human.Enabled {
+		fields["enabled"] = 1
+		fields["fails"] = 0
 	}
 
 	// Clear admin_disable if role_check_mode is "disable-user" and has disabled_date
 	if ctx.Config.General.RoleCheckMode == "disable-user" {
-		if human.AdminDisable == 1 && human.DisabledDate.Valid {
-			setClauses = append(setClauses, "admin_disable = ?", "disabled_date = ?")
-			setArgs = append(setArgs, 0, nil)
-			updateRequired = true
+		if human.AdminDisable && human.DisabledDate.Valid {
+			fields["admin_disable"] = 0
+			fields["disabled_date"] = nil
 			log.Debugf("poracle: user %s re-enabled via poracle command (admin_disable cleared)", ctx.UserID)
 		}
 	}
 
 	// Add community if area security is enabled
 	if communityToAdd != "" {
-		existingCommunities := bot.ParseCommunityMembership(human.CommunityMembership)
-		newCommunities := bot.AddCommunity(ctx.Config, existingCommunities, communityToAdd)
+		newCommunities := bot.AddCommunity(ctx.Config, human.CommunityMembership, communityToAdd)
 		newRestrictions := bot.CalculateLocationRestrictions(ctx.Config, newCommunities)
 
 		communityJSON, _ := json.Marshal(newCommunities)
 		restrictionJSON, _ := json.Marshal(newRestrictions)
 
-		setClauses = append(setClauses, "community_membership = ?", "area_restriction = ?")
-		setArgs = append(setArgs, string(communityJSON), string(restrictionJSON))
-		updateRequired = true
+		fields["community_membership"] = string(communityJSON)
+		fields["area_restriction"] = string(restrictionJSON)
 	}
 
-	if !updateRequired {
+	if len(fields) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
 
-	// Build and execute update query
-	query := "UPDATE humans SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
-	setArgs = append(setArgs, ctx.UserID)
-	if _, err := ctx.DB.Exec(query, setArgs...); err != nil {
+	if err := ctx.Humans.Update(ctx.UserID, fields); err != nil {
 		log.Errorf("poracle: update human %s: %v", ctx.UserID, err)
 		return []bot.Reply{{React: "🙅"}}
 	}
@@ -126,38 +117,29 @@ func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd s
 	}
 
 	// Build community membership
-	communityMembership := "[]"
-	var areaRestrictionStr *string
+	var communities []string
+	var restrictions []string
 	if communityToAdd != "" {
-		communities := []string{communityToAdd}
-		communityJSON, _ := json.Marshal(communities)
-		communityMembership = string(communityJSON)
-
-		restrictions := bot.CalculateLocationRestrictions(ctx.Config, communities)
-		restrictionJSON, _ := json.Marshal(restrictions)
-		s := string(restrictionJSON)
-		areaRestrictionStr = &s
+		communities = []string{communityToAdd}
+		restrictions = bot.CalculateLocationRestrictions(ctx.Config, communities)
 	}
 
-	human := &db.HumanFull{
+	human := &store.Human{
 		ID:                  ctx.UserID,
 		Name:                ctx.UserName,
 		Type:                userType,
-		Enabled:             1,
-		Area:                "[]",
-		CommunityMembership: communityMembership,
-	}
-	if areaRestrictionStr != nil {
-		human.AreaRestriction.SetValid(*areaRestrictionStr)
+		Enabled:             true,
+		CommunityMembership: communities,
+		AreaRestriction:     restrictions,
 	}
 
-	if err := db.CreateHuman(ctx.DB, human); err != nil {
+	if err := ctx.Humans.Create(human); err != nil {
 		log.Errorf("poracle: create human %s: %v", ctx.UserID, err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
 	// Create default profile
-	if err := db.CreateDefaultProfile(ctx.DB, ctx.UserID, ctx.UserName, "[]", 0, 0); err != nil {
+	if err := ctx.Humans.CreateDefaultProfile(ctx.UserID, ctx.UserName, nil, 0, 0); err != nil {
 		log.Errorf("poracle: create default profile for %s: %v", ctx.UserID, err)
 		// Don't fail the registration, the human was created
 	}

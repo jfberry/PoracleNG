@@ -31,8 +31,7 @@ func (c *EnableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		if id == "" {
 			continue
 		}
-		_, err := ctx.DB.Exec("UPDATE humans SET admin_disable = 0, disabled_date = NULL WHERE id = ?", id)
-		if err != nil {
+		if err := ctx.Humans.SetAdminDisable(id, false); err != nil {
 			log.Errorf("enable: %v", err)
 			continue
 		}
@@ -68,8 +67,7 @@ func (c *DisableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		if id == "" {
 			continue
 		}
-		_, err := ctx.DB.Exec("UPDATE humans SET admin_disable = 1 WHERE id = ?", id)
-		if err != nil {
+		if err := ctx.Humans.SetAdminDisable(id, true); err != nil {
 			log.Errorf("disable: %v", err)
 			continue
 		}
