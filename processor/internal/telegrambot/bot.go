@@ -326,6 +326,13 @@ func (b *Bot) sendReplies(chatID int64, userID int64, replies []bot.Reply) {
 			targetChat = userID
 		}
 
+		// React — Telegram doesn't support message reactions, send as text
+		if reply.React != "" && reply.Text == "" && len(reply.Embed) == 0 && reply.Attachment == nil {
+			msg := tgbotapi.NewMessage(targetChat, reply.React)
+			b.api.Send(msg)
+			continue
+		}
+
 		// File attachment
 		if reply.Attachment != nil {
 			doc := tgbotapi.NewDocument(targetChat, tgbotapi.FileBytes{
