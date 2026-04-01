@@ -458,6 +458,13 @@ func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCre
 }
 
 func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, replies []bot.Reply) {
+	// Reference the original message so responses show as replies
+	ref := &discordgo.MessageReference{
+		MessageID: m.ID,
+		ChannelID: m.ChannelID,
+		GuildID:   m.GuildID,
+	}
+
 	for _, reply := range replies {
 		// React
 		if reply.React != "" {
@@ -465,7 +472,8 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 		}
 
 		targetChannel := m.ChannelID
-		if reply.IsDM && m.GuildID != "" {
+		isDM := reply.IsDM && m.GuildID != ""
+		if isDM {
 			ch, err := s.UserChannelCreate(m.Author.ID)
 			if err != nil {
 				log.Warnf("discord bot: create DM channel: %v", err)
@@ -474,10 +482,18 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 			targetChannel = ch.ID
 		}
 
+		// Use message reference when replying in the same channel.
+		// For DM replies redirected from guild, don't reference the guild message.
+		msgRef := ref
+		if targetChannel != m.ChannelID {
+			msgRef = nil
+		}
+
 		// File attachment
 		if reply.Attachment != nil {
 			msgSend := &discordgo.MessageSend{
-				Content: reply.Text,
+				Content:   reply.Text,
+				Reference: msgRef,
 				Files: []*discordgo.File{{
 					Name:   reply.Attachment.Filename,
 					Reader: bytes.NewReader(reply.Attachment.Content),
@@ -492,8 +508,12 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 		// Text message
 		if reply.Text != "" {
 			messages := bot.SplitMessage(reply.Text, 2000)
-			for _, msg := range messages {
-				s.ChannelMessageSend(targetChannel, msg)
+			for i, msg := range messages {
+				msgSend := &discordgo.MessageSend{Content: msg}
+				if i == 0 && msgRef != nil {
+					msgSend.Reference = msgRef
+				}
+				s.ChannelMessageSendComplex(targetChannel, msgSend)
 			}
 		}
 
@@ -530,6 +550,7 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 				}
 
 				if msg.Content != "" || len(msg.Embeds) > 0 {
+					msg.Reference = msgRef
 					if _, err := s.ChannelMessageSendComplex(targetChannel, msg); err != nil {
 						log.Warnf("discord bot: send embed: %v", err)
 					}
