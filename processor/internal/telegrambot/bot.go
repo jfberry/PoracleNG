@@ -332,8 +332,13 @@ func (b *Bot) sendReplies(chatID int64, replies []bot.Reply) {
 			messages := bot.SplitMessage(reply.Text, 4095)
 			for _, text := range messages {
 				msg := tgbotapi.NewMessage(chatID, text)
+				msg.ParseMode = "Markdown"
 				if _, err := b.api.Send(msg); err != nil {
-					log.Warnf("telegram bot: send message: %v", err)
+					// Retry without parse mode in case the text has invalid Markdown
+					msg.ParseMode = ""
+					if _, err2 := b.api.Send(msg); err2 != nil {
+						log.Warnf("telegram bot: send message: %v", err2)
+					}
 				}
 			}
 		}
