@@ -410,6 +410,7 @@
 
   "cmd.unregister.admin_no_targets": "No-one to unregister: as an admin I won't let you unregister yourself",
   "cmd.unregister.success": "Unregistered: {0}",
+  "cmd.unregister.goodbye": "You have been unregistered. All your tracking data has been removed.",
 
   "cmd.community.usage": "Valid commands are `{0}community add <name> <targets>`, `{0}community remove <name> <targets>`, `{0}community clear <targets>`, `{0}community show <targets>`, `{0}community list`",
   "cmd.community.none": "No communities configured",

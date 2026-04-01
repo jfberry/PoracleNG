@@ -65,5 +65,11 @@ func (c *UnregisterCommand) Run(ctx *bot.CommandContext, args []string) []bot.Re
 	}
 
 	ctx.TriggerReload()
+
+	if !ctx.IsAdmin {
+		// Self-unregister: friendly goodbye
+		return []bot.Reply{{React: "✅", Text: tr.T("cmd.unregister.goodbye")}}
+	}
+	// Admin unregistering others: show IDs
 	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.unregister.success", strings.Join(unregistered, ", "))}}
 }
