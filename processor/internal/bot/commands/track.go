@@ -49,6 +49,17 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Resolve pokemon list
 	monsterList := c.resolveMonsters(ctx, parsed)
 
+	// Reject bare "!track everything" with no meaningful filters for non-admins.
+	// Filters like IV, CP, level, PVP league, type, or gender meaningfully narrow results.
+	// "shiny" alone doesn't — almost everything can be shiny.
+	if parsed.HasKeyword("arg.everything") && !ctx.IsAdmin {
+		hasFilters := len(parsed.Singles) > 0 || len(parsed.Ranges) > 0 ||
+			len(parsed.Types) > 0 || parsed.Gender != 0
+		if !hasFilters {
+			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.track.everything_no_filters")}}
+		}
+	}
+
 	// Parse filter values with defaults
 	filters := c.parseFilters(ctx, parsed)
 
