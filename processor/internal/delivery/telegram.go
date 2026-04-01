@@ -37,6 +37,9 @@ func NewTelegramSender(token string) *TelegramSender {
 // Platform returns the platform identifier.
 func (ts *TelegramSender) Platform() string { return "telegram" }
 
+// WaitForRateLimit is a no-op for Telegram — rate limiting is handled inline via 429 retry.
+func (ts *TelegramSender) WaitForRateLimit(target string) {}
+
 // telegramMessage holds the parsed fields from a Telegram job message.
 type telegramMessage struct {
 	Content        string      `json:"content"`

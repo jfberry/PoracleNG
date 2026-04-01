@@ -48,6 +48,10 @@ type Sender interface {
 	Delete(ctx context.Context, sentID string) error
 	Edit(ctx context.Context, sentID string, message json.RawMessage) error
 	Platform() string // "discord" or "telegram"
+	// WaitForRateLimit blocks until the target is not rate-limited.
+	// Called BEFORE acquiring the platform semaphore so that rate-limited
+	// goroutines don't hold concurrency slots.
+	WaitForRateLimit(target string)
 }
 
 // PermanentError wraps an error that should not be retried (e.g. user blocked bot).

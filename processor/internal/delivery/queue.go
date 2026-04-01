@@ -106,12 +106,17 @@ func (fq *FairQueue) processJob(job *Job) {
 	destLock.Lock()
 	defer destLock.Unlock()
 
-	// 2. Acquire platform semaphore (limits global concurrency per platform)
+	// 2. Wait for rate limits BEFORE acquiring semaphore so that
+	//    rate-limited goroutines don't hold concurrency slots.
+	platform := PlatformFromType(job.Type)
+	if sender, ok := fq.senders[platform]; ok {
+		sender.WaitForRateLimit(job.Target)
+	}
+
+	// 3. Acquire platform semaphore (limits global concurrency per platform)
 	sem := fq.semaphoreFor(job.Type)
 	sem <- struct{}{}
 	defer func() { <-sem }()
-
-	platform := PlatformFromType(job.Type)
 
 	// Track per-platform in-flight count
 	counter := fq.counterFor(job.Type)
