@@ -238,6 +238,18 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		return
 	}
 
+	// Helper: send a reply referencing the user's message
+	reply := func(text string) {
+		s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{
+			Content: text,
+			Reference: &discordgo.MessageReference{
+				MessageID: m.ID,
+				ChannelID: m.ChannelID,
+				GuildID:   m.GuildID,
+			},
+		})
+	}
+
 	// Parse commands
 	parsed := b.Parser.Parse(m.Content)
 	if len(parsed) == 0 {
@@ -251,7 +263,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			}
 			suggestion := commands.FormatNLPSuggestion(result, prefix)
 			if suggestion != "" {
-				s.ChannelMessageSend(m.ChannelID, suggestion)
+				reply(suggestion)
 			}
 		}
 		return
@@ -330,11 +342,11 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 					result := b.nlpParser.Parse(m.Content)
 					suggestion := commands.FormatNLPSuggestion(result, b.Cfg.Discord.Prefix)
 					if suggestion != "" {
-						s.ChannelMessageSend(channelID, suggestion)
+						reply(suggestion)
 						continue
 					}
 				}
-				s.ChannelMessageSend(channelID, tr.Tf("cmd.unknown", b.Cfg.Discord.Prefix+"help"))
+				reply(tr.Tf("cmd.unknown", b.Cfg.Discord.Prefix+"help"))
 			}
 			continue
 		}
@@ -346,7 +358,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 		// Registration check — skip for poracle (registration), poracle_test, and version commands
 		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
-			s.ChannelMessageSend(channelID, tr.T("cmd.not_registered"))
+			reply(tr.T("cmd.not_registered"))
 			continue
 		}
 
@@ -404,7 +416,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		target, remainingArgs, err := bot.BuildTarget(ctx, cmd.Args)
 		if err != nil {
 			s.MessageReactionAdd(channelID, m.ID, "🙅")
-			s.ChannelMessageSend(channelID, err.Error())
+			reply(err.Error())
 			continue
 		}
 		if target != nil {
@@ -418,7 +430,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			ctx.HasLocation = target.HasLocation
 			ctx.HasArea = target.HasArea
 			if target.ExecutionMessage != "" {
-				s.ChannelMessageSend(channelID, target.ExecutionMessage)
+				reply(target.ExecutionMessage)
 			}
 		}
 
