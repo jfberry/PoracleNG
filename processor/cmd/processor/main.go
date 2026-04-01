@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -327,6 +328,23 @@ func main() {
 	mux.HandleFunc("POST /api/humans", apiRoute("humans/create", api.HandleCreateHuman(trackingDeps)))
 	mux.HandleFunc("GET /api/humans/{id}", apiRoute("humans", api.HandleGetHumanAreas(trackingDeps)))
 
+	// Role endpoints — Discord session resolved lazily since bot may start after routes are registered
+	var discordBotRef *discordbot.Bot
+	roleDeps := &api.RoleDeps{
+		SessionFunc: func() *discordgo.Session {
+			if discordBotRef != nil {
+				return discordBotRef.Session()
+			}
+			return nil
+		},
+		Config: cfg,
+		DB:     database,
+	}
+	mux.HandleFunc("GET /api/humans/{id}/roles", apiRoute("humans/roles", api.HandleGetRoles(roleDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/roles/add/{roleId}", apiRoute("humans/roles/add", api.HandleAddRole(roleDeps)))
+	mux.HandleFunc("POST /api/humans/{id}/roles/remove/{roleId}", apiRoute("humans/roles/remove", api.HandleRemoveRole(roleDeps)))
+	mux.HandleFunc("GET /api/humans/{id}/getAdministrationRoles", apiRoute("humans/getAdministrationRoles", api.HandleGetAdministrationRoles(roleDeps)))
+
 	// Profile endpoints
 	mux.HandleFunc("GET /api/profiles/{id}", apiRoute("profiles", api.HandleGetProfiles(trackingDeps)))
 	mux.HandleFunc("DELETE /api/profiles/{id}/byProfileNo/{profile_no}", apiRoute("profiles/delete", api.HandleDeleteProfile(trackingDeps)))
@@ -339,6 +357,11 @@ func main() {
 		mux.HandleFunc("GET /api/config/templates", auth(api.HandleTemplateConfig(proc.dtsRenderer.Templates())))
 		mux.HandleFunc("POST /api/dts/render", auth(api.HandleDTSRender(proc.dtsRenderer.Templates())))
 	}
+
+	// Config and master data endpoints (replaces alerter-proxied routes)
+	mux.HandleFunc("GET /api/config/poracleWeb", auth(api.HandleConfigPoracleWeb(cfg)))
+	mux.HandleFunc("GET /api/masterdata/monsters", auth(api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations)))
+	mux.HandleFunc("GET /api/masterdata/grunts", auth(api.HandleMasterdataGrunts(proc.enricher.GameData)))
 
 	// Delivery endpoint — accepts pre-rendered jobs from alerter commands (broadcast, etc.)
 	mux.HandleFunc("POST /api/deliverMessages", auth(api.HandleDeliverMessages(proc.dispatcher)))
@@ -553,6 +576,7 @@ func main() {
 			log.Warnf("Discord bot failed to start: %v", err)
 		} else {
 			discordBot = dbot
+			discordBotRef = dbot
 		}
 	}
 

@@ -112,6 +112,12 @@ func (b *Bot) logGuildPresence() {
 	}
 }
 
+// Session returns the underlying discordgo session, or nil if the bot is not running.
+// Used by API endpoints that need to make Discord REST calls.
+func (b *Bot) Session() *discordgo.Session {
+	return b.session
+}
+
 // Close disconnects the Discord gateway and stops background goroutines.
 func (b *Bot) Close() {
 	if b.stopCh != nil {
