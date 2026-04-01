@@ -200,6 +200,7 @@ type TelegramConfig struct {
 	CheckRole               bool                      `toml:"check_role"`
 	CheckRoleInterval       int                       `toml:"check_role_interval"` // hours between periodic reconciliation
 	BotGoodbyeMessage       string                    `toml:"bot_goodbye_message"`
+	DisableAutoGreetings    bool                      `toml:"disable_auto_greetings"`
 	DelegatedAdministration TelegramDelegatedAdminConfig `toml:"delegated_administration"`
 }
 

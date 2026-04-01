@@ -373,6 +373,10 @@ func (r *TelegramReconciliation) disableUser(user *db.HumanFull) {
 
 // sendGreetings sends a DTS greeting message via Telegram.
 func (r *TelegramReconciliation) sendGreetings(id string) {
+	if r.cfg.Telegram.DisableAutoGreetings {
+		return
+	}
+
 	tmpl := r.dtsStore.Get("greeting", "telegram", "", "")
 	if tmpl == nil {
 		tmpl = r.dtsStore.Get("greeting", "telegram", "1", "")
@@ -405,15 +409,33 @@ func (r *TelegramReconciliation) sendGreetings(id string) {
 	if err := json.Unmarshal([]byte(result), &raw); err == nil {
 		text := extractTelegramText(raw)
 		if text != "" {
-			msg := tgbotapi.NewMessage(chatID, text)
-			r.api.Send(msg)
+			r.sendSplitMessage(chatID, text)
 			return
 		}
 	}
 
 	// Fallback: send as plain text.
-	msg := tgbotapi.NewMessage(chatID, result)
-	r.api.Send(msg)
+	r.sendSplitMessage(chatID, result)
+}
+
+// sendSplitMessage sends a message, splitting on newlines if it exceeds
+// Telegram's 4096 character limit (matching alerter's 1024 split for embed fields).
+func (r *TelegramReconciliation) sendSplitMessage(chatID int64, text string) {
+	const maxLen = 4096
+	for len(text) > maxLen {
+		// Find a newline to split on before the limit
+		splitAt := maxLen
+		if idx := strings.LastIndex(text[:maxLen], "\n"); idx > 0 {
+			splitAt = idx + 1
+		}
+		msg := tgbotapi.NewMessage(chatID, text[:splitAt])
+		r.api.Send(msg)
+		text = text[splitAt:]
+	}
+	if text != "" {
+		msg := tgbotapi.NewMessage(chatID, text)
+		r.api.Send(msg)
+	}
 }
 
 // sendGoodbye sends the configured goodbye message via Telegram.
