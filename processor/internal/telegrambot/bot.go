@@ -216,6 +216,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			TargetID:     userID,
 			TargetName:   m.From.FirstName,
 			TargetType:   targetType,
+			AreaLogic:    bot.NewAreaLogic(fences, b.Cfg),
 			DB:           b.DB,
 			Config:       b.Cfg,
 			StateMgr:     b.StateMgr,

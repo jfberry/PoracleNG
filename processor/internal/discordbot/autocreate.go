@@ -345,6 +345,7 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 				if st != nil {
 					ctx.Geofence = st.Geofence
 					ctx.Fences = st.Fences
+					ctx.AreaLogic = bot.NewAreaLogic(st.Fences, b.Cfg)
 				}
 
 				replies := handler.Run(ctx, pc.Args)

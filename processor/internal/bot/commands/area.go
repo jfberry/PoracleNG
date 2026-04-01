@@ -28,7 +28,7 @@ func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		prefix := commandPrefix(ctx)
 		var text string
 		if len(currentAreas) > 0 {
-			displayNames := resolveAreaDisplayNames(ctx, currentAreas)
+			displayNames := ctx.AreaLogic.ResolveDisplayNames(currentAreas)
 			text = tr.Tf("status.areas_set", strings.Join(displayNames, ", "))
 		} else {
 			text = tr.T("status.no_areas")
@@ -66,7 +66,9 @@ func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
-	available := getAvailableAreas(ctx)
+	currentAreas := getUserAreas(ctx)
+	communities := getUserCommunities(ctx)
+	available := ctx.AreaLogic.GetAvailableAreasMarked(communities, currentAreas)
 	if len(available) == 0 {
 		return []bot.Reply{{Text: tr.T("cmd.area.none_available")}}
 	}
@@ -76,17 +78,10 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 		return strings.ToLower(available[i].Name) < strings.ToLower(available[j].Name)
 	})
 
-	// Get user's current areas for marking
-	currentAreas := getUserAreas(ctx)
-	currentSet := make(map[string]bool)
-	for _, a := range currentAreas {
-		currentSet[strings.ToLower(a)] = true
-	}
-
 	var sb strings.Builder
 	sb.WriteString(tr.T("cmd.area.current") + "\n\n")
 	for _, a := range available {
-		if currentSet[strings.ToLower(a.Name)] {
+		if a.IsActive {
 			sb.WriteString(fmt.Sprintf("🟢 %s\n", a.Name))
 		} else {
 			sb.WriteString(fmt.Sprintf("◽ %s\n", a.Name))
@@ -101,35 +96,12 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.area.specify_add")}}
 	}
 
-	available := getAvailableAreas(ctx)
-	availableMap := make(map[string]string) // lowercase → display name
-	for _, a := range available {
-		availableMap[strings.ToLower(a.Name)] = a.Name
-	}
-
 	currentAreas := getUserAreas(ctx)
-	currentSet := make(map[string]bool)
-	for _, a := range currentAreas {
-		currentSet[strings.ToLower(a)] = true
-	}
-
-	var added []string
-	var notFound []string
-	for _, arg := range args {
-		lower := strings.ToLower(arg)
-		if displayName, ok := availableMap[lower]; ok {
-			if !currentSet[lower] {
-				currentAreas = append(currentAreas, lower)
-				currentSet[lower] = true
-				added = append(added, displayName)
-			}
-		} else {
-			notFound = append(notFound, arg)
-		}
-	}
+	communities := getUserCommunities(ctx)
+	added, notFound, newList := ctx.AreaLogic.AddAreas(currentAreas, communities, args)
 
 	if len(added) > 0 {
-		setUserAreas(ctx, currentAreas)
+		setUserAreas(ctx, newList)
 	}
 
 	var parts []string
@@ -141,7 +113,7 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 	}
 
 	// Show current areas after change
-	allDisplay := resolveAreaDisplayNames(ctx, getUserAreas(ctx))
+	allDisplay := ctx.AreaLogic.ResolveDisplayNames(getUserAreas(ctx))
 	if len(allDisplay) > 0 {
 		parts = append(parts, tr.Tf("status.areas_set", strings.Join(allDisplay, ", ")))
 	}
@@ -160,20 +132,7 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 	}
 
 	currentAreas := getUserAreas(ctx)
-	removeSet := make(map[string]bool)
-	for _, arg := range args {
-		removeSet[strings.ToLower(arg)] = true
-	}
-
-	var remaining []string
-	var removed []string
-	for _, a := range currentAreas {
-		if removeSet[strings.ToLower(a)] {
-			removed = append(removed, a)
-		} else {
-			remaining = append(remaining, a)
-		}
-	}
+	removed, remaining := ctx.AreaLogic.RemoveAreas(currentAreas, args)
 
 	if len(removed) > 0 {
 		setUserAreas(ctx, remaining)
@@ -181,12 +140,12 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 
 	var parts []string
 	if len(removed) > 0 {
-		removedDisplay := resolveAreaDisplayNames(ctx, removed)
+		removedDisplay := ctx.AreaLogic.ResolveDisplayNames(removed)
 		parts = append(parts, tr.Tf("cmd.area.removed", strings.Join(removedDisplay, ", ")))
 	}
 
 	// Show current areas after change
-	allDisplay := resolveAreaDisplayNames(ctx, getUserAreas(ctx))
+	allDisplay := ctx.AreaLogic.ResolveDisplayNames(getUserAreas(ctx))
 	if len(allDisplay) > 0 {
 		parts = append(parts, tr.Tf("status.areas_set", strings.Join(allDisplay, ", ")))
 	} else {
@@ -213,7 +172,7 @@ func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Re
 	var replies []bot.Reply
 	for _, area := range areas {
 		displayName := area
-		fence := api.FindFence(ctx.Fences, area)
+		fence := ctx.AreaLogic.FindFence(area)
 		if fence != nil {
 			displayName = fence.Name
 		}
@@ -253,7 +212,7 @@ func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bo
 	if len(areas) == 0 {
 		return []bot.Reply{{Text: tr.T("status.no_areas")}}
 	}
-	displayNames := resolveAreaDisplayNames(ctx, areas)
+	displayNames := ctx.AreaLogic.ResolveDisplayNames(areas)
 
 	reply := bot.Reply{Text: tr.Tf("cmd.area.your_areas", strings.Join(displayNames, ", "))}
 
@@ -261,7 +220,7 @@ func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bo
 	if ctx.StaticMap != nil {
 		var fences []*geofence.Fence
 		for _, name := range areas {
-			if f := api.FindFence(ctx.Fences, name); f != nil && len(api.FencePaths(f)) > 0 {
+			if f := ctx.AreaLogic.FindFence(name); f != nil && len(api.FencePaths(f)) > 0 {
 				fences = append(fences, f)
 			}
 		}
@@ -298,50 +257,17 @@ func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bo
 	return []bot.Reply{reply}
 }
 
-type availableArea struct {
-	Name  string
-	Group string
-}
-
-func getAvailableAreas(ctx *bot.CommandContext) []availableArea {
+// getUserCommunities loads community membership from the DB for area security filtering.
+func getUserCommunities(ctx *bot.CommandContext) []string {
 	if !ctx.Config.Area.Enabled {
-		// No area security — all user-selectable fences
-		var areas []availableArea
-		for _, f := range ctx.Fences {
-			if f.UserSelectable {
-				areas = append(areas, availableArea{Name: f.Name, Group: f.Group})
-			}
-		}
-		return areas
+		return nil
 	}
-
-	// Area security enabled — filter by community membership
 	var communityJSON *string
 	_ = ctx.DB.Get(&communityJSON, "SELECT community_membership FROM humans WHERE id = ? LIMIT 1", ctx.TargetID)
-
-	allowedSet := make(map[string]bool)
-	if communityJSON != nil && *communityJSON != "" {
-		var communities []string
-		if err := json.Unmarshal([]byte(*communityJSON), &communities); err == nil {
-			for _, comm := range communities {
-				for _, cc := range ctx.Config.Area.Communities {
-					if strings.EqualFold(cc.Name, comm) {
-						for _, area := range cc.AllowedAreas {
-							allowedSet[strings.ToLower(area)] = true
-						}
-					}
-				}
-			}
-		}
+	if communityJSON == nil || *communityJSON == "" {
+		return nil
 	}
-
-	var areas []availableArea
-	for _, f := range ctx.Fences {
-		if f.UserSelectable && allowedSet[strings.ToLower(f.Name)] {
-			areas = append(areas, availableArea{Name: f.Name, Group: f.Group})
-		}
-	}
-	return areas
+	return bot.ParseCommunityMembership(*communityJSON)
 }
 
 func getUserAreas(ctx *bot.CommandContext) []string {
@@ -364,22 +290,4 @@ func setUserAreas(ctx *bot.CommandContext, areas []string) {
 	ctx.DB.Exec("UPDATE profiles SET area = ? WHERE id = ? AND profile_no = ?",
 		string(areaJSON), ctx.TargetID, ctx.ProfileNo)
 	ctx.TriggerReload()
-}
-
-func resolveAreaDisplayNames(ctx *bot.CommandContext, areas []string) []string {
-	displayNames := make([]string, 0, len(areas))
-	for _, a := range areas {
-		found := false
-		for _, f := range ctx.Fences {
-			if strings.EqualFold(f.Name, a) {
-				displayNames = append(displayNames, f.Name)
-				found = true
-				break
-			}
-		}
-		if !found {
-			displayNames = append(displayNames, a)
-		}
-	}
-	return displayNames
 }
