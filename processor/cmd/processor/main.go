@@ -255,8 +255,7 @@ func main() {
 		},
 		Config:       cfg,
 		Translations: proc.enricher.Translations,
-		AlerterURL:   cfg.Processor.AlerterURL,
-		APISecret:    cfg.Processor.APISecret,
+		Dispatcher:   proc.dispatcher,
 		ReloadFunc:   proc.triggerReload,
 	}
 	// Pokemon (monster) tracking
@@ -363,8 +362,9 @@ func main() {
 	mux.HandleFunc("GET /api/masterdata/monsters", auth(api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations)))
 	mux.HandleFunc("GET /api/masterdata/grunts", auth(api.HandleMasterdataGrunts(proc.enricher.GameData)))
 
-	// Delivery endpoint — accepts pre-rendered jobs from alerter commands (broadcast, etc.)
+	// Delivery endpoint — accepts pre-rendered jobs
 	mux.HandleFunc("POST /api/deliverMessages", auth(api.HandleDeliverMessages(proc.dispatcher)))
+	mux.HandleFunc("POST /api/postMessage", auth(api.HandleDeliverMessages(proc.dispatcher))) // legacy alias
 
 	// Command framework — shared by API endpoint and Discord/Telegram bots
 	cmdLanguages := cfg.General.AvailableLanguages

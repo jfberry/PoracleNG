@@ -1,20 +1,17 @@
 package api
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
@@ -29,8 +26,7 @@ type TrackingDeps struct {
 	RowText      *rowtext.Generator
 	Config       *config.Config
 	Translations *i18n.Bundle
-	AlerterURL   string // e.g. "http://localhost:3031"
-	APISecret    string // for X-Poracle-Secret on alerter calls
+	Dispatcher   *delivery.Dispatcher
 	ReloadFunc   func() // triggers debounced state reload (from ProcessorService.triggerReload)
 }
 
@@ -69,62 +65,26 @@ func reloadState(deps *TrackingDeps) {
 	}
 }
 
-// sendConfirmation posts a message to the alerter's /api/postMessage endpoint.
-// It is non-blocking: the POST happens in a goroutine and errors are logged.
+// sendConfirmation dispatches a confirmation message to the user via the delivery system.
 func sendConfirmation(deps *TrackingDeps, human *db.HumanAPI, message, language string) {
-	if deps.AlerterURL == "" || message == "" {
+	if deps.Dispatcher == nil || message == "" {
 		return
 	}
 
-	payload := []map[string]any{
-		{
-			"lat":     0,
-			"lon":     0,
-			"message": map[string]string{"content": message},
-			"target":  human.ID,
-			"type":    human.Type,
-			"name":    human.Name,
-			"tth":     map[string]int{"hours": 1, "minutes": 0, "seconds": 0},
-			"clean":   false,
-			"emoji":   "",
-			"logReference": "WebApi",
-			"language":     language,
-		},
+	msgJSON, err := json.Marshal(map[string]string{"content": message})
+	if err != nil {
+		log.Errorf("Tracking API: marshal confirmation: %s", err)
+		return
 	}
 
-	go func() {
-		body, err := json.Marshal(payload)
-		if err != nil {
-			log.Errorf("Tracking API: marshal confirmation: %s", err)
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		url := deps.AlerterURL + "/api/postMessage"
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-		if err != nil {
-			log.Errorf("Tracking API: create confirmation request: %s", err)
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if deps.APISecret != "" {
-			req.Header.Set("X-Poracle-Secret", deps.APISecret)
-		}
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Errorf("Tracking API: send confirmation to alerter: %s", err)
-			return
-		}
-		defer resp.Body.Close()
-		io.Copy(io.Discard, resp.Body)
-
-		if resp.StatusCode >= 300 {
-			log.Warnf("Tracking API: alerter postMessage returned %d", resp.StatusCode)
-		}
-	}()
+	deps.Dispatcher.Dispatch(&delivery.Job{
+		Target:       human.ID,
+		Type:         human.Type,
+		Name:         human.Name,
+		Message:      msgJSON,
+		TTH:          delivery.TTH{Hours: 1},
+		LogReference: "WebApi",
+	})
 }
 
 // readJSONBody decodes the JSON request body into v.

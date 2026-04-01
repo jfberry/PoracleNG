@@ -110,16 +110,7 @@ func (ps *ProcessorService) checkProfileSwitches() {
 		tr := ps.translations.For(human.Language)
 		msg := tr.Tf("profile.switched", p.Name)
 
-		ps.postMessageToAlerter(postMessage{
-			Target:       human.ID,
-			Type:         human.Type,
-			Name:         human.Name,
-			Message:      messageContent{Content: msg},
-			Language:     human.Language,
-			TTH:          tth{Hours: 1},
-			AlwaysSend:   true,
-			LogReference: "ProfileScheduler",
-		})
+		ps.dispatchMessage(human.ID, human.Type, human.Name, msg, "ProfileScheduler")
 	}
 
 	if needsReload {
