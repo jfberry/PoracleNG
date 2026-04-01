@@ -623,6 +623,14 @@ func main() {
 	<-sigCh
 
 	log.Infof("Shutting down...")
+
+	// 1. Stop accepting new requests — no more webhooks enter the pipeline
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	server.Shutdown(ctx)
+	log.Infof("HTTP server stopped")
+
+	// 2. Stop bots (no more command processing)
 	close(periodicDone)
 	if discordBot != nil {
 		discordBot.Close()
@@ -632,9 +640,8 @@ func main() {
 		telegramBot.Close()
 		log.Infof("Telegram bot disconnected")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	server.Shutdown(ctx)
+
+	// 3. Drain webhook workers → render queue → delivery queue
 	proc.Close()
 	log.Infof("Shutdown complete")
 }
