@@ -335,6 +335,12 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			continue
 		}
 
+		// Registration check — skip for poracle (registration), poracle_test, and version commands
+		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
+			reply(tr.T("cmd.not_registered"))
+			continue
+		}
+
 		if cmd.CommandKey == "" {
 			if isDM {
 				// Try NLP suggestion for unrecognised DM commands
@@ -353,12 +359,6 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 		handler := b.Registry.Lookup(cmd.CommandKey)
 		if handler == nil {
-			continue
-		}
-
-		// Registration check — skip for poracle (registration), poracle_test, and version commands
-		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
-			reply(tr.T("cmd.not_registered"))
 			continue
 		}
 

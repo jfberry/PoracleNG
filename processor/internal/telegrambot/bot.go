@@ -216,6 +216,14 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			continue
 		}
 
+		// Registration check — skip for poracle (registration), poracle_test, and version commands
+		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
+			tr := b.Translations.For(userLang)
+			replyMsg := tgbotapi.NewMessage(chatID, tr.T("cmd.not_registered"))
+			b.api.Send(replyMsg)
+			continue
+		}
+
 		if cmd.CommandKey == "" {
 			// Try NLP suggestion for unrecognised DM commands
 			if isDM && b.nlpParser != nil && b.Cfg.AI.SuggestOnDM {
@@ -232,14 +240,6 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 
 		handler := b.Registry.Lookup(cmd.CommandKey)
 		if handler == nil {
-			continue
-		}
-
-		// Registration check — skip for poracle (registration), poracle_test, and version commands
-		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
-			tr := b.Translations.For(userLang)
-			replyMsg := tgbotapi.NewMessage(chatID, tr.T("cmd.not_registered"))
-			b.api.Send(replyMsg)
 			continue
 		}
 
