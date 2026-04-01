@@ -38,8 +38,15 @@ func RequestLogger() gin.HandlerFunc {
 		c.Next()
 		duration := time.Since(start)
 
+		path := c.Request.URL.Path
+
+		// Skip logging for high-volume webhook receiver endpoint
+		if path == "/" {
+			return
+		}
+
 		log.Infof("API: %s %s %d %s",
-			c.Request.Method, c.Request.URL.Path,
+			c.Request.Method, path,
 			c.Writer.Status(), duration.Round(time.Millisecond))
 
 		// Record Prometheus metrics using the route template (e.g. /api/tracking/pokemon/:id)
