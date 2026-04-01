@@ -37,6 +37,7 @@ type LayeredView struct {
 // supports custom DTS templates referencing obscure webhook fields).
 func NewLayeredView(
 	vb *ViewBuilder,
+	templateType string,
 	base map[string]any,
 	perLang map[string]any,
 	perUser map[string]any,
@@ -83,8 +84,8 @@ func NewLayeredView(
 		lv.computed["emoji"] = resolved
 	}
 
-	// Build alias reverse lookup
-	lv.aliases = buildAliasLookup()
+	// Build alias lookup for this template type
+	lv.aliases = buildAliasLookup(templateType)
 
 	return lv
 }
@@ -313,18 +314,23 @@ func buildComputedFields(base, perLang map[string]any, emoji map[string]string, 
 	return m
 }
 
-// buildAliasLookup returns a map of alias → source field name.
-// Built once, shared across all views.
-var aliasLookupCache map[string]string
+// buildAliasLookup returns a map of alias → source field name for a given template type.
+// Cached per type since the alias tables are static.
+var aliasLookupCache = make(map[string]map[string]string)
 
-func buildAliasLookup() map[string]string {
-	if aliasLookupCache != nil {
-		return aliasLookupCache
+func buildAliasLookup(templateType string) map[string]string {
+	if cached, ok := aliasLookupCache[templateType]; ok {
+		return cached
 	}
-	m := make(map[string]string, len(aliasMapping))
-	for _, a := range aliasMapping {
+	m := make(map[string]string, len(commonAliases)+10)
+	for _, a := range commonAliases {
 		m[a.alias] = a.source
 	}
-	aliasLookupCache = m
+	if typeSpecific, ok := typeAliases[templateType]; ok {
+		for _, a := range typeSpecific {
+			m[a.alias] = a.source
+		}
+	}
+	aliasLookupCache[templateType] = m
 	return m
 }

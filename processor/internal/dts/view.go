@@ -47,8 +47,8 @@ func (vb *ViewBuilder) BuildPokemonView(
 	// 3. Merge DTS dictionary (user-defined key-value pairs)
 	mergeMaps(view, vb.dtsDictionary)
 
-	// 4. Add backward-compatible aliases
-	addAliases(view)
+	// 4. Add backward-compatible aliases (pokemon type)
+	addAliases(view, "pokemon")
 
 	// 5. Add computed fields
 	addComputedFields(view, areas)
@@ -167,90 +167,140 @@ func (vb *ViewBuilder) resolveEmojiArray(raw any, platform string) []string {
 // aliasMapping maps alias names to their source fields.
 // These cover both backward-compat aliases and snake_case → camelCase conversions
 // that the alerter controllers used to do manually.
-// aliasMapping maps DTS template field names to their enrichment source fields.
-// These cover the field renamings that the alerter controllers used to do.
-// Only applied when the alias doesn't already exist (won't overwrite enrichment values).
-var aliasMapping = []struct {
+// aliasPair maps a DTS template field name to its enrichment/webhook source field.
+type aliasPair struct {
 	alias  string
 	source string
-}{
-	// === Common across types ===
+}
+
+// Common aliases shared by all webhook types.
+var commonAliases = []aliasPair{
 	{"mapurl", "googleMapUrl"},
 	{"applemap", "appleMapUrl"},
 	{"distime", "disappearTime"},
 	{"staticmap", "staticMap"},
-	{"matched", "matchedAreaNames"}, // lowercase area names array
+	{"matched", "matchedAreaNames"},
+}
 
-	// === Pokemon (monster) ===
-	{"formname", "formName"},
-	{"ivcolor", "ivColor"},
-	{"individual_attack", "atk"},
-	{"individual_defense", "def"},
-	{"individual_stamina", "sta"},
-	{"quickMove", "quickMoveName"},
-	{"chargeMove", "chargeMoveName"},
-	{"boostemoji", "boostWeatherEmoji"},
-	{"gameweather", "gameWeatherId"},
-	{"gameweatheremoji", "gameWeatherEmoji"},
-	{"move1emoji", "quickMoveEmoji"},
-	{"move2emoji", "chargeMoveEmoji"},
-	{"pokemonId", "pokemon_id"},
-
-	// === Pokestop-based (invasion/quest/lure) ===
-	{"pokestopName", "pokestop_name"},
-	{"pokestopUrl", "pokestop_url"},
-	{"name", "pokestop_name"},   // won't overwrite pokemon/nest "name" from enrichment
-	{"url", "pokestop_url"},
-
-	// === Raid / Egg ===
-	{"gymName", "gym_name"},
-	{"gymUrl", "gym_url"},
-	{"gymColor", "gym_color"},
-	{"gymId", "gym_id"},
-	{"teamId", "team_id"},
-	// megaName is computed in RaidTranslate enrichment
-	{"hatchtime", "hatchTime"},
-	{"ex", "is_ex_raid_eligible"},
-	{"move1", "quickMoveName"},
-	{"move2", "chargeMoveName"},
-
-	// === Gym ===
-	{"gymName", "name"},
-	{"gymUrl", "url"},
-
-	// === Invasion ===
-	{"gruntType", "gruntTypeName"},
-
-	// === Lure ===
-	{"lureTypeColor", "lureColor"},
-	{"lureType", "lureTypeName"},
-
-	// === Nest ===
-	{"nestName", "nest_name"},
-
-	// === Gym ===
-	{"oldTeamName", "previousControlName"},
-	{"oldTeamId", "previousControlId"},
-
-	// === Weather ===
-	{"oldweather", "oldWeatherId"},
-	{"oldweatheremoji", "oldWeatherEmoji"},
-	{"weatheremoji", "weatherEmoji"},
-	{"condition", "gameplayCondition"},
-	{"weatherCellId", "s2_cell_id"},
+// Per-type alias tables. Each type includes commonAliases plus type-specific mappings.
+// This avoids conflicts where the same alias (e.g. "gymName") maps to different source
+// fields depending on webhook type ("gym_name" for raids vs "name" for gym changes).
+var typeAliases = map[string][]aliasPair{
+	"pokemon": {
+		{"formname", "formName"},
+		{"ivcolor", "ivColor"},
+		{"individual_attack", "atk"},
+		{"individual_defense", "def"},
+		{"individual_stamina", "sta"},
+		{"quickMove", "quickMoveName"},
+		{"chargeMove", "chargeMoveName"},
+		{"boostemoji", "boostWeatherEmoji"},
+		{"gameweather", "gameWeatherId"},
+		{"gameweatheremoji", "gameWeatherEmoji"},
+		{"move1emoji", "quickMoveEmoji"},
+		{"move2emoji", "chargeMoveEmoji"},
+		{"pokemonId", "pokemon_id"},
+	},
+	"raid": {
+		{"gymName", "gym_name"},
+		{"gymUrl", "gym_url"},
+		{"gymColor", "gym_color"},
+		{"gymId", "gym_id"},
+		{"teamId", "team_id"},
+		{"hatchtime", "hatchTime"},
+		{"ex", "is_ex_raid_eligible"},
+		{"move1", "quickMoveName"},
+		{"move2", "chargeMoveName"},
+		{"formname", "formName"},
+		{"quickMove", "quickMoveName"},
+		{"chargeMove", "chargeMoveName"},
+		{"boostemoji", "boostWeatherEmoji"},
+		{"gameweather", "gameWeatherId"},
+		{"gameweatheremoji", "gameWeatherEmoji"},
+		{"pokemonId", "pokemon_id"},
+	},
+	"egg": {
+		{"gymName", "gym_name"},
+		{"gymUrl", "gym_url"},
+		{"gymColor", "gym_color"},
+		{"gymId", "gym_id"},
+		{"teamId", "team_id"},
+		{"hatchtime", "hatchTime"},
+		{"ex", "is_ex_raid_eligible"},
+	},
+	"gym": {
+		{"gymName", "name"},
+		{"gymUrl", "url"},
+		{"gymId", "gym_id"},
+		{"gymColor", "gymColor"},
+		{"teamId", "team_id"},
+		{"oldTeamName", "previousControlName"},
+		{"oldTeamId", "previousControlId"},
+	},
+	"invasion": {
+		{"pokestopName", "pokestop_name"},
+		{"pokestopUrl", "pokestop_url"},
+		{"name", "pokestop_name"},
+		{"url", "pokestop_url"},
+		{"gruntType", "gruntTypeName"},
+	},
+	"quest": {
+		{"pokestopName", "pokestop_name"},
+		{"pokestopUrl", "pokestop_url"},
+		{"name", "pokestop_name"},
+		{"url", "pokestop_url"},
+	},
+	"lure": {
+		{"pokestopName", "pokestop_name"},
+		{"pokestopUrl", "pokestop_url"},
+		{"name", "pokestop_name"},
+		{"url", "pokestop_url"},
+		{"lureTypeColor", "lureColor"},
+		{"lureType", "lureTypeName"},
+	},
+	"nest": {
+		{"nestName", "nest_name"},
+	},
+	"weather": {
+		{"oldweather", "oldWeatherId"},
+		{"oldweatheremoji", "oldWeatherEmoji"},
+		{"weatheremoji", "weatherEmoji"},
+		{"condition", "gameplayCondition"},
+		{"weatherCellId", "s2_cell_id"},
+	},
+	"fort-update": {},
+	"maxbattle": {
+		{"gymName", "gym_name"},
+		{"gymUrl", "gym_url"},
+		{"gymId", "gym_id"},
+		{"formname", "formName"},
+		{"quickMove", "quickMoveName"},
+		{"chargeMove", "chargeMoveName"},
+	},
+	"greeting": {},
 }
 
 // addAliases adds backward-compatible field aliases to the view.
 // Only sets the alias if the target field doesn't already exist,
 // preventing overwrite of enrichment values (e.g. "name" from pokemon
 // enrichment should not be overwritten by pokestop_name alias).
-func addAliases(view map[string]any) {
-	for _, a := range aliasMapping {
+func addAliases(view map[string]any, templateType string) {
+	for _, a := range commonAliases {
 		if _, exists := view[a.alias]; exists {
-			continue // don't overwrite existing values
+			continue
 		}
 		if v, ok := view[a.source]; ok {
 			view[a.alias] = v
+		}
+	}
+	if typeSpecific, ok := typeAliases[templateType]; ok {
+		for _, a := range typeSpecific {
+			if _, exists := view[a.alias]; exists {
+				continue
+			}
+			if v, ok := view[a.source]; ok {
+				view[a.alias] = v
+			}
 		}
 	}
 }

@@ -186,7 +186,7 @@ func (r *Renderer) renderForUsers(
 		perUser := mapOrEmpty(perUserEnrichment, user.ID)
 
 		// e. Build layered view (zero-copy — no map merging)
-		view := NewLayeredView(r.viewBuilder, enrichment, perLang, perUser, webhookFields, platform, areas)
+		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, perUser, webhookFields, platform, areas)
 
 		// f. Get template (with monsterNoIv -> monster fallback)
 		tmpl := r.templates.Get(templateType, platform, user.Template, language)
@@ -317,7 +317,7 @@ func (r *Renderer) renderGrouped(
 
 		// Render once for this group
 		perLang := mapOrEmpty(perLangEnrichment, key.language)
-		view := NewLayeredView(r.viewBuilder, enrichment, perLang, nil, webhookFields, key.platform, areas)
+		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, nil, webhookFields, key.platform, areas)
 
 		tmpl := r.templates.Get(templateType, key.platform, key.templateID, key.language)
 
