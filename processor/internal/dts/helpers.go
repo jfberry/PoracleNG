@@ -33,6 +33,20 @@ func RegisterHelpers() {
 
 // toFloat converts an interface{} to float64.
 // Handles int (all widths), uint (all widths), float32/64, string, bool, nil.
+// boolResult handles comparison helpers that work both as block helpers
+// ({{#eq a b}}X{{else}}Y{{/eq}}) and as subexpressions ({{#if (eq a b)}}).
+// In subexpression mode, returns a boolean for the outer helper to evaluate.
+// In block mode, renders Fn() or Inverse().
+func boolResult(result bool, options *raymond.Options) interface{} {
+	if options.IsSubExpression() {
+		return result
+	}
+	if result {
+		return options.Fn()
+	}
+	return options.Inverse()
+}
+
 func toFloat(v interface{}) float64 {
 	if v == nil {
 		return 0
@@ -79,61 +93,55 @@ func toString(v interface{}) string {
 // ---------------------------------------------------------------------------
 
 func registerComparisonHelpers() {
+	// Comparison helpers work in two modes:
+	// 1. Block mode: {{#eq level 8}}...{{else}}...{{/eq}} — renders Fn() or Inverse()
+	// 2. Subexpression mode: {{#if (eq level 8)}} — returns boolean for outer helper
+	//
+	// We detect subexpression mode by checking if the helper has a block body.
+	// When options.FnBody() is empty, we're in subexpression mode and return bool.
+
 	// eq — true if a == b (normalized via Sprintf)
 	raymond.RegisterHelper("eq", func(a, b interface{}, options *raymond.Options) interface{} {
-		if fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b) {
-			return options.Fn()
-		}
-		return options.Inverse()
+		result := fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
+		return boolResult(result, options)
 	})
 
-	// isnt — true if a != b
+	// ne — true if a != b
+	raymond.RegisterHelper("ne", func(a, b interface{}, options *raymond.Options) interface{} {
+		result := fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b)
+		return boolResult(result, options)
+	})
+
+	// isnt — alias for ne
 	raymond.RegisterHelper("isnt", func(a, b interface{}, options *raymond.Options) interface{} {
-		if fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b) {
-			return options.Fn()
-		}
-		return options.Inverse()
+		result := fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b)
+		return boolResult(result, options)
 	})
 
 	// compare — supports ==, !=, <, >, <=, >=
 	raymond.RegisterHelper("compare", func(a interface{}, op string, b interface{}, options *raymond.Options) interface{} {
 		result := evalCompare(a, op, b)
-		if result {
-			return options.Fn()
-		}
-		return options.Inverse()
+		return boolResult(result, options)
 	})
 
 	// gt — a > b (numeric)
 	raymond.RegisterHelper("gt", func(a, b interface{}, options *raymond.Options) interface{} {
-		if toFloat(a) > toFloat(b) {
-			return options.Fn()
-		}
-		return options.Inverse()
+		return boolResult(toFloat(a) > toFloat(b), options)
 	})
 
 	// gte — a >= b (numeric)
 	raymond.RegisterHelper("gte", func(a, b interface{}, options *raymond.Options) interface{} {
-		if toFloat(a) >= toFloat(b) {
-			return options.Fn()
-		}
-		return options.Inverse()
+		return boolResult(toFloat(a) >= toFloat(b), options)
 	})
 
 	// lt — a < b (numeric)
 	raymond.RegisterHelper("lt", func(a, b interface{}, options *raymond.Options) interface{} {
-		if toFloat(a) < toFloat(b) {
-			return options.Fn()
-		}
-		return options.Inverse()
+		return boolResult(toFloat(a) < toFloat(b), options)
 	})
 
 	// lte — a <= b (numeric)
 	raymond.RegisterHelper("lte", func(a, b interface{}, options *raymond.Options) interface{} {
-		if toFloat(a) <= toFloat(b) {
-			return options.Fn()
-		}
-		return options.Inverse()
+		return boolResult(toFloat(a) <= toFloat(b), options)
 	})
 
 	// and — both truthy

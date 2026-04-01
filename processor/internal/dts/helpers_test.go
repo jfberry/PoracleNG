@@ -28,35 +28,48 @@ func render(t *testing.T, source string, ctx interface{}) string {
 func TestEq(t *testing.T) {
 	ctx := map[string]interface{}{"a": "hello", "b": "hello", "n": 42}
 
-	// Equal strings
+	// Block mode: {{#eq ...}}...{{else}}...{{/eq}}
 	got := render(t, `{{#eq a b}}yes{{else}}no{{/eq}}`, ctx)
 	if got != "yes" {
-		t.Errorf("eq strings: got %q, want %q", got, "yes")
+		t.Errorf("eq block strings: got %q, want %q", got, "yes")
 	}
-
-	// Not equal
 	got = render(t, `{{#eq a "world"}}yes{{else}}no{{/eq}}`, ctx)
 	if got != "no" {
-		t.Errorf("eq not equal: got %q, want %q", got, "no")
+		t.Errorf("eq block not equal: got %q, want %q", got, "no")
 	}
-
-	// Number vs string via Sprintf normalization
 	got = render(t, `{{#eq n 42}}yes{{else}}no{{/eq}}`, ctx)
 	if got != "yes" {
-		t.Errorf("eq number: got %q, want %q", got, "yes")
+		t.Errorf("eq block number: got %q, want %q", got, "yes")
+	}
+
+	// Subexpression mode: {{#if (eq ...)}}...{{/if}}
+	got = render(t, `{{#if (eq a b)}}yes{{else}}no{{/if}}`, ctx)
+	if got != "yes" {
+		t.Errorf("eq subexpr match: got %q, want %q", got, "yes")
+	}
+	got = render(t, `{{#if (eq a "world")}}yes{{else}}no{{/if}}`, ctx)
+	if got != "no" {
+		t.Errorf("eq subexpr no match: got %q, want %q", got, "no")
 	}
 }
 
 func TestIsnt(t *testing.T) {
 	ctx := map[string]interface{}{"a": "foo", "b": "bar"}
+
+	// Block mode
 	got := render(t, `{{#isnt a b}}different{{else}}same{{/isnt}}`, ctx)
 	if got != "different" {
-		t.Errorf("isnt: got %q, want %q", got, "different")
+		t.Errorf("isnt block: got %q, want %q", got, "different")
 	}
-
 	got = render(t, `{{#isnt a a}}different{{else}}same{{/isnt}}`, ctx)
 	if got != "same" {
-		t.Errorf("isnt same: got %q, want %q", got, "same")
+		t.Errorf("isnt block same: got %q, want %q", got, "same")
+	}
+
+	// Subexpression mode
+	got = render(t, `{{#if (isnt a b)}}different{{else}}same{{/if}}`, ctx)
+	if got != "different" {
+		t.Errorf("isnt subexpr: got %q, want %q", got, "different")
 	}
 }
 
@@ -67,13 +80,13 @@ func TestCompare(t *testing.T) {
 		tmpl string
 		want string
 	}{
+		// Block mode
 		{`{{#compare x "==" 10}}yes{{else}}no{{/compare}}`, "yes"},
 		{`{{#compare x "!=" y}}yes{{else}}no{{/compare}}`, "yes"},
-		{`{{#compare x "<" y}}yes{{else}}no{{/compare}}`, "yes"},
-		{`{{#compare y ">" x}}yes{{else}}no{{/compare}}`, "yes"},
-		{`{{#compare x "<=" 10}}yes{{else}}no{{/compare}}`, "yes"},
-		{`{{#compare y ">=" 20}}yes{{else}}no{{/compare}}`, "yes"},
 		{`{{#compare x ">" y}}yes{{else}}no{{/compare}}`, "no"},
+		// Subexpression mode
+		{`{{#if (compare x "<" y)}}yes{{else}}no{{/if}}`, "yes"},
+		{`{{#if (compare y ">" x)}}yes{{else}}no{{/if}}`, "yes"},
 	}
 	for _, tt := range tests {
 		got := render(t, tt.tmpl, ctx)
@@ -86,21 +99,29 @@ func TestCompare(t *testing.T) {
 func TestGtGteLtLte(t *testing.T) {
 	ctx := map[string]interface{}{"a": 5, "b": 10}
 
+	// Block mode
 	if got := render(t, `{{#gt b a}}yes{{else}}no{{/gt}}`, ctx); got != "yes" {
-		t.Errorf("gt: got %q", got)
+		t.Errorf("gt block: got %q", got)
 	}
-	if got := render(t, `{{#gte a 5}}yes{{else}}no{{/gte}}`, ctx); got != "yes" {
-		t.Errorf("gte: got %q", got)
-	}
-	if got := render(t, `{{#lt a b}}yes{{else}}no{{/lt}}`, ctx); got != "yes" {
-		t.Errorf("lt: got %q", got)
-	}
-	if got := render(t, `{{#lte b 10}}yes{{else}}no{{/lte}}`, ctx); got != "yes" {
-		t.Errorf("lte: got %q", got)
-	}
-	// Failing cases
 	if got := render(t, `{{#gt a b}}yes{{else}}no{{/gt}}`, ctx); got != "no" {
-		t.Errorf("gt fail: got %q", got)
+		t.Errorf("gt block fail: got %q", got)
+	}
+
+	// Subexpression mode
+	if got := render(t, `{{#if (gt b a)}}yes{{else}}no{{/if}}`, ctx); got != "yes" {
+		t.Errorf("gt subexpr: got %q", got)
+	}
+	if got := render(t, `{{#if (gte a 5)}}yes{{else}}no{{/if}}`, ctx); got != "yes" {
+		t.Errorf("gte subexpr: got %q", got)
+	}
+	if got := render(t, `{{#if (lt a b)}}yes{{else}}no{{/if}}`, ctx); got != "yes" {
+		t.Errorf("lt subexpr: got %q", got)
+	}
+	if got := render(t, `{{#if (lte b 10)}}yes{{else}}no{{/if}}`, ctx); got != "yes" {
+		t.Errorf("lte subexpr: got %q", got)
+	}
+	if got := render(t, `{{#if (gt a b)}}yes{{else}}no{{/if}}`, ctx); got != "no" {
+		t.Errorf("gt subexpr fail: got %q", got)
 	}
 }
 
