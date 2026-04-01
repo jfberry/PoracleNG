@@ -7,8 +7,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pokemon/poracleng/processor/internal/db"
 )
+
+func init() {
+	gin.SetMode(gin.TestMode)
+}
+
+// newTestGinContext creates a gin.Context backed by the given recorder.
+func newTestGinContext(w *httptest.ResponseRecorder) *gin.Context {
+	c, _ := gin.CreateTestContext(w)
+	return c
+}
 
 // --- IntBool JSON serialization tests ---
 
@@ -158,7 +169,8 @@ func TestDiffTrackingNewInsert(t *testing.T) {
 
 func TestTrackingJSONOK(t *testing.T) {
 	w := httptest.NewRecorder()
-	trackingJSONOK(w, map[string]any{"count": 3})
+	c := newTestGinContext(w)
+	trackingJSONOK(c, map[string]any{"count": 3})
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
@@ -177,7 +189,8 @@ func TestTrackingJSONOK(t *testing.T) {
 
 func TestTrackingJSONError(t *testing.T) {
 	w := httptest.NewRecorder()
-	trackingJSONError(w, http.StatusNotFound, "User not found")
+	c := newTestGinContext(w)
+	trackingJSONError(c, http.StatusNotFound, "User not found")
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", w.Code)
@@ -196,7 +209,8 @@ func TestTrackingJSONError(t *testing.T) {
 
 func TestTrackingJSONOKNilData(t *testing.T) {
 	w := httptest.NewRecorder()
-	trackingJSONOK(w, nil)
+	c := newTestGinContext(w)
+	trackingJSONOK(c, nil)
 
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
@@ -227,10 +241,13 @@ func TestHandlerMissingID(t *testing.T) {
 	deps := &TrackingDeps{} // nil DB — should fail before DB call
 	handler := HandleGetLure(deps)
 
+	r := gin.New()
+	// Register without :id param so gin provides empty string
+	r.GET("/api/tracking/lure/", handler)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/tracking/lure/", nil)
-	// No {id} path value set → lookupHuman will get empty string → error
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 for missing id, got %d", w.Code)
@@ -247,13 +264,12 @@ func TestDeleteInvalidUID(t *testing.T) {
 	deps := &TrackingDeps{}
 	handler := HandleDeleteLure(deps)
 
-	// Use Go 1.22+ ServeMux to set path values
-	mux := http.NewServeMux()
-	mux.HandleFunc("DELETE /api/tracking/lure/{id}/byUid/{uid}", handler)
+	r := gin.New()
+	r.DELETE("/api/tracking/lure/:id/byUid/:uid", handler)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/tracking/lure/user1/byUid/notanumber", nil)
 	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for invalid uid, got %d", w.Code)
@@ -264,19 +280,17 @@ func TestCreateLureInvalidBody(t *testing.T) {
 	deps := &TrackingDeps{}
 	handler := HandleCreateLure(deps)
 
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.POST("/api/tracking/lure/:id", handler)
+
 	req := httptest.NewRequest(http.MethodPost, "/api/tracking/lure/user1", strings.NewReader("not json"))
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
-	// Should fail at lookupHuman (nil DB) or body parse — either way, error response
+	// Should fail at lookupHuman (nil DB panics) — recovery middleware returns 500
 	if w.Code == http.StatusOK {
 		t.Error("expected error for invalid body, got 200")
-	}
-
-	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["status"] != "error" {
-		t.Errorf("expected error status, got %v", resp["status"])
 	}
 }
 

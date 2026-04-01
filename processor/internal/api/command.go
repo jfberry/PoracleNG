@@ -1,23 +1,23 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
-	"github.com/pokemon/poracleng/processor/internal/nlp"
-	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
@@ -61,28 +61,23 @@ type commandResponse struct {
 
 // HandleCommand returns the POST /api/command handler.
 // This endpoint allows testing commands without a bot gateway.
-func HandleCommand(deps *CommandDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "POST only", http.StatusMethodNotAllowed)
-			return
-		}
-
+func HandleCommand(deps *CommandDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		var req commandRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeCommandJSON(w, http.StatusBadRequest, commandResponse{Status: "error"})
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, commandResponse{Status: "error"})
 			return
 		}
 
 		if req.Text == "" || req.UserID == "" {
-			writeCommandJSON(w, http.StatusBadRequest, commandResponse{Status: "error"})
+			c.JSON(http.StatusBadRequest, commandResponse{Status: "error"})
 			return
 		}
 
 		// Parse commands from text
 		parsed := deps.Parser.Parse(req.Text)
 		if len(parsed) == 0 {
-			writeCommandJSON(w, http.StatusOK, commandResponse{Status: "ok", Replies: nil})
+			c.JSON(http.StatusOK, commandResponse{Status: "ok", Replies: nil})
 			return
 		}
 
@@ -191,14 +186,6 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 			allReplies = append(allReplies, replies...)
 		}
 
-		writeCommandJSON(w, http.StatusOK, commandResponse{Status: "ok", Replies: allReplies})
+		c.JSON(http.StatusOK, commandResponse{Status: "ok", Replies: allReplies})
 	}
-}
-
-// lookupUserState loads basic user info for command context building.
-
-func writeCommandJSON(w http.ResponseWriter, status int, resp commandResponse) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }

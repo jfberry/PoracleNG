@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
@@ -14,22 +15,22 @@ import (
 )
 
 // HandleGetEgg returns the GET /api/tracking/egg/{id} handler.
-func HandleGetEgg(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleGetEgg(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		eggs, err := db.SelectEggsByIDProfile(deps.DB, human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: get eggs: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -48,32 +49,32 @@ func HandleGetEgg(deps *TrackingDeps) http.HandlerFunc {
 			}
 		}
 
-		trackingJSONOK(w, map[string]any{"egg": result})
+		trackingJSONOK(c, map[string]any{"egg": result})
 	}
 }
 
 // HandleDeleteEgg returns the DELETE /api/tracking/egg/{id}/byUid/{uid} handler.
-func HandleDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		uidStr := r.PathValue("uid")
+func HandleDeleteEgg(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		uidStr := c.Param("uid")
 		uid, err := strconv.ParseInt(uidStr, 10, 64)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid uid")
+			trackingJSONError(c, http.StatusBadRequest, "invalid uid")
 			return
 		}
 
 		// Look up human + existing rows for row text
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil || human == nil {
 			// Fall back to simple delete without row text
 			if err := db.DeleteByUID(deps.DB, "egg", id, uid); err != nil {
 				log.Errorf("Tracking API: delete egg: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			reloadState(deps)
-			trackingJSONOK(w, nil)
+			trackingJSONOK(c, nil)
 			return
 		}
 
@@ -82,7 +83,7 @@ func HandleDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUID(deps.DB, "egg", id, uid); err != nil {
 			log.Errorf("Tracking API: delete egg: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -91,7 +92,7 @@ func HandleDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
 		// Generate removed row text
 		tr := translatorFor(deps, human)
 		language := resolveLanguage(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 		var message string
 		for _, e := range existing {
 			if e.UID == uid {
@@ -102,7 +103,7 @@ func HandleDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
 		if !silent && message != "" {
 			sendConfirmation(deps, human, message, language)
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -119,38 +120,38 @@ type eggInsertRequest struct {
 }
 
 // HandleCreateEgg returns the POST /api/tracking/egg/{id} handler.
-func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		language := resolveLanguage(deps, human)
 		tr := translatorFor(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var insertReqs []eggInsertRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &insertReqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single eggInsertRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			insertReqs = []eggInsertRequest{single}
@@ -201,7 +202,7 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 			levels := parseLevelArray(req.Level)
 			for _, lvl := range levels {
 				if lvl < 1 {
-					trackingJSONError(w, http.StatusBadRequest, "Invalid level")
+					trackingJSONError(c, http.StatusBadRequest, "Invalid level")
 					return
 				}
 
@@ -224,7 +225,7 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 		tracked, err := deps.Tracking.Eggs.SelectByIDProfile(human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: select existing eggs: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -264,7 +265,7 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 			}
 			if err := deps.Tracking.Eggs.DeleteByUIDs(human.ID, uids); err != nil {
 				log.Errorf("Tracking API: delete updated eggs: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 		}
@@ -274,7 +275,7 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 			uid, err := deps.Tracking.Eggs.Insert(&diff.Inserts[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert egg: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -283,7 +284,7 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 			uid, err := deps.Tracking.Eggs.Insert(&diff.Updates[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert egg: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -300,7 +301,7 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 			responseMsg = ""
 		}
 
-		trackingJSONOK(w, map[string]any{
+		trackingJSONOK(c, map[string]any{
 			"message":        responseMsg,
 			"newUids":        newUIDs,
 			"alreadyPresent": len(diff.AlreadyPresent),
@@ -311,33 +312,33 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 }
 
 // HandleBulkDeleteEgg returns the POST /api/tracking/egg/{id}/delete handler.
-func HandleBulkDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleBulkDeleteEgg(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var uids []int64
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &uids); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single int64
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			uids = []int64{single}
 		}
 
 		// Look up human + existing rows for row text
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		var existing []db.EggTrackingAPI
 		if err == nil && human != nil {
 			existing, _ = db.SelectEggsByIDProfile(deps.DB, human.ID, profileNo)
@@ -345,7 +346,7 @@ func HandleBulkDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUIDs(deps.DB, "egg", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete eggs: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -356,7 +357,7 @@ func HandleBulkDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
 		if human != nil && len(existing) > 0 {
 			tr := translatorFor(deps, human)
 			language := resolveLanguage(deps, human)
-			silent := isSilent(r)
+			silent := isSilent(c)
 			uidSet := make(map[int64]bool, len(uids))
 			for _, u := range uids {
 				uidSet[u] = true
@@ -374,7 +375,7 @@ func HandleBulkDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
 				sendConfirmation(deps, human, message, language)
 			}
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 

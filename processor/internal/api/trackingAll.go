@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -214,15 +215,15 @@ func enrichForts(deps *TrackingDeps, tr *i18n.Translator, rows []db.FortTracking
 // ---------------------------------------------------------------------------
 
 // HandleGetAllTracking returns GET /api/tracking/all/{id} — all tracking for current profile.
-func HandleGetAllTracking(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleGetAllTracking(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
@@ -230,11 +231,11 @@ func HandleGetAllTracking(deps *TrackingDeps) http.HandlerFunc {
 		humanFull, err := db.SelectOneHumanFull(deps.DB, human.ID)
 		if err != nil {
 			log.Errorf("Tracking API: get full human: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		wantDesc := isTruthy(r.URL.Query().Get("includeDescriptions"))
+		wantDesc := isTruthy(c.Query("includeDescriptions"))
 		var tr *i18n.Translator
 		if wantDesc {
 			tr = translatorFor(deps, human)
@@ -335,7 +336,7 @@ func HandleGetAllTracking(deps *TrackingDeps) http.HandlerFunc {
 			log.Warnf("Tracking API: get all forts: %s", err)
 		}
 
-		trackingJSONOK(w, result)
+		trackingJSONOK(c, result)
 	}
 }
 
@@ -348,27 +349,27 @@ func HandleGetAllTracking(deps *TrackingDeps) http.HandlerFunc {
 // ---------------------------------------------------------------------------
 
 // HandleGetAllProfilesTracking returns GET /api/tracking/allProfiles/{id}.
-func HandleGetAllProfilesTracking(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleGetAllProfilesTracking(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 		if id == "" {
-			trackingJSONError(w, http.StatusBadRequest, "missing id parameter")
+			trackingJSONError(c, http.StatusBadRequest, "missing id parameter")
 			return
 		}
 
 		humanFull, err := db.SelectOneHumanFull(deps.DB, id)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, fmt.Sprintf("lookup human: %s", err))
+			trackingJSONError(c, http.StatusInternalServerError, fmt.Sprintf("lookup human: %s", err))
 			return
 		}
 		if humanFull == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		// Default: descriptions enabled (backward compatible with JS behavior).
 		wantDesc := true
-		if descParam := r.URL.Query().Get("includeDescriptions"); descParam != "" && isFalsy(descParam) {
+		if descParam := c.Query("includeDescriptions"); descParam != "" && isFalsy(descParam) {
 			wantDesc = false
 		}
 
@@ -485,6 +486,6 @@ func HandleGetAllProfilesTracking(deps *TrackingDeps) http.HandlerFunc {
 			log.Warnf("Tracking API: get allProfiles forts: %s", err)
 		}
 
-		trackingJSONOK(w, result)
+		trackingJSONOK(c, result)
 	}
 }

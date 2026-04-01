@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
@@ -26,15 +28,12 @@ type TileDeps struct {
 	Weather   *tracker.WeatherTracker
 }
 
-func jsonOK(w http.ResponseWriter, tileURL string) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "url": tileURL})
+func tileJSONOK(c *gin.Context, tileURL string) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "url": tileURL})
 }
 
-func jsonError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"status": "error", "message": msg})
+func tileJSONError(c *gin.Context, status int, msg string) {
+	c.JSON(status, gin.H{"status": "error", "message": msg})
 }
 
 // FindFence finds a fence by name (case-insensitive, underscore-normalized).
@@ -74,29 +73,29 @@ func FenceAutopositionPolygons(paths [][][2]float64) [][]staticmap.LatLon {
 
 // HandleGeofenceAreaMap returns a tile of a single geofence area polygon.
 // GET /api/geofence/{area}/map
-func HandleGeofenceAreaMap(deps TileDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGeofenceAreaMap(deps TileDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		if deps.StaticMap == nil {
-			jsonError(w, http.StatusServiceUnavailable, "static map provider not configured")
+			tileJSONError(c, http.StatusServiceUnavailable, "static map provider not configured")
 			return
 		}
 
-		areaName, _ := url.PathUnescape(r.PathValue("area"))
+		areaName, _ := url.PathUnescape(c.Param("area"))
 		if areaName == "" {
-			jsonError(w, http.StatusBadRequest, "area parameter required")
+			tileJSONError(c, http.StatusBadRequest, "area parameter required")
 			return
 		}
 
 		st := deps.StateMgr.Get()
 		fence := FindFence(st.Fences, areaName)
 		if fence == nil {
-			jsonError(w, http.StatusNotFound, "area not found")
+			tileJSONError(c, http.StatusNotFound, "area not found")
 			return
 		}
 
 		paths := FencePaths(fence)
 		if len(paths) == 0 {
-			jsonError(w, http.StatusNotFound, "area has no polygon data")
+			tileJSONError(c, http.StatusNotFound, "area has no polygon data")
 			return
 		}
 
@@ -105,7 +104,7 @@ func HandleGeofenceAreaMap(deps TileDeps) http.HandlerFunc {
 		}, 500, 250, 1.25, 17.5)
 
 		if pos == nil {
-			jsonError(w, http.StatusInternalServerError, "autoposition failed")
+			tileJSONError(c, http.StatusInternalServerError, "autoposition failed")
 			return
 		}
 
@@ -117,24 +116,24 @@ func HandleGeofenceAreaMap(deps TileDeps) http.HandlerFunc {
 		}
 
 		tileURL := deps.StaticMap.GetPregeneratedTileURL("area", data, "staticMap")
-		jsonOK(w, tileURL)
+		tileJSONOK(c, tileURL)
 	}
 }
 
 // HandleDistanceMap returns a tile showing a distance circle.
 // GET /api/geofence/distanceMap/{lat}/{lon}/{distance}
-func HandleDistanceMap(deps TileDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDistanceMap(deps TileDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		if deps.StaticMap == nil {
-			jsonError(w, http.StatusServiceUnavailable, "static map provider not configured")
+			tileJSONError(c, http.StatusServiceUnavailable, "static map provider not configured")
 			return
 		}
 
-		lat, err1 := strconv.ParseFloat(r.PathValue("lat"), 64)
-		lon, err2 := strconv.ParseFloat(r.PathValue("lon"), 64)
-		distance, err3 := strconv.ParseFloat(r.PathValue("distance"), 64)
+		lat, err1 := strconv.ParseFloat(c.Param("lat"), 64)
+		lon, err2 := strconv.ParseFloat(c.Param("lon"), 64)
+		distance, err3 := strconv.ParseFloat(c.Param("distance"), 64)
 		if err1 != nil || err2 != nil || err3 != nil || distance < 0 {
-			jsonError(w, http.StatusBadRequest, "invalid parameters")
+			tileJSONError(c, http.StatusBadRequest, "invalid parameters")
 			return
 		}
 
@@ -143,7 +142,7 @@ func HandleDistanceMap(deps TileDeps) http.HandlerFunc {
 		}, 500, 250, 1.25, 17.5)
 
 		if pos == nil {
-			jsonError(w, http.StatusInternalServerError, "autoposition failed")
+			tileJSONError(c, http.StatusInternalServerError, "autoposition failed")
 			return
 		}
 
@@ -155,23 +154,23 @@ func HandleDistanceMap(deps TileDeps) http.HandlerFunc {
 		}
 
 		tileURL := deps.StaticMap.GetPregeneratedTileURL("distance", data, "staticMap")
-		jsonOK(w, tileURL)
+		tileJSONOK(c, tileURL)
 	}
 }
 
 // HandleLocationMap returns a tile showing a location pin.
 // GET /api/geofence/locationMap/{lat}/{lon}
-func HandleLocationMap(deps TileDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleLocationMap(deps TileDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		if deps.StaticMap == nil {
-			jsonError(w, http.StatusServiceUnavailable, "static map provider not configured")
+			tileJSONError(c, http.StatusServiceUnavailable, "static map provider not configured")
 			return
 		}
 
-		lat, err1 := strconv.ParseFloat(r.PathValue("lat"), 64)
-		lon, err2 := strconv.ParseFloat(r.PathValue("lon"), 64)
+		lat, err1 := strconv.ParseFloat(c.Param("lat"), 64)
+		lon, err2 := strconv.ParseFloat(c.Param("lon"), 64)
 		if err1 != nil || err2 != nil {
-			jsonError(w, http.StatusBadRequest, "invalid parameters")
+			tileJSONError(c, http.StatusBadRequest, "invalid parameters")
 			return
 		}
 
@@ -181,24 +180,24 @@ func HandleLocationMap(deps TileDeps) http.HandlerFunc {
 		}
 
 		tileURL := deps.StaticMap.GetPregeneratedTileURL("location", data, "staticMap")
-		jsonOK(w, tileURL)
+		tileJSONOK(c, tileURL)
 	}
 }
 
 // HandleOverviewMap returns a tile showing multiple geofence areas with rainbow colors.
 // POST /api/geofence/overviewMap  body: {"areas": ["area1", "area2"]}
-func HandleOverviewMap(deps TileDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleOverviewMap(deps TileDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		if deps.StaticMap == nil {
-			jsonError(w, http.StatusServiceUnavailable, "static map provider not configured")
+			tileJSONError(c, http.StatusServiceUnavailable, "static map provider not configured")
 			return
 		}
 
 		var body struct {
 			Areas []string `json:"areas"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Areas) == 0 {
-			jsonError(w, http.StatusBadRequest, "areas array required")
+		if err := c.ShouldBindJSON(&body); err != nil || len(body.Areas) == 0 {
+			tileJSONError(c, http.StatusBadRequest, "areas array required")
 			return
 		}
 
@@ -212,7 +211,7 @@ func HandleOverviewMap(deps TileDeps) http.HandlerFunc {
 			}
 		}
 		if len(fences) == 0 {
-			jsonError(w, http.StatusNotFound, "no matching areas found")
+			tileJSONError(c, http.StatusNotFound, "no matching areas found")
 			return
 		}
 
@@ -227,7 +226,7 @@ func HandleOverviewMap(deps TileDeps) http.HandlerFunc {
 		}, 1024, 768, 1.25, 17.5)
 
 		if pos == nil {
-			jsonError(w, http.StatusInternalServerError, "autoposition failed")
+			tileJSONError(c, http.StatusInternalServerError, "autoposition failed")
 			return
 		}
 
@@ -251,29 +250,29 @@ func HandleOverviewMap(deps TileDeps) http.HandlerFunc {
 		}
 
 		tileURL := deps.StaticMap.GetPregeneratedTileURL("areaoverview", data, "staticMap")
-		jsonOK(w, tileURL)
+		tileJSONOK(c, tileURL)
 	}
 }
 
 // HandleWeatherMap returns a tile showing a weather S2 cell.
 // GET /api/geofence/weatherMap/{lat}/{lon}
-func HandleWeatherMap(deps TileDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleWeatherMap(deps TileDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		if deps.StaticMap == nil {
-			jsonError(w, http.StatusServiceUnavailable, "static map provider not configured")
+			tileJSONError(c, http.StatusServiceUnavailable, "static map provider not configured")
 			return
 		}
 
-		lat, err1 := strconv.ParseFloat(r.PathValue("lat"), 64)
-		lon, err2 := strconv.ParseFloat(r.PathValue("lon"), 64)
+		lat, err1 := strconv.ParseFloat(c.Param("lat"), 64)
+		lon, err2 := strconv.ParseFloat(c.Param("lon"), 64)
 		if err1 != nil || err2 != nil {
-			jsonError(w, http.StatusBadRequest, "invalid parameters")
+			tileJSONError(c, http.StatusBadRequest, "invalid parameters")
 			return
 		}
 
 		// Get weather condition from query param or look up from tracker
 		weatherID := 0
-		if qw := r.URL.Query().Get("weather"); qw != "" {
+		if qw := c.Query("weather"); qw != "" {
 			weatherID, _ = strconv.Atoi(qw)
 		}
 		if weatherID == 0 && deps.Weather != nil {
@@ -286,10 +285,10 @@ func HandleWeatherMap(deps TileDeps) http.HandlerFunc {
 		coords := geo.GetCellCoordsSlice(lat, lon, 10)
 
 		data := map[string]any{
-			"latitude":             centerLat,
-			"longitude":            centerLon,
-			"coords":               coords,
-			"gameplay_condition":   weatherID,
+			"latitude":           centerLat,
+			"longitude":          centerLon,
+			"coords":             coords,
+			"gameplay_condition": weatherID,
 		}
 
 		// Add weather icon if available
@@ -298,17 +297,16 @@ func HandleWeatherMap(deps TileDeps) http.HandlerFunc {
 		}
 
 		tileURL := deps.StaticMap.GetPregeneratedTileURL("weather", data, "staticMap")
-		jsonOK(w, tileURL)
+		tileJSONOK(c, tileURL)
 	}
 }
 
 // HandleGeofenceAll returns all geofence data.
 // GET /api/geofence/all
-func HandleGeofenceAll(stateMgr *state.Manager) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGeofenceAll(stateMgr *state.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		st := stateMgr.Get()
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		c.JSON(http.StatusOK, gin.H{
 			"status":   "ok",
 			"geofence": st.Fences,
 		})
@@ -317,16 +315,15 @@ func HandleGeofenceAll(stateMgr *state.Manager) http.HandlerFunc {
 
 // HandleGeofenceHash returns MD5 hashes of each geofence path.
 // GET /api/geofence/all/hash
-func HandleGeofenceHash(stateMgr *state.Manager) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGeofenceHash(stateMgr *state.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		st := stateMgr.Get()
 		areas := make(map[string]string, len(st.Fences))
 		for _, f := range st.Fences {
 			pathJSON, _ := json.Marshal(f.Path)
 			areas[f.Name] = fmt.Sprintf("%x", md5.Sum(pathJSON))
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 			"areas":  areas,
 		})
@@ -335,8 +332,8 @@ func HandleGeofenceHash(stateMgr *state.Manager) http.HandlerFunc {
 
 // HandleGeofenceGeoJSON returns geofences as a GeoJSON FeatureCollection.
 // GET /api/geofence/all/geojson
-func HandleGeofenceGeoJSON(stateMgr *state.Manager) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGeofenceGeoJSON(stateMgr *state.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		st := stateMgr.Get()
 
 		features := make([]map[string]any, 0, len(st.Fences))
@@ -391,8 +388,7 @@ func HandleGeofenceGeoJSON(stateMgr *state.Manager) http.HandlerFunc {
 			})
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 			"geoJSON": map[string]any{
 				"type":     "FeatureCollection",
