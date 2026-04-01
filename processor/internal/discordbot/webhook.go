@@ -39,8 +39,13 @@ func (b *Bot) handleWebhook(s *discordgo.Session, m *discordgo.MessageCreate, ar
 		subcommand = args[0]
 	}
 
+	prefix := b.Cfg.Discord.Prefix
+	if prefix == "" {
+		prefix = "!"
+	}
+
 	switch subcommand {
-	case "list", "":
+	case "list":
 		b.handleWebhookList(s, m)
 	case "create":
 		b.handleWebhookCreate(s, m, webhookName)
@@ -48,27 +53,32 @@ func (b *Bot) handleWebhook(s *discordgo.Session, m *discordgo.MessageCreate, ar
 		b.handleWebhookAdd(s, m, webhookName)
 	case "remove":
 		b.handleWebhookRemove(s, m, webhookName)
+	default:
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(
+			"Usage: `%swebhook list` | `%swebhook add [name:webhookname]` | `%swebhook remove [name:webhookname]` | `%swebhook create`",
+			prefix, prefix, prefix, prefix))
 	}
 }
 
 func (b *Bot) handleWebhookList(s *discordgo.Session, m *discordgo.MessageCreate) {
-	hooks, err := s.ChannelWebhooks(m.ChannelID)
-	if err != nil {
-		log.Warnf("discord bot: fetch webhooks for channel %s: %v", m.ChannelID, err)
-		s.ChannelMessageSend(m.ChannelID, "Failed to fetch webhooks")
-		return
-	}
-
 	ch, _ := s.Channel(m.ChannelID)
 	channelName := m.ChannelID
 	if ch != nil {
 		channelName = ch.Name
 	}
 
-	// Send channel info to DM
+	hooks, err := s.ChannelWebhooks(m.ChannelID)
+	if err != nil {
+		log.Warnf("discord bot: fetch webhooks for channel %s: %v", m.ChannelID, err)
+		s.ChannelMessageSend(m.ChannelID, "I have not been allowed to manage webhooks! Check bot permissions.")
+		return
+	}
+
+	// Send results to DM
 	dmCh, err := s.UserChannelCreate(m.Author.ID)
 	if err != nil {
 		log.Warnf("discord bot: create DM for webhook list: %v", err)
+		s.ChannelMessageSend(m.ChannelID, "Could not send DM — check your privacy settings")
 		return
 	}
 
@@ -76,12 +86,14 @@ func (b *Bot) handleWebhookList(s *discordgo.Session, m *discordgo.MessageCreate
 
 	if len(hooks) == 0 {
 		s.ChannelMessageSend(dmCh.ID, "No webhooks found in this channel")
+		s.MessageReactionAdd(m.ChannelID, m.ID, "✅")
 		return
 	}
 
 	for _, hook := range hooks {
 		s.ChannelMessageSend(dmCh.ID, fmt.Sprintf("%s | https://discord.com/api/webhooks/%s/%s", hook.Name, hook.ID, hook.Token))
 	}
+	s.MessageReactionAdd(m.ChannelID, m.ID, "✅")
 }
 
 func (b *Bot) handleWebhookCreate(s *discordgo.Session, m *discordgo.MessageCreate, name string) {
