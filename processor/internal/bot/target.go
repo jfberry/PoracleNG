@@ -53,21 +53,36 @@ func BuildTarget(ctx *CommandContext, args []string) (*Target, []string, error) 
 
 	// Default target: the sender themselves
 	if nameOverride == "" && userOverride == "" {
-		// In a channel (not DM) with admin/delegated permissions: target the channel
-		if !ctx.IsDM && (ctx.IsAdmin || ctx.Permissions.ChannelTracking) {
-			target, err := lookupTarget(hs, ctx.ChannelID)
-			if err != nil || target == nil {
-				// Channel not registered — fall back to self
-				target, err = lookupTarget(hs, ctx.TargetID)
-				if err != nil {
-					return nil, remaining, err
-				}
+		if ctx.IsDM {
+			// DM: target is always the sender
+			target, err := lookupTarget(hs, ctx.TargetID)
+			if err != nil {
+				return nil, remaining, err
 			}
-			if target != nil {
-				target.IsAdmin = ctx.IsAdmin
-				return target, remaining, nil
+			if target == nil {
+				return nil, remaining, fmt.Errorf("user %s not found", ctx.TargetID)
 			}
+			target.IsAdmin = ctx.IsAdmin
+			return target, remaining, nil
 		}
+
+		// Guild channel: must be registered
+		channelTarget, _ := lookupTarget(hs, ctx.ChannelID)
+		if channelTarget == nil {
+			prefix := "!"
+			if ctx.Platform == "telegram" {
+				prefix = "/"
+			}
+			return nil, remaining, fmt.Errorf("%s does not seem to be registered. add it with %schannel add", ctx.ChannelID, prefix)
+		}
+
+		if ctx.IsAdmin || ctx.Permissions.ChannelTracking {
+			// Admin/delegated: target the channel
+			channelTarget.IsAdmin = ctx.IsAdmin
+			return channelTarget, remaining, nil
+		}
+
+		// Non-admin in registered channel: target is the sender
 		target, err := lookupTarget(hs, ctx.TargetID)
 		if err != nil {
 			return nil, remaining, err
