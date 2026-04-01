@@ -36,6 +36,13 @@ func NewParser(prefix string, bundle *i18n.Bundle, languages []string) *Parser {
 			if !strings.HasPrefix(key, "cmd.") {
 				continue
 			}
+			// Only register top-level command keys (cmd.track, cmd.poracle)
+			// not subcommand labels (cmd.info.sub.poracle) or message strings
+			// (cmd.track.usage). A command key has exactly one dot after "cmd.".
+			parts := strings.SplitN(key[4:], ".", 2) // strip "cmd." prefix
+			if len(parts) > 1 {
+				continue // has sub-key — not a command name
+			}
 			lower := strings.ToLower(val)
 			if lower == "" {
 				continue
