@@ -117,16 +117,5 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		}
 	}
 
-	text := sb.String()
-	if len(text) > 2000 {
-		return []bot.Reply{{
-			Text: tr.T("cmd.userlist.registered"),
-			Attachment: &bot.Attachment{
-				Filename: "userlist.txt",
-				Content:  []byte(text),
-			},
-		}}
-	}
-
-	return []bot.Reply{{Text: text}}
+	return bot.SplitTextReply(sb.String())
 }
