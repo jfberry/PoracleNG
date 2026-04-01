@@ -12,6 +12,11 @@ func LookupUserStateFromStore(hs store.HumanStore, userID, defaultLocale string)
 		return
 	}
 
+	// Admin-disabled or self-disabled users are treated as unregistered
+	if h.AdminDisable || !h.Enabled {
+		return
+	}
+
 	isRegistered = true
 	if h.Language != "" {
 		lang = h.Language
