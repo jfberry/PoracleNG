@@ -316,7 +316,8 @@ func main() {
 	mux.HandleFunc("GET /api/tracking/allProfiles/{id}", apiRoute("tracking/allProfiles", api.HandleGetAllProfilesTracking(trackingDeps)))
 
 	// Human endpoints
-	mux.HandleFunc("GET /api/humans/one/{id}", apiRoute("humans/one", api.HandleGetOneHuman(trackingDeps)))
+	// Note: GET /api/humans/{id} uses a sub-router to avoid Go mux conflicts
+	// between literal segments (one, roles) and wildcards ({id}).
 	mux.HandleFunc("POST /api/humans/{id}/start", apiRoute("humans/start", api.HandleStartHuman(trackingDeps)))
 	mux.HandleFunc("POST /api/humans/{id}/stop", apiRoute("humans/stop", api.HandleStopHuman(trackingDeps)))
 	mux.HandleFunc("POST /api/humans/{id}/adminDisabled", apiRoute("humans/adminDisabled", api.HandleAdminDisabled(trackingDeps)))
@@ -325,7 +326,8 @@ func main() {
 	mux.HandleFunc("POST /api/humans/{id}/setLocation/{lat}/{lon}", apiRoute("humans/setLocation", api.HandleSetLocation(trackingDeps)))
 	mux.HandleFunc("POST /api/humans/{id}/setAreas", apiRoute("humans/setAreas", api.HandleSetAreas(trackingDeps)))
 	mux.HandleFunc("POST /api/humans", apiRoute("humans/create", api.HandleCreateHuman(trackingDeps)))
-	mux.HandleFunc("GET /api/humans/{id}", apiRoute("humans", api.HandleGetHumanAreas(trackingDeps)))
+	// GET /api/humans/* uses a path-based dispatcher to avoid Go mux conflicts
+	// between literal segments (one, roles) and the {id} wildcard.
 
 	// Role endpoints — Discord session resolved lazily since bot may start after routes are registered
 	var discordBotRef *discordbot.Bot
@@ -339,10 +341,39 @@ func main() {
 		Config: cfg,
 		DB:     database,
 	}
-	mux.HandleFunc("GET /api/humans/{id}/roles", apiRoute("humans/roles", api.HandleGetRoles(roleDeps)))
 	mux.HandleFunc("POST /api/humans/{id}/roles/add/{roleId}", apiRoute("humans/roles/add", api.HandleAddRole(roleDeps)))
 	mux.HandleFunc("POST /api/humans/{id}/roles/remove/{roleId}", apiRoute("humans/roles/remove", api.HandleRemoveRole(roleDeps)))
-	mux.HandleFunc("GET /api/humans/{id}/getAdministrationRoles", apiRoute("humans/getAdministrationRoles", api.HandleGetAdministrationRoles(roleDeps)))
+	{
+		// GET handlers that conflict with Go mux wildcard matching:
+		// /api/humans/one/{id}, /api/humans/{id}/roles, /api/humans/{id}/getAdministrationRoles, /api/humans/{id}
+		getOneHuman := auth(api.HandleGetOneHuman(trackingDeps))
+		getHumanAreas := auth(api.HandleGetHumanAreas(trackingDeps))
+		getRoles := auth(api.HandleGetRoles(roleDeps))
+		getAdminRoles := auth(api.HandleGetAdministrationRoles(roleDeps))
+		mux.HandleFunc("GET /api/humans/{path...}", func(w http.ResponseWriter, r *http.Request) {
+			p := r.PathValue("path")
+			parts := strings.SplitN(p, "/", 3)
+			switch {
+			case len(parts) == 2 && parts[0] == "one":
+				r.SetPathValue("id", parts[1])
+				getOneHuman.ServeHTTP(w, r)
+			case len(parts) == 2 && parts[1] == "roles":
+				r.SetPathValue("id", parts[0])
+				getRoles.ServeHTTP(w, r)
+			case len(parts) == 2 && parts[1] == "getAdministrationRoles":
+				r.SetPathValue("id", parts[0])
+				getAdminRoles.ServeHTTP(w, r)
+			case len(parts) >= 3 && parts[1] == "checkLocation":
+				// Already handled by specific route above
+				http.NotFound(w, r)
+			case len(parts) == 1:
+				r.SetPathValue("id", parts[0])
+				getHumanAreas.ServeHTTP(w, r)
+			default:
+				http.NotFound(w, r)
+			}
+		})
+	}
 
 	// Profile endpoints
 	mux.HandleFunc("GET /api/profiles/{id}", apiRoute("profiles", api.HandleGetProfiles(trackingDeps)))
