@@ -314,15 +314,21 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 		}
 
 		replies := handler.Run(ctx, remainingArgs)
-		b.sendReplies(chatID, replies)
+		b.sendReplies(chatID, m.From.ID, replies)
 	}
 }
 
-func (b *Bot) sendReplies(chatID int64, replies []bot.Reply) {
+func (b *Bot) sendReplies(chatID int64, userID int64, replies []bot.Reply) {
 	for _, reply := range replies {
+		// IsDM replies go to the user's private chat, not the group
+		targetChat := chatID
+		if reply.IsDM && chatID != userID {
+			targetChat = userID
+		}
+
 		// File attachment
 		if reply.Attachment != nil {
-			doc := tgbotapi.NewDocument(chatID, tgbotapi.FileBytes{
+			doc := tgbotapi.NewDocument(targetChat, tgbotapi.FileBytes{
 				Name:  reply.Attachment.Filename,
 				Bytes: reply.Attachment.Content,
 			})
@@ -339,7 +345,7 @@ func (b *Bot) sendReplies(chatID int64, replies []bot.Reply) {
 			// Split long messages at 4095 char limit
 			messages := bot.SplitMessage(reply.Text, 4095)
 			for _, text := range messages {
-				msg := tgbotapi.NewMessage(chatID, text)
+				msg := tgbotapi.NewMessage(targetChat, text)
 				msg.ParseMode = "Markdown"
 				if _, err := b.api.Send(msg); err != nil {
 					// Retry without parse mode in case the text has invalid Markdown

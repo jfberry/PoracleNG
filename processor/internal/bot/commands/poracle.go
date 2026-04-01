@@ -149,6 +149,14 @@ func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd s
 	log.Infof("poracle: %s registered as %s", ctx.UserName, userType)
 
 	replies := []bot.Reply{{React: "✅"}}
+
+	// Group welcome text — sent to the group (not DM) with {user} replaced
+	if ctx.Platform == "telegram" && ctx.Config.Telegram.GroupWelcomeText != "" && !ctx.IsDM {
+		welcome := strings.ReplaceAll(ctx.Config.Telegram.GroupWelcomeText, "{user}", ctx.UserName)
+		replies = append(replies, bot.Reply{Text: welcome})
+	}
+
+	// Greeting DTS — sent via DM
 	if greeting := c.renderGreeting(ctx); greeting != nil {
 		replies = append(replies, *greeting)
 	}
