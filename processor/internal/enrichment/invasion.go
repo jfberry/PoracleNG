@@ -62,6 +62,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 		tileFields["gruntTypeId"] = gruntTypeID
 	}
 	if displayType != 0 {
+		m["displayTypeId"] = displayType
 		tileFields["displayTypeId"] = displayType
 	}
 	if lureID != 0 {
