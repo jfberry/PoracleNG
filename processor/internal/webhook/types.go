@@ -3,8 +3,6 @@ package webhook
 import (
 	"encoding/json"
 	"strconv"
-
-	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 // FlexBool handles JSON booleans that may arrive as true/false or 0/1.
@@ -195,28 +193,6 @@ type MatchedUser struct {
 	PVPRankingWorst   int                  `json:"pvp_ranking_worst"`
 	RSVPChanges       int                  `json:"rsvp_changes"`
 	ActivePokemons    []ActivePokemonEntry `json:"active_pokemons,omitempty"`
-}
-
-// OutboundPayload is sent from processor to alerter.
-type OutboundPayload struct {
-	Type                   string                    `json:"type"`
-	Message                json.RawMessage           `json:"message"`
-	Enrichment             map[string]any            `json:"enrichment,omitempty"`
-	PerLanguageEnrichment  map[string]map[string]any `json:"per_language_enrichment,omitempty"` // lang → enrichment
-	PerUserEnrichment      map[string]map[string]any `json:"per_user_enrichment,omitempty"`     // userId → enrichment
-	MatchedAreas           []MatchedArea             `json:"matched_areas"`
-	MatchedUsers           []MatchedUser             `json:"matched_users"`
-	OldState               *EncounterOld             `json:"old_state,omitempty"`
-	TilePending            *staticmap.TilePending    `json:"-"` // async tile, resolved by sender before flush
-}
-
-// EncounterOld holds old state for pokemon_changed events.
-type EncounterOld struct {
-	PokemonID int     `json:"pokemon_id"`
-	Form      int     `json:"form"`
-	Weather   int     `json:"weather"`
-	CP        int     `json:"cp"`
-	IV        float64 `json:"iv"`
 }
 
 // InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.

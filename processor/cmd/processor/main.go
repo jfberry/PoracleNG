@@ -460,9 +460,6 @@ func main() {
 	}
 	mux.HandleFunc("POST /api/command", apiRoute("command", api.HandleCommand(cmdDeps)))
 
-	// Proxy unhandled /api/ requests to the alerter (config, humans, profiles, etc.)
-	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
-
 	// Prometheus metrics
 	mux.Handle("/metrics", promhttp.Handler())
 
@@ -660,7 +657,6 @@ type ProcessorService struct {
 	cfg             *config.Config
 	stateMgr        *state.Manager
 	database        *sqlx.DB
-	sender          *webhook.Sender
 	weather         *tracker.WeatherTracker
 	weatherCares    *tracker.WeatherCareTracker
 	encounters      *tracker.EncounterTracker
@@ -685,7 +681,6 @@ type ProcessorService struct {
 	scanner         scanner.Scanner
 	rateLimiter     *ratelimit.Limiter
 	translations    *i18n.Bundle
-	alerterClient   *http.Client
 	renderCh        chan RenderJob
 	renderWg        sync.WaitGroup
 	reloadMu        sync.Mutex
@@ -962,8 +957,6 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		enricher:      enricher,
 		dtsRenderer:   dtsRenderer,
 		scanner:       scannerInstance,
-		alerterClient: &http.Client{Timeout: 5 * time.Second},
-		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Processor.APISecret, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),
 		encounters:   tracker.NewEncounterTracker(),
@@ -1010,12 +1003,6 @@ func (ps *ProcessorService) Close() {
 		ps.dispatcher.Stop()
 		log.Info("Delivery dispatcher stopped")
 	}
-	log.Info("Stopping legacy sender...")
-	// Sender must close before resolver: sender's final flush may need
-	// tile workers still running to resolve pending tiles within deadline.
-	log.Info("Stopping legacy sender...")
-	ps.sender.Close()
-	log.Info("Legacy sender stopped")
 	if ps.enricher.StaticMap != nil {
 		ps.enricher.StaticMap.Close()
 	}
