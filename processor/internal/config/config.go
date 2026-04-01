@@ -131,12 +131,11 @@ type LoggingConfig struct {
 type ProcessorConfig struct {
 	Host        string   `toml:"host"`
 	Port        int      `toml:"port"`
-	AlerterURL  string   `toml:"alerter_url"`
 	IPWhitelist []string `toml:"ip_whitelist"`
-	APISecret   string   `toml:"api_secret"` // Alerter API secret (read from [alerter] section)
+	APISecret   string   `toml:"api_secret"` // API secret for X-Poracle-Secret header authentication
 }
 
-// AlerterConfig reads the [alerter] section so the processor can authenticate to alerter APIs.
+// AlerterConfig reads the [alerter] section for backward-compatible api_secret configuration.
 type AlerterConfig struct {
 	APISecret string `toml:"api_secret"`
 }
@@ -175,7 +174,7 @@ func (c DiscordConfig) DiscordTokens() []string {
 }
 
 // RoleSubscriptionMap converts the [[discord.role_subscriptions]] TOML array
-// into a guild-keyed map, matching the alerter's userRoleSubscription format.
+// into a guild-keyed map, matching the userRoleSubscription configuration format.
 func (c DiscordConfig) RoleSubscriptionMap() map[string]RoleSubscriptionEntry {
 	m := make(map[string]RoleSubscriptionEntry, len(c.RoleSubscriptions))
 	for _, entry := range c.RoleSubscriptions {
@@ -471,9 +470,8 @@ func Load(baseDir string) (*Config, error) {
 	cfg := &Config{
 		BaseDir: absDir,
 		Processor: ProcessorConfig{
-			Host:       "0.0.0.0",
-			Port:       3030,
-			AlerterURL: "http://localhost:3031",
+			Host: "0.0.0.0",
+			Port: 3030,
 		},
 		PVP: PVPConfig{
 			PVPQueryMaxRank:    100,
@@ -556,7 +554,7 @@ func Load(baseDir string) (*Config, error) {
 		return nil, err
 	}
 
-	// Copy alerter api_secret to processor config for API authentication
+	// Copy api_secret from [alerter] section for backward compatibility
 	if cfg.Alerter.APISecret != "" && cfg.Processor.APISecret == "" {
 		cfg.Processor.APISecret = cfg.Alerter.APISecret
 	}

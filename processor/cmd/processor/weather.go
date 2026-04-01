@@ -27,8 +27,8 @@ func (ps *ProcessorService) ProcessWeather(raw json.RawMessage) error {
 	return nil
 }
 
-// consumeWeatherChanges reads weather change events and forwards them to the alerter
-// with the list of users who care about that cell.
+// consumeWeatherChanges reads weather change events and processes them for
+// matching and delivery.
 func (ps *ProcessorService) consumeWeatherChanges() {
 	for change := range ps.weather.Changes() {
 		l := log.WithField("ref", change.S2CellID)

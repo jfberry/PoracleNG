@@ -357,7 +357,7 @@ func main() {
 		mux.HandleFunc("POST /api/dts/render", auth(api.HandleDTSRender(proc.dtsRenderer.Templates())))
 	}
 
-	// Config and master data endpoints (replaces alerter-proxied routes)
+	// Config and master data endpoints
 	mux.HandleFunc("GET /api/config/poracleWeb", auth(api.HandleConfigPoracleWeb(cfg)))
 	mux.HandleFunc("GET /api/masterdata/monsters", auth(api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations)))
 	mux.HandleFunc("GET /api/masterdata/grunts", auth(api.HandleMasterdataGrunts(proc.enricher.GameData)))
