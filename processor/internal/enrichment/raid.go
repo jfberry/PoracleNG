@@ -46,6 +46,12 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		}
 	}
 
+	// Unix timestamps as integers — avoids float64 scientific notation from
+	// the raw webhook layer (Go JSON decodes numbers as float64 in map[string]any).
+	// DTS templates use these for Discord timestamps: <t:{{start}}:R>
+	m["start"] = raid.Start
+	m["end"] = raid.End
+
 	if raid.PokemonID > 0 {
 		// Hatched raid: disappearTime from end, tth from now to end
 		m["disappearTime"] = geo.FormatTime(raid.End, tz, e.TimeLayout)

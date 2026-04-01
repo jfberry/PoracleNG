@@ -22,6 +22,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
 
 	if expiration > 0 {
+		m["expiration"] = expiration // integer for <t:{{expiration}}:R>
 		m["disappearTime"] = geo.FormatTime(expiration, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(expiration)
 	}
