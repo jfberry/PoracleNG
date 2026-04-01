@@ -77,10 +77,11 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		}
 		sb.WriteString(fmt.Sprintf("%d%s. %s", p.ProfileNo, activeMarker, p.Name))
 
-		areaJSON, _ := json.Marshal(p.Area)
-		area := string(areaJSON)
-		if area != "null" && area != "[]" {
-			sb.WriteString(fmt.Sprintf(" - areas: %s", area))
+		if len(p.Area) > 0 && ctx.AreaLogic != nil {
+			displayNames := ctx.AreaLogic.ResolveDisplayNames(p.Area)
+			sb.WriteString(fmt.Sprintf(" - areas: %s", strings.Join(displayNames, ", ")))
+		} else if len(p.Area) > 0 {
+			sb.WriteString(fmt.Sprintf(" - areas: %s", strings.Join(p.Area, ", ")))
 		}
 
 		if p.Latitude != 0 || p.Longitude != 0 {
