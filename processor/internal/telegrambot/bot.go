@@ -49,6 +49,9 @@ func New(cfg Config) (*Bot, error) {
 
 	log.Infof("Telegram bot connected as @%s", api.Self.UserName)
 
+	// Validate configured Telegram IDs
+	b.validateConfig()
+
 	// Initialize reconciliation if check_role is enabled.
 	if cfg.Cfg.Telegram.CheckRole && cfg.DTS != nil {
 		b.reconciliation = NewTelegramReconciliation(api, cfg.DB, cfg.Cfg, cfg.Translations, cfg.DTS)
@@ -57,6 +60,44 @@ func New(cfg Config) (*Bot, error) {
 
 	go b.pollUpdates()
 	return b, nil
+}
+
+// validateConfig checks all configured Telegram IDs (channels, groups, communities)
+// by calling getChat and logs whether they resolve.
+func (b *Bot) validateConfig() {
+	checkChat := func(label, chatIDStr string) {
+		chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
+		if err != nil {
+			log.Warnf("config: %s %s — invalid ID", label, chatIDStr)
+			return
+		}
+		chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
+		chat, err := b.api.GetChat(chatCfg)
+		if err != nil {
+			log.Warnf("config: %s %s — NOT ACCESSIBLE (bot may not be a member): %v", label, chatIDStr, err)
+			return
+		}
+		name := chat.Title
+		if name == "" {
+			name = chat.UserName
+		}
+		if name == "" {
+			name = chat.FirstName
+		}
+		log.Infof("config: %s %s → %s (%s) ✓", label, chatIDStr, name, chat.Type)
+	}
+
+	// Registration channels
+	for _, chID := range b.Cfg.Telegram.Channels {
+		checkChat("telegram.channels", chID)
+	}
+
+	// Community channels (area security)
+	for _, comm := range b.Cfg.Area.Communities {
+		for _, chID := range comm.Telegram.Channels {
+			checkChat(fmt.Sprintf("community %s telegram channel", comm.Name), chID)
+		}
+	}
 }
 
 // Close stops the polling loop.
