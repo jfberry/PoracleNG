@@ -19,16 +19,11 @@ const CONFIG_DIR = path.join(ROOT, 'config')
 const EXAMPLES_DIR = path.join(ROOT, 'fallbacks')
 
 // ---------------------------------------------------------------------------
-// Helpers (shared with convert-config.js)
+// Helpers (shared with migrate-from-poracle.js)
 // ---------------------------------------------------------------------------
 
-let JSON5
-try {
-	JSON5 = require(path.join(ROOT, 'alerter', 'node_modules', 'json5'))
-} catch {
-	console.error('Error: run "npm install" in alerter/ first.')
-	process.exit(1)
-}
+// Bundled JSON5 v2.2.3 (MIT) — parses JSON with comments, trailing commas, etc.
+const JSON5 = require(path.join(__dirname, 'vendor-json5'))
 
 function readJsonc(filePath) {
 	const raw = fs.readFileSync(filePath, 'utf8')
@@ -192,7 +187,7 @@ function jsonFilesAreEqual(fileA, fileB) {
 }
 
 // ---------------------------------------------------------------------------
-// Config conversion (from convert-config.js)
+// Config conversion (from migrate-from-poracle.js)
 // ---------------------------------------------------------------------------
 
 const OBSOLETE_TUNING = new Set([
@@ -224,20 +219,18 @@ function buildUnifiedConfig(defaults, local) {
 		unified.database.scanner.type = 'rdm'
 	}
 
-	// Networking — processor takes the old Poracle port, alerter gets port+1
+	// Networking — processor takes the old Poracle port
 	const serverOverrides = userOverrides.server || {}
 	const oldPort = parseInt((local.server && local.server.port) || (defaults.server && defaults.server.port) || '3030', 10)
-	const processorPort = oldPort
-	const alerterPort = oldPort + 1
 
 	unified.processor = {
-		port: processorPort,
-		alerter_url: `http://localhost:${alerterPort}`,
+		port: oldPort,
 	}
 
-	unified.alerter = convertKeysToSnake(serverOverrides)
-	unified.alerter.port = alerterPort
-	unified.alerter.processor_url = `http://localhost:${processorPort}`
+	// Preserve api_secret from server overrides
+	if (serverOverrides.apiSecret) {
+		unified.processor.api_secret = serverOverrides.apiSecret
+	}
 
 	// Geofence — always include paths so both components find the geofence
 	unified.geofence = {}
@@ -647,19 +640,15 @@ function printSummary(copied, skipped, unified) {
 	console.log()
 	console.log('=== IMPORTANT: Review Required ===')
 	console.log()
-	console.log('PoracleNG splits Poracle into two components that talk to each other:')
+	console.log('PoracleNG is a single Go process that handles everything:')
+	console.log(`  - Receives webhooks, matches alerts, renders templates, sends messages`)
+	console.log(`  - Discord bot (commands, reconciliation)`)
+	console.log(`  - Telegram bot (commands, reconciliation)`)
+	console.log(`  - All API endpoints (tracking, humans, profiles, config, masterdata)`)
 	console.log()
-	console.log(`  Processor (Go)  - receives webhooks, matches alerts    [:${unified.processor?.port || 3030}]`)
-	console.log(`  Alerter (Node)  - renders templates, sends messages    [:${unified.alerter?.port || 3031}]`)
+	console.log(`Listening on port :${unified.processor?.port || 3030}`)
 	console.log()
-	console.log('The cross-component URLs have been auto-configured in config.toml:')
-	console.log(`  [processor] alerter_url = "${unified.processor?.alerter_url || 'http://localhost:3031'}"`)
-	console.log(`  [alerter]   processor_url = "${unified.alerter?.processor_url || 'http://localhost:3030'}"`)
-	console.log()
-	console.log('If the components run on different hosts, update these URLs accordingly.')
-	console.log()
-	console.log(`Your webhook sender (e.g. Golbat) should now POST to the PROCESSOR`)
-	console.log(`port (:${unified.processor?.port || 3030}), not the old alerter port.`)
+	console.log(`Your webhook sender (e.g. Golbat) should POST to port :${unified.processor?.port || 3030}.`)
 	console.log()
 
 	// Check for scanner type issues
