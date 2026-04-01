@@ -63,8 +63,17 @@ func (b *Bot) handleWebhook(s *discordgo.Session, m *discordgo.MessageCreate, ar
 func (b *Bot) handleWebhookList(s *discordgo.Session, m *discordgo.MessageCreate) {
 	ch, _ := s.Channel(m.ChannelID)
 	channelName := m.ChannelID
+	channelType := "text"
 	if ch != nil {
 		channelName = ch.Name
+		switch ch.Type {
+		case discordgo.ChannelTypeGuildText:
+			channelType = "GUILD_TEXT"
+		case discordgo.ChannelTypeGuildNews:
+			channelType = "GUILD_NEWS"
+		default:
+			channelType = fmt.Sprintf("type:%d", ch.Type)
+		}
 	}
 
 	hooks, err := s.ChannelWebhooks(m.ChannelID)
@@ -74,7 +83,7 @@ func (b *Bot) handleWebhookList(s *discordgo.Session, m *discordgo.MessageCreate
 		return
 	}
 
-	// Send results to DM
+	// Send results to DM (matching alerter behavior)
 	dmCh, err := s.UserChannelCreate(m.Author.ID)
 	if err != nil {
 		log.Warnf("discord bot: create DM for webhook list: %v", err)
@@ -82,18 +91,19 @@ func (b *Bot) handleWebhookList(s *discordgo.Session, m *discordgo.MessageCreate
 		return
 	}
 
-	s.ChannelMessageSend(dmCh.ID, fmt.Sprintf("Channel: %s", channelName))
+	s.ChannelMessageSend(dmCh.ID, fmt.Sprintf("This is %s Channel: %s", channelType, channelName))
 
 	if len(hooks) == 0 {
 		s.ChannelMessageSend(dmCh.ID, "No webhooks found in this channel")
-		s.MessageReactionAdd(m.ChannelID, m.ID, "✅")
 		return
 	}
 
 	for _, hook := range hooks {
-		s.ChannelMessageSend(dmCh.ID, fmt.Sprintf("%s | https://discord.com/api/webhooks/%s/%s", hook.Name, hook.ID, hook.Token))
+		url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", hook.ID, hook.Token)
+		s.ChannelMessageSend(dmCh.ID, fmt.Sprintf("%s | %s", hook.Name, url))
 	}
-	s.MessageReactionAdd(m.ChannelID, m.ID, "✅")
+
+	s.ChannelMessageSend(m.ChannelID, "Webhook list sent to your DMs")
 }
 
 func (b *Bot) handleWebhookCreate(s *discordgo.Session, m *discordgo.MessageCreate, name string) {
