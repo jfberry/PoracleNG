@@ -335,9 +335,60 @@ All tracking commands (track, raid, egg, quest, nest, lure, gym, fort, invasion,
 4. Validate distance/area requirements
 5. Call store layer for DB operations, trigger state reload, send confirmation messages
 
-### Channel Registration
+### Command Security & Target Resolution Rules
 
-Commands in guild channels require the channel to be registered (`!channel add`). Unregistered channels receive an error response. DM commands always target the sender. Admin/delegated users in registered channels target the channel.
+These rules govern who can execute commands, what they target, and where they can be run. **Do not change these without understanding the full security model.**
+
+#### Context: Where commands run
+
+| Context | Target Resolution | Notes |
+|---------|-------------------|-------|
+| **DM** | Always targets the sender | Any registered user can run commands |
+| **Guild channel (registered)** | Admin/delegated → targets the channel; Non-admin → targets the sender | Channel must be registered with `!channel add` |
+| **Guild channel (unregistered)** | **BLOCKED** — error "does not seem to be registered" | Prevents users from accidentally modifying personal tracking from random channels |
+| **`user:ID` override** | Admin only — targets the specified user by ID | Bypasses channel check (explicit target) |
+| **`name:webhookname` override** | Admin or webhook admin — targets the named webhook | Bypasses channel check (explicit target) |
+
+#### Exceptions to BuildTarget
+
+| Command | Behavior | Reason |
+|---------|----------|--------|
+| `!poracle` (all language variants) | Skips BuildTarget entirely, always targets sender | Registration command — runs in designated registration channels, has own `IsRegistrationChannel` validation |
+| Discord-specific commands (`!channel`, `!webhook`, `!role`, `!autocreate`, `!poracle-clean`, `!poracle-id`, `!poracle-emoji`) | Handled before BuildTarget by `handleDiscordCommand` | Require discordgo session directly, have their own permission checks |
+
+#### Permission levels
+
+| Level | Who | Can do |
+|-------|-----|--------|
+| **Admin** | Users in `discord.admins` / `telegram.admins` | All commands, target override (`user:`, `name:`), manage channels/webhooks, enable/disable users, broadcast, apply |
+| **Delegated channel admin** | Users/roles in `delegated_administration.channel_tracking` | Manage tracking for specific channels (without full admin) |
+| **Delegated webhook admin** | Users in `delegated_administration.webhook_tracking` | Manage specific webhooks by name |
+| **Community admin (Telegram)** | Users in `area_security.communities.*.telegram.admins` | Manage community channels via `/channel add` |
+| **Regular user** | Registered via `!poracle` | Track/untrack, area, location, profile, language, start/stop, script, help, info, ask |
+| **Unregistered user** | Not in humans table | Can only run `!poracle` (registration) and `!version` |
+
+#### Command security (`command_security` config)
+
+Maps Discord role IDs to allowed command sets. Users without the required role for a command get 🙅. Checked via `CommandAllowed()` after registration check, before BuildTarget.
+
+#### Area security (`area_security.enabled`)
+
+When enabled, users belong to communities (determined by Discord roles or Telegram group membership). Each community has:
+- `allowed_areas` — geofence areas the user can select
+- `location_fence` — geographic restriction on alert delivery
+- Registration channels — where `!poracle` works for that community
+
+`AreaLogic.ValidateAndPrune` removes areas no longer permitted when community membership changes.
+
+#### `everything` flag permissions (`tracking.everything_flag_permissions`)
+
+Controls whether non-admin users can use the `everything` keyword in `!track`:
+- `deny` (default) — `everything` keyword not available to non-admins
+- `allow-any` — `everything` and `individually` both available
+- `allow-and-always-individually` — `everything` expands to all pokemon individually
+- `allow-and-ignore-individually` — `everything` available but `individually` keyword hidden
+
+Bare `!track everything` with no meaningful filters (IV, CP, level, PVP, type, gender) is always rejected for non-admins regardless of this setting.
 
 ### Key Commands
 
