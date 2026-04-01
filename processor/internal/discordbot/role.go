@@ -10,6 +10,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/discordroles"
 )
 
 // userRe matches user<id>, user:id, or userid (case-insensitive).
@@ -92,6 +93,8 @@ func (b *Bot) handleRoleList(s *discordgo.Session, m *discordgo.MessageCreate,
 	tr interface{ T(string) string; Tf(string, ...interface{}) string },
 	membershipOnly bool) {
 
+	guilds, _ := discordroles.ListUserRolesAcrossGuilds(s, roleSubMap, targetID)
+
 	var sb strings.Builder
 	if membershipOnly {
 		sb.WriteString(tr.T("cmd.role.your_roles"))
@@ -100,36 +103,17 @@ func (b *Bot) handleRoleList(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 	sb.WriteString(":\n")
 
-	for guildID, entry := range roleSubMap {
-		guild, err := s.Guild(guildID)
-		if err != nil {
-			log.Warnf("discord bot: fetch guild %s for role list: %v", guildID, err)
-			continue
-		}
-
-		// Try to fetch member (may fail if user not in guild)
-		member, err := s.GuildMember(guildID, targetID)
-		if err != nil {
-			log.Debugf("discord bot: fetch member %s in guild %s: %v", targetID, guildID, err)
-			continue
-		}
-
-		memberRoles := make(map[string]bool)
-		for _, r := range member.Roles {
-			memberRoles[r] = true
-		}
-
+	for _, guild := range guilds {
 		sb.WriteString(fmt.Sprintf("**%s**\n", guild.Name))
 
 		// Exclusive role sets
-		for _, exSet := range entry.ExclusiveRoles {
-			for desc, roleID := range exSet {
-				hasRole := memberRoles[roleID]
-				if membershipOnly && !hasRole {
+		for _, exSet := range guild.Roles.Exclusive {
+			for _, role := range exSet {
+				if membershipOnly && !role.Set {
 					continue
 				}
-				displayName := strings.ReplaceAll(desc, " ", "_")
-				if hasRole {
+				displayName := strings.ReplaceAll(role.Description, " ", "_")
+				if role.Set {
 					sb.WriteString(fmt.Sprintf("   %s  ☑️\n", displayName))
 				} else {
 					sb.WriteString(fmt.Sprintf("   %s\n", displayName))
@@ -141,13 +125,12 @@ func (b *Bot) handleRoleList(s *discordgo.Session, m *discordgo.MessageCreate,
 		}
 
 		// General roles
-		for desc, roleID := range entry.Roles {
-			hasRole := memberRoles[roleID]
-			if membershipOnly && !hasRole {
+		for _, role := range guild.Roles.General {
+			if membershipOnly && !role.Set {
 				continue
 			}
-			displayName := strings.ReplaceAll(desc, " ", "_")
-			if hasRole {
+			displayName := strings.ReplaceAll(role.Description, " ", "_")
+			if role.Set {
 				sb.WriteString(fmt.Sprintf("   %s  ☑️\n", displayName))
 			} else {
 				sb.WriteString(fmt.Sprintf("   %s\n", displayName))

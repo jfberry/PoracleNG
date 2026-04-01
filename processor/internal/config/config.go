@@ -72,10 +72,11 @@ type RoleSubscriptionEntry struct {
 
 // TrackingConfig holds settings from the [tracking] section.
 type TrackingConfig struct {
-	EverythingFlagPermissions string `toml:"everything_flag_permissions"` // "deny", "allow-any", "allow-and-always-individually", "allow-and-ignore-individually"
-	DefaultDistance           int    `toml:"default_distance"`
-	MaxDistance               int    `toml:"max_distance"`
-	EnableGymBattle           bool   `toml:"enable_gym_battle"`
+	EverythingFlagPermissions      string `toml:"everything_flag_permissions"` // "deny", "allow-any", "allow-and-always-individually", "allow-and-ignore-individually"
+	DefaultDistance                int    `toml:"default_distance"`
+	MaxDistance                    int    `toml:"max_distance"`
+	EnableGymBattle                bool   `toml:"enable_gym_battle"`
+	DefaultUserTrackingLevelCap    int    `toml:"default_user_tracking_level_cap"`
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor
@@ -101,6 +102,18 @@ type GeneralConfig struct {
 	ShortlinkDomain      string         `toml:"shortlink_provider_domain"` // Shlink domain override
 	DTSDictionary        map[string]any `toml:"dts_dictionary"`            // custom key-value pairs for DTS templates
 	AvailableLanguages   []string `toml:"available_languages"`
+
+	// Webhook type disable flags — used by /api/config/poracleWeb to report disabledHooks.
+	DisablePokemon   bool `toml:"disable_pokemon"`
+	DisableRaid      bool `toml:"disable_raid"`
+	DisablePokestop  bool `toml:"disable_pokestop"`
+	DisableInvasion  bool `toml:"disable_invasion"`
+	DisableLure      bool `toml:"disable_lure"`
+	DisableQuest     bool `toml:"disable_quest"`
+	DisableWeather   bool `toml:"disable_weather"`
+	DisableNest      bool `toml:"disable_nest"`
+	DisableGym       bool `toml:"disable_gym"`
+	DisableMaxBattle bool `toml:"disable_max_battle"`
 }
 
 type LocaleConfig struct {
@@ -160,6 +173,7 @@ type DiscordConfig struct {
 type DelegatedAdminConfig struct {
 	ChannelTracking map[string][]string `toml:"channel_tracking"` // channelID/guildID/categoryID → allowed userIDs/roleIDs
 	WebhookTracking map[string][]string `toml:"webhook_tracking"` // webhookName → allowed userIDs
+	UserTracking    []string            `toml:"user_tracking"`    // user/role IDs that can manage other users' tracking
 }
 
 // DiscordTokens returns the discord tokens as a string slice.
@@ -181,12 +195,19 @@ func (c DiscordConfig) RoleSubscriptionMap() map[string]RoleSubscriptionEntry {
 
 // TelegramConfig reads the [telegram] section for fields the processor needs.
 type TelegramConfig struct {
-	Token             any      `toml:"token"` // string or []string
-	Channels          []string `toml:"channels"` // registration channel/group IDs
-	Admins            []string `toml:"admins"`
-	CheckRole         bool     `toml:"check_role"`
-	CheckRoleInterval int      `toml:"check_role_interval"` // hours between periodic reconciliation
-	BotGoodbyeMessage string   `toml:"bot_goodbye_message"`
+	Token                   any                       `toml:"token"` // string or []string
+	Channels                []string                  `toml:"channels"` // registration channel/group IDs
+	Admins                  []string                  `toml:"admins"`
+	CheckRole               bool                      `toml:"check_role"`
+	CheckRoleInterval       int                       `toml:"check_role_interval"` // hours between periodic reconciliation
+	BotGoodbyeMessage       string                    `toml:"bot_goodbye_message"`
+	DelegatedAdministration TelegramDelegatedAdminConfig `toml:"delegated_administration"`
+}
+
+// TelegramDelegatedAdminConfig controls who can manage tracking for Telegram channels.
+type TelegramDelegatedAdminConfig struct {
+	ChannelTracking map[string][]string `toml:"channel_tracking"` // channelID → allowed userIDs
+	UserTracking    []string            `toml:"user_tracking"`    // user IDs that can manage other users' tracking
 }
 
 // TelegramTokens returns the telegram tokens as a string slice.
@@ -291,7 +312,9 @@ type PVPConfig struct {
 	DisplayGreatMinCP          int   `toml:"display_great_min_cp"`
 	DisplayUltraMinCP          int   `toml:"display_ultra_min_cp"`
 	DisplayLittleMinCP         int   `toml:"display_little_min_cp"`
-	FilterByTrack              bool  `toml:"filter_by_track"`
+	FilterByTrack              bool   `toml:"filter_by_track"`
+	ForceMinCP                 bool   `toml:"force_min_cp"`
+	DataSource                 string `toml:"data_source"` // "webhook" (default) or "ohbem"
 }
 
 type WeatherConfig struct {
@@ -467,6 +490,7 @@ func Load(baseDir string) (*Config, error) {
 			DisplayGreatMinCP:  1400,
 			DisplayUltraMinCP:  2350,
 			DisplayLittleMinCP: 450,
+			DataSource:         "webhook",
 		},
 		Tuning: TuningConfig{
 			ReloadIntervalSecs:             60,
