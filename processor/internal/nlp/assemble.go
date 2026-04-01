@@ -42,7 +42,16 @@ func assembleTrack(isRemove bool, result *MatchResult) []string {
 
 	subjects := result.Pokemon
 	if len(subjects) == 0 {
-		subjects = []string{"everything"}
+		if result.Everything || len(result.Filters) > 0 || len(result.Forms) > 0 {
+			// Have meaningful filters — use "everything" as the subject
+			subjects = []string{"everything"}
+		} else if len(result.Unmatched) > 0 {
+			// Unrecognised tokens with no filters — pass through as pokemon names
+			// (they might be valid pokemon the NLP vocabulary doesn't know about)
+			subjects = result.Unmatched
+		} else {
+			return nil // truly empty — nothing to assemble
+		}
 	}
 
 	filters := joinFilters(result.Forms, result.Filters)
