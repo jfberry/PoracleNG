@@ -282,26 +282,34 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			ReloadFunc:   b.ReloadFunc,
 		}
 
-		// Handle target override
-		target, remainingArgs, err := bot.BuildTarget(ctx, cmd.Args)
-		if err != nil {
-			msg := tgbotapi.NewMessage(chatID, err.Error())
-			b.api.Send(msg)
-			continue
-		}
-		if target != nil {
-			ctx.TargetID = target.ID
-			ctx.TargetName = target.Name
-			ctx.TargetType = target.Type
-			if target.Language != "" {
-				ctx.Language = target.Language
-			}
-			ctx.ProfileNo = target.ProfileNo
-			ctx.HasLocation = target.HasLocation
-			ctx.HasArea = target.HasArea
-			if target.ExecutionMessage != "" {
-				msg := tgbotapi.NewMessage(chatID, target.ExecutionMessage)
+		// Handle target override.
+		// /poracle skips BuildTarget — it's a registration command that always
+		// targets the sender and has its own channel validation internally.
+		var remainingArgs []string
+		if cmd.CommandKey == "cmd.poracle" {
+			remainingArgs = cmd.Args
+		} else {
+			target, args, err := bot.BuildTarget(ctx, cmd.Args)
+			if err != nil {
+				msg := tgbotapi.NewMessage(chatID, err.Error())
 				b.api.Send(msg)
+				continue
+			}
+			remainingArgs = args
+			if target != nil {
+				ctx.TargetID = target.ID
+				ctx.TargetName = target.Name
+				ctx.TargetType = target.Type
+				if target.Language != "" {
+					ctx.Language = target.Language
+				}
+				ctx.ProfileNo = target.ProfileNo
+				ctx.HasLocation = target.HasLocation
+				ctx.HasArea = target.HasArea
+				if target.ExecutionMessage != "" {
+					msg := tgbotapi.NewMessage(chatID, target.ExecutionMessage)
+					b.api.Send(msg)
+				}
 			}
 		}
 

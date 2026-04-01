@@ -31,6 +31,12 @@ func (c *EnableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		if id == "" {
 			continue
 		}
+		// If not a numeric ID, try to resolve as a webhook name
+		if !isNumeric(id) {
+			if webhookID, err := ctx.Humans.LookupWebhookByName(id); err == nil && webhookID != "" {
+				id = webhookID
+			}
+		}
 		if err := ctx.Humans.SetAdminDisable(id, false); err != nil {
 			log.Errorf("enable: %v", err)
 			continue
@@ -67,6 +73,12 @@ func (c *DisableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		if id == "" {
 			continue
 		}
+		// If not a numeric ID, try to resolve as a webhook name
+		if !isNumeric(id) {
+			if webhookID, err := ctx.Humans.LookupWebhookByName(id); err == nil && webhookID != "" {
+				id = webhookID
+			}
+		}
 		if err := ctx.Humans.SetAdminDisable(id, true); err != nil {
 			log.Errorf("disable: %v", err)
 			continue
@@ -79,6 +91,16 @@ func (c *DisableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 	ctx.TriggerReload()
 	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.disable.success", strings.Join(disabled, ", "))}}
+}
+
+// isNumeric returns true if the string contains only digits.
+func isNumeric(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // stripMention removes Discord mention formatting: <@123> → 123, <@!123> → 123
