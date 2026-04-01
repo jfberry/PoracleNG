@@ -173,16 +173,17 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 		found := false
 
 		for guildID, entry := range roleSubMap {
-			guild, err := s.Guild(guildID)
+			_, err := s.Guild(guildID)
 			if err != nil {
+				log.Warnf("discord bot: fetch guild %s for role toggle: %v", guildID, err)
 				continue
 			}
 
 			member, err := s.GuildMember(guildID, targetID)
 			if err != nil {
+				log.Warnf("discord bot: fetch member %s in guild %s: %v", targetID, guildID, err)
 				continue
 			}
-			_ = guild
 
 			memberRoles := make(map[string]bool)
 			for _, r := range member.Roles {
@@ -196,6 +197,8 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 					if set {
 						if err := s.GuildMemberRoleAdd(guildID, targetID, roleID); err != nil {
 							log.Warnf("discord bot: add role %s to %s: %v", desc, targetID, err)
+							s.ChannelMessageSend(m.ChannelID,
+								fmt.Sprintf("Failed to add role %s — check bot permissions", desc))
 						} else {
 							s.ChannelMessageSend(m.ChannelID,
 								tr.Tf("cmd.role.granted", desc))
@@ -203,6 +206,8 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 					} else {
 						if err := s.GuildMemberRoleRemove(guildID, targetID, roleID); err != nil {
 							log.Warnf("discord bot: remove role %s from %s: %v", desc, targetID, err)
+							s.ChannelMessageSend(m.ChannelID,
+								fmt.Sprintf("Failed to remove role %s — check bot permissions", desc))
 						} else {
 							s.ChannelMessageSend(m.ChannelID,
 								tr.Tf("cmd.role.removed", desc))
@@ -222,6 +227,8 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 								if otherRoleID == roleID {
 									if err := s.GuildMemberRoleAdd(guildID, targetID, roleID); err != nil {
 										log.Warnf("discord bot: add exclusive role %s to %s: %v", desc, targetID, err)
+										s.ChannelMessageSend(m.ChannelID,
+											fmt.Sprintf("Failed to add role %s — check bot permissions", otherDesc))
 									} else {
 										s.ChannelMessageSend(m.ChannelID,
 											tr.Tf("cmd.role.granted", otherDesc))
