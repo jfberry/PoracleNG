@@ -50,28 +50,6 @@ var (
 		Help: "Total worker pool capacity",
 	})
 
-	SenderQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "poracle_processor_sender_queue_depth",
-		Help: "Current items queued in sender batch",
-	})
-
-	SenderBatchSize = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "poracle_processor_sender_batch_size",
-		Help:    "Number of items per outbound flush",
-		Buckets: []float64{1, 5, 10, 20, 50, 100, 200},
-	})
-
-	SenderFlushDuration = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "poracle_processor_sender_flush_seconds",
-		Help:    "Time to POST a batch to alerter",
-		Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
-	})
-
-	SenderBatches = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "poracle_processor_sender_batches_total",
-		Help: "Outbound batch sends",
-	}, []string{"status"})
-
 	StateReloads = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "poracle_processor_state_reloads_total",
 		Help: "State reload count",

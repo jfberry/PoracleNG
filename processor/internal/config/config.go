@@ -562,9 +562,6 @@ func Load(baseDir string) (*Config, error) {
 	}
 
 	// Validate required fields
-	if cfg.Processor.AlerterURL == "" {
-		return nil, fmt.Errorf("[processor] alerter_url is required")
-	}
 	if cfg.Database.User == "" || cfg.Database.Database == "" {
 		return nil, fmt.Errorf("[database] user and database are required")
 	}
