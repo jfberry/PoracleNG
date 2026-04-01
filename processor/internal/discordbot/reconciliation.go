@@ -488,7 +488,7 @@ func (r *Reconciliation) SendGreetings(id string) {
 			return
 		}
 	} else {
-		r.greetingCount = 1
+		r.greetingCount = 0
 		r.lastGreetingMinute = currentMinute
 	}
 	r.mu.Unlock()
