@@ -1,16 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
@@ -160,44 +158,27 @@ func (ps *ProcessorService) filterRateLimited(matched []webhook.MatchedUser) []w
 	return allowed
 }
 
-// postMessage is a message payload for the alerter's POST /api/postMessage endpoint.
-type postMessage struct {
-	Target       string         `json:"target"`
-	Type         string         `json:"type"`
-	Name         string         `json:"name"`
-	Message      messageContent `json:"message"`
-	Language     string         `json:"language"`
-	TTH          tth            `json:"tth"`
-	Clean        bool           `json:"clean"`
-	AlwaysSend   bool           `json:"alwaysSend"`
-	LogReference string         `json:"logReference"`
+// dispatchMessage sends a message directly via the delivery dispatcher.
+func (ps *ProcessorService) dispatchMessage(target, typ, name, content, logRef string) {
+	if ps.dispatcher == nil || content == "" {
+		return
+	}
+	msgJSON, _ := json.Marshal(map[string]string{"content": content})
+	ps.dispatcher.Dispatch(&delivery.Job{
+		Target:       target,
+		Type:         typ,
+		Name:         name,
+		Message:      msgJSON,
+		TTH:          delivery.TTH{Hours: 1},
+		LogReference: logRef,
+	})
 }
 
-type messageContent struct {
-	Content string `json:"content"`
-}
-
-type tth struct {
-	Hours   int `json:"hours"`
-	Minutes int `json:"minutes"`
-	Seconds int `json:"seconds"`
-}
-
-// sendRateLimitNotification sends a rate limit warning message to the user via the alerter.
+// sendRateLimitNotification sends a rate limit warning message to the user.
 func (ps *ProcessorService) sendRateLimitNotification(user webhook.MatchedUser, result ratelimit.RateResult) {
 	tr := ps.translations.For(user.Language)
 	msg := tr.Tf("rate_limit.reached", result.Limit, ps.cfg.AlertLimits.TimingPeriod)
-
-	ps.postMessageToAlerter(postMessage{
-		Target:       user.ID,
-		Type:         user.Type,
-		Name:         user.Name,
-		Message:      messageContent{Content: msg},
-		Language:     user.Language,
-		TTH:          tth{Hours: 1},
-		AlwaysSend:   true,
-		LogReference: "RateLimit",
-	})
+	ps.dispatchMessage(user.ID, user.Type, user.Name, msg, "RateLimit")
 }
 
 // disableUser disables a user in the DB and sends a final notification.
@@ -222,28 +203,12 @@ func (ps *ProcessorService) disableUser(user webhook.MatchedUser, result ratelim
 		msg = tr.Tf("rate_limit.banned_soft", prefix)
 	}
 
-	ps.postMessageToAlerter(postMessage{
-		Target:       user.ID,
-		Type:         user.Type,
-		Name:         user.Name,
-		Message:      messageContent{Content: msg},
-		Language:     user.Language,
-		TTH:          tth{Hours: 1},
-		AlwaysSend:   true,
-		LogReference: "RateLimit",
-	})
+	ps.dispatchMessage(user.ID, user.Type, user.Name, msg, "RateLimit")
 
 	// Send shame message if configured
 	if ps.cfg.AlertLimits.ShameChannel != "" {
 		shameContent := tr.Tf("rate_limit.shame", user.ID)
-		ps.postMessageToAlerter(postMessage{
-			Target:       ps.cfg.AlertLimits.ShameChannel,
-			Type:         "discord:channel",
-			Name:         "Shame channel",
-			Message:      messageContent{Content: shameContent},
-			Language:     "en",
-			LogReference: "RateLimit",
-		})
+		ps.dispatchMessage(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "RateLimit")
 	}
 
 	// Trigger debounced state reload so user is removed from matching
@@ -267,32 +232,3 @@ func (ps *ProcessorService) triggerReload() {
 	})
 }
 
-// postMessageToAlerter sends a message via the alerter's POST /api/postMessage endpoint.
-func (ps *ProcessorService) postMessageToAlerter(msg postMessage) {
-	data, err := json.Marshal([]postMessage{msg})
-	if err != nil {
-		log.Errorf("Rate limit: failed to marshal postMessage: %s", err)
-		return
-	}
-
-	req, err := http.NewRequest("POST", ps.cfg.Processor.AlerterURL+"/api/postMessage", bytes.NewReader(data))
-	if err != nil {
-		log.Errorf("Rate limit: failed to create postMessage request: %s", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if ps.cfg.Processor.APISecret != "" {
-		req.Header.Set("X-Poracle-Secret", ps.cfg.Processor.APISecret)
-	}
-
-	resp, err := ps.alerterClient.Do(req)
-	if err != nil {
-		log.Errorf("Rate limit: failed to send postMessage to alerter: %s", err)
-		return
-	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		log.Errorf("Rate limit: alerter returned status %d for postMessage", resp.StatusCode)
-	}
-}
