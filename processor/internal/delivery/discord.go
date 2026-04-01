@@ -160,10 +160,13 @@ func (ds *DiscordSender) ensureDMChannel(ctx context.Context, userID string) (st
 	return result.ID, nil
 }
 
+// WaitForRateLimit blocks until the target is not rate-limited.
+func (ds *DiscordSender) WaitForRateLimit(target string) {
+	ds.rateLimiter.Wait(target)
+}
+
 // postMessage sends a message to a Discord channel via the bot API.
 func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage) (*SentMessage, error) {
-	ds.rateLimiter.Wait(channelID)
-
 	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
@@ -197,8 +200,6 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 
 // postWebhook sends a message via a Discord webhook URL.
 func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, message json.RawMessage) (*SentMessage, error) {
-	ds.rateLimiter.Wait(webhookURL)
-
 	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)

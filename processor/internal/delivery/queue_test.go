@@ -53,6 +53,8 @@ func (m *queueMockSender) Edit(_ context.Context, sentID string, _ json.RawMessa
 
 func (m *queueMockSender) Platform() string { return m.platform }
 
+func (m *queueMockSender) WaitForRateLimit(target string) {} // no-op in tests
+
 func (m *queueMockSender) getSendCalls() []*Job {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -196,6 +198,8 @@ func (s *concurrencyTrackingSender) Delete(ctx context.Context, sentID string) e
 func (s *concurrencyTrackingSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
 	return s.inner.Edit(ctx, sentID, message)
 }
+
+func (s *concurrencyTrackingSender) WaitForRateLimit(target string) {}
 
 func (s *concurrencyTrackingSender) Platform() string { return s.inner.Platform() }
 

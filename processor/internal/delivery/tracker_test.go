@@ -30,6 +30,8 @@ func (m *mockSender) Edit(ctx context.Context, sentID string, message json.RawMe
 
 func (m *mockSender) Platform() string { return "discord" }
 
+func (m *mockSender) WaitForRateLimit(target string) {}
+
 func (m *mockSender) getDeleted() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
