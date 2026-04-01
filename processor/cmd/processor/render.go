@@ -40,7 +40,7 @@ func (ps *ProcessorService) renderWorker() {
 }
 
 // processRenderJob resolves the pending tile (if any), renders DTS templates,
-// and delivers the resulting messages to the alerter.
+// and delivers the resulting messages via the dispatcher.
 func (ps *ProcessorService) processRenderJob(job RenderJob) {
 	// 1. Resolve tile with queue-pressure awareness.
 	if job.TilePending != nil {

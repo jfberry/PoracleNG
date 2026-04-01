@@ -34,7 +34,7 @@ type TestProcessor interface {
 // HandleTest returns a handler for POST /api/test.
 // The test endpoint accepts a webhook + target, runs it through the normal
 // enrichment pipeline (skipping matching/dedup), and sends the enriched
-// result to the alerter for the specified target user.
+// result for the specified target user via the render pipeline.
 func HandleTest(proc TestProcessor) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

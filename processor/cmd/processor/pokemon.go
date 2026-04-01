@@ -101,7 +101,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
 			metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
 
-			// Get matched areas for the alerter
+			// Get matched areas for enrichment
 			areas := st.Geofence.PointInAreas(pokemon.Latitude, pokemon.Longitude)
 			matchedAreas := make([]webhook.MatchedArea, len(areas))
 			for i, a := range areas {
@@ -225,6 +225,5 @@ func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessag
 		ps.pokemonName(change.New.PokemonID, change.New.Form))
 
 	// TODO: Route pokemon_changed through render queue with EditKey for message editing.
-	// For now, skip delivery — the old alerter path no longer has controllers to handle it.
 	_ = oldIV
 }

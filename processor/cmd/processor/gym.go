@@ -58,7 +58,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		// Update gym state and get old state.
 		// On first sight (oldState == nil), use -1 for old values to signal
 		// "unknown previous state" — this triggers team-change alerts matching
-		// the alerter's behavior where old_team_id=-1 means "team changed".
+		// the original behavior where old_team_id=-1 means "team changed".
 		oldState := ps.gymState.Update(gymID, teamID, gym.SlotsAvailable, inBattle, gym.LastOwnerID)
 
 		oldTeamID := -1
