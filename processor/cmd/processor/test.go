@@ -234,7 +234,7 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 	}
 
 	inBattle := bool(gym.IsInBattle) || bool(gym.InBattle)
-	enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, inBattle, false, gymID)
+	enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, -1, inBattle, false, gymID)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any

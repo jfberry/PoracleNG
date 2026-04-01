@@ -214,6 +214,10 @@ var aliasMapping = []struct {
 	{"move1", "quickMoveName"},
 	{"move2", "chargeMoveName"},
 
+	// === Gym ===
+	{"gymName", "name"},
+	{"gymUrl", "url"},
+
 	// === Invasion ===
 	{"gruntType", "gruntTypeName"},
 

@@ -6,13 +6,26 @@ import (
 )
 
 // Gym builds enrichment fields for a gym webhook.
-func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable int, inBattle, ex bool, gymID string) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldSlotsAvailable int, inBattle, ex bool, gymID string) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
 	m["conqueredTime"] = geo.FormatNow(tz, e.TimeLayout)
 	m["tth"] = geo.TTH{Hours: 1}
 	addSunTimes(m, lat, lon, tz)
+
+	// Gym identity fields for DTS templates
+	m["gymId"] = gymID
+
+	// Slot and team fields for DTS templates
+	m["slotsAvailable"] = slotsAvailable
+	m["oldSlotsAvailable"] = oldSlotsAvailable
+	m["trainerCount"] = 6 - slotsAvailable
+	m["oldTrainerCount"] = 6 - oldSlotsAvailable
+	m["teamId"] = teamID
+	m["oldTeamId"] = oldTeamID
+	m["ex"] = ex
+	m["inBattle"] = inBattle
 
 	// Icon URLs
 	trainerCount := 6 - slotsAvailable
