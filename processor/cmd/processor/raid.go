@@ -131,9 +131,6 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			}
 
 			gymName := raid.GymName
-			if gymName == "" {
-				gymName = raid.Name
-			}
 
 			if raid.PokemonID > 0 {
 				l.Infof("Raid %s L%d on %s at [%.3f,%.3f] areas(%s) and %d humans cared",

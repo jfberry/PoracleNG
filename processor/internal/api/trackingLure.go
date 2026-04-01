@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 	"strconv"
 	"strings"
 
@@ -18,22 +20,22 @@ var validLureIDs = map[int]bool{
 }
 
 // HandleGetLure returns the GET /api/tracking/lure/{id} handler.
-func HandleGetLure(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleGetLure(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		lures, err := db.SelectLuresByIDProfile(deps.DB, human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: get lures: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -61,30 +63,30 @@ func HandleGetLure(deps *TrackingDeps) http.HandlerFunc {
 			}
 		}
 
-		trackingJSONOK(w, map[string]any{"lure": result})
+		trackingJSONOK(c, map[string]any{"lure": result})
 	}
 }
 
 // HandleDeleteLure returns the DELETE /api/tracking/lure/{id}/byUid/{uid} handler.
-func HandleDeleteLure(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		uidStr := r.PathValue("uid")
+func HandleDeleteLure(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		uidStr := c.Param("uid")
 		uid, err := strconv.ParseInt(uidStr, 10, 64)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid uid")
+			trackingJSONError(c, http.StatusBadRequest, "invalid uid")
 			return
 		}
 
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil || human == nil {
 			if err := db.DeleteByUID(deps.DB, "lures", id, uid); err != nil {
 				log.Errorf("Tracking API: delete lure: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			reloadState(deps)
-			trackingJSONOK(w, nil)
+			trackingJSONOK(c, nil)
 			return
 		}
 
@@ -92,7 +94,7 @@ func HandleDeleteLure(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUID(deps.DB, "lures", id, uid); err != nil {
 			log.Errorf("Tracking API: delete lure: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -100,7 +102,7 @@ func HandleDeleteLure(deps *TrackingDeps) http.HandlerFunc {
 
 		tr := translatorFor(deps, human)
 		language := resolveLanguage(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 		var message string
 		for _, e := range existing {
 			if e.UID == uid {
@@ -111,7 +113,7 @@ func HandleDeleteLure(deps *TrackingDeps) http.HandlerFunc {
 		if !silent && message != "" {
 			sendConfirmation(deps, human, message, language)
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -124,39 +126,39 @@ type lureInsertRequest struct {
 }
 
 // HandleCreateLure returns the POST /api/tracking/lure/{id} handler.
-func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleCreateLure(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		language := resolveLanguage(deps, human)
 		tr := translatorFor(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 
 		// Parse body: single object or array
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var insertReqs []lureInsertRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &insertReqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single lureInsertRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			insertReqs = []lureInsertRequest{single}
@@ -173,7 +175,7 @@ func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
 		for _, req := range insertReqs {
 			lureID := req.LureID.intValue(0)
 			if !validLureIDs[lureID] {
-				trackingJSONError(w, http.StatusBadRequest, "Unrecognised lure_id value")
+				trackingJSONError(c, http.StatusBadRequest, "Unrecognised lure_id value")
 				return
 			}
 
@@ -209,7 +211,7 @@ func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
 		tracked, err := deps.Tracking.Lures.SelectByIDProfile(human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: select existing lures: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -252,7 +254,7 @@ func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
 			}
 			if err := deps.Tracking.Lures.DeleteByUIDs(human.ID, uids); err != nil {
 				log.Errorf("Tracking API: delete updated lures: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 		}
@@ -262,7 +264,7 @@ func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
 			uid, err := deps.Tracking.Lures.Insert(&diff.Inserts[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert lure: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -271,7 +273,7 @@ func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
 			uid, err := deps.Tracking.Lures.Insert(&diff.Updates[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert lure: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -288,7 +290,7 @@ func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
 			responseMsg = ""
 		}
 
-		trackingJSONOK(w, map[string]any{
+		trackingJSONOK(c, map[string]any{
 			"message":        responseMsg,
 			"newUids":        newUIDs,
 			"alreadyPresent": len(diff.AlreadyPresent),
@@ -299,33 +301,33 @@ func HandleCreateLure(deps *TrackingDeps) http.HandlerFunc {
 }
 
 // HandleBulkDeleteLure returns the POST /api/tracking/lure/{id}/delete handler.
-func HandleBulkDeleteLure(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleBulkDeleteLure(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 
 		// Parse body: single uid or array of uids
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var uids []int64
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &uids); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single int64
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			uids = []int64{single}
 		}
 
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		var existing []db.LureTrackingAPI
 		if err == nil && human != nil {
 			existing, _ = db.SelectLuresByIDProfile(deps.DB, human.ID, profileNo)
@@ -333,7 +335,7 @@ func HandleBulkDeleteLure(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUIDs(deps.DB, "lures", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete lures: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -343,7 +345,7 @@ func HandleBulkDeleteLure(deps *TrackingDeps) http.HandlerFunc {
 		if human != nil && len(existing) > 0 {
 			tr := translatorFor(deps, human)
 			language := resolveLanguage(deps, human)
-			silent := isSilent(r)
+			silent := isSilent(c)
 			uidSet := make(map[int64]bool, len(uids))
 			for _, u := range uids {
 				uidSet[u] = true
@@ -361,7 +363,7 @@ func HandleBulkDeleteLure(deps *TrackingDeps) http.HandlerFunc {
 				sendConfirmation(deps, human, message, language)
 			}
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 

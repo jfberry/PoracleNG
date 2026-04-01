@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
@@ -33,8 +34,8 @@ type TrackingDeps struct {
 // lookupHuman resolves the human from the {id} path parameter and the profile_no
 // from the query string (falling back to the human's current_profile_no).
 // Returns (nil, 0, nil) if the human is not found — caller should return an error response.
-func lookupHuman(deps *TrackingDeps, r *http.Request) (*db.HumanAPI, int, error) {
-	id := r.PathValue("id")
+func lookupHuman(deps *TrackingDeps, c *gin.Context) (*db.HumanAPI, int, error) {
+	id := c.Param("id")
 	if id == "" {
 		return nil, 0, fmt.Errorf("missing id parameter")
 	}
@@ -48,7 +49,7 @@ func lookupHuman(deps *TrackingDeps, r *http.Request) (*db.HumanAPI, int, error)
 	}
 
 	profileNo := human.CurrentProfileNo
-	if pq := r.URL.Query().Get("profile_no"); pq != "" {
+	if pq := c.Query("profile_no"); pq != "" {
 		if n, err := strconv.Atoi(pq); err == nil {
 			profileNo = n
 		}
@@ -87,40 +88,23 @@ func sendConfirmation(deps *TrackingDeps, human *db.HumanAPI, message, language 
 	})
 }
 
-// readJSONBody decodes the JSON request body into v.
-func readJSONBody(r *http.Request, v any) error {
-	if r.Body == nil {
-		return fmt.Errorf("empty request body")
-	}
-	defer r.Body.Close()
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(v); err != nil {
-		return fmt.Errorf("decode JSON body: %w", err)
-	}
-	return nil
-}
-
 // isSilent returns true if the request has a silent or suppressMessage query param.
-func isSilent(r *http.Request) bool {
-	q := r.URL.Query()
-	return q.Get("silent") != "" || q.Get("suppressMessage") != ""
+func isSilent(c *gin.Context) bool {
+	return c.Query("silent") != "" || c.Query("suppressMessage") != ""
 }
 
 // trackingJSONOK writes a JSON response with status "ok" and any additional fields.
-func trackingJSONOK(w http.ResponseWriter, data map[string]any) {
+func trackingJSONOK(c *gin.Context, data map[string]any) {
 	if data == nil {
 		data = make(map[string]any)
 	}
 	data["status"] = "ok"
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
+	c.JSON(http.StatusOK, data)
 }
 
 // trackingJSONError writes a JSON error response.
-func trackingJSONError(w http.ResponseWriter, statusCode int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]string{
+func trackingJSONError(c *gin.Context, statusCode int, message string) {
+	c.JSON(statusCode, gin.H{
 		"status":  "error",
 		"message": message,
 	})
@@ -135,6 +119,18 @@ func resolveLanguage(deps *TrackingDeps, human *db.HumanAPI) string {
 func translatorFor(deps *TrackingDeps, human *db.HumanAPI) *i18n.Translator {
 	lang := resolveLanguage(deps, human)
 	return deps.Translations.For(lang)
+}
+
+// readBody reads the raw request body from a gin context.
+func readBody(c *gin.Context) ([]byte, error) {
+	data, err := c.GetRawData()
+	if err != nil {
+		return nil, fmt.Errorf("read request body: %w", err)
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty request body")
+	}
+	return data, nil
 }
 
 // flexBool is a JSON type that accepts booleans (true/false) and numbers (0/1),

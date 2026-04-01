@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
@@ -15,14 +17,9 @@ import (
 // HandleMasterdataMonsters returns a handler for GET /api/masterdata/monsters.
 // It builds the poracle-v2 format that PoracleWeb expects from the processor's
 // raw masterfile data and translations.
-func HandleMasterdataMonsters(gd *gamedata.GameData, translations *i18n.Bundle) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		locale := r.URL.Query().Get("locale")
+func HandleMasterdataMonsters(gd *gamedata.GameData, translations *i18n.Bundle) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		locale := c.Query("locale")
 		if locale == "" {
 			locale = "en"
 		}
@@ -83,8 +80,7 @@ func HandleMasterdataMonsters(gd *gamedata.GameData, translations *i18n.Bundle) 
 			}
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+		c.JSON(http.StatusOK, result)
 	}
 }
 
@@ -123,18 +119,13 @@ type poracle2Evo struct {
 // HandleMasterdataGrunts returns a handler for GET /api/masterdata/grunts.
 // It builds the poracle-v2 format that PoracleWeb expects from the processor's
 // classic.json grunt data.
-func HandleMasterdataGrunts(gd *gamedata.GameData) http.HandlerFunc {
+func HandleMasterdataGrunts(gd *gamedata.GameData) gin.HandlerFunc {
 	// Build the response once since game data is loaded at startup.
 	result := buildGruntsResponse(gd)
 	body, _ := json.Marshal(result)
 
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+	return func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/json", body)
 	}
 }
 

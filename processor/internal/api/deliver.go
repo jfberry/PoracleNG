@@ -1,9 +1,9 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/delivery"
@@ -12,17 +12,10 @@ import (
 // HandleDeliverMessages returns a handler that accepts pre-rendered delivery jobs
 // and dispatches them to the delivery system. This is used by the alerter's
 // broadcast command and other command-generated messages.
-func HandleDeliverMessages(dispatcher *delivery.Dispatcher) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
+func HandleDeliverMessages(dispatcher *delivery.Dispatcher) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		if dispatcher == nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]string{
+			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"status":  "error",
 				"message": "delivery dispatcher not configured",
 			})
@@ -30,10 +23,8 @@ func HandleDeliverMessages(dispatcher *delivery.Dispatcher) http.HandlerFunc {
 		}
 
 		var jobs []delivery.Job
-		if err := json.NewDecoder(r.Body).Decode(&jobs); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{
+		if err := c.ShouldBindJSON(&jobs); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
 				"status":  "error",
 				"message": "invalid JSON: " + err.Error(),
 			})
@@ -51,8 +42,7 @@ func HandleDeliverMessages(dispatcher *delivery.Dispatcher) http.HandlerFunc {
 
 		log.Debugf("Accepted %d delivery jobs via API", queued)
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 			"queued": queued,
 		})

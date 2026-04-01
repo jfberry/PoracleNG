@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 	"strconv"
 	"strings"
 
@@ -12,22 +14,22 @@ import (
 )
 
 // HandleGetMaxbattle returns the GET /api/tracking/maxbattle/{id} handler.
-func HandleGetMaxbattle(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleGetMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		maxbattles, err := db.SelectMaxbattlesByIDProfile(deps.DB, human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: get maxbattles: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -46,30 +48,30 @@ func HandleGetMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 			}
 		}
 
-		trackingJSONOK(w, map[string]any{"maxbattle": result})
+		trackingJSONOK(c, map[string]any{"maxbattle": result})
 	}
 }
 
 // HandleDeleteMaxbattle returns the DELETE /api/tracking/maxbattle/{id}/byUid/{uid} handler.
-func HandleDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		uidStr := r.PathValue("uid")
+func HandleDeleteMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		uidStr := c.Param("uid")
 		uid, err := strconv.ParseInt(uidStr, 10, 64)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid uid")
+			trackingJSONError(c, http.StatusBadRequest, "invalid uid")
 			return
 		}
 
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil || human == nil {
 			if err := db.DeleteByUID(deps.DB, "maxbattle", id, uid); err != nil {
 				log.Errorf("Tracking API: delete maxbattle: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			reloadState(deps)
-			trackingJSONOK(w, nil)
+			trackingJSONOK(c, nil)
 			return
 		}
 
@@ -77,7 +79,7 @@ func HandleDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUID(deps.DB, "maxbattle", id, uid); err != nil {
 			log.Errorf("Tracking API: delete maxbattle: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -85,7 +87,7 @@ func HandleDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 
 		tr := translatorFor(deps, human)
 		language := resolveLanguage(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 		var message string
 		for _, e := range existing {
 			if e.UID == uid {
@@ -96,7 +98,7 @@ func HandleDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 		if !silent && message != "" {
 			sendConfirmation(deps, human, message, language)
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -116,38 +118,38 @@ type maxbattleInsertRequest struct {
 
 // HandleCreateMaxbattle returns the POST /api/tracking/maxbattle/{id} handler.
 // The JS handler always inserts (no diff logic).
-func HandleCreateMaxbattle(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleCreateMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		language := resolveLanguage(deps, human)
 		tr := translatorFor(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var insertReqs []maxbattleInsertRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &insertReqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single maxbattleInsertRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			insertReqs = []maxbattleInsertRequest{single}
@@ -166,7 +168,7 @@ func HandleCreateMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 			if pokemonID == 9000 {
 				level = req.Level.intValue(9000)
 				if level < 1 {
-					trackingJSONError(w, http.StatusBadRequest, "Invalid level (must be specified if no pokemon_id)")
+					trackingJSONError(c, http.StatusBadRequest, "Invalid level (must be specified if no pokemon_id)")
 					return
 				}
 			}
@@ -236,7 +238,7 @@ func HandleCreateMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 			uid, err := deps.Tracking.Maxbattles.Insert(&insert[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert maxbattle: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -253,7 +255,7 @@ func HandleCreateMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 			responseMsg = ""
 		}
 
-		trackingJSONOK(w, map[string]any{
+		trackingJSONOK(c, map[string]any{
 			"message": responseMsg,
 			"newUids": newUIDs,
 			"insert":  len(insert),
@@ -262,32 +264,32 @@ func HandleCreateMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 }
 
 // HandleBulkDeleteMaxbattle returns the POST /api/tracking/maxbattle/{id}/delete handler.
-func HandleBulkDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleBulkDeleteMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var uids []int64
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &uids); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single int64
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			uids = []int64{single}
 		}
 
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		var existing []db.MaxbattleTrackingAPI
 		if err == nil && human != nil {
 			existing, _ = db.SelectMaxbattlesByIDProfile(deps.DB, human.ID, profileNo)
@@ -295,7 +297,7 @@ func HandleBulkDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUIDs(deps.DB, "maxbattle", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete maxbattles: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -305,7 +307,7 @@ func HandleBulkDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 		if human != nil && len(existing) > 0 {
 			tr := translatorFor(deps, human)
 			language := resolveLanguage(deps, human)
-			silent := isSilent(r)
+			silent := isSilent(c)
 			uidSet := make(map[int64]bool, len(uids))
 			for _, u := range uids {
 				uidSet[u] = true
@@ -323,7 +325,7 @@ func HandleBulkDeleteMaxbattle(deps *TrackingDeps) http.HandlerFunc {
 				sendConfirmation(deps, human, message, language)
 			}
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -177,8 +178,11 @@ func main() {
 	go proc.runProfileScheduler()
 	log.Infof("Profile scheduler enabled (10-minute interval)")
 
-	// HTTP server
-	mux := http.NewServeMux()
+	// HTTP server — Gin router
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(api.RequestLogger())
 
 	// Webhook receiver
 	var webhookLogger io.Writer
@@ -198,29 +202,44 @@ func main() {
 		log.Infof("Webhook logging enabled: %s", cfg.WebhookLogging.Filename)
 	}
 	webhookHandler := webhook.NewHandler(proc, webhookLogger)
-	mux.Handle("/", webhookHandler)
 
-	// API endpoints (protected by x-poracle-secret when configured, with metrics)
-	secret := cfg.Processor.APISecret
-	auth := func(h http.HandlerFunc) http.HandlerFunc { return api.RequireSecret(secret, h) }
-	// apiRoute wraps a handler with auth + instrumentation
-	apiRoute := func(endpoint string, h http.HandlerFunc) http.HandlerFunc {
-		return api.InstrumentAPI(endpoint, auth(h))
+	// Public endpoints (no auth)
+	r.POST("/", webhookHandler)
+	r.GET("/health", api.HandleHealth())
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// pprof endpoints
+	pprofGroup := r.Group("/debug/pprof")
+	{
+		pprofGroup.GET("/", gin.WrapF(http.DefaultServeMux.ServeHTTP))
+		pprofGroup.GET("/:name", gin.WrapF(http.DefaultServeMux.ServeHTTP))
 	}
 
-	mux.HandleFunc("/api/reload", auth(api.HandleReload(func() error {
+	// Authenticated API group
+	apiGroup := r.Group("/api")
+	apiGroup.Use(api.RequireSecretGin(cfg.Processor.APISecret))
+
+	// Reload
+	apiGroup.POST("/reload", api.HandleReload(func() error {
 		return state.Load(stateMgr, database)
-	})))
-	mux.HandleFunc("/api/geofence/reload", auth(api.HandleReload(func() error {
+	}))
+	apiGroup.GET("/reload", api.HandleReload(func() error {
+		return state.Load(stateMgr, database)
+	}))
+	apiGroup.POST("/geofence/reload", api.HandleReload(func() error {
 		return state.LoadWithGeofences(stateMgr, database, cfg.Geofence)
-	})))
-	mux.HandleFunc("/api/weather", auth(api.HandleWeather(proc.weather)))
-	mux.HandleFunc("/api/stats/rarity", auth(api.HandleStats(func() any { return proc.stats.ExportGroups() })))
-	mux.HandleFunc("/api/stats/shiny", auth(api.HandleStats(func() any { return proc.stats.ExportShinyStats() })))
-	mux.HandleFunc("/api/stats/shiny-possible", auth(api.HandleStats(func() any { return proc.stats.ExportShinyPossible() })))
-	mux.HandleFunc("/health", api.HandleHealth())
-	mux.HandleFunc("/api/test", auth(api.HandleTest(proc)))
-	mux.HandleFunc("/api/geocode/forward", auth(api.HandleGeocode(proc.enricher.Geocoder)))
+	}))
+	apiGroup.GET("/geofence/reload", api.HandleReload(func() error {
+		return state.LoadWithGeofences(stateMgr, database, cfg.Geofence)
+	}))
+
+	// Weather, stats, geocode, test
+	apiGroup.GET("/weather", api.HandleWeather(proc.weather))
+	apiGroup.GET("/stats/rarity", api.HandleStats(func() any { return proc.stats.ExportGroups() }))
+	apiGroup.GET("/stats/shiny", api.HandleStats(func() any { return proc.stats.ExportShinyStats() }))
+	apiGroup.GET("/stats/shiny-possible", api.HandleStats(func() any { return proc.stats.ExportShinyPossible() }))
+	apiGroup.POST("/test", api.HandleTest(proc))
+	apiGroup.GET("/geocode/forward", api.HandleGeocode(proc.enricher.Geocoder))
 
 	// Geofence data and tile generation endpoints
 	tileDeps := api.TileDeps{
@@ -229,14 +248,15 @@ func main() {
 		ImgUicons: proc.enricher.ImgUicons,
 		Weather:   proc.weather,
 	}
-	mux.HandleFunc("GET /api/geofence/all/hash", auth(api.HandleGeofenceHash(stateMgr)))
-	mux.HandleFunc("GET /api/geofence/all/geojson", auth(api.HandleGeofenceGeoJSON(stateMgr)))
-	mux.HandleFunc("GET /api/geofence/all", auth(api.HandleGeofenceAll(stateMgr)))
-	mux.HandleFunc("GET /api/geofence/weatherMap/{lat}/{lon}", auth(api.HandleWeatherMap(tileDeps)))
-	mux.HandleFunc("GET /api/geofence/locationMap/{lat}/{lon}", auth(api.HandleLocationMap(tileDeps)))
-	mux.HandleFunc("GET /api/geofence/distanceMap/{lat}/{lon}/{distance}", auth(api.HandleDistanceMap(tileDeps)))
-	mux.HandleFunc("POST /api/geofence/overviewMap", auth(api.HandleOverviewMap(tileDeps)))
-	mux.HandleFunc("GET /api/geofence/{area}/map", auth(api.HandleGeofenceAreaMap(tileDeps)))
+	geofence := apiGroup.Group("/geofence")
+	geofence.GET("/all/hash", api.HandleGeofenceHash(stateMgr))
+	geofence.GET("/all/geojson", api.HandleGeofenceGeoJSON(stateMgr))
+	geofence.GET("/all", api.HandleGeofenceAll(stateMgr))
+	geofence.GET("/weatherMap/:lat/:lon", api.HandleWeatherMap(tileDeps))
+	geofence.GET("/locationMap/:lat/:lon", api.HandleLocationMap(tileDeps))
+	geofence.GET("/distanceMap/:lat/:lon/:distance", api.HandleDistanceMap(tileDeps))
+	geofence.POST("/overviewMap", api.HandleOverviewMap(tileDeps))
+	geofence.GET("/:area/map", api.HandleGeofenceAreaMap(tileDeps))
 
 	// Tracking CRUD endpoints (registered after proc is created so enricher/scanner are available)
 	defaultTemplate := "1"
@@ -258,78 +278,65 @@ func main() {
 		Dispatcher:   proc.dispatcher,
 		ReloadFunc:   proc.triggerReload,
 	}
+	tracking := apiGroup.Group("/tracking")
 	// Pokemon (monster) tracking
-	mux.HandleFunc("GET /api/tracking/pokemon/{id}", apiRoute("tracking/pokemon", api.HandleGetMonster(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/pokemon/{id}", apiRoute("tracking/pokemon", api.HandleCreateMonster(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/pokemon/{id}/byUid/{uid}", apiRoute("tracking/pokemon", api.HandleDeleteMonster(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/pokemon/{id}/delete", apiRoute("tracking/pokemon", api.HandleBulkDeleteMonster(trackingDeps)))
-	mux.HandleFunc("GET /api/tracking/pokemon/refresh", auth(api.HandleReload(func() error {
+	tracking.GET("/pokemon/:id", api.HandleGetMonster(trackingDeps))
+	tracking.POST("/pokemon/:id", api.HandleCreateMonster(trackingDeps))
+	tracking.DELETE("/pokemon/:id/byUid/:uid", api.HandleDeleteMonster(trackingDeps))
+	tracking.POST("/pokemon/:id/delete", api.HandleBulkDeleteMonster(trackingDeps))
+	tracking.GET("/pokemon/refresh", api.HandleReload(func() error {
 		return state.Load(stateMgr, database)
-	})))
+	}))
 	// Raid tracking
-	mux.HandleFunc("GET /api/tracking/raid/{id}", apiRoute("tracking/raid", api.HandleGetRaid(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/raid/{id}", apiRoute("tracking/raid", api.HandleCreateRaid(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/raid/{id}/byUid/{uid}", apiRoute("tracking/raid", api.HandleDeleteRaid(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/raid/{id}/delete", apiRoute("tracking/raid", api.HandleBulkDeleteRaid(trackingDeps)))
+	tracking.GET("/raid/:id", api.HandleGetRaid(trackingDeps))
+	tracking.POST("/raid/:id", api.HandleCreateRaid(trackingDeps))
+	tracking.DELETE("/raid/:id/byUid/:uid", api.HandleDeleteRaid(trackingDeps))
+	tracking.POST("/raid/:id/delete", api.HandleBulkDeleteRaid(trackingDeps))
 	// Egg tracking
-	mux.HandleFunc("GET /api/tracking/egg/{id}", apiRoute("tracking/egg", api.HandleGetEgg(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/egg/{id}", apiRoute("tracking/egg", api.HandleCreateEgg(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/egg/{id}/byUid/{uid}", apiRoute("tracking/egg", api.HandleDeleteEgg(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/egg/{id}/delete", apiRoute("tracking/egg", api.HandleBulkDeleteEgg(trackingDeps)))
+	tracking.GET("/egg/:id", api.HandleGetEgg(trackingDeps))
+	tracking.POST("/egg/:id", api.HandleCreateEgg(trackingDeps))
+	tracking.DELETE("/egg/:id/byUid/:uid", api.HandleDeleteEgg(trackingDeps))
+	tracking.POST("/egg/:id/delete", api.HandleBulkDeleteEgg(trackingDeps))
 	// Quest tracking
-	mux.HandleFunc("GET /api/tracking/quest/{id}", apiRoute("tracking/quest", api.HandleGetQuest(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/quest/{id}", apiRoute("tracking/quest", api.HandleCreateQuest(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/quest/{id}/byUid/{uid}", apiRoute("tracking/quest", api.HandleDeleteQuest(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/quest/{id}/delete", apiRoute("tracking/quest", api.HandleBulkDeleteQuest(trackingDeps)))
+	tracking.GET("/quest/:id", api.HandleGetQuest(trackingDeps))
+	tracking.POST("/quest/:id", api.HandleCreateQuest(trackingDeps))
+	tracking.DELETE("/quest/:id/byUid/:uid", api.HandleDeleteQuest(trackingDeps))
+	tracking.POST("/quest/:id/delete", api.HandleBulkDeleteQuest(trackingDeps))
 	// Invasion tracking
-	mux.HandleFunc("GET /api/tracking/invasion/{id}", apiRoute("tracking/invasion", api.HandleGetInvasion(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/invasion/{id}", apiRoute("tracking/invasion", api.HandleCreateInvasion(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/invasion/{id}/byUid/{uid}", apiRoute("tracking/invasion", api.HandleDeleteInvasion(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/invasion/{id}/delete", apiRoute("tracking/invasion", api.HandleBulkDeleteInvasion(trackingDeps)))
+	tracking.GET("/invasion/:id", api.HandleGetInvasion(trackingDeps))
+	tracking.POST("/invasion/:id", api.HandleCreateInvasion(trackingDeps))
+	tracking.DELETE("/invasion/:id/byUid/:uid", api.HandleDeleteInvasion(trackingDeps))
+	tracking.POST("/invasion/:id/delete", api.HandleBulkDeleteInvasion(trackingDeps))
 	// Lure tracking
-	mux.HandleFunc("GET /api/tracking/lure/{id}", apiRoute("tracking/lure", api.HandleGetLure(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/lure/{id}", apiRoute("tracking/lure", api.HandleCreateLure(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/lure/{id}/byUid/{uid}", apiRoute("tracking/lure", api.HandleDeleteLure(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/lure/{id}/delete", apiRoute("tracking/lure", api.HandleBulkDeleteLure(trackingDeps)))
+	tracking.GET("/lure/:id", api.HandleGetLure(trackingDeps))
+	tracking.POST("/lure/:id", api.HandleCreateLure(trackingDeps))
+	tracking.DELETE("/lure/:id/byUid/:uid", api.HandleDeleteLure(trackingDeps))
+	tracking.POST("/lure/:id/delete", api.HandleBulkDeleteLure(trackingDeps))
 	// Nest tracking
-	mux.HandleFunc("GET /api/tracking/nest/{id}", apiRoute("tracking/nest", api.HandleGetNest(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/nest/{id}", apiRoute("tracking/nest", api.HandleCreateNest(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/nest/{id}/byUid/{uid}", apiRoute("tracking/nest", api.HandleDeleteNest(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/nest/{id}/delete", apiRoute("tracking/nest", api.HandleBulkDeleteNest(trackingDeps)))
+	tracking.GET("/nest/:id", api.HandleGetNest(trackingDeps))
+	tracking.POST("/nest/:id", api.HandleCreateNest(trackingDeps))
+	tracking.DELETE("/nest/:id/byUid/:uid", api.HandleDeleteNest(trackingDeps))
+	tracking.POST("/nest/:id/delete", api.HandleBulkDeleteNest(trackingDeps))
 	// Gym tracking
-	mux.HandleFunc("GET /api/tracking/gym/{id}", apiRoute("tracking/gym", api.HandleGetGym(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/gym/{id}", apiRoute("tracking/gym", api.HandleCreateGym(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/gym/{id}/byUid/{uid}", apiRoute("tracking/gym", api.HandleDeleteGym(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/gym/{id}/delete", apiRoute("tracking/gym", api.HandleBulkDeleteGym(trackingDeps)))
+	tracking.GET("/gym/:id", api.HandleGetGym(trackingDeps))
+	tracking.POST("/gym/:id", api.HandleCreateGym(trackingDeps))
+	tracking.DELETE("/gym/:id/byUid/:uid", api.HandleDeleteGym(trackingDeps))
+	tracking.POST("/gym/:id/delete", api.HandleBulkDeleteGym(trackingDeps))
 	// Fort tracking
-	mux.HandleFunc("GET /api/tracking/fort/{id}", apiRoute("tracking/fort", api.HandleGetFort(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/fort/{id}", apiRoute("tracking/fort", api.HandleCreateFort(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/fort/{id}/byUid/{uid}", apiRoute("tracking/fort", api.HandleDeleteFort(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/fort/{id}/delete", apiRoute("tracking/fort", api.HandleBulkDeleteFort(trackingDeps)))
+	tracking.GET("/fort/:id", api.HandleGetFort(trackingDeps))
+	tracking.POST("/fort/:id", api.HandleCreateFort(trackingDeps))
+	tracking.DELETE("/fort/:id/byUid/:uid", api.HandleDeleteFort(trackingDeps))
+	tracking.POST("/fort/:id/delete", api.HandleBulkDeleteFort(trackingDeps))
 	// Maxbattle tracking
-	mux.HandleFunc("GET /api/tracking/maxbattle/{id}", apiRoute("tracking/maxbattle", api.HandleGetMaxbattle(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/maxbattle/{id}", apiRoute("tracking/maxbattle", api.HandleCreateMaxbattle(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/maxbattle/{id}/byUid/{uid}", apiRoute("tracking/maxbattle", api.HandleDeleteMaxbattle(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/maxbattle/{id}/delete", apiRoute("tracking/maxbattle", api.HandleBulkDeleteMaxbattle(trackingDeps)))
+	tracking.GET("/maxbattle/:id", api.HandleGetMaxbattle(trackingDeps))
+	tracking.POST("/maxbattle/:id", api.HandleCreateMaxbattle(trackingDeps))
+	tracking.DELETE("/maxbattle/:id/byUid/:uid", api.HandleDeleteMaxbattle(trackingDeps))
+	tracking.POST("/maxbattle/:id/delete", api.HandleBulkDeleteMaxbattle(trackingDeps))
 	// Aggregate tracking endpoints
-	mux.HandleFunc("GET /api/tracking/all/{id}", apiRoute("tracking/all", api.HandleGetAllTracking(trackingDeps)))
-	mux.HandleFunc("GET /api/tracking/allProfiles/{id}", apiRoute("tracking/allProfiles", api.HandleGetAllProfilesTracking(trackingDeps)))
+	tracking.GET("/all/:id", api.HandleGetAllTracking(trackingDeps))
+	tracking.GET("/allProfiles/:id", api.HandleGetAllProfilesTracking(trackingDeps))
 
-	// Human endpoints
-	// Note: GET /api/humans/{id} uses a sub-router to avoid Go mux conflicts
-	// between literal segments (one, roles) and wildcards ({id}).
-	mux.HandleFunc("POST /api/humans/{id}/start", apiRoute("humans/start", api.HandleStartHuman(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/stop", apiRoute("humans/stop", api.HandleStopHuman(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/adminDisabled", apiRoute("humans/adminDisabled", api.HandleAdminDisabled(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/switchProfile/{profile}", apiRoute("humans/switchProfile", api.HandleSwitchProfile(trackingDeps)))
-	mux.HandleFunc("GET /api/humans/{id}/checkLocation/{lat}/{lon}", apiRoute("humans/checkLocation", api.HandleCheckLocation(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/setLocation/{lat}/{lon}", apiRoute("humans/setLocation", api.HandleSetLocation(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/setAreas", apiRoute("humans/setAreas", api.HandleSetAreas(trackingDeps)))
-	mux.HandleFunc("POST /api/humans", apiRoute("humans/create", api.HandleCreateHuman(trackingDeps)))
-	// GET /api/humans/* uses a path-based dispatcher to avoid Go mux conflicts
-	// between literal segments (one, roles) and the {id} wildcard.
-
-	// Role endpoints — Discord session resolved lazily since bot may start after routes are registered
+	// Human endpoints — Gin handles path parameter conflicts natively
 	var discordBotRef *discordbot.Bot
 	roleDeps := &api.RoleDeps{
 		SessionFunc: func() *discordgo.Session {
@@ -341,61 +348,44 @@ func main() {
 		Config: cfg,
 		DB:     database,
 	}
-	mux.HandleFunc("POST /api/humans/{id}/roles/add/{roleId}", apiRoute("humans/roles/add", api.HandleAddRole(roleDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/roles/remove/{roleId}", apiRoute("humans/roles/remove", api.HandleRemoveRole(roleDeps)))
-	{
-		// GET handlers that conflict with Go mux wildcard matching:
-		// /api/humans/one/{id}, /api/humans/{id}/roles, /api/humans/{id}/getAdministrationRoles, /api/humans/{id}
-		getOneHuman := auth(api.HandleGetOneHuman(trackingDeps))
-		getHumanAreas := auth(api.HandleGetHumanAreas(trackingDeps))
-		getRoles := auth(api.HandleGetRoles(roleDeps))
-		getAdminRoles := auth(api.HandleGetAdministrationRoles(roleDeps))
-		mux.HandleFunc("GET /api/humans/{path...}", func(w http.ResponseWriter, r *http.Request) {
-			p := r.PathValue("path")
-			parts := strings.SplitN(p, "/", 3)
-			switch {
-			case len(parts) == 2 && parts[0] == "one":
-				r.SetPathValue("id", parts[1])
-				getOneHuman.ServeHTTP(w, r)
-			case len(parts) == 2 && parts[1] == "roles":
-				r.SetPathValue("id", parts[0])
-				getRoles.ServeHTTP(w, r)
-			case len(parts) == 2 && parts[1] == "getAdministrationRoles":
-				r.SetPathValue("id", parts[0])
-				getAdminRoles.ServeHTTP(w, r)
-			case len(parts) >= 3 && parts[1] == "checkLocation":
-				// Already handled by specific route above
-				http.NotFound(w, r)
-			case len(parts) == 1:
-				r.SetPathValue("id", parts[0])
-				getHumanAreas.ServeHTTP(w, r)
-			default:
-				http.NotFound(w, r)
-			}
-		})
-	}
+	humans := apiGroup.Group("/humans")
+	humans.GET("/one/:id", api.HandleGetOneHuman(trackingDeps))
+	humans.GET("/:id", api.HandleGetHumanAreas(trackingDeps))
+	humans.GET("/:id/roles", api.HandleGetRoles(roleDeps))
+	humans.GET("/:id/getAdministrationRoles", api.HandleGetAdministrationRoles(roleDeps))
+	humans.GET("/:id/checkLocation/:lat/:lon", api.HandleCheckLocation(trackingDeps))
+	humans.POST("", api.HandleCreateHuman(trackingDeps))
+	humans.POST("/:id/start", api.HandleStartHuman(trackingDeps))
+	humans.POST("/:id/stop", api.HandleStopHuman(trackingDeps))
+	humans.POST("/:id/adminDisabled", api.HandleAdminDisabled(trackingDeps))
+	humans.POST("/:id/switchProfile/:profile", api.HandleSwitchProfile(trackingDeps))
+	humans.POST("/:id/setLocation/:lat/:lon", api.HandleSetLocation(trackingDeps))
+	humans.POST("/:id/setAreas", api.HandleSetAreas(trackingDeps))
+	humans.POST("/:id/roles/add/:roleId", api.HandleAddRole(roleDeps))
+	humans.POST("/:id/roles/remove/:roleId", api.HandleRemoveRole(roleDeps))
 
 	// Profile endpoints
-	mux.HandleFunc("GET /api/profiles/{id}", apiRoute("profiles", api.HandleGetProfiles(trackingDeps)))
-	mux.HandleFunc("DELETE /api/profiles/{id}/byProfileNo/{profile_no}", apiRoute("profiles/delete", api.HandleDeleteProfile(trackingDeps)))
-	mux.HandleFunc("POST /api/profiles/{id}/add", apiRoute("profiles/add", api.HandleAddProfile(trackingDeps)))
-	mux.HandleFunc("POST /api/profiles/{id}/update", apiRoute("profiles/update", api.HandleUpdateProfile(trackingDeps)))
-	mux.HandleFunc("POST /api/profiles/{id}/copy/{from}/{to}", apiRoute("profiles/copy", api.HandleCopyProfile(trackingDeps)))
+	profiles := apiGroup.Group("/profiles")
+	profiles.GET("/:id", api.HandleGetProfiles(trackingDeps))
+	profiles.DELETE("/:id/byProfileNo/:profile_no", api.HandleDeleteProfile(trackingDeps))
+	profiles.POST("/:id/add", api.HandleAddProfile(trackingDeps))
+	profiles.POST("/:id/update", api.HandleUpdateProfile(trackingDeps))
+	profiles.POST("/:id/copy/:from/:to", api.HandleCopyProfile(trackingDeps))
 
 	// DTS template endpoints
 	if proc.dtsRenderer != nil {
-		mux.HandleFunc("GET /api/config/templates", auth(api.HandleTemplateConfig(proc.dtsRenderer.Templates())))
-		mux.HandleFunc("POST /api/dts/render", auth(api.HandleDTSRender(proc.dtsRenderer.Templates())))
+		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/render", api.HandleDTSRender(proc.dtsRenderer.Templates()))
 	}
 
 	// Config and master data endpoints
-	mux.HandleFunc("GET /api/config/poracleWeb", auth(api.HandleConfigPoracleWeb(cfg)))
-	mux.HandleFunc("GET /api/masterdata/monsters", auth(api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations)))
-	mux.HandleFunc("GET /api/masterdata/grunts", auth(api.HandleMasterdataGrunts(proc.enricher.GameData)))
+	apiGroup.GET("/config/poracleWeb", api.HandleConfigPoracleWeb(cfg))
+	apiGroup.GET("/masterdata/monsters", api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations))
+	apiGroup.GET("/masterdata/grunts", api.HandleMasterdataGrunts(proc.enricher.GameData))
 
 	// Delivery endpoint — accepts pre-rendered jobs
-	mux.HandleFunc("POST /api/deliverMessages", auth(api.HandleDeliverMessages(proc.dispatcher)))
-	mux.HandleFunc("POST /api/postMessage", auth(api.HandleDeliverMessages(proc.dispatcher))) // legacy alias
+	apiGroup.POST("/deliverMessages", api.HandleDeliverMessages(proc.dispatcher))
+	apiGroup.POST("/postMessage", api.HandleDeliverMessages(proc.dispatcher)) // legacy alias
 
 	// Command framework — shared by API endpoint and Discord/Telegram bots
 	cmdLanguages := cfg.General.AvailableLanguages
@@ -489,17 +479,11 @@ func main() {
 		NLPParser:    nlpParser,
 		ReloadFunc:   proc.triggerReload,
 	}
-	mux.HandleFunc("POST /api/command", apiRoute("command", api.HandleCommand(cmdDeps)))
-
-	// Prometheus metrics
-	mux.Handle("/metrics", promhttp.Handler())
-
-	// pprof endpoints (cpu, heap, goroutine, etc.)
-	mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
+	apiGroup.POST("/command", api.HandleCommand(cmdDeps))
 
 	server := &http.Server{
 		Addr:    cfg.Processor.ListenAddr(),
-		Handler: mux,
+		Handler: r,
 	}
 
 	// Periodic reload

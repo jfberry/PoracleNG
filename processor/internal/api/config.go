@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/pokemon/poracleng/processor/internal/config"
 )
 
@@ -14,7 +16,7 @@ var Version = "0.0.0"
 
 // HandleConfigPoracleWeb returns a handler for GET /api/config/poracleWeb.
 // It returns the configuration subset that PoracleWeb needs for its UI.
-func HandleConfigPoracleWeb(cfg *config.Config) http.HandlerFunc {
+func HandleConfigPoracleWeb(cfg *config.Config) gin.HandlerFunc {
 	// Pre-compute the disabled hooks list from config flags.
 	type hookFlag struct {
 		Name    string
@@ -95,12 +97,7 @@ func HandleConfigPoracleWeb(cfg *config.Config) http.HandlerFunc {
 
 	body, _ := json.Marshal(resp)
 
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(body)
+	return func(c *gin.Context) {
+		c.Data(http.StatusOK, "application/json", body)
 	}
 }

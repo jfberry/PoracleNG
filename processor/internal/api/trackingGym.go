@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 	"strconv"
 	"strings"
 
@@ -13,22 +15,22 @@ import (
 )
 
 // HandleGetGym returns the GET /api/tracking/gym/{id} handler.
-func HandleGetGym(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleGetGym(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		gyms, err := db.SelectGymsByIDProfile(deps.DB, human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: get gyms: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -47,30 +49,30 @@ func HandleGetGym(deps *TrackingDeps) http.HandlerFunc {
 			}
 		}
 
-		trackingJSONOK(w, map[string]any{"gym": result})
+		trackingJSONOK(c, map[string]any{"gym": result})
 	}
 }
 
 // HandleDeleteGym returns the DELETE /api/tracking/gym/{id}/byUid/{uid} handler.
-func HandleDeleteGym(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		uidStr := r.PathValue("uid")
+func HandleDeleteGym(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		uidStr := c.Param("uid")
 		uid, err := strconv.ParseInt(uidStr, 10, 64)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid uid")
+			trackingJSONError(c, http.StatusBadRequest, "invalid uid")
 			return
 		}
 
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil || human == nil {
 			if err := db.DeleteByUID(deps.DB, "gym", id, uid); err != nil {
 				log.Errorf("Tracking API: delete gym: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			reloadState(deps)
-			trackingJSONOK(w, nil)
+			trackingJSONOK(c, nil)
 			return
 		}
 
@@ -78,7 +80,7 @@ func HandleDeleteGym(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUID(deps.DB, "gym", id, uid); err != nil {
 			log.Errorf("Tracking API: delete gym: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -86,7 +88,7 @@ func HandleDeleteGym(deps *TrackingDeps) http.HandlerFunc {
 
 		tr := translatorFor(deps, human)
 		language := resolveLanguage(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 		var message string
 		for _, e := range existing {
 			if e.UID == uid {
@@ -97,7 +99,7 @@ func HandleDeleteGym(deps *TrackingDeps) http.HandlerFunc {
 		if !silent && message != "" {
 			sendConfirmation(deps, human, message, language)
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -113,38 +115,38 @@ type gymInsertRequest struct {
 }
 
 // HandleCreateGym returns the POST /api/tracking/gym/{id} handler.
-func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleCreateGym(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		language := resolveLanguage(deps, human)
 		tr := translatorFor(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var insertReqs []gymInsertRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &insertReqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single gymInsertRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			insertReqs = []gymInsertRequest{single}
@@ -158,12 +160,12 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 		insert := make([]db.GymTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
 			if !req.Team.isSet() {
-				trackingJSONError(w, http.StatusBadRequest, "Invalid team")
+				trackingJSONError(c, http.StatusBadRequest, "Invalid team")
 				return
 			}
 			team := req.Team.intValue(0)
 			if team < 0 || team > 4 {
-				trackingJSONError(w, http.StatusBadRequest, "Invalid team")
+				trackingJSONError(c, http.StatusBadRequest, "Invalid team")
 				return
 			}
 
@@ -209,7 +211,7 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 		tracked, err := deps.Tracking.Gyms.SelectByIDProfile(human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: select existing gyms: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -252,7 +254,7 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 			}
 			if err := deps.Tracking.Gyms.DeleteByUIDs(human.ID, uids); err != nil {
 				log.Errorf("Tracking API: delete updated gyms: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 		}
@@ -262,7 +264,7 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 			uid, err := deps.Tracking.Gyms.Insert(&diff.Inserts[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert gym: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -271,7 +273,7 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 			uid, err := deps.Tracking.Gyms.Insert(&diff.Updates[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert gym: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -288,7 +290,7 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 			responseMsg = ""
 		}
 
-		trackingJSONOK(w, map[string]any{
+		trackingJSONOK(c, map[string]any{
 			"message":        responseMsg,
 			"newUids":        newUIDs,
 			"alreadyPresent": len(diff.AlreadyPresent),
@@ -299,32 +301,32 @@ func HandleCreateGym(deps *TrackingDeps) http.HandlerFunc {
 }
 
 // HandleBulkDeleteGym returns the POST /api/tracking/gym/{id}/delete handler.
-func HandleBulkDeleteGym(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleBulkDeleteGym(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var uids []int64
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &uids); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single int64
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			uids = []int64{single}
 		}
 
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		var existing []db.GymTrackingAPI
 		if err == nil && human != nil {
 			existing, _ = db.SelectGymsByIDProfile(deps.DB, human.ID, profileNo)
@@ -332,7 +334,7 @@ func HandleBulkDeleteGym(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUIDs(deps.DB, "gym", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete gyms: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -342,7 +344,7 @@ func HandleBulkDeleteGym(deps *TrackingDeps) http.HandlerFunc {
 		if human != nil && len(existing) > 0 {
 			tr := translatorFor(deps, human)
 			language := resolveLanguage(deps, human)
-			silent := isSilent(r)
+			silent := isSilent(c)
 			uidSet := make(map[int64]bool, len(uids))
 			for _, u := range uids {
 				uidSet[u] = true
@@ -360,7 +362,7 @@ func HandleBulkDeleteGym(deps *TrackingDeps) http.HandlerFunc {
 				sendConfirmation(deps, human, message, language)
 			}
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 

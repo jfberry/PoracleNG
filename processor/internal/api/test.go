@@ -2,9 +2,9 @@ package api
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -35,30 +35,22 @@ type TestProcessor interface {
 // The test endpoint accepts a webhook + target, runs it through the normal
 // enrichment pipeline (skipping matching/dedup), and sends the enriched
 // result for the specified target user via the render pipeline.
-func HandleTest(proc TestProcessor) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		body, err := io.ReadAll(r.Body)
+func HandleTest(proc TestProcessor) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		body, err := c.GetRawData()
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "failed to read body"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read body"})
 			return
 		}
 
 		var req TestRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
 			return
 		}
 
 		if req.Type == "" || req.Webhook == nil || req.Target.ID == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "type, webhook, and target.id are required"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "type, webhook, and target.id are required"})
 			return
 		}
 
@@ -66,12 +58,10 @@ func HandleTest(proc TestProcessor) http.HandlerFunc {
 
 		if err := proc.ProcessTest(req.Type, req.Webhook, req.Target); err != nil {
 			log.Errorf("[Test] Failed to process %s test: %s", req.Type, err)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 }

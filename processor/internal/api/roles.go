@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
@@ -32,33 +33,32 @@ func (d *RoleDeps) session() *discordgo.Session {
 
 // HandleGetRoles returns the GET /api/humans/{id}/roles handler.
 // Lists available roles for a Discord user across all configured guilds.
-func HandleGetRoles(deps *RoleDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleGetRoles(deps *RoleDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 		if id == "" {
-			trackingJSONError(w, http.StatusBadRequest, "missing id parameter")
+			trackingJSONError(c, http.StatusBadRequest, "missing id parameter")
 			return
 		}
 
 		human, err := db.SelectOneHuman(deps.DB, id)
 		if err != nil {
 			log.Errorf("Roles API: get human: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		if human.Type != "discord:user" {
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte("[]"))
+			c.Data(http.StatusOK, "application/json", []byte("[]"))
 			return
 		}
 
 		if deps.session() == nil {
-			trackingJSONError(w, http.StatusServiceUnavailable, "Discord bot not available")
+			trackingJSONError(c, http.StatusServiceUnavailable, "Discord bot not available")
 			return
 		}
 
@@ -66,57 +66,56 @@ func HandleGetRoles(deps *RoleDeps) http.HandlerFunc {
 		guilds, err := discordroles.ListUserRolesAcrossGuilds(deps.session(), roleSubMap, human.ID)
 		if err != nil {
 			log.Errorf("Roles API: list roles: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "failed to list roles")
+			trackingJSONError(c, http.StatusInternalServerError, "failed to list roles")
 			return
 		}
 
-		trackingJSONOK(w, map[string]any{"guilds": guilds})
+		trackingJSONOK(c, map[string]any{"guilds": guilds})
 	}
 }
 
 // HandleAddRole returns the POST /api/humans/{id}/roles/add/{roleId} handler.
-func HandleAddRole(deps *RoleDeps) http.HandlerFunc {
+func HandleAddRole(deps *RoleDeps) gin.HandlerFunc {
 	return handleRoleChange(deps, true)
 }
 
 // HandleRemoveRole returns the POST /api/humans/{id}/roles/remove/{roleId} handler.
-func HandleRemoveRole(deps *RoleDeps) http.HandlerFunc {
+func HandleRemoveRole(deps *RoleDeps) gin.HandlerFunc {
 	return handleRoleChange(deps, false)
 }
 
-func handleRoleChange(deps *RoleDeps, add bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func handleRoleChange(deps *RoleDeps, add bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 		if id == "" {
-			trackingJSONError(w, http.StatusBadRequest, "missing id parameter")
+			trackingJSONError(c, http.StatusBadRequest, "missing id parameter")
 			return
 		}
 
-		roleID := r.PathValue("roleId")
+		roleID := c.Param("roleId")
 		if roleID == "" {
-			trackingJSONError(w, http.StatusBadRequest, "missing roleId parameter")
+			trackingJSONError(c, http.StatusBadRequest, "missing roleId parameter")
 			return
 		}
 
 		human, err := db.SelectOneHuman(deps.DB, id)
 		if err != nil {
 			log.Errorf("Roles API: get human: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		if human.Type != "discord:user" {
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte("[]"))
+			c.Data(http.StatusOK, "application/json", []byte("[]"))
 			return
 		}
 
 		if deps.session() == nil {
-			trackingJSONError(w, http.StatusServiceUnavailable, "Discord bot not available")
+			trackingJSONError(c, http.StatusServiceUnavailable, "Discord bot not available")
 			return
 		}
 
@@ -124,11 +123,11 @@ func handleRoleChange(deps *RoleDeps, add bool) http.HandlerFunc {
 		changes, err := discordroles.SetUserRole(deps.session(), roleSubMap, human.ID, roleID, add)
 		if err != nil {
 			log.Errorf("Roles API: set role: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "failed to set role")
+			trackingJSONError(c, http.StatusInternalServerError, "failed to set role")
 			return
 		}
 
-		trackingJSONOK(w, map[string]any{"result": changes})
+		trackingJSONOK(c, map[string]any{"result": changes})
 	}
 }
 
@@ -151,22 +150,22 @@ type telegramAdminRoles struct {
 
 // HandleGetAdministrationRoles returns the GET /api/humans/{id}/getAdministrationRoles handler.
 // Checks delegated administration config to determine what the user can manage.
-func HandleGetAdministrationRoles(deps *RoleDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleGetAdministrationRoles(deps *RoleDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 		if id == "" {
-			trackingJSONError(w, http.StatusBadRequest, "missing id parameter")
+			trackingJSONError(c, http.StatusBadRequest, "missing id parameter")
 			return
 		}
 
 		human, err := db.SelectOneHuman(deps.DB, id)
 		if err != nil {
 			log.Errorf("Roles API: get human for admin roles: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
@@ -341,7 +340,7 @@ func HandleGetAdministrationRoles(deps *RoleDeps) http.HandlerFunc {
 			result.Telegram = telegram
 		}
 
-		trackingJSONOK(w, map[string]any{"admin": result})
+		trackingJSONOK(c, map[string]any{"admin": result})
 	}
 }
 

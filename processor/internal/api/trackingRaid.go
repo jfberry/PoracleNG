@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
@@ -14,22 +15,22 @@ import (
 )
 
 // HandleGetRaid returns the GET /api/tracking/raid/{id} handler.
-func HandleGetRaid(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleGetRaid(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		raids, err := db.SelectRaidsByIDProfile(deps.DB, human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: get raids: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -48,30 +49,30 @@ func HandleGetRaid(deps *TrackingDeps) http.HandlerFunc {
 			}
 		}
 
-		trackingJSONOK(w, map[string]any{"raid": result})
+		trackingJSONOK(c, map[string]any{"raid": result})
 	}
 }
 
 // HandleDeleteRaid returns the DELETE /api/tracking/raid/{id}/byUid/{uid} handler.
-func HandleDeleteRaid(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		uidStr := r.PathValue("uid")
+func HandleDeleteRaid(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		uidStr := c.Param("uid")
 		uid, err := strconv.ParseInt(uidStr, 10, 64)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid uid")
+			trackingJSONError(c, http.StatusBadRequest, "invalid uid")
 			return
 		}
 
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil || human == nil {
 			if err := db.DeleteByUID(deps.DB, "raid", id, uid); err != nil {
 				log.Errorf("Tracking API: delete raid: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			reloadState(deps)
-			trackingJSONOK(w, nil)
+			trackingJSONOK(c, nil)
 			return
 		}
 
@@ -79,7 +80,7 @@ func HandleDeleteRaid(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUID(deps.DB, "raid", id, uid); err != nil {
 			log.Errorf("Tracking API: delete raid: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -87,7 +88,7 @@ func HandleDeleteRaid(deps *TrackingDeps) http.HandlerFunc {
 
 		tr := translatorFor(deps, human)
 		language := resolveLanguage(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 		var message string
 		for _, e := range existing {
 			if e.UID == uid {
@@ -98,7 +99,7 @@ func HandleDeleteRaid(deps *TrackingDeps) http.HandlerFunc {
 		if !silent && message != "" {
 			sendConfirmation(deps, human, message, language)
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -126,38 +127,38 @@ type pokemonFormPair struct {
 }
 
 // HandleCreateRaid returns the POST /api/tracking/raid/{id} handler.
-func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		language := resolveLanguage(deps, human)
 		tr := translatorFor(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var insertReqs []raidInsertRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &insertReqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single raidInsertRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			insertReqs = []raidInsertRequest{single}
@@ -247,7 +248,7 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 				if pokemonID == 9000 {
 					level = lvl
 					if level < 1 {
-						trackingJSONError(w, http.StatusBadRequest, "Invalid level (must be specified if no pokemon_id)")
+						trackingJSONError(c, http.StatusBadRequest, "Invalid level (must be specified if no pokemon_id)")
 						return
 					}
 				}
@@ -275,7 +276,7 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 		tracked, err := deps.Tracking.Raids.SelectByIDProfile(human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: select existing raids: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -318,7 +319,7 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 			}
 			if err := deps.Tracking.Raids.DeleteByUIDs(human.ID, uids); err != nil {
 				log.Errorf("Tracking API: delete updated raids: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 		}
@@ -328,7 +329,7 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 			uid, err := deps.Tracking.Raids.Insert(&diff.Inserts[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert raid: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -337,7 +338,7 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 			uid, err := deps.Tracking.Raids.Insert(&diff.Updates[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert raid: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -354,7 +355,7 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 			responseMsg = ""
 		}
 
-		trackingJSONOK(w, map[string]any{
+		trackingJSONOK(c, map[string]any{
 			"message":        responseMsg,
 			"newUids":        newUIDs,
 			"alreadyPresent": len(diff.AlreadyPresent),
@@ -365,32 +366,32 @@ func HandleCreateRaid(deps *TrackingDeps) http.HandlerFunc {
 }
 
 // HandleBulkDeleteRaid returns the POST /api/tracking/raid/{id}/delete handler.
-func HandleBulkDeleteRaid(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleBulkDeleteRaid(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var uids []int64
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &uids); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single int64
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			uids = []int64{single}
 		}
 
-		human, profileNo, err := lookupHuman(deps, r)
+		human, profileNo, err := lookupHuman(deps, c)
 		var existing []db.RaidTrackingAPI
 		if err == nil && human != nil {
 			existing, _ = db.SelectRaidsByIDProfile(deps.DB, human.ID, profileNo)
@@ -398,7 +399,7 @@ func HandleBulkDeleteRaid(deps *TrackingDeps) http.HandlerFunc {
 
 		if err := db.DeleteByUIDs(deps.DB, "raid", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete raids: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -408,7 +409,7 @@ func HandleBulkDeleteRaid(deps *TrackingDeps) http.HandlerFunc {
 		if human != nil && len(existing) > 0 {
 			tr := translatorFor(deps, human)
 			language := resolveLanguage(deps, human)
-			silent := isSilent(r)
+			silent := isSilent(c)
 			uidSet := make(map[int64]bool, len(uids))
 			for _, u := range uids {
 				uidSet[u] = true
@@ -426,7 +427,7 @@ func HandleBulkDeleteRaid(deps *TrackingDeps) http.HandlerFunc {
 				sendConfirmation(deps, human, message, language)
 			}
 		}
-		trackingJSONOK(w, map[string]any{"message": message})
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
