@@ -535,11 +535,16 @@ func main() {
 				metrics.RenderQueueDepth.Set(float64(depth))
 			}
 			if proc.dispatcher != nil {
-				statusParts = append(statusParts, fmt.Sprintf("Delivery: Discord:%d+%d Telegram:%d Tracked:%d",
+				rlWaiting := proc.dispatcher.RateLimitWaiting()
+				deliveryStatus := fmt.Sprintf("Delivery: Discord:%d+%d Telegram:%d Tracked:%d",
 					proc.dispatcher.DiscordDepth(),
 					proc.dispatcher.WebhookDepth(),
 					proc.dispatcher.TelegramDepth(),
-					proc.dispatcher.TrackerSize()))
+					proc.dispatcher.TrackerSize())
+				if rlWaiting > 0 {
+					deliveryStatus += fmt.Sprintf(" RateLimited:%d", rlWaiting)
+				}
+				statusParts = append(statusParts, deliveryStatus)
 				metrics.DeliveryQueueDepth.Set(float64(proc.dispatcher.QueueDepth()))
 				metrics.DeliveryDiscordQueueDepth.Set(float64(proc.dispatcher.DiscordDepth()))
 				metrics.DeliveryWebhookQueueDepth.Set(float64(proc.dispatcher.WebhookDepth()))
