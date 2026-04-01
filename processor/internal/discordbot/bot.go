@@ -92,19 +92,28 @@ func (b *Bot) logGuildPresence() {
 	allChannels := make(map[string]string)   // id → name
 
 	for _, g := range b.session.State.Guilds {
-		presentGuilds[g.ID] = g.Name
+		// State guilds may have empty names at startup — fetch via REST
+		guildName := g.Name
+		if guildName == "" {
+			if full, err := b.session.Guild(g.ID); err == nil {
+				guildName = full.Name
+			} else {
+				guildName = g.ID
+			}
+		}
+		presentGuilds[g.ID] = guildName
 
 		// Fetch roles for this guild
 		if roles, err := b.session.GuildRoles(g.ID); err == nil {
 			for _, r := range roles {
-				allRoles[r.ID] = r.Name + " (guild:" + g.Name + ")"
+				allRoles[r.ID] = r.Name + " (guild:" + guildName + ")"
 			}
 		}
 
 		// Fetch channels for this guild
 		if channels, err := b.session.GuildChannels(g.ID); err == nil {
 			for _, ch := range channels {
-				allChannels[ch.ID] = "#" + ch.Name + " (guild:" + g.Name + ")"
+				allChannels[ch.ID] = "#" + ch.Name + " (guild:" + guildName + ")"
 			}
 		}
 	}
