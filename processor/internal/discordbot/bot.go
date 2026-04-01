@@ -228,6 +228,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			TargetID:     m.Author.ID,
 			TargetName:   m.Author.Username,
 			TargetType:   targetType,
+			AreaLogic:    bot.NewAreaLogic(fences, b.Cfg),
 			DB:           b.DB,
 			Config:       b.Cfg,
 			StateMgr:     b.StateMgr,

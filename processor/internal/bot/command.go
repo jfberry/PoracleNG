@@ -88,6 +88,9 @@ type CommandContext struct {
 	TargetName string
 	TargetType string // "discord:user", "discord:channel", "webhook", "telegram:user", etc.
 
+	// Pure-logic helpers (no DB access)
+	AreaLogic *AreaLogic
+
 	// Injected dependencies
 	DB           *sqlx.DB
 	Config       *config.Config

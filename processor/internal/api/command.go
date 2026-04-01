@@ -142,6 +142,7 @@ func HandleCommand(deps *CommandDeps) http.HandlerFunc {
 				TargetID:     req.UserID,
 				TargetName:   req.UserName,
 				TargetType:   req.Platform + ":user",
+				AreaLogic:    bot.NewAreaLogic(fences, deps.Config),
 				DB:           deps.DB,
 				Config:       deps.Config,
 				StateMgr:     deps.StateMgr,

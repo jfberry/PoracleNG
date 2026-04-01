@@ -24,7 +24,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if len(args) > 0 && args[0] == "area" {
 		currentAreas := getUserAreas(ctx)
 		if len(currentAreas) > 0 {
-			displayNames := resolveAreaDisplayNames(ctx, currentAreas)
+			displayNames := ctx.AreaLogic.ResolveDisplayNames(currentAreas)
 			return []bot.Reply{{Text: tr.Tf("status.areas_set", strings.Join(displayNames, ", "))}}
 		}
 		return []bot.Reply{{Text: tr.T("status.no_areas")}}
