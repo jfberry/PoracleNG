@@ -17,15 +17,15 @@ var userRe = regexp.MustCompile(`(?i)^user[:<]?(\S+?)>?$`)
 
 func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
 	isDM := m.GuildID == ""
-	isAdmin := bot.IsAdmin(b.cfg, "discord", m.Author.ID)
+	isAdmin := bot.IsAdmin(b.Cfg, "discord", m.Author.ID)
 
 	if !isAdmin && !isDM {
 		s.ChannelMessageSend(m.ChannelID,
-			b.translations.For(b.cfg.General.Locale).T("cmd.dm_only"))
+			b.Translations.For(b.Cfg.General.Locale).T("cmd.dm_only"))
 		return
 	}
 
-	if len(b.cfg.Discord.RoleSubscriptions) == 0 {
+	if len(b.Cfg.Discord.RoleSubscriptions) == 0 {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "🙅")
 		return
 	}
@@ -42,15 +42,15 @@ func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args 
 
 	// Check user is registered and not admin-disabled
 	var adminDisable int
-	err := b.db.Get(&adminDisable, `SELECT admin_disable FROM humans WHERE id = ? LIMIT 1`, targetID)
+	err := b.DB.Get(&adminDisable, `SELECT admin_disable FROM humans WHERE id = ? LIMIT 1`, targetID)
 	if err != nil || adminDisable != 0 {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "🙅")
 		return
 	}
 
 	// Get user language
-	userLang, _, _, _, _ := bot.LookupUserState(b.db, targetID, b.cfg.General.Locale)
-	tr := b.translations.For(userLang)
+	userLang, _, _, _, _ := bot.LookupUserState(b.DB, targetID, b.Cfg.General.Locale)
+	tr := b.Translations.For(userLang)
 
 	// Filter out user override args for subcommand detection
 	var filteredArgs []string
@@ -66,7 +66,7 @@ func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args 
 		subcommand = filteredArgs[0]
 	}
 
-	roleSubMap := b.cfg.Discord.RoleSubscriptionMap()
+	roleSubMap := b.Cfg.Discord.RoleSubscriptionMap()
 
 	switch subcommand {
 	case "", "list":
@@ -78,7 +78,7 @@ func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args 
 	case "remove":
 		b.handleRoleToggle(s, m, targetID, filteredArgs[1:], roleSubMap, tr, false)
 	default:
-		prefix := b.cfg.Discord.Prefix
+		prefix := b.Cfg.Discord.Prefix
 		if prefix == "" {
 			prefix = "!"
 		}

@@ -17,11 +17,13 @@ type ArgMatcher struct {
 	resolver *PokemonResolver
 
 	// Pre-built lookup tables (built once at construction)
-	teamMap     map[string]map[string]int // lang → name → team ID
-	genderMap   map[string]map[string]int // lang → name → gender ID
-	lureMap     map[string]map[string]int // lang → name → lure ID
-	typeMap     map[string]map[string]int // lang → name → type ID
-	raidLevelMap map[string]map[string][]int // lang → name → level IDs
+	teamMap      map[string]map[string]int    // lang → name → team ID
+	genderMap    map[string]map[string]int    // lang → name → gender ID
+	lureMap      map[string]map[string]int    // lang → name → lure ID
+	typeMap      map[string]map[string]int    // lang → name → type ID
+	raidLevelMap map[string]map[string][]int  // lang → name → level IDs
+	prefixMap    map[string][]string          // (lang + "\x00" + key) → prefix strings
+	keywordMap   map[string]map[string]string // lang → lowercase_translated → original key
 }
 
 // NewArgMatcher builds the pre-computed lookup tables for argument matching.
@@ -35,6 +37,8 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 		lureMap:      make(map[string]map[string]int),
 		typeMap:      make(map[string]map[string]int),
 		raidLevelMap: make(map[string]map[string][]int),
+		prefixMap:    make(map[string][]string),
+		keywordMap:   make(map[string]map[string]string),
 	}
 
 	for _, lang := range languages {
@@ -115,9 +119,58 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 			}
 		}
 		am.raidLevelMap[lang] = levels
+
+		// Pre-compute keyword translations for this language.
+		kw := make(map[string]string)
+		for _, key := range knownKeywordKeys {
+			val := strings.ToLower(tr.T(key))
+			if val != key && val != "" {
+				kw[val] = key
+			}
+		}
+		am.keywordMap[lang] = kw
+	}
+
+	// Pre-compute prefix translations for all (lang, key) pairs.
+	for _, lang := range languages {
+		for _, key := range knownPrefixKeys {
+			cacheKey := lang + "\x00" + key
+			am.prefixMap[cacheKey] = am.resolvePrefix(key, lang)
+		}
 	}
 
 	return am
+}
+
+// knownPrefixKeys lists all arg.prefix.* keys used by any command.
+var knownPrefixKeys = []string{
+	"arg.prefix.iv", "arg.prefix.miniv", "arg.prefix.maxiv",
+	"arg.prefix.cp", "arg.prefix.mincp", "arg.prefix.maxcp",
+	"arg.prefix.level", "arg.prefix.maxlevel",
+	"arg.prefix.atk", "arg.prefix.maxatk",
+	"arg.prefix.def", "arg.prefix.maxdef",
+	"arg.prefix.sta", "arg.prefix.maxsta",
+	"arg.prefix.weight", "arg.prefix.maxweight",
+	"arg.prefix.rarity", "arg.prefix.maxrarity",
+	"arg.prefix.size", "arg.prefix.maxsize",
+	"arg.prefix.d", "arg.prefix.t", "arg.prefix.gen", "arg.prefix.cap",
+	"arg.prefix.form", "arg.prefix.template", "arg.prefix.move", "arg.prefix.language",
+	"arg.prefix.stardust", "arg.prefix.energy", "arg.prefix.candy",
+	"arg.prefix.minspawn",
+	"arg.prefix.great", "arg.prefix.greathigh", "arg.prefix.greatcp",
+	"arg.prefix.ultra", "arg.prefix.ultrahigh", "arg.prefix.ultracp",
+	"arg.prefix.little", "arg.prefix.littlehigh", "arg.prefix.littlecp",
+}
+
+// knownKeywordKeys lists all arg.* keyword keys used by any command.
+var knownKeywordKeys = []string{
+	"arg.remove", "arg.everything", "arg.individually",
+	"arg.clean", "arg.shiny", "arg.ex",
+	"arg.rsvp", "arg.no_rsvp", "arg.rsvp_only",
+	"arg.gmax",
+	"arg.pokestop", "arg.gym", "arg.location", "arg.new", "arg.removal", "arg.photo", "arg.include_empty",
+	"arg.stardust", "arg.energy", "arg.candy",
+	"arg.slot_changes", "arg.battle_changes",
 }
 
 // Match walks through tokens and tries each declared ParamDef in priority order.
@@ -244,10 +297,18 @@ func stripPrefix(tok, prefix string) (string, bool) {
 	return "", false
 }
 
+// cachedPrefix returns pre-computed prefixes if available, falling back to resolvePrefix.
+func (am *ArgMatcher) cachedPrefix(key, lang string) []string {
+	if prefixes, ok := am.prefixMap[lang+"\x00"+key]; ok {
+		return prefixes
+	}
+	return am.resolvePrefix(key, lang)
+}
+
 // tryPrefixRange matches patterns like "iv100", "iv:100", "iv50-100", "iv:50-100".
 // The prefix is translated (e.g. German "wp" for "cp").
 func (am *ArgMatcher) tryPrefixRange(tok, key, lang string, result *ParsedArgs) bool {
-	prefixes := am.resolvePrefix(key, lang)
+	prefixes := am.cachedPrefix(key, lang)
 	for _, p := range prefixes {
 		val, ok := stripPrefix(tok, p)
 		if !ok {
@@ -276,7 +337,7 @@ func (am *ArgMatcher) tryPrefixRange(tok, key, lang string, result *ParsedArgs) 
 
 // tryPrefixSingle matches patterns like "d500", "d:500", "t60", "gen3".
 func (am *ArgMatcher) tryPrefixSingle(tok, key, lang string, result *ParsedArgs) bool {
-	prefixes := am.resolvePrefix(key, lang)
+	prefixes := am.cachedPrefix(key, lang)
 	for _, p := range prefixes {
 		val, ok := stripPrefix(tok, p)
 		if !ok {
@@ -300,7 +361,7 @@ func (am *ArgMatcher) tryPrefixSingle(tok, key, lang string, result *ParsedArgs)
 
 // tryPrefixString matches patterns like "form:alola", "template:2", "move:hydro pump".
 func (am *ArgMatcher) tryPrefixString(tok, key, lang string, result *ParsedArgs) bool {
-	prefix := am.resolvePrefix(key, lang)
+	prefix := am.cachedPrefix(key, lang)
 	for _, p := range prefix {
 		// PrefixString uses ":" separator
 		fullPrefix := p + ":"
@@ -320,20 +381,17 @@ func (am *ArgMatcher) tryPrefixString(tok, key, lang string, result *ParsedArgs)
 
 // tryKeyword matches exact keywords like "remove", "everything", "clean".
 func (am *ArgMatcher) tryKeyword(tok, key, lang string, result *ParsedArgs) bool {
-	tr := am.bundle.For(lang)
-	if tr != nil {
-		translated := strings.ToLower(tr.T(key))
-		if translated != key && tok == translated {
+	// Check pre-computed keyword map for user's language.
+	if kw, ok := am.keywordMap[lang]; ok {
+		if matchedKey, found := kw[tok]; found && matchedKey == key {
 			result.Keywords[key] = true
 			return true
 		}
 	}
-	// English fallback
+	// English fallback.
 	if lang != "en" {
-		enTr := am.bundle.For("en")
-		if enTr != nil {
-			enVal := strings.ToLower(enTr.T(key))
-			if enVal != key && tok == enVal {
+		if kw, ok := am.keywordMap["en"]; ok {
+			if matchedKey, found := kw[tok]; found && matchedKey == key {
 				result.Keywords[key] = true
 				return true
 			}
@@ -419,7 +477,7 @@ func (am *ArgMatcher) tryPVPLeague(tok, key, lang string, result *ParsedArgs) bo
 	// key is one of: arg.prefix.great, arg.prefix.greathigh, arg.prefix.greatcp,
 	//                arg.prefix.ultra, arg.prefix.ultrahigh, arg.prefix.ultracp,
 	//                arg.prefix.little, arg.prefix.littlehigh, arg.prefix.littlecp
-	prefixes := am.resolvePrefix(key, lang)
+	prefixes := am.cachedPrefix(key, lang)
 	for _, p := range prefixes {
 		val, ok := stripPrefix(tok, p)
 		if !ok {

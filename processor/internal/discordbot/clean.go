@@ -10,7 +10,7 @@ import (
 )
 
 func (b *Bot) handleClean(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if !bot.IsAdmin(b.cfg, "discord", m.Author.ID) {
+	if !bot.IsAdmin(b.Cfg, "discord", m.Author.ID) {
 		return
 	}
 

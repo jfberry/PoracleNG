@@ -7,6 +7,7 @@ package bot
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 
@@ -163,4 +164,31 @@ type Reply struct {
 type Attachment struct {
 	Filename string `json:"filename"`
 	Content  []byte `json:"content"`
+}
+
+// Platform type constants used across bot commands and tracking.
+const (
+	TypeDiscordUser    = "discord:user"
+	TypeDiscordChannel = "discord:channel"
+	TypeTelegramUser   = "telegram:user"
+	TypeTelegramGroup  = "telegram:group"
+	TypeWebhook        = "webhook"
+)
+
+// WildcardID is the sentinel value meaning "any" for pokemon_id, move, evolution, etc.
+const WildcardID = 9000
+
+// IsCommandDisabled checks if a command key (e.g. "cmd.track") matches any entry
+// in the disabled_commands list (which uses short names like "track", "raid").
+func IsCommandDisabled(disabled []string, cmdKey string) bool {
+	if len(disabled) == 0 {
+		return false
+	}
+	name := strings.TrimPrefix(cmdKey, "cmd.")
+	for _, d := range disabled {
+		if d == name {
+			return true
+		}
+	}
+	return false
 }

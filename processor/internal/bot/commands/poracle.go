@@ -120,9 +120,9 @@ func (c *PoracleCommand) handleExistingUser(ctx *bot.CommandContext, human *db.H
 
 func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd string) []bot.Reply {
 	// Determine user type
-	userType := "discord:user"
+	userType := bot.TypeDiscordUser
 	if ctx.Platform == "telegram" {
-		userType = "telegram:user"
+		userType = bot.TypeTelegramUser
 	}
 
 	// Build community membership
@@ -180,7 +180,7 @@ func (c *PoracleCommand) renderGreeting(ctx *bot.CommandContext) *bot.Reply {
 
 	prefix := commandPrefix(ctx)
 	platform := ctx.Platform
-	if platform == "webhook" {
+	if platform == bot.TypeWebhook {
 		platform = "discord"
 	}
 

@@ -68,19 +68,9 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	}
 
 	// Move filter — match by translated name
-	move := 9000
+	move := bot.WildcardID
 	if moveName, ok := parsed.Strings["move"]; ok {
-		if ctx.GameData != nil {
-			tr := ctx.Tr()
-			enTr := ctx.Translations.For("en")
-			for id := range ctx.GameData.Moves {
-				key := gamedata.MoveTranslationKey(id)
-				if strings.EqualFold(tr.T(key), moveName) || strings.EqualFold(enTr.T(key), moveName) {
-					move = id
-					break
-				}
-			}
-		}
+		move = resolveMoveByName(ctx, moveName)
 	}
 
 	// Handle remove
@@ -106,7 +96,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 				Level:     90, // 90 = all levels for specific pokemon
 				Move:      move,
 				Gmax:      gmax,
-				Evolution: 9000,
+				Evolution: bot.WildcardID,
 				StationID: nil,
 			})
 		}
@@ -140,11 +130,11 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 				Template:  template,
 				Distance:  distance,
 				Clean:     db.IntBool(clean),
-				PokemonID: 9000, // 9000 = by level
+				PokemonID: bot.WildcardID, // 9000 = by level
 				Level:     lvl,
 				Move:      move,
 				Gmax:      gmax,
-				Evolution: 9000,
+				Evolution: bot.WildcardID,
 				StationID: nil,
 			})
 		}

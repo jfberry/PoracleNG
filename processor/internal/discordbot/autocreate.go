@@ -113,7 +113,7 @@ var rolePermissionFlags = map[string]int64{
 // handleAutocreate handles the !autocreate command.
 // Loads a channel template, creates Discord categories and channels, and registers them.
 func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
-	if !bot.IsAdmin(b.cfg, "discord", m.Author.ID) {
+	if !bot.IsAdmin(b.Cfg, "discord", m.Author.ID) {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "🙅")
 		return
 	}
@@ -137,7 +137,7 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 
 	// Load channel template.
-	templatePath := filepath.Join(b.cfg.BaseDir, "config", "channelTemplate.json")
+	templatePath := filepath.Join(b.Cfg.BaseDir, "config", "channelTemplate.json")
 	data, err := os.ReadFile(templatePath)
 	if err != nil {
 		s.ChannelMessageSend(m.ChannelID, "No channel templates defined - create config/channelTemplate.json")
@@ -246,7 +246,7 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 
 		if chDef.ControlType == "bot" {
 			targetID = channel.ID
-			targetType = "discord:channel"
+			targetType = bot.TypeDiscordChannel
 			targetName = formatTemplate(chDef.ChannelName, subArgsUnder)
 		} else {
 			// Create webhook.
@@ -262,7 +262,7 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 			}
 
 			targetID = fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)
-			targetType = "webhook"
+			targetType = bot.TypeWebhook
 			targetName = webhookName
 		}
 
@@ -275,20 +275,20 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 			Area:                "[]",
 			CommunityMembership: "[]",
 		}
-		if err := db.CreateHuman(b.db, h); err != nil {
+		if err := db.CreateHuman(b.DB, h); err != nil {
 			log.Errorf("discord bot: autocreate register %s: %v", targetName, err)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to register %s", targetName))
 			continue
 		}
 
 		// Create default profile.
-		if err := db.CreateDefaultProfile(b.db, targetID, targetName, "[]", 0, 0); err != nil {
+		if err := db.CreateDefaultProfile(b.DB, targetID, targetName, "[]", 0, 0); err != nil {
 			log.Warnf("discord bot: autocreate default profile %s: %v", targetName, err)
 		}
 
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Executing as %s / %s %s",
 			targetType, targetName, func() string {
-				if targetType != "webhook" {
+				if targetType != bot.TypeWebhook {
 					return targetID
 				}
 				return ""
@@ -300,9 +300,9 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">>> Executing %s", expanded))
 
 			// Parse and execute the command through the shared registry.
-			parsed := b.parser.Parse(b.cfg.Discord.Prefix + expanded)
+			parsed := b.Parser.Parse(b.Cfg.Discord.Prefix + expanded)
 			for _, pc := range parsed {
-				handler := b.registry.Lookup(pc.CommandKey)
+				handler := b.Registry.Lookup(pc.CommandKey)
 				if handler == nil {
 					s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Unknown command: %s", pc.CommandKey))
 					continue
@@ -316,32 +316,32 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 					GuildID:      guildID,
 					IsDM:         false,
 					IsAdmin:      true,
-					Language:     b.cfg.General.Locale,
+					Language:     b.Cfg.General.Locale,
 					ProfileNo:    1,
 					TargetID:     targetID,
 					TargetName:   targetName,
 					TargetType:   targetType,
-					DB:           b.db,
-					Config:       b.cfg,
-					StateMgr:     b.stateMgr,
-					GameData:     b.gameData,
-					Translations: b.translations,
-					Dispatcher:   b.dispatcher,
-					RowText:      b.rowText,
-					Resolver:     b.resolver,
-					ArgMatcher:   b.argMatcher,
-					Geocoder:     b.geocoder,
-					StaticMap:    b.staticMap,
-					Weather:      b.weather,
-					Stats:        b.stats,
-					DTS:          b.dts,
-					Emoji:        b.emoji,
+					DB:           b.DB,
+					Config:       b.Cfg,
+					StateMgr:     b.StateMgr,
+					GameData:     b.GameData,
+					Translations: b.Translations,
+					Dispatcher:   b.Dispatcher,
+					RowText:      b.RowText,
+					Resolver:     b.Resolver,
+					ArgMatcher:   b.ArgMatcher,
+					Geocoder:     b.Geocoder,
+					StaticMap:    b.StaticMap,
+					Weather:      b.Weather,
+					Stats:        b.Stats,
+					DTS:          b.DTS,
+					Emoji:        b.Emoji,
 					NLP:          b.nlpParser,
-					Registry:     b.registry,
-					ReloadFunc:   b.reloadFunc,
+					Registry:     b.Registry,
+					ReloadFunc:   b.ReloadFunc,
 				}
 
-				st := b.stateMgr.Get()
+				st := b.StateMgr.Get()
 				if st != nil {
 					ctx.Geofence = st.Geofence
 					ctx.Fences = st.Fences
@@ -354,8 +354,8 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 
 	// Trigger reload after all creations.
-	if b.reloadFunc != nil {
-		b.reloadFunc()
+	if b.ReloadFunc != nil {
+		b.ReloadFunc()
 	}
 
 	s.ChannelMessageSend(m.ChannelID, "Autocreate complete!")

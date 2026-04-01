@@ -122,7 +122,10 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		for i, u := range updates {
 			uids[i] = u.UID
 		}
-		db.DeleteByUIDs(ctx.DB, "lures", ctx.TargetID, uids)
+		if err := db.DeleteByUIDs(ctx.DB, "lures", ctx.TargetID, uids); err != nil {
+			log.Errorf("lure command: delete updated: %s", err)
+			return []bot.Reply{{React: "🙅"}}
+		}
 	}
 	toInsert := append(insert, updates...)
 	for i := range toInsert {
@@ -158,7 +161,10 @@ func removeLures(ctx *bot.CommandContext, lureIDs []int) []bot.Reply {
 	if len(uids) == 0 {
 		return []bot.Reply{{React: "👌"}}
 	}
-	db.DeleteByUIDs(ctx.DB, "lures", ctx.TargetID, uids)
+	if err := db.DeleteByUIDs(ctx.DB, "lures", ctx.TargetID, uids); err != nil {
+		log.Errorf("lure command: delete: %s", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
 	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}

@@ -10,47 +10,19 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
-	"github.com/pokemon/poracleng/processor/internal/config"
-	"github.com/pokemon/poracleng/processor/internal/delivery"
-	"github.com/pokemon/poracleng/processor/internal/dts"
-	"github.com/pokemon/poracleng/processor/internal/gamedata"
-	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
-	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
-	"github.com/pokemon/poracleng/processor/internal/rowtext"
-	"github.com/pokemon/poracleng/processor/internal/state"
-	"github.com/pokemon/poracleng/processor/internal/staticmap"
-	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
 // Bot is the Telegram bot polling handler.
 type Bot struct {
-	api        *tgbotapi.BotAPI
-	parser     *bot.Parser
-	registry   *bot.Registry
-	argMatcher *bot.ArgMatcher
-	resolver   *bot.PokemonResolver
-	db         *sqlx.DB
-	cfg        *config.Config
-	stateMgr   *state.Manager
-	gameData   *gamedata.GameData
-	translations *i18n.Bundle
-	dispatcher *delivery.Dispatcher
-	rowText    *rowtext.Generator
-	geocoder   *geocoding.Geocoder
-	staticMap  *staticmap.Resolver
-	weather    *tracker.WeatherTracker
-	stats      *tracker.StatsTracker
-	dts        *dts.TemplateStore
-	emoji      *dts.EmojiLookup
+	bot.BotDeps
+	api            *tgbotapi.BotAPI
 	nlpParser      *nlp.Parser
-	reloadFunc     func()
 	reconciliation *TelegramReconciliation
 	stopCh         chan struct{}
 }
@@ -69,27 +41,10 @@ func New(cfg Config) (*Bot, error) {
 	}
 
 	b := &Bot{
-		api:          api,
-		parser:       cfg.Parser,
-		registry:     cfg.Registry,
-		argMatcher:   cfg.ArgMatcher,
-		resolver:     cfg.Resolver,
-		db:           cfg.DB,
-		cfg:          cfg.Cfg,
-		stateMgr:     cfg.StateMgr,
-		gameData:     cfg.GameData,
-		translations: cfg.Translations,
-		dispatcher:   cfg.Dispatcher,
-		rowText:      cfg.RowText,
-		geocoder:     cfg.Geocoder,
-		staticMap:    cfg.StaticMap,
-		weather:      cfg.Weather,
-		stats:        cfg.Stats,
-		dts:          cfg.DTS,
-		emoji:        cfg.Emoji,
-		nlpParser:    cfg.NLPParser,
-		reloadFunc:   cfg.ReloadFunc,
-		stopCh:       make(chan struct{}),
+		BotDeps:   cfg.BotDeps,
+		api:       api,
+		nlpParser: cfg.NLPParser,
+		stopCh:    make(chan struct{}),
 	}
 
 	log.Infof("Telegram bot connected as @%s", api.Self.UserName)
@@ -171,11 +126,11 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 		}
 	}
 
-	parsed := b.parser.Parse(text)
+	parsed := b.Parser.Parse(text)
 	if len(parsed) == 0 {
 		// No prefix match — try NLP suggestion for DMs
 		isDM := m.Chat.Type == "private"
-		if isDM && b.nlpParser != nil && b.cfg.AI.SuggestOnDM {
+		if isDM && b.nlpParser != nil && b.Cfg.AI.SuggestOnDM {
 			result := b.nlpParser.Parse(text)
 			suggestion := commands.FormatNLPSuggestion(result, "/")
 			if suggestion != "" {
@@ -190,17 +145,17 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 	isDM := m.Chat.Type == "private"
 	chatID := m.Chat.ID
 
-	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserState(b.db, userID, b.cfg.General.Locale)
-	isAdmin := bot.IsAdmin(b.cfg, "telegram", userID)
+	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserState(b.DB, userID, b.Cfg.General.Locale)
+	isAdmin := bot.IsAdmin(b.Cfg, "telegram", userID)
 
-	targetType := "telegram:user"
+	targetType := bot.TypeTelegramUser
 	if !isDM {
-		targetType = "telegram:group"
+		targetType = bot.TypeTelegramGroup
 	}
 
 	var spatialIndex *geofence.SpatialIndex
 	var fences []geofence.Fence
-	st := b.stateMgr.Get()
+	st := b.StateMgr.Get()
 	if st != nil {
 		spatialIndex = st.Geofence
 		fences = st.Fences
@@ -211,7 +166,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 
 	for _, cmd := range parsed {
 		// Check disabled commands
-		if isCommandDisabled(b.cfg.General.DisabledCommands, cmd.CommandKey) {
+		if bot.IsCommandDisabled(b.Cfg.General.DisabledCommands, cmd.CommandKey) {
 			continue
 		}
 
@@ -222,7 +177,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 
 		if cmd.CommandKey == "" {
 			// Try NLP suggestion for unrecognised DM commands
-			if isDM && b.nlpParser != nil && b.cfg.AI.SuggestOnDM {
+			if isDM && b.nlpParser != nil && b.Cfg.AI.SuggestOnDM {
 				result := b.nlpParser.Parse(text)
 				suggestion := commands.FormatNLPSuggestion(result, "/")
 				if suggestion != "" {
@@ -234,14 +189,14 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			continue // don't spam about unknown commands in Telegram groups
 		}
 
-		handler := b.registry.Lookup(cmd.CommandKey)
+		handler := b.Registry.Lookup(cmd.CommandKey)
 		if handler == nil {
 			continue
 		}
 
 		// Registration check — skip for poracle (registration), poracle_test, and version commands
 		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
-			tr := b.translations.For(userLang)
+			tr := b.Translations.For(userLang)
 			replyMsg := tgbotapi.NewMessage(chatID, tr.T("cmd.not_registered"))
 			b.api.Send(replyMsg)
 			continue
@@ -261,30 +216,30 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			TargetID:     userID,
 			TargetName:   m.From.FirstName,
 			TargetType:   targetType,
-			DB:           b.db,
-			Config:       b.cfg,
-			StateMgr:     b.stateMgr,
-			GameData:     b.gameData,
-			Translations: b.translations,
+			DB:           b.DB,
+			Config:       b.Cfg,
+			StateMgr:     b.StateMgr,
+			GameData:     b.GameData,
+			Translations: b.Translations,
 			Geofence:     spatialIndex,
 			Fences:       fences,
-			Dispatcher:   b.dispatcher,
-			RowText:      b.rowText,
-			Resolver:     b.resolver,
-			ArgMatcher:   b.argMatcher,
-			Geocoder:     b.geocoder,
-			StaticMap:    b.staticMap,
-			Weather:      b.weather,
-			Stats:        b.stats,
-			DTS:          b.dts,
-			Emoji:        b.emoji,
+			Dispatcher:   b.Dispatcher,
+			RowText:      b.RowText,
+			Resolver:     b.Resolver,
+			ArgMatcher:   b.ArgMatcher,
+			Geocoder:     b.Geocoder,
+			StaticMap:    b.StaticMap,
+			Weather:      b.Weather,
+			Stats:        b.Stats,
+			DTS:          b.DTS,
+			Emoji:        b.Emoji,
 			NLP:          b.nlpParser,
-			Registry:     b.registry,
-			ReloadFunc:   b.reloadFunc,
+			Registry:     b.Registry,
+			ReloadFunc:   b.ReloadFunc,
 		}
 
 		// Handle target override
-		target, remainingArgs, err := bot.BuildTarget(b.db, ctx, cmd.Args)
+		target, remainingArgs, err := bot.BuildTarget(b.DB, ctx, cmd.Args)
 		if err != nil {
 			msg := tgbotapi.NewMessage(chatID, err.Error())
 			b.api.Send(msg)
@@ -345,7 +300,7 @@ func (b *Bot) sendReplies(chatID int64, replies []bot.Reply) {
 
 // reconciliationLoop runs periodic reconciliation at the configured interval.
 func (b *Bot) reconciliationLoop() {
-	interval := time.Duration(b.cfg.Telegram.CheckRoleInterval) * time.Hour
+	interval := time.Duration(b.Cfg.Telegram.CheckRoleInterval) * time.Hour
 	if interval <= 0 {
 		interval = 6 * time.Hour
 	}
@@ -372,24 +327,9 @@ func (b *Bot) reconciliationLoop() {
 
 // runReconciliation executes a full Telegram reconciliation cycle.
 func (b *Bot) runReconciliation() {
-	rcfg := b.cfg.Reconciliation.Telegram
+	rcfg := b.Cfg.Reconciliation.Telegram
 	b.reconciliation.SyncTelegramUsers(rcfg.UpdateUserNames, rcfg.RemoveInvalidUsers)
 	b.reconciliation.UpdateTelegramChannels()
-}
-
-// isCommandDisabled checks if a command key (e.g. "cmd.track") matches any entry
-// in the disabled_commands list (which uses short names like "track", "raid").
-func isCommandDisabled(disabled []string, cmdKey string) bool {
-	if len(disabled) == 0 {
-		return false
-	}
-	cmdName := strings.TrimPrefix(cmdKey, "cmd.")
-	for _, d := range disabled {
-		if d == cmdName {
-			return true
-		}
-	}
-	return false
 }
 
 // handleTelegramCommand dispatches Telegram-specific commands that require the

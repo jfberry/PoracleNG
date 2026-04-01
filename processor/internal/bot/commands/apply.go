@@ -123,7 +123,7 @@ func (c *ApplyCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	for _, target := range targets {
 		idDisplay := ""
-		if target.Type != "webhook" {
+		if target.Type != bot.TypeWebhook {
 			idDisplay = " " + target.ID
 		}
 		allReplies = append(allReplies, bot.Reply{

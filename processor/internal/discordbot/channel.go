@@ -24,13 +24,13 @@ var (
 )
 
 func (b *Bot) handleChannel(s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
-	if !bot.IsAdmin(b.cfg, "discord", m.Author.ID) {
+	if !bot.IsAdmin(b.Cfg, "discord", m.Author.ID) {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "🙅")
 		return
 	}
 
 	isDM := m.GuildID == ""
-	tr := b.translations.For(b.cfg.General.Locale)
+	tr := b.Translations.For(b.Cfg.General.Locale)
 
 	// Parse name<value>, area<name>, language<code> from args
 	var webhookName, areaName, language string
@@ -83,7 +83,7 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 		// Webhook registration
 		targetID = webhookURL
 		targetName = webhookName
-		targetType = "webhook"
+		targetType = bot.TypeWebhook
 	} else {
 		// Channel registration — must not be DM
 		if isDM {
@@ -91,7 +91,7 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 			return
 		}
 		targetID = m.ChannelID
-		targetType = "discord:channel"
+		targetType = bot.TypeDiscordChannel
 
 		// Get channel name
 		ch, err := s.Channel(m.ChannelID)
@@ -104,7 +104,7 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 
 	// Check if already registered
-	existing, _ := db.SelectOneHumanFull(b.db, targetID)
+	existing, _ := db.SelectOneHumanFull(b.DB, targetID)
 	if existing != nil {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "👌")
 		return
@@ -128,14 +128,14 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	if language != "" {
 		h.Language.SetValid(language)
 	}
-	if err := db.CreateHuman(b.db, h); err != nil {
+	if err := db.CreateHuman(b.DB, h); err != nil {
 		log.Errorf("discord bot: create human for channel/webhook %s: %v", targetID, err)
 		s.ChannelMessageSend(m.ChannelID, "Failed to register, check logs")
 		return
 	}
 
 	// Create default profile
-	if err := db.CreateDefaultProfile(b.db, targetID, targetName, "[]", 0, 0); err != nil {
+	if err := db.CreateDefaultProfile(b.DB, targetID, targetName, "[]", 0, 0); err != nil {
 		log.Warnf("discord bot: create default profile for %s: %v", targetID, err)
 	}
 
@@ -151,8 +151,8 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	s.ChannelMessageSend(m.ChannelID, reply)
 
 	// Trigger reload so the new human is picked up
-	if b.reloadFunc != nil {
-		b.reloadFunc()
+	if b.ReloadFunc != nil {
+		b.ReloadFunc()
 	}
 }
 
@@ -160,12 +160,12 @@ func (b *Bot) handleChannelRemove(s *discordgo.Session, m *discordgo.MessageCrea
 	if webhookName != "" {
 		// Remove webhook by name
 		var webhookID string
-		err := b.db.Get(&webhookID, `SELECT id FROM humans WHERE name = ? AND type = 'webhook' LIMIT 1`, webhookName)
+		err := b.DB.Get(&webhookID, `SELECT id FROM humans WHERE name = ? AND type = 'webhook' LIMIT 1`, webhookName)
 		if err != nil || webhookID == "" {
 			s.ChannelMessageSend(m.ChannelID, "Webhook with that name does not appear to be registered")
 			return
 		}
-		if err := db.DeleteHumanAndTracking(b.db, webhookID); err != nil {
+		if err := db.DeleteHumanAndTracking(b.DB, webhookID); err != nil {
 			log.Errorf("discord bot: delete webhook %s: %v", webhookName, err)
 			s.ChannelMessageSend(m.ChannelID, "Failed to remove webhook, check logs")
 			return
@@ -179,9 +179,9 @@ func (b *Bot) handleChannelRemove(s *discordgo.Session, m *discordgo.MessageCrea
 		}
 
 		targetID := m.ChannelID
-		existing, _ := db.SelectOneHumanFull(b.db, targetID)
+		existing, _ := db.SelectOneHumanFull(b.DB, targetID)
 		if existing == nil {
-			prefix := b.cfg.Discord.Prefix
+			prefix := b.Cfg.Discord.Prefix
 			if prefix == "" {
 				prefix = "!"
 			}
@@ -190,7 +190,7 @@ func (b *Bot) handleChannelRemove(s *discordgo.Session, m *discordgo.MessageCrea
 					m.ChannelID, prefix))
 			return
 		}
-		if err := db.DeleteHumanAndTracking(b.db, targetID); err != nil {
+		if err := db.DeleteHumanAndTracking(b.DB, targetID); err != nil {
 			log.Errorf("discord bot: delete channel %s: %v", targetID, err)
 			s.ChannelMessageSend(m.ChannelID, "Failed to remove channel, check logs")
 			return
@@ -199,8 +199,8 @@ func (b *Bot) handleChannelRemove(s *discordgo.Session, m *discordgo.MessageCrea
 	}
 
 	// Trigger reload
-	if b.reloadFunc != nil {
-		b.reloadFunc()
+	if b.ReloadFunc != nil {
+		b.ReloadFunc()
 	}
 }
 

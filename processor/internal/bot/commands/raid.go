@@ -1,15 +1,12 @@
 package commands
 
 import (
-	"strings"
-
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
-	"github.com/pokemon/poracleng/processor/internal/gamedata"
 )
 
 // RaidCommand implements !raid — track raid bosses or raid levels.
@@ -82,19 +79,9 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	// Move filter — match by translated name
-	move := 9000
+	move := bot.WildcardID
 	if moveName, ok := parsed.Strings["move"]; ok {
-		if ctx.GameData != nil {
-			tr := ctx.Tr()
-			enTr := ctx.Translations.For("en")
-			for id := range ctx.GameData.Moves {
-				key := gamedata.MoveTranslationKey(id)
-				if strings.EqualFold(tr.T(key), moveName) || strings.EqualFold(enTr.T(key), moveName) {
-					move = id
-					break
-				}
-			}
-		}
+		move = resolveMoveByName(ctx, moveName)
 	}
 
 	// Handle remove
@@ -114,11 +101,11 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				Ping:        pings,
 				PokemonID:   mon.PokemonID,
 				Form:        mon.Form,
-				Level:       9000,
+				Level:       bot.WildcardID,
 				Team:        team,
 				Exclusive:   db.IntBool(exclusive),
 				Move:        move,
-				Evolution:   9000,
+				Evolution:   bot.WildcardID,
 				GymID:       null.String{},
 				Distance:    distance,
 				Template:    template,
@@ -161,12 +148,12 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				ID:          ctx.TargetID,
 				ProfileNo:   ctx.ProfileNo,
 				Ping:        pings,
-				PokemonID:   9000,
+				PokemonID:   bot.WildcardID,
 				Level:       lvl,
 				Team:        team,
 				Exclusive:   db.IntBool(exclusive),
 				Move:        move,
-				Evolution:   9000,
+				Evolution:   bot.WildcardID,
 				GymID:       null.String{},
 				Distance:    distance,
 				Template:    template,

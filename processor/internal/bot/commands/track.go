@@ -145,33 +145,11 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	// Build response
-	totalChanges := len(alreadyPresent) + len(updates) + len(insert)
-	var message string
-	if totalChanges > 20 {
-		message = tr.Tf("tracking.bulk_changes",
-			ctx.Config.Discord.Prefix, tr.T("tracking.tracked"))
-	} else {
-		var sb strings.Builder
-		for i := range alreadyPresent {
-			mt := monsterAPIToTracking(&alreadyPresent[i])
-			sb.WriteString(tr.T("tracking.unchanged"))
-			sb.WriteString(ctx.RowText.MonsterRowText(tr, mt))
-			sb.WriteByte('\n')
-		}
-		for i := range updates {
-			mt := monsterAPIToTracking(&updates[i])
-			sb.WriteString(tr.T("tracking.updated"))
-			sb.WriteString(ctx.RowText.MonsterRowText(tr, mt))
-			sb.WriteByte('\n')
-		}
-		for i := range insert {
-			mt := monsterAPIToTracking(&insert[i])
-			sb.WriteString(tr.T("tracking.new"))
-			sb.WriteString(ctx.RowText.MonsterRowText(tr, mt))
-			sb.WriteByte('\n')
-		}
-		message = sb.String()
-	}
+	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
+		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&alreadyPresent[i])) },
+		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&updates[i])) },
+		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&insert[i])) },
+	)
 
 	// Apply changes
 	if len(updates) > 0 {
