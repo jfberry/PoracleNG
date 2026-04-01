@@ -125,20 +125,31 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 		}
 	}
 
-	// Grunt name
-	grunt := e.GameData.GetGrunt(gruntTypeID)
-	if grunt != nil {
-		m["gruntName"] = tr.T(grunt.CategoryKey())
-		if typeKey := grunt.TypeKey(); typeKey != "" {
-			m["gruntTypeName"] = tr.T(typeKey)
-		} else {
-			// Untyped grunts (Metal, Darkness, Mixed) — derive name from template string
-			derived := gamedata.TypeNameFromTemplate(grunt.Template)
-			if derived != "" {
-				// Capitalize first letter for display
-				m["gruntTypeName"] = strings.ToUpper(derived[:1]) + derived[1:]
+	// Event invasions (kecleon, showcase, gold-stop) take priority over grunt ID 0
+	// which maps to CHARACTER_UNSET in the grunt data.
+	displayType := toInt(base["displayTypeId"])
+	isEventInvasion := displayType >= 7
+	var grunt *gamedata.Grunt
+
+	if isEventInvasion && gd.Util != nil {
+		if eventInfo, ok := gd.Util.PokestopEvent[displayType]; ok {
+			m["gruntName"] = eventInfo.Name
+			m["gruntTypeName"] = eventInfo.Name
+		}
+	} else {
+		// Regular grunt name
+		grunt = e.GameData.GetGrunt(gruntTypeID)
+		if grunt != nil {
+			m["gruntName"] = tr.T(grunt.CategoryKey())
+			if typeKey := grunt.TypeKey(); typeKey != "" {
+				m["gruntTypeName"] = tr.T(typeKey)
 			} else {
-				m["gruntTypeName"] = ""
+				derived := gamedata.TypeNameFromTemplate(grunt.Template)
+				if derived != "" {
+					m["gruntTypeName"] = strings.ToUpper(derived[:1]) + derived[1:]
+				} else {
+					m["gruntTypeName"] = ""
+				}
 			}
 		}
 	}
