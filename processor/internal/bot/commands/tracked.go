@@ -242,21 +242,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	// If too long for a single message, send as file attachment
-	maxLen := 2000
-	if ctx.Platform == "telegram" {
-		maxLen = 4095
-	}
-	if len(text) > maxLen {
-		return []bot.Reply{{
-			Text: tr.T("status.tracking_file"),
-			Attachment: &bot.Attachment{
-				Filename: "tracked.txt",
-				Content:  []byte(text),
-			},
-		}}
-	}
-
-	return []bot.Reply{{Text: text}}
+	return bot.SplitTextReply(text)
 }
 
 type trackedHuman struct {

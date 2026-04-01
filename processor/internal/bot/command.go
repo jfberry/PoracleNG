@@ -168,6 +168,17 @@ type Reply struct {
 	IsDM       bool            `json:"isDM,omitempty"`
 }
 
+// SplitTextReply splits a long text into multiple Reply messages, breaking
+// at line boundaries to stay within Discord's 2000 char limit.
+func SplitTextReply(text string) []Reply {
+	messages := SplitMessage(text, 2000)
+	replies := make([]Reply, len(messages))
+	for i, msg := range messages {
+		replies[i] = Reply{Text: msg}
+	}
+	return replies
+}
+
 // Attachment is a file to attach to the reply message.
 type Attachment struct {
 	Filename string `json:"filename"`
