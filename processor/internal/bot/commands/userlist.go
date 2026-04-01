@@ -93,10 +93,13 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	sb.WriteByte('\n')
 
 	for _, h := range filtered {
-		isEnabled := h.Enabled && !h.AdminDisable
-		disabled := ""
-		if !isEnabled {
-			disabled = " 🚫"
+		status := ""
+		if h.AdminDisable && !h.Enabled {
+			status = " ⛔stopped+disabled"
+		} else if h.AdminDisable {
+			status = " ⛔disabled"
+		} else if !h.Enabled {
+			status = " 🛑stopped"
 		}
 
 		areaJSON, _ := json.Marshal(h.Area)
@@ -106,14 +109,14 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		}
 
 		if h.Type == "webhook" {
-			sb.WriteString(fmt.Sprintf("webhook • %s%s\n", h.Name, disabled))
+			sb.WriteString(fmt.Sprintf("webhook • %s%s\n", h.Name, status))
 		} else {
 			displayName := h.Name
 			if displayName == "" {
 				displayName = h.ID
 			}
 			sb.WriteString(fmt.Sprintf("%s • %s | (%s) %s%s\n",
-				h.Type, displayName, h.ID, area, disabled))
+				h.Type, displayName, h.ID, area, status))
 		}
 	}
 

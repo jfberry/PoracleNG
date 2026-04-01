@@ -123,11 +123,12 @@ func (s *SQLHumanStore) SetEnabledWithFails(id string) error {
 func (s *SQLHumanStore) SetAdminDisable(id string, disable bool) error {
 	if disable {
 		_, err := s.db.Exec(`UPDATE humans SET admin_disable = 1, disabled_date = NOW() WHERE id = ?`, id)
+		// Note: does NOT set enabled=0 — admin_disable is a separate flag
 		if err != nil {
 			return fmt.Errorf("admin disable human %s: %w", id, err)
 		}
 	} else {
-		_, err := s.db.Exec(`UPDATE humans SET admin_disable = 0, disabled_date = NULL WHERE id = ?`, id)
+		_, err := s.db.Exec(`UPDATE humans SET admin_disable = 0, disabled_date = NULL, enabled = 1, fails = 0 WHERE id = ?`, id)
 		if err != nil {
 			return fmt.Errorf("admin enable human %s: %w", id, err)
 		}
