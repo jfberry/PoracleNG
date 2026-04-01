@@ -91,3 +91,12 @@ func (d *Dispatcher) WebhookDepth() int { return d.queue.WebhookDepth() }
 
 // TelegramDepth returns the number of telegram jobs currently in-flight.
 func (d *Dispatcher) TelegramDepth() int { return d.queue.TelegramDepth() }
+
+// RateLimitWaiting returns the number of delivery goroutines currently blocked
+// waiting for Discord rate limits to clear.
+func (d *Dispatcher) RateLimitWaiting() int64 {
+	if ds, ok := d.queue.senders["discord"].(*DiscordSender); ok {
+		return ds.rateLimiter.WaitingCount()
+	}
+	return 0
+}
