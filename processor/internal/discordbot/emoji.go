@@ -19,7 +19,7 @@ import (
 // Downloads emoji images from the configured uicons repository and uploads them to the Discord guild.
 // Generates an emoji.json config snippet as output.
 func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
-	if !bot.IsAdmin(b.cfg, "discord", m.Author.ID) {
+	if !bot.IsAdmin(b.Cfg, "discord", m.Author.ID) {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "🙅")
 		return
 	}
@@ -37,7 +37,7 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 	}
 
 	// Check if imgUrl is a uicons repository by checking for index.json.
-	imgURL := b.cfg.General.ImgURL
+	imgURL := b.Cfg.General.ImgURL
 	if imgURL == "" {
 		s.ChannelMessageSend(m.ChannelID, "No img_url configured")
 		return
@@ -128,8 +128,8 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 	}
 
 	// Types
-	if b.gameData != nil && b.gameData.Util != nil {
-		for _, typInfo := range b.gameData.Util.Types {
+	if b.GameData != nil && b.GameData.Util != nil {
+		for _, typInfo := range b.GameData.Util.Types {
 			if typInfo.Emoji != "" {
 				url := ""
 				if upload {
@@ -140,7 +140,7 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 		}
 
 		// Weather
-		for weatherID, weatherInfo := range b.gameData.Util.Weather {
+		for weatherID, weatherInfo := range b.GameData.Util.Weather {
 			if weatherInfo.Emoji != "" {
 				url := ""
 				if upload {
@@ -151,7 +151,7 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 		}
 
 		// Lures
-		for lureID, lureInfo := range b.gameData.Util.Lures {
+		for lureID, lureInfo := range b.GameData.Util.Lures {
 			if lureInfo.Emoji != "" {
 				url := ""
 				if upload {
@@ -162,7 +162,7 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 		}
 
 		// Teams
-		for teamID, teamInfo := range b.gameData.Util.Teams {
+		for teamID, teamInfo := range b.GameData.Util.Teams {
 			if teamInfo.Emoji != "" {
 				url := ""
 				if upload {

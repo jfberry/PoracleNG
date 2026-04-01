@@ -20,6 +20,18 @@ type Target struct {
 	ExecutionMessage string // shown to user when target is overridden (admin feature)
 }
 
+// humanRow is the common set of columns queried when looking up a human target.
+type humanRow struct {
+	ID        string  `db:"id"`
+	Name      string  `db:"name"`
+	Type      string  `db:"type"`
+	Language  *string `db:"language"`
+	ProfileNo int     `db:"current_profile_no"`
+	Latitude  float64 `db:"latitude"`
+	Longitude float64 `db:"longitude"`
+	Area      *string `db:"area"`
+}
+
 // BuildTarget resolves who a command operates on from the args.
 // Admin users can override the target using name<webhookName> or user<userID>.
 // Non-admin commands target the sender.
@@ -105,16 +117,7 @@ func BuildTarget(db *sqlx.DB, ctx *CommandContext, args []string) (*Target, []st
 
 // lookupHumanTarget loads a human record by ID and type.
 func lookupHumanTarget(db *sqlx.DB, id, typ string) (*Target, error) {
-	var h struct {
-		ID        string  `db:"id"`
-		Name      string  `db:"name"`
-		Type      string  `db:"type"`
-		Language  *string `db:"language"`
-		ProfileNo int     `db:"current_profile_no"`
-		Latitude  float64 `db:"latitude"`
-		Longitude float64 `db:"longitude"`
-		Area      *string `db:"area"`
-	}
+	var h humanRow
 	err := db.Get(&h, "SELECT id, name, type, language, current_profile_no, latitude, longitude, area FROM humans WHERE id = ? AND type = ?", id, typ)
 	if err != nil {
 		return nil, err
@@ -124,16 +127,7 @@ func lookupHumanTarget(db *sqlx.DB, id, typ string) (*Target, error) {
 
 // lookupHumanByID loads a human record by ID (any type).
 func lookupHumanByID(db *sqlx.DB, id string) (*Target, error) {
-	var h struct {
-		ID        string  `db:"id"`
-		Name      string  `db:"name"`
-		Type      string  `db:"type"`
-		Language  *string `db:"language"`
-		ProfileNo int     `db:"current_profile_no"`
-		Latitude  float64 `db:"latitude"`
-		Longitude float64 `db:"longitude"`
-		Area      *string `db:"area"`
-	}
+	var h humanRow
 	err := db.Get(&h, "SELECT id, name, type, language, current_profile_no, latitude, longitude, area FROM humans WHERE id = ? LIMIT 1", id)
 	if err != nil {
 		return nil, err
@@ -143,16 +137,7 @@ func lookupHumanByID(db *sqlx.DB, id string) (*Target, error) {
 
 // lookupHumanByName loads a human record by name (for webhook lookup).
 func lookupHumanByName(db *sqlx.DB, name string) (*Target, error) {
-	var h struct {
-		ID        string  `db:"id"`
-		Name      string  `db:"name"`
-		Type      string  `db:"type"`
-		Language  *string `db:"language"`
-		ProfileNo int     `db:"current_profile_no"`
-		Latitude  float64 `db:"latitude"`
-		Longitude float64 `db:"longitude"`
-		Area      *string `db:"area"`
-	}
+	var h humanRow
 	err := db.Get(&h, "SELECT id, name, type, language, current_profile_no, latitude, longitude, area FROM humans WHERE name = ? LIMIT 1", name)
 	if err != nil {
 		return nil, err
@@ -160,16 +145,7 @@ func lookupHumanByName(db *sqlx.DB, name string) (*Target, error) {
 	return humanToTarget(&h), nil
 }
 
-func humanToTarget(h *struct {
-	ID        string  `db:"id"`
-	Name      string  `db:"name"`
-	Type      string  `db:"type"`
-	Language  *string `db:"language"`
-	ProfileNo int     `db:"current_profile_no"`
-	Latitude  float64 `db:"latitude"`
-	Longitude float64 `db:"longitude"`
-	Area      *string `db:"area"`
-}) *Target {
+func humanToTarget(h *humanRow) *Target {
 	lang := ""
 	if h.Language != nil {
 		lang = *h.Language

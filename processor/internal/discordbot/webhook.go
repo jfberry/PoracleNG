@@ -12,7 +12,7 @@ import (
 )
 
 func (b *Bot) handleWebhook(s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
-	if !bot.IsAdmin(b.cfg, "discord", m.Author.ID) {
+	if !bot.IsAdmin(b.Cfg, "discord", m.Author.ID) {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "🙅")
 		return
 	}
@@ -124,7 +124,7 @@ func (b *Bot) handleWebhookCreate(s *discordgo.Session, m *discordgo.MessageCrea
 
 func (b *Bot) handleWebhookAdd(s *discordgo.Session, m *discordgo.MessageCreate, name string) {
 	// Check if channel is already registered as bot-controlled
-	existing, _ := db.SelectOneHumanFull(b.db, m.ChannelID)
+	existing, _ := db.SelectOneHumanFull(b.DB, m.ChannelID)
 	if existing != nil {
 		dmCh, _ := s.UserChannelCreate(m.Author.ID)
 		if dmCh != nil {
@@ -157,7 +157,7 @@ func (b *Bot) handleWebhookAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 
 	// Check if name is already in use
 	var count int
-	b.db.Get(&count, "SELECT COUNT(*) FROM humans WHERE name = ?", name)
+	b.DB.Get(&count, "SELECT COUNT(*) FROM humans WHERE name = ?", name)
 	if count > 0 {
 		dmCh, _ := s.UserChannelCreate(m.Author.ID)
 		if dmCh != nil {
@@ -204,33 +204,33 @@ func (b *Bot) handleWebhookAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	// Register the webhook
 	h := &db.HumanFull{
 		ID:                  webhookURL,
-		Type:                "webhook",
+		Type:                bot.TypeWebhook,
 		Name:                name,
 		Enabled:             1,
 		Area:                "[]",
 		CommunityMembership: "[]",
 	}
-	if err := db.CreateHuman(b.db, h); err != nil {
+	if err := db.CreateHuman(b.DB, h); err != nil {
 		log.Errorf("discord bot: create human for webhook %s: %v", name, err)
 		s.ChannelMessageSend(m.ChannelID, "Failed to register webhook, check logs")
 		return
 	}
 
 	// Create default profile
-	if err := db.CreateDefaultProfile(b.db, webhookURL, name, "[]", 0, 0); err != nil {
+	if err := db.CreateDefaultProfile(b.DB, webhookURL, name, "[]", 0, 0); err != nil {
 		log.Warnf("discord bot: create default profile for webhook %s: %v", name, err)
 	}
 
 	s.MessageReactionAdd(m.ChannelID, m.ID, "✅")
 
-	if b.reloadFunc != nil {
-		b.reloadFunc()
+	if b.ReloadFunc != nil {
+		b.ReloadFunc()
 	}
 }
 
 func (b *Bot) handleWebhookRemove(s *discordgo.Session, m *discordgo.MessageCreate, name string) {
 	// Check if channel is registered as bot-controlled
-	existing, _ := db.SelectOneHumanFull(b.db, m.ChannelID)
+	existing, _ := db.SelectOneHumanFull(b.DB, m.ChannelID)
 	if existing != nil {
 		dmCh, _ := s.UserChannelCreate(m.Author.ID)
 		if dmCh != nil {
@@ -251,7 +251,7 @@ func (b *Bot) handleWebhookRemove(s *discordgo.Session, m *discordgo.MessageCrea
 	}
 
 	var webhookID string
-	err := b.db.Get(&webhookID, `SELECT id FROM humans WHERE name = ? AND type = 'webhook' LIMIT 1`, name)
+	err := b.DB.Get(&webhookID, `SELECT id FROM humans WHERE name = ? AND type = 'webhook' LIMIT 1`, name)
 	if err != nil || webhookID == "" {
 		dmCh, _ := s.UserChannelCreate(m.Author.ID)
 		if dmCh != nil {
@@ -261,7 +261,7 @@ func (b *Bot) handleWebhookRemove(s *discordgo.Session, m *discordgo.MessageCrea
 		return
 	}
 
-	if err := db.DeleteHumanAndTracking(b.db, webhookID); err != nil {
+	if err := db.DeleteHumanAndTracking(b.DB, webhookID); err != nil {
 		log.Errorf("discord bot: delete webhook %s: %v", name, err)
 		s.ChannelMessageSend(m.ChannelID, "Failed to remove webhook, check logs")
 		return
@@ -269,7 +269,7 @@ func (b *Bot) handleWebhookRemove(s *discordgo.Session, m *discordgo.MessageCrea
 
 	s.MessageReactionAdd(m.ChannelID, m.ID, "✅")
 
-	if b.reloadFunc != nil {
-		b.reloadFunc()
+	if b.ReloadFunc != nil {
+		b.ReloadFunc()
 	}
 }

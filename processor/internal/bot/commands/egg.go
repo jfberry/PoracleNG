@@ -177,33 +177,11 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	// Build response message
-	totalChanges := len(alreadyPresent) + len(updates) + len(insert)
-	var message string
-	if totalChanges > 20 {
-		message = tr.Tf("tracking.bulk_changes",
-			ctx.Config.Discord.Prefix, tr.T("tracking.tracked"))
-	} else {
-		var sb strings.Builder
-		for i := range alreadyPresent {
-			et := eggAPIToTracking(&alreadyPresent[i])
-			sb.WriteString(tr.T("tracking.unchanged"))
-			sb.WriteString(ctx.RowText.EggRowText(tr, et))
-			sb.WriteByte('\n')
-		}
-		for i := range updates {
-			et := eggAPIToTracking(&updates[i])
-			sb.WriteString(tr.T("tracking.updated"))
-			sb.WriteString(ctx.RowText.EggRowText(tr, et))
-			sb.WriteByte('\n')
-		}
-		for i := range insert {
-			et := eggAPIToTracking(&insert[i])
-			sb.WriteString(tr.T("tracking.new"))
-			sb.WriteString(ctx.RowText.EggRowText(tr, et))
-			sb.WriteByte('\n')
-		}
-		message = sb.String()
-	}
+	message := buildTrackingMessage(tr, ctx, len(alreadyPresent), len(updates), len(insert),
+		func(i int) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(&alreadyPresent[i])) },
+		func(i int) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(&updates[i])) },
+		func(i int) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(&insert[i])) },
+	)
 
 	// Apply changes to DB
 	if len(updates) > 0 {

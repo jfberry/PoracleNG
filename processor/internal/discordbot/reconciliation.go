@@ -272,7 +272,7 @@ func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *db.HumanFull,
 
 			h := &db.HumanFull{
 				ID:                  id,
-				Type:                "discord:user",
+				Type:                bot.TypeDiscordUser,
 				Name:                name,
 				Enabled:             1,
 				Area:                "[]",
@@ -367,7 +367,7 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *db.HumanFull, na
 
 			h := &db.HumanFull{
 				ID:                  id,
-				Type:                "discord:user",
+				Type:                bot.TypeDiscordUser,
 				Name:                name,
 				Enabled:             1,
 				Area:                "[]",

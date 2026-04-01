@@ -18,13 +18,7 @@ func (c *ScriptCommand) Aliases() []string { return nil }
 
 func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
-	prefix := ctx.Config.Discord.Prefix
-	if prefix == "" {
-		prefix = "!"
-	}
-	if ctx.Platform == "telegram" {
-		prefix = "/"
-	}
+	prefix := commandPrefix(ctx)
 
 	var sb strings.Builder
 
@@ -157,7 +151,7 @@ func (c *ScriptCommand) monsterToScript(ctx *bot.CommandContext, prefix string, 
 			parts = append(parts, fmt.Sprintf("iv:%d", m.MinIV))
 		}
 	}
-	if m.MinCP > 0 || m.MaxCP != 9000 {
+	if m.MinCP > 0 || m.MaxCP != bot.WildcardID {
 		parts = append(parts, fmt.Sprintf("cp:%d-%d", m.MinCP, m.MaxCP))
 	}
 	if m.MinLevel > 0 || m.MaxLevel != 55 {
@@ -228,13 +222,13 @@ func (c *ScriptCommand) raidToScript(ctx *bot.CommandContext, prefix string, r *
 	var parts []string
 	parts = append(parts, prefix+"raid")
 
-	if r.PokemonID != 9000 {
+	if r.PokemonID != bot.WildcardID {
 		parts = append(parts, c.pokemonName(ctx, r.PokemonID))
 	} else {
 		parts = append(parts, fmt.Sprintf("level:%d", r.Level))
 	}
 
-	if r.Move != 9000 {
+	if r.Move != bot.WildcardID {
 		moveName := c.moveName(ctx, r.Move)
 		if moveName != "" {
 			parts = append(parts, "move:"+moveName)

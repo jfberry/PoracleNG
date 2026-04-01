@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
 
@@ -62,6 +63,23 @@ func enforceDistance(ctx *bot.CommandContext, distance int) int {
 	return distance
 }
 
+// resolveMoveByName looks up a move ID by its translated name.
+// Returns bot.WildcardID if no match is found.
+func resolveMoveByName(ctx *bot.CommandContext, moveName string) int {
+	if ctx.GameData == nil {
+		return bot.WildcardID
+	}
+	tr := ctx.Tr()
+	enTr := ctx.Translations.For("en")
+	for id := range ctx.GameData.Moves {
+		key := gamedata.MoveTranslationKey(id)
+		if strings.EqualFold(tr.T(key), moveName) || strings.EqualFold(enTr.T(key), moveName) {
+			return id
+		}
+	}
+	return bot.WildcardID
+}
+
 // buildTrackingMessage generates the confirmation message for tracking mutations.
 // The rowFunc callbacks produce row text for each entry by index.
 func buildTrackingMessage(
@@ -75,7 +93,7 @@ func buildTrackingMessage(
 	total := unchangedCount + updateCount + insertCount
 	if total > 20 {
 		return tr.Tf("tracking.bulk_changes",
-			ctx.Config.Discord.Prefix, tr.T("tracking.tracked"))
+			commandPrefix(ctx), tr.T("tracking.tracked"))
 	}
 
 	var sb strings.Builder

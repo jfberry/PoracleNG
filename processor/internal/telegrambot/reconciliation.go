@@ -185,7 +185,7 @@ func (r *TelegramReconciliation) reconcileNonAreaSecurity(id string, user *db.Hu
 
 			h := &db.HumanFull{
 				ID:                  id,
-				Type:                "telegram:user",
+				Type:                bot.TypeTelegramUser,
 				Name:                name,
 				Enabled:             1,
 				Area:                "[]",
@@ -249,7 +249,7 @@ func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *db.Human
 
 			h := &db.HumanFull{
 				ID:                  id,
-				Type:                "telegram:user",
+				Type:                bot.TypeTelegramUser,
 				Name:                name,
 				Enabled:             1,
 				Area:                "[]",
