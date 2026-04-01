@@ -81,17 +81,18 @@ type TrackingConfig struct {
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
-	Locale               string `toml:"locale"`                // default language code (e.g. "en", "pl")
-	RoleCheckMode        string `toml:"role_check_mode"`       // "ignore", "disable-user", "delete"
-	DefaultTemplateName  any    `toml:"default_template_name"` // default DTS template (typically 1 or "1")
-	RdmURL               string `toml:"rdm_url"`
-	ReactMapURL          string `toml:"react_map_url"`
-	RocketMadURL         string `toml:"rocket_mad_url"`
-	ImgURL               string `toml:"img_url"`
-	ImgURLAlt            string `toml:"img_url_alt"`
-	StickerURL           string `toml:"sticker_url"`
-	RequestShinyImages   bool   `toml:"request_shiny_images"`
-	PopulatePokestopName bool   `toml:"populate_pokestop_name"`
+	Locale               string   `toml:"locale"`                // default language code (e.g. "en", "pl")
+	RoleCheckMode        string   `toml:"role_check_mode"`       // "ignore", "disable-user", "delete"
+	DefaultTemplateName  any      `toml:"default_template_name"` // default DTS template (typically 1 or "1")
+	DisabledCommands     []string `toml:"disabled_commands"`     // list of command names to disable (e.g. ["lure", "nest"])
+	RdmURL               string   `toml:"rdm_url"`
+	ReactMapURL          string   `toml:"react_map_url"`
+	RocketMadURL         string   `toml:"rocket_mad_url"`
+	ImgURL               string   `toml:"img_url"`
+	ImgURLAlt            string   `toml:"img_url_alt"`
+	StickerURL           string   `toml:"sticker_url"`
+	RequestShinyImages   bool     `toml:"request_shiny_images"`
+	PopulatePokestopName bool     `toml:"populate_pokestop_name"`
 	AlertMinimumTime     int            `toml:"alert_minimum_time"`        // seconds before expiry inside which alerts are dropped
 	IgnoreLongRaids      bool           `toml:"ignore_long_raids"`         // skip raids/eggs with TTH > 47 minutes
 	ShortlinkProvider    string         `toml:"shortlink_provider"`        // "shlink" or empty

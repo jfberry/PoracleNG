@@ -8,6 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -220,7 +221,7 @@ func (r *TelegramReconciliation) reconcileNonAreaSecurity(id string, user *db.Hu
 
 	if before && after {
 		if syncNames && user.Name != name && name != "" {
-			r.updateHuman(id, map[string]interface{}{"name": name})
+			bot.UpdateHuman(r.db, id, map[string]interface{}{"name": name})
 		}
 	}
 }
@@ -293,16 +294,16 @@ func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *db.Human
 			updates["name"] = name
 		}
 
-		if !user.AreaRestriction.Valid || !haveSameContents(areaRestriction, parseJSONStringSlice(user.AreaRestriction.ValueOrZero())) {
+		if !user.AreaRestriction.Valid || !bot.HaveSameContents(areaRestriction, bot.ParseJSONStringSlice(user.AreaRestriction.ValueOrZero())) {
 			updates["area_restriction"] = string(areaRestrictionJSON)
 		}
 
-		if !haveSameContents(communityList, parseJSONStringSlice(user.CommunityMembership)) {
+		if !bot.HaveSameContents(communityList, bot.ParseJSONStringSlice(user.CommunityMembership)) {
 			updates["community_membership"] = string(communityJSON)
 		}
 
 		if len(updates) > 0 {
-			r.updateHuman(id, updates)
+			bot.UpdateHuman(r.db, id, updates)
 			r.log.Infof("Update user %s %s with communities %v", id, name, communityList)
 		}
 	}
@@ -323,13 +324,13 @@ func (r *TelegramReconciliation) UpdateTelegramChannels() {
 		r.log.Debugf("Check channel %s %s", user.ID, user.Name)
 
 		if user.AreaRestriction.Valid && user.CommunityMembership != "" {
-			membership := parseJSONStringSlice(user.CommunityMembership)
+			membership := bot.ParseJSONStringSlice(user.CommunityMembership)
 			if len(membership) > 0 {
 				areaRestriction := community.CalculateLocationRestrictions(r.cfg.Area.Communities, membership)
-				existing := parseJSONStringSlice(user.AreaRestriction.ValueOrZero())
-				if !haveSameContents(areaRestriction, existing) {
+				existing := bot.ParseJSONStringSlice(user.AreaRestriction.ValueOrZero())
+				if !bot.HaveSameContents(areaRestriction, existing) {
 					areaRestrictionJSON, _ := json.Marshal(areaRestriction)
-					r.updateHuman(user.ID, map[string]interface{}{
+					bot.UpdateHuman(r.db, user.ID, map[string]interface{}{
 						"area_restriction": string(areaRestrictionJSON),
 					})
 					r.log.Infof("Update channel %s %s", user.ID, user.Name)
@@ -433,26 +434,6 @@ func (r *TelegramReconciliation) sendGoodbye(id string) {
 	}
 }
 
-// updateHuman updates selected fields on a human record.
-func (r *TelegramReconciliation) updateHuman(id string, updates map[string]interface{}) {
-	if len(updates) == 0 {
-		return
-	}
-
-	setClauses := make([]string, 0, len(updates))
-	args := make([]interface{}, 0, len(updates)+1)
-	for col, val := range updates {
-		setClauses = append(setClauses, col+" = ?")
-		args = append(args, val)
-	}
-	args = append(args, id)
-
-	query := "UPDATE humans SET " + strings.Join(setClauses, ", ") + " WHERE id = ?"
-	if _, err := r.db.Exec(query, args...); err != nil {
-		r.log.Errorf("Update human %s: %v", id, err)
-	}
-}
-
 // extractTelegramText converts a DTS JSON template output to plain text for Telegram.
 // Extracts content and embed fields, similar to the alerter's sendGreetings.
 func extractTelegramText(raw map[string]json.RawMessage) string {
@@ -505,35 +486,3 @@ func hasAnyChannel(userChannels, configuredChannels []string) bool {
 	return false
 }
 
-// haveSameContents checks if two string slices contain the same elements (order-independent).
-func haveSameContents(a, b []string) bool {
-	if len(a) == 0 && len(b) == 0 {
-		return true
-	}
-	if len(a) != len(b) {
-		return false
-	}
-	counts := make(map[string]int, len(a))
-	for _, v := range a {
-		counts[v]++
-	}
-	for _, v := range b {
-		counts[v]--
-	}
-	for _, c := range counts {
-		if c != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// parseJSONStringSlice parses a JSON string array, returning nil on error.
-func parseJSONStringSlice(s string) []string {
-	if s == "" {
-		return nil
-	}
-	var result []string
-	json.Unmarshal([]byte(s), &result)
-	return result
-}

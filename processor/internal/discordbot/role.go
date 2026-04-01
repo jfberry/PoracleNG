@@ -2,6 +2,7 @@ package discordbot
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -10,6 +11,9 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 )
+
+// userRe matches user<id>, user:id, or userid (case-insensitive).
+var userRe = regexp.MustCompile(`(?i)^user[:<]?(\S+?)>?$`)
 
 func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
 	isDM := m.GuildID == ""
@@ -30,10 +34,8 @@ func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args 
 	targetID := m.Author.ID
 	if isAdmin {
 		for _, arg := range args {
-			if strings.HasPrefix(arg, "user:") && len(arg) > 5 {
-				targetID = arg[5:]
-			} else if strings.HasPrefix(arg, "user") && len(arg) > 4 {
-				targetID = arg[4:]
+			if match := userRe.FindStringSubmatch(arg); match != nil {
+				targetID = match[1]
 			}
 		}
 	}
@@ -53,10 +55,8 @@ func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args 
 	// Filter out user override args for subcommand detection
 	var filteredArgs []string
 	for _, arg := range args {
-		if strings.HasPrefix(arg, "user:") || strings.HasPrefix(arg, "user") {
-			if len(arg) > 4 {
-				continue
-			}
+		if userRe.MatchString(arg) {
+			continue
 		}
 		filteredArgs = append(filteredArgs, arg)
 	}
@@ -182,7 +182,7 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 
 	for _, roleArg := range roleArgs {
 		// Skip user override args
-		if strings.HasPrefix(roleArg, "user:") || strings.HasPrefix(roleArg, "user") {
+		if userRe.MatchString(roleArg) {
 			continue
 		}
 

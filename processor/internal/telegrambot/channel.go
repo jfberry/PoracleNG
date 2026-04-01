@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	telegramNameRe    = regexp.MustCompile(`(?i)^name<(\S+)>$`)
+	telegramNameRe    = regexp.MustCompile(`(?i)^name[:<]?(\S+?)>?$`)
 	telegramChannelRe = regexp.MustCompile(`^-?\d{1,20}$`)
 )
 

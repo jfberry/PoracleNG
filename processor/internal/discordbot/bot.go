@@ -6,6 +6,8 @@ package discordbot
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -56,26 +58,8 @@ type Bot struct {
 
 // Config holds everything needed to create a Discord bot.
 type Config struct {
-	Token        string
-	DB           *sqlx.DB
-	Cfg          *config.Config
-	StateMgr     *state.Manager
-	GameData     *gamedata.GameData
-	Translations *i18n.Bundle
-	Dispatcher   *delivery.Dispatcher
-	RowText      *rowtext.Generator
-	Registry     *bot.Registry
-	Parser       *bot.Parser
-	ArgMatcher   *bot.ArgMatcher
-	Resolver     *bot.PokemonResolver
-	Geocoder     *geocoding.Geocoder
-	StaticMap    *staticmap.Resolver
-	Weather      *tracker.WeatherTracker
-	Stats        *tracker.StatsTracker
-	DTS          *dts.TemplateStore
-	Emoji        *dts.EmojiLookup
-	NLPParser    *nlp.Parser
-	ReloadFunc   func()
+	Token string
+	bot.BotDeps
 }
 
 // New creates and starts a Discord bot. Returns the bot (for shutdown) or an error.
@@ -109,10 +93,13 @@ func New(cfg Config) (*Bot, error) {
 		stopCh:       make(chan struct{}),
 	}
 
+	// Note: field access works via the embedded BotDeps struct
+
 	session.Identify.Intents = discordgo.IntentsGuildMessages |
 		discordgo.IntentsDirectMessages |
 		discordgo.IntentsGuildMembers |
-		discordgo.IntentsMessageContent
+		discordgo.IntentsMessageContent |
+		discordgo.IntentsGuildMessageReactions
 
 	session.AddHandler(b.onMessageCreate)
 
@@ -179,6 +166,12 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	guildID := m.GuildID
 	channelID := m.ChannelID
 
+	// Log DMs to configured log channel
+	if isDM && b.cfg.Discord.DmLogChannelID != "" {
+		logMsg := fmt.Sprintf("DM from %s (%s): %s", m.Author.Username, m.Author.ID, m.Content)
+		s.ChannelMessageSend(b.cfg.Discord.DmLogChannelID, logMsg)
+	}
+
 	// Look up user state
 	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserState(b.db, m.Author.ID, b.cfg.General.Locale)
 	isAdmin := bot.IsAdmin(b.cfg, "discord", m.Author.ID)
@@ -215,6 +208,11 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	parsed = bot.MergeApplyGroups(parsed)
 
 	for _, cmd := range parsed {
+		// Check disabled commands
+		if isCommandDisabled(b.cfg.General.DisabledCommands, cmd.CommandKey) {
+			continue
+		}
+
 		// Try Discord-specific commands first (require discordgo session directly)
 		if b.handleDiscordCommand(s, m, cmd.CommandKey, cmd.Args, isDM) {
 			continue
@@ -444,6 +442,21 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 			}
 		}
 	}
+}
+
+// isCommandDisabled checks if a command key (e.g. "cmd.track") matches any entry
+// in the disabled_commands list (which uses short names like "track", "raid").
+func isCommandDisabled(disabled []string, cmdKey string) bool {
+	if len(disabled) == 0 {
+		return false
+	}
+	cmdName := strings.TrimPrefix(cmdKey, "cmd.")
+	for _, d := range disabled {
+		if d == cmdName {
+			return true
+		}
+	}
+	return false
 }
 
 // onGuildMemberUpdate is called when a guild member's roles change.

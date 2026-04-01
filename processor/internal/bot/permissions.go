@@ -1,6 +1,8 @@
 package bot
 
 import (
+	"encoding/json"
+
 	"github.com/pokemon/poracleng/processor/internal/config"
 )
 
@@ -111,26 +113,20 @@ func CanAdminWebhook(cfg *config.Config, userID string, webhookName string) bool
 // BlockedAlerts derives blocked alert types from command_security configuration.
 // For a user who lacks the role for "raid", "monster", etc., those alert types
 // are returned as blocked. Used by reconciliation to set blocked_alerts on users.
-func BlockedAlerts(cfg *config.Config, userID string, userRoles []string) []string {
-	// Alert types that map to command_security entries
-	alertTypes := []struct {
-		alert   string // alert type in blocked_alerts
-		cmdSec  string // command_security key
-	}{
-		{"raid", "raid"},
-		{"pokemon", "monster"},
-		{"gym", "gym"},
-		{"lure", "lure"},
-		{"nest", "nest"},
-		{"egg", "egg"},
-		{"invasion", "invasion"},
-		{"quest", "quest"},
-		{"maxbattle", "maxbattle"},
+// Returns nil if no command_security is configured, or a JSON-encoded string pointer
+// if any alerts are blocked.
+func BlockedAlerts(cfg *config.Config, userID string, userRoles []string) *string {
+	if len(cfg.Discord.CommandSecurity) == 0 {
+		return nil
 	}
 
+	// Alert types and feature keys that map to command_security entries.
+	// Matches the alerter's computeBlockedAlerts set.
+	commands := []string{"raid", "monster", "gym", "specificgym", "lure", "nest", "egg", "invasion", "pvp", "maxbattle"}
+
 	var blocked []string
-	for _, at := range alertTypes {
-		allowedIDs, ok := cfg.Discord.CommandSecurity[at.cmdSec]
+	for _, cmd := range commands {
+		allowedIDs, ok := cfg.Discord.CommandSecurity[cmd]
 		if !ok || len(allowedIDs) == 0 {
 			continue // not restricted
 		}
@@ -148,10 +144,17 @@ func BlockedAlerts(cfg *config.Config, userID string, userRoles []string) []stri
 			}
 		}
 		if !hasAccess {
-			blocked = append(blocked, at.alert)
+			blocked = append(blocked, cmd)
 		}
 	}
-	return blocked
+
+	if len(blocked) == 0 {
+		return nil
+	}
+
+	blockedJSON, _ := json.Marshal(blocked)
+	s := string(blockedJSON)
+	return &s
 }
 
 // commandSecurityName maps command identifier keys to command_security config names.
