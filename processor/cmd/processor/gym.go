@@ -55,14 +55,22 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		// Skip if same team + same slots and within 5-min battle cooldown.
 		battleCooldown := ps.duplicates.GymInBattleCooldown(gymID, inBattle)
 
-		// Update gym state and get old state
+		// Update gym state and get old state.
+		// On first sight (oldState == nil), use -1 for old values to signal
+		// "unknown previous state" — this triggers team-change alerts matching
+		// the alerter's behavior where old_team_id=-1 means "team changed".
 		oldState := ps.gymState.Update(gymID, teamID, gym.SlotsAvailable, inBattle, gym.LastOwnerID)
-		if oldState == nil {
-			l.Debug("Gym first seen, no change detection yet")
-			return
+
+		oldTeamID := -1
+		oldSlotsAvailable := -1
+		var oldInBattle bool
+		if oldState != nil {
+			oldTeamID = oldState.TeamID
+			oldSlotsAvailable = oldState.SlotsAvailable
+			oldInBattle = oldState.InBattle
 		}
 
-		if battleCooldown && oldState.TeamID == teamID && oldState.SlotsAvailable == gym.SlotsAvailable {
+		if oldState != nil && battleCooldown && oldTeamID == teamID && oldSlotsAvailable == gym.SlotsAvailable {
 			l.Debug("Gym battle cooldown, no team/slot change, skipping")
 			return
 		}
@@ -70,11 +78,11 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		data := &matching.GymData{
 			GymID:             gymID,
 			TeamID:            teamID,
-			OldTeamID:         oldState.TeamID,
+			OldTeamID:         oldTeamID,
 			SlotsAvailable:    gym.SlotsAvailable,
-			OldSlotsAvailable: oldState.SlotsAvailable,
+			OldSlotsAvailable: oldSlotsAvailable,
 			InBattle:          inBattle,
-			OldInBattle:       oldState.InBattle,
+			OldInBattle:       oldInBattle,
 			Latitude:          gym.Latitude,
 			Longitude:         gym.Longitude,
 		}
@@ -93,16 +101,16 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			matchedAreas := buildMatchedAreas(areas)
 
 			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
-				gym.Name, ps.teamName(oldState.TeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))
+				gym.Name, ps.teamName(oldTeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldState.TeamID, gym.SlotsAvailable, inBattle, false, gymID)
+			enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldTeamID, gym.SlotsAvailable, inBattle, false, gymID)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.GymTranslate(enrichment, teamID, oldState.TeamID, gym.LastOwnerID, lang)
+					perLang[lang] = ps.enricher.GymTranslate(enrichment, teamID, oldTeamID, gym.LastOwnerID, lang)
 				}
 			}
 
