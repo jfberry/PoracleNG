@@ -104,6 +104,11 @@ func main() {
 	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
 
+	// Restore gym state cache from previous run
+	if err := proc.gymState.Load(); err != nil {
+		log.Warnf("Failed to load gym state cache: %v", err)
+	}
+
 	// Start render pool workers
 	poolSize := cfg.Tuning.RenderPoolSize
 	if poolSize < 1 {
@@ -753,7 +758,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		encounters:   tracker.NewEncounterTracker(),
 		duplicates:   tracker.NewDuplicateCache(),
 		stats:        statsTracker,
-		gymState:     tracker.NewGymStateTracker(),
+		gymState:     tracker.NewGymStateTracker(filepath.Join(cfg.BaseDir, "config", ".cache")),
 		pokemonMatcher: &matching.PokemonMatcher{
 			PVPQueryMaxRank:            cfg.PVP.PVPQueryMaxRank,
 			PVPEvolutionDirectTracking: cfg.PVP.PVPEvolutionDirectTracking,
@@ -803,6 +808,12 @@ func (ps *ProcessorService) Close() {
 	}
 	ps.duplicates.Close()
 	ps.rateLimiter.Close()
+	// Persist gym state cache for restart
+	if err := ps.gymState.Save(); err != nil {
+		log.Warnf("Failed to save gym state cache: %v", err)
+	} else {
+		log.Info("Gym state cache saved")
+	}
 	if ps.enricher.Geocoder != nil {
 		ps.enricher.Geocoder.Close()
 	}
