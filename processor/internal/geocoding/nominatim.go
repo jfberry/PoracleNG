@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+// userAgent identifies the application to Nominatim per their usage policy.
+// The public server blocks Go's default "Go-http-client/2.0".
+const userAgent = "PoracleNG/1.0"
+
 // Nominatim implements Provider using the Nominatim API (OpenStreetMap).
 type Nominatim struct {
 	baseURL string
@@ -70,22 +74,9 @@ func (n *Nominatim) Reverse(lat, lon float64) (*Address, error) {
 	q.Set("addressdetails", "1")
 	u.RawQuery = q.Encode()
 
-	resp, err := n.client.Get(u.String())
+	body, err := n.doGet(u.String())
 	if err != nil {
-		return nil, fmt.Errorf("nominatim: request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 500 {
-		return nil, fmt.Errorf("nominatim: server error %d", resp.StatusCode)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("nominatim: HTTP %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("nominatim: read body: %w", err)
+		return nil, err
 	}
 
 	var result nominatimReverseResult
@@ -142,22 +133,9 @@ func (n *Nominatim) Forward(query string) ([]ForwardResult, error) {
 	q.Set("addressdetails", "1")
 	u.RawQuery = q.Encode()
 
-	resp, err := n.client.Get(u.String())
+	body, err := n.doGet(u.String())
 	if err != nil {
-		return nil, fmt.Errorf("nominatim: request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 500 {
-		return nil, fmt.Errorf("nominatim: server error %d", resp.StatusCode)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("nominatim: HTTP %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("nominatim: read body: %w", err)
+		return nil, err
 	}
 
 	var results []nominatimForwardResult
@@ -178,6 +156,34 @@ func (n *Nominatim) Forward(query string) ([]ForwardResult, error) {
 		})
 	}
 	return out, nil
+}
+
+// doGet performs an HTTP GET with the required User-Agent header.
+func (n *Nominatim) doGet(url string) ([]byte, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("nominatim: build request: %w", err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := n.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("nominatim: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 500 {
+		return nil, fmt.Errorf("nominatim: server error %d", resp.StatusCode)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("nominatim: HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("nominatim: read body: %w", err)
+	}
+	return body, nil
 }
 
 // firstNonEmpty returns the first non-empty string argument.
