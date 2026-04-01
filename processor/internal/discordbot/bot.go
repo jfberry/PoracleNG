@@ -118,10 +118,10 @@ func (b *Bot) logGuildPresence() {
 		}
 	}
 
-	// Log guild presence
+	// Log guild presence (using resolved names)
 	var guildNames []string
-	for _, g := range b.session.State.Guilds {
-		guildNames = append(guildNames, g.ID+":"+g.Name)
+	for id, name := range presentGuilds {
+		guildNames = append(guildNames, id+":"+name)
 	}
 	if len(guildNames) > 0 {
 		log.Infof("Bot is present in guilds %s", strings.Join(guildNames, ", "))
