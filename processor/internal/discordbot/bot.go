@@ -79,35 +79,126 @@ func New(cfg Config) (*Bot, error) {
 	return b, nil
 }
 
-// logGuildPresence logs which guilds the bot is in and warns if
-// config.discord.guilds doesn't match (matching alerter startup behavior).
+// logGuildPresence logs which guilds the bot is in and validates
+// configured Discord IDs (channels, roles, etc.) at startup.
 func (b *Bot) logGuildPresence() {
 	if b.session.State == nil {
 		return
 	}
-	var names []string
-	presentIDs := make(map[string]bool)
+
+	// Build lookup maps from all guilds
+	presentGuilds := make(map[string]string) // id → name
+	allRoles := make(map[string]string)      // id → name
+	allChannels := make(map[string]string)   // id → name
+
 	for _, g := range b.session.State.Guilds {
-		names = append(names, g.ID+":"+g.Name)
-		presentIDs[g.ID] = true
-	}
-	if len(names) > 0 {
-		log.Infof("Bot is present in guilds %s", strings.Join(names, ", "))
+		presentGuilds[g.ID] = g.Name
+
+		// Fetch roles for this guild
+		if roles, err := b.session.GuildRoles(g.ID); err == nil {
+			for _, r := range roles {
+				allRoles[r.ID] = r.Name + " (guild:" + g.Name + ")"
+			}
+		}
+
+		// Fetch channels for this guild
+		if channels, err := b.session.GuildChannels(g.ID); err == nil {
+			for _, ch := range channels {
+				allChannels[ch.ID] = "#" + ch.Name + " (guild:" + g.Name + ")"
+			}
+		}
 	}
 
-	configuredGuilds := b.Cfg.Discord.Guilds
-	if len(configuredGuilds) > 0 {
-		allMatch := len(configuredGuilds) == len(presentIDs)
-		if allMatch {
-			for _, gid := range configuredGuilds {
-				if !presentIDs[gid] {
-					allMatch = false
-					break
+	// Log guild presence
+	var guildNames []string
+	for _, g := range b.session.State.Guilds {
+		guildNames = append(guildNames, g.ID+":"+g.Name)
+	}
+	if len(guildNames) > 0 {
+		log.Infof("Bot is present in guilds %s", strings.Join(guildNames, ", "))
+	}
+
+	// Validate configured guilds
+	for _, gid := range b.Cfg.Discord.Guilds {
+		if _, ok := presentGuilds[gid]; !ok {
+			log.Warnf("config: discord.guilds contains %s but bot is not in that guild", gid)
+		}
+	}
+
+	// Validate channels
+	for _, chID := range b.Cfg.Discord.Channels {
+		if name, ok := allChannels[chID]; ok {
+			log.Infof("config: discord.channels %s → %s ✓", chID, name)
+		} else {
+			log.Warnf("config: discord.channels %s — NOT FOUND in any guild", chID)
+		}
+	}
+
+	// Validate DM log channel
+	if b.Cfg.Discord.DmLogChannelID != "" {
+		if name, ok := allChannels[b.Cfg.Discord.DmLogChannelID]; ok {
+			log.Infof("config: dm_log_channel_id %s → %s ✓", b.Cfg.Discord.DmLogChannelID, name)
+		} else {
+			log.Warnf("config: dm_log_channel_id %s — NOT FOUND in any guild", b.Cfg.Discord.DmLogChannelID)
+		}
+	}
+
+	// Validate user_role IDs
+	for _, roleID := range b.Cfg.Discord.UserRole {
+		if name, ok := allRoles[roleID]; ok {
+			log.Infof("config: discord.user_role %s → %s ✓", roleID, name)
+		} else {
+			log.Warnf("config: discord.user_role %s — NOT FOUND in any guild", roleID)
+		}
+	}
+
+	// Validate role_subscriptions
+	for _, sub := range b.Cfg.Discord.RoleSubscriptions {
+		if _, ok := presentGuilds[sub.Guild]; !ok {
+			log.Warnf("config: role_subscriptions guild %s — NOT FOUND", sub.Guild)
+		}
+		for desc, roleID := range sub.Roles {
+			if name, ok := allRoles[roleID]; ok {
+				log.Infof("config: role_subscriptions.roles %s (%s) → %s ✓", desc, roleID, name)
+			} else {
+				log.Warnf("config: role_subscriptions.roles %s (%s) — NOT FOUND in any guild", desc, roleID)
+			}
+		}
+		for _, exSet := range sub.ExclusiveRoles {
+			for desc, roleID := range exSet {
+				if name, ok := allRoles[roleID]; ok {
+					log.Infof("config: role_subscriptions.exclusive_roles %s (%s) → %s ✓", desc, roleID, name)
+				} else {
+					log.Warnf("config: role_subscriptions.exclusive_roles %s (%s) — NOT FOUND in any guild", desc, roleID)
 				}
 			}
 		}
-		if !allMatch {
-			log.Warn("config.discord.guilds does not contain all guilds bot is present in")
+	}
+
+	// Validate shame channel
+	if b.Cfg.AlertLimits.ShameChannel != "" {
+		if name, ok := allChannels[b.Cfg.AlertLimits.ShameChannel]; ok {
+			log.Infof("config: alert_limits.shame_channel %s → %s ✓", b.Cfg.AlertLimits.ShameChannel, name)
+		} else {
+			log.Warnf("config: alert_limits.shame_channel %s — NOT FOUND in any guild", b.Cfg.AlertLimits.ShameChannel)
+		}
+	}
+
+	// Validate community channels (area security)
+	for _, comm := range b.Cfg.Area.Communities {
+		for _, chID := range comm.Discord.Channels {
+			if name, ok := allChannels[chID]; ok {
+				log.Infof("config: community %s discord channel %s → %s ✓", comm.Name, chID, name)
+			} else {
+				log.Warnf("config: community %s discord channel %s — NOT FOUND in any guild", comm.Name, chID)
+			}
+		}
+		for _, roleID := range comm.Discord.UserRole {
+			if name, ok := allRoles[roleID]; ok {
+				log.Infof("config: community %s user_role %s → %s ✓", comm.Name, roleID, name)
+			} else {
+				log.Warnf("config: community %s user_role %s — NOT FOUND in any guild", comm.Name, roleID)
+			}
 		}
 	}
 }
