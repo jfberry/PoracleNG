@@ -412,25 +412,33 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		ctx.Permissions.ChannelTracking = bot.CalculateChannelPermissions(
 			b.Cfg, m.Author.ID, fetchRoles(), channelID, guildID, "")
 
-		// Handle target override
-		target, remainingArgs, err := bot.BuildTarget(ctx, cmd.Args)
-		if err != nil {
-			s.MessageReactionAdd(channelID, m.ID, "🙅")
-			reply(err.Error())
-			continue
-		}
-		if target != nil {
-			ctx.TargetID = target.ID
-			ctx.TargetName = target.Name
-			ctx.TargetType = target.Type
-			if target.Language != "" {
-				ctx.Language = target.Language
+		// Handle target override.
+		// !poracle skips BuildTarget — it's a registration command that always
+		// targets the sender and has its own channel validation internally.
+		var remainingArgs []string
+		if cmd.CommandKey == "cmd.poracle" {
+			remainingArgs = cmd.Args
+		} else {
+			target, args, err := bot.BuildTarget(ctx, cmd.Args)
+			if err != nil {
+				s.MessageReactionAdd(channelID, m.ID, "🙅")
+				reply(err.Error())
+				continue
 			}
-			ctx.ProfileNo = target.ProfileNo
-			ctx.HasLocation = target.HasLocation
-			ctx.HasArea = target.HasArea
-			if target.ExecutionMessage != "" {
-				reply(target.ExecutionMessage)
+			remainingArgs = args
+			if target != nil {
+				ctx.TargetID = target.ID
+				ctx.TargetName = target.Name
+				ctx.TargetType = target.Type
+				if target.Language != "" {
+					ctx.Language = target.Language
+				}
+				ctx.ProfileNo = target.ProfileNo
+				ctx.HasLocation = target.HasLocation
+				ctx.HasArea = target.HasArea
+				if target.ExecutionMessage != "" {
+					reply(target.ExecutionMessage)
+				}
 			}
 		}
 
