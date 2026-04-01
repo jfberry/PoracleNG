@@ -1,6 +1,8 @@
 package enrichment
 
 import (
+	"time"
+
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
@@ -73,18 +75,28 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		m["tth"] = geo.ComputeTTH(raid.Start)
 	}
 
-	// Format RSVP timeslots
+	// Format RSVP timeslots — only include future timeslots (matching alerter behavior)
 	if len(raid.RSVPs) > 0 {
-		rsvpTimes := make([]map[string]any, len(raid.RSVPs))
-		for i, r := range raid.RSVPs {
-			rsvpTimes[i] = map[string]any{
-				"timeslot":    r.Timeslot,
-				"going_count": r.GoingCount,
-				"maybe_count": r.MaybeCount,
-				"time":        geo.FormatTime(r.Timeslot/1000, tz, e.TimeLayout),
+		nowMs := time.Now().UnixMilli()
+		var rsvpTimes []map[string]any
+		for _, r := range raid.RSVPs {
+			if r.Timeslot <= nowMs {
+				continue // skip past timeslots
 			}
+			tsSec := (r.Timeslot + 999) / 1000 // ceil to seconds (matching alerter Math.ceil)
+			rsvpTimes = append(rsvpTimes, map[string]any{
+				"timeslot":    tsSec,
+				"timeSlot":    tsSec,        // camelCase for DTS templates
+				"going_count": r.GoingCount,
+				"goingCount":  r.GoingCount, // camelCase for DTS templates
+				"maybe_count": r.MaybeCount,
+				"maybeCount":  r.MaybeCount, // camelCase for DTS templates
+				"time":        geo.FormatTime(r.Timeslot/1000, tz, e.TimeLayout),
+			})
 		}
-		m["rsvps"] = rsvpTimes
+		if len(rsvpTimes) > 0 {
+			m["rsvps"] = rsvpTimes
+		}
 	}
 
 	// Map URLs
