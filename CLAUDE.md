@@ -4,7 +4,7 @@ Pokemon GO webhook alerting system. Receives webhooks from Golbat (scanner), mat
 
 ## Architecture
 
-Two processes, one shared MySQL database, one shared TOML config:
+Single Go process, one MySQL database, one shared TOML config:
 
 ```
 Golbat (scanner)
@@ -17,19 +17,15 @@ Processor (Go, port 3030)
     |  - Enriches with computed fields (three layers: base, per-language, per-user)
     |  - Renders DTS Handlebars templates (jfberry/raymond) into Discord/Telegram messages
     |  - Delivers messages directly via Discord REST API and Telegram Bot API
-    |  - Serves all /api/* endpoints (tracking CRUD, humans, profiles, geofence, tiles, config)
-    |  - Proxies unhandled /api/* to alerter (for remaining alerter-only routes)
-    v
-Alerter (Node.js/Fastify, port 3031)
-    |  - Discord bot (command processing, reconciliation)
-    |  - Telegram bot (command processing)
-    |  - POST /api/postMessage — sends confirmation messages from processor API operations
+    |  - Serves all /api/* endpoints (tracking CRUD, humans, profiles, geofence, tiles, config, masterdata, roles)
+    |  - Discord bot (discordgo gateway: commands, reconciliation, role management)
+    |  - Telegram bot (go-telegram-bot-api: commands, reconciliation)
     v
 Discord / Telegram
     (DM, channel, webhook, group, thread)
 ```
 
-Both processes run together via `start.sh` (or Docker). The processor starts first, waits for health check, then the alerter starts.
+Runs via `start.sh` (or Docker) as a single process.
 
 ## Directory Structure
 
@@ -91,40 +87,34 @@ processor/                      # Go binary
       shlink.go                 # URL shortening via Shlink
     scanner/                    # Scanner DB interface (RDM, Golbat) for nearby stops
     rowtext/                    # Tracking rule description generator (for API confirmation messages)
-
-alerter/                        # Node.js application (command processing + reconciliation)
-  src/
-    app.js                      # Entry point, Fastify server, Discord/Telegram bot startup
-    lib/
-      discord/
-        commando/
-          index.js              # Discord bot setup, command registration
-          events/messageCreate.js  # Command parser (underscore→space, pipe groups, translation)
-          commands/              # Admin commands (poracle, channel, webhook, autocreate, role, etc.)
-        discordReconciliation.js # Discord role sync
-        poracleDiscordState.js  # State wrapper passed to command handlers
-        poracleDiscordUtil.js   # buildTarget, commandAllowed, permission checks
-        poracleDiscordMessage.js # Message abstraction (reply, react, replyWithAttachment)
-      telegram/
-        Telegram.js             # Bot setup, command routing (no delivery code)
-        poracleTelegramState.js # State wrapper for Telegram commands
-        telegramReconciliation.js # Telegram group membership sync
-      poracleMessage/
-        commands/               # User commands: track, raid, egg, quest, nest, lure, gym, fort, invasion, maxbattle, etc.
-        commandUtil.js          # Shared: reportUnrecognizedArgs
-      configAdapter.js          # TOML → internal config conversion (snake_case → camelCase)
-      configResolver.js         # Config/fallback file resolution, config directory
-      geofenceLoader.js         # GeoJSON/Poracle fence parser, R-tree builder
-    routes/
-      apiPostMessage.js         # POST /api/postMessage — delivers confirmation messages from processor
-      apiHumans.js              # User management (Discord role operations)
-      apiConfig.js              # GET /api/config/poracleWeb — expose config to web UI
-      apiMasterData.js          # GET /api/masterdata/monsters, /grunts
-      apiGeofence.js            # Geofence reload bridge
-    util/
-      regex.js                  # Command argument regex factory (translated command names)
-      translate.js              # Translator class (locale JSON files)
-      translatorFactory.js      # Multi-locale translator management
+    bot/                        # Platform-agnostic command framework
+      command.go                # Command interface, CommandContext, Reply types, BotDeps
+      parser.go                 # Multi-language command lookup, tokenization, pipe splitting
+      argmatch.go               # 14 typed parameter matchers with language fallback
+      pokemon_resolver.go       # Name→ID resolution (translations, aliases, evolution chains)
+      area_logic.go             # Area validation/filtering (no DB dependency)
+      community_logic.go        # Community membership management
+      permissions.go            # Admin checks, command security, delegated admin
+      target.go                 # BuildTarget (user/webhook override resolution)
+      commands/                 # ~35 command implementations
+    discordbot/                 # Discord gateway bot (discordgo)
+      bot.go                    # Gateway setup, message handling, NLP suggest
+      reconciliation.go         # Periodic role sync + event-driven reconciliation
+      channel.go, webhook.go    # Channel/webhook management commands
+      role.go                   # Role subscription command
+      autocreate.go             # Channel auto-creation from template
+    telegrambot/                # Telegram polling bot (go-telegram-bot-api)
+      bot.go                    # Polling setup, command dispatch
+      channel.go                # Channel/group management
+      reconciliation.go         # Group membership verification
+    discordroles/               # Shared Discord role helpers (used by bot + API)
+    store/                      # Database abstraction layer
+      human.go                  # HumanStore interface
+      human_sql.go              # SQL implementation
+      tracking.go               # TrackingStore[T] generic interface + ApplyDiff
+      tracking_sql.go           # Per-type SQL implementations
+      mock_human.go             # Mock for testing
+    nlp/                        # Natural language → command suggestion parser
 
 config/                         # Shared config directory
   config.toml                   # Main config (copied from config.example.toml)

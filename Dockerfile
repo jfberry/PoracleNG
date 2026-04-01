@@ -1,5 +1,5 @@
 # ---- Stage 1: Build Go processor ----
-FROM golang:1.26-alpine AS go-builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /build
 COPY processor/go.mod processor/go.sum ./
@@ -8,46 +8,32 @@ RUN go mod download
 COPY processor/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o poracle-processor ./cmd/processor
 
-# ---- Stage 2: Install Node.js alerter dependencies ----
-FROM node:24-alpine AS node-builder
-
-RUN apk add --no-cache python3 make g++ git
-
-WORKDIR /build
-COPY alerter/package.json alerter/package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm rebuild
-
-# ---- Stage 3: Runtime image ----
-FROM node:24-alpine
+# ---- Stage 2: Runtime image ----
+FROM alpine:3
 
 RUN apk add --no-cache curl bash tini tzdata
 
 WORKDIR /app
 
 # Processor binary
-COPY --from=go-builder /build/poracle-processor processor/poracle-processor
-
-# Alerter source + dependencies
-COPY alerter/ alerter/
-COPY --from=node-builder /build/node_modules alerter/node_modules
+COPY --from=builder /build/poracle-processor processor/poracle-processor
+RUN chmod +x processor/poracle-processor
 
 # Shared files
 COPY config/config.example.toml config/config.example.toml
 COPY start.sh start.sh
-RUN chmod +x start.sh processor/poracle-processor
+RUN chmod +x start.sh
 
 # Scripts for PoracleJS migration
 COPY scripts/ scripts/
 
 # Create runtime directories (processor downloads resources at startup)
-RUN mkdir -p config/.cache/geofences resources/data resources/rawdata resources/locale resources/gamelocale alerter/logs alerter/nominatimData logs backups
+RUN mkdir -p config/.cache/geofences resources/rawdata resources/gamelocale logs backups
 
-# Static resource files needed by the alerter at startup
-COPY resources/data/util.json resources/data/util.json
+# Bundled defaults
 COPY fallbacks/ fallbacks/
 
-# Processor: 3030, Alerter: 3031
-EXPOSE 3030 3031
+EXPOSE 3030
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -sf http://localhost:3030/health || exit 1
