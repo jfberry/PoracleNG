@@ -128,13 +128,13 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 					})
 				}
 
-				// Track active pokemon per user for weather change alerts
+				// Track active pokemon per user for weather change alerts.
+				// pokemon.Weather (webhook "weather" field) is the in-game boost
+				// weather: >0 means the pokemon IS weather-boosted, 0 means not.
+				// This matches PoracleJS's data.weather used by getAlteringWeathers.
 				if ps.activePokemon != nil {
 					types := ps.pokemonTypes.GetTypes(pokemon.PokemonID, pokemon.Form)
-					pokWeather := pokemon.BoostedWeather
-					if pokWeather == 0 {
-						pokWeather = pokemon.Weather
-					}
+					boosted := pokemon.Weather > 0
 					for _, u := range matched {
 						ps.activePokemon.Register(cellID, u.ID, pokemon.EncounterID, tracker.ActivePokemon{
 							PokemonID:     pokemon.PokemonID,
@@ -144,7 +144,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 							Latitude:      pokemon.Latitude,
 							Longitude:     pokemon.Longitude,
 							DisappearTime: pokemon.DisappearTime,
-							Weather:       pokWeather,
+							Boosted:       boosted,
 							Types:         types,
 						})
 					}

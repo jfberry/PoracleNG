@@ -48,7 +48,11 @@ func (pt *PokemonTypes) GetTypes(pokemonID, form int) []int {
 
 // IsAffectedByWeatherChange returns true if a pokemon with the given types
 // gains or loses weather boost due to the weather changing from oldWeather to newWeather.
-func IsAffectedByWeatherChange(types []int, currentBoost int, newWeather int) bool {
+// IsAffectedByWeatherChange checks if a pokemon's boost status would change
+// with the new weather. Matches the alerter's getAlteringWeathers logic:
+// - If currently boosted: affected if new weather does NOT boost its types (loses boost)
+// - If not boosted: affected if new weather DOES boost its types (gains boost)
+func IsAffectedByWeatherChange(types []int, currentlyBoosted bool, newWeather int) bool {
 	if len(types) == 0 {
 		return false
 	}
@@ -63,8 +67,22 @@ func IsAffectedByWeatherChange(types []int, currentBoost int, newWeather int) bo
 		}
 	}
 
-	if currentBoost > 0 {
-		return !newBoosts
+	if currentlyBoosted {
+		return !newBoosts // was boosted, affected if would lose boost
 	}
-	return newBoosts
+	return newBoosts // wasn't boosted, affected if would gain boost
+}
+
+// IsBoostedByWeather checks if a pokemon with the given types is boosted by the given weather.
+func IsBoostedByWeather(types []int, weather int) bool {
+	boosted, ok := WeatherTypeBoost[weather]
+	if !ok {
+		return false
+	}
+	for _, t := range types {
+		if slices.Contains(boosted, t) {
+			return true
+		}
+	}
+	return false
 }
