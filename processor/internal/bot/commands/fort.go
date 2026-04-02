@@ -130,6 +130,9 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	)
 
 	ctx.TriggerReload()
+
+	message += trackingWarnings(ctx, distance)
+
 	react := "✅"
 	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		react = "👌"
