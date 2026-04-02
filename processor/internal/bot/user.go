@@ -12,8 +12,10 @@ func LookupUserStateFromStore(hs store.HumanStore, userID, defaultLocale string)
 		return
 	}
 
-	// Admin-disabled or self-disabled users are treated as unregistered
-	if h.AdminDisable || !h.Enabled {
+	// Admin-disabled users are treated as unregistered (role removed, banned).
+	// enabled=0 (!stop) just pauses alerts — user is still registered and can
+	// run commands like !start, !tracked, !area, etc.
+	if h.AdminDisable {
 		return
 	}
 
