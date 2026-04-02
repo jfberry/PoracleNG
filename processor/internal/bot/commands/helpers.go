@@ -63,6 +63,42 @@ func enforceDistance(ctx *bot.CommandContext, distance int) int {
 	return distance
 }
 
+// trackingWarnings generates warning messages for common tracking issues.
+// Returns a string to append to the reply, or empty if no warnings.
+// Should be called by all tracking commands after successful tracking changes.
+func trackingWarnings(ctx *bot.CommandContext, distance int) string {
+	tr := ctx.Tr()
+	var warnings []string
+
+	// Check if user has stopped alerts
+	if ctx.Humans != nil {
+		if h, err := ctx.Humans.Get(ctx.TargetID); err == nil && h != nil && !h.Enabled {
+			prefix := commandPrefix(ctx)
+			warnings = append(warnings, tr.Tf("tracking.warn_stopped", prefix))
+		}
+	}
+
+	// Check distance with no location
+	if distance > 0 && !ctx.HasLocation {
+		warnings = append(warnings, tr.T("tracking.warn_no_location"))
+	}
+
+	// Check no distance and no areas
+	if distance == 0 && !ctx.HasArea {
+		warnings = append(warnings, tr.T("tracking.warn_no_area"))
+	}
+
+	// Check max distance was applied
+	if ctx.Config.Tracking.MaxDistance > 0 && distance > 0 && distance >= ctx.Config.Tracking.MaxDistance {
+		warnings = append(warnings, tr.Tf("tracking.warn_max_distance", ctx.Config.Tracking.MaxDistance))
+	}
+
+	if len(warnings) == 0 {
+		return ""
+	}
+	return "\n⚠️ " + strings.Join(warnings, "\n⚠️ ")
+}
+
 // resolveMoveByName looks up a move ID by its translated name.
 // Returns bot.WildcardID if no match is found.
 func resolveMoveByName(ctx *bot.CommandContext, moveName string) int {
