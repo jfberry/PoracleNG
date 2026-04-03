@@ -80,13 +80,16 @@ func (fq *FairQueue) Start() {
 	}
 }
 
-// Stop cancels in-flight sends, closes the job channel, and waits for workers to finish.
+// Stop closes the job channel, waits for workers to drain remaining jobs,
+// then cancels the context. Channel is closed first so queued jobs are still
+// delivered before shutdown. The Dispatcher owns channel creation; FairQueue
+// closes it here as part of the coordinated shutdown sequence.
 func (fq *FairQueue) Stop() {
-	fq.cancel()
 	close(fq.ch)
 	log.Info("delivery: waiting for queue workers to drain...")
 	fq.wg.Wait()
 	log.Info("delivery: queue workers drained")
+	fq.cancel()
 }
 
 func (fq *FairQueue) worker() {

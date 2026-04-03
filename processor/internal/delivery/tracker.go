@@ -84,14 +84,17 @@ func (mt *MessageTracker) LookupEdit(editKey string) *TrackedMessage {
 	return item.Value()
 }
 
-// UpdateEdit updates the sent ID of an existing tracked message.
+// UpdateEdit updates the sent ID of an existing tracked message by replacing
+// the cache entry atomically (avoids race on concurrent value reads).
 func (mt *MessageTracker) UpdateEdit(editKey string, newSentID string) {
 	item := mt.cache.Get(editKey)
 	if item == nil {
 		return
 	}
 	msg := item.Value()
-	msg.SentID = newSentID
+	updated := *msg
+	updated.SentID = newSentID
+	mt.cache.Set(editKey, &updated, ttlcache.DefaultTTL)
 }
 
 // Size returns the number of tracked messages.
