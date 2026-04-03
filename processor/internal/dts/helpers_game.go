@@ -567,11 +567,13 @@ func loadCustomMaps(configDir string) *customMapStore {
 		return store
 	}
 	mapsDir := filepath.Join(configDir, "customMaps")
+	if err := os.MkdirAll(mapsDir, 0755); err != nil {
+		log.Warnf("dts: create customMaps dir: %v", err)
+		return store
+	}
 	entries, err := os.ReadDir(mapsDir)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Warnf("dts: read customMaps dir: %v", err)
-		}
+		log.Warnf("dts: read customMaps dir: %v", err)
 		return store
 	}
 	for _, e := range entries {
