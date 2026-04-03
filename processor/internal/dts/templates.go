@@ -209,10 +209,25 @@ func (ts *TemplateStore) Get(templateType, platform, templateID, language string
 	return compiled
 }
 
-// Exists checks whether a template exists for the given type, platform, ID, and language
-// using the same selection chain as Get, but without compiling or caching.
+// Exists checks whether a template with the given ID exists for the type and
+// platform. A default entry's ID also counts as valid. This does NOT fall back
+// to the default template for unknown IDs — use Get for that (rendering).
 func (ts *TemplateStore) Exists(templateType, platform, templateID, language string) bool {
-	return ts.selectEntry(templateType, platform, templateID, language) != nil
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	idLower := strings.ToLower(templateID)
+
+	for i := range ts.entries {
+		e := &ts.entries[i]
+		if e.Type != templateType || e.Platform != platform {
+			continue
+		}
+		if strings.ToLower(e.ID.String()) == idLower {
+			return true
+		}
+	}
+	return false
 }
 
 func cacheKey(templateType, platform, templateID, language string) string {
