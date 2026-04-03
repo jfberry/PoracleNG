@@ -87,5 +87,53 @@
   "tracking.updated": "Updated: ",
   "tracking.new": "New: ",
   "tracking.bulk_changes": "I have made a lot of changes. See {0}{1} for details",
-  "tracking.tracked": "tracked"
+  "tracking.tracked": "tracked",
+
+  "status.enabled": "aktivert",
+  "status.disabled": "deaktivert",
+  "status.alerts_currently": "Dine gjeldende varsler er **{0}**",
+  "status.location_set": "Ditt gjeldende sted er {0}",
+  "status.no_location": "Du har ikke satt et sted enda",
+  "status.areas_set": "Du har aktivert varsler fra {0}",
+  "status.no_areas": "Du har ikke lagt inn noen områder enda",
+  "status.profile_set": "Din profil er satt til: {0}",
+  "status.tracking_file": "Din liste over hva du varsles om er veldig lang. Her er en fil med alt sammen:",
+
+  "section.pokemon.none": "Du varsles ikke om noen Pokémon",
+  "section.raids.none": "Du varsles ikke om noen raid",
+  "section.quests.none": "Du varsles ikke om noen research-oppgaver",
+  "section.invasions.none": "Du varsles ikke om noen Team Go Rocket-typer",
+  "section.lures.none": "Du varsles ikke ome noen lures",
+  "section.nests.none": "Du varsles ikke om noen nests",
+  "section.gyms.none": "Du varsles ikke om noen gymendringer",
+
+  "msg.dm_only": "Vennligst skriv kommandoer i direktemeldinger",
+  "msg.no_pokemon": "Ingen Pokémon ble funnet",
+  "msg.userlist.registered": "Disse brukerne er registrerte:",
+  "msg.channel.added": "Kanal lagt til",
+  "msg.removed_n": "Jeg fjernet {0} varslinger",
+
+  "msg.track.everything_no_filters": "Denne kommandoen ville ført til alt for mange varsler, legg inn mer filtrering for å begrense mulige varsler.",
+
+  "msg.stop.warn_args": "Kommandoen {0}{1} vil deaktivere alle varslinger, er dette det du vil?",
+  "msg.stop.success": "Alle varsler er deaktivert, du kan aktivere dem igjen med {0}{1}",
+  "msg.start.success": "Varslene er nå aktivert",
+
+  "msg.language.changed": "Ditt språk er endret til {0}",
+  "msg.language.current": "Aktivt språk er satt til {0}",
+  "msg.language.unknown": "Tilgjengelige språk: {0}",
+
+  "msg.location.not_found": "Kunne ikke forstå hva slags posisjon du forsøkte å angi",
+  "msg.location.new": "Nytt sted",
+  "msg.area.added": "Lagt til områder: {0}",
+  "msg.area.removed": "Fjernede områder: {0}",
+  "msg.area.current": "Gyldige områder er:",
+
+  "msg.profile.none": "Du har ingen profiler",
+  "msg.profile.not_found": "Ukjent profil",
+  "msg.profile.list_header": "Du har følgende profiler:",
+
+  "msg.info.rarity_unavailable": "Data om sjeldenhet er ikke kalkulert enda, prøv igjen om en times tid",
+
+  "cmd.invasion": "invadering"
 }

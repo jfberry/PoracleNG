@@ -87,5 +87,31 @@
   "tracking.updated": "Updated: ",
   "tracking.new": "New: ",
   "tracking.bulk_changes": "I have made a lot of changes. See {0}{1} for details",
-  "tracking.tracked": "tracked"
+  "tracking.tracked": "tracked",
+
+  "status.enabled": "aktiverade",
+  "status.disabled": "avaktiverade",
+  "status.alerts_currently": "Dina aviseringar är **{0}**",
+  "status.location_set": "Din plats är för närvarande {0}",
+  "status.no_location": "Du har inte angivit en plats ännu",
+  "status.areas_set": "Du tar just nu emot aviseringar från {0}",
+  "status.no_areas": "Du har inte valt ett område ännu",
+
+  "section.pokemon.none": "Du spårar inga Pokémon",
+  "section.raids.none": "Du spårar inga raider",
+  "section.quests.none": "Du spårar inga uppdrag",
+  "section.invasions.none": "Du spårar inga Rocket invasioner",
+
+  "msg.dm_only": "Skriv alla kommandon i PM till botten",
+  "msg.area.added": "Tillagda platser: {0}",
+  "msg.area.removed": "Borttagna platser: {0}",
+  "msg.area.current": "Valbara platser är:",
+
+  "msg.language.changed": "Jag har ändrat ditt språk till {0}",
+  "msg.language.current": "Aktivt språk är inställt på {0}",
+  "msg.language.unknown": "Tillgängliga språk är: {0}",
+
+  "msg.location.new": "Ny plats",
+
+  "cmd.invasion": "invasion"
 }
