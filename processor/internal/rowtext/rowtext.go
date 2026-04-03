@@ -24,7 +24,7 @@ type Generator struct {
 // standardText appends template and clean indicators.
 func standardText(tr *i18n.Translator, template, defaultTemplate string, clean bool) string {
 	var text string
-	if template != defaultTemplate {
+	if template != "" && template != defaultTemplate {
 		text += " " + tr.Tf("tracking.template_fmt", template)
 	}
 	if clean {

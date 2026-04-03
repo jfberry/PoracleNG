@@ -176,7 +176,7 @@ func (d DatabaseConfig) DSN() string {
 	if port == 0 {
 		port = 3306
 	}
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true", d.User, d.Password, host, port, d.Database)
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&multiStatements=true", d.User, d.Password, host, port, d.Database)
 }
 
 type GeofenceConfig struct {
