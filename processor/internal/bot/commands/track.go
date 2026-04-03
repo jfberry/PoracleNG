@@ -8,7 +8,6 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
-	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -529,7 +528,7 @@ func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 					monsters = append(monsters, bot.ResolvedPokemon{PokemonID: key.ID, Form: 0})
 				}
 			}
-			return c.filterByGenAndType(ctx, monsters, parsed)
+			return filterByGenAndType(ctx, monsters, parsed)
 		}
 		// Single catch-all entry
 		return []bot.ResolvedPokemon{{PokemonID: 0, Form: 0}}
@@ -537,77 +536,11 @@ func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 
 	monsters := parsed.Pokemon
 
-	// Form filtering — match form name via translation keys (form_{formId})
-	if formName, ok := parsed.Strings["form"]; ok && ctx.GameData != nil {
-		tr := ctx.Tr()
-		enTr := ctx.Translations.For("en")
-		var filtered []bot.ResolvedPokemon
-		for _, mon := range monsters {
-			for key := range ctx.GameData.Monsters {
-				if key.ID != mon.PokemonID || key.Form == 0 {
-					continue
-				}
-				formKey := gamedata.FormTranslationKey(key.Form)
-				translatedForm := strings.ToLower(tr.T(formKey))
-				enForm := strings.ToLower(enTr.T(formKey))
-				if translatedForm == formName || enForm == formName {
-					filtered = append(filtered, bot.ResolvedPokemon{PokemonID: key.ID, Form: key.Form})
-				}
-			}
-		}
-		if len(filtered) > 0 {
-			monsters = filtered
-		}
+	if formName, ok := parsed.Strings["form"]; ok {
+		monsters = filterByForm(ctx, monsters, formName)
 	}
 
-	return c.filterByGenAndType(ctx, monsters, parsed)
-}
-
-func (c *TrackCommand) filterByGenAndType(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
-	if ctx.GameData == nil {
-		return monsters
-	}
-
-	// Generation filter
-	if gen, ok := parsed.Singles["gen"]; ok {
-		genInfo := ctx.GameData.Util.GenData[gen]
-		if genInfo.Min > 0 && genInfo.Max > 0 {
-			var filtered []bot.ResolvedPokemon
-			for _, mon := range monsters {
-				if mon.PokemonID >= genInfo.Min && mon.PokemonID <= genInfo.Max {
-					filtered = append(filtered, mon)
-				}
-			}
-			monsters = filtered
-		}
-	}
-
-	// Type filter
-	if len(parsed.Types) > 0 {
-		typeSet := make(map[int]bool)
-		for _, t := range parsed.Types {
-			typeSet[t] = true
-		}
-		var filtered []bot.ResolvedPokemon
-		for _, mon := range monsters {
-			m := ctx.GameData.Monsters[gamedata.MonsterKey{ID: mon.PokemonID, Form: mon.Form}]
-			if m == nil {
-				m = ctx.GameData.Monsters[gamedata.MonsterKey{ID: mon.PokemonID, Form: 0}]
-			}
-			if m == nil {
-				continue
-			}
-			for _, t := range m.Types {
-				if typeSet[t] {
-					filtered = append(filtered, mon)
-					break
-				}
-			}
-		}
-		monsters = filtered
-	}
-
-	return monsters
+	return filterByGenAndType(ctx, monsters, parsed)
 }
 
 
