@@ -433,6 +433,48 @@ func (ts *TemplateStore) TemplateMetadata(includeDescriptions bool) map[string]a
 	return result
 }
 
+// UserTemplateInfo holds template info for user-facing display.
+type UserTemplateInfo struct {
+	ID          string
+	Name        string
+	Description string
+	IsDefault   bool
+}
+
+// ListForPlatform returns non-hidden templates for a given platform, grouped by type.
+// Deduplicates by ID within each type (same ID can appear for different languages).
+func (ts *TemplateStore) ListForPlatform(platform string) map[string][]UserTemplateInfo {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	type seen struct{ typ, id string }
+	dedup := make(map[seen]bool)
+	result := make(map[string][]UserTemplateInfo)
+
+	for _, e := range ts.entries {
+		if e.Hidden || e.Platform != platform {
+			continue
+		}
+		id := e.ID.String()
+		if id == "" {
+			id = "default"
+		}
+		key := seen{e.Type, id}
+		if dedup[key] {
+			continue
+		}
+		dedup[key] = true
+
+		result[e.Type] = append(result[e.Type], UserTemplateInfo{
+			ID:          id,
+			Name:        e.Name,
+			Description: e.Description,
+			IsDefault:   e.Default,
+		})
+	}
+	return result
+}
+
 // TemplateSummary returns a map of type → platform → count for loaded templates.
 // Hidden entries are excluded.
 func (ts *TemplateStore) TemplateSummary() map[string]map[string]int {
