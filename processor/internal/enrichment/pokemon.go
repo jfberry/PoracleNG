@@ -19,6 +19,8 @@ import (
 // also includes game data enrichment (types, weakness, stats, maps, etc.).
 func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) (map[string]any, *staticmap.TilePending) {
 	m := map[string]any{
+		"pokemon_id":       pokemon.PokemonID,
+		"pokemonId":        pokemon.PokemonID,
 		"rarityGroup":      processed.RarityGroup,
 		"pvpBestRank":      processed.PVPBestRank,
 		"pvpEvolutionData": processed.PVPEvoData,
@@ -446,29 +448,45 @@ func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr
 			mon := gd.GetMonster(rank.Pokemon, formID)
 			if mon != nil {
 				nameInfo := make(map[string]any)
-				TranslateMonsterNames(nameInfo, gd, tr, rank.Pokemon, formID, rank.Evolution)
+				TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, rank.Pokemon, formID, rank.Evolution)
 				entry["name"] = nameInfo["name"]
 				entry["fullName"] = nameInfo["fullName"]
 				entry["formName"] = nameInfo["formName"]
 				entry["formNormalised"] = nameInfo["formNormalised"]
+				entry["nameEng"] = nameInfo["nameEng"]
+				entry["fullNameEng"] = nameInfo["fullNameEng"]
+				entry["formNormalisedEng"] = nameInfo["formNormalisedEng"]
 				entry["baseStats"] = map[string]int{
 					"baseAttack":  mon.Attack,
 					"baseDefense": mon.Defense,
 					"baseStamina": mon.Stamina,
 				}
+				entry["baseAttack"] = mon.Attack
+				entry["baseDefense"] = mon.Defense
+				entry["baseStamina"] = mon.Stamina
 			} else {
 				entry["name"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
 				entry["fullName"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
 				entry["formName"] = ""
 				entry["formNormalised"] = ""
+				entry["nameEng"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
+				entry["fullNameEng"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
+				entry["formNormalisedEng"] = ""
 				entry["baseStats"] = map[string]int{
 					"baseAttack": 0, "baseDefense": 0, "baseStamina": 0,
 				}
+				entry["baseAttack"] = 0
+				entry["baseDefense"] = 0
+				entry["baseStamina"] = 0
 			}
 
 			enriched = append(enriched, entry)
 		}
 		m[fmt.Sprintf("pvpEnriched_%s_league", leagueName)] = enriched
+		// Also store under the original webhook key so existing DTS templates
+		// using {{#each pvp_rankings_great_league}} get the enriched entries
+		// (with levelWithCap, name, fullName, etc.) instead of raw webhook data.
+		m[fmt.Sprintf("pvp_rankings_%s_league", leagueName)] = enriched
 	}
 }
 
