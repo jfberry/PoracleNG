@@ -340,9 +340,11 @@ func (b *Bot) sendReplies(chatID int64, userID int64, replies []bot.Reply) {
 				photo.Caption = reply.Text
 			}
 			if _, err := b.api.Send(photo); err != nil {
-				log.Warnf("telegram bot: send photo: %v", err)
+				log.Warnf("telegram bot: send photo failed, falling back to text: %v", err)
+				// Fall through to text handler below
+			} else {
+				continue
 			}
-			continue
 		}
 
 		// File attachment
