@@ -1,13 +1,11 @@
 package commands
 
 import (
-	"fmt"
-	"strings"
-
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // UntrackCommand implements !untrack — remove pokemon tracking rules.
@@ -34,7 +32,10 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	// Direct UID removal — bypasses pokemon/gen/type matching
 	if len(parsed.RemoveUIDs) > 0 {
-		return removeByUIDs(ctx, ctx.Tracking.Monsters, parsed.RemoveUIDs)
+		return removeByUIDs(ctx, ctx.Tracking.Monsters, parsed.RemoveUIDs,
+			store.MonsterGetUID,
+			func(r *db.MonsterTrackingAPI) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(r)) },
+		)
 	}
 
 	tracked, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
@@ -115,14 +116,9 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	ctx.TriggerReload()
 
-	var sb strings.Builder
-	if len(removed) > 20 {
-		sb.WriteString(tr.Tf("msg.removed_n", len(removed)))
-	} else {
-		for i := range removed {
-			mt := monsterAPIToTracking(&removed[i])
-			fmt.Fprintf(&sb, "Removed: %s\n", ctx.RowText.MonsterRowText(tr, mt))
-		}
+	var descriptions []string
+	for i := range removed {
+		descriptions = append(descriptions, ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&removed[i])))
 	}
-	return []bot.Reply{{React: "✅", Text: sb.String()}}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }

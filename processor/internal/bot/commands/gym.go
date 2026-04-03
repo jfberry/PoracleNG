@@ -91,7 +91,11 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	if parsed.HasKeyword("arg.remove") {
 		if len(parsed.RemoveUIDs) > 0 {
-			return removeByUIDs(ctx, ctx.Tracking.Gyms, parsed.RemoveUIDs)
+			tr := ctx.Tr()
+			return removeByUIDs(ctx, ctx.Tracking.Gyms, parsed.RemoveUIDs,
+				store.GymGetUID,
+				func(r *db.GymTrackingAPI) string { return ctx.RowText.GymRowText(tr, gymAPIToTracking(r)) },
+			)
 		}
 		return c.removeGyms(ctx, teams)
 	}
@@ -190,9 +194,11 @@ func (c *GymCommand) removeGyms(ctx *bot.CommandContext, teams []int) []bot.Repl
 	}
 
 	var uids []int64
+	var removed []db.GymTrackingAPI
 	for _, existing := range tracked {
 		if teamSet[existing.Team] || teamSet[4] {
 			uids = append(uids, existing.UID)
+			removed = append(removed, existing)
 		}
 	}
 	if len(uids) == 0 {
@@ -204,5 +210,9 @@ func (c *GymCommand) removeGyms(ctx *bot.CommandContext, teams []int) []bot.Repl
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
+	var descriptions []string
+	for i := range removed {
+		descriptions = append(descriptions, ctx.RowText.GymRowText(tr, gymAPIToTracking(&removed[i])))
+	}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }

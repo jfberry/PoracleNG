@@ -183,14 +183,75 @@ func buildTrackingMessage(
 	return sb.String()
 }
 
-// removeByUIDs deletes tracking rows by their UIDs. Works for any tracking type.
-// Used by all "remove id:XX" commands.
-func removeByUIDs[T any](ctx *bot.CommandContext, trackingStore store.TrackingStore[T], uids []int64) []bot.Reply {
+// formatRemovedRows builds the response text for removed tracking rows.
+// Shows individual row descriptions up to a threshold, then falls back to a count.
+func formatRemovedRows(tr *i18n.Translator, descriptions []string) string {
+	var sb strings.Builder
+	if len(descriptions) > 20 {
+		sb.WriteString(tr.Tf("msg.removed_n", len(descriptions)))
+	} else {
+		for _, desc := range descriptions {
+			sb.WriteString(tr.T("tracking.removed_prefix"))
+			sb.WriteString(desc)
+			sb.WriteByte('\n')
+		}
+	}
+	return sb.String()
+}
+
+// removeByUIDs validates and deletes tracking rows by their UIDs.
+// getUID extracts the UID from a row. describeRow generates display text for removed rows.
+// Reports which UIDs were not found.
+func removeByUIDs[T any](
+	ctx *bot.CommandContext,
+	trackingStore store.TrackingStore[T],
+	requestedUIDs []int64,
+	getUID func(*T) int64,
+	describeRow func(*T) string,
+) []bot.Reply {
 	tr := ctx.Tr()
-	if err := trackingStore.DeleteByUIDs(ctx.TargetID, uids); err != nil {
-		log.Errorf("remove by uid: %v", err)
+
+	// Load existing rows to validate UIDs and generate descriptions
+	existing, err := trackingStore.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
+	if err != nil {
+		log.Errorf("remove by uid: select: %v", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+
+	// Build lookup of existing UIDs
+	byUID := make(map[int64]*T, len(existing))
+	for i := range existing {
+		byUID[getUID(&existing[i])] = &existing[i]
+	}
+
+	// Classify requested UIDs as found or not found
+	var toDelete []int64
+	var descriptions []string
+	var notFound []int64
+	for _, uid := range requestedUIDs {
+		if row, ok := byUID[uid]; ok {
+			toDelete = append(toDelete, uid)
+			descriptions = append(descriptions, describeRow(row))
+		} else {
+			notFound = append(notFound, uid)
+		}
+	}
+
+	if len(toDelete) == 0 {
+		return []bot.Reply{{React: "👌", Text: tr.T("msg.nothing_to_remove")}}
+	}
+
+	if err := trackingStore.DeleteByUIDs(ctx.TargetID, toDelete); err != nil {
+		log.Errorf("remove by uid: delete: %v", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
+
+	msg := formatRemovedRows(tr, descriptions)
+	if len(notFound) > 0 {
+		for _, uid := range notFound {
+			msg += tr.Tf("tracking.uid_not_found", uid) + "\n"
+		}
+	}
+	return []bot.Reply{{React: "✅", Text: strings.TrimSpace(msg)}}
 }

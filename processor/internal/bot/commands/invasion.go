@@ -210,7 +210,11 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 
 func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, parsed *bot.ParsedArgs, gruntTypes []string) []bot.Reply {
 	if len(parsed.RemoveUIDs) > 0 {
-		return removeByUIDs(ctx, ctx.Tracking.Invasions, parsed.RemoveUIDs)
+		tr := ctx.Tr()
+		return removeByUIDs(ctx, ctx.Tracking.Invasions, parsed.RemoveUIDs,
+			store.InvasionGetUID,
+			func(r *db.InvasionTrackingAPI) string { return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(r)) },
+		)
 	}
 
 	tracked, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
@@ -225,10 +229,12 @@ func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, parsed *bot.P
 	}
 
 	var uids []int64
+	var removed []db.InvasionTrackingAPI
 	for _, existing := range tracked {
 		// "everything" means remove all
 		if gtSet["everything"] || gtSet[existing.GruntType] {
 			uids = append(uids, existing.UID)
+			removed = append(removed, existing)
 		}
 	}
 	if len(uids) == 0 {
@@ -240,5 +246,9 @@ func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, parsed *bot.P
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
+	var descriptions []string
+	for i := range removed {
+		descriptions = append(descriptions, ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&removed[i])))
+	}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }

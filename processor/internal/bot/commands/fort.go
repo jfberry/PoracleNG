@@ -103,7 +103,11 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	if parsed.HasKeyword("arg.remove") {
 		if len(parsed.RemoveUIDs) > 0 {
-			return removeByUIDs(ctx, ctx.Tracking.Forts, parsed.RemoveUIDs)
+			tr := ctx.Tr()
+			return removeByUIDs(ctx, ctx.Tracking.Forts, parsed.RemoveUIDs,
+				store.FortGetUID,
+				func(r *db.FortTrackingAPI) string { return ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(r)) },
+			)
 		}
 		return c.removeForts(ctx, fortType)
 	}
@@ -167,9 +171,11 @@ func (c *FortCommand) removeForts(ctx *bot.CommandContext, fortType string) []bo
 	}
 
 	var uids []int64
+	var removed []db.FortTrackingAPI
 	for _, existing := range tracked {
 		if fortType == "everything" || existing.FortType == fortType {
 			uids = append(uids, existing.UID)
+			removed = append(removed, existing)
 		}
 	}
 	if len(uids) == 0 {
@@ -181,5 +187,9 @@ func (c *FortCommand) removeForts(ctx *bot.CommandContext, fortType string) []bo
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
+	var descriptions []string
+	for i := range removed {
+		descriptions = append(descriptions, ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&removed[i])))
+	}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }
