@@ -1,6 +1,13 @@
 package bot
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+
+	log "github.com/sirupsen/logrus"
+
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
@@ -15,13 +22,13 @@ type ResolvedPokemon struct {
 // masterfile, poke_{id} translation keys, and pokemonAlias.json.
 type PokemonResolver struct {
 	nameToIDs map[string]map[string][]int // lang → lowercase name → pokemon IDs
-	aliases   map[string]int              // alias → pokemon ID
+	aliases   map[string][]int            // alias → pokemon IDs
 	gameData  *gamedata.GameData
 	bundle    *i18n.Bundle
 }
 
 // NewPokemonResolver builds name→ID lookup maps for all configured languages.
-func NewPokemonResolver(gd *gamedata.GameData, bundle *i18n.Bundle, languages []string, aliases map[string]int) *PokemonResolver {
+func NewPokemonResolver(gd *gamedata.GameData, bundle *i18n.Bundle, languages []string, aliases map[string][]int) *PokemonResolver {
 	r := &PokemonResolver{
 		nameToIDs: make(map[string]map[string][]int),
 		aliases:   aliases,
@@ -29,7 +36,7 @@ func NewPokemonResolver(gd *gamedata.GameData, bundle *i18n.Bundle, languages []
 		bundle:    bundle,
 	}
 	if r.aliases == nil {
-		r.aliases = make(map[string]int)
+		r.aliases = make(map[string][]int)
 	}
 
 	// Build name→ID maps per language from poke_{id} translation keys
@@ -73,9 +80,9 @@ func (r *PokemonResolver) Resolve(name string, lang string) []ResolvedPokemon {
 		return []ResolvedPokemon{{PokemonID: id, Form: 0}}
 	}
 
-	// 2. Alias
-	if id, ok := r.aliases[cleanName]; ok {
-		return []ResolvedPokemon{{PokemonID: id, Form: 0}}
+	// 2. Alias (may resolve to multiple pokemon, e.g. "laketrio" → [480, 481, 482])
+	if ids, ok := r.aliases[cleanName]; ok {
+		return idsToResolved(ids)
 	}
 
 	// 3. User's language
@@ -162,4 +169,48 @@ func parseIntSafe(s string) int {
 		n = n*10 + int(c-'0')
 	}
 	return n
+}
+
+// LoadPokemonAliases reads pokemonAlias.json from configDir (preferred) or fallbackDir.
+// Returns a map of lowercase alias → pokemon IDs. Each value may be a single int
+// or an array of ints (e.g. "laketrio" → [480, 481, 482]).
+func LoadPokemonAliases(configDir, fallbackDir string) map[string][]int {
+	path := filepath.Join(configDir, "pokemonAlias.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		path = filepath.Join(fallbackDir, "pokemonAlias.json")
+		data, err = os.ReadFile(path)
+		if err != nil {
+			log.Debug("No pokemonAlias.json found")
+			return nil
+		}
+	}
+
+	// JSON values are either a single number or an array of numbers
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		log.Warnf("pokemonAlias: failed to parse %s: %v", path, err)
+		return nil
+	}
+
+	result := make(map[string][]int, len(raw))
+	for name, val := range raw {
+		key := strings.ToLower(name)
+		// Try array first
+		var ids []int
+		if err := json.Unmarshal(val, &ids); err == nil {
+			result[key] = ids
+			continue
+		}
+		// Try single int
+		var id int
+		if err := json.Unmarshal(val, &id); err == nil {
+			result[key] = []int{id}
+			continue
+		}
+		log.Warnf("pokemonAlias: skipping %q: unsupported value type", name)
+	}
+
+	log.Infof("Loaded %d pokemon aliases from %s", len(result), path)
+	return result
 }

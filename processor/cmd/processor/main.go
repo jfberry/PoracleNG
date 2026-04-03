@@ -398,7 +398,8 @@ func main() {
 	}
 	cmdParser := bot.NewParser(cmdPrefix, proc.enricher.Translations, cmdLanguages)
 	tgParser := bot.NewParser("/", proc.enricher.Translations, cmdLanguages)
-	cmdResolver := bot.NewPokemonResolver(proc.enricher.GameData, proc.enricher.Translations, cmdLanguages, nil)
+	pokemonAliases := bot.LoadPokemonAliases(filepath.Join(cfg.BaseDir, "config"), filepath.Join(cfg.BaseDir, "fallbacks"))
+	cmdResolver := bot.NewPokemonResolver(proc.enricher.GameData, proc.enricher.Translations, cmdLanguages, pokemonAliases)
 	cmdArgMatcher := bot.NewArgMatcher(proc.enricher.Translations, proc.enricher.GameData, cmdResolver, cmdLanguages)
 	cmdRegistry := bot.NewRegistry()
 	cmdRegistry.Register(&commands.StartCommand{})
