@@ -883,6 +883,11 @@ func (c *InfoCommand) templateList(ctx *bot.CommandContext) []bot.Reply {
 	platform := targetDTSPlatform(ctx)
 	byType := ctx.DTS.ListForPlatform(platform)
 
+	// Hide types that users can't select templates for
+	delete(byType, "weatherchange")
+	delete(byType, "monsterNoIv")
+	delete(byType, "greeting")
+
 	if len(byType) == 0 {
 		return []bot.Reply{{Text: "No templates available"}}
 	}
