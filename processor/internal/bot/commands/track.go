@@ -41,9 +41,17 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*warn}
 	}
 
-	// Handle remove
+	// Handle remove — delegate to !untrack logic (strip the "remove" keyword)
 	if parsed.HasKeyword("arg.remove") {
-		return c.removeTracking(ctx, parsed)
+		untrack := &UntrackCommand{}
+		var remaining []string
+		removeWord := strings.ToLower(tr.T("arg.remove"))
+		for _, a := range args {
+			if strings.ToLower(a) != removeWord && strings.ToLower(a) != "remove" {
+				remaining = append(remaining, a)
+			}
+		}
+		return untrack.Run(ctx, remaining)
 	}
 
 	// Resolve pokemon list
@@ -602,58 +610,6 @@ func (c *TrackCommand) filterByGenAndType(ctx *bot.CommandContext, monsters []bo
 	return monsters
 }
 
-func (c *TrackCommand) removeTracking(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
-	tr := ctx.Tr()
-	tracked, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-	if err != nil {
-		log.Errorf("track command: select for remove: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	// Build set of pokemon IDs to remove
-	removeIDs := make(map[int]bool)
-	for _, mon := range parsed.Pokemon {
-		removeIDs[mon.PokemonID] = true
-	}
-
-	// If everything keyword, remove all
-	if parsed.HasKeyword("arg.everything") {
-		for _, existing := range tracked {
-			removeIDs[existing.PokemonID] = true
-		}
-	}
-
-	var uidsToDelete []int64
-	var removed []db.MonsterTrackingAPI
-	for _, existing := range tracked {
-		if removeIDs[existing.PokemonID] {
-			uidsToDelete = append(uidsToDelete, existing.UID)
-			removed = append(removed, existing)
-		}
-	}
-
-	if len(uidsToDelete) == 0 {
-		return []bot.Reply{{React: "👌"}}
-	}
-
-	if err := ctx.Tracking.Monsters.DeleteByUIDs(ctx.TargetID, uidsToDelete); err != nil {
-		log.Errorf("track command: delete: %s", err)
-		return []bot.Reply{{React: "🙅"}}
-	}
-
-	ctx.TriggerReload()
-
-	var sb strings.Builder
-	if len(removed) > 20 {
-		sb.WriteString(tr.Tf("cmd.removed_n", len(removed)))
-	} else {
-		for i := range removed {
-			mt := monsterAPIToTracking(&removed[i])
-			fmt.Fprintf(&sb, "Removed: %s\n", ctx.RowText.MonsterRowText(tr, mt))
-		}
-	}
-	return []bot.Reply{{React: "✅", Text: sb.String()}}
-}
 
 func monsterAPIToTracking(a *db.MonsterTrackingAPI) *db.MonsterTracking {
 	return &db.MonsterTracking{
