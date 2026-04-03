@@ -65,7 +65,7 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 	ctx.TriggerReload()
 
-	mapLink := fmt.Sprintf("https://maps.google.com/maps?q=%f,%f", lat, lon)
+	mapLink := fmt.Sprintf("<https://maps.google.com/maps?q=%f,%f>", lat, lon)
 	reply := bot.Reply{React: "✅", Text: tr.Tf("msg.location.set", lat, lon) + "\n" + mapLink}
 
 	// Generate location pin tile if static map is available
