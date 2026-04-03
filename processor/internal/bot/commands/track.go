@@ -64,12 +64,34 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	filters := c.parseFilters(ctx, parsed)
 
 	// Resolve PVP
-	pvpLeague, pvpBest, pvpWorst, pvpMinCP, pvpCap := c.parsePVP(parsed)
+	pvpLeague, pvpBest, pvpWorst, pvpMinCP, pvpCap := c.parsePVP(ctx, parsed)
 
 	// Check PVP permission if PVP filters are present
 	if pvpLeague > 0 {
 		if !bot.CheckFeaturePermission(ctx.Config, ctx.Platform, "pvp", ctx.UserID, nil) {
 			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
+		}
+	}
+
+	// Validate PVP level cap against configured caps
+	if pvpCap > 0 {
+		validCaps := ctx.Config.PVP.LevelCaps
+		if len(validCaps) == 0 {
+			validCaps = []int{50}
+		}
+		found := false
+		for _, c := range validCaps {
+			if pvpCap == c {
+				found = true
+				break
+			}
+		}
+		if !found {
+			capStrs := []string{"0"}
+			for _, c := range validCaps {
+				capStrs = append(capStrs, fmt.Sprintf("%d", c))
+			}
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.track.invalid_cap", strings.Join(capStrs, ", "))}}
 		}
 	}
 
@@ -399,9 +421,16 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	return f
 }
 
-func (c *TrackCommand) parsePVP(parsed *bot.ParsedArgs) (league, best, worst, minCP, cap int) {
+func (c *TrackCommand) parsePVP(ctx *bot.CommandContext, parsed *bot.ParsedArgs) (league, best, worst, minCP, cap int) {
 	best = 1
 	worst = 4096
+
+	// Config-based minimum CP per league (matches JS alerter behavior)
+	leagueMinCP := map[string]int{
+		"great":  ctx.Config.PVP.PVPFilterGreatMinCP,
+		"ultra":  ctx.Config.PVP.PVPFilterUltraMinCP,
+		"little": ctx.Config.PVP.PVPFilterLittleMinCP,
+	}
 
 	// Check each league in priority order
 	for _, l := range []struct {
@@ -416,7 +445,16 @@ func (c *TrackCommand) parsePVP(parsed *bot.ParsedArgs) (league, best, worst, mi
 			league = l.cp
 			best = f.Best
 			worst = f.Worst
+			// Clamp worst rank by config max (pvp_filter_max_rank)
+			maxRank := ctx.Config.PVP.PVPFilterMaxRank
+			if maxRank > 0 && worst > maxRank {
+				worst = maxRank
+			}
+			// Enforce config minimum CP: user's explicit CP or config floor, whichever is higher
 			minCP = f.MinCP
+			if floor := leagueMinCP[l.name]; floor > minCP {
+				minCP = floor
+			}
 			break
 		}
 	}

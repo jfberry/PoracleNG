@@ -314,6 +314,7 @@
   "cmd.raid.usage": "Valid commands are e.g. `{0}raid level:5`, `{0}raid pikachu`, `{0}raid remove everything`",
   "cmd.track.usage": "Valid commands are e.g. `{0}track pikachu iv:100`, `{0}track everything iv:90`, `{0}track remove pikachu`",
   "cmd.track.everything_no_filters": "This would result in too many alerts. You need to provide additional filters to limit the number of valid candidates.",
+  "cmd.track.invalid_cap": "This level cap is not supported, valid choices are: {0}",
   "cmd.quest.usage": "Valid commands are e.g. `{0}quest pikachu`, `{0}quest stardust:1000`, `{0}quest energy:charizard`",
   "cmd.lure.usage": "Valid commands are e.g. `{0}lure glacial`, `{0}lure everything`, `{0}lure remove glacial`",
   "cmd.gym.usage": "Valid commands are e.g. `{0}gym valor`, `{0}gym everything slot_changes`, `{0}gym remove valor`",
