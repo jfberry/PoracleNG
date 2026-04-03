@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -551,9 +552,9 @@ func TestPlatformFromType(t *testing.T) {
 		{"webhook", "discord"},
 	}
 	for _, tt := range tests {
-		got := platformFromType(tt.input)
+		got := delivery.PlatformFromType(tt.input)
 		if got != tt.want {
-			t.Errorf("platformFromType(%q) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("PlatformFromType(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
@@ -577,25 +578,6 @@ func TestDeduplicateUsers(t *testing.T) {
 	if result[0].Name != "Alice" {
 		t.Errorf("expected first occurrence 'Alice', got %q", result[0].Name)
 	}
-}
-
-func TestAppendPing(t *testing.T) {
-	// Existing content
-	msg := map[string]any{"content": "Hello"}
-	appendPing(msg, "<@user>")
-	if msg["content"] != "Hello <@user>" {
-		t.Errorf("expected 'Hello <@user>', got %v", msg["content"])
-	}
-
-	// No existing content
-	msg2 := map[string]any{}
-	appendPing(msg2, "<@user>")
-	if msg2["content"] != "<@user>" {
-		t.Errorf("expected '<@user>', got %v", msg2["content"])
-	}
-
-	// Non-map message (should not panic)
-	appendPing("not a map", "<@user>")
 }
 
 // --- RenderAlert tests ---

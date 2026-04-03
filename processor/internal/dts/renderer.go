@@ -3,12 +3,12 @@ package dts
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	raymond "github.com/mailgun/raymond/v2"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -171,7 +171,7 @@ func (r *Renderer) renderForUsers(
 
 	for _, user := range users {
 		// a. Determine platform
-		platform := platformFromType(user.Type)
+		platform := delivery.PlatformFromType(user.Type)
 
 		// b. Determine language
 		language := user.Language
@@ -231,20 +231,7 @@ func (r *Renderer) renderForUsers(
 			rawMessage = appendPingToRaw(rawMessage, user.Ping)
 		}
 
-		// Extract emoji from view
-		var emojiSlice []string
-		if raw, ok := view.GetField("emoji"); ok {
-			switch v := raw.(type) {
-			case []string:
-				emojiSlice = v
-			case []any:
-				for _, item := range v {
-					if s, ok := item.(string); ok {
-						emojiSlice = append(emojiSlice, s)
-					}
-				}
-			}
-		}
+		emojiSlice := extractEmojiSlice(view)
 
 		// h. Build DeliveryJob
 		jobs = append(jobs, webhook.DeliveryJob{
@@ -296,7 +283,7 @@ func (r *Renderer) renderGrouped(
 	groupMap := make(map[renderGroupKey]*groupEntry, 4)
 
 	for _, user := range users {
-		platform := platformFromType(user.Type)
+		platform := delivery.PlatformFromType(user.Type)
 		language := user.Language
 		if language == "" {
 			language = r.locale
@@ -351,20 +338,7 @@ func (r *Renderer) renderGrouped(
 			rawMessage = fallbackMessageRaw(templateType, key.platform, key.templateID, key.language)
 		}
 
-		// Extract emoji once for the group
-		var emojiSlice []string
-		if raw, ok := view.GetField("emoji"); ok {
-			switch v := raw.(type) {
-			case []string:
-				emojiSlice = v
-			case []any:
-				for _, item := range v {
-					if s, ok := item.(string); ok {
-						emojiSlice = append(emojiSlice, s)
-					}
-				}
-			}
-		}
+		emojiSlice := extractEmojiSlice(view)
 
 		// Create a job for each user in the group
 		for _, user := range g.users {
@@ -428,18 +402,28 @@ func truncateCoord(f float64) string {
 	return s
 }
 
-// platformFromType extracts the platform from a user type string.
-// "discord:user" -> "discord", "telegram:group" -> "telegram", "webhook" -> "discord"
-func platformFromType(userType string) string {
-	parts := strings.SplitN(userType, ":", 2)
-	platform := parts[0]
-	if platform == "webhook" {
-		return "discord"
+// deduplicateUsers returns a slice with only the first occurrence of each user ID.
+// extractEmojiSlice gets the emoji array from a LayeredView, handling both []string and []any.
+func extractEmojiSlice(view *LayeredView) []string {
+	raw, ok := view.GetField("emoji")
+	if !ok {
+		return nil
 	}
-	return platform
+	switch v := raw.(type) {
+	case []string:
+		return v
+	case []any:
+		var result []string
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	}
+	return nil
 }
 
-// deduplicateUsers returns a slice with only the first occurrence of each user ID.
 func deduplicateUsers(users []webhook.MatchedUser) []webhook.MatchedUser {
 	seen := make(map[string]bool, len(users))
 	var result []webhook.MatchedUser
@@ -517,17 +501,6 @@ func fallbackMessage(templateType, platform, templateID, language string) string
 	obj := map[string]string{"content": msg}
 	b, _ := json.Marshal(obj)
 	return string(b)
-}
-
-// appendPing appends a ping string to the message's "content" field.
-func appendPing(message any, ping string) {
-	if m, ok := message.(map[string]any); ok {
-		if content, ok := m["content"].(string); ok {
-			m["content"] = content + " " + ping
-		} else {
-			m["content"] = ping
-		}
-	}
 }
 
 // appendPingToRaw parses a JSON message, appends ping to "content", and re-serializes.
