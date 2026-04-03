@@ -17,5 +17,5 @@ func (c *WeatherCommand) Aliases() []string { return nil }
 
 func (c *WeatherCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "🙅", Text: tr.T("cmd.weather.unavailable")}}
+	return []bot.Reply{{React: "🙅", Text: tr.T("msg.weather.unavailable")}}
 }

@@ -21,7 +21,7 @@ func (c *CommunityCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	tr := ctx.Tr()
 
 	if !ctx.IsAdmin {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
 	}
 
 	if len(args) == 0 {
@@ -50,14 +50,14 @@ func (c *CommunityCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 func (c *CommunityCommand) usageReply(ctx *bot.CommandContext) []bot.Reply {
 	prefix := commandPrefix(ctx)
 	tr := ctx.Tr()
-	return []bot.Reply{{Text: tr.Tf("cmd.community.usage", prefix)}}
+	return []bot.Reply{{Text: tr.Tf("msg.community.usage", prefix)}}
 }
 
 func (c *CommunityCommand) runList(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 	names := bot.CommunityNames(ctx.Config)
 	if len(names) == 0 {
-		return []bot.Reply{{Text: tr.T("cmd.community.none")}}
+		return []bot.Reply{{Text: tr.T("msg.community.none")}}
 	}
 
 	// Replace spaces with underscores for display (matching alerter)
@@ -67,7 +67,7 @@ func (c *CommunityCommand) runList(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	return []bot.Reply{
-		{Text: tr.T("cmd.community.valid")},
+		{Text: tr.T("msg.community.valid")},
 		{Text: "```\n" + strings.Join(display, "\n") + "```"},
 	}
 }
@@ -83,7 +83,7 @@ func (c *CommunityCommand) runAddRemove(ctx *bot.CommandContext, args []string, 
 
 	targets := extractTargetIDs(targetArgs)
 	if len(targets) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.community.no_targets")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.community.no_targets")}}
 	}
 
 	var messages []string
@@ -124,7 +124,7 @@ func (c *CommunityCommand) runShow(ctx *bot.CommandContext, args []string) []bot
 	targets := extractTargetIDs(args)
 	tr := ctx.Tr()
 	if len(targets) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.community.no_targets")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.community.no_targets")}}
 	}
 
 	var messages []string
@@ -159,7 +159,7 @@ func (c *CommunityCommand) runClear(ctx *bot.CommandContext, args []string) []bo
 	targets := extractTargetIDs(args)
 	tr := ctx.Tr()
 	if len(targets) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.community.no_targets")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.community.no_targets")}}
 	}
 
 	var messages []string

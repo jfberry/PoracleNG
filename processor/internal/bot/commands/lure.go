@@ -28,10 +28,10 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.lure.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.lure.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.lure.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.lure.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -74,7 +74,7 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	} else if parsed.LureType == 0 && !parsed.HasKeyword("arg.everything") {
 		// Check if a lure type name matched with ID 0 (normal)
 		// If no lure type at all, show error
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_lure_type")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_lure_type")}}
 	}
 
 	if parsed.HasKeyword("arg.remove") {
@@ -152,5 +152,5 @@ func removeLures(ctx *bot.CommandContext, lureIDs []int) []bot.Reply {
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
 }

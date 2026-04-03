@@ -59,7 +59,7 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	if len(profiles) == 0 {
-		return []bot.Reply{{Text: tr.T("cmd.profile.none")}}
+		return []bot.Reply{{Text: tr.T("msg.profile.none")}}
 	}
 
 	dayKeys := []string{
@@ -68,7 +68,7 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(tr.T("cmd.profile.list_header"))
+	sb.WriteString(tr.T("msg.profile.list_header"))
 	sb.WriteByte('\n')
 	for _, p := range profiles {
 		activeMarker := ""
@@ -113,7 +113,7 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 func (c *ProfileCommand) addProfile(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.specify_name")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.specify_name")}}
 	}
 	name := strings.Join(args, " ")
 
@@ -132,22 +132,22 @@ func (c *ProfileCommand) addProfile(ctx *bot.CommandContext, args []string) []bo
 		}
 	}
 
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.profile.created", newNo, name)}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.created", newNo, name)}}
 }
 
 func (c *ProfileCommand) removeProfile(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.specify")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.specify")}}
 	}
 
 	profileNo := c.resolveProfileNo(ctx, args[0])
 	if profileNo < 1 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.not_found")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.not_found")}}
 	}
 
 	if profileNo == 1 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.cannot_delete_1")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.cannot_delete_1")}}
 	}
 
 	if err := ctx.Humans.DeleteProfile(ctx.TargetID, profileNo); err != nil {
@@ -156,18 +156,18 @@ func (c *ProfileCommand) removeProfile(ctx *bot.CommandContext, args []string) [
 	}
 
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.profile.deleted", profileNo)}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.deleted", profileNo)}}
 }
 
 func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.specify")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.specify")}}
 	}
 
 	profileNo := c.resolveProfileNo(ctx, strings.Join(args, " "))
 	if profileNo < 1 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.not_found")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.not_found")}}
 	}
 
 	found, err := ctx.Humans.SwitchProfile(ctx.TargetID, profileNo)
@@ -176,7 +176,7 @@ func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) [
 		return []bot.Reply{{React: "🙅"}}
 	}
 	if !found {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.not_found")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.not_found")}}
 	}
 
 	ctx.TriggerReload()
@@ -229,7 +229,7 @@ func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
 func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.settime_usage")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.settime_usage")}}
 	}
 
 	// Parse day:time patterns from all args.
@@ -264,7 +264,7 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 	}
 
 	if len(entries) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.settime_usage")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.settime_usage")}}
 	}
 
 	data, _ := json.Marshal(entries)
@@ -275,13 +275,13 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 	}
 
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.profile.hours_set", ctx.ProfileNo)}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.hours_set", ctx.ProfileNo)}}
 }
 
 func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.copyto_usage")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.copyto_usage")}}
 	}
 
 	// Load all profiles for this user.
@@ -348,14 +348,14 @@ func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Re
 
 	var parts []string
 	if len(copiedNames) > 0 {
-		parts = append(parts, tr.Tf("cmd.profile.copied", strings.Join(copiedNames, ", ")))
+		parts = append(parts, tr.Tf("msg.profile.copied", strings.Join(copiedNames, ", ")))
 	}
 	if len(invalid) > 0 {
-		parts = append(parts, tr.Tf("cmd.profile.copy_invalid", strings.Join(invalid, ", ")))
+		parts = append(parts, tr.Tf("msg.profile.copy_invalid", strings.Join(invalid, ", ")))
 	}
 
 	if len(copiedNames) == 0 && len(invalid) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.profile.copyto_usage")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.copyto_usage")}}
 	}
 
 	ctx.TriggerReload()

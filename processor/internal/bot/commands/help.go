@@ -43,7 +43,7 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 		// No DTS system — fall back to i18n text
 		tr := ctx.Tr()
 		prefix := commandPrefix(ctx)
-		return []bot.Reply{{Text: tr.Tf("cmd.help.text", prefix)}}
+		return []bot.Reply{{Text: tr.Tf("msg.help.text", prefix)}}
 	}
 
 	language := ctx.Language
@@ -69,11 +69,11 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 				return []bot.Reply{{Text: text}}
 			}
 			// Unknown topic
-			return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.help.unknown_topic", templateID, prefix)}}
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.help.unknown_topic", templateID, prefix)}}
 		}
 		// No greeting template
 		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.Tf("cmd.help.no_greeting", commandPrefix(ctx))}}
+		return []bot.Reply{{Text: tr.Tf("msg.help.no_greeting", commandPrefix(ctx))}}
 	}
 
 	// Render the template
@@ -81,7 +81,7 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 	if err != nil {
 		log.Warnf("help: render %s/%s: %v", templateType, templateID, err)
 		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.Tf("cmd.help.text", commandPrefix(ctx))}}
+		return []bot.Reply{{Text: tr.Tf("msg.help.text", commandPrefix(ctx))}}
 	}
 
 	// Parse the rendered JSON

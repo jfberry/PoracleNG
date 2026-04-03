@@ -19,7 +19,7 @@ func (c *AskCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "\xf0\x9f\x99\x85"}}
 	}
 
-	if r := usageReply(ctx, args, "cmd.ask.usage"); r != nil {
+	if r := usageReply(ctx, args, "msg.ask.usage"); r != nil {
 		return []bot.Reply{*r}
 	}
 

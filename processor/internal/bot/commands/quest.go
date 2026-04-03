@@ -88,10 +88,10 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.quest.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.quest.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.quest.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.quest.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -211,7 +211,7 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		parsed.Unrecognized = nil
 		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 2, itemID, 0, 0))
 	} else {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_quest_type")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_quest_type")}}
 	}
 
 	// Check for remaining unrecognized args (after item matching had a chance)
@@ -220,7 +220,7 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	if len(insert) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_quest_type")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_quest_type")}}
 	}
 
 	// Diff against existing and apply
@@ -410,5 +410,5 @@ func (c *QuestCommand) removeQuests(ctx *bot.CommandContext, targets []db.QuestT
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
 }

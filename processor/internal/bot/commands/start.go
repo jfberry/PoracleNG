@@ -16,7 +16,7 @@ func (c *StartCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: tr.T("cmd.start.success")}}
+	return []bot.Reply{{React: "✅", Text: tr.T("msg.start.success")}}
 }
 
 // StopCommand implements !stop — disables alert delivery for the user.
@@ -33,7 +33,7 @@ func (c *StopCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// User typed "!stop pokemon" or similar — warn them and do NOT stop
 		return []bot.Reply{{
 			React: "🙅",
-			Text:  tr.Tf("cmd.stop.warn_args", prefix, tr.T("cmd.stop")),
+			Text:  tr.Tf("msg.stop.warn_args", prefix, tr.T("cmd.stop")),
 		}}
 	}
 
@@ -41,5 +41,5 @@ func (c *StopCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.stop.success", prefix, tr.T("cmd.start"))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.stop.success", prefix, tr.T("cmd.start"))}}
 }

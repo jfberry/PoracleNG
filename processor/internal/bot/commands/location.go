@@ -22,10 +22,10 @@ var locationParams = []bot.ParamDef{
 func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
-	if usage := usageReply(ctx, args, "cmd.location.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.location.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.location.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.location.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -37,7 +37,7 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 			return []bot.Reply{{React: "🙅"}}
 		}
 		ctx.TriggerReload()
-		return []bot.Reply{{React: "✅", Text: tr.T("cmd.location.removed")}}
+		return []bot.Reply{{React: "✅", Text: tr.T("msg.location.removed")}}
 	}
 
 	var lat, lon float64
@@ -50,12 +50,12 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		query := strings.Join(parsed.Unrecognized, " ")
 		results, err := ctx.Geocoder.Forward(query)
 		if err != nil || len(results) == 0 {
-			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.location.not_found")}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.location.not_found")}}
 		}
 		lat = results[0].Latitude
 		lon = results[0].Longitude
 	} else {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.location.specify")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.location.specify")}}
 	}
 
 	// Set location
@@ -66,7 +66,7 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	ctx.TriggerReload()
 
 	mapLink := fmt.Sprintf("https://maps.google.com/maps?q=%f,%f", lat, lon)
-	reply := bot.Reply{React: "✅", Text: tr.Tf("cmd.location.set", lat, lon) + "\n" + mapLink}
+	reply := bot.Reply{React: "✅", Text: tr.Tf("msg.location.set", lat, lon) + "\n" + mapLink}
 
 	// Generate location pin tile if static map is available
 	if ctx.StaticMap != nil {

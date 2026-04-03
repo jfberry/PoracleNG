@@ -22,7 +22,7 @@ func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args 
 
 	if !isAdmin && !isDM {
 		s.ChannelMessageSend(m.ChannelID,
-			b.Translations.For(b.Cfg.General.Locale).T("cmd.dm_only"))
+			b.Translations.For(b.Cfg.General.Locale).T("msg.dm_only"))
 		return
 	}
 
@@ -84,7 +84,7 @@ func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args 
 			prefix = "!"
 		}
 		s.ChannelMessageSend(m.ChannelID,
-			tr.Tf("cmd.role.usage", prefix))
+			tr.Tf("msg.role.usage", prefix))
 	}
 }
 
@@ -97,9 +97,9 @@ func (b *Bot) handleRoleList(s *discordgo.Session, m *discordgo.MessageCreate,
 
 	var sb strings.Builder
 	if membershipOnly {
-		sb.WriteString(tr.T("cmd.role.your_roles"))
+		sb.WriteString(tr.T("msg.role.your_roles"))
 	} else {
-		sb.WriteString(tr.T("cmd.role.available"))
+		sb.WriteString(tr.T("msg.role.available"))
 	}
 	sb.WriteString(":\n")
 
@@ -201,7 +201,7 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 								fmt.Sprintf("Failed to add role %s — check bot permissions", desc))
 						} else {
 							s.ChannelMessageSend(m.ChannelID,
-								tr.Tf("cmd.role.granted", desc))
+								tr.Tf("msg.role.granted", desc))
 						}
 					} else {
 						if err := s.GuildMemberRoleRemove(guildID, targetID, roleID); err != nil {
@@ -210,7 +210,7 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 								fmt.Sprintf("Failed to remove role %s — check bot permissions", desc))
 						} else {
 							s.ChannelMessageSend(m.ChannelID,
-								tr.Tf("cmd.role.removed", desc))
+								tr.Tf("msg.role.removed", desc))
 						}
 					}
 				}
@@ -231,14 +231,14 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 											fmt.Sprintf("Failed to add role %s — check bot permissions", otherDesc))
 									} else {
 										s.ChannelMessageSend(m.ChannelID,
-											tr.Tf("cmd.role.granted", otherDesc))
+											tr.Tf("msg.role.granted", otherDesc))
 									}
 								} else if memberRoles[otherRoleID] {
 									if err := s.GuildMemberRoleRemove(guildID, targetID, otherRoleID); err != nil {
 										log.Warnf("discord bot: remove exclusive role %s from %s: %v", otherDesc, targetID, err)
 									} else {
 										s.ChannelMessageSend(m.ChannelID,
-											tr.Tf("cmd.role.removed", otherDesc))
+											tr.Tf("msg.role.removed", otherDesc))
 									}
 								}
 							}
@@ -247,7 +247,7 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 								log.Warnf("discord bot: remove role %s from %s: %v", desc, targetID, err)
 							} else {
 								s.ChannelMessageSend(m.ChannelID,
-									tr.Tf("cmd.role.removed", desc))
+									tr.Tf("msg.role.removed", desc))
 							}
 						}
 					}
@@ -257,7 +257,7 @@ func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 
 		if !found {
 			s.ChannelMessageSend(m.ChannelID,
-				tr.Tf("cmd.role.unknown", roleArg))
+				tr.Tf("msg.role.unknown", roleArg))
 		}
 	}
 }

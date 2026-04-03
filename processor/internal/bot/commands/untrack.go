@@ -84,9 +84,9 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	if len(removeIDs) == 0 {
 		if parsed.HasKeyword("arg.everything") || len(parsed.Pokemon) > 0 || len(parsed.Types) > 0 {
-			return []bot.Reply{{React: "👌", Text: tr.T("cmd.nothing_to_remove")}}
+			return []bot.Reply{{React: "👌", Text: tr.T("msg.nothing_to_remove")}}
 		}
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_pokemon")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_pokemon")}}
 	}
 
 	var uidsToDelete []int64
@@ -111,7 +111,7 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	var sb strings.Builder
 	if len(removed) > 20 {
-		sb.WriteString(tr.Tf("cmd.removed_n", len(removed)))
+		sb.WriteString(tr.Tf("msg.removed_n", len(removed)))
 	} else {
 		for i := range removed {
 			mt := monsterAPIToTracking(&removed[i])

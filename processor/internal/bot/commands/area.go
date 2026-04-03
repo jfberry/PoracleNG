@@ -71,7 +71,7 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 	communities := humanCommunities(ctx, h)
 	available := ctx.AreaLogic.GetAvailableAreasMarked(communities, currentAreas)
 	if len(available) == 0 {
-		return []bot.Reply{{Text: tr.T("cmd.area.none_available")}}
+		return []bot.Reply{{Text: tr.T("msg.area.none_available")}}
 	}
 
 	// Sort alphabetically
@@ -80,7 +80,7 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 	})
 
 	var sb strings.Builder
-	sb.WriteString(tr.T("cmd.area.current") + "\n\n")
+	sb.WriteString(tr.T("msg.area.current") + "\n\n")
 	for _, a := range available {
 		if a.IsActive {
 			sb.WriteString(fmt.Sprintf("🟢 %s\n", a.Name))
@@ -94,7 +94,7 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.area.specify_add")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.area.specify_add")}}
 	}
 
 	h := getUserHuman(ctx)
@@ -108,10 +108,10 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 
 	var parts []string
 	if len(added) > 0 {
-		parts = append(parts, tr.Tf("cmd.area.added", strings.Join(added, ", ")))
+		parts = append(parts, tr.Tf("msg.area.added", strings.Join(added, ", ")))
 	}
 	if len(notFound) > 0 {
-		parts = append(parts, tr.Tf("cmd.area.not_found", strings.Join(notFound, ", ")))
+		parts = append(parts, tr.Tf("msg.area.not_found", strings.Join(notFound, ", ")))
 	}
 
 	// Show current areas after change
@@ -130,7 +130,7 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.area.specify_remove")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.area.specify_remove")}}
 	}
 
 	currentAreas := humanAreas(getUserHuman(ctx))
@@ -143,7 +143,7 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 	var parts []string
 	if len(removed) > 0 {
 		removedDisplay := ctx.AreaLogic.ResolveDisplayNames(removed)
-		parts = append(parts, tr.Tf("cmd.area.removed", strings.Join(removedDisplay, ", ")))
+		parts = append(parts, tr.Tf("msg.area.removed", strings.Join(removedDisplay, ", ")))
 	}
 
 	// Show current areas after change
@@ -179,7 +179,7 @@ func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Re
 			displayName = fence.Name
 		}
 
-		reply := bot.Reply{Text: tr.Tf("cmd.area.display", displayName)}
+		reply := bot.Reply{Text: tr.Tf("msg.area.display", displayName)}
 
 		// Generate tile if static map is available and fence found
 		if ctx.StaticMap != nil && fence != nil {
@@ -216,7 +216,7 @@ func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bo
 	}
 	displayNames := ctx.AreaLogic.ResolveDisplayNames(areas)
 
-	reply := bot.Reply{Text: tr.Tf("cmd.area.your_areas", strings.Join(displayNames, ", "))}
+	reply := bot.Reply{Text: tr.Tf("msg.area.your_areas", strings.Join(displayNames, ", "))}
 
 	// Generate overview tile if static map is available
 	if ctx.StaticMap != nil {

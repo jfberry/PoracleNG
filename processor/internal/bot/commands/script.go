@@ -105,7 +105,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 
 	text := strings.TrimSpace(sb.String())
 	if text == "" {
-		return []bot.Reply{{Text: tr.T("cmd.script.none")}}
+		return []bot.Reply{{Text: tr.T("msg.script.none")}}
 	}
 
 	// Send as file if too long
@@ -115,7 +115,7 @@ func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 	if len(text) > maxLen {
 		return []bot.Reply{{
-			Text: tr.T("cmd.script.file"),
+			Text: tr.T("msg.script.file"),
 			Attachment: &bot.Attachment{
 				Filename: "tracking_script.txt",
 				Content:  []byte(text),

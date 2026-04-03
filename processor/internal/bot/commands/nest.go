@@ -36,10 +36,10 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.nest.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.nest.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.nest.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.nest.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -79,7 +79,7 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	monsterList := c.resolveMonsters(ctx, parsed)
 
 	if len(monsterList) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_pokemon")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_pokemon")}}
 	}
 
 	if parsed.HasKeyword("arg.remove") {
@@ -235,5 +235,5 @@ func (c *NestCommand) removeNests(ctx *bot.CommandContext, monsterList []bot.Res
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
 }

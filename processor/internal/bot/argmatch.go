@@ -624,6 +624,6 @@ func ReportUnrecognized(parsed *ParsedArgs, tr *i18n.Translator) *Reply {
 	if len(parsed.Unrecognized) == 0 {
 		return nil
 	}
-	msg := tr.Tf("cmd.unrecognized", strings.Join(parsed.Unrecognized, ", "))
+	msg := tr.Tf("msg.unrecognized", strings.Join(parsed.Unrecognized, ", "))
 	return &Reply{React: "🙅", Text: msg}
 }

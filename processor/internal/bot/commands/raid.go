@@ -41,10 +41,10 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.raid.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.raid.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.raid.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.raid.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -151,7 +151,7 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		}
 
 		if len(levelSet) == 0 {
-			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_raid_target")}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_raid_target")}}
 		}
 
 		for lvl := range levelSet {
@@ -261,5 +261,5 @@ func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArg
 
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uidsToDelete))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uidsToDelete))}}
 }

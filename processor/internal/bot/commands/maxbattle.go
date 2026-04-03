@@ -38,10 +38,10 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.maxbattle.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.maxbattle.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.maxbattle.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.maxbattle.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -130,7 +130,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 		}
 
 		if len(levelSet) == 0 {
-			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_levels")}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_levels")}}
 		}
 
 		for lvl := range levelSet {
@@ -152,7 +152,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	}
 
 	if len(insert) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_levels")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_levels")}}
 	}
 
 	// Diff against existing and apply
@@ -297,5 +297,5 @@ func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
 }

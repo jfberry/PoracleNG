@@ -14,7 +14,7 @@ func (c *LanguageCommand) Aliases() []string { return nil }
 func (c *LanguageCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.language.specify")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.language.specify")}}
 	}
 
 	input := strings.ToLower(args[0])
@@ -34,7 +34,7 @@ func (c *LanguageCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 
 	if matched == "" {
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.language.unknown", strings.Join(available, ", "))}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.language.unknown", strings.Join(available, ", "))}}
 	}
 
 	if err := ctx.Humans.SetLanguage(ctx.TargetID, matched); err != nil {
@@ -42,5 +42,5 @@ func (c *LanguageCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.language.changed", matched)}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.language.changed", matched)}}
 }
