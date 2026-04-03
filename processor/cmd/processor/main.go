@@ -928,13 +928,18 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	if gd != nil {
 		utilEmojis = gd.Util.Emojis
 	}
+	dtsDefaultTemplate := "1"
+	if cfg.General.DefaultTemplateName != nil {
+		dtsDefaultTemplate = fmt.Sprintf("%v", cfg.General.DefaultTemplateName)
+	}
 	dtsRenderer, err = dts.NewRenderer(dts.RendererConfig{
-		ConfigDir:     filepath.Join(cfg.BaseDir, "config"),
-		FallbackDir:   filepath.Join(cfg.BaseDir, "fallbacks"),
-		GameData:      gd,
-		Translations:  enricher.Translations,
-		UtilEmojis:    utilEmojis,
-		DefaultLocale: cfg.General.Locale,
+		ConfigDir:           filepath.Join(cfg.BaseDir, "config"),
+		FallbackDir:         filepath.Join(cfg.BaseDir, "fallbacks"),
+		GameData:            gd,
+		Translations:        enricher.Translations,
+		UtilEmojis:          utilEmojis,
+		DefaultLocale:       cfg.General.Locale,
+		DefaultTemplateName: dtsDefaultTemplate,
 	})
 	if err != nil {
 		log.Warnf("DTS renderer initialization failed: %s", err)

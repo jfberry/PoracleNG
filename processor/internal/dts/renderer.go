@@ -18,30 +18,32 @@ import (
 
 // RendererConfig holds configuration for creating a Renderer.
 type RendererConfig struct {
-	ConfigDir     string
-	FallbackDir   string
-	GameData      *gamedata.GameData
-	Translations  *i18n.Bundle
-	UtilEmojis    map[string]string  // from GameData.Util.Emojis
-	ShlinkURL     string             // empty = no shortening
-	ShlinkKey     string
-	ShlinkDomain  string
-	DTSDictionary map[string]any     // from config [general] dts_dictionary
-	DefaultLocale string             // fallback language (e.g. "en")
-	MinAlertTime  int                // minimum seconds remaining for alert
+	ConfigDir           string
+	FallbackDir         string
+	GameData            *gamedata.GameData
+	Translations        *i18n.Bundle
+	UtilEmojis          map[string]string // from GameData.Util.Emojis
+	ShlinkURL           string            // empty = no shortening
+	ShlinkKey           string
+	ShlinkDomain        string
+	DTSDictionary       map[string]any // from config [general] dts_dictionary
+	DefaultLocale       string         // fallback language (e.g. "en")
+	DefaultTemplateName string         // from config default_template_name (e.g. "1")
+	MinAlertTime        int            // minimum seconds remaining for alert
 }
 
 // Renderer ties together templates, enrichment, emoji, and URL shortening
 // to produce DeliveryJobs from matched webhook data.
 type Renderer struct {
-	templates   *TemplateStore
-	viewBuilder *ViewBuilder
-	shortener   *ShlinkShortener // nil if not configured
-	gd          *gamedata.GameData
-	bundle      *i18n.Bundle
-	emoji       *EmojiLookup
-	locale      string
-	minAlertSec int
+	templates       *TemplateStore
+	viewBuilder     *ViewBuilder
+	shortener       *ShlinkShortener // nil if not configured
+	gd              *gamedata.GameData
+	bundle          *i18n.Bundle
+	emoji           *EmojiLookup
+	locale          string
+	defaultTemplate string // config default_template_name, used when tracking has no explicit template
+	minAlertSec     int
 }
 
 // NewRenderer creates a Renderer from the given configuration.
@@ -69,15 +71,28 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 	}
 
 	return &Renderer{
-		templates:   ts,
-		viewBuilder: vb,
-		shortener:   shortener,
-		gd:          cfg.GameData,
-		bundle:      cfg.Translations,
-		emoji:       emoji,
-		locale:      locale,
-		minAlertSec: cfg.MinAlertTime,
+		templates:       ts,
+		viewBuilder:     vb,
+		shortener:       shortener,
+		gd:              cfg.GameData,
+		bundle:          cfg.Translations,
+		emoji:           emoji,
+		locale:          locale,
+		defaultTemplate: cfg.DefaultTemplateName,
+		minAlertSec:     cfg.MinAlertTime,
 	}, nil
+}
+
+// resolveTemplate returns the template ID to use for DTS lookup.
+// If the tracking rule has no explicit template (empty string), the
+// configured default_template_name is used first. If that is also empty,
+// an empty string is returned which causes Get() to fall through to
+// the DTS entry marked as default.
+func (r *Renderer) resolveTemplate(trackingTemplate string) string {
+	if trackingTemplate != "" {
+		return trackingTemplate
+	}
+	return r.defaultTemplate
 }
 
 // Templates returns the underlying TemplateStore.
@@ -192,14 +207,15 @@ func (r *Renderer) renderForUsers(
 		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, perUser, webhookFields, platform, areas)
 
 		// f. Get template (with monsterNoIv -> monster fallback)
-		tmpl := r.templates.Get(templateType, platform, user.Template, language)
+		templateID := r.resolveTemplate(user.Template)
+		tmpl := r.templates.Get(templateType, platform, templateID, language)
 		if tmpl == nil && templateType == "monsterNoIv" {
-			tmpl = r.templates.Get("monster", platform, user.Template, language)
+			tmpl = r.templates.Get("monster", platform, templateID, language)
 		}
 
 		var rendered string
 		if tmpl == nil {
-			rendered = fallbackMessage(templateType, platform, user.Template, language)
+			rendered = fallbackMessage(templateType, platform, templateID, language)
 		} else {
 			df := raymond.NewDataFrame()
 			df.Set("language", language)
@@ -211,7 +227,7 @@ func (r *Renderer) renderForUsers(
 			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
 				log.Errorf("dts: render %s for user %s: %v", templateType, user.ID, err)
-				rendered = fallbackMessage(templateType, platform, user.Template, language)
+				rendered = fallbackMessage(templateType, platform, templateID, language)
 				metrics.TemplateTotal.WithLabelValues(templateType, "error").Inc()
 			} else {
 				rendered = result
@@ -226,7 +242,7 @@ func (r *Renderer) renderForUsers(
 		rawMessage := json.RawMessage(rendered)
 		if !json.Valid(rawMessage) {
 			log.Errorf("dts: invalid rendered JSON for user %s (raw: %.200s)", user.ID, rendered)
-			rawMessage = fallbackMessageRaw(templateType, platform, user.Template, language)
+			rawMessage = fallbackMessageRaw(templateType, platform, templateID, language)
 		}
 
 		// Append ping to content
@@ -291,7 +307,7 @@ func (r *Renderer) renderGrouped(
 		if language == "" {
 			language = r.locale
 		}
-		key := renderGroupKey{templateID: user.Template, platform: platform, language: language}
+		key := renderGroupKey{templateID: r.resolveTemplate(user.Template), platform: platform, language: language}
 		if g, ok := groupMap[key]; ok {
 			g.users = append(g.users, user)
 		} else {

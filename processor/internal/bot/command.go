@@ -6,7 +6,6 @@ package bot
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
@@ -121,20 +120,11 @@ type CommandContext struct {
 	ReloadFunc func()
 }
 
-// DefaultTemplate returns the default template name from config as a string.
+// DefaultTemplate returns the template to store when the user doesn't specify one.
+// Returns empty string — the renderer resolves empty to config default_template_name
+// at render time, so changing the config retroactively applies to existing rules.
 func (ctx *CommandContext) DefaultTemplate() string {
-	if ctx.Config == nil {
-		return "1"
-	}
-	switch v := ctx.Config.General.DefaultTemplateName.(type) {
-	case string:
-		if v != "" {
-			return v
-		}
-	case float64:
-		return fmt.Sprintf("%d", int(v))
-	}
-	return "1"
+	return ""
 }
 
 // Permissions holds resolved permission state for the current command invocation.
