@@ -96,6 +96,21 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		sb.WriteByte('\n')
 	}
 
+	// Helper: append ⚠️ to a row if the tracking has a distance/area issue
+	hasLocationWarning := false
+	hasAreaWarning := false
+	warnRow := func(rowText string, distance int) string {
+		if distance > 0 && !ctx.HasLocation {
+			hasLocationWarning = true
+			return rowText + " ⚠️"
+		}
+		if distance == 0 && !ctx.HasArea {
+			hasAreaWarning = true
+			return rowText + " ⚠️"
+		}
+		return rowText
+	}
+
 	// Each tracking category: show rules or "not tracking X" (unless disabled in config)
 	cfg := ctx.Config.General
 
@@ -106,7 +121,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(monsters) > 0 {
 			sb.WriteString(tr.T("section.pokemon") + "\n")
 			for i := range monsters {
-				sb.WriteString(ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&monsters[i])))
+				sb.WriteString(warnRow(ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&monsters[i])), monsters[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -122,7 +137,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(raids) > 0 {
 			sb.WriteString(tr.T("section.raids") + "\n")
 			for i := range raids {
-				sb.WriteString(ctx.RowText.RaidRowText(tr, raidAPIToTracking(&raids[i])))
+				sb.WriteString(warnRow(ctx.RowText.RaidRowText(tr, raidAPIToTracking(&raids[i])), raids[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -138,7 +153,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(eggs) > 0 {
 			sb.WriteString(tr.T("section.eggs") + "\n")
 			for i := range eggs {
-				sb.WriteString(ctx.RowText.EggRowText(tr, eggAPIToTracking(&eggs[i])))
+				sb.WriteString(warnRow(ctx.RowText.EggRowText(tr, eggAPIToTracking(&eggs[i])), eggs[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -154,7 +169,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(quests) > 0 {
 			sb.WriteString(tr.T("section.quests") + "\n")
 			for i := range quests {
-				sb.WriteString(ctx.RowText.QuestRowText(tr, questAPIToTracking(&quests[i])))
+				sb.WriteString(warnRow(ctx.RowText.QuestRowText(tr, questAPIToTracking(&quests[i])), quests[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -170,7 +185,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(invasions) > 0 {
 			sb.WriteString(tr.T("section.invasions") + "\n")
 			for i := range invasions {
-				sb.WriteString(ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&invasions[i])))
+				sb.WriteString(warnRow(ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&invasions[i])), invasions[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -186,7 +201,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(lures) > 0 {
 			sb.WriteString(tr.T("section.lures") + "\n")
 			for i := range lures {
-				sb.WriteString(ctx.RowText.LureRowText(tr, lureAPIToTracking(&lures[i])))
+				sb.WriteString(warnRow(ctx.RowText.LureRowText(tr, lureAPIToTracking(&lures[i])), lures[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -202,7 +217,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(gyms) > 0 {
 			sb.WriteString(tr.T("section.gyms") + "\n")
 			for i := range gyms {
-				sb.WriteString(ctx.RowText.GymRowText(tr, gymAPIToTracking(&gyms[i])))
+				sb.WriteString(warnRow(ctx.RowText.GymRowText(tr, gymAPIToTracking(&gyms[i])), gyms[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -218,7 +233,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(nests) > 0 {
 			sb.WriteString(tr.T("section.nests") + "\n")
 			for i := range nests {
-				sb.WriteString(ctx.RowText.NestRowText(tr, nestAPIToTracking(&nests[i])))
+				sb.WriteString(warnRow(ctx.RowText.NestRowText(tr, nestAPIToTracking(&nests[i])), nests[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -234,7 +249,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(forts) > 0 {
 			sb.WriteString(tr.T("section.forts") + "\n")
 			for i := range forts {
-				sb.WriteString(ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&forts[i])))
+				sb.WriteString(warnRow(ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&forts[i])), forts[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -250,7 +265,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		} else if len(maxbattles) > 0 {
 			sb.WriteString(tr.T("section.maxbattles") + "\n")
 			for i := range maxbattles {
-				sb.WriteString(ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&maxbattles[i])))
+				sb.WriteString(warnRow(ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&maxbattles[i])), maxbattles[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -259,7 +274,13 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		sb.WriteByte('\n')
 	}
 
-	// Warn if alerts are stopped
+	// Summary warnings at the end
+	if hasLocationWarning {
+		sb.WriteString("\n⚠️ " + tr.T("tracking.warn_no_location"))
+	}
+	if hasAreaWarning {
+		sb.WriteString("\n⚠️ " + tr.T("tracking.warn_no_area"))
+	}
 	if human != nil && !human.Enabled {
 		prefix := commandPrefix(ctx)
 		sb.WriteString("\n⚠️ " + tr.Tf("tracking.warn_stopped", prefix))
