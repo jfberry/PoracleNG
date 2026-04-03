@@ -1,13 +1,10 @@
 package commands
 
 import (
-	"strings"
-
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
-	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -199,70 +196,10 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 
 func (c *MaxbattleCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
 	monsters := parsed.Pokemon
-
-	// Form filtering
-	if formName, ok := parsed.Strings["form"]; ok && ctx.GameData != nil {
-		tr := ctx.Tr()
-		enTr := ctx.Translations.For("en")
-		var filtered []bot.ResolvedPokemon
-		for _, mon := range monsters {
-			for key := range ctx.GameData.Monsters {
-				if key.ID != mon.PokemonID || key.Form == 0 {
-					continue
-				}
-				formKey := gamedata.FormTranslationKey(key.Form)
-				translatedForm := strings.ToLower(tr.T(formKey))
-				enForm := strings.ToLower(enTr.T(formKey))
-				if translatedForm == formName || enForm == formName {
-					filtered = append(filtered, bot.ResolvedPokemon{PokemonID: key.ID, Form: key.Form})
-				}
-			}
-		}
-		if len(filtered) > 0 {
-			monsters = filtered
-		}
+	if formName, ok := parsed.Strings["form"]; ok {
+		monsters = filterByForm(ctx, monsters, formName)
 	}
-
-	// Generation filter
-	if gen, ok := parsed.Singles["gen"]; ok && ctx.GameData != nil {
-		genInfo := ctx.GameData.Util.GenData[gen]
-		if genInfo.Min > 0 && genInfo.Max > 0 {
-			var filtered []bot.ResolvedPokemon
-			for _, mon := range monsters {
-				if mon.PokemonID >= genInfo.Min && mon.PokemonID <= genInfo.Max {
-					filtered = append(filtered, mon)
-				}
-			}
-			monsters = filtered
-		}
-	}
-
-	// Type filter
-	if len(parsed.Types) > 0 && ctx.GameData != nil {
-		typeSet := make(map[int]bool)
-		for _, t := range parsed.Types {
-			typeSet[t] = true
-		}
-		var filtered []bot.ResolvedPokemon
-		for _, mon := range monsters {
-			m := ctx.GameData.Monsters[gamedata.MonsterKey{ID: mon.PokemonID, Form: mon.Form}]
-			if m == nil {
-				m = ctx.GameData.Monsters[gamedata.MonsterKey{ID: mon.PokemonID, Form: 0}]
-			}
-			if m == nil {
-				continue
-			}
-			for _, t := range m.Types {
-				if typeSet[t] {
-					filtered = append(filtered, mon)
-					break
-				}
-			}
-		}
-		monsters = filtered
-	}
-
-	return monsters
+	return filterByGenAndType(ctx, monsters, parsed)
 }
 
 func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {

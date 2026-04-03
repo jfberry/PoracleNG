@@ -255,3 +255,89 @@ func removeByUIDs[T any](
 	}
 	return []bot.Reply{{React: "✅", Text: strings.TrimSpace(msg)}}
 }
+
+// filterByForm narrows a pokemon list to only those matching the given form name.
+// Checks the user's language and English fallback via form_{id} translation keys.
+// Returns the original list if no matches found (preserves base form).
+func filterByForm(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, formName string) []bot.ResolvedPokemon {
+	if ctx.GameData == nil || formName == "" {
+		return monsters
+	}
+	tr := ctx.Tr()
+	enTr := ctx.Translations.For("en")
+	var filtered []bot.ResolvedPokemon
+	for _, mon := range monsters {
+		for key := range ctx.GameData.Monsters {
+			if key.ID != mon.PokemonID || key.Form == 0 {
+				continue
+			}
+			formKey := gamedata.FormTranslationKey(key.Form)
+			translatedForm := strings.ToLower(tr.T(formKey))
+			enForm := strings.ToLower(enTr.T(formKey))
+			if translatedForm == formName || enForm == formName {
+				filtered = append(filtered, bot.ResolvedPokemon{PokemonID: key.ID, Form: key.Form})
+			}
+		}
+	}
+	if len(filtered) > 0 {
+		return filtered
+	}
+	return monsters
+}
+
+// filterByGen narrows a pokemon list to those in the specified generation.
+func filterByGen(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, gen int) []bot.ResolvedPokemon {
+	if ctx.GameData == nil {
+		return monsters
+	}
+	genInfo := ctx.GameData.Util.GenData[gen]
+	if genInfo.Min <= 0 || genInfo.Max <= 0 {
+		return monsters
+	}
+	var filtered []bot.ResolvedPokemon
+	for _, mon := range monsters {
+		if mon.PokemonID >= genInfo.Min && mon.PokemonID <= genInfo.Max {
+			filtered = append(filtered, mon)
+		}
+	}
+	return filtered
+}
+
+// filterByTypes narrows a pokemon list to those with any of the specified types.
+func filterByTypes(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, typeIDs []int) []bot.ResolvedPokemon {
+	if ctx.GameData == nil || len(typeIDs) == 0 {
+		return monsters
+	}
+	typeSet := make(map[int]bool, len(typeIDs))
+	for _, t := range typeIDs {
+		typeSet[t] = true
+	}
+	var filtered []bot.ResolvedPokemon
+	for _, mon := range monsters {
+		m := ctx.GameData.Monsters[gamedata.MonsterKey{ID: mon.PokemonID, Form: mon.Form}]
+		if m == nil {
+			m = ctx.GameData.Monsters[gamedata.MonsterKey{ID: mon.PokemonID, Form: 0}]
+		}
+		if m == nil {
+			continue
+		}
+		for _, t := range m.Types {
+			if typeSet[t] {
+				filtered = append(filtered, mon)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+// filterByGenAndType applies generation and type filters from parsed args.
+func filterByGenAndType(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
+	if gen, ok := parsed.Singles["gen"]; ok {
+		monsters = filterByGen(ctx, monsters, gen)
+	}
+	if len(parsed.Types) > 0 {
+		monsters = filterByTypes(ctx, monsters, parsed.Types)
+	}
+	return monsters
+}

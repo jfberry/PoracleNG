@@ -294,30 +294,9 @@ func questParseInt(s string) int {
 
 func (c *QuestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
 	monsters := parsed.Pokemon
-
-	// Form filtering
-	if formName, ok := parsed.Strings["form"]; ok && ctx.GameData != nil {
-		tr := ctx.Tr()
-		enTr := ctx.Translations.For("en")
-		var filtered []bot.ResolvedPokemon
-		for _, mon := range monsters {
-			for key := range ctx.GameData.Monsters {
-				if key.ID != mon.PokemonID || key.Form == 0 {
-					continue
-				}
-				formKey := gamedata.FormTranslationKey(key.Form)
-				translatedForm := strings.ToLower(tr.T(formKey))
-				enForm := strings.ToLower(enTr.T(formKey))
-				if translatedForm == formName || enForm == formName {
-					filtered = append(filtered, bot.ResolvedPokemon{PokemonID: key.ID, Form: key.Form})
-				}
-			}
-		}
-		if len(filtered) > 0 {
-			monsters = filtered
-		}
+	if formName, ok := parsed.Strings["form"]; ok {
+		monsters = filterByForm(ctx, monsters, formName)
 	}
-
 	return monsters
 }
 
