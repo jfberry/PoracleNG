@@ -333,6 +333,18 @@ func (b *Bot) sendReplies(chatID int64, userID int64, replies []bot.Reply) {
 			continue
 		}
 
+		// Image URL — send as photo (e.g. area map tiles)
+		if reply.ImageURL != "" {
+			photo := tgbotapi.NewPhoto(targetChat, tgbotapi.FileURL(reply.ImageURL))
+			if reply.Text != "" {
+				photo.Caption = reply.Text
+			}
+			if _, err := b.api.Send(photo); err != nil {
+				log.Warnf("telegram bot: send photo: %v", err)
+			}
+			continue
+		}
+
 		// File attachment
 		if reply.Attachment != nil {
 			doc := tgbotapi.NewDocument(targetChat, tgbotapi.FileBytes{
