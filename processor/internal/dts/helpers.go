@@ -153,20 +153,28 @@ func registerComparisonHelpers() {
 		return boolResult(toFloat(a) <= toFloat(b), options)
 	})
 
-	// and — both truthy
-	raymond.RegisterHelper("and", func(a, b interface{}, options *raymond.Options) interface{} {
-		if toBool(a) && toBool(b) {
-			return options.Fn()
+	// and — all args truthy (variadic)
+	raymond.RegisterHelper("and", func(options *raymond.Options) interface{} {
+		result := true
+		for _, p := range options.Params() {
+			if !toBool(p) {
+				result = false
+				break
+			}
 		}
-		return options.Inverse()
+		return boolResult(result, options)
 	})
 
-	// or — either truthy
-	raymond.RegisterHelper("or", func(a, b interface{}, options *raymond.Options) interface{} {
-		if toBool(a) || toBool(b) {
-			return options.Fn()
+	// or — any arg truthy (variadic)
+	raymond.RegisterHelper("or", func(options *raymond.Options) interface{} {
+		result := false
+		for _, p := range options.Params() {
+			if toBool(p) {
+				result = true
+				break
+			}
 		}
-		return options.Inverse()
+		return boolResult(result, options)
 	})
 
 	// not — logical negation (block helper)

@@ -140,6 +140,41 @@ func TestAndOr(t *testing.T) {
 	if got := render(t, `{{#or f e}}yes{{else}}no{{/or}}`, ctx); got != "no" {
 		t.Errorf("or both falsy: got %q", got)
 	}
+
+	// Variadic: 3+ args
+	if got := render(t, `{{#or f e s}}yes{{else}}no{{/or}}`, ctx); got != "yes" {
+		t.Errorf("or three args (one truthy): got %q", got)
+	}
+	if got := render(t, `{{#or f e f}}yes{{else}}no{{/or}}`, ctx); got != "no" {
+		t.Errorf("or three args (all falsy): got %q", got)
+	}
+	if got := render(t, `{{#and t s t}}yes{{else}}no{{/and}}`, ctx); got != "yes" {
+		t.Errorf("and three args (all truthy): got %q", got)
+	}
+	if got := render(t, `{{#and t f s}}yes{{else}}no{{/and}}`, ctx); got != "no" {
+		t.Errorf("and three args (one falsy): got %q", got)
+	}
+
+	// Subexpression mode
+	if got := render(t, `{{#if (or f s)}}yes{{else}}no{{/if}}`, ctx); got != "yes" {
+		t.Errorf("or subexpression: got %q", got)
+	}
+	if got := render(t, `{{#if (and t s)}}yes{{else}}no{{/if}}`, ctx); got != "yes" {
+		t.Errorf("and subexpression: got %q", got)
+	}
+	if got := render(t, `{{#if (or f e)}}yes{{else}}no{{/if}}`, ctx); got != "no" {
+		t.Errorf("or subexpression all falsy: got %q", got)
+	}
+
+	// Variadic with array values (like PVP lists)
+	pvpCtx := map[string]interface{}{
+		"pvpGreat":  []map[string]interface{}{{"rank": 1}},
+		"pvpUltra":  nil,
+		"pvpLittle": nil,
+	}
+	if got := render(t, `{{#or pvpGreat pvpUltra pvpLittle}}PvP{{else}}no{{/or}}`, pvpCtx); got != "PvP" {
+		t.Errorf("or with array value: got %q", got)
+	}
 }
 
 func TestNot(t *testing.T) {
