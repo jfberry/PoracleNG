@@ -584,12 +584,26 @@ func loadCustomMaps(configDir string) *customMapStore {
 			log.Warnf("dts: read custom map %s: %v", e.Name(), err)
 			continue
 		}
+		// Support both formats:
+		// 1. PoracleJS format: {"name": "arealist", "map": {"key": "value"}}
+		// 2. Flat format: {"key": "value"}
+		var wrapper struct {
+			Name string            `json:"name"`
+			Map  map[string]string `json:"map"`
+		}
+		if err := json.Unmarshal(data, &wrapper); err == nil && wrapper.Map != nil {
+			store.maps[name] = wrapper.Map
+			log.Debugf("dts: loaded custom map %s (%d entries, PoracleJS format)", name, len(wrapper.Map))
+			continue
+		}
+
 		var m map[string]string
 		if err := json.Unmarshal(data, &m); err != nil {
 			log.Warnf("dts: parse custom map %s: %v", e.Name(), err)
 			continue
 		}
 		store.maps[name] = m
+		log.Debugf("dts: loaded custom map %s (%d entries)", name, len(m))
 	}
 	return store
 }
