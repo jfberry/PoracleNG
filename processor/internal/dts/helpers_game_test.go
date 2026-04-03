@@ -419,6 +419,15 @@ func TestGetPowerUpCostInline(t *testing.T) {
 	}
 }
 
+func TestGetPowerUpCostBlock(t *testing.T) {
+	ctx := map[string]interface{}{}
+	got := renderWithData(t, `{{#getPowerUpCost 1 2}}SD:{{stardust}} C:{{candy}} XL:{{xlCandy}}{{/getPowerUpCost}}`, ctx, nil)
+	expected := "SD:400 C:2 XL:0"
+	if got != expected {
+		t.Errorf("getPowerUpCost block: got %q, want %q", got, expected)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // buildFullName (unit)
 // ---------------------------------------------------------------------------
