@@ -111,18 +111,14 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 		}
 		m["enrichedActivePokemons"] = enrichedPokemon
 
-		// Generate per-user tile with active pokemon data when configured
+		// Generate per-user tile with active pokemon data when configured.
+		// Pass base enrichment so addStaticMap has access to imgUrl and
+		// all other base fields for the tileserver payload.
 		if showAlteredPokemonStaticMap {
 			m["activePokemons"] = enrichedPokemon
 			lat, _ := base["latitude"].(float64)
 			lon, _ := base["longitude"].(float64)
-			webhookFields := map[string]any{
-				"gameplay_condition": newWeatherID,
-			}
-			if coords, ok := base["coords"]; ok {
-				webhookFields["coords"] = coords
-			}
-			pending = e.addStaticMap(m, "weather", lat, lon, webhookFields)
+			pending = e.addStaticMap(m, "weather", lat, lon, base)
 		}
 	}
 
