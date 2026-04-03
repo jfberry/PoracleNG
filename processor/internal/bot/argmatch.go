@@ -237,6 +237,7 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 // Structurally unambiguous types (prefix patterns) first, then exact-match
 // keywords, then game data lookups, then pokemon names last.
 var matchPriorities = []ParamType{
+	ParamRemoveUID,
 	ParamPrefixRange,
 	ParamPrefixSingle,
 	ParamPrefixString,
@@ -252,6 +253,8 @@ var matchPriorities = []ParamType{
 
 func (am *ArgMatcher) tryMatch(tok string, param ParamDef, lang string, result *ParsedArgs) bool {
 	switch param.Type {
+	case ParamRemoveUID:
+		return tryRemoveUID(tok, result)
 	case ParamPrefixRange:
 		return am.tryPrefixRange(tok, param.Key, lang, result)
 	case ParamPrefixSingle:
@@ -537,6 +540,21 @@ func (am *ArgMatcher) tryPVPLeague(tok, key, lang string, result *ParsedArgs) bo
 		return true
 	}
 	return false
+}
+
+// tryRemoveUID matches "id:45" or "id:123" — tracking UID for removal.
+// Collects into ParsedArgs.RemoveUIDs (supports multiple in one command).
+func tryRemoveUID(tok string, result *ParsedArgs) bool {
+	if !strings.HasPrefix(tok, "id:") {
+		return false
+	}
+	val := tok[3:]
+	n, err := strconv.ParseInt(val, 10, 64)
+	if err != nil || n <= 0 {
+		return false
+	}
+	result.RemoveUIDs = append(result.RemoveUIDs, n)
+	return true
 }
 
 var latLonRe = regexp.MustCompile(`^(-?\d+\.?\d*),(-?\d+\.?\d*)$`)

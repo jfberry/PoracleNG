@@ -14,6 +14,7 @@ func (c *LureCommand) Name() string      { return "cmd.lure" }
 func (c *LureCommand) Aliases() []string { return nil }
 
 var lureParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
@@ -78,6 +79,9 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	if parsed.HasKeyword("arg.remove") {
+		if len(parsed.RemoveUIDs) > 0 {
+			return removeByUIDs(ctx, ctx.Tracking.Lures, parsed.RemoveUIDs)
+		}
 		return removeLures(ctx, lureIDs)
 	}
 

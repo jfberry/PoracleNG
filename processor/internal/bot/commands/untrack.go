@@ -17,6 +17,7 @@ func (c *UntrackCommand) Name() string      { return "cmd.untrack" }
 func (c *UntrackCommand) Aliases() []string { return nil }
 
 var untrackParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.gen"},
 	{Type: bot.ParamTypeName},
@@ -29,6 +30,11 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 		return []bot.Reply{*warn}
+	}
+
+	// Direct UID removal — bypasses pokemon/gen/type matching
+	if len(parsed.RemoveUIDs) > 0 {
+		return removeByUIDs(ctx, ctx.Tracking.Monsters, parsed.RemoveUIDs)
 	}
 
 	tracked, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)

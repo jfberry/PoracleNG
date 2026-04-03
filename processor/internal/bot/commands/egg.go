@@ -21,6 +21,7 @@ func (c *EggCommand) Aliases() []string { return nil }
 
 // eggParams declares the parameter types !egg accepts.
 var eggParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixRange, Key: "arg.prefix.level"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
@@ -129,6 +130,9 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	// Handle remove
 	if parsed.HasKeyword("arg.remove") {
+		if len(parsed.RemoveUIDs) > 0 {
+			return removeByUIDs(ctx, ctx.Tracking.Eggs, parsed.RemoveUIDs)
+		}
 		return c.removeEggs(ctx, levelSet)
 	}
 

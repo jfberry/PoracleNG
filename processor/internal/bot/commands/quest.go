@@ -66,6 +66,7 @@ func (c *QuestCommand) Name() string      { return "cmd.quest" }
 func (c *QuestCommand) Aliases() []string { return nil }
 
 var questParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
@@ -322,6 +323,10 @@ func (c *QuestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 
 // handleRemove handles !quest remove variants. Must be called before reward type detection.
 func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedArgs, template string, distance int, clean, shiny bool, pings string) []bot.Reply {
+	if len(parsed.RemoveUIDs) > 0 {
+		return removeByUIDs(ctx, ctx.Tracking.Quests, parsed.RemoveUIDs)
+	}
+
 	var targets []db.QuestTrackingAPI
 
 	if parsed.HasKeyword("arg.everything") {

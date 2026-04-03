@@ -18,6 +18,7 @@ func (c *NestCommand) Name() string      { return "cmd.nest" }
 func (c *NestCommand) Aliases() []string { return nil }
 
 var nestParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
@@ -83,6 +84,9 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	if parsed.HasKeyword("arg.remove") {
+		if len(parsed.RemoveUIDs) > 0 {
+			return removeByUIDs(ctx, ctx.Tracking.Nests, parsed.RemoveUIDs)
+		}
 		return c.removeNests(ctx, monsterList)
 	}
 

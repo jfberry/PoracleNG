@@ -15,6 +15,7 @@ func (c *GymCommand) Name() string      { return "cmd.gym" }
 func (c *GymCommand) Aliases() []string { return nil }
 
 var gymParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
@@ -89,6 +90,9 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	if parsed.HasKeyword("arg.remove") {
+		if len(parsed.RemoveUIDs) > 0 {
+			return removeByUIDs(ctx, ctx.Tracking.Gyms, parsed.RemoveUIDs)
+		}
 		return c.removeGyms(ctx, teams)
 	}
 
