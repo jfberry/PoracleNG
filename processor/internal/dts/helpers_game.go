@@ -440,6 +440,7 @@ func loadCustomMaps(configDir string) *customMapStore {
 			log.Warnf("dts: read custom map %s: %v", e.Name(), err)
 			continue
 		}
+
 		// Support both formats:
 		// 1. PoracleJS format: {"name": "arealist", "map": {"key": "value"}}
 		// 2. Flat format: {"key": "value"}
