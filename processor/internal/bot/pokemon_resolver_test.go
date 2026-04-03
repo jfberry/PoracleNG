@@ -55,9 +55,10 @@ func newTestResolver() *PokemonResolver {
 		},
 	}
 
-	aliases := map[string]int{
-		"mr. mime": 122,
-		"mr mime":  122,
+	aliases := map[string][]int{
+		"mr. mime":  {122},
+		"mr mime":   {122},
+		"laketrio":  {480, 481, 482},
 	}
 
 	return NewPokemonResolver(gd, bundle, []string{"en", "de"}, aliases)
@@ -107,6 +108,23 @@ func TestResolveByAlias(t *testing.T) {
 	result = r.Resolve("mr mime", "en")
 	if len(result) != 1 || result[0].PokemonID != 122 {
 		t.Errorf("got %v, want [{122, 0}]", result)
+	}
+}
+
+func TestResolveByMultiAlias(t *testing.T) {
+	r := newTestResolver()
+	result := r.Resolve("laketrio", "en")
+	if len(result) != 3 {
+		t.Fatalf("got %d results, want 3", len(result))
+	}
+	ids := map[int]bool{}
+	for _, p := range result {
+		ids[p.PokemonID] = true
+	}
+	for _, expected := range []int{480, 481, 482} {
+		if !ids[expected] {
+			t.Errorf("laketrio should include pokemon %d, got %v", expected, result)
+		}
 	}
 }
 
