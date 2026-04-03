@@ -48,7 +48,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 		// Location
 		if human.Latitude != 0 || human.Longitude != 0 {
-			mapLink := fmt.Sprintf("https://maps.google.com/maps?q=%f,%f", human.Latitude, human.Longitude)
+			mapLink := fmt.Sprintf("<https://maps.google.com/maps?q=%f,%f>", human.Latitude, human.Longitude)
 			sb.WriteString(tr.Tf("status.location_set", mapLink) + "\n")
 		} else {
 			sb.WriteString(tr.T("status.no_location") + "\n")
