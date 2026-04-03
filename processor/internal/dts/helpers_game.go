@@ -350,12 +350,12 @@ func registerMiscGameHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *
 			"candy":    candy,
 			"xlCandy":  xlCandy,
 		}
-		// Block mode: render with stardust/candy/xlCandy as context
+		// Block mode: {{#getPowerUpCost ...}}...{{/getPowerUpCost}}
 		rendered := options.FnWith(result)
 		if rendered != "" {
 			return rendered
 		}
-		// Inline mode: return formatted string
+		// Inline mode: {{getPowerUpCost ...}}
 		return fmt.Sprintf("%d stardust, %d candy, %d XL candy", stardust, candy, xlCandy)
 	})
 

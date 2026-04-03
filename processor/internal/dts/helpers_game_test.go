@@ -1,6 +1,7 @@
 package dts
 
 import (
+	"strings"
 	"testing"
 
 	raymond "github.com/mailgun/raymond/v2"
@@ -455,6 +456,17 @@ func TestGetPowerUpCostBlock(t *testing.T) {
 	expected := "SD:400 C:2 XL:0"
 	if got != expected {
 		t.Errorf("getPowerUpCost block: got %q, want %q", got, expected)
+	}
+}
+
+func TestGetPowerUpCostBlockWithAddCommas(t *testing.T) {
+	ctx := map[string]interface{}{}
+	got := renderWithData(t, `{{#getPowerUpCost 1 40}}{{addCommas stardust}} stardust & {{candy}} candy{{/getPowerUpCost}}`, ctx, nil)
+	if got == "" {
+		t.Error("getPowerUpCost block with addCommas: got empty")
+	}
+	if !strings.Contains(got, "stardust") || !strings.Contains(got, "candy") {
+		t.Errorf("getPowerUpCost block: expected stardust and candy, got %q", got)
 	}
 }
 
