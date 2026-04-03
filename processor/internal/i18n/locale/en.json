@@ -303,6 +303,7 @@
   "section.maxbattles.none": "You're not tracking any max battles",
 
   "cmd.no_pokemon": "No pokemon specified",
+  "cmd.nothing_to_remove": "Nothing to remove",
   "cmd.no_levels": "No levels specified",
   "cmd.no_egg_levels": "No egg levels specified",
   "cmd.no_raid_target": "No raid levels or pokemon specified",

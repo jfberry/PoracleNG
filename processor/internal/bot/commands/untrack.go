@@ -83,7 +83,10 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if len(removeIDs) == 0 {
-		return []bot.Reply{{React: "👌", Text: tr.T("cmd.no_pokemon")}}
+		if parsed.HasKeyword("arg.everything") || len(parsed.Pokemon) > 0 || len(parsed.Types) > 0 {
+			return []bot.Reply{{React: "👌", Text: tr.T("cmd.nothing_to_remove")}}
+		}
+		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_pokemon")}}
 	}
 
 	var uidsToDelete []int64
