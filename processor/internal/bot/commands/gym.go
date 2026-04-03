@@ -45,27 +45,10 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*warn}
 	}
 
-	template := ctx.DefaultTemplate()
-	if t, ok := parsed.Strings["template"]; ok {
-		template = t
+	common, block := parseCommonTrackFields(ctx, parsed, "gym")
+	if block != nil {
+		return []bot.Reply{*block}
 	}
-
-	// Validate template exists
-	var templateWarn string
-	if _, explicit := parsed.Strings["template"]; explicit {
-		if block, warn := validateTemplate(ctx, "gym", template); block != nil {
-			return []bot.Reply{*block}
-		} else {
-			templateWarn = warn
-		}
-	}
-
-	distance := 0
-	if d, ok := parsed.Singles["d"]; ok {
-		distance = d
-	}
-	distance = enforceDistance(ctx, distance)
-	clean := parsed.HasKeyword("arg.clean")
 	slotChanges := parsed.HasKeyword("arg.slot_changes")
 
 	battleChanges := false
@@ -106,10 +89,10 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			ID:            ctx.TargetID,
 			ProfileNo:     ctx.ProfileNo,
 			Ping:          pings,
-			Template:      template,
-			Distance:      distance,
+			Template:      common.Template,
+			Distance:      common.Distance,
 			Team:          team,
-			Clean:         db.IntBool(clean),
+			Clean:         db.IntBool(common.Clean),
 			SlotChanges:   db.IntBool(slotChanges),
 			BattleChanges: db.IntBool(battleChanges),
 			GymID:         nil,
@@ -168,10 +151,10 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	ctx.TriggerReload()
 
-	message += trackingWarnings(ctx, distance)
+	message += trackingWarnings(ctx, common.Distance)
 
-	if templateWarn != "" {
-		message += "\n⚠️ " + templateWarn
+	if common.TemplateWarn != "" {
+		message += "\n⚠️ " + common.TemplateWarn
 	}
 
 	react := "✅"

@@ -256,6 +256,43 @@ func removeByUIDs[T any](
 	return []bot.Reply{{React: "✅", Text: strings.TrimSpace(msg)}}
 }
 
+// commonTrackFields holds the standard fields parsed by all tracking commands.
+type commonTrackFields struct {
+	Template     string
+	Distance     int
+	Clean        bool
+	TemplateWarn string // non-empty if admin and template not found
+}
+
+// parseCommonTrackFields extracts template, distance, and clean from parsed args.
+// Validates the template if explicitly specified. Returns a blocking reply if a
+// non-admin user specifies a template that doesn't exist.
+func parseCommonTrackFields(ctx *bot.CommandContext, parsed *bot.ParsedArgs, dtsType string) (*commonTrackFields, *bot.Reply) {
+	f := &commonTrackFields{
+		Template: ctx.DefaultTemplate(),
+		Clean:    parsed.HasKeyword("arg.clean"),
+	}
+
+	if t, ok := parsed.Strings["template"]; ok {
+		f.Template = t
+	}
+
+	if _, explicit := parsed.Strings["template"]; explicit {
+		if block, warn := validateTemplate(ctx, dtsType, f.Template); block != nil {
+			return nil, block
+		} else {
+			f.TemplateWarn = warn
+		}
+	}
+
+	if d, ok := parsed.Singles["d"]; ok {
+		f.Distance = d
+	}
+	f.Distance = enforceDistance(ctx, f.Distance)
+
+	return f, nil
+}
+
 // filterByForm narrows a pokemon list to only those matching the given form name.
 // Checks the user's language and English fallback via form_{id} translation keys.
 // Returns the original list if no matches found (preserves base form).
