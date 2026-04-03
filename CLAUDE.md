@@ -194,6 +194,7 @@ Enrichment is computed in three layers:
 - Emoji keys for per-platform resolution during DTS view building
 - Weakness list with translated type names
 - Evolution/mega evolution entries with translated names
+- PVP ranking lists (`pvp_rankings_great_league`, `pvp_rankings_ultra_league`, `pvp_rankings_little_league`) with enriched entries (`levelWithCap`, `nameEng`, pokemon/form names) for backward-compatible DTS templates
 
 **Per-user enrichment** (computed per matched user):
 - PVP display lists filtered by user's tracking criteria
@@ -333,7 +334,12 @@ All tracking commands (track, raid, egg, quest, nest, lure, gym, fort, invasion,
 2. Parse args using typed parameter matchers (`bot/argmatch.go`)
 3. Track consumed args, report unrecognized args
 4. Validate distance/area requirements
-5. Call store layer for DB operations, trigger state reload, send confirmation messages
+5. **Template validation**: When user explicitly specifies `template:X`, the command validates the template exists in loaded DTS templates for the relevant type/platform. Non-admins are blocked with an error; admins receive a warning but can proceed.
+6. Call store layer for DB operations, trigger state reload, send confirmation messages
+
+**Default template storage**: Commands store an empty string for `template` when the user does not specify `template:X`. The renderer resolves empty template to `[general] default_template_name` from config at render time, allowing the admin to change the default without updating existing tracking rules.
+
+**`!track remove` delegates to `!untrack`**: `!track remove ...` is equivalent to `!untrack ...`, including gen/type filtering support.
 
 ### Command Security & Target Resolution Rules
 
@@ -392,11 +398,12 @@ Bare `!track everything` with no meaningful filters (IV, CP, level, PVP, type, g
 
 ### Key Commands
 
-- `!track <pokemon> [filters]` — the most complex, uses `parameterDefinition` regex map (already has full arg validation)
+- `!track <pokemon> [filters]` — the most complex, uses `parameterDefinition` regex map (already has full arg validation). Supports multi-league PVP: `!track pikachu great5 ultra10` creates separate tracking rules per league. PVP filters enforce config min CP floors (`pvp_filter_great_min_cp` etc., defaults 1400/2350/450), clamp worst rank to `pvp_filter_max_rank`, and validate level caps against `level_caps` config.
 - `!raid`, `!egg` — level/pokemon + team/exclusive/move/template/distance/rsvp
 - `!quest` — stardust/energy/candy/item/pokemon rewards
 - `!nest`, `!lure`, `!gym`, `!fort`, `!invasion`, `!maxbattle` — type-specific filters
-- `!tracked` — list all active tracking
+- `!tracked` — list all active tracking, shows `[id:XX]` per rule for targeted removal
+- `!untrack id:45` or `!raid remove id:12` — remove a specific tracking rule by database UID (works for all tracking types)
 - `!poracle` — register/start
 - `!profile` — switch/create/delete profiles
 - `!area` — add/remove geofence areas
@@ -503,6 +510,8 @@ Templates are loaded from `config/dts.json` (or `fallbacks/dts.json` as fallback
 - `"@include filename"` — include directive for shared partials (resolved from `config/dts/`)
 - Array values for multi-line `description` fields — joined into strings (only arrays of all strings; arrays containing objects like `embed.fields` are preserved)
 
+**DTS Partials** (`config/partials.json` or `fallbacks/partials.json`): Named Handlebars partials loaded per-template and registered with raymond before rendering. Reloaded on DTS reload (`/api/reload`). Partials are available in templates via `{{> partialName}}`.
+
 ### Template Selection Chain
 
 Template selection uses a 5-level fallback (first match wins):
@@ -528,12 +537,14 @@ The `LayeredView` implements raymond's `FieldResolver` interface, providing an 8
 
 **HTML escaping is disabled**: raymond's `EscapeFunc` is set to a no-op. DTS output is JSON for Discord/Telegram, not HTML — the default HTML escaping would corrupt `<` characters in Handlebars expressions and URL parameters. The `{{escape}}` helper is available for explicit HTML escaping when needed.
 
-**DTS alias tables are per webhook type** (not global) to avoid cross-type field name conflicts. Each webhook type registers its own camelCase alias mappings in its enrichment code.
+**DTS alias tables are per webhook type** (not global) to avoid cross-type field name conflicts. Each webhook type registers its own camelCase alias mappings in its enrichment code. The `gameweather` alias maps to `gameWeatherName` (translated name), not `gameWeatherId` (numeric).
+
+**LayeredView is the only render path.** Legacy view code (`BuildPokemonView`, `mergeMaps`, `addAliases`, `addComputedFields`) has been removed.
 
 ### Handlebars Helpers
 
 The processor registers ~47 Handlebars helpers via `dts/helpers.go`:
-- **Comparison**: `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `and`, `or`, `not`, `isPokemon` — work in both block mode (`{{#eq a b}}...{{/eq}}`) and subexpression mode (`{{#if (eq a b)}}...{{/if}}`)
+- **Comparison**: `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `and`, `or`, `not`, `isPokemon` — work in both block mode (`{{#eq a b}}...{{/eq}}`) and subexpression mode (`{{#if (eq a b)}}...{{/if}}`). The `and`/`or` helpers are variadic (accept 2+ args) and registered as options-only helpers in the raymond fork to support correct argument collection.
 - **Math**: `add`, `subtract`, `multiply`, `divide`, `round`, `roundPokemon`, `floor`, `ceil`, `abs`, `toFixed`
 - **String**: `contains`, `split`, `trim`, `join`, `concat`, `lowercase`, `uppercase`, `capitalizePokemon`, `replace`
 - **Array**: `len`
@@ -584,7 +595,9 @@ Templates receive the full view object with all enriched data. Common fields: `{
 | Quest titles | `quest_title_{title}` | resources/gamelocale/ | `quest_title_quest_catch_pokemon_plural` → "Catch %{amount_0} Pokemon" |
 | Item names | `item_{id}` | resources/gamelocale/ | `item_701` → "Razz Berry" |
 | Weather names | `weather_{id}` | resources/locale/ | `weather_1` → "Clear" |
-| UI strings | `rate_limit.*`, `tracking.*` | processor/internal/i18n/locale/ (embedded) | `rate_limit.reached` |
+| Command names | `cmd.*` | processor/internal/i18n/locale/ (embedded) | `cmd.track` → "track" |
+| Response text | `msg.*` | processor/internal/i18n/locale/ (embedded) | `msg.tracked.pokemon` |
+| UI strings | `rate_limit.*` | processor/internal/i18n/locale/ (embedded) | `rate_limit.reached` |
 
 **Named placeholders**: gamelocale strings use `%{name}` placeholders (e.g. `%{amount_0}`, `%{pokemon}`), not `{0}` positional. The `FormatNamed()` / `TfNamed()` functions in `processor/internal/i18n/` handle these. The processor's own embedded strings use `{0}` positional via `Format()` / `Tf()`.
 
@@ -607,13 +620,15 @@ MySQL (or MariaDB). Key tables:
 
 All tracking tables have: `id` (FK to humans), `profile_no`, `distance`, `template`, `clean`, `ping`.
 
-Migrations in `processor/internal/db/migrations/` (SQL files, run on processor startup).
+Migrations in `processor/internal/db/migrations/` (SQL files, run on processor startup). The DSN includes `multiStatements=true` to support multi-statement migration files on fresh installations.
 
 ## Game Data
 
 The processor uses the **raw masterfile** (`master-latest-raw.json`) from Masterfile-Generator, split into `resources/rawdata/` (pokemon, forms, moves, types, items, invasions, weather). The masterdata API endpoints (`/api/masterdata/monsters`, `/api/masterdata/grunts`) build poracle-v2 format on-the-fly from the raw masterfile for PoracleWeb compatibility.
 
 **Grunt/invasion data** uses `classic.json` from WatWowMap/event-info (downloaded to `resources/rawdata/invasions.json`). This format uses numeric type IDs (`character.type.id`) and proto template strings (`CHARACTER_GRASS_GRUNT_MALE`), NOT English name strings. Translation uses identifier keys: `poke_type_{typeID}` for grunt type, `character_category_{categoryID}` for grunt category.
+
+**Pokemon aliases** (`config/pokemonAlias.json` with fallback to `fallbacks/pokemonAlias.json`): Maps alias names to one or more pokemon IDs. Supports multi-ID aliases (e.g., `"laketrio": [480, 481, 482]`). Used by the pokemon resolver in bot commands for convenient shorthand names.
 
 **Important: resource download collision.** The raw masterfile (`master-latest-raw.json`) also contains an `"invasions"` category in the old formatted.json format. `downloadRawMaster` skips this category to avoid overwriting the `classic.json` saved by `downloadGrunts`. If this skip is removed, the processor will silently load empty grunt data.
 
