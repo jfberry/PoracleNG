@@ -1,8 +1,6 @@
 package commands
 
 import (
-	"database/sql"
-
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
@@ -231,18 +229,3 @@ func (c *EggCommand) removeEggs(ctx *bot.CommandContext, levelSet map[int]bool) 
 	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }
 
-func eggAPIToTracking(api *db.EggTrackingAPI) *db.EggTracking {
-	return &db.EggTracking{
-		ID:          api.ID,
-		ProfileNo:   api.ProfileNo,
-		Ping:        api.Ping,
-		Clean:       bool(api.Clean),
-		Distance:    api.Distance,
-		Template:    api.Template,
-		Team:        api.Team,
-		Level:       api.Level,
-		Exclusive:   bool(api.Exclusive),
-		GymID:       sql.NullString{String: api.GymID.String, Valid: api.GymID.Valid},
-		RSVPChanges: api.RSVPChanges,
-	}
-}

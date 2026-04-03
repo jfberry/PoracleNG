@@ -6,6 +6,60 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
+func monsterAPIToTracking(a *db.MonsterTrackingAPI) *db.MonsterTracking {
+	return &db.MonsterTracking{
+		ID:               a.ID,
+		ProfileNo:        a.ProfileNo,
+		PokemonID:        a.PokemonID,
+		Form:             a.Form,
+		Distance:         a.Distance,
+		MinIV:            a.MinIV,
+		MaxIV:            a.MaxIV,
+		MinCP:            a.MinCP,
+		MaxCP:            a.MaxCP,
+		MinLevel:         a.MinLevel,
+		MaxLevel:         a.MaxLevel,
+		ATK:              a.ATK,
+		DEF:              a.DEF,
+		STA:              a.STA,
+		MaxATK:           a.MaxATK,
+		MaxDEF:           a.MaxDEF,
+		MaxSTA:           a.MaxSTA,
+		Gender:           a.Gender,
+		MinWeight:        a.MinWeight,
+		MaxWeight:        a.MaxWeight,
+		MinTime:          a.MinTime,
+		Rarity:           a.Rarity,
+		MaxRarity:        a.MaxRarity,
+		Size:             a.Size,
+		MaxSize:          a.MaxSize,
+		Template:         a.Template,
+		Clean:            bool(a.Clean),
+		Ping:             a.Ping,
+		PVPRankingLeague: a.PVPRankingLeague,
+		PVPRankingBest:   a.PVPRankingBest,
+		PVPRankingWorst:  a.PVPRankingWorst,
+		PVPRankingMinCP:  a.PVPRankingMinCP,
+		PVPRankingCap:    a.PVPRankingCap,
+	}
+}
+
+func eggAPIToTracking(api *db.EggTrackingAPI) *db.EggTracking {
+	return &db.EggTracking{
+		ID:          api.ID,
+		ProfileNo:   api.ProfileNo,
+		Ping:        api.Ping,
+		Clean:       bool(api.Clean),
+		Distance:    api.Distance,
+		Template:    api.Template,
+		Team:        api.Team,
+		Level:       api.Level,
+		Exclusive:   bool(api.Exclusive),
+		GymID:       sql.NullString{String: api.GymID.String, Valid: api.GymID.Valid},
+		RSVPChanges: api.RSVPChanges,
+	}
+}
+
 func raidAPIToTracking(a *db.RaidTrackingAPI) *db.RaidTracking {
 	return &db.RaidTracking{
 		ID:          a.ID,
