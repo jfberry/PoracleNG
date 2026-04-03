@@ -209,6 +209,12 @@ func (ts *TemplateStore) Get(templateType, platform, templateID, language string
 	return compiled
 }
 
+// Exists checks whether a template exists for the given type, platform, ID, and language
+// using the same selection chain as Get, but without compiling or caching.
+func (ts *TemplateStore) Exists(templateType, platform, templateID, language string) bool {
+	return ts.selectEntry(templateType, platform, templateID, language) != nil
+}
+
 func cacheKey(templateType, platform, templateID, language string) string {
 	return templateType + " " + platform + " " + templateID + " " + language
 }
