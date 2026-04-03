@@ -97,6 +97,14 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		template = t
 	}
 
+	// Validate template exists
+	var templateWarn string
+	if block, warn := validateTemplate(ctx, "egg", template); block != nil {
+		return []bot.Reply{*block}
+	} else {
+		templateWarn = warn
+	}
+
 	clean := parsed.HasKeyword("arg.clean")
 	exclusive := parsed.HasKeyword("arg.ex")
 	team := parsed.Team
@@ -169,6 +177,10 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	ctx.TriggerReload()
 
 	message += trackingWarnings(ctx, distance)
+
+	if templateWarn != "" {
+		message += "\n⚠️ " + templateWarn
+	}
 
 	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		return []bot.Reply{{React: "👌", Text: message}}

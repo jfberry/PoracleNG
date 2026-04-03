@@ -99,6 +99,35 @@ func trackingWarnings(ctx *bot.CommandContext, distance int) string {
 	return "\n⚠️ " + strings.Join(warnings, "\n⚠️ ")
 }
 
+// targetDTSPlatform returns the DTS platform for template lookup based on TargetType.
+// Webhooks always use discord templates.
+func targetDTSPlatform(ctx *bot.CommandContext) string {
+	if strings.HasPrefix(ctx.TargetType, "telegram") {
+		return "telegram"
+	}
+	return "discord"
+}
+
+// validateTemplate checks if a DTS template exists for the given tracking type and
+// template ID. For regular users, returns a blocking reply. For admins, returns nil
+// but sets the warning text in the second return value. Returns (nil, "") if the
+// template exists or DTS is unavailable.
+func validateTemplate(ctx *bot.CommandContext, dtsType, templateID string) (*bot.Reply, string) {
+	if ctx.DTS == nil {
+		return nil, ""
+	}
+	platform := targetDTSPlatform(ctx)
+	if ctx.DTS.Exists(dtsType, platform, templateID, ctx.Language) {
+		return nil, ""
+	}
+
+	tr := ctx.Tr()
+	if ctx.IsAdmin {
+		return nil, tr.Tf("tracking.warn_template_not_found", templateID, dtsType, platform)
+	}
+	return &bot.Reply{React: "🙅", Text: tr.Tf("tracking.template_not_found", templateID)}, ""
+}
+
 // resolveMoveByName looks up a move ID by its translated name.
 // Returns bot.WildcardID if no match is found.
 func resolveMoveByName(ctx *bot.CommandContext, moveName string) int {
