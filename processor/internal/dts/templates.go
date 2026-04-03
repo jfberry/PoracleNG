@@ -53,6 +53,7 @@ type TemplateStore struct {
 	mu          sync.RWMutex
 	entries     []DTSEntry
 	cache       map[string]*raymond.Template
+	partials    map[string]string
 	configDir   string
 	fallbackDir string
 }
@@ -64,12 +65,39 @@ func LoadTemplates(configDir, fallbackDir string) (*TemplateStore, error) {
 		configDir:   configDir,
 		fallbackDir: fallbackDir,
 	}
+
+	ts.partials = loadPartials(configDir, fallbackDir)
+
 	entries, err := loadEntries(configDir, fallbackDir)
 	if err != nil {
 		return nil, err
 	}
 	ts.entries = entries
 	return ts, nil
+}
+
+// loadPartials loads Handlebars partials from partials.json.
+// Config dir takes precedence over fallback dir.
+func loadPartials(configDir, fallbackDir string) map[string]string {
+	path := filepath.Join(configDir, "partials.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		path = filepath.Join(fallbackDir, "partials.json")
+		data, err = os.ReadFile(path)
+		if err != nil {
+			log.Debug("No partials.json found")
+			return nil
+		}
+	}
+
+	var partials map[string]string
+	if err := json.Unmarshal(data, &partials); err != nil {
+		log.Warnf("dts: failed to parse partials.json: %v", err)
+		return nil
+	}
+
+	log.Infof("dts: loaded %d partials from %s", len(partials), path)
+	return partials
 }
 
 func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
@@ -119,14 +147,16 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 	return entries, nil
 }
 
-// Reload re-reads dts.json and clears the template cache.
+// Reload re-reads dts.json and partials.json, then clears the template cache.
 func (ts *TemplateStore) Reload(configDir, fallbackDir string) error {
 	entries, err := loadEntries(configDir, fallbackDir)
 	if err != nil {
 		return err
 	}
+	partials := loadPartials(configDir, fallbackDir)
 	ts.mu.Lock()
 	ts.entries = entries
+	ts.partials = partials
 	ts.cache = make(map[string]*raymond.Template)
 	ts.configDir = configDir
 	ts.fallbackDir = fallbackDir
@@ -163,6 +193,13 @@ func (ts *TemplateStore) Get(templateType, platform, templateID, language string
 		log.Errorf("dts: compile template %s/%s/%s/%s: %v", templateType, platform, templateID, language, err)
 		return nil
 	}
+
+	// Register partials on this template instance (not globally, so reloads work)
+	ts.mu.RLock()
+	if len(ts.partials) > 0 {
+		compiled.RegisterPartials(ts.partials)
+	}
+	ts.mu.RUnlock()
 
 	// Cache under write lock
 	ts.mu.Lock()
