@@ -88,6 +88,7 @@
   "tracking.new": "New: ",
   "tracking.bulk_changes": "I have made a lot of changes. See {0}{1} for details",
   "tracking.tracked": "tracciati",
+  "tracking.warn_stopped": "Le tue notifiche sono attualmente in pausa. Utilizza {0}start per riprendere.",
 
   "cmd.track": "trova",
   "cmd.untrack": "basta",
@@ -238,5 +239,53 @@
   "arg.prefix.sat": "sab",
   "arg.prefix.sun": "dom",
   "arg.prefix.weekday": "feriale",
-  "arg.prefix.weekend": "weekend"
+  "arg.prefix.weekend": "weekend",
+
+  "status.enabled": "attivato",
+  "status.disabled": "disattivato",
+  "status.alerts_currently": "I tuoi alert sono attualmente **{0}**",
+  "status.location_set": "La tua posizione è attualmente impostata su {0}",
+  "status.no_location": "Non hai ancora impostato una località",
+  "status.areas_set": "Al momento sei impostato per ricevere notifiche in {0}",
+  "status.no_areas": "Non hai ancora selezionato nessuna area",
+  "status.profile_set": "Il tuo profilo è attualmente settato su: {0}",
+  "status.no_tracking": "Nessun tracking attivo",
+  "status.tracking_file": "L'elenco dei tracking è piuttosto lungo. Dai un'occhiata a",
+
+  "section.pokemon.none": "Non stai tracciando nessun Pokémon",
+  "section.raids.none": "Non stai tracciando nessun raid",
+  "section.quests.none": "Non stai tracciando nessuna quest",
+  "section.invasions.none": "Non stai traccando nessuna invasion",
+  "section.lures.none": "Non stai tracciando nessuna esca",
+
+  "msg.no_pokemon": "Nessun pokemon trovato",
+  "msg.dm_only": "Per favore esegui i comandi nei messaggi privati",
+  "msg.channel.added": "Canale aggiunto",
+  "msg.webhook.added": "Webhook aggiunto",
+  "msg.admin_no_distance": "Attenzione: Rilevati commandi amministrativi senza una distanza impostata - uso distanza di default",
+  "msg.userlist.registered": "Questi utenti sono registrati con Poracle :",
+
+  "msg.language.changed": "Ho cambiato l'impostazione della tua lingua in {0}",
+  "msg.language.current": "Lingua corrente impostata su {0}",
+  "msg.language.unknown": "Riconosco solo le seguenti lingue: {0}",
+
+  "msg.location.not_found": "Posizione non riconosciuta",
+  "msg.location.new": "Nuova posizione",
+  "msg.area.added": "Aree aggiunte: {0}",
+  "msg.area.removed": "Aree rimosse: {0}",
+  "msg.area.current": "Le aree attualmente configurate sono:",
+
+  "msg.profile.none": "Non hai nessun profilo",
+  "msg.profile.not_found": "Non posso trovare quel profilo",
+  "msg.profile.list_header": "I profili attualmente configurati sono:",
+
+  "msg.start.success": "Le tue notifiche sono adesso attivate",
+
+  "day.monday": "Lunedì",
+  "day.tuesday": "Martedì",
+  "day.wednesday": "Mercoledì",
+  "day.thursday": "Giovedì",
+  "day.friday": "Venerdì",
+  "day.saturday": "Sabato",
+  "day.sunday": "Domenica"
 }

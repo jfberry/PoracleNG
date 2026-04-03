@@ -238,5 +238,76 @@
   "arg.prefix.sat": "сб",
   "arg.prefix.sun": "вс",
   "arg.prefix.weekday": "будни",
-  "arg.prefix.weekend": "выходные"
+  "arg.prefix.weekend": "выходные",
+
+  "status.enabled": "*включены*",
+  "status.disabled": "*выключены*",
+  "status.alerts_currently": "*Оповещения* **{0}**",
+  "status.location_set": "*Твои текущие стартовые координаты:* {0}",
+  "status.no_location": "*Стартовые координаты не установлены.*",
+  "status.areas_set": "Ты получаешь оповещения из следующих зон: {0}",
+  "status.no_areas": "Ты еще не выбрал зоны для оповещений.",
+  "status.profile_set": "Твой текущий профиль: {0}",
+  "status.no_tracking": "Нет активного отслеживания",
+  "status.tracking_file": "*Список очень длинный. Подробнее:*",
+
+  "section.pokemon.none": "*Ты не отслеживаешь ни одного покемона.*",
+  "section.raids.none": "*Ты не отслеживаешь ни одного рейда.*",
+  "section.quests.none": "*Ты не отслеживаешь ни одного квеста.*",
+  "section.invasions.none": "*Ты не отслеживаешь ни одного ивента с Командой Р.*",
+  "section.lures.none": "*Ты не отслеживаешь ни один тип люров.*",
+  "section.gyms.none": "*Ты не отслеживаешь изменения на гимах*",
+  "section.nests.none": "*Ты не отслеживаешь гнезда*",
+
+  "msg.dm_only": "Данную команду можно отправить только в ЛС",
+  "msg.no_pokemon": "покемон не найден",
+  "msg.no_permission": "Нет прав для выполнения этой команды",
+  "msg.admin_no_distance": "Внимание: введена команда без установленного расстояния - вместо этого будет использоваться стандартное расстояние",
+  "msg.userlist.registered": "Список зарегистрированных пользователей:",
+  "msg.removed_n": "Удалено ивентов: {0}",
+
+  "msg.track.everything_no_filters": "Слишком много оповещений. Добавь больше фильтров.",
+
+  "msg.stop.warn_args": "Команда `{0}{1}` используется для остановки всех оповещений, останавливаем?",
+  "msg.stop.success": "Все оповещения отключены, их можно возобновить при помощи команды `{0}{1}`",
+  "msg.start.success": "Оповещения включены",
+
+  "msg.language.changed": "Язык изменен на {0}",
+  "msg.language.current": "Текущий язык: {0}",
+  "msg.language.unknown": "Можно выбрать следующие языки: {0}",
+
+  "msg.location.not_found": "Координаты заданы неверно",
+  "msg.location.new": "Новая позиция",
+  "msg.area.added": "Зоны добавлены: {0}",
+  "msg.area.removed": "Зоны удалены: {0}",
+  "msg.area.current": "Список зон:",
+
+  "msg.profile.none": "Ты еще не установил ни одного профиля",
+  "msg.profile.not_found": "Профиль не найден",
+  "msg.profile.list_header": "Список профилей:",
+
+  "msg.info.super_effective": "Повышенный урон",
+  "msg.info.vulnerable": "Уязвимость",
+  "msg.info.very_vulnerable": "Двойная уязвимость",
+  "msg.info.resistant": "Резист",
+  "msg.info.very_resistant": "Двойной резист",
+  "msg.info.available_forms": "*Доступные формы*",
+  "msg.info.primary_type": "*Первый тип*",
+  "msg.info.secondary_type": "*Второй тип*",
+  "msg.info.boosted_by": "*Погодный буст*",
+  "msg.info.shiny_header": "**Шайни-статистика за последние пару часов**",
+  "msg.info.rarity_unavailable": "Информация о редкости покемонов еще не готова - попробуй через пару минут",
+  "msg.info.items_header": "**Список предметов** ({0}):",
+  "msg.info.moves_header": "**Список атак** ({0}):",
+
+  "msg.community.valid": "Доступные сообщества:",
+  "msg.community.no_targets": "Не указаны цели",
+
+  "day.monday": "Понедельник",
+  "day.tuesday": "Вторник",
+  "day.wednesday": "Среда",
+  "day.thursday": "Четверг",
+  "day.friday": "Пятница",
+  "day.saturday": "Суббота",
+  "day.sunday": "Воскресенье"
 }

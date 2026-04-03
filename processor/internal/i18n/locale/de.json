@@ -86,7 +86,7 @@
   "tracking.unchanged": "Unverändert: ",
   "tracking.updated": "Aktualisiert: ",
   "tracking.new": "Neu: ",
-  "tracking.bulk_changes": "I have made a lot of changes. See {0}{1} for details",
+  "tracking.bulk_changes": "Es wurden viele Änderungen vorgenommen. Weitere Informationen unter {0}{1}.",
   "tracking.tracked": "status",
 
   "cmd.track": "beobachte",
@@ -309,5 +309,84 @@
   "msg.webhook.added": "Webhook hinzugefügt",
   "msg.dm_only": "Befehle müssen als Direktnachrichten an den Poracle-Bot gesendet werden!",
   "msg.admin_no_distance": "Warnung: Befehl ohne Distanz erkannt - standard Distanz wird stattdessen verwendet",
-  "msg.not_registered": "Du bist nicht registriert. Bitte registriere dich zuerst."
+  "msg.not_registered": "Du bist nicht registriert. Bitte registriere dich zuerst.",
+
+  "msg.track.everything_no_filters": "Dies würde zu zu vielen Meldungen führen. Du musst zusätzliche Filter wählen, um die Anzahl gültiger Kandidaten zu begrenzen.",
+  "msg.track.invalid_cap": "This level cap is not supported, valid choices are: {0}",
+
+  "msg.language.current": "Aktuell eingestellte Sprache: {0}",
+
+  "msg.location.not_found": "Konnte den Standort nicht verstehen",
+  "msg.location.new": "Neuer Standort",
+
+  "msg.area.current": "Aktuell sind folgende Gebiete festgelegt:",
+
+  "msg.profile.list_header": "Folgende Profile sind verfügbar:",
+  "msg.profile.hours_usage": "Usage: profile hours <profileNo> <json>",
+  "msg.profile.hours_invalid_json": "Invalid JSON for active hours",
+  "msg.profile.copied": "Profil kopiert nach: {0}",
+  "msg.profile.copy_invalid": "Ungültige Profile: {0}",
+
+  "msg.no_permission.fort": "keine Berechtigung Gym und Stop Änderungen zu tracken",
+
+  "msg.role.available": "Aktuell sind folgende Rollen verfügbar",
+  "msg.role.your_roles": "Folgende Rollen sind hinzugefügt",
+  "msg.role.granted": "Folgende Rolle wurde hinzugefügt: {0}",
+  "msg.role.removed": "Es wurde folgende Rolle entfernt: {0}",
+  "msg.role.unknown": "Unbekannte Rolle -- {0}",
+
+  "msg.community.valid": "Dies sind die verfügbaren Communities:",
+  "msg.community.no_targets": "Keine ChannelId oder UserId aufgelistet",
+
+  "msg.info.super_effective": "sehr effektiv gegen",
+  "msg.info.vulnerable": "empfindlich bei",
+  "msg.info.very_vulnerable": "sehr empfindlich bei",
+  "msg.info.resistant": "resistent gegen",
+  "msg.info.very_resistant": "sehr resistent gegen",
+  "msg.info.extremely_resistant": "extrem resistent gegen",
+  "msg.info.available_forms": "verfügbare Formen",
+  "msg.info.primary_type": "Primärer Typ",
+  "msg.info.secondary_type": "Sekundärer Typ",
+  "msg.info.boosted_by": "Wetterverstärkung bei",
+  "msg.info.shiny_header": "**Shiny Statistik (der letzen Stunden)**",
+  "msg.info.shiny_seen": "gesehen",
+  "msg.info.shiny_ratio": "Verhältnis",
+  "msg.info.shiny_unavailable": "Shinyinfos noch nicht berechnet - warte ein paar Minuten und versuche es erneut",
+  "msg.info.rarity_unavailable": "Seltenheitswert noch nicht berechnet - warte ein paar Minuten und versuche es erneut",
+  "msg.info.moves_header": "**Attacken** ({0}):",
+  "msg.info.items_header": "**Gegenstände** ({0}):",
+
+  "msg.unregister.success": "Abgemeldet: {0}",
+
+  "tracking.warn_stopped": "Alle Benachrichtigungen sind gestoppt. Benutze {0}start um sie wieder zu aktivieren.",
+
+  "section.pokemon.none": "Es werden keine Pokémon beobachtet.",
+  "section.raids.none": "Es werden keine Raids beobachtet.",
+  "section.eggs.none": "Es werden keine Eier beobachtet.",
+  "section.quests.none": "Es werden keine Quests beobachtet.",
+  "section.invasions.none": "Es werden keine Team-GO-Rocket-Invasionen beobachtet.",
+  "section.lures.none": "Es werden keine Lockmodule beobachtet.",
+  "section.gyms.none": "Es werden keine Arenen beobachtet.",
+  "section.nests.none": "Es werden keine Nester beobachtet.",
+  "section.forts.none": "Es werden keine Gym und Stop Änderungen beobachtet.",
+  "section.maxbattles.none": "Es werden keine dynamax Kämpfe beobachtet.",
+
+  "status.tracking_file": "Beobachtungsliste ist zu umfangreich für direkte Ausgabe. Sie wird stattdessen als Datei zur Verfügung gestellt:",
+
+  "day.monday": "Montag",
+  "day.tuesday": "Dienstag",
+  "day.wednesday": "Mittwoch",
+  "day.thursday": "Donnerstag",
+  "day.friday": "Freitag",
+  "day.saturday": "Samstag",
+  "day.sunday": "Sonntag",
+
+  "raid.level.legendary": "Legendär",
+  "raid.level.mega": "Mega",
+  "raid.level.mega_legendary": "Mega Legendär",
+  "raid.level.ultra_beast": "Ultrabestie",
+  "raid.level.elite": "Top",
+  "raid.level.shadow": "Crypto",
+  "raid.level.shadow_legendary": "Crypto Legendär",
+  "raid.level.primal": "Proto"
 }

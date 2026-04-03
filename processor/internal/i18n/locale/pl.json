@@ -87,5 +87,24 @@
   "tracking.updated": "Updated: ",
   "tracking.new": "New: ",
   "tracking.bulk_changes": "I have made a lot of changes. See {0}{1} for details",
-  "tracking.tracked": "tracked"
+  "tracking.tracked": "tracked",
+
+  "status.enabled": "włączone",
+  "status.disabled": "wyłączone",
+  "status.alerts_currently": "Powiadomienia są: **{0}**",
+  "status.location_set": "Ustawiona lokalizacja: {0}",
+  "status.areas_set": "Ustawiony obszar do powiadomień to: {0}",
+
+  "section.pokemon.none": "Nie śledzisz żadnych Pokemonów",
+  "section.raids.none": "Nie śledzisz żadnych Raidów",
+  "section.quests.none": "Nie śledzisz żadnych Questów",
+  "section.invasions.none": "Nie śledzisz żadnych Inwazji",
+
+  "msg.dm_only": "Komendy wysyłaj do bota na priv",
+  "msg.no_pokemon": "Nie znaleziono Pokemona",
+  "msg.area.added": "Dodano obszar: {0}",
+  "msg.area.removed": "Usunięto obszar: {0}",
+  "msg.area.current": "Dostępne obszary:",
+
+  "cmd.invasion": "inwazja"
 }
