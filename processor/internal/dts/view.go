@@ -102,7 +102,7 @@ var commonAliases = []aliasPair{
 // This avoids conflicts where the same alias (e.g. "gymName") maps to different source
 // fields depending on webhook type ("gym_name" for raids vs "name" for gym changes).
 var typeAliases = map[string][]aliasPair{
-	"pokemon": {
+	"monster": {
 		{"formname", "formName"},
 		{"ivcolor", "ivColor"},
 		{"individual_attack", "atk"},

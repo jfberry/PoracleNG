@@ -12,7 +12,7 @@ import (
 func newTestView(t *testing.T, opts ...func(*testViewOpts)) *LayeredView {
 	t.Helper()
 	o := &testViewOpts{
-		templateType: "pokemon",
+		templateType: "monster",
 		platform:     "discord",
 	}
 	for _, fn := range opts {
