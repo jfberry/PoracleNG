@@ -49,27 +49,10 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 		return []bot.Reply{*warn}
 	}
 
-	template := ctx.DefaultTemplate()
-	if t, ok := parsed.Strings["template"]; ok {
-		template = t
+	common, block := parseCommonTrackFields(ctx, parsed, "maxbattle")
+	if block != nil {
+		return []bot.Reply{*block}
 	}
-
-	// Validate template exists
-	var templateWarn string
-	if _, explicit := parsed.Strings["template"]; explicit {
-		if block, warn := validateTemplate(ctx, "maxbattle", template); block != nil {
-			return []bot.Reply{*block}
-		} else {
-			templateWarn = warn
-		}
-	}
-
-	distance := 0
-	if d, ok := parsed.Singles["d"]; ok {
-		distance = d
-	}
-	distance = enforceDistance(ctx, distance)
-	clean := parsed.HasKeyword("arg.clean")
 
 	gmax := 0
 	if parsed.HasKeyword("arg.gmax") {
@@ -97,9 +80,9 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 				ID:        ctx.TargetID,
 				ProfileNo: ctx.ProfileNo,
 				Ping:      pings,
-				Template:  template,
-				Distance:  distance,
-				Clean:     db.IntBool(clean),
+				Template:  common.Template,
+				Distance:  common.Distance,
+				Clean:     db.IntBool(common.Clean),
 				PokemonID: mon.PokemonID,
 				Form:      mon.Form,
 				Level:     90, // 90 = all levels for specific pokemon
@@ -136,9 +119,9 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 				ID:        ctx.TargetID,
 				ProfileNo: ctx.ProfileNo,
 				Ping:      pings,
-				Template:  template,
-				Distance:  distance,
-				Clean:     db.IntBool(clean),
+				Template:  common.Template,
+				Distance:  common.Distance,
+				Clean:     db.IntBool(common.Clean),
 				PokemonID: bot.WildcardID, // 9000 = by level
 				Level:     lvl,
 				Move:      move,
@@ -181,10 +164,10 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 
 	ctx.TriggerReload()
 
-	message += trackingWarnings(ctx, distance)
+	message += trackingWarnings(ctx, common.Distance)
 
-	if templateWarn != "" {
-		message += "\n⚠️ " + templateWarn
+	if common.TemplateWarn != "" {
+		message += "\n⚠️ " + common.TemplateWarn
 	}
 
 	react := "✅"

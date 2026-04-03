@@ -98,32 +98,15 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	parsed := ctx.ArgMatcher.Match(args, questParams, ctx.Language)
 
-	template := ctx.DefaultTemplate()
-	if t, ok := parsed.Strings["template"]; ok {
-		template = t
+	common, block := parseCommonTrackFields(ctx, parsed, "quest")
+	if block != nil {
+		return []bot.Reply{*block}
 	}
-
-	// Validate template exists
-	var templateWarn string
-	if _, explicit := parsed.Strings["template"]; explicit {
-		if block, warn := validateTemplate(ctx, "quest", template); block != nil {
-			return []bot.Reply{*block}
-		} else {
-			templateWarn = warn
-		}
-	}
-
-	distance := 0
-	if d, ok := parsed.Singles["d"]; ok {
-		distance = d
-	}
-	distance = enforceDistance(ctx, distance)
-	clean := parsed.HasKeyword("arg.clean")
 	shiny := parsed.HasKeyword("arg.shiny")
 
 	// Handle remove first — before reward type detection
 	if parsed.HasKeyword("arg.remove") {
-		return c.handleRemove(ctx, parsed, template, distance, clean, shiny, pings)
+		return c.handleRemove(ctx, parsed, common, shiny, pings)
 	}
 
 	// Determine reward mode.
@@ -134,60 +117,60 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if stardustVal, ok := parsed.Strings["stardust"]; ok {
 		// stardust:1000 — minimum amount stored in Reward field (matching alerter)
 		amount := questParseInt(stardustVal)
-		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 3, amount, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, amount, 0, 0))
 	} else if parsed.HasKeyword("arg.stardust") {
 		// bare "stardust" — any amount
-		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 3, 0, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, 0, 0, 0))
 	} else if energyVal, ok := parsed.Strings["energy"]; ok {
 		// energy:charizard — resolve pokemon name
 		resolved := ctx.Resolver.Resolve(energyVal, ctx.Language)
 		if len(resolved) > 0 {
 			for _, mon := range resolved {
-				insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
+				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
 			}
 		} else {
-			insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 12, 0, 0, 0))
+			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, 0))
 		}
 	} else if parsed.HasKeyword("arg.energy") {
 		// bare "energy" — check for pokemon in args
 		if len(parsed.Pokemon) > 0 {
 			for _, mon := range parsed.Pokemon {
-				insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
+				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
 			}
 		} else {
-			insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 12, 0, 0, 0))
+			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, 0))
 		}
 	} else if candyVal, ok := parsed.Strings["candy"]; ok {
 		// candy:pikachu — resolve pokemon name
 		resolved := ctx.Resolver.Resolve(candyVal, ctx.Language)
 		if len(resolved) > 0 {
 			for _, mon := range resolved {
-				insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
+				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
 			}
 		} else {
-			insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 4, 0, 0, 0))
+			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, 0))
 		}
 	} else if parsed.HasKeyword("arg.candy") {
 		// bare "candy" — check for pokemon in args
 		if len(parsed.Pokemon) > 0 {
 			for _, mon := range parsed.Pokemon {
-				insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
+				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
 			}
 		} else {
-			insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 4, 0, 0, 0))
+			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, 0))
 		}
 	} else if parsed.HasKeyword("arg.everything") {
 		// Everything: track all quest reward types (matching alerter behavior)
 		// Pokemon quests
-		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 7, 0, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 7, 0, 0, 0))
 		// Stardust quests (reward=0 means any amount)
-		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 3, 0, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, 0, 0, 0))
 		// Mega energy quests
-		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 12, 0, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, 0))
 		// Candy quests
-		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 4, 0, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, 0))
 		// Item quests
-		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 2, 0, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 2, 0, 0, 0))
 	} else if len(parsed.Pokemon) > 0 {
 		// Pokemon quest tracking (reward_type = 7)
 		monsterList := c.resolveMonsters(ctx, parsed)
@@ -196,9 +179,9 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				ID:         ctx.TargetID,
 				ProfileNo:  ctx.ProfileNo,
 				Ping:       pings,
-				Template:   template,
-				Distance:   distance,
-				Clean:      db.IntBool(clean),
+				Template:   common.Template,
+				Distance:   common.Distance,
+				Clean:      db.IntBool(common.Clean),
 				Shiny:      db.IntBool(shiny),
 				RewardType: 7,
 				Reward:     mon.PokemonID,
@@ -210,7 +193,7 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// Item quest tracking (reward_type = 2)
 		// Consume matched item tokens from Unrecognized
 		parsed.Unrecognized = nil
-		insert = append(insert, c.makeQuest(ctx, template, distance, clean, shiny, pings, 2, itemID, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 2, itemID, 0, 0))
 	} else {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_quest_type")}}
 	}
@@ -252,10 +235,10 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	ctx.TriggerReload()
 
-	message += trackingWarnings(ctx, distance)
+	message += trackingWarnings(ctx, common.Distance)
 
-	if templateWarn != "" {
-		message += "\n⚠️ " + templateWarn
+	if common.TemplateWarn != "" {
+		message += "\n⚠️ " + common.TemplateWarn
 	}
 
 	react := "✅"
@@ -265,14 +248,14 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	return []bot.Reply{{React: react, Text: message}}
 }
 
-func (c *QuestCommand) makeQuest(ctx *bot.CommandContext, template string, distance int, clean, shiny bool, ping string, rewardType, reward, form, amount int) db.QuestTrackingAPI {
+func (c *QuestCommand) makeQuest(ctx *bot.CommandContext, common *commonTrackFields, shiny bool, ping string, rewardType, reward, form, amount int) db.QuestTrackingAPI {
 	return db.QuestTrackingAPI{
 		ID:         ctx.TargetID,
 		ProfileNo:  ctx.ProfileNo,
 		Ping:       ping,
-		Template:   template,
-		Distance:   distance,
-		Clean:      db.IntBool(clean),
+		Template:   common.Template,
+		Distance:   common.Distance,
+		Clean:      db.IntBool(common.Clean),
 		Shiny:      db.IntBool(shiny),
 		RewardType: rewardType,
 		Reward:     reward,
@@ -301,7 +284,7 @@ func (c *QuestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 }
 
 // handleRemove handles !quest remove variants. Must be called before reward type detection.
-func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedArgs, template string, distance int, clean, shiny bool, pings string) []bot.Reply {
+func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedArgs, common *commonTrackFields, shiny bool, pings string) []bot.Reply {
 	if len(parsed.RemoveUIDs) > 0 {
 		tr := ctx.Tr()
 		return removeByUIDs(ctx, ctx.Tracking.Quests, parsed.RemoveUIDs,
@@ -315,56 +298,56 @@ func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedA
 	if parsed.HasKeyword("arg.everything") {
 		// remove everything — match all reward types
 		for _, rt := range []int{7, 3, 12, 4, 2} {
-			targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, rt, 0, 0, 0))
+			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, rt, 0, 0, 0))
 		}
 	} else if stardustVal, ok := parsed.Strings["stardust"]; ok {
 		amount := questParseInt(stardustVal)
-		targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 3, amount, 0, 0))
+		targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 3, amount, 0, 0))
 	} else if parsed.HasKeyword("arg.stardust") {
-		targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 3, 0, 0, 0))
+		targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 3, 0, 0, 0))
 	} else if energyVal, ok := parsed.Strings["energy"]; ok {
 		resolved := ctx.Resolver.Resolve(energyVal, ctx.Language)
 		if len(resolved) > 0 {
 			for _, mon := range resolved {
-				targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
+				targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
 			}
 		} else {
-			targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 12, 0, 0, 0))
+			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, 0))
 		}
 	} else if parsed.HasKeyword("arg.energy") {
 		if len(parsed.Pokemon) > 0 {
 			for _, mon := range parsed.Pokemon {
-				targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
+				targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
 			}
 		} else {
-			targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 12, 0, 0, 0))
+			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, 0))
 		}
 	} else if candyVal, ok := parsed.Strings["candy"]; ok {
 		resolved := ctx.Resolver.Resolve(candyVal, ctx.Language)
 		if len(resolved) > 0 {
 			for _, mon := range resolved {
-				targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
+				targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
 			}
 		} else {
-			targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 4, 0, 0, 0))
+			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, 0))
 		}
 	} else if parsed.HasKeyword("arg.candy") {
 		if len(parsed.Pokemon) > 0 {
 			for _, mon := range parsed.Pokemon {
-				targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
+				targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
 			}
 		} else {
-			targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 4, 0, 0, 0))
+			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, 0))
 		}
 	} else if len(parsed.Pokemon) > 0 {
 		monsterList := c.resolveMonsters(ctx, parsed)
 		for _, mon := range monsterList {
-			targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, 7, mon.PokemonID, mon.Form, 0))
+			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 7, mon.PokemonID, mon.Form, 0))
 		}
 	} else {
 		// No specific type — remove everything
 		for _, rt := range []int{7, 3, 12, 4, 2} {
-			targets = append(targets, c.makeQuest(ctx, template, distance, clean, shiny, pings, rt, 0, 0, 0))
+			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, rt, 0, 0, 0))
 		}
 	}
 

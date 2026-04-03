@@ -42,27 +42,10 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*warn}
 	}
 
-	template := ctx.DefaultTemplate()
-	if t, ok := parsed.Strings["template"]; ok {
-		template = t
+	common, block := parseCommonTrackFields(ctx, parsed, "lure")
+	if block != nil {
+		return []bot.Reply{*block}
 	}
-
-	// Validate template exists
-	var templateWarn string
-	if _, explicit := parsed.Strings["template"]; explicit {
-		if block, warn := validateTemplate(ctx, "lure", template); block != nil {
-			return []bot.Reply{*block}
-		} else {
-			templateWarn = warn
-		}
-	}
-
-	distance := 0
-	if d, ok := parsed.Singles["d"]; ok {
-		distance = d
-	}
-	distance = enforceDistance(ctx, distance)
-	clean := parsed.HasKeyword("arg.clean")
 
 	// Collect lure IDs
 	lureIDs := []int{}
@@ -96,9 +79,9 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			ProfileNo: ctx.ProfileNo,
 			Ping:      pings,
 			LureID:    id,
-			Distance:  distance,
-			Template:  template,
-			Clean:     db.IntBool(clean),
+			Distance:  common.Distance,
+			Template:  common.Template,
+			Clean:     db.IntBool(common.Clean),
 		})
 	}
 
@@ -123,10 +106,10 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	ctx.TriggerReload()
 
-	message += trackingWarnings(ctx, distance)
+	message += trackingWarnings(ctx, common.Distance)
 
-	if templateWarn != "" {
-		message += "\n⚠️ " + templateWarn
+	if common.TemplateWarn != "" {
+		message += "\n⚠️ " + common.TemplateWarn
 	}
 
 	react := "✅"

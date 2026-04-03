@@ -47,27 +47,10 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*warn}
 	}
 
-	template := ctx.DefaultTemplate()
-	if t, ok := parsed.Strings["template"]; ok {
-		template = t
+	common, block := parseCommonTrackFields(ctx, parsed, "nest")
+	if block != nil {
+		return []bot.Reply{*block}
 	}
-
-	// Validate template exists
-	var templateWarn string
-	if _, explicit := parsed.Strings["template"]; explicit {
-		if block, warn := validateTemplate(ctx, "nest", template); block != nil {
-			return []bot.Reply{*block}
-		} else {
-			templateWarn = warn
-		}
-	}
-
-	distance := 0
-	if d, ok := parsed.Singles["d"]; ok {
-		distance = d
-	}
-	distance = enforceDistance(ctx, distance)
-	clean := parsed.HasKeyword("arg.clean")
 	minSpawnAvg := 0
 	if ms, ok := parsed.Singles["minspawn"]; ok {
 		minSpawnAvg = ms
@@ -97,9 +80,9 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			ID:          ctx.TargetID,
 			ProfileNo:   ctx.ProfileNo,
 			Ping:        pings,
-			Template:    template,
-			Distance:    distance,
-			Clean:       db.IntBool(clean),
+			Template:    common.Template,
+			Distance:    common.Distance,
+			Clean:       db.IntBool(common.Clean),
 			PokemonID:   mon.PokemonID,
 			Form:        mon.Form,
 			MinSpawnAvg: minSpawnAvg,
@@ -127,10 +110,10 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	ctx.TriggerReload()
 
-	message += trackingWarnings(ctx, distance)
+	message += trackingWarnings(ctx, common.Distance)
 
-	if templateWarn != "" {
-		message += "\n⚠️ " + templateWarn
+	if common.TemplateWarn != "" {
+		message += "\n⚠️ " + common.TemplateWarn
 	}
 
 	react := "✅"

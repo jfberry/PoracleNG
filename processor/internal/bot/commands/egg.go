@@ -82,29 +82,10 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_egg_levels")}}
 	}
 
-	// Parse common fields
-	distance := 0
-	if d, ok := parsed.Singles["d"]; ok {
-		distance = d
+	common, block := parseCommonTrackFields(ctx, parsed, "egg")
+	if block != nil {
+		return []bot.Reply{*block}
 	}
-	distance = enforceDistance(ctx, distance)
-
-	template := ctx.DefaultTemplate()
-	if t, ok := parsed.Strings["template"]; ok {
-		template = t
-	}
-
-	// Validate template exists
-	var templateWarn string
-	if _, explicit := parsed.Strings["template"]; explicit {
-		if block, warn := validateTemplate(ctx, "egg", template); block != nil {
-			return []bot.Reply{*block}
-		} else {
-			templateWarn = warn
-		}
-	}
-
-	clean := parsed.HasKeyword("arg.clean")
 	exclusive := parsed.HasKeyword("arg.ex")
 	team := parsed.Team
 
@@ -148,10 +129,10 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			ID:          ctx.TargetID,
 			ProfileNo:   ctx.ProfileNo,
 			Ping:        pings,
-			Template:    template,
-			Distance:    distance,
+			Template:    common.Template,
+			Distance:    common.Distance,
 			Team:        team,
-			Clean:       db.IntBool(clean),
+			Clean:       db.IntBool(common.Clean),
 			Exclusive:   db.IntBool(exclusive),
 			GymID:       null.String{},
 			RSVPChanges: rsvpChanges,
@@ -182,10 +163,10 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	ctx.TriggerReload()
 
-	message += trackingWarnings(ctx, distance)
+	message += trackingWarnings(ctx, common.Distance)
 
-	if templateWarn != "" {
-		message += "\n⚠️ " + templateWarn
+	if common.TemplateWarn != "" {
+		message += "\n⚠️ " + common.TemplateWarn
 	}
 
 	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
