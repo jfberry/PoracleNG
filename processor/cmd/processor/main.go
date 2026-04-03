@@ -940,18 +940,23 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		shlinkDomain = cfg.General.ShortlinkDomain
 	}
 
+	dtsDefaultTemplate := "1"
+	if cfg.General.DefaultTemplateName != nil {
+		dtsDefaultTemplate = fmt.Sprintf("%v", cfg.General.DefaultTemplateName)
+	}
 	dtsRenderer, err = dts.NewRenderer(dts.RendererConfig{
-		ConfigDir:     filepath.Join(cfg.BaseDir, "config"),
-		FallbackDir:   filepath.Join(cfg.BaseDir, "fallbacks"),
-		GameData:      gd,
-		Translations:  enricher.Translations,
-		UtilEmojis:    utilEmojis,
-		DefaultLocale: cfg.General.Locale,
-		MinAlertTime:  cfg.General.AlertMinimumTime,
-		ShlinkURL:     shlinkURL,
-		ShlinkKey:     shlinkKey,
-		ShlinkDomain:  shlinkDomain,
-		DTSDictionary: cfg.General.DTSDictionary,
+		ConfigDir:           filepath.Join(cfg.BaseDir, "config"),
+		FallbackDir:         filepath.Join(cfg.BaseDir, "fallbacks"),
+		GameData:            gd,
+		Translations:        enricher.Translations,
+		UtilEmojis:          utilEmojis,
+		DefaultLocale:       cfg.General.Locale,
+		DefaultTemplateName: dtsDefaultTemplate,
+		MinAlertTime:        cfg.General.AlertMinimumTime,
+		ShlinkURL:           shlinkURL,
+		ShlinkKey:           shlinkKey,
+		ShlinkDomain:        shlinkDomain,
+		DTSDictionary:       cfg.General.DTSDictionary,
 	})
 	if err != nil {
 		log.Warnf("DTS renderer initialization failed: %s", err)
