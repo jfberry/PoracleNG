@@ -64,6 +64,8 @@ func (c *InfoCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			return []bot.Reply{{React: "🙅"}}
 		}
 		return c.translateDebug(ctx, args[1:])
+	case matchSub("msg.info.sub.templates"):
+		return c.templateList(ctx)
 	case matchSub("msg.info.sub.dts"):
 		if !ctx.IsAdmin {
 			return []bot.Reply{{React: "🙅"}}
@@ -854,4 +856,67 @@ func (c *InfoCommand) dtsInfo(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	return bot.SplitTextReply(sb.String())
+}
+
+// dtsTypeDisplayName maps DTS type strings to user-friendly display names.
+var dtsTypeDisplayName = map[string]string{
+	"monster":       "Pokemon",
+	"monsterNoIv":   "Pokemon (no IV)",
+	"raid":          "Raids",
+	"egg":           "Eggs",
+	"quest":         "Quests",
+	"invasion":      "Invasions",
+	"lure":          "Lures",
+	"nest":          "Nests",
+	"gym":           "Gyms",
+	"fort-update":   "Fort Updates",
+	"maxbattle":     "Max Battles",
+	"weatherchange": "Weather",
+	"greeting":      "Greetings",
+}
+
+func (c *InfoCommand) templateList(ctx *bot.CommandContext) []bot.Reply {
+	if ctx.DTS == nil {
+		return []bot.Reply{{Text: "Templates not loaded"}}
+	}
+
+	platform := targetDTSPlatform(ctx)
+	byType := ctx.DTS.ListForPlatform(platform)
+
+	if len(byType) == 0 {
+		return []bot.Reply{{Text: "No templates available"}}
+	}
+
+	// Sort types for consistent output
+	types := make([]string, 0, len(byType))
+	for t := range byType {
+		types = append(types, t)
+	}
+	sort.Strings(types)
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**Available templates (%s):**\n\n", platform))
+
+	for _, t := range types {
+		templates := byType[t]
+		displayName := dtsTypeDisplayName[t]
+		if displayName == "" {
+			displayName = t
+		}
+		sb.WriteString(fmt.Sprintf("**%s**\n", displayName))
+
+		for _, tmpl := range templates {
+			sb.WriteString(fmt.Sprintf("  `%s`", tmpl.ID))
+			if tmpl.Name != "" {
+				sb.WriteString(fmt.Sprintf(" — %s", tmpl.Name))
+			}
+			sb.WriteByte('\n')
+			if tmpl.Description != "" {
+				sb.WriteString(fmt.Sprintf("    %s\n", tmpl.Description))
+			}
+		}
+		sb.WriteByte('\n')
+	}
+
+	return bot.SplitTextReply(strings.TrimSpace(sb.String()))
 }
