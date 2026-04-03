@@ -85,7 +85,11 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	if parsed.HasKeyword("arg.remove") {
 		if len(parsed.RemoveUIDs) > 0 {
-			return removeByUIDs(ctx, ctx.Tracking.Nests, parsed.RemoveUIDs)
+			tr := ctx.Tr()
+			return removeByUIDs(ctx, ctx.Tracking.Nests, parsed.RemoveUIDs,
+				store.NestGetUID,
+				func(r *db.NestTrackingAPI) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(r)) },
+			)
 		}
 		return c.removeNests(ctx, monsterList)
 	}
@@ -224,10 +228,12 @@ func (c *NestCommand) removeNests(ctx *bot.CommandContext, monsterList []bot.Res
 	}
 
 	var uids []int64
+	var removed []db.NestTrackingAPI
 	for _, existing := range tracked {
 		// PokemonID 0 means everything — remove all
 		if removeIDs[0] || removeIDs[existing.PokemonID] {
 			uids = append(uids, existing.UID)
+			removed = append(removed, existing)
 		}
 	}
 	if len(uids) == 0 {
@@ -239,5 +245,9 @@ func (c *NestCommand) removeNests(ctx *bot.CommandContext, monsterList []bot.Res
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
+	var descriptions []string
+	for i := range removed {
+		descriptions = append(descriptions, ctx.RowText.NestRowText(tr, nestAPIToTracking(&removed[i])))
+	}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }

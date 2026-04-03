@@ -80,7 +80,11 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	if parsed.HasKeyword("arg.remove") {
 		if len(parsed.RemoveUIDs) > 0 {
-			return removeByUIDs(ctx, ctx.Tracking.Lures, parsed.RemoveUIDs)
+			tr := ctx.Tr()
+			return removeByUIDs(ctx, ctx.Tracking.Lures, parsed.RemoveUIDs,
+				store.LureGetUID,
+				func(r *db.LureTrackingAPI) string { return ctx.RowText.LureRowText(tr, lureAPIToTracking(r)) },
+			)
 		}
 		return removeLures(ctx, lureIDs)
 	}
@@ -142,9 +146,11 @@ func removeLures(ctx *bot.CommandContext, lureIDs []int) []bot.Reply {
 		idSet[id] = true
 	}
 	var uids []int64
+	var removed []db.LureTrackingAPI
 	for _, existing := range tracked {
 		if idSet[existing.LureID] || idSet[0] {
 			uids = append(uids, existing.UID)
+			removed = append(removed, existing)
 		}
 	}
 	if len(uids) == 0 {
@@ -156,5 +162,9 @@ func removeLures(ctx *bot.CommandContext, lureIDs []int) []bot.Reply {
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
+	var descriptions []string
+	for i := range removed {
+		descriptions = append(descriptions, ctx.RowText.LureRowText(tr, lureAPIToTracking(&removed[i])))
+	}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }

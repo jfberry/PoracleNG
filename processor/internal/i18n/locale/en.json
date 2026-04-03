@@ -102,6 +102,8 @@
   "tracking.template_not_found": "Template \"{0}\" does not exist.",
   "tracking.warn_template_not_found": "Template \"{0}\" not found for type {1}/{2}. Tracking saved but alerts may not render.",
   "tracking.id_hint": "To remove a specific entry, use its id — e.g. `{0}untrack id:45` or `{0}raid remove id:12`",
+  "tracking.removed_prefix": "Removed: ",
+  "tracking.uid_not_found": "id:{0} not found",
 
   "cmd.track": "track",
   "cmd.untrack": "untrack",

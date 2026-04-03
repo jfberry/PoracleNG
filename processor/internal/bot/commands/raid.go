@@ -212,7 +212,11 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
 	if len(parsed.RemoveUIDs) > 0 {
-		return removeByUIDs(ctx, ctx.Tracking.Raids, parsed.RemoveUIDs)
+		tr := ctx.Tr()
+		return removeByUIDs(ctx, ctx.Tracking.Raids, parsed.RemoveUIDs,
+			store.RaidGetUID,
+			func(r *db.RaidTrackingAPI) string { return ctx.RowText.RaidRowText(tr, raidAPIToTracking(r)) },
+		)
 	}
 
 	tracked, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
@@ -222,6 +226,7 @@ func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArg
 	}
 
 	var uidsToDelete []int64
+	var removed []db.RaidTrackingAPI
 	for _, existing := range tracked {
 		shouldRemove := false
 		// Remove by pokemon
@@ -252,6 +257,7 @@ func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArg
 		}
 		if shouldRemove {
 			uidsToDelete = append(uidsToDelete, existing.UID)
+			removed = append(removed, existing)
 		}
 	}
 
@@ -266,5 +272,9 @@ func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArg
 
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uidsToDelete))}}
+	var descriptions []string
+	for i := range removed {
+		descriptions = append(descriptions, ctx.RowText.RaidRowText(tr, raidAPIToTracking(&removed[i])))
+	}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }

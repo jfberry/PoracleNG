@@ -2,8 +2,6 @@ package commands
 
 import (
 	"database/sql"
-	"fmt"
-	"strings"
 
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
@@ -131,7 +129,11 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Handle remove
 	if parsed.HasKeyword("arg.remove") {
 		if len(parsed.RemoveUIDs) > 0 {
-			return removeByUIDs(ctx, ctx.Tracking.Eggs, parsed.RemoveUIDs)
+			tr := ctx.Tr()
+			return removeByUIDs(ctx, ctx.Tracking.Eggs, parsed.RemoveUIDs,
+				store.EggGetUID,
+				func(r *db.EggTrackingAPI) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(r)) },
+			)
 		}
 		return c.removeEggs(ctx, levelSet)
 	}
@@ -222,12 +224,11 @@ func (c *EggCommand) removeEggs(ctx *bot.CommandContext, levelSet map[int]bool) 
 
 	ctx.TriggerReload()
 
-	var sb strings.Builder
+	var descriptions []string
 	for i := range removed {
-		et := eggAPIToTracking(&removed[i])
-		fmt.Fprintf(&sb, "Removed: %s\n", ctx.RowText.EggRowText(tr, et))
+		descriptions = append(descriptions, ctx.RowText.EggRowText(tr, eggAPIToTracking(&removed[i])))
 	}
-	return []bot.Reply{{React: "✅", Text: sb.String()}}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }
 
 func eggAPIToTracking(api *db.EggTrackingAPI) *db.EggTracking {

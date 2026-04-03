@@ -267,7 +267,11 @@ func (c *MaxbattleCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.
 
 func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
 	if len(parsed.RemoveUIDs) > 0 {
-		return removeByUIDs(ctx, ctx.Tracking.Maxbattles, parsed.RemoveUIDs)
+		tr := ctx.Tr()
+		return removeByUIDs(ctx, ctx.Tracking.Maxbattles, parsed.RemoveUIDs,
+			store.MaxbattleGetUID,
+			func(r *db.MaxbattleTrackingAPI) string { return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(r)) },
+		)
 	}
 
 	tracked, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
@@ -277,9 +281,11 @@ func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot
 	}
 
 	var uids []int64
+	var removed []db.MaxbattleTrackingAPI
 	if parsed.HasKeyword("arg.everything") {
 		for _, existing := range tracked {
 			uids = append(uids, existing.UID)
+			removed = append(removed, existing)
 		}
 	} else {
 		removeIDs := make(map[int]bool)
@@ -289,6 +295,7 @@ func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot
 		for _, existing := range tracked {
 			if removeIDs[existing.PokemonID] {
 				uids = append(uids, existing.UID)
+				removed = append(removed, existing)
 			}
 		}
 	}
@@ -302,5 +309,9 @@ func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
+	var descriptions []string
+	for i := range removed {
+		descriptions = append(descriptions, ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&removed[i])))
+	}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }

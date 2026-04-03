@@ -324,7 +324,11 @@ func (c *QuestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 // handleRemove handles !quest remove variants. Must be called before reward type detection.
 func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedArgs, template string, distance int, clean, shiny bool, pings string) []bot.Reply {
 	if len(parsed.RemoveUIDs) > 0 {
-		return removeByUIDs(ctx, ctx.Tracking.Quests, parsed.RemoveUIDs)
+		tr := ctx.Tr()
+		return removeByUIDs(ctx, ctx.Tracking.Quests, parsed.RemoveUIDs,
+			store.QuestGetUID,
+			func(r *db.QuestTrackingAPI) string { return ctx.RowText.QuestRowText(tr, questAPIToTracking(r)) },
+		)
 	}
 
 	var targets []db.QuestTrackingAPI
@@ -396,11 +400,13 @@ func (c *QuestCommand) removeQuests(ctx *bot.CommandContext, targets []db.QuestT
 	}
 
 	var uids []int64
+	var removed []db.QuestTrackingAPI
 	for _, existing := range tracked {
 		for _, target := range targets {
 			if existing.RewardType == target.RewardType &&
 				(target.Reward == 0 || existing.Reward == target.Reward) {
 				uids = append(uids, existing.UID)
+				removed = append(removed, existing)
 				break
 			}
 		}
@@ -415,5 +421,9 @@ func (c *QuestCommand) removeQuests(ctx *bot.CommandContext, targets []db.QuestT
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
+	var descriptions []string
+	for i := range removed {
+		descriptions = append(descriptions, ctx.RowText.QuestRowText(tr, questAPIToTracking(&removed[i])))
+	}
+	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }
