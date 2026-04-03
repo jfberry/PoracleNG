@@ -454,6 +454,40 @@ func (ts *TemplateStore) TemplateSummary() map[string]map[string]int {
 	return result
 }
 
+// TemplateSummaryDetailed returns type → platform → list of template IDs.
+func (ts *TemplateStore) TemplateSummaryDetailed() map[string]map[string][]string {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	result := make(map[string]map[string][]string)
+	for _, e := range ts.entries {
+		if e.Hidden {
+			continue
+		}
+		byPlatform, ok := result[e.Type]
+		if !ok {
+			byPlatform = make(map[string][]string)
+			result[e.Type] = byPlatform
+		}
+		id := string(e.ID)
+		if id == "" {
+			id = "default"
+		}
+		// Deduplicate (same ID can appear for different languages)
+		found := false
+		for _, existing := range byPlatform[e.Platform] {
+			if existing == id {
+				found = true
+				break
+			}
+		}
+		if !found {
+			byPlatform[e.Platform] = append(byPlatform[e.Platform], id)
+		}
+	}
+	return result
+}
+
 // LogSummary logs a summary of loaded templates and warns about types missing defaults.
 func (ts *TemplateStore) LogSummary() {
 	ts.mu.RLock()
