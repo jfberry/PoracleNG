@@ -199,8 +199,18 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 		}
 	}
 
-	// For Pokemon and Type params, collect ALL unmatched tokens (not just first)
+	// For collecting types: match ALL unmatched tokens, not just one
 	for _, param := range params {
+		if param.Type == ParamRemoveUID {
+			for i, tok := range tokens {
+				if consumed[i] {
+					continue
+				}
+				if tryRemoveUID(tok, result) {
+					consumed[i] = true
+				}
+			}
+		}
 		if param.Type == ParamPokemonName {
 			for i, tok := range tokens {
 				if consumed[i] {
@@ -237,7 +247,6 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 // Structurally unambiguous types (prefix patterns) first, then exact-match
 // keywords, then game data lookups, then pokemon names last.
 var matchPriorities = []ParamType{
-	ParamRemoveUID,
 	ParamPrefixRange,
 	ParamPrefixSingle,
 	ParamPrefixString,
@@ -253,8 +262,6 @@ var matchPriorities = []ParamType{
 
 func (am *ArgMatcher) tryMatch(tok string, param ParamDef, lang string, result *ParsedArgs) bool {
 	switch param.Type {
-	case ParamRemoveUID:
-		return tryRemoveUID(tok, result)
 	case ParamPrefixRange:
 		return am.tryPrefixRange(tok, param.Key, lang, result)
 	case ParamPrefixSingle:
