@@ -145,16 +145,7 @@ func idsToResolved(ids []int) []ResolvedPokemon {
 }
 
 func toLower(s string) string {
-	// Fast path for ASCII-only (most pokemon names)
-	b := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		b[i] = c
-	}
-	return string(b)
+	return strings.ToLower(s)
 }
 
 func parseIntSafe(s string) int {
