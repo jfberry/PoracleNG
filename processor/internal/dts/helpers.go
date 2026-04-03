@@ -356,8 +356,104 @@ func registerStringHelpers() {
 // Array helpers
 // ---------------------------------------------------------------------------
 
+// eachContextWithMeta injects isFirst/isLast into the iteration context.
+// For map contexts: adds the keys directly. For non-map contexts: wraps in
+// an eachWrapper that implements FieldResolver so {{this}} still works.
+func eachContextWithMeta(ctx interface{}, index, length int) interface{} {
+	isFirst := index == 0
+	isLast := index == length-1
+
+	// If ctx is a map, inject directly
+	if m, ok := ctx.(map[string]any); ok {
+		m["isFirst"] = isFirst
+		m["isLast"] = isLast
+		return m
+	}
+	if m, ok := ctx.(map[string]interface{}); ok {
+		m["isFirst"] = isFirst
+		m["isLast"] = isLast
+		return m
+	}
+
+	// Wrap non-map contexts so isFirst/isLast are accessible alongside {{this}}
+	return &eachWrapper{value: ctx, isFirst: isFirst, isLast: isLast}
+}
+
+// eachWrapper implements raymond.FieldResolver to provide isFirst/isLast
+// while preserving the original value for {{this}}.
+type eachWrapper struct {
+	value   interface{}
+	isFirst bool
+	isLast  bool
+}
+
+func (w *eachWrapper) GetField(name string) (interface{}, bool) {
+	switch name {
+	case "isFirst":
+		return w.isFirst, true
+	case "isLast":
+		return w.isLast, true
+	}
+	return nil, false
+}
+
+// String implements fmt.Stringer so {{this}} renders the wrapped value.
+func (w *eachWrapper) String() string {
+	return fmt.Sprintf("%v", w.value)
+}
+
 func registerArrayHelpers() {
 	// forEach — block helper with @isFirst, @isLast, @total
+	// Override built-in each to inject isFirst/isLast into context for PoracleJS compat.
+	// Standard Handlebars provides @first/@last (data variables) but PoracleJS templates
+	// use isFirst/isLast as context properties (bare names without @).
+	raymond.RemoveHelper("each")
+	raymond.RegisterHelper("each", func(context interface{}, options *raymond.Options) interface{} {
+		if !raymond.IsTrue(context) {
+			return options.Inverse()
+		}
+
+		val := reflect.ValueOf(context)
+		switch val.Kind() {
+		case reflect.Slice, reflect.Array:
+			length := val.Len()
+			if length == 0 {
+				return options.Inverse()
+			}
+			var sb strings.Builder
+			for i := 0; i < length; i++ {
+				data := options.NewDataFrame()
+				data.Set("index", i)
+				data.Set("first", i == 0)
+				data.Set("last", i == length-1)
+
+				ctx := eachContextWithMeta(val.Index(i).Interface(), i, length)
+				sb.WriteString(options.FnCtxData(ctx, data))
+			}
+			return sb.String()
+		case reflect.Map:
+			keys := val.MapKeys()
+			length := len(keys)
+			if length == 0 {
+				return options.Inverse()
+			}
+			var sb strings.Builder
+			for i, key := range keys {
+				data := options.NewDataFrame()
+				data.Set("index", i)
+				data.Set("key", key.Interface())
+				data.Set("first", i == 0)
+				data.Set("last", i == length-1)
+
+				ctx := eachContextWithMeta(val.MapIndex(key).Interface(), i, length)
+				sb.WriteString(options.FnCtxData(ctx, data))
+			}
+			return sb.String()
+		default:
+			return options.Inverse()
+		}
+	})
+
 	raymond.RegisterHelper("forEach", func(context interface{}, options *raymond.Options) interface{} {
 		if !raymond.IsTrue(context) {
 			return options.Inverse()
@@ -379,10 +475,10 @@ func registerArrayHelpers() {
 			data.Set("index", i)
 			data.Set("first", i == 0)
 			data.Set("last", i == length-1)
-			data.Set("isFirst", i == 0)
-			data.Set("isLast", i == length-1)
 			data.Set("total", length)
-			sb.WriteString(options.FnCtxData(val.Index(i).Interface(), data))
+
+			ctx := eachContextWithMeta(val.Index(i).Interface(), i, length)
+			sb.WriteString(options.FnCtxData(ctx, data))
 		}
 		return sb.String()
 	})
@@ -520,6 +616,7 @@ func registerFormattingHelpers() {
 			n = -n
 		}
 		s := strconv.FormatInt(n, 10)
+		// Insert commas from right
 		var result []byte
 		for i, c := range s {
 			if i > 0 && (len(s)-i)%3 == 0 {
