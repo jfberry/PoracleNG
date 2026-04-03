@@ -299,6 +299,12 @@ func buildComputedFields(base, perLang map[string]any, emoji map[string]string, 
 		}
 	}
 	m["areas"] = strings.Join(areaNames, ", ")
+	// matched: lowercase area names for {{#each matched}}{{map 'arealist' this}}
+	matched := make([]string, len(areaNames))
+	for i, name := range areaNames {
+		matched[i] = strings.ToLower(name)
+	}
+	m["matched"] = matched
 
 	// genderData (assembled from perLang name + resolved emoji)
 	genderName := ""

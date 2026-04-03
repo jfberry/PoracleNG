@@ -18,9 +18,12 @@ import (
 // Returns a base enrichment map (universal fields) and, if GameData is loaded,
 // also includes game data enrichment (types, weakness, stats, maps, etc.).
 func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) (map[string]any, *staticmap.TilePending) {
+	verified := pokemon.DisappearTimeVerified || pokemon.Verified
 	m := map[string]any{
 		"pokemon_id":       pokemon.PokemonID,
 		"pokemonId":        pokemon.PokemonID,
+		"verified":         verified,
+		"confirmedTime":    verified,
 		"rarityGroup":      processed.RarityGroup,
 		"pvpBestRank":      processed.PVPBestRank,
 		"pvpEvolutionData": processed.PVPEvoData,
