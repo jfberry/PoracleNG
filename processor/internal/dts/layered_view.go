@@ -84,6 +84,9 @@ func NewLayeredView(
 		lv.computed["emoji"] = resolved
 	}
 
+	// Escape user-generated content (pokestop/gym names) into computed layer
+	escapeUserContentLayered(lv.computed, base, webhookFields)
+
 	// Build alias lookup for this template type
 	lv.aliases = buildAliasLookup(templateType)
 
