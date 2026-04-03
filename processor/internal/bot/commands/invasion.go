@@ -48,10 +48,12 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 
 	// Validate template exists
 	var templateWarn string
-	if block, warn := validateTemplate(ctx, "invasion", template); block != nil {
-		return []bot.Reply{*block}
-	} else {
-		templateWarn = warn
+	if _, explicit := parsed.Strings["template"]; explicit {
+		if block, warn := validateTemplate(ctx, "invasion", template); block != nil {
+			return []bot.Reply{*block}
+		} else {
+			templateWarn = warn
+		}
 	}
 
 	distance := 0

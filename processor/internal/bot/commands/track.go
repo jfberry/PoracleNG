@@ -97,12 +97,14 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		}
 	}
 
-	// Validate template exists
+	// Validate template exists (only when user explicitly specified one)
 	var templateWarn string
-	if block, warn := validateTemplate(ctx, "monster", filters.template); block != nil {
-		return []bot.Reply{*block}
-	} else {
-		templateWarn = warn
+	if _, explicit := parsed.Strings["template"]; explicit {
+		if block, warn := validateTemplate(ctx, "monster", filters.template); block != nil {
+			return []bot.Reply{*block}
+		} else {
+			templateWarn = warn
+		}
 	}
 
 	// If min_iv is still default (-1) but other IV-related filters are set, default to 0

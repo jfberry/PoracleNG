@@ -99,10 +99,12 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	// Validate template exists
 	var templateWarn string
-	if block, warn := validateTemplate(ctx, "egg", template); block != nil {
-		return []bot.Reply{*block}
-	} else {
-		templateWarn = warn
+	if _, explicit := parsed.Strings["template"]; explicit {
+		if block, warn := validateTemplate(ctx, "egg", template); block != nil {
+			return []bot.Reply{*block}
+		} else {
+			templateWarn = warn
+		}
 	}
 
 	clean := parsed.HasKeyword("arg.clean")
