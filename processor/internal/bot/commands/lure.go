@@ -48,10 +48,12 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	// Validate template exists
 	var templateWarn string
-	if block, warn := validateTemplate(ctx, "lure", template); block != nil {
-		return []bot.Reply{*block}
-	} else {
-		templateWarn = warn
+	if _, explicit := parsed.Strings["template"]; explicit {
+		if block, warn := validateTemplate(ctx, "lure", template); block != nil {
+			return []bot.Reply{*block}
+		} else {
+			templateWarn = warn
+		}
 	}
 
 	distance := 0
