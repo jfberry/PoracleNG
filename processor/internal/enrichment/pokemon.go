@@ -464,6 +464,7 @@ func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr
 					"baseDefense": mon.Defense,
 					"baseStamina": mon.Stamina,
 				}
+				// Flat base stats for DTS templates using {{this.baseAttack}}
 				entry["baseAttack"] = mon.Attack
 				entry["baseDefense"] = mon.Defense
 				entry["baseStamina"] = mon.Stamina
