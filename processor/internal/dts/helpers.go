@@ -503,6 +503,11 @@ func registerFormattingHelpers() {
 		return fmt.Sprintf("%0*d", w, int(toFloat(value)))
 	})
 
+	// replaceFirst — replace first occurrence only. Usage: {{replaceFirst "Mr. Mime" ". " "_"}} → "Mr_Mime"
+	raymond.RegisterHelper("replaceFirst", func(s, old, new interface{}) interface{} {
+		return strings.Replace(toString(s), toString(old), toString(new), 1)
+	})
+
 	// addCommas — format number with thousand separators. Usage: {{addCommas 12345}} → "12,345"
 	raymond.RegisterHelper("addCommas", func(value interface{}) interface{} {
 		n := int64(toFloat(value))
