@@ -73,6 +73,14 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		}
 	}
 
+	// Validate template exists
+	var templateWarn string
+	if block, warn := validateTemplate(ctx, "monster", filters.template); block != nil {
+		return []bot.Reply{*block}
+	} else {
+		templateWarn = warn
+	}
+
 	// If min_iv is still default (-1) but other IV-related filters are set, default to 0
 	if filters.minIV == -1 && (filters.minCP > 0 || filters.minLevel > 0 ||
 		filters.atk > 0 || filters.def > 0 || filters.sta > 0 ||
@@ -148,6 +156,9 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	ctx.TriggerReload()
 
 	message += trackingWarnings(ctx, filters.distance)
+	if templateWarn != "" {
+		message += "\n⚠️ " + templateWarn
+	}
 
 	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
 		return []bot.Reply{{React: "👌", Text: message}}

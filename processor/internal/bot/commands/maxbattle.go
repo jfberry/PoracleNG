@@ -55,6 +55,15 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	if t, ok := parsed.Strings["template"]; ok {
 		template = t
 	}
+
+	// Validate template exists
+	var templateWarn string
+	if block, warn := validateTemplate(ctx, "maxbattle", template); block != nil {
+		return []bot.Reply{*block}
+	} else {
+		templateWarn = warn
+	}
+
 	distance := 0
 	if d, ok := parsed.Singles["d"]; ok {
 		distance = d
@@ -173,6 +182,10 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	ctx.TriggerReload()
 
 	message += trackingWarnings(ctx, distance)
+
+	if templateWarn != "" {
+		message += "\n⚠️ " + templateWarn
+	}
 
 	react := "✅"
 	if len(diff.Inserts) == 0 && len(diff.Updates) == 0 {
