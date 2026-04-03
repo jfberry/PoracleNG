@@ -63,35 +63,37 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Parse filter values with defaults
 	filters := c.parseFilters(ctx, parsed)
 
-	// Resolve PVP
-	pvpLeague, pvpBest, pvpWorst, pvpMinCP, pvpCap := c.parsePVP(ctx, parsed)
+	// Resolve PVP (may return multiple leagues: "great5 ultra10" → 2 entries)
+	pvpEntries := c.parsePVP(ctx, parsed)
 
 	// Check PVP permission if PVP filters are present
-	if pvpLeague > 0 {
+	if len(pvpEntries) > 0 {
 		if !bot.CheckFeaturePermission(ctx.Config, ctx.Platform, "pvp", ctx.UserID, nil) {
 			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
 		}
 	}
 
 	// Validate PVP level cap against configured caps
-	if pvpCap > 0 {
-		validCaps := ctx.Config.PVP.LevelCaps
-		if len(validCaps) == 0 {
-			validCaps = []int{50}
-		}
-		found := false
-		for _, c := range validCaps {
-			if pvpCap == c {
-				found = true
-				break
+	for _, pe := range pvpEntries {
+		if pe.Cap > 0 {
+			validCaps := ctx.Config.PVP.LevelCaps
+			if len(validCaps) == 0 {
+				validCaps = []int{50}
 			}
-		}
-		if !found {
-			capStrs := []string{"0"}
+			found := false
 			for _, c := range validCaps {
-				capStrs = append(capStrs, fmt.Sprintf("%d", c))
+				if pe.Cap == c {
+					found = true
+					break
+				}
 			}
-			return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.track.invalid_cap", strings.Join(capStrs, ", "))}}
+			if !found {
+				capStrs := []string{"0"}
+				for _, c := range validCaps {
+					capStrs = append(capStrs, fmt.Sprintf("%d", c))
+				}
+				return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.track.invalid_cap", strings.Join(capStrs, ", "))}}
+			}
 		}
 	}
 
@@ -106,48 +108,55 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// If min_iv is still default (-1) but other IV-related filters are set, default to 0
 	if filters.minIV == -1 && (filters.minCP > 0 || filters.minLevel > 0 ||
 		filters.atk > 0 || filters.def > 0 || filters.sta > 0 ||
-		pvpLeague > 0) {
+		len(pvpEntries) > 0) {
 		filters.minIV = 0
 	}
 
-	// Build insert structs
-	insert := make([]db.MonsterTrackingAPI, 0, len(monsterList))
+	// Build insert structs — one per pokemon per PVP league
+	// If no PVP, one entry per pokemon with zeroed PVP fields
+	pvpList := pvpEntries
+	if len(pvpList) == 0 {
+		pvpList = []pvpEntry{{}} // single entry with zero PVP
+	}
+	insert := make([]db.MonsterTrackingAPI, 0, len(monsterList)*len(pvpList))
 	for _, mon := range monsterList {
-		insert = append(insert, db.MonsterTrackingAPI{
-			ID:               ctx.TargetID,
-			ProfileNo:        ctx.ProfileNo,
-			PokemonID:        mon.PokemonID,
-			Form:             mon.Form,
-			Ping:             pings,
-			Distance:         filters.distance,
-			MinIV:            filters.minIV,
-			MaxIV:            filters.maxIV,
-			MinCP:            filters.minCP,
-			MaxCP:            filters.maxCP,
-			MinLevel:         filters.minLevel,
-			MaxLevel:         filters.maxLevel,
-			ATK:              filters.atk,
-			DEF:              filters.def,
-			STA:              filters.sta,
-			MaxATK:           filters.maxAtk,
-			MaxDEF:           filters.maxDef,
-			MaxSTA:           filters.maxSta,
-			Gender:           filters.gender,
-			MinWeight:        filters.minWeight,
-			MaxWeight:        filters.maxWeight,
-			MinTime:          filters.minTime,
-			Rarity:           filters.rarity,
-			MaxRarity:        filters.maxRarity,
-			Size:             filters.size,
-			MaxSize:          filters.maxSize,
-			Template:         filters.template,
-			Clean:            db.IntBool(filters.clean),
-			PVPRankingLeague: pvpLeague,
-			PVPRankingBest:   pvpBest,
-			PVPRankingWorst:  pvpWorst,
-			PVPRankingMinCP:  pvpMinCP,
-			PVPRankingCap:    pvpCap,
-		})
+		for _, pe := range pvpList {
+			insert = append(insert, db.MonsterTrackingAPI{
+				ID:               ctx.TargetID,
+				ProfileNo:        ctx.ProfileNo,
+				PokemonID:        mon.PokemonID,
+				Form:             mon.Form,
+				Ping:             pings,
+				Distance:         filters.distance,
+				MinIV:            filters.minIV,
+				MaxIV:            filters.maxIV,
+				MinCP:            filters.minCP,
+				MaxCP:            filters.maxCP,
+				MinLevel:         filters.minLevel,
+				MaxLevel:         filters.maxLevel,
+				ATK:              filters.atk,
+				DEF:              filters.def,
+				STA:              filters.sta,
+				MaxATK:           filters.maxAtk,
+				MaxDEF:           filters.maxDef,
+				MaxSTA:           filters.maxSta,
+				Gender:           filters.gender,
+				MinWeight:        filters.minWeight,
+				MaxWeight:        filters.maxWeight,
+				MinTime:          filters.minTime,
+				Rarity:           filters.rarity,
+				MaxRarity:        filters.maxRarity,
+				Size:             filters.size,
+				MaxSize:          filters.maxSize,
+				Template:         filters.template,
+				Clean:            db.IntBool(filters.clean),
+				PVPRankingLeague: pe.League,
+				PVPRankingBest:   pe.Best,
+				PVPRankingWorst:  pe.Worst,
+				PVPRankingMinCP:  pe.MinCP,
+				PVPRankingCap:    pe.Cap,
+			})
+		}
 	}
 
 	if len(insert) == 0 {
@@ -421,18 +430,35 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	return f
 }
 
-func (c *TrackCommand) parsePVP(ctx *bot.CommandContext, parsed *bot.ParsedArgs) (league, best, worst, minCP, cap int) {
-	best = 1
-	worst = 4096
+// pvpEntry holds resolved PVP parameters for a single league.
+type pvpEntry struct {
+	League int // CP cap: 500, 1500, 2500
+	Best   int
+	Worst  int
+	MinCP  int
+	Cap    int
+}
 
-	// Config-based minimum CP per league (matches JS alerter behavior)
+// parsePVP resolves all PVP league parameters from parsed args.
+// Returns one entry per league specified (supports multi-league: "great5 ultra10").
+// If no PVP parameters are set, returns nil.
+func (c *TrackCommand) parsePVP(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []pvpEntry {
+	if len(parsed.PVP) == 0 {
+		return nil
+	}
+
 	leagueMinCP := map[string]int{
 		"great":  ctx.Config.PVP.PVPFilterGreatMinCP,
 		"ultra":  ctx.Config.PVP.PVPFilterUltraMinCP,
 		"little": ctx.Config.PVP.PVPFilterLittleMinCP,
 	}
 
-	// Check each league in priority order
+	cap := 0
+	if v, ok := parsed.Singles["cap"]; ok {
+		cap = v
+	}
+
+	var entries []pvpEntry
 	for _, l := range []struct {
 		name string
 		cp   int
@@ -441,29 +467,40 @@ func (c *TrackCommand) parsePVP(ctx *bot.CommandContext, parsed *bot.ParsedArgs)
 		{"ultra", 2500},
 		{"little", 500},
 	} {
-		if f, ok := parsed.PVP[l.name]; ok {
-			league = l.cp
-			best = f.Best
-			worst = f.Worst
-			// Clamp worst rank by config max (pvp_filter_max_rank)
-			maxRank := ctx.Config.PVP.PVPFilterMaxRank
-			if maxRank > 0 && worst > maxRank {
-				worst = maxRank
-			}
-			// Enforce config minimum CP: user's explicit CP or config floor, whichever is higher
-			minCP = f.MinCP
-			if floor := leagueMinCP[l.name]; floor > minCP {
-				minCP = floor
-			}
-			break
+		f, ok := parsed.PVP[l.name]
+		if !ok {
+			continue
 		}
+
+		best := f.Best
+		if best == 0 {
+			best = 1
+		}
+		worst := f.Worst
+		if worst == 0 {
+			worst = 4096
+		}
+		// Clamp worst rank by config max (pvp_filter_max_rank)
+		maxRank := ctx.Config.PVP.PVPFilterMaxRank
+		if maxRank > 0 && worst > maxRank {
+			worst = maxRank
+		}
+		// Enforce config minimum CP floor
+		minCP := f.MinCP
+		if floor := leagueMinCP[l.name]; floor > minCP {
+			minCP = floor
+		}
+
+		entries = append(entries, pvpEntry{
+			League: l.cp,
+			Best:   best,
+			Worst:  worst,
+			MinCP:  minCP,
+			Cap:    cap,
+		})
 	}
 
-	if v, ok := parsed.Singles["cap"]; ok && league > 0 {
-		cap = v
-	}
-
-	return
+	return entries
 }
 
 func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
