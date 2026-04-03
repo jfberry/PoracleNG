@@ -824,10 +824,10 @@ func (c *InfoCommand) dtsInfo(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	tr := ctx.Tr()
-	summary := ctx.DTS.TemplateSummary()
+	summary := ctx.DTS.TemplateSummaryDetailed()
 
 	var sb strings.Builder
-	sb.WriteString(tr.T("cmd.info.dts_summary") + "\n")
+	sb.WriteString(tr.T("cmd.info.dts_summary") + "\n\n")
 
 	// Sort types for consistent output
 	types := make([]string, 0, len(summary))
@@ -838,7 +838,6 @@ func (c *InfoCommand) dtsInfo(ctx *bot.CommandContext) []bot.Reply {
 
 	for _, t := range types {
 		byPlatform := summary[t]
-		// Sort platforms for consistent output
 		platforms := make([]string, 0, len(byPlatform))
 		for p := range byPlatform {
 			platforms = append(platforms, p)
@@ -847,10 +846,12 @@ func (c *InfoCommand) dtsInfo(ctx *bot.CommandContext) []bot.Reply {
 
 		var parts []string
 		for _, p := range platforms {
-			parts = append(parts, fmt.Sprintf("%s(%d)", p, byPlatform[p]))
+			ids := byPlatform[p]
+			sort.Strings(ids)
+			parts = append(parts, fmt.Sprintf("%s(%d): %s", p, len(ids), strings.Join(ids, ", ")))
 		}
-		sb.WriteString(fmt.Sprintf("  %s: %s\n", t, strings.Join(parts, " ")))
+		sb.WriteString(fmt.Sprintf("**%s**\n  %s\n", t, strings.Join(parts, "\n  ")))
 	}
 
-	return []bot.Reply{{Text: sb.String()}}
+	return bot.SplitTextReply(sb.String())
 }
