@@ -44,27 +44,27 @@ func (c *InfoCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	switch {
-	case matchSub("cmd.info.sub.moves"):
+	case matchSub("msg.info.sub.moves"):
 		return c.listMoves(ctx)
-	case matchSub("cmd.info.sub.items"):
+	case matchSub("msg.info.sub.items"):
 		return c.listItems(ctx)
-	case matchSub("cmd.info.sub.shiny"):
+	case matchSub("msg.info.sub.shiny"):
 		return c.shinyStats(ctx)
-	case matchSub("cmd.info.sub.rarity"):
+	case matchSub("msg.info.sub.rarity"):
 		return c.rarityStats(ctx)
-	case matchSub("cmd.info.sub.weather"):
+	case matchSub("msg.info.sub.weather"):
 		return c.weatherInfo(ctx, args[1:])
-	case matchSub("cmd.info.sub.poracle"):
+	case matchSub("msg.info.sub.poracle"):
 		if !ctx.IsAdmin {
 			return []bot.Reply{{React: "🙅"}}
 		}
 		return c.poracleInfo(ctx)
-	case matchSub("cmd.info.sub.translate"):
+	case matchSub("msg.info.sub.translate"):
 		if !ctx.IsAdmin {
 			return []bot.Reply{{React: "🙅"}}
 		}
 		return c.translateDebug(ctx, args[1:])
-	case matchSub("cmd.info.sub.dts"):
+	case matchSub("msg.info.sub.dts"):
 		if !ctx.IsAdmin {
 			return []bot.Reply{{React: "🙅"}}
 		}
@@ -78,7 +78,7 @@ func (c *InfoCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 func (c *InfoCommand) usage(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 	prefix := commandPrefix(ctx)
-	text := tr.Tf("cmd.info.usage", prefix)
+	text := tr.Tf("msg.info.usage", prefix)
 	return []bot.Reply{{Text: text}}
 }
 
@@ -103,7 +103,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	resolved := ctx.Resolver.Resolve(name, ctx.Language)
 	if len(resolved) == 0 {
 		tr := ctx.Tr()
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.info.pokemon_not_found", name)}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", name)}}
 	}
 
 	pokemonID := resolved[0].PokemonID
@@ -145,7 +145,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	}
 	if mon == nil {
 		tr := ctx.Tr()
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.info.pokemon_not_found", name)}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", name)}}
 	}
 
 	tr := ctx.Tr()
@@ -179,10 +179,10 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	sb.WriteByte('\n')
 
 	// Pokedex ID
-	sb.WriteString(fmt.Sprintf("%s #%d\n", tr.T("cmd.info.pokedex_id"), pokemonID))
+	sb.WriteString(fmt.Sprintf("%s #%d\n", tr.T("msg.info.pokedex_id"), pokemonID))
 
 	// Base stats
-	sb.WriteString(tr.Tf("cmd.info.base_stats",
+	sb.WriteString(tr.Tf("msg.info.base_stats",
 		strconv.Itoa(mon.Attack), strconv.Itoa(mon.Defense), strconv.Itoa(mon.Stamina)) + "\n")
 
 	// Generation
@@ -190,16 +190,16 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	if gen > 0 {
 		genInfo := ctx.GameData.GetGenerationInfo(gen)
 		if genInfo != nil {
-			sb.WriteString(tr.Tf("cmd.info.generation", strconv.Itoa(gen), genInfo.Roman) + "\n")
+			sb.WriteString(tr.Tf("msg.info.generation", strconv.Itoa(gen), genInfo.Roman) + "\n")
 		}
 	}
 
 	// Per-type details: type name, emoji, boosted weather, super effective against
 	for i, tid := range mon.Types {
 		sb.WriteByte('\n')
-		typeLabel := tr.T("cmd.info.primary_type")
+		typeLabel := tr.T("msg.info.primary_type")
 		if i > 0 {
-			typeLabel = tr.T("cmd.info.secondary_type")
+			typeLabel = tr.T("msg.info.secondary_type")
 		}
 		sb.WriteString(fmt.Sprintf("**%s**\n", typeLabel))
 
@@ -230,7 +230,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 					weatherParts = append(weatherParts, wName)
 				}
 			}
-			sb.WriteString(fmt.Sprintf("  %s %s\n", tr.T("cmd.info.boosted_by"), strings.Join(weatherParts, ", ")))
+			sb.WriteString(fmt.Sprintf("  %s %s\n", tr.T("msg.info.boosted_by"), strings.Join(weatherParts, ", ")))
 		}
 
 		// Super effective against: find which types have this type in their Weaknesses
@@ -254,7 +254,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		}
 		if len(effectiveAgainst) > 0 {
 			sort.Strings(effectiveAgainst)
-			sb.WriteString(fmt.Sprintf("  %s %s\n", tr.T("cmd.info.super_effective"), strings.Join(effectiveAgainst, ", ")))
+			sb.WriteString(fmt.Sprintf("  %s %s\n", tr.T("msg.info.super_effective"), strings.Join(effectiveAgainst, ", ")))
 		}
 	}
 
@@ -265,11 +265,11 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 
 		// Map multiplier to i18n key
 		multiplierLabels := map[float64]string{
-			4:     "cmd.info.very_vulnerable",
-			2:     "cmd.info.vulnerable",
-			0.5:   "cmd.info.resistant",
-			0.25:  "cmd.info.very_resistant",
-			0.125: "cmd.info.extremely_resistant",
+			4:     "msg.info.very_vulnerable",
+			2:     "msg.info.vulnerable",
+			0.5:   "msg.info.resistant",
+			0.25:  "msg.info.very_resistant",
+			0.125: "msg.info.extremely_resistant",
 		}
 
 		for _, cat := range categories {
@@ -298,7 +298,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	forms := c.availableForms(ctx, pokemonID)
 	if len(forms) > 0 {
 		sb.WriteByte('\n')
-		sb.WriteString(tr.T("cmd.info.available_forms") + "\n")
+		sb.WriteString(tr.T("msg.info.available_forms") + "\n")
 		for _, f := range forms {
 			sb.WriteString("  " + f + "\n")
 		}
@@ -316,13 +316,13 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 				evoStrs = append(evoStrs, evoName)
 			}
 		}
-		sb.WriteString(tr.Tf("cmd.info.evolves_to", strings.Join(evoStrs, ", ")) + "\n")
+		sb.WriteString(tr.Tf("msg.info.evolves_to", strings.Join(evoStrs, ", ")) + "\n")
 	}
 
 	// Hundo CP table
 	if mon.Attack > 0 || mon.Defense > 0 || mon.Stamina > 0 {
 		sb.WriteByte('\n')
-		sb.WriteString("\U0001F4AF " + tr.T("cmd.info.hundo_cp") + "\n")
+		sb.WriteString("\U0001F4AF " + tr.T("msg.info.hundo_cp") + "\n")
 		levels := []int{15, 20, 25, 40, 50, 51}
 		levelLabels := []string{"L15", "L20", "L25", "L40", "L50", "L51"}
 		for i, level := range levels {
@@ -425,7 +425,7 @@ func calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivSta, level int) int 
 func (c *InfoCommand) listMoves(ctx *bot.CommandContext) []bot.Reply {
 	if ctx.GameData == nil || len(ctx.GameData.Moves) == 0 {
 		tr := ctx.Tr()
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.info.no_move_data")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.info.no_move_data")}}
 	}
 
 	tr := ctx.Tr()
@@ -470,11 +470,11 @@ func (c *InfoCommand) listMoves(ctx *bot.CommandContext) []bot.Reply {
 
 	text := sb.String()
 	if text == "" {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.info.no_move_data")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.info.no_move_data")}}
 	}
 
 	return []bot.Reply{{
-		Text: tr.Tf("cmd.info.moves_header", strconv.Itoa(len(entries))),
+		Text: tr.Tf("msg.info.moves_header", strconv.Itoa(len(entries))),
 		Attachment: &bot.Attachment{
 			Filename: "moves.txt",
 			Content:  []byte(text),
@@ -485,7 +485,7 @@ func (c *InfoCommand) listMoves(ctx *bot.CommandContext) []bot.Reply {
 func (c *InfoCommand) listItems(ctx *bot.CommandContext) []bot.Reply {
 	if ctx.GameData == nil || len(ctx.GameData.Items) == 0 {
 		tr := ctx.Tr()
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.info.no_item_data")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.info.no_item_data")}}
 	}
 
 	tr := ctx.Tr()
@@ -525,11 +525,11 @@ func (c *InfoCommand) listItems(ctx *bot.CommandContext) []bot.Reply {
 
 	text := sb.String()
 	if text == "" {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.info.no_item_data")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.info.no_item_data")}}
 	}
 
 	return []bot.Reply{{
-		Text: tr.Tf("cmd.info.items_header", strconv.Itoa(len(names))),
+		Text: tr.Tf("msg.info.items_header", strconv.Itoa(len(names))),
 		Attachment: &bot.Attachment{
 			Filename: "items.txt",
 			Content:  []byte(text),
@@ -540,13 +540,13 @@ func (c *InfoCommand) listItems(ctx *bot.CommandContext) []bot.Reply {
 func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 	if ctx.Stats == nil {
 		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.T("cmd.info.shiny_unavailable")}}
+		return []bot.Reply{{Text: tr.T("msg.info.shiny_unavailable")}}
 	}
 
 	tr := ctx.Tr()
 	stats := ctx.Stats.ExportShinyStats()
 	if len(stats) == 0 {
-		return []bot.Reply{{Text: tr.T("cmd.info.shiny_unavailable")}}
+		return []bot.Reply{{Text: tr.T("msg.info.shiny_unavailable")}}
 	}
 
 	// Sort by pokemon ID
@@ -561,8 +561,8 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].id < entries[j].id })
 
 	var sb strings.Builder
-	sb.WriteString(tr.T("cmd.info.shiny_header") + "\n\n")
-	sb.WriteString(fmt.Sprintf("%-25s %6s %6s %8s\n", "Pokemon", tr.T("cmd.info.shiny_seen"), "Shiny", tr.T("cmd.info.shiny_ratio")))
+	sb.WriteString(tr.T("msg.info.shiny_header") + "\n\n")
+	sb.WriteString(fmt.Sprintf("%-25s %6s %6s %8s\n", "Pokemon", tr.T("msg.info.shiny_seen"), "Shiny", tr.T("msg.info.shiny_ratio")))
 	sb.WriteString(strings.Repeat("-", 50) + "\n")
 
 	for _, e := range entries {
@@ -575,7 +575,7 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 	// If too long for a message, send as file
 	if len(text) > 1500 {
 		return []bot.Reply{{
-			Text: tr.T("cmd.info.shiny_header"),
+			Text: tr.T("msg.info.shiny_header"),
 			Attachment: &bot.Attachment{
 				Filename: "shiny_stats.txt",
 				Content:  []byte(text),
@@ -589,13 +589,13 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 func (c *InfoCommand) rarityStats(ctx *bot.CommandContext) []bot.Reply {
 	if ctx.Stats == nil {
 		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.T("cmd.info.rarity_unavailable")}}
+		return []bot.Reply{{Text: tr.T("msg.info.rarity_unavailable")}}
 	}
 
 	tr := ctx.Tr()
 	groups := ctx.Stats.ExportGroups()
 	if len(groups) == 0 {
-		return []bot.Reply{{Text: tr.T("cmd.info.rarity_unavailable")}}
+		return []bot.Reply{{Text: tr.T("msg.info.rarity_unavailable")}}
 	}
 
 	var sb strings.Builder
@@ -629,13 +629,13 @@ func (c *InfoCommand) rarityStats(ctx *bot.CommandContext) []bot.Reply {
 
 	text := sb.String()
 	if text == "" {
-		return []bot.Reply{{Text: tr.T("cmd.info.rarity_unavailable")}}
+		return []bot.Reply{{Text: tr.T("msg.info.rarity_unavailable")}}
 	}
 
 	// If too long, send as file
 	if len(text) > 1500 {
 		return []bot.Reply{{
-			Text: tr.T("cmd.info.rarity_header"),
+			Text: tr.T("msg.info.rarity_header"),
 			Attachment: &bot.Attachment{
 				Filename: "rarity_stats.txt",
 				Content:  []byte(text),
@@ -649,7 +649,7 @@ func (c *InfoCommand) rarityStats(ctx *bot.CommandContext) []bot.Reply {
 func (c *InfoCommand) weatherInfo(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if ctx.Weather == nil {
 		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.T("cmd.info.weather_unavailable")}}
+		return []bot.Reply{{Text: tr.T("msg.info.weather_unavailable")}}
 	}
 
 	tr := ctx.Tr()
@@ -664,16 +664,16 @@ func (c *InfoCommand) weatherInfo(ctx *bot.CommandContext, args []string) []bot.
 			lat, err1 = strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
 			lon, err2 = strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
 			if err1 != nil || err2 != nil {
-				return []bot.Reply{{Text: tr.T("cmd.info.weather_invalid_coords")}}
+				return []bot.Reply{{Text: tr.T("msg.info.weather_invalid_coords")}}
 			}
 		} else {
-			return []bot.Reply{{Text: tr.T("cmd.info.weather_invalid_coords")}}
+			return []bot.Reply{{Text: tr.T("msg.info.weather_invalid_coords")}}
 		}
 	} else {
 		// Look up user's location from DB
 		human, err := ctx.Humans.Get(ctx.TargetID)
 		if err != nil || human == nil || (human.Latitude == 0 && human.Longitude == 0) {
-			return []bot.Reply{{Text: tr.T("cmd.info.weather_no_location")}}
+			return []bot.Reply{{Text: tr.T("msg.info.weather_no_location")}}
 		}
 		lat = human.Latitude
 		lon = human.Longitude
@@ -683,12 +683,12 @@ func (c *InfoCommand) weatherInfo(ctx *bot.CommandContext, args []string) []bot.
 	forecast := ctx.Weather.GetWeatherForecast(cellID)
 
 	var sb strings.Builder
-	sb.WriteString(tr.Tf("cmd.info.weather_location", fmt.Sprintf("%.4f", lat), fmt.Sprintf("%.4f", lon)) + "\n")
+	sb.WriteString(tr.Tf("msg.info.weather_location", fmt.Sprintf("%.4f", lat), fmt.Sprintf("%.4f", lon)) + "\n")
 	sb.WriteString(fmt.Sprintf("S2 Cell: %s\n", cellID))
 
 	if forecast.Current > 0 {
 		weatherName := tr.T(gamedata.WeatherTranslationKey(forecast.Current))
-		sb.WriteString(tr.Tf("cmd.info.weather_current", weatherName) + "\n")
+		sb.WriteString(tr.Tf("msg.info.weather_current", weatherName) + "\n")
 
 		// Show boosted types for current weather
 		if ctx.GameData != nil {
@@ -698,16 +698,16 @@ func (c *InfoCommand) weatherInfo(ctx *bot.CommandContext, args []string) []bot.
 				for _, tid := range boosted {
 					typeNames = append(typeNames, tr.T(gamedata.TypeTranslationKey(tid)))
 				}
-				sb.WriteString(tr.Tf("cmd.info.weather_boosts", strings.Join(typeNames, ", ")) + "\n")
+				sb.WriteString(tr.Tf("msg.info.weather_boosts", strings.Join(typeNames, ", ")) + "\n")
 			}
 		}
 	} else {
-		sb.WriteString(tr.T("cmd.info.weather_unknown") + "\n")
+		sb.WriteString(tr.T("msg.info.weather_unknown") + "\n")
 	}
 
 	if forecast.Next > 0 {
 		nextName := tr.T(gamedata.WeatherTranslationKey(forecast.Next))
-		sb.WriteString(tr.Tf("cmd.info.weather_forecast", nextName) + "\n")
+		sb.WriteString(tr.Tf("msg.info.weather_forecast", nextName) + "\n")
 	}
 
 	return []bot.Reply{{Text: sb.String()}}
@@ -827,7 +827,7 @@ func (c *InfoCommand) dtsInfo(ctx *bot.CommandContext) []bot.Reply {
 	summary := ctx.DTS.TemplateSummaryDetailed()
 
 	var sb strings.Builder
-	sb.WriteString(tr.T("cmd.info.dts_summary") + "\n\n")
+	sb.WriteString(tr.T("msg.info.dts_summary") + "\n\n")
 
 	// Sort types for consistent output
 	types := make([]string, 0, len(summary))

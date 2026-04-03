@@ -22,14 +22,14 @@ func (c *PoracleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	// Telegram: only works in groups, not DMs
 	if ctx.Platform == "telegram" && ctx.IsDM {
 		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.T("cmd.poracle.dm_only_telegram")}}
+		return []bot.Reply{{Text: tr.T("msg.poracle.dm_only_telegram")}}
 	}
 
 	// Validate channel is a registration channel
 	if !bot.IsRegistrationChannel(ctx.Config, ctx.Platform, ctx.ChannelID) {
 		log.Infof("poracle: %s tried to register in channel %s (not a registration channel)", ctx.UserName, ctx.ChannelID)
 		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.T("cmd.poracle.wrong_channel")}}
+		return []bot.Reply{{Text: tr.T("msg.poracle.wrong_channel")}}
 	}
 
 	// Determine community to add (if area security is enabled)

@@ -32,7 +32,7 @@ func (c *UnregisterCommand) Run(ctx *bot.CommandContext, args []string) []bot.Re
 		}
 		// Safety: admin with no targets won't unregister self
 		if len(targets) == 0 {
-			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.unregister.admin_no_targets")}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.unregister.admin_no_targets")}}
 		}
 		// Safety: filter out self
 		var filtered []string
@@ -42,7 +42,7 @@ func (c *UnregisterCommand) Run(ctx *bot.CommandContext, args []string) []bot.Re
 			}
 		}
 		if len(filtered) == 0 {
-			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.unregister.admin_no_targets")}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.unregister.admin_no_targets")}}
 		}
 		targets = filtered
 	} else {
@@ -68,8 +68,8 @@ func (c *UnregisterCommand) Run(ctx *bot.CommandContext, args []string) []bot.Re
 
 	if !ctx.IsAdmin {
 		// Self-unregister: friendly goodbye
-		return []bot.Reply{{React: "✅", Text: tr.T("cmd.unregister.goodbye")}}
+		return []bot.Reply{{React: "✅", Text: tr.T("msg.unregister.goodbye")}}
 	}
 	// Admin unregistering others: show IDs
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.unregister.success", strings.Join(unregistered, ", "))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.unregister.success", strings.Join(unregistered, ", "))}}
 }

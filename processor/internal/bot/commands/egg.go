@@ -41,10 +41,10 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.egg.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.egg.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.egg.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.egg.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -82,7 +82,7 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 			return []bot.Reply{*warn}
 		}
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_egg_levels")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_egg_levels")}}
 	}
 
 	// Parse common fields

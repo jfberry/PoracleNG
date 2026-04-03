@@ -17,11 +17,11 @@ func (c *EnableCommand) Aliases() []string { return nil }
 func (c *EnableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if !ctx.IsAdmin {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
 	}
 
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.enable.specify")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.enable.specify")}}
 	}
 
 	var enabled []string
@@ -48,7 +48,7 @@ func (c *EnableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		return []bot.Reply{{React: "👌"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.enable.success", strings.Join(enabled, ", "))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.enable.success", strings.Join(enabled, ", "))}}
 }
 
 // DisableCommand implements !disable — admin disables user(s).
@@ -60,11 +60,11 @@ func (c *DisableCommand) Aliases() []string { return nil }
 func (c *DisableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if !ctx.IsAdmin {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
 	}
 
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.enable.specify")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.enable.specify")}}
 	}
 
 	var disabled []string
@@ -90,7 +90,7 @@ func (c *DisableCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		return []bot.Reply{{React: "👌"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.disable.success", strings.Join(disabled, ", "))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.disable.success", strings.Join(disabled, ", "))}}
 }
 
 // isNumeric returns true if the string contains only digits.

@@ -24,10 +24,10 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.track.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.track.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.track.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.track.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -64,7 +64,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		hasFilters := len(parsed.Singles) > 0 || len(parsed.Ranges) > 0 ||
 			len(parsed.Types) > 0 || parsed.Gender != 0 || len(parsed.PVP) > 0
 		if !hasFilters {
-			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.track.everything_no_filters")}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.track.everything_no_filters")}}
 		}
 	}
 
@@ -77,7 +77,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Check PVP permission if PVP filters are present
 	if len(pvpEntries) > 0 {
 		if !bot.CheckFeaturePermission(ctx.Config, ctx.Platform, "pvp", ctx.UserID, nil) {
-			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
 		}
 	}
 
@@ -100,7 +100,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				for _, c := range validCaps {
 					capStrs = append(capStrs, fmt.Sprintf("%d", c))
 				}
-				return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.track.invalid_cap", strings.Join(capStrs, ", "))}}
+				return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.track.invalid_cap", strings.Join(capStrs, ", "))}}
 			}
 		}
 	}
@@ -170,7 +170,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	if len(insert) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_pokemon")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_pokemon")}}
 	}
 
 	// Diff against existing and apply

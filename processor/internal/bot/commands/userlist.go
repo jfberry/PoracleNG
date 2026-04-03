@@ -21,7 +21,7 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	tr := ctx.Tr()
 
 	if !ctx.IsAdmin && !ctx.IsCommunityAdmin {
-		return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_permission")}}
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
 	}
 
 	// Parse filter arguments
@@ -85,11 +85,11 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 
 	if len(filtered) == 0 {
-		return []bot.Reply{{Text: tr.T("cmd.userlist.none")}}
+		return []bot.Reply{{Text: tr.T("msg.userlist.none")}}
 	}
 
 	var sb strings.Builder
-	sb.WriteString(tr.T("cmd.userlist.registered"))
+	sb.WriteString(tr.T("msg.userlist.registered"))
 	sb.WriteByte('\n')
 
 	for _, h := range filtered {

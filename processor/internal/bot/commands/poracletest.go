@@ -71,7 +71,7 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 	validHooks := []string{"pokemon", "raid", "pokestop", "gym", "nest", "quest", "fort-update", "max-battle"}
 
 	if len(args) == 0 {
-		return []bot.Reply{{Text: tr.Tf("cmd.poracle_test.usage", strings.Join(validHooks, ", "))}}
+		return []bot.Reply{{Text: tr.Tf("msg.poracle_test.usage", strings.Join(validHooks, ", "))}}
 	}
 
 	hookTypeDisplay := args[0]
@@ -83,7 +83,7 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 		}
 	}
 	if !valid {
-		return []bot.Reply{{Text: tr.Tf("cmd.poracle_test.usage", strings.Join(validHooks, ", "))}}
+		return []bot.Reply{{Text: tr.Tf("msg.poracle_test.usage", strings.Join(validHooks, ", "))}}
 	}
 
 	hookType := strings.ReplaceAll(hookTypeDisplay, "-", "_")
@@ -117,7 +117,7 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 
 	// If no test ID, list available tests for this hook type
 	if testID == "" {
-		msg := tr.Tf("cmd.poracle_test.tests_found", hookType) + "\n\n"
+		msg := tr.Tf("msg.poracle_test.tests_found", hookType) + "\n\n"
 		for _, entry := range testdata {
 			if entry.Type == hookType {
 				msg += "  " + entry.Test + "\n"
@@ -135,7 +135,7 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 		}
 	}
 	if dataItem == nil {
-		return []bot.Reply{{Text: tr.Tf("cmd.poracle_test.not_found", hookType, testID)}}
+		return []bot.Reply{{Text: tr.Tf("msg.poracle_test.not_found", hookType, testID)}}
 	}
 
 	// Look up user location
@@ -261,7 +261,7 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 	displayID := testID
 	reply := bot.Reply{
 		React: "✅",
-		Text:  tr.Tf("cmd.poracle_test.queued", hookType, displayID, template),
+		Text:  tr.Tf("msg.poracle_test.queued", hookType, displayID, template),
 	}
 
 	// POST to the processor's own /api/test endpoint
@@ -278,14 +278,14 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Errorf("poracle-test: request: %v", err)
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.poracle_test.failed", err.Error())}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.poracle_test.failed", err.Error())}}
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		log.Errorf("poracle-test: status %d: %s", resp.StatusCode, string(body))
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("cmd.poracle_test.failed", fmt.Sprintf("HTTP %d", resp.StatusCode))}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.poracle_test.failed", fmt.Sprintf("HTTP %d", resp.StatusCode))}}
 	}
 
 	return []bot.Reply{reply}

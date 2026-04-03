@@ -46,7 +46,7 @@ func (c *BackupCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 
 	if hasRemove {
 		if len(filteredArgs) == 0 || !validBackupName.MatchString(filteredArgs[0]) {
-			return []bot.Reply{{Text: tr.T("cmd.backup.invalid_name")}}
+			return []bot.Reply{{Text: tr.T("msg.backup.invalid_name")}}
 		}
 		name := filteredArgs[0]
 		filePath := filepath.Join(backupDir, name+".json")
@@ -69,7 +69,7 @@ func (c *BackupCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 
 	// Backup: need a name
 	if len(args) == 0 || !validBackupName.MatchString(args[0]) {
-		return []bot.Reply{{Text: tr.T("cmd.backup.need_name")}}
+		return []bot.Reply{{Text: tr.T("msg.backup.need_name")}}
 	}
 
 	name := args[0]
@@ -135,7 +135,7 @@ func (c *BackupCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 func listBackups(tr interface{ T(string) string }, backupDir string) []bot.Reply {
 	entries, err := os.ReadDir(backupDir)
 	if err != nil {
-		return []bot.Reply{{Text: tr.T("cmd.restore.no_backups_dir")}}
+		return []bot.Reply{{Text: tr.T("msg.restore.no_backups_dir")}}
 	}
 
 	var names []string
@@ -146,9 +146,9 @@ func listBackups(tr interface{ T(string) string }, backupDir string) []bot.Reply
 	}
 
 	if len(names) == 0 {
-		return []bot.Reply{{Text: tr.T("cmd.restore.no_backups_dir")}}
+		return []bot.Reply{{Text: tr.T("msg.restore.no_backups_dir")}}
 	}
 
 	return []bot.Reply{{Text: fmt.Sprintf("%s ```\n%s```",
-		tr.T("cmd.restore.available"), strings.Join(names, ",\n"))}}
+		tr.T("msg.restore.available"), strings.Join(names, ",\n"))}}
 }

@@ -31,10 +31,10 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.gym.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.gym.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.gym.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.gym.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -72,7 +72,7 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		if ctx.Config.Tracking.EnableGymBattle {
 			battleChanges = true
 		} else {
-			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.gym.battle_disabled")}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.gym.battle_disabled")}}
 		}
 	}
 
@@ -200,5 +200,5 @@ func (c *GymCommand) removeGyms(ctx *bot.CommandContext, teams []int) []bot.Repl
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
 }

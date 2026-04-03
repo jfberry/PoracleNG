@@ -33,20 +33,20 @@ func (c *RestoreCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if len(args) == 0 {
-		return []bot.Reply{{Text: tr.T("cmd.restore.usage")}}
+		return []bot.Reply{{Text: tr.T("msg.restore.usage")}}
 	}
 
 	name := args[0]
 
 	// Check backup directory exists
 	if _, err := os.Stat(backupDir); os.IsNotExist(err) {
-		return []bot.Reply{{Text: tr.T("cmd.restore.no_backups_dir")}}
+		return []bot.Reply{{Text: tr.T("msg.restore.no_backups_dir")}}
 	}
 
 	// List available backups for validation
 	entries, err := os.ReadDir(backupDir)
 	if err != nil {
-		return []bot.Reply{{Text: tr.T("cmd.restore.no_backups_dir")}}
+		return []bot.Reply{{Text: tr.T("msg.restore.no_backups_dir")}}
 	}
 
 	var availableNames []string
@@ -63,8 +63,8 @@ func (c *RestoreCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	if !found {
 		return []bot.Reply{{Text: fmt.Sprintf("%s %s\n%s ```\n%s```",
-			name, tr.T("cmd.restore.not_found"),
-			tr.T("cmd.restore.available"),
+			name, tr.T("msg.restore.not_found"),
+			tr.T("msg.restore.available"),
 			strings.Join(availableNames, ",\n"))}}
 	}
 

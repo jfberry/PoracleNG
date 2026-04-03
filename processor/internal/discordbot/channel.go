@@ -143,9 +143,9 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 
 	var reply string
 	if webhookName != "" {
-		reply = tr.T("cmd.webhook.added")
+		reply = tr.T("msg.webhook.added")
 	} else {
-		reply = tr.T("cmd.channel.added")
+		reply = tr.T("msg.channel.added")
 	}
 
 	s.ChannelMessageSend(m.ChannelID, reply)

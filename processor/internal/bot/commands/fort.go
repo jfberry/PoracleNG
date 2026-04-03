@@ -36,10 +36,10 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.fort.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.fort.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.fort.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.fort.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -177,5 +177,5 @@ func (c *FortCommand) removeForts(ctx *bot.CommandContext, fortType string) []bo
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
 }

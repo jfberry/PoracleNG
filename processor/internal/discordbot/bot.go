@@ -337,7 +337,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 		// Registration check — skip for poracle (registration), poracle_test, and version commands
 		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
-			reply(tr.T("cmd.not_registered"))
+			reply(tr.T("msg.not_registered"))
 			continue
 		}
 
@@ -352,7 +352,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 						continue
 					}
 				}
-				reply(tr.Tf("cmd.unknown", b.Cfg.Discord.Prefix+"help"))
+				reply(tr.Tf("msg.unknown", b.Cfg.Discord.Prefix+"help"))
 			}
 			continue
 		}

@@ -32,10 +32,10 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
-	if usage := usageReply(ctx, args, "cmd.invasion.usage"); usage != nil {
+	if usage := usageReply(ctx, args, "msg.invasion.usage"); usage != nil {
 		return []bot.Reply{*usage}
 	}
-	if help := helpArgReply(ctx, args, "cmd.invasion.usage"); help != nil {
+	if help := helpArgReply(ctx, args, "msg.invasion.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
 
@@ -141,7 +141,7 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	// If nothing matched, report unrecognized or default to everything
 	if len(gruntTypes) == 0 && !parsed.HasKeyword("arg.remove") {
 		if len(parsed.Unrecognized) > 0 {
-			return []bot.Reply{{React: "🙅", Text: tr.T("cmd.no_invasion_type")}}
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_invasion_type")}}
 		}
 		gruntTypes = append(gruntTypes, "everything")
 	}
@@ -235,5 +235,5 @@ func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, gruntTypes []
 	}
 	ctx.TriggerReload()
 	tr := ctx.Tr()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("cmd.removed_n", len(uids))}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
 }
