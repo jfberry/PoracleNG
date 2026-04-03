@@ -18,6 +18,7 @@ func (c *MaxbattleCommand) Name() string      { return "cmd.maxbattle" }
 func (c *MaxbattleCommand) Aliases() []string { return nil }
 
 var maxbattleParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixRange, Key: "arg.prefix.level"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
@@ -265,6 +266,10 @@ func (c *MaxbattleCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.
 }
 
 func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
+	if len(parsed.RemoveUIDs) > 0 {
+		return removeByUIDs(ctx, ctx.Tracking.Maxbattles, parsed.RemoveUIDs)
+	}
+
 	tracked, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("maxbattle command: select for remove: %s", err)

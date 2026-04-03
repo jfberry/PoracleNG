@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 // TrackedCommand implements !tracked — list all active tracking rules.
@@ -114,13 +115,100 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	// Each tracking category: show rules or "not tracking X" (unless disabled in config)
 	cfg := ctx.Config.General
 
+	// First pass: collect max UID across all types for padding width
+	maxUID := int64(0)
+	updateMaxUID := func(uid int64) {
+		if uid > maxUID {
+			maxUID = uid
+		}
+	}
+
+	// Pre-query all types to find max UID (queries are reused below)
+	var monsters []db.MonsterTrackingAPI
+	var raidList []db.RaidTrackingAPI
+	var eggList []db.EggTrackingAPI
+	var questList []db.QuestTrackingAPI
+	var invasionList []db.InvasionTrackingAPI
+	var lureList []db.LureTrackingAPI
+	var gymList []db.GymTrackingAPI
+	var nestList []db.NestTrackingAPI
+	var fortList []db.FortTrackingAPI
+	var maxbattleList []db.MaxbattleTrackingAPI
+
 	if !cfg.DisablePokemon {
-		monsters, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select monsters: %v", err)
-		} else if len(monsters) > 0 {
+		if v, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			monsters = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+	}
+	if !cfg.DisableRaid {
+		if v, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			raidList = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+		if v, err := ctx.Tracking.Eggs.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			eggList = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+	}
+	if !cfg.DisableQuest {
+		if v, err := ctx.Tracking.Quests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			questList = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+	}
+	if !cfg.DisableInvasion {
+		if v, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			invasionList = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+	}
+	if !cfg.DisableLure {
+		if v, err := ctx.Tracking.Lures.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			lureList = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+	}
+	if !cfg.DisableGym {
+		if v, err := ctx.Tracking.Gyms.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			gymList = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+	}
+	if !cfg.DisableNest {
+		if v, err := ctx.Tracking.Nests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			nestList = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+	}
+	if !cfg.DisablePokestop {
+		if v, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			fortList = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+	}
+	if !cfg.DisableMaxBattle {
+		if v, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
+			maxbattleList = v
+			for i := range v { updateMaxUID(v[i].UID) }
+		}
+	}
+
+	// Compute padding width from max UID
+	idWidth := len(fmt.Sprintf("%d", maxUID))
+	if idWidth < 1 {
+		idWidth = 1
+	}
+	fmtID := func(uid int64) string {
+		return fmt.Sprintf("[id:%*d] ", idWidth, uid)
+	}
+	hasAnyRules := maxUID > 0
+
+	if !cfg.DisablePokemon {
+		if len(monsters) > 0 {
 			sb.WriteString(tr.T("section.pokemon") + "\n")
 			for i := range monsters {
+				sb.WriteString(fmtID(monsters[i].UID))
 				sb.WriteString(warnRow(ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&monsters[i])), monsters[i].Distance))
 				sb.WriteByte('\n')
 			}
@@ -131,13 +219,11 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if !cfg.DisableRaid {
-		raids, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select raids: %v", err)
-		} else if len(raids) > 0 {
+		if len(raidList) > 0 {
 			sb.WriteString(tr.T("section.raids") + "\n")
-			for i := range raids {
-				sb.WriteString(warnRow(ctx.RowText.RaidRowText(tr, raidAPIToTracking(&raids[i])), raids[i].Distance))
+			for i := range raidList {
+				sb.WriteString(fmtID(raidList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.RaidRowText(tr, raidAPIToTracking(&raidList[i])), raidList[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -147,13 +233,11 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if !cfg.DisableRaid {
-		eggs, err := ctx.Tracking.Eggs.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select eggs: %v", err)
-		} else if len(eggs) > 0 {
+		if len(eggList) > 0 {
 			sb.WriteString(tr.T("section.eggs") + "\n")
-			for i := range eggs {
-				sb.WriteString(warnRow(ctx.RowText.EggRowText(tr, eggAPIToTracking(&eggs[i])), eggs[i].Distance))
+			for i := range eggList {
+				sb.WriteString(fmtID(eggList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.EggRowText(tr, eggAPIToTracking(&eggList[i])), eggList[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -163,13 +247,11 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if !cfg.DisableQuest {
-		quests, err := ctx.Tracking.Quests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select quests: %v", err)
-		} else if len(quests) > 0 {
+		if len(questList) > 0 {
 			sb.WriteString(tr.T("section.quests") + "\n")
-			for i := range quests {
-				sb.WriteString(warnRow(ctx.RowText.QuestRowText(tr, questAPIToTracking(&quests[i])), quests[i].Distance))
+			for i := range questList {
+				sb.WriteString(fmtID(questList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.QuestRowText(tr, questAPIToTracking(&questList[i])), questList[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -179,13 +261,11 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if !cfg.DisableInvasion {
-		invasions, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select invasions: %v", err)
-		} else if len(invasions) > 0 {
+		if len(invasionList) > 0 {
 			sb.WriteString(tr.T("section.invasions") + "\n")
-			for i := range invasions {
-				sb.WriteString(warnRow(ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&invasions[i])), invasions[i].Distance))
+			for i := range invasionList {
+				sb.WriteString(fmtID(invasionList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(&invasionList[i])), invasionList[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -195,13 +275,11 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if !cfg.DisableLure {
-		lures, err := ctx.Tracking.Lures.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select lures: %v", err)
-		} else if len(lures) > 0 {
+		if len(lureList) > 0 {
 			sb.WriteString(tr.T("section.lures") + "\n")
-			for i := range lures {
-				sb.WriteString(warnRow(ctx.RowText.LureRowText(tr, lureAPIToTracking(&lures[i])), lures[i].Distance))
+			for i := range lureList {
+				sb.WriteString(fmtID(lureList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.LureRowText(tr, lureAPIToTracking(&lureList[i])), lureList[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -211,13 +289,11 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if !cfg.DisableGym {
-		gyms, err := ctx.Tracking.Gyms.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select gyms: %v", err)
-		} else if len(gyms) > 0 {
+		if len(gymList) > 0 {
 			sb.WriteString(tr.T("section.gyms") + "\n")
-			for i := range gyms {
-				sb.WriteString(warnRow(ctx.RowText.GymRowText(tr, gymAPIToTracking(&gyms[i])), gyms[i].Distance))
+			for i := range gymList {
+				sb.WriteString(fmtID(gymList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.GymRowText(tr, gymAPIToTracking(&gymList[i])), gymList[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -227,13 +303,11 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if !cfg.DisableNest {
-		nests, err := ctx.Tracking.Nests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select nests: %v", err)
-		} else if len(nests) > 0 {
+		if len(nestList) > 0 {
 			sb.WriteString(tr.T("section.nests") + "\n")
-			for i := range nests {
-				sb.WriteString(warnRow(ctx.RowText.NestRowText(tr, nestAPIToTracking(&nests[i])), nests[i].Distance))
+			for i := range nestList {
+				sb.WriteString(fmtID(nestList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.NestRowText(tr, nestAPIToTracking(&nestList[i])), nestList[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -243,13 +317,11 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if !cfg.DisablePokestop {
-		forts, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select forts: %v", err)
-		} else if len(forts) > 0 {
+		if len(fortList) > 0 {
 			sb.WriteString(tr.T("section.forts") + "\n")
-			for i := range forts {
-				sb.WriteString(warnRow(ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&forts[i])), forts[i].Distance))
+			for i := range fortList {
+				sb.WriteString(fmtID(fortList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.FortUpdateRowText(tr, fortAPIToTracking(&fortList[i])), fortList[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
@@ -259,19 +331,23 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if !cfg.DisableMaxBattle {
-		maxbattles, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
-		if err != nil {
-			log.Errorf("tracked: select maxbattles: %v", err)
-		} else if len(maxbattles) > 0 {
+		if len(maxbattleList) > 0 {
 			sb.WriteString(tr.T("section.maxbattles") + "\n")
-			for i := range maxbattles {
-				sb.WriteString(warnRow(ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&maxbattles[i])), maxbattles[i].Distance))
+			for i := range maxbattleList {
+				sb.WriteString(fmtID(maxbattleList[i].UID))
+				sb.WriteString(warnRow(ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(&maxbattleList[i])), maxbattleList[i].Distance))
 				sb.WriteByte('\n')
 			}
 		} else {
 			sb.WriteString(tr.T("section.maxbattles.none"))
 		}
 		sb.WriteByte('\n')
+	}
+
+	// Hint about id-based removal
+	if hasAnyRules {
+		prefix := commandPrefix(ctx)
+		sb.WriteString("\n" + tr.Tf("tracking.id_hint", prefix, prefix))
 	}
 
 	// Summary warnings at the end

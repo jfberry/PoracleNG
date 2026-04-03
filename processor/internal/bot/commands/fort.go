@@ -17,6 +17,7 @@ func (c *FortCommand) Name() string      { return "cmd.fort" }
 func (c *FortCommand) Aliases() []string { return nil }
 
 var fortParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
@@ -101,6 +102,9 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	changeTypesStr := strings.Join(changeTypes, ",")
 
 	if parsed.HasKeyword("arg.remove") {
+		if len(parsed.RemoveUIDs) > 0 {
+			return removeByUIDs(ctx, ctx.Tracking.Forts, parsed.RemoveUIDs)
+		}
 		return c.removeForts(ctx, fortType)
 	}
 

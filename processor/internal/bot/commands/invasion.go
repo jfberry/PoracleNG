@@ -18,6 +18,7 @@ func (c *InvasionCommand) Name() string      { return "cmd.invasion" }
 func (c *InvasionCommand) Aliases() []string { return []string{"cmd.incident"} }
 
 var invasionParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
@@ -150,7 +151,7 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 
 	if parsed.HasKeyword("arg.remove") {
-		return c.removeInvasions(ctx, gruntTypes)
+		return c.removeInvasions(ctx, parsed, gruntTypes)
 	}
 
 	insert := make([]db.InvasionTrackingAPI, 0, len(gruntTypes))
@@ -207,7 +208,11 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	return []bot.Reply{{React: react, Text: message}}
 }
 
-func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, gruntTypes []string) []bot.Reply {
+func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, parsed *bot.ParsedArgs, gruntTypes []string) []bot.Reply {
+	if len(parsed.RemoveUIDs) > 0 {
+		return removeByUIDs(ctx, ctx.Tracking.Invasions, parsed.RemoveUIDs)
+	}
+
 	tracked, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("invasion command: select for remove: %s", err)

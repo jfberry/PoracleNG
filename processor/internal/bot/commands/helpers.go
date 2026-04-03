@@ -3,9 +3,12 @@ package commands
 import (
 	"strings"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // commandPrefix returns the appropriate command prefix for the platform.
@@ -178,4 +181,16 @@ func buildTrackingMessage(
 		sb.WriteByte('\n')
 	}
 	return sb.String()
+}
+
+// removeByUIDs deletes tracking rows by their UIDs. Works for any tracking type.
+// Used by all "remove id:XX" commands.
+func removeByUIDs[T any](ctx *bot.CommandContext, trackingStore store.TrackingStore[T], uids []int64) []bot.Reply {
+	tr := ctx.Tr()
+	if err := trackingStore.DeleteByUIDs(ctx.TargetID, uids); err != nil {
+		log.Errorf("remove by uid: %v", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+	ctx.TriggerReload()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.removed_n", len(uids))}}
 }

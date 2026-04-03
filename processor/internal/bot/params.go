@@ -16,6 +16,7 @@ const (
 	ParamRaidLevelName ParamType = iota // legendary, mega, shadow, ultra beast
 	ParamPVPLeague     ParamType = iota // great5, ultra10-50, greathigh3, greatcp1400
 	ParamLatLon        ParamType = iota // 51.28,1.08
+	ParamRemoveUID     ParamType = iota // id:45, id:46 — tracking UID for removal
 )
 
 // ParamDef defines a parameter that a command accepts.
@@ -74,6 +75,8 @@ type ParsedArgs struct {
 	RaidLevels []int
 	// PVP filters by league key: "great" → {Best:1, Worst:5, MinCP:0}
 	PVP map[string]PVPFilter
+	// Tracking UIDs for id-based removal: "id:45 id:46" → [45, 46]
+	RemoveUIDs []int64
 	// Parsed coordinates
 	Coords *LatLon
 	// Tokens that matched nothing

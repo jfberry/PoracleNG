@@ -16,6 +16,7 @@ func (c *RaidCommand) Name() string      { return "cmd.raid" }
 func (c *RaidCommand) Aliases() []string { return nil }
 
 var raidParams = []bot.ParamDef{
+	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixRange, Key: "arg.prefix.level"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
@@ -210,6 +211,10 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 }
 
 func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
+	if len(parsed.RemoveUIDs) > 0 {
+		return removeByUIDs(ctx, ctx.Tracking.Raids, parsed.RemoveUIDs)
+	}
+
 	tracked, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
 	if err != nil {
 		log.Errorf("raid command: select for remove: %s", err)
