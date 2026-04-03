@@ -525,8 +525,8 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 			continue
 		}
 
-		// Text message
-		if reply.Text != "" {
+		// Text message (skip if ImageURL is set — text goes in the embed instead)
+		if reply.Text != "" && reply.ImageURL == "" {
 			messages := bot.SplitMessage(reply.Text, 2000)
 			for i, msg := range messages {
 				msgSend := &discordgo.MessageSend{Content: msg}
