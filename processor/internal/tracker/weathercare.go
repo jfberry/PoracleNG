@@ -51,8 +51,10 @@ func (wct *WeatherCareTracker) Register(cellID string, entry WeatherCareEntry) {
 		if entry.CaresUntil > existing.CaresUntil {
 			existing.CaresUntil = entry.CaresUntil
 		}
-		// Update mutable fields
-		existing.Clean = entry.Clean
+		// Clean is true if ANY matched pokemon has clean=true
+		if entry.Clean {
+			existing.Clean = true
+		}
 		existing.Ping = entry.Ping
 		existing.Language = entry.Language
 		existing.Template = entry.Template

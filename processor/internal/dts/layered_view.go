@@ -2,6 +2,7 @@ package dts
 
 import (
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/geo"
@@ -318,12 +319,13 @@ func buildComputedFields(base, perLang map[string]any, emoji map[string]string, 
 }
 
 // buildAliasLookup returns a map of alias → source field name for a given template type.
-// Cached per type since the alias tables are static.
-var aliasLookupCache = make(map[string]map[string]string)
+// Cached per type since the alias tables are static. Uses sync.Map for safe concurrent access
+// from render worker goroutines.
+var aliasLookupCache sync.Map
 
 func buildAliasLookup(templateType string) map[string]string {
-	if cached, ok := aliasLookupCache[templateType]; ok {
-		return cached
+	if cached, ok := aliasLookupCache.Load(templateType); ok {
+		return cached.(map[string]string)
 	}
 	m := make(map[string]string, len(commonAliases)+10)
 	for _, a := range commonAliases {
@@ -334,6 +336,6 @@ func buildAliasLookup(templateType string) map[string]string {
 			m[a.alias] = a.source
 		}
 	}
-	aliasLookupCache[templateType] = m
+	aliasLookupCache.Store(templateType, m)
 	return m
 }

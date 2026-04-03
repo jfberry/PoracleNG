@@ -394,22 +394,6 @@ func (r *Renderer) renderGrouped(
 	return jobs
 }
 
-// cloneMessage creates a shallow copy of a map[string]any message so that
-// mutations (like appendPing) don't affect the shared rendered object.
-// Only top-level keys are copied; nested maps/slices are shared by reference.
-// This is safe because appendPing only replaces the top-level "content" key.
-func cloneMessage(msg any) any {
-	if m, ok := msg.(map[string]any); ok {
-		clone := make(map[string]any, len(m))
-		for k, v := range m {
-			clone[k] = v
-		}
-		return clone
-	}
-	return msg
-}
-
-// truncateCoord formats a coordinate as a string, truncated to 8 characters.
 // lookupFloat finds a float value by key, checking enrichment first then webhookFields.
 func lookupFloat(enrichment, webhookFields map[string]any, key string) float64 {
 	if v, ok := enrichment[key]; ok {
@@ -533,13 +517,6 @@ func fallbackMessage(templateType, platform, templateID, language string) string
 	obj := map[string]string{"content": msg}
 	b, _ := json.Marshal(obj)
 	return string(b)
-}
-
-// fallbackMessageObject returns a map for a fallback error message.
-func fallbackMessageObject(templateType, platform, templateID, language string) map[string]any {
-	return map[string]any{
-		"content": fmt.Sprintf("Template not found: %s/%s/%s/%s", templateType, platform, templateID, language),
-	}
 }
 
 // appendPing appends a ping string to the message's "content" field.
