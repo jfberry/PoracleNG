@@ -179,6 +179,11 @@ func (r *Reconciliation) SyncDiscordRole(registerNewUsers, syncNames, removeInva
 // ReconcileSingleUser fetches a single user's roles from all guilds and reconciles.
 // Called from event handlers (guildMemberUpdate, guildMemberRemove).
 func (r *Reconciliation) ReconcileSingleUser(id string, removeInvalidUsers bool) {
+	// Never reconcile admins — they should not be disabled by role changes
+	if isAdminID(r.cfg, id) {
+		return
+	}
+
 	r.log.Debugf("Check (single) user %s", id)
 
 	roleList := make([]string, 0)
