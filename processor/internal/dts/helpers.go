@@ -502,4 +502,26 @@ func registerFormattingHelpers() {
 		}
 		return fmt.Sprintf("%0*d", w, int(toFloat(value)))
 	})
+
+	// addCommas — format number with thousand separators. Usage: {{addCommas 12345}} → "12,345"
+	raymond.RegisterHelper("addCommas", func(value interface{}) interface{} {
+		n := int64(toFloat(value))
+		if n == 0 {
+			return "0"
+		}
+		sign := ""
+		if n < 0 {
+			sign = "-"
+			n = -n
+		}
+		s := strconv.FormatInt(n, 10)
+		var result []byte
+		for i, c := range s {
+			if i > 0 && (len(s)-i)%3 == 0 {
+				result = append(result, ',')
+			}
+			result = append(result, byte(c))
+		}
+		return sign + string(result)
+	})
 }
