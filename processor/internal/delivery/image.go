@@ -45,13 +45,17 @@ func DownloadImage(client *http.Client, url string) ([]byte, error) {
 	return data, nil
 }
 
-// NormalizeDiscordMessage normalizes a Discord message JSON payload:
+// NormalizeAndExtractImage normalizes a Discord message JSON payload and optionally
+// extracts the embed image URL — all in a single JSON parse. Returns the normalized
+// JSON and the image URL (empty if none or extractImage is false).
+//
+// Normalization:
 //   - Converts singular "embed" to "embeds" array
 //   - Coerces string color values in embeds to integers
-func NormalizeDiscordMessage(raw json.RawMessage) (json.RawMessage, error) {
+func NormalizeAndExtractImage(raw json.RawMessage, extractImage bool) (json.RawMessage, string, error) {
 	var msg map[string]any
 	if err := json.Unmarshal(raw, &msg); err != nil {
-		return nil, fmt.Errorf("parsing discord message: %w", err)
+		return nil, "", fmt.Errorf("parsing discord message: %w", err)
 	}
 
 	// Convert singular embed to embeds array.
@@ -63,15 +67,28 @@ func NormalizeDiscordMessage(raw json.RawMessage) (json.RawMessage, error) {
 	}
 
 	// Coerce color strings in each embed.
+	var imageURL string
 	if embeds, ok := msg["embeds"].([]any); ok {
 		for _, e := range embeds {
 			if embed, ok := e.(map[string]any); ok {
 				coerceEmbedColor(embed)
 			}
 		}
+		// Extract image URL from first embed (same parse pass).
+		if extractImage && len(embeds) > 0 {
+			if embed, ok := embeds[0].(map[string]any); ok {
+				if image, ok := embed["image"].(map[string]any); ok {
+					imageURL, _ = image["url"].(string)
+				}
+			}
+		}
 	}
 
-	return marshalNoEscape(msg)
+	result, err := marshalNoEscape(msg)
+	if err != nil {
+		return nil, "", err
+	}
+	return result, imageURL, nil
 }
 
 // coerceEmbedColor converts a string "color" field to an integer in-place.
@@ -122,34 +139,9 @@ func isHexColor(s string) bool {
 	return true
 }
 
-// ExtractEmbedImageURL returns embeds[0].image.url from a Discord message, or "".
-func ExtractEmbedImageURL(raw json.RawMessage) string {
-	var msg map[string]any
-	if err := json.Unmarshal(raw, &msg); err != nil {
-		return ""
-	}
-
-	embeds, ok := msg["embeds"].([]any)
-	if !ok || len(embeds) == 0 {
-		return ""
-	}
-
-	embed, ok := embeds[0].(map[string]any)
-	if !ok {
-		return ""
-	}
-
-	image, ok := embed["image"].(map[string]any)
-	if !ok {
-		return ""
-	}
-
-	url, _ := image["url"].(string)
-	return url
-}
-
 // ReplaceEmbedImageURL sets embeds[0].image.url to "attachment://map.png".
-// Returns the original payload if parsing or re-serialization fails.
+// This is the only function that needs a second JSON parse — called only when
+// an image was successfully downloaded and needs to be replaced with an attachment.
 func ReplaceEmbedImageURL(raw json.RawMessage) json.RawMessage {
 	var msg map[string]any
 	if err := json.Unmarshal(raw, &msg); err != nil {

@@ -13,7 +13,7 @@ import (
 
 func TestNormalizeEmbedToEmbeds(t *testing.T) {
 	input := json.RawMessage(`{"content":"hello","embed":{"title":"test","color":123}}`)
-	result, err := NormalizeDiscordMessage(input)
+	result, _, err := NormalizeAndExtractImage(input, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestNormalizeColorHex(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := NormalizeDiscordMessage(json.RawMessage(tc.input))
+			result, _, err := NormalizeAndExtractImage(json.RawMessage(tc.input), false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -76,7 +76,7 @@ func TestNormalizeColorHex(t *testing.T) {
 
 func TestNormalizeColorDecimal(t *testing.T) {
 	input := json.RawMessage(`{"embeds":[{"color":"1216493"}]}`)
-	result, err := NormalizeDiscordMessage(input)
+	result, _, err := NormalizeAndExtractImage(input, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestNormalizeColorDecimal(t *testing.T) {
 
 func TestNormalizeColorAlreadyInt(t *testing.T) {
 	input := json.RawMessage(`{"embeds":[{"color":1216493}]}`)
-	result, err := NormalizeDiscordMessage(input)
+	result, _, err := NormalizeAndExtractImage(input, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,15 +120,29 @@ func TestNormalizeColorAlreadyInt(t *testing.T) {
 	}
 }
 
-func TestExtractEmbedImageURL(t *testing.T) {
+func TestNormalizeAndExtractImage(t *testing.T) {
 	input := json.RawMessage(`{"embeds":[{"image":{"url":"https://example.com/tile.png"}}]}`)
-	url := ExtractEmbedImageURL(input)
-	if url != "https://example.com/tile.png" {
-		t.Errorf("expected https://example.com/tile.png, got %q", url)
+	_, imageURL, err := NormalizeAndExtractImage(input, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imageURL != "https://example.com/tile.png" {
+		t.Errorf("expected https://example.com/tile.png, got %q", imageURL)
 	}
 }
 
-func TestExtractEmbedImageURLMissing(t *testing.T) {
+func TestNormalizeAndExtractImage_NoExtract(t *testing.T) {
+	input := json.RawMessage(`{"embeds":[{"image":{"url":"https://example.com/tile.png"}}]}`)
+	_, imageURL, err := NormalizeAndExtractImage(input, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imageURL != "" {
+		t.Errorf("expected empty when extractImage=false, got %q", imageURL)
+	}
+}
+
+func TestNormalizeAndExtractImage_Missing(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -141,11 +155,40 @@ func TestExtractEmbedImageURLMissing(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			url := ExtractEmbedImageURL(json.RawMessage(tc.input))
-			if url != "" {
-				t.Errorf("expected empty string, got %q", url)
+			_, imageURL, err := NormalizeAndExtractImage(json.RawMessage(tc.input), true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if imageURL != "" {
+				t.Errorf("expected empty string, got %q", imageURL)
 			}
 		})
+	}
+}
+
+func TestNormalizeEmbedAndExtractImage(t *testing.T) {
+	// Test that embed→embeds normalization AND image extraction work in one pass
+	input := json.RawMessage(`{"embed":{"image":{"url":"https://example.com/tile.png"},"color":"#FF0000"}}`)
+	result, imageURL, err := NormalizeAndExtractImage(input, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if imageURL != "https://example.com/tile.png" {
+		t.Errorf("expected image URL, got %q", imageURL)
+	}
+
+	var msg map[string]any
+	if err := json.Unmarshal(result, &msg); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := msg["embed"]; ok {
+		t.Error("embed key should be removed")
+	}
+	embeds := msg["embeds"].([]any)
+	embed := embeds[0].(map[string]any)
+	color, _ := embed["color"].(float64)
+	if color != 0xFF0000 {
+		t.Errorf("expected color 16711680, got %v", color)
 	}
 }
 

@@ -164,7 +164,7 @@ func (ds *DiscordSender) ensureDMChannel(ctx context.Context, userID string) (st
 func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage) (*SentMessage, error) {
 	ds.rateLimiter.Wait(channelID)
 
-	normalized, err := NormalizeDiscordMessage(message)
+	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
 	}
@@ -172,19 +172,17 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 	var reqBody io.Reader
 	var contentType string
 
-	if ds.uploadImages {
-		if imageURL := ExtractEmbedImageURL(normalized); imageURL != "" {
-			log.Debugf("discord: uploading embed image for bot/%s", channelID)
-			if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
-				normalized = ReplaceEmbedImageURL(normalized)
-				buf, ct, err := BuildMultipartMessage(normalized, imageData, "files[0]")
-				if err == nil {
-					reqBody = buf
-					contentType = ct
-				}
-			} else {
-				log.Debugf("discord: image download failed for %s, sending without: %v", channelID, err)
+	if imageURL != "" {
+		log.Debugf("discord: uploading embed image for bot/%s", channelID)
+		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
+			normalized = ReplaceEmbedImageURL(normalized)
+			buf, ct, err := BuildMultipartMessage(normalized, imageData, "files[0]")
+			if err == nil {
+				reqBody = buf
+				contentType = ct
 			}
+		} else {
+			log.Debugf("discord: image download failed for %s, sending without: %v", channelID, err)
 		}
 	}
 
@@ -201,7 +199,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, message json.RawMessage) (*SentMessage, error) {
 	ds.rateLimiter.Wait(webhookURL)
 
-	normalized, err := NormalizeDiscordMessage(message)
+	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
 	}
@@ -209,19 +207,17 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 	var reqBody io.Reader
 	var contentType string
 
-	if ds.uploadImages {
-		if imageURL := ExtractEmbedImageURL(normalized); imageURL != "" {
-			log.Debugf("discord: uploading embed image for webhook/%s", webhookURL)
-			if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
-				normalized = ReplaceEmbedImageURL(normalized)
-				buf, ct, err := BuildMultipartMessage(normalized, imageData, "file")
-				if err == nil {
-					reqBody = buf
-					contentType = ct
-				}
-			} else {
-				log.Debugf("discord: image download failed for %s, sending without: %v", webhookURL, err)
+	if imageURL != "" {
+		log.Debugf("discord: uploading embed image for webhook/%s", webhookURL)
+		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
+			normalized = ReplaceEmbedImageURL(normalized)
+			buf, ct, err := BuildMultipartMessage(normalized, imageData, "file")
+			if err == nil {
+				reqBody = buf
+				contentType = ct
 			}
+		} else {
+			log.Debugf("discord: image download failed for %s, sending without: %v", webhookURL, err)
 		}
 	}
 
