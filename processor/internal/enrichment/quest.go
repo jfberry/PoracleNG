@@ -118,6 +118,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 		}
 	}
 
+	e.setFallbackImg(m, e.FallbackImgURL)
 
 	return m, pending
 }

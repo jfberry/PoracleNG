@@ -66,6 +66,21 @@ type Enricher struct {
 	RequestShinyImages bool                   // Whether to request shiny icon variants
 	StaticMap          *staticmap.Resolver    // Static map tile resolver (nil = disabled)
 	Geocoder           *geocoding.Geocoder    // Reverse geocoder (nil = disabled)
+
+	// Fallback icon URLs when uicons are not configured or fail
+	FallbackImgURL       string
+	FallbackImgWeather   string
+	FallbackImgEgg       string
+	FallbackImgGym       string
+	FallbackImgPokestop  string
+	FallbackPokestopURL  string
+}
+
+// setFallbackImg sets imgUrl to the fallback if it wasn't set by uicons.
+func (e *Enricher) setFallbackImg(m map[string]any, fallback string) {
+	if _, ok := m["imgUrl"]; !ok && fallback != "" {
+		m["imgUrl"] = fallback
+	}
 }
 
 // New creates a new Enricher.

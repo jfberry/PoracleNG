@@ -89,6 +89,7 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 		}
 	}
 
+	e.setFallbackImg(m, e.FallbackImgURL)
 
 	return m, pending
 }

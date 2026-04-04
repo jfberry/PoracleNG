@@ -61,6 +61,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldS
 		}
 	}
 
+	e.setFallbackImg(m, e.FallbackImgGym)
 
 	return m, pending
 }

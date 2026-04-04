@@ -199,6 +199,7 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.For
 	}
 	pending := e.addStaticMap(m, "fort-update", mapLat, mapLon, webhookFields)
 
+	e.setFallbackImg(m, e.FallbackImgPokestop)
 
 	return m, pending
 }

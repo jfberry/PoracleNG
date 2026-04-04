@@ -54,6 +54,11 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 		}
 	}
 
+	e.setFallbackImg(m, e.FallbackImgPokestop)
+	if _, ok := m["pokestop_url"]; !ok && e.FallbackPokestopURL != "" {
+		m["pokestop_url"] = e.FallbackPokestopURL
+	}
+
 	return m, pending
 }
 

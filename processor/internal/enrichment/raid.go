@@ -176,7 +176,9 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 	}
 
 	if raid.PokemonID > 0 {
+		e.setFallbackImg(m, e.FallbackImgURL)
 	} else {
+		e.setFallbackImg(m, e.FallbackImgEgg)
 	}
 	return m, pending
 }

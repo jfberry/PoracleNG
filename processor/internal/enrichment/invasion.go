@@ -109,6 +109,11 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 		}
 	}
 
+	e.setFallbackImg(m, e.FallbackImgPokestop)
+	if _, ok := m["pokestop_url"]; !ok && e.FallbackPokestopURL != "" {
+		m["pokestop_url"] = e.FallbackPokestopURL
+	}
+
 	return m, pending
 }
 

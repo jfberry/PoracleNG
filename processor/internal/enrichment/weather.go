@@ -53,6 +53,8 @@ func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, coords [][2]
 		pending = e.addStaticMap(m, "weather", lat, lon, webhookFields)
 	}
 
+	e.setFallbackImg(m, e.FallbackImgWeather)
+
 	return m, pending
 }
 

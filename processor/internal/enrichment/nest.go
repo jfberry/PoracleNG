@@ -117,6 +117,7 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.T
 		}
 	}
 
+	e.setFallbackImg(m, e.FallbackImgURL)
 
 	return m, pending
 }

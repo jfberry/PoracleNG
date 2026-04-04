@@ -797,6 +797,14 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	enricher.DefaultLocale = cfg.General.Locale
 	enricher.RequestShinyImages = cfg.General.RequestShinyImages
 
+	// Fallback icon URLs
+	enricher.FallbackImgURL = cfg.Fallbacks.ImgURL
+	enricher.FallbackImgWeather = cfg.Fallbacks.ImgURLWeather
+	enricher.FallbackImgEgg = cfg.Fallbacks.ImgURLEgg
+	enricher.FallbackImgGym = cfg.Fallbacks.ImgURLGym
+	enricher.FallbackImgPokestop = cfg.Fallbacks.ImgURLPokestop
+	enricher.FallbackPokestopURL = cfg.Fallbacks.PokestopURL
+
 	// Scanner DB and static map tile resolver
 	var scannerInstance scanner.Scanner
 	if cfg.Database.Scanner.Configured() {

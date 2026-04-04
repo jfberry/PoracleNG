@@ -198,6 +198,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		"seen_type":          pokemon.SeenType,
 	})
 
+	e.setFallbackImg(m, e.FallbackImgURL)
 	return m, pending
 }
 

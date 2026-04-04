@@ -467,7 +467,13 @@ type TileserverConfig struct {
 
 // FallbacksConfig holds fallback URLs from the [fallbacks] section.
 type FallbacksConfig struct {
-	StaticMap string `toml:"static_map"`
+	StaticMap    string `toml:"static_map"`
+	ImgURL       string `toml:"img_url"`        // fallback pokemon icon
+	ImgURLWeather string `toml:"img_url_weather"` // fallback weather icon
+	ImgURLEgg    string `toml:"img_url_egg"`     // fallback egg icon
+	ImgURLGym    string `toml:"img_url_gym"`     // fallback gym icon
+	ImgURLPokestop string `toml:"img_url_pokestop"` // fallback pokestop icon
+	PokestopURL  string `toml:"pokestop_url"`    // fallback pokestop URL (for pokestop_url field)
 }
 
 // ResolvePath resolves a path relative to the config file's directory.
@@ -576,7 +582,13 @@ func Load(baseDir string) (*Config, error) {
 			Enabled: true,
 		},
 		Fallbacks: FallbacksConfig{
-			StaticMap: "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png",
+			StaticMap:      "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png",
+			ImgURL:         "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/mon.png",
+			ImgURLWeather:  "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/weather.png",
+			ImgURLEgg:      "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/uni.png",
+			ImgURLGym:      "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/gym.png",
+			ImgURLPokestop: "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png",
+			PokestopURL:    "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png",
 		},
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
