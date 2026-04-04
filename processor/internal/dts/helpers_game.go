@@ -192,6 +192,18 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 		var ivAtk, ivDef, ivSta int
 
 		switch v := baseStatsOrID.(type) {
+		case map[string]int:
+			// Enrichment stores baseStats as map[string]int
+			if len(args) < 4 {
+				return 10
+			}
+			baseAtk = v["baseAttack"]
+			baseDef = v["baseDefense"]
+			baseSta = v["baseStamina"]
+			level = toFloat(args[0])
+			ivAtk = int(toFloat(args[1]))
+			ivDef = int(toFloat(args[2]))
+			ivSta = int(toFloat(args[3]))
 		case map[string]interface{}:
 			if len(args) < 4 {
 				return 10

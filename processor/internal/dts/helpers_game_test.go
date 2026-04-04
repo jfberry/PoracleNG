@@ -278,6 +278,20 @@ func TestCalculateCpMinimum(t *testing.T) {
 	}
 }
 
+func TestCalculateCpWithBaseStatsMap(t *testing.T) {
+	ctx := map[string]interface{}{
+		"baseStats": map[string]int{
+			"baseAttack":  300,
+			"baseDefense": 182,
+			"baseStamina": 214,
+		},
+	}
+	got := renderWithData(t, `{{calculateCp baseStats 20 15 15 15}}`, ctx, nil)
+	if got != "2387" {
+		t.Errorf("calculateCp with map[string]int baseStats: got %q, want %q", got, "2387")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Move helpers
 // ---------------------------------------------------------------------------
