@@ -109,6 +109,7 @@
 
   "msg.language.changed": "Jag har ändrat ditt språk till {0}",
   "msg.language.current": "Aktivt språk är inställt på {0}",
+  "msg.language.available": "Tillgängliga språk: {0}",
   "msg.language.unknown": "Tillgängliga språk är: {0}",
 
   "msg.location.new": "Ny plats",

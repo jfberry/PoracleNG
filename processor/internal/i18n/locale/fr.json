@@ -286,6 +286,7 @@
 
   "msg.language.changed": "Langue mise à jour pour {0}",
   "msg.language.current": "La langue actuellement configurée est {0}",
+  "msg.language.available": "Langues disponibles : {0}",
   "msg.language.unknown": "Les langues disponibles sont : {0}",
 
   "msg.location.not_found": "Position non reconnue",

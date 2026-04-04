@@ -315,6 +315,7 @@
   "msg.track.invalid_cap": "This level cap is not supported, valid choices are: {0}",
 
   "msg.language.current": "Aktuell eingestellte Sprache: {0}",
+  "msg.language.available": "Verfügbare Sprachen: {0}",
 
   "msg.location.not_found": "Konnte den Standort nicht verstehen",
   "msg.location.new": "Neuer Standort",

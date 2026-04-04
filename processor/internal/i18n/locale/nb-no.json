@@ -121,6 +121,7 @@
 
   "msg.language.changed": "Ditt språk er endret til {0}",
   "msg.language.current": "Aktivt språk er satt til {0}",
+  "msg.language.available": "Tilgjengelige språk: {0}",
   "msg.language.unknown": "Tilgjengelige språk: {0}",
 
   "msg.location.not_found": "Kunne ikke forstå hva slags posisjon du forsøkte å angi",

@@ -267,6 +267,7 @@
 
   "msg.language.changed": "Ho cambiato l'impostazione della tua lingua in {0}",
   "msg.language.current": "Lingua corrente impostata su {0}",
+  "msg.language.available": "Lingue disponibili: {0}",
   "msg.language.unknown": "Riconosco solo le seguenti lingue: {0}",
 
   "msg.location.not_found": "Posizione non riconosciuta",

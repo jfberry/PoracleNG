@@ -462,6 +462,7 @@
 
   "msg.language.changed": "I have changed your language setting to {0}",
   "msg.language.current": "Current language is set to {0}",
+  "msg.language.available": "Available languages: {0}",
 
   "msg.location.not_found": "Could not understand the location",
   "msg.location.new": "New location",

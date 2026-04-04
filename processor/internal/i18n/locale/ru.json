@@ -274,6 +274,7 @@
 
   "msg.language.changed": "Язык изменен на {0}",
   "msg.language.current": "Текущий язык: {0}",
+  "msg.language.available": "Доступные языки: {0}",
   "msg.language.unknown": "Можно выбрать следующие языки: {0}",
 
   "msg.location.not_found": "Координаты заданы неверно",

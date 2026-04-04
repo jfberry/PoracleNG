@@ -106,6 +106,10 @@
   "msg.area.removed": "Usunięto obszar: {0}",
   "msg.area.current": "Dostępne obszary:",
 
+  "msg.language.changed": "Zmieniłem język na {0}",
+  "msg.language.current": "Aktualny język to {0}",
+  "msg.language.available": "Dostępne języki: {0}",
+
   "cmd.invasion": "inwazja",
 
   "language.en": "Angielski",

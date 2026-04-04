@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
@@ -42,11 +43,24 @@ func TestLanguageCommand_Invalid(t *testing.T) {
 
 func TestLanguageCommand_NoArgs(t *testing.T) {
 	ctx, _ := testCtx(t)
+	ctx.Config.General.AvailableLanguages = map[string]config.LanguageEntry{
+		"en": {},
+		"de": {},
+	}
 
 	cmd := &LanguageCommand{}
 	replies := cmd.Run(ctx, nil)
 
-	assertReact(t, replies, "🙅")
+	// No args should show current language, not an error
+	if len(replies) == 0 {
+		t.Fatal("expected reply")
+	}
+	if replies[0].React == "🙅" {
+		t.Errorf("should not be an error react")
+	}
+	if !strings.Contains(replies[0].Text, "en") {
+		t.Errorf("should mention current language, got: %s", replies[0].Text)
+	}
 }
 
 func TestLanguageCommand_CaseInsensitive(t *testing.T) {
