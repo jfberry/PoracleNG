@@ -17,7 +17,7 @@ type Config struct {
 	Weather        WeatherConfig        `toml:"weather"`
 	Tuning         TuningConfig         `toml:"tuning"`
 	Stats          StatsConfig          `toml:"stats"`
-	Area           AreaConfig           `toml:"areaSecurity"`
+	Area           AreaConfig           `toml:"area_security"`
 	Locale         LocaleConfig         `toml:"locale"`
 	Logging        LoggingConfig        `toml:"logging"`
 	WebhookLogging WebhookLoggingConfig `toml:"webhookLogging"`
@@ -45,8 +45,13 @@ type GeneralConfig struct {
 	StickerURL           string `toml:"sticker_url"`
 	RequestShinyImages   bool   `toml:"request_shiny_images"`
 	PopulatePokestopName bool   `toml:"populate_pokestop_name"`
-	AlertMinimumTime     int    `toml:"alert_minimum_time"`   // seconds before expiry inside which alerts are dropped
-	IgnoreLongRaids      bool   `toml:"ignore_long_raids"`    // skip raids/eggs with TTH > 47 minutes
+	AlertMinimumTime     int            `toml:"alert_minimum_time"`        // seconds before expiry inside which alerts are dropped
+	IgnoreLongRaids      bool           `toml:"ignore_long_raids"`         // skip raids/eggs with TTH > 47 minutes
+	ShortlinkProvider    string         `toml:"shortlink_provider"`        // "shlink" or empty
+	ShortlinkProviderURL string         `toml:"shortlink_provider_url"`    // Shlink instance URL
+	ShortlinkProviderKey string         `toml:"shortlink_provider_key"`    // Shlink API key
+	ShortlinkDomain      string         `toml:"shortlink_provider_domain"` // Shlink domain override
+	DTSDictionary        map[string]any `toml:"dts_dictionary"`            // custom key-value pairs for DTS templates
 }
 
 type LocaleConfig struct {
@@ -193,12 +198,12 @@ type KojiOptions struct {
 
 type PVPConfig struct {
 	PVPQueryMaxRank            int   `toml:"pvp_query_max_rank"`
-	PVPFilterMaxRank           int   `toml:"pvp_filter_max_rank"`
-	PVPEvolutionDirectTracking bool  `toml:"pvp_evolution_direct_tracking"`
+	PVPFilterMaxRank           int   `toml:"filter_max_rank"`
+	PVPEvolutionDirectTracking bool  `toml:"evolution_direct_tracking"`
 	LevelCaps                  []int `toml:"level_caps"`
-	PVPFilterGreatMinCP        int   `toml:"pvp_filter_great_min_cp"`
-	PVPFilterUltraMinCP        int   `toml:"pvp_filter_ultra_min_cp"`
-	PVPFilterLittleMinCP       int   `toml:"pvp_filter_little_min_cp"`
+	PVPFilterGreatMinCP        int   `toml:"filter_great_min_cp"`
+	PVPFilterUltraMinCP        int   `toml:"filter_ultra_min_cp"`
+	PVPFilterLittleMinCP       int   `toml:"filter_little_min_cp"`
 	IncludeMegaEvolution       bool  `toml:"include_mega_evolution"`
 	DisplayMaxRank             int   `toml:"display_max_rank"`
 	DisplayGreatMinCP          int   `toml:"display_great_min_cp"`

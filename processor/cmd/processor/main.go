@@ -716,6 +716,14 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	if gd != nil {
 		utilEmojis = gd.Util.Emojis
 	}
+	// Shortlink URL shortener (for <S< ... >S> markers in DTS templates)
+	var shlinkURL, shlinkKey, shlinkDomain string
+	if cfg.General.ShortlinkProvider == "shlink" && cfg.General.ShortlinkProviderURL != "" {
+		shlinkURL = cfg.General.ShortlinkProviderURL
+		shlinkKey = cfg.General.ShortlinkProviderKey
+		shlinkDomain = cfg.General.ShortlinkDomain
+	}
+
 	dtsRenderer, err = dts.NewRenderer(dts.RendererConfig{
 		ConfigDir:     filepath.Join(cfg.BaseDir, "config"),
 		FallbackDir:   filepath.Join(cfg.BaseDir, "fallbacks"),
@@ -724,6 +732,10 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		UtilEmojis:    utilEmojis,
 		DefaultLocale: cfg.General.Locale,
 		MinAlertTime:  cfg.General.AlertMinimumTime,
+		ShlinkURL:     shlinkURL,
+		ShlinkKey:     shlinkKey,
+		ShlinkDomain:  shlinkDomain,
+		DTSDictionary: cfg.General.DTSDictionary,
 	})
 	if err != nil {
 		log.Warnf("DTS renderer initialization failed: %s", err)
