@@ -85,6 +85,9 @@ func NewLayeredView(
 		lv.computed["emoji"] = resolved
 	}
 
+	// Resolve emoji keys inside weaknessList entries (per-platform)
+	resolveWeaknessEmojis(vb.emoji, perLang, platform)
+
 	// Escape user-generated content (pokestop/gym names) into computed layer
 	escapeUserContentLayered(lv.computed, base, webhookFields)
 
@@ -232,6 +235,36 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang map[string]any, platform st
 	}
 
 	return result
+}
+
+// resolveWeaknessEmojis resolves emoji keys inside weaknessList entries.
+// Each type entry gets "emoji" resolved, and each category gets "typeEmoji" as a joined string.
+// This must happen during view construction because it requires the platform for the emoji lookup.
+func resolveWeaknessEmojis(emojiLookup *EmojiLookup, perLang map[string]any, platform string) {
+	if perLang == nil || emojiLookup == nil {
+		return
+	}
+	raw, ok := perLang["weaknessList"]
+	if !ok {
+		return
+	}
+	weaknessList, ok := raw.([]map[string]any)
+	if !ok {
+		return
+	}
+
+	for _, cat := range weaknessList {
+		types, _ := cat["types"].([]map[string]any)
+		var typeEmojis []string
+		for _, entry := range types {
+			if key, ok := entry["emojiKey"].(string); ok && key != "" {
+				resolved := emojiLookup.Lookup(key, platform)
+				entry["emoji"] = resolved
+				typeEmojis = append(typeEmojis, resolved)
+			}
+		}
+		cat["typeEmoji"] = strings.Join(typeEmojis, "")
+	}
 }
 
 // buildComputedFields creates the small set of derived fields.

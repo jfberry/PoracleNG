@@ -363,7 +363,7 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 
 	// Translated weakness list
 	if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
-		m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr)
+		m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr, gd)
 	}
 
 	// Evolution chain

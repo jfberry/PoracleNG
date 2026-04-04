@@ -13,6 +13,7 @@ import (
 // Raid builds enrichment fields for a raid or egg webhook.
 func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
+	m["pokemon_id"] = raid.PokemonID
 	m["firstNotification"] = firstNotification
 
 	tz := geo.GetTimezone(raid.Latitude, raid.Longitude)
@@ -231,7 +232,7 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 
 		// Weakness
 		if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
-			m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr)
+			m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr, gd)
 		}
 	}
 

@@ -122,7 +122,7 @@ func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.Maxbattle
 			TranslateTypeNames(m, tr, monster.Types)
 			addWeatherFields(m, gd, tr, monster.Types, toInt(base["gameWeatherId"]))
 			if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
-				m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr)
+				m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr, gd)
 			}
 		}
 		addMoveFields(m, gd, tr, mb.BattlePokemonMove1, mb.BattlePokemonMove2)

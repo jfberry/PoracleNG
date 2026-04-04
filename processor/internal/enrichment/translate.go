@@ -115,19 +115,32 @@ func TranslateItemName(tr *i18n.Translator, itemID int) string {
 }
 
 // TranslateWeaknessCategories translates type names in weakness categories.
-func TranslateWeaknessCategories(categories []gamedata.WeaknessCategory, tr *i18n.Translator) []map[string]any {
+// Stores emoji keys on each type entry — emoji resolution to platform-specific
+// strings happens later in NewLayeredView (which knows the platform).
+func TranslateWeaknessCategories(categories []gamedata.WeaknessCategory, tr *i18n.Translator, gd *gamedata.GameData) []map[string]any {
 	result := make([]map[string]any, 0, len(categories))
 	for _, cat := range categories {
 		translatedTypes := make([]map[string]any, 0, len(cat.TypeIDs))
+		var typeNames []string
+		var emojiKeys []string
 		for _, typeID := range cat.TypeIDs {
-			translatedTypes = append(translatedTypes, map[string]any{
+			name := tr.T(gamedata.TypeTranslationKey(typeID))
+			entry := map[string]any{
 				"typeId": typeID,
-				"name":   tr.T(gamedata.TypeTranslationKey(typeID)),
-			})
+				"name":   name,
+			}
+			if ti, ok := gd.Types[typeID]; ok && ti.Emoji != "" {
+				entry["emojiKey"] = ti.Emoji
+				emojiKeys = append(emojiKeys, ti.Emoji)
+			}
+			translatedTypes = append(translatedTypes, entry)
+			typeNames = append(typeNames, name)
 		}
 		result = append(result, map[string]any{
-			"value":     cat.Multiplier,
-			"types":     translatedTypes,
+			"value":         cat.Multiplier,
+			"types":         translatedTypes,
+			"typeName":      strings.Join(typeNames, ", "),
+			"typeEmojiKeys": emojiKeys,
 		})
 	}
 	return result
