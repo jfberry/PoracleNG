@@ -171,15 +171,42 @@ type DiscordConfig struct {
 	UploadEmbedImages       bool                 `toml:"upload_embed_images"`
 	MessageDeleteDelay      int                  `toml:"message_delete_delay"` // extra ms for clean TTH on channels
 	RoleSubscriptions       []RoleSubscriptionEntry `toml:"role_subscriptions"`
-	CommandSecurity         map[string][]string  `toml:"command_security"`
-	DelegatedAdministration DelegatedAdminConfig `toml:"delegated_administration"`
+	CommandSecurity    map[string][]string `toml:"command_security"`
+
+	// Delegated administration — TOML array-of-tables format
+	DelegatedAdmins    []DelegatedAdminEntry `toml:"delegated_admins"`    // [[discord.delegated_admins]]
+	WebhookAdmins      []DelegatedAdminEntry `toml:"webhook_admins"`     // [[discord.webhook_admins]]
+	UserTrackingAdmins []string              `toml:"user_tracking_admins"`
+
+	// Internal computed maps (populated from TOML entries after load)
+	DelegatedAdministration DelegatedAdminConfig `toml:"-"`
 }
 
-// DelegatedAdminConfig controls who can manage tracking for channels and webhooks.
+// DelegatedAdminEntry represents a [[delegated_admins]] TOML array-of-tables entry.
+type DelegatedAdminEntry struct {
+	Target string   `toml:"target"`
+	Admins []string `toml:"admins"`
+}
+
+// DelegatedAdminConfig is the internal representation used by permissions code.
 type DelegatedAdminConfig struct {
-	ChannelTracking map[string][]string `toml:"channel_tracking"` // channelID/guildID/categoryID → allowed userIDs/roleIDs
-	WebhookTracking map[string][]string `toml:"webhook_tracking"` // webhookName → allowed userIDs
-	UserTracking    []string            `toml:"user_tracking"`    // user/role IDs that can manage other users' tracking
+	ChannelTracking map[string][]string // targetID → allowed userIDs/roleIDs
+	WebhookTracking map[string][]string // webhookName → allowed userIDs
+	UserTracking    []string            // user/role IDs that can manage other users' tracking
+}
+
+// buildDelegatedAdmin converts TOML array-of-tables entries into the internal map format.
+func buildDelegatedAdmin(entries []DelegatedAdminEntry) map[string][]string {
+	if len(entries) == 0 {
+		return nil
+	}
+	m := make(map[string][]string, len(entries))
+	for _, e := range entries {
+		if e.Target != "" {
+			m[e.Target] = append(m[e.Target], e.Admins...)
+		}
+	}
+	return m
 }
 
 // DiscordTokens returns the discord tokens as a string slice.
@@ -214,13 +241,18 @@ type TelegramConfig struct {
 	UnrecognisedCommandMessage string `toml:"unrecognised_command_message"`  // custom reply, overrides i18n
 	RegisterOnStart            bool   `toml:"register_on_start"`            // auto-register users on /start
 	DisableAutoGreetings       bool   `toml:"disable_auto_greetings"`
-	DelegatedAdministration TelegramDelegatedAdminConfig `toml:"delegated_administration"`
+	// Delegated administration — TOML array-of-tables format
+	DelegatedAdmins    []DelegatedAdminEntry `toml:"delegated_admins"`    // [[telegram.delegated_admins]]
+	UserTrackingAdmins []string              `toml:"user_tracking_admins"`
+
+	// Internal computed maps (populated from TOML entries after load)
+	DelegatedAdministration TelegramDelegatedAdminConfig `toml:"-"`
 }
 
-// TelegramDelegatedAdminConfig controls who can manage tracking for Telegram channels.
+// TelegramDelegatedAdminConfig is the internal representation used by permissions code.
 type TelegramDelegatedAdminConfig struct {
-	ChannelTracking map[string][]string `toml:"channel_tracking"` // channelID → allowed userIDs
-	UserTracking    []string            `toml:"user_tracking"`    // user IDs that can manage other users' tracking
+	ChannelTracking map[string][]string // targetID → allowed userIDs
+	UserTracking    []string            // user IDs that can manage other users' tracking
 }
 
 // TelegramTokens returns the telegram tokens as a string slice.
@@ -598,6 +630,17 @@ func Load(baseDir string) (*Config, error) {
 	// Copy api_secret from [alerter] section for backward compatibility
 	if cfg.Alerter.APISecret != "" && cfg.Processor.APISecret == "" {
 		cfg.Processor.APISecret = cfg.Alerter.APISecret
+	}
+
+	// Convert delegated admin TOML array-of-tables to internal map format
+	cfg.Discord.DelegatedAdministration = DelegatedAdminConfig{
+		ChannelTracking: buildDelegatedAdmin(cfg.Discord.DelegatedAdmins),
+		WebhookTracking: buildDelegatedAdmin(cfg.Discord.WebhookAdmins),
+		UserTracking:    cfg.Discord.UserTrackingAdmins,
+	}
+	cfg.Telegram.DelegatedAdministration = TelegramDelegatedAdminConfig{
+		ChannelTracking: buildDelegatedAdmin(cfg.Telegram.DelegatedAdmins),
+		UserTracking:    cfg.Telegram.UserTrackingAdmins,
 	}
 
 	// Validate required fields
