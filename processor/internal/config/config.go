@@ -206,9 +206,13 @@ type TelegramConfig struct {
 	Admins                  []string                  `toml:"admins"`
 	CheckRole               bool                      `toml:"check_role"`
 	CheckRoleInterval       int                       `toml:"check_role_interval"` // hours between periodic reconciliation
-	BotGoodbyeMessage       string                    `toml:"bot_goodbye_message"`
-	GroupWelcomeText        string                    `toml:"group_welcome_text"` // sent to group on registration, {user} replaced with first name
-	DisableAutoGreetings    bool                      `toml:"disable_auto_greetings"`
+	BotWelcomeText              string `toml:"bot_welcome_text"`              // DM sent on registration
+	BotGoodbyeMessage          string `toml:"bot_goodbye_message"`           // DM sent when user loses access
+	GroupWelcomeText           string `toml:"group_welcome_text"`            // sent to group on registration, {user} replaced
+	UnregisteredUserMessage    string `toml:"unregistered_user_message"`     // custom reply, overrides i18n
+	UnrecognisedCommandMessage string `toml:"unrecognised_command_message"`  // custom reply, overrides i18n
+	RegisterOnStart            bool   `toml:"register_on_start"`            // auto-register users on /start
+	DisableAutoGreetings       bool   `toml:"disable_auto_greetings"`
 	DelegatedAdministration TelegramDelegatedAdminConfig `toml:"delegated_administration"`
 }
 

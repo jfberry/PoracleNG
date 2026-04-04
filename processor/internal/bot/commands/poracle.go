@@ -156,6 +156,11 @@ func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd s
 		replies = append(replies, bot.Reply{Text: welcome})
 	}
 
+	// Bot welcome text — custom DM message on registration (Telegram)
+	if ctx.Platform == "telegram" && ctx.Config.Telegram.BotWelcomeText != "" {
+		replies = append(replies, bot.Reply{Text: ctx.Config.Telegram.BotWelcomeText, IsDM: true})
+	}
+
 	// Greeting DTS — sent via DM
 	if greeting := c.renderGreeting(ctx); greeting != nil {
 		replies = append(replies, *greeting)

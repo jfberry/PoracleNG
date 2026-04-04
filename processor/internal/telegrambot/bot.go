@@ -216,26 +216,38 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			continue
 		}
 
+		// register_on_start: /start triggers registration like /poracle
+		if !isRegistered && cmd.CommandKey == "cmd.start" && b.Cfg.Telegram.RegisterOnStart {
+			cmd.CommandKey = "cmd.poracle"
+		}
+
 		// Registration check — skip for poracle (registration), poracle_test, and version commands
 		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
-			tr := b.Translations.For(userLang)
-			replyMsg := tgbotapi.NewMessage(chatID, tr.T("msg.not_registered"))
-			b.api.Send(replyMsg)
+			if customMsg := b.Cfg.Telegram.UnregisteredUserMessage; customMsg != "" {
+				b.api.Send(tgbotapi.NewMessage(chatID, customMsg))
+			} else {
+				tr := b.Translations.For(userLang)
+				b.api.Send(tgbotapi.NewMessage(chatID, tr.T("msg.not_registered")))
+			}
 			continue
 		}
 
 		if cmd.CommandKey == "" {
-			// Try NLP suggestion for unrecognised DM commands
-			if isDM && b.nlpParser != nil && b.Cfg.AI.SuggestOnDM {
-				result := b.nlpParser.Parse(text)
-				suggestion := commands.FormatNLPSuggestion(result, "/")
-				if suggestion != "" {
-					msg := tgbotapi.NewMessage(chatID, suggestion)
-					b.api.Send(msg)
-					continue
+			if isDM {
+				// Try NLP suggestion for unrecognised DM commands
+				if b.nlpParser != nil && b.Cfg.AI.SuggestOnDM {
+					result := b.nlpParser.Parse(text)
+					suggestion := commands.FormatNLPSuggestion(result, "/")
+					if suggestion != "" {
+						b.api.Send(tgbotapi.NewMessage(chatID, suggestion))
+						continue
+					}
+				}
+				if customMsg := b.Cfg.Telegram.UnrecognisedCommandMessage; customMsg != "" {
+					b.api.Send(tgbotapi.NewMessage(chatID, customMsg))
 				}
 			}
-			continue // don't spam about unknown commands in Telegram groups
+			continue
 		}
 
 		handler := b.Registry.Lookup(cmd.CommandKey)
