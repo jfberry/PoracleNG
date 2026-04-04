@@ -296,6 +296,7 @@ func TestCalculateCpMinimum(t *testing.T) {
 }
 
 func TestCalculateCpWithBaseStatsMap(t *testing.T) {
+	// Same Mewtwo calculation but passing baseStats as map[string]int (enrichment format)
 	ctx := map[string]interface{}{
 		"baseStats": map[string]int{
 			"baseAttack":  300,
