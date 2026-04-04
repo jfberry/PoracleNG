@@ -294,6 +294,9 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			ReloadFunc:   b.ReloadFunc,
 		}
 
+		// Populate delegated admin permissions
+		ctx.Permissions.UserTracking = bot.CanTrackUsers(b.Cfg, "telegram", userID, nil)
+
 		// Handle target override.
 		// /poracle skips BuildTarget — it's a registration command that always
 		// targets the sender and has its own channel validation internally.

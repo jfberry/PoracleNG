@@ -431,8 +431,10 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		}
 
 		// Populate delegated admin permissions
+		roles := fetchRoles()
 		ctx.Permissions.ChannelTracking = bot.CalculateChannelPermissions(
-			b.Cfg, m.Author.ID, fetchRoles(), channelID, guildID, "")
+			b.Cfg, m.Author.ID, roles, channelID, guildID, "")
+		ctx.Permissions.UserTracking = bot.CanTrackUsers(b.Cfg, "discord", m.Author.ID, roles)
 
 		// Handle target override.
 		// !poracle skips BuildTarget — it's a registration command that always

@@ -110,6 +110,30 @@ func CanAdminWebhook(cfg *config.Config, userID string, webhookName string) bool
 	return containsStr(allowedIDs, userID)
 }
 
+// CanTrackUsers checks if a user has user_tracking_admins permission.
+// Works for both Discord (checks user ID and role IDs) and Telegram (user ID only).
+func CanTrackUsers(cfg *config.Config, platform, userID string, userRoles []string) bool {
+	var allowed []string
+	switch platform {
+	case "discord":
+		allowed = cfg.Discord.DelegatedAdministration.UserTracking
+	case "telegram":
+		allowed = cfg.Telegram.DelegatedAdministration.UserTracking
+	}
+	if len(allowed) == 0 {
+		return false
+	}
+	if containsStr(allowed, userID) {
+		return true
+	}
+	for _, role := range userRoles {
+		if containsStr(allowed, role) {
+			return true
+		}
+	}
+	return false
+}
+
 // BlockedAlerts derives blocked alert types from command_security configuration.
 // For a user who lacks the role for "raid", "monster", etc., those alert types
 // are returned as blocked. Used by reconciliation to set blocked_alerts on users.

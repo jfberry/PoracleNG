@@ -94,12 +94,11 @@ func BuildTarget(ctx *CommandContext, args []string) (*Target, []string, error) 
 		return target, remaining, nil
 	}
 
-	// Admin override required
-	if !ctx.IsAdmin && !ctx.Permissions.ChannelTracking {
-		return nil, remaining, fmt.Errorf("only admins can target other users")
-	}
-
+	// user: override requires admin, user tracking, or channel tracking permission
 	if userOverride != "" {
+		if !ctx.IsAdmin && !ctx.Permissions.UserTracking {
+			return nil, remaining, fmt.Errorf("only admins can target other users")
+		}
 		target, err := lookupTarget(hs, userOverride)
 		if err != nil || target == nil {
 			return nil, remaining, fmt.Errorf("user %s not found or not registered", userOverride)

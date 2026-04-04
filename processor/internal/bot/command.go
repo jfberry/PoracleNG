@@ -134,6 +134,8 @@ type Permissions struct {
 	ChannelTracking bool
 	// WebhookAdmin is the webhook name the user can admin (empty = none).
 	WebhookAdmin string
+	// UserTracking is true if the user can manage other users' tracking via user:ID.
+	UserTracking bool
 }
 
 // Tr returns a translator for the command's target language.
