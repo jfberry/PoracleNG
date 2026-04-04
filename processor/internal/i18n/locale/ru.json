@@ -309,5 +309,18 @@
   "day.thursday": "Четверг",
   "day.friday": "Пятница",
   "day.saturday": "Суббота",
-  "day.sunday": "Воскресенье"
+  "day.sunday": "Воскресенье",
+
+  "language.en": "Английский",
+  "language.fr": "Французский",
+  "language.es": "Испанский",
+  "language.it": "Итальянский",
+  "language.de": "Немецкий",
+  "language.ja": "Японский",
+  "language.ko": "Корейский",
+  "language.pl": "Польский",
+  "language.ru": "Русский",
+  "language.fi": "Финский",
+  "language.se": "Шведский",
+  "language.nb-no": "Норвежский"
 }

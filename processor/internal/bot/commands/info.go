@@ -12,16 +12,6 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
-// cpMultipliers holds the standard CP multiplier values for specific levels
-// used in the hundo CP table display. These are the official PoGO values.
-var cpMultipliers = map[int]float64{
-	15: 0.51739395,
-	20: 0.5974000,
-	25: 0.667934,
-	40: 0.7903,
-	50: 0.84029999,
-	51: 0.84529999,
-}
 
 // InfoCommand implements !info — show pokemon info, type matchups, stats,
 // weather, shiny rates, rarity, moves, items, and admin debug tools.
@@ -328,7 +318,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		levels := []int{15, 20, 25, 40, 50, 51}
 		levelLabels := []string{"L15", "L20", "L25", "L40", "L50", "L51"}
 		for i, level := range levels {
-			cp := calculateCP(mon.Attack, mon.Defense, mon.Stamina, 15, 15, 15, level)
+			cp := calculateCP(ctx.GameData, mon.Attack, mon.Defense, mon.Stamina, 15, 15, 15, level)
 			sb.WriteString(fmt.Sprintf("  %s: %d\n", levelLabels[i], cp))
 		}
 	}
@@ -408,9 +398,13 @@ func (c *InfoCommand) availableForms(ctx *bot.CommandContext, pokemonID int) []s
 }
 
 // calculateCP computes the CP for a pokemon given base stats, IVs, and level.
-// Formula: max(10, floor((baseAtk+ivAtk) * sqrt(baseDef+ivDef) * sqrt(baseSta+ivSta) * cpMulti^2 / 10))
-func calculateCP(baseAtk, baseDef, baseSta, ivAtk, ivDef, ivSta, level int) int {
-	multi, ok := cpMultipliers[level]
+// CP multipliers are loaded from util.json via GameData.
+func calculateCP(gd *gamedata.GameData, baseAtk, baseDef, baseSta, ivAtk, ivDef, ivSta, level int) int {
+	if gd == nil || gd.Util == nil || gd.Util.CpMultipliers == nil {
+		return 0
+	}
+	key := strconv.Itoa(level)
+	multi, ok := gd.Util.CpMultipliers[key]
 	if !ok {
 		return 0
 	}

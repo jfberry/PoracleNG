@@ -106,5 +106,18 @@
   "msg.area.removed": "Usunięto obszar: {0}",
   "msg.area.current": "Dostępne obszary:",
 
-  "cmd.invasion": "inwazja"
+  "cmd.invasion": "inwazja",
+
+  "language.en": "Angielski",
+  "language.fr": "Francuski",
+  "language.es": "Hiszpański",
+  "language.it": "Włoski",
+  "language.de": "Niemiecki",
+  "language.ja": "Japoński",
+  "language.ko": "Koreański",
+  "language.pl": "Polski",
+  "language.ru": "Rosyjski",
+  "language.fi": "Fiński",
+  "language.se": "Szwedzki",
+  "language.nb-no": "Norweski"
 }

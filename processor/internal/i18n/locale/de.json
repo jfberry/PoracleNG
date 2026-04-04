@@ -388,5 +388,18 @@
   "raid.level.elite": "Top",
   "raid.level.shadow": "Crypto",
   "raid.level.shadow_legendary": "Crypto Legendär",
-  "raid.level.primal": "Proto"
+  "raid.level.primal": "Proto",
+
+  "language.en": "Englisch",
+  "language.fr": "Französisch",
+  "language.es": "Spanisch",
+  "language.it": "Italienisch",
+  "language.de": "Deutsch",
+  "language.ja": "Japanisch",
+  "language.ko": "Koreanisch",
+  "language.pl": "Polnisch",
+  "language.ru": "Russisch",
+  "language.fi": "Finnisch",
+  "language.se": "Schwedisch",
+  "language.nb-no": "Norwegisch"
 }

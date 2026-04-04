@@ -135,5 +135,18 @@
 
   "msg.info.rarity_unavailable": "Data om sjeldenhet er ikke kalkulert enda, prøv igjen om en times tid",
 
-  "cmd.invasion": "invadering"
+  "cmd.invasion": "invadering",
+
+  "language.en": "Engelsk",
+  "language.fr": "Fransk",
+  "language.es": "Spansk",
+  "language.it": "Italiensk",
+  "language.de": "Tysk",
+  "language.ja": "Japansk",
+  "language.ko": "Koreansk",
+  "language.pl": "Polsk",
+  "language.ru": "Russisk",
+  "language.fi": "Finsk",
+  "language.se": "Svensk",
+  "language.nb-no": "Norsk"
 }

@@ -287,5 +287,18 @@
   "day.thursday": "Giovedì",
   "day.friday": "Venerdì",
   "day.saturday": "Sabato",
-  "day.sunday": "Domenica"
+  "day.sunday": "Domenica",
+
+  "language.en": "Inglese",
+  "language.fr": "Francese",
+  "language.es": "Spagnolo",
+  "language.it": "Italiano",
+  "language.de": "Tedesco",
+  "language.ja": "Giapponese",
+  "language.ko": "Coreano",
+  "language.pl": "Polacco",
+  "language.ru": "Russo",
+  "language.fi": "Finlandese",
+  "language.se": "Svedese",
+  "language.nb-no": "Norvegese"
 }

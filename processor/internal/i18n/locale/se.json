@@ -113,5 +113,18 @@
 
   "msg.location.new": "Ny plats",
 
-  "cmd.invasion": "invasion"
+  "cmd.invasion": "invasion",
+
+  "language.en": "Engelska",
+  "language.fr": "Franska",
+  "language.es": "Spanska",
+  "language.it": "Italienska",
+  "language.de": "Tyska",
+  "language.ja": "Japanska",
+  "language.ko": "Koreanska",
+  "language.pl": "Polska",
+  "language.ru": "Ryska",
+  "language.fi": "Finska",
+  "language.se": "Svenska",
+  "language.nb-no": "Norska"
 }
