@@ -231,6 +231,12 @@ function buildUnifiedConfig(defaults, local) {
 	if (serverOverrides.apiSecret) {
 		unified.processor.api_secret = serverOverrides.apiSecret
 	}
+	if (serverOverrides.ipWhitelist && serverOverrides.ipWhitelist.length) {
+		unified.processor.ip_whitelist = serverOverrides.ipWhitelist
+	}
+	if (serverOverrides.ipBlacklist && serverOverrides.ipBlacklist.length) {
+		unified.processor.ip_blacklist = serverOverrides.ipBlacklist
+	}
 
 	// Geofence — always include paths so both components find the geofence
 	unified.geofence = {}
