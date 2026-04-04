@@ -76,6 +76,17 @@ func testGameData() *gamedata.GameData {
 		Items:   make(map[int]*gamedata.Item),
 		Grunts:  make(map[int]*gamedata.Grunt),
 		Weather: make(map[int]*gamedata.WeatherData),
+		Util: &gamedata.UtilData{
+			PowerUpCost: map[string]gamedata.PowerUpCostEntry{
+				"1":    {Stardust: 200, Candy: 1},
+				"1.5":  {Stardust: 200, Candy: 1},
+				"2":    {Stardust: 200, Candy: 1},
+				"39":   {Stardust: 10000, Candy: 15},
+				"39.5": {Stardust: 10000, Candy: 15},
+				"40":   {Stardust: 10000, XLCandy: 10},
+				"40.5": {Stardust: 10000, XLCandy: 10},
+			},
+		},
 	}
 }
 
@@ -493,16 +504,30 @@ func TestGetCPMultiplier(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCalculatePowerUpCost(t *testing.T) {
+	gd := testGameData()
+
 	// Level 1 → 1.5: one power-up, 200 stardust, 1 candy
-	sd, c, xl := calculatePowerUpCost(1, 1.5)
+	sd, c, xl := calculatePowerUpCost(gd, 1, 1.5)
 	if sd != 200 || c != 1 || xl != 0 {
 		t.Errorf("1→1.5: got (%d, %d, %d), want (200, 1, 0)", sd, c, xl)
 	}
 
-	// Level 40 → 40.5: last non-XL level
-	sd, c, xl = calculatePowerUpCost(40, 40.5)
-	if sd != 10000 || c != 15 || xl != 0 {
-		t.Errorf("40→40.5: got (%d, %d, %d), want (10000, 15, 0)", sd, c, xl)
+	// Level 1 → 2: two power-ups, 400 stardust, 2 candy
+	sd, c, xl = calculatePowerUpCost(gd, 1, 2)
+	if sd != 400 || c != 2 || xl != 0 {
+		t.Errorf("1→2: got (%d, %d, %d), want (400, 2, 0)", sd, c, xl)
+	}
+
+	// Level 40 → 40.5: XL candy level
+	sd, c, xl = calculatePowerUpCost(gd, 40, 40.5)
+	if sd != 10000 || c != 0 || xl != 10 {
+		t.Errorf("40→40.5: got (%d, %d, %d), want (10000, 0, 10)", sd, c, xl)
+	}
+
+	// Nil GameData returns zeros
+	sd, c, xl = calculatePowerUpCost(nil, 1, 2)
+	if sd != 0 || c != 0 || xl != 0 {
+		t.Errorf("nil gd: got (%d, %d, %d), want (0, 0, 0)", sd, c, xl)
 	}
 }
 

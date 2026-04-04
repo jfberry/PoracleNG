@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -331,7 +332,7 @@ func registerMoveHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *Emoj
 // Miscellaneous game helpers
 // ---------------------------------------------------------------------------
 
-func registerMiscGameHelpers(_ *gamedata.GameData, bundle *i18n.Bundle, emoji *EmojiLookup, configDir string) {
+func registerMiscGameHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *EmojiLookup, configDir string) {
 	raymond.RegisterHelper("getEmoji", func(key interface{}, options *raymond.Options) interface{} {
 		return emoji.Lookup(toString(key), getPlatform(options))
 	})
@@ -343,7 +344,7 @@ func registerMiscGameHelpers(_ *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 	raymond.RegisterHelper("getPowerUpCost", func(startLevel, endLevel interface{}, options *raymond.Options) interface{} {
 		start := toFloat(startLevel)
 		end := toFloat(endLevel)
-		stardust, candy, xlCandy := calculatePowerUpCost(start, end)
+		stardust, candy, xlCandy := calculatePowerUpCost(gd, start, end)
 		result := map[string]interface{}{
 			"stardust": stardust,
 			"candy":    candy,
@@ -491,75 +492,17 @@ func getCPMultiplier(level float64) float64 {
 // Power-up cost table
 // ---------------------------------------------------------------------------
 
-type powerUpCostEntry struct {
-	stardust int
-	candy    int
-	xlCandy  int
-}
-
-var powerUpCosts = buildPowerUpCosts()
-
-func buildPowerUpCosts() map[float64]powerUpCostEntry {
-	costs := make(map[float64]powerUpCostEntry)
-
-	// Levels 1-10 (half levels included): stardust + candy (no XL)
-	dustArr := []int{
-		200, 200, 400, 400, 600, 600, 800, 800, 1000, 1000,
-		1300, 1300, 1600, 1600, 1900, 1900, 2200, 2200, 2500, 2500,
-		3000, 3000, 3500, 3500, 4000, 4000, 4500, 4500, 5000, 5000,
-		6000, 6000, 7000, 7000, 8000, 8000, 9000, 9000, 10000, 10000,
-		10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
-		10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
-		10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
-		10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000,
+func calculatePowerUpCost(gd *gamedata.GameData, startLevel, endLevel float64) (stardust, candy, xlCandy int) {
+	if gd == nil || gd.Util == nil || gd.Util.PowerUpCost == nil {
+		return
 	}
-	candyArr := []int{
-		1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-		3, 3, 3, 3, 3, 3, 4, 4, 4, 4,
-		6, 6, 8, 8, 10, 10, 12, 12, 15, 15,
-		15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
-		15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
-		15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
-		15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
-	}
-
-	for i := 0; i < len(dustArr); i++ {
-		level := 1.0 + float64(i)*0.5
-		costs[level] = powerUpCostEntry{
-			stardust: dustArr[i],
-			candy:    candyArr[i],
-		}
-	}
-
-	// XL candy costs for levels 41-50.5
-	xlDust := []int{
-		10000, 10000, 10000, 10000, 11000, 11000, 12000, 12000, 12500, 12500,
-		13000, 13000, 14000, 14000, 15000, 15000, 16000, 16000, 17000, 17000,
-	}
-	xlCandyArr := []int{
-		10, 10, 10, 10, 12, 12, 12, 12, 15, 15,
-		15, 15, 17, 17, 17, 17, 20, 20, 20, 20,
-	}
-	for i := 0; i < len(xlDust); i++ {
-		level := 41.0 + float64(i)*0.5
-		costs[level] = powerUpCostEntry{
-			stardust: xlDust[i],
-			candy:    0,
-			xlCandy:  xlCandyArr[i],
-		}
-	}
-
-	return costs
-}
-
-func calculatePowerUpCost(startLevel, endLevel float64) (stardust, candy, xlCandy int) {
 	level := startLevel
 	for level < endLevel {
-		if entry, ok := powerUpCosts[level]; ok {
-			stardust += entry.stardust
-			candy += entry.candy
-			xlCandy += entry.xlCandy
+		key := strconv.FormatFloat(level, 'f', -1, 64)
+		if entry, ok := gd.Util.PowerUpCost[key]; ok {
+			stardust += entry.Stardust
+			candy += entry.Candy
+			xlCandy += entry.XLCandy
 		}
 		level += 0.5
 	}

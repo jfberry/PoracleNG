@@ -25,7 +25,15 @@ type UtilData struct {
 	MaxbattleLevels  map[int]string // level → English name
 	Lures            map[int]LureInfo
 	PokestopEvent    map[int]EventInfo
+	PowerUpCost      map[string]PowerUpCostEntry // level string → {stardust, candy, xlCandy}
 	Emojis           map[string]string // emoji key → unicode
+}
+
+// PowerUpCostEntry holds the cost to power up one half-level.
+type PowerUpCostEntry struct {
+	Stardust int `json:"stardust"`
+	Candy    int `json:"candy"`
+	XLCandy  int `json:"xlCandy"`
 }
 
 // GenderInfo holds gender display data.
@@ -170,6 +178,14 @@ func ParseUtilData(data []byte) (*UtilData, error) {
 
 	// PokestopEvent: {"7": {...}, ...}
 	u.PokestopEvent = parseIntKeyMap[EventInfo](raw["pokestopEvent"])
+
+	// PowerUpCost: {"1": {"stardust": 200, "candy": 1}, "1.5": {...}, ...}
+	if raw["powerUpCost"] != nil {
+		var puc map[string]PowerUpCostEntry
+		if err := json.Unmarshal(raw["powerUpCost"], &puc); err == nil {
+			u.PowerUpCost = puc
+		}
+	}
 
 	// Emojis: {"lure-normal": "📍", ...}
 	if raw["emojis"] != nil {
