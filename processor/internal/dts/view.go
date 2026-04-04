@@ -99,6 +99,7 @@ var commonAliases = []aliasPair{
 	// Weather aliases — available on all types that have S2 cell weather data
 	{"gameweather", "gameWeatherName"},
 	{"gameweatheremoji", "gameWeatherEmoji"},
+	{"boost", "boostWeatherName"},
 	{"boostemoji", "boostWeatherEmoji"},
 }
 
