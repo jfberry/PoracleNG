@@ -121,7 +121,8 @@ func boundingBox(path [][2]float64) (minX, minY, maxX, maxY float64) {
 
 // LoadAllGeofences loads all geofence files from the given paths and builds a spatial index.
 // HTTP/HTTPS URLs are resolved to their cached file paths in cacheDir.
-func LoadAllGeofences(paths []string, cacheDir string) (*SpatialIndex, []Fence, error) {
+// defaultName is the prefix for unnamed fences (e.g. "city" → city1, city2).
+func LoadAllGeofences(paths []string, cacheDir, defaultName string) (*SpatialIndex, []Fence, error) {
 	if cacheDir == "" {
 		cacheDir = "config/.cache/geofences"
 	}
@@ -131,7 +132,7 @@ func LoadAllGeofences(paths []string, cacheDir string) (*SpatialIndex, []Fence, 
 		if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
 			filePath = filepath.Join(cacheDir, sanitizeURL(p)+".json")
 		}
-		fences, err := LoadGeofenceFile(filePath)
+		fences, err := LoadGeofenceFile(filePath, defaultName)
 		if err != nil {
 			return nil, nil, err
 		}

@@ -81,7 +81,8 @@ type geoJSONProperties struct {
 }
 
 // LoadGeofenceFile loads a geofence file (Poracle JSON or GeoJSON format).
-func LoadGeofenceFile(path string) ([]Fence, error) {
+// defaultName is the prefix for unnamed fences (e.g. "city" → city1, city2).
+func LoadGeofenceFile(path, defaultName string) ([]Fence, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -93,7 +94,7 @@ func LoadGeofenceFile(path string) ([]Fence, error) {
 	// Try GeoJSON first
 	var collection geoJSONCollection
 	if err := json.Unmarshal(cleaned, &collection); err == nil && collection.Type == "FeatureCollection" {
-		return parseGeoJSON(collection), nil
+		return parseGeoJSON(collection, defaultName), nil
 	}
 
 	// Try Poracle native format — UnmarshalJSON handles defaulting
@@ -102,10 +103,22 @@ func LoadGeofenceFile(path string) ([]Fence, error) {
 	if err := json.Unmarshal(cleaned, &fences); err != nil {
 		return nil, err
 	}
+	// Assign default names to unnamed fences
+	prefix := defaultName
+	if prefix == "" {
+		prefix = "city"
+	}
+	unnamed := 0
+	for i := range fences {
+		if fences[i].Name == "" {
+			unnamed++
+			fences[i].Name = prefix + strconv.Itoa(unnamed)
+		}
+	}
 	return fences, nil
 }
 
-func parseGeoJSON(collection geoJSONCollection) []Fence {
+func parseGeoJSON(collection geoJSONCollection, defaultName string) []Fence {
 	var fences []Fence
 	for i, feature := range collection.Features {
 		if feature.Type != "Feature" {
@@ -114,7 +127,11 @@ func parseGeoJSON(collection geoJSONCollection) []Fence {
 		props := feature.Properties
 		name := props.Name
 		if name == "" {
-			name = "geofence" + strconv.Itoa(i)
+			prefix := defaultName
+			if prefix == "" {
+				prefix = "city"
+			}
+			name = prefix + strconv.Itoa(i+1)
 		}
 		userSel := true
 		if props.UserSelectable != nil {

@@ -302,8 +302,9 @@ func (d DatabaseConfig) DSN() string {
 }
 
 type GeofenceConfig struct {
-	Paths []string    `toml:"paths"`
-	Koji  KojiOptions `toml:"koji"`
+	Paths       []string    `toml:"paths"`
+	DefaultName string      `toml:"default_name"` // prefix for unnamed fences (e.g. "Fence" → Fence1, Fence2)
+	Koji        KojiOptions `toml:"koji"`
 }
 
 type KojiOptions struct {
