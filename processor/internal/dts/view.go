@@ -96,6 +96,10 @@ var commonAliases = []aliasPair{
 	{"distime", "disappearTime"},
 	{"staticmap", "staticMap"},
 	{"matched", "matchedAreaNames"},
+	// Weather aliases — available on all types that have S2 cell weather data
+	{"gameweather", "gameWeatherName"},
+	{"gameweatheremoji", "gameWeatherEmoji"},
+	{"boostemoji", "boostWeatherEmoji"},
 }
 
 // Per-type alias tables. Each type includes commonAliases plus type-specific mappings.
@@ -111,9 +115,6 @@ var typeAliases = map[string][]aliasPair{
 		{"individual_stamina", "sta"},
 		{"quickMove", "quickMoveName"},
 		{"chargeMove", "chargeMoveName"},
-		{"boostemoji", "boostWeatherEmoji"},
-		{"gameweather", "gameWeatherName"},
-		{"gameweatheremoji", "gameWeatherEmoji"},
 		{"move1emoji", "quickMoveEmoji"},
 		{"move2emoji", "chargeMoveEmoji"},
 		{"pokemonId", "pokemon_id"},
@@ -137,9 +138,6 @@ var typeAliases = map[string][]aliasPair{
 		{"chargeMove", "chargeMoveName"},
 		{"move1emoji", "quickMoveEmoji"},
 		{"move2emoji", "chargeMoveEmoji"},
-		{"boostemoji", "boostWeatherEmoji"},
-		{"gameweather", "gameWeatherName"},
-		{"gameweatheremoji", "gameWeatherEmoji"},
 		{"pokemonId", "pokemon_id"},
 	},
 	"egg": {
