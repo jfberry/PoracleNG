@@ -26,10 +26,12 @@ These fields are available in every template:
 |-------|------|-------------|
 | `latitude` | number | Alert location latitude |
 | `longitude` | number | Alert location longitude |
-| `now` | Date | Current date/time |
+| `now` | string | Current date/time (RFC3339) |
 | `nowISO` | string | Current time as ISO 8601 string |
 | `areas` | string | Comma-separated names of matched geofence areas |
+| `matched` | array | Array of lowercase matched area names (for `{{#each matched}}`) |
 | `addr` | string | Formatted address from reverse geocoding |
+| `formattedAddress` | string | Full formatted address string |
 | `streetName` | string | Street name |
 | `streetNumber` | string | Street number |
 | `city` | string | City name |
@@ -51,9 +53,37 @@ These fields are available in every template:
 | `rdmUrl` | string | RDM map link |
 | `reactMapUrl` | string | ReactMap link |
 | `rocketMadUrl` | string | RocketMAD link |
+| `mapurl` | string | *Deprecated* — alias for `googleMapUrl` |
+| `applemap` | string | *Deprecated* — alias for `appleMapUrl` |
 | `nightTime` | bool | Is it night at the alert location |
 | `dawnTime` | bool | Is it dawn |
 | `duskTime` | bool | Is it dusk |
+| `tthd` | int | Days component of time remaining |
+| `tthh` | int | Hours component of time remaining |
+| `tthm` | int | Minutes component of time remaining |
+| `tths` | int | Seconds component of time remaining |
+| `distime` | string | *Deprecated* — alias for `disappearTime` |
+
+### Weather Fields (types with S2 cell data: pokemon, raid, egg, invasion, maxbattle)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gameWeatherId` | int | Current game weather ID |
+| `gameWeatherName` | string | Translated current weather name |
+| `gameWeatherEmoji` | string | Current weather emoji |
+| `gameweather` | string | *Deprecated* — alias for `gameWeatherName` |
+| `gameweatheremoji` | string | *Deprecated* — alias for `gameWeatherEmoji` |
+
+### Boost Fields (types with pokemon type data: pokemon, raid, maxbattle)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `boosted` | bool | Is weather boosted |
+| `boostWeatherId` | int/string | Boosting weather ID (empty string if not boosted) |
+| `boostWeatherName` | string | Translated boost weather name |
+| `boostWeatherEmoji` | string | Boost weather emoji |
+| `boost` | string | *Deprecated* — alias for `boostWeatherName` |
+| `boostemoji` | string | *Deprecated* — alias for `boostWeatherEmoji` |
 
 ---
 
@@ -100,9 +130,8 @@ Template type `monster` is used for encountered pokemon (with IV data). Template
 |-------|------|-------------|
 | `typeName` | string | Translated type names (comma-separated) |
 | `color` | string | Primary type color hex |
-| `emoji` | array | Array of type emoji strings |
 | `emojiString` | string | Type emojis concatenated |
-| `typeEmoji` | string | Same as emojiString |
+| `typeEmoji` | string | Type emojis concatenated (resolved from emoji keys) |
 | `weaknessList` | array | Weakness categories: `{value, types: [{typeId, name, typeEmoji}]}` |
 
 ### Moves
@@ -118,23 +147,19 @@ Template type `monster` is used for encountered pokemon (with IV data). Template
 
 ### Weather
 
+Weather boost fields (`boosted`, `boostWeatherId`, `boostWeatherName`, `boostWeatherEmoji`) and game weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are documented in the Common Fields section above.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `weather` | int | Boosted weather ID |
-| `gameWeatherId` | int | Current game weather ID |
-| `gameWeatherName` | string | Translated current weather name |
-| `gameWeatherEmoji` | string | Current weather emoji |
-| `boosted` | bool | Is boosted by current weather |
-| `boostWeatherId` | int | Weather that boosts this pokemon |
-| `boostWeatherName` | string | Translated boost weather name |
-| `boostWeatherEmoji` | string | Boost weather emoji |
-| `weatherChange` | string | Weather change message (if forecast available) |
-| `weatherCurrentName` | string | Current weather name |
-| `weatherCurrentEmoji` | string | Current weather emoji |
-| `weatherNextName` | string | Forecast weather name |
-| `weatherNextEmoji` | string | Forecast weather emoji |
+| `weather` | int | Boosted weather ID (from webhook) |
+| `weatherChangeTime` | string | Time of next hour boundary (potential weather change) |
+| `weatherForecastCurrent` | int | Forecast current weather ID (if AccuWeather configured) |
+| `weatherForecastNext` | int | Forecast next-hour weather ID (if AccuWeather configured) |
+| `nextHourTimestamp` | int | Unix timestamp of next hour boundary |
 
 ### PVP
+
+Base enrichment (available to all users):
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -142,12 +167,24 @@ Template type `monster` is used for encountered pokemon (with IV data). Template
 | `bestGreatLeagueRank` | object | Best Great League rank entry |
 | `bestUltraLeagueRank` | object | Best Ultra League rank entry |
 | `bestLittleLeagueRank` | object | Best Little League rank entry |
-| `pvpDisplayGreat` | array | Great League PVP display list (per user filter) |
-| `pvpDisplayUltra` | array | Ultra League PVP display list |
-| `pvpDisplayLittle` | array | Little League PVP display list |
-| `pvpDisplayMax` | array | All PVP display entries combined |
+
+Per-user enrichment (varies based on user's tracking filters):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pvpGreat` | array | Great League PVP display list (filtered by user's tracking) |
+| `pvpGreatBest` | object | Best entry from `pvpGreat` |
+| `pvpUltra` | array | Ultra League PVP display list |
+| `pvpUltraBest` | object | Best entry from `pvpUltra` |
+| `pvpLittle` | array | Little League PVP display list |
+| `pvpLittleBest` | object | Best entry from `pvpLittle` |
+| `pvpAvailable` | bool | Any PVP data available for this pokemon |
+| `userHasPvpTracks` | bool | User has PVP tracking rules that matched |
+| `pvpDisplayGreatMinCP` | int | Minimum CP threshold for Great League display |
+| `pvpDisplayUltraMinCP` | int | Minimum CP threshold for Ultra League display |
 
 Each PVP display entry has: `{pokemon, pokemonName, fullName, formName, rank, cp, percentage, level, evolution, cap, pokemon_id, form}`
+Each "best" object has the same fields as a display entry.
 
 ### Timing
 
@@ -155,20 +192,24 @@ Each PVP display entry has: `{pokemon, pokemonName, fullName, formName, rank, cp
 |---------------|---------------|------|-------------|
 | **`time`** | | string | Disappear time (formatted for user's timezone) |
 | **`disappearTime`** | | string | Same as time |
-| **`tthh`** | | int | Hours remaining |
-| **`tthm`** | | int | Minutes remaining |
-| **`tths`** | | int | Seconds remaining |
 | `confirmedTime` | `disappear_time_verified` | bool | Is disappear time verified by scanner |
 | | `disappear_time` | int | Raw unix timestamp (use `time` instead) |
+
+Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
 
 ### Other
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `encountered` | bool | Whether pokemon was encountered (has IV data) |
+| `seenType` | string | Encounter type from scanner (e.g. "wild", "pokestop", "encounter") |
+| `cell_coords` | array | S2 cell vertices for cell spawns |
 | `generation` | int | Generation number |
 | `generationRoman` | string | Generation as Roman numeral (I, II, etc.) |
 | `generationName` | string | Translated generation name |
+| `legendary` | bool | Is a legendary pokemon |
+| `mythic` | bool | Is a mythical pokemon |
+| `ultraBeast` | bool | Is an ultra beast |
 | `shinyPossible` | bool | Can this pokemon be shiny |
 | `shinyStats` | int | Shiny rate (1 in N) |
 | `shinyPossibleEmoji` | string | Shiny sparkle emoji (empty if not shiny possible) |
@@ -186,7 +227,6 @@ Each PVP display entry has: `{pokemon, pokemonName, fullName, formName, rank, cp
 | `distance` | number | Distance from user (per-user enrichment) |
 | `bearing` | int | Bearing degrees from user |
 | `bearingEmoji` | string | Directional arrow emoji |
-| `intersection` | string | Street intersection |
 
 ---
 
@@ -199,16 +239,18 @@ Hatched raid with a boss pokemon.
 | Field | Type | Description |
 |-------|------|-------------|
 | `pokemon_id` | int | Boss pokemon ID |
-| `id` | int | Same as pokemon_id |
-| `pokemonId` | int | Same as pokemon_id |
+| `id` | int | Same as pokemon_id (computed alias) |
+| `pokemonId` | int | *Deprecated* — alias for `pokemon_id` |
 | `name` | string | Translated pokemon name |
 | `formName` | string | Translated form name |
+| `formNormalised` | string | Form name (empty if "Normal") |
 | `fullName` | string | Name + form |
 | `nameEng` | string | English name |
+| `fullNameEng` | string | English name + form |
+| `formNormalisedEng` | string | English form name (empty if "Normal") |
 | `evolutionName` | string | Evolution name (for mega raids) |
-| `megaName` | string | Mega evolution name |
-| `form` | int | Form ID |
-| `formId` | int | Same as form |
+| `megaName` | string | Mega evolution name (fullName when evolved, name when not) |
+| `form` | int | Form ID (from webhook) |
 | `level` | int | Raid level |
 
 ### Gym
@@ -242,16 +284,14 @@ Hatched raid with a boss pokemon.
 | Field | Type | Description |
 |-------|------|-------------|
 | `typeName` | string | Translated type names |
-| `emoji` | array | Type emoji array |
 | `typeEmoji` | string | Type emojis concatenated |
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
 | `weaknessList` | array | Weakness categories |
-| `weaknessEmoji` | string | Weakness summary with emojis |
 | `generation` | int | Generation number |
 | `generationRoman` | string | Roman numeral |
 | `generationName` | string | Translated generation name |
-| `shinyPossible` | bool | Can be shiny |
-| `shinyPossibleEmoji` | string | Shiny emoji |
+| `genderData` | object | `{name, emoji}` |
+| `genderEmoji` | string | Gender emoji |
 
 ### Timing
 
@@ -259,27 +299,24 @@ Hatched raid with a boss pokemon.
 |---------------|---------------|------|-------------|
 | **`time`** | | string | Raid end time (formatted for user's timezone) |
 | **`disappearTime`** | | string | Same as time |
-| **`tthh`** | | int | Hours remaining |
-| **`tthm`** | | int | Minutes remaining |
-| **`tths`** | | int | Seconds remaining |
-| `confirmedTime` | | bool | Is time verified |
-| | `start` | int | Raw raid start unix timestamp |
-| | `end` | int | Raw raid end unix timestamp |
+| `start` | `start` | int | Raid start unix timestamp |
+| `end` | `end` | int | Raid end unix timestamp |
+
+Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
 
 ### Weather & Boost
 
+Weather and boost fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`, `boosted`, `boostWeatherId`, `boostWeatherName`, `boostWeatherEmoji`) are documented in the Common Fields section.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `gameWeatherId` | int | Current weather |
-| `gameWeatherName` | string | Translated weather name |
-| `gameWeatherEmoji` | string | Weather emoji |
-| `boosted` | bool | Is weather boosted |
-| `boostWeatherId` | int | Boosting weather ID |
-| `boostWeatherName` | string | Boost weather name |
-| `boostWeatherEmoji` | string | Boost weather emoji |
-| `boostingWeathers` | array | All boosting weather IDs |
-| `boostingWeathersEmoji` | string | Boosting weather emojis |
-| `weatherChange` | string | Weather change forecast message |
+| `boostingWeatherIds` | array | All weather IDs that boost this pokemon's types |
+| `weatherChangeTime` | string | Time of next hour boundary (potential weather change) |
+| `weatherForecastCurrent` | int | Forecast current weather ID (if AccuWeather configured) |
+| `weatherForecastNext` | int | Forecast next-hour weather ID (if AccuWeather configured) |
+| `nextHourTimestamp` | int | Unix timestamp of next hour boundary |
+
+**Note:** `boostingWeatherEmojis` is defined as an alias but the emoji keys are not currently set in raid enrichment, so it will always be empty. Use `boostWeatherEmoji` instead for the currently-boosting weather.
 
 ### RSVP
 
@@ -289,12 +326,7 @@ Hatched raid with a boss pokemon.
 
 ### Evolutions
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `evolutions` | array | Evolution chain: `{id, form, name, formName, typeEmoji}` |
-| `hasEvolutions` | bool | Has evolutions |
-| `megaEvolutions` | array | Mega evolutions: `{fullName, evolution, typeEmoji}` |
-| `hasMegaEvolutions` | bool | Has mega evolutions |
+**Not yet implemented** for raids. Evolution chain data (`evolutions`, `hasEvolutions`, `megaEvolutions`, `hasMegaEvolutions`) is only available for pokemon and maxbattle templates.
 
 ---
 
@@ -306,22 +338,26 @@ Unhatched raid egg.
 |-------|------|-------------|
 | `level` | int | Egg level |
 | `levelName` | string | Translated level name |
-| `gymId` | string | Gym ID |
-| `gymName` | string | Gym name |
-| `gymUrl` | string | Gym image URL |
-| `teamId` | int | Gym team |
+| `gymId` | string | Gym ID (alias for `gym_id`) |
+| `gymName` | string | Gym name (alias for `gym_name`) |
+| `gymUrl` | string | Gym image URL (alias for `gym_url`) |
+| `teamId` | int | Gym team (alias for `team_id`) |
 | `teamName` | string | Translated team name |
+| `teamNameEng` | string | English team name |
 | `teamEmoji` | string | Team emoji |
-| `gymColor` | string | Team color hex |
-| `ex` | bool | EX raid eligible |
+| `teamColor` | string | Team color hex |
+| `gymColor` | string | Gym color hex (alias for `gym_color`) |
+| `ex` | bool | EX raid eligible (alias for `is_ex_raid_eligible`) |
 | `hatchTime` | string | Hatch time (formatted) |
-| `time` | string | Same as hatchTime |
-| `tthh` | int | Hours until hatch |
-| `tthm` | int | Minutes until hatch |
-| `tths` | int | Seconds until hatch |
+| `time` | string | Alias for `disappearTime` (raid end time) |
+| `disappearTime` | string | Raid end time (formatted) |
+| `start` | int | Hatch unix timestamp |
+| `end` | int | Raid end unix timestamp |
 | `rsvps` | array | RSVP time slots |
 | `gameWeatherName` | string | Current weather name |
 | `gameWeatherEmoji` | string | Weather emoji |
+
+Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are computed from hatch time (not end time).
 
 ---
 
@@ -329,38 +365,49 @@ Unhatched raid egg.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `pokestopId` | string | Pokestop ID |
-| `pokestopName` | string | Pokestop name |
-| `pokestopUrl` | string | Pokestop image URL |
+| `pokestopName` | string | Pokestop name (alias for `pokestop_name`) |
+| `pokestopUrl` | string | Pokestop image URL (alias for `pokestop_url`) |
 | `questString` | string | Translated quest objective |
 | `questStringEng` | string | English quest objective |
-| `questTitle` | string | Quest title from webhook |
-| `target` | int | Quest target count |
-| `rewardString` | string | All rewards as text |
+| `rewardString` | string | All rewards as text (translated) |
 | `rewardStringEng` | string | English rewards text |
 | `dustAmount` | int | Stardust reward amount |
 | `itemAmount` | int | Item reward amount |
+| `energyAmount` | int | Mega energy amount (first reward) |
+| `candyAmount` | int | Candy amount (first reward) |
 | `isShiny` | bool | Reward pokemon is shiny |
 | `shinyPossible` | bool | Can reward be shiny |
 | `shinyPossibleEmoji` | string | Shiny emoji |
-| `time` | string | Quest expiry time |
-| `tthh` | int | Hours remaining |
-| `tthm` | int | Minutes remaining |
-| `tths` | int | Seconds remaining |
+| `shinyStats` | int | Shiny rate (1 in N) for reward pokemon |
+| `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` for reward pokemon |
+| `time` | string | Quest expiry time (alias for `disappearTime`) |
+| `disappearTime` | string | Quest expiry time (end of day) |
+| `futureEvent` | bool | Quest may change due to upcoming event |
+| `futureEventTime` | string | Event start time |
+| `futureEventName` | string | Event name |
+| `futureEventTrigger` | string | Event trigger type |
 
-### Reward Data
+Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
+
+Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`, `quest_title`, `target`) are also available.
+
+### Reward Name Strings
+
+These are flat top-level strings, not nested under a `rewardData` object:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `rewardData.monsters` | array | Pokemon rewards: `{pokemonId, formId, shiny, name, form, fullName}` |
-| `rewardData.monsterNames` | string | Comma-separated pokemon reward names |
-| `rewardData.items` | array | Item rewards: `{id, amount, name}` |
-| `rewardData.itemNames` | string | Comma-separated item names |
-| `rewardData.dustAmount` | int | Stardust amount |
-| `rewardData.energyMonsters` | array | Mega energy rewards |
-| `rewardData.energyMonstersNames` | string | Energy reward text |
-| `rewardData.candy` | array | Candy rewards |
-| `rewardData.candyMonstersNames` | string | Candy reward text |
+| `monsterNames` | string | Comma-separated pokemon reward names (translated) |
+| `monsterNamesEng` | string | English pokemon reward names |
+| `itemNames` | string | Comma-separated item names (translated) |
+| `itemNamesEng` | string | English item names |
+| `dustText` | string | Translated stardust text (e.g. "500 Stardust") |
+| `dustTextEng` | string | English stardust text |
+| `energyMonstersNames` | string | Mega energy reward text (translated) |
+| `energyMonstersNamesEng` | string | English energy reward text |
+| `candyMonstersNames` | string | Candy reward text (translated) |
+| `candyMonstersNamesEng` | string | English candy reward text |
+| `monsterList` | array | Structured pokemon rewards: `{pokemonId, formId, shiny, name, formName, fullName, nameEng, fullNameEng}` |
 
 ---
 
@@ -368,26 +415,29 @@ Unhatched raid egg.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `pokestopId` | string | Pokestop ID |
-| `pokestopName` | string | Pokestop name |
-| `pokestopUrl` | string | Pokestop image URL |
+| `pokestopName` | string | Pokestop name (alias for `pokestop_name`) |
+| `pokestopUrl` | string | Pokestop image URL (alias for `pokestop_url`) |
 | `gruntTypeId` | int | Grunt type ID |
 | `gruntName` | string | Translated grunt name |
-| `gruntType` | string | Translated grunt type (e.g. "Water") |
-| `gruntTypeName` | string | Same as gruntType |
+| `gruntType` | string | Translated grunt type, e.g. "Water" (alias for `gruntTypeName`) |
+| `gruntTypeName` | string | Translated grunt type name |
 | `gruntTypeColor` | string | Type color hex |
 | `gruntTypeEmoji` | string | Type emoji |
-| `gruntRewards` | string | Reward pokemon summary |
+| `gruntRewards` | string | Reward pokemon summary (translated) |
 | `gruntRewardsList` | object | Structured: `{first: {chance, monsters}, second: {chance, monsters}}` |
-| `gruntLineupList` | object | Confirmed lineup: `{confirmed, monsters}` |
-| `gender` | int | Grunt gender (1=male, 2=female) |
+| `gruntRewardIDs` | object | Raw reward pokemon IDs (without translation) |
+| `gruntGender` | int | Grunt gender (1=male, 2=female) |
 | `genderData` | object | `{name, emoji}` |
+| `genderEmoji` | string | Gender emoji |
 | `displayTypeId` | int | Event display type |
-| `time` | string | Expiry time |
-| `tthd` | int | Days remaining |
-| `tthh` | int | Hours remaining |
-| `tthm` | int | Minutes remaining |
-| `tths` | int | Seconds remaining |
+| `time` | string | Expiry time (alias for `disappearTime`) |
+| `disappearTime` | string | Invasion expiry time |
+
+Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
+
+Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`) are also available.
+
+Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are available for invasions.
 
 ---
 
@@ -395,18 +445,20 @@ Unhatched raid egg.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `pokestopId` | string | Pokestop ID |
-| `pokestopName` | string | Pokestop name |
-| `pokestopUrl` | string | Pokestop image URL |
-| `lureTypeId` | int | Lure type ID (501-506) |
+| `pokestopName` | string | Pokestop name (alias for `pokestop_name`) |
+| `pokestopUrl` | string | Pokestop image URL (alias for `pokestop_url`) |
 | `lureTypeName` | string | Translated lure type name |
-| `lureType` | string | Same as lureTypeName |
-| `lureTypeColor` | string | Lure color hex |
+| `lureType` | string | *Deprecated* — alias for `lureTypeName` |
+| `lureTypeColor` | string | Lure color hex (alias for `lureColor`) |
 | `lureTypeEmoji` | string | Lure emoji |
-| `time` | string | Lure expiry time |
-| `tthh` | int | Hours remaining |
-| `tthm` | int | Minutes remaining |
-| `tths` | int | Seconds remaining |
+| `time` | string | Lure expiry time (alias for `disappearTime`) |
+| `disappearTime` | string | Lure expiry time |
+
+Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
+
+Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`, `lure_id`) are also available.
+
+**Note:** `lureTypeId` is not set as an enrichment field. Use `lure_id` from the webhook layer to access the lure type ID.
 
 ---
 
@@ -414,15 +466,19 @@ Unhatched raid egg.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `gymId` | string | Gym ID |
-| `gymName` | string | Gym name |
-| `gymUrl` | string | Gym image URL |
-| `teamId` | int | New team ID |
+| `gymId` | string | Gym ID (alias for `gym_id`) |
+| `gymName` | string | Gym name (alias for webhook `name`) |
+| `gymUrl` | string | Gym image URL (alias for webhook `url`) |
+| `teamId` | int | New team ID (alias for `team_id`) |
 | `oldTeamId` | int | Previous team ID |
+| `previousControlId` | int | *Deprecated* — alias for `oldTeamId` |
 | `teamName` | string | Translated new team name |
-| `oldTeamName` | string | Translated previous team name |
+| `teamNameEng` | string | English team name |
+| `teamColor` | string | Team color hex |
+| `oldTeamName` | string | Translated previous team name (alias for `previousControlName`) |
+| `previousControlName` | string | Translated previous controller team name |
 | `gymColor` | string | New team color hex |
-| `color` | string | Same as gymColor (deprecated alias) |
+| `color` | string | Same as gymColor (*deprecated*) |
 | `teamEmoji` | string | New team emoji |
 | `previousControlTeamEmoji` | string | Previous team emoji |
 | `slotsAvailable` | int | Available defender slots |
@@ -431,10 +487,9 @@ Unhatched raid egg.
 | `oldTrainerCount` | int | Previous defenders |
 | `ex` | bool | EX raid eligible |
 | `inBattle` | bool | Gym in battle |
-| `time` | string | Event time |
-| `tthh` | int | Hours |
-| `tthm` | int | Minutes |
-| `tths` | int | Seconds |
+| `conqueredTime` | string | Formatted time of team change (current time) |
+
+Time-remaining fields are set with a fixed 1-hour TTH.
 
 ---
 
@@ -442,29 +497,34 @@ Unhatched raid egg.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `nestId` | string | Nest area ID |
-| `nestName` | string | Nest name |
-| `pokemonId` | int | Nesting pokemon ID |
+| `nestName` | string | Nest name (alias for `nest_name` from webhook) |
 | `name` | string | Translated pokemon name |
+| `nameEng` | string | English pokemon name |
 | `formName` | string | Translated form name |
+| `formNormalised` | string | Form name (empty if "Normal") |
 | `fullName` | string | Name + form |
-| `formId` | int | Form ID |
-| `pokemonCount` | int | Observed spawn count |
-| `pokemonSpawnAvg` | number | Average spawns per hour |
+| `fullNameEng` | string | English name + form |
+| `formNormalisedEng` | string | English form name (empty if "Normal") |
 | `typeName` | string | Translated type names |
 | `color` | string | Type color hex |
-| `emoji` | array | Type emoji array |
-| `emojiString` | string | Type emojis concatenated |
-| `typeEmoji` | string | Same as emojiString |
-| `shinyPossible` | bool | Can be shiny |
-| `shinyPossibleEmoji` | string | Shiny emoji |
-| `resetDate` | string | Next nest rotation date |
-| `resetTime` | string | Next nest rotation time |
-| `time` | string | Reset time |
-| `tthd` | int | Days until reset |
-| `tthh` | int | Hours |
-| `tthm` | int | Minutes |
-| `tths` | int | Seconds |
+| `typeEmoji` | string | Type emojis concatenated |
+| `resetDate` | string | Nest rotation date |
+| `resetTime` | string | Nest rotation time |
+| `disappearTime` | string | Expiry time (reset + 7 days) |
+| `disappearDate` | string | Expiry date |
+| `time` | string | Alias for `disappearTime` |
+
+Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
+
+Raw webhook fields (`nest_id`, `nest_name`, `pokemon_id`, `form`, `pokemon_avg`) are also available.
+
+**Known gaps:**
+- Map URLs (`googleMapUrl`, etc.) are **not set** for nests. The nest enrichment does not call `addMapURLs`.
+- `shinyPossible` / `shinyPossibleEmoji` are **not set** for nests.
+- `pokemonCount` is **not available** (not present in the webhook data from Golbat).
+- The `nestName` alias resolves to `nest_name` from the webhook, which may be empty if the webhook uses a different field name.
+
+**Nest autoposition:** If the webhook includes `poly_path` (polygon coordinates), the enrichment computes optimal `zoom`, `map_latitude`, and `map_longitude` for the static map tile.
 
 ---
 
@@ -550,16 +610,12 @@ Each `activePokemons` entry:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | string | Fort ID |
 | `fortType` | string | "pokestop" or "gym" |
 | `fortTypeText` | string | "Pokestop" or "Gym" |
-| `name` | string | Fort name |
-| `description` | string | Fort description |
-| `imgUrl` | string | Fort image URL |
-| `change_type` | string | "new", "edit", or "removal" |
-| `changeType` | string | Same as change_type |
+| `name` | string | Fort name (best available from new/old snapshot) |
+| `description` | string | Fort description (best available) |
+| `imgUrl` | string | Fort image URL (best available) |
 | `changeTypeText` | string | "New", "Edit", or "Removal" |
-| `changeTypes` | array | All change types |
 | `isNew` | bool | Is a new fort |
 | `isEdit` | bool | Is an edit to existing fort |
 | `isRemoval` | bool | Is a removal |
@@ -567,34 +623,67 @@ Each `activePokemons` entry:
 | `isEditDescription` | bool | Description was changed |
 | `isEditLocation` | bool | Location was changed |
 | `isEditImageUrl` | bool | Image was changed |
+| `isEditImgUrl` | bool | Alias for `isEditImageUrl` |
 | `oldName` | string | Previous name |
 | `oldDescription` | string | Previous description |
 | `oldImageUrl` | string | Previous image URL |
+| `oldImgUrl` | string | Alias for `oldImageUrl` |
 | `oldLatitude` | float | Previous latitude |
 | `oldLongitude` | float | Previous longitude |
 | `newName` | string | New name |
 | `newDescription` | string | New description |
 | `newImageUrl` | string | New image URL |
+| `newImgUrl` | string | Alias for `newImageUrl` |
 | `newLatitude` | float | New latitude |
 | `newLongitude` | float | New longitude |
+| `zoom` | float | Autopositioned zoom level (if location edit with old/new coords) |
+| `map_latitude` | float | Autopositioned map center latitude |
+| `map_longitude` | float | Autopositioned map center longitude |
+
+Raw webhook fields (`change_type`, `edit_types`) are also available.
+
+**Not yet implemented:** `tth`, `disappearTime`, `resetDate`, `resetTime` timing fields are not set for fort updates.
 
 ---
 
 ## Handlebars Helpers
 
-Templates can use built-in Handlebars block helpers plus ~47 custom helpers registered by the processor:
+Templates can use built-in Handlebars block helpers plus custom helpers registered by the processor:
 
 **Built-in:**
 - `{{#if field}}` / `{{#unless field}}` — conditional rendering
-- `{{#each array}}` — iteration (`{{this}}` for current item, `{{@index}}` for index)
+- `{{#each array}}` — iteration (`{{this}}` for current item, `{{@index}}` for index, `{{isFirst}}`/`{{isLast}}` as context properties)
+- `{{#forEach array}}` — like each, with `{{@total}}` data variable
 
-**Comparison:** `{{#eq a b}}`, `{{#ne a b}}`, `{{#gt a b}}`, `{{#lt a b}}`, `{{#gte a b}}`, `{{#lte a b}}`, `{{#and a b}}`, `{{#or a b}}`, `{{#not a}}`
+**Comparison:** `{{#eq a b}}`, `{{#ne a b}}`, `{{#isnt a b}}`, `{{#gt a b}}`, `{{#lt a b}}`, `{{#gte a b}}`, `{{#lte a b}}`, `{{#and a b ...}}` (variadic), `{{#or a b ...}}` (variadic), `{{#neither a b ...}}` (variadic, inverse of or), `{{#not a}}`, `{{#contains collection value}}`, `{{#compare a "op" b}}`
 
-**Math:** `{{add a b}}`, `{{subtract a b}}`, `{{multiply a b}}`, `{{divide a b}}`, `{{round v}}`, `{{floor v}}`, `{{ceil v}}`, `{{abs v}}`, `{{toFixed v decimals}}`
+All comparison helpers work both as block helpers (`{{#eq a b}}X{{else}}Y{{/eq}}`) and as subexpressions (`{{#if (eq a b)}}`).
 
-**String:** `{{contains str sub}}`, `{{split str sep}}`, `{{trim str}}`, `{{join arr sep}}`, `{{concat a b ...}}`, `{{lowercase str}}`, `{{uppercase str}}`, `{{replace str old new}}`
+**Math:** `{{add a b}}`, `{{plus a b}}`, `{{subtract a b}}`, `{{minus a b}}`, `{{multiply a b}}`, `{{divide a b}}`, `{{round v}}`, `{{floor v}}`, `{{ceil v}}`, `{{toFixed v decimals}}`, `{{toInt v}}`
 
-**Formatting:** `{{pad value width}}`, `{{len array}}`
+**String:** `{{contains str sub}}`, `{{join arr sep}}`, `{{concat a b ...}}` (variadic), `{{lowercase str}}`, `{{uppercase str}}`, `{{capitalize str}}`, `{{replace str old new}}` (all occurrences), `{{replaceFirst str old new}}` (first occurrence only), `{{truncate str maxLen [suffix="..."]}}`
+
+**Array:** `{{length arr}}`, `{{first arr [n=1]}}`, `{{last arr [n=1]}}`
+
+**Formatting:** `{{pad0 value width}}` (zero-pad), `{{numberFormat value decimals}}`, `{{addCommas value}}` (thousand separators), `{{default value fallback}}`
+
+**Game Data:**
+- `{{pokemonName id}}` — translated pokemon name (uses template language)
+- `{{pokemonNameEng id}}` — English pokemon name
+- `{{pokemonNameAlt id}}` — alt-language pokemon name
+- `{{pokemonForm formId}}` / `{{pokemonFormEng formId}}` / `{{pokemonFormAlt formId}}` — form names
+- `{{#pokemon id form}}...{{/pokemon}}` — block helper providing rich pokemon context (`name`, `nameEng`, `formName`, `fullName`, `typeName`, `typeEmoji`, `baseStats`, `hasEvolutions`)
+- `{{pokemonBaseStats id form}}` — returns `{baseAttack, baseDefense, baseStamina}`
+- `{{calculateCp baseStats level ivAtk ivDef ivSta}}` or `{{calculateCp pokemonId formId level ivAtk ivDef ivSta}}` — calculate CP
+- `{{moveName id}}` / `{{moveNameEng id}}` / `{{moveNameAlt id}}` — move name lookups
+- `{{moveType moveId}}` / `{{moveTypeEng moveId}}` / `{{moveTypeAlt moveId}}` — move type name
+- `{{moveEmoji moveId}}` / `{{moveEmojiEng moveId}}` / `{{moveEmojiAlt moveId}}` — move type emoji
+- `{{getEmoji key}}` — emoji lookup by key (platform-aware)
+- `{{translateAlt text}}` — translate key in alt language
+- `{{#getPowerUpCost startLevel endLevel}}...{{/getPowerUpCost}}` — power-up costs (`stardust`, `candy`, `xlCandy`)
+- `{{#map "mapName" value}}...{{/map}}` / `{{#map2 "mapName" value fallback}}...{{/map2}}` — custom map lookups (from `config/customMaps/`)
+
+**Utility:** `{{escape value}}` — explicit HTML escaping
 
 ## Example Template
 
