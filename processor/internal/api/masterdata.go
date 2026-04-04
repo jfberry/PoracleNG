@@ -19,6 +19,10 @@ import (
 // raw masterfile data and translations.
 func HandleMasterdataMonsters(gd *gamedata.GameData, translations *i18n.Bundle) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if gd == nil {
+			c.JSON(http.StatusOK, []any{})
+			return
+		}
 		locale := c.Query("locale")
 		if locale == "" {
 			locale = "en"
@@ -131,6 +135,9 @@ func HandleMasterdataGrunts(gd *gamedata.GameData) gin.HandlerFunc {
 
 // buildGruntsResponse converts processor Grunt data to the poracle-v2 grunts.json format.
 func buildGruntsResponse(gd *gamedata.GameData) map[string]*poracle2Grunt {
+	if gd == nil {
+		return make(map[string]*poracle2Grunt)
+	}
 	result := make(map[string]*poracle2Grunt, len(gd.Grunts))
 
 	// Sort IDs for deterministic output.
