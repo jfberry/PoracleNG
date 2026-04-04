@@ -204,7 +204,7 @@ func (r *Renderer) renderForUsers(
 			df.Set("altLanguage", "en")
 
 			tStart := time.Now()
-			result, err := tmpl.ExecWith(view, df)
+			result, err := safeExecWith(tmpl, view, df)
 			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
 				log.Errorf("dts: render %s for user %s: %v", templateType, user.ID, err)
@@ -318,7 +318,7 @@ func (r *Renderer) renderGrouped(
 			df.Set("altLanguage", "en")
 
 			tStart := time.Now()
-			result, err := tmpl.ExecWith(view, df)
+			result, err := safeExecWith(tmpl, view, df)
 			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
 				log.Errorf("dts: render %s for group (%s/%s/%s): %v", templateType, key.platform, key.templateID, key.language, err)
@@ -527,4 +527,16 @@ func mapKeys(m map[string]map[string]any) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// safeExecWith wraps raymond Template.ExecWith with panic recovery.
+// Malformed templates can cause panics in raymond (e.g. nil Options in helpers).
+// This converts those panics into errors so a bad template doesn't crash the process.
+func safeExecWith(tmpl *raymond.Template, ctx interface{}, df *raymond.DataFrame) (result string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("template panic: %v", r)
+		}
+	}()
+	return tmpl.ExecWith(ctx, df)
 }
