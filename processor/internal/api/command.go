@@ -40,8 +40,9 @@ type CommandDeps struct {
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
 	Emoji        *dts.EmojiLookup
-	NLPParser    *nlp.Parser
-	ReloadFunc   func()
+	NLPParser     *nlp.Parser
+	TestProcessor bot.TestProcessor
+	ReloadFunc    func()
 }
 
 type commandRequest struct {
@@ -158,9 +159,10 @@ func HandleCommand(deps *CommandDeps) gin.HandlerFunc {
 				Stats:        deps.Stats,
 				DTS:          deps.DTS,
 				Emoji:        deps.Emoji,
-				NLP:          deps.NLPParser,
-				Registry:     deps.Registry,
-				ReloadFunc:   deps.ReloadFunc,
+				NLP:           deps.NLPParser,
+				TestProcessor: deps.TestProcessor,
+				Registry:      deps.Registry,
+				ReloadFunc:    deps.ReloadFunc,
 			}
 
 			// Handle target override (user<id>, name<webhook>)

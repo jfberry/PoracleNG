@@ -102,6 +102,27 @@ func (r *Renderer) resolveTemplate(trackingTemplate string) string {
 	return r.defaultTemplate
 }
 
+// CheckTemplate validates that a template can be found for the given parameters.
+// Returns nil if a template exists, or an error describing what's missing.
+func (r *Renderer) CheckTemplate(templateType, platform, templateID, language string) error {
+	resolvedID := r.resolveTemplate(templateID)
+	tmpl := r.templates.Get(templateType, platform, resolvedID, language)
+	if tmpl != nil {
+		return nil
+	}
+	// Try monsterNoIv → monster fallback
+	if templateType == "monsterNoIv" {
+		tmpl = r.templates.Get("monster", platform, resolvedID, language)
+		if tmpl != nil {
+			return nil
+		}
+	}
+	if resolvedID == "" {
+		return fmt.Errorf("no DTS template found for type=%q platform=%q (no default template configured)", templateType, platform)
+	}
+	return fmt.Errorf("no DTS template found for type=%q platform=%q template=%q language=%q", templateType, platform, resolvedID, language)
+}
+
 // Templates returns the underlying TemplateStore.
 func (r *Renderer) Templates() *TemplateStore { return r.templates }
 

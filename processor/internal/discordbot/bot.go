@@ -425,9 +425,10 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			Stats:        b.Stats,
 			DTS:          b.DTS,
 			Emoji:        b.Emoji,
-			NLP:          b.nlpParser,
-			Registry:     b.Registry,
-			ReloadFunc:   b.ReloadFunc,
+			NLP:           b.nlpParser,
+			TestProcessor: b.TestProcessor,
+			Registry:      b.Registry,
+			ReloadFunc:    b.ReloadFunc,
 		}
 
 		// Populate delegated admin permissions

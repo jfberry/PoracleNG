@@ -506,8 +506,9 @@ func main() {
 		Stats:        proc.stats,
 		DTS:          cmdDTS,
 		Emoji:        cmdEmoji,
-		NLPParser:    nlpParser,
-		ReloadFunc:   proc.triggerReload,
+		NLPParser:     nlpParser,
+		TestProcessor: proc,
+		ReloadFunc:    proc.triggerReload,
 	}
 	apiGroup.POST("/command", api.HandleCommand(cmdDeps))
 
@@ -606,8 +607,9 @@ func main() {
 		Stats:        proc.stats,
 		DTS:          cmdDTS,
 		Emoji:        cmdEmoji,
-		NLPParser:    nlpParser,
-		ReloadFunc:   proc.triggerReload,
+		NLPParser:     nlpParser,
+		TestProcessor: proc,
+		ReloadFunc:    proc.triggerReload,
 	}
 
 	discordTokens := cfg.Discord.DiscordTokens()
@@ -1002,7 +1004,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		DTSDictionary:       cfg.General.DTSDictionary,
 	})
 	if err != nil {
-		log.Warnf("DTS renderer initialization failed: %s", err)
+		log.Errorf("DTS renderer initialization failed (alerts will not be sent!): %s", err)
 		dtsRenderer = nil
 	} else {
 		dtsRenderer.Templates().LogSummary()

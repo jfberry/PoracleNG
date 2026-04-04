@@ -1,11 +1,8 @@
 package commands
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,8 +97,10 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 	parsed := ctx.ArgMatcher.Match(remaining, poracleTestParams, ctx.Language)
 
 	template := ctx.DefaultTemplate()
+	explicitTemplate := false
 	if t, ok := parsed.Strings["template"]; ok {
 		template = t
+		explicitTemplate = true
 	}
 
 	language := ctx.Language
@@ -136,6 +135,18 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 	}
 	if dataItem == nil {
 		return []bot.Reply{{Text: tr.Tf("msg.poracle_test.not_found", hookType, testID)}}
+	}
+
+	// Validate explicit template exists (after finding test data so we can
+	// resolve the actual DTS type: pokestop→lure/invasion, raid→egg/raid).
+	// Unlike tracking commands where admins get a warning, test commands
+	// always block on missing templates — no point sending a test that can't render.
+	if explicitTemplate && template != "" && ctx.DTS != nil {
+		dtsType := resolveDTSType(hookType, dataItem.Webhook)
+		platform := targetDTSPlatform(ctx)
+		if !ctx.DTS.Exists(dtsType, platform, template, ctx.Language) {
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("tracking.template_not_found", template)}}
+		}
 	}
 
 	// Look up user location
@@ -229,64 +240,65 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 		// No timestamp freshening needed
 	}
 
-	// Marshal webhook for the API request
+	// Marshal webhook for the ProcessTest call
 	webhookJSON, err := json.Marshal(hook)
 	if err != nil {
 		log.Errorf("poracle-test: marshal webhook: %v", err)
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	// Build the API request
-	testReq := map[string]interface{}{
-		"type":    dataItem.Type,
-		"webhook": json.RawMessage(webhookJSON),
-		"target": map[string]interface{}{
-			"id":        ctx.TargetID,
-			"name":      ctx.TargetName,
-			"type":      ctx.TargetType,
-			"language":  language,
-			"template":  template,
-			"latitude":  humanLat,
-			"longitude": humanLon,
-		},
+	if ctx.TestProcessor == nil {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.poracle_test.failed", "test processor not available")}}
 	}
 
-	reqBody, err := json.Marshal(testReq)
-	if err != nil {
-		log.Errorf("poracle-test: marshal request: %v", err)
-		return []bot.Reply{{React: "🙅"}}
+	target := bot.TestTarget{
+		ID:        ctx.TargetID,
+		Name:      ctx.TargetName,
+		Type:      ctx.TargetType,
+		Language:  language,
+		Template:  template,
+		Latitude:  humanLat,
+		Longitude: humanLon,
 	}
 
-	// Reply first with queued message
-	displayID := testID
-	reply := bot.Reply{
-		React: "✅",
-		Text:  tr.Tf("msg.poracle_test.queued", hookType, displayID, template),
-	}
-
-	// POST to the processor's own /api/test endpoint
-	processorURL := fmt.Sprintf("http://localhost:%d", ctx.Config.Processor.Port)
-	url := processorURL + "/api/test"
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	req, _ := http.NewRequest("POST", url, bytes.NewReader(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	if ctx.Config.Alerter.APISecret != "" {
-		req.Header.Set("X-Poracle-Secret", ctx.Config.Alerter.APISecret)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Errorf("poracle-test: request: %v", err)
+	if err := ctx.TestProcessor.ProcessTest(dataItem.Type, json.RawMessage(webhookJSON), target); err != nil {
+		log.Errorf("poracle-test: %v", err)
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.poracle_test.failed", err.Error())}}
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
 
-	if resp.StatusCode != http.StatusOK {
-		log.Errorf("poracle-test: status %d: %s", resp.StatusCode, string(body))
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.poracle_test.failed", fmt.Sprintf("HTTP %d", resp.StatusCode))}}
+	displayID := testID
+	return []bot.Reply{
+		{React: "✅", Text: tr.Tf("msg.poracle_test.queued", hookType, displayID, template)},
 	}
+}
 
-	return []bot.Reply{reply}
+// resolveDTSType determines the DTS template type from the webhook type and data.
+// Some types branch based on the webhook content (pokestop→lure/invasion, raid→egg/raid).
+func resolveDTSType(hookType string, webhook map[string]interface{}) string {
+	switch hookType {
+	case "pokemon":
+		return "monster"
+	case "raid":
+		// If pokemon_id is present and > 0, it's a raid boss; otherwise it's an egg
+		if pid, ok := webhook["pokemon_id"]; ok {
+			if id, _ := pid.(float64); id > 0 {
+				return "raid"
+			}
+		}
+		return "egg"
+	case "pokestop":
+		// If lure_expiration is present and > 0, it's a lure; otherwise invasion
+		if lure, ok := webhook["lure_expiration"]; ok {
+			if exp, _ := lure.(float64); exp > 0 {
+				return "lure"
+			}
+		}
+		return "invasion"
+	case "fort_update":
+		return "fort-update"
+	case "max_battle":
+		return "maxbattle"
+	default:
+		return hookType // quest, gym, nest, egg, invasion, lure — match 1:1
+	}
 }

@@ -47,8 +47,25 @@ type BotDeps struct {
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
 	Emoji        *dts.EmojiLookup
-	NLPParser    *nlp.Parser
-	ReloadFunc   func()
+	NLPParser      *nlp.Parser
+	TestProcessor  TestProcessor
+	ReloadFunc     func()
+}
+
+// TestTarget specifies who to deliver a test alert to.
+type TestTarget struct {
+	ID        string
+	Name      string
+	Type      string // discord:user, telegram:user, etc.
+	Language  string
+	Template  string
+	Latitude  float64
+	Longitude float64
+}
+
+// TestProcessor processes a single test webhook through the enrichment pipeline.
+type TestProcessor interface {
+	ProcessTest(webhookType string, raw json.RawMessage, target TestTarget) error
 }
 
 // Command is implemented by every bot command handler.
@@ -113,8 +130,9 @@ type CommandContext struct {
 	Stats        *tracker.StatsTracker
 	DTS          *dts.TemplateStore
 	Emoji        *dts.EmojiLookup
-	NLP          *nlp.Parser
-	Registry     *Registry
+	NLP           *nlp.Parser
+	TestProcessor TestProcessor
+	Registry      *Registry
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()

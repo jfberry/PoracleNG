@@ -6,14 +6,36 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
+	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
-// ProcessTest processes a test webhook through the enrichment pipeline
-// without matching or dedup, sending the result to the specified target.
-func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage, target api.TestTarget) error {
+func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage, target bot.TestTarget) error {
+	if ps.dtsRenderer == nil {
+		return fmt.Errorf("DTS templates not loaded — check startup logs for template loading errors")
+	}
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	if ps.dispatcher == nil {
+		return fmt.Errorf("message delivery not configured — check Discord/Telegram token settings")
+	}
+
+	// Validate that a matching DTS template exists before enqueueing.
+	// Resolve the actual DTS type by peeking at the webhook data for types
+	// that branch (pokestop→lure/invasion, raid→egg/raid).
+	dtsType := resolveDTSTypeFromRaw(webhookType, raw)
+	platform := delivery.PlatformFromType(target.Type)
+	language := target.Language
+	if language == "" {
+		language = ps.cfg.General.Locale
+	}
+	if err := ps.dtsRenderer.CheckTemplate(dtsType, platform, target.Template, language); err != nil {
+		return err
+	}
+
 	matchedUser := webhook.MatchedUser{
 		ID:       target.ID,
 		Name:     target.Name,
@@ -394,5 +416,38 @@ func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webh
 	return ps.processTestInvasion(raw, target)
 }
 
+// resolveDTSTypeFromRaw determines the DTS template type by peeking at the raw webhook JSON.
+// Handles branching types: pokestop→lure/invasion, raid→egg/raid.
+func resolveDTSTypeFromRaw(webhookType string, raw json.RawMessage) string {
+	switch webhookType {
+	case "pokemon":
+		return "monster"
+	case "raid":
+		var peek struct {
+			PokemonID int `json:"pokemon_id"`
+		}
+		if json.Unmarshal(raw, &peek) == nil && peek.PokemonID > 0 {
+			return "raid"
+		}
+		return "egg"
+	case "egg":
+		return "egg"
+	case "pokestop":
+		var peek struct {
+			LureExpiration int64 `json:"lure_expiration"`
+		}
+		if json.Unmarshal(raw, &peek) == nil && peek.LureExpiration > 0 {
+			return "lure"
+		}
+		return "invasion"
+	case "fort_update":
+		return "fort-update"
+	case "max_battle":
+		return "maxbattle"
+	default:
+		return webhookType
+	}
+}
+
 // Ensure ProcessorService implements TestProcessor
-var _ api.TestProcessor = (*ProcessorService)(nil)
+var _ bot.TestProcessor = (*ProcessorService)(nil)
