@@ -371,9 +371,6 @@ func registerMiscGameHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *
 }
 
 // ---------------------------------------------------------------------------
-// CP Multiplier table
-// ---------------------------------------------------------------------------
-
 // getCPMultiplier returns the CP multiplier for a given level from util.json data.
 func getCPMultiplier(gd *gamedata.GameData, level float64) float64 {
 	if gd != nil && gd.Util != nil && gd.Util.CpMultipliers != nil {

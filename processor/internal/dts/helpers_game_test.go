@@ -499,6 +499,11 @@ func TestBuildFullName(t *testing.T) {
 
 func TestGetCPMultiplier(t *testing.T) {
 	gd := testGameData()
+	// Add CP multipliers to test data
+	gd.Util.CpMultipliers = map[string]float64{
+		"20": 0.597400009632111,
+		"40": 0.790300011634827,
+	}
 
 	// Level 20
 	cpm := getCPMultiplier(gd, 20)
