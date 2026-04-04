@@ -1,4 +1,6 @@
 {
+  "weather.possible_change_at": "Changement météo possible à",
+  "weather.unknown": "inconnu",
   "rate_limit.reached": "Vous avez atteint la limite de {0} messages en {1} secondes",
   "rate_limit.banned_soft": "Vous avez dépassé le nombre de messages autorisés trop de fois dans les dernières 24h. Vos notifications sont stoppées, utilisez {0}start pour reprendre",
   "rate_limit.banned_hard": "Vous avez dépassé le nombre de messages autorisés trop de fois dans les dernières 24h. Vos notifications sont stoppées, contactez un administrateur pour reprendre",
