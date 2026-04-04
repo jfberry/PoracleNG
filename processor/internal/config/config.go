@@ -460,12 +460,13 @@ type AlertLimitOverride struct {
 }
 
 type WebhookLoggingConfig struct {
-	Enabled    bool   `toml:"enabled"`
-	Filename   string `toml:"filename"`
-	MaxSize    int    `toml:"max_size"`
-	MaxAge     int    `toml:"max_age"`
-	MaxBackups int    `toml:"max_backups"`
-	Compress   bool   `toml:"compress"`
+	Enabled        bool   `toml:"enabled"`
+	Filename       string `toml:"filename"`
+	MaxSize        int    `toml:"max_size"`    // MB per file
+	MaxAge         int    `toml:"max_age"`     // days to keep old files (0 = use max_backups only)
+	MaxBackups     int    `toml:"max_backups"` // number of old files to keep
+	Compress       bool   `toml:"compress"`
+	RotateInterval int    `toml:"rotate_interval"` // minutes between forced rotations (0 = size only)
 }
 
 // GeocodingConfig holds settings from the [geocoding] section for static map generation
@@ -592,8 +593,17 @@ func Load(baseDir string) (*Config, error) {
 			Filename:           "logs/processor.log",
 			FileLoggingEnabled: true,
 			MaxSize:            50,
-			MaxAge:             30,
+			MaxAge:             7,
 			MaxBackups:         5,
+			Compress:           true,
+		},
+		WebhookLogging: WebhookLoggingConfig{
+			Filename:       "logs/webhooks.log",
+			MaxSize:        100,
+			MaxAge:         1,
+			MaxBackups:     12,
+			Compress:       true,
+			RotateInterval: 60, // hourly
 		},
 		Discord: DiscordConfig{
 			Enabled:  true,

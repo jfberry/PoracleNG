@@ -193,14 +193,26 @@ func main() {
 		if maxSize == 0 {
 			maxSize = 100
 		}
-		webhookLogger = &lumberjack.Logger{
+		lj := &lumberjack.Logger{
 			Filename:   cfg.WebhookLogging.Filename,
 			MaxSize:    maxSize,
 			MaxAge:     cfg.WebhookLogging.MaxAge,
 			MaxBackups: cfg.WebhookLogging.MaxBackups,
 			Compress:   cfg.WebhookLogging.Compress,
 		}
-		log.Infof("Webhook logging enabled: %s", cfg.WebhookLogging.Filename)
+		webhookLogger = lj
+
+		// Timer-based rotation (e.g. hourly) in addition to size-based
+		if cfg.WebhookLogging.RotateInterval > 0 {
+			go func() {
+				ticker := time.NewTicker(time.Duration(cfg.WebhookLogging.RotateInterval) * time.Minute)
+				defer ticker.Stop()
+				for range ticker.C {
+					lj.Rotate() //nolint:errcheck
+				}
+			}()
+		}
+		log.Infof("Webhook logging enabled: %s (rotate every %dm)", cfg.WebhookLogging.Filename, cfg.WebhookLogging.RotateInterval)
 	}
 	webhookHandler := webhook.NewHandler(proc, webhookLogger)
 
