@@ -87,11 +87,15 @@ func LoadUtilData(path string) (*UtilData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
+	return ParseUtilData(data)
+}
 
+// ParseUtilData parses util.json from raw bytes (for embedded data).
+func ParseUtilData(data []byte) (*UtilData, error) {
 	// Parse into raw JSON map first since keys are sometimes strings of ints
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+		return nil, fmt.Errorf("parse util.json: %w", err)
 	}
 
 	u := &UtilData{}

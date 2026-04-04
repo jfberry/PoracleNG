@@ -518,10 +518,9 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	// Load full game data from raw masterfile + util.json
 	gd, err := gamedata.Load(cfg.BaseDir)
 	if err != nil {
-		log.Warnf("Failed to load game data: %s (enrichment will be limited)", err)
-	} else {
-		log.Infof("Game data loaded: %d monsters, %d moves, %d types", len(gd.Monsters), len(gd.Moves), len(gd.Types))
+		log.Fatalf("Failed to load game data: %s — ensure resources are downloaded (check network on first run)", err)
 	}
+	log.Infof("Game data loaded: %d monsters, %d moves, %d types", len(gd.Monsters), len(gd.Moves), len(gd.Types))
 
 	var activePokemon *tracker.ActivePokemonTracker
 	var pokemonTypes *gamedata.PokemonTypes
