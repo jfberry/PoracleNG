@@ -60,6 +60,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		if rate > 0 {
 			m["shinyStats"] = int(math.Round(rate))
 			m["shinyPossible"] = true
+			m["shinyPossibleEmojiKey"] = "shiny"
 		} else {
 			m["shinyPossible"] = false
 		}
@@ -81,6 +82,11 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		m["disappear_time"] = pokemon.DisappearTime // integer for <t:{{disappear_time}}:R>
 		m["disappearTime"] = geo.FormatTime(pokemon.DisappearTime, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(pokemon.DisappearTime)
+		tthSec := pokemon.DisappearTime - time.Now().Unix()
+		if tthSec < 0 {
+			tthSec = 0
+		}
+		m["tthSeconds"] = int(tthSec)
 
 		// Weather change time: the hour boundary before disappear_time
 		weatherChangeTS := pokemon.DisappearTime - (pokemon.DisappearTime % 3600)
@@ -314,6 +320,7 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
+	enTr := e.Translations.For("en")
 	monster := gd.GetMonster(pokemon.PokemonID, pokemon.Form)
 	if monster == nil {
 		return m
@@ -323,12 +330,12 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 	TranslateMonsterNamesEng(m, gd, tr, e.Translations, pokemon.PokemonID, pokemon.Form, 0)
 
 	// Type names
-	TranslateTypeNames(m, tr, monster.Types)
+	TranslateTypeNames(m, tr, enTr, monster.Types)
 
 	// Move names
 	encountered, _ := base["encountered"].(bool)
 	if encountered {
-		addMoveFields(m, gd, tr, pokemon.Move1, pokemon.Move2)
+		addMoveFields(m, gd, tr, enTr, pokemon.Move1, pokemon.Move2)
 	} else {
 		m["quickMoveName"] = ""
 		m["chargeMoveName"] = ""
@@ -348,11 +355,30 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		}
 	}
 
+	// Weather forecast names (for weather change templates)
+	forecastCurrent, _ := base["weatherForecastCurrent"].(int)
+	forecastNext, _ := base["weatherForecastNext"].(int)
+	if forecastCurrent > 0 {
+		m["weatherCurrentName"] = TranslateWeatherName(tr, forecastCurrent)
+		if wInfo, ok := gd.Util.Weather[forecastCurrent]; ok {
+			m["weatherCurrentEmojiKey"] = wInfo.Emoji
+		}
+	}
+	if forecastNext > 0 {
+		m["weatherNextName"] = TranslateWeatherName(tr, forecastNext)
+		if wInfo, ok := gd.Util.Weather[forecastNext]; ok {
+			m["weatherNextEmojiKey"] = wInfo.Emoji
+		}
+		// Translated strings for weatherChange composition (in layered view)
+		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
+		m["weatherCurrentUnknown"] = tr.T("weather.unknown")
+	}
+
 	// Generation name
 	addGenerationFields(m, gd, tr, pokemon.PokemonID, pokemon.Form)
 
 	// Gender name
-	addGenderFields(m, gd, tr, pokemon.Gender)
+	addGenderFields(m, gd, tr, enTr, pokemon.Gender)
 
 	// Rarity name
 	rarityGroup, _ := base["rarityGroup"].(int)
@@ -464,6 +490,7 @@ func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr
 					"baseDefense": mon.Defense,
 					"baseStamina": mon.Stamina,
 				}
+				// Flat base stats for DTS templates using {{this.baseAttack}}
 				entry["baseAttack"] = mon.Attack
 				entry["baseDefense"] = mon.Defense
 				entry["baseStamina"] = mon.Stamina
@@ -518,7 +545,7 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 
 			nameInfo := make(map[string]any)
 			TranslateMonsterNames(nameInfo, gd, tr, evo.PokemonID, evo.FormID, 0)
-			TranslateTypeNames(nameInfo, tr, evoMon.Types)
+			TranslateTypeNames(nameInfo, tr, nil, evoMon.Types)
 			nameInfo["id"] = evo.PokemonID
 			nameInfo["form"] = evo.FormID
 			nameInfo["typeEmojiKeys"] = gd.GetTypeEmojiKeys(evoMon.Types)
@@ -546,7 +573,7 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 			megaInfo["fullName"] = i18n.Format(pattern, baseName)
 			megaInfo["evolution"] = te.TempEvoID
 			megaInfo["typeEmojiKeys"] = gd.GetTypeEmojiKeys(types)
-			TranslateTypeNames(megaInfo, tr, types)
+			TranslateTypeNames(megaInfo, tr, nil, types)
 			megaInfo["baseStats"] = map[string]int{
 				"baseAttack":  te.Attack,
 				"baseDefense": te.Defense,

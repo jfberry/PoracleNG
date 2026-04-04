@@ -233,6 +233,13 @@ type InvasionWebhook struct {
 	DisplayType             int     `json:"display_type"`
 	IncidentDisplayType     int     `json:"incident_display_type"`
 	Confirmed               bool    `json:"confirmed"`
+	Lineup                  []InvasionLineupEntry `json:"lineup"`
+}
+
+// InvasionLineupEntry is a confirmed catch from a grunt battle.
+type InvasionLineupEntry struct {
+	PokemonID int `json:"pokemon_id"`
+	Form      int `json:"form"`
 }
 
 // QuestWebhook mirrors Golbat's quest webhook message.
@@ -279,16 +286,19 @@ type GymWebhook struct {
 	LastOwnerID    int      `json:"last_owner_id"`
 }
 
-// NestWebhook mirrors a nest webhook message.
+// NestWebhook mirrors a nest webhook message from the nest processor.
 type NestWebhook struct {
-	NestID     int64           `json:"nest_id"`
-	PokemonID  int             `json:"pokemon_id"`
-	Form       int             `json:"form"`
-	PokemonAvg float64         `json:"pokemon_avg"`
-	Latitude   float64         `json:"latitude"`
-	Longitude  float64         `json:"longitude"`
-	ResetTime  int64           `json:"reset_time"`
-	PolyPath   json.RawMessage `json:"poly_path"`
+	NestID       int64   `json:"nest_id"`
+	Name         string  `json:"name"`
+	Lat          float64 `json:"lat"`
+	Lon          float64 `json:"lon"`
+	PokemonID    int     `json:"pokemon_id"`
+	Form         int     `json:"form"`
+	PokemonCount uint64  `json:"pokemon_count"`
+	PokemonAvg   float64 `json:"pokemon_avg"`
+	PokemonRatio float64 `json:"pokemon_ratio"`
+	PolyPath     string  `json:"poly_path"` // JSON-encoded polygon path
+	ResetTime    int64   `json:"reset_time"`
 }
 
 // MaxbattleWebhook mirrors Golbat's max_battle webhook message.

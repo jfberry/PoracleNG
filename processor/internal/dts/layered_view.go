@@ -1,6 +1,7 @@
 package dts
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -87,6 +88,9 @@ func NewLayeredView(
 
 	// Resolve emoji keys inside weaknessList entries (per-platform)
 	resolveWeaknessEmojis(vb.emoji, perLang, platform)
+
+	// Compose weatherChange text from forecast fields (needs resolved emoji + translated names)
+	composeWeatherChange(lv.computed, base, perLang, vb.emoji, platform)
 
 	// Escape user-generated content (pokestop/gym names) into computed layer
 	escapeUserContentLayered(lv.computed, base, webhookFields)
@@ -377,4 +381,68 @@ func buildAliasLookup(templateType string) map[string]string {
 	}
 	aliasLookupCache.Store(templateType, m)
 	return m
+}
+
+// composeWeatherChange builds the weatherChange text from forecast fields.
+// Format matches JS: "⚠️ {Possible weather change at} {time} : {currentEmoji} {current} ➡️ {nextEmoji} {next}"
+// When weatherCurrent is unknown: "⚠️ {Possible weather change at} {time} : ➡️ {nextEmoji} {next}"
+func composeWeatherChange(computed map[string]any, base, perLang map[string]any, emoji *EmojiLookup, platform string) {
+	// weatherNext must exist (set by forecast impact detection)
+	weatherNext, _ := lookupField(base, perLang, "weatherForecastNext").(int)
+	if weatherNext == 0 {
+		return
+	}
+
+	weatherChangeTime, _ := lookupField(base, perLang, "weatherChangeTime").(string)
+	if weatherChangeTime == "" {
+		return
+	}
+
+	// Get translated weather change prefix from per-language enrichment
+	prefix, _ := lookupField(base, perLang, "weatherChangePossibleAt").(string)
+	if prefix == "" {
+		prefix = "Possible weather change at"
+	}
+
+	nextName, _ := lookupField(base, perLang, "weatherNextName").(string)
+	nextEmojiKey, _ := lookupField(base, perLang, "weatherNextEmojiKey").(string)
+	nextEmoji := ""
+	if nextEmojiKey != "" && emoji != nil {
+		nextEmoji = emoji.Lookup(nextEmojiKey, platform)
+	}
+
+	weatherCurrent, _ := lookupField(base, perLang, "weatherForecastCurrent").(int)
+	if weatherCurrent == 0 {
+		// Unknown current weather
+		currentName, _ := lookupField(base, perLang, "weatherCurrentUnknown").(string)
+		if currentName == "" {
+			currentName = "unknown"
+		}
+		computed["weatherCurrentName"] = currentName
+		computed["weatherCurrentEmoji"] = "❓"
+		computed["weatherChange"] = fmt.Sprintf("⚠️ %s %s : ➡️ %s %s", prefix, weatherChangeTime, nextName, nextEmoji)
+	} else {
+		currentName, _ := lookupField(base, perLang, "weatherCurrentName").(string)
+		currentEmojiKey, _ := lookupField(base, perLang, "weatherCurrentEmojiKey").(string)
+		currentEmoji := ""
+		if currentEmojiKey != "" && emoji != nil {
+			currentEmoji = emoji.Lookup(currentEmojiKey, platform)
+		}
+		computed["weatherChange"] = fmt.Sprintf("⚠️ %s %s : %s %s ➡️ %s %s", prefix, weatherChangeTime, currentName, currentEmoji, nextName, nextEmoji)
+	}
+}
+
+// lookupField checks perLang first, then base, for a field value.
+func lookupField(base, perLang map[string]any, key string) any {
+	if perLang != nil {
+		if v, ok := perLang[key]; ok {
+			return v
+		}
+	}
+	if base != nil {
+		if v, ok := base[key]; ok {
+			return v
+		}
+	}
+	return nil
 }

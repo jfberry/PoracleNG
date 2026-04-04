@@ -49,8 +49,8 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 			PokemonID:  nest.PokemonID,
 			Form:       nest.Form,
 			PokemonAvg: nest.PokemonAvg,
-			Latitude:   nest.Latitude,
-			Longitude:  nest.Longitude,
+			Latitude:   nest.Lat,
+			Longitude:  nest.Lon,
 		}
 
 		st := ps.stateMgr.Get()
@@ -63,7 +63,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 			metrics.MatchedEvents.WithLabelValues("nest").Inc()
 			metrics.MatchedUsers.WithLabelValues("nest").Add(float64(len(matched)))
 
-			areas := st.Geofence.PointInAreas(nest.Latitude, nest.Longitude)
+			areas := st.Geofence.PointInAreas(nest.Lat, nest.Lon)
 			matchedAreas := buildMatchedAreas(areas)
 
 			l.Infof("Nest %s (avg %.1f/hr) areas(%s) and %d humans cared",

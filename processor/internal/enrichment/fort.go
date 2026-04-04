@@ -18,6 +18,18 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.For
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "pokestops", fortID)
 
+	// Fort ID
+	m["id"] = fortID
+
+	// isEmpty — true if the fort has no name or description
+	isEmpty := true
+	if fort.New != nil && (fort.New.Name != "" || fort.New.Description != "") {
+		isEmpty = false
+	} else if fort.Old != nil && fort.Old.Name != "" {
+		isEmpty = false
+	}
+	m["isEmpty"] = isEmpty
+
 	// Fort type
 	fortType := "unknown"
 	if fort.New != nil && fort.New.FortType != "" {
@@ -186,6 +198,7 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.For
 		webhookFields["map_longitude"] = position.Longitude
 	}
 	pending := e.addStaticMap(m, "fort-update", mapLat, mapLon, webhookFields)
+
 
 	return m, pending
 }

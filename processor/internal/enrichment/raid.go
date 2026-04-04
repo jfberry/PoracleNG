@@ -153,11 +153,31 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 				m["weaknessList"] = gamedata.CalculateWeaknesses(monster.Types, gd.Types)
 
 				// Weather boost
-				m["boostingWeatherIds"] = gd.GetBoostingWeathers(monster.Types)
+				boostingWeathers := gd.GetBoostingWeathers(monster.Types)
+				m["boostingWeatherIds"] = boostingWeathers
+				m["boostingWeatherEmojiKeys"] = gd.GetWeatherEmojiKeys(boostingWeathers)
+
+				// Evolution chain
+				m["hasEvolutions"] = len(monster.Evolutions) > 0
+				m["hasMegaEvolutions"] = len(monster.TempEvolutions) > 0
+
+				// Shiny possible
+				if e.ShinyProvider != nil {
+					rate := e.ShinyProvider.GetShinyRate(raid.PokemonID)
+					if rate > 0 {
+						m["shinyPossible"] = true
+						m["shinyPossibleEmojiKey"] = "shiny"
+					} else {
+						m["shinyPossible"] = false
+					}
+				}
 			}
 		}
 	}
 
+	if raid.PokemonID > 0 {
+	} else {
+	}
 	return m, pending
 }
 
@@ -184,6 +204,24 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		}
 	}
 
+	// Weather forecast names (for weatherChange composition)
+	forecastCurrent, _ := base["weatherForecastCurrent"].(int)
+	forecastNext, _ := base["weatherForecastNext"].(int)
+	if forecastCurrent > 0 {
+		m["weatherCurrentName"] = TranslateWeatherName(tr, forecastCurrent)
+		if wInfo, ok := gd.Util.Weather[forecastCurrent]; ok {
+			m["weatherCurrentEmojiKey"] = wInfo.Emoji
+		}
+	}
+	if forecastNext > 0 {
+		m["weatherNextName"] = TranslateWeatherName(tr, forecastNext)
+		if wInfo, ok := gd.Util.Weather[forecastNext]; ok {
+			m["weatherNextEmojiKey"] = wInfo.Emoji
+		}
+		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
+		m["weatherCurrentUnknown"] = tr.T("weather.unknown")
+	}
+
 	// Level name
 	if levelName, ok := base["levelNameEng"].(string); ok {
 		m["levelName"] = tr.T(levelName)
@@ -198,11 +236,13 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		// Pokemon name
 		TranslateMonsterNamesEng(m, gd, tr, e.Translations, raid.PokemonID, raid.Form, raid.Evolution)
 
+		enTr := e.Translations.For("en")
+
 		// Type names
-		TranslateTypeNames(m, tr, monster.Types)
+		TranslateTypeNames(m, tr, enTr, monster.Types)
 
 		// Moves
-		addMoveFields(m, gd, tr, raid.Move1, raid.Move2)
+		addMoveFields(m, gd, tr, enTr, raid.Move1, raid.Move2)
 
 		// Weather boost
 		weather := toInt(base["gameWeatherId"])
@@ -212,7 +252,7 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		addGenerationFields(m, gd, tr, raid.PokemonID, raid.Form)
 
 		// Gender
-		addGenderFields(m, gd, tr, raid.Gender)
+		addGenderFields(m, gd, tr, enTr, raid.Gender)
 
 		// Evolution name + megaName
 		if raid.Evolution > 0 {
@@ -234,6 +274,11 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
 			m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr, gd)
 		}
+
+		// Evolution chain (same helper as pokemon)
+		evolutions, megaEvolutions := e.buildEvolutions(gd, tr, raid.PokemonID, raid.Form)
+		m["evolutions"] = evolutions
+		m["megaEvolutions"] = megaEvolutions
 	}
 
 	return m

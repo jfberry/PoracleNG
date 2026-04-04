@@ -287,8 +287,8 @@ func TestNestIconURLs(t *testing.T) {
 	nest := &webhook.NestWebhook{
 		PokemonID: 25,
 		Form:      0,
-		Latitude:  52.5,
-		Longitude: 13.4,
+		Lat:  52.5,
+		Lon: 13.4,
 		ResetTime: time.Now().Unix(),
 	}
 	m, _ := e.Nest(nest)
@@ -311,8 +311,8 @@ func TestNestIconURLs_NilUicons(t *testing.T) {
 	nest := &webhook.NestWebhook{
 		PokemonID: 25,
 		Form:      0,
-		Latitude:  52.5,
-		Longitude: 13.4,
+		Lat:  52.5,
+		Lon: 13.4,
 		ResetTime: time.Now().Unix(),
 	}
 	m, _ := e.Nest(nest)

@@ -139,7 +139,7 @@ func TestInvasionTranslateGruntName(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, "en")
+	m := e.InvasionTranslate(base, 44, nil, "en")
 
 	if m["gruntName"] != "Grunt" {
 		t.Errorf("gruntName = %q, want %q", m["gruntName"], "Grunt")
@@ -178,7 +178,7 @@ func TestInvasionTranslateGruntNameGerman(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, "de")
+	m := e.InvasionTranslate(base, 44, nil, "de")
 
 	if m["gruntName"] != "Ruepel" {
 		t.Errorf("gruntName = %q, want %q", m["gruntName"], "Ruepel")
@@ -219,7 +219,7 @@ func TestInvasionTranslateGender(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 1}
-	m := e.InvasionTranslate(base, 44, "en")
+	m := e.InvasionTranslate(base, 44, nil, "en")
 
 	if m["genderName"] != "Male" {
 		t.Errorf("genderName = %q, want %q", m["genderName"], "Male")
@@ -273,7 +273,7 @@ func TestInvasionTranslateRewardsTwoSlots(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 1}
-	m := e.InvasionTranslate(base, 44, "en")
+	m := e.InvasionTranslate(base, 44, nil, "en")
 
 	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
@@ -364,7 +364,7 @@ func TestInvasionTranslateRewardsSingleSlot(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, "en")
+	m := e.InvasionTranslate(base, 44, nil, "en")
 
 	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
@@ -429,7 +429,7 @@ func TestInvasionTranslateRewardsThirdSlotFallback(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, "en")
+	m := e.InvasionTranslate(base, 44, nil, "en")
 
 	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
@@ -475,7 +475,7 @@ func TestInvasionTranslateNoGrunt(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 0, "en")
+	m := e.InvasionTranslate(base, 0, nil, "en")
 
 	if _, ok := m["gruntRewardsList"]; ok {
 		t.Error("gruntRewardsList should not be set when no grunt found")

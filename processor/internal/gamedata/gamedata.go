@@ -184,6 +184,20 @@ func (gd *GameData) GetTypeEmojiKeys(typeIDs []int) []string {
 	return keys
 }
 
+// GetWeatherEmojiKeys returns the emoji keys for a list of weather IDs.
+func (gd *GameData) GetWeatherEmojiKeys(weatherIDs []int) []string {
+	if gd.Util == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(weatherIDs))
+	for _, id := range weatherIDs {
+		if wInfo, ok := gd.Util.Weather[id]; ok {
+			keys = append(keys, wInfo.Emoji)
+		}
+	}
+	return keys
+}
+
 // TranslationKey helpers for pogo-translations identifier keys.
 
 // PokemonTranslationKey returns "poke_{id}" for a pokemon ID.

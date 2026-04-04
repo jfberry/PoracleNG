@@ -61,6 +61,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldS
 		}
 	}
 
+
 	return m, pending
 }
 
@@ -78,13 +79,16 @@ func (e *Enricher) GymTranslate(base map[string]any, teamID, oldTeamID, lastOwne
 	if oldTeamID >= 0 {
 		if info, ok := e.GameData.Util.Teams[oldTeamID]; ok {
 			m["oldTeamName"] = tr.T(info.Name)
+			m["oldTeamNameEng"] = info.Name
 			m["oldTeamEmojiKey"] = info.Emoji
 		}
 	}
 	// Previous controller's team (from webhook last_owner_id — may differ from old_team_id)
+	m["previousControlId"] = lastOwnerID
 	if lastOwnerID >= 0 {
 		if info, ok := e.GameData.Util.Teams[lastOwnerID]; ok {
 			m["previousControlName"] = tr.T(info.Name)
+			m["previousControlNameEng"] = info.Name
 		}
 	}
 

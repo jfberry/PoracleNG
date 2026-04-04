@@ -44,6 +44,9 @@ var singleEmojiKeys = []struct {
 	// Weather
 	{"weatherEmojiKey", "weatherEmoji"},
 	{"oldWeatherEmojiKey", "oldWeatherEmoji"},
+	// Weather forecast (pokemon)
+	{"weatherCurrentEmojiKey", "weatherCurrentEmoji"},
+	{"weatherNextEmojiKey", "weatherNextEmoji"},
 }
 
 // arrayEmojiKeys lists enrichment fields that contain arrays of emoji key strings.
@@ -156,8 +159,6 @@ var typeAliases = map[string][]aliasPair{
 		{"gymId", "gym_id"},
 		{"gymColor", "gymColor"},
 		{"teamId", "team_id"},
-		{"oldTeamName", "previousControlName"},
-		{"oldTeamId", "previousControlId"},
 	},
 	"invasion": {
 		{"pokestopName", "pokestop_name"},
@@ -165,6 +166,7 @@ var typeAliases = map[string][]aliasPair{
 		{"name", "pokestop_name"},
 		{"url", "pokestop_url"},
 		{"gruntType", "gruntTypeName"},
+		{"gender", "gruntGender"},
 	},
 	"quest": {
 		{"pokestopName", "pokestop_name"},

@@ -45,10 +45,12 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 	pending := e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields)
 
 	// Lure data from util.json
+	m["lureTypeId"] = lure.LureID
 	if e.GameData != nil {
 		if info, ok := e.GameData.Util.Lures[lure.LureID]; ok {
 			m["lureColor"] = info.Color
 			m["lureEmojiKey"] = info.Emoji
+			m["lureTypeNameEng"] = info.Name // util.json names are English
 		}
 	}
 

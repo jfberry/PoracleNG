@@ -9,6 +9,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // Invasion builds enrichment fields for an invasion webhook.
@@ -112,7 +113,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 }
 
 // InvasionTranslate adds per-language translated fields.
-func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang string) map[string]any {
+func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lineup []webhook.InvasionLineupEntry, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
 		return nil
 	}
@@ -159,7 +160,7 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 	}
 
 	// Gender name and emoji (uses shared helper for consistent fallbacks)
-	addGenderFields(m, gd, tr, toInt(base["gruntGender"]))
+	addGenderFields(m, gd, tr, e.Translations.For("en"), toInt(base["gruntGender"]))
 
 	// Build gruntRewardsList with translated pokemon names
 	if grunt != nil {
@@ -211,6 +212,26 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 
 			m["gruntRewardsList"] = rewardsList
 			m["gruntRewards"] = strings.Join(rewardsTextParts, "\\n")
+		}
+	}
+
+	// Confirmed lineup from webhook (translated pokemon names)
+	if len(lineup) > 0 {
+		lineupMonsters := make([]map[string]any, 0, len(lineup))
+		for _, entry := range lineup {
+			nameInfo := make(map[string]any)
+			TranslateMonsterNames(nameInfo, gd, tr, entry.PokemonID, entry.Form, 0)
+			lineupMonsters = append(lineupMonsters, map[string]any{
+				"id":       entry.PokemonID,
+				"formId":   entry.Form,
+				"name":     nameInfo["name"],
+				"formName": nameInfo["formName"],
+				"fullName": nameInfo["fullName"],
+			})
+		}
+		m["gruntLineupList"] = map[string]any{
+			"confirmed": true,
+			"monsters":  lineupMonsters,
 		}
 	}
 

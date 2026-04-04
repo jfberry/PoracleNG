@@ -89,6 +89,7 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 		}
 	}
 
+
 	return m, pending
 }
 
@@ -119,13 +120,13 @@ func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.Maxbattle
 		TranslateMonsterNamesEng(m, gd, tr, e.Translations, mb.BattlePokemonID, mb.BattlePokemonForm, 0)
 		monster := gd.GetMonster(mb.BattlePokemonID, mb.BattlePokemonForm)
 		if monster != nil {
-			TranslateTypeNames(m, tr, monster.Types)
+			TranslateTypeNames(m, tr, e.Translations.For("en"), monster.Types)
 			addWeatherFields(m, gd, tr, monster.Types, toInt(base["gameWeatherId"]))
 			if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
 				m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr, gd)
 			}
 		}
-		addMoveFields(m, gd, tr, mb.BattlePokemonMove1, mb.BattlePokemonMove2)
+		addMoveFields(m, gd, tr, e.Translations.For("en"), mb.BattlePokemonMove1, mb.BattlePokemonMove2)
 	}
 
 	return m
