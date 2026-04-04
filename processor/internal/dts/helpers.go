@@ -177,6 +177,16 @@ func registerComparisonHelpers() {
 		return boolResult(result, options)
 	})
 
+	// neither — none of the args truthy (variadic, inverse of or)
+	raymond.RegisterHelper("neither", func(options *raymond.Options) interface{} {
+		for _, p := range options.Params() {
+			if toBool(p) {
+				return boolResult(false, options)
+			}
+		}
+		return boolResult(true, options)
+	})
+
 	// not — logical negation (block helper)
 	raymond.RegisterHelper("not", func(value interface{}, options *raymond.Options) interface{} {
 		if !toBool(value) {
