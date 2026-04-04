@@ -45,4 +45,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/mailgun/raymond/v2 => github.com/jfberry/raymond/v2 v2.0.49-0.20260403105804-67ac8092d6a7
+replace github.com/mailgun/raymond/v2 => github.com/jfberry/raymond/v2 v2.0.49-0.20260404193140-e01a94acd440
