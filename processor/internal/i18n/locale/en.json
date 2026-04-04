@@ -1,4 +1,7 @@
 {
+  "weather.possible_change_at": "Possible weather change at",
+  "weather.unknown": "unknown",
+
   "rate_limit.reached": "You have reached the limit of {0} messages over {1} seconds",
   "rate_limit.banned_soft": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, use {0}start to resume",
   "rate_limit.banned_hard": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, contact an administrator to resume",

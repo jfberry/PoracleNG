@@ -1,4 +1,6 @@
 {
+  "weather.possible_change_at": "Möglicher Wetterwechsel um",
+  "weather.unknown": "unbekannt",
   "rate_limit.reached": "Das Limit von {0} Benachrichtigungen innerhalb von {1} Sekunden wurde erreicht.",
   "rate_limit.banned_soft": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, nutze {0}start um diese wieder zu aktivieren",
   "rate_limit.banned_hard": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, kontaktiere einen Administrator um diese wieder zu aktivieren",
