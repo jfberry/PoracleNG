@@ -13,6 +13,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
+	if ps.cfg.General.DisableRaid {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():

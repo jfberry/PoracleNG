@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessWeather(raw json.RawMessage) error {
+	if ps.cfg.General.DisableWeather {
+		return nil
+	}
+
 	var weather webhook.WeatherWebhook
 	if err := json.Unmarshal(raw, &weather); err != nil {
 		log.Errorf("Failed to parse weather webhook: %s", err)

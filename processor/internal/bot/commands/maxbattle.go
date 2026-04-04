@@ -43,6 +43,10 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 		return []bot.Reply{*help}
 	}
 
+	if ctx.Config.General.DisableMaxBattle {
+		return []bot.Reply{{React: "\U0001f645", Text: "This alert type is disabled"}}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, maxbattleParams, ctx.Language)
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {

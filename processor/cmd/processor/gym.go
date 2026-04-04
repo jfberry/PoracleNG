@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
+	if ps.cfg.General.DisableGym {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():

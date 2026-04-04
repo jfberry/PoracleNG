@@ -45,6 +45,10 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*help}
 	}
 
+	if ctx.Config.General.DisableRaid {
+		return []bot.Reply{{React: "\U0001f645", Text: "This alert type is disabled"}}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, eggParams, ctx.Language)
 
 	// Collect levels from multiple sources

@@ -49,6 +49,10 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*help}
 	}
 
+	if ctx.Config.General.DisableRaid {
+		return []bot.Reply{{React: "\U0001f645", Text: "This alert type is disabled"}}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, raidParams, ctx.Language)
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {

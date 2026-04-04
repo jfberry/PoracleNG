@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
+	if ps.cfg.General.DisableLure {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():

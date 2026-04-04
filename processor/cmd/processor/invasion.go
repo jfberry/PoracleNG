@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
+	if ps.cfg.General.DisableInvasion {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():

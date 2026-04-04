@@ -14,6 +14,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
+	if ps.cfg.General.DisablePokemon {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():

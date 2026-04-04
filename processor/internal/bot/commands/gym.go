@@ -39,6 +39,10 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*help}
 	}
 
+	if ctx.Config.General.DisableGym {
+		return []bot.Reply{{React: "\U0001f645", Text: "This alert type is disabled"}}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, gymParams, ctx.Language)
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {

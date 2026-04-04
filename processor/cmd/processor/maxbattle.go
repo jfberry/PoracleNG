@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
+	if ps.cfg.General.DisableMaxBattle {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():

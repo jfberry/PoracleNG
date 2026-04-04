@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
+	if ps.cfg.General.DisableFortUpdate {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():

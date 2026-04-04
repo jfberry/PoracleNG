@@ -14,6 +14,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
+	if ps.cfg.General.DisableQuest {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():

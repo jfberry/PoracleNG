@@ -36,6 +36,10 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*help}
 	}
 
+	if ctx.Config.General.DisableLure {
+		return []bot.Reply{{React: "\U0001f645", Text: "This alert type is disabled"}}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, lureParams, ctx.Language)
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {

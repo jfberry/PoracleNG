@@ -113,7 +113,8 @@ type GeneralConfig struct {
 	DisableWeather   bool `toml:"disable_weather"`
 	DisableNest      bool `toml:"disable_nest"`
 	DisableGym       bool `toml:"disable_gym"`
-	DisableMaxBattle bool `toml:"disable_max_battle"`
+	DisableMaxBattle    bool `toml:"disable_max_battle"`
+	DisableFortUpdate  bool `toml:"disable_fort_update"`
 }
 
 type LocaleConfig struct {

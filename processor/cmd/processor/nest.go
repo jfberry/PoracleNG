@@ -13,6 +13,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
+	if ps.cfg.General.DisableNest {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():

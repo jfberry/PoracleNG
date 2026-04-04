@@ -40,6 +40,10 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		return []bot.Reply{*help}
 	}
 
+	if ctx.Config.General.DisableInvasion {
+		return []bot.Reply{{React: "\U0001f645", Text: "This alert type is disabled"}}
+	}
+
 	parsed := ctx.ArgMatcher.Match(args, invasionParams, ctx.Language)
 
 	common, block := parseCommonTrackFields(ctx, parsed, "invasion")

@@ -181,7 +181,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 			for i := range v { updateMaxUID(v[i].UID) }
 		}
 	}
-	if !cfg.DisablePokestop {
+	if !cfg.DisableFortUpdate {
 		if v, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			fortList = v
 			for i := range v { updateMaxUID(v[i].UID) }
@@ -316,7 +316,7 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		sb.WriteByte('\n')
 	}
 
-	if !cfg.DisablePokestop {
+	if !cfg.DisableFortUpdate {
 		if len(fortList) > 0 {
 			sb.WriteString(tr.T("section.forts") + "\n")
 			for i := range fortList {
