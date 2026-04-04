@@ -953,6 +953,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		Translations:        enricher.Translations,
 		UtilEmojis:          utilEmojis,
 		DefaultLocale:       cfg.General.Locale,
+		AltLanguage:         cfg.Locale.Language,
 		DefaultTemplateName: dtsDefaultTemplate,
 		MinAlertTime:        cfg.General.AlertMinimumTime,
 		ShlinkURL:           shlinkURL,

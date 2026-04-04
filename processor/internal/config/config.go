@@ -122,6 +122,7 @@ type LocaleConfig struct {
 	Time          string `toml:"time"`
 	Date          string `toml:"date"`
 	AddressFormat string `toml:"address_format"`
+	Language      string `toml:"language"` // alt language for DTS helpers (pokemonNameAlt, moveNameAlt, etc.) — default "en"
 }
 
 type LoggingConfig struct {

@@ -28,6 +28,7 @@ type RendererConfig struct {
 	ShlinkDomain        string
 	DTSDictionary       map[string]any // from config [general] dts_dictionary
 	DefaultLocale       string         // fallback language (e.g. "en")
+	AltLanguage         string         // alt language for *Alt helpers (default "en")
 	DefaultTemplateName string         // from config default_template_name (e.g. "1")
 	MinAlertTime        int            // minimum seconds remaining for alert
 }
@@ -43,6 +44,7 @@ type Renderer struct {
 	emoji           *EmojiLookup
 	locale          string
 	defaultTemplate string // config default_template_name, used when tracking has no explicit template
+	altLanguage     string
 	minAlertSec     int
 }
 
@@ -69,6 +71,10 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 	if locale == "" {
 		locale = "en"
 	}
+	altLang := cfg.AltLanguage
+	if altLang == "" {
+		altLang = "en"
+	}
 
 	return &Renderer{
 		templates:       ts,
@@ -78,6 +84,7 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 		bundle:          cfg.Translations,
 		emoji:           emoji,
 		locale:          locale,
+		altLanguage:     altLang,
 		defaultTemplate: cfg.DefaultTemplateName,
 		minAlertSec:     cfg.MinAlertTime,
 	}, nil
@@ -220,7 +227,7 @@ func (r *Renderer) renderForUsers(
 			df := raymond.NewDataFrame()
 			df.Set("language", language)
 			df.Set("platform", platform)
-			df.Set("altLanguage", "en")
+			df.Set("altLanguage", r.altLanguage)
 
 			tStart := time.Now()
 			result, err := safeExecWith(tmpl, view, df)
@@ -334,7 +341,7 @@ func (r *Renderer) renderGrouped(
 			df := raymond.NewDataFrame()
 			df.Set("language", key.language)
 			df.Set("platform", key.platform)
-			df.Set("altLanguage", "en")
+			df.Set("altLanguage", r.altLanguage)
 
 			tStart := time.Now()
 			result, err := safeExecWith(tmpl, view, df)
