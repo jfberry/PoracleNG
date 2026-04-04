@@ -53,6 +53,15 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			return
 		}
 
+		// ignore_long_raids: skip raids/eggs with > 47 minutes remaining
+		if ps.cfg.General.IgnoreLongRaids {
+			tthSeconds := raid.End - time.Now().Unix()
+			if tthSeconds > 47*60 {
+				l.Debugf("Raid/egg on gym %s has %ds remaining (>47m), skipping (ignore_long_raids)", raid.GymID, tthSeconds)
+				return
+			}
+		}
+
 		st := ps.stateMgr.Get()
 		ex := bool(raid.ExRaidEligible) || bool(raid.IsExRaidEligible)
 

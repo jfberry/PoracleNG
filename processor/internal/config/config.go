@@ -45,6 +45,8 @@ type GeneralConfig struct {
 	StickerURL           string `toml:"sticker_url"`
 	RequestShinyImages   bool   `toml:"request_shiny_images"`
 	PopulatePokestopName bool   `toml:"populate_pokestop_name"`
+	AlertMinimumTime     int    `toml:"alert_minimum_time"`   // seconds before expiry inside which alerts are dropped
+	IgnoreLongRaids      bool   `toml:"ignore_long_raids"`    // skip raids/eggs with TTH > 47 minutes
 }
 
 type LocaleConfig struct {

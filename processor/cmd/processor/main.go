@@ -723,6 +723,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		Translations:  enricher.Translations,
 		UtilEmojis:    utilEmojis,
 		DefaultLocale: cfg.General.Locale,
+		MinAlertTime:  cfg.General.AlertMinimumTime,
 	})
 	if err != nil {
 		log.Warnf("DTS renderer initialization failed: %s", err)
