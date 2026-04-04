@@ -311,6 +311,15 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		sb.WriteString(tr.Tf("msg.info.evolves_to", strings.Join(evoStrs, ", ")) + "\n")
 	}
 
+	// Shiny rate (from stats tracker)
+	if ctx.Stats != nil {
+		shinyStats := ctx.Stats.ExportShinyStats()
+		if s, ok := shinyStats[pokemonID]; ok {
+			sb.WriteByte('\n')
+			sb.WriteString(fmt.Sprintf("**%s**: %d/%d  (1:%.0f)\n", tr.T("msg.info.shiny_rate"), s.Seen, s.Total, s.Ratio))
+		}
+	}
+
 	// Hundo CP table
 	if mon.Attack > 0 || mon.Defense > 0 || mon.Stamina > 0 {
 		sb.WriteByte('\n')
@@ -557,13 +566,11 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].id < entries[j].id })
 
 	var sb strings.Builder
-	sb.WriteString(tr.T("msg.info.shiny_header") + "\n\n")
-	sb.WriteString(fmt.Sprintf("%-25s %6s %6s %8s\n", "Pokemon", tr.T("msg.info.shiny_seen"), "Shiny", tr.T("msg.info.shiny_ratio")))
-	sb.WriteString(strings.Repeat("-", 50) + "\n")
+	sb.WriteString("**" + tr.T("msg.info.shiny_header") + "**\n\n")
 
 	for _, e := range entries {
 		pokeName := tr.T(gamedata.PokemonTranslationKey(e.id))
-		sb.WriteString(fmt.Sprintf("%-25s %6d %6d %8.0f\n", pokeName, e.stat.Total, e.stat.Seen, e.stat.Ratio))
+		sb.WriteString(fmt.Sprintf("%s: %s %d - %s 1:%.0f\n", pokeName, tr.T("msg.info.shiny_seen"), e.stat.Total, tr.T("msg.info.shiny_ratio"), e.stat.Ratio))
 	}
 
 	text := sb.String()
