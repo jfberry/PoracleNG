@@ -51,7 +51,7 @@ var arrayEmojiKeys = []struct {
 	keyField    string
 	outputField string
 }{
-	{"typeEmojiKeys", "typeEmojis"},
+	{"typeEmojiKeys", "typeEmoji"},
 	{"boostingWeatherEmojiKeys", "boostingWeatherEmojis"},
 }
 
@@ -135,6 +135,8 @@ var typeAliases = map[string][]aliasPair{
 		{"formname", "formName"},
 		{"quickMove", "quickMoveName"},
 		{"chargeMove", "chargeMoveName"},
+		{"move1emoji", "quickMoveEmoji"},
+		{"move2emoji", "chargeMoveEmoji"},
 		{"boostemoji", "boostWeatherEmoji"},
 		{"gameweather", "gameWeatherName"},
 		{"gameweatheremoji", "gameWeatherEmoji"},
@@ -191,6 +193,8 @@ var typeAliases = map[string][]aliasPair{
 		{"formname", "formName"},
 		{"quickMove", "quickMoveName"},
 		{"chargeMove", "chargeMoveName"},
+		{"move1emoji", "quickMoveEmoji"},
+		{"move2emoji", "chargeMoveEmoji"},
 	},
 	"greeting": {},
 }
