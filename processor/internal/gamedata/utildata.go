@@ -26,6 +26,7 @@ type UtilData struct {
 	Lures            map[int]LureInfo
 	PokestopEvent    map[int]EventInfo
 	PowerUpCost      map[string]PowerUpCostEntry // level string → {stardust, candy, xlCandy}
+	CpMultipliers    map[string]float64 // level string → CP multiplier
 	Emojis           map[string]string // emoji key → unicode
 }
 
@@ -178,6 +179,14 @@ func ParseUtilData(data []byte) (*UtilData, error) {
 
 	// PokestopEvent: {"7": {...}, ...}
 	u.PokestopEvent = parseIntKeyMap[EventInfo](raw["pokestopEvent"])
+
+	// CpMultipliers: {"1": 0.094, "1.5": 0.135, ...}
+	if raw["cpMultipliers"] != nil {
+		var cpm map[string]float64
+		if err := json.Unmarshal(raw["cpMultipliers"], &cpm); err == nil {
+			u.CpMultipliers = cpm
+		}
+	}
 
 	// PowerUpCost: {"1": {"stardust": 200, "candy": 1}, "1.5": {...}, ...}
 	if raw["powerUpCost"] != nil {

@@ -86,6 +86,11 @@ func testGameData() *gamedata.GameData {
 				"40":   {Stardust: 10000, XLCandy: 10},
 				"40.5": {Stardust: 10000, XLCandy: 10},
 			},
+			CpMultipliers: map[string]float64{
+				"1": 0.0939999967813492, "1.5": 0.135137432089339,
+				"20": 0.597400009632111, "40": 0.790300011634827,
+				"51": 0.845300018787384,
+			},
 		},
 	}
 }
@@ -480,22 +485,30 @@ func TestBuildFullName(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetCPMultiplier(t *testing.T) {
-	// Level 20 should return ~0.5974
-	cpm := getCPMultiplier(20)
+	gd := testGameData()
+
+	// Level 20
+	cpm := getCPMultiplier(gd, 20)
 	if cpm < 0.597 || cpm > 0.598 {
 		t.Errorf("getCPMultiplier(20) = %f, want ~0.5974", cpm)
 	}
 
-	// Level 40 should return ~0.7903
-	cpm = getCPMultiplier(40)
+	// Level 40
+	cpm = getCPMultiplier(gd, 40)
 	if cpm < 0.790 || cpm > 0.791 {
 		t.Errorf("getCPMultiplier(40) = %f, want ~0.7903", cpm)
 	}
 
-	// Out of range → fallback
-	cpm = getCPMultiplier(100)
+	// Missing level → fallback
+	cpm = getCPMultiplier(gd, 100)
 	if cpm != 0.7903 {
 		t.Errorf("getCPMultiplier(100) = %f, want 0.7903 (fallback)", cpm)
+	}
+
+	// Nil GameData → fallback
+	cpm = getCPMultiplier(nil, 20)
+	if cpm != 0.7903 {
+		t.Errorf("getCPMultiplier(nil, 20) = %f, want 0.7903 (fallback)", cpm)
 	}
 }
 
