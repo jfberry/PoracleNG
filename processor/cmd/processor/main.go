@@ -578,6 +578,9 @@ func main() {
 				metrics.DeliveryTrackerSize.Set(float64(proc.dispatcher.TrackerSize()))
 			}
 			log.Infof("[Status] %s", strings.Join(statusParts, " | "))
+			if webhooks == 0 {
+				log.Warn("[Status] No webhooks have been received — check your scanner or networking configuration")
+			}
 		}
 	}()
 
