@@ -579,7 +579,7 @@ func main() {
 	}
 
 	discordTokens := cfg.Discord.DiscordTokens()
-	if len(discordTokens) > 0 && discordTokens[0] != "" {
+	if cfg.Discord.Enabled && len(discordTokens) > 0 && discordTokens[0] != "" {
 		deps := sharedBotDeps
 		deps.Parser = cmdParser
 		dbot, err := discordbot.New(discordbot.Config{
@@ -597,7 +597,7 @@ func main() {
 	// Start Telegram bot (if token configured)
 	var telegramBot *telegrambot.Bot
 	telegramTokens := cfg.Telegram.TelegramTokens()
-	if len(telegramTokens) > 0 && telegramTokens[0] != "" {
+	if cfg.Telegram.Enabled && len(telegramTokens) > 0 && telegramTokens[0] != "" {
 		deps := sharedBotDeps
 		deps.Parser = tgParser
 		tbot, err := telegrambot.New(telegrambot.Config{

@@ -150,8 +150,10 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Token                   any                  `toml:"token"` // string or []string
+	Enabled                 bool                 `toml:"enabled"` // false = disable bot even if token is set
+	Token                   any                  `toml:"token"`   // string or []string
 	Prefix                  string               `toml:"prefix"`
+	Activity                string               `toml:"activity"` // bot activity/status text
 	Channels                []string             `toml:"channels"` // registration channel IDs
 	Guilds                  []string             `toml:"guilds"`
 	UserRole                []string             `toml:"user_role"`
@@ -159,7 +161,10 @@ type DiscordConfig struct {
 	CheckRoleInterval       int                  `toml:"check_role_interval"` // hours between periodic reconciliation
 	LostRoleMessage         string               `toml:"lost_role_message"`
 	DisableAutoGreetings    bool                 `toml:"disable_auto_greetings"`
-	DmLogChannelID          string               `toml:"dm_log_channel_id"`
+	DmLogChannelID              string `toml:"dm_log_channel_id"`
+	DmLogChannelDeletionTime    int    `toml:"dm_log_channel_deletion_time"` // minutes, 0 = don't delete
+	UnrecognisedCommandMessage  string `toml:"unrecognised_command_message"` // custom reply, overrides i18n
+	UnregisteredUserMessage     string `toml:"unregistered_user_message"`    // custom reply, overrides i18n
 	IvColors                []string             `toml:"iv_colors"`
 	Admins                  []string             `toml:"admins"`
 	UploadEmbedImages       bool                 `toml:"upload_embed_images"`
@@ -195,7 +200,8 @@ func (c DiscordConfig) RoleSubscriptionMap() map[string]RoleSubscriptionEntry {
 
 // TelegramConfig reads the [telegram] section for fields the processor needs.
 type TelegramConfig struct {
-	Token                   any                       `toml:"token"` // string or []string
+	Enabled                 bool                      `toml:"enabled"` // false = disable bot even if token is set
+	Token                   any                       `toml:"token"`   // string or []string
 	Channels                []string                  `toml:"channels"` // registration channel/group IDs
 	Admins                  []string                  `toml:"admins"`
 	CheckRole               bool                      `toml:"check_role"`
@@ -538,6 +544,7 @@ func Load(baseDir string) (*Config, error) {
 			MaxBackups:         5,
 		},
 		Discord: DiscordConfig{
+			Enabled:  true,
 			Prefix:   "!",
 			IvColors: []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"},
 		},
@@ -558,6 +565,9 @@ func Load(baseDir string) (*Config, error) {
 		General: GeneralConfig{
 			ImgURL:     "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS",
 			StickerURL: "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle",
+		},
+		Telegram: TelegramConfig{
+			Enabled: true,
 		},
 		Fallbacks: FallbacksConfig{
 			StaticMap: "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png",

@@ -67,6 +67,13 @@ func New(cfg Config) (*Bot, error) {
 
 	log.Infof("Discord bot connected as %s", session.State.User.Username)
 
+	// Set bot activity/status
+	if activity := cfg.Cfg.Discord.Activity; activity != "" {
+		if err := session.UpdateGameStatus(0, activity); err != nil {
+			log.Warnf("Discord bot: failed to set activity: %v", err)
+		}
+	}
+
 	// Log guild presence and validate config
 	b.logGuildPresence()
 
@@ -276,7 +283,14 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	// Log DMs to configured log channel
 	if isDM && b.Cfg.Discord.DmLogChannelID != "" {
 		logMsg := fmt.Sprintf("DM from %s (%s): %s", m.Author.Username, m.Author.ID, m.Content)
-		s.ChannelMessageSend(b.Cfg.Discord.DmLogChannelID, logMsg)
+		sent, err := s.ChannelMessageSend(b.Cfg.Discord.DmLogChannelID, logMsg)
+		if err == nil && sent != nil && b.Cfg.Discord.DmLogChannelDeletionTime > 0 {
+			delay := time.Duration(b.Cfg.Discord.DmLogChannelDeletionTime) * time.Minute
+			go func(channelID, messageID string) {
+				time.Sleep(delay)
+				s.ChannelMessageDelete(channelID, messageID) //nolint:errcheck
+			}(b.Cfg.Discord.DmLogChannelID, sent.ID)
+		}
 	}
 
 	// Look up user state
@@ -337,7 +351,11 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 		// Registration check — skip for poracle (registration), poracle_test, and version commands
 		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
-			reply(tr.T("msg.not_registered"))
+			if msg := b.Cfg.Discord.UnregisteredUserMessage; msg != "" {
+				reply(msg)
+			} else {
+				reply(tr.T("msg.not_registered"))
+			}
 			continue
 		}
 
@@ -352,7 +370,11 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 						continue
 					}
 				}
-				reply(tr.Tf("msg.unknown", b.Cfg.Discord.Prefix+"help"))
+				if msg := b.Cfg.Discord.UnrecognisedCommandMessage; msg != "" {
+					reply(msg)
+				} else {
+					reply(tr.Tf("msg.unknown", b.Cfg.Discord.Prefix+"help"))
+				}
 			}
 			continue
 		}
