@@ -99,6 +99,7 @@ Template type `monster` is used for encountered pokemon (with IV data). Template
 | **`fullName`** | | string | Name + form combined (recommended) |
 | `nameEng` | | string | English pokemon name |
 | `fullNameEng` | | string | English name + form |
+| `formNameEng` | | string | English form name (raw, not normalised) |
 | **`formName`** | | string | Translated form name |
 | `formNormalised` | | string | Form name (empty if "Normal") |
 | `pokemonId` | `pokemon_id` | int | Pokemon ID |
@@ -144,6 +145,8 @@ Template type `monster` is used for encountered pokemon (with IV data). Template
 | `chargeMoveId` | `move_2` | int | Charged move ID |
 | `quickMoveEmoji` | | string | Fast move type emoji |
 | `chargeMoveEmoji` | | string | Charged move type emoji |
+| `quickMoveNameEng` | | string | English fast move name |
+| `chargeMoveNameEng` | | string | English charged move name |
 
 ### Weather
 
@@ -156,6 +159,11 @@ Weather boost fields (`boosted`, `boostWeatherId`, `boostWeatherName`, `boostWea
 | `weatherForecastCurrent` | int | Forecast current weather ID (if AccuWeather configured) |
 | `weatherForecastNext` | int | Forecast next-hour weather ID (if AccuWeather configured) |
 | `nextHourTimestamp` | int | Unix timestamp of next hour boundary |
+| `weatherChange` | string | Composed weather forecast text (e.g. "Warning Possible weather change at 14:00 : Clear -> Rain") |
+| `weatherCurrentName` | string | Translated current forecast weather name |
+| `weatherCurrentEmoji` | string | Current forecast weather emoji |
+| `weatherNextName` | string | Translated next forecast weather name |
+| `weatherNextEmoji` | string | Next forecast weather emoji |
 
 ### PVP
 
@@ -197,6 +205,10 @@ Each "best" object has the same fields as a display entry.
 
 Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
 
+| Field | Type | Description |
+|-------|------|-------------|
+| `tthSeconds` | int | Total seconds until despawn |
+
 ### Other
 
 | Field | Type | Description |
@@ -207,6 +219,7 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `generation` | int | Generation number |
 | `generationRoman` | string | Generation as Roman numeral (I, II, etc.) |
 | `generationName` | string | Translated generation name |
+| `generationNameEng` | string | English generation name (e.g. "Kanto") |
 | `legendary` | bool | Is a legendary pokemon |
 | `mythic` | bool | Is a mythical pokemon |
 | `ultraBeast` | bool | Is an ultra beast |
@@ -215,9 +228,13 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `shinyPossibleEmoji` | string | Shiny sparkle emoji (empty if not shiny possible) |
 | `rarityGroup` | int | Rarity group (1-6) |
 | `rarityName` | string | Translated rarity name |
+| `rarityNameEng` | string | English rarity name (e.g. "Common") |
 | `sizeName` | string | Translated size name |
+| `sizeNameEng` | string | English size name (e.g. "XXL") |
 | `genderData` | object | `{name, emoji}` |
 | `genderEmoji` | string | Gender emoji |
+| `genderNameEng` | string | English gender name |
+| `typeNameEng` | array | Array of English type name strings |
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
 | `evolutions` | array | Evolution chain entries |
 | `hasEvolutions` | bool | Has evolutions |
@@ -278,6 +295,8 @@ Hatched raid with a boss pokemon.
 | `chargeMoveId` | `move_2` | int | Charged move ID |
 | `quickMoveEmoji` | | string | Fast move type emoji |
 | `chargeMoveEmoji` | | string | Charged move type emoji |
+| `quickMoveNameEng` | | string | English fast move name |
+| `chargeMoveNameEng` | | string | English charged move name |
 
 ### Type & Stats
 
@@ -292,6 +311,15 @@ Hatched raid with a boss pokemon.
 | `generationName` | string | Translated generation name |
 | `genderData` | object | `{name, emoji}` |
 | `genderEmoji` | string | Gender emoji |
+| `genderNameEng` | string | English gender name |
+| `typeNameEng` | array | Array of English type name strings |
+| `generationNameEng` | string | English generation name |
+| `shinyPossible` | bool | Can raid boss be shiny |
+| `shinyPossibleEmoji` | string | Shiny sparkle emoji (empty if not shiny possible) |
+| `hasEvolutions` | bool | Boss has evolutions |
+| `evolutions` | array | Evolution chain entries |
+| `hasMegaEvolutions` | bool | Boss has mega evolutions |
+| `megaEvolutions` | array | Mega evolution entries |
 
 ### Timing
 
@@ -316,17 +344,18 @@ Weather and boost fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`
 | `weatherForecastNext` | int | Forecast next-hour weather ID (if AccuWeather configured) |
 | `nextHourTimestamp` | int | Unix timestamp of next hour boundary |
 
-**Note:** `boostingWeatherEmojis` is defined as an alias but the emoji keys are not currently set in raid enrichment, so it will always be empty. Use `boostWeatherEmoji` instead for the currently-boosting weather.
+| `boostingWeathersEmoji` | string | All boosting weather emojis concatenated |
+| `weatherChange` | string | Composed weather forecast text (e.g. "Warning Possible weather change at 14:00 : Clear -> Rain") |
+| `weatherCurrentName` | string | Translated current forecast weather name |
+| `weatherCurrentEmoji` | string | Current forecast weather emoji |
+| `weatherNextName` | string | Translated next forecast weather name |
+| `weatherNextEmoji` | string | Next forecast weather emoji |
 
 ### RSVP
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `rsvps` | array | RSVP time slots: `{timeSlot, time, goingCount, maybeCount}` |
-
-### Evolutions
-
-**Not yet implemented** for raids. Evolution chain data (`evolutions`, `hasEvolutions`, `megaEvolutions`, `hasMegaEvolutions`) is only available for pokemon and maxbattle templates.
 
 ---
 
@@ -407,7 +436,11 @@ These are flat top-level strings, not nested under a `rewardData` object:
 | `energyMonstersNamesEng` | string | English energy reward text |
 | `candyMonstersNames` | string | Candy reward text (translated) |
 | `candyMonstersNamesEng` | string | English candy reward text |
-| `monsterList` | array | Structured pokemon rewards: `{pokemonId, formId, shiny, name, formName, fullName, nameEng, fullNameEng}` |
+| `monsterList` | array | *Deprecated* — alias for `monsters` |
+| `monsters` | array | Pokemon encounter rewards: `{pokemonId, formId, shiny, name, formName, fullName, nameEng, fullNameEng}` |
+| `items` | array | Item rewards: `{id, amount, name, nameEng}` |
+| `energyMonsters` | array | Mega energy rewards: `{pokemonId, amount, name, nameEng}` |
+| `candy` | array | Candy rewards: `{pokemonId, amount, name, nameEng}` |
 
 ---
 
@@ -427,8 +460,11 @@ These are flat top-level strings, not nested under a `rewardData` object:
 | `gruntRewardsList` | object | Structured: `{first: {chance, monsters}, second: {chance, monsters}}` |
 | `gruntRewardIDs` | object | Raw reward pokemon IDs (without translation) |
 | `gruntGender` | int | Grunt gender (1=male, 2=female) |
+| `gender` | int | Alias for `gruntGender` (0/1/2) |
 | `genderData` | object | `{name, emoji}` |
 | `genderEmoji` | string | Gender emoji |
+| `genderNameEng` | string | English gender name |
+| `gruntLineupList` | object | Confirmed catch lineup: `{confirmed: true, monsters: [{id, formId, name, formName, fullName}]}` |
 | `displayTypeId` | int | Event display type |
 | `time` | string | Expiry time (alias for `disappearTime`) |
 | `disappearTime` | string | Invasion expiry time |
@@ -447,7 +483,9 @@ Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are avai
 |-------|------|-------------|
 | `pokestopName` | string | Pokestop name (alias for `pokestop_name`) |
 | `pokestopUrl` | string | Pokestop image URL (alias for `pokestop_url`) |
+| `lureTypeId` | int | Lure type ID (501-506) |
 | `lureTypeName` | string | Translated lure type name |
+| `lureTypeNameEng` | string | English lure type name |
 | `lureType` | string | *Deprecated* — alias for `lureTypeName` |
 | `lureTypeColor` | string | Lure color hex (alias for `lureColor`) |
 | `lureTypeEmoji` | string | Lure emoji |
@@ -457,8 +495,6 @@ Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are avai
 Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields section.
 
 Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`, `lure_id`) are also available.
-
-**Note:** `lureTypeId` is not set as an enrichment field. Use `lure_id` from the webhook layer to access the lure type ID.
 
 ---
 
@@ -471,12 +507,14 @@ Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`, `lure_id`) a
 | `gymUrl` | string | Gym image URL (alias for webhook `url`) |
 | `teamId` | int | New team ID (alias for `team_id`) |
 | `oldTeamId` | int | Previous team ID |
-| `previousControlId` | int | *Deprecated* — alias for `oldTeamId` |
+| `previousControlId` | int | Previous controller's team ID (from `last_owner_id` webhook field) |
 | `teamName` | string | Translated new team name |
 | `teamNameEng` | string | English team name |
 | `teamColor` | string | Team color hex |
-| `oldTeamName` | string | Translated previous team name (alias for `previousControlName`) |
+| `oldTeamName` | string | Translated previous team name |
+| `oldTeamNameEng` | string | English old team name |
 | `previousControlName` | string | Translated previous controller team name |
+| `previousControlNameEng` | string | English previous controller team name |
 | `gymColor` | string | New team color hex |
 | `color` | string | Same as gymColor (*deprecated*) |
 | `teamEmoji` | string | New team emoji |
@@ -497,7 +535,10 @@ Time-remaining fields are set with a fixed 1-hour TTH.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `nestName` | string | Nest name (alias for `nest_name` from webhook) |
+| `nestName` | string | Nest/park name (from webhook) |
+| `pokemonId` | int | Pokemon ID (camelCase alias) |
+| `pokemonCount` | int | Observed spawn count (from webhook) |
+| `pokemonSpawnAvg` | float | Average spawns per hour |
 | `name` | string | Translated pokemon name |
 | `nameEng` | string | English pokemon name |
 | `formName` | string | Translated form name |
@@ -508,6 +549,8 @@ Time-remaining fields are set with a fixed 1-hour TTH.
 | `typeName` | string | Translated type names |
 | `color` | string | Type color hex |
 | `typeEmoji` | string | Type emojis concatenated |
+| `shinyPossible` | bool | Can be shiny |
+| `shinyPossibleEmoji` | string | Shiny sparkle emoji (empty if not shiny possible) |
 | `resetDate` | string | Nest rotation date |
 | `resetTime` | string | Nest rotation time |
 | `disappearTime` | string | Expiry time (reset + 7 days) |
@@ -518,11 +561,7 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 
 Raw webhook fields (`nest_id`, `nest_name`, `pokemon_id`, `form`, `pokemon_avg`) are also available.
 
-**Known gaps:**
-- Map URLs (`googleMapUrl`, etc.) are **not set** for nests. The nest enrichment does not call `addMapURLs`.
-- `shinyPossible` / `shinyPossibleEmoji` are **not set** for nests.
-- `pokemonCount` is **not available** (not present in the webhook data from Golbat).
-- The `nestName` alias resolves to `nest_name` from the webhook, which may be empty if the webhook uses a different field name.
+Map URLs (`googleMapUrl`, `appleMapUrl`, `wazeMapUrl`, etc.) are available for nests.
 
 **Nest autoposition:** If the webhook includes `poly_path` (polygon coordinates), the enrichment computes optimal `zoom`, `map_latitude`, and `map_longitude` for the static map tile.
 
@@ -610,8 +649,10 @@ Each `activePokemons` entry:
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `id` | string | Fort ID |
 | `fortType` | string | "pokestop" or "gym" |
 | `fortTypeText` | string | "Pokestop" or "Gym" |
+| `isEmpty` | bool | True if fort has no name or description |
 | `name` | string | Fort name (best available from new/old snapshot) |
 | `description` | string | Fort description (best available) |
 | `imgUrl` | string | Fort image URL (best available) |
