@@ -6,8 +6,8 @@ import (
 )
 
 // WeatherTypeBoost maps weather condition ID to the type IDs it boosts.
-// This is the hardcoded fallback; prefer GameData.Weather or UtilData.WeatherTypeBoost
-// when GameData is loaded.
+// Initialized from util.json at startup via InitWeatherTypeBoost.
+// The hardcoded default is a fallback for when util.json is unavailable.
 var WeatherTypeBoost = map[int][]int{
 	1: {5, 10, 12}, // clear: fire, ground, grass
 	2: {7, 11, 13}, // rainy: water, electric, bug
@@ -16,6 +16,14 @@ var WeatherTypeBoost = map[int][]int{
 	5: {3, 14, 16}, // windy: flying, dragon, psychic
 	6: {9, 15},     // snow: ice, steel
 	7: {8, 17},     // fog: ghost, dark
+}
+
+// InitWeatherTypeBoost replaces the hardcoded WeatherTypeBoost with data from util.json.
+// Called at startup after GameData is loaded.
+func InitWeatherTypeBoost(util *UtilData) {
+	if util != nil && len(util.WeatherTypeBoost) > 0 {
+		WeatherTypeBoost = util.WeatherTypeBoost
+	}
 }
 
 // PokemonTypes holds the type IDs for each pokemon_form combination.

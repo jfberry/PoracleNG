@@ -522,6 +522,11 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	}
 	log.Infof("Game data loaded: %d monsters, %d moves, %d types", len(gd.Monsters), len(gd.Moves), len(gd.Types))
 
+	// Initialize weather type boost from util.json (replaces hardcoded fallback)
+	if gd != nil && gd.Util != nil {
+		gamedata.InitWeatherTypeBoost(gd.Util)
+	}
+
 	var activePokemon *tracker.ActivePokemonTracker
 	var pokemonTypes *gamedata.PokemonTypes
 	if cfg.Weather.ShowAlteredPokemon && gd != nil {
