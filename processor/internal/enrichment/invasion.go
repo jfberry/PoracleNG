@@ -22,7 +22,9 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
 
 	if expiration > 0 {
-		m["expiration"] = expiration // integer for <t:{{expiration}}:R>
+		m["expiration"] = expiration                    // integer for <t:{{expiration}}:R>
+		m["incidentExpiration"] = expiration            // camelCase alias
+		m["incident_expire_timestamp"] = expiration     // webhook field name alias
 		m["disappearTime"] = geo.FormatTime(expiration, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(expiration)
 	}

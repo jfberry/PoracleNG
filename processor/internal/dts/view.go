@@ -105,6 +105,7 @@ var typeAliases = map[string][]aliasPair{
 	"monster": {
 		{"formname", "formName"},
 		{"ivcolor", "ivColor"},
+		{"pokestopName", "pokestop_name"},
 		{"individual_attack", "atk"},
 		{"individual_defense", "def"},
 		{"individual_stamina", "sta"},
