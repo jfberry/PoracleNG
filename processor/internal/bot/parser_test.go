@@ -26,7 +26,7 @@ func newTestParser() *Parser {
 		"cmd.stop":    "stoppen",
 		"cmd.tracked": "status",
 	}))
-	return NewParser("!", bundle, []string{"en", "de"})
+	return NewParser("!", bundle, []string{"en", "de"}, nil)
 }
 
 func TestParserBasic(t *testing.T) {

@@ -19,22 +19,24 @@ func (c *LanguageCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 
 	input := strings.ToLower(args[0])
 
-	// Match by code or by display name
+	// Match against available_languages keys
 	available := ctx.Config.General.AvailableLanguages
-	if len(available) == 0 {
-		available = []string{"en"}
-	}
-
 	var matched string
-	for _, lang := range available {
-		if strings.ToLower(lang) == input {
-			matched = lang
-			break
+	var langCodes []string
+	if len(available) > 0 {
+		for code := range available {
+			langCodes = append(langCodes, code)
+			if strings.ToLower(code) == input {
+				matched = code
+			}
 		}
+	} else {
+		// No available_languages configured — accept any code
+		matched = input
 	}
 
 	if matched == "" {
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.language.unknown", strings.Join(available, ", "))}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.language.unknown", strings.Join(langCodes, ", "))}}
 	}
 
 	if err := ctx.Humans.SetLanguage(ctx.TargetID, matched); err != nil {

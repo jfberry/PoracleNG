@@ -2,11 +2,17 @@ package commands
 
 import (
 	"testing"
+
+	"github.com/pokemon/poracleng/processor/internal/config"
 )
 
 func TestLanguageCommand_SetValid(t *testing.T) {
 	ctx, mock := testCtx(t)
-	ctx.Config.General.AvailableLanguages = []string{"en", "de", "fr"}
+	ctx.Config.General.AvailableLanguages = map[string]config.LanguageEntry{
+		"en": {Poracle: "poracle"},
+		"de": {Poracle: "dasporacle"},
+		"fr": {Poracle: "leporacle"},
+	}
 
 	cmd := &LanguageCommand{}
 	replies := cmd.Run(ctx, []string{"de"})
@@ -22,7 +28,10 @@ func TestLanguageCommand_SetValid(t *testing.T) {
 
 func TestLanguageCommand_Invalid(t *testing.T) {
 	ctx, mock := testCtx(t)
-	ctx.Config.General.AvailableLanguages = []string{"en", "de"}
+	ctx.Config.General.AvailableLanguages = map[string]config.LanguageEntry{
+		"en": {Poracle: "poracle"},
+		"de": {Poracle: "dasporacle"},
+	}
 
 	cmd := &LanguageCommand{}
 	replies := cmd.Run(ctx, []string{"xx"})
@@ -42,11 +51,29 @@ func TestLanguageCommand_NoArgs(t *testing.T) {
 
 func TestLanguageCommand_CaseInsensitive(t *testing.T) {
 	ctx, mock := testCtx(t)
-	ctx.Config.General.AvailableLanguages = []string{"en", "DE"}
+	ctx.Config.General.AvailableLanguages = map[string]config.LanguageEntry{
+		"en": {},
+		"DE": {},
+	}
 
 	cmd := &LanguageCommand{}
 	replies := cmd.Run(ctx, []string{"de"})
 
 	assertReact(t, replies, "✅")
 	assertCall(t, mock, "SetLanguage")
+}
+
+func TestLanguageCommand_NoAvailable(t *testing.T) {
+	ctx, mock := testCtx(t)
+	// No available_languages configured — accept any language code
+
+	cmd := &LanguageCommand{}
+	replies := cmd.Run(ctx, []string{"ja"})
+
+	assertReact(t, replies, "✅")
+	assertCall(t, mock, "SetLanguage")
+	h, _ := mock.Get("user1")
+	if h.Language != "ja" {
+		t.Errorf("expected language ja, got %s", h.Language)
+	}
 }

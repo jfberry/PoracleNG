@@ -101,7 +101,7 @@ type GeneralConfig struct {
 	ShortlinkProviderKey string         `toml:"shortlink_provider_key"`    // Shlink API key
 	ShortlinkDomain      string         `toml:"shortlink_provider_domain"` // Shlink domain override
 	DTSDictionary        map[string]any `toml:"dts_dictionary"`            // custom key-value pairs for DTS templates
-	AvailableLanguages   []string `toml:"available_languages"`
+	AvailableLanguages   map[string]LanguageEntry `toml:"available_languages"` // lang code → {poracle, help}
 
 	// Webhook type disable flags — used by /api/config/poracleWeb to report disabledHooks.
 	DisablePokemon   bool `toml:"disable_pokemon"`
@@ -115,6 +115,13 @@ type GeneralConfig struct {
 	DisableGym       bool `toml:"disable_gym"`
 	DisableMaxBattle    bool `toml:"disable_max_battle"`
 	DisableFortUpdate  bool `toml:"disable_fort_update"`
+}
+
+// LanguageEntry defines the command aliases for a language variant.
+// Used by available_languages to register language-specific !poracle and !help commands.
+type LanguageEntry struct {
+	Poracle string `toml:"poracle"` // registration command word (e.g. "dasporacle")
+	Help    string `toml:"help"`    // help command word (e.g. "hilfe")
 }
 
 type LocaleConfig struct {

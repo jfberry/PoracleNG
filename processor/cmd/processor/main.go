@@ -388,16 +388,32 @@ func main() {
 	apiGroup.POST("/postMessage", api.HandleDeliverMessages(proc.dispatcher)) // legacy alias
 
 	// Command framework — shared by API endpoint and Discord/Telegram bots
-	cmdLanguages := cfg.General.AvailableLanguages
-	if len(cmdLanguages) == 0 {
+	var cmdLanguages []string
+	if len(cfg.General.AvailableLanguages) > 0 {
+		for code := range cfg.General.AvailableLanguages {
+			cmdLanguages = append(cmdLanguages, code)
+		}
+		// Ensure English and default locale are included
+		hasEn := false
+		hasLocale := false
+		for _, l := range cmdLanguages {
+			if l == "en" { hasEn = true }
+			if l == cfg.General.Locale { hasLocale = true }
+		}
+		if !hasEn { cmdLanguages = append(cmdLanguages, "en") }
+		if cfg.General.Locale != "" && !hasLocale { cmdLanguages = append(cmdLanguages, cfg.General.Locale) }
+	} else {
 		cmdLanguages = []string{"en"}
+		if cfg.General.Locale != "" && cfg.General.Locale != "en" {
+			cmdLanguages = append(cmdLanguages, cfg.General.Locale)
+		}
 	}
 	cmdPrefix := cfg.Discord.Prefix
 	if cmdPrefix == "" {
 		cmdPrefix = "!"
 	}
-	cmdParser := bot.NewParser(cmdPrefix, proc.enricher.Translations, cmdLanguages)
-	tgParser := bot.NewParser("/", proc.enricher.Translations, cmdLanguages)
+	cmdParser := bot.NewParser(cmdPrefix, proc.enricher.Translations, cmdLanguages, cfg.General.AvailableLanguages)
+	tgParser := bot.NewParser("/", proc.enricher.Translations, cmdLanguages, cfg.General.AvailableLanguages)
 	pokemonAliases := bot.LoadPokemonAliases(filepath.Join(cfg.BaseDir, "config"), filepath.Join(cfg.BaseDir, "fallbacks"))
 	cmdResolver := bot.NewPokemonResolver(proc.enricher.GameData, proc.enricher.Translations, cmdLanguages, pokemonAliases)
 	cmdArgMatcher := bot.NewArgMatcher(proc.enricher.Translations, proc.enricher.GameData, cmdResolver, cmdLanguages)

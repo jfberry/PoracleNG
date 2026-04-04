@@ -47,6 +47,10 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 	}
 
 	language := ctx.Language
+	// Use language hint if available (from language-specific help command variant)
+	if hint := ctx.GetLanguageHint(); hint != "" {
+		language = hint
+	}
 
 	// Look up the compiled template
 	var tmpl = ctx.DTS.Get(templateType, platform, templateID, language)

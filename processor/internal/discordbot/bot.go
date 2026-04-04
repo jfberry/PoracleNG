@@ -436,6 +436,9 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			b.Cfg, m.Author.ID, roles, channelID, guildID, "")
 		ctx.Permissions.UserTracking = bot.CanTrackUsers(b.Cfg, "discord", m.Author.ID, roles)
 
+		// Set language hint from available_languages (e.g. !dasporacle → "de")
+		ctx.SetLanguageHint(cmd.LanguageHint)
+
 		// Handle target override.
 		// !poracle skips BuildTarget — it's a registration command that always
 		// targets the sender and has its own channel validation internally.

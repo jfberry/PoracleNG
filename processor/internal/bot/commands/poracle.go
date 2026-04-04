@@ -130,6 +130,7 @@ func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd s
 		Name:                ctx.UserName,
 		Type:                userType,
 		Enabled:             true,
+		Language:            ctx.GetLanguageHint(), // auto-set from language-specific command variant
 		CommunityMembership: communities,
 		AreaRestriction:     restrictions,
 	}

@@ -118,6 +118,9 @@ type CommandContext struct {
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
+
+	// languageHint from available_languages (set by bot when command uses a language variant)
+	languageHint string
 }
 
 // DefaultTemplate returns the template to store when the user doesn't specify one.
@@ -136,6 +139,19 @@ type Permissions struct {
 	WebhookAdmin string
 	// UserTracking is true if the user can manage other users' tracking via user:ID.
 	UserTracking bool
+}
+
+// LanguageHint is set when a language-specific command variant is used
+// (from available_languages). The poracle command uses this to auto-set
+// the user's language on registration.
+// The help command uses this to return help in the hinted language.
+func (ctx *CommandContext) SetLanguageHint(hint string) {
+	ctx.languageHint = hint
+}
+
+// GetLanguageHint returns the language hint from available_languages, or "".
+func (ctx *CommandContext) GetLanguageHint() string {
+	return ctx.languageHint
 }
 
 // Tr returns a translator for the command's target language.

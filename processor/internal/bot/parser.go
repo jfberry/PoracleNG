@@ -4,19 +4,22 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
 
 // ParsedCommand represents one command invocation after parsing.
 type ParsedCommand struct {
-	CommandKey string   // identifier key (e.g. "cmd.track"), empty if unrecognised
-	Args       []string // remaining arguments (lowercased, underscores→spaces)
+	CommandKey   string   // identifier key (e.g. "cmd.track"), empty if unrecognised
+	Args         []string // remaining arguments (lowercased, underscores→spaces)
+	LanguageHint string   // language code from available_languages (e.g. "de" from "!dasporacle")
 }
 
 // Parser handles text → structured commands.
 type Parser struct {
 	prefix     string
 	commandMap map[string]string // lowercased translated name → identifier key
+	langMap    map[string]string // lowercased command word → language code (from available_languages)
 }
 
 var tokenRe = regexp.MustCompile(`"([^"]*)"|\S+`)
@@ -25,7 +28,7 @@ var tokenRe = regexp.MustCompile(`"([^"]*)"|\S+`)
 // For each cmd.* key in the bundle, all translations across the given languages
 // are mapped to the identifier key. If two languages translate different commands
 // to the same word, the first language in the list wins.
-func NewParser(prefix string, bundle *i18n.Bundle, languages []string) *Parser {
+func NewParser(prefix string, bundle *i18n.Bundle, languages []string, availableLanguages map[string]config.LanguageEntry) *Parser {
 	cmdMap := make(map[string]string)
 	for _, lang := range languages {
 		tr := bundle.For(lang)
@@ -53,7 +56,30 @@ func NewParser(prefix string, bundle *i18n.Bundle, languages []string) *Parser {
 			}
 		}
 	}
-	return &Parser{prefix: strings.ToLower(prefix), commandMap: cmdMap}
+
+	// Register available_languages poracle/help aliases.
+	// These map language-specific command words (e.g. "dasporacle") to the
+	// standard command keys. The language code is stored in langMap so the
+	// poracle command can auto-set the user's language on registration.
+	langMap := make(map[string]string) // command word → language code
+	for langCode, entry := range availableLanguages {
+		if entry.Poracle != "" {
+			word := strings.ToLower(entry.Poracle)
+			if _, exists := cmdMap[word]; !exists {
+				cmdMap[word] = "cmd.poracle"
+			}
+			langMap[word] = langCode
+		}
+		if entry.Help != "" {
+			word := strings.ToLower(entry.Help)
+			if _, exists := cmdMap[word]; !exists {
+				cmdMap[word] = "cmd.help"
+			}
+			langMap[word] = langCode
+		}
+	}
+
+	return &Parser{prefix: strings.ToLower(prefix), commandMap: cmdMap, langMap: langMap}
 }
 
 // Parse splits raw message text into one or more ParsedCommands.
@@ -84,7 +110,9 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 		}
 
 		// Look up command name (first token, already lowercased by tokenize)
-		cmdKey := p.commandMap[tokens[0]]
+		cmdWord := tokens[0]
+		cmdKey := p.commandMap[cmdWord]
+		langHint := p.langMap[cmdWord] // non-empty if from available_languages
 
 		// Remaining args: underscore→space
 		args := make([]string, 0, len(tokens)-1)
@@ -95,10 +123,10 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 		// Pipe splitting: split args by "|" into groups sharing the same command
 		groups := splitByPipe(args)
 		if len(groups) == 0 {
-			results = append(results, ParsedCommand{CommandKey: cmdKey, Args: nil})
+			results = append(results, ParsedCommand{CommandKey: cmdKey, Args: nil, LanguageHint: langHint})
 		} else {
 			for _, group := range groups {
-				results = append(results, ParsedCommand{CommandKey: cmdKey, Args: group})
+				results = append(results, ParsedCommand{CommandKey: cmdKey, Args: group, LanguageHint: langHint})
 			}
 		}
 	}
