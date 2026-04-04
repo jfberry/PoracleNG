@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"net/http"
 	"time"
 
@@ -27,6 +28,50 @@ func RequireSecretGin(apiSecret string) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// IPFilter returns a Gin middleware that enforces IP whitelist and blacklist.
+// If whitelist is non-empty, only listed IPs are allowed.
+// If blacklist is non-empty, listed IPs are rejected.
+// Both lists are checked against the client IP (from Gin's ClientIP which
+// respects trusted proxies / X-Forwarded-For).
+func IPFilter(whitelist, blacklist []string) gin.HandlerFunc {
+	if len(whitelist) == 0 && len(blacklist) == 0 {
+		return func(c *gin.Context) { c.Next() }
+	}
+
+	whiteSet := make(map[string]bool, len(whitelist))
+	for _, ip := range whitelist {
+		whiteSet[normalizeIP(ip)] = true
+	}
+	blackSet := make(map[string]bool, len(blacklist))
+	for _, ip := range blacklist {
+		blackSet[normalizeIP(ip)] = true
+	}
+
+	return func(c *gin.Context) {
+		clientIP := normalizeIP(c.ClientIP())
+
+		if len(blackSet) > 0 && blackSet[clientIP] {
+			log.Warnf("API: rejected blacklisted IP %s for %s %s", clientIP, c.Request.Method, c.Request.URL.Path)
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+		if len(whiteSet) > 0 && !whiteSet[clientIP] {
+			log.Warnf("API: rejected non-whitelisted IP %s for %s %s", clientIP, c.Request.Method, c.Request.URL.Path)
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+		c.Next()
+	}
+}
+
+// normalizeIP strips port and zone from an IP address for consistent matching.
+func normalizeIP(addr string) string {
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
 }
 
 // RequestLogger returns a Gin middleware that logs API requests and records

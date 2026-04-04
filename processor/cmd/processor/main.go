@@ -183,6 +183,7 @@ func main() {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(api.RequestLogger())
+	r.Use(api.IPFilter(cfg.Processor.IPWhitelist, cfg.Processor.IPBlacklist))
 
 	// Webhook receiver
 	var webhookLogger io.Writer

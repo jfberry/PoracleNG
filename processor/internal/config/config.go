@@ -148,6 +148,7 @@ type ProcessorConfig struct {
 	Host        string   `toml:"host"`
 	Port        int      `toml:"port"`
 	IPWhitelist []string `toml:"ip_whitelist"`
+	IPBlacklist []string `toml:"ip_blacklist"`
 	APISecret   string   `toml:"api_secret"` // API secret for X-Poracle-Secret header authentication
 }
 
