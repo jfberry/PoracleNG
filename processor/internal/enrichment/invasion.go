@@ -60,13 +60,16 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	// Reverse geocoding
 	e.addGeoResult(m, lat, lon)
 
+	// Grunt and display type IDs for DTS templates
+	m["gruntTypeId"] = gruntTypeID
+	m["displayTypeId"] = displayType
+
 	// Static map tile — only pass non-zero IDs so tileserver template nil checks work
 	tileFields := make(map[string]any)
 	if gruntTypeID != 0 {
 		tileFields["gruntTypeId"] = gruntTypeID
 	}
 	if displayType != 0 {
-		m["displayTypeId"] = displayType
 		tileFields["displayTypeId"] = displayType
 	}
 	if lureID != 0 {
