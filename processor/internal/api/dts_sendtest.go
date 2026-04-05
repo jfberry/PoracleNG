@@ -1,11 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	raymond "github.com/mailgun/raymond/v2"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
@@ -31,7 +34,7 @@ func HandleDTSSendTest(dispatcher *delivery.Dispatcher, ts *dts.TemplateStore) g
 			Platform string `json:"platform"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid request body: " + err.Error()})
 			return
 		}
 
@@ -53,15 +56,20 @@ func HandleDTSSendTest(dispatcher *delivery.Dispatcher, ts *dts.TemplateStore) g
 			req.Platform = "discord"
 		}
 
-		// JSON-stringify the template object, then compile as Handlebars
-		templateJSON, err := json.Marshal(req.Template)
-		if err != nil {
+		// JSON-stringify the template object with SetEscapeHTML(false) to preserve
+		// <, >, & in Handlebars expressions like {{#compare x '<' 100}}.
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(req.Template); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid template: " + err.Error()})
 			return
 		}
+		templateStr := strings.TrimSpace(buf.String())
 
-		compiled, err := raymond.Parse(string(templateJSON))
+		compiled, err := raymond.Parse(templateStr)
 		if err != nil {
+			log.Warnf("dts sendtest: template compile error: %v\nTemplate: %s", err, templateStr)
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "template compile error: " + err.Error()})
 			return
 		}
@@ -78,6 +86,7 @@ func HandleDTSSendTest(dispatcher *delivery.Dispatcher, ts *dts.TemplateStore) g
 
 		rendered, err := compiled.ExecWith(req.Variables, df)
 		if err != nil {
+			log.Warnf("dts sendtest: render error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "render error: " + err.Error()})
 			return
 		}
@@ -85,6 +94,7 @@ func HandleDTSSendTest(dispatcher *delivery.Dispatcher, ts *dts.TemplateStore) g
 		// Parse rendered JSON into message object
 		var message json.RawMessage
 		if err := json.Unmarshal([]byte(rendered), &message); err != nil {
+			log.Warnf("dts sendtest: rendered template is not valid JSON: %v\nRendered: %s", err, rendered)
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "rendered template is not valid JSON: " + err.Error()})
 			return
 		}
