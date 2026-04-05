@@ -131,13 +131,19 @@ func (h *Handler) routePokestop(raw json.RawMessage) error {
 		return err
 	}
 
+	// A pokestop can have both a lure and an invasion — process both
 	if peek.LureExpiration > 0 {
-		return h.processor.ProcessLure(raw)
+		if err := h.processor.ProcessLure(raw); err != nil {
+			return err
+		}
 	}
 	if peek.IncidentExpiration > 0 || peek.IncidentGruntType > 0 {
 		return h.processor.ProcessInvasion(raw)
 	}
 
-	// Default: try as invasion
-	return h.processor.ProcessInvasion(raw)
+	// If neither lure nor invasion was detected, try as invasion (legacy fallback)
+	if peek.LureExpiration <= 0 {
+		return h.processor.ProcessInvasion(raw)
+	}
+	return nil
 }
