@@ -15,6 +15,7 @@ type enrichResult struct {
 	templateType  string
 	base          map[string]any
 	perLang       map[string]any
+	perUser       map[string]any
 	webhookFields map[string]any
 }
 
@@ -61,7 +62,7 @@ func (ps *ProcessorService) EnrichWebhook(webhookType string, raw json.RawMessag
 			result.templateType,
 			result.base,
 			result.perLang,
-			nil, // no per-user enrichment for editor preview
+			result.perUser,
 			result.webhookFields,
 			platform,
 			nil, // no matched areas
@@ -107,10 +108,26 @@ func (ps *ProcessorService) enrichPokemon(raw json.RawMessage, language string) 
 		perLang = ps.enricher.PokemonTranslate(base, &pokemon, language)
 	}
 
+	// Compute PVP display data with a synthetic user (no filters = show all PVP entries).
+	// In normal rendering this is per-user, but for the editor preview we show everything.
+	var perUser map[string]any
+	if ps.enricher.PVPDisplay != nil && perLang != nil {
+		syntheticUser := webhook.MatchedUser{
+			ID:       "_editor",
+			Language: language,
+		}
+		perUserMap := ps.enricher.PokemonPerUser(
+			map[string]map[string]any{language: perLang},
+			[]webhook.MatchedUser{syntheticUser},
+		)
+		perUser = perUserMap["_editor"]
+	}
+
 	return &enrichResult{
 		templateType:  "monster",
 		base:          base,
 		perLang:       perLang,
+		perUser:       perUser,
 		webhookFields: parseWebhookFields(raw),
 	}, nil
 }
