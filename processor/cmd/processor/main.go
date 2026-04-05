@@ -182,6 +182,7 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(api.CORSMiddleware())
 	r.Use(api.RequestLogger())
 	r.Use(api.IPFilter(cfg.Processor.IPWhitelist, cfg.Processor.IPBlacklist))
 
@@ -230,7 +231,6 @@ func main() {
 
 	// Authenticated API group
 	apiGroup := r.Group("/api")
-	apiGroup.Use(api.CORSMiddleware())
 	apiGroup.Use(api.RequireSecretGin(cfg.Processor.APISecret))
 
 	// Reload
