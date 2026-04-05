@@ -230,6 +230,7 @@ func main() {
 
 	// Authenticated API group
 	apiGroup := r.Group("/api")
+	apiGroup.Use(api.CORSMiddleware())
 	apiGroup.Use(api.RequireSecretGin(cfg.Processor.APISecret))
 
 	// Reload
@@ -389,6 +390,18 @@ func main() {
 	if proc.dtsRenderer != nil {
 		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
 		apiGroup.POST("/dts/render", api.HandleDTSRender(proc.dtsRenderer.Templates()))
+		apiGroup.GET("/dts/templates", api.HandleDTSGetTemplates(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/templates", api.HandleDTSSaveTemplates(proc.dtsRenderer.Templates()))
+		apiGroup.DELETE("/dts/templates", api.HandleDTSDeleteTemplate(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/enrich", api.HandleDTSEnrich(proc))
+		apiGroup.GET("/dts/fields", api.HandleDTSFieldTypes())
+		apiGroup.GET("/dts/fields/:type", api.HandleDTSFields())
+		apiGroup.GET("/dts/partials", api.HandleDTSPartials(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/sendtest", api.HandleDTSSendTest(proc.dispatcher, proc.dtsRenderer.Templates()))
+		apiGroup.GET("/dts/testdata", api.HandleDTSTestdata(
+			filepath.Join(cfg.BaseDir, "config"),
+			filepath.Join(cfg.BaseDir, "fallbacks"),
+		))
 	}
 
 	// Config and master data endpoints

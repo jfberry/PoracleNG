@@ -1,0 +1,462 @@
+package api
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+// FieldDef describes a single template field for the DTS editor.
+type FieldDef struct {
+	Name                 string `json:"name"`
+	Type                 string `json:"type"`
+	Description          string `json:"description"`
+	Category             string `json:"category"`
+	Preferred            bool   `json:"preferred,omitempty"`
+	Deprecated           bool   `json:"deprecated,omitempty"`
+	RawWebhook           bool   `json:"rawWebhook,omitempty"`
+	PreferredAlternative string `json:"preferredAlternative,omitempty"`
+}
+
+// BlockScope describes fields available inside a block helper context.
+type BlockScope struct {
+	Helper         string     `json:"helper"`
+	Args           []string   `json:"args,omitempty"`
+	Description    string     `json:"description"`
+	Fields         []FieldDef `json:"fields"`
+	IterableFields []string   `json:"iterableFields,omitempty"`
+}
+
+var commonFields = []FieldDef{
+	// Location
+	{Name: "latitude", Type: "number", Description: "Alert location latitude", Category: "location", Preferred: true},
+	{Name: "longitude", Type: "number", Description: "Alert location longitude", Category: "location", Preferred: true},
+	{Name: "addr", Type: "string", Description: "Formatted address", Category: "location", Preferred: true},
+	{Name: "streetName", Type: "string", Description: "Street name", Category: "location"},
+	{Name: "streetNumber", Type: "string", Description: "Street number", Category: "location"},
+	{Name: "neighbourhood", Type: "string", Description: "Neighbourhood", Category: "location"},
+	{Name: "city", Type: "string", Description: "City name", Category: "location"},
+	{Name: "suburb", Type: "string", Description: "Suburb", Category: "location"},
+	{Name: "state", Type: "string", Description: "State/province", Category: "location"},
+	{Name: "zipcode", Type: "string", Description: "Zip/postal code", Category: "location"},
+	{Name: "country", Type: "string", Description: "Country name", Category: "location"},
+	{Name: "countryCode", Type: "string", Description: "Country code", Category: "location"},
+	{Name: "flag", Type: "string", Description: "Country flag emoji", Category: "location"},
+	{Name: "areas", Type: "string", Description: "Comma-separated matched areas", Category: "location"},
+	{Name: "areasList", Type: "array", Description: "Matched areas as array", Category: "location"},
+	{Name: "distance", Type: "number", Description: "Distance from user location", Category: "location"},
+	{Name: "bearing", Type: "int", Description: "Bearing degrees from user", Category: "location"},
+	{Name: "bearingEmoji", Type: "string", Description: "Directional arrow emoji", Category: "location"},
+	// Maps
+	{Name: "staticMap", Type: "string", Description: "Static map image URL", Category: "maps", Preferred: true},
+	{Name: "staticmap", Type: "string", Description: "Deprecated alias for staticMap", Category: "maps", Deprecated: true, PreferredAlternative: "staticMap"},
+	{Name: "imgUrl", Type: "string", Description: "Primary icon URL", Category: "maps", Preferred: true},
+	{Name: "imgUrlAlt", Type: "string", Description: "Alternative icon URL", Category: "maps"},
+	{Name: "stickerUrl", Type: "string", Description: "Sticker icon URL", Category: "maps"},
+	{Name: "googleMapUrl", Type: "string", Description: "Google Maps link", Category: "maps", Preferred: true},
+	{Name: "appleMapUrl", Type: "string", Description: "Apple Maps link", Category: "maps", Preferred: true},
+	{Name: "wazeMapUrl", Type: "string", Description: "Waze link", Category: "maps"},
+	{Name: "rdmUrl", Type: "string", Description: "RDM map link", Category: "maps"},
+	{Name: "reactMapUrl", Type: "string", Description: "ReactMap link", Category: "maps"},
+	{Name: "rocketMadUrl", Type: "string", Description: "RocketMad link", Category: "maps"},
+	{Name: "mapurl", Type: "string", Description: "Deprecated alias for googleMapUrl", Category: "maps", Deprecated: true, PreferredAlternative: "googleMapUrl"},
+	{Name: "applemap", Type: "string", Description: "Deprecated alias for appleMapUrl", Category: "maps", Deprecated: true, PreferredAlternative: "appleMapUrl"},
+	// Time
+	{Name: "tthd", Type: "int", Description: "Days remaining", Category: "time"},
+	{Name: "tthh", Type: "int", Description: "Hours remaining", Category: "time", Preferred: true},
+	{Name: "tthm", Type: "int", Description: "Minutes remaining", Category: "time", Preferred: true},
+	{Name: "tths", Type: "int", Description: "Seconds remaining", Category: "time", Preferred: true},
+	{Name: "now", Type: "string", Description: "Current date/time", Category: "time"},
+	{Name: "nowPokemon", Type: "string", Description: "Current date/time (pokemon format)", Category: "time"},
+	{Name: "sunsetTime", Type: "string", Description: "Sunset time", Category: "time"},
+	{Name: "sunriseTime", Type: "string", Description: "Sunrise time", Category: "time"},
+	{Name: "isNight", Type: "bool", Description: "Is nighttime", Category: "time"},
+	{Name: "isDusk", Type: "bool", Description: "Is dusk", Category: "time"},
+	{Name: "isDawn", Type: "bool", Description: "Is dawn", Category: "time"},
+}
+
+var monsterFields = []FieldDef{
+	// Identity
+	{Name: "name", Type: "string", Description: "Translated pokemon name", Category: "identity", Preferred: true},
+	{Name: "fullName", Type: "string", Description: "Name + form combined", Category: "identity", Preferred: true},
+	{Name: "formName", Type: "string", Description: "Translated form name", Category: "identity", Preferred: true},
+	{Name: "formNormalised", Type: "string", Description: "Form name (empty for Normal)", Category: "identity"},
+	{Name: "pokemonId", Type: "int", Description: "Pokemon ID", Category: "identity", Preferred: true},
+	{Name: "pokemon_id", Type: "int", Description: "Pokemon ID (webhook)", Category: "identity", RawWebhook: true, PreferredAlternative: "pokemonId"},
+	{Name: "formId", Type: "int", Description: "Form ID", Category: "identity", Preferred: true},
+	{Name: "nameEng", Type: "string", Description: "English pokemon name", Category: "identity"},
+	{Name: "fullNameEng", Type: "string", Description: "English name + form", Category: "identity"},
+	{Name: "formNameEng", Type: "string", Description: "English form name", Category: "identity"},
+	// Stats
+	{Name: "iv", Type: "number", Description: "IV percentage (0-100)", Category: "stats", Preferred: true},
+	{Name: "atk", Type: "int", Description: "Attack IV (0-15)", Category: "stats", Preferred: true},
+	{Name: "def", Type: "int", Description: "Defense IV (0-15)", Category: "stats", Preferred: true},
+	{Name: "sta", Type: "int", Description: "Stamina IV (0-15)", Category: "stats", Preferred: true},
+	{Name: "cp", Type: "int", Description: "Combat Power", Category: "stats", Preferred: true},
+	{Name: "level", Type: "int", Description: "Pokemon level", Category: "stats", Preferred: true},
+	{Name: "ivColor", Type: "string", Description: "Hex color based on IV range", Category: "stats", Preferred: true},
+	{Name: "weight", Type: "string", Description: "Weight in kg", Category: "stats"},
+	{Name: "height", Type: "string", Description: "Height in m", Category: "stats"},
+	{Name: "baseStats", Type: "object", Description: "{baseAttack, baseDefense, baseStamina}", Category: "stats"},
+	{Name: "encountered", Type: "bool", Description: "Has IV data", Category: "stats"},
+	{Name: "individual_attack", Type: "int", Description: "Attack IV (webhook)", Category: "stats", RawWebhook: true, PreferredAlternative: "atk"},
+	{Name: "individual_defense", Type: "int", Description: "Defense IV (webhook)", Category: "stats", RawWebhook: true, PreferredAlternative: "def"},
+	{Name: "individual_stamina", Type: "int", Description: "Stamina IV (webhook)", Category: "stats", RawWebhook: true, PreferredAlternative: "sta"},
+	// Moves
+	{Name: "quickMoveName", Type: "string", Description: "Translated fast move name", Category: "moves", Preferred: true},
+	{Name: "chargeMoveName", Type: "string", Description: "Translated charged move name", Category: "moves", Preferred: true},
+	{Name: "quickMoveEmoji", Type: "string", Description: "Fast move type emoji", Category: "moves"},
+	{Name: "chargeMoveEmoji", Type: "string", Description: "Charged move type emoji", Category: "moves"},
+	{Name: "quickMoveNameEng", Type: "string", Description: "English fast move name", Category: "moves"},
+	{Name: "chargeMoveNameEng", Type: "string", Description: "English charged move name", Category: "moves"},
+	{Name: "quickMoveId", Type: "int", Description: "Fast move ID", Category: "moves"},
+	{Name: "chargeMoveId", Type: "int", Description: "Charged move ID", Category: "moves"},
+	{Name: "move_1", Type: "int", Description: "Fast move ID (webhook)", Category: "moves", RawWebhook: true, PreferredAlternative: "quickMoveId"},
+	{Name: "move_2", Type: "int", Description: "Charged move ID (webhook)", Category: "moves", RawWebhook: true, PreferredAlternative: "chargeMoveId"},
+	// Time
+	{Name: "time", Type: "string", Description: "Disappear time (formatted)", Category: "time", Preferred: true},
+	{Name: "disappearTime", Type: "string", Description: "Disappear time", Category: "time"},
+	{Name: "confirmedTime", Type: "bool", Description: "Is disappear time verified", Category: "time"},
+	{Name: "tthSeconds", Type: "int", Description: "Total seconds remaining", Category: "time"},
+	{Name: "distime", Type: "string", Description: "Deprecated alias for disappearTime", Category: "time", Deprecated: true, PreferredAlternative: "disappearTime"},
+	// Types
+	{Name: "typeName", Type: "array", Description: "Array of translated type names", Category: "types", Preferred: true},
+	{Name: "typeNameEng", Type: "array", Description: "Array of English type names", Category: "types"},
+	{Name: "typeEmoji", Type: "array", Description: "Array of type emoji strings", Category: "types"},
+	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types", Preferred: true},
+	// Weather
+	{Name: "boostWeatherEmoji", Type: "string", Description: "Boost weather emoji", Category: "weather", Preferred: true},
+	{Name: "boostWeatherName", Type: "string", Description: "Translated boost weather", Category: "weather"},
+	{Name: "boosted", Type: "bool", Description: "Is weather boosted", Category: "weather"},
+	{Name: "gameWeatherName", Type: "string", Description: "Current game weather name", Category: "weather"},
+	{Name: "gameWeatherEmoji", Type: "string", Description: "Current game weather emoji", Category: "weather"},
+	{Name: "weatherChange", Type: "string", Description: "Weather forecast text", Category: "weather"},
+	{Name: "weatherCurrentName", Type: "string", Description: "Current weather name", Category: "weather"},
+	{Name: "weatherNextName", Type: "string", Description: "Next hour weather name", Category: "weather"},
+	// PVP
+	{Name: "pvpGreat", Type: "array", Description: "Great League PVP display list", Category: "pvp", Preferred: true},
+	{Name: "pvpUltra", Type: "array", Description: "Ultra League PVP display list", Category: "pvp", Preferred: true},
+	{Name: "pvpLittle", Type: "array", Description: "Little League PVP display list", Category: "pvp"},
+	// Other
+	{Name: "generation", Type: "int", Description: "Generation number", Category: "other"},
+	{Name: "generationName", Type: "string", Description: "Generation name", Category: "other"},
+	{Name: "genderName", Type: "string", Description: "Gender name", Category: "other"},
+	{Name: "genderEmoji", Type: "string", Description: "Gender emoji", Category: "other"},
+	{Name: "sizeName", Type: "string", Description: "Size category name", Category: "other"},
+	{Name: "rarityName", Type: "string", Description: "Rarity group name", Category: "other"},
+	{Name: "costume", Type: "int", Description: "Costume ID", Category: "other"},
+	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
+	{Name: "weaknessList", Type: "array", Description: "Type weakness list", Category: "other"},
+	{Name: "evolutions", Type: "array", Description: "Evolution entries", Category: "other"},
+	{Name: "megaEvolutions", Type: "array", Description: "Mega evolution entries", Category: "other"},
+	{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions", Category: "other"},
+	{Name: "hasMegaEvolutions", Type: "bool", Description: "Has mega evolutions", Category: "other"},
+	{Name: "pokestopName", Type: "string", Description: "Nearby pokestop name", Category: "other"},
+}
+
+var raidFields = []FieldDef{
+	// Identity
+	{Name: "name", Type: "string", Description: "Translated pokemon name", Category: "identity", Preferred: true},
+	{Name: "fullName", Type: "string", Description: "Name + form", Category: "identity", Preferred: true},
+	{Name: "formName", Type: "string", Description: "Translated form name", Category: "identity"},
+	{Name: "nameEng", Type: "string", Description: "English pokemon name", Category: "identity"},
+	{Name: "fullNameEng", Type: "string", Description: "English name + form", Category: "identity"},
+	{Name: "pokemonId", Type: "int", Description: "Pokemon ID", Category: "identity"},
+	{Name: "level", Type: "int", Description: "Raid level", Category: "identity", Preferred: true},
+	{Name: "levelName", Type: "string", Description: "Raid level name", Category: "identity", Preferred: true},
+	// Gym
+	{Name: "gymName", Type: "string", Description: "Gym name", Category: "gym", Preferred: true},
+	{Name: "gym_name", Type: "string", Description: "Gym name (webhook)", Category: "gym", RawWebhook: true, PreferredAlternative: "gymName"},
+	{Name: "gymUrl", Type: "string", Description: "Gym image URL", Category: "gym"},
+	{Name: "gymColor", Type: "string", Description: "Team color hex", Category: "gym"},
+	{Name: "teamName", Type: "string", Description: "Team name", Category: "gym"},
+	{Name: "teamEmoji", Type: "string", Description: "Team emoji", Category: "gym"},
+	{Name: "ex", Type: "bool", Description: "EX raid eligible", Category: "gym", Preferred: true},
+	// Stats
+	{Name: "cp", Type: "int", Description: "Boss CP (20/25)", Category: "stats"},
+	{Name: "cp20", Type: "int", Description: "Boss CP at level 20", Category: "stats"},
+	{Name: "cp25", Type: "int", Description: "Boss CP at level 25", Category: "stats"},
+	// Moves
+	{Name: "quickMoveName", Type: "string", Description: "Translated fast move", Category: "moves", Preferred: true},
+	{Name: "chargeMoveName", Type: "string", Description: "Translated charged move", Category: "moves", Preferred: true},
+	{Name: "quickMoveEmoji", Type: "string", Description: "Fast move type emoji", Category: "moves"},
+	{Name: "chargeMoveEmoji", Type: "string", Description: "Charged move type emoji", Category: "moves"},
+	// Time
+	{Name: "time", Type: "string", Description: "End time", Category: "time", Preferred: true},
+	{Name: "hatchTime", Type: "string", Description: "Hatch/start time", Category: "time"},
+	// Types
+	{Name: "typeName", Type: "array", Description: "Pokemon type names", Category: "types"},
+	{Name: "typeEmoji", Type: "array", Description: "Type emoji strings", Category: "types"},
+	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types"},
+	// Weather
+	{Name: "boostWeatherEmoji", Type: "string", Description: "Boost weather emoji", Category: "weather"},
+	{Name: "boostWeatherName", Type: "string", Description: "Translated boost weather", Category: "weather"},
+	// Other
+	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
+	{Name: "evolutions", Type: "array", Description: "Evolution entries", Category: "other"},
+	{Name: "megaEvolutions", Type: "array", Description: "Mega evolution entries", Category: "other"},
+	{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions", Category: "other"},
+	{Name: "hasMegaEvolutions", Type: "bool", Description: "Has mega evolutions", Category: "other"},
+	{Name: "weaknessList", Type: "array", Description: "Type weakness list", Category: "other"},
+	{Name: "rsvps", Type: "array", Description: "RSVP timeslot entries", Category: "other"},
+}
+
+var eggFields = []FieldDef{
+	{Name: "level", Type: "int", Description: "Egg level", Category: "identity", Preferred: true},
+	{Name: "levelName", Type: "string", Description: "Raid level name", Category: "identity", Preferred: true},
+	{Name: "gymName", Type: "string", Description: "Gym name", Category: "gym", Preferred: true},
+	{Name: "gymUrl", Type: "string", Description: "Gym image URL", Category: "gym"},
+	{Name: "gymColor", Type: "string", Description: "Team color hex", Category: "gym"},
+	{Name: "teamName", Type: "string", Description: "Team name", Category: "gym"},
+	{Name: "teamEmoji", Type: "string", Description: "Team emoji", Category: "gym"},
+	{Name: "ex", Type: "bool", Description: "EX raid eligible", Category: "gym"},
+	{Name: "time", Type: "string", Description: "Hatch time", Category: "time", Preferred: true},
+	{Name: "hatchTime", Type: "string", Description: "Hatch time", Category: "time"},
+	{Name: "rsvps", Type: "array", Description: "RSVP timeslot entries", Category: "other"},
+}
+
+var questFields = []FieldDef{
+	{Name: "pokestopName", Type: "string", Description: "Pokestop name", Category: "location", Preferred: true},
+	{Name: "questString", Type: "string", Description: "Quest description", Category: "quest", Preferred: true},
+	{Name: "rewardString", Type: "string", Description: "Reward description", Category: "quest", Preferred: true},
+	{Name: "dustAmount", Type: "int", Description: "Stardust amount", Category: "quest"},
+	{Name: "itemAmount", Type: "int", Description: "Item amount", Category: "quest"},
+	{Name: "itemName", Type: "string", Description: "Item name", Category: "quest"},
+	{Name: "monsterName", Type: "string", Description: "Reward pokemon name", Category: "quest"},
+	{Name: "monsterFullName", Type: "string", Description: "Reward pokemon full name", Category: "quest"},
+	{Name: "energyAmount", Type: "int", Description: "Mega energy amount", Category: "quest"},
+	{Name: "energyMonsterName", Type: "string", Description: "Mega energy pokemon name", Category: "quest"},
+	{Name: "candyAmount", Type: "int", Description: "Candy amount", Category: "quest"},
+	{Name: "candyMonsterName", Type: "string", Description: "Candy pokemon name", Category: "quest"},
+	{Name: "xlCandyAmount", Type: "int", Description: "XL candy amount", Category: "quest"},
+	{Name: "xlCandyMonsterName", Type: "string", Description: "XL candy pokemon name", Category: "quest"},
+	{Name: "shiny", Type: "bool", Description: "Reward is shiny", Category: "quest"},
+}
+
+var invasionFields = []FieldDef{
+	{Name: "pokestopName", Type: "string", Description: "Pokestop name", Category: "location", Preferred: true},
+	{Name: "gruntName", Type: "string", Description: "Grunt name", Category: "invasion", Preferred: true},
+	{Name: "gruntTypeName", Type: "string", Description: "Grunt type name", Category: "invasion", Preferred: true},
+	{Name: "gruntTypeEmoji", Type: "string", Description: "Grunt type emoji", Category: "invasion"},
+	{Name: "gruntTypeColor", Type: "string", Description: "Grunt type color hex", Category: "invasion"},
+	{Name: "gruntTypeId", Type: "int", Description: "Grunt type ID", Category: "invasion"},
+	{Name: "displayTypeId", Type: "int", Description: "Display type ID", Category: "invasion"},
+	{Name: "genderName", Type: "string", Description: "Grunt gender name", Category: "invasion"},
+	{Name: "genderEmoji", Type: "string", Description: "Grunt gender emoji", Category: "invasion"},
+	{Name: "gruntRewardsList", Type: "object", Description: "Reward pokemon lists", Category: "invasion"},
+	{Name: "gruntLineupList", Type: "array", Description: "Confirmed lineup pokemon", Category: "invasion"},
+	{Name: "time", Type: "string", Description: "End time", Category: "time", Preferred: true},
+}
+
+var lureFields = []FieldDef{
+	{Name: "pokestopName", Type: "string", Description: "Pokestop name", Category: "location", Preferred: true},
+	{Name: "lureTypeId", Type: "int", Description: "Lure type ID", Category: "lure", Preferred: true},
+	{Name: "lureTypeName", Type: "string", Description: "Translated lure type name", Category: "lure", Preferred: true},
+	{Name: "lureTypeEmoji", Type: "string", Description: "Lure type emoji", Category: "lure"},
+	{Name: "lureTypeColor", Type: "string", Description: "Lure type color hex", Category: "lure"},
+	{Name: "time", Type: "string", Description: "Expiry time", Category: "time", Preferred: true},
+	{Name: "gruntTypeId", Type: "int", Description: "Co-existing invasion grunt type", Category: "invasion"},
+	{Name: "displayTypeId", Type: "int", Description: "Co-existing invasion display type", Category: "invasion"},
+}
+
+var nestFields = []FieldDef{
+	{Name: "name", Type: "string", Description: "Translated pokemon name", Category: "identity", Preferred: true},
+	{Name: "fullName", Type: "string", Description: "Name + form", Category: "identity", Preferred: true},
+	{Name: "formName", Type: "string", Description: "Translated form name", Category: "identity"},
+	{Name: "nameEng", Type: "string", Description: "English pokemon name", Category: "identity"},
+	{Name: "nest_name", Type: "string", Description: "Nest name", Category: "location", Preferred: true},
+	{Name: "pokemonId", Type: "int", Description: "Pokemon ID", Category: "identity"},
+	{Name: "pokemonCount", Type: "int", Description: "Pokemon count", Category: "stats"},
+	{Name: "pokemonSpawnAvg", Type: "number", Description: "Avg spawns per hour", Category: "stats"},
+	{Name: "pokemonRatio", Type: "number", Description: "Pokemon spawn ratio", Category: "stats"},
+	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
+	{Name: "typeName", Type: "array", Description: "Pokemon type names", Category: "types"},
+	{Name: "typeEmoji", Type: "array", Description: "Type emoji strings", Category: "types"},
+	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types"},
+}
+
+var gymFields = []FieldDef{
+	{Name: "gymName", Type: "string", Description: "Gym name", Category: "gym", Preferred: true},
+	{Name: "teamName", Type: "string", Description: "Current team name", Category: "gym", Preferred: true},
+	{Name: "teamEmoji", Type: "string", Description: "Team emoji", Category: "gym"},
+	{Name: "gymColor", Type: "string", Description: "Team color hex", Category: "gym"},
+	{Name: "oldTeamName", Type: "string", Description: "Previous team name", Category: "gym"},
+	{Name: "oldTeamEmoji", Type: "string", Description: "Previous team emoji", Category: "gym"},
+	{Name: "slotsAvailable", Type: "int", Description: "Available gym slots", Category: "gym"},
+	{Name: "oldSlotsAvailable", Type: "int", Description: "Previous slot count", Category: "gym"},
+	{Name: "inBattle", Type: "bool", Description: "Is gym in battle", Category: "gym"},
+	{Name: "ex", Type: "bool", Description: "EX raid eligible", Category: "gym"},
+	{Name: "previousControlName", Type: "string", Description: "Previous owner name", Category: "gym"},
+}
+
+var fortUpdateFields = []FieldDef{
+	{Name: "name", Type: "string", Description: "Fort name", Category: "identity", Preferred: true},
+	{Name: "id", Type: "string", Description: "Fort ID", Category: "identity"},
+	{Name: "fortType", Type: "string", Description: "pokestop or gym", Category: "identity", Preferred: true},
+	{Name: "changeType", Type: "string", Description: "new, edit, or removal", Category: "change", Preferred: true},
+	{Name: "changeTypeText", Type: "string", Description: "Translated change type", Category: "change"},
+	{Name: "editTypesList", Type: "array", Description: "Types of edits made", Category: "change"},
+	{Name: "isEditName", Type: "bool", Description: "Name was changed", Category: "change"},
+	{Name: "isEditLocation", Type: "bool", Description: "Location was changed", Category: "change"},
+	{Name: "isEditImage", Type: "bool", Description: "Image was changed", Category: "change"},
+	{Name: "newName", Type: "string", Description: "New fort name", Category: "change"},
+	{Name: "oldName", Type: "string", Description: "Previous fort name", Category: "change"},
+	{Name: "newDescription", Type: "string", Description: "New fort description", Category: "change"},
+	{Name: "oldDescription", Type: "string", Description: "Previous fort description", Category: "change"},
+	{Name: "newImageUrl", Type: "string", Description: "New image URL", Category: "change"},
+	{Name: "oldImageUrl", Type: "string", Description: "Previous image URL", Category: "change"},
+	{Name: "isEmpty", Type: "bool", Description: "No name or description", Category: "change"},
+}
+
+var maxbattleFields = []FieldDef{
+	{Name: "name", Type: "string", Description: "Translated pokemon name", Category: "identity", Preferred: true},
+	{Name: "fullName", Type: "string", Description: "Name + form", Category: "identity", Preferred: true},
+	{Name: "pokemonId", Type: "int", Description: "Pokemon ID", Category: "identity"},
+	{Name: "level", Type: "int", Description: "Battle level", Category: "identity", Preferred: true},
+	{Name: "pokestopName", Type: "string", Description: "Location name", Category: "location", Preferred: true},
+	{Name: "time", Type: "string", Description: "End time", Category: "time", Preferred: true},
+	{Name: "quickMoveName", Type: "string", Description: "Translated fast move", Category: "moves"},
+	{Name: "chargeMoveName", Type: "string", Description: "Translated charged move", Category: "moves"},
+	{Name: "quickMoveEmoji", Type: "string", Description: "Fast move type emoji", Category: "moves"},
+	{Name: "chargeMoveEmoji", Type: "string", Description: "Charged move type emoji", Category: "moves"},
+	{Name: "typeName", Type: "array", Description: "Pokemon type names", Category: "types"},
+	{Name: "typeEmoji", Type: "array", Description: "Type emoji strings", Category: "types"},
+	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types"},
+	{Name: "gmax", Type: "bool", Description: "Is Gigantamax", Category: "other"},
+	{Name: "totalStationedPokemon", Type: "int", Description: "Total stationed pokemon", Category: "other"},
+	{Name: "totalStationedGmax", Type: "int", Description: "Total stationed Gmax", Category: "other"},
+}
+
+var weatherChangeFields = []FieldDef{
+	{Name: "weatherName", Type: "string", Description: "New weather name", Category: "weather", Preferred: true},
+	{Name: "oldWeatherName", Type: "string", Description: "Previous weather name", Category: "weather", Preferred: true},
+	{Name: "weatherEmojiKey", Type: "string", Description: "New weather emoji key", Category: "weather"},
+	{Name: "oldWeatherEmojiKey", Type: "string", Description: "Previous weather emoji key", Category: "weather"},
+	{Name: "weatherTthh", Type: "int", Description: "Hours until weather change", Category: "time"},
+	{Name: "weatherTthm", Type: "int", Description: "Minutes until weather change", Category: "time"},
+	{Name: "weatherTths", Type: "int", Description: "Seconds until weather change", Category: "time"},
+	{Name: "enrichedActivePokemons", Type: "array", Description: "Active pokemon affected by weather change", Category: "pokemon"},
+}
+
+var greetingFields = []FieldDef{
+	{Name: "pokemonId", Type: "int", Description: "Random pokemon ID", Category: "identity"},
+	{Name: "pokemonName", Type: "string", Description: "Translated random pokemon name", Category: "identity"},
+}
+
+var pvpEntryFields = []FieldDef{
+	{Name: "rank", Type: "int", Description: "PVP rank"},
+	{Name: "cp", Type: "int", Description: "CP at this rank"},
+	{Name: "fullName", Type: "string", Description: "Pokemon name + form"},
+	{Name: "nameEng", Type: "string", Description: "English pokemon name"},
+	{Name: "level", Type: "number", Description: "Level at this rank"},
+	{Name: "levelWithCap", Type: "string", Description: "Level with cap notation"},
+	{Name: "percentage", Type: "number", Description: "Stat product percentage"},
+	{Name: "cap", Type: "int", Description: "Level cap"},
+}
+
+var monsterBlockScopes = []BlockScope{
+	{
+		Helper:         "each",
+		IterableFields: []string{"pvpGreat", "pvpUltra", "pvpLittle", "weaknessList", "evolutions", "megaEvolutions", "typeName", "typeEmoji"},
+		Description:    "Iterate over arrays",
+		Fields:         pvpEntryFields,
+	},
+	{
+		Helper:      "pokemon",
+		Args:        []string{"id", "form"},
+		Description: "Pokemon data block helper",
+		Fields: []FieldDef{
+			{Name: "name", Type: "string", Description: "Translated pokemon name"},
+			{Name: "nameEng", Type: "string", Description: "English pokemon name"},
+			{Name: "fullName", Type: "string", Description: "Name + form"},
+			{Name: "formName", Type: "string", Description: "Translated form name"},
+			{Name: "typeName", Type: "array", Description: "Type names"},
+			{Name: "typeEmoji", Type: "array", Description: "Type emojis"},
+			{Name: "baseStats", Type: "object", Description: "{baseAttack, baseDefense, baseStamina}"},
+			{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions"},
+		},
+	},
+	{
+		Helper:      "getPowerUpCost",
+		Args:        []string{"levelStart", "levelEnd"},
+		Description: "Power-up cost between two levels",
+		Fields: []FieldDef{
+			{Name: "stardust", Type: "int", Description: "Stardust cost"},
+			{Name: "candy", Type: "int", Description: "Candy cost"},
+			{Name: "xlCandy", Type: "int", Description: "XL Candy cost"},
+		},
+	},
+}
+
+var raidBlockScopes = []BlockScope{
+	{
+		Helper:         "each",
+		IterableFields: []string{"weaknessList", "evolutions", "megaEvolutions", "typeName", "typeEmoji", "rsvps"},
+		Description:    "Iterate over arrays",
+	},
+}
+
+type fieldEntry struct {
+	Fields      []FieldDef
+	BlockScopes []BlockScope
+}
+
+var fieldsByType = map[string]fieldEntry{
+	"monster":      {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes},
+	"monsterNoIv":  {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes},
+	"raid":         {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes},
+	"egg":          {Fields: append(commonFields, eggFields...)},
+	"quest":        {Fields: append(commonFields, questFields...)},
+	"invasion":     {Fields: append(commonFields, invasionFields...)},
+	"lure":         {Fields: append(commonFields, lureFields...)},
+	"nest":         {Fields: append(commonFields, nestFields...)},
+	"gym":          {Fields: append(commonFields, gymFields...)},
+	"fort-update":  {Fields: append(commonFields, fortUpdateFields...)},
+	"maxbattle":    {Fields: append(commonFields, maxbattleFields...)},
+	"weatherchange": {Fields: append(commonFields, weatherChangeFields...)},
+	"greeting":     {Fields: append(commonFields, greetingFields...)},
+}
+
+// HandleDTSFields returns available template fields for a DTS type.
+// GET /api/dts/fields/:type
+func HandleDTSFields() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		typeName := c.Param("type")
+
+		entry, ok := fieldsByType[typeName]
+		if !ok {
+			// Return just common fields for unknown types
+			c.JSON(http.StatusOK, gin.H{
+				"status": "ok",
+				"type":   typeName,
+				"fields": commonFields,
+			})
+			return
+		}
+
+		resp := gin.H{
+			"status": "ok",
+			"type":   typeName,
+			"fields": entry.Fields,
+		}
+		if len(entry.BlockScopes) > 0 {
+			resp["blockScopes"] = entry.BlockScopes
+		}
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
+// HandleDTSFieldTypes returns the list of available DTS types.
+// GET /api/dts/fields
+func HandleDTSFieldTypes() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		types := make([]string, 0, len(fieldsByType))
+		for t := range fieldsByType {
+			types = append(types, t)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+			"types":  types,
+		})
+	}
+}

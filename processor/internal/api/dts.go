@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	raymond "github.com/mailgun/raymond/v2"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/dts"
 )
@@ -83,5 +84,83 @@ func HandleDTSRender(ts *dts.TemplateStore) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": message})
+	}
+}
+
+// HandleDTSGetTemplates returns DTS template entries with full content.
+// GET /api/dts/templates?type=monster&platform=discord&language=en&id=1
+func HandleDTSGetTemplates(ts *dts.TemplateStore) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		entries := ts.FilteredEntries(
+			c.Query("type"),
+			c.Query("platform"),
+			c.Query("language"),
+			c.Query("id"),
+		)
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "templates": entries})
+	}
+}
+
+// HandleDTSSaveTemplates accepts an array of DTS entries and saves them.
+// POST /api/dts/templates
+func HandleDTSSaveTemplates(ts *dts.TemplateStore) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var entries []dts.DTSEntry
+		if err := c.ShouldBindJSON(&entries); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid request body: " + err.Error()})
+			return
+		}
+
+		updated, inserted := ts.UpdateEntries(entries)
+
+		if err := ts.SaveToFile(); err != nil {
+			log.Errorf("dts: save failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "save failed: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":   "ok",
+			"updated":  updated,
+			"inserted": inserted,
+		})
+	}
+}
+
+// HandleDTSDeleteTemplate deletes a DTS template entry by its key fields.
+// DELETE /api/dts/templates?type=monster&platform=discord&language=en&id=1
+func HandleDTSDeleteTemplate(ts *dts.TemplateStore) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		filterType := c.Query("type")
+		filterPlatform := c.Query("platform")
+		filterLanguage := c.Query("language")
+		filterID := c.Query("id")
+
+		if filterType == "" || filterPlatform == "" || filterID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "type, platform, and id query parameters are required"})
+			return
+		}
+
+		deleted := ts.DeleteEntry(filterType, filterPlatform, filterLanguage, filterID)
+		if !deleted {
+			c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "template not found"})
+			return
+		}
+
+		if err := ts.SaveToFile(); err != nil {
+			log.Errorf("dts: save failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "save failed: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+
+// HandleDTSPartials returns Handlebars partials for the DTS editor.
+// GET /api/dts/partials
+func HandleDTSPartials(ts *dts.TemplateStore) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "partials": ts.Partials()})
 	}
 }
