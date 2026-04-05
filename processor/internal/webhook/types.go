@@ -269,6 +269,11 @@ type LureWebhook struct {
 	Longitude      float64 `json:"longitude"`
 	LureExpiration int64   `json:"lure_expiration"`
 	LureID         int     `json:"lure_id"`
+	// Invasion fields — a pokestop can have both a lure and an invasion
+	IncidentGruntType   int `json:"incident_grunt_type"`
+	GruntType           int `json:"grunt_type"`
+	DisplayType         int `json:"display_type"`
+	IncidentDisplayType int `json:"incident_display_type"`
 }
 
 // GymWebhook mirrors Golbat's gym/gym_details webhook message.
