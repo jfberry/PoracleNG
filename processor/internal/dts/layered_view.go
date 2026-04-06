@@ -432,6 +432,54 @@ func composeWeatherChange(computed map[string]any, base, perLang map[string]any,
 	}
 }
 
+// Flatten merges all layers into a single flat map for API responses.
+// This produces the same field resolution as GetField but as a materialized map.
+func (lv *LayeredView) Flatten() map[string]any {
+	// Start with lowest priority, overlay higher
+	result := make(map[string]any, 128)
+
+	// 8. DTS dictionary
+	for k, v := range lv.dtsDict {
+		result[k] = v
+	}
+	// 7. Raw webhook
+	for k, v := range lv.webhook {
+		result[k] = v
+	}
+	// 5. Base enrichment
+	for k, v := range lv.base {
+		result[k] = v
+	}
+	// 4. Computed fields
+	for k, v := range lv.computed {
+		result[k] = v
+	}
+	// 3. Per-language
+	for k, v := range lv.perLang {
+		result[k] = v
+	}
+	// 2. Emoji
+	for k, v := range lv.emoji {
+		result[k] = v
+	}
+	// 1. Per-user
+	for k, v := range lv.perUser {
+		result[k] = v
+	}
+
+	// 6. Aliases — resolve each alias from the result (not from a separate layer)
+	for alias, source := range lv.aliases {
+		if _, already := result[alias]; already {
+			continue // direct field takes precedence over alias
+		}
+		if v, ok := result[source]; ok {
+			result[alias] = v
+		}
+	}
+
+	return result
+}
+
 // lookupField checks perLang first, then base, for a field value.
 func lookupField(base, perLang map[string]any, key string) any {
 	if perLang != nil {

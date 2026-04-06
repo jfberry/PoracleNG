@@ -571,6 +571,126 @@ func (ts *TemplateStore) LogSummary() {
 	}
 }
 
+// Partials returns the registered Handlebars partials as a name→template map.
+func (ts *TemplateStore) Partials() map[string]string {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	result := make(map[string]string, len(ts.partials))
+	for k, v := range ts.partials {
+		result[k] = v
+	}
+	return result
+}
+
+// FilteredEntries returns DTS entries matching the given filters.
+// Empty filter values match all entries for that dimension.
+func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLanguage, filterID string) []DTSEntry {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	var result []DTSEntry
+	for _, e := range ts.entries {
+		if filterType != "" && e.Type != filterType {
+			continue
+		}
+		if filterPlatform != "" && e.Platform != filterPlatform {
+			continue
+		}
+		if filterLanguage != "" && e.Language != filterLanguage {
+			continue
+		}
+		if filterID != "" && strings.ToLower(e.ID.String()) != strings.ToLower(filterID) {
+			continue
+		}
+		result = append(result, e)
+	}
+	return result
+}
+
+// UpdateEntries merges incoming entries into the store. Entries are matched by
+// (type, platform, language, id). Matching entries are updated; new entries are
+// appended. Returns the number of updated and inserted entries.
+func (ts *TemplateStore) UpdateEntries(incoming []DTSEntry) (updated, inserted int) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	for _, inc := range incoming {
+		found := false
+		for i := range ts.entries {
+			e := &ts.entries[i]
+			if e.Type == inc.Type &&
+				e.Platform == inc.Platform &&
+				e.Language == inc.Language &&
+				strings.ToLower(e.ID.String()) == strings.ToLower(inc.ID.String()) {
+				e.Template = inc.Template
+				e.TemplateFile = inc.TemplateFile
+				e.Name = inc.Name
+				e.Description = inc.Description
+				e.Default = inc.Default
+				e.Hidden = inc.Hidden
+				found = true
+				updated++
+				break
+			}
+		}
+		if !found {
+			ts.entries = append(ts.entries, inc)
+			inserted++
+		}
+	}
+
+	// Clear compiled template cache — entries have changed
+	ts.cache = make(map[string]*raymond.Template)
+	return
+}
+
+// DeleteEntry removes a single entry matching all four key fields.
+// Returns true if an entry was removed.
+func (ts *TemplateStore) DeleteEntry(filterType, filterPlatform, filterLanguage, filterID string) bool {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	idLower := strings.ToLower(filterID)
+	for i := range ts.entries {
+		e := &ts.entries[i]
+		if e.Type == filterType &&
+			e.Platform == filterPlatform &&
+			e.Language == filterLanguage &&
+			strings.ToLower(e.ID.String()) == idLower {
+			ts.entries = append(ts.entries[:i], ts.entries[i+1:]...)
+			ts.cache = make(map[string]*raymond.Template)
+			return true
+		}
+	}
+	return false
+}
+
+// SaveToFile writes all current entries to configDir/dts.json.
+func (ts *TemplateStore) SaveToFile() error {
+	// Marshal under read lock, then release before file I/O.
+	ts.mu.RLock()
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	err := enc.Encode(ts.entries)
+	count := len(ts.entries)
+	configDir := ts.configDir
+	ts.mu.RUnlock()
+
+	if err != nil {
+		return fmt.Errorf("marshal entries: %w", err)
+	}
+
+	path := filepath.Join(configDir, "dts.json")
+	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+
+	log.Infof("dts: saved %d entries to %s", count, path)
+	return nil
+}
+
 // resolveIncludes replaces @include directives in s with the file contents.
 // Format: @include filename (the rest of the line after @include is the filename).
 func resolveIncludes(s string, configDir string) string {

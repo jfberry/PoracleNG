@@ -182,6 +182,7 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
+	r.Use(api.CORSMiddleware())
 	r.Use(api.RequestLogger())
 	r.Use(api.IPFilter(cfg.Processor.IPWhitelist, cfg.Processor.IPBlacklist))
 
@@ -389,6 +390,14 @@ func main() {
 	if proc.dtsRenderer != nil {
 		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
 		apiGroup.POST("/dts/render", api.HandleDTSRender(proc.dtsRenderer.Templates()))
+		apiGroup.GET("/dts/templates", api.HandleDTSGetTemplates(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/templates", api.HandleDTSSaveTemplates(proc.dtsRenderer.Templates()))
+		apiGroup.DELETE("/dts/templates", api.HandleDTSDeleteTemplate(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/enrich", api.HandleDTSEnrich(proc))
+		apiGroup.GET("/dts/fields", api.HandleDTSFieldTypes())
+		apiGroup.GET("/dts/fields/:type", api.HandleDTSFields())
+		apiGroup.GET("/dts/partials", api.HandleDTSPartials(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/sendtest", api.HandleDTSSendTest(proc.dispatcher, proc.dtsRenderer.Templates()))
 		apiGroup.POST("/dts/reload", api.HandleReload(func() error {
 			return proc.dtsRenderer.Templates().Reload(
 				filepath.Join(cfg.BaseDir, "config"),
@@ -401,6 +410,10 @@ func main() {
 				filepath.Join(cfg.BaseDir, "fallbacks"),
 			)
 		}))
+		apiGroup.GET("/dts/testdata", api.HandleDTSTestdata(
+			filepath.Join(cfg.BaseDir, "config"),
+			filepath.Join(cfg.BaseDir, "fallbacks"),
+		))
 	}
 
 	// Config and master data endpoints
