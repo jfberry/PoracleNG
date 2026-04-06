@@ -418,6 +418,18 @@ func main() {
 
 	// Config and master data endpoints
 	apiGroup.GET("/config/poracleWeb", api.HandleConfigPoracleWeb(cfg))
+	configDeps := api.ConfigDeps{
+		Cfg:       cfg,
+		ConfigDir: filepath.Join(cfg.BaseDir, "config"),
+		ReloadFn:  func() {
+			// Hot-reloadable config changes are already applied in-memory via ApplyOverrides.
+			// Trigger a state reload so matching rules pick up any changed config values.
+			proc.triggerReload()
+		},
+	}
+	apiGroup.GET("/config/schema", api.HandleConfigSchema())
+	apiGroup.GET("/config/values", api.HandleConfigValues(configDeps))
+	apiGroup.POST("/config/values", api.HandleConfigSave(configDeps))
 	apiGroup.GET("/masterdata/monsters", api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations))
 	apiGroup.GET("/masterdata/grunts", api.HandleMasterdataGrunts(proc.enricher.GameData))
 
