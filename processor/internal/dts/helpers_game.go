@@ -169,6 +169,9 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 			"baseStats":     baseStats,
 			"hasEvolutions": hasEvolutions,
 		}
+		if !options.IsBlock() {
+			return fullName
+		}
 		return options.FnWith(ctx)
 	})
 
@@ -350,12 +353,9 @@ func registerMiscGameHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *
 			"candy":    candy,
 			"xlCandy":  xlCandy,
 		}
-		// Block mode: {{#getPowerUpCost ...}}...{{/getPowerUpCost}}
-		rendered := options.FnWith(result)
-		if rendered != "" {
-			return rendered
+		if options.IsBlock() {
+			return options.FnWith(result)
 		}
-		// Inline mode: {{getPowerUpCost ...}}
 		return fmt.Sprintf("%d stardust, %d candy, %d XL candy", stardust, candy, xlCandy)
 	})
 
