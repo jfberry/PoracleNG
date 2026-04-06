@@ -13,11 +13,24 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// HumanDisabler is the subset of HumanStore needed for delivery failure handling.
+type HumanDisabler interface {
+	SetEnabled(id string, enabled bool) error
+}
+
+// failRecord tracks consecutive failures and when the block was applied.
+type failRecord struct {
+	count     atomic.Int32
+	blockedAt time.Time // zero until threshold reached
+}
+
 // QueueConfig controls per-platform concurrency limits.
 type QueueConfig struct {
 	ConcurrentDiscord  int
 	ConcurrentWebhook  int
 	ConcurrentTelegram int
+	FailThreshold      int            // consecutive failures before disabling (0 = disabled)
+	Humans             HumanDisabler  // for disabling users on repeated failures (nil = skip)
 }
 
 // FairQueue provides per-destination serialization with platform-level concurrency control.
@@ -43,6 +56,16 @@ type FairQueue struct {
 	discordInFlight  atomic.Int64
 	webhookInFlight  atomic.Int64
 	telegramInFlight atomic.Int64
+
+	// Per-destination consecutive failure tracking. After failThreshold
+	// consecutive errors, the destination is disabled (enabled=0 in DB)
+	// and messages are dropped for failBlockDuration. After that window
+	// the in-memory block expires — if the user re-enabled via any path
+	// (PoracleWeb, !start, API), delivery resumes.
+	failCounts        sync.Map // target string → *failRecord
+	failThreshold     int
+	failBlockDuration time.Duration
+	humans            HumanDisabler // for setting enabled=0
 }
 
 // NewFairQueue creates a FairQueue that reads jobs from ch and dispatches them
@@ -59,15 +82,22 @@ func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTrack
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	failThreshold := cfg.FailThreshold
+	if failThreshold <= 0 {
+		failThreshold = 10
+	}
 	return &FairQueue{
-		ch:          ch,
-		senders:     senders,
-		tracker:     tracker,
-		ctx:         ctx,
-		cancel:      cancel,
-		discordSem:  make(chan struct{}, cfg.ConcurrentDiscord),
-		webhookSem:  make(chan struct{}, cfg.ConcurrentWebhook),
-		telegramSem: make(chan struct{}, cfg.ConcurrentTelegram),
+		ch:                ch,
+		senders:           senders,
+		tracker:           tracker,
+		ctx:               ctx,
+		cancel:            cancel,
+		discordSem:        make(chan struct{}, cfg.ConcurrentDiscord),
+		webhookSem:        make(chan struct{}, cfg.ConcurrentWebhook),
+		telegramSem:       make(chan struct{}, cfg.ConcurrentTelegram),
+		failThreshold:     failThreshold,
+		failBlockDuration: 5 * time.Minute,
+		humans:            cfg.Humans,
 	}
 }
 
@@ -150,7 +180,12 @@ func (fq *FairQueue) processJob(job *Job) {
 		}
 	}
 
-	// 3. Send new message
+	// 3. Send new message — skip if target has been disabled from repeated failures
+	if fq.isTargetDisabled(job.Target) {
+		metrics.DeliveryTotal.WithLabelValues(platform, "stopped").Inc()
+		return
+	}
+
 	destKind := strings.ToUpper(strings.TrimPrefix(job.Type, platform+":"))
 	if destKind == "" {
 		destKind = strings.ToUpper(job.Type)
@@ -163,14 +198,18 @@ func (fq *FairQueue) processJob(job *Job) {
 		if errors.As(err, &permErr) {
 			log.Warnf("delivery: permanent error for %s/%s: %s", job.Type, job.Target, permErr.Reason)
 			metrics.DeliveryTotal.WithLabelValues(platform, "permanent_error").Inc()
-			// TODO: disable user in DB (future work)
+			fq.recordFailure(job.Target, job.Name)
 		} else {
 			log.Errorf("delivery: send failed for %s/%s: %v", job.Type, job.Target, err)
 			metrics.DeliveryTotal.WithLabelValues(platform, "error").Inc()
+			fq.recordFailure(job.Target, job.Name)
 		}
 		metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 		return
 	}
+
+	// Successful send — reset failure counter
+	fq.failCounts.Delete(job.Target)
 
 	metrics.DeliveryTotal.WithLabelValues(platform, "ok").Inc()
 	metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
@@ -230,3 +269,42 @@ func (fq *FairQueue) WebhookDepth() int { return int(fq.webhookInFlight.Load()) 
 
 // TelegramDepth returns the number of telegram jobs currently in-flight.
 func (fq *FairQueue) TelegramDepth() int { return int(fq.telegramInFlight.Load()) }
+
+// recordFailure increments the consecutive failure counter for a target.
+// When the threshold is reached, disables the user in the database and
+// blocks delivery for failBlockDuration.
+func (fq *FairQueue) recordFailure(target, name string) {
+	val, _ := fq.failCounts.LoadOrStore(target, &failRecord{})
+	rec := val.(*failRecord)
+	count := int(rec.count.Add(1))
+
+	if count == fq.failThreshold {
+		rec.blockedAt = time.Now()
+		log.Warnf("delivery: disabling %s (%s) after %d consecutive delivery failures", target, name, count)
+		if fq.humans != nil {
+			if err := fq.humans.SetEnabled(target, false); err != nil {
+				log.Errorf("delivery: failed to disable %s: %v", target, err)
+			}
+		}
+	}
+}
+
+// isTargetDisabled returns true if the target has been disabled from repeated
+// failures and the block window hasn't expired. After the window, the record
+// is cleaned up so delivery can resume (if the user re-enabled via any path).
+func (fq *FairQueue) isTargetDisabled(target string) bool {
+	val, ok := fq.failCounts.Load(target)
+	if !ok {
+		return false
+	}
+	rec := val.(*failRecord)
+	if int(rec.count.Load()) < fq.failThreshold {
+		return false
+	}
+	// Block window expired — clean up and allow delivery
+	if time.Since(rec.blockedAt) > fq.failBlockDuration {
+		fq.failCounts.Delete(target)
+		return false
+	}
+	return true
+}

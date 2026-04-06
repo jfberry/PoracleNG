@@ -154,6 +154,7 @@ func main() {
 				ConcurrentDiscord:  cfg.Tuning.ConcurrentDiscordDestinations,
 				ConcurrentWebhook:  cfg.Tuning.ConcurrentDiscordWebhooks,
 				ConcurrentTelegram: cfg.Tuning.ConcurrentTelegramDestinations,
+				Humans:             humanStore,
 			},
 		})
 		if err != nil {
