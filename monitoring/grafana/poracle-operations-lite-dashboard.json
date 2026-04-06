@@ -351,11 +351,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(poracle_alerter_messages_sent_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
+          "expr": "sum(rate(poracle_delivery_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
           "legendFormat": ""
         }
       ],
-      "title": "Messages Sent/s",
+      "title": "Delivered/s",
       "type": "stat"
     },
     {
@@ -415,7 +415,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * sum(rate(poracle_alerter_messages_failed_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_alerter_messages_sent_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])) + sum(rate(poracle_alerter_messages_failed_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])), 0.001)",
+          "expr": "100 * sum(rate(poracle_delivery_total{status!=\"ok\",job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_delivery_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
           "legendFormat": ""
         }
       ],
@@ -504,10 +504,18 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
               }
             ]
           },
-          "unit": "ops"
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -535,11 +543,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(poracle_alerter_backpressure_events_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
+          "expr": "100 * sum(poracle_render_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"}) / clamp_min(sum(poracle_render_queue_capacity{job=~\"$processor_job\",instance=~\"$processor_instance\"}), 1)",
           "legendFormat": ""
         }
       ],
-      "title": "Backpressure/s",
+      "title": "Render Queue %",
       "type": "stat"
     },
     {
@@ -642,7 +650,7 @@
           "legendFormat": "matched users {{type}}"
         }
       ],
-      "title": "Processor Intake and Match Rate",
+      "title": "Intake and Match Rate",
       "type": "timeseries"
     },
     {
@@ -728,8 +736,8 @@
         },
         {
           "refId": "B",
-          "expr": "sum(poracle_processor_sender_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
-          "legendFormat": "sender queue"
+          "expr": "sum(poracle_render_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "render queue"
         },
         {
           "refId": "C",
@@ -737,7 +745,7 @@
           "legendFormat": "workers in use"
         }
       ],
-      "title": "Processor Latency and Pressure",
+      "title": "Processing Latency and Pressure",
       "type": "timeseries"
     },
     {
@@ -818,31 +826,26 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(poracle_alerter_matched_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": "matched"
+          "expr": "sum(poracle_delivery_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "total"
         },
         {
           "refId": "B",
-          "expr": "sum(poracle_alerter_hook_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": "hook"
-        },
-        {
-          "refId": "C",
-          "expr": "sum(poracle_alerter_discord_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
+          "expr": "sum(poracle_delivery_discord_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
           "legendFormat": "discord"
         },
         {
-          "refId": "D",
-          "expr": "sum(poracle_alerter_discord_webhook_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
+          "refId": "C",
+          "expr": "sum(poracle_delivery_webhook_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
           "legendFormat": "discord webhook"
         },
         {
-          "refId": "E",
-          "expr": "sum(poracle_alerter_telegram_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
+          "refId": "D",
+          "expr": "sum(poracle_delivery_telegram_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
           "legendFormat": "telegram"
         }
       ],
-      "title": "Alerter Queues",
+      "title": "Delivery Queues",
       "type": "timeseries"
     },
     {
@@ -923,18 +926,18 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(destination_type) (rate(poracle_alerter_messages_sent_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "sent {{destination_type}}"
+          "expr": "sum by(platform) (rate(poracle_delivery_total{status=\"ok\",job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "sent {{platform}}"
         },
         {
           "refId": "B",
-          "expr": "sum by(destination_type) (rate(poracle_alerter_messages_failed_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "failed {{destination_type}}"
+          "expr": "sum by(platform) (rate(poracle_delivery_total{status!=\"ok\",job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "failed {{platform}}"
         },
         {
           "refId": "C",
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_alerter_discord_webhook_delivery_seconds_bucket{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])))",
-          "legendFormat": "discord webhook p95"
+          "expr": "histogram_quantile(0.95, sum by(le, platform) (rate(poracle_delivery_duration_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "{{platform}} p95"
         }
       ],
       "title": "Delivery Outcomes and Latency",
@@ -1019,22 +1022,17 @@
         {
           "refId": "A",
           "expr": "sum(rate(poracle_processor_rate_limit_dropped_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
-          "legendFormat": "processor dropped"
+          "legendFormat": "alert rate limit dropped"
         },
         {
           "refId": "B",
           "expr": "sum(rate(poracle_processor_rate_limit_breaches_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
-          "legendFormat": "processor breaches"
+          "legendFormat": "alert rate limit breaches"
         },
         {
           "refId": "C",
-          "expr": "sum by(source) (rate(poracle_alerter_discord_rate_limits_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "discord {{source}}"
-        },
-        {
-          "refId": "D",
-          "expr": "sum(rate(poracle_alerter_telegram_rate_limits_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "telegram"
+          "expr": "sum by(platform) (rate(poracle_delivery_rate_limited_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "delivery rate limited {{platform}}"
         }
       ],
       "title": "Rate Limits and Drops",
@@ -1119,22 +1117,12 @@
         {
           "refId": "A",
           "expr": "sum by(result) (rate(poracle_processor_tile_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
-          "legendFormat": "processor tile {{result}}"
+          "legendFormat": "tile {{result}}"
         },
         {
           "refId": "B",
           "expr": "sum by(result) (rate(poracle_processor_geocode_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
-          "legendFormat": "processor geocode {{result}}"
-        },
-        {
-          "refId": "C",
-          "expr": "sum by(result) (rate(poracle_alerter_tile_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "alerter tile {{result}}"
-        },
-        {
-          "refId": "D",
-          "expr": "sum by(result) (rate(poracle_alerter_geocode_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "alerter geocode {{result}}"
+          "legendFormat": "geocode {{result}}"
         }
       ],
       "title": "Maps and Geocoding",
@@ -1404,14 +1392,14 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(poracle_alerter_matched_queue_depth, job)",
+        "definition": "label_values(process_resident_memory_bytes{job!~\"$processor_job\"}, job)",
         "hide": 0,
         "includeAll": true,
         "label": "Alerter job",
         "multi": true,
         "name": "alerter_job",
         "options": [],
-        "query": "label_values(poracle_alerter_matched_queue_depth, job)",
+        "query": "label_values(process_resident_memory_bytes{job!~\"$processor_job\"}, job)",
         "refresh": 1,
         "sort": 1,
         "type": "query"
@@ -1428,14 +1416,14 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(poracle_alerter_matched_queue_depth{job=~\"$alerter_job\"}, instance)",
+        "definition": "label_values(process_resident_memory_bytes{job=~\"$alerter_job\"}, instance)",
         "hide": 0,
         "includeAll": true,
         "label": "Alerter instance",
         "multi": true,
         "name": "alerter_instance",
         "options": [],
-        "query": "label_values(poracle_alerter_matched_queue_depth{job=~\"$alerter_job\"}, instance)",
+        "query": "label_values(process_resident_memory_bytes{job=~\"$alerter_job\"}, instance)",
         "refresh": 2,
         "sort": 1,
         "type": "query"
@@ -1450,6 +1438,6 @@
   "timezone": "browser",
   "title": "PoracleNG Operations Lite",
   "uid": "poracleng-ops-lite",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

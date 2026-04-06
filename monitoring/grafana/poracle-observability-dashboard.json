@@ -25,7 +25,7 @@
       }
     ]
   },
-  "description": "Complete observability dashboard for PoracleNG processor and alerter Prometheus metrics, including runtime telemetry.",
+  "description": "Complete observability dashboard for PoracleNG processor and alerter Prometheus metrics, including render pipeline, delivery, and runtime telemetry.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -351,11 +351,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(poracle_alerter_messages_sent_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
+          "expr": "sum(rate(poracle_delivery_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
           "legendFormat": ""
         }
       ],
-      "title": "Messages Sent/s",
+      "title": "Delivered/s",
       "type": "stat"
     },
     {
@@ -415,7 +415,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * sum(rate(poracle_alerter_messages_failed_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_alerter_messages_sent_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])) + sum(rate(poracle_alerter_messages_failed_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])), 0.001)",
+          "expr": "100 * sum(rate(poracle_delivery_total{status!=\"ok\",job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_delivery_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
           "legendFormat": ""
         }
       ],
@@ -504,10 +504,18 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
               }
             ]
           },
-          "unit": "ops"
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -535,11 +543,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(poracle_alerter_backpressure_events_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
+          "expr": "100 * sum(poracle_render_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"}) / clamp_min(sum(poracle_render_queue_capacity{job=~\"$processor_job\",instance=~\"$processor_instance\"}), 1)",
           "legendFormat": ""
         }
       ],
-      "title": "Backpressure/s",
+      "title": "Render Queue %",
       "type": "stat"
     },
     {
@@ -637,7 +645,7 @@
           "legendFormat": "{{type}}"
         }
       ],
-      "title": "Processor Webhook Intake by Type",
+      "title": "Webhook Intake by Type",
       "type": "timeseries"
     },
     {
@@ -722,7 +730,7 @@
           "legendFormat": "{{type}}"
         }
       ],
-      "title": "Processor Webhook Processing p95 by Type",
+      "title": "Webhook Processing p95 by Type",
       "type": "timeseries"
     },
     {
@@ -817,7 +825,7 @@
           "legendFormat": "duplicates {{type}}"
         }
       ],
-      "title": "Processor Match Production by Type",
+      "title": "Match Production by Type",
       "type": "timeseries"
     },
     {
@@ -905,14 +913,9 @@
           "refId": "B",
           "expr": "sum(poracle_processor_worker_pool_capacity{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
           "legendFormat": "worker pool capacity"
-        },
-        {
-          "refId": "C",
-          "expr": "sum(poracle_processor_sender_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
-          "legendFormat": "sender queue depth"
         }
       ],
-      "title": "Processor Worker and Sender Pressure",
+      "title": "Worker Pool Pressure",
       "type": "timeseries"
     },
     {
@@ -967,7 +970,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -993,21 +996,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(status) (rate(poracle_processor_sender_batches_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
-          "legendFormat": "batches {{status}}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(rate(poracle_processor_sender_batch_size_sum{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_processor_sender_batch_size_count{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
-          "legendFormat": "avg batch size"
-        },
-        {
-          "refId": "C",
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_processor_sender_batch_size_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
-          "legendFormat": "batch size p95"
+          "expr": "histogram_quantile(0.95, sum by(le, type) (rate(poracle_processor_matching_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "{{type}}"
         }
       ],
-      "title": "Processor Sender Outcomes and Batch Size",
+      "title": "Matching Duration p95 by Type",
       "type": "timeseries"
     },
     {
@@ -1088,16 +1081,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(poracle_processor_sender_flush_seconds_sum{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_processor_sender_flush_seconds_count{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
-          "legendFormat": "flush avg"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_processor_sender_flush_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
-          "legendFormat": "flush p95"
+          "expr": "histogram_quantile(0.95, sum by(le, type) (rate(poracle_processor_enrichment_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "{{type}}"
         }
       ],
-      "title": "Processor Sender Flush Duration",
+      "title": "Enrichment Duration p95 by Type",
       "type": "timeseries"
     },
     {
@@ -1202,7 +1190,7 @@
           "legendFormat": "rate limit disabled"
         }
       ],
-      "title": "Processor Reloads and Rate Limiter",
+      "title": "Reloads and Rate Limiter",
       "type": "timeseries"
     },
     {
@@ -1292,7 +1280,7 @@
           "legendFormat": "matched events per webhook"
         }
       ],
-      "title": "Processor Match Yield per Webhook",
+      "title": "Match Yield per Webhook",
       "type": "timeseries"
     },
     {
@@ -1305,7 +1293,7 @@
       },
       "id": 19,
       "panels": [],
-      "title": "Processor Integrations",
+      "title": "Render Pipeline",
       "type": "row"
     },
     {
@@ -1386,16 +1374,21 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(result) (rate(poracle_processor_geocode_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
-          "legendFormat": "{{result}}"
+          "expr": "sum(poracle_render_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "queue depth"
         },
         {
           "refId": "B",
-          "expr": "sum(poracle_processor_geocode_in_flight{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
-          "legendFormat": "in flight"
+          "expr": "sum(poracle_render_queue_capacity{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "queue capacity"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(poracle_render_tile_skipped_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "tiles skipped (backpressure)"
         }
       ],
-      "title": "Processor Geocode Outcomes and In Flight",
+      "title": "Render Queue Depth and Capacity",
       "type": "timeseries"
     },
     {
@@ -1476,16 +1469,16 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(poracle_processor_geocode_seconds_sum{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_processor_geocode_seconds_count{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
-          "legendFormat": "avg"
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_render_duration_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "render job p95"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_processor_geocode_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
-          "legendFormat": "p95"
+          "expr": "sum(rate(poracle_render_duration_seconds_sum{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_render_duration_seconds_count{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
+          "legendFormat": "render job avg"
         }
       ],
-      "title": "Processor Geocode Latency",
+      "title": "Render Job Duration p95",
       "type": "timeseries"
     },
     {
@@ -1540,7 +1533,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -1566,16 +1559,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(result) (rate(poracle_processor_tile_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
-          "legendFormat": "{{result}}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(poracle_processor_tile_in_flight{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
-          "legendFormat": "in flight"
+          "expr": "sum by(status) (rate(poracle_render_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{status}}"
         }
       ],
-      "title": "Processor Tile Outcomes and In Flight",
+      "title": "Render Outcomes",
       "type": "timeseries"
     },
     {
@@ -1656,16 +1644,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(poracle_processor_tile_seconds_sum{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_processor_tile_seconds_count{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
-          "legendFormat": "avg"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_processor_tile_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
-          "legendFormat": "p95"
+          "expr": "histogram_quantile(0.95, sum by(le, type) (rate(poracle_template_render_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "{{type}}"
         }
       ],
-      "title": "Processor Tile Latency",
+      "title": "Template Render Duration p95 by Type",
       "type": "timeseries"
     },
     {
@@ -1731,6 +1714,1297 @@
         "y": 55
       },
       "id": 24,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(type, status) (rate(poracle_template_render_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{type}} {{status}}"
+        }
+      ],
+      "title": "Template Render Outcomes by Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 55
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(result) (rate(poracle_shlink_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{result}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_shlink_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "latency p95"
+        }
+      ],
+      "title": "Shlink URL Shortening",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      },
+      "id": 26,
+      "panels": [],
+      "title": "Delivery",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 64
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(poracle_delivery_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "total queue"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(poracle_delivery_discord_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "discord"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(poracle_delivery_webhook_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "discord webhook"
+        },
+        {
+          "refId": "D",
+          "expr": "sum(poracle_delivery_telegram_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "telegram"
+        }
+      ],
+      "title": "Delivery Queue Depths",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 64
+      },
+      "id": 28,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(platform, status) (rate(poracle_delivery_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{platform}} {{status}}"
+        }
+      ],
+      "title": "Delivery Outcomes by Platform",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 72
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by(le, platform) (rate(poracle_delivery_duration_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "{{platform}}"
+        }
+      ],
+      "title": "Delivery Latency p95 by Platform",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 72
+      },
+      "id": 30,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(platform) (poracle_delivery_in_flight{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "in-flight {{platform}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(poracle_delivery_tracker_size{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "tracker size"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(poracle_delivery_clean_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "clean deletes/s"
+        },
+        {
+          "refId": "D",
+          "expr": "sum(rate(poracle_delivery_tracker_evictions_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "tracker evictions/s"
+        }
+      ],
+      "title": "Delivery In-Flight and Tracker",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 80
+      },
+      "id": 31,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(platform) (rate(poracle_delivery_rate_limited_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "rate limited {{platform}}"
+        }
+      ],
+      "title": "Delivery Rate Limits",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 80
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by(le, platform) (rate(poracle_delivery_rate_limit_wait_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "{{platform}} p95"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by(platform) (rate(poracle_delivery_rate_limit_wait_seconds_sum{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum by(platform) (rate(poracle_delivery_rate_limit_wait_seconds_count{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
+          "legendFormat": "{{platform}} avg"
+        }
+      ],
+      "title": "Discord Rate Limit Wait Time",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 88
+      },
+      "id": 33,
+      "panels": [],
+      "title": "Processor Integrations",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 89
+      },
+      "id": 34,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(result) (rate(poracle_processor_geocode_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{result}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(poracle_processor_geocode_in_flight{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "in flight"
+        }
+      ],
+      "title": "Geocode Outcomes and In Flight",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 89
+      },
+      "id": 35,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(poracle_processor_geocode_seconds_sum{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_processor_geocode_seconds_count{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
+          "legendFormat": "avg"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_processor_geocode_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "title": "Geocode Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 97
+      },
+      "id": 36,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(result) (rate(poracle_processor_tile_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{result}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(poracle_processor_tile_in_flight{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "in flight"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(poracle_processor_tile_queue_depth{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "async queue depth"
+        }
+      ],
+      "title": "Tile Outcomes and In Flight",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 97
+      },
+      "id": 37,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(poracle_processor_tile_seconds_sum{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_processor_tile_seconds_count{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
+          "legendFormat": "avg"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_processor_tile_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "p95"
+        }
+      ],
+      "title": "Tile Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 105
+      },
+      "id": 38,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(poracle_tile_circuit_healthy{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "tileserver circuit (1=healthy)"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(poracle_geocode_circuit_healthy{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "geocode circuit (1=healthy)"
+        }
+      ],
+      "title": "Circuit Breakers",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 105
+      },
+      "id": 39,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(result) (rate(poracle_uicons_refresh_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{result}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_uicons_refresh_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "latency p95"
+        }
+      ],
+      "title": "Uicons Index Refresh",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 113
+      },
+      "id": 40,
       "options": {
         "legend": {
           "calcs": [],
@@ -1813,9 +3087,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 55
+        "y": 113
       },
-      "id": 25,
+      "id": 41,
       "options": {
         "legend": {
           "calcs": [],
@@ -1854,11 +3128,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 121
       },
-      "id": 26,
+      "id": 42,
       "panels": [],
-      "title": "Alerter Delivery",
+      "title": "State & API",
       "type": "row"
     },
     {
@@ -1921,9 +3195,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 122
       },
-      "id": 27,
+      "id": 43,
       "options": {
         "legend": {
           "calcs": [],
@@ -1939,116 +3213,21 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(poracle_alerter_matched_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": "matched queue"
+          "expr": "sum(poracle_processor_state_humans{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "humans"
         },
         {
           "refId": "B",
-          "expr": "sum(poracle_alerter_hook_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": "hook queue"
+          "expr": "sum by(type) (poracle_processor_state_tracking_rules{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "rules {{type}}"
         },
         {
           "refId": "C",
-          "expr": "sum(poracle_alerter_discord_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": "discord queue"
-        },
-        {
-          "refId": "D",
-          "expr": "sum(poracle_alerter_discord_webhook_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": "discord webhook queue"
-        },
-        {
-          "refId": "E",
-          "expr": "sum(poracle_alerter_telegram_queue_depth{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": "telegram queue"
+          "expr": "sum(poracle_processor_state_geofences{job=~\"$processor_job\",instance=~\"$processor_instance\"})",
+          "legendFormat": "geofences"
         }
       ],
-      "title": "Alerter Queue Depths",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 64
-      },
-      "id": 28,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by(controller_type, destination_type) (rate(poracle_alerter_messages_created_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "{{controller_type}} -> {{destination_type}}"
-        }
-      ],
-      "title": "Alerter Message Creation by Controller and Destination",
+      "title": "State Size",
       "type": "timeseries"
     },
     {
@@ -2110,10 +3289,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 72
+        "x": 12,
+        "y": 122
       },
-      "id": 29,
+      "id": 44,
       "options": {
         "legend": {
           "calcs": [],
@@ -2129,11 +3308,16 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by(le, controller_type) (rate(poracle_alerter_message_create_seconds_bucket{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])))",
-          "legendFormat": "{{controller_type}}"
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_processor_state_reload_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "total reload p95"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_processor_state_db_query_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "DB query p95"
         }
       ],
-      "title": "Alerter Message Create p95 by Controller",
+      "title": "State Reload Breakdown",
       "type": "timeseries"
     },
     {
@@ -2195,10 +3379,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 72
+        "x": 0,
+        "y": 130
       },
-      "id": 30,
+      "id": 45,
       "options": {
         "legend": {
           "calcs": [],
@@ -2214,16 +3398,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(destination_type) (rate(poracle_alerter_messages_sent_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "sent {{destination_type}}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum by(destination_type) (rate(poracle_alerter_messages_failed_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "failed {{destination_type}}"
+          "expr": "sum by(method, endpoint) (rate(poracle_processor_api_requests_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{method}} {{endpoint}}"
         }
       ],
-      "title": "Alerter Delivery Outcomes by Destination",
+      "title": "API Request Rate",
       "type": "timeseries"
     },
     {
@@ -2285,105 +3464,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 80
-      },
-      "id": 31,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by(le, destination_type) (rate(poracle_alerter_discord_delivery_seconds_bucket{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])))",
-          "legendFormat": "discord {{destination_type}}"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_alerter_discord_webhook_delivery_seconds_bucket{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])))",
-          "legendFormat": "discord webhook"
-        },
-        {
-          "refId": "C",
-          "expr": "histogram_quantile(0.95, sum by(le, destination_type) (rate(poracle_alerter_telegram_delivery_seconds_bucket{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])))",
-          "legendFormat": "telegram {{destination_type}}"
-        }
-      ],
-      "title": "Alerter Delivery Latency p95",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 12,
-        "y": 80
+        "y": 130
       },
-      "id": 32,
+      "id": 46,
       "options": {
         "legend": {
           "calcs": [],
@@ -2399,26 +3483,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(source) (rate(poracle_alerter_discord_rate_limits_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "discord {{source}}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(rate(poracle_alerter_telegram_rate_limits_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "telegram"
-        },
-        {
-          "refId": "C",
-          "expr": "sum(rate(poracle_alerter_rate_limited_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "dropped"
-        },
-        {
-          "refId": "D",
-          "expr": "sum(rate(poracle_alerter_backpressure_events_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "backpressure"
+          "expr": "histogram_quantile(0.95, sum by(le, endpoint) (rate(poracle_processor_api_request_seconds_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "{{endpoint}}"
         }
       ],
-      "title": "Alerter Rate Limits, Drops and Backpressure",
+      "title": "API Request Latency p95",
       "type": "timeseries"
     },
     {
@@ -2481,9 +3550,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 88
+        "y": 138
       },
-      "id": 33,
+      "id": 47,
       "options": {
         "legend": {
           "calcs": [],
@@ -2499,16 +3568,16 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(result) (rate(poracle_alerter_geocode_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "{{result}}"
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_processor_webhook_batch_size_bucket{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])))",
+          "legendFormat": "batch size p95"
         },
         {
           "refId": "B",
-          "expr": "sum(poracle_alerter_geocode_in_flight{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": "in flight"
+          "expr": "sum(rate(poracle_processor_webhook_batch_size_sum{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_processor_webhook_batch_size_count{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])), 0.001)",
+          "legendFormat": "batch size avg"
         }
       ],
-      "title": "Alerter Geocode Outcomes and In Flight",
+      "title": "Webhook Batch Size",
       "type": "timeseries"
     },
     {
@@ -2563,7 +3632,7 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "dateTimeAsIso"
         },
         "overrides": []
       },
@@ -2571,9 +3640,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 88
+        "y": 138
       },
-      "id": 34,
+      "id": 48,
       "options": {
         "legend": {
           "calcs": [],
@@ -2589,196 +3658,11 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(poracle_alerter_geocode_seconds_sum{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_alerter_geocode_seconds_count{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])), 0.001)",
-          "legendFormat": "avg"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_alerter_geocode_seconds_bucket{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])))",
-          "legendFormat": "p95"
+          "expr": "poracle_processor_state_last_reload_success_timestamp{job=~\"$processor_job\",instance=~\"$processor_instance\"} * 1000",
+          "legendFormat": "{{instance}}"
         }
       ],
-      "title": "Alerter Geocode Latency",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 96
-      },
-      "id": 35,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by(result) (rate(poracle_alerter_tile_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval]))",
-          "legendFormat": "{{result}}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum(poracle_alerter_tile_in_flight{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": "in flight"
-        }
-      ],
-      "title": "Alerter Tile Outcomes and In Flight",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 96
-      },
-      "id": 36,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(poracle_alerter_tile_seconds_sum{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])) / clamp_min(sum(rate(poracle_alerter_tile_seconds_count{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])), 0.001)",
-          "legendFormat": "avg"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(poracle_alerter_tile_seconds_bucket{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])))",
-          "legendFormat": "p95"
-        }
-      ],
-      "title": "Alerter Tile Latency",
+      "title": "Last Successful Reload",
       "type": "timeseries"
     },
     {
@@ -2787,9 +3671,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 104
+        "y": 146
       },
-      "id": 37,
+      "id": 49,
       "panels": [],
       "title": "Runtime and Process Health",
       "type": "row"
@@ -2854,9 +3738,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 105
+        "y": 147
       },
-      "id": 38,
+      "id": 50,
       "options": {
         "legend": {
           "calcs": [],
@@ -2954,9 +3838,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 105
+        "y": 147
       },
-      "id": 39,
+      "id": 51,
       "options": {
         "legend": {
           "calcs": [],
@@ -3044,9 +3928,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 113
+        "y": 155
       },
-      "id": 40,
+      "id": 52,
       "options": {
         "legend": {
           "calcs": [],
@@ -3134,9 +4018,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 113
+        "y": 155
       },
-      "id": 41,
+      "id": 53,
       "options": {
         "legend": {
           "calcs": [],
@@ -3229,9 +4113,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 121
+        "y": 163
       },
-      "id": 42,
+      "id": 54,
       "options": {
         "legend": {
           "calcs": [],
@@ -3314,9 +4198,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 121
+        "y": 163
       },
-      "id": 43,
+      "id": 55,
       "options": {
         "legend": {
           "calcs": [],
@@ -3409,9 +4293,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 129
+        "y": 171
       },
-      "id": 44,
+      "id": 56,
       "options": {
         "legend": {
           "calcs": [],
@@ -3499,9 +4383,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 129
+        "y": 171
       },
-      "id": 45,
+      "id": 57,
       "options": {
         "legend": {
           "calcs": [],
@@ -3600,14 +4484,14 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(poracle_alerter_matched_queue_depth, job)",
+        "definition": "label_values(process_resident_memory_bytes{job!~\"$processor_job\"}, job)",
         "hide": 0,
         "includeAll": true,
         "label": "Alerter job",
         "multi": true,
         "name": "alerter_job",
         "options": [],
-        "query": "label_values(poracle_alerter_matched_queue_depth, job)",
+        "query": "label_values(process_resident_memory_bytes{job!~\"$processor_job\"}, job)",
         "refresh": 1,
         "sort": 1,
         "type": "query"
@@ -3624,14 +4508,14 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(poracle_alerter_matched_queue_depth{job=~\"$alerter_job\"}, instance)",
+        "definition": "label_values(process_resident_memory_bytes{job=~\"$alerter_job\"}, instance)",
         "hide": 0,
         "includeAll": true,
         "label": "Alerter instance",
         "multi": true,
         "name": "alerter_instance",
         "options": [],
-        "query": "label_values(poracle_alerter_matched_queue_depth{job=~\"$alerter_job\"}, instance)",
+        "query": "label_values(process_resident_memory_bytes{job=~\"$alerter_job\"}, instance)",
         "refresh": 2,
         "sort": 1,
         "type": "query"
@@ -3646,6 +4530,6 @@
   "timezone": "browser",
   "title": "PoracleNG Observability",
   "uid": "poracleng-observability",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
