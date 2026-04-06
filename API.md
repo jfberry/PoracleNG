@@ -693,6 +693,14 @@ Supported types: monster, monsterNoIv, raid, egg, quest, invasion, lure, nest, g
 
 Returns the list of available DTS type names.
 
+### GET/POST /api/dts/reload
+
+Reload DTS templates and partials from disk (`config/dts.json`, `config/dts/`, `config/partials.json`). Use after editing template files directly on disk.
+
+```json
+{"status": "ok"}
+```
+
 ### GET /api/dts/partials
 
 Returns Handlebars partials registered for DTS templates. The editor needs these to render templates that use `{{> partialName}}`.
