@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+	log "github.com/sirupsen/logrus"
 )
 
 type Config struct {
@@ -680,6 +681,25 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if cfg.Geofence.Koji.CacheDir != "" && !filepath.IsAbs(cfg.Geofence.Koji.CacheDir) {
 		cfg.Geofence.Koji.CacheDir = filepath.Join(configDir, cfg.Geofence.Koji.CacheDir)
+	}
+
+	// Apply JSON overrides (from config editor)
+	var overrides map[string]any
+	overrides, err = LoadOverrides(configDir)
+	if err != nil {
+		log.Warnf("config: %v", err)
+	} else if overrides != nil {
+		ApplyOverrides(cfg, overrides)
+		// Re-run computed fields after overrides
+		cfg.Discord.DelegatedAdministration = DelegatedAdminConfig{
+			ChannelTracking: buildDelegatedAdmin(cfg.Discord.DelegatedAdmins),
+			WebhookTracking: buildDelegatedAdmin(cfg.Discord.WebhookAdmins),
+			UserTracking:    cfg.Discord.UserTrackingAdmins,
+		}
+		cfg.Telegram.DelegatedAdministration = TelegramDelegatedAdminConfig{
+			ChannelTracking: buildDelegatedAdmin(cfg.Telegram.DelegatedAdmins),
+			UserTracking:    cfg.Telegram.UserTrackingAdmins,
+		}
 	}
 
 	// Conditional defaults that depend on other config values
