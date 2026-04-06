@@ -97,6 +97,7 @@ func (b *Bot) logGuildPresence() {
 	presentGuilds := make(map[string]string) // id → name
 	allRoles := make(map[string]string)      // id → name
 	allChannels := make(map[string]string)   // id → name
+	allCategories := make(map[string]string) // id → name
 
 	for _, g := range b.session.State.Guilds {
 		// State guilds may have empty names at startup — fetch via REST
@@ -120,6 +121,9 @@ func (b *Bot) logGuildPresence() {
 		// Fetch channels for this guild
 		if channels, err := b.session.GuildChannels(g.ID); err == nil {
 			for _, ch := range channels {
+				if ch.Type == discordgo.ChannelTypeGuildCategory {
+					allCategories[ch.ID] = ch.Name + " (guild:" + guildName + ")"
+				}
 				allChannels[ch.ID] = "#" + ch.Name + " (guild:" + guildName + ")"
 			}
 		}
@@ -216,6 +220,69 @@ func (b *Bot) logGuildPresence() {
 				log.Warnf("config: community %s user_role %s — NOT FOUND in any guild", comm.Name, roleID)
 			}
 		}
+	}
+
+	// resolveUserOrRole describes a Discord ID as either a role name or a user name.
+	resolveUserOrRole := func(id string) string {
+		if name, ok := allRoles[id]; ok {
+			return "role:" + name + " (" + id + ")"
+		}
+		// Try to fetch as a user
+		if user, err := b.session.User(id); err == nil {
+			name := user.Username
+			if user.GlobalName != "" {
+				name = user.GlobalName
+			}
+			return name + " (" + id + ")"
+		}
+		return id
+	}
+
+	// Log admin list
+	if len(b.Cfg.Discord.Admins) > 0 {
+		var descs []string
+		for _, id := range b.Cfg.Discord.Admins {
+			descs = append(descs, resolveUserOrRole(id))
+		}
+		log.Infof("config: discord.admins: %s", strings.Join(descs, ", "))
+	} else {
+		log.Warnf("config: discord.admins is empty — no Discord admins configured")
+	}
+
+	// Log delegated admins (channel tracking)
+	// The target can be a guild ID, category ID, or channel ID
+	for target, admins := range b.Cfg.Discord.DelegatedAdministration.ChannelTracking {
+		targetDesc := target
+		if name, ok := presentGuilds[target]; ok {
+			targetDesc = "guild:" + name + " (" + target + ")"
+		} else if name, ok := allCategories[target]; ok {
+			targetDesc = "category:" + name + " (" + target + ")"
+		} else if name, ok := allChannels[target]; ok {
+			targetDesc = "channel:" + name + " (" + target + ")"
+		}
+		var adminDescs []string
+		for _, id := range admins {
+			adminDescs = append(adminDescs, resolveUserOrRole(id))
+		}
+		log.Infof("config: discord.delegated_admins target %s → admins: %s", targetDesc, strings.Join(adminDescs, ", "))
+	}
+
+	// Log webhook admins
+	for webhookName, admins := range b.Cfg.Discord.DelegatedAdministration.WebhookTracking {
+		var adminDescs []string
+		for _, id := range admins {
+			adminDescs = append(adminDescs, resolveUserOrRole(id))
+		}
+		log.Infof("config: discord.webhook_admins webhook %q → admins: %s", webhookName, strings.Join(adminDescs, ", "))
+	}
+
+	// Log user tracking admins
+	if len(b.Cfg.Discord.DelegatedAdministration.UserTracking) > 0 {
+		var descs []string
+		for _, id := range b.Cfg.Discord.DelegatedAdministration.UserTracking {
+			descs = append(descs, resolveUserOrRole(id))
+		}
+		log.Infof("config: discord.user_tracking_admins: %s", strings.Join(descs, ", "))
 	}
 }
 

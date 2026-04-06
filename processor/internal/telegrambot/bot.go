@@ -98,6 +98,74 @@ func (b *Bot) validateConfig() {
 			checkChat(fmt.Sprintf("community %s telegram channel", comm.Name), chID)
 		}
 	}
+
+	// resolveUser describes a Telegram user ID by fetching their name via getChat.
+	resolveUser := func(idStr string) string {
+		chatID, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			return idStr
+		}
+		chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
+		chat, err := b.api.GetChat(chatCfg)
+		if err != nil {
+			return idStr
+		}
+		name := chat.FirstName
+		if chat.LastName != "" {
+			name += " " + chat.LastName
+		}
+		if name == "" {
+			name = chat.UserName
+		}
+		if name == "" {
+			name = chat.Title
+		}
+		if name == "" {
+			return idStr
+		}
+		return fmt.Sprintf("%s (%s)", name, idStr)
+	}
+
+	// Log admin list
+	if len(b.Cfg.Telegram.Admins) > 0 {
+		var descs []string
+		for _, id := range b.Cfg.Telegram.Admins {
+			descs = append(descs, resolveUser(id))
+		}
+		log.Infof("config: telegram.admins: %s", strings.Join(descs, ", "))
+	} else {
+		log.Warnf("config: telegram.admins is empty — no Telegram admins configured")
+	}
+
+	// Log delegated admins (channel tracking)
+	for target, admins := range b.Cfg.Telegram.DelegatedAdministration.ChannelTracking {
+		targetDesc := target
+		chatID, err := strconv.ParseInt(target, 10, 64)
+		if err == nil {
+			chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
+			if chat, err := b.api.GetChat(chatCfg); err == nil {
+				name := chat.Title
+				if name == "" {
+					name = chat.UserName
+				}
+				targetDesc = fmt.Sprintf("%s (%s, %s)", name, target, chat.Type)
+			}
+		}
+		var adminDescs []string
+		for _, id := range admins {
+			adminDescs = append(adminDescs, resolveUser(id))
+		}
+		log.Infof("config: telegram.delegated_admins target %s → admins: %s", targetDesc, strings.Join(adminDescs, ", "))
+	}
+
+	// Log user tracking admins
+	if len(b.Cfg.Telegram.DelegatedAdministration.UserTracking) > 0 {
+		var descs []string
+		for _, id := range b.Cfg.Telegram.DelegatedAdministration.UserTracking {
+			descs = append(descs, resolveUser(id))
+		}
+		log.Infof("config: telegram.user_tracking_admins: %s", strings.Join(descs, ", "))
+	}
 }
 
 // Close stops the polling loop.
