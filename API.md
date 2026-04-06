@@ -582,20 +582,18 @@ Available DTS templates by platform, type, and language (metadata only, no templ
 
 ## DTS Editor
 
+All DTS editor endpoints require the `X-Poracle-Secret` header. CORS is enabled globally.
+
 ### GET /api/dts/templates
 
-Returns DTS template entries with full template content. Filterable by query parameters.
+Returns DTS template entries with full template content. Filterable by query parameters. Each entry includes a `readonly` flag — entries from `fallbacks/dts.json` are readonly.
 
 | Parameter | Description |
 |-----------|-------------|
 | `type` | Filter by DTS type (monster, raid, egg, etc.) |
 | `platform` | Filter by platform (discord, telegram) |
-| `language` | Filter by language (en, de, etc.) |
+| `language` | Filter by language code (en, de, etc.) or empty for language-independent |
 | `id` | Filter by template ID |
-
-```bash
-curl -H "X-Poracle-Secret: secret" "http://localhost:3030/api/dts/templates?type=monster&platform=discord"
-```
 
 ```json
 {
@@ -605,9 +603,12 @@ curl -H "X-Poracle-Secret: secret" "http://localhost:3030/api/dts/templates?type
       "id": "1",
       "type": "monster",
       "platform": "discord",
-      "language": "en",
+      "language": "",
       "default": true,
-      "template": {"embed": {"title": "{{round iv}}% {{fullName}} ..."}}
+      "readonly": true,
+      "template": {"embed": {"title": "{{round iv}}% {{fullName}} ..."}},
+      "name": "Default Monster",
+      "description": "Standard pokemon alert"
     }
   ]
 }
@@ -615,37 +616,72 @@ curl -H "X-Poracle-Secret: secret" "http://localhost:3030/api/dts/templates?type
 
 ### POST /api/dts/templates
 
-Save modified DTS template entries. Entries are matched by (type, platform, language, id) — matching entries are updated, new entries are inserted. Changes are written to `config/dts.json`.
+Save DTS template entries. Accepts a JSON array of entries. Each entry requires at minimum `type`, `platform`, and `template`.
+
+**Save behaviour:**
+- Each entry is saved to its own file in `config/dts/` (e.g., `monster-1-discord.json`)
+- If the entry previously existed in another file (`config/dts.json` or another `config/dts/*.json`), it is removed from the old file (other entries in that file are preserved)
+- Saving a **readonly** entry (from fallbacks) creates an override copy in `config/dts/` — the fallback is not modified, and the override takes precedence via the loading order
+- The `id` field defaults to empty if not provided (matches the "default" template)
+
+**Required fields per entry:** `type`, `platform`
 
 ```bash
 curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
   http://localhost:3030/api/dts/templates \
-  -d '[{"id":"99","type":"monster","platform":"discord","language":"en","template":{"embed":{"title":"Test {{name}}"}}}]'
+  -d '[{
+    "id": "1",
+    "type": "monster",
+    "platform": "discord",
+    "language": "en",
+    "default": false,
+    "template": {"embed": {"title": "{{round iv}}% {{fullName}}"}}
+  }]'
 ```
 
+**Success:**
 ```json
-{"status": "ok", "updated": 0, "inserted": 1}
+{"status": "ok", "saved": 1}
+```
+
+**Errors:**
+```json
+{"status": "error", "message": "no templates provided"}
+{"status": "error", "message": "entry 0 missing required fields (type=\"\", platform=\"\", id=\"\")"}
 ```
 
 ### DELETE /api/dts/templates
 
-Delete a DTS template entry by its key fields.
+Delete a DTS template entry. Removes from memory and from the source file on disk. Readonly entries (from fallbacks) cannot be deleted.
 
 | Parameter | Description |
 |-----------|-------------|
 | `type` | DTS type (required) |
 | `platform` | Platform (required) |
-| `language` | Language |
 | `id` | Template ID (required) |
+| `language` | Language (empty string matches language-independent entries) |
+
+**Errors:**
+```json
+{"status": "error", "message": "template not found"}
+{"status": "error", "message": "template monster/discord/1/ is readonly"}
+```
 
 ### POST /api/dts/enrich
 
-Run a raw webhook through the enrichment pipeline and return the enriched variable map. Used by the DTS editor to get realistic template preview data.
+Run a raw webhook through the enrichment pipeline and return the enriched variable map — the same data that Handlebars templates see during rendering. Includes all layers: base enrichment, translated fields, PVP display, aliases, resolved emoji, and computed fields (tthh/tthm, areas, weatherChange, etc.).
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `type` | string | yes | | Webhook type: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort_update, max_battle |
+| `webhook` | object | yes | | Raw webhook payload (same format as Golbat sends) |
+| `language` | string | no | "en" | Language code for translations |
+| `platform` | string | no | "discord" | Platform for emoji resolution (discord or telegram) |
 
 ```bash
 curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
   http://localhost:3030/api/dts/enrich \
-  -d '{"type":"pokemon","webhook":{"pokemon_id":129,"latitude":51.28,"longitude":1.08,"disappear_time":9999999999},"language":"en"}'
+  -d '{"type":"pokemon","webhook":{"pokemon_id":129,"latitude":51.28,"longitude":1.08,"disappear_time":9999999999,"individual_attack":15,"individual_defense":15,"individual_stamina":15},"language":"en","platform":"discord"}'
 ```
 
 ```json
@@ -654,24 +690,23 @@ curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
   "variables": {
     "name": "Magikarp",
     "fullName": "Magikarp",
+    "pokemonId": 129,
     "iv": 100,
     "cp": 212,
-    "quickMoveName": "Splash"
+    "level": 27,
+    "quickMoveName": "Splash",
+    "chargeMoveName": "Struggle",
+    "pvpGreat": [...],
+    "pvpUltra": [...]
   }
 }
 ```
-
-Supported types: `pokemon`, `raid`, `egg`, `quest`, `invasion`, `lure`, `nest`, `gym`, `fort_update`, `max_battle`.
 
 ### GET /api/dts/fields/:type
 
 Returns available template fields for a DTS type, with metadata for the editor's tag picker.
 
-Field properties: `name`, `type`, `description`, `category`, `preferred`, `deprecated`, `rawWebhook`, `preferredAlternative`.
-
-```bash
-curl -H "X-Poracle-Secret: secret" http://localhost:3030/api/dts/fields/monster
-```
+Field properties: `name`, `type`, `description`, `category`, `preferred` (recommended for new templates), `deprecated` (use preferredAlternative instead), `rawWebhook` (direct from scanner, prefer enriched equivalent).
 
 ```json
 {
@@ -682,28 +717,22 @@ curl -H "X-Poracle-Secret: secret" http://localhost:3030/api/dts/fields/monster
     {"name": "pokemon_id", "type": "int", "description": "Pokemon ID (webhook)", "category": "identity", "rawWebhook": true, "preferredAlternative": "pokemonId"}
   ],
   "blockScopes": [
-    {"helper": "each", "iterableFields": ["pvpGreat","pvpUltra","pvpLittle"], "fields": [...]}
+    {"helper": "each", "iterableFields": ["pvpGreat","pvpUltra","pvpLittle","weaknessList"], "description": "Iterate over arrays", "fields": [...]},
+    {"helper": "pokemon", "args": ["id","form"], "description": "Pokemon data block helper", "fields": [...]},
+    {"helper": "getPowerUpCost", "args": ["levelStart","levelEnd"], "description": "Power-up cost between two levels", "fields": [...]}
   ]
 }
 ```
 
-Supported types: monster, monsterNoIv, raid, egg, quest, invasion, lure, nest, gym, fort-update, maxbattle, weatherchange, greeting.
+Types: monster, monsterNoIv, raid, egg, quest, invasion, lure, nest, gym, fort-update, maxbattle, weatherchange, greeting.
 
 ### GET /api/dts/fields
 
-Returns the list of available DTS type names.
-
-### GET/POST /api/dts/reload
-
-Reload DTS templates and partials from disk (`config/dts.json`, `config/dts/`, `config/partials.json`). Use after editing template files directly on disk.
-
-```json
-{"status": "ok"}
-```
+Returns the list of all available DTS type names as a string array.
 
 ### GET /api/dts/partials
 
-Returns Handlebars partials registered for DTS templates. The editor needs these to render templates that use `{{> partialName}}`.
+Returns Handlebars partials for client-side template rendering. Register these with the Handlebars engine before rendering templates that use `{{> partialName}}`.
 
 ```json
 {"status": "ok", "partials": {"remainingTime": "{{#if tthh}}{{tthh}}h{{/if}}{{tthm}}m{{tths}}s"}}
@@ -711,19 +740,16 @@ Returns Handlebars partials registered for DTS templates. The editor needs these
 
 ### POST /api/dts/sendtest
 
-Render a DTS template with provided variables and deliver the message to a Discord/Telegram user. Used by the DTS editor to send a preview of the currently edited template.
+Compile a template with provided variables and deliver the rendered message to a Discord/Telegram user. Used by the editor to preview exactly what Discord/Telegram will show.
 
-```bash
-curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
-  http://localhost:3030/api/dts/sendtest \
-  -d '{
-    "template": {"embed": {"title": "Test: {{name}}", "description": "CP: {{cp}}"}},
-    "variables": {"name": "Magikarp", "cp": 212},
-    "target": {"id": "123456789", "type": "discord:user"},
-    "platform": "discord",
-    "language": "en"
-  }'
-```
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `template` | object | yes | | DTS template object (same format as in dts.json) |
+| `variables` | object | yes | | Enriched variable map (from /api/dts/enrich) |
+| `target.id` | string | yes | | Discord user/channel ID or Telegram chat ID |
+| `target.type` | string | no | "discord:user" | Destination type (discord:user, discord:channel, telegram:user, telegram:group) |
+| `platform` | string | no | "discord" | Platform for rendering |
+| `language` | string | no | "en" | Language for rendering |
 
 ```json
 {"status": "ok", "message": "sent"}
@@ -731,29 +757,28 @@ curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
 
 ### GET /api/dts/testdata
 
-Returns test webhook scenarios from `testdata.json` (config dir overrides fallback dir, merged by type+test key). Used by the DTS editor to provide sample webhook payloads for the enrich endpoint.
+Returns test webhook scenarios from `testdata.json`. The editor can use these as sample payloads for the enrich endpoint. Config dir entries override fallback entries by type+test key.
 
 | Parameter | Description |
 |-----------|-------------|
-| `type` | Filter by webhook type (pokemon, raid, etc.) |
-
-```bash
-curl -H "X-Poracle-Secret: secret" "http://localhost:3030/api/dts/testdata?type=pokemon"
-```
+| `type` | Filter by webhook type (pokemon, raid, pokestop, gym, max_battle, quest, fort_update) |
 
 ```json
 {
   "status": "ok",
   "testdata": [
     {"type": "pokemon", "test": "hundo", "location": "current", "webhook": {...}},
-    {"type": "pokemon", "test": "boring", "location": "current", "webhook": {...}}
+    {"type": "pokemon", "test": "great-rank1", "location": "current", "webhook": {...}},
+    {"type": "pokemon", "test": "shiny", "location": "current", "webhook": {...}}
   ]
 }
 ```
 
+Available test scenarios: boring, hundo, great-rank1, great-rank9, ultra1, unencountered, boosted, shiny (pokemon); egg1, level1, egg5, level5, egg6, level3 (raid); invasion, lure, giovanni, kecleon, goldstop, goldlure, showcase, pokemoncontest (pokestop); teamchange (gym); level1, level3 (max_battle); quest-item, quest-stardust, quest-pokemon, quest-energy (quest); edit, new, remove, etc. (fort_update).
+
 ### GET/POST /api/dts/reload
 
-Reload DTS templates and partials from disk (`config/dts.json`, `config/dts/`, `config/partials.json`).
+Reload DTS templates and partials from disk. Use after editing files directly or after saving via the API if you want to pick up changes from other sources.
 
 ```json
 {"status": "ok"}

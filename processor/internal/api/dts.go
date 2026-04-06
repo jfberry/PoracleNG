@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	raymond "github.com/mailgun/raymond/v2"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/dts"
 )
@@ -109,19 +110,38 @@ func HandleDTSSaveTemplates(ts *dts.TemplateStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var entries []dts.DTSEntry
 		if err := c.ShouldBindJSON(&entries); err != nil {
+			log.Warnf("dts save: invalid request body: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid request body: " + err.Error()})
 			return
+		}
+
+		if len(entries) == 0 {
+			log.Warnf("dts save: received empty entries array")
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "no templates provided"})
+			return
+		}
+
+		// Validate required fields
+		for i, entry := range entries {
+			if entry.Type == "" || entry.Platform == "" {
+				msg := fmt.Sprintf("entry %d missing required fields (type=%q, platform=%q, id=%q)", i, entry.Type, entry.Platform, entry.ID)
+				log.Warnf("dts save: %s", msg)
+				c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": msg})
+				return
+			}
 		}
 
 		saved := 0
 		for _, entry := range entries {
 			if err := ts.SaveEntry(entry); err != nil {
+				log.Warnf("dts save: failed to save %s/%s/%s/%s: %v", entry.Type, entry.Platform, entry.ID, entry.Language, err)
 				c.JSON(http.StatusForbidden, gin.H{"status": "error", "message": err.Error()})
 				return
 			}
 			saved++
 		}
 
+		log.Infof("dts save: saved %d template(s) via API", saved)
 		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 			"saved":  saved,
