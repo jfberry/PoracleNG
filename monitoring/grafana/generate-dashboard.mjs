@@ -212,14 +212,14 @@ function commonTemplating() {
 				value: ['$__all'],
 			},
 			datasource,
-			definition: 'label_values(poracle_alerter_matched_queue_depth, job)',
+			definition: 'label_values(process_resident_memory_bytes{job!~"$processor_job"}, job)',
 			hide: 0,
 			includeAll: true,
 			label: 'Alerter job',
 			multi: true,
 			name: 'alerter_job',
 			options: [],
-			query: 'label_values(poracle_alerter_matched_queue_depth, job)',
+			query: 'label_values(process_resident_memory_bytes{job!~"$processor_job"}, job)',
 			refresh: 1,
 			sort: 1,
 			type: 'query',
@@ -231,14 +231,14 @@ function commonTemplating() {
 				value: ['$__all'],
 			},
 			datasource,
-			definition: 'label_values(poracle_alerter_matched_queue_depth{job=~"$alerter_job"}, instance)',
+			definition: 'label_values(process_resident_memory_bytes{job=~"$alerter_job"}, instance)',
 			hide: 0,
 			includeAll: true,
 			label: 'Alerter instance',
 			multi: true,
 			name: 'alerter_instance',
 			options: [],
-			query: 'label_values(poracle_alerter_matched_queue_depth{job=~"$alerter_job"}, instance)',
+			query: 'label_values(process_resident_memory_bytes{job=~"$alerter_job"}, instance)',
 			refresh: 2,
 			sort: 1,
 			type: 'query',
@@ -301,6 +301,8 @@ function buildDashboard({ title, uid, version, description, panels }) {
 		weekStart: '',
 	}
 }
+
+// ─── Full Observability Dashboard ────────────────────────────────────────────
 
 const panels = []
 
@@ -365,8 +367,8 @@ panels.push(
 )
 panels.push(
 	statPanel({
-		title: 'Messages Sent/s',
-		expr: `sum(rate(poracle_alerter_messages_sent_total${alerterFilter}[$__rate_interval]))`,
+		title: 'Delivered/s',
+		expr: `sum(rate(poracle_delivery_total${processorFilter}[$__rate_interval]))`,
 		x: 12,
 		y,
 		unit: 'ops',
@@ -376,9 +378,8 @@ panels.push(
 	statPanel({
 		title: 'Delivery Failure %',
 		expr:
-			`100 * sum(rate(poracle_alerter_messages_failed_total${alerterFilter}[$__rate_interval])) / ` +
-			`clamp_min(sum(rate(poracle_alerter_messages_sent_total${alerterFilter}[$__rate_interval])) + ` +
-			`sum(rate(poracle_alerter_messages_failed_total${alerterFilter}[$__rate_interval])), 0.001)`,
+			`100 * sum(rate(poracle_delivery_total{status!="ok",job=~"$processor_job",instance=~"$processor_instance"}[$__rate_interval])) / ` +
+			`clamp_min(sum(rate(poracle_delivery_total${processorFilter}[$__rate_interval])), 0.001)`,
 		x: 15,
 		y,
 		unit: 'percent',
@@ -407,21 +408,30 @@ panels.push(
 )
 panels.push(
 	statPanel({
-		title: 'Backpressure/s',
-		expr: `sum(rate(poracle_alerter_backpressure_events_total${alerterFilter}[$__rate_interval]))`,
+		title: 'Render Queue %',
+		expr:
+			`100 * sum(poracle_render_queue_depth${processorFilter}) / ` +
+			`clamp_min(sum(poracle_render_queue_capacity${processorFilter}), 1)`,
 		x: 21,
 		y,
-		unit: 'ops',
+		unit: 'percent',
+		thresholdSteps: [
+			{ color: 'green', value: null },
+			{ color: 'yellow', value: 70 },
+			{ color: 'red', value: 90 },
+		],
 	}),
 )
 y += 4
+
+// ─── Processor Pipeline ──────────────────────────────────────────────────────
 
 panels.push(rowPanel('Processor Pipeline', y))
 y += 1
 
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Webhook Intake by Type',
+		title: 'Webhook Intake by Type',
 		x: 0,
 		y,
 		unit: 'ops',
@@ -435,7 +445,7 @@ panels.push(
 )
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Webhook Processing p95 by Type',
+		title: 'Webhook Processing p95 by Type',
 		x: 12,
 		y,
 		unit: 's',
@@ -453,7 +463,7 @@ y += 8
 
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Match Production by Type',
+		title: 'Match Production by Type',
 		x: 0,
 		y,
 		unit: 'ops',
@@ -475,7 +485,7 @@ panels.push(
 )
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Worker and Sender Pressure',
+		title: 'Worker Pool Pressure',
 		x: 12,
 		y,
 		unit: 'short',
@@ -488,10 +498,6 @@ panels.push(
 				expr: `sum(poracle_processor_worker_pool_capacity${processorFilter})`,
 				legendFormat: 'worker pool capacity',
 			},
-			{
-				expr: `sum(poracle_processor_sender_queue_depth${processorFilter})`,
-				legendFormat: 'sender queue depth',
-			},
 		],
 	}),
 )
@@ -499,48 +505,32 @@ y += 8
 
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Sender Outcomes and Batch Size',
+		title: 'Matching Duration p95 by Type',
 		x: 0,
 		y,
-		unit: 'short',
+		unit: 's',
 		targets: [
-			{
-				expr: `sum by(status) (rate(poracle_processor_sender_batches_total${processorFilter}[$__rate_interval]))`,
-				legendFormat: 'batches {{status}}',
-			},
-			{
-				expr:
-					`sum(rate(poracle_processor_sender_batch_size_sum${processorFilter}[$__rate_interval])) / ` +
-					`clamp_min(sum(rate(poracle_processor_sender_batch_size_count${processorFilter}[$__rate_interval])), 0.001)`,
-				legendFormat: 'avg batch size',
-			},
 			{
 				expr:
 					`histogram_quantile(0.95, ` +
-					`sum by(le) (rate(poracle_processor_sender_batch_size_bucket${processorFilter}[$__rate_interval])))`,
-				legendFormat: 'batch size p95',
+					`sum by(le, type) (rate(poracle_processor_matching_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: '{{type}}',
 			},
 		],
 	}),
 )
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Sender Flush Duration',
+		title: 'Enrichment Duration p95 by Type',
 		x: 12,
 		y,
 		unit: 's',
 		targets: [
 			{
 				expr:
-					`sum(rate(poracle_processor_sender_flush_seconds_sum${processorFilter}[$__rate_interval])) / ` +
-					`clamp_min(sum(rate(poracle_processor_sender_flush_seconds_count${processorFilter}[$__rate_interval])), 0.001)`,
-				legendFormat: 'flush avg',
-			},
-			{
-				expr:
 					`histogram_quantile(0.95, ` +
-					`sum by(le) (rate(poracle_processor_sender_flush_seconds_bucket${processorFilter}[$__rate_interval])))`,
-				legendFormat: 'flush p95',
+					`sum by(le, type) (rate(poracle_processor_enrichment_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: '{{type}}',
 			},
 		],
 	}),
@@ -549,7 +539,7 @@ y += 8
 
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Reloads and Rate Limiter',
+		title: 'Reloads and Rate Limiter',
 		x: 0,
 		y,
 		unit: 'short',
@@ -581,7 +571,7 @@ panels.push(
 )
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Match Yield per Webhook',
+		title: 'Match Yield per Webhook',
 		x: 12,
 		y,
 		unit: 'short',
@@ -603,12 +593,262 @@ panels.push(
 )
 y += 8
 
+// ─── Render Pipeline ─────────────────────────────────────────────────────────
+
+panels.push(rowPanel('Render Pipeline', y))
+y += 1
+
+panels.push(
+	timeseriesPanel({
+		title: 'Render Queue Depth and Capacity',
+		x: 0,
+		y,
+		unit: 'short',
+		targets: [
+			{
+				expr: `sum(poracle_render_queue_depth${processorFilter})`,
+				legendFormat: 'queue depth',
+			},
+			{
+				expr: `sum(poracle_render_queue_capacity${processorFilter})`,
+				legendFormat: 'queue capacity',
+			},
+			{
+				expr: `sum(rate(poracle_render_tile_skipped_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: 'tiles skipped (backpressure)',
+			},
+		],
+	}),
+)
+panels.push(
+	timeseriesPanel({
+		title: 'Render Job Duration p95',
+		x: 12,
+		y,
+		unit: 's',
+		targets: [
+			{
+				expr:
+					`histogram_quantile(0.95, ` +
+					`sum by(le) (rate(poracle_render_duration_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: 'render job p95',
+			},
+			{
+				expr:
+					`sum(rate(poracle_render_duration_seconds_sum${processorFilter}[$__rate_interval])) / ` +
+					`clamp_min(sum(rate(poracle_render_duration_seconds_count${processorFilter}[$__rate_interval])), 0.001)`,
+				legendFormat: 'render job avg',
+			},
+		],
+	}),
+)
+y += 8
+
+panels.push(
+	timeseriesPanel({
+		title: 'Render Outcomes',
+		x: 0,
+		y,
+		unit: 'ops',
+		targets: [
+			{
+				expr: `sum by(status) (rate(poracle_render_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: '{{status}}',
+			},
+		],
+	}),
+)
+panels.push(
+	timeseriesPanel({
+		title: 'Template Render Duration p95 by Type',
+		x: 12,
+		y,
+		unit: 's',
+		targets: [
+			{
+				expr:
+					`histogram_quantile(0.95, ` +
+					`sum by(le, type) (rate(poracle_template_render_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: '{{type}}',
+			},
+		],
+	}),
+)
+y += 8
+
+panels.push(
+	timeseriesPanel({
+		title: 'Template Render Outcomes by Type',
+		x: 0,
+		y,
+		unit: 'ops',
+		targets: [
+			{
+				expr: `sum by(type, status) (rate(poracle_template_render_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: '{{type}} {{status}}',
+			},
+		],
+	}),
+)
+panels.push(
+	timeseriesPanel({
+		title: 'Shlink URL Shortening',
+		x: 12,
+		y,
+		unit: 'short',
+		targets: [
+			{
+				expr: `sum by(result) (rate(poracle_shlink_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: '{{result}}',
+			},
+			{
+				expr:
+					`histogram_quantile(0.95, ` +
+					`sum by(le) (rate(poracle_shlink_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: 'latency p95',
+			},
+		],
+	}),
+)
+y += 8
+
+// ─── Delivery ────────────────────────────────────────────────────────────────
+
+panels.push(rowPanel('Delivery', y))
+y += 1
+
+panels.push(
+	timeseriesPanel({
+		title: 'Delivery Queue Depths',
+		x: 0,
+		y,
+		unit: 'short',
+		targets: [
+			{
+				expr: `sum(poracle_delivery_queue_depth${processorFilter})`,
+				legendFormat: 'total queue',
+			},
+			{
+				expr: `sum(poracle_delivery_discord_queue_depth${processorFilter})`,
+				legendFormat: 'discord',
+			},
+			{
+				expr: `sum(poracle_delivery_webhook_queue_depth${processorFilter})`,
+				legendFormat: 'discord webhook',
+			},
+			{
+				expr: `sum(poracle_delivery_telegram_queue_depth${processorFilter})`,
+				legendFormat: 'telegram',
+			},
+		],
+	}),
+)
+panels.push(
+	timeseriesPanel({
+		title: 'Delivery Outcomes by Platform',
+		x: 12,
+		y,
+		unit: 'ops',
+		targets: [
+			{
+				expr: `sum by(platform, status) (rate(poracle_delivery_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: '{{platform}} {{status}}',
+			},
+		],
+	}),
+)
+y += 8
+
+panels.push(
+	timeseriesPanel({
+		title: 'Delivery Latency p95 by Platform',
+		x: 0,
+		y,
+		unit: 's',
+		targets: [
+			{
+				expr:
+					`histogram_quantile(0.95, ` +
+					`sum by(le, platform) (rate(poracle_delivery_duration_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: '{{platform}}',
+			},
+		],
+	}),
+)
+panels.push(
+	timeseriesPanel({
+		title: 'Delivery In-Flight and Tracker',
+		x: 12,
+		y,
+		unit: 'short',
+		targets: [
+			{
+				expr: `sum by(platform) (poracle_delivery_in_flight${processorFilter})`,
+				legendFormat: 'in-flight {{platform}}',
+			},
+			{
+				expr: `sum(poracle_delivery_tracker_size${processorFilter})`,
+				legendFormat: 'tracker size',
+			},
+			{
+				expr: `sum(rate(poracle_delivery_clean_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: 'clean deletes/s',
+			},
+			{
+				expr: `sum(rate(poracle_delivery_tracker_evictions_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: 'tracker evictions/s',
+			},
+		],
+	}),
+)
+y += 8
+
+panels.push(
+	timeseriesPanel({
+		title: 'Delivery Rate Limits',
+		x: 0,
+		y,
+		unit: 'ops',
+		targets: [
+			{
+				expr: `sum by(platform) (rate(poracle_delivery_rate_limited_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: 'rate limited {{platform}}',
+			},
+		],
+	}),
+)
+panels.push(
+	timeseriesPanel({
+		title: 'Discord Rate Limit Wait Time',
+		x: 12,
+		y,
+		unit: 's',
+		targets: [
+			{
+				expr:
+					`histogram_quantile(0.95, ` +
+					`sum by(le, platform) (rate(poracle_delivery_rate_limit_wait_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: '{{platform}} p95',
+			},
+			{
+				expr:
+					`sum by(platform) (rate(poracle_delivery_rate_limit_wait_seconds_sum${processorFilter}[$__rate_interval])) / ` +
+					`clamp_min(sum by(platform) (rate(poracle_delivery_rate_limit_wait_seconds_count${processorFilter}[$__rate_interval])), 0.001)`,
+				legendFormat: '{{platform}} avg',
+			},
+		],
+	}),
+)
+y += 8
+
+// ─── Processor Integrations ──────────────────────────────────────────────────
+
 panels.push(rowPanel('Processor Integrations', y))
 y += 1
 
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Geocode Outcomes and In Flight',
+		title: 'Geocode Outcomes and In Flight',
 		x: 0,
 		y,
 		unit: 'short',
@@ -626,7 +866,7 @@ panels.push(
 )
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Geocode Latency',
+		title: 'Geocode Latency',
 		x: 12,
 		y,
 		unit: 's',
@@ -650,7 +890,7 @@ y += 8
 
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Tile Outcomes and In Flight',
+		title: 'Tile Outcomes and In Flight',
 		x: 0,
 		y,
 		unit: 'short',
@@ -663,12 +903,16 @@ panels.push(
 				expr: `sum(poracle_processor_tile_in_flight${processorFilter})`,
 				legendFormat: 'in flight',
 			},
+			{
+				expr: `sum(poracle_processor_tile_queue_depth${processorFilter})`,
+				legendFormat: 'async queue depth',
+			},
 		],
 	}),
 )
 panels.push(
 	timeseriesPanel({
-		title: 'Processor Tile Latency',
+		title: 'Tile Latency',
 		x: 12,
 		y,
 		unit: 's',
@@ -684,6 +928,46 @@ panels.push(
 					`histogram_quantile(0.95, ` +
 					`sum by(le) (rate(poracle_processor_tile_seconds_bucket${processorFilter}[$__rate_interval])))`,
 				legendFormat: 'p95',
+			},
+		],
+	}),
+)
+y += 8
+
+panels.push(
+	timeseriesPanel({
+		title: 'Circuit Breakers',
+		x: 0,
+		y,
+		unit: 'short',
+		targets: [
+			{
+				expr: `sum(poracle_tile_circuit_healthy${processorFilter})`,
+				legendFormat: 'tileserver circuit (1=healthy)',
+			},
+			{
+				expr: `sum(poracle_geocode_circuit_healthy${processorFilter})`,
+				legendFormat: 'geocode circuit (1=healthy)',
+			},
+		],
+	}),
+)
+panels.push(
+	timeseriesPanel({
+		title: 'Uicons Index Refresh',
+		x: 12,
+		y,
+		unit: 'short',
+		targets: [
+			{
+				expr: `sum by(result) (rate(poracle_uicons_refresh_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: '{{result}}',
+			},
+			{
+				expr:
+					`histogram_quantile(0.95, ` +
+					`sum by(le) (rate(poracle_uicons_refresh_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: 'latency p95',
 			},
 		],
 	}),
@@ -730,92 +1014,51 @@ panels.push(
 )
 y += 8
 
-panels.push(rowPanel('Alerter Delivery', y))
+// ─── State & API ─────────────────────────────────────────────────────────────
+
+panels.push(rowPanel('State & API', y))
 y += 1
 
 panels.push(
 	timeseriesPanel({
-		title: 'Alerter Queue Depths',
+		title: 'State Size',
 		x: 0,
 		y,
 		unit: 'short',
 		targets: [
 			{
-				expr: `sum(poracle_alerter_matched_queue_depth${alerterFilter})`,
-				legendFormat: 'matched queue',
+				expr: `sum(poracle_processor_state_humans${processorFilter})`,
+				legendFormat: 'humans',
 			},
 			{
-				expr: `sum(poracle_alerter_hook_queue_depth${alerterFilter})`,
-				legendFormat: 'hook queue',
+				expr: `sum by(type) (poracle_processor_state_tracking_rules${processorFilter})`,
+				legendFormat: 'rules {{type}}',
 			},
 			{
-				expr: `sum(poracle_alerter_discord_queue_depth${alerterFilter})`,
-				legendFormat: 'discord queue',
-			},
-			{
-				expr: `sum(poracle_alerter_discord_webhook_queue_depth${alerterFilter})`,
-				legendFormat: 'discord webhook queue',
-			},
-			{
-				expr: `sum(poracle_alerter_telegram_queue_depth${alerterFilter})`,
-				legendFormat: 'telegram queue',
+				expr: `sum(poracle_processor_state_geofences${processorFilter})`,
+				legendFormat: 'geofences',
 			},
 		],
 	}),
 )
 panels.push(
 	timeseriesPanel({
-		title: 'Alerter Message Creation by Controller and Destination',
+		title: 'State Reload Breakdown',
 		x: 12,
-		y,
-		unit: 'ops',
-		targets: [
-			{
-				expr:
-					`sum by(controller_type, destination_type) (` +
-					`rate(poracle_alerter_messages_created_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: '{{controller_type}} -> {{destination_type}}',
-			},
-		],
-	}),
-)
-y += 8
-
-panels.push(
-	timeseriesPanel({
-		title: 'Alerter Message Create p95 by Controller',
-		x: 0,
 		y,
 		unit: 's',
 		targets: [
 			{
 				expr:
 					`histogram_quantile(0.95, ` +
-					`sum by(le, controller_type) (` +
-					`rate(poracle_alerter_message_create_seconds_bucket${alerterFilter}[$__rate_interval])))`,
-				legendFormat: '{{controller_type}}',
-			},
-		],
-	}),
-)
-panels.push(
-	timeseriesPanel({
-		title: 'Alerter Delivery Outcomes by Destination',
-		x: 12,
-		y,
-		unit: 'ops',
-		targets: [
-			{
-				expr:
-					`sum by(destination_type) (` +
-					`rate(poracle_alerter_messages_sent_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'sent {{destination_type}}',
+					`sum by(le) (rate(poracle_processor_state_reload_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: 'total reload p95',
 			},
 			{
 				expr:
-					`sum by(destination_type) (` +
-					`rate(poracle_alerter_messages_failed_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'failed {{destination_type}}',
+					`histogram_quantile(0.95, ` +
+					`sum by(le) (rate(poracle_processor_state_db_query_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: 'DB query p95',
 			},
 		],
 	}),
@@ -824,59 +1067,30 @@ y += 8
 
 panels.push(
 	timeseriesPanel({
-		title: 'Alerter Delivery Latency p95',
+		title: 'API Request Rate',
 		x: 0,
+		y,
+		unit: 'ops',
+		targets: [
+			{
+				expr: `sum by(method, endpoint) (rate(poracle_processor_api_requests_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: '{{method}} {{endpoint}}',
+			},
+		],
+	}),
+)
+panels.push(
+	timeseriesPanel({
+		title: 'API Request Latency p95',
+		x: 12,
 		y,
 		unit: 's',
 		targets: [
 			{
 				expr:
 					`histogram_quantile(0.95, ` +
-					`sum by(le, destination_type) (` +
-					`rate(poracle_alerter_discord_delivery_seconds_bucket${alerterFilter}[$__rate_interval])))`,
-				legendFormat: 'discord {{destination_type}}',
-			},
-			{
-				expr:
-					`histogram_quantile(0.95, ` +
-					`sum by(le) (` +
-					`rate(poracle_alerter_discord_webhook_delivery_seconds_bucket${alerterFilter}[$__rate_interval])))`,
-				legendFormat: 'discord webhook',
-			},
-			{
-				expr:
-					`histogram_quantile(0.95, ` +
-					`sum by(le, destination_type) (` +
-					`rate(poracle_alerter_telegram_delivery_seconds_bucket${alerterFilter}[$__rate_interval])))`,
-				legendFormat: 'telegram {{destination_type}}',
-			},
-		],
-	}),
-)
-panels.push(
-	timeseriesPanel({
-		title: 'Alerter Rate Limits, Drops and Backpressure',
-		x: 12,
-		y,
-		unit: 'ops',
-		targets: [
-			{
-				expr:
-					`sum by(source) (` +
-					`rate(poracle_alerter_discord_rate_limits_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'discord {{source}}',
-			},
-			{
-				expr: `sum(rate(poracle_alerter_telegram_rate_limits_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'telegram',
-			},
-			{
-				expr: `sum(rate(poracle_alerter_rate_limited_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'dropped',
-			},
-			{
-				expr: `sum(rate(poracle_alerter_backpressure_events_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'backpressure',
+					`sum by(le, endpoint) (rate(poracle_processor_api_request_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: '{{endpoint}}',
 			},
 		],
 	}),
@@ -885,87 +1099,43 @@ y += 8
 
 panels.push(
 	timeseriesPanel({
-		title: 'Alerter Geocode Outcomes and In Flight',
+		title: 'Webhook Batch Size',
 		x: 0,
 		y,
 		unit: 'short',
 		targets: [
 			{
-				expr: `sum by(result) (rate(poracle_alerter_geocode_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: '{{result}}',
+				expr:
+					`histogram_quantile(0.95, ` +
+					`sum by(le) (rate(poracle_processor_webhook_batch_size_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: 'batch size p95',
 			},
 			{
-				expr: `sum(poracle_alerter_geocode_in_flight${alerterFilter})`,
-				legendFormat: 'in flight',
+				expr:
+					`sum(rate(poracle_processor_webhook_batch_size_sum${processorFilter}[$__rate_interval])) / ` +
+					`clamp_min(sum(rate(poracle_processor_webhook_batch_size_count${processorFilter}[$__rate_interval])), 0.001)`,
+				legendFormat: 'batch size avg',
 			},
 		],
 	}),
 )
 panels.push(
 	timeseriesPanel({
-		title: 'Alerter Geocode Latency',
+		title: 'Last Successful Reload',
 		x: 12,
 		y,
-		unit: 's',
+		unit: 'dateTimeAsIso',
 		targets: [
 			{
-				expr:
-					`sum(rate(poracle_alerter_geocode_seconds_sum${alerterFilter}[$__rate_interval])) / ` +
-					`clamp_min(sum(rate(poracle_alerter_geocode_seconds_count${alerterFilter}[$__rate_interval])), 0.001)`,
-				legendFormat: 'avg',
-			},
-			{
-				expr:
-					`histogram_quantile(0.95, ` +
-					`sum by(le) (rate(poracle_alerter_geocode_seconds_bucket${alerterFilter}[$__rate_interval])))`,
-				legendFormat: 'p95',
+				expr: `poracle_processor_state_last_reload_success_timestamp${processorFilter} * 1000`,
+				legendFormat: '{{instance}}',
 			},
 		],
 	}),
 )
 y += 8
 
-panels.push(
-	timeseriesPanel({
-		title: 'Alerter Tile Outcomes and In Flight',
-		x: 0,
-		y,
-		unit: 'short',
-		targets: [
-			{
-				expr: `sum by(result) (rate(poracle_alerter_tile_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: '{{result}}',
-			},
-			{
-				expr: `sum(poracle_alerter_tile_in_flight${alerterFilter})`,
-				legendFormat: 'in flight',
-			},
-		],
-	}),
-)
-panels.push(
-	timeseriesPanel({
-		title: 'Alerter Tile Latency',
-		x: 12,
-		y,
-		unit: 's',
-		targets: [
-			{
-				expr:
-					`sum(rate(poracle_alerter_tile_seconds_sum${alerterFilter}[$__rate_interval])) / ` +
-					`clamp_min(sum(rate(poracle_alerter_tile_seconds_count${alerterFilter}[$__rate_interval])), 0.001)`,
-				legendFormat: 'avg',
-			},
-			{
-				expr:
-					`histogram_quantile(0.95, ` +
-					`sum by(le) (rate(poracle_alerter_tile_seconds_bucket${alerterFilter}[$__rate_interval])))`,
-				legendFormat: 'p95',
-			},
-		],
-	}),
-)
-y += 8
+// ─── Runtime and Process Health ──────────────────────────────────────────────
 
 panels.push(rowPanel('Runtime and Process Health', y))
 y += 1
@@ -1140,11 +1310,13 @@ panels.push(
 const dashboard = buildDashboard({
 	title: 'PoracleNG Observability',
 	uid: 'poracleng-observability',
-	version: 2,
+	version: 3,
 	description:
-		'Complete observability dashboard for PoracleNG processor and alerter Prometheus metrics, including runtime telemetry.',
+		'Complete observability dashboard for PoracleNG processor and alerter Prometheus metrics, including render pipeline, delivery, and runtime telemetry.',
 	panels,
 })
+
+// ─── Operations Lite Dashboard ───────────────────────────────────────────────
 
 resetPanelIds()
 
@@ -1200,8 +1372,8 @@ litePanels.push(
 )
 litePanels.push(
 	statPanel({
-		title: 'Messages Sent/s',
-		expr: `sum(rate(poracle_alerter_messages_sent_total${alerterFilter}[$__rate_interval]))`,
+		title: 'Delivered/s',
+		expr: `sum(rate(poracle_delivery_total${processorFilter}[$__rate_interval]))`,
 		x: 12,
 		y: liteY,
 		unit: 'ops',
@@ -1211,9 +1383,8 @@ litePanels.push(
 	statPanel({
 		title: 'Delivery Failure %',
 		expr:
-			`100 * sum(rate(poracle_alerter_messages_failed_total${alerterFilter}[$__rate_interval])) / ` +
-			`clamp_min(sum(rate(poracle_alerter_messages_sent_total${alerterFilter}[$__rate_interval])) + ` +
-			`sum(rate(poracle_alerter_messages_failed_total${alerterFilter}[$__rate_interval])), 0.001)`,
+			`100 * sum(rate(poracle_delivery_total{status!="ok",job=~"$processor_job",instance=~"$processor_instance"}[$__rate_interval])) / ` +
+			`clamp_min(sum(rate(poracle_delivery_total${processorFilter}[$__rate_interval])), 0.001)`,
 		x: 15,
 		y: liteY,
 		unit: 'percent',
@@ -1242,11 +1413,18 @@ litePanels.push(
 )
 litePanels.push(
 	statPanel({
-		title: 'Backpressure/s',
-		expr: `sum(rate(poracle_alerter_backpressure_events_total${alerterFilter}[$__rate_interval]))`,
+		title: 'Render Queue %',
+		expr:
+			`100 * sum(poracle_render_queue_depth${processorFilter}) / ` +
+			`clamp_min(sum(poracle_render_queue_capacity${processorFilter}), 1)`,
 		x: 21,
 		y: liteY,
-		unit: 'ops',
+		unit: 'percent',
+		thresholdSteps: [
+			{ color: 'green', value: null },
+			{ color: 'yellow', value: 70 },
+			{ color: 'red', value: 90 },
+		],
 	}),
 )
 liteY += 4
@@ -1256,7 +1434,7 @@ liteY += 1
 
 litePanels.push(
 	timeseriesPanel({
-		title: 'Processor Intake and Match Rate',
+		title: 'Intake and Match Rate',
 		x: 0,
 		y: liteY,
 		unit: 'ops',
@@ -1274,7 +1452,7 @@ litePanels.push(
 )
 litePanels.push(
 	timeseriesPanel({
-		title: 'Processor Latency and Pressure',
+		title: 'Processing Latency and Pressure',
 		x: 12,
 		y: liteY,
 		unit: 'short',
@@ -1286,8 +1464,8 @@ litePanels.push(
 				legendFormat: 'p95 {{type}}',
 			},
 			{
-				expr: `sum(poracle_processor_sender_queue_depth${processorFilter})`,
-				legendFormat: 'sender queue',
+				expr: `sum(poracle_render_queue_depth${processorFilter})`,
+				legendFormat: 'render queue',
 			},
 			{
 				expr: `sum(poracle_processor_worker_pool_in_use${processorFilter})`,
@@ -1300,29 +1478,25 @@ liteY += 8
 
 litePanels.push(
 	timeseriesPanel({
-		title: 'Alerter Queues',
+		title: 'Delivery Queues',
 		x: 0,
 		y: liteY,
 		unit: 'short',
 		targets: [
 			{
-				expr: `sum(poracle_alerter_matched_queue_depth${alerterFilter})`,
-				legendFormat: 'matched',
+				expr: `sum(poracle_delivery_queue_depth${processorFilter})`,
+				legendFormat: 'total',
 			},
 			{
-				expr: `sum(poracle_alerter_hook_queue_depth${alerterFilter})`,
-				legendFormat: 'hook',
-			},
-			{
-				expr: `sum(poracle_alerter_discord_queue_depth${alerterFilter})`,
+				expr: `sum(poracle_delivery_discord_queue_depth${processorFilter})`,
 				legendFormat: 'discord',
 			},
 			{
-				expr: `sum(poracle_alerter_discord_webhook_queue_depth${alerterFilter})`,
+				expr: `sum(poracle_delivery_webhook_queue_depth${processorFilter})`,
 				legendFormat: 'discord webhook',
 			},
 			{
-				expr: `sum(poracle_alerter_telegram_queue_depth${alerterFilter})`,
+				expr: `sum(poracle_delivery_telegram_queue_depth${processorFilter})`,
 				legendFormat: 'telegram',
 			},
 		],
@@ -1336,23 +1510,19 @@ litePanels.push(
 		unit: 'short',
 		targets: [
 			{
-				expr:
-					`sum by(destination_type) (` +
-					`rate(poracle_alerter_messages_sent_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'sent {{destination_type}}',
+				expr: `sum by(platform) (rate(poracle_delivery_total{status="ok",job=~"$processor_job",instance=~"$processor_instance"}[$__rate_interval]))`,
+				legendFormat: 'sent {{platform}}',
 			},
 			{
-				expr:
-					`sum by(destination_type) (` +
-					`rate(poracle_alerter_messages_failed_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'failed {{destination_type}}',
+				expr: `sum by(platform) (rate(poracle_delivery_total{status!="ok",job=~"$processor_job",instance=~"$processor_instance"}[$__rate_interval]))`,
+				legendFormat: 'failed {{platform}}',
 			},
 			{
 				expr:
 					`histogram_quantile(0.95, ` +
-					`sum by(le) (` +
-					`rate(poracle_alerter_discord_webhook_delivery_seconds_bucket${alerterFilter}[$__rate_interval])))`,
-				legendFormat: 'discord webhook p95',
+					`sum by(le, platform) (` +
+					`rate(poracle_delivery_duration_seconds_bucket${processorFilter}[$__rate_interval])))`,
+				legendFormat: '{{platform}} p95',
 			},
 		],
 	}),
@@ -1368,21 +1538,15 @@ litePanels.push(
 		targets: [
 			{
 				expr: `sum(rate(poracle_processor_rate_limit_dropped_total${processorFilter}[$__rate_interval]))`,
-				legendFormat: 'processor dropped',
+				legendFormat: 'alert rate limit dropped',
 			},
 			{
 				expr: `sum(rate(poracle_processor_rate_limit_breaches_total${processorFilter}[$__rate_interval]))`,
-				legendFormat: 'processor breaches',
+				legendFormat: 'alert rate limit breaches',
 			},
 			{
-				expr:
-					`sum by(source) (` +
-					`rate(poracle_alerter_discord_rate_limits_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'discord {{source}}',
-			},
-			{
-				expr: `sum(rate(poracle_alerter_telegram_rate_limits_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'telegram',
+				expr: `sum by(platform) (rate(poracle_delivery_rate_limited_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: 'delivery rate limited {{platform}}',
 			},
 		],
 	}),
@@ -1396,19 +1560,11 @@ litePanels.push(
 		targets: [
 			{
 				expr: `sum by(result) (rate(poracle_processor_tile_total${processorFilter}[$__rate_interval]))`,
-				legendFormat: 'processor tile {{result}}',
+				legendFormat: 'tile {{result}}',
 			},
 			{
 				expr: `sum by(result) (rate(poracle_processor_geocode_total${processorFilter}[$__rate_interval]))`,
-				legendFormat: 'processor geocode {{result}}',
-			},
-			{
-				expr: `sum by(result) (rate(poracle_alerter_tile_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'alerter tile {{result}}',
-			},
-			{
-				expr: `sum by(result) (rate(poracle_alerter_geocode_total${alerterFilter}[$__rate_interval]))`,
-				legendFormat: 'alerter geocode {{result}}',
+				legendFormat: 'geocode {{result}}',
 			},
 		],
 	}),
@@ -1460,7 +1616,7 @@ litePanels.push(
 const liteDashboard = buildDashboard({
 	title: 'PoracleNG Operations Lite',
 	uid: 'poracleng-ops-lite',
-	version: 1,
+	version: 2,
 	description:
 		'Concise Grafana dashboard for day-to-day PoracleNG operations, focusing on service health, flow pressure, delivery, and runtime.',
 	panels: litePanels,
