@@ -578,6 +578,14 @@ Server configuration for the web UI (locale, prefix, PVP settings, admin lists, 
 
 Available DTS templates by platform, type, and language.
 
+### GET/POST /api/dts/reload
+
+Reload DTS templates and partials from disk (`config/dts.json`, `config/dts/`, `config/partials.json`).
+
+```json
+{"status": "ok"}
+```
+
 ---
 
 ## Game Data

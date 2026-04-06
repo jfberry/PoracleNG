@@ -389,6 +389,18 @@ func main() {
 	if proc.dtsRenderer != nil {
 		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
 		apiGroup.POST("/dts/render", api.HandleDTSRender(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/reload", api.HandleReload(func() error {
+			return proc.dtsRenderer.Templates().Reload(
+				filepath.Join(cfg.BaseDir, "config"),
+				filepath.Join(cfg.BaseDir, "fallbacks"),
+			)
+		}))
+		apiGroup.GET("/dts/reload", api.HandleReload(func() error {
+			return proc.dtsRenderer.Templates().Reload(
+				filepath.Join(cfg.BaseDir, "config"),
+				filepath.Join(cfg.BaseDir, "fallbacks"),
+			)
+		}))
 	}
 
 	// Config and master data endpoints
