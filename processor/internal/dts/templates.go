@@ -672,30 +672,34 @@ func entryFilename(e *DTSEntry) string {
 func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 	ts.mu.Lock()
 
-	// Find existing entry
+	// Find existing entries. There may be multiple matches (e.g. one from
+	// fallback readonly + one from config/dts.json). We need to:
+	// - Note if any are readonly (so we know to append an override)
+	// - Update the first non-readonly match in place
+	// - Record the old source file so we can clean it up on disk
 	var oldSourceFile string
 	found := false
 	isOverride := false
 	incKey := entryKey(&inc)
 	for i := range ts.entries {
 		e := &ts.entries[i]
-		if entryKey(e) == incKey {
-			if e.Readonly {
-				// Don't modify the readonly entry — append a new override
-				isOverride = true
-			} else {
-				oldSourceFile = e.sourceFile
-				// Update in place
-				e.Template = inc.Template
-				e.TemplateFile = inc.TemplateFile
-				e.Name = inc.Name
-				e.Description = inc.Description
-				e.Default = inc.Default
-				e.Hidden = inc.Hidden
-				found = true
-			}
-			break
+		if entryKey(e) != incKey {
+			continue
 		}
+		if e.Readonly {
+			isOverride = true
+			continue // keep looking for a non-readonly copy to update
+		}
+		oldSourceFile = e.sourceFile
+		// Update in place
+		e.Template = inc.Template
+		e.TemplateFile = inc.TemplateFile
+		e.Name = inc.Name
+		e.Description = inc.Description
+		e.Default = inc.Default
+		e.Hidden = inc.Hidden
+		found = true
+		break
 	}
 
 	if !found {
