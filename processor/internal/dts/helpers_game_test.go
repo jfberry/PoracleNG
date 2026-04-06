@@ -471,6 +471,50 @@ func TestGetPowerUpCostBlockWithAddCommas(t *testing.T) {
 	}
 }
 
+// Regression test: getPowerUpCost used inline inside {{#each}} must not
+// cause infinite recursion. This reproduces the exact DTS template pattern:
+// {{#each pvp_rankings}}...{{getPowerUpCost ../level this.level}}...{{/each}}
+func TestGetPowerUpCostInlineInsideEach(t *testing.T) {
+	ctx := map[string]interface{}{
+		"baseLevel": 25,
+		"rankings": []map[string]interface{}{
+			{"targetLevel": 40, "name": "First"},
+			{"targetLevel": 50, "name": "Second"},
+		},
+	}
+	tpl := `{{#each rankings}}{{getPowerUpCost ../baseLevel this.targetLevel}} | {{/each}}`
+	got := renderWithData(t, tpl, ctx, nil)
+	if got == "" {
+		t.Fatal("getPowerUpCost inline inside each: got empty result")
+	}
+	if !strings.Contains(got, "stardust") {
+		t.Errorf("getPowerUpCost inline inside each: expected stardust in output, got %q", got)
+	}
+	// Should render twice (two rankings)
+	if strings.Count(got, "|") != 2 {
+		t.Errorf("getPowerUpCost inline inside each: expected 2 items, got %q", got)
+	}
+}
+
+// Same test but as a subexpression: (getPowerUpCost ...) inside {{#each}}
+// This matches the user's DTS pattern: {{{replace (getPowerUpCost ../level this.level) ...}}}
+func TestGetPowerUpCostSubexpressionInsideEach(t *testing.T) {
+	ctx := map[string]interface{}{
+		"baseLevel": 25,
+		"rankings": []map[string]interface{}{
+			{"targetLevel": 40},
+		},
+	}
+	tpl := `{{#each rankings}}{{replace (getPowerUpCost ../baseLevel this.targetLevel) "stardust" "SD"}}{{/each}}`
+	got := renderWithData(t, tpl, ctx, nil)
+	if got == "" {
+		t.Fatal("getPowerUpCost subexpression inside each: got empty result")
+	}
+	if !strings.Contains(got, "SD") {
+		t.Errorf("expected 'stardust' replaced with 'SD', got %q", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // buildFullName (unit)
 // ---------------------------------------------------------------------------
