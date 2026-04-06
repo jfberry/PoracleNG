@@ -786,6 +786,118 @@ Reload DTS templates and partials from disk. Use after editing files directly or
 
 ---
 
+## Config Editor
+
+All config editor endpoints require the `X-Poracle-Secret` header. Sensitive settings (database, tokens, bind addresses) are excluded — they remain TOML-only.
+
+### GET /api/config/schema
+
+Returns the config schema with field metadata for the editor. Each field includes:
+
+| Property | Description |
+|----------|-------------|
+| `name` | TOML field name |
+| `type` | `string`, `int`, `float`, `bool`, `string[]`, `select`, `map` |
+| `default` | Default value |
+| `description` | Help text |
+| `hotReload` | `true` if changes take effect immediately, `false` if restart needed |
+| `sensitive` | `true` for fields masked in values response |
+| `resolve` | ID resolution hint: `discord:user`, `discord:role`, `discord:channel`, `discord:guild`, `discord:target`, `discord:user\|role`, `telegram:chat`, `geofence:area` |
+| `options` | For `select` type: `[{value, label, description}]` |
+| `dependsOn` | Visibility dependency: `{field, value}` — hide when parent field doesn't match |
+
+Response is grouped by `sections`, each with `fields` and optional `tables` (array-of-tables like delegated_admins, communities, role_subscriptions).
+
+### GET /api/config/values
+
+Returns current merged config values (TOML + overrides). Only web-editable fields. Sensitive fields are masked.
+
+| Parameter | Description |
+|-----------|-------------|
+| `section` | (optional) Return only this section |
+
+```json
+{
+  "status": "ok",
+  "values": {
+    "general": {"locale": "en", "max_pokemon": 0},
+    "discord": {"admins": ["344179542874914817"], "check_role": true}
+  }
+}
+```
+
+### POST /api/config/values
+
+Save config changes. Accepts partial updates — only changed fields. Writes to `config/overrides.json` (never modifies config.toml). Hot-reloadable settings are applied immediately.
+
+```json
+{
+  "discord": {"admins": ["344179542874914817", "999888777"]},
+  "alert_limits": {"dm_limit": 30}
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "saved": 2,
+  "restart_required": false
+}
+```
+
+If any changed field requires restart:
+```json
+{
+  "status": "ok",
+  "saved": 3,
+  "restart_required": true,
+  "restart_fields": ["discord.check_role"]
+}
+```
+
+### POST /api/resolve
+
+Batch resolve Discord/Telegram IDs to human-readable names. Results cached for 10 minutes. IDs that cannot be resolved are omitted (not an error). Discord/Telegram sections are omitted when the respective bot is not configured.
+
+**Request:**
+```json
+{
+  "discord": {
+    "users": ["344179542874914817"],
+    "roles": ["987654321"],
+    "channels": ["111222333"],
+    "guilds": ["444555666"]
+  },
+  "telegram": {
+    "chats": ["789012345", "-100123456"]
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "discord": {
+    "users": {"344179542874914817": {"name": "JamesBerry", "globalName": "James Berry"}},
+    "roles": {"987654321": {"name": "Moderator", "guild": "My Server", "guildId": "444555666"}},
+    "channels": {"111222333": {"name": "raid-alerts", "type": "text", "guild": "My Server", "guildId": "444555666", "categoryName": "Pokemon"}},
+    "guilds": {"444555666": {"name": "My Server"}}
+  },
+  "telegram": {
+    "chats": {
+      "789012345": {"name": "James Berry", "type": "private"},
+      "-100123456": {"name": "Pokemon Group", "type": "supergroup"}
+    }
+  }
+}
+```
+
+For `geofence:area` resolve hints, the editor uses the existing `GET /api/geofence/all` endpoint to populate autocomplete.
+
+---
+
 ## Game Data
 
 ### GET /api/masterdata/monsters
