@@ -297,8 +297,9 @@ Fields containing platform IDs declare a `resolve` hint for the editor:
 - `discord:target` — could be guild, category, or channel (try all)
 - `discord:user|role` — could be either user or role
 - `telegram:chat` — Telegram user or group ID
+- `geofence:area` — geofence area name (editor fetches list from `GET /api/geofence/all` for autocomplete)
 
-The editor collects all IDs on the page and sends a single batch `POST /api/resolve` request.
+The editor collects all IDs on the page and sends a single batch `POST /api/resolve` request. For `geofence:area` fields, the editor calls `GET /api/geofence/all` to populate autocomplete options.
 
 ## Hot Reload vs Restart
 

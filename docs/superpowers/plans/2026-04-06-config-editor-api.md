@@ -370,8 +370,8 @@ ConfigTableDef{
 	Description: "Each community defines a group of users with shared area access, registration channels, and role requirements",
 	Fields: []ConfigFieldDef{
 		{Name: "name", Type: "string", Description: "Community identifier (e.g., \"newyork\")"},
-		{Name: "allowed_areas", Type: "string[]", Description: "Geofence area names users in this community can select with !area"},
-		{Name: "location_fence", Type: "string[]", Description: "Geofence used for strict_locations enforcement — alerts outside this fence are blocked"},
+		{Name: "allowed_areas", Type: "string[]", Description: "Geofence area names users in this community can select with !area", Resolve: "geofence:area"},
+		{Name: "location_fence", Type: "string[]", Description: "Geofence used for strict_locations enforcement — alerts outside this fence are blocked", Resolve: "geofence:area"},
 		{Name: "discord_channels", Type: "string[]", Description: "Discord channel IDs where !poracle registers users into this community", Resolve: "discord:channel"},
 		{Name: "discord_user_role", Type: "string[]", Description: "Discord role IDs that grant membership in this community", Resolve: "discord:role"},
 		{Name: "telegram_channels", Type: "string[]", Description: "Telegram group/channel IDs that qualify users for this community", Resolve: "telegram:chat"},
