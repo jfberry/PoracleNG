@@ -353,8 +353,12 @@ func registerMiscGameHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *
 			"candy":    candy,
 			"xlCandy":  xlCandy,
 		}
-		if options.IsBlock() {
-			return options.FnWith(result)
+		// Block mode: {{#getPowerUpCost ...}}{{stardust}} dust{{/getPowerUpCost}}
+		// Inline mode: {{getPowerUpCost ...}} → "X stardust, Y candy, Z XL candy"
+		// FnWith returns empty for inline (raymond pops enclosing block during body eval)
+		rendered := options.FnWith(result)
+		if rendered != "" {
+			return rendered
 		}
 		return fmt.Sprintf("%d stardust, %d candy, %d XL candy", stardust, candy, xlCandy)
 	})
