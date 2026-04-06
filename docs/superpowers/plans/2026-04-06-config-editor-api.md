@@ -361,7 +361,26 @@ func HandleConfigSchema() gin.HandlerFunc {
 
 **[weather]** — enable_inference, change_alert, show_altered_pokemon, show_altered_pokemon_max_count (dependsOn show_altered_pokemon), show_altered_pokemon_static_map (dependsOn show_altered_pokemon), enable_forecast, accuweather_day_quota (dependsOn enable_forecast), forecast_refresh_interval (dependsOn enable_forecast), local_first_fetch_hod (dependsOn enable_forecast), smart_forecast (dependsOn enable_forecast). Exclude accuweather_api_keys.
 
-**[area_security]** — enabled, strict_locations (dependsOn enabled). Tables: communities.
+**[area_security]** — enabled, strict_locations (dependsOn enabled). Tables: communities. The communities table is complex with nested sub-objects:
+
+```go
+ConfigTableDef{
+	Name:        "communities",
+	Title:       "Communities",
+	Description: "Each community defines a group of users with shared area access, registration channels, and role requirements",
+	Fields: []ConfigFieldDef{
+		{Name: "name", Type: "string", Description: "Community identifier (e.g., \"newyork\")"},
+		{Name: "allowed_areas", Type: "string[]", Description: "Geofence area names users in this community can select with !area"},
+		{Name: "location_fence", Type: "string[]", Description: "Geofence used for strict_locations enforcement — alerts outside this fence are blocked"},
+		{Name: "discord_channels", Type: "string[]", Description: "Discord channel IDs where !poracle registers users into this community", Resolve: "discord:channel"},
+		{Name: "discord_user_role", Type: "string[]", Description: "Discord role IDs that grant membership in this community", Resolve: "discord:role"},
+		{Name: "telegram_channels", Type: "string[]", Description: "Telegram group/channel IDs that qualify users for this community", Resolve: "telegram:chat"},
+		{Name: "telegram_admins", Type: "string[]", Description: "Telegram user IDs with admin rights for this community", Resolve: "telegram:chat"},
+	},
+}
+```
+
+Note: The Go struct has nested `Discord` and `Telegram` sub-structs, but for the JSON API schema we flatten them with prefixed names (`discord_channels`, `discord_user_role`, `telegram_channels`, `telegram_admins`) to avoid nested objects inside a table row. The `ApplyOverrides` function needs to handle this flattening when writing back to the config struct.
 
 **[geocoding]** — provider (select: none/nominatim/google), provider_url (dependsOn provider=nominatim), cache_detail, forward_only, static_provider (select: none/tileservercache/google/osm/mapbox), static_provider_url (dependsOn static_provider), width, height, zoom, type, day_style, dawn_style, dusk_style, night_style. Exclude geocoding_key, static_key.
 
