@@ -2,10 +2,30 @@
 
 DTS (Data Template System) templates use Handlebars syntax to render alert messages for Discord and Telegram. Templates are rendered by the Go processor using [jfberry/raymond](https://github.com/jfberry/raymond) (a fork of mailgun/raymond with a `FieldResolver` interface for zero-copy view lookup).
 
-Templates are loaded from `config/dts.json` (with `fallbacks/dts.json` as fallback) plus additional JSON files from `config/dts/`. Each entry may use:
+## Template Loading
+
+Templates are loaded from multiple sources in this order:
+
+1. **`fallbacks/dts.json`** — bundled defaults (shipped with the code, marked **readonly**)
+2. **`config/dts.json`** — user's main configuration file
+3. **`config/dts/*.json`** — additional template files (one or more entries per file)
+
+All entries are merged into a single list. When multiple entries match the same type/platform/id/language, the **last-loaded entry wins** — so `config/dts/` overrides `config/dts.json`, which overrides `fallbacks/dts.json`. This means you can customize any bundled template by creating an entry with the same key in your config.
+
+Each entry may use:
 - Inline `template` object — JSON with `{{fieldName}}` placeholders
 - `"templateFile": "dts/filename.txt"` — external file read as raw Handlebars text (allows non-JSON constructs like unquoted Handlebars expressions in value positions)
 - `"@include filename"` — include directive for shared partials
+
+## Template Saving (DTS Editor API)
+
+The `POST /api/dts/templates` endpoint saves templates safely without destroying user file organization:
+
+- Each saved template is written to its **own file** in `config/dts/` (e.g., `monster-1-discord.json`, `raid-default-telegram-de.json`)
+- If the template previously existed in `config/dts.json` or another file, it is **removed from the old file** (other entries in that file are preserved)
+- **Readonly templates** (from `fallbacks/dts.json`) are never modified — saving creates an override in `config/dts/` that takes precedence via the last-match-wins loading order
+- Source files that become empty after removal are automatically deleted (except the main `config/dts.json`)
+- Templates can be reloaded from disk via `GET /api/dts/reload` without restarting the processor
 
 ## Poracle Fields vs Raw Webhook Fields
 

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	raymond "github.com/mailgun/raymond/v2"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/dts"
 )
@@ -102,6 +102,8 @@ func HandleDTSGetTemplates(ts *dts.TemplateStore) gin.HandlerFunc {
 }
 
 // HandleDTSSaveTemplates accepts an array of DTS entries and saves them.
+// Each entry is saved to its own file in config/dts/ and removed from its
+// previous source file. Readonly entries are rejected.
 // POST /api/dts/templates
 func HandleDTSSaveTemplates(ts *dts.TemplateStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -111,23 +113,24 @@ func HandleDTSSaveTemplates(ts *dts.TemplateStore) gin.HandlerFunc {
 			return
 		}
 
-		updated, inserted := ts.UpdateEntries(entries)
-
-		if err := ts.SaveToFile(); err != nil {
-			log.Errorf("dts: save failed: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "save failed: " + err.Error()})
-			return
+		saved := 0
+		for _, entry := range entries {
+			if err := ts.SaveEntry(entry); err != nil {
+				c.JSON(http.StatusForbidden, gin.H{"status": "error", "message": err.Error()})
+				return
+			}
+			saved++
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"status":   "ok",
-			"updated":  updated,
-			"inserted": inserted,
+			"status": "ok",
+			"saved":  saved,
 		})
 	}
 }
 
 // HandleDTSDeleteTemplate deletes a DTS template entry by its key fields.
+// Removes from in-memory state and from the source file on disk.
 // DELETE /api/dts/templates?type=monster&platform=discord&language=en&id=1
 func HandleDTSDeleteTemplate(ts *dts.TemplateStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -141,15 +144,12 @@ func HandleDTSDeleteTemplate(ts *dts.TemplateStore) gin.HandlerFunc {
 			return
 		}
 
-		deleted := ts.DeleteEntry(filterType, filterPlatform, filterLanguage, filterID)
-		if !deleted {
-			c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": "template not found"})
-			return
-		}
-
-		if err := ts.SaveToFile(); err != nil {
-			log.Errorf("dts: save failed: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "save failed: " + err.Error()})
+		if err := ts.DeleteEntry(filterType, filterPlatform, filterLanguage, filterID); err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				c.JSON(http.StatusNotFound, gin.H{"status": "error", "message": err.Error()})
+			} else {
+				c.JSON(http.StatusForbidden, gin.H{"status": "error", "message": err.Error()})
+			}
 			return
 		}
 

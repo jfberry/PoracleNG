@@ -21,11 +21,19 @@ type DTSEntry struct {
 	Language     string `json:"language"`
 	Default      bool   `json:"default"`
 	Hidden       bool   `json:"hidden"`
+	Readonly     bool   `json:"readonly,omitempty"`
 	Name         string `json:"name,omitempty"`
 	Description  string `json:"description,omitempty"`
 	Template     any    `json:"template"`
 	TemplateFile string `json:"templateFile"`
+
+	// sourceFile tracks where this entry was loaded from (not serialized).
+	// Used to remove the entry from its original file when saving elsewhere.
+	sourceFile string
 }
+
+// SourceFile returns the file path this entry was loaded from.
+func (e *DTSEntry) SourceFile() string { return e.sourceFile }
 
 // jsonID handles DTS id fields that may be either a JSON string or number.
 type jsonID string
@@ -101,24 +109,39 @@ func loadPartials(configDir, fallbackDir string) map[string]string {
 }
 
 func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
-	path := filepath.Join(configDir, "dts.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("read dts.json from config: %w", err)
-		}
-		path = filepath.Join(fallbackDir, "dts.json")
-		data, err = os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read dts.json from fallback: %w", err)
-		}
-	}
 	var entries []DTSEntry
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, fmt.Errorf("parse dts.json: %w", err)
+
+	// 1. Load fallback dts.json (readonly — bundled defaults)
+	fallbackPath := filepath.Join(fallbackDir, "dts.json")
+	if data, err := os.ReadFile(fallbackPath); err == nil {
+		var fallbackEntries []DTSEntry
+		if err := json.Unmarshal(data, &fallbackEntries); err != nil {
+			return nil, fmt.Errorf("parse fallback dts.json: %w", err)
+		}
+		for i := range fallbackEntries {
+			fallbackEntries[i].sourceFile = fallbackPath
+			fallbackEntries[i].Readonly = true
+		}
+		entries = append(entries, fallbackEntries...)
 	}
 
-	// Load additional DTS files from config/dts/ directory (matches alerter's dtsloader behavior).
+	// 2. Load config dts.json (user's main config, editable)
+	configPath := filepath.Join(configDir, "dts.json")
+	if data, err := os.ReadFile(configPath); err == nil {
+		var configEntries []DTSEntry
+		if err := json.Unmarshal(data, &configEntries); err != nil {
+			return nil, fmt.Errorf("parse config dts.json: %w", err)
+		}
+		for i := range configEntries {
+			configEntries[i].sourceFile = configPath
+		}
+		entries = append(entries, configEntries...)
+	} else if entries == nil {
+		// Neither fallback nor config found
+		return nil, fmt.Errorf("no dts.json found in %s or %s", configDir, fallbackDir)
+	}
+
+	// 3. Load additional DTS files from config/dts/ directory.
 	// Each JSON file is an array of DTSEntry objects, concatenated to the main list.
 	// Later entries override earlier ones via the template selection chain.
 	dtsDir := filepath.Join(configDir, "dts")
@@ -138,6 +161,9 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 			if err := json.Unmarshal(extraData, &extraEntries); err != nil {
 				log.Warnf("dts: failed to parse %s: %s", extraPath, err)
 				continue
+			}
+			for i := range extraEntries {
+				extraEntries[i].sourceFile = extraPath
 			}
 			entries = append(entries, extraEntries...)
 			log.Debugf("dts: loaded %d entries from %s", len(extraEntries), f.Name())
@@ -235,21 +261,28 @@ func cacheKey(templateType, platform, templateID, language string) string {
 }
 
 // selectEntry applies the selection chain to find the best matching entry.
+// Within each priority level, the LAST match wins — this ensures config/dts/
+// entries override config/dts.json entries, which override fallback entries,
+// since later-loaded files are appended to the entries slice.
 func (ts *TemplateStore) selectEntry(templateType, platform, templateID, language string) *DTSEntry {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
 	idLower := strings.ToLower(templateID)
 
-	// 1. type + id + platform + language (exact)
+	// 1. type + id + platform + language (exact) — last match wins
+	var match *DTSEntry
 	for i := range ts.entries {
 		e := &ts.entries[i]
 		if e.Type == templateType &&
 			strings.ToLower(e.ID.String()) == idLower &&
 			e.Platform == platform &&
 			e.Language == language {
-			return e
+			match = e
 		}
+	}
+	if match != nil {
+		return match
 	}
 
 	// 2. type + id + platform (no language — entry has empty language)
@@ -259,8 +292,11 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 			strings.ToLower(e.ID.String()) == idLower &&
 			e.Platform == platform &&
 			e.Language == "" {
-			return e
+			match = e
 		}
+	}
+	if match != nil {
+		return match
 	}
 
 	// 3. default + type + platform + language
@@ -270,7 +306,7 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 			e.Type == templateType &&
 			e.Platform == platform &&
 			e.Language == language {
-			return e
+			match = e
 		}
 	}
 
@@ -281,8 +317,11 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 			e.Type == templateType &&
 			e.Platform == platform &&
 			e.Language == "" {
-			return e
+			match = e
 		}
+	}
+	if match != nil {
+		return match
 	}
 
 	// 5. default + type + platform (any language — last resort)
@@ -291,11 +330,10 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 		if e.Default &&
 			e.Type == templateType &&
 			e.Platform == platform {
-			return e
+			match = e
 		}
 	}
-
-	return nil
+	return match
 }
 
 // resolveTemplate produces the Handlebars template string from a DTSEntry.
@@ -607,21 +645,47 @@ func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLangu
 	return result
 }
 
-// UpdateEntries merges incoming entries into the store. Entries are matched by
-// (type, platform, language, id). Matching entries are updated; new entries are
-// appended. Returns the number of updated and inserted entries.
-func (ts *TemplateStore) UpdateEntries(incoming []DTSEntry) (updated, inserted int) {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
+// entryKey returns the matching key for a DTSEntry.
+func entryKey(e *DTSEntry) string {
+	return e.Type + "|" + e.Platform + "|" + e.Language + "|" + strings.ToLower(e.ID.String())
+}
 
-	for _, inc := range incoming {
-		found := false
-		for i := range ts.entries {
-			e := &ts.entries[i]
-			if e.Type == inc.Type &&
-				e.Platform == inc.Platform &&
-				e.Language == inc.Language &&
-				strings.ToLower(e.ID.String()) == strings.ToLower(inc.ID.String()) {
+// entryFilename generates a filename for saving an entry to config/dts/.
+// Format: {type}-{id}-{platform}[-{lang}].json
+func entryFilename(e *DTSEntry) string {
+	id := strings.ToLower(e.ID.String())
+	if id == "" {
+		id = "default"
+	}
+	name := e.Type + "-" + id + "-" + e.Platform
+	if e.Language != "" {
+		name += "-" + e.Language
+	}
+	return name + ".json"
+}
+
+// SaveEntry saves a single DTS entry: updates in-memory state, writes to its
+// own file in config/dts/, and removes it from its previous source file.
+// If the existing entry is readonly (e.g. from fallbacks), a new override
+// entry is appended — the readonly original is left untouched, and the
+// last-match-wins selection chain ensures the new entry takes precedence.
+func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
+	ts.mu.Lock()
+
+	// Find existing entry
+	var oldSourceFile string
+	found := false
+	isOverride := false
+	incKey := entryKey(&inc)
+	for i := range ts.entries {
+		e := &ts.entries[i]
+		if entryKey(e) == incKey {
+			if e.Readonly {
+				// Don't modify the readonly entry — append a new override
+				isOverride = true
+			} else {
+				oldSourceFile = e.sourceFile
+				// Update in place
 				e.Template = inc.Template
 				e.TemplateFile = inc.TemplateFile
 				e.Name = inc.Name
@@ -629,66 +693,161 @@ func (ts *TemplateStore) UpdateEntries(incoming []DTSEntry) (updated, inserted i
 				e.Default = inc.Default
 				e.Hidden = inc.Hidden
 				found = true
-				updated++
-				break
 			}
-		}
-		if !found {
-			ts.entries = append(ts.entries, inc)
-			inserted++
+			break
 		}
 	}
 
-	// Clear compiled template cache — entries have changed
+	if !found {
+		// New entry (or override of readonly)
+		ts.entries = append(ts.entries, inc)
+		if isOverride {
+			log.Infof("dts: creating override for readonly template %s", entryFilename(&inc))
+		}
+	}
+
+	// Determine the save path
+	dtsDir := filepath.Join(ts.configDir, "dts")
+	savePath := filepath.Join(dtsDir, entryFilename(&inc))
+
+	// Update the source file on the entry
+	for i := range ts.entries {
+		if entryKey(&ts.entries[i]) == incKey {
+			ts.entries[i].sourceFile = savePath
+			break
+		}
+	}
+
+	// Clear template cache
 	ts.cache = make(map[string]*raymond.Template)
-	return
+	configDir := ts.configDir
+	ts.mu.Unlock()
+
+	// Ensure config/dts/ directory exists
+	if err := os.MkdirAll(dtsDir, 0755); err != nil {
+		return fmt.Errorf("create dts dir: %w", err)
+	}
+
+	// Write the entry to its own file (single-element array)
+	if err := writeEntryFile(savePath, inc); err != nil {
+		return err
+	}
+
+	// Remove from previous source file (if it was in a config file, not fallback)
+	if oldSourceFile != "" && oldSourceFile != savePath {
+		if err := removeEntryFromFile(oldSourceFile, incKey, configDir); err != nil {
+			log.Warnf("dts: failed to remove old entry from %s: %v", oldSourceFile, err)
+		}
+	}
+
+	log.Infof("dts: saved template %s to %s", entryFilename(&inc), savePath)
+	return nil
 }
 
 // DeleteEntry removes a single entry matching all four key fields.
-// Returns true if an entry was removed.
-func (ts *TemplateStore) DeleteEntry(filterType, filterPlatform, filterLanguage, filterID string) bool {
+// Removes from in-memory state and from the source file on disk.
+// Returns an error if the entry is readonly or not found.
+func (ts *TemplateStore) DeleteEntry(filterType, filterPlatform, filterLanguage, filterID string) error {
 	ts.mu.Lock()
-	defer ts.mu.Unlock()
 
-	idLower := strings.ToLower(filterID)
+	target := DTSEntry{Type: filterType, Platform: filterPlatform, Language: filterLanguage, ID: jsonID(filterID)}
+	targetKey := entryKey(&target)
+
+	var sourceFile string
+	found := false
 	for i := range ts.entries {
 		e := &ts.entries[i]
-		if e.Type == filterType &&
-			e.Platform == filterPlatform &&
-			e.Language == filterLanguage &&
-			strings.ToLower(e.ID.String()) == idLower {
+		if entryKey(e) == targetKey {
+			if e.Readonly {
+				ts.mu.Unlock()
+				return fmt.Errorf("template %s/%s/%s/%s is readonly", e.Type, e.Platform, e.ID, e.Language)
+			}
+			sourceFile = e.sourceFile
 			ts.entries = append(ts.entries[:i], ts.entries[i+1:]...)
 			ts.cache = make(map[string]*raymond.Template)
-			return true
+			found = true
+			break
 		}
 	}
-	return false
+
+	configDir := ts.configDir
+	ts.mu.Unlock()
+
+	if !found {
+		return fmt.Errorf("template not found")
+	}
+
+	// Remove from source file on disk
+	if sourceFile != "" {
+		if err := removeEntryFromFile(sourceFile, targetKey, configDir); err != nil {
+			log.Warnf("dts: failed to remove entry from %s: %v", sourceFile, err)
+		}
+	}
+
+	return nil
 }
 
-// SaveToFile writes all current entries to configDir/dts.json.
-func (ts *TemplateStore) SaveToFile() error {
-	// Marshal under read lock, then release before file I/O.
-	ts.mu.RLock()
+// writeEntryFile writes a single DTSEntry as a one-element JSON array.
+func writeEntryFile(path string, entry DTSEntry) error {
+	// Don't serialize internal fields
+	clean := entry
+	clean.sourceFile = ""
+	clean.Readonly = false
+
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
-	err := enc.Encode(ts.entries)
-	count := len(ts.entries)
-	configDir := ts.configDir
-	ts.mu.RUnlock()
-
-	if err != nil {
-		return fmt.Errorf("marshal entries: %w", err)
+	if err := enc.Encode([]DTSEntry{clean}); err != nil {
+		return fmt.Errorf("marshal entry: %w", err)
 	}
-
-	path := filepath.Join(configDir, "dts.json")
 	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
-
-	log.Infof("dts: saved %d entries to %s", count, path)
 	return nil
+}
+
+// removeEntryFromFile removes an entry (by key) from a JSON file containing
+// an array of DTSEntry objects. If the file becomes empty, it is deleted
+// (unless it's the main dts.json).
+func removeEntryFromFile(filePath, targetKey, configDir string) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	var entries []DTSEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("parse %s: %w", filePath, err)
+	}
+
+	// Filter out the target entry
+	var remaining []DTSEntry
+	for _, e := range entries {
+		if entryKey(&e) != targetKey {
+			remaining = append(remaining, e)
+		}
+	}
+
+	if len(remaining) == len(entries) {
+		return nil // entry wasn't in this file
+	}
+
+	mainDTS := filepath.Join(configDir, "dts.json")
+	if len(remaining) == 0 && filePath != mainDTS {
+		// File is empty and it's not the main dts.json — delete it
+		return os.Remove(filePath)
+	}
+
+	// Write back the remaining entries
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(remaining); err != nil {
+		return fmt.Errorf("marshal remaining: %w", err)
+	}
+	return os.WriteFile(filePath, buf.Bytes(), 0644)
 }
 
 // resolveIncludes replaces @include directives in s with the file contents.
