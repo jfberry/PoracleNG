@@ -519,9 +519,11 @@ func (c *TrackCommand) parsePVP(ctx *bot.CommandContext, parsed *bot.ParsedArgs)
 func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
 	// "everything" keyword
 	if parsed.HasKeyword("arg.everything") {
+		_, hasForm := parsed.Strings["form"]
 		forceIndividual := parsed.HasKeyword("arg.individually") ||
 			len(parsed.Types) > 0 ||
 			parsed.Singles["gen"] > 0 ||
+			hasForm ||
 			strings.ToLower(ctx.Config.Tracking.EverythingFlagPermissions) == "allow-and-always-individually"
 
 		if forceIndividual && ctx.GameData != nil {
@@ -531,6 +533,9 @@ func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 				if key.Form == 0 {
 					monsters = append(monsters, bot.ResolvedPokemon{PokemonID: key.ID, Form: 0})
 				}
+			}
+			if formName, ok := parsed.Strings["form"]; ok {
+				monsters = filterByForm(ctx, monsters, formName)
 			}
 			return filterByGenAndType(ctx, monsters, parsed)
 		}

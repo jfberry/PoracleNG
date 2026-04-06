@@ -295,7 +295,7 @@ func parseCommonTrackFields(ctx *bot.CommandContext, parsed *bot.ParsedArgs, dts
 
 // filterByForm narrows a pokemon list to only those matching the given form name.
 // Checks the user's language and English fallback via form_{id} translation keys.
-// Returns the original list if no matches found (preserves base form).
+// Returns empty list if no matches found (form name not recognized).
 func filterByForm(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, formName string) []bot.ResolvedPokemon {
 	if ctx.GameData == nil || formName == "" {
 		return monsters
@@ -316,10 +316,7 @@ func filterByForm(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, formN
 			}
 		}
 	}
-	if len(filtered) > 0 {
-		return filtered
-	}
-	return monsters
+	return filtered
 }
 
 // filterByGen narrows a pokemon list to those in the specified generation.
