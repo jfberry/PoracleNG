@@ -168,6 +168,9 @@ func (b *Bot) validateConfig() {
 	}
 }
 
+// API returns the underlying Telegram bot API, or nil if the bot is not running.
+func (b *Bot) API() *tgbotapi.BotAPI { return b.api }
+
 // Close stops the polling loop.
 func (b *Bot) Close() {
 	close(b.stopCh)

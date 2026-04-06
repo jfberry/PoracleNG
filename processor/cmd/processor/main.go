@@ -433,6 +433,9 @@ func main() {
 	apiGroup.GET("/masterdata/monsters", api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations))
 	apiGroup.GET("/masterdata/grunts", api.HandleMasterdataGrunts(proc.enricher.GameData))
 
+	// Resolution cache — populated after bot init below
+	resolveCache := api.NewResolveCache()
+
 	// Delivery endpoint — accepts pre-rendered jobs
 	apiGroup.POST("/deliverMessages", api.HandleDeliverMessages(proc.dispatcher))
 	apiGroup.POST("/postMessage", api.HandleDeliverMessages(proc.dispatcher)) // legacy alias
@@ -681,6 +684,18 @@ func main() {
 			telegramBot = tbot
 		}
 	}
+
+	// Register resolve endpoint now that bots are initialized
+	resolveDeps := api.ResolveDeps{
+		Cache: resolveCache,
+	}
+	if discordBot != nil {
+		resolveDeps.DiscordSession = discordBot.Session()
+	}
+	if telegramBot != nil {
+		resolveDeps.TelegramAPI = telegramBot.API()
+	}
+	apiGroup.POST("/resolve", api.HandleResolve(resolveDeps))
 
 	// Start server
 	go func() {
