@@ -186,15 +186,17 @@ func (ps *ProcessorService) disableUser(user webhook.MatchedUser, result ratelim
 	tr := ps.translations.For(user.Language)
 	var msg string
 	if ps.cfg.AlertLimits.DisableOnStop {
-		_, err := ps.database.Exec("UPDATE humans SET admin_disable = 1, disabled_date = NULL WHERE id = ?", user.ID)
-		if err != nil {
-			log.Errorf("Rate limit: failed to admin_disable user %s: %s", user.ID, err)
+		if ps.humans != nil {
+			if err := ps.humans.SetAdminDisable(user.ID, true); err != nil {
+				log.Errorf("Rate limit: failed to admin_disable user %s: %s", user.ID, err)
+			}
 		}
 		msg = tr.T("rate_limit.banned_hard")
 	} else {
-		_, err := ps.database.Exec("UPDATE humans SET enabled = 0 WHERE id = ?", user.ID)
-		if err != nil {
-			log.Errorf("Rate limit: failed to disable user %s: %s", user.ID, err)
+		if ps.humans != nil {
+			if err := ps.humans.SetEnabled(user.ID, false); err != nil {
+				log.Errorf("Rate limit: failed to disable user %s: %s", user.ID, err)
+			}
 		}
 		prefix := ps.cfg.Discord.Prefix
 		if user.Type == "telegram:user" || user.Type == "telegram:channel" || user.Type == "telegram:group" {
@@ -216,12 +218,15 @@ func (ps *ProcessorService) disableUser(user webhook.MatchedUser, result ratelim
 }
 
 // disableUserForDeliveryFailure is invoked by the delivery queue after N consecutive
-// send failures. Sets enabled=0 in the DB, posts to the shame channel (if configured),
-// and triggers a state reload so the user is removed from matching.
+// send failures. Sets enabled=0 via the human store, posts to the shame channel
+// (if configured), and triggers a state reload so the user is removed from matching.
 //
 // Called from a delivery worker goroutine — must be safe for concurrent use.
 func (ps *ProcessorService) disableUserForDeliveryFailure(target, name, jobType string) {
-	if _, err := ps.database.Exec("UPDATE humans SET enabled = 0 WHERE id = ?", target); err != nil {
+	if ps.humans == nil {
+		return
+	}
+	if err := ps.humans.SetEnabled(target, false); err != nil {
 		log.Errorf("Delivery failure: failed to disable user %s: %s", target, err)
 		return
 	}

@@ -116,6 +116,7 @@ func main() {
 	// Create processor
 	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
+	proc.humans = humanStore
 
 	// Restore gym state cache from previous run
 	if err := proc.gymState.Load(); err != nil {
@@ -792,6 +793,7 @@ type ProcessorService struct {
 	enricher        *enrichment.Enricher
 	dtsRenderer     *dts.Renderer
 	dispatcher      *delivery.Dispatcher
+	humans          store.HumanStore
 	scanner         scanner.Scanner
 	rateLimiter     *ratelimit.Limiter
 	translations    *i18n.Bundle
