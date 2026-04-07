@@ -13,11 +13,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// HumanDisabler is the subset of HumanStore needed for delivery failure handling.
-type HumanDisabler interface {
-	SetEnabled(id string, enabled bool) error
-}
-
 // failRecord tracks consecutive failures and when the block was applied.
 type failRecord struct {
 	count     atomic.Int32
@@ -29,8 +24,10 @@ type QueueConfig struct {
 	ConcurrentDiscord  int
 	ConcurrentWebhook  int
 	ConcurrentTelegram int
-	FailThreshold      int            // consecutive failures before disabling (0 = disabled)
-	Humans             HumanDisabler  // for disabling users on repeated failures (nil = skip)
+	FailThreshold      int // consecutive failures before disabling (0 = default 10)
+	// OnDisabled is invoked when a target hits the failure threshold.
+	// Implementation should: disable the user in DB, notify them, post shame.
+	OnDisabled func(target, name, jobType string)
 }
 
 // FairQueue provides per-destination serialization with platform-level concurrency control.
@@ -58,14 +55,14 @@ type FairQueue struct {
 	telegramInFlight atomic.Int64
 
 	// Per-destination consecutive failure tracking. After failThreshold
-	// consecutive errors, the destination is disabled (enabled=0 in DB)
-	// and messages are dropped for failBlockDuration. After that window
-	// the in-memory block expires — if the user re-enabled via any path
-	// (PoracleWeb, !start, API), delivery resumes.
+	// consecutive errors, the destination is disabled via onDisabled
+	// callback and messages are dropped for failBlockDuration. After
+	// that window the in-memory block expires — if the user re-enabled
+	// via any path (PoracleWeb, !start, API), delivery resumes.
 	failCounts        sync.Map // target string → *failRecord
 	failThreshold     int
 	failBlockDuration time.Duration
-	humans            HumanDisabler // for setting enabled=0
+	onDisabled        func(target, name, jobType string)
 }
 
 // NewFairQueue creates a FairQueue that reads jobs from ch and dispatches them
@@ -97,7 +94,7 @@ func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTrack
 		telegramSem:       make(chan struct{}, cfg.ConcurrentTelegram),
 		failThreshold:     failThreshold,
 		failBlockDuration: 5 * time.Minute,
-		humans:            cfg.Humans,
+		onDisabled:        cfg.OnDisabled,
 	}
 }
 
@@ -198,11 +195,11 @@ func (fq *FairQueue) processJob(job *Job) {
 		if errors.As(err, &permErr) {
 			log.Warnf("delivery: permanent error for %s/%s: %s", job.Type, job.Target, permErr.Reason)
 			metrics.DeliveryTotal.WithLabelValues(platform, "permanent_error").Inc()
-			fq.recordFailure(job.Target, job.Name)
+			fq.recordFailure(job.Target, job.Name, job.Type)
 		} else {
 			log.Errorf("delivery: send failed for %s/%s: %v", job.Type, job.Target, err)
 			metrics.DeliveryTotal.WithLabelValues(platform, "error").Inc()
-			fq.recordFailure(job.Target, job.Name)
+			fq.recordFailure(job.Target, job.Name, job.Type)
 		}
 		metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 		return
@@ -271,9 +268,9 @@ func (fq *FairQueue) WebhookDepth() int { return int(fq.webhookInFlight.Load()) 
 func (fq *FairQueue) TelegramDepth() int { return int(fq.telegramInFlight.Load()) }
 
 // recordFailure increments the consecutive failure counter for a target.
-// When the threshold is reached, disables the user in the database and
+// When the threshold is reached, invokes the onDisabled callback and
 // blocks delivery for failBlockDuration.
-func (fq *FairQueue) recordFailure(target, name string) {
+func (fq *FairQueue) recordFailure(target, name, jobType string) {
 	val, _ := fq.failCounts.LoadOrStore(target, &failRecord{})
 	rec := val.(*failRecord)
 	count := int(rec.count.Add(1))
@@ -281,10 +278,8 @@ func (fq *FairQueue) recordFailure(target, name string) {
 	if count == fq.failThreshold {
 		rec.blockedAt = time.Now()
 		log.Warnf("delivery: disabling %s (%s) after %d consecutive delivery failures", target, name, count)
-		if fq.humans != nil {
-			if err := fq.humans.SetEnabled(target, false); err != nil {
-				log.Errorf("delivery: failed to disable %s: %v", target, err)
-			}
+		if fq.onDisabled != nil {
+			fq.onDisabled(target, name, jobType)
 		}
 	}
 }

@@ -215,6 +215,27 @@ func (ps *ProcessorService) disableUser(user webhook.MatchedUser, result ratelim
 	ps.triggerReload()
 }
 
+// disableUserForDeliveryFailure is invoked by the delivery queue after N consecutive
+// send failures. Sets enabled=0 in the DB, posts to the shame channel (if configured),
+// and triggers a state reload so the user is removed from matching.
+//
+// Called from a delivery worker goroutine — must be safe for concurrent use.
+func (ps *ProcessorService) disableUserForDeliveryFailure(target, name, jobType string) {
+	if _, err := ps.database.Exec("UPDATE humans SET enabled = 0 WHERE id = ?", target); err != nil {
+		log.Errorf("Delivery failure: failed to disable user %s: %s", target, err)
+		return
+	}
+
+	// Post shame message if configured (Discord users only — Telegram doesn't have channel pings the same way)
+	if ps.cfg.AlertLimits.ShameChannel != "" && strings.HasPrefix(jobType, "discord:") {
+		tr := ps.translations.For(ps.cfg.General.Locale)
+		shameContent := tr.Tf("delivery.shame", target)
+		ps.dispatchMessage(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "DeliveryFail")
+	}
+
+	ps.triggerReload()
+}
+
 // triggerReload schedules a debounced state reload. Multiple calls within 500ms
 // are coalesced into a single reload. Safe to call from any goroutine.
 // Used by: rate-limit disable, profile scheduler, and (on api branch) tracking mutations.

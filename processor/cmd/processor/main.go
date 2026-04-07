@@ -156,7 +156,9 @@ func main() {
 				ConcurrentDiscord:  cfg.Tuning.ConcurrentDiscordDestinations,
 				ConcurrentWebhook:  cfg.Tuning.ConcurrentDiscordWebhooks,
 				ConcurrentTelegram: cfg.Tuning.ConcurrentTelegramDestinations,
-				Humans:             humanStore,
+				OnDisabled: func(target, name, jobType string) {
+					proc.disableUserForDeliveryFailure(target, name, jobType)
+				},
 			},
 		})
 		if err != nil {
