@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, nutze {0}start um diese wieder zu aktivieren",
   "rate_limit.banned_hard": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, kontaktiere einen Administrator um diese wieder zu aktivieren",
   "rate_limit.shame": "<@{0}> wurde wegen zu häufiger Überschreitung des Nachrichtenlimits deaktiviert!",
+  "delivery.shame": "<@{0}> has had their Poracle tracking disabled after repeated delivery failures — please check your Discord privacy settings (allow DMs from server members) and use !start to resume.",
   "profile.switched": "Profil gewechselt auf: {0}",
   "team_0": "unumkämpft",
   "team_1": "Weisheit",
