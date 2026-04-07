@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "Достигнут лимит оповещений слишком много раз за 24 часа, оповещения отключены. {0}start, чтобы включить",
   "rate_limit.banned_hard": "Достигнут лимит оповещений слишком много раз за 24 часа, оповещения отключены. Обратитесь к администратору для возобновления",
   "rate_limit.shame": "<@{0}> был отключён за слишком частое превышение лимита оповещений!",
+  "delivery.shame": "<@{0}> has had their Poracle tracking disabled after repeated delivery failures — please check your Discord privacy settings (allow DMs from server members) and use !start to resume.",
   "profile.switched": "Профиль установлен: {0}",
   "team_0": "Незахваченные",
   "team_1": "Синие",
