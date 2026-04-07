@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="200" src="https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/starchy.svg?sanitize=true">
+  <img width="200" src="https://raw.githubusercontent.com/jfberry/PoracleNG/images/starchy.svg?sanitize=true">
 </p>
 
 # PoracleNG

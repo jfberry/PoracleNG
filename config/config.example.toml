@@ -435,13 +435,13 @@ rarity_group_5_ultra_rare = 0.01     # % ultra rare
 # Fallback URLs if something goes wrong
 
 [fallbacks]
-static_map = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png"
-img_url = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/mon.png"
-img_url_weather = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/weather.png"
-img_url_egg = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/uni.png"
-img_url_gym = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/gym.png"
-img_url_pokestop = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png"
-pokestop_url = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png"
+static_map = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/staticMap.png"
+img_url = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/mon.png"
+img_url_weather = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/weather.png"
+img_url_egg = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/uni.png"
+img_url_gym = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/gym.png"
+img_url_pokestop = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png"
+pokestop_url = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png"
 
 
 

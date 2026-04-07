@@ -633,13 +633,13 @@ func Load(baseDir string) (*Config, error) {
 			Enabled: true,
 		},
 		Fallbacks: FallbacksConfig{
-			StaticMap:      "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png",
-			ImgURL:         "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/mon.png",
-			ImgURLWeather:  "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/weather.png",
-			ImgURLEgg:      "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/uni.png",
-			ImgURLGym:      "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/gym.png",
-			ImgURLPokestop: "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png",
-			PokestopURL:    "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png",
+			StaticMap:      "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/staticMap.png",
+			ImgURL:         "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/mon.png",
+			ImgURLWeather:  "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/weather.png",
+			ImgURLEgg:      "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/uni.png",
+			ImgURLGym:      "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/gym.png",
+			ImgURLPokestop: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png",
+			PokestopURL:    "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png",
 		},
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
