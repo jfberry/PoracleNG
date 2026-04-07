@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "Du har nådd grensen for antall varsler for mange ganger i løpet av det siste døgnet. Dine varsler har nå blitt stoppet. Du kan aktivere varsler igjen med {0}start",
   "rate_limit.banned_hard": "Du har nådd grensen for antall varsler for mange ganger i løpet av det siste døgnet. Dine varsler har nå blitt stoppet. Kontakt en administrator for å aktivere varsler igjen",
   "rate_limit.shame": "<@{0}> har fått Poracle-varsler deaktivert for å ha overskredet varslingsgrensen for mange ganger!",
+  "delivery.shame": "<@{0}> has had their Poracle tracking disabled after repeated delivery failures — please check your Discord privacy settings (allow DMs from server members) and use !start to resume.",
   "profile.switched": "Jeg har satt profilen din til: {0}",
   "team_0": "Uncontested",
   "team_1": "Mystic",
