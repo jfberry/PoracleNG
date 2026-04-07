@@ -11,7 +11,7 @@ import (
 )
 
 // Version is the processor version reported by /api/config/poracleWeb.
-// It can be overridden at build time via -ldflags.
+// Set from processor.Version at startup in main.go.
 var Version = "0.0.0"
 
 // HandleConfigPoracleWeb returns a handler for GET /api/config/poracleWeb.

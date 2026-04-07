@@ -24,6 +24,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/pokemon/poracleng/processor"
 	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
@@ -59,9 +60,10 @@ func main() {
 	baseDir := flag.String("basedir", "..", "path to project root directory")
 	flag.Parse()
 
-	// Register build info from Go's embedded VCS metadata
+	// Register build info from version.go + Go's embedded VCS metadata
 	buildVersion, buildCommit, buildDate := readBuildInfo()
 	metrics.BuildInfo.WithLabelValues(buildVersion, buildCommit, buildDate).Set(1)
+	api.Version = buildVersion
 
 	cfg, err := config.Load(*baseDir)
 	if err != nil {
@@ -736,13 +738,12 @@ func main() {
 }
 
 func readBuildInfo() (version, commit, date string) {
-	version, commit, date = "dev", "unknown", "unknown"
+	// Static version from version.go (bumped per release).
+	// Commit and build date come from Go's embedded VCS info.
+	version, commit, date = processor.Version, "unknown", "unknown"
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return
-	}
-	if info.Main.Version != "" && info.Main.Version != "(devel)" {
-		version = info.Main.Version
 	}
 	for _, s := range info.Settings {
 		switch s.Key {
