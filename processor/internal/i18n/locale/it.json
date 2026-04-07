@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "Hai violato il limite di velocità troppe volte nelle ultime 24h. I tuoi messaggi sono adesso stoppati, utilizza {0}start per riprendere",
   "rate_limit.banned_hard": "Hai violato il limite di velocità troppe volte nelle ultime 24h. I tuoi messaggi sono adesso stoppati, contatta un amministratore per riprendere",
   "rate_limit.shame": "<@{0}> è stato disattivato per aver superato il limite di messaggi troppe volte!",
+  "delivery.shame": "<@{0}> has had their Poracle tracking disabled after repeated delivery failures — please check your Discord privacy settings (allow DMs from server members) and use !start to resume.",
   "profile.switched": "Ho settato il tuo profilo su: {0}",
   "team_0": "Uncontested",
   "team_1": "Mystic",
