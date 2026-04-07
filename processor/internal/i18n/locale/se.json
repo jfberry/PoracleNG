@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, use {0}start to resume",
   "rate_limit.banned_hard": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, contact an administrator to resume",
   "rate_limit.shame": "<@{0}> has had their Poracle tracking disabled for exceeding the rate limit too many times!",
+  "delivery.shame": "<@{0}> has had their Poracle tracking disabled after repeated delivery failures — please check your Discord privacy settings (allow DMs from server members) and use !start to resume.",
   "profile.switched": "I have set your profile to: {0}",
   "team_0": "Uncontested",
   "team_1": "Mystic",
