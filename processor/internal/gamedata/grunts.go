@@ -54,11 +54,15 @@ func (g *Grunt) TypeKey() string {
 // TypeNameFromTemplate extracts the grunt type name from the character template string.
 // Used as a fallback when TypeID is 0 (Metal, Darkness, Mixed grunts).
 // Returns lowercased name matching what the !invasion command stores in the DB.
+//
+// Pokemon GO uses "Metal" internally for what players know as the Steel type,
+// so we normalise METAL → "steel" — this lets users track Metal grunts using
+// !invasion steel (matching PoracleJS behaviour).
 func TypeNameFromTemplate(template string) string {
 	// Special cases that don't have a standard pokemon type ID
 	switch {
 	case strings.Contains(template, "METAL"):
-		return "metal"
+		return "steel"
 	case strings.Contains(template, "DARKNESS"):
 		return "darkness"
 	case strings.Contains(template, "GRUNTB"):
