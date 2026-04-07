@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "Vous avez dépassé le nombre de messages autorisés trop de fois dans les dernières 24h. Vos notifications sont stoppées, utilisez {0}start pour reprendre",
   "rate_limit.banned_hard": "Vous avez dépassé le nombre de messages autorisés trop de fois dans les dernières 24h. Vos notifications sont stoppées, contactez un administrateur pour reprendre",
   "rate_limit.shame": "<@{0}> a été désactivé pour avoir dépassé la limite de messages trop de fois !",
+  "delivery.shame": "<@{0}> has had their Poracle tracking disabled after repeated delivery failures — please check your Discord privacy settings (allow DMs from server members) and use !start to resume.",
   "profile.switched": "Profil mis à jour pour : {0}",
   "team_0": "Incontestée",
   "team_1": "Mystic",
