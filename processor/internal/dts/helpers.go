@@ -601,10 +601,15 @@ func registerFormattingHelpers() {
 	})
 
 	// pad0 — zero-pad to width characters. Usage: {{pad0 n 3}}
-	raymond.RegisterHelper("pad0", func(value, width interface{}) interface{} {
-		w := int(toFloat(width))
-		if w <= 0 {
-			w = 3
+	raymond.RegisterHelper("pad0", func(value interface{}, args ...interface{}) interface{} {
+		w := 3
+		if len(args) > 0 {
+			switch v := args[0].(type) {
+			case int, int64, float64, string:
+				if n := int(toFloat(v)); n > 0 {
+					w = n
+				}
+			}
 		}
 		return fmt.Sprintf("%0*d", w, int(toFloat(value)))
 	})
