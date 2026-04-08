@@ -22,7 +22,7 @@ func LoadQuests(db *sqlx.DB) ([]*QuestTracking, error) {
 	var quests []QuestTracking
 	err := db.Select(&quests,
 		`SELECT id, profile_no, ping, clean, reward,
-		        COALESCE(template, '1') AS template, shiny, reward_type,
+		        COALESCE(template, '') AS template, shiny, reward_type,
 		        distance, COALESCE(form, 0) AS form,
 		        COALESCE(amount, 0) AS amount
 		 FROM quest`)
