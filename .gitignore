@@ -29,3 +29,7 @@ resources/locale/
 # Node
 node_modules/
 backups/
+
+# IDE
+.idea/
+*.iml
