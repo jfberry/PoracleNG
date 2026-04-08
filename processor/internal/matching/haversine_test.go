@@ -69,14 +69,14 @@ func TestCardinalDirection(t *testing.T) {
 	}{
 		{0, "north"},
 		{10, "north"},
-		{30, "northwest"},
-		{60, "northwest"},
-		{90, "west"},
-		{135, "southwest"},
+		{30, "northeast"},
+		{60, "northeast"},
+		{90, "east"},
+		{135, "southeast"},
 		{180, "south"},
-		{225, "southeast"},
-		{270, "east"},
-		{315, "northeast"},
+		{225, "southwest"},
+		{270, "west"},
+		{315, "northwest"},
 		{350, "north"},
 	}
 	for _, tt := range tests {
