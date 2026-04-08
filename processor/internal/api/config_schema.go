@@ -374,7 +374,7 @@ var configSchema = []ConfigSection{
 				Title:       "Limit Overrides",
 				Description: "Override the default alert limit for specific channels, users, or webhooks",
 				Fields: []ConfigFieldDef{
-					{Name: "target", Type: "string", Description: "Channel ID, user ID, or webhook name to override"},
+					{Name: "target", Type: "string", Description: "Channel ID, user ID, or webhook name to override", Resolve: "destination"},
 					{Name: "limit", Type: "int", Description: "Custom message limit for this target during the timing period"},
 				},
 			},

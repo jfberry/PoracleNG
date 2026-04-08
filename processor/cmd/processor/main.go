@@ -694,7 +694,8 @@ func main() {
 
 	// Register resolve endpoint now that bots are initialized
 	resolveDeps := api.ResolveDeps{
-		Cache: resolveCache,
+		Cache:  resolveCache,
+		Humans: humanStore,
 	}
 	if discordBot != nil {
 		resolveDeps.DiscordSession = discordBot.Session()

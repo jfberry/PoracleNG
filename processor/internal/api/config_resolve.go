@@ -10,12 +10,23 @@ import (
 	"github.com/gin-gonic/gin"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/jellydator/ttlcache/v3"
+
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
+
+// HumanLookup is the subset of HumanStore needed by the resolve handler —
+// just enough to look up a registered destination by its stored ID. Used to
+// resolve webhook names (which only exist in the humans table) and to enrich
+// Discord/Telegram lookups with PoracleNG-specific metadata (notes, area).
+type HumanLookup interface {
+	Get(id string) (*store.Human, error)
+}
 
 // ResolveDeps holds dependencies for the resolve handler.
 type ResolveDeps struct {
 	DiscordSession *discordgo.Session          // nil if Discord not configured
 	TelegramAPI    *tgbotapi.BotAPI            // nil if Telegram not configured
+	Humans         HumanLookup                 // nil if not wired (lookup is skipped)
 	Cache          *ttlcache.Cache[string, any]
 }
 
@@ -30,6 +41,11 @@ func NewResolveCache() *ttlcache.Cache[string, any] {
 
 // HandleResolve batch-resolves Discord/Telegram IDs to names.
 // POST /api/resolve
+//
+// The "destinations" array is for IDs of unknown type — the resolver tries
+// each one as a Discord user, channel, role, guild, and Telegram chat,
+// returning a flat map of "best match" results. Used by the alert_limits
+// overrides editor where the target could be any kind of destination.
 func HandleResolve(deps ResolveDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
@@ -42,6 +58,7 @@ func HandleResolve(deps ResolveDeps) gin.HandlerFunc {
 			Telegram *struct {
 				Chats []string `json:"chats"`
 			} `json:"telegram"`
+			Destinations []string `json:"destinations"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
@@ -49,6 +66,17 @@ func HandleResolve(deps ResolveDeps) gin.HandlerFunc {
 		}
 
 		result := gin.H{"status": "ok"}
+
+		// Resolve unknown-type destinations by trying every category in turn
+		if len(req.Destinations) > 0 {
+			destinations := make(map[string]any)
+			for _, id := range req.Destinations {
+				if resolved := resolveAnyDestination(deps, id); resolved != nil {
+					destinations[id] = resolved
+				}
+			}
+			result["destinations"] = destinations
+		}
 
 		// Discord resolution
 		if req.Discord != nil && deps.DiscordSession != nil {
@@ -116,6 +144,120 @@ func HandleResolve(deps ResolveDeps) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, result)
 	}
+}
+
+// resolveAnyDestination tries to identify a destination ID across every
+// known source. Used when the schema field's type is unknown (e.g.
+// alert_limits.overrides.target which can be a channel/user ID or a
+// webhook name).
+//
+// Lookup order:
+//  1. PoracleNG humans table — covers webhook names and gives PoracleNG-side
+//     metadata (Name, Notes, Area) for any registered destination
+//  2. Discord (channel, user, role, guild)
+//  3. Telegram (chat)
+//
+// Result includes a "kind" field. The "stale" field is true when the ID
+// exists in the humans table but the corresponding platform entity
+// (Discord channel/user, Telegram chat) could not be found via the
+// platform API — meaning the destination is registered but no longer
+// reachable. The editor should warn the user before letting them keep
+// stale targets in their config.
+//
+// "stale" is omitted (not false) when:
+//   - The match comes purely from a platform API (no humans entry)
+//   - The match is a webhook (no platform API to verify against)
+//   - No platform bot is configured for the destination type
+func resolveAnyDestination(deps ResolveDeps, id string) map[string]any {
+	var humansResult map[string]any
+	var humansType string
+
+	// 1. Humans table — handles webhook names and registered destinations
+	if deps.Humans != nil {
+		if h, err := deps.Humans.Get(id); err == nil && h != nil {
+			humansType = h.Type
+			humansResult = map[string]any{
+				"kind":    h.Type, // e.g. "webhook", "discord:channel", "telegram:user"
+				"name":    h.Name,
+				"enabled": h.Enabled,
+			}
+			if h.Notes != "" {
+				humansResult["notes"] = h.Notes
+			}
+			if len(h.Area) > 0 {
+				humansResult["areas"] = h.Area
+			}
+		}
+	}
+
+	// 2. Discord — try every category for any unknown ID
+	if deps.DiscordSession != nil {
+		if r := resolveDiscordChannel(deps, id); r != nil {
+			return mergeResolved(humansResult, r, "discord:channel")
+		}
+		if r := resolveDiscordUser(deps, id); r != nil {
+			return mergeResolved(humansResult, r, "discord:user")
+		}
+		if r := resolveDiscordRole(deps, id); r != nil {
+			return mergeResolved(humansResult, r, "discord:role")
+		}
+		if r := resolveDiscordGuild(deps, id); r != nil {
+			return mergeResolved(humansResult, r, "discord:guild")
+		}
+	}
+
+	// 3. Telegram — for chat IDs not in humans
+	if deps.TelegramAPI != nil {
+		if r := resolveTelegramChat(deps, id); r != nil {
+			return mergeResolved(humansResult, r, "telegram:chat")
+		}
+	}
+
+	// Platform lookup failed. If the humans table had a match AND the
+	// destination type SHOULD have been verifiable via platform API, mark
+	// it stale so the editor can warn the user.
+	if humansResult != nil {
+		if isPlatformVerifiable(humansType, deps) {
+			humansResult["stale"] = true
+		}
+		return humansResult
+	}
+
+	return nil
+}
+
+// isPlatformVerifiable returns true if the given humans.type can be checked
+// against a platform API and the relevant bot is configured. Used to decide
+// whether a missing platform lookup means "stale" or "no platform to ask".
+func isPlatformVerifiable(humansType string, deps ResolveDeps) bool {
+	switch humansType {
+	case "discord:user", "discord:channel", "discord:thread":
+		return deps.DiscordSession != nil
+	case "telegram:user", "telegram:channel", "telegram:group":
+		return deps.TelegramAPI != nil
+	}
+	// "webhook" and any unknown type can't be verified — don't claim stale
+	return false
+}
+
+// mergeResolved combines a humans-table base record with a platform API
+// lookup. Platform-API fields fill in any blanks but don't overwrite
+// PoracleNG-side fields (name from humans table is the user's chosen
+// label, which is more useful than the platform display name).
+func mergeResolved(base, platform map[string]any, kind string) map[string]any {
+	if base == nil {
+		platform["kind"] = kind
+		return platform
+	}
+	for k, v := range platform {
+		if _, exists := base[k]; !exists {
+			base[k] = v
+		}
+	}
+	if _, hasKind := base["kind"]; !hasKind {
+		base["kind"] = kind
+	}
+	return base
 }
 
 // cachedResolve checks the cache before calling the platform API.

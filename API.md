@@ -915,9 +915,12 @@ Batch resolve Discord/Telegram IDs to human-readable names. Results cached for 1
   },
   "telegram": {
     "chats": ["789012345", "-100123456"]
-  }
+  },
+  "destinations": ["111222333", "raid-feed", "999000111"]
 }
 ```
+
+The `destinations` array is for IDs of unknown type — used when a schema field has `resolve: "destination"` (e.g., `alert_limits.overrides.target` which can be a Discord channel/user/webhook/Telegram chat). The processor tries the humans table first, then Discord (channel → user → role → guild), then Telegram, returning whatever matches first.
 
 **Response:**
 ```json
@@ -934,9 +937,38 @@ Batch resolve Discord/Telegram IDs to human-readable names. Results cached for 1
       "789012345": {"name": "James Berry", "type": "private"},
       "-100123456": {"name": "Pokemon Group", "type": "supergroup"}
     }
+  },
+  "destinations": {
+    "111222333": {
+      "kind": "discord:channel",
+      "name": "raid-alerts",
+      "enabled": true,
+      "notes": "EU South RAID alerts",
+      "areas": ["london"],
+      "type": "text",
+      "guild": "My Server",
+      "guildId": "444555666"
+    },
+    "raid-feed": {
+      "kind": "webhook",
+      "name": "raid-feed",
+      "enabled": true,
+      "notes": "Discord raid feed for #raids"
+    },
+    "999000111": {
+      "kind": "discord:channel",
+      "name": "old-channel",
+      "enabled": true,
+      "notes": "channel deleted after server cleanup",
+      "stale": true
+    }
   }
 }
 ```
+
+**Stale flag**: when a destination matches an entry in PoracleNG's humans table but the platform API can't find the corresponding entity (e.g., a channel that was deleted, a user who left the server), the result includes `"stale": true`. The editor should warn the user before letting them keep stale targets in their config — these IDs are registered but no longer reachable.
+
+The `kind` field tells the editor what type was matched: `webhook`, `discord:channel`, `discord:user`, `discord:role`, `discord:guild`, `telegram:user`, `telegram:channel`, `telegram:group`, etc.
 
 For `geofence:area` resolve hints, the editor uses the existing `GET /api/geofence/all` endpoint to populate autocomplete.
 
