@@ -464,6 +464,10 @@ func TestPad0(t *testing.T) {
 	if got := render(t, `{{pad0 n 5}}`, ctx); got != "00007" {
 		t.Errorf("pad0 5: got %q", got)
 	}
+	// No width arg defaults to 3
+	if got := render(t, `{{pad0 n}}`, ctx); got != "007" {
+		t.Errorf("pad0 default: got %q", got)
+	}
 }
 
 // ---------------------------------------------------------------------------
