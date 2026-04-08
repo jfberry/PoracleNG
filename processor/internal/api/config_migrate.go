@@ -99,7 +99,7 @@ func HandleConfigMigrate(deps ConfigDeps) gin.HandlerFunc {
 		}
 
 		// 4. Merge into existing overrides.json (without overwriting existing overrides)
-		existingOverrides, _ := config.LoadOverrides(deps.ConfigDir)
+		existingOverrides, _, _ := config.LoadOverrides(deps.ConfigDir)
 		if existingOverrides == nil {
 			existingOverrides = make(map[string]any)
 		}

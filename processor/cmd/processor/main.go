@@ -83,6 +83,11 @@ func main() {
 
 	log.Infof("Poracle processor %s (commit %s, built %s)", buildVersion, buildCommit, buildDate)
 
+	// Now that logging is set up, report any override layering. The status
+	// was computed during config.Load() but couldn't be logged before
+	// logging.Setup ran.
+	config.LogOverrideStatus(cfg.OverrideStatus)
+
 	// Download game resources (monsters, moves, locales, etc.)
 	if err := resources.Download(cfg.BaseDir); err != nil {
 		log.Warnf("Resource download had errors: %s", err)

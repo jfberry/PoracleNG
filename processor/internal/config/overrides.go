@@ -8,67 +8,143 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	log "github.com/sirupsen/logrus"
 )
 
-// LoadOverrides reads config/overrides.json and returns the parsed map.
-// Returns nil (not an error) if the file doesn't exist.
+// OverrideStatus describes how overrides.json is layering on top of
+// config.toml. Returned by LoadOverrides so the caller can log it AFTER
+// logging.Setup has run (LoadOverrides itself runs before logging is
+// configured).
+type OverrideStatus struct {
+	Path      string   // path to overrides.json
+	Conflicts []string // dotted field paths set in both files with different values
+	Managed   []string // dotted field paths only in overrides.json
+}
+
+// LoadOverrides reads config/overrides.json and returns the parsed map
+// plus an OverrideStatus describing how it layers on top of config.toml.
+// The caller is responsible for logging the status — LoadOverrides itself
+// stays silent because it runs before logging is configured.
 //
-// Logs a prominent banner listing every overridden field so users editing
-// config.toml directly can see exactly which of their values are being
-// overridden by the web editor — preventing the "I changed config.toml
-// but my setting isn't being used" confusion.
-func LoadOverrides(configDir string) (map[string]any, error) {
+// Returns (nil, nil, nil) if the file doesn't exist.
+func LoadOverrides(configDir string) (map[string]any, *OverrideStatus, error) {
 	path := filepath.Join(configDir, "overrides.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, fmt.Errorf("read overrides.json: %w", err)
+		return nil, nil, fmt.Errorf("read overrides.json: %w", err)
 	}
 
 	var overrides map[string]any
 	if err := json.Unmarshal(data, &overrides); err != nil {
-		return nil, fmt.Errorf("parse overrides.json: %w", err)
+		return nil, nil, fmt.Errorf("parse overrides.json: %w", err)
 	}
 
-	logOverrideBanner(path, overrides)
-	return overrides, nil
+	status := classifyOverrides(configDir, path, overrides)
+	return overrides, status, nil
 }
 
-// logOverrideBanner prints a clearly visible warning at startup listing
-// every field that overrides.json is overriding. Users who edit config.toml
-// expect their values to take effect — this banner makes it obvious when
-// they don't.
-func logOverrideBanner(path string, overrides map[string]any) {
-	var fields []string
-	collectOverrideFields("", overrides, &fields)
-
-	log.Warnf("══════════════════════════════════════════════════════════════")
-	log.Warnf("config: %d field(s) overridden by %s", len(fields), path)
-	log.Warnf("These values take precedence over config.toml:")
-	for _, f := range fields {
-		log.Warnf("  • %s", f)
+// LogOverrideStatus prints the override layering report. Call this AFTER
+// logging.Setup so the output uses the configured formatter.
+//
+//   - Conflicts (config.toml and overrides.json disagree): WARN, listed
+//   - Managed (only in overrides.json, no conflict): single INFO line
+//
+// After a config migration, almost everything is in the "managed" bucket
+// and the warning section is silent unless the user manually re-edits
+// config.toml.
+func LogOverrideStatus(status *OverrideStatus) {
+	if status == nil {
+		return
 	}
-	log.Warnf("To revert: edit or delete %s and restart", path)
-	log.Warnf("══════════════════════════════════════════════════════════════")
+	if len(status.Conflicts) > 0 {
+		log.Warnf("══════════════════════════════════════════════════════════════")
+		log.Warnf("config: %d field(s) in config.toml are being overridden by %s", len(status.Conflicts), status.Path)
+		log.Warnf("config.toml has these values but overrides.json takes precedence:")
+		for _, f := range status.Conflicts {
+			log.Warnf("  • %s", f)
+		}
+		log.Warnf("To use the config.toml values: remove the matching entries from %s", status.Path)
+		log.Warnf("══════════════════════════════════════════════════════════════")
+	}
+	if len(status.Managed) > 0 {
+		log.Infof("config: %d field(s) managed by %s (not present in config.toml)", len(status.Managed), status.Path)
+	}
 }
 
-// collectOverrideFields walks the override map recursively, building dotted
-// field paths (e.g. "discord.admins", "alert_limits.dm_limit").
-func collectOverrideFields(prefix string, m map[string]any, out *[]string) {
-	for k, v := range m {
+// classifyOverrides walks the override map and classifies each leaf field
+// against the raw config.toml contents. See OverrideStatus.
+func classifyOverrides(configDir, overridesPath string, overrides map[string]any) *OverrideStatus {
+	tomlPath := filepath.Join(configDir, "config.toml")
+	tomlMap := loadConfigTOMLAsMap(tomlPath)
+
+	status := &OverrideStatus{Path: overridesPath}
+	collectOverrideClassification("", overrides, tomlMap, &status.Conflicts, &status.Managed)
+	return status
+}
+
+// loadConfigTOMLAsMap parses config.toml into a generic map so we can do
+// path-based lookups. Returns nil if the file is missing or unparseable —
+// in that case the conflict detection just degrades to "everything is
+// managed", which is the safe (quiet) outcome.
+func loadConfigTOMLAsMap(path string) map[string]any {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	if err := toml.Unmarshal(data, &m); err != nil {
+		return nil
+	}
+	return m
+}
+
+// collectOverrideClassification walks the override map and classifies each
+// leaf field as either "conflict" (same field set differently in tomlMap)
+// or "managed" (field absent from tomlMap). Both lists use dotted paths.
+func collectOverrideClassification(prefix string, overrides, tomlMap map[string]any, conflicts, managed *[]string) {
+	for k, v := range overrides {
 		path := k
 		if prefix != "" {
 			path = prefix + "." + k
 		}
 		if sub, ok := v.(map[string]any); ok {
-			collectOverrideFields(path, sub, out)
+			subToml, _ := tomlMap[k].(map[string]any)
+			collectOverrideClassification(path, sub, subToml, conflicts, managed)
 			continue
 		}
-		*out = append(*out, path)
+		// Leaf field — check if it's also in config.toml
+		if tomlMap == nil {
+			*managed = append(*managed, path)
+			continue
+		}
+		tomlVal, present := tomlMap[k]
+		if !present {
+			*managed = append(*managed, path)
+			continue
+		}
+		if !valuesEqual(tomlVal, v) {
+			*conflicts = append(*conflicts, path)
+		} else {
+			// Same value in both — silently keep as managed (no warning needed)
+			*managed = append(*managed, path)
+		}
 	}
+}
+
+// valuesEqual compares two parsed values for semantic equality. Uses
+// JSON round-trip to normalise type differences (TOML int64 vs JSON
+// float64, etc.).
+func valuesEqual(a, b any) bool {
+	aj, errA := json.Marshal(a)
+	bj, errB := json.Marshal(b)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return string(aj) == string(bj)
 }
 
 // SaveOverrides reads the existing overrides.json, deep-merges the updates,

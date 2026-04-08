@@ -32,7 +32,7 @@ func HandleConfigValues(deps ConfigDeps) gin.HandlerFunc {
 		values := extractValues(deps.Cfg, filterSection)
 
 		// List dotted paths of currently overridden fields (e.g. "discord.admins")
-		overrides, _ := config.LoadOverrides(deps.ConfigDir)
+		overrides, _, _ := config.LoadOverrides(deps.ConfigDir)
 		var overridden []string
 		collectOverrideFieldPaths("", overrides, &overridden)
 

@@ -34,6 +34,11 @@ type Config struct {
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
+
+	// OverrideStatus describes how config/overrides.json layers on top of
+	// config.toml. Populated during Load(). The caller logs it via
+	// LogOverrideStatus after logging.Setup has run.
+	OverrideStatus *OverrideStatus `toml:"-"`
 }
 
 // AIConfig holds settings for the NLP command assistant.
@@ -683,13 +688,14 @@ func Load(baseDir string) (*Config, error) {
 		cfg.Geofence.Koji.CacheDir = filepath.Join(configDir, cfg.Geofence.Koji.CacheDir)
 	}
 
-	// Apply JSON overrides (from config editor)
-	var overrides map[string]any
-	overrides, err = LoadOverrides(configDir)
+	// Apply JSON overrides (from config editor). LoadOverrides stays silent
+	// because logging isn't set up yet — main.go logs the status afterwards.
+	overrides, status, err := LoadOverrides(configDir)
 	if err != nil {
 		log.Warnf("config: %v", err)
 	} else if overrides != nil {
 		ApplyOverrides(cfg, overrides)
+		cfg.OverrideStatus = status
 		// Re-run computed fields after overrides
 		cfg.Discord.DelegatedAdministration = DelegatedAdminConfig{
 			ChannelTracking: buildDelegatedAdmin(cfg.Discord.DelegatedAdmins),
