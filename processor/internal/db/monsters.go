@@ -56,7 +56,7 @@ func LoadMonsters(db *sqlx.DB) (*MonsterIndex, error) {
 		        atk, def, sta, max_atk, max_def, max_sta,
 		        gender, min_weight, max_weight, min_time,
 		        rarity, max_rarity, size, max_size,
-		        template, clean, ping,
+		        COALESCE(template, '') AS template, clean, ping,
 		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
 		        pvp_ranking_min_cp, pvp_ranking_cap
 		 FROM monsters`)
