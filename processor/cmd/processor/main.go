@@ -401,6 +401,7 @@ func main() {
 	if proc.dtsRenderer != nil {
 		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
 		apiGroup.POST("/dts/render", api.HandleDTSRender(proc.dtsRenderer.Templates()))
+		apiGroup.GET("/dts/emoji", api.HandleDTSEmoji(proc.dtsRenderer.Emoji()))
 		apiGroup.GET("/dts/templates", api.HandleDTSGetTemplates(proc.dtsRenderer.Templates()))
 		apiGroup.POST("/dts/templates", api.HandleDTSSaveTemplates(proc.dtsRenderer.Templates()))
 		apiGroup.DELETE("/dts/templates", api.HandleDTSDeleteTemplate(proc.dtsRenderer.Templates()))

@@ -46,6 +46,53 @@ func LoadEmoji(configDir string, utilEmojis map[string]string) *EmojiLookup {
 	return e
 }
 
+// Defaults returns the default key→emoji map (from util.json).
+func (e *EmojiLookup) Defaults() map[string]string {
+	if e == nil {
+		return nil
+	}
+	out := make(map[string]string, len(e.defaults))
+	for k, v := range e.defaults {
+		out[k] = v
+	}
+	return out
+}
+
+// PlatformOverrides returns the per-platform custom overrides (from emoji.json).
+func (e *EmojiLookup) PlatformOverrides() map[string]map[string]string {
+	if e == nil {
+		return nil
+	}
+	out := make(map[string]map[string]string, len(e.custom))
+	for p, m := range e.custom {
+		inner := make(map[string]string, len(m))
+		for k, v := range m {
+			inner[k] = v
+		}
+		out[p] = inner
+	}
+	return out
+}
+
+// MergedFor returns the effective key→emoji map for a given platform: defaults
+// overlaid with the platform's overrides. Useful for clients that want a
+// single flat map to resolve from.
+func (e *EmojiLookup) MergedFor(platform string) map[string]string {
+	if e == nil {
+		return nil
+	}
+	out := make(map[string]string, len(e.defaults))
+	for k, v := range e.defaults {
+		out[k] = v
+	}
+	if platformMap, ok := e.custom[platform]; ok {
+		for k, v := range platformMap {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // Lookup resolves an emoji string for the given key and platform.
 // It checks custom[platform][key] first, then defaults[key], then returns "".
 func (e *EmojiLookup) Lookup(key, platform string) string {
