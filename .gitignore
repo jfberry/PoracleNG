@@ -19,6 +19,7 @@ logs/
 
 # Compiled binaries
 processor/poracle-processor
+processor/go_build_*
 
 # Downloaded resources (fetched at startup)
 resources/rawdata/
