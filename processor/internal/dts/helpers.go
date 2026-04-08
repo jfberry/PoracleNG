@@ -46,6 +46,54 @@ func RegisterHelpers() {
 // ({{#eq a b}}X{{else}}Y{{/eq}}) and as subexpressions ({{#if (eq a b)}}).
 // In subexpression mode, returns a boolean for the outer helper to evaluate.
 // In block mode, renders Fn() or Inverse().
+// looseEqual compares two values the way the JS templates expect: if both
+// values parse as numbers, compare numerically (so "100.00" == 100); otherwise
+// fall back to string comparison via %v. nil equals nil.
+func looseEqual(a, b interface{}) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if af, aok := tryFloat(a); aok {
+		if bf, bok := tryFloat(b); bok {
+			return af == bf
+		}
+	}
+	return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
+}
+
+// tryFloat returns the float64 value of v and true if it can be interpreted
+// as a number (numeric kinds, bool, or numeric strings).
+func tryFloat(v interface{}) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case float32:
+		return float64(x), true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case int32:
+		return float64(x), true
+	case uint:
+		return float64(x), true
+	case uint64:
+		return float64(x), true
+	case bool:
+		if x {
+			return 1, true
+		}
+		return 0, true
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		if err != nil {
+			return 0, false
+		}
+		return f, true
+	}
+	return 0, false
+}
+
 func boolResult(result bool, options *raymond.Options) interface{} {
 	if options.IsSubExpression() {
 		return result
@@ -109,22 +157,20 @@ func registerComparisonHelpers() {
 	// We detect subexpression mode by checking if the helper has a block body.
 	// When options.FnBody() is empty, we're in subexpression mode and return bool.
 
-	// eq — true if a == b (normalized via Sprintf)
+	// eq — true if a == b. Numeric comparison when both sides parse as numbers
+	// (so "100.00" equals 100), string comparison otherwise.
 	raymond.RegisterHelper("eq", func(a, b interface{}, options *raymond.Options) interface{} {
-		result := fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
-		return boolResult(result, options)
+		return boolResult(looseEqual(a, b), options)
 	})
 
-	// ne — true if a != b
+	// ne — true if a != b (loose comparison, see eq).
 	raymond.RegisterHelper("ne", func(a, b interface{}, options *raymond.Options) interface{} {
-		result := fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b)
-		return boolResult(result, options)
+		return boolResult(!looseEqual(a, b), options)
 	})
 
 	// isnt — alias for ne
 	raymond.RegisterHelper("isnt", func(a, b interface{}, options *raymond.Options) interface{} {
-		result := fmt.Sprintf("%v", a) != fmt.Sprintf("%v", b)
-		return boolResult(result, options)
+		return boolResult(!looseEqual(a, b), options)
 	})
 
 	// compare — supports ==, !=, <, >, <=, >=
