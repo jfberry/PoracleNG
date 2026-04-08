@@ -797,14 +797,25 @@ Returns the config schema with field metadata for the editor. Each field include
 | Property | Description |
 |----------|-------------|
 | `name` | TOML field name |
-| `type` | `string`, `int`, `float`, `bool`, `string[]`, `select`, `map` |
+| `type` | `string`, `int`, `float`, `bool`, `string[]`, `int[]`, `color[]`, `select`, `map` |
 | `default` | Default value |
 | `description` | Help text |
 | `hotReload` | `true` if changes take effect immediately, `false` if restart needed |
 | `sensitive` | `true` for fields masked in values response |
-| `resolve` | ID resolution hint: `discord:user`, `discord:role`, `discord:channel`, `discord:guild`, `discord:target`, `discord:user\|role`, `telegram:chat`, `geofence:area` |
-| `options` | For `select` type: `[{value, label, description}]` |
+| `deprecated` | `true` if the field/option is no longer recommended — editor should warn or hide unless already set |
+| `advanced` | `true` if the field should be hidden behind a "show advanced" toggle |
+| `hideDefault` | `true` if the editor should NOT pre-fill the default value (e.g. fallback URLs that the user shouldn't normally see) |
+| `minLength`, `maxLength` | For array types: minimum/maximum number of entries (e.g., `iv_colors` requires exactly 6) |
+| `resolve` | ID resolution hint: `discord:user`, `discord:role`, `discord:channel`, `discord:guild`, `discord:target`, `discord:user\|role`, `telegram:chat`, `geofence:area`, `destination` |
+| `options` | For `select` type: `[{value, label, description, deprecated?}]` |
 | `dependsOn` | Visibility dependency: `{field, value}` — hide when parent field doesn't match |
+
+**Type notes:**
+- `color[]` — array of CSS hex colour strings (e.g., `iv_colors`); editor should render colour pickers
+- `int[]` — array of integers (e.g., `pvp.level_caps`)
+- `map` — `map[string]any`; the field's `resolve` hint applies to the values where appropriate (e.g., `command_security` values are user/role IDs)
+
+**Deprecated handling:** Field-level `deprecated: true` means the entire field is deprecated. Option-level `deprecated: true` (inside `options`) means a specific select value is deprecated but the field itself is fine. Editor behaviour suggestion: hide deprecated items unless they're already set, in which case show them with a warning badge.
 
 Response is grouped by `sections`, each with `fields` and optional `tables` (array-of-tables like delegated_admins, communities, role_subscriptions).
 
@@ -860,6 +871,55 @@ If any changed field requires restart:
   "restart_fields": ["discord.check_role"]
 }
 ```
+
+### POST /api/config/validate
+
+Dry-run validation. Same request body as `POST /api/config/values` but only checks for problems without writing. Useful for live previews — the editor can call this whenever a value changes and show validation issues immediately.
+
+The save endpoint runs the same validators internally; any field with an `error`-severity issue rejects the save with HTTP 400. `warning`-severity issues are advisory and don't block saves.
+
+**Request:** same as `POST /api/config/values`
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "issues": [
+    {
+      "field": "discord.iv_colors[2]",
+      "severity": "error",
+      "message": "not a valid hex colour (expected #RGB or #RRGGBB): \"red\""
+    },
+    {
+      "field": "discord.iv_colors",
+      "severity": "error",
+      "message": "requires at least 6 entries (got 5)"
+    },
+    {
+      "field": "geofence.paths[1]",
+      "severity": "warning",
+      "message": "file does not exist (yet) at /path/to/config/geofences/foo.json"
+    },
+    {
+      "field": "geofence.paths[2]",
+      "severity": "error",
+      "message": "absolute paths not allowed; use a path relative to the config directory"
+    }
+  ]
+}
+```
+
+Empty `issues` array means everything is valid. Each issue is one of:
+
+| Severity | Meaning |
+|----------|---------|
+| `error` | Save will be rejected. The field value is invalid and the user must fix it. |
+| `warning` | Save proceeds. The value is suspicious but technically allowed (e.g., a geofence path that doesn't exist on disk yet — the user might be configuring a fence they haven't created). |
+
+**Validators currently applied:**
+- `color[]` fields: each entry must be a valid hex colour (`#RGB` or `#RRGGBB`)
+- `MinLength`/`MaxLength`: array length must fall within bounds
+- `geofence.paths`: each entry must be either an http(s):// URL or a relative path under the config directory; absolute paths and `..` escapes are rejected; non-existent files trigger a warning
 
 ### POST /api/config/migrate
 

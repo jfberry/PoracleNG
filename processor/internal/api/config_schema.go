@@ -9,11 +9,16 @@ import (
 // ConfigFieldDef describes a single config field for the editor.
 type ConfigFieldDef struct {
 	Name        string               `json:"name"`
-	Type        string               `json:"type"` // string, int, float, bool, string[], select, map
+	Type        string               `json:"type"` // string, int, float, bool, string[], color[], select, map
 	Default     any                  `json:"default,omitempty"`
 	Description string               `json:"description"`
 	HotReload   bool                 `json:"hotReload,omitempty"`
 	Sensitive   bool                 `json:"sensitive,omitempty"`
+	Deprecated  bool                 `json:"deprecated,omitempty"`  // editor should warn / hide unless already set
+	Advanced    bool                 `json:"advanced,omitempty"`    // editor hides behind "show advanced" toggle
+	HideDefault bool                 `json:"hideDefault,omitempty"` // editor should not pre-fill the default
+	MinLength   int                  `json:"minLength,omitempty"`   // for arrays: minimum number of entries
+	MaxLength   int                  `json:"maxLength,omitempty"`   // for arrays: maximum number of entries
 	Resolve     string               `json:"resolve,omitempty"`
 	Options     []ConfigSelectOption `json:"options,omitempty"`
 	DependsOn   *ConfigDependency    `json:"dependsOn,omitempty"`
@@ -24,6 +29,7 @@ type ConfigSelectOption struct {
 	Value       string `json:"value"`
 	Label       string `json:"label"`
 	Description string `json:"description"`
+	Deprecated  bool   `json:"deprecated,omitempty"`
 }
 
 // ConfigDependency makes a field visible only when another field has a specific value.
@@ -65,9 +71,9 @@ var configSchema = []ConfigSection{
 			}},
 			{Name: "default_template_name", Type: "string", Default: "1", Description: "Default DTS template ID for new tracking rules", HotReload: true},
 			{Name: "disabled_commands", Type: "string[]", Default: []string{}, Description: "Commands to disable globally (e.g., [\"lure\", \"nest\"])", HotReload: true},
-			{Name: "rdm_url", Type: "string", Default: "", Description: "RDM map instance URL for {{rdmUrl}} in DTS templates", HotReload: true},
+			{Name: "rdm_url", Type: "string", Default: "", Description: "RDM map instance URL for {{rdmUrl}} in DTS templates", HotReload: true, Deprecated: true},
 			{Name: "react_map_url", Type: "string", Default: "", Description: "ReactMap instance URL for {{reactMapUrl}} in DTS templates", HotReload: true},
-			{Name: "rocket_mad_url", Type: "string", Default: "", Description: "RocketMAD instance URL for {{rocketMadUrl}} in DTS templates", HotReload: true},
+			{Name: "rocket_mad_url", Type: "string", Default: "", Description: "RocketMAD instance URL for {{rocketMadUrl}} in DTS templates", HotReload: true, Deprecated: true},
 			{Name: "img_url", Type: "string", Default: "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS", Description: "Base URL for pokemon icon images (uicons repository)", HotReload: false},
 			{Name: "img_url_alt", Type: "string", Default: "", Description: "Alternative icon URL for {{imgUrlAlt}} in DTS templates", HotReload: false},
 			{Name: "sticker_url", Type: "string", Default: "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle", Description: "Base URL for Telegram sticker icons (webp format)", HotReload: false},
@@ -78,8 +84,8 @@ var configSchema = []ConfigSection{
 			{Name: "shortlink_provider", Type: "select", Default: "", Description: "URL shortener for <S< >S> markers in DTS templates", HotReload: false, Options: []ConfigSelectOption{
 				{Value: "", Label: "None", Description: "No URL shortening"},
 				{Value: "shlink", Label: "Shlink", Description: "Self-hosted Shlink instance"},
-				{Value: "hideuri", Label: "HideURI", Description: "HideURI public shortener"},
-				{Value: "yourls", Label: "YOURLS", Description: "Your Own URL Shortener"},
+				{Value: "hideuri", Label: "HideURI", Description: "Not currently supported in PoracleNG", Deprecated: true},
+				{Value: "yourls", Label: "YOURLS", Description: "Not currently supported in PoracleNG", Deprecated: true},
 			}},
 			{Name: "shortlink_provider_url", Type: "string", Default: "", Description: "Shortlink service URL", HotReload: false, DependsOn: &ConfigDependency{Field: "shortlink_provider", Value: "shlink"}},
 			{Name: "shortlink_provider_key", Type: "string", Default: "", Description: "Shortlink API key", HotReload: false, Sensitive: true, DependsOn: &ConfigDependency{Field: "shortlink_provider", Value: "shlink"}},
@@ -132,11 +138,11 @@ var configSchema = []ConfigSection{
 			{Name: "dm_log_channel_deletion_time", Type: "int", Default: 0, Description: "Minutes after which logged DM messages are deleted (0 = never delete)", DependsOn: &ConfigDependency{Field: "dm_log_channel_id", Value: ""}},
 			{Name: "unrecognised_command_message", Type: "string", Default: "", Description: "Custom reply to unrecognised commands in DM (empty = default i18n message)"},
 			{Name: "unregistered_user_message", Type: "string", Default: "", Description: "Custom reply to unregistered users (empty = shrug emoji)"},
-			{Name: "iv_colors", Type: "string[]", Default: []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"}, Description: "Six hex color codes for pokemon IV ranking tiers (0-5 stars)"},
+			{Name: "iv_colors", Type: "color[]", Default: []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"}, Description: "Six hex color codes for pokemon IV ranking tiers (0-5 stars). Must contain exactly 6 entries.", MinLength: 6, MaxLength: 6},
 			{Name: "upload_embed_images", Type: "bool", Default: false, Description: "Download and re-upload embed images directly to Discord CDN"},
 			{Name: "message_delete_delay", Type: "int", Default: 0, Description: "Extra milliseconds added to message clean TTH for channel messages"},
 			{Name: "user_tracking_admins", Type: "string[]", Default: []string{}, Description: "User or role IDs that can manage other users' tracking via user: override", Resolve: "discord:user|role", HotReload: true},
-			{Name: "command_security", Type: "map", Default: nil, Description: "Map of command name to array of role/user IDs allowed to use that command"},
+			{Name: "command_security", Type: "map", Default: nil, Description: "Map of command name to array of Discord role or user IDs allowed to use that command", Resolve: "discord:user|role"},
 		},
 		Tables: []ConfigTableDef{
 			{
@@ -207,7 +213,7 @@ var configSchema = []ConfigSection{
 		Name:  "geofence",
 		Title: "Geofence",
 		Fields: []ConfigFieldDef{
-			{Name: "paths", Type: "string[]", Default: []string{"geofences/geofence.json"}, Description: "Paths to geofence JSON/GeoJSON files (relative to config directory, or HTTP URLs)"},
+			{Name: "paths", Type: "string[]", Default: []string{"geofences/geofence.json"}, Description: "Paths to geofence JSON/GeoJSON files. Each entry must be a relative path under the config directory (e.g., \"geofences/london.json\") or an http(s):// URL. Validated at startup — invalid paths log a warning."},
 			{Name: "default_name", Type: "string", Default: "city", Description: "Default prefix for unnamed fences (e.g., \"city\" produces city1, city2)"},
 		},
 	},
@@ -218,7 +224,6 @@ var configSchema = []ConfigSection{
 		Title: "Koji Geofence Source",
 		Fields: []ConfigFieldDef{
 			{Name: "bearer_token", Type: "string", Default: "", Description: "Koji API bearer token (required for HTTP geofence downloads from Koji)", Sensitive: true, HotReload: false},
-			{Name: "cache_dir", Type: "string", Default: ".cache/geofences", Description: "Directory for caching downloaded geofences"},
 		},
 	},
 
@@ -227,11 +232,11 @@ var configSchema = []ConfigSection{
 		Name:  "pvp",
 		Title: "PVP Settings",
 		Fields: []ConfigFieldDef{
-			{Name: "data_source", Type: "select", Default: "webhook", Description: "Source of PVP rank data", Options: []ConfigSelectOption{
-				{Value: "webhook", Label: "Webhook", Description: "PVP data comes from Golbat webhooks (recommended)"},
-				{Value: "ohbem", Label: "Ohbem", Description: "PVP data comes from Ohbem service"},
+			{Name: "data_source", Type: "select", Default: "webhook", Description: "Source of PVP rank data", Deprecated: true, Advanced: true, Options: []ConfigSelectOption{
+				{Value: "webhook", Label: "Webhook", Description: "PVP data comes from Golbat webhooks (only supported source)"},
+				{Value: "ohbem", Label: "Ohbem", Description: "Not currently supported in PoracleNG", Deprecated: true},
 			}},
-			{Name: "level_caps", Type: "string[]", Default: []int{50}, Description: "Level caps to include in PVP rank calculations (e.g., [50] or [50, 51])"},
+			{Name: "level_caps", Type: "int[]", Default: []int{50}, Description: "Level caps to include in PVP rank calculations (e.g., [50] or [50, 51])"},
 			{Name: "include_mega_evolution", Type: "bool", Default: false, Description: "Include mega evolutions in PVP rank calculations"},
 			{Name: "evolution_direct_tracking", Type: "bool", Default: false, Description: "Allow users to track PVP evolutions directly (e.g., tracking Vaporeon matches an Eevee)"},
 			{Name: "filter_by_track", Type: "bool", Default: false, Description: "Auto-filter PVP display listings by the user's tracking requirements"},
@@ -260,7 +265,7 @@ var configSchema = []ConfigSection{
 			{Name: "show_altered_pokemon_static_map", Type: "bool", Default: false, Description: "Show weather-changed pokemon on the static map tile", DependsOn: &ConfigDependency{Field: "show_altered_pokemon", Value: true}},
 			{Name: "enable_forecast", Type: "bool", Default: false, Description: "Enable AccuWeather forecast for next-hour weather prediction"},
 			{Name: "accuweather_api_keys", Type: "string[]", Default: []string{}, Description: "AccuWeather API keys (rotated through array as quotas are exhausted)", Sensitive: true, HotReload: false, DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
-			{Name: "accuweather_day_quota", Type: "int", Default: 50, Description: "Maximum AccuWeather API calls per key per day", DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
+			{Name: "accuweather_day_quota", Type: "int", Default: 500, Description: "Maximum AccuWeather API calls per key per day (free tier is 50/day, paid tiers are higher)", DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
 			{Name: "forecast_refresh_interval", Type: "int", Default: 8, Description: "Hours between forecast API calls per weather cell", DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
 			{Name: "local_first_fetch_hod", Type: "int", Default: 3, Description: "First forecast fetch hour of the day in local time (e.g., 3 = 3am)", DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
 			{Name: "smart_forecast", Type: "bool", Default: false, Description: "Pull forecast data on demand if no cached data exists for a cell", DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
@@ -332,27 +337,27 @@ var configSchema = []ConfigSection{
 		Name:  "tuning",
 		Title: "Performance Tuning",
 		Fields: []ConfigFieldDef{
-			{Name: "reload_interval_secs", Type: "int", Default: 60, Description: "Seconds between periodic database state reloads"},
-			{Name: "encounter_cache_ttl", Type: "int", Default: 3600, Description: "Seconds to cache encounter data for deduplication"},
-			{Name: "worker_pool_size", Type: "int", Default: 4, Description: "Number of webhook processing goroutines"},
-			{Name: "batch_size", Type: "int", Default: 50, Description: "Maximum webhooks processed per batch"},
-			{Name: "flush_interval_millis", Type: "int", Default: 100, Description: "Milliseconds between batch flushes when batch is not full"},
-			{Name: "tileserver_concurrency", Type: "int", Default: 2, Description: "Number of tile worker goroutines for parallel tileserver POSTs"},
-			{Name: "tileserver_timeout", Type: "int", Default: 10000, Description: "HTTP timeout per tile POST in milliseconds"},
-			{Name: "tileserver_failure_threshold", Type: "int", Default: 5, Description: "Consecutive tile errors before circuit breaker opens"},
-			{Name: "tileserver_cooldown_ms", Type: "int", Default: 30000, Description: "Milliseconds the circuit breaker stays open before retrying"},
-			{Name: "tileserver_queue_size", Type: "int", Default: 100, Description: "Maximum pending tile requests — overflow uses fallback URL"},
-			{Name: "tileserver_deadline", Type: "int", Default: 10000, Description: "Maximum milliseconds a payload waits for its tile before using fallback"},
-			{Name: "geocoding_concurrency", Type: "int", Default: 0, Description: "Number of concurrent geocoding worker goroutines (0 = default)"},
-			{Name: "geocoding_timeout", Type: "int", Default: 0, Description: "HTTP timeout per geocoding request in milliseconds (0 = default)"},
-			{Name: "geocoding_failure_threshold", Type: "int", Default: 0, Description: "Consecutive geocoding errors before circuit breaker opens (0 = default)"},
-			{Name: "geocoding_cooldown_ms", Type: "int", Default: 0, Description: "Milliseconds the geocoding circuit breaker stays open (0 = default)"},
-			{Name: "render_pool_size", Type: "int", Default: 8, Description: "Number of concurrent DTS render goroutines"},
-			{Name: "render_queue_size", Type: "int", Default: 100, Description: "Maximum buffered render jobs before backpressure"},
-			{Name: "concurrent_discord_destinations", Type: "int", Default: 10, Description: "Concurrent Discord DM/channel sends per bot"},
-			{Name: "concurrent_telegram_destinations", Type: "int", Default: 10, Description: "Concurrent Telegram sends per bot"},
-			{Name: "concurrent_discord_webhooks", Type: "int", Default: 10, Description: "Concurrent Discord webhook sends"},
-			{Name: "delivery_queue_size", Type: "int", Default: 200, Description: "Maximum buffered delivery jobs"},
+			{Name: "reload_interval_secs", Type: "int", Default: 60, Description: "Seconds between periodic database state reloads", Advanced: true},
+			{Name: "encounter_cache_ttl", Type: "int", Default: 3600, Description: "Seconds to cache encounter data for deduplication", Advanced: true},
+			{Name: "worker_pool_size", Type: "int", Default: 4, Description: "Number of webhook processing goroutines", Advanced: true},
+			{Name: "batch_size", Type: "int", Default: 50, Description: "Maximum webhooks processed per batch", Advanced: true},
+			{Name: "flush_interval_millis", Type: "int", Default: 100, Description: "Milliseconds between batch flushes when batch is not full", Advanced: true},
+			{Name: "tileserver_concurrency", Type: "int", Default: 2, Description: "Number of tile worker goroutines for parallel tileserver POSTs", Advanced: true},
+			{Name: "tileserver_timeout", Type: "int", Default: 10000, Description: "HTTP timeout per tile POST in milliseconds", Advanced: true},
+			{Name: "tileserver_failure_threshold", Type: "int", Default: 5, Description: "Consecutive tile errors before circuit breaker opens", Advanced: true},
+			{Name: "tileserver_cooldown_ms", Type: "int", Default: 30000, Description: "Milliseconds the circuit breaker stays open before retrying", Advanced: true},
+			{Name: "tileserver_queue_size", Type: "int", Default: 100, Description: "Maximum pending tile requests — overflow uses fallback URL", Advanced: true},
+			{Name: "tileserver_deadline", Type: "int", Default: 10000, Description: "Maximum milliseconds a payload waits for its tile before using fallback", Advanced: true},
+			{Name: "geocoding_concurrency", Type: "int", Default: 0, Description: "Number of concurrent geocoding worker goroutines (0 = default)", Advanced: true},
+			{Name: "geocoding_timeout", Type: "int", Default: 0, Description: "HTTP timeout per geocoding request in milliseconds (0 = default)", Advanced: true},
+			{Name: "geocoding_failure_threshold", Type: "int", Default: 0, Description: "Consecutive geocoding errors before circuit breaker opens (0 = default)", Advanced: true},
+			{Name: "geocoding_cooldown_ms", Type: "int", Default: 0, Description: "Milliseconds the geocoding circuit breaker stays open (0 = default)", Advanced: true},
+			{Name: "render_pool_size", Type: "int", Default: 8, Description: "Number of concurrent DTS render goroutines", Advanced: true},
+			{Name: "render_queue_size", Type: "int", Default: 100, Description: "Maximum buffered render jobs before backpressure", Advanced: true},
+			{Name: "concurrent_discord_destinations", Type: "int", Default: 10, Description: "Concurrent Discord DM/channel sends per bot", Advanced: true},
+			{Name: "concurrent_telegram_destinations", Type: "int", Default: 10, Description: "Concurrent Telegram sends per bot", Advanced: true},
+			{Name: "concurrent_discord_webhooks", Type: "int", Default: 10, Description: "Concurrent Discord webhook sends", Advanced: true},
+			{Name: "delivery_queue_size", Type: "int", Default: 200, Description: "Maximum buffered delivery jobs", Advanced: true},
 		},
 	},
 
@@ -428,13 +433,13 @@ var configSchema = []ConfigSection{
 		Name:  "stats",
 		Title: "Rarity Statistics",
 		Fields: []ConfigFieldDef{
-			{Name: "min_sample_size", Type: "int", Default: 10000, Description: "Minimum total pokemon sightings before rarity is calculated"},
-			{Name: "window_hours", Type: "int", Default: 8, Description: "Rolling window hours for rarity and shiny rate statistics"},
-			{Name: "refresh_interval_mins", Type: "int", Default: 5, Description: "Minutes between rarity statistic recalculations"},
-			{Name: "rarity_group_2_uncommon", Type: "float", Default: 1.0, Description: "Percentage threshold of total sightings for Uncommon rarity group"},
-			{Name: "rarity_group_3_rare", Type: "float", Default: 0.5, Description: "Percentage threshold for Rare rarity group"},
-			{Name: "rarity_group_4_very_rare", Type: "float", Default: 0.03, Description: "Percentage threshold for Very Rare rarity group"},
-			{Name: "rarity_group_5_ultra_rare", Type: "float", Default: 0.01, Description: "Percentage threshold for Ultra Rare rarity group"},
+			{Name: "min_sample_size", Type: "int", Default: 10000, Description: "Minimum total pokemon sightings before rarity is calculated", Advanced: true},
+			{Name: "window_hours", Type: "int", Default: 8, Description: "Rolling window hours for rarity and shiny rate statistics", Advanced: true},
+			{Name: "refresh_interval_mins", Type: "int", Default: 5, Description: "Minutes between rarity statistic recalculations", Advanced: true},
+			{Name: "rarity_group_2_uncommon", Type: "float", Default: 1.0, Description: "Percentage threshold of total sightings for Uncommon rarity group", Advanced: true},
+			{Name: "rarity_group_3_rare", Type: "float", Default: 0.5, Description: "Percentage threshold for Rare rarity group", Advanced: true},
+			{Name: "rarity_group_4_very_rare", Type: "float", Default: 0.03, Description: "Percentage threshold for Very Rare rarity group", Advanced: true},
+			{Name: "rarity_group_5_ultra_rare", Type: "float", Default: 0.01, Description: "Percentage threshold for Ultra Rare rarity group", Advanced: true},
 		},
 	},
 
@@ -443,13 +448,13 @@ var configSchema = []ConfigSection{
 		Name:  "fallbacks",
 		Title: "Fallback URLs",
 		Fields: []ConfigFieldDef{
-			{Name: "static_map", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/staticMap.png", Description: "Fallback static map image when tile generation fails"},
-			{Name: "img_url", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/mon.png", Description: "Fallback pokemon icon image"},
-			{Name: "img_url_weather", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/weather.png", Description: "Fallback weather icon image"},
-			{Name: "img_url_egg", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/uni.png", Description: "Fallback egg icon image"},
-			{Name: "img_url_gym", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/gym.png", Description: "Fallback gym icon image"},
-			{Name: "img_url_pokestop", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png", Description: "Fallback pokestop icon image"},
-			{Name: "pokestop_url", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png", Description: "Fallback pokestop URL for the pokestop_url DTS field"},
+			{Name: "static_map", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/staticMap.png", Description: "Fallback static map image when tile generation fails", Advanced: true, HideDefault: true},
+			{Name: "img_url", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/mon.png", Description: "Fallback pokemon icon image", Advanced: true, HideDefault: true},
+			{Name: "img_url_weather", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/weather.png", Description: "Fallback weather icon image", Advanced: true, HideDefault: true},
+			{Name: "img_url_egg", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/uni.png", Description: "Fallback egg icon image", Advanced: true, HideDefault: true},
+			{Name: "img_url_gym", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/gym.png", Description: "Fallback gym icon image", Advanced: true, HideDefault: true},
+			{Name: "img_url_pokestop", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png", Description: "Fallback pokestop icon image", Advanced: true, HideDefault: true},
+			{Name: "pokestop_url", Type: "string", Default: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png", Description: "Fallback pokestop URL for the pokestop_url DTS field", Advanced: true, HideDefault: true},
 		},
 	},
 

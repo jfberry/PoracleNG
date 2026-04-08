@@ -586,7 +586,7 @@ func Load(baseDir string) (*Config, error) {
 		},
 		Weather: WeatherConfig{
 			ShowAlteredPokemonMaxCount: 10,
-			AccuWeatherDayQuota:        50,
+			AccuWeatherDayQuota:        500,
 			ForecastRefreshInterval:    8,
 			LocalFirstFetchHOD:         3,
 		},

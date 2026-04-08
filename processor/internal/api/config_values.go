@@ -80,6 +80,23 @@ func HandleConfigSave(deps ConfigDeps) gin.HandlerFunc {
 			return
 		}
 
+		// Per-field value validation (colour format, array length, paths)
+		issues := validateConfigValues(updates, deps.ConfigDir)
+		var errorIssues []ValidationIssue
+		for _, iss := range issues {
+			if iss.Severity == "error" {
+				errorIssues = append(errorIssues, iss)
+			}
+		}
+		if len(errorIssues) > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"status":  "error",
+				"message": "validation failed",
+				"issues":  errorIssues,
+			})
+			return
+		}
+
 		// Strip masked sensitive values ("****") so the editor can resubmit
 		// a form without wiping secrets the user didn't touch.
 		stripMaskedSensitiveValues(updates)
