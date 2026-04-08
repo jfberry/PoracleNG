@@ -2,4 +2,4 @@
 package processor
 
 // Version is the PoracleNG processor version. Bump on each release.
-const Version = "5.0.0"
+const Version = "5.0.1"
