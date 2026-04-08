@@ -19,7 +19,7 @@ func LoadForts(db *sqlx.DB) ([]*FortTracking, error) {
 	var forts []FortTracking
 	err := db.Select(&forts,
 		`SELECT id, profile_no, ping, distance,
-		        COALESCE(template, '1') AS template,
+		        COALESCE(template, '') AS template,
 		        COALESCE(fort_type, 'everything') AS fort_type,
 		        COALESCE(include_empty, true) AS include_empty,
 		        COALESCE(change_types, '[]') AS change_types

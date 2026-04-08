@@ -19,7 +19,7 @@ func LoadInvasions(db *sqlx.DB) ([]*InvasionTracking, error) {
 	var invasions []InvasionTracking
 	err := db.Select(&invasions,
 		`SELECT id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, gender, grunt_type
+		        COALESCE(template, '') AS template, gender, grunt_type
 		 FROM invasion`)
 	if err != nil {
 		return nil, err

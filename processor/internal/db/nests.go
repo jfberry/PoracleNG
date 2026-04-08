@@ -20,7 +20,7 @@ func LoadNests(db *sqlx.DB) ([]*NestTracking, error) {
 	var nests []NestTracking
 	err := db.Select(&nests,
 		`SELECT id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, pokemon_id,
+		        COALESCE(template, '') AS template, pokemon_id,
 		        min_spawn_avg, COALESCE(form, 0) AS form
 		 FROM nests`)
 	if err != nil {
