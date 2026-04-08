@@ -45,7 +45,7 @@ func LoadRaids(db *sqlx.DB) ([]*RaidTracking, error) {
 	var raids []RaidTracking
 	err := db.Select(&raids,
 		`SELECT id, profile_no, pokemon_id, level, team, exclusive, form, evolution,
-		        move, gym_id, distance, template, clean, ping, rsvp_changes
+		        move, gym_id, distance, COALESCE(template, '') AS template, clean, ping, rsvp_changes
 		 FROM raid`)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func LoadEggs(db *sqlx.DB) ([]*EggTracking, error) {
 	var eggs []EggTracking
 	err := db.Select(&eggs,
 		`SELECT id, profile_no, level, team, exclusive, gym_id, distance,
-		        template, clean, ping, rsvp_changes
+		        COALESCE(template, '') AS template, clean, ping, rsvp_changes
 		 FROM egg`)
 	if err != nil {
 		return nil, err
