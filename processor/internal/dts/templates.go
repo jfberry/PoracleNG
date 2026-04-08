@@ -661,6 +661,17 @@ func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLangu
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
+	// First pass: record (type|platform) combos that have at least one user
+	// (non-readonly) entry. Fallback (readonly) entries for those combos are
+	// suppressed in the second pass — the user has already taken ownership of
+	// that surface in the editor and the bundled defaults would just be noise.
+	hasUser := make(map[string]bool)
+	for _, e := range ts.entries {
+		if !e.Readonly {
+			hasUser[e.Type+"|"+e.Platform] = true
+		}
+	}
+
 	var result []DTSEntry
 	for _, e := range ts.entries {
 		if filterType != "" && e.Type != filterType {
@@ -673,6 +684,9 @@ func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLangu
 			continue
 		}
 		if filterID != "" && strings.ToLower(e.ID.String()) != strings.ToLower(filterID) {
+			continue
+		}
+		if e.Readonly && hasUser[e.Type+"|"+e.Platform] {
 			continue
 		}
 		result = append(result, e)
