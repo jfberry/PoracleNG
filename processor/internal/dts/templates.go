@@ -261,19 +261,42 @@ func cacheKey(templateType, platform, templateID, language string) string {
 }
 
 // selectEntry applies the selection chain to find the best matching entry.
-// Within each priority level, the LAST match wins — this ensures config/dts/
-// entries override config/dts.json entries, which override fallback entries,
-// since later-loaded files are appended to the entries slice.
+//
+// User entries (non-readonly, from config/dts.json or config/dts/) always
+// beat fallback entries (readonly, bundled defaults). The chain is run twice:
+// first over user entries only, then — if nothing matched — over readonly
+// entries. Within each pass, the priority order is:
+//
+//  1. type + id + platform + language  (exact)
+//  2. type + id + platform              (entry has empty language)
+//  3. default + type + platform + language
+//  4. default + type + platform         (entry has empty language)
+//  5. default + type + platform         (any language — last resort)
+//
+// Within each level the LAST match wins, so config/dts/ overrides
+// config/dts.json since later-loaded files are appended to the entries slice.
 func (ts *TemplateStore) selectEntry(templateType, platform, templateID, language string) *DTSEntry {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
 	idLower := strings.ToLower(templateID)
+	if e := selectEntryPass(ts.entries, templateType, platform, idLower, language, false); e != nil {
+		return e
+	}
+	return selectEntryPass(ts.entries, templateType, platform, idLower, language, true)
+}
 
-	// 1. type + id + platform + language (exact) — last match wins
+// selectEntryPass walks the priority chain over a subset of entries
+// (readonly==false → user entries; readonly==true → fallback entries).
+func selectEntryPass(entries []DTSEntry, templateType, platform, idLower, language string, readonly bool) *DTSEntry {
 	var match *DTSEntry
-	for i := range ts.entries {
-		e := &ts.entries[i]
+
+	// 1. type + id + platform + language (exact)
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Type == templateType &&
 			strings.ToLower(e.ID.String()) == idLower &&
 			e.Platform == platform &&
@@ -285,9 +308,12 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 		return match
 	}
 
-	// 2. type + id + platform (no language — entry has empty language)
-	for i := range ts.entries {
-		e := &ts.entries[i]
+	// 2. type + id + platform (entry has empty language)
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Type == templateType &&
 			strings.ToLower(e.ID.String()) == idLower &&
 			e.Platform == platform &&
@@ -300,8 +326,11 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 	}
 
 	// 3. default + type + platform + language
-	for i := range ts.entries {
-		e := &ts.entries[i]
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Default &&
 			e.Type == templateType &&
 			e.Platform == platform &&
@@ -310,9 +339,12 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 		}
 	}
 
-	// 4. default + type + platform (no language — entry has empty language)
-	for i := range ts.entries {
-		e := &ts.entries[i]
+	// 4. default + type + platform (entry has empty language)
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Default &&
 			e.Type == templateType &&
 			e.Platform == platform &&
@@ -325,8 +357,11 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 	}
 
 	// 5. default + type + platform (any language — last resort)
-	for i := range ts.entries {
-		e := &ts.entries[i]
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Default &&
 			e.Type == templateType &&
 			e.Platform == platform {
