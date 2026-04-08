@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -74,6 +75,8 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 	if err := json.Unmarshal(job.Message, &msg); err != nil {
 		return nil, fmt.Errorf("parsing telegram message: %w", err)
 	}
+
+	sanitizeTelegramMessage(&msg)
 
 	log.Debugf("[telegram] Send to %s: location=%v lat=%.6f lon=%.6f content_len=%d sticker=%q photo=%q send_order=%v",
 		job.Target, msg.Location, job.Lat, job.Lon, len(msg.Content), msg.Sticker, msg.Photo, msg.SendOrder)
@@ -430,6 +433,69 @@ func parseSendOrder(raw interface{}) []string {
 	default:
 		return defaultSendOrder
 	}
+}
+
+// Telegram message limits — see https://core.telegram.org/bots/api#sendmessage
+const (
+	maxTelegramText    = 4096 // text messages, captions are 1024 but we don't enforce that here
+	maxTelegramCaption = 1024
+)
+
+// emptyMarkdownLinkRegex matches [text]() or [](url) — both forms cause Telegram
+// markdown parser errors. The first has empty target, the second has empty label.
+var emptyMarkdownLinkRegex = regexp.MustCompile(`\[\s*\]\([^)]*\)|\[[^\]]*\]\(\s*\)`)
+
+// nullLiteralRegex matches "null", "undefined", "<nil>" as standalone tokens
+// (whitespace-bounded). Common DTS rendering bug for missing variables.
+var nullLiteralRegex = regexp.MustCompile(`(^|\s)(null|undefined|<nil>)(\s|$)`)
+
+// sanitizeTelegramMessage strips known footguns from a Telegram message in
+// place. Rules:
+//
+//   - Truncate text content to 4096 chars (Telegram limit)
+//   - Strip empty markdown links [text]() or [](url) which cause parse errors
+//   - Strip "null"/"undefined"/"<nil>" string literals (DTS rendering bugs)
+//   - Drop sticker/photo URLs that are empty/whitespace/null literals
+//   - Drop content if it's empty or only whitespace
+func sanitizeTelegramMessage(msg *telegramMessage) {
+	msg.Content = sanitizeTelegramText(msg.Content, maxTelegramText)
+	msg.Sticker = stripBlankURL(msg.Sticker)
+	msg.Photo = stripBlankURL(msg.Photo)
+}
+
+// sanitizeTelegramText cleans up a single text body. Returns the cleaned
+// string (may be empty if the input was nothing but null literals/whitespace).
+func sanitizeTelegramText(s string, maxLen int) string {
+	if s == "" {
+		return s
+	}
+	// Strip empty markdown links
+	s = emptyMarkdownLinkRegex.ReplaceAllString(s, "")
+	// Strip "null"/"undefined" tokens — keep the surrounding whitespace
+	s = nullLiteralRegex.ReplaceAllString(s, "$1$3")
+	// Truncate
+	if maxLen > 0 {
+		s = truncateRunes(s, maxLen)
+	}
+	// If only whitespace remains, return empty so the caller skips the send
+	if strings.TrimSpace(s) == "" {
+		return ""
+	}
+	return s
+}
+
+// stripBlankURL returns "" if the input is empty/whitespace or a known null
+// literal; otherwise returns the input unchanged.
+func stripBlankURL(s string) string {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return ""
+	}
+	lower := strings.ToLower(trimmed)
+	if lower == "null" || lower == "undefined" || lower == "<nil>" {
+		return ""
+	}
+	return s
 }
 
 // normalizeTelegramParseMode normalizes Telegram parse mode strings.
