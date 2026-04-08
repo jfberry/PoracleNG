@@ -409,7 +409,7 @@ func main() {
 		apiGroup.GET("/dts/fields", api.HandleDTSFieldTypes())
 		apiGroup.GET("/dts/fields/:type", api.HandleDTSFields())
 		apiGroup.GET("/dts/partials", api.HandleDTSPartials(proc.dtsRenderer.Templates()))
-		apiGroup.POST("/dts/sendtest", api.HandleDTSSendTest(proc.dispatcher, proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/sendtest", api.HandleDTSSendTest(proc.dispatcher, proc.dtsRenderer.Templates(), proc.dtsRenderer))
 		apiGroup.POST("/dts/reload", api.HandleReload(func() error {
 			return proc.dtsRenderer.Templates().Reload(
 				filepath.Join(cfg.BaseDir, "config"),

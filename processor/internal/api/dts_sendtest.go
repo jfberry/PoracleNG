@@ -16,7 +16,7 @@ import (
 
 // HandleDTSSendTest renders a template with provided variables and delivers to a user.
 // POST /api/dts/sendtest
-func HandleDTSSendTest(dispatcher *delivery.Dispatcher, ts *dts.TemplateStore) gin.HandlerFunc {
+func HandleDTSSendTest(dispatcher *delivery.Dispatcher, ts *dts.TemplateStore, renderer *dts.Renderer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if dispatcher == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "delivery dispatcher not configured"})
@@ -89,6 +89,11 @@ func HandleDTSSendTest(dispatcher *delivery.Dispatcher, ts *dts.TemplateStore) g
 			log.Warnf("dts sendtest: render error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "render error: " + err.Error()})
 			return
+		}
+
+		// Process <S< ... >S> shortlink markers the same way the live renderer does.
+		if renderer != nil {
+			rendered = dts.ShortenMarkers(rendered, renderer.Shortener())
 		}
 
 		// Parse rendered JSON into message object

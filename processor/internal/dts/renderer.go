@@ -129,6 +129,9 @@ func (r *Renderer) Templates() *TemplateStore { return r.templates }
 // Emoji returns the emoji lookup used by this renderer.
 func (r *Renderer) Emoji() *EmojiLookup { return r.emoji }
 
+// Shortener returns the URL shortener (nil if not configured).
+func (r *Renderer) Shortener() *ShlinkShortener { return r.shortener }
+
 // ViewBuilder returns the view builder used for LayeredView construction.
 func (r *Renderer) ViewBuilder() *ViewBuilder { return r.viewBuilder }
 
