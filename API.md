@@ -810,7 +810,7 @@ Response is grouped by `sections`, each with `fields` and optional `tables` (arr
 
 ### GET /api/config/values
 
-Returns current merged config values (TOML + overrides). Only web-editable fields. Sensitive fields are masked.
+Returns current merged config values (TOML + overrides) plus a list of fields that are currently overridden by `config/overrides.json`. The editor uses `overridden` to display badges showing which fields come from the web editor vs the user's `config.toml`. Only web-editable fields. Sensitive fields are masked.
 
 | Parameter | Description |
 |-----------|-------------|
@@ -822,13 +822,18 @@ Returns current merged config values (TOML + overrides). Only web-editable field
   "values": {
     "general": {"locale": "en", "max_pokemon": 0},
     "discord": {"admins": ["344179542874914817"], "check_role": true}
-  }
+  },
+  "overridden": ["discord.admins", "alert_limits.dm_limit"]
 }
 ```
+
+The processor also logs a prominent banner at startup listing every field overridden by `overrides.json` — so users editing `config.toml` directly can see at a glance which of their values are being shadowed.
 
 ### POST /api/config/values
 
 Save config changes. Accepts partial updates — only changed fields. Writes to `config/overrides.json` (never modifies config.toml). Hot-reloadable settings are applied immediately.
+
+**Sensitive field handling:** Fields marked sensitive in the schema are returned as `"****"` by `GET /values`. When you POST a value of `"****"` for a sensitive field, the processor silently strips it before saving — preserving the existing secret. This lets the editor resubmit a whole form without wiping secrets the user didn't change. To actually update a secret, send a real value.
 
 ```json
 {
@@ -853,6 +858,45 @@ If any changed field requires restart:
   "saved": 3,
   "restart_required": true,
   "restart_fields": ["discord.check_role"]
+}
+```
+
+### POST /api/config/migrate
+
+Slim `config.toml` by moving every web-editable non-default value into `config/overrides.json`. Useful after a user has been using the web editor for a while — it cleans up `config.toml` so it contains only TOML-only fields (database, tokens, processor host/port).
+
+**Process:**
+1. Backs up the current `config.toml` to `config.toml.bak.YYYY-MM-DD_HHMMSS`
+2. For every web-editable field with a non-default value, copies it to `overrides.json` (without overwriting existing overrides — existing overrides win)
+3. Rewrites `config.toml` containing only fields NOT in the editor schema (database, tokens, etc.) with a header comment pointing to the backup
+
+**Idempotent:** running it twice produces the same result. Safe to retry on errors.
+
+**Reversible:** delete `overrides.json` and restore the backup file to undo.
+
+```bash
+curl -X POST -H "X-Poracle-Secret: secret" http://localhost:3030/api/config/migrate
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "backup": "config.toml.bak.2026-04-08_153022",
+  "fields_moved": [
+    "alert_limits.dm_limit",
+    "discord.admins",
+    "general.locale"
+  ],
+  "fields_kept": [
+    "alerter.api_secret",
+    "database.host",
+    "database.password",
+    "discord.token",
+    "processor.api_secret",
+    "processor.port",
+    "telegram.token"
+  ]
 }
 ```
 

@@ -436,6 +436,7 @@ func main() {
 	apiGroup.GET("/config/schema", api.HandleConfigSchema())
 	apiGroup.GET("/config/values", api.HandleConfigValues(configDeps))
 	apiGroup.POST("/config/values", api.HandleConfigSave(configDeps))
+	apiGroup.POST("/config/migrate", api.HandleConfigMigrate(configDeps))
 	apiGroup.GET("/masterdata/monsters", api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations))
 	apiGroup.GET("/masterdata/grunts", api.HandleMasterdataGrunts(proc.enricher.GameData))
 

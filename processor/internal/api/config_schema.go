@@ -212,6 +212,16 @@ var configSchema = []ConfigSection{
 		},
 	},
 
+	// ---- geofence.koji ----
+	{
+		Name:  "geofence.koji",
+		Title: "Koji Geofence Source",
+		Fields: []ConfigFieldDef{
+			{Name: "bearer_token", Type: "string", Default: "", Description: "Koji API bearer token (required for HTTP geofence downloads from Koji)", Sensitive: true, HotReload: false},
+			{Name: "cache_dir", Type: "string", Default: ".cache/geofences", Description: "Directory for caching downloaded geofences"},
+		},
+	},
+
 	// ---- pvp ----
 	{
 		Name:  "pvp",
@@ -249,6 +259,7 @@ var configSchema = []ConfigSection{
 			{Name: "show_altered_pokemon_max_count", Type: "int", Default: 10, Description: "Maximum number of changed pokemon per weather alert", DependsOn: &ConfigDependency{Field: "show_altered_pokemon", Value: true}},
 			{Name: "show_altered_pokemon_static_map", Type: "bool", Default: false, Description: "Show weather-changed pokemon on the static map tile", DependsOn: &ConfigDependency{Field: "show_altered_pokemon", Value: true}},
 			{Name: "enable_forecast", Type: "bool", Default: false, Description: "Enable AccuWeather forecast for next-hour weather prediction"},
+			{Name: "accuweather_api_keys", Type: "string[]", Default: []string{}, Description: "AccuWeather API keys (rotated through array as quotas are exhausted)", Sensitive: true, HotReload: false, DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
 			{Name: "accuweather_day_quota", Type: "int", Default: 50, Description: "Maximum AccuWeather API calls per key per day", DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
 			{Name: "forecast_refresh_interval", Type: "int", Default: 8, Description: "Hours between forecast API calls per weather cell", DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
 			{Name: "local_first_fetch_hod", Type: "int", Default: 3, Description: "First forecast fetch hour of the day in local time (e.g., 3 = 3am)", DependsOn: &ConfigDependency{Field: "enable_forecast", Value: true}},
@@ -293,6 +304,7 @@ var configSchema = []ConfigSection{
 				{Value: "google", Label: "Google", Description: "Google Maps Geocoding API (requires API key in config.toml)"},
 			}},
 			{Name: "provider_url", Type: "string", Default: "", Description: "Nominatim instance URL for address lookups", DependsOn: &ConfigDependency{Field: "provider", Value: "nominatim"}},
+			{Name: "geocoding_key", Type: "string[]", Default: []string{}, Description: "Google Geocoding API keys (rotated through array)", Sensitive: true, HotReload: true, DependsOn: &ConfigDependency{Field: "provider", Value: "google"}},
 			{Name: "cache_detail", Type: "int", Default: 3, Description: "Decimal places of lat/lon for geocoding cache key rounding (3 or 4 for 100x more detail)"},
 			{Name: "forward_only", Type: "bool", Default: false, Description: "Disable reverse geocoding — only forward lookups will be performed"},
 			{Name: "static_provider", Type: "select", Default: "none", Description: "Static map tile provider for generating map images in alerts", Options: []ConfigSelectOption{
@@ -303,6 +315,7 @@ var configSchema = []ConfigSection{
 				{Value: "mapbox", Label: "Mapbox", Description: "Mapbox Static Images API"},
 			}},
 			{Name: "static_provider_url", Type: "string", Default: "", Description: "Static map tile provider URL"},
+			{Name: "static_key", Type: "string[]", Default: []string{}, Description: "API keys for the static map provider (Google/Mapbox), rotated through array", Sensitive: true, HotReload: true},
 			{Name: "width", Type: "int", Default: 320, Description: "Static map image width in pixels"},
 			{Name: "height", Type: "int", Default: 200, Description: "Static map image height in pixels"},
 			{Name: "zoom", Type: "int", Default: 15, Description: "Static map default zoom level"},

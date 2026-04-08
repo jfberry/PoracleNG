@@ -13,6 +13,11 @@ import (
 
 // LoadOverrides reads config/overrides.json and returns the parsed map.
 // Returns nil (not an error) if the file doesn't exist.
+//
+// Logs a prominent banner listing every overridden field so users editing
+// config.toml directly can see exactly which of their values are being
+// overridden by the web editor — preventing the "I changed config.toml
+// but my setting isn't being used" confusion.
 func LoadOverrides(configDir string) (map[string]any, error) {
 	path := filepath.Join(configDir, "overrides.json")
 	data, err := os.ReadFile(path)
@@ -28,8 +33,42 @@ func LoadOverrides(configDir string) (map[string]any, error) {
 		return nil, fmt.Errorf("parse overrides.json: %w", err)
 	}
 
-	log.Infof("config: loaded %d override sections from %s", len(overrides), path)
+	logOverrideBanner(path, overrides)
 	return overrides, nil
+}
+
+// logOverrideBanner prints a clearly visible warning at startup listing
+// every field that overrides.json is overriding. Users who edit config.toml
+// expect their values to take effect — this banner makes it obvious when
+// they don't.
+func logOverrideBanner(path string, overrides map[string]any) {
+	var fields []string
+	collectOverrideFields("", overrides, &fields)
+
+	log.Warnf("══════════════════════════════════════════════════════════════")
+	log.Warnf("config: %d field(s) overridden by %s", len(fields), path)
+	log.Warnf("These values take precedence over config.toml:")
+	for _, f := range fields {
+		log.Warnf("  • %s", f)
+	}
+	log.Warnf("To revert: edit or delete %s and restart", path)
+	log.Warnf("══════════════════════════════════════════════════════════════")
+}
+
+// collectOverrideFields walks the override map recursively, building dotted
+// field paths (e.g. "discord.admins", "alert_limits.dm_limit").
+func collectOverrideFields(prefix string, m map[string]any, out *[]string) {
+	for k, v := range m {
+		path := k
+		if prefix != "" {
+			path = prefix + "." + k
+		}
+		if sub, ok := v.(map[string]any); ok {
+			collectOverrideFields(path, sub, out)
+			continue
+		}
+		*out = append(*out, path)
+	}
 }
 
 // SaveOverrides reads the existing overrides.json, deep-merges the updates,

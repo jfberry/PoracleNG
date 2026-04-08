@@ -19,7 +19,11 @@ type ConfigDeps struct {
 	ReloadFn  func() // called after hot-reloadable settings change
 }
 
-// HandleConfigValues returns current merged config values.
+// HandleConfigValues returns current merged config values along with the
+// list of fields currently overridden by config/overrides.json. The editor
+// uses the overridden list to mark fields visually so users can tell which
+// values come from config.toml vs the web editor.
+//
 // GET /api/config/values?section=discord
 func HandleConfigValues(deps ConfigDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -27,7 +31,31 @@ func HandleConfigValues(deps ConfigDeps) gin.HandlerFunc {
 
 		values := extractValues(deps.Cfg, filterSection)
 
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "values": values})
+		// List dotted paths of currently overridden fields (e.g. "discord.admins")
+		overrides, _ := config.LoadOverrides(deps.ConfigDir)
+		var overridden []string
+		collectOverrideFieldPaths("", overrides, &overridden)
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":     "ok",
+			"values":     values,
+			"overridden": overridden,
+		})
+	}
+}
+
+// collectOverrideFieldPaths walks an override map and produces dotted field paths.
+func collectOverrideFieldPaths(prefix string, m map[string]any, out *[]string) {
+	for k, v := range m {
+		path := k
+		if prefix != "" {
+			path = prefix + "." + k
+		}
+		if sub, ok := v.(map[string]any); ok {
+			collectOverrideFieldPaths(path, sub, out)
+			continue
+		}
+		*out = append(*out, path)
 	}
 }
 
@@ -51,6 +79,10 @@ func HandleConfigSave(deps ConfigDeps) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
 			return
 		}
+
+		// Strip masked sensitive values ("****") so the editor can resubmit
+		// a form without wiping secrets the user didn't touch.
+		stripMaskedSensitiveValues(updates)
 
 		// Save to overrides.json
 		if err := config.SaveOverrides(deps.ConfigDir, updates); err != nil {
@@ -126,20 +158,18 @@ func extractValues(cfg *config.Config, filterSection string) map[string]any {
 	return result
 }
 
-// findConfigSection returns the reflect.Value for a top-level config section.
+// findConfigSection returns the reflect.Value for a config section.
+// Supports dotted paths like "reconciliation.discord" or "geofence.koji".
 func findConfigSection(cfg *config.Config, sectionName string) reflect.Value {
 	v := reflect.ValueOf(cfg).Elem()
-	t := v.Type()
-	for i := 0; i < t.NumField(); i++ {
-		tag := t.Field(i).Tag.Get("toml")
-		if idx := strings.Index(tag, ","); idx != -1 {
-			tag = tag[:idx]
-		}
-		if tag == sectionName {
-			return v.Field(i)
+	parts := strings.Split(sectionName, ".")
+	for _, part := range parts {
+		v = getFieldByTag(v, part)
+		if !v.IsValid() {
+			return reflect.Value{}
 		}
 	}
-	return reflect.Value{}
+	return v
 }
 
 // getFieldByTag finds a struct field by its TOML tag name.
@@ -217,6 +247,41 @@ func checkRestartRequired(updates map[string]any) (bool, []string) {
 	}
 
 	return len(restartFields) > 0, restartFields
+}
+
+// stripMaskedSensitiveValues walks the updates map and removes any
+// sensitive field whose value is the masked placeholder "****". This lets
+// the editor resubmit a whole form without wiping secrets the user
+// didn't actually change.
+func stripMaskedSensitiveValues(updates map[string]any) {
+	sensitive := make(map[string]map[string]bool)
+	for _, section := range configSchema {
+		fields := make(map[string]bool)
+		for _, f := range section.Fields {
+			if f.Sensitive {
+				fields[f.Name] = true
+			}
+		}
+		if len(fields) > 0 {
+			sensitive[section.Name] = fields
+		}
+	}
+
+	for sectionName, sectionVal := range updates {
+		sectionMap, ok := sectionVal.(map[string]any)
+		if !ok {
+			continue
+		}
+		fields, ok := sensitive[sectionName]
+		if !ok {
+			continue
+		}
+		for fieldName := range fields {
+			if v, ok := sectionMap[fieldName]; ok && v == "****" {
+				delete(sectionMap, fieldName)
+			}
+		}
+	}
 }
 
 // countFields counts the total number of individual field changes.
