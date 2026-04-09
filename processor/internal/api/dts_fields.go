@@ -525,6 +525,7 @@ type Snippet struct {
 	Insert      string `json:"insert"`
 	Description string `json:"description"`
 	Category    string `json:"category,omitempty"`
+	Platform    string `json:"platform,omitempty"` // "discord", "telegram", or empty for all
 }
 
 var commonSnippets = []Snippet{
@@ -555,7 +556,7 @@ var commonSnippets = []Snippet{
 	// Links
 	{Label: "Shortlink", Insert: "<S<{{url}}>S>", Description: "Wrap a URL for Shlink shortening", Category: "link"},
 	// Maps
-	{Label: "Static map image", Insert: "[\u200A]({{{staticMap}}})", Description: "Invisible-text image link (Telegram/Discord)", Category: "link"},
+	{Label: "Static map image", Insert: "[\u200A]({{{staticMap}}})", Description: "Invisible-text image link for Telegram", Category: "link", Platform: "telegram"},
 	{Label: "Google Maps link", Insert: "[Google]({{{googleMapUrl}}})", Description: "Clickable Google Maps link", Category: "link"},
 	{Label: "Apple Maps link", Insert: "[Apple]({{{appleMapUrl}}})", Description: "Clickable Apple Maps link", Category: "link"},
 }
@@ -563,7 +564,7 @@ var commonSnippets = []Snippet{
 var monsterSnippets = []Snippet{
 	{Label: "Round IV", Insert: "{{round iv}}", Description: "IV rounded to integer", Category: "pokemon"},
 	{Label: "IV or 💯", Insert: "{{#isnt iv 100}}{{round iv}}%{{else}}💯{{/isnt}}", Description: "Show IV% or 💯 for hundos", Category: "pokemon"},
-	{Label: "IV with stars", Insert: "{{#isnt iv 100}}*{{round iv}}%*{{else}}💯{{/isnt}}", Description: "Bold IV% or 💯 (Telegram)", Category: "pokemon"},
+	{Label: "IV with stars", Insert: "{{#isnt iv 100}}*{{round iv}}%*{{else}}💯{{/isnt}}", Description: "Bold IV% or 💯 (Telegram markdown)", Category: "pokemon", Platform: "telegram"},
 	{Label: "Pokemon with gender", Insert: "{{fullName}} {{genderEmoji}}", Description: "Name + gender emoji", Category: "pokemon"},
 	{Label: "IV line", Insert: "{{atk}}/{{def}}/{{sta}}", Description: "Individual IVs (15/15/15)", Category: "pokemon"},
 	{Label: "CP and level", Insert: "CP{{cp}} L{{level}}", Description: "CP and level", Category: "pokemon"},
