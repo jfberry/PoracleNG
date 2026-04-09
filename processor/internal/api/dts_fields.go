@@ -544,14 +544,14 @@ var commonSnippets = []Snippet{
 	{Label: "lowercase", Insert: "{{lowercase fieldName}}", Description: "Convert to lowercase", Category: "format"},
 	{Label: "uppercase", Insert: "{{uppercase fieldName}}", Description: "Convert to uppercase", Category: "format"},
 	// String
-	{Label: "contains", Insert: "{{#contains fieldName \"text\"}}...{{/contains}}", Description: "Check if string contains text", Category: "string"},
-	{Label: "replace", Insert: "{{replace fieldName \"old\" \"new\"}}", Description: "Replace all occurrences", Category: "string"},
+	{Label: "contains", Insert: "{{#contains fieldName 'text'}}...{{/contains}}", Description: "Check if string contains text", Category: "string"},
+	{Label: "replace", Insert: "{{replace fieldName 'old' 'new'}}", Description: "Replace all occurrences", Category: "string"},
 	{Label: "concat", Insert: "{{concat a b c}}", Description: "Concatenate strings", Category: "string"},
 	// Iteration
 	{Label: "each", Insert: "{{#each arrayField}}{{this}}{{/each}}", Description: "Iterate over an array", Category: "iteration"},
 	{Label: "each with index", Insert: "{{#each arrayField}}{{@index}}: {{this}}{{/each}}", Description: "Iterate with index", Category: "iteration"},
 	// Emoji
-	{Label: "getEmoji", Insert: "{{getEmoji \"key\"}}", Description: "Look up emoji by key", Category: "emoji"},
+	{Label: "getEmoji", Insert: "{{getEmoji 'key'}}", Description: "Look up emoji by key", Category: "emoji"},
 	// Links
 	{Label: "Shortlink", Insert: "<S<{{url}}>S>", Description: "Wrap a URL for Shlink shortening", Category: "link"},
 	// Maps
