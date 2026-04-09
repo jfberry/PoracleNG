@@ -1,4 +1,6 @@
 {
+  "weather.possible_change_at": "Possible weather change at",
+  "weather.unknown": "unknown",
   "rate_limit.reached": "Du har nådd grensen på {0} varsler i løpet av {1} sekunder.",
   "rate_limit.banned_soft": "Du har nådd grensen for antall varsler for mange ganger i løpet av det siste døgnet. Dine varsler har nå blitt stoppet. Du kan aktivere varsler igjen med {0}start",
   "rate_limit.banned_hard": "Du har nådd grensen for antall varsler for mange ganger i løpet av det siste døgnet. Dine varsler har nå blitt stoppet. Kontakt en administrator for å aktivere varsler igjen",
