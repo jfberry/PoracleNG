@@ -59,7 +59,7 @@ func NewLayeredView(
 	lv.emoji = vb.resolveEmojiMap(base, perLang, platform)
 
 	// Build computed fields (small map — needs resolved emoji for genderData)
-	lv.computed = buildComputedFields(base, perLang, lv.emoji, areas)
+	lv.computed = buildComputedFields(templateType, base, perLang, lv.emoji, areas)
 
 	// Resolve emoji arrays into computed (they're []string, not simple strings)
 	for _, m := range arrayEmojiKeys {
@@ -272,7 +272,7 @@ func resolveWeaknessEmojis(emojiLookup *EmojiLookup, perLang map[string]any, pla
 }
 
 // buildComputedFields creates the small set of derived fields.
-func buildComputedFields(base, perLang map[string]any, emoji map[string]string, areas []webhook.MatchedArea) map[string]any {
+func buildComputedFields(templateType string, base, perLang map[string]any, emoji map[string]string, areas []webhook.MatchedArea) map[string]any {
 	m := make(map[string]any, 16)
 
 	// id = pokemon_id
@@ -280,9 +280,15 @@ func buildComputedFields(base, perLang map[string]any, emoji map[string]string, 
 		m["id"] = v
 	}
 
-	// time = disappearTime
-	if v, ok := base["disappearTime"]; ok {
-		m["time"] = v
+	// time: for eggs = hatchTime (when egg hatches), for everything else = disappearTime
+	if templateType == "egg" {
+		if v, ok := base["hatchTime"]; ok {
+			m["time"] = v
+		}
+	} else {
+		if v, ok := base["disappearTime"]; ok {
+			m["time"] = v
+		}
 	}
 
 	// TTH components
