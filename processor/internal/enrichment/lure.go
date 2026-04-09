@@ -15,6 +15,8 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 
 	if lure.LureExpiration > 0 {
 		tz := geo.GetTimezone(lure.Latitude, lure.Longitude)
+		m["lure_expiration"] = lure.LureExpiration
+		m["expirationTimestamp"] = lure.LureExpiration // unix int for Discord <t:N:R>
 		m["disappearTime"] = geo.FormatTime(lure.LureExpiration, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(lure.LureExpiration)
 		addSunTimes(m, lure.Latitude, lure.Longitude, tz)

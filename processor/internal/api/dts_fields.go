@@ -117,6 +117,7 @@ var monsterFields = []FieldDef{
 	{Name: "time", Type: "string", Description: "Disappear time (formatted)", Category: "time", Preferred: true},
 	{Name: "disappearTime", Type: "string", Description: "Disappear time", Category: "time"},
 	{Name: "confirmedTime", Type: "bool", Description: "Is disappear time verified", Category: "time"},
+	{Name: "despawnTimestamp", Type: "int", Description: "Unix despawn timestamp (for Discord <t:N:R>)", Category: "time"},
 	{Name: "tthSeconds", Type: "int", Description: "Total seconds remaining", Category: "time"},
 	{Name: "distime", Type: "string", Description: "Deprecated alias for disappearTime", Category: "time", Deprecated: true, PreferredAlternative: "disappearTime"},
 	// Types
@@ -186,6 +187,8 @@ var raidFields = []FieldDef{
 	// Time
 	{Name: "time", Type: "string", Description: "End time", Category: "time", Preferred: true},
 	{Name: "hatchTime", Type: "string", Description: "Hatch/start time", Category: "time"},
+	{Name: "endTimestamp", Type: "int", Description: "Unix raid end timestamp (for Discord <t:N:R>)", Category: "time"},
+	{Name: "hatchTimestamp", Type: "int", Description: "Unix hatch timestamp (for Discord <t:N:R>)", Category: "time"},
 	// Types
 	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names", Category: "types"},
 	{Name: "typeNameEng", Type: "array", Description: "English type names", Category: "types"},
@@ -215,6 +218,8 @@ var eggFields = []FieldDef{
 	{Name: "ex", Type: "bool", Description: "EX raid eligible", Category: "gym"},
 	{Name: "time", Type: "string", Description: "Hatch time", Category: "time", Preferred: true},
 	{Name: "hatchTime", Type: "string", Description: "Hatch time", Category: "time"},
+	{Name: "hatchTimestamp", Type: "int", Description: "Unix hatch timestamp (for Discord <t:N:R>)", Category: "time"},
+	{Name: "endTimestamp", Type: "int", Description: "Unix raid end timestamp (for Discord <t:N:R>)", Category: "time"},
 	{Name: "rsvps", Type: "array", Description: "RSVP timeslot entries", Category: "other"},
 }
 
@@ -249,6 +254,7 @@ var invasionFields = []FieldDef{
 	{Name: "gruntRewardsList", Type: "object", Description: "Reward pokemon lists", Category: "invasion"},
 	{Name: "gruntLineupList", Type: "array", Description: "Confirmed lineup pokemon", Category: "invasion"},
 	{Name: "time", Type: "string", Description: "End time", Category: "time", Preferred: true},
+	{Name: "expirationTimestamp", Type: "int", Description: "Unix expiry timestamp (for Discord <t:N:R>)", Category: "time"},
 }
 
 var lureFields = []FieldDef{
@@ -258,6 +264,7 @@ var lureFields = []FieldDef{
 	{Name: "lureTypeEmoji", Type: "string", Description: "Lure type emoji", Category: "lure"},
 	{Name: "lureTypeColor", Type: "string", Description: "Lure type color hex", Category: "lure"},
 	{Name: "time", Type: "string", Description: "Expiry time", Category: "time", Preferred: true},
+	{Name: "expirationTimestamp", Type: "int", Description: "Unix expiry timestamp (for Discord <t:N:R>)", Category: "time"},
 	{Name: "gruntTypeId", Type: "int", Description: "Co-existing invasion grunt type", Category: "invasion"},
 	{Name: "displayTypeId", Type: "int", Description: "Co-existing invasion display type", Category: "invasion"},
 }
@@ -318,6 +325,7 @@ var maxbattleFields = []FieldDef{
 	{Name: "level", Type: "int", Description: "Battle level", Category: "identity", Preferred: true},
 	{Name: "pokestopName", Type: "string", Description: "Location name", Category: "location", Preferred: true},
 	{Name: "time", Type: "string", Description: "End time", Category: "time", Preferred: true},
+	{Name: "endTimestamp", Type: "int", Description: "Unix end timestamp (for Discord <t:N:R>)", Category: "time"},
 	{Name: "quickMoveName", Type: "string", Description: "Translated fast move", Category: "moves"},
 	{Name: "chargeMoveName", Type: "string", Description: "Translated charged move", Category: "moves"},
 	{Name: "quickMoveEmoji", Type: "string", Description: "Fast move type emoji", Category: "moves"},
@@ -570,6 +578,7 @@ var monsterSnippets = []Snippet{
 	{Label: "CP and level", Insert: "CP{{cp}} L{{level}}", Description: "CP and level", Category: "pokemon"},
 	{Label: "Time remaining", Insert: "{{tthh}}h {{tthm}}m {{tths}}s", Description: "Time to hide", Category: "pokemon"},
 	{Label: "Despawn time", Insert: "{{time}} ({{tthm}}m{{tths}}s)", Description: "Despawn time with TTH", Category: "pokemon"},
+	{Label: "Countdown", Insert: "<t:{{despawnTimestamp}}:R>", Description: "Discord relative countdown", Category: "pokemon", Platform: "discord"},
 	{Label: "Weather boosted", Insert: "{{#if boosted}}{{boostWeatherEmoji}}{{/if}}", Description: "Show boost emoji if boosted", Category: "pokemon"},
 	{Label: "Weather change", Insert: "{{weatherChange}}", Description: "Weather forecast text (empty if no change)", Category: "pokemon"},
 	{Label: "Shiny possible", Insert: "{{#if shinyPossible}}✨{{/if}}", Description: "Sparkle if shiny possible", Category: "pokemon"},
@@ -586,11 +595,13 @@ var raidSnippets = []Snippet{
 	{Label: "Gym line", Insert: "📍 {{gymName}}", Description: "Gym name with pin", Category: "raid"},
 	{Label: "EX eligible", Insert: "{{#if ex}}🎟 EX{{/if}}", Description: "Show EX badge if eligible", Category: "raid"},
 	{Label: "Time remaining", Insert: "{{time}} ({{tthm}}m)", Description: "End time with TTH", Category: "raid"},
+	{Label: "Countdown", Insert: "<t:{{endTimestamp}}:R>", Description: "Discord relative countdown to raid end", Category: "raid", Platform: "discord"},
 }
 
 var eggSnippets = []Snippet{
 	{Label: "Egg line", Insert: "🥚 L{{level}} egg", Description: "Egg level", Category: "egg"},
 	{Label: "Hatch time", Insert: "{{time}} ({{tthm}}m)", Description: "Hatch time with TTH", Category: "egg"},
+	{Label: "Countdown", Insert: "<t:{{hatchTimestamp}}:R>", Description: "Discord relative countdown to hatch", Category: "egg", Platform: "discord"},
 }
 
 var questSnippets = []Snippet{
@@ -601,6 +612,16 @@ var questSnippets = []Snippet{
 var invasionSnippets = []Snippet{
 	{Label: "Grunt line", Insert: "{{gruntTypeEmoji}} {{gruntName}}", Description: "Grunt type emoji + name", Category: "invasion"},
 	{Label: "Time remaining", Insert: "{{time}} ({{tthm}}m)", Description: "End time with TTH", Category: "invasion"},
+	{Label: "Countdown", Insert: "<t:{{expirationTimestamp}}:R>", Description: "Discord relative countdown", Category: "invasion", Platform: "discord"},
+}
+
+var lureSnippets = []Snippet{
+	{Label: "Lure type", Insert: "{{lureTypeEmoji}} {{lureTypeName}}", Description: "Lure type emoji + name", Category: "lure"},
+	{Label: "Countdown", Insert: "<t:{{expirationTimestamp}}:R>", Description: "Discord relative countdown", Category: "lure", Platform: "discord"},
+}
+
+var maxbattleSnippets = []Snippet{
+	{Label: "Countdown", Insert: "<t:{{endTimestamp}}:R>", Description: "Discord relative countdown", Category: "maxbattle", Platform: "discord"},
 }
 
 type fieldEntry struct {
@@ -616,11 +637,11 @@ var fieldsByType = map[string]fieldEntry{
 	"egg":          {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
 	"quest":        {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
 	"invasion":     {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
-	"lure":         {Fields: append(commonFields, lureFields...), Snippets: commonSnippets},
+	"lure":         {Fields: append(commonFields, lureFields...), Snippets: append(commonSnippets, lureSnippets...)},
 	"nest":         {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},
 	"gym":          {Fields: append(commonFields, gymFields...), Snippets: commonSnippets},
 	"fort-update":  {Fields: append(commonFields, fortUpdateFields...), Snippets: commonSnippets},
-	"maxbattle":    {Fields: append(commonFields, maxbattleFields...), Snippets: commonSnippets},
+	"maxbattle":    {Fields: append(commonFields, maxbattleFields...), Snippets: append(commonSnippets, maxbattleSnippets...)},
 	"weatherchange": {Fields: append(commonFields, weatherChangeFields...), Snippets: commonSnippets},
 	"greeting":     {Fields: append(commonFields, greetingFields...), Snippets: commonSnippets},
 }

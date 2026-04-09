@@ -79,7 +79,8 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	// Time enrichment
 	if pokemon.DisappearTime > 0 {
 		tz := geo.GetTimezone(pokemon.Latitude, pokemon.Longitude)
-		m["disappear_time"] = pokemon.DisappearTime // integer for <t:{{disappear_time}}:R>
+		m["disappear_time"] = pokemon.DisappearTime
+		m["despawnTimestamp"] = pokemon.DisappearTime // unix int for Discord <t:N:R>
 		m["disappearTime"] = geo.FormatTime(pokemon.DisappearTime, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(pokemon.DisappearTime)
 		tthSec := pokemon.DisappearTime - time.Now().Unix()

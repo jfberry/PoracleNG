@@ -19,6 +19,8 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
 
 	if battleEnd > 0 {
+		m["battle_end"] = battleEnd
+		m["endTimestamp"] = battleEnd // unix int for Discord <t:N:R>
 		m["disappearTime"] = geo.FormatTime(battleEnd, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(battleEnd)
 
