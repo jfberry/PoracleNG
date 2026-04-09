@@ -327,7 +327,7 @@ func (s ScannerDBConfig) DSN() string {
 	if port == 0 {
 		port = 3306
 	}
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true", s.User, s.Password, host, port, s.Database)
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&multiStatements=true", s.User, s.Password, host, port, s.Database)
 }
 
 // Configured returns true if the scanner database has been configured with at least a user and database.

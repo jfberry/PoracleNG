@@ -35,3 +35,4 @@ backups/
 .idea/
 **/.idea/
 *.iml
+processor/go_build_*
