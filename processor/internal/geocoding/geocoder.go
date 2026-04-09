@@ -171,6 +171,7 @@ func (g *Geocoder) GetAddress(lat, lon float64) *Address {
 	g.consecutiveErrors = 0
 	g.halfOpenProbeActive = false
 	g.mu.Unlock()
+	metrics.GeocodeCircuitHealthy.Set(1)
 
 	g.statCalls.Add(1)
 	g.statTotalMs.Add(duration.Milliseconds())
@@ -237,5 +238,6 @@ func (g *Geocoder) recordError() {
 	g.halfOpenProbeActive = false
 	if g.consecutiveErrors >= g.config.FailureThreshold {
 		g.circuitOpenSince = time.Now()
+		metrics.GeocodeCircuitHealthy.Set(0)
 	}
 }

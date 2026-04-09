@@ -59,13 +59,10 @@ func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, coords [][2]
 // WeatherTranslate adds per-language translated fields for a weather change.
 func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeatherID int, activePokemons []webhook.ActivePokemonEntry, lang string, showAlteredPokemonStaticMap bool) (map[string]any, *staticmap.TilePending) {
 	if e.GameData == nil || e.Translations == nil {
-		return base, nil
+		return nil, nil
 	}
 
-	m := make(map[string]any, len(base)+10)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 10) // only translated fields; caller merges base + perLang
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
@@ -114,18 +111,14 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 		}
 		m["enrichedActivePokemons"] = enrichedPokemon
 
-		// Generate per-user tile with active pokemon data when configured
+		// Generate per-user tile with active pokemon data when configured.
+		// Pass base enrichment so addStaticMap has access to imgUrl and
+		// all other base fields for the tileserver payload.
 		if showAlteredPokemonStaticMap {
 			m["activePokemons"] = enrichedPokemon
 			lat, _ := base["latitude"].(float64)
 			lon, _ := base["longitude"].(float64)
-			webhookFields := map[string]any{
-				"gameplay_condition": newWeatherID,
-			}
-			if coords, ok := base["coords"]; ok {
-				webhookFields["coords"] = coords
-			}
-			pending = e.addStaticMap(m, "weather", lat, lon, webhookFields)
+			pending = e.addStaticMap(m, "weather", lat, lon, base)
 		}
 	}
 

@@ -32,15 +32,22 @@ var placeholderRe = regexp.MustCompile(`\{(\d+)\}`)
 type Translator struct {
 	lang     string
 	messages map[string]string // key → translated string
+	fallback *Translator       // English fallback for missing keys (nil for English itself)
 }
 
-// T returns the translation of key, or key itself if not found.
+// T returns the translation of key, falling back to English, or key itself if
+// neither has it.
 func (t *Translator) T(key string) string {
 	if t == nil || t.messages == nil {
 		return key
 	}
 	if s, ok := t.messages[key]; ok && s != "" {
 		return s
+	}
+	if t.fallback != nil {
+		if s, ok := t.fallback.messages[key]; ok && s != "" {
+			return s
+		}
 	}
 	return key
 }
@@ -83,6 +90,12 @@ func Format(s string, args ...any) string {
 	})
 }
 
+// NewTranslator creates a Translator for the given locale with pre-populated messages.
+// Useful for testing or building translators outside the Bundle merge pipeline.
+func NewTranslator(lang string, msgs map[string]string) *Translator {
+	return &Translator{lang: lang, messages: msgs}
+}
+
 // Bundle holds translators for all loaded locales.
 type Bundle struct {
 	mu          sync.RWMutex
@@ -94,6 +107,16 @@ func NewBundle() *Bundle {
 	return &Bundle{
 		translators: make(map[string]*Translator),
 	}
+}
+
+// AddTranslator adds a pre-built Translator to the bundle.
+// If a translator for the same locale already exists, its messages are merged
+// (new keys override existing ones).
+func (b *Bundle) AddTranslator(t *Translator) {
+	if t == nil {
+		return
+	}
+	b.merge(t.lang, t.messages)
 }
 
 // LoadJSONDir loads all .json files from a directory, merging into existing
@@ -192,10 +215,31 @@ func (b *Bundle) merge(locale string, msgs map[string]string) {
 	t, ok := b.translators[locale]
 	if !ok {
 		t = &Translator{lang: locale, messages: make(map[string]string)}
+		// Non-English translators fall back to English for missing keys
+		if locale != "en" {
+			t.fallback = b.translators["en"]
+		}
 		b.translators[locale] = t
 	}
 	for k, v := range msgs {
 		t.messages[k] = v
+	}
+}
+
+// linkFallbacks sets the English fallback on all non-English translators.
+// Called after all locale files are loaded to handle the case where English
+// was loaded after another language.
+func (b *Bundle) LinkFallbacks() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	en := b.translators["en"]
+	if en == nil {
+		return
+	}
+	for locale, t := range b.translators {
+		if locale != "en" {
+			t.fallback = en
+		}
 	}
 }
 

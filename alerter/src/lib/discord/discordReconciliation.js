@@ -1,5 +1,5 @@
 const { DiscordAPIError } = require('discord.js')
-const mustache = require('handlebars')
+const axios = require('axios')
 const communityLogic = require('../communityLogic')
 const emojiStrip = require('../../util/emojiStrip')
 const { withRateLimitRetry } = require('./rateLimitRetry')
@@ -12,14 +12,12 @@ const haveSameContents = (a, b) => {
 }
 
 class DiscordReconciliation {
-	constructor(client, log, config, query, dts) {
+	constructor(client, log, config, query) {
 		this.client = client
 		this.log = log
 		this.config = config
 		this.query = query
 		this.client = client
-		this.dts = dts
-		this.mustache = mustache
 	}
 
 	async sendGreetings(id) {
@@ -38,18 +36,26 @@ class DiscordReconciliation {
 			}
 
 			const discordUser = await this.client.users.fetch(id)
-
-			const greetingDts = this.dts.find((template) => template.type === 'greeting' && template.platform === 'discord' && template.default)
-			const view = { prefix: this.config.discord.prefix }
-			const greeting = this.mustache.compile(JSON.stringify(greetingDts.template)) /* grrr */
 			await discordUser.createDM()
-			const discordMsgToSend = JSON.parse(greeting(view))
-			if (discordMsgToSend.embed) {
-				discordMsgToSend.embeds = [discordMsgToSend.embed]
-				delete discordMsgToSend.embed
-			}
+
 			try {
-				await discordUser.send(discordMsgToSend)
+				const resp = await axios.post(`${this.config.processor.url}/api/dts/render`, {
+					type: 'greeting',
+					platform: 'discord',
+					language: '',
+					view: { prefix: this.config.discord.prefix },
+				}, {
+					headers: { 'Content-Type': 'application/json', ...this.config.processor.headers },
+					timeout: 5000,
+				})
+				if (resp.data.status === 'ok' && resp.data.message) {
+					const discordMsgToSend = resp.data.message
+					if (discordMsgToSend.embed) {
+						discordMsgToSend.embeds = [discordMsgToSend.embed]
+						delete discordMsgToSend.embed
+					}
+					await discordUser.send(discordMsgToSend)
+				}
 			} catch (err) {
 				this.log.error(`Reconciliation (Discord) Cannot send welcome message to "${id}"`, err)
 			}

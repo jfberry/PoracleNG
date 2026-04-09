@@ -614,6 +614,7 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 	r.consecutiveErrors = 0
 	r.halfOpenProbeActive = false
 	r.mu.Unlock()
+	metrics.TileCircuitHealthy.Set(1)
 
 	// If the result is already a full URL, return it directly
 	if strings.HasPrefix(result, "http") {
@@ -634,6 +635,7 @@ func (r *Resolver) recordError() {
 	r.halfOpenProbeActive = false
 	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
 		r.circuitOpenSince = time.Now()
+		metrics.TileCircuitHealthy.Set(0)
 	}
 }
 

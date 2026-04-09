@@ -90,15 +90,21 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 				}
 			}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  "max_battle",
-				Message:               raw,
-				Enrichment:            enrichment,
-				PerLanguageEnrichment: perLang,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          matched,
-				TilePending:           tilePending,
-			})
+			if ps.renderCh == nil {
+				return
+			}
+			webhookFields := parseWebhookFields(raw)
+
+			ps.renderCh <- RenderJob{
+				TemplateType:      "maxbattle",
+				Enrichment:        enrichment,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TilePending:       tilePending,
+				LogReference:      mb.ID,
+			}
 		} else {
 			l.Debugf("Maxbattle L%d %s at %s [%.3f,%.3f] and 0 humans cared",
 				mb.BattleLevel, ps.pokemonName(mb.BattlePokemonID, mb.BattlePokemonForm),

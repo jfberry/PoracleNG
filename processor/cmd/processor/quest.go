@@ -85,15 +85,21 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 				}
 			}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  "quest",
-				Message:               raw,
-				Enrichment:            enrichment,
-				PerLanguageEnrichment: perLang,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          matched,
-				TilePending:           tilePending,
-			})
+			if ps.renderCh == nil {
+				return
+			}
+			webhookFields := parseWebhookFields(raw)
+
+			ps.renderCh <- RenderJob{
+				TemplateType:      "quest",
+				Enrichment:        enrichment,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TilePending:       tilePending,
+				LogReference:      quest.PokestopID,
+			}
 		} else {
 			l.Debugf("Quest at %s and 0 humans cared", quest.Name)
 		}

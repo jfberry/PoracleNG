@@ -128,13 +128,13 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 					})
 				}
 
-				// Track active pokemon per user for weather change alerts
+				// Track active pokemon per user for weather change alerts.
+				// pokemon.Weather (webhook "weather" field) is the in-game boost
+				// weather: >0 means the pokemon IS weather-boosted, 0 means not.
+				// This matches PoracleJS's data.weather used by getAlteringWeathers.
 				if ps.activePokemon != nil {
 					types := ps.pokemonTypes.GetTypes(pokemon.PokemonID, pokemon.Form)
-					pokWeather := pokemon.BoostedWeather
-					if pokWeather == 0 {
-						pokWeather = pokemon.Weather
-					}
+					boosted := pokemon.Weather > 0
 					for _, u := range matched {
 						ps.activePokemon.Register(cellID, u.ID, pokemon.EncounterID, tracker.ActivePokemon{
 							PokemonID:     pokemon.PokemonID,
@@ -144,7 +144,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 							Latitude:      pokemon.Latitude,
 							Longitude:     pokemon.Longitude,
 							DisappearTime: pokemon.DisappearTime,
-							Weather:       pokWeather,
+							Boosted:       boosted,
 							Types:         types,
 						})
 					}
@@ -161,6 +161,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 					pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
 			}
 
+			enrichStart := time.Now()
 			baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed)
 
 			// Compute per-language translated enrichment
@@ -176,17 +177,25 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			if ps.enricher.PVPDisplay != nil && perLang != nil {
 				perUser = ps.enricher.PokemonPerUser(perLang, matched)
 			}
+			metrics.EnrichmentDuration.WithLabelValues("pokemon").Observe(time.Since(enrichStart).Seconds())
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  "pokemon",
-				Message:               raw,
-				Enrichment:            baseEnrichment,
-				PerLanguageEnrichment: perLang,
-				PerUserEnrichment:     perUser,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          matched,
-				TilePending:           tilePending,
-			})
+			if ps.renderCh == nil {
+				return
+			}
+			webhookFields := parseWebhookFields(raw)
+
+			ps.renderCh <- RenderJob{
+				IsPokemon:         true,
+				IsEncountered:     processed.Encountered,
+				Enrichment:        baseEnrichment,
+				PerLangEnrichment: perLang,
+				PerUserEnrichment: perUser,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TilePending:       tilePending,
+				LogReference:      pokemon.EncounterID,
+			}
 		} else {
 			if processed.Encountered {
 				l.Debugf("%s{CP%d/IV%.0f%%} appeared at [%.3f,%.3f] and 0 humans cared",
@@ -215,15 +224,7 @@ func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessag
 		ps.pokemonName(change.Old.PokemonID, change.Old.Form),
 		ps.pokemonName(change.New.PokemonID, change.New.Form))
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:    "pokemon_changed",
-		Message: raw,
-		OldState: &webhook.EncounterOld{
-			PokemonID: change.Old.PokemonID,
-			Form:      change.Old.Form,
-			Weather:   change.Old.Weather,
-			CP:        change.Old.CP,
-			IV:        oldIV,
-		},
-	})
+	// TODO: Route pokemon_changed through render queue with EditKey for message editing.
+	// For now, skip delivery — the old alerter path no longer has controllers to handle it.
+	_ = oldIV
 }

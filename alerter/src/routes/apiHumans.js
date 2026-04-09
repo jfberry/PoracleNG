@@ -131,7 +131,7 @@ module.exports = async (fastify, options) => {
 				if (fastify.config.discord.delegatedAdministration && fastify.config.discord.delegatedAdministration.channelTracking
 						&& Object.keys(fastify.config.discord.delegatedAdministration.channelTracking).length) {
 					const dr = new DiscordUtil(
-						fastify.discordWorker.client,
+						fastify.discordClient,
 						fastify.logger,
 						fastify.config,
 						fastify.query,
@@ -172,7 +172,7 @@ module.exports = async (fastify, options) => {
 					&& Object.keys(fastify.config.discord.delegatedAdministration.webhookTracking).length) {
 					if (!roles) {
 						const dr = new DiscordUtil(
-							fastify.discordWorker.client,
+							fastify.discordClient,
 							fastify.logger,
 							fastify.config,
 							fastify.query,
@@ -190,7 +190,7 @@ module.exports = async (fastify, options) => {
 				if (fastify.config.discord.delegatedAdministration && fastify.config.discord.delegatedAdministration.userTracking) {
 					if (!roles) {
 						const dr = new DiscordUtil(
-							fastify.discordWorker.client,
+							fastify.discordClient,
 							fastify.logger,
 							fastify.config,
 							fastify.query,

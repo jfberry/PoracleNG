@@ -18,7 +18,7 @@ func LoadLures(db *sqlx.DB) ([]*LureTracking, error) {
 	var lures []LureTracking
 	err := db.Select(&lures,
 		`SELECT id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, lure_id
+		        COALESCE(template, '') AS template, lure_id
 		 FROM lures`)
 	if err != nil {
 		return nil, err

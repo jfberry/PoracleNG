@@ -17,7 +17,7 @@ type Config struct {
 	Weather        WeatherConfig        `toml:"weather"`
 	Tuning         TuningConfig         `toml:"tuning"`
 	Stats          StatsConfig          `toml:"stats"`
-	Area           AreaConfig           `toml:"areaSecurity"`
+	Area           AreaConfig           `toml:"area_security"`
 	Locale         LocaleConfig         `toml:"locale"`
 	Logging        LoggingConfig        `toml:"logging"`
 	WebhookLogging WebhookLoggingConfig `toml:"webhookLogging"`
@@ -45,6 +45,13 @@ type GeneralConfig struct {
 	StickerURL           string `toml:"sticker_url"`
 	RequestShinyImages   bool   `toml:"request_shiny_images"`
 	PopulatePokestopName bool   `toml:"populate_pokestop_name"`
+	AlertMinimumTime     int            `toml:"alert_minimum_time"`        // seconds before expiry inside which alerts are dropped
+	IgnoreLongRaids      bool           `toml:"ignore_long_raids"`         // skip raids/eggs with TTH > 47 minutes
+	ShortlinkProvider    string         `toml:"shortlink_provider"`        // "shlink" or empty
+	ShortlinkProviderURL string         `toml:"shortlink_provider_url"`    // Shlink instance URL
+	ShortlinkProviderKey string         `toml:"shortlink_provider_key"`    // Shlink API key
+	ShortlinkDomain      string         `toml:"shortlink_provider_domain"` // Shlink domain override
+	DTSDictionary        map[string]any `toml:"dts_dictionary"`            // custom key-value pairs for DTS templates
 }
 
 type LocaleConfig struct {
@@ -81,14 +88,47 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Prefix   string   `toml:"prefix"`
-	IvColors []string `toml:"iv_colors"`
-	Admins   []string `toml:"admins"`
+	Token              any      `toml:"token"` // string or []string
+	Prefix             string   `toml:"prefix"`
+	IvColors           []string `toml:"iv_colors"`
+	Admins             []string `toml:"admins"`
+	UploadEmbedImages  bool     `toml:"upload_embed_images"`
+	MessageDeleteDelay int      `toml:"message_delete_delay"` // extra ms for clean TTH on channels
+}
+
+// DiscordTokens returns the discord tokens as a string slice.
+func (c DiscordConfig) DiscordTokens() []string {
+	return tomlTokens(c.Token)
 }
 
 // TelegramConfig reads the [telegram] section for fields the processor needs.
 type TelegramConfig struct {
+	Token  any      `toml:"token"` // string or []string
 	Admins []string `toml:"admins"`
+}
+
+// TelegramTokens returns the telegram tokens as a string slice.
+func (c TelegramConfig) TelegramTokens() []string {
+	return tomlTokens(c.Token)
+}
+
+// tomlTokens normalizes a TOML token field (bare string or array) into a string slice.
+func tomlTokens(v any) []string {
+	switch t := v.(type) {
+	case string:
+		if t != "" {
+			return []string{t}
+		}
+	case []any:
+		var tokens []string
+		for _, elem := range t {
+			if s, ok := elem.(string); ok && s != "" {
+				tokens = append(tokens, s)
+			}
+		}
+		return tokens
+	}
+	return nil
 }
 
 // ListenAddr returns the host:port listen address.
@@ -158,12 +198,12 @@ type KojiOptions struct {
 
 type PVPConfig struct {
 	PVPQueryMaxRank            int   `toml:"pvp_query_max_rank"`
-	PVPFilterMaxRank           int   `toml:"pvp_filter_max_rank"`
-	PVPEvolutionDirectTracking bool  `toml:"pvp_evolution_direct_tracking"`
+	PVPFilterMaxRank           int   `toml:"filter_max_rank"`
+	PVPEvolutionDirectTracking bool  `toml:"evolution_direct_tracking"`
 	LevelCaps                  []int `toml:"level_caps"`
-	PVPFilterGreatMinCP        int   `toml:"pvp_filter_great_min_cp"`
-	PVPFilterUltraMinCP        int   `toml:"pvp_filter_ultra_min_cp"`
-	PVPFilterLittleMinCP       int   `toml:"pvp_filter_little_min_cp"`
+	PVPFilterGreatMinCP        int   `toml:"filter_great_min_cp"`
+	PVPFilterUltraMinCP        int   `toml:"filter_ultra_min_cp"`
+	PVPFilterLittleMinCP       int   `toml:"filter_little_min_cp"`
 	IncludeMegaEvolution       bool  `toml:"include_mega_evolution"`
 	DisplayMaxRank             int   `toml:"display_max_rank"`
 	DisplayGreatMinCP          int   `toml:"display_great_min_cp"`
@@ -214,6 +254,14 @@ type TuningConfig struct {
 	GeocodingTimeout           int `toml:"geocoding_timeout"`            // ms
 	GeocodingFailureThreshold  int `toml:"geocoding_failure_threshold"`
 	GeocodingCooldownMs        int `toml:"geocoding_cooldown_ms"`
+	RenderPoolSize             int `toml:"render_pool_size"`
+	RenderQueueSize            int `toml:"render_queue_size"`
+
+	// Delivery tuning
+	ConcurrentDiscordDestinations  int `toml:"concurrent_discord_destinations"`
+	ConcurrentTelegramDestinations int `toml:"concurrent_telegram_destinations"`
+	ConcurrentDiscordWebhooks      int `toml:"concurrent_discord_webhooks"`
+	DeliveryQueueSize              int `toml:"delivery_queue_size"`
 }
 
 type AreaConfig struct {
@@ -339,11 +387,17 @@ func Load(baseDir string) (*Config, error) {
 			DisplayLittleMinCP: 450,
 		},
 		Tuning: TuningConfig{
-			ReloadIntervalSecs:  60,
-			EncounterCacheTTL:   3600,
-			WorkerPoolSize:      4,
-			BatchSize:           50,
-			FlushIntervalMillis: 100,
+			ReloadIntervalSecs:             60,
+			EncounterCacheTTL:              3600,
+			WorkerPoolSize:                 4,
+			BatchSize:                      50,
+			FlushIntervalMillis:            100,
+			RenderPoolSize:                 8,
+			RenderQueueSize:                100,
+			ConcurrentDiscordDestinations:  10,
+			ConcurrentTelegramDestinations: 10,
+			ConcurrentDiscordWebhooks:      10,
+			DeliveryQueueSize:              200,
 		},
 		Stats: StatsConfig{
 			MinSampleSize:       10000,

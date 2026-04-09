@@ -75,5 +75,8 @@ func Load(baseDir string) *Bundle {
 		}
 	}
 
+	// Ensure all non-English translators fall back to English for missing keys
+	b.LinkFallbacks()
+
 	return b
 }

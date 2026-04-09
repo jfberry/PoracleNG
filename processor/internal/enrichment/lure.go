@@ -10,6 +10,9 @@ import (
 func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
+	// Pokestop name — lure webhook uses "name" field, normalize to pokestop_name
+	m["pokestop_name"] = lure.Name
+
 	if lure.LureExpiration > 0 {
 		tz := geo.GetTimezone(lure.Latitude, lure.Longitude)
 		m["disappearTime"] = geo.FormatTime(lure.LureExpiration, tz, e.TimeLayout)
@@ -42,12 +45,26 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 	pending := e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields)
 
 	// Lure data from util.json
+	m["lureTypeId"] = lure.LureID
 	if e.GameData != nil {
 		if info, ok := e.GameData.Util.Lures[lure.LureID]; ok {
 			m["lureColor"] = info.Color
 			m["lureEmojiKey"] = info.Emoji
+			m["lureTypeNameEng"] = info.Name // util.json names are English
 		}
 	}
+
+	// Invasion fields — a pokestop can have both a lure and an invasion
+	gruntTypeID := lure.IncidentGruntType
+	if gruntTypeID == 0 {
+		gruntTypeID = lure.GruntType
+	}
+	displayType := lure.DisplayType
+	if displayType == 0 {
+		displayType = lure.IncidentDisplayType
+	}
+	m["gruntTypeId"] = gruntTypeID
+	m["displayTypeId"] = displayType
 
 	return m, pending
 }
@@ -55,17 +72,27 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 // LureTranslate adds per-language translated fields.
 func (e *Enricher) LureTranslate(base map[string]any, lureID int, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+3)
-	for k, v := range base {
-		m[k] = v
-	}
+	gd := e.GameData
+	m := make(map[string]any, 8)
 
 	tr := e.Translations.For(lang)
-	if info, ok := e.GameData.Util.Lures[lureID]; ok {
+	if info, ok := gd.Util.Lures[lureID]; ok {
 		m["lureTypeName"] = tr.T(info.Name)
+	}
+
+	// Translate invasion fields if present on this pokestop
+	gruntTypeID := toInt(base["gruntTypeId"])
+	if gruntTypeID > 0 {
+		grunt := gd.GetGrunt(gruntTypeID)
+		if grunt != nil {
+			m["gruntName"] = tr.T(grunt.CategoryKey())
+			if typeKey := grunt.TypeKey(); typeKey != "" {
+				m["gruntTypeName"] = tr.T(typeKey)
+			}
+		}
 	}
 
 	return m

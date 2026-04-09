@@ -1,6 +1,8 @@
 package enrichment
 
 import (
+	"time"
+
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
@@ -11,6 +13,7 @@ import (
 // Raid builds enrichment fields for a raid or egg webhook.
 func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
+	m["pokemon_id"] = raid.PokemonID
 	m["firstNotification"] = firstNotification
 
 	tz := geo.GetTimezone(raid.Latitude, raid.Longitude)
@@ -46,6 +49,12 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		}
 	}
 
+	// Unix timestamps as integers — avoids float64 scientific notation from
+	// the raw webhook layer (Go JSON decodes numbers as float64 in map[string]any).
+	// DTS templates use these for Discord timestamps: <t:{{start}}:R>
+	m["start"] = raid.Start
+	m["end"] = raid.End
+
 	if raid.PokemonID > 0 {
 		// Hatched raid: disappearTime from end, tth from now to end
 		m["disappearTime"] = geo.FormatTime(raid.End, tz, e.TimeLayout)
@@ -67,18 +76,28 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		m["tth"] = geo.ComputeTTH(raid.Start)
 	}
 
-	// Format RSVP timeslots
+	// Format RSVP timeslots — only include future timeslots (matching alerter behavior)
 	if len(raid.RSVPs) > 0 {
-		rsvpTimes := make([]map[string]any, len(raid.RSVPs))
-		for i, r := range raid.RSVPs {
-			rsvpTimes[i] = map[string]any{
-				"timeslot":    r.Timeslot,
-				"going_count": r.GoingCount,
-				"maybe_count": r.MaybeCount,
-				"time":        geo.FormatTime(r.Timeslot/1000, tz, e.TimeLayout),
+		nowMs := time.Now().UnixMilli()
+		var rsvpTimes []map[string]any
+		for _, r := range raid.RSVPs {
+			if r.Timeslot <= nowMs {
+				continue // skip past timeslots
 			}
+			tsSec := (r.Timeslot + 999) / 1000 // ceil to seconds (matching alerter Math.ceil)
+			rsvpTimes = append(rsvpTimes, map[string]any{
+				"timeslot":    tsSec,
+				"timeSlot":    tsSec,        // camelCase for DTS templates
+				"going_count": r.GoingCount,
+				"goingCount":  r.GoingCount, // camelCase for DTS templates
+				"maybe_count": r.MaybeCount,
+				"maybeCount":  r.MaybeCount, // camelCase for DTS templates
+				"time":        geo.FormatTime(r.Timeslot/1000, tz, e.TimeLayout),
+			})
 		}
-		m["rsvps"] = rsvpTimes
+		if len(rsvpTimes) > 0 {
+			m["rsvps"] = rsvpTimes
+		}
 	}
 
 	// Map URLs
@@ -104,6 +123,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		// Team color
 		if info, ok := gd.Util.Teams[raid.TeamID]; ok {
 			m["gymColor"] = info.Color
+			m["color"] = info.Color // deprecated alias
 		}
 
 		// Raid level name
@@ -133,24 +153,41 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 				m["weaknessList"] = gamedata.CalculateWeaknesses(monster.Types, gd.Types)
 
 				// Weather boost
-				m["boostingWeatherIds"] = gd.GetBoostingWeathers(monster.Types)
+				boostingWeathers := gd.GetBoostingWeathers(monster.Types)
+				m["boostingWeatherIds"] = boostingWeathers
+				m["boostingWeatherEmojiKeys"] = gd.GetWeatherEmojiKeys(boostingWeathers)
+
+				// Evolution chain
+				m["hasEvolutions"] = len(monster.Evolutions) > 0
+				m["hasMegaEvolutions"] = len(monster.TempEvolutions) > 0
+
+				// Shiny possible
+				if e.ShinyProvider != nil {
+					rate := e.ShinyProvider.GetShinyRate(raid.PokemonID)
+					if rate > 0 {
+						m["shinyPossible"] = true
+						m["shinyPossibleEmojiKey"] = "shiny"
+					} else {
+						m["shinyPossible"] = false
+					}
+				}
 			}
 		}
 	}
 
+	if raid.PokemonID > 0 {
+	} else {
+	}
 	return m, pending
 }
 
 // RaidTranslate adds per-language translated fields to a raid enrichment map.
 func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+15)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 15) // only translated fields; caller merges base + perLang
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
@@ -167,6 +204,24 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		}
 	}
 
+	// Weather forecast names (for weatherChange composition)
+	forecastCurrent, _ := base["weatherForecastCurrent"].(int)
+	forecastNext, _ := base["weatherForecastNext"].(int)
+	if forecastCurrent > 0 {
+		m["weatherCurrentName"] = TranslateWeatherName(tr, forecastCurrent)
+		if wInfo, ok := gd.Util.Weather[forecastCurrent]; ok {
+			m["weatherCurrentEmojiKey"] = wInfo.Emoji
+		}
+	}
+	if forecastNext > 0 {
+		m["weatherNextName"] = TranslateWeatherName(tr, forecastNext)
+		if wInfo, ok := gd.Util.Weather[forecastNext]; ok {
+			m["weatherNextEmojiKey"] = wInfo.Emoji
+		}
+		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
+		m["weatherCurrentUnknown"] = tr.T("weather.unknown")
+	}
+
 	// Level name
 	if levelName, ok := base["levelNameEng"].(string); ok {
 		m["levelName"] = tr.T(levelName)
@@ -181,11 +236,13 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		// Pokemon name
 		TranslateMonsterNamesEng(m, gd, tr, e.Translations, raid.PokemonID, raid.Form, raid.Evolution)
 
+		enTr := e.Translations.For("en")
+
 		// Type names
-		TranslateTypeNames(m, tr, monster.Types)
+		TranslateTypeNames(m, tr, enTr, monster.Types)
 
 		// Moves
-		addMoveFields(m, gd, tr, raid.Move1, raid.Move2)
+		addMoveFields(m, gd, tr, enTr, raid.Move1, raid.Move2)
 
 		// Weather boost
 		weather := toInt(base["gameWeatherId"])
@@ -195,19 +252,33 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		addGenerationFields(m, gd, tr, raid.PokemonID, raid.Form)
 
 		// Gender
-		addGenderFields(m, gd, tr, raid.Gender)
+		addGenderFields(m, gd, tr, enTr, raid.Gender)
 
-		// Evolution name
+		// Evolution name + megaName
 		if raid.Evolution > 0 {
 			if info, ok := gd.Util.Evolution[raid.Evolution]; ok {
 				m["evolutionName"] = tr.T(info.Name)
+			}
+			// megaName = fullName when evolved (mega/primal)
+			if fn, ok := m["fullName"].(string); ok {
+				m["megaName"] = fn
+			}
+		} else {
+			// megaName = base pokemon name when not evolved
+			if n, ok := m["name"].(string); ok {
+				m["megaName"] = n
 			}
 		}
 
 		// Weakness
 		if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
-			m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr)
+			m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr, gd)
 		}
+
+		// Evolution chain (same helper as pokemon)
+		evolutions, megaEvolutions := e.buildEvolutions(gd, tr, raid.PokemonID, raid.Form)
+		m["evolutions"] = evolutions
+		m["megaEvolutions"] = megaEvolutions
 	}
 
 	return m

@@ -68,7 +68,12 @@ func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i
 		if evolution > 0 {
 			enFullName = i18n.Format(nameKeys.MegaNamePattern, enFullName)
 		}
+		enFormName := ""
+		if nameKeys.FormKey != "" {
+			enFormName = enTr.T(nameKeys.FormKey)
+		}
 		m["nameEng"] = enName
+		m["formNameEng"] = enFormName
 		m["formNormalisedEng"] = enFormNormalised
 		m["fullNameEng"] = enFullName
 	}
@@ -82,12 +87,20 @@ func IsNormalForm(name string) bool {
 }
 
 // TranslateTypeNames adds translated type names to the enrichment map.
-func TranslateTypeNames(m map[string]any, tr *i18n.Translator, typeIDs []int) {
+func TranslateTypeNames(m map[string]any, tr *i18n.Translator, enTr *i18n.Translator, typeIDs []int) {
 	names := make([]string, 0, len(typeIDs))
+	namesEng := make([]string, 0, len(typeIDs))
 	for _, id := range typeIDs {
-		names = append(names, tr.T(gamedata.TypeTranslationKey(id)))
+		key := gamedata.TypeTranslationKey(id)
+		names = append(names, tr.T(key))
+		if enTr != nil {
+			namesEng = append(namesEng, enTr.T(key))
+		}
 	}
 	m["typeName"] = strings.Join(names, ", ")
+	if enTr != nil {
+		m["typeNameEng"] = namesEng
+	}
 }
 
 // TranslateMoveName returns the translated name for a move ID.
@@ -115,31 +128,48 @@ func TranslateItemName(tr *i18n.Translator, itemID int) string {
 }
 
 // TranslateWeaknessCategories translates type names in weakness categories.
-func TranslateWeaknessCategories(categories []gamedata.WeaknessCategory, tr *i18n.Translator) []map[string]any {
+// Stores emoji keys on each type entry — emoji resolution to platform-specific
+// strings happens later in NewLayeredView (which knows the platform).
+func TranslateWeaknessCategories(categories []gamedata.WeaknessCategory, tr *i18n.Translator, gd *gamedata.GameData) []map[string]any {
 	result := make([]map[string]any, 0, len(categories))
 	for _, cat := range categories {
 		translatedTypes := make([]map[string]any, 0, len(cat.TypeIDs))
+		var typeNames []string
+		var emojiKeys []string
 		for _, typeID := range cat.TypeIDs {
-			translatedTypes = append(translatedTypes, map[string]any{
+			name := tr.T(gamedata.TypeTranslationKey(typeID))
+			entry := map[string]any{
 				"typeId": typeID,
-				"name":   tr.T(gamedata.TypeTranslationKey(typeID)),
-			})
+				"name":   name,
+			}
+			if ti, ok := gd.Types[typeID]; ok && ti.Emoji != "" {
+				entry["emojiKey"] = ti.Emoji
+				emojiKeys = append(emojiKeys, ti.Emoji)
+			}
+			translatedTypes = append(translatedTypes, entry)
+			typeNames = append(typeNames, name)
 		}
 		result = append(result, map[string]any{
-			"value":     cat.Multiplier,
-			"types":     translatedTypes,
+			"value":         cat.Multiplier,
+			"types":         translatedTypes,
+			"typeName":      strings.Join(typeNames, ", "),
+			"typeEmojiKeys": emojiKeys,
 		})
 	}
 	return result
 }
 
 // addGenderFields adds translated gender name and emoji key to the enrichment map.
-func addGenderFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, gender int) {
+func addGenderFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, enTr *i18n.Translator, gender int) {
 	if info, ok := gd.Util.Genders[gender]; ok {
 		m["genderName"] = tr.T(info.Name)
+		if enTr != nil {
+			m["genderNameEng"] = enTr.T(info.Name)
+		}
 		m["genderEmojiKey"] = info.Emoji
 	} else {
 		m["genderName"] = ""
+		m["genderNameEng"] = ""
 		m["genderEmojiKey"] = ""
 	}
 }
@@ -148,8 +178,10 @@ func addGenderFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translato
 func addRarityFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, rarityGroup int) {
 	if name, ok := gd.Util.Rarity[rarityGroup]; ok {
 		m["rarityName"] = tr.T(name)
+		m["rarityNameEng"] = name // util.json names are already English
 	} else {
 		m["rarityName"] = ""
+		m["rarityNameEng"] = ""
 	}
 }
 
@@ -157,8 +189,10 @@ func addRarityFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translato
 func addSizeFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, size int) {
 	if name, ok := gd.Util.Size[size]; ok {
 		m["sizeName"] = tr.T(name)
+		m["sizeNameEng"] = name // util.json names are already English
 	} else {
 		m["sizeName"] = ""
+		m["sizeNameEng"] = ""
 	}
 }
 
@@ -184,9 +218,11 @@ func addGenerationFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Trans
 	info := gd.GetGenerationInfo(gen)
 	if info != nil {
 		m["generationName"] = tr.T(info.Name)
+		m["generationNameEng"] = info.Name // util.json names are already English
 		m["generationRoman"] = info.Roman
 	} else {
 		m["generationName"] = fmt.Sprintf("Gen %d", gen)
+		m["generationNameEng"] = fmt.Sprintf("Gen %d", gen)
 		m["generationRoman"] = ""
 	}
 }
@@ -209,11 +245,15 @@ func addWeatherFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translat
 }
 
 // addMoveFields adds translated move names and type emoji keys.
-func addMoveFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, quickMoveID, chargeMoveID int) {
+func addMoveFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, enTr *i18n.Translator, quickMoveID, chargeMoveID int) {
 	m["quickMoveId"] = quickMoveID
 	m["chargeMoveId"] = chargeMoveID
 	m["quickMoveName"] = TranslateMoveName(tr, quickMoveID)
 	m["chargeMoveName"] = TranslateMoveName(tr, chargeMoveID)
+	if enTr != nil {
+		m["quickMoveNameEng"] = TranslateMoveName(enTr, quickMoveID)
+		m["chargeMoveNameEng"] = TranslateMoveName(enTr, chargeMoveID)
+	}
 
 	// Move type emoji keys
 	if quickMove := gd.GetMove(quickMoveID); quickMove != nil && quickMove.TypeID > 0 {

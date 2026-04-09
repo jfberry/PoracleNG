@@ -198,4 +198,162 @@ var (
 		Name: "poracle_processor_api_requests_total",
 		Help: "API requests by method, endpoint, and status",
 	}, []string{"method", "endpoint", "status"})
+
+	// Render queue metrics
+	RenderQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_render_queue_depth",
+		Help: "Current number of items in the render queue",
+	})
+
+	RenderQueueCapacity = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_render_queue_capacity",
+		Help: "Configured render queue capacity",
+	})
+
+	RenderDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "poracle_render_duration_seconds",
+		Help:    "Time to process a render job (tile + render + deliver)",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5},
+	})
+
+	RenderTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_render_total",
+		Help: "Total render jobs processed",
+	}, []string{"status"})
+
+	RenderTileSkipped = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_render_tile_skipped_total",
+		Help: "Tiles skipped due to render queue pressure",
+	})
+
+	// Delivery metrics
+	DeliveryTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_delivery_total",
+		Help: "Total messages delivered",
+	}, []string{"platform", "status"})
+
+	DeliveryDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_delivery_duration_seconds",
+		Help:    "Time to deliver a message",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10},
+	}, []string{"platform"})
+
+	DeliveryQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_queue_depth",
+		Help: "Current items in delivery queue",
+	})
+
+	DeliveryTrackerSize = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_tracker_size",
+		Help: "Messages tracked for clean/edit",
+	})
+
+	DeliveryCleanTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_delivery_clean_total",
+		Help: "Messages successfully deleted (clean)",
+	})
+
+	DeliveryRateLimited = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_delivery_rate_limited_total",
+		Help: "Rate-limited delivery attempts",
+	}, []string{"platform"})
+
+	// Per-platform queue depths
+	DeliveryDiscordQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_discord_queue_depth",
+		Help: "Current discord delivery queue depth",
+	})
+	DeliveryWebhookQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_webhook_queue_depth",
+		Help: "Current discord webhook delivery queue depth",
+	})
+	DeliveryTelegramQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_telegram_queue_depth",
+		Help: "Current telegram delivery queue depth",
+	})
+
+	// Per-platform in-flight (concurrency saturation)
+	DeliveryInFlight = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "poracle_delivery_in_flight",
+		Help: "Current in-flight delivery sends per platform",
+	}, []string{"platform"})
+
+	// Discord API rate limit wait time
+	DeliveryRateLimitWait = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_delivery_rate_limit_wait_seconds",
+		Help:    "Time spent waiting for Discord rate limits",
+		Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60},
+	}, []string{"platform"})
+
+	// Message tracker evictions (TTL expiry)
+	DeliveryTrackerEvictions = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_delivery_tracker_evictions_total",
+		Help: "Messages evicted from tracker on TTL expiry",
+	})
+
+	// Template rendering (separate from full render pipeline)
+	TemplateDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_template_render_seconds",
+		Help:    "DTS template rendering latency",
+		Buckets: []float64{0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25},
+	}, []string{"type"})
+
+	TemplateTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_template_render_total",
+		Help: "DTS template renders by type and status",
+	}, []string{"type", "status"})
+
+	// Shlink URL shortening
+	ShlinkDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "poracle_shlink_seconds",
+		Help:    "Shlink URL shortening request latency",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5},
+	})
+
+	ShlinkTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_shlink_total",
+		Help: "Shlink shortening outcomes",
+	}, []string{"result"}) // ok, error, cache_hit, disabled
+
+	// Uicons
+	UiconsRefreshTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_uicons_refresh_total",
+		Help: "Uicons index refresh outcomes",
+	}, []string{"result"}) // ok, error, not_found
+
+	UiconsRefreshDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "poracle_uicons_refresh_seconds",
+		Help:    "Uicons index fetch latency",
+		Buckets: []float64{0.1, 0.25, 0.5, 1, 2, 5},
+	})
+
+	// Circuit breaker state (1=closed/healthy, 0=open/tripped)
+	TileCircuitHealthy = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_tile_circuit_healthy",
+		Help: "Tileserver circuit breaker state (1=closed, 0=open)",
+	})
+
+	GeocodeCircuitHealthy = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_geocode_circuit_healthy",
+		Help: "Geocoding circuit breaker state (1=closed, 0=open)",
+	})
+
+	// State reload breakdown
+	StateDBQueryDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "poracle_processor_state_db_query_seconds",
+		Help:    "Time for state reload DB queries",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
+	})
+
+	StateLastReloadSuccess = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_last_reload_success_timestamp",
+		Help: "Unix timestamp of last successful state reload",
+	})
+
+	// Enrichment timing
+	EnrichmentDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_processor_enrichment_seconds",
+		Help:    "Enrichment computation time by webhook type",
+		Buckets: []float64{0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5},
+	}, []string{"type"})
 )

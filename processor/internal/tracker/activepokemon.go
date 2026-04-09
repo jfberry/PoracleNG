@@ -16,7 +16,7 @@ type ActivePokemon struct {
 	Latitude      float64
 	Longitude     float64
 	DisappearTime int64
-	Weather       int   // current boost weather on this pokemon (0 = none)
+	Boosted       bool  // whether this pokemon is currently weather-boosted
 	Types         []int // pokemon type IDs
 }
 
@@ -108,7 +108,7 @@ func (apt *ActivePokemonTracker) GetAffectedPokemon(cellID, userID string, oldWe
 			continue
 		}
 
-		if gamedata.IsAffectedByWeatherChange(p.Types, p.Weather, newWeather) {
+		if gamedata.IsAffectedByWeatherChange(p.Types, p.Boosted, newWeather) {
 			result = append(result, *p)
 			if len(result) >= maxCount {
 				break

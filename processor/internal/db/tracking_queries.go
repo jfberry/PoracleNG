@@ -96,7 +96,7 @@ func SelectLuresByIDProfile(db *sqlx.DB, id string, profileNo int) ([]LureTracki
 	var lures []LureTrackingAPI
 	err := db.Select(&lures,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, lure_id
+		        COALESCE(template, '') AS template, lure_id
 		 FROM lures WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select lures for %s profile %d: %w", id, profileNo, err)
@@ -139,7 +139,7 @@ func SelectFortsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]FortTracki
 	var forts []FortTrackingAPI
 	err := db.Select(&forts,
 		`SELECT uid, id, profile_no, ping, distance,
-		        COALESCE(template, '1') AS template,
+		        COALESCE(template, '') AS template,
 		        COALESCE(fort_type, 'everything') AS fort_type,
 		        COALESCE(include_empty, true) AS include_empty,
 		        COALESCE(change_types, '[]') AS change_types
@@ -185,7 +185,7 @@ func SelectInvasionsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Invasi
 	var invasions []InvasionTrackingAPI
 	err := db.Select(&invasions,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, gender, grunt_type
+		        COALESCE(template, '') AS template, gender, grunt_type
 		 FROM invasion WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select invasions for %s profile %d: %w", id, profileNo, err)
@@ -229,7 +229,7 @@ func SelectNestsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]NestTracki
 	var nests []NestTrackingAPI
 	err := db.Select(&nests,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, pokemon_id,
+		        COALESCE(template, '') AS template, pokemon_id,
 		        min_spawn_avg, COALESCE(form, 0) AS form
 		 FROM nests WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
@@ -276,7 +276,7 @@ func SelectQuestsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]QuestTrac
 	var quests []QuestTrackingAPI
 	err := db.Select(&quests,
 		`SELECT uid, id, profile_no, ping, clean, reward,
-		        COALESCE(template, '1') AS template, shiny, reward_type,
+		        COALESCE(template, '') AS template, shiny, reward_type,
 		        distance, COALESCE(form, 0) AS form,
 		        COALESCE(amount, 0) AS amount
 		 FROM quest WHERE id = ? AND profile_no = ?`, id, profileNo)
@@ -347,7 +347,7 @@ func SelectMonstersByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Monster
 	var monsters []MonsterTrackingAPI
 	err := db.Select(&monsters,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, pokemon_id, form,
+		        COALESCE(template, '') AS template, pokemon_id, form,
 		        min_iv, max_iv, min_cp, max_cp, min_level, max_level,
 		        atk, def, sta, max_atk, max_def, max_sta,
 		        gender, min_weight, max_weight, min_time,
@@ -439,7 +439,7 @@ func SelectRaidsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]RaidTracki
 	var raids []RaidTrackingAPI
 	err := db.Select(&raids,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, team, pokemon_id, form,
+		        COALESCE(template, '') AS template, team, pokemon_id, form,
 		        level, exclusive, move, evolution, gym_id, rsvp_changes
 		 FROM raid WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
@@ -488,7 +488,7 @@ func SelectEggsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]EggTracking
 	var eggs []EggTrackingAPI
 	err := db.Select(&eggs,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, team, level, exclusive,
+		        COALESCE(template, '') AS template, team, level, exclusive,
 		        gym_id, rsvp_changes
 		 FROM egg WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
@@ -535,7 +535,7 @@ func SelectGymsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]GymTracking
 	var gyms []GymTrackingAPI
 	err := db.Select(&gyms,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, team, slot_changes,
+		        COALESCE(template, '') AS template, team, slot_changes,
 		        gym_id, COALESCE(battle_changes, false) AS battle_changes
 		 FROM gym WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
@@ -586,7 +586,7 @@ func SelectMaxbattlesByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Maxba
 	var maxbattles []MaxbattleTrackingAPI
 	err := db.Select(&maxbattles,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, pokemon_id, form,
+		        COALESCE(template, '') AS template, pokemon_id, form,
 		        level, move, gmax, evolution, station_id
 		 FROM maxbattle WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
@@ -622,7 +622,7 @@ func SelectMonstersByID(db *sqlx.DB, id string) ([]MonsterTrackingAPI, error) {
 	var monsters []MonsterTrackingAPI
 	err := db.Select(&monsters,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, pokemon_id, form,
+		        COALESCE(template, '') AS template, pokemon_id, form,
 		        min_iv, max_iv, min_cp, max_cp, min_level, max_level,
 		        atk, def, sta, max_atk, max_def, max_sta,
 		        gender, min_weight, max_weight, min_time,
@@ -641,7 +641,7 @@ func SelectRaidsByID(db *sqlx.DB, id string) ([]RaidTrackingAPI, error) {
 	var raids []RaidTrackingAPI
 	err := db.Select(&raids,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, team, pokemon_id, form,
+		        COALESCE(template, '') AS template, team, pokemon_id, form,
 		        level, exclusive, move, evolution, gym_id, rsvp_changes
 		 FROM raid WHERE id = ?`, id)
 	if err != nil {
@@ -655,7 +655,7 @@ func SelectEggsByID(db *sqlx.DB, id string) ([]EggTrackingAPI, error) {
 	var eggs []EggTrackingAPI
 	err := db.Select(&eggs,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, team, level, exclusive,
+		        COALESCE(template, '') AS template, team, level, exclusive,
 		        gym_id, rsvp_changes
 		 FROM egg WHERE id = ?`, id)
 	if err != nil {
@@ -669,7 +669,7 @@ func SelectQuestsByID(db *sqlx.DB, id string) ([]QuestTrackingAPI, error) {
 	var quests []QuestTrackingAPI
 	err := db.Select(&quests,
 		`SELECT uid, id, profile_no, ping, clean, reward,
-		        COALESCE(template, '1') AS template, shiny, reward_type,
+		        COALESCE(template, '') AS template, shiny, reward_type,
 		        distance, COALESCE(form, 0) AS form,
 		        COALESCE(amount, 0) AS amount
 		 FROM quest WHERE id = ?`, id)
@@ -684,7 +684,7 @@ func SelectInvasionsByID(db *sqlx.DB, id string) ([]InvasionTrackingAPI, error) 
 	var invasions []InvasionTrackingAPI
 	err := db.Select(&invasions,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, gender, grunt_type
+		        COALESCE(template, '') AS template, gender, grunt_type
 		 FROM invasion WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select invasions for %s: %w", id, err)
@@ -697,7 +697,7 @@ func SelectLuresByID(db *sqlx.DB, id string) ([]LureTrackingAPI, error) {
 	var lures []LureTrackingAPI
 	err := db.Select(&lures,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, lure_id
+		        COALESCE(template, '') AS template, lure_id
 		 FROM lures WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select lures for %s: %w", id, err)
@@ -710,7 +710,7 @@ func SelectNestsByID(db *sqlx.DB, id string) ([]NestTrackingAPI, error) {
 	var nests []NestTrackingAPI
 	err := db.Select(&nests,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, pokemon_id,
+		        COALESCE(template, '') AS template, pokemon_id,
 		        min_spawn_avg, COALESCE(form, 0) AS form
 		 FROM nests WHERE id = ?`, id)
 	if err != nil {
@@ -724,7 +724,7 @@ func SelectGymsByID(db *sqlx.DB, id string) ([]GymTrackingAPI, error) {
 	var gyms []GymTrackingAPI
 	err := db.Select(&gyms,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, team, slot_changes,
+		        COALESCE(template, '') AS template, team, slot_changes,
 		        gym_id, COALESCE(battle_changes, false) AS battle_changes
 		 FROM gym WHERE id = ?`, id)
 	if err != nil {
@@ -738,7 +738,7 @@ func SelectMaxbattlesByID(db *sqlx.DB, id string) ([]MaxbattleTrackingAPI, error
 	var maxbattles []MaxbattleTrackingAPI
 	err := db.Select(&maxbattles,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, pokemon_id, form,
+		        COALESCE(template, '') AS template, pokemon_id, form,
 		        level, move, gmax, evolution, station_id
 		 FROM maxbattle WHERE id = ?`, id)
 	if err != nil {
@@ -752,7 +752,7 @@ func SelectFortsByID(db *sqlx.DB, id string) ([]FortTrackingAPI, error) {
 	var forts []FortTrackingAPI
 	err := db.Select(&forts,
 		`SELECT uid, id, profile_no, ping, distance,
-		        COALESCE(template, '1') AS template,
+		        COALESCE(template, '') AS template,
 		        COALESCE(fort_type, 'everything') AS fort_type,
 		        COALESCE(include_empty, true) AS include_empty,
 		        COALESCE(change_types, '[]') AS change_types

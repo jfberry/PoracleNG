@@ -18,7 +18,7 @@ func TestActivePokemonTracker_RegisterAndGet(t *testing.T) {
 		Latitude:      40.0,
 		Longitude:     -74.0,
 		DisappearTime: future,
-		Weather:       1,            // boosted by clear
+		Boosted:       true,            // boosted by clear
 		Types:         []int{4, 12}, // poison, grass — grass boosted by clear (1)
 	})
 
@@ -30,7 +30,7 @@ func TestActivePokemonTracker_RegisterAndGet(t *testing.T) {
 		Latitude:      40.1,
 		Longitude:     -74.1,
 		DisappearTime: future,
-		Weather:       0,        // not boosted
+		Boosted:       false,        // not boosted
 		Types:         []int{7}, // water — boosted by rainy (2)
 	})
 
@@ -60,13 +60,13 @@ func TestActivePokemonTracker_ExpiryEviction(t *testing.T) {
 	apt.Register("cell1", "user1", "enc_expired", ActivePokemon{
 		PokemonID:     1,
 		DisappearTime: past,
-		Weather:       1,
+		Boosted:       true,
 		Types:         []int{12},
 	})
 	apt.Register("cell1", "user1", "enc_active", ActivePokemon{
 		PokemonID:     7,
 		DisappearTime: future,
-		Weather:       0,
+		Boosted:       false,
 		Types:         []int{7},
 	})
 
@@ -89,7 +89,7 @@ func TestActivePokemonTracker_MaxPerUser(t *testing.T) {
 		apt.Register("cell1", "user1", encID(i), ActivePokemon{
 			PokemonID:     i + 1,
 			DisappearTime: future + int64(i),
-			Weather:       0,
+			Boosted:       false,
 			Types:         []int{7},
 		})
 	}
@@ -113,7 +113,7 @@ func TestActivePokemonTracker_MaxCount(t *testing.T) {
 		apt.Register("cell1", "user1", encID(i), ActivePokemon{
 			PokemonID:     i + 1,
 			DisappearTime: future,
-			Weather:       0,
+			Boosted:       false,
 			Types:         []int{7}, // water, boosted by rainy
 		})
 	}

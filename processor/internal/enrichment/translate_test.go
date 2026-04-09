@@ -188,7 +188,7 @@ func TestTranslateTypeNames(t *testing.T) {
 	tr := bundle.For("de")
 
 	m := make(map[string]any)
-	TranslateTypeNames(m, tr, []int{4, 12})
+	TranslateTypeNames(m, tr, nil, []int{4, 12})
 
 	typeName, ok := m["typeName"].(string)
 	if !ok {
@@ -204,7 +204,7 @@ func TestTranslateTypeNames_English(t *testing.T) {
 	tr := bundle.For("en")
 
 	m := make(map[string]any)
-	TranslateTypeNames(m, tr, []int{4, 12})
+	TranslateTypeNames(m, tr, nil, []int{4, 12})
 
 	typeName := m["typeName"].(string)
 	if typeName != "Poison, Grass" {

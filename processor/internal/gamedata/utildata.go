@@ -25,7 +25,16 @@ type UtilData struct {
 	MaxbattleLevels  map[int]string // level → English name
 	Lures            map[int]LureInfo
 	PokestopEvent    map[int]EventInfo
+	PowerUpCost      map[string]PowerUpCostEntry // level string → {stardust, candy, xlCandy}
+	CpMultipliers    map[string]float64 // level string → CP multiplier
 	Emojis           map[string]string // emoji key → unicode
+}
+
+// PowerUpCostEntry holds the cost to power up one half-level.
+type PowerUpCostEntry struct {
+	Stardust int `json:"stardust"`
+	Candy    int `json:"candy"`
+	XLCandy  int `json:"xlCandy"`
 }
 
 // GenderInfo holds gender display data.
@@ -87,11 +96,15 @@ func LoadUtilData(path string) (*UtilData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
+	return ParseUtilData(data)
+}
 
+// ParseUtilData parses util.json from raw bytes (for embedded data).
+func ParseUtilData(data []byte) (*UtilData, error) {
 	// Parse into raw JSON map first since keys are sometimes strings of ints
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+		return nil, fmt.Errorf("parse util.json: %w", err)
 	}
 
 	u := &UtilData{}
@@ -166,6 +179,22 @@ func LoadUtilData(path string) (*UtilData, error) {
 
 	// PokestopEvent: {"7": {...}, ...}
 	u.PokestopEvent = parseIntKeyMap[EventInfo](raw["pokestopEvent"])
+
+	// CpMultipliers: {"1": 0.094, "1.5": 0.135, ...}
+	if raw["cpMultipliers"] != nil {
+		var cpm map[string]float64
+		if err := json.Unmarshal(raw["cpMultipliers"], &cpm); err == nil {
+			u.CpMultipliers = cpm
+		}
+	}
+
+	// PowerUpCost: {"1": {"stardust": 200, "candy": 1}, "1.5": {...}, ...}
+	if raw["powerUpCost"] != nil {
+		var puc map[string]PowerUpCostEntry
+		if err := json.Unmarshal(raw["powerUpCost"], &puc); err == nil {
+			u.PowerUpCost = puc
+		}
+	}
 
 	// Emojis: {"lure-normal": "📍", ...}
 	if raw["emojis"] != nil {

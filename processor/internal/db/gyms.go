@@ -21,7 +21,7 @@ func LoadGyms(db *sqlx.DB) ([]*GymTracking, error) {
 	var gyms []GymTracking
 	err := db.Select(&gyms,
 		`SELECT id, profile_no, ping, clean, distance,
-		        COALESCE(template, '1') AS template, team, slot_changes,
+		        COALESCE(template, '') AS template, team, slot_changes,
 		        gym_id, COALESCE(battle_changes, false) AS battle_changes
 		 FROM gym`)
 	if err != nil {

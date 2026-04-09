@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -15,7 +16,9 @@ import (
 // Load reloads tracking data from the database while preserving the existing
 // geofence data. Use LoadWithGeofences for a full reload including geofences.
 func Load(manager *Manager, database *sqlx.DB) error {
+	dbStart := time.Now()
 	data, err := db.LoadAll(database)
+	metrics.StateDBQueryDuration.Observe(time.Since(dbStart).Seconds())
 	if err != nil {
 		return fmt.Errorf("load database: %w", err)
 	}
@@ -48,6 +51,7 @@ func Load(manager *Manager, database *sqlx.DB) error {
 
 	manager.Set(s)
 	recordStateMetrics(s)
+	metrics.StateLastReloadSuccess.SetToCurrentTime()
 
 	log.Infof("State loaded: %d humans, %d pokemon, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences",
 		len(data.Humans), data.Monsters.Total, len(data.Raids), len(data.Eggs),
@@ -65,7 +69,9 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 		log.Warnf("Koji geofence fetch had errors: %s", err)
 	}
 
+	dbStart := time.Now()
 	data, err := db.LoadAll(database)
+	metrics.StateDBQueryDuration.Observe(time.Since(dbStart).Seconds())
 	if err != nil {
 		return fmt.Errorf("load database: %w", err)
 	}
@@ -106,6 +112,7 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 
 	manager.Set(s)
 	recordStateMetrics(s)
+	metrics.StateLastReloadSuccess.SetToCurrentTime()
 
 	log.Infof("State loaded: %d humans, %d pokemon, %d raids, %d eggs, %d invasions, %d quests, %d lures, %d gyms, %d nests, %d forts, %d maxbattles, %d fences",
 		len(data.Humans), data.Monsters.Total, len(data.Raids), len(data.Eggs),

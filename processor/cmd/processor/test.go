@@ -74,16 +74,22 @@ func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webho
 
 	log.Infof("[Test] Pokemon %d at [%.3f,%.3f] → %s %s", pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude, target.Type, target.ID)
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:                  "pokemon",
-		Message:               raw,
-		Enrichment:            enrichment,
-		PerLanguageEnrichment: perLang,
-		PerUserEnrichment:     perUser,
-		MatchedAreas:          []webhook.MatchedArea{},
-		MatchedUsers:          matched,
-		TilePending:           tilePending,
-	})
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	webhookFields := parseWebhookFields(raw)
+	ps.renderCh <- RenderJob{
+		IsPokemon:         true,
+		IsEncountered:     processed.Encountered,
+		Enrichment:        enrichment,
+		PerLangEnrichment: perLang,
+		PerUserEnrichment: perUser,
+		WebhookFields:     webhookFields,
+		MatchedUsers:      matched,
+		MatchedAreas:      []webhook.MatchedArea{},
+		TilePending:       tilePending,
+		LogReference:      "test",
+	}
 	return nil
 }
 
@@ -113,15 +119,20 @@ func (ps *ProcessorService) processTestRaid(raw json.RawMessage, target webhook.
 
 	log.Infof("[Test] %s level %d at [%.3f,%.3f] → %s %s", msgType, raid.Level, raid.Latitude, raid.Longitude, target.Type, target.ID)
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:                  msgType,
-		Message:               raw,
-		Enrichment:            enrichment,
-		PerLanguageEnrichment: perLang,
-		MatchedAreas:          []webhook.MatchedArea{},
-		MatchedUsers:          matched,
-		TilePending:           tilePending,
-	})
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	webhookFields := parseWebhookFields(raw)
+	ps.renderCh <- RenderJob{
+		TemplateType:      msgType,
+		Enrichment:        enrichment,
+		PerLangEnrichment: perLang,
+		WebhookFields:     webhookFields,
+		MatchedUsers:      matched,
+		MatchedAreas:      []webhook.MatchedArea{},
+		TilePending:       tilePending,
+		LogReference:      "test",
+	}
 	return nil
 }
 
@@ -150,19 +161,24 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.InvasionTranslate(enrichment, gruntTypeID, target.Language),
+			target.Language: ps.enricher.InvasionTranslate(enrichment, gruntTypeID, inv.Lineup, target.Language),
 		}
 	}
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:                  "invasion",
-		Message:               raw,
-		Enrichment:            enrichment,
-		PerLanguageEnrichment: perLang,
-		MatchedAreas:          []webhook.MatchedArea{},
-		MatchedUsers:          matched,
-		TilePending:           tilePending,
-	})
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	webhookFields := parseWebhookFields(raw)
+	ps.renderCh <- RenderJob{
+		TemplateType:      "invasion",
+		Enrichment:        enrichment,
+		PerLangEnrichment: perLang,
+		WebhookFields:     webhookFields,
+		MatchedUsers:      matched,
+		MatchedAreas:      []webhook.MatchedArea{},
+		TilePending:       tilePending,
+		LogReference:      "test",
+	}
 	return nil
 }
 
@@ -185,15 +201,20 @@ func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook
 		}
 	}
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:                  "quest",
-		Message:               raw,
-		Enrichment:            enrichment,
-		PerLanguageEnrichment: perLang,
-		MatchedAreas:          []webhook.MatchedArea{},
-		MatchedUsers:          []webhook.MatchedUser{target},
-		TilePending:           tilePending,
-	})
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	webhookFields := parseWebhookFields(raw)
+	ps.renderCh <- RenderJob{
+		TemplateType:      "quest",
+		Enrichment:        enrichment,
+		PerLangEnrichment: perLang,
+		WebhookFields:     webhookFields,
+		MatchedUsers:      []webhook.MatchedUser{target},
+		MatchedAreas:      []webhook.MatchedArea{},
+		TilePending:       tilePending,
+		LogReference:      "test",
+	}
 	return nil
 }
 
@@ -213,7 +234,7 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 	}
 
 	inBattle := bool(gym.IsInBattle) || bool(gym.InBattle)
-	enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, inBattle, false, gymID)
+	enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, -1, inBattle, false, gymID)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any
@@ -223,15 +244,20 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 		}
 	}
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:                  "gym",
-		Message:               raw,
-		Enrichment:            enrichment,
-		PerLanguageEnrichment: perLang,
-		MatchedAreas:          []webhook.MatchedArea{},
-		MatchedUsers:          matched,
-		TilePending:           tilePending,
-	})
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	webhookFields := parseWebhookFields(raw)
+	ps.renderCh <- RenderJob{
+		TemplateType:      "gym",
+		Enrichment:        enrichment,
+		PerLangEnrichment: perLang,
+		WebhookFields:     webhookFields,
+		MatchedUsers:      matched,
+		MatchedAreas:      []webhook.MatchedArea{},
+		TilePending:       tilePending,
+		LogReference:      "test",
+	}
 	return nil
 }
 
@@ -251,15 +277,20 @@ func (ps *ProcessorService) processTestNest(raw json.RawMessage, target webhook.
 		}
 	}
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:                  "nest",
-		Message:               raw,
-		Enrichment:            enrichment,
-		PerLanguageEnrichment: perLang,
-		MatchedAreas:          []webhook.MatchedArea{},
-		MatchedUsers:          matched,
-		TilePending:           tilePending,
-	})
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	webhookFields := parseWebhookFields(raw)
+	ps.renderCh <- RenderJob{
+		TemplateType:      "nest",
+		Enrichment:        enrichment,
+		PerLangEnrichment: perLang,
+		WebhookFields:     webhookFields,
+		MatchedUsers:      matched,
+		MatchedAreas:      []webhook.MatchedArea{},
+		TilePending:       tilePending,
+		LogReference:      "test",
+	}
 	return nil
 }
 
@@ -271,14 +302,19 @@ func (ps *ProcessorService) processTestFort(raw json.RawMessage, target webhook.
 
 	enrichment, tilePending := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID(), &fort)
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:         "fort_update",
-		Message:      raw,
-		Enrichment:   enrichment,
-		MatchedAreas: []webhook.MatchedArea{},
-		MatchedUsers: []webhook.MatchedUser{target},
-		TilePending:  tilePending,
-	})
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	webhookFields := parseWebhookFields(raw)
+	ps.renderCh <- RenderJob{
+		TemplateType:  "fort-update",
+		Enrichment:    enrichment,
+		WebhookFields: webhookFields,
+		MatchedUsers:  []webhook.MatchedUser{target},
+		MatchedAreas:  []webhook.MatchedArea{},
+		TilePending:   tilePending,
+		LogReference:  "test",
+	}
 	return nil
 }
 
@@ -298,15 +334,20 @@ func (ps *ProcessorService) processTestMaxbattle(raw json.RawMessage, target web
 		}
 	}
 
-	ps.sender.Send(webhook.OutboundPayload{
-		Type:                  "max_battle",
-		Message:               raw,
-		Enrichment:            enrichment,
-		PerLanguageEnrichment: perLang,
-		MatchedAreas:          []webhook.MatchedArea{},
-		MatchedUsers:          matched,
-		TilePending:           tilePending,
-	})
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	webhookFields := parseWebhookFields(raw)
+	ps.renderCh <- RenderJob{
+		TemplateType:      "maxbattle",
+		Enrichment:        enrichment,
+		PerLangEnrichment: perLang,
+		WebhookFields:     webhookFields,
+		MatchedUsers:      matched,
+		MatchedAreas:      []webhook.MatchedArea{},
+		TilePending:       tilePending,
+		LogReference:      "test",
+	}
 	return nil
 }
 
@@ -333,15 +374,20 @@ func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webh
 				target.Language: ps.enricher.LureTranslate(enrichment, lure.LureID, target.Language),
 			}
 		}
-		ps.sender.Send(webhook.OutboundPayload{
-			Type:                  "lure",
-			Message:               raw,
-			Enrichment:            enrichment,
-			PerLanguageEnrichment: perLang,
-			MatchedAreas:          []webhook.MatchedArea{},
-			MatchedUsers:          matched,
-			TilePending:           tilePending,
-		})
+		if ps.renderCh == nil {
+			return fmt.Errorf("render queue not available")
+		}
+		webhookFields := parseWebhookFields(raw)
+		ps.renderCh <- RenderJob{
+			TemplateType:      "lure",
+			Enrichment:        enrichment,
+			PerLangEnrichment: perLang,
+			WebhookFields:     webhookFields,
+			MatchedUsers:      matched,
+			MatchedAreas:      []webhook.MatchedArea{},
+			TilePending:       tilePending,
+			LogReference:      "test",
+		}
 		return nil
 	}
 

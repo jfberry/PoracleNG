@@ -185,3 +185,4 @@ func (s *Sender) sendBatch(batch []OutboundPayload) {
 		metrics.SenderBatches.WithLabelValues("success").Inc()
 	}
 }
+

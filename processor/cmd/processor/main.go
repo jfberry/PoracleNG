@@ -24,7 +24,9 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
@@ -101,6 +103,59 @@ func main() {
 	// Create processor
 	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
+
+	// Restore gym state cache from previous run
+	if err := proc.gymState.Load(); err != nil {
+		log.Warnf("Failed to load gym state cache: %v", err)
+	}
+
+	// Start render pool workers
+	poolSize := cfg.Tuning.RenderPoolSize
+	if poolSize < 1 {
+		poolSize = 8
+	}
+	for i := 0; i < poolSize; i++ {
+		proc.renderWg.Add(1)
+		go proc.renderWorker()
+	}
+	log.Infof("Render pool started: %d workers, queue size %d", poolSize, cfg.Tuning.RenderQueueSize)
+
+	// Initialize delivery dispatcher
+	discordToken := ""
+	if tokens := cfg.Discord.DiscordTokens(); len(tokens) > 0 {
+		discordToken = tokens[0]
+	}
+	telegramToken := ""
+	if tokens := cfg.Telegram.TelegramTokens(); len(tokens) > 0 {
+		telegramToken = tokens[0]
+	}
+
+	if discordToken != "" || telegramToken != "" {
+		var err error
+		proc.dispatcher, err = delivery.NewDispatcher(delivery.DispatcherConfig{
+			DiscordToken:  discordToken,
+			TelegramToken: telegramToken,
+			UploadImages:  cfg.Discord.UploadEmbedImages,
+			DeleteDelayMs: cfg.Discord.MessageDeleteDelay,
+			QueueSize:     cfg.Tuning.DeliveryQueueSize,
+			CacheDir:      filepath.Join(cfg.BaseDir, "config", ".cache"),
+			Queue: delivery.QueueConfig{
+				ConcurrentDiscord:  cfg.Tuning.ConcurrentDiscordDestinations,
+				ConcurrentWebhook:  cfg.Tuning.ConcurrentDiscordWebhooks,
+				ConcurrentTelegram: cfg.Tuning.ConcurrentTelegramDestinations,
+			},
+		})
+		if err != nil {
+			log.Warnf("Delivery dispatcher init failed: %s", err)
+		} else {
+			proc.dispatcher.Start()
+			log.Infof("Delivery dispatcher started: discord=%d webhook=%d telegram=%d queue=%d",
+				cfg.Tuning.ConcurrentDiscordDestinations,
+				cfg.Tuning.ConcurrentDiscordWebhooks,
+				cfg.Tuning.ConcurrentTelegramDestinations,
+				cfg.Tuning.DeliveryQueueSize)
+		}
+	}
 
 	// Weather change consumer
 	if cfg.Weather.ChangeAlert {
@@ -269,6 +324,15 @@ func main() {
 	mux.HandleFunc("POST /api/profiles/{id}/update", apiRoute("profiles/update", api.HandleUpdateProfile(trackingDeps)))
 	mux.HandleFunc("POST /api/profiles/{id}/copy/{from}/{to}", apiRoute("profiles/copy", api.HandleCopyProfile(trackingDeps)))
 
+	// DTS template endpoints
+	if proc.dtsRenderer != nil {
+		mux.HandleFunc("GET /api/config/templates", auth(api.HandleTemplateConfig(proc.dtsRenderer.Templates())))
+		mux.HandleFunc("POST /api/dts/render", auth(api.HandleDTSRender(proc.dtsRenderer.Templates())))
+	}
+
+	// Delivery endpoint — accepts pre-rendered jobs from alerter commands (broadcast, etc.)
+	mux.HandleFunc("POST /api/deliverMessages", auth(api.HandleDeliverMessages(proc.dispatcher)))
+
 	// Proxy unhandled /api/ requests to the alerter (config, humans, profiles, etc.)
 	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
 
@@ -284,11 +348,17 @@ func main() {
 	}
 
 	// Periodic reload
+	periodicDone := make(chan struct{})
 	go func() {
 		interval := time.Duration(cfg.Tuning.ReloadIntervalSecs) * time.Second
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		for range ticker.C {
+		for {
+			select {
+			case <-periodicDone:
+				return
+			case <-ticker.C:
+			}
 			log.Debugf("Periodic reload triggered")
 			start := time.Now()
 			if err := state.Load(stateMgr, database); err != nil {
@@ -320,6 +390,23 @@ func main() {
 				statusParts = append(statusParts, fmt.Sprintf("Geo: %d calls avg:%dms hits:%d err:%d", gs.Calls, gs.AvgMs(), gs.Hits, gs.Errors))
 				proc.enricher.Geocoder.ResetStats()
 			}
+			if proc.renderCh != nil {
+				depth := len(proc.renderCh)
+				statusParts = append(statusParts, fmt.Sprintf("RenderQ: %d/%d", depth, cap(proc.renderCh)))
+				metrics.RenderQueueDepth.Set(float64(depth))
+			}
+			if proc.dispatcher != nil {
+				statusParts = append(statusParts, fmt.Sprintf("Delivery: Discord:%d+%d Telegram:%d Tracked:%d",
+					proc.dispatcher.DiscordDepth(),
+					proc.dispatcher.WebhookDepth(),
+					proc.dispatcher.TelegramDepth(),
+					proc.dispatcher.TrackerSize()))
+				metrics.DeliveryQueueDepth.Set(float64(proc.dispatcher.QueueDepth()))
+				metrics.DeliveryDiscordQueueDepth.Set(float64(proc.dispatcher.DiscordDepth()))
+				metrics.DeliveryWebhookQueueDepth.Set(float64(proc.dispatcher.WebhookDepth()))
+				metrics.DeliveryTelegramQueueDepth.Set(float64(proc.dispatcher.TelegramDepth()))
+				metrics.DeliveryTrackerSize.Set(float64(proc.dispatcher.TrackerSize()))
+			}
 			log.Infof("[Status] %s", strings.Join(statusParts, " | "))
 		}
 	}()
@@ -338,6 +425,7 @@ func main() {
 	<-sigCh
 
 	log.Infof("Shutting down...")
+	close(periodicDone)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	server.Shutdown(ctx)
@@ -398,10 +486,14 @@ type ProcessorService struct {
 	activePokemon   *tracker.ActivePokemonTracker
 	pokemonTypes    *gamedata.PokemonTypes
 	enricher        *enrichment.Enricher
+	dtsRenderer     *dts.Renderer
+	dispatcher      *delivery.Dispatcher
 	scanner         scanner.Scanner
 	rateLimiter     *ratelimit.Limiter
 	translations    *i18n.Bundle
 	alerterClient   *http.Client
+	renderCh        chan RenderJob
+	renderWg        sync.WaitGroup
 	reloadMu        sync.Mutex
 	reloadTimer     *time.Timer
 	workerPool      chan struct{}
@@ -426,9 +518,13 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	// Load full game data from raw masterfile + util.json
 	gd, err := gamedata.Load(cfg.BaseDir)
 	if err != nil {
-		log.Warnf("Failed to load game data: %s (enrichment will be limited)", err)
-	} else {
-		log.Infof("Game data loaded: %d monsters, %d moves, %d types", len(gd.Monsters), len(gd.Moves), len(gd.Types))
+		log.Fatalf("Failed to load game data: %s — ensure resources are downloaded (check network on first run)", err)
+	}
+	log.Infof("Game data loaded: %d monsters, %d moves, %d types", len(gd.Monsters), len(gd.Moves), len(gd.Types))
+
+	// Initialize weather type boost from util.json (replaces hardcoded fallback)
+	if gd != nil && gd.Util != nil {
+		gamedata.InitWeatherTypeBoost(gd.Util)
 	}
 
 	var activePokemon *tracker.ActivePokemonTracker
@@ -618,6 +714,48 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		Overrides:           overrides,
 	})
 
+	// DTS renderer — renders templates in Go and delivers via /api/deliverMessages
+	var dtsRenderer *dts.Renderer
+	var utilEmojis map[string]string
+	if gd != nil {
+		utilEmojis = gd.Util.Emojis
+	}
+	// Shortlink URL shortener (for <S< ... >S> markers in DTS templates)
+	var shlinkURL, shlinkKey, shlinkDomain string
+	if cfg.General.ShortlinkProvider == "shlink" && cfg.General.ShortlinkProviderURL != "" {
+		shlinkURL = cfg.General.ShortlinkProviderURL
+		shlinkKey = cfg.General.ShortlinkProviderKey
+		shlinkDomain = cfg.General.ShortlinkDomain
+	}
+
+	dtsRenderer, err = dts.NewRenderer(dts.RendererConfig{
+		ConfigDir:     filepath.Join(cfg.BaseDir, "config"),
+		FallbackDir:   filepath.Join(cfg.BaseDir, "fallbacks"),
+		GameData:      gd,
+		Translations:  enricher.Translations,
+		UtilEmojis:    utilEmojis,
+		DefaultLocale: cfg.General.Locale,
+		MinAlertTime:  cfg.General.AlertMinimumTime,
+		ShlinkURL:     shlinkURL,
+		ShlinkKey:     shlinkKey,
+		ShlinkDomain:  shlinkDomain,
+		DTSDictionary: cfg.General.DTSDictionary,
+	})
+	if err != nil {
+		log.Warnf("DTS renderer initialization failed: %s", err)
+		dtsRenderer = nil
+	} else {
+		dtsRenderer.Templates().LogSummary()
+	}
+
+	// Start render pool for async tile resolution + DTS rendering + delivery
+	renderQueueSize := cfg.Tuning.RenderQueueSize
+	if renderQueueSize < 1 {
+		renderQueueSize = 100
+	}
+	renderCh := make(chan RenderJob, renderQueueSize)
+	metrics.RenderQueueCapacity.Set(float64(renderQueueSize))
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ProcessorService{
@@ -626,7 +764,9 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		database: database,
 		ctx:      ctx,
 		cancel:   cancel,
+		renderCh: renderCh,
 		enricher:      enricher,
+		dtsRenderer:   dtsRenderer,
 		scanner:       scannerInstance,
 		alerterClient: &http.Client{Timeout: 5 * time.Second},
 		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Processor.APISecret, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
@@ -635,7 +775,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		encounters:   tracker.NewEncounterTracker(),
 		duplicates:   tracker.NewDuplicateCache(),
 		stats:        statsTracker,
-		gymState:     tracker.NewGymStateTracker(),
+		gymState:     tracker.NewGymStateTracker(filepath.Join(cfg.BaseDir, "config", ".cache")),
 		pokemonMatcher: &matching.PokemonMatcher{
 			PVPQueryMaxRank:            cfg.PVP.PVPQueryMaxRank,
 			PVPEvolutionDirectTracking: cfg.PVP.PVPEvolutionDirectTracking,
@@ -662,6 +802,21 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 func (ps *ProcessorService) Close() {
 	ps.cancel()
 	ps.wg.Wait()
+	log.Info("Webhook workers stopped")
+
+	// Close render channel BEFORE dispatcher — render workers feed into dispatcher.
+	// Order: webhook workers → render channel → render workers → dispatcher → delivery
+	if ps.renderCh != nil {
+		close(ps.renderCh)
+		ps.renderWg.Wait()
+		log.Info("Render pool stopped")
+	}
+	if ps.dispatcher != nil {
+		log.Info("Stopping delivery dispatcher...")
+		ps.dispatcher.Stop()
+		log.Info("Delivery dispatcher stopped")
+	}
+	log.Info("Stopping legacy sender...")
 	// Sender must close before resolver: sender's final flush may need
 	// tile workers still running to resolve pending tiles within deadline.
 	ps.sender.Close()
@@ -670,6 +825,12 @@ func (ps *ProcessorService) Close() {
 	}
 	ps.duplicates.Close()
 	ps.rateLimiter.Close()
+	// Persist gym state cache for restart
+	if err := ps.gymState.Save(); err != nil {
+		log.Warnf("Failed to save gym state cache: %v", err)
+	} else {
+		log.Info("Gym state cache saved")
+	}
 	if ps.enricher.Geocoder != nil {
 		ps.enricher.Geocoder.Close()
 	}

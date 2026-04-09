@@ -96,6 +96,17 @@ func distinctLanguages(matched []webhook.MatchedUser, defaultLocale string) []st
 	return langs
 }
 
+// parseWebhookFields deserialises the raw webhook JSON into a map for use as
+// a low-priority layer in the LayeredView. This gives custom DTS templates
+// access to raw webhook fields not explicitly included in enrichment.
+func parseWebhookFields(raw json.RawMessage) map[string]any {
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil
+	}
+	return fields
+}
+
 // buildMatchedAreas converts geofence areas to webhook MatchedArea structs.
 func buildMatchedAreas(areas []geofence.MatchedArea) []webhook.MatchedArea {
 	result := make([]webhook.MatchedArea, len(areas))

@@ -171,7 +171,7 @@ func TestMaxbattleIconURLs_NoPokemon(t *testing.T) {
 func TestGymIconURLs(t *testing.T) {
 	e := newTestEnricher()
 
-	m, _ := e.Gym(52.5, 13.4, 1, 0, 3, false, false, "gym123")
+	m, _ := e.Gym(52.5, 13.4, 1, 0, 3, -1, false, false, "gym123")
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -187,7 +187,7 @@ func TestGymIconURLs_NilUicons(t *testing.T) {
 		WeatherProvider: &mockWeather{},
 		TimeLayout:      "15:04:05",
 	}
-	m, _ := e.Gym(52.5, 13.4, 1, 0, 3, false, false, "gym123")
+	m, _ := e.Gym(52.5, 13.4, 1, 0, 3, -1, false, false, "gym123")
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")
@@ -287,8 +287,8 @@ func TestNestIconURLs(t *testing.T) {
 	nest := &webhook.NestWebhook{
 		PokemonID: 25,
 		Form:      0,
-		Latitude:  52.5,
-		Longitude: 13.4,
+		Lat:  52.5,
+		Lon: 13.4,
 		ResetTime: time.Now().Unix(),
 	}
 	m, _ := e.Nest(nest)
@@ -311,8 +311,8 @@ func TestNestIconURLs_NilUicons(t *testing.T) {
 	nest := &webhook.NestWebhook{
 		PokemonID: 25,
 		Form:      0,
-		Latitude:  52.5,
-		Longitude: 13.4,
+		Lat:  52.5,
+		Lon: 13.4,
 		ResetTime: time.Now().Unix(),
 	}
 	m, _ := e.Nest(nest)
@@ -330,9 +330,10 @@ func TestWeatherIconURLs(t *testing.T) {
 	e.GameData = newTestGameData()
 
 	base, _ := e.Weather(52.5, 13.4, 3, nil, false)
-	m, _ := e.WeatherTranslate(base, 1, 3, nil, "en", false)
+	// WeatherTranslate returns only translated fields; imgUrl is in base enrichment
+	_ = e // suppress unused warning for translate call
 
-	imgUrl, ok := m["imgUrl"].(string)
+	imgUrl, ok := base["imgUrl"].(string)
 	if !ok || imgUrl == "" {
 		t.Fatal("weather should have imgUrl")
 	}

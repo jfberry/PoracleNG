@@ -103,7 +103,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
 				gym.Name, ps.teamName(oldTeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldTeamID, gym.SlotsAvailable, inBattle, false, gymID)
+			enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldTeamID, gym.SlotsAvailable, oldSlotsAvailable, inBattle, false, gymID)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
@@ -114,15 +114,21 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 				}
 			}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  "gym",
-				Message:               raw,
-				Enrichment:            enrichment,
-				PerLanguageEnrichment: perLang,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          matched,
-				TilePending:           tilePending,
-			})
+			if ps.renderCh == nil {
+				return
+			}
+			webhookFields := parseWebhookFields(raw)
+
+			ps.renderCh <- RenderJob{
+				TemplateType:      "gym",
+				Enrichment:        enrichment,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TilePending:       tilePending,
+				LogReference:      gymID,
+			}
 		} else {
 			l.Debugf("Gym %s changed and 0 humans cared", gym.Name)
 		}

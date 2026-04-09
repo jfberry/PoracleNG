@@ -1,29 +1,41 @@
 package tracker
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // GymState holds cached gym state for change detection.
 type GymState struct {
-	TeamID         int
-	SlotsAvailable int
-	InBattle       bool
-	LastOwnerID    int
-	LastSeen       time.Time
+	TeamID         int       `json:"team_id"`
+	SlotsAvailable int       `json:"slots_available"`
+	InBattle       bool      `json:"in_battle"`
+	LastOwnerID    int       `json:"last_owner_id"`
+	LastSeen       time.Time `json:"last_seen"`
 }
 
 // GymStateTracker tracks gym state for detecting team/slot/battle changes.
+// State is persisted to disk on Save() and restored on Load() to avoid a
+// burst of false team-change alerts after a restart.
 type GymStateTracker struct {
-	mu   sync.Mutex
-	gyms map[string]*GymState
+	mu       sync.Mutex
+	gyms     map[string]*GymState
+	cacheDir string
 }
 
+const gymCacheFile = "gym-state.json"
+
 // NewGymStateTracker creates a new gym state tracker.
-func NewGymStateTracker() *GymStateTracker {
+// If cacheDir is non-empty, Load() and Save() will use that directory.
+func NewGymStateTracker(cacheDir string) *GymStateTracker {
 	gst := &GymStateTracker{
-		gyms: make(map[string]*GymState),
+		gyms:     make(map[string]*GymState),
+		cacheDir: cacheDir,
 	}
 	go gst.cleanupLoop()
 	return gst
@@ -55,6 +67,69 @@ func (gst *GymStateTracker) Update(gymID string, teamID, slotsAvailable int, inB
 		}
 	}
 	return oldCopy
+}
+
+// Save persists the gym state cache to disk.
+func (gst *GymStateTracker) Save() error {
+	if gst.cacheDir == "" {
+		return nil
+	}
+
+	gst.mu.Lock()
+	snapshot := make(map[string]*GymState, len(gst.gyms))
+	for k, v := range gst.gyms {
+		cp := *v
+		snapshot[k] = &cp
+	}
+	gst.mu.Unlock()
+
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(gst.cacheDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(gst.cacheDir, gymCacheFile), data, 0o644)
+}
+
+// Load restores the gym state cache from disk.
+func (gst *GymStateTracker) Load() error {
+	if gst.cacheDir == "" {
+		return nil
+	}
+
+	path := filepath.Join(gst.cacheDir, gymCacheFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no cache file yet
+		}
+		return err
+	}
+
+	var loaded map[string]*GymState
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		log.Warnf("gym state: failed to parse cache %s: %v (starting fresh)", path, err)
+		return nil
+	}
+
+	gst.mu.Lock()
+	defer gst.mu.Unlock()
+
+	// Only load entries that aren't stale (< 24h old)
+	cutoff := time.Now().Add(-24 * time.Hour)
+	restored := 0
+	for k, v := range loaded {
+		if v.LastSeen.After(cutoff) {
+			gst.gyms[k] = v
+			restored++
+		}
+	}
+
+	log.Infof("gym state: restored %d gyms from cache", restored)
+	return nil
 }
 
 func (gst *GymStateTracker) cleanupLoop() {

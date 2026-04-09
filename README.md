@@ -4,21 +4,22 @@
 
 # PoracleNG
 
-PoracleNG splits Poracle into two components: a high-performance **Processor** (Go) that receives webhooks and performs all user matching in memory, and an **Alerter** (Node.js) that handles template rendering and message delivery to Discord and Telegram.
+PoracleNG splits Poracle into two components: a high-performance **Processor** (Go) that receives webhooks, matches, renders templates, and delivers messages directly to Discord and Telegram, and an **Alerter** (Node.js) that handles Discord/Telegram bot commands and reconciliation.
 
 ## Architecture
 
 ```
-Golbat ──webhook──▶ Processor (Go :3030) ──matched──▶ Alerter (Node.js :3031) ──▶ Discord / Telegram
-                         │                                │
-                         │◀──── POST /api/reload ──────────│
-                         │                                │
-                         ▼                                ▼
-                    MySQL (read)                     MySQL (read/write)
+Golbat ──webhook──▶ Processor (Go :3030) ──REST API──▶ Discord / Telegram
+                         │                                   ▲
+                         │◀──── /api/* (commands) ───────────│
+                         │                                   │
+                         ▼                                   │
+                    MySQL (read/write)              Alerter (Node.js :3031)
+                                                    (bot commands, reconciliation)
 ```
 
-- The **Processor** receives raw webhooks from Golbat, matches them against all user tracking rules in memory, and forwards only the matched results to the alerter.
-- The **Alerter** receives pre-matched results, renders templates (DTS), and delivers messages to Discord and Telegram. It also handles user commands (Discord bot and Telegram bot).
+- The **Processor** receives raw webhooks from Golbat, matches them against all user tracking rules in memory, enriches with game data and translations, renders DTS Handlebars templates, and delivers messages directly via Discord REST API and Telegram Bot API.
+- The **Alerter** handles Discord and Telegram bot commands (e.g. `!track`, `!raid`, `!area`), Discord role reconciliation, and sends confirmation messages from processor API operations. It does not render templates or deliver alert messages.
 
 **Migrating from PoracleJS?** See [Migrating from PoracleJS](#migrating-from-poraclejs) for an automated migration script and what has changed.
 
@@ -216,11 +217,7 @@ Both components write logs to the shared `logs/` directory at the project root:
 **Alerter logs:**
 - `logs/general-<date>.log` — main alerter log (rotated daily)
 - `logs/errors-<date>.log` — warnings and errors
-- `logs/discord-<date>.log` — Discord message delivery
-- `logs/telegram-<date>.log` — Telegram message delivery
 - `logs/commands-<date>.log` — user commands
-- `logs/controller-<date>.log` — controller activity
-- `logs/matched_webhooks-<date>-<hour>.log` — matched results from the processor (if enabled)
 
 Log level and retention are configured in the `[logging]` section of `config.toml`:
 
@@ -320,10 +317,8 @@ All API endpoints are available through the processor (default port 3030). Exter
 
 | Category | Endpoints | Description |
 |----------|-----------|-------------|
-| Delivery | `POST /api/matched` | Receive pre-matched results from processor |
-| Messages | `POST /api/postMessage` | Direct message delivery to Discord/Telegram |
-| Discord | `/api/humans/{id}/roles/*` | Discord role management (requires Discord.js client) |
-| Config | `GET /api/config/*` | Server config and template metadata |
+| Messages | `POST /api/postMessage` | Send confirmation messages to Discord/Telegram |
+| Config | `GET /api/config/poracleWeb` | Server config for web UI |
 | Game data | `GET /api/masterdata/*` | Pokemon and grunt master data |
 
 The processor proxies unhandled `/api/*` requests to the alerter transparently. Both components expose `/health` and `/metrics` on their respective ports for Prometheus monitoring.
@@ -348,8 +343,10 @@ Then:
 | From | To | Endpoint | Purpose |
 |------|----|----------|---------|
 | Golbat | Processor | `POST /` | Raw webhooks (all types) |
-| Processor | Alerter | `POST /api/matched` | Pre-matched results with user lists |
-| Alerter | Processor | `POST /api/reload` | Trigger in-memory state reload |
+| Processor | Discord | Discord REST API v10 | Alert delivery (DM, channel, thread, webhook) |
+| Processor | Telegram | Telegram Bot API | Alert delivery (user, group, channel) |
+| Processor | Alerter | `POST /api/postMessage` | Confirmation messages from API operations |
+| Alerter | Processor | `/api/tracking/*`, `/api/humans/*` | Command processing (track, area, location, etc.) |
 
 ## Building
 

@@ -1,13 +1,10 @@
 const Knex = require('knex')
 const moment = require('moment-timezone')
 const TranslatorFactory = require('../util/translatorFactory')
-const dtsLoader = require('./dtsloader')
-const configChecker = require('./configChecker')
 const geofenceLoader = require('./geofenceLoader')
 
 let config
 let knex
-let dts
 let geofence
 let translator
 let translatorFactory
@@ -64,7 +61,6 @@ function getScannerKnex(conf) {
 module.exports = {
 	Config: (performChecks = true) => {
 		config = require('./configSingleton')
-		dts = dtsLoader.readDtsFiles()
 		geofence = geofenceLoader.readAllGeofenceFiles(config)
 		knex = getKnex(config)
 		scannerKnex = getScannerKnex(config)
@@ -72,14 +68,12 @@ module.exports = {
 		translator = translatorFactory.default
 
 		if (performChecks) {
-			configChecker.checkConfig(config)
-			configChecker.checkDts(dts, config)
-			configChecker.checkGeofence(geofence.geofence)
+			// Config checks are now handled by the processor
 		}
 
 		moment.locale(config.locale.timeformat)
 		return {
-			config, knex, scannerKnex, dts, geofence, translator, translatorFactory,
+			config, knex, scannerKnex, geofence, translator, translatorFactory,
 		}
 	},
 	getKnex,

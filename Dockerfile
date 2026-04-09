@@ -42,8 +42,11 @@ COPY scripts/ scripts/
 # Create runtime directories (processor downloads resources at startup)
 RUN mkdir -p config/.cache/geofences resources/data resources/rawdata resources/locale resources/gamelocale alerter/logs alerter/nominatimData logs backups
 
-# Static resource files needed by the alerter at startup
+# Pre-packaged game data (util.json is also embedded in the Go binary,
+# but the alerter reads it from disk)
 COPY resources/data/util.json resources/data/util.json
+
+# Bundled defaults (util.json is now embedded in the Go binary)
 COPY fallbacks/ fallbacks/
 
 # Processor: 3030, Alerter: 3031

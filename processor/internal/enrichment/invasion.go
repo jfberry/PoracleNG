@@ -9,6 +9,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // Invasion builds enrichment fields for an invasion webhook.
@@ -22,6 +23,9 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
 
 	if expiration > 0 {
+		m["expiration"] = expiration                    // integer for <t:{{expiration}}:R>
+		m["incidentExpiration"] = expiration            // camelCase alias
+		m["incident_expire_timestamp"] = expiration     // webhook field name alias
 		m["disappearTime"] = geo.FormatTime(expiration, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(expiration)
 	}
@@ -55,6 +59,10 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 
 	// Reverse geocoding
 	e.addGeoResult(m, lat, lon)
+
+	// Grunt and display type IDs for DTS templates
+	m["gruntTypeId"] = gruntTypeID
+	m["displayTypeId"] = displayType
 
 	// Static map tile — only pass non-zero IDs so tileserver template nil checks work
 	tileFields := make(map[string]any)
@@ -108,15 +116,12 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 }
 
 // InvasionTranslate adds per-language translated fields.
-func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang string) map[string]any {
+func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lineup []webhook.InvasionLineupEntry, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+5)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 15) // only translated fields; caller merges base + perLang
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
@@ -128,19 +133,37 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 		}
 	}
 
-	// Grunt name
-	grunt := e.GameData.GetGrunt(gruntTypeID)
-	if grunt != nil {
-		m["gruntName"] = tr.T(grunt.CategoryKey())
-		if typeKey := grunt.TypeKey(); typeKey != "" {
-			m["gruntTypeName"] = tr.T(typeKey)
-		} else {
-			m["gruntTypeName"] = ""
+	// Event invasions (kecleon, showcase, gold-stop) take priority over grunt ID 0
+	// which maps to CHARACTER_UNSET in the grunt data.
+	displayType := toInt(base["displayTypeId"])
+	isEventInvasion := displayType >= 7
+	var grunt *gamedata.Grunt
+
+	if isEventInvasion && gd.Util != nil {
+		if eventInfo, ok := gd.Util.PokestopEvent[displayType]; ok {
+			m["gruntName"] = eventInfo.Name
+			m["gruntTypeName"] = eventInfo.Name
+		}
+	} else {
+		// Regular grunt name
+		grunt = e.GameData.GetGrunt(gruntTypeID)
+		if grunt != nil {
+			m["gruntName"] = tr.T(grunt.CategoryKey())
+			if typeKey := grunt.TypeKey(); typeKey != "" {
+				m["gruntTypeName"] = tr.T(typeKey)
+			} else {
+				derived := gamedata.TypeNameFromTemplate(grunt.Template)
+				if derived != "" {
+					m["gruntTypeName"] = strings.ToUpper(derived[:1]) + derived[1:]
+				} else {
+					m["gruntTypeName"] = ""
+				}
+			}
 		}
 	}
 
 	// Gender name and emoji (uses shared helper for consistent fallbacks)
-	addGenderFields(m, gd, tr, toInt(base["gruntGender"]))
+	addGenderFields(m, gd, tr, e.Translations.For("en"), toInt(base["gruntGender"]))
 
 	// Build gruntRewardsList with translated pokemon names
 	if grunt != nil {
@@ -192,6 +215,26 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lang 
 
 			m["gruntRewardsList"] = rewardsList
 			m["gruntRewards"] = strings.Join(rewardsTextParts, "\\n")
+		}
+	}
+
+	// Confirmed lineup from webhook (translated pokemon names)
+	if len(lineup) > 0 {
+		lineupMonsters := make([]map[string]any, 0, len(lineup))
+		for _, entry := range lineup {
+			nameInfo := make(map[string]any)
+			TranslateMonsterNames(nameInfo, gd, tr, entry.PokemonID, entry.Form, 0)
+			lineupMonsters = append(lineupMonsters, map[string]any{
+				"id":       entry.PokemonID,
+				"formId":   entry.Form,
+				"name":     nameInfo["name"],
+				"formName": nameInfo["formName"],
+				"fullName": nameInfo["fullName"],
+			})
+		}
+		m["gruntLineupList"] = map[string]any{
+			"confirmed": true,
+			"monsters":  lineupMonsters,
 		}
 	}
 

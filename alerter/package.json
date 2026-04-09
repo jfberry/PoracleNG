@@ -28,7 +28,6 @@
     "test:commands": "mocha src/lib/poracleMessage/commands/__tests__/*.test.js --timeout 10000"
   },
   "dependencies": {
-    "@budibase/handlebars-helpers": "^0.14.2",
     "async-mutex": "^0.5.0",
     "axios": "^1.13.6",
     "chokidar": "^3.5.3",
@@ -38,7 +37,6 @@
     "fastify": "^5.8.4",
     "form-data": "^4.0.5",
     "geo-tz": "^8.1.6",
-    "handlebars": "^4.7.9",
     "import-fresh": "^3.3.0",
     "json5": "^2.2.3",
     "knex": "^3.2.6",

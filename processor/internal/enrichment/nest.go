@@ -16,13 +16,22 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.T
 	m := make(map[string]any)
 
 	expiration := nest.ResetTime + 7*24*60*60
-	tz := geo.GetTimezone(nest.Latitude, nest.Longitude)
+	tz := geo.GetTimezone(nest.Lat, nest.Lon)
 
 	m["tth"] = geo.ComputeTTH(expiration)
 	m["disappearTime"] = geo.FormatTime(expiration, tz, e.TimeLayout)
 	m["disappearDate"] = geo.FormatTime(expiration, tz, e.DateLayout)
 	m["resetTime"] = geo.FormatTime(nest.ResetTime, tz, e.TimeLayout)
 	m["resetDate"] = geo.FormatTime(nest.ResetTime, tz, e.DateLayout)
+
+	// Nest identity
+	m["nest_name"] = nest.Name
+	m["pokemonCount"] = nest.PokemonCount
+	m["pokemonSpawnAvg"] = nest.PokemonAvg
+
+	// Normalise lat/lon to latitude/longitude for common field consumers
+	m["latitude"] = nest.Lat
+	m["longitude"] = nest.Lon
 
 	// Icon URLs
 	if e.ImgUicons != nil {
@@ -36,9 +45,9 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.T
 	}
 
 	// Autoposition from polygon paths
-	if len(nest.PolyPath) > 0 {
+	if nest.PolyPath != "" {
 		var rawPolygons [][][2]float64
-		if err := json.Unmarshal(nest.PolyPath, &rawPolygons); err != nil {
+		if err := json.Unmarshal([]byte(nest.PolyPath), &rawPolygons); err != nil {
 			log.Debugf("nest: failed to parse poly_path: %s", err)
 		} else {
 			var polygons [][]staticmap.LatLon
@@ -65,11 +74,14 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.T
 		}
 	}
 
+	// Map URLs
+	e.addMapURLs(m, nest.Lat, nest.Lon, "nests", "")
+
 	// Reverse geocoding
-	e.addGeoResult(m, nest.Latitude, nest.Longitude)
+	e.addGeoResult(m, nest.Lat, nest.Lon)
 
 	// Static map tile — use autopositioned center if available, else original coords
-	mapLat, mapLon := nest.Latitude, nest.Longitude
+	mapLat, mapLon := nest.Lat, nest.Lon
 	if autoLat, ok := m["map_latitude"].(float64); ok {
 		mapLat = autoLat
 		mapLon = m["map_longitude"].(float64)
@@ -81,6 +93,9 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.T
 		"pokemonSpawnAvg": nest.PokemonAvg,
 	})
 
+	// Pokemon identity
+	m["pokemonId"] = nest.PokemonID
+
 	// Game data enrichment
 	if e.GameData != nil {
 		monster := e.GameData.GetMonster(nest.PokemonID, nest.Form)
@@ -91,26 +106,35 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.T
 		}
 	}
 
+	// Shiny possible
+	if e.ShinyProvider != nil {
+		rate := e.ShinyProvider.GetShinyRate(nest.PokemonID)
+		if rate > 0 {
+			m["shinyPossible"] = true
+			m["shinyPossibleEmojiKey"] = "shiny"
+		} else {
+			m["shinyPossible"] = false
+		}
+	}
+
+
 	return m, pending
 }
 
 // NestTranslate adds per-language translated fields.
 func (e *Enricher) NestTranslate(base map[string]any, pokemonID, form int, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+5)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 5) // only translated fields; caller merges base + perLang
 
 	tr := e.Translations.For(lang)
 	TranslateMonsterNamesEng(m, e.GameData, tr, e.Translations, pokemonID, form, 0)
 
 	monster := e.GameData.GetMonster(pokemonID, form)
 	if monster != nil {
-		TranslateTypeNames(m, tr, monster.Types)
+		TranslateTypeNames(m, tr, e.Translations.For("en"), monster.Types)
 	}
 
 	return m

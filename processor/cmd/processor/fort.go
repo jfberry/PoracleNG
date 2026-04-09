@@ -72,14 +72,20 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 
 			enrichment, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort)
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:         "fort_update",
-				Message:      raw,
-				Enrichment:   enrichment,
-				MatchedAreas: matchedAreas,
-				MatchedUsers: matched,
-				TilePending:  tilePending,
-			})
+			if ps.renderCh == nil {
+				return
+			}
+			webhookFields := parseWebhookFields(raw)
+
+			ps.renderCh <- RenderJob{
+				TemplateType:  "fort-update",
+				Enrichment:    enrichment,
+				WebhookFields: webhookFields,
+				MatchedUsers:  matched,
+				MatchedAreas:  matchedAreas,
+				TilePending:   tilePending,
+				LogReference:  fortID,
+			}
 		} else {
 			l.Debugf("Fort update %s (%s, %s) and 0 humans cared",
 				fort.FortName(), fort.FortType(), fort.ChangeType)

@@ -5,6 +5,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -111,7 +113,13 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 		msg, _ := json.Marshal(change)
 		baseEnrichment, baseTilePending := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap)
 
-		// Per-user: each gets their own payload with per-language enrichment and tile
+		// Per-user: each gets their own render job with per-language enrichment and tile
+		if ps.renderCh == nil {
+			continue
+		}
+
+		webhookFields := parseWebhookFields(msg)
+
 		for _, user := range matched {
 			lang := user.Language
 			if lang == "" {
@@ -122,9 +130,10 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			}
 
 			var perLang map[string]map[string]any
-			var tilePending = baseTilePending
+			var userTilePending *staticmap.TilePending
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-				langEnrichment, userTilePending := ps.enricher.WeatherTranslate(
+				var langEnrichment map[string]any
+				langEnrichment, userTilePending = ps.enricher.WeatherTranslate(
 					baseEnrichment,
 					change.OldGameplayCondition,
 					change.GameplayCondition,
@@ -132,21 +141,43 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 					lang,
 					ps.cfg.Weather.ShowAlteredPokemonStaticMap,
 				)
-				if userTilePending != nil {
-					tilePending = userTilePending
-				}
 				perLang = map[string]map[string]any{lang: langEnrichment}
 			}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  "weather_change",
-				Message:               msg,
-				Enrichment:            baseEnrichment,
-				PerLanguageEnrichment: perLang,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          []webhook.MatchedUser{user},
-				TilePending:           tilePending,
-			})
+			// For clean weather alerts, TTH is the latest pokemon despawn time.
+			userEnrichment := baseEnrichment
+			if user.Clean && len(user.ActivePokemons) > 0 {
+				var maxDespawn int64
+				for _, ap := range user.ActivePokemons {
+					if ap.DisappearTime > maxDespawn {
+						maxDespawn = ap.DisappearTime
+					}
+				}
+				if maxDespawn > 0 {
+					userEnrichment = make(map[string]any, len(baseEnrichment)+1)
+					for k, v := range baseEnrichment {
+						userEnrichment[k] = v
+					}
+					userEnrichment["tth"] = geo.ComputeTTH(maxDespawn)
+				}
+			}
+
+			// Use per-user tile if available, otherwise base tile
+			tp := baseTilePending
+			if userTilePending != nil {
+				tp = userTilePending
+			}
+
+			ps.renderCh <- RenderJob{
+				TemplateType:      "weatherchange",
+				Enrichment:        userEnrichment,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      []webhook.MatchedUser{user},
+				MatchedAreas:      matchedAreas,
+				TilePending:       tp,
+				LogReference:      change.S2CellID,
+			}
 		}
 	}
 }

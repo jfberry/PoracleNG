@@ -1,6 +1,8 @@
 package rowtext
 
 import (
+	"strings"
+
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
@@ -19,7 +21,14 @@ func (g *Generator) InvasionRowText(tr *i18n.Translator, invasion *db.InvasionTr
 
 	typeText := tr.T("tracking.any")
 	if invasion.GruntType != "" {
-		typeText = tr.T(invasion.GruntType)
+		// Try i18n key first (works for grunt type names that have translations),
+		// otherwise capitalize the raw name (pokestop events like kecleon, showcase).
+		translated := tr.T(invasion.GruntType)
+		if translated == invasion.GruntType && len(translated) > 0 {
+			typeText = strings.ToUpper(translated[:1]) + translated[1:]
+		} else {
+			typeText = translated
+		}
 	}
 
 	s := tr.Tf("tracking.grunt_type_fmt", typeText)

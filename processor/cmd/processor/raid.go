@@ -53,6 +53,15 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			return
 		}
 
+		// ignore_long_raids: skip raids/eggs with > 47 minutes remaining
+		if ps.cfg.General.IgnoreLongRaids {
+			tthSeconds := raid.End - time.Now().Unix()
+			if tthSeconds > 47*60 {
+				l.Debugf("Raid/egg on gym %s has %ds remaining (>47m), skipping (ignore_long_raids)", raid.GymID, tthSeconds)
+				return
+			}
+		}
+
 		st := ps.stateMgr.Get()
 		ex := bool(raid.ExRaidEligible) || bool(raid.IsExRaidEligible)
 
@@ -154,15 +163,21 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				}
 			}
 
-			ps.sender.Send(webhook.OutboundPayload{
-				Type:                  msgType,
-				Message:               raw,
-				Enrichment:            baseEnrichment,
-				PerLanguageEnrichment: perLang,
-				MatchedAreas:          matchedAreas,
-				MatchedUsers:          matched,
-				TilePending:           tilePending,
-			})
+			if ps.renderCh == nil {
+				return
+			}
+			webhookFields := parseWebhookFields(raw)
+
+			ps.renderCh <- RenderJob{
+				TemplateType:      msgType,
+				Enrichment:        baseEnrichment,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TilePending:       tilePending,
+				LogReference:      raid.GymID,
+			}
 		} else {
 			if raid.PokemonID > 0 {
 				l.Debugf("Raid %s L%d at [%.3f,%.3f] and 0 humans cared",

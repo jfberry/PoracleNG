@@ -118,6 +118,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 		}
 	}
 
+
 	return m, pending
 }
 
@@ -148,13 +149,10 @@ func buildQuestRewardData(rewards []matching.QuestRewardData) QuestRewardData {
 // QuestTranslate adds per-language translated fields for quest enrichment.
 func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebhook, rewards []matching.QuestRewardData, lang string) map[string]any {
 	if e.Translations == nil {
-		return base
+		return nil
 	}
 
-	m := make(map[string]any, len(base)+20)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 20) // only translated fields; caller merges base + perLang
 
 	tr := e.Translations.For(lang)
 	enTr := e.Translations.For("en")
@@ -194,15 +192,23 @@ func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebho
 			}
 		}
 		m["monsterList"] = monsterList
+		m["monsters"] = monsterList // JS compat: spread from rewardData
 	}
 	m["monsterNames"] = strings.Join(monsterNames, ", ")
 	m["monsterNamesEng"] = strings.Join(monsterNamesEng, ", ")
 
-	// Item names
+	// Item names + items array
 	var itemNames, itemNamesEng []string
+	itemsList := make([]map[string]any, 0, len(rewardData.Items))
 	for _, item := range rewardData.Items {
 		name := TranslateItemName(tr, item.ID)
 		nameEng := TranslateItemName(enTr, item.ID)
+		itemsList = append(itemsList, map[string]any{
+			"id":      item.ID,
+			"amount":  item.Amount,
+			"name":    name,
+			"nameEng": nameEng,
+		})
 		if item.Amount > 1 {
 			itemNames = append(itemNames, fmt.Sprintf("%d %s", item.Amount, name))
 			itemNamesEng = append(itemNamesEng, fmt.Sprintf("%d %s", item.Amount, nameEng))
@@ -211,6 +217,7 @@ func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebho
 			itemNamesEng = append(itemNamesEng, nameEng)
 		}
 	}
+	m["items"] = itemsList
 	m["itemNames"] = strings.Join(itemNames, ", ")
 	m["itemNamesEng"] = strings.Join(itemNamesEng, ", ")
 
@@ -225,29 +232,45 @@ func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebho
 	m["dustText"] = dustText
 	m["dustTextEng"] = dustTextEng
 
-	// Mega energy names
+	// Mega energy names + energyMonsters array
 	var energyNames, energyNamesEng []string
+	energyList := make([]map[string]any, 0, len(rewardData.EnergyMonsters))
 	for _, e := range rewardData.EnergyMonsters {
 		pokeName := tr.T(gamedata.PokemonTranslationKey(e.PokemonID))
 		pokeNameEng := enTr.T(gamedata.PokemonTranslationKey(e.PokemonID))
 		energyLabel := tr.T("quest_reward_12")
 		energyLabelEng := enTr.T("quest_reward_12")
+		energyList = append(energyList, map[string]any{
+			"pokemonId": e.PokemonID,
+			"amount":    e.Amount,
+			"name":      pokeName,
+			"nameEng":   pokeNameEng,
+		})
 		energyNames = append(energyNames, fmt.Sprintf("%d %s %s", e.Amount, pokeName, energyLabel))
 		energyNamesEng = append(energyNamesEng, fmt.Sprintf("%d %s %s", e.Amount, pokeNameEng, energyLabelEng))
 	}
+	m["energyMonsters"] = energyList
 	m["energyMonstersNames"] = strings.Join(energyNames, ", ")
 	m["energyMonstersNamesEng"] = strings.Join(energyNamesEng, ", ")
 
-	// Candy names
+	// Candy names + candy array
 	var candyNames, candyNamesEng []string
+	candyList := make([]map[string]any, 0, len(rewardData.Candy))
 	for _, c := range rewardData.Candy {
 		pokeName := tr.T(gamedata.PokemonTranslationKey(c.PokemonID))
 		pokeNameEng := enTr.T(gamedata.PokemonTranslationKey(c.PokemonID))
 		candyLabel := tr.T("quest_reward_4")
 		candyLabelEng := enTr.T("quest_reward_4")
+		candyList = append(candyList, map[string]any{
+			"pokemonId": c.PokemonID,
+			"amount":    c.Amount,
+			"name":      pokeName,
+			"nameEng":   pokeNameEng,
+		})
 		candyNames = append(candyNames, fmt.Sprintf("%d %s %s", c.Amount, pokeName, candyLabel))
 		candyNamesEng = append(candyNamesEng, fmt.Sprintf("%d %s %s", c.Amount, pokeNameEng, candyLabelEng))
 	}
+	m["candy"] = candyList
 	m["candyMonstersNames"] = strings.Join(candyNames, ", ")
 	m["candyMonstersNamesEng"] = strings.Join(candyNamesEng, ", ")
 

@@ -17,9 +17,13 @@
 package gamedata
 
 import (
+	_ "embed"
 	"fmt"
 	"path/filepath"
 )
+
+//go:embed util.json
+var embeddedUtilJSON []byte
 
 // MonsterKey uniquely identifies a pokemon by species ID and form ID.
 type MonsterKey struct {
@@ -47,7 +51,6 @@ type WeatherData struct {
 // Load reads all game data from the resources directory.
 func Load(baseDir string) (*GameData, error) {
 	rawDir := filepath.Join(baseDir, "resources", "rawdata")
-	dataDir := filepath.Join(baseDir, "resources", "data")
 
 	monsters, err := LoadMonsters(
 		filepath.Join(rawDir, "pokemon.json"),
@@ -82,9 +85,10 @@ func Load(baseDir string) (*GameData, error) {
 		return nil, fmt.Errorf("loading weather: %w", err)
 	}
 
-	util, err := LoadUtilData(filepath.Join(dataDir, "util.json"))
+	// util.json is embedded in the binary — no filesystem dependency
+	util, err := ParseUtilData(embeddedUtilJSON)
 	if err != nil {
-		return nil, fmt.Errorf("loading util: %w", err)
+		return nil, fmt.Errorf("loading embedded util.json: %w", err)
 	}
 
 	// Enrich TypeInfo with display data from util.json
@@ -175,6 +179,20 @@ func (gd *GameData) GetTypeEmojiKeys(typeIDs []int) []string {
 	for _, id := range typeIDs {
 		if ti, ok := gd.Types[id]; ok {
 			keys = append(keys, ti.Emoji)
+		}
+	}
+	return keys
+}
+
+// GetWeatherEmojiKeys returns the emoji keys for a list of weather IDs.
+func (gd *GameData) GetWeatherEmojiKeys(weatherIDs []int) []string {
+	if gd.Util == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(weatherIDs))
+	for _, id := range weatherIDs {
+		if wInfo, ok := gd.Util.Weather[id]; ok {
+			keys = append(keys, wInfo.Emoji)
 		}
 	}
 	return keys

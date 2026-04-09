@@ -18,7 +18,12 @@ import (
 // Returns a base enrichment map (universal fields) and, if GameData is loaded,
 // also includes game data enrichment (types, weakness, stats, maps, etc.).
 func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) (map[string]any, *staticmap.TilePending) {
+	verified := pokemon.DisappearTimeVerified || pokemon.Verified
 	m := map[string]any{
+		"pokemon_id":       pokemon.PokemonID,
+		"pokemonId":        pokemon.PokemonID,
+		"verified":         verified,
+		"confirmedTime":    verified,
 		"rarityGroup":      processed.RarityGroup,
 		"pvpBestRank":      processed.PVPBestRank,
 		"pvpEvolutionData": processed.PVPEvoData,
@@ -55,6 +60,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		if rate > 0 {
 			m["shinyStats"] = int(math.Round(rate))
 			m["shinyPossible"] = true
+			m["shinyPossibleEmojiKey"] = "shiny"
 		} else {
 			m["shinyPossible"] = false
 		}
@@ -73,8 +79,14 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	// Time enrichment
 	if pokemon.DisappearTime > 0 {
 		tz := geo.GetTimezone(pokemon.Latitude, pokemon.Longitude)
+		m["disappear_time"] = pokemon.DisappearTime // integer for <t:{{disappear_time}}:R>
 		m["disappearTime"] = geo.FormatTime(pokemon.DisappearTime, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(pokemon.DisappearTime)
+		tthSec := pokemon.DisappearTime - time.Now().Unix()
+		if tthSec < 0 {
+			tthSec = 0
+		}
+		m["tthSeconds"] = int(tthSec)
 
 		// Weather change time: the hour boundary before disappear_time
 		weatherChangeTS := pokemon.DisappearTime - (pokemon.DisappearTime % 3600)
@@ -124,6 +136,10 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 
 		// IV color
 		m["ivColor"] = gamedata.FindIvColor(iv, e.IvColors)
+
+		// Weight and height (formatted to 2dp, matching alerter)
+		m["weight"] = fmt.Sprintf("%.2f", pokemon.Weight)
+		m["height"] = fmt.Sprintf("%.2f", pokemon.Height)
 
 		// Catch rates
 		m["catchBase"] = fmt.Sprintf("%.2f", pokemon.BaseCatch*100)
@@ -297,17 +313,14 @@ func (e *Enricher) enrichPokemonGameData(m map[string]any, pokemon *webhook.Poke
 // Call this once per distinct language among matched users.
 func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.PokemonWebhook, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
-		return base
+		return nil
 	}
 
-	// Clone base map for this language
-	m := make(map[string]any, len(base)+20)
-	for k, v := range base {
-		m[k] = v
-	}
+	m := make(map[string]any, 20) // only translated fields; caller merges base + perLang
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
+	enTr := e.Translations.For("en")
 	monster := gd.GetMonster(pokemon.PokemonID, pokemon.Form)
 	if monster == nil {
 		return m
@@ -317,12 +330,12 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 	TranslateMonsterNamesEng(m, gd, tr, e.Translations, pokemon.PokemonID, pokemon.Form, 0)
 
 	// Type names
-	TranslateTypeNames(m, tr, monster.Types)
+	TranslateTypeNames(m, tr, enTr, monster.Types)
 
 	// Move names
 	encountered, _ := base["encountered"].(bool)
 	if encountered {
-		addMoveFields(m, gd, tr, pokemon.Move1, pokemon.Move2)
+		addMoveFields(m, gd, tr, enTr, pokemon.Move1, pokemon.Move2)
 	} else {
 		m["quickMoveName"] = ""
 		m["chargeMoveName"] = ""
@@ -334,7 +347,7 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		weather = pokemon.Weather
 	}
 	addWeatherFields(m, gd, tr, monster.Types, weather)
-	gameWeatherID := toInt(m["gameWeatherId"])
+	gameWeatherID := toInt(base["gameWeatherId"])
 	m["gameWeatherName"] = TranslateWeatherName(tr, gameWeatherID)
 	if gameWeatherID > 0 {
 		if wInfo, ok := gd.Util.Weather[gameWeatherID]; ok {
@@ -342,11 +355,30 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		}
 	}
 
+	// Weather forecast names (for weather change templates)
+	forecastCurrent, _ := base["weatherForecastCurrent"].(int)
+	forecastNext, _ := base["weatherForecastNext"].(int)
+	if forecastCurrent > 0 {
+		m["weatherCurrentName"] = TranslateWeatherName(tr, forecastCurrent)
+		if wInfo, ok := gd.Util.Weather[forecastCurrent]; ok {
+			m["weatherCurrentEmojiKey"] = wInfo.Emoji
+		}
+	}
+	if forecastNext > 0 {
+		m["weatherNextName"] = TranslateWeatherName(tr, forecastNext)
+		if wInfo, ok := gd.Util.Weather[forecastNext]; ok {
+			m["weatherNextEmojiKey"] = wInfo.Emoji
+		}
+		// Translated strings for weatherChange composition (in layered view)
+		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
+		m["weatherCurrentUnknown"] = tr.T("weather.unknown")
+	}
+
 	// Generation name
 	addGenerationFields(m, gd, tr, pokemon.PokemonID, pokemon.Form)
 
 	// Gender name
-	addGenderFields(m, gd, tr, pokemon.Gender)
+	addGenderFields(m, gd, tr, enTr, pokemon.Gender)
 
 	// Rarity name
 	rarityGroup, _ := base["rarityGroup"].(int)
@@ -357,7 +389,7 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 
 	// Translated weakness list
 	if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {
-		m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr)
+		m["weaknessList"] = TranslateWeaknessCategories(weaknesses, tr, gd)
 	}
 
 	// Evolution chain
@@ -445,29 +477,46 @@ func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr
 			mon := gd.GetMonster(rank.Pokemon, formID)
 			if mon != nil {
 				nameInfo := make(map[string]any)
-				TranslateMonsterNames(nameInfo, gd, tr, rank.Pokemon, formID, rank.Evolution)
+				TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, rank.Pokemon, formID, rank.Evolution)
 				entry["name"] = nameInfo["name"]
 				entry["fullName"] = nameInfo["fullName"]
 				entry["formName"] = nameInfo["formName"]
 				entry["formNormalised"] = nameInfo["formNormalised"]
+				entry["nameEng"] = nameInfo["nameEng"]
+				entry["fullNameEng"] = nameInfo["fullNameEng"]
+				entry["formNormalisedEng"] = nameInfo["formNormalisedEng"]
 				entry["baseStats"] = map[string]int{
 					"baseAttack":  mon.Attack,
 					"baseDefense": mon.Defense,
 					"baseStamina": mon.Stamina,
 				}
+				// Flat base stats for DTS templates using {{this.baseAttack}}
+				entry["baseAttack"] = mon.Attack
+				entry["baseDefense"] = mon.Defense
+				entry["baseStamina"] = mon.Stamina
 			} else {
 				entry["name"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
 				entry["fullName"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
 				entry["formName"] = ""
 				entry["formNormalised"] = ""
+				entry["nameEng"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
+				entry["fullNameEng"] = fmt.Sprintf("Pokemon %d", rank.Pokemon)
+				entry["formNormalisedEng"] = ""
 				entry["baseStats"] = map[string]int{
 					"baseAttack": 0, "baseDefense": 0, "baseStamina": 0,
 				}
+				entry["baseAttack"] = 0
+				entry["baseDefense"] = 0
+				entry["baseStamina"] = 0
 			}
 
 			enriched = append(enriched, entry)
 		}
 		m[fmt.Sprintf("pvpEnriched_%s_league", leagueName)] = enriched
+		// Also store under the original webhook key so existing DTS templates
+		// using {{#each pvp_rankings_great_league}} get the enriched entries
+		// (with levelWithCap, name, fullName, etc.) instead of raw webhook data.
+		m[fmt.Sprintf("pvp_rankings_%s_league", leagueName)] = enriched
 	}
 }
 
@@ -496,7 +545,7 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 
 			nameInfo := make(map[string]any)
 			TranslateMonsterNames(nameInfo, gd, tr, evo.PokemonID, evo.FormID, 0)
-			TranslateTypeNames(nameInfo, tr, evoMon.Types)
+			TranslateTypeNames(nameInfo, tr, nil, evoMon.Types)
 			nameInfo["id"] = evo.PokemonID
 			nameInfo["form"] = evo.FormID
 			nameInfo["typeEmojiKeys"] = gd.GetTypeEmojiKeys(evoMon.Types)
@@ -524,7 +573,7 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 			megaInfo["fullName"] = i18n.Format(pattern, baseName)
 			megaInfo["evolution"] = te.TempEvoID
 			megaInfo["typeEmojiKeys"] = gd.GetTypeEmojiKeys(types)
-			TranslateTypeNames(megaInfo, tr, types)
+			TranslateTypeNames(megaInfo, tr, nil, types)
 			megaInfo["baseStats"] = map[string]int{
 				"baseAttack":  te.Attack,
 				"baseDefense": te.Defense,
