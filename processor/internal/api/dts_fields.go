@@ -519,25 +519,109 @@ var eggBlockScopes = []BlockScope{
 	},
 }
 
+// Snippet is a pre-made Handlebars expression the editor can offer for quick insertion.
+type Snippet struct {
+	Label       string `json:"label"`
+	Insert      string `json:"insert"`
+	Description string `json:"description"`
+	Category    string `json:"category,omitempty"`
+}
+
+var commonSnippets = []Snippet{
+	// Conditionals
+	{Label: "if / else", Insert: "{{#if fieldName}}...{{else}}...{{/if}}", Description: "Conditional block", Category: "control"},
+	{Label: "unless", Insert: "{{#unless fieldName}}...{{/unless}}", Description: "Inverse conditional", Category: "control"},
+	{Label: "eq", Insert: "{{#eq fieldName value}}...{{/eq}}", Description: "Equal comparison block", Category: "control"},
+	{Label: "isnt", Insert: "{{#isnt fieldName value}}...{{else}}...{{/isnt}}", Description: "Not-equal comparison with else", Category: "control"},
+	{Label: "gt / lt / gte / lte", Insert: "{{#gt fieldName value}}...{{/gt}}", Description: "Numeric comparison block", Category: "control"},
+	{Label: "and (subexpr)", Insert: "{{#if (and (gt a 1) (lt b 5))}}...{{/if}}", Description: "Combine conditions with and", Category: "control"},
+	{Label: "or (subexpr)", Insert: "{{#if (or condA condB)}}...{{/if}}", Description: "Either condition true", Category: "control"},
+	// Formatting
+	{Label: "round", Insert: "{{round fieldName}}", Description: "Round number to nearest integer", Category: "format"},
+	{Label: "toFixed", Insert: "{{toFixed fieldName 2}}", Description: "Format to N decimal places", Category: "format"},
+	{Label: "pad0", Insert: "{{pad0 fieldName 3}}", Description: "Zero-pad to N characters (default 3)", Category: "format"},
+	{Label: "addCommas", Insert: "{{addCommas fieldName}}", Description: "Thousand separators (12,345)", Category: "format"},
+	{Label: "lowercase", Insert: "{{lowercase fieldName}}", Description: "Convert to lowercase", Category: "format"},
+	{Label: "uppercase", Insert: "{{uppercase fieldName}}", Description: "Convert to uppercase", Category: "format"},
+	// String
+	{Label: "contains", Insert: "{{#contains fieldName \"text\"}}...{{/contains}}", Description: "Check if string contains text", Category: "string"},
+	{Label: "replace", Insert: "{{replace fieldName \"old\" \"new\"}}", Description: "Replace all occurrences", Category: "string"},
+	{Label: "concat", Insert: "{{concat a b c}}", Description: "Concatenate strings", Category: "string"},
+	// Iteration
+	{Label: "each", Insert: "{{#each arrayField}}{{this}}{{/each}}", Description: "Iterate over an array", Category: "iteration"},
+	{Label: "each with index", Insert: "{{#each arrayField}}{{@index}}: {{this}}{{/each}}", Description: "Iterate with index", Category: "iteration"},
+	// Emoji
+	{Label: "getEmoji", Insert: "{{getEmoji \"key\"}}", Description: "Look up emoji by key", Category: "emoji"},
+	// Links
+	{Label: "Shortlink", Insert: "<S<{{url}}>S>", Description: "Wrap a URL for Shlink shortening", Category: "link"},
+	// Maps
+	{Label: "Static map image", Insert: "[\u200A]({{{staticMap}}})", Description: "Invisible-text image link (Telegram/Discord)", Category: "link"},
+	{Label: "Google Maps link", Insert: "[Google]({{{googleMapUrl}}})", Description: "Clickable Google Maps link", Category: "link"},
+	{Label: "Apple Maps link", Insert: "[Apple]({{{appleMapUrl}}})", Description: "Clickable Apple Maps link", Category: "link"},
+}
+
+var monsterSnippets = []Snippet{
+	{Label: "Round IV", Insert: "{{round iv}}", Description: "IV rounded to integer", Category: "pokemon"},
+	{Label: "IV or 💯", Insert: "{{#isnt iv 100}}{{round iv}}%{{else}}💯{{/isnt}}", Description: "Show IV% or 💯 for hundos", Category: "pokemon"},
+	{Label: "IV with stars", Insert: "{{#isnt iv 100}}*{{round iv}}%*{{else}}💯{{/isnt}}", Description: "Bold IV% or 💯 (Telegram)", Category: "pokemon"},
+	{Label: "Pokemon with gender", Insert: "{{fullName}} {{genderEmoji}}", Description: "Name + gender emoji", Category: "pokemon"},
+	{Label: "IV line", Insert: "{{atk}}/{{def}}/{{sta}}", Description: "Individual IVs (15/15/15)", Category: "pokemon"},
+	{Label: "CP and level", Insert: "CP{{cp}} L{{level}}", Description: "CP and level", Category: "pokemon"},
+	{Label: "Time remaining", Insert: "{{tthh}}h {{tthm}}m {{tths}}s", Description: "Time to hide", Category: "pokemon"},
+	{Label: "Despawn time", Insert: "{{time}} ({{tthm}}m{{tths}}s)", Description: "Despawn time with TTH", Category: "pokemon"},
+	{Label: "Weather boosted", Insert: "{{#if boosted}}{{boostWeatherEmoji}}{{/if}}", Description: "Show boost emoji if boosted", Category: "pokemon"},
+	{Label: "Weather change", Insert: "{{weatherChange}}", Description: "Weather forecast text (empty if no change)", Category: "pokemon"},
+	{Label: "Shiny possible", Insert: "{{#if shinyPossible}}✨{{/if}}", Description: "Sparkle if shiny possible", Category: "pokemon"},
+	{Label: "Moves", Insert: "{{quickMoveName}} / {{chargeMoveName}}", Description: "Fast and charged move names", Category: "pokemon"},
+	{Label: "PVP Great League", Insert: "{{#each pvpGreat}}#{{rank}} {{fullName}} CP{{cp}} L{{levelWithCap}} {{percentage}}%\n{{/each}}", Description: "Great League PVP rankings", Category: "pvp"},
+	{Label: "PVP Ultra League", Insert: "{{#each pvpUltra}}#{{rank}} {{fullName}} CP{{cp}} L{{levelWithCap}} {{percentage}}%\n{{/each}}", Description: "Ultra League PVP rankings", Category: "pvp"},
+	{Label: "Power-up cost", Insert: "{{#getPowerUpCost level 50}}{{addCommas stardust}} dust, {{candy}} candy{{/getPowerUpCost}}", Description: "Power-up cost to level 50", Category: "pokemon"},
+	{Label: "Power-up cost inline", Insert: "{{getPowerUpCost level 50}}", Description: "Power-up cost as text", Category: "pokemon"},
+	{Label: "Size filter", Insert: "{{#if size}}{{#or (lte size 1) (gte size 5)}}📐 {{sizeName}}{{/or}}{{/if}}", Description: "Show size for XXS/XXL only", Category: "pokemon"},
+}
+
+var raidSnippets = []Snippet{
+	{Label: "Raid boss line", Insert: "⭐{{level}} {{fullName}}", Description: "Level stars + boss name", Category: "raid"},
+	{Label: "Gym line", Insert: "📍 {{gymName}}", Description: "Gym name with pin", Category: "raid"},
+	{Label: "EX eligible", Insert: "{{#if ex}}🎟 EX{{/if}}", Description: "Show EX badge if eligible", Category: "raid"},
+	{Label: "Time remaining", Insert: "{{time}} ({{tthm}}m)", Description: "End time with TTH", Category: "raid"},
+}
+
+var eggSnippets = []Snippet{
+	{Label: "Egg line", Insert: "🥚 L{{level}} egg", Description: "Egg level", Category: "egg"},
+	{Label: "Hatch time", Insert: "{{time}} ({{tthm}}m)", Description: "Hatch time with TTH", Category: "egg"},
+}
+
+var questSnippets = []Snippet{
+	{Label: "Quest line", Insert: "{{questString}} → {{rewardString}}", Description: "Quest task and reward", Category: "quest"},
+	{Label: "Pokestop", Insert: "📍 {{pokestopName}}", Description: "Pokestop name with pin", Category: "quest"},
+}
+
+var invasionSnippets = []Snippet{
+	{Label: "Grunt line", Insert: "{{gruntTypeEmoji}} {{gruntName}}", Description: "Grunt type emoji + name", Category: "invasion"},
+	{Label: "Time remaining", Insert: "{{time}} ({{tthm}}m)", Description: "End time with TTH", Category: "invasion"},
+}
+
 type fieldEntry struct {
 	Fields      []FieldDef
 	BlockScopes []BlockScope
+	Snippets    []Snippet
 }
 
 var fieldsByType = map[string]fieldEntry{
-	"monster":      {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes},
-	"monsterNoIv":  {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes},
-	"raid":         {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes},
-	"egg":          {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes},
-	"quest":        {Fields: append(commonFields, questFields...)},
-	"invasion":     {Fields: append(commonFields, invasionFields...)},
-	"lure":         {Fields: append(commonFields, lureFields...)},
-	"nest":         {Fields: append(commonFields, nestFields...)},
-	"gym":          {Fields: append(commonFields, gymFields...)},
-	"fort-update":  {Fields: append(commonFields, fortUpdateFields...)},
-	"maxbattle":    {Fields: append(commonFields, maxbattleFields...)},
-	"weatherchange": {Fields: append(commonFields, weatherChangeFields...)},
-	"greeting":     {Fields: append(commonFields, greetingFields...)},
+	"monster":      {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"monsterNoIv":  {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"raid":         {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
+	"egg":          {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
+	"quest":        {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
+	"invasion":     {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
+	"lure":         {Fields: append(commonFields, lureFields...), Snippets: commonSnippets},
+	"nest":         {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},
+	"gym":          {Fields: append(commonFields, gymFields...), Snippets: commonSnippets},
+	"fort-update":  {Fields: append(commonFields, fortUpdateFields...), Snippets: commonSnippets},
+	"maxbattle":    {Fields: append(commonFields, maxbattleFields...), Snippets: commonSnippets},
+	"weatherchange": {Fields: append(commonFields, weatherChangeFields...), Snippets: commonSnippets},
+	"greeting":     {Fields: append(commonFields, greetingFields...), Snippets: commonSnippets},
 }
 
 // HandleDTSFields returns available template fields for a DTS type.
@@ -564,6 +648,9 @@ func HandleDTSFields() gin.HandlerFunc {
 		}
 		if len(entry.BlockScopes) > 0 {
 			resp["blockScopes"] = entry.BlockScopes
+		}
+		if len(entry.Snippets) > 0 {
+			resp["snippets"] = entry.Snippets
 		}
 		c.JSON(http.StatusOK, resp)
 	}
