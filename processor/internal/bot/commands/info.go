@@ -573,20 +573,7 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 		sb.WriteString(fmt.Sprintf("%s: %s %d - %s 1:%.0f\n", pokeName, tr.T("msg.info.shiny_seen"), e.stat.Total, tr.T("msg.info.shiny_ratio"), e.stat.Ratio))
 	}
 
-	text := sb.String()
-
-	// If too long for a message, send as file
-	if len(text) > 1500 {
-		return []bot.Reply{{
-			Text: tr.T("msg.info.shiny_header"),
-			Attachment: &bot.Attachment{
-				Filename: "shiny_stats.txt",
-				Content:  []byte(text),
-			},
-		}}
-	}
-
-	return []bot.Reply{{Text: text}}
+	return bot.SplitTextReply(sb.String())
 }
 
 func (c *InfoCommand) rarityStats(ctx *bot.CommandContext) []bot.Reply {
@@ -635,18 +622,7 @@ func (c *InfoCommand) rarityStats(ctx *bot.CommandContext) []bot.Reply {
 		return []bot.Reply{{Text: tr.T("msg.info.rarity_unavailable")}}
 	}
 
-	// If too long, send as file
-	if len(text) > 1500 {
-		return []bot.Reply{{
-			Text: tr.T("msg.info.rarity_header"),
-			Attachment: &bot.Attachment{
-				Filename: "rarity_stats.txt",
-				Content:  []byte(text),
-			},
-		}}
-	}
-
-	return []bot.Reply{{Text: text}}
+	return bot.SplitTextReply(text)
 }
 
 func (c *InfoCommand) weatherInfo(ctx *bot.CommandContext, args []string) []bot.Reply {
