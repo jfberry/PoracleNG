@@ -88,9 +88,9 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		}
 		m["tthSeconds"] = int(tthSec)
 
-		// Weather change time: the hour boundary before disappear_time
-		weatherChangeTS := pokemon.DisappearTime - (pokemon.DisappearTime % 3600)
-		m["weatherChangeTime"] = geo.FormatTime(weatherChangeTS, tz, e.TimeLayout)
+		// Weather change timestamp: the hour boundary before disappear_time
+		// (used later if forecast shows a boost change)
+		m["weatherChangeTS"] = pokemon.DisappearTime - (pokemon.DisappearTime % 3600)
 
 		addSunTimes(m, pokemon.Latitude, pokemon.Longitude, tz)
 
@@ -270,6 +270,16 @@ func (e *Enricher) enrichPokemonGameData(m map[string]any, pokemon *webhook.Poke
 							m["weatherCurrent"] = forecastCurrent
 						}
 						m["weatherNext"] = forecastNext
+						// Format weatherChangeTime only when change matters (matching JS)
+						// Strip seconds — JS uses .slice(0, -3) to remove ":SS"
+						if ts, ok := m["weatherChangeTS"].(int64); ok {
+							tz := geo.GetTimezone(pokemon.Latitude, pokemon.Longitude)
+							formatted := geo.FormatTime(ts, tz, e.TimeLayout)
+							if len(formatted) >= 3 {
+								formatted = formatted[:len(formatted)-3]
+							}
+							m["weatherChangeTime"] = formatted
+						}
 					}
 				}
 			}
@@ -355,21 +365,23 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		}
 	}
 
-	// Weather forecast names (for weather change templates)
-	forecastCurrent, _ := base["weatherForecastCurrent"].(int)
-	forecastNext, _ := base["weatherForecastNext"].(int)
-	if forecastCurrent > 0 {
-		m["weatherCurrentName"] = TranslateWeatherName(tr, forecastCurrent)
-		if wInfo, ok := gd.Util.Weather[forecastCurrent]; ok {
-			m["weatherCurrentEmojiKey"] = wInfo.Emoji
+	// Weather forecast names — only set when base enrichment determined a
+	// meaningful weather change (weatherNext is set). Use the processed
+	// weatherCurrent (which may be overridden to the pokemon's actual boost
+	// weather), not the raw forecastCurrent — matching JS behavior.
+	weatherNext, _ := base["weatherNext"].(int)
+	if weatherNext > 0 {
+		weatherCurrent, _ := base["weatherCurrent"].(int)
+		if weatherCurrent > 0 {
+			m["weatherCurrentName"] = TranslateWeatherName(tr, weatherCurrent)
+			if wInfo, ok := gd.Util.Weather[weatherCurrent]; ok {
+				m["weatherCurrentEmojiKey"] = wInfo.Emoji
+			}
 		}
-	}
-	if forecastNext > 0 {
-		m["weatherNextName"] = TranslateWeatherName(tr, forecastNext)
-		if wInfo, ok := gd.Util.Weather[forecastNext]; ok {
+		m["weatherNextName"] = TranslateWeatherName(tr, weatherNext)
+		if wInfo, ok := gd.Util.Weather[weatherNext]; ok {
 			m["weatherNextEmojiKey"] = wInfo.Emoji
 		}
-		// Translated strings for weatherChange composition (in layered view)
 		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
 		m["weatherCurrentUnknown"] = tr.T("weather.unknown")
 	}
