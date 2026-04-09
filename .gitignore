@@ -22,3 +22,8 @@ resources/locale/
 
 # Node
 node_modules/
+
+# IDE
+.idea/
+*.iml
+processor/go_build_*
