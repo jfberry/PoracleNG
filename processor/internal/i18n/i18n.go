@@ -185,6 +185,11 @@ func (b *Bundle) LoadCustomFile(path string, locale string) error {
 	return nil
 }
 
+// localeAliases maps commonly misconfigured locale codes to their correct form.
+var localeAliases = map[string]string{
+	"se": "sv", // Northern Sami → Swedish (historical misconfiguration)
+}
+
 // For returns the translator for the given locale, falling back to English.
 func (b *Bundle) For(locale string) *Translator {
 	if locale == "" {
@@ -195,6 +200,15 @@ func (b *Bundle) For(locale string) *Translator {
 	b.mu.RUnlock()
 	if ok {
 		return t
+	}
+	// Try known alias (e.g. "se" → "sv")
+	if alias, ok := localeAliases[locale]; ok {
+		b.mu.RLock()
+		t, ok = b.translators[alias]
+		b.mu.RUnlock()
+		if ok {
+			return t
+		}
 	}
 	// Try base language (e.g. "pt" from "pt-br")
 	if idx := strings.IndexAny(locale, "-_"); idx > 0 {
