@@ -393,8 +393,10 @@ func buildAliasLookup(templateType string) map[string]string {
 // Format matches JS: "⚠️ {Possible weather change at} {time} : {currentEmoji} {current} ➡️ {nextEmoji} {next}"
 // When weatherCurrent is unknown: "⚠️ {Possible weather change at} {time} : ➡️ {nextEmoji} {next}"
 func composeWeatherChange(computed map[string]any, base, perLang map[string]any, emoji *EmojiLookup, platform string) {
-	// weatherNext must exist (set by forecast impact detection)
-	weatherNext, _ := lookupField(base, perLang, "weatherForecastNext").(int)
+	// weatherNext is only set when the base enrichment determines the weather
+	// change actually affects the pokemon's boost status. weatherForecastNext
+	// is the raw forecast and may be the same as current — don't use it here.
+	weatherNext, _ := lookupField(base, perLang, "weatherNext").(int)
 	if weatherNext == 0 {
 		return
 	}
@@ -417,7 +419,7 @@ func composeWeatherChange(computed map[string]any, base, perLang map[string]any,
 		nextEmoji = emoji.Lookup(nextEmojiKey, platform)
 	}
 
-	weatherCurrent, _ := lookupField(base, perLang, "weatherForecastCurrent").(int)
+	weatherCurrent, _ := lookupField(base, perLang, "weatherCurrent").(int)
 	if weatherCurrent == 0 {
 		// Unknown current weather
 		currentName, _ := lookupField(base, perLang, "weatherCurrentUnknown").(string)

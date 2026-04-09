@@ -62,9 +62,9 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		m["disappearTime"] = geo.FormatTime(raid.End, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(raid.End)
 
-		// Weather change time: the hour boundary before end
-		weatherChangeTS := raid.End - (raid.End % 3600)
-		m["weatherChangeTime"] = geo.FormatTime(weatherChangeTS, tz, e.TimeLayout)
+		// Weather change timestamp: the hour boundary before end
+		// (used later in per-language enrichment if forecast shows a boost change)
+		m["weatherChangeTS"] = raid.End - (raid.End % 3600)
 
 		// Weather forecast for boost change detection (triggers AccuWeather fetch if configured)
 		forecast := e.GetForecast(cellID)
@@ -208,18 +208,19 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		}
 	}
 
-	// Weather forecast names (for weatherChange composition)
-	forecastCurrent, _ := base["weatherForecastCurrent"].(int)
-	forecastNext, _ := base["weatherForecastNext"].(int)
-	if forecastCurrent > 0 {
-		m["weatherCurrentName"] = TranslateWeatherName(tr, forecastCurrent)
-		if wInfo, ok := gd.Util.Weather[forecastCurrent]; ok {
-			m["weatherCurrentEmojiKey"] = wInfo.Emoji
+	// Weather forecast names — only set when base enrichment determined a
+	// meaningful weather change (weatherNext is set).
+	weatherNext, _ := base["weatherNext"].(int)
+	if weatherNext > 0 {
+		weatherCurrent, _ := base["weatherCurrent"].(int)
+		if weatherCurrent > 0 {
+			m["weatherCurrentName"] = TranslateWeatherName(tr, weatherCurrent)
+			if wInfo, ok := gd.Util.Weather[weatherCurrent]; ok {
+				m["weatherCurrentEmojiKey"] = wInfo.Emoji
+			}
 		}
-	}
-	if forecastNext > 0 {
-		m["weatherNextName"] = TranslateWeatherName(tr, forecastNext)
-		if wInfo, ok := gd.Util.Weather[forecastNext]; ok {
+		m["weatherNextName"] = TranslateWeatherName(tr, weatherNext)
+		if wInfo, ok := gd.Util.Weather[weatherNext]; ok {
 			m["weatherNextEmojiKey"] = wInfo.Emoji
 		}
 		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
