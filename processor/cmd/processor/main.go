@@ -199,7 +199,6 @@ func main() {
 
 	// Webhook receiver
 	var webhookLogger io.Writer
-	log.Infof("Webhook logging config: enabled=%v filename=%q", cfg.WebhookLogging.Enabled, cfg.WebhookLogging.Filename)
 	if cfg.WebhookLogging.Enabled && cfg.WebhookLogging.Filename != "" {
 		maxSize := cfg.WebhookLogging.MaxSize
 		if maxSize == 0 {

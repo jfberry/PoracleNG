@@ -104,7 +104,6 @@ func loadPartials(configDir, fallbackDir string) map[string]string {
 		return nil
 	}
 
-	log.Infof("dts: loaded %d partials from %s", len(partials), path)
 	return partials
 }
 
@@ -624,7 +623,8 @@ func (ts *TemplateStore) LogSummary() {
 		}
 	}
 
-	log.Infof("DTS loaded: %d templates (%d discord, %d telegram)", total, discordCount, telegramCount)
+	partialCount := len(ts.partials)
+	log.Infof("DTS loaded: %d templates (%d discord, %d telegram), %d partials", total, discordCount, telegramCount, partialCount)
 
 	// Check for types missing default templates per platform
 	// Collect all (type, platform) pairs that have entries
