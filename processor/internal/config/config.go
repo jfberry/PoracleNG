@@ -548,6 +548,15 @@ func Load(baseDir string) (*Config, error) {
 			Host: "0.0.0.0",
 			Port: 3030,
 		},
+		Reconciliation: ReconciliationConfig{
+			Discord: ReconciliationDiscordConfig{
+				RemoveInvalidUsers: true,
+				UpdateChannelNames: true,
+			},
+			Telegram: ReconciliationTelegramConfig{
+				RemoveInvalidUsers: true,
+			},
+		},
 		PVP: PVPConfig{
 			PVPQueryMaxRank:      100,
 			PVPFilterMaxRank:     100,
@@ -587,6 +596,7 @@ func Load(baseDir string) (*Config, error) {
 			TimeFormat:    "en-gb",
 			Time:          "LTS",
 			Date:          "L",
+			Language:      "en",
 			AddressFormat: "{{{streetName}}} {{streetNumber}}",
 		},
 		Weather: WeatherConfig{
@@ -612,9 +622,11 @@ func Load(baseDir string) (*Config, error) {
 			RotateInterval: 60, // hourly
 		},
 		Discord: DiscordConfig{
-			Enabled:  true,
-			Prefix:   "!",
-			IvColors: []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"},
+			Enabled:           true,
+			Prefix:            "!",
+			IvColors:          []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"},
+			CheckRoleInterval: 6,
+			Activity:          "PoracleNG",
 		},
 		AlertLimits: AlertLimitsConfig{
 			TimingPeriod:        240,
@@ -629,13 +641,24 @@ func Load(baseDir string) (*Config, error) {
 		},
 		Geocoding: GeocodingConfig{
 			CacheDetail: 3,
+			Width:       320,
+			Height:      200,
+			Zoom:        15,
+			MapType:     "klokantech-basic",
 		},
 		General: GeneralConfig{
-			ImgURL:     "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS",
-			StickerURL: "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle",
+			ImgURL:              "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS",
+			StickerURL:          "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle",
+			Locale:              "en",
+			RoleCheckMode:       "ignore",
+			DefaultTemplateName: "1",
+			AlertMinimumTime:    120,
 		},
 		Telegram: TelegramConfig{
-			Enabled: true,
+			Enabled:           true,
+			CheckRoleInterval: 6,
+			BotWelcomeText:    "You are now registered with Poracle",
+			GroupWelcomeText:  "Welcome {user}, remember to click on me and 'start bot' to be able to receive messages",
 		},
 		Fallbacks: FallbacksConfig{
 			StaticMap:      "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/staticMap.png",

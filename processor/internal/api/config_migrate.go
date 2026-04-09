@@ -61,6 +61,9 @@ func HandleConfigMigrate(deps ConfigDeps) gin.HandlerFunc {
 		}
 
 		// 3. Walk the live config struct, finding non-default web-editable values
+		// Only move fields that were actually present in the raw TOML — Go struct
+		// zero values (0, false, "") for fields absent from TOML would incorrectly
+		// override the schema defaults.
 		toMove := make(map[string]any)
 		var movedPaths []string
 		for _, section := range configSchema {
@@ -68,8 +71,16 @@ func HandleConfigMigrate(deps ConfigDeps) gin.HandlerFunc {
 			if !sectionStruct.IsValid() {
 				continue
 			}
+			rawSection := findRawSection(rawMap, section.Name)
 			sectionUpdates := make(map[string]any)
 			for _, field := range section.Fields {
+				// Skip fields not explicitly set in config.toml
+				if rawSection == nil {
+					continue
+				}
+				if _, inTOML := rawSection[field.Name]; !inTOML {
+					continue
+				}
 				val := getFieldByTag(sectionStruct, field.Name)
 				if !val.IsValid() {
 					continue
@@ -150,6 +161,21 @@ func HandleConfigMigrate(deps ConfigDeps) gin.HandlerFunc {
 			FieldsMoved: movedPaths,
 		})
 	}
+}
+
+// findRawSection walks the raw TOML map for a dotted section name like
+// "reconciliation.discord" and returns the sub-map, or nil if not present.
+func findRawSection(rawMap map[string]any, sectionName string) map[string]any {
+	parts := strings.Split(sectionName, ".")
+	cur := rawMap
+	for _, part := range parts {
+		sub, ok := cur[part].(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur = sub
+	}
+	return cur
 }
 
 // isDefaultValue compares a current config value to its schema default.
