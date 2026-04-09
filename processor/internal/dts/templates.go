@@ -390,7 +390,11 @@ func (ts *TemplateStore) TemplateMetadata(includeDescriptions bool) map[string]a
 	defer ts.mu.RUnlock()
 
 	// platform -> type -> language -> list
-	result := make(map[string]any)
+	// Pre-seed both platforms so clients always see discord/telegram keys.
+	result := map[string]any{
+		"discord":  make(map[string]any),
+		"telegram": make(map[string]any),
+	}
 
 	for _, e := range ts.entries {
 		if e.Hidden {
