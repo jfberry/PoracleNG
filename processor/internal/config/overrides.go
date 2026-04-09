@@ -162,6 +162,10 @@ func SaveOverrides(configDir string, updates map[string]any) error {
 		return fmt.Errorf("read existing overrides.json: %w", err)
 	}
 
+	// Expand dotted section keys (e.g. "reconciliation.discord": {...})
+	// into nested maps before merging.
+	updates = expandDottedKeys(updates)
+
 	// Deep merge updates into existing
 	deepMerge(existing, updates)
 
@@ -177,6 +181,46 @@ func SaveOverrides(configDir string, updates map[string]any) error {
 
 	log.Infof("config: saved overrides to %s", path)
 	return nil
+}
+
+// expandDottedKeys converts flat dotted keys like "reconciliation.discord"
+// into nested maps: {"reconciliation": {"discord": {...}}}. Non-dotted keys
+// are left unchanged.
+func expandDottedKeys(m map[string]any) map[string]any {
+	result := make(map[string]any, len(m))
+	for k, v := range m {
+		parts := strings.Split(k, ".")
+		if len(parts) == 1 {
+			result[k] = v
+			continue
+		}
+		// Build nested structure from the dotted key
+		cur := result
+		for i, part := range parts {
+			if i == len(parts)-1 {
+				// Last part — set the value, merging if both sides are maps
+				if existingMap, ok := cur[part].(map[string]any); ok {
+					if vMap, ok := v.(map[string]any); ok {
+						deepMerge(existingMap, vMap)
+					} else {
+						cur[part] = v
+					}
+				} else {
+					cur[part] = v
+				}
+			} else {
+				// Intermediate part — ensure nested map exists
+				if next, ok := cur[part].(map[string]any); ok {
+					cur = next
+				} else {
+					next := make(map[string]any)
+					cur[part] = next
+					cur = next
+				}
+			}
+		}
+	}
+	return result
 }
 
 // deepMerge merges src into dst. For nested maps, recurses. For everything
