@@ -581,7 +581,7 @@ var monsterSnippets = []Snippet{
 }
 
 var raidSnippets = []Snippet{
-	{Label: "Raid boss line", Insert: "⭐{{level}} {{fullName}}", Description: "Level stars + boss name", Category: "raid"},
+	{Label: "Raid boss line", Insert: "⭐{{levelName}} {{fullName}}", Description: "Level name + boss name", Category: "raid"},
 	{Label: "Gym line", Insert: "📍 {{gymName}}", Description: "Gym name with pin", Category: "raid"},
 	{Label: "EX eligible", Insert: "{{#if ex}}🎟 EX{{/if}}", Description: "Show EX badge if eligible", Category: "raid"},
 	{Label: "Time remaining", Insert: "{{time}} ({{tthm}}m)", Description: "End time with TTH", Category: "raid"},
