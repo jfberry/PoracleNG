@@ -120,9 +120,11 @@ var monsterFields = []FieldDef{
 	{Name: "tthSeconds", Type: "int", Description: "Total seconds remaining", Category: "time"},
 	{Name: "distime", Type: "string", Description: "Deprecated alias for disappearTime", Category: "time", Deprecated: true, PreferredAlternative: "disappearTime"},
 	// Types
-	{Name: "typeName", Type: "array", Description: "Array of translated type names", Category: "types", Preferred: true},
+	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names (e.g. \"Fire, Flying\")", Category: "types", Preferred: true},
 	{Name: "typeNameEng", Type: "array", Description: "Array of English type names", Category: "types"},
-	{Name: "typeEmoji", Type: "array", Description: "Array of type emoji strings", Category: "types"},
+	{Name: "typeEmojiKeys", Type: "array", Description: "Array of type emoji keys (raw)", Category: "types"},
+	{Name: "typeEmoji", Type: "array", Description: "Array of resolved type emoji strings", Category: "types", Preferred: true},
+	{Name: "emoji", Type: "array", Description: "Alias for typeEmoji (resolved)", Category: "types"},
 	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types", Preferred: true},
 	// Weather
 	{Name: "boostWeatherEmoji", Type: "string", Description: "Boost weather emoji", Category: "weather", Preferred: true},
@@ -185,8 +187,9 @@ var raidFields = []FieldDef{
 	{Name: "time", Type: "string", Description: "End time", Category: "time", Preferred: true},
 	{Name: "hatchTime", Type: "string", Description: "Hatch/start time", Category: "time"},
 	// Types
-	{Name: "typeName", Type: "array", Description: "Pokemon type names", Category: "types"},
-	{Name: "typeEmoji", Type: "array", Description: "Type emoji strings", Category: "types"},
+	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names", Category: "types"},
+	{Name: "typeNameEng", Type: "array", Description: "English type names", Category: "types"},
+	{Name: "typeEmoji", Type: "array", Description: "Resolved type emoji strings", Category: "types"},
 	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types"},
 	// Weather
 	{Name: "boostWeatherEmoji", Type: "string", Description: "Boost weather emoji", Category: "weather"},
@@ -270,8 +273,8 @@ var nestFields = []FieldDef{
 	{Name: "pokemonSpawnAvg", Type: "number", Description: "Avg spawns per hour", Category: "stats"},
 	{Name: "pokemonRatio", Type: "number", Description: "Pokemon spawn ratio", Category: "stats"},
 	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
-	{Name: "typeName", Type: "array", Description: "Pokemon type names", Category: "types"},
-	{Name: "typeEmoji", Type: "array", Description: "Type emoji strings", Category: "types"},
+	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names", Category: "types"},
+	{Name: "typeEmoji", Type: "array", Description: "Resolved type emoji strings", Category: "types"},
 	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types"},
 }
 
@@ -319,8 +322,8 @@ var maxbattleFields = []FieldDef{
 	{Name: "chargeMoveName", Type: "string", Description: "Translated charged move", Category: "moves"},
 	{Name: "quickMoveEmoji", Type: "string", Description: "Fast move type emoji", Category: "moves"},
 	{Name: "chargeMoveEmoji", Type: "string", Description: "Charged move type emoji", Category: "moves"},
-	{Name: "typeName", Type: "array", Description: "Pokemon type names", Category: "types"},
-	{Name: "typeEmoji", Type: "array", Description: "Type emoji strings", Category: "types"},
+	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names", Category: "types"},
+	{Name: "typeEmoji", Type: "array", Description: "Resolved type emoji strings", Category: "types"},
 	{Name: "color", Type: "string", Description: "Primary type color hex", Category: "types"},
 	{Name: "gmax", Type: "bool", Description: "Is Gigantamax", Category: "other"},
 	{Name: "totalStationedPokemon", Type: "int", Description: "Total stationed pokemon", Category: "other"},
@@ -346,20 +349,98 @@ var greetingFields = []FieldDef{
 var pvpEntryFields = []FieldDef{
 	{Name: "rank", Type: "int", Description: "PVP rank"},
 	{Name: "cp", Type: "int", Description: "CP at this rank"},
-	{Name: "fullName", Type: "string", Description: "Pokemon name + form"},
-	{Name: "nameEng", Type: "string", Description: "English pokemon name"},
 	{Name: "level", Type: "number", Description: "Level at this rank"},
-	{Name: "levelWithCap", Type: "string", Description: "Level with cap notation"},
-	{Name: "percentage", Type: "number", Description: "Stat product percentage"},
+	{Name: "levelWithCap", Type: "string", Description: "Level with cap notation (e.g. 40/50 if uncapped)"},
 	{Name: "cap", Type: "int", Description: "Level cap"},
+	{Name: "capped", Type: "bool", Description: "True when this rank is at the level cap"},
+	{Name: "percentage", Type: "string", Description: "Stat product percentage (formatted)"},
+	{Name: "pokemon", Type: "int", Description: "Pokemon ID for this rank"},
+	{Name: "form", Type: "int", Description: "Form ID for this rank"},
+	{Name: "evolution", Type: "int", Description: "Evolution form ID (mega etc.)"},
+	{Name: "name", Type: "string", Description: "Translated pokemon name"},
+	{Name: "fullName", Type: "string", Description: "Pokemon name + form"},
+	{Name: "formName", Type: "string", Description: "Translated form name"},
+	{Name: "formNormalised", Type: "string", Description: "Form name (empty for Normal)"},
+	{Name: "nameEng", Type: "string", Description: "English pokemon name"},
+	{Name: "fullNameEng", Type: "string", Description: "English name + form"},
+	{Name: "formNormalisedEng", Type: "string", Description: "English form name (empty for Normal)"},
+	{Name: "baseStats", Type: "object", Description: "{baseAttack, baseDefense, baseStamina}"},
+	{Name: "baseAttack", Type: "int", Description: "Base attack stat"},
+	{Name: "baseDefense", Type: "int", Description: "Base defense stat"},
+	{Name: "baseStamina", Type: "int", Description: "Base stamina stat"},
+}
+
+var weaknessEntryFields = []FieldDef{
+	{Name: "value", Type: "number", Description: "Damage multiplier (e.g. 1.6, 2.56)"},
+	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names"},
+	{Name: "types", Type: "array", Description: "Array of {typeId, name, emojiKey} entries"},
+	{Name: "typeEmojiKeys", Type: "array", Description: "Array of type emoji keys"},
+}
+
+var evolutionEntryFields = []FieldDef{
+	{Name: "id", Type: "int", Description: "Pokemon ID of the evolution"},
+	{Name: "form", Type: "int", Description: "Form ID of the evolution"},
+	{Name: "name", Type: "string", Description: "Translated pokemon name"},
+	{Name: "fullName", Type: "string", Description: "Translated name + form"},
+	{Name: "formName", Type: "string", Description: "Translated form name"},
+	{Name: "formNormalised", Type: "string", Description: "Form name (empty for Normal)"},
+	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names"},
+	{Name: "typeEmojiKeys", Type: "array", Description: "Array of type emoji keys"},
+	{Name: "baseStats", Type: "object", Description: "{baseAttack, baseDefense, baseStamina}"},
+}
+
+var megaEvolutionEntryFields = []FieldDef{
+	{Name: "evolution", Type: "int", Description: "Temp evolution ID"},
+	{Name: "fullName", Type: "string", Description: "Translated mega name"},
+	{Name: "typeName", Type: "string", Description: "Comma-joined translated type names"},
+	{Name: "typeEmojiKeys", Type: "array", Description: "Array of type emoji keys"},
+	{Name: "baseStats", Type: "object", Description: "{baseAttack, baseDefense, baseStamina}"},
+}
+
+var rsvpEntryFields = []FieldDef{
+	{Name: "time", Type: "string", Description: "Formatted timeslot time"},
+	{Name: "timeslot", Type: "int", Description: "Timeslot in seconds (snake_case)"},
+	{Name: "timeSlot", Type: "int", Description: "Timeslot in seconds (camelCase)"},
+	{Name: "going_count", Type: "int", Description: "Number going (snake_case)"},
+	{Name: "goingCount", Type: "int", Description: "Number going (camelCase)"},
+	{Name: "maybe_count", Type: "int", Description: "Number maybe (snake_case)"},
+	{Name: "maybeCount", Type: "int", Description: "Number maybe (camelCase)"},
 }
 
 var monsterBlockScopes = []BlockScope{
 	{
 		Helper:         "each",
-		IterableFields: []string{"pvpGreat", "pvpUltra", "pvpLittle", "weaknessList", "evolutions", "megaEvolutions", "typeName", "typeEmoji"},
-		Description:    "Iterate over arrays",
+		Args:           []string{"pvpGreat"},
+		IterableFields: []string{"pvpGreat", "pvpUltra", "pvpLittle"},
+		Description:    "Iterate over a PVP league display list",
 		Fields:         pvpEntryFields,
+	},
+	{
+		Helper:         "each",
+		Args:           []string{"weaknessList"},
+		IterableFields: []string{"weaknessList"},
+		Description:    "Iterate over weakness categories (grouped by multiplier)",
+		Fields:         weaknessEntryFields,
+	},
+	{
+		Helper:         "each",
+		Args:           []string{"evolutions"},
+		IterableFields: []string{"evolutions"},
+		Description:    "Iterate over evolution chain entries",
+		Fields:         evolutionEntryFields,
+	},
+	{
+		Helper:         "each",
+		Args:           []string{"megaEvolutions"},
+		IterableFields: []string{"megaEvolutions"},
+		Description:    "Iterate over mega evolution entries",
+		Fields:         megaEvolutionEntryFields,
+	},
+	{
+		Helper:         "each",
+		Args:           []string{"typeEmoji"},
+		IterableFields: []string{"typeEmoji", "typeNameEng", "emoji"},
+		Description:    "Iterate over a type emoji / English type name array (each item is a string)",
 	},
 	{
 		Helper:      "pokemon",
@@ -368,10 +449,13 @@ var monsterBlockScopes = []BlockScope{
 		Fields: []FieldDef{
 			{Name: "name", Type: "string", Description: "Translated pokemon name"},
 			{Name: "nameEng", Type: "string", Description: "English pokemon name"},
-			{Name: "fullName", Type: "string", Description: "Name + form"},
 			{Name: "formName", Type: "string", Description: "Translated form name"},
-			{Name: "typeName", Type: "array", Description: "Type names"},
-			{Name: "typeEmoji", Type: "array", Description: "Type emojis"},
+			{Name: "formNameEng", Type: "string", Description: "English form name"},
+			{Name: "fullName", Type: "string", Description: "Name + form"},
+			{Name: "fullNameEng", Type: "string", Description: "English name + form"},
+			{Name: "typeName", Type: "array", Description: "Translated type names"},
+			{Name: "typeNameEng", Type: "array", Description: "English type names"},
+			{Name: "typeEmoji", Type: "array", Description: "Type emoji strings"},
 			{Name: "baseStats", Type: "object", Description: "{baseAttack, baseDefense, baseStamina}"},
 			{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions"},
 		},
@@ -391,8 +475,47 @@ var monsterBlockScopes = []BlockScope{
 var raidBlockScopes = []BlockScope{
 	{
 		Helper:         "each",
-		IterableFields: []string{"weaknessList", "evolutions", "megaEvolutions", "typeName", "typeEmoji", "rsvps"},
-		Description:    "Iterate over arrays",
+		Args:           []string{"weaknessList"},
+		IterableFields: []string{"weaknessList"},
+		Description:    "Iterate over weakness categories",
+		Fields:         weaknessEntryFields,
+	},
+	{
+		Helper:         "each",
+		Args:           []string{"evolutions"},
+		IterableFields: []string{"evolutions"},
+		Description:    "Iterate over evolution chain entries",
+		Fields:         evolutionEntryFields,
+	},
+	{
+		Helper:         "each",
+		Args:           []string{"megaEvolutions"},
+		IterableFields: []string{"megaEvolutions"},
+		Description:    "Iterate over mega evolution entries",
+		Fields:         megaEvolutionEntryFields,
+	},
+	{
+		Helper:         "each",
+		Args:           []string{"rsvps"},
+		IterableFields: []string{"rsvps"},
+		Description:    "Iterate over RSVP timeslots",
+		Fields:         rsvpEntryFields,
+	},
+	{
+		Helper:         "each",
+		Args:           []string{"typeEmoji"},
+		IterableFields: []string{"typeEmoji", "typeNameEng"},
+		Description:    "Iterate over a type emoji / English type name array",
+	},
+}
+
+var eggBlockScopes = []BlockScope{
+	{
+		Helper:         "each",
+		Args:           []string{"rsvps"},
+		IterableFields: []string{"rsvps"},
+		Description:    "Iterate over RSVP timeslots",
+		Fields:         rsvpEntryFields,
 	},
 }
 
@@ -405,7 +528,7 @@ var fieldsByType = map[string]fieldEntry{
 	"monster":      {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes},
 	"monsterNoIv":  {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes},
 	"raid":         {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes},
-	"egg":          {Fields: append(commonFields, eggFields...)},
+	"egg":          {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes},
 	"quest":        {Fields: append(commonFields, questFields...)},
 	"invasion":     {Fields: append(commonFields, invasionFields...)},
 	"lure":         {Fields: append(commonFields, lureFields...)},
