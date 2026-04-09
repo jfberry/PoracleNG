@@ -347,6 +347,7 @@
   "day.saturday": "Samstag",
   "day.sunday": "Sonntag",
   "msg.language.specify": "Please specify a language",
+  "msg.language.available": "Available: {0}",
   "msg.language.unknown": "Poracle unterstützt nur folgende Sprachen: {0}",
   "msg.gym.battle_disabled": "Battle changes tracking is not enabled",
   "msg.weather.unavailable": "Weather tracking is not yet available via this command",
