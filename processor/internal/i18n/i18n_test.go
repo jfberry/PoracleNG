@@ -99,6 +99,23 @@ func TestBundleBaseLanguageFallback(t *testing.T) {
 	}
 }
 
+func TestPerKeyFallbackToEnglish(t *testing.T) {
+	b := NewBundle()
+	b.merge("en", map[string]string{"poke_25": "Pikachu", "greeting": "Hello"})
+	b.merge("sv", map[string]string{"greeting": "Hej"})
+	b.LinkFallbacks()
+
+	tr := b.For("sv")
+	// Key present in sv → use sv
+	if got := tr.T("greeting"); got != "Hej" {
+		t.Errorf("sv greeting = %q, want Hej", got)
+	}
+	// Key missing in sv → fall back to English
+	if got := tr.T("poke_25"); got != "Pikachu" {
+		t.Errorf("sv poke_25 = %q, want Pikachu (en fallback)", got)
+	}
+}
+
 func TestMerge(t *testing.T) {
 	b := NewBundle()
 	b.merge("de", map[string]string{"a": "1", "b": "2"})
