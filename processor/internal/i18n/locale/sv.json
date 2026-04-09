@@ -347,6 +347,7 @@
   "day.saturday": "Saturday",
   "day.sunday": "Sunday",
   "msg.language.specify": "Please specify a language",
+  "msg.language.available": "Available: {0}",
   "msg.language.unknown": "Tillgängliga språk är: {0}",
   "msg.gym.battle_disabled": "Battle changes tracking is not enabled",
   "msg.weather.unavailable": "Weather tracking is not yet available via this command",
