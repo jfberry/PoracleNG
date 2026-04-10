@@ -389,6 +389,7 @@
   "msg.info.no_move_data": "Keine Attacken Daten geladen",
   "msg.info.no_item_data": "Keine Item Daten geladen",
   "msg.info.shiny_header": "**Shiny Statistik (der letzen Stunden)**",
+  "msg.info.shiny_rate": "Shiny Rate",
   "msg.info.shiny_seen": "gesehen",
   "msg.info.shiny_ratio": "Verhältnis",
   "msg.info.shiny_unavailable": "Shinyinfos noch nicht berechnet - warte ein paar Minuten und versuche es erneut",
