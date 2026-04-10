@@ -595,6 +595,10 @@ Returns DTS template entries with full template content. Filterable by query par
 | `language` | Filter by language code (en, de, etc.) or empty for language-independent |
 | `id` | Filter by template ID |
 
+When a user has any non-readonly entry for a given (type, platform), fallback entries for that combo are suppressed — the user has taken ownership in the editor.
+
+For entries using `templateFile` (external Handlebars files), the response includes `templateFileContent` with the resolved raw file content. Entries with inline `template` objects do not have this field.
+
 ```json
 {
   "status": "ok",
@@ -609,10 +613,21 @@ Returns DTS template entries with full template content. Filterable by query par
       "template": {"embed": {"title": "{{round iv}}% {{fullName}} ..."}},
       "name": "Default Monster",
       "description": "Standard pokemon alert"
+    },
+    {
+      "id": "1",
+      "type": "fort-update",
+      "platform": "discord",
+      "language": "",
+      "default": true,
+      "templateFile": "dts/fort_update.txt",
+      "templateFileContent": "{{#eq fortType 'pokestop'}}..raw handlebars..{{/eq}}"
     }
   ]
 }
 ```
+
+**Editor note:** Entries with `templateFile` use raw Handlebars text (not JSON). The editor should display these differently from inline `template` entries and use `PUT /api/dts/templates/file` to save changes to the file content.
 
 ### POST /api/dts/templates
 
@@ -667,6 +682,65 @@ Delete a DTS template entry. Removes from memory and from the source file on dis
 {"status": "error", "message": "template monster/discord/1/ is readonly"}
 ```
 
+### PUT /api/dts/templates/file
+
+Update the raw content of a `templateFile` entry. The file path is resolved from the template's key fields — no client-supplied paths are accepted, preventing path traversal. Readonly entries are rejected.
+
+| Parameter | Description |
+|-----------|-------------|
+| `type` | DTS type (required) |
+| `platform` | Platform (required) |
+| `id` | Template ID (required) |
+| `language` | Language code |
+
+**Request body:**
+```json
+{"content": "{{#eq fortType 'pokestop'}}...raw handlebars text...{{/eq}}"}
+```
+
+**Response:**
+```json
+{"status": "ok", "templateFile": "dts/fort_update.txt"}
+```
+
+**Errors:**
+```json
+{"status": "error", "message": "template not found"}
+{"status": "error", "message": "template uses inline JSON, not a templateFile"}
+{"status": "error", "message": "template is readonly (bundled default)"}
+```
+
+### GET /api/dts/emoji
+
+Returns the emoji lookup map for template editing. Emojis come from `util.json` (defaults) overlaid with `emoji.json` (per-platform custom overrides). Used for resolving `{{getEmoji 'key'}}` in the editor and presenting an emoji picklist.
+
+**Per-platform merged map** (what the renderer uses):
+```
+GET /api/dts/emoji?platform=discord
+```
+```json
+{
+  "status": "ok",
+  "platform": "discord",
+  "emoji": {"team_0": "<:team_unknown:123>", "weather_1": "☀️"}
+}
+```
+
+**Full structure** (for UIs showing customised vs default):
+```
+GET /api/dts/emoji
+```
+```json
+{
+  "status": "ok",
+  "defaults": {"team_0": "❓", "weather_1": "☀️"},
+  "platforms": {
+    "discord": {"team_0": "<:team_unknown:123>"},
+    "telegram": {}
+  }
+}
+```
+
 ### POST /api/dts/enrich
 
 Run a raw webhook through the enrichment pipeline and return the enriched variable map — the same data that Handlebars templates see during rendering. Includes all layers: base enrichment, translated fields, PVP display, aliases, resolved emoji, and computed fields (tthh/tthm, areas, weatherChange, etc.).
@@ -704,9 +778,13 @@ curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
 
 ### GET /api/dts/fields/:type
 
-Returns available template fields for a DTS type, with metadata for the editor's tag picker.
+Returns available template fields, block scopes, and insertable snippets for a DTS type.
 
-Field properties: `name`, `type`, `description`, `category`, `preferred` (recommended for new templates), `deprecated` (use preferredAlternative instead), `rawWebhook` (direct from scanner, prefer enriched equivalent).
+**Field properties:** `name`, `type`, `description`, `category`, `preferred` (recommended for new templates), `deprecated` (use preferredAlternative instead), `rawWebhook` (direct from scanner, prefer enriched equivalent).
+
+**Block scopes:** describe what fields are available inside block helpers like `{{#each pvpGreat}}`. Each scope lists `iterableFields` (which arrays it applies to) and `fields` (what's available on each item). Scopes are per-iterable — `pvpGreat` items have different fields from `weaknessList` items.
+
+**Snippets:** pre-made Handlebars expressions for quick insertion. Each has `label`, `insert` (the text to insert), `description`, `category`, and optional `platform` (`"discord"`, `"telegram"`, or omitted for all). Uses single quotes (Poracle convention).
 
 ```json
 {
@@ -714,12 +792,21 @@ Field properties: `name`, `type`, `description`, `category`, `preferred` (recomm
   "type": "monster",
   "fields": [
     {"name": "fullName", "type": "string", "description": "Name + form combined", "category": "identity", "preferred": true},
-    {"name": "pokemon_id", "type": "int", "description": "Pokemon ID (webhook)", "category": "identity", "rawWebhook": true, "preferredAlternative": "pokemonId"}
+    {"name": "pokemon_id", "type": "int", "description": "Pokemon ID (webhook)", "category": "identity", "rawWebhook": true, "preferredAlternative": "pokemonId"},
+    {"name": "despawnTimestamp", "type": "int", "description": "Unix despawn timestamp (for Discord <t:N:R>)", "category": "time"}
   ],
   "blockScopes": [
-    {"helper": "each", "iterableFields": ["pvpGreat","pvpUltra","pvpLittle","weaknessList"], "description": "Iterate over arrays", "fields": [...]},
+    {"helper": "each", "args": ["pvpGreat"], "iterableFields": ["pvpGreat","pvpUltra","pvpLittle"], "description": "Iterate over a PVP league display list", "fields": [...]},
+    {"helper": "each", "args": ["weaknessList"], "iterableFields": ["weaknessList"], "description": "Iterate over weakness categories", "fields": [...]},
+    {"helper": "each", "args": ["evolutions"], "iterableFields": ["evolutions"], "description": "Iterate over evolution chain entries", "fields": [...]},
     {"helper": "pokemon", "args": ["id","form"], "description": "Pokemon data block helper", "fields": [...]},
     {"helper": "getPowerUpCost", "args": ["levelStart","levelEnd"], "description": "Power-up cost between two levels", "fields": [...]}
+  ],
+  "snippets": [
+    {"label": "Round IV", "insert": "{{round iv}}", "description": "IV rounded to integer", "category": "pokemon"},
+    {"label": "IV or 💯", "insert": "{{#isnt iv 100}}{{round iv}}%{{else}}💯{{/isnt}}", "description": "Show IV% or 💯 for hundos", "category": "pokemon"},
+    {"label": "Countdown", "insert": "<t:{{despawnTimestamp}}:R>", "description": "Discord relative countdown", "category": "pokemon", "platform": "discord"},
+    {"label": "getEmoji", "insert": "{{getEmoji 'key'}}", "description": "Look up emoji by key", "category": "emoji"}
   ]
 }
 ```
