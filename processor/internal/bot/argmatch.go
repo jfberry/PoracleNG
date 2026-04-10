@@ -369,22 +369,15 @@ func (am *ArgMatcher) tryPrefixSingle(tok, key, lang string, result *ParsedArgs)
 	return false
 }
 
-// tryPrefixString matches patterns like "form:alola", "template:2", "move:hydro pump".
+// tryPrefixString matches patterns like "form:alola" or "formalola", "template:2", "move:hydro pump".
 func (am *ArgMatcher) tryPrefixString(tok, key, lang string, result *ParsedArgs) bool {
 	prefix := am.cachedPrefix(key, lang)
 	for _, p := range prefix {
-		// PrefixString uses ":" separator
-		fullPrefix := p + ":"
-		if !strings.HasPrefix(tok, fullPrefix) {
-			continue
+		if val, ok := stripPrefix(tok, p); ok {
+			shortKey := strings.TrimPrefix(key, "arg.prefix.")
+			result.Strings[shortKey] = val
+			return true
 		}
-		val := tok[len(fullPrefix):]
-		if val == "" {
-			continue
-		}
-		shortKey := strings.TrimPrefix(key, "arg.prefix.")
-		result.Strings[shortKey] = val
-		return true
 	}
 	return false
 }
