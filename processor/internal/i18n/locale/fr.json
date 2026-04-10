@@ -389,6 +389,7 @@
   "msg.info.no_move_data": "No move data loaded",
   "msg.info.no_item_data": "No item data loaded",
   "msg.info.shiny_header": "**Stats des derniers Shiny aperçus**",
+  "msg.info.shiny_rate": "Shiny Rate",
   "msg.info.shiny_seen": "Vus",
   "msg.info.shiny_ratio": "Ratio",
   "msg.info.shiny_unavailable": "Info shiny pas encore calculée - attendez quelques minutes et ré-essayez",
