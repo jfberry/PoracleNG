@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -90,7 +92,7 @@ func HandleDTSRender(ts *dts.TemplateStore) gin.HandlerFunc {
 
 // HandleDTSGetTemplates returns DTS template entries with full content.
 // GET /api/dts/templates?type=monster&platform=discord&language=en&id=1
-func HandleDTSGetTemplates(ts *dts.TemplateStore) gin.HandlerFunc {
+func HandleDTSGetTemplates(ts *dts.TemplateStore, configDir string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		entries := ts.FilteredEntries(
 			c.Query("type"),
@@ -98,7 +100,23 @@ func HandleDTSGetTemplates(ts *dts.TemplateStore) gin.HandlerFunc {
 			c.Query("language"),
 			c.Query("id"),
 		)
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "templates": entries})
+		// For templateFile entries, resolve the file content into a
+		// "templateFileContent" field so the editor can display it.
+		type entryWithContent struct {
+			dts.DTSEntry
+			TemplateFileContent string `json:"templateFileContent,omitempty"`
+		}
+		result := make([]entryWithContent, len(entries))
+		for i, e := range entries {
+			result[i].DTSEntry = e
+			if e.TemplateFile != "" {
+				path := filepath.Join(configDir, e.TemplateFile)
+				if data, err := os.ReadFile(path); err == nil {
+					result[i].TemplateFileContent = string(data)
+				}
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "templates": result})
 	}
 }
 

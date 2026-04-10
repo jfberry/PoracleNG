@@ -255,6 +255,14 @@ func (ts *TemplateStore) Exists(templateType, platform, templateID, language str
 	return false
 }
 
+// ClearCache drops all compiled templates so the next render re-parses from
+// source. Used after template file content is updated via the API.
+func (ts *TemplateStore) ClearCache() {
+	ts.mu.Lock()
+	ts.cache = make(map[string]*raymond.Template)
+	ts.mu.Unlock()
+}
+
 func cacheKey(templateType, platform, templateID, language string) string {
 	return templateType + " " + platform + " " + templateID + " " + language
 }
@@ -696,6 +704,25 @@ func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLangu
 		result = append(result, e)
 	}
 	return result
+}
+
+// GetEntry returns a copy of the entry matching the four key fields, or nil
+// if not found. Used by the API to look up an entry without exposing internals.
+func (ts *TemplateStore) GetEntry(filterType, filterPlatform, filterLanguage, filterID string) *DTSEntry {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	target := entryKey(&DTSEntry{
+		Type: filterType, Platform: filterPlatform,
+		Language: filterLanguage, ID: jsonID(filterID),
+	})
+	for i := range ts.entries {
+		if entryKey(&ts.entries[i]) == target {
+			e := ts.entries[i]
+			return &e
+		}
+	}
+	return nil
 }
 
 // entryKey returns the matching key for a DTSEntry.
