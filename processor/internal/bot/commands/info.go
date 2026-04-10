@@ -222,7 +222,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 					weatherParts = append(weatherParts, wName)
 				}
 			}
-			sb.WriteString(fmt.Sprintf("  %s %s\n", tr.T("msg.info.boosted_by"), strings.Join(weatherParts, ", ")))
+			sb.WriteString(fmt.Sprintf("  %s\n", tr.Tf("msg.info.boosted_by", strings.Join(weatherParts, ", "))))
 		}
 
 		// Super effective against: find which types have this type in their Weaknesses
