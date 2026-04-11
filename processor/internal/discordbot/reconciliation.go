@@ -672,7 +672,13 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 
 		name := channel.Name
 
-		// Build notes: "GuildName / CategoryName" or just "GuildName".
+		// Build notes describing the channel's location in the guild hierarchy.
+		// Channels: "GuildName / CategoryName"
+		// Threads:  "GuildName / CategoryName / ChannelName"
+		isThread := channel.Type == discordgo.ChannelTypeGuildPublicThread ||
+			channel.Type == discordgo.ChannelTypeGuildPrivateThread ||
+			channel.Type == discordgo.ChannelTypeGuildNewsThread
+
 		notes := ""
 		if channel.GuildID != "" {
 			guild, err := r.session.Guild(channel.GuildID)
@@ -682,7 +688,19 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 			if channel.ParentID != "" {
 				parent, err := r.session.Channel(channel.ParentID)
 				if err == nil && parent != nil {
-					notes += " / " + parent.Name
+					if isThread {
+						// For threads, ParentID is the channel. Get the category from the channel's ParentID.
+						if parent.ParentID != "" {
+							category, err := r.session.Channel(parent.ParentID)
+							if err == nil && category != nil {
+								notes += " / " + category.Name
+							}
+						}
+						notes += " / " + parent.Name
+					} else {
+						// For channels, ParentID is the category.
+						notes += " / " + parent.Name
+					}
 				}
 			}
 		}
