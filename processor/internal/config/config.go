@@ -71,9 +71,9 @@ type ReconciliationTelegramConfig struct {
 
 // RoleSubscriptionEntry represents a [[discord.role_subscriptions]] TOML entry.
 type RoleSubscriptionEntry struct {
-	Guild          string                       `toml:"guild"`
-	Roles          map[string]string            `toml:"roles"`
-	ExclusiveRoles []map[string]string          `toml:"exclusive_roles"`
+	Guild          string              `toml:"guild" json:"guild"`
+	Roles          map[string]string   `toml:"roles" json:"roles"`
+	ExclusiveRoles []map[string]string `toml:"exclusive_roles" json:"exclusive_roles"`
 }
 
 // TrackingConfig holds settings from the [tracking] section.
@@ -198,8 +198,8 @@ type DiscordConfig struct {
 
 // DelegatedAdminEntry represents a [[delegated_admins]] TOML array-of-tables entry.
 type DelegatedAdminEntry struct {
-	Target string   `toml:"target"`
-	Admins []string `toml:"admins"`
+	Target string   `toml:"target" json:"target"`
+	Admins []string `toml:"admins" json:"admins"`
 }
 
 // DelegatedAdminConfig is the internal representation used by permissions code.
@@ -437,17 +437,17 @@ type AreaConfig struct {
 
 // CommunityConfig represents a community entry under [[area_security.communities]].
 type CommunityConfig struct {
-	Name          string   `toml:"name"`
-	AllowedAreas  []string `toml:"allowed_areas"`
-	LocationFence []string `toml:"location_fence"`
+	Name          string   `toml:"name" json:"name"`
+	AllowedAreas  []string `toml:"allowed_areas" json:"allowed_areas"`
+	LocationFence []string `toml:"location_fence" json:"location_fence"`
 	Discord       struct {
-		Channels []string `toml:"channels"`
-		UserRole []string `toml:"user_role"`
-	} `toml:"discord"`
+		Channels []string `toml:"channels" json:"channels"`
+		UserRole []string `toml:"user_role" json:"user_role"`
+	} `toml:"discord" json:"discord"`
 	Telegram struct {
-		Channels []string `toml:"channels"`
-		Admins   []string `toml:"admins"`
-	} `toml:"telegram"`
+		Channels []string `toml:"channels" json:"channels"`
+		Admins   []string `toml:"admins" json:"admins"`
+	} `toml:"telegram" json:"telegram"`
 }
 
 type AlertLimitsConfig struct {
@@ -461,8 +461,8 @@ type AlertLimitsConfig struct {
 }
 
 type AlertLimitOverride struct {
-	Target string `toml:"target"`
-	Limit  int    `toml:"limit"`
+	Target string `toml:"target" json:"target"`
+	Limit  int    `toml:"limit" json:"limit"`
 }
 
 type WebhookLoggingConfig struct {

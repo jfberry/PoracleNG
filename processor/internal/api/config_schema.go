@@ -170,7 +170,7 @@ var configSchema = []ConfigSection{
 				Fields: []ConfigFieldDef{
 					{Name: "guild", Type: "string", Description: "Guild ID this subscription applies to", Resolve: "discord:guild"},
 					{Name: "roles", Type: "map", Description: "Independent roles users can freely add/remove (name → role ID)"},
-					{Name: "exclusive_roles", Type: "map", Description: "Groups of mutually exclusive roles — user can only hold one per group"},
+					{Name: "exclusive_roles", Type: "map[]", Description: "Array of exclusive role groups — each group is a map of name → role ID, user can only hold one role per group"},
 				},
 			},
 		},
