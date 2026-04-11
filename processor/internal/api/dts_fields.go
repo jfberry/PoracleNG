@@ -599,12 +599,14 @@ var raidSnippets = []Snippet{
 	{Label: "Time remaining", Insert: "{{time}} ({{tthm}}m)", Description: "End time with TTH", Category: "raid"},
 	{Label: "Countdown", Insert: "<t:{{endTimestamp}}:R>", Description: "Discord relative countdown to raid end", Category: "raid", Platform: "discord"},
 	{Label: "Campfire link", Insert: "[Campfire]({{{campfireUrl}}})", Description: "Niantic Campfire deep link", Category: "raid"},
+	{Label: "RSVP list", Insert: "{{#if rsvps}}RSVPS:\n{{#each rsvps}}TS: <t:{{timeSlot}}:R> {{time}} Going: {{goingCount}} Maybe: {{maybeCount}}\n{{/each}}{{/if}}", Description: "RSVP timeslots with Discord countdown", Category: "raid"},
 }
 
 var eggSnippets = []Snippet{
 	{Label: "Egg line", Insert: "🥚 L{{level}} egg", Description: "Egg level", Category: "egg"},
 	{Label: "Hatch time", Insert: "{{time}} ({{tthm}}m)", Description: "Hatch time with TTH", Category: "egg"},
 	{Label: "Countdown", Insert: "<t:{{hatchTimestamp}}:R>", Description: "Discord relative countdown to hatch", Category: "egg", Platform: "discord"},
+	{Label: "RSVP list", Insert: "{{#if rsvps}}RSVPS:\n{{#each rsvps}}TS: <t:{{timeSlot}}:R> {{time}} Going: {{goingCount}} Maybe: {{maybeCount}}\n{{/each}}{{/if}}", Description: "RSVP timeslots with Discord countdown", Category: "egg"},
 }
 
 var questSnippets = []Snippet{
