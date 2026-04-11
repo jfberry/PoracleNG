@@ -28,6 +28,7 @@ files:
     languages_mapping:
       locale:
         de: "de"
+        es-ES: "es"
         fr: "fr"
         it: "it"
         "no": "nb-no"
