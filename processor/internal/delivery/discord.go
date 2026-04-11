@@ -88,6 +88,12 @@ func (ds *DiscordSender) Delete(ctx context.Context, sentID string) error {
 
 // Edit edits a previously sent message.
 func (ds *DiscordSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
+	// Run the same normalisation as Send — coerce embed colours, sanitise fields.
+	normalized, _, err := NormalizeAndExtractImage(message, false)
+	if err == nil && normalized != nil {
+		message = normalized
+	}
+
 	url, auth, err := ds.resolveMessageURL(sentID)
 	if err != nil {
 		return err
