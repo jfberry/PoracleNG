@@ -93,10 +93,7 @@ func (l *Limiter) Check(destinationID, destinationType string) RateResult {
 	}
 
 	c.count++
-	resetSeconds := int(windowDuration.Seconds() - now.Sub(c.windowAt).Seconds())
-	if resetSeconds < 1 {
-		resetSeconds = 1
-	}
+	resetSeconds := max(int(windowDuration.Seconds()-now.Sub(c.windowAt).Seconds()), 1)
 
 	result := RateResult{
 		Limit:        limit,

@@ -179,8 +179,8 @@ func extractValues(cfg *config.Config, filterSection string) map[string]any {
 // Supports dotted paths like "reconciliation.discord" or "geofence.koji".
 func findConfigSection(cfg *config.Config, sectionName string) reflect.Value {
 	v := reflect.ValueOf(cfg).Elem()
-	parts := strings.Split(sectionName, ".")
-	for _, part := range parts {
+	parts := strings.SplitSeq(sectionName, ".")
+	for part := range parts {
 		v = getFieldByTag(v, part)
 		if !v.IsValid() {
 			return reflect.Value{}
@@ -191,7 +191,7 @@ func findConfigSection(cfg *config.Config, sectionName string) reflect.Value {
 
 // getFieldByTag finds a struct field by its TOML tag name.
 func getFieldByTag(v reflect.Value, tagName string) reflect.Value {
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	if v.Kind() != reflect.Struct {

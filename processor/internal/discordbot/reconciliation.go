@@ -3,6 +3,7 @@ package discordbot
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -300,7 +301,7 @@ func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *db.HumanFull,
 			// Reactivate user.
 			r.log.Infof("Reactivate user %s %s", id, name)
 
-			args := []interface{}{0, nil}
+			args := []any{0, nil}
 			setClauses := "admin_disable = ?, disabled_date = ?"
 			if blocked != nil {
 				setClauses += ", blocked_alerts = ?"
@@ -325,7 +326,7 @@ func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *db.HumanFull,
 	}
 
 	if before && after {
-		updates := make(map[string]interface{})
+		updates := make(map[string]any)
 		if syncNames && user.Name != name && name != "" {
 			updates["name"] = name
 		}
@@ -417,7 +418,7 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *db.HumanFull, na
 	}
 
 	if before && after {
-		updates := make(map[string]interface{})
+		updates := make(map[string]any)
 		if syncNames && user.Name != name && name != "" {
 			updates["name"] = name
 		}
@@ -705,7 +706,7 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 			}
 		}
 
-		updates := make(map[string]interface{})
+		updates := make(map[string]any)
 		if syncNames && user.Name != name && name != "" {
 			updates["name"] = name
 		}
@@ -739,21 +740,14 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 
 // isAdminID checks if a user ID is in the admin list.
 func isAdminID(cfg *config.Config, id string) bool {
-	for _, admin := range cfg.Discord.Admins {
-		if admin == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(cfg.Discord.Admins, id)
 }
 
 // hasAnyRole checks if any role in the roleList matches any role in the required list.
 func hasAnyRole(roleList, required []string) bool {
 	for _, role := range roleList {
-		for _, req := range required {
-			if role == req {
-				return true
-			}
+		if slices.Contains(required, role) {
+			return true
 		}
 	}
 	return false
@@ -768,7 +762,7 @@ func nullableStr(s *string) string {
 }
 
 // nullableSqlArg returns the string value or nil for SQL NULL.
-func nullableSqlArg(s *string) interface{} {
+func nullableSqlArg(s *string) any {
 	if s == nil {
 		return nil
 	}

@@ -90,7 +90,10 @@ func (b *Bot) handleRole(s *discordgo.Session, m *discordgo.MessageCreate, args 
 
 func (b *Bot) handleRoleList(s *discordgo.Session, m *discordgo.MessageCreate,
 	targetID string, roleSubMap map[string]config.RoleSubscriptionEntry,
-	tr interface{ T(string) string; Tf(string, ...interface{}) string },
+	tr interface {
+		T(string) string
+		Tf(string, ...any) string
+	},
 	membershipOnly bool) {
 
 	guilds, _ := discordroles.ListUserRolesAcrossGuilds(s, roleSubMap, targetID)
@@ -160,7 +163,10 @@ func (b *Bot) handleRoleList(s *discordgo.Session, m *discordgo.MessageCreate,
 func (b *Bot) handleRoleToggle(s *discordgo.Session, m *discordgo.MessageCreate,
 	targetID string, roleArgs []string,
 	roleSubMap map[string]config.RoleSubscriptionEntry,
-	tr interface{ T(string) string; Tf(string, ...interface{}) string },
+	tr interface {
+		T(string) string
+		Tf(string, ...any) string
+	},
 	set bool) {
 
 	for _, roleArg := range roleArgs {

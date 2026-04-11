@@ -3,7 +3,7 @@ package dts
 import "testing"
 
 func TestEachIsLast(t *testing.T) {
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"items": []string{"a", "b", "c"},
 	}
 	got := render(t, `{{#each items}}{{this}}{{#unless isLast}}, {{/unless}}{{/each}}`, ctx)
@@ -14,7 +14,7 @@ func TestEachIsLast(t *testing.T) {
 }
 
 func TestEachIsFirst(t *testing.T) {
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"items": []string{"a", "b", "c"},
 	}
 	got := render(t, `{{#each items}}{{#unless isFirst}}, {{/unless}}{{this}}{{/each}}`, ctx)
@@ -25,7 +25,7 @@ func TestEachIsFirst(t *testing.T) {
 }
 
 func TestEachIsLastWithMaps(t *testing.T) {
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"pvp": []map[string]any{
 			{"name": "Pikachu", "rank": 1},
 			{"name": "Eevee", "rank": 5},
@@ -40,7 +40,7 @@ func TestEachIsLastWithMaps(t *testing.T) {
 }
 
 func TestForEachIsLast(t *testing.T) {
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"items": []map[string]any{
 			{"name": "Dratini"},
 			{"name": "Bagon"},
@@ -55,7 +55,7 @@ func TestForEachIsLast(t *testing.T) {
 }
 
 func TestEachSingleElement(t *testing.T) {
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"items": []string{"only"},
 	}
 	got := render(t, `{{#each items}}{{this}}{{#unless isLast}}, {{/unless}}{{/each}}`, ctx)

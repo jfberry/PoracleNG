@@ -120,17 +120,17 @@ func NormalizeAndExtractImage(raw json.RawMessage, extractImage bool) (json.RawM
 
 // Discord embed limits — see https://discord.com/developers/docs/resources/channel#embed-object-embed-limits
 const (
-	maxDiscordContent     = 2000
-	maxDiscordEmbeds      = 10
-	maxEmbedTitle         = 256
-	maxEmbedDescription   = 4096
-	maxEmbedFields        = 25
-	maxEmbedFieldName     = 256
-	maxEmbedFieldValue    = 1024
-	maxEmbedFooterText    = 2048
-	maxEmbedAuthorName    = 256
-	maxEmbedTotalChars    = 6000
-	zeroWidthSpace        = "\u200B"
+	maxDiscordContent   = 2000
+	maxDiscordEmbeds    = 10
+	maxEmbedTitle       = 256
+	maxEmbedDescription = 4096
+	maxEmbedFields      = 25
+	maxEmbedFieldName   = 256
+	maxEmbedFieldValue  = 1024
+	maxEmbedFooterText  = 2048
+	maxEmbedAuthorName  = 256
+	maxEmbedTotalChars  = 6000
+	zeroWidthSpace      = "\u200B"
 )
 
 // sanitizeDiscordEmbed enforces Discord's embed validation rules in place.
@@ -340,10 +340,7 @@ func enforceEmbedCharBudget(embed map[string]any) {
 	if total > maxEmbedTotalChars {
 		if desc, ok := embed["description"].(string); ok {
 			overflow := total - maxEmbedTotalChars
-			newLen := len(desc) - overflow
-			if newLen < 0 {
-				newLen = 0
-			}
+			newLen := max(len(desc)-overflow, 0)
 			embed["description"] = truncateRunes(desc, newLen)
 		}
 	}

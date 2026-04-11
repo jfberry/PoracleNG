@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -26,10 +27,8 @@ func (c *RestoreCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	backupDir := filepath.Join(ctx.Config.BaseDir, "backups")
 
 	// Handle "list" subcommand
-	for _, arg := range args {
-		if arg == "list" {
-			return listBackups(tr, backupDir)
-		}
+	if slices.Contains(args, "list") {
+		return listBackups(tr, backupDir)
 	}
 
 	if len(args) == 0 {
@@ -75,7 +74,7 @@ func (c *RestoreCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		return []bot.Reply{{React: "🙅"}}
 	}
 
-	var backup map[string][]map[string]interface{}
+	var backup map[string][]map[string]any
 	if err := json.Unmarshal(data, &backup); err != nil {
 		log.Errorf("restore: parse %s: %v", name, err)
 		return []bot.Reply{{React: "🙅"}}
@@ -109,7 +108,7 @@ func (c *RestoreCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 			var cols []string
 			var placeholders []string
-			var vals []interface{}
+			var vals []any
 			for k, v := range row {
 				cols = append(cols, fmt.Sprintf("`%s`", k))
 				placeholders = append(placeholders, "?")

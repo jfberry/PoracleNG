@@ -1,6 +1,7 @@
 package enrichment
 
 import (
+	"maps"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -48,32 +49,32 @@ type PVPDisplayConfig struct {
 // sent to the alerter. The enrichment map is sent alongside the original
 // raw message so neither needs to be re-encoded.
 type Enricher struct {
-	TimeLayout       string
-	DateLayout       string
-	WeatherProvider  WeatherProvider
-	ForecastProvider ForecastProvider  // optional; triggers AccuWeather fetch
-	ShinyProvider    ShinyRateProvider // optional; provides shiny rates
-	EventChecker     *PogoEventChecker
-	GameData         *gamedata.GameData  // game master data for enrichment
-	Translations     *i18n.Bundle        // translations for per-language enrichment
-	MapConfig        *MapConfig          // map URL configuration
+	TimeLayout         string
+	DateLayout         string
+	WeatherProvider    WeatherProvider
+	ForecastProvider   ForecastProvider  // optional; triggers AccuWeather fetch
+	ShinyProvider      ShinyRateProvider // optional; provides shiny rates
+	EventChecker       *PogoEventChecker
+	GameData           *gamedata.GameData  // game master data for enrichment
+	Translations       *i18n.Bundle        // translations for per-language enrichment
+	MapConfig          *MapConfig          // map URL configuration
 	IvColors           []string            // Discord IV color hex strings (6 thresholds)
 	PVPDisplay         *PVPDisplayConfig   // PVP display filtering config
-	ImgUicons          *uicons.Uicons        // Primary icon resolver
-	ImgUiconsAlt       *uicons.Uicons        // Alternative icon resolver
-	StickerUicons      *uicons.Uicons        // Sticker icon resolver (webp)
-	DefaultLocale      string                   // Fallback locale when user has no language set
-	RequestShinyImages bool                   // Whether to request shiny icon variants
-	StaticMap          *staticmap.Resolver    // Static map tile resolver (nil = disabled)
-	Geocoder           *geocoding.Geocoder    // Reverse geocoder (nil = disabled)
+	ImgUicons          *uicons.Uicons      // Primary icon resolver
+	ImgUiconsAlt       *uicons.Uicons      // Alternative icon resolver
+	StickerUicons      *uicons.Uicons      // Sticker icon resolver (webp)
+	DefaultLocale      string              // Fallback locale when user has no language set
+	RequestShinyImages bool                // Whether to request shiny icon variants
+	StaticMap          *staticmap.Resolver // Static map tile resolver (nil = disabled)
+	Geocoder           *geocoding.Geocoder // Reverse geocoder (nil = disabled)
 
 	// Fallback icon URLs when uicons are not configured or fail
-	FallbackImgURL       string
-	FallbackImgWeather   string
-	FallbackImgEgg       string
-	FallbackImgGym       string
-	FallbackImgPokestop  string
-	FallbackPokestopURL  string
+	FallbackImgURL      string
+	FallbackImgWeather  string
+	FallbackImgEgg      string
+	FallbackImgGym      string
+	FallbackImgPokestop string
+	FallbackPokestopURL string
 }
 
 // setFallbackImg sets imgUrl to the fallback if it wasn't set by uicons.
@@ -174,12 +175,8 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 	}
 	// Build tileserver payload from enrichment + webhook fields
 	merged := make(map[string]any, len(m)+len(webhookFields)+2)
-	for k, v := range m {
-		merged[k] = v
-	}
-	for k, v := range webhookFields {
-		merged[k] = v
-	}
+	maps.Copy(merged, m)
+	maps.Copy(merged, webhookFields)
 	merged["latitude"] = lat
 	merged["longitude"] = lon
 	keys, pregenKeys := staticMapFieldsForType(maptype)

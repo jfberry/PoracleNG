@@ -102,7 +102,7 @@ func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTrack
 // Start launches worker goroutines (one per concurrency slot) that drain the job channel.
 func (fq *FairQueue) Start() {
 	total := cap(fq.discordSem) + cap(fq.webhookSem) + cap(fq.telegramSem)
-	for i := 0; i < total; i++ {
+	for range total {
 		fq.wg.Add(1)
 		go fq.worker()
 	}

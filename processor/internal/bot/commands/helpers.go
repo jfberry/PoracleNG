@@ -165,17 +165,17 @@ func buildTrackingMessage(
 	}
 
 	var sb strings.Builder
-	for i := 0; i < unchangedCount; i++ {
+	for i := range unchangedCount {
 		sb.WriteString(tr.T("tracking.unchanged"))
 		sb.WriteString(unchangedRow(i))
 		sb.WriteByte('\n')
 	}
-	for i := 0; i < updateCount; i++ {
+	for i := range updateCount {
 		sb.WriteString(tr.T("tracking.updated"))
 		sb.WriteString(updateRow(i))
 		sb.WriteByte('\n')
 	}
-	for i := 0; i < insertCount; i++ {
+	for i := range insertCount {
 		sb.WriteString(tr.T("tracking.new"))
 		sb.WriteString(insertRow(i))
 		sb.WriteByte('\n')
@@ -247,13 +247,14 @@ func removeByUIDs[T any](
 	}
 	ctx.TriggerReload()
 
-	msg := formatRemovedRows(tr, descriptions)
+	var msg strings.Builder
+	msg.WriteString(formatRemovedRows(tr, descriptions))
 	if len(notFound) > 0 {
 		for _, uid := range notFound {
-			msg += tr.Tf("tracking.uid_not_found", uid) + "\n"
+			msg.WriteString(tr.Tf("tracking.uid_not_found", uid) + "\n")
 		}
 	}
-	return []bot.Reply{{React: "✅", Text: strings.TrimSpace(msg)}}
+	return []bot.Reply{{React: "✅", Text: strings.TrimSpace(msg.String())}}
 }
 
 // commonTrackFields holds the standard fields parsed by all tracking commands.

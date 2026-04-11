@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -199,17 +200,10 @@ func HandleSwitchProfile(deps *TrackingDeps) gin.HandlerFunc {
 
 // isAdmin returns true if the given ID is in the discord or telegram admin lists.
 func isAdmin(deps *TrackingDeps, id string) bool {
-	for _, a := range deps.Config.Discord.Admins {
-		if a == id {
-			return true
-		}
+	if slices.Contains(deps.Config.Discord.Admins, id) {
+		return true
 	}
-	for _, a := range deps.Config.Telegram.Admins {
-		if a == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(deps.Config.Telegram.Admins, id)
 }
 
 // parseMembership parses a JSON array string into a []string, returning nil on error or empty.

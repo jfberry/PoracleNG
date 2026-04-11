@@ -17,7 +17,7 @@ import (
 
 // broadcastTemplate represents one entry in broadcast.json.
 type broadcastTemplate struct {
-	ID       interface{}     `json:"id"`
+	ID       any             `json:"id"`
 	Platform string          `json:"platform"`
 	Template json.RawMessage `json:"template"`
 }
@@ -158,7 +158,7 @@ func (c *BroadcastCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 
 	// Build the WHERE clause
 	var conditions []string
-	var queryArgs []interface{}
+	var queryArgs []any
 
 	if hasLocation {
 		conditions = append(conditions,

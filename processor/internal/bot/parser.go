@@ -87,8 +87,8 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 	var results []ParsedCommand
 
 	// Multi-line: split by newlines, each line is independent
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(text, "\n")
+	for line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

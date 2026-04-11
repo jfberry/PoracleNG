@@ -2,6 +2,7 @@ package dts
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -24,14 +25,14 @@ import (
 //  6. base enrichment (universal: weather, maps, icons, geocoding)
 //  7. dtsDictionary (user-defined config overrides)
 type LayeredView struct {
-	base      map[string]any
-	perLang   map[string]any
-	perUser   map[string]any
-	emoji     map[string]string // resolved emoji key → string
-	aliases   map[string]string // alias name → source field name
-	computed  map[string]any    // pre-computed fields (tthh, areas, etc.)
-	webhook   map[string]any    // raw webhook fields (lowest priority, for custom DTS)
-	dtsDict   map[string]any
+	base     map[string]any
+	perLang  map[string]any
+	perUser  map[string]any
+	emoji    map[string]string // resolved emoji key → string
+	aliases  map[string]string // alias name → source field name
+	computed map[string]any    // pre-computed fields (tthh, areas, etc.)
+	webhook  map[string]any    // raw webhook fields (lowest priority, for custom DTS)
+	dtsDict  map[string]any
 }
 
 // NewLayeredView creates a view from enrichment layers without copying.
@@ -63,7 +64,7 @@ func NewLayeredView(
 
 	// Resolve emoji arrays into computed (they're []string, not simple strings)
 	for _, m := range arrayEmojiKeys {
-		var raw interface{}
+		var raw any
 		if perLang != nil {
 			raw = perLang[m.keyField]
 		}
@@ -75,7 +76,7 @@ func NewLayeredView(
 		}
 	}
 	// Special: typeEmojiKeys → "emoji" array
-	var typeRaw interface{}
+	var typeRaw any
 	if perLang != nil {
 		typeRaw = perLang["typeEmojiKeys"]
 	}
@@ -103,7 +104,7 @@ func NewLayeredView(
 
 // GetField implements raymond.FieldResolver.
 // Checks layers in priority order, returns first match.
-func (lv *LayeredView) GetField(name string) (interface{}, bool) {
+func (lv *LayeredView) GetField(name string) (any, bool) {
 	// 1. Per-user enrichment (PVP, distance)
 	if lv.perUser != nil {
 		if v, ok := lv.perUser[name]; ok {
@@ -158,7 +159,7 @@ func (lv *LayeredView) GetField(name string) (interface{}, bool) {
 }
 
 // resolveSource looks up a field by name across all non-alias layers.
-func (lv *LayeredView) resolveSource(name string) (interface{}, bool) {
+func (lv *LayeredView) resolveSource(name string) (any, bool) {
 	if lv.perUser != nil {
 		if v, ok := lv.perUser[name]; ok {
 			return v, true
@@ -214,7 +215,7 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang map[string]any, platform st
 
 	// Resolve array emoji keys
 	for _, m := range arrayEmojiKeys {
-		var raw interface{}
+		var raw any
 		if perLang != nil {
 			raw = perLang[m.keyField]
 		}
@@ -227,7 +228,7 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang map[string]any, platform st
 	}
 
 	// Special case: typeEmojiKeys → emoji ([]string) + emojiString
-	var typeRaw interface{}
+	var typeRaw any
 	if perLang != nil {
 		typeRaw = perLang["typeEmojiKeys"]
 	}
@@ -447,33 +448,21 @@ func (lv *LayeredView) Flatten() map[string]any {
 	result := make(map[string]any, 128)
 
 	// 8. DTS dictionary
-	for k, v := range lv.dtsDict {
-		result[k] = v
-	}
+	maps.Copy(result, lv.dtsDict)
 	// 7. Raw webhook
-	for k, v := range lv.webhook {
-		result[k] = v
-	}
+	maps.Copy(result, lv.webhook)
 	// 5. Base enrichment
-	for k, v := range lv.base {
-		result[k] = v
-	}
+	maps.Copy(result, lv.base)
 	// 4. Computed fields
-	for k, v := range lv.computed {
-		result[k] = v
-	}
+	maps.Copy(result, lv.computed)
 	// 3. Per-language
-	for k, v := range lv.perLang {
-		result[k] = v
-	}
+	maps.Copy(result, lv.perLang)
 	// 2. Emoji
 	for k, v := range lv.emoji {
 		result[k] = v
 	}
 	// 1. Per-user
-	for k, v := range lv.perUser {
-		result[k] = v
-	}
+	maps.Copy(result, lv.perUser)
 
 	// 6. Aliases — resolve each alias from the result (not from a separate layer)
 	for alias, source := range lv.aliases {

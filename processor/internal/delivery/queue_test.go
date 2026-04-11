@@ -13,14 +13,14 @@ import (
 // queueMockSender is a configurable mock for queue tests.
 // (Named differently from mockSender in tracker_test.go to avoid conflict.)
 type queueMockSender struct {
-	platform   string
-	sendCalls  []*Job
-	editCalls  []string // sentIDs passed to Edit
-	mu         sync.Mutex
-	sendErr    error
-	editErr    error
-	sendDelay  time.Duration
-	sentID     string // returned from Send
+	platform  string
+	sendCalls []*Job
+	editCalls []string // sentIDs passed to Edit
+	mu        sync.Mutex
+	sendErr   error
+	editErr   error
+	sendDelay time.Duration
+	sentID    string // returned from Send
 }
 
 func (m *queueMockSender) Send(_ context.Context, job *Job) (*SentMessage, error) {
@@ -151,7 +151,7 @@ func TestFairQueueConcurrency(t *testing.T) {
 	fq.Start()
 
 	// Send 6 jobs — with concurrency 2 and 50ms delay, they should be serialized in pairs
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		ch <- &Job{
 			Target:  "user1",
 			Type:    "discord:user",
@@ -354,7 +354,7 @@ func TestFairQueueStop(t *testing.T) {
 	fq.Start()
 
 	// Enqueue some jobs then immediately stop
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		ch <- &Job{
 			Target:  "user1",
 			Type:    "discord:user",

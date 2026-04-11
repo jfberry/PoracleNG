@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
-
 
 // InfoCommand implements !info — show pokemon info, type matchups, stats,
 // weather, shiny rates, rarity, moves, items, and admin debug tools.
@@ -84,8 +84,8 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	nameArgs := make([]string, 0, len(args))
 	for _, a := range args {
 		lower := strings.ToLower(a)
-		if strings.HasPrefix(lower, "form:") {
-			formFilter = strings.TrimPrefix(lower, "form:")
+		if after, ok := strings.CutPrefix(lower, "form:"); ok {
+			formFilter = after
 		} else {
 			nameArgs = append(nameArgs, a)
 		}
@@ -228,19 +228,16 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		// Super effective against: find which types have this type in their Weaknesses
 		var effectiveAgainst []string
 		for otherTID, otherType := range ctx.GameData.Types {
-			for _, wID := range otherType.Weaknesses {
-				if wID == tid {
-					otherName := tr.T(gamedata.TypeTranslationKey(otherTID))
-					otherEmoji := ""
-					if emoji != nil {
-						otherEmoji = emoji.Lookup(otherType.Emoji, platform)
-					}
-					if otherEmoji != "" {
-						effectiveAgainst = append(effectiveAgainst, otherEmoji+" "+otherName)
-					} else {
-						effectiveAgainst = append(effectiveAgainst, otherName)
-					}
-					break
+			if slices.Contains(otherType.Weaknesses, tid) {
+				otherName := tr.T(gamedata.TypeTranslationKey(otherTID))
+				otherEmoji := ""
+				if emoji != nil {
+					otherEmoji = emoji.Lookup(otherType.Emoji, platform)
+				}
+				if otherEmoji != "" {
+					effectiveAgainst = append(effectiveAgainst, otherEmoji+" "+otherName)
+				} else {
+					effectiveAgainst = append(effectiveAgainst, otherName)
 				}
 			}
 		}
@@ -420,10 +417,7 @@ func calculateCP(gd *gamedata.GameData, baseAtk, baseDef, baseSta, ivAtk, ivDef,
 	atk := float64(baseAtk + ivAtk)
 	def := float64(baseDef + ivDef)
 	sta := float64(baseSta + ivSta)
-	cp := int(math.Floor(atk * math.Sqrt(def) * math.Sqrt(sta) * multi * multi / 10))
-	if cp < 10 {
-		cp = 10
-	}
+	cp := max(int(math.Floor(atk*math.Sqrt(def)*math.Sqrt(sta)*multi*multi/10)), 10)
 	return cp
 }
 

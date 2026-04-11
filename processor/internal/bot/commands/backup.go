@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -61,10 +62,8 @@ func (c *BackupCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 
 	// Handle "list" subcommand
-	for _, arg := range args {
-		if arg == "list" {
-			return listBackups(tr, backupDir)
-		}
+	if slices.Contains(args, "list") {
+		return listBackups(tr, backupDir)
 	}
 
 	// Backup: need a name
@@ -75,7 +74,7 @@ func (c *BackupCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	name := args[0]
 
 	// Export all tracking tables
-	backup := make(map[string][]map[string]interface{})
+	backup := make(map[string][]map[string]any)
 	for _, table := range backupTables {
 		rows, err := ctx.DB.Queryx(
 			fmt.Sprintf("SELECT * FROM `%s` WHERE id = ? AND profile_no = ?", table),
@@ -85,9 +84,9 @@ func (c *BackupCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 			continue
 		}
 
-		var tableRows []map[string]interface{}
+		var tableRows []map[string]any
 		for rows.Next() {
-			row := make(map[string]interface{})
+			row := make(map[string]any)
 			if err := rows.MapScan(row); err != nil {
 				log.Errorf("backup: scan %s row: %v", table, err)
 				continue
@@ -106,7 +105,7 @@ func (c *BackupCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		}
 		rows.Close()
 		if tableRows == nil {
-			tableRows = []map[string]interface{}{}
+			tableRows = []map[string]any{}
 		}
 		backup[table] = tableRows
 	}

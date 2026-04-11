@@ -6,12 +6,12 @@ package bot
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/jmoiron/sqlx"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
-	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -22,34 +22,35 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
 // BotDeps holds shared dependencies needed by both Discord and Telegram bots.
 // Platform-specific bot Config structs embed this to avoid duplication.
 type BotDeps struct {
-	DB           *sqlx.DB
-	Humans       store.HumanStore
-	Tracking     *store.TrackingStores
-	Cfg          *config.Config
-	StateMgr     *state.Manager
-	GameData     *gamedata.GameData
-	Translations *i18n.Bundle
-	Dispatcher   *delivery.Dispatcher
-	RowText      *rowtext.Generator
-	Registry     *Registry
-	Parser       *Parser
-	ArgMatcher   *ArgMatcher
-	Resolver     *PokemonResolver
-	Geocoder     *geocoding.Geocoder
-	StaticMap    *staticmap.Resolver
-	Weather      *tracker.WeatherTracker
-	Stats        *tracker.StatsTracker
-	DTS          *dts.TemplateStore
-	Emoji        *dts.EmojiLookup
-	NLPParser      *nlp.Parser
-	TestProcessor  TestProcessor
-	ReloadFunc     func()
+	DB            *sqlx.DB
+	Humans        store.HumanStore
+	Tracking      *store.TrackingStores
+	Cfg           *config.Config
+	StateMgr      *state.Manager
+	GameData      *gamedata.GameData
+	Translations  *i18n.Bundle
+	Dispatcher    *delivery.Dispatcher
+	RowText       *rowtext.Generator
+	Registry      *Registry
+	Parser        *Parser
+	ArgMatcher    *ArgMatcher
+	Resolver      *PokemonResolver
+	Geocoder      *geocoding.Geocoder
+	StaticMap     *staticmap.Resolver
+	Weather       *tracker.WeatherTracker
+	Stats         *tracker.StatsTracker
+	DTS           *dts.TemplateStore
+	Emoji         *dts.EmojiLookup
+	NLPParser     *nlp.Parser
+	TestProcessor TestProcessor
+	ReloadFunc    func()
 }
 
 // TestTarget specifies who to deliver a test alert to.
@@ -111,25 +112,25 @@ type CommandContext struct {
 	AreaLogic *AreaLogic
 
 	// Injected dependencies
-	DB           *sqlx.DB          // DEPRECATED — use Humans/Tracking stores. Kept during migration.
-	Humans       store.HumanStore
-	Tracking     *store.TrackingStores
-	Config       *config.Config
-	StateMgr     *state.Manager
-	GameData     *gamedata.GameData
-	Translations *i18n.Bundle
-	Geofence     *geofence.SpatialIndex
-	Fences       []geofence.Fence
-	Dispatcher   *delivery.Dispatcher
-	RowText      *rowtext.Generator
-	Resolver     *PokemonResolver
-	ArgMatcher   *ArgMatcher
-	Geocoder     *geocoding.Geocoder
-	StaticMap    *staticmap.Resolver
-	Weather      *tracker.WeatherTracker
-	Stats        *tracker.StatsTracker
-	DTS          *dts.TemplateStore
-	Emoji        *dts.EmojiLookup
+	DB            *sqlx.DB // DEPRECATED — use Humans/Tracking stores. Kept during migration.
+	Humans        store.HumanStore
+	Tracking      *store.TrackingStores
+	Config        *config.Config
+	StateMgr      *state.Manager
+	GameData      *gamedata.GameData
+	Translations  *i18n.Bundle
+	Geofence      *geofence.SpatialIndex
+	Fences        []geofence.Fence
+	Dispatcher    *delivery.Dispatcher
+	RowText       *rowtext.Generator
+	Resolver      *PokemonResolver
+	ArgMatcher    *ArgMatcher
+	Geocoder      *geocoding.Geocoder
+	StaticMap     *staticmap.Resolver
+	Weather       *tracker.WeatherTracker
+	Stats         *tracker.StatsTracker
+	DTS           *dts.TemplateStore
+	Emoji         *dts.EmojiLookup
 	NLP           *nlp.Parser
 	TestProcessor TestProcessor
 	Registry      *Registry
@@ -230,10 +231,5 @@ func IsCommandDisabled(disabled []string, cmdKey string) bool {
 		return false
 	}
 	name := strings.TrimPrefix(cmdKey, "cmd.")
-	for _, d := range disabled {
-		if d == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(disabled, name)
 }

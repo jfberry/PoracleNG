@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -229,9 +230,7 @@ func (b *Bundle) merge(locale string, msgs map[string]string) {
 		}
 		b.translators[locale] = t
 	}
-	for k, v := range msgs {
-		t.messages[k] = v
-	}
+	maps.Copy(t.messages, msgs)
 }
 
 // linkFallbacks sets the English fallback on all non-English translators.

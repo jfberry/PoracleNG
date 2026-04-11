@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"slices"
+
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
@@ -225,11 +227,8 @@ func (c *RaidCommand) removeRaids(ctx *bot.CommandContext, parsed *bot.ParsedArg
 			}
 		}
 		// Remove by level
-		for _, lvl := range parsed.RaidLevels {
-			if existing.Level == lvl {
-				shouldRemove = true
-				break
-			}
+		if slices.Contains(parsed.RaidLevels, existing.Level) {
+			shouldRemove = true
 		}
 		if r, ok := parsed.Ranges["level"]; ok {
 			if r.HasMax {

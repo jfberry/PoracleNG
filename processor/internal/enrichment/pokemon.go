@@ -83,10 +83,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		m["despawnTimestamp"] = pokemon.DisappearTime // unix int for Discord <t:N:R>
 		m["disappearTime"] = geo.FormatTime(pokemon.DisappearTime, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(pokemon.DisappearTime)
-		tthSec := pokemon.DisappearTime - time.Now().Unix()
-		if tthSec < 0 {
-			tthSec = 0
-		}
+		tthSec := max(pokemon.DisappearTime-time.Now().Unix(), 0)
 		m["tthSeconds"] = int(tthSec)
 
 		// Weather change timestamp: the hour boundary before disappear_time

@@ -3,8 +3,10 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,7 +18,7 @@ import (
 // PoracleTestCommand implements !poracle-test — send a test webhook.
 type PoracleTestCommand struct{}
 
-func (c *PoracleTestCommand) Name() string     { return "cmd.poracle_test" }
+func (c *PoracleTestCommand) Name() string      { return "cmd.poracle_test" }
 func (c *PoracleTestCommand) Aliases() []string { return nil }
 
 var poracleTestParams = []bot.ParamDef{
@@ -26,10 +28,10 @@ var poracleTestParams = []bot.ParamDef{
 
 // testdataEntry represents one item from testdata.json.
 type testdataEntry struct {
-	Type     string                 `json:"type"`
-	Test     string                 `json:"test"`
-	Location string                 `json:"location,omitempty"`
-	Webhook  map[string]interface{} `json:"webhook"`
+	Type     string         `json:"type"`
+	Test     string         `json:"test"`
+	Location string         `json:"location,omitempty"`
+	Webhook  map[string]any `json:"webhook"`
 }
 
 // loadTestdata loads and merges bundled + user testdata.json files.
@@ -72,13 +74,7 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 	}
 
 	hookTypeDisplay := args[0]
-	valid := false
-	for _, v := range validHooks {
-		if v == hookTypeDisplay {
-			valid = true
-			break
-		}
-	}
+	valid := slices.Contains(validHooks, hookTypeDisplay)
 	if !valid {
 		return []bot.Reply{{Text: tr.Tf("msg.poracle_test.usage", strings.Join(validHooks, ", "))}}
 	}
@@ -116,13 +112,14 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 
 	// If no test ID, list available tests for this hook type
 	if testID == "" {
-		msg := tr.Tf("msg.poracle_test.tests_found", hookType) + "\n\n"
+		var msg strings.Builder
+		msg.WriteString(tr.Tf("msg.poracle_test.tests_found", hookType) + "\n\n")
 		for _, entry := range testdata {
 			if entry.Type == hookType {
-				msg += "  " + entry.Test + "\n"
+				msg.WriteString("  " + entry.Test + "\n")
 			}
 		}
-		return []bot.Reply{{Text: msg}}
+		return []bot.Reply{{Text: msg.String()}}
 	}
 
 	// Find the test data item
@@ -161,10 +158,8 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 	}
 
 	// Deep copy the webhook so we don't mutate the loaded testdata
-	hook := make(map[string]interface{})
-	for k, v := range dataItem.Webhook {
-		hook[k] = v
-	}
+	hook := make(map[string]any)
+	maps.Copy(hook, dataItem.Webhook)
 
 	// Move location to user's location (unless location: "keep")
 	if dataItem.Location != "keep" {
@@ -197,32 +192,24 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 		}
 	case "fort_update":
 		// Deep copy old/new location objects
-		if oldObj, ok := hook["old"].(map[string]interface{}); ok {
-			newOld := make(map[string]interface{})
-			for k, v := range oldObj {
-				newOld[k] = v
-			}
-			if loc, ok := newOld["location"].(map[string]interface{}); ok {
-				newLoc := make(map[string]interface{})
-				for k, v := range loc {
-					newLoc[k] = v
-				}
+		if oldObj, ok := hook["old"].(map[string]any); ok {
+			newOld := make(map[string]any)
+			maps.Copy(newOld, oldObj)
+			if loc, ok := newOld["location"].(map[string]any); ok {
+				newLoc := make(map[string]any)
+				maps.Copy(newLoc, loc)
 				newLoc["lat"] = humanLat
 				newLoc["lon"] = humanLon
 				newOld["location"] = newLoc
 			}
 			hook["old"] = newOld
 		}
-		if newObj, ok := hook["new"].(map[string]interface{}); ok {
-			newNew := make(map[string]interface{})
-			for k, v := range newObj {
-				newNew[k] = v
-			}
-			if loc, ok := newNew["location"].(map[string]interface{}); ok {
-				newLoc := make(map[string]interface{})
-				for k, v := range loc {
-					newLoc[k] = v
-				}
+		if newObj, ok := hook["new"].(map[string]any); ok {
+			newNew := make(map[string]any)
+			maps.Copy(newNew, newObj)
+			if loc, ok := newNew["location"].(map[string]any); ok {
+				newLoc := make(map[string]any)
+				maps.Copy(newLoc, loc)
 				newLoc["lat"] = humanLat + 0.001
 				newLoc["lon"] = humanLon + 0.001
 				newNew["location"] = newLoc
@@ -274,7 +261,7 @@ func (c *PoracleTestCommand) Run(ctx *bot.CommandContext, args []string) []bot.R
 
 // resolveDTSType determines the DTS template type from the webhook type and data.
 // Some types branch based on the webhook content (pokestop→lure/invasion, raid→egg/raid).
-func resolveDTSType(hookType string, webhook map[string]interface{}) string {
+func resolveDTSType(hookType string, webhook map[string]any) string {
 	switch hookType {
 	case "pokemon":
 		return "monster"

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -91,13 +92,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			if len(validCaps) == 0 {
 				validCaps = []int{50}
 			}
-			found := false
-			for _, c := range validCaps {
-				if pe.Cap == c {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(validCaps, pe.Cap)
 			if !found {
 				capStrs := []string{"0"}
 				for _, c := range validCaps {
@@ -192,7 +187,9 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	// Build response
 	message := buildTrackingMessage(tr, ctx, len(diff.AlreadyPresent), len(diff.Updates), len(diff.Inserts),
-		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&diff.AlreadyPresent[i])) },
+		func(i int) string {
+			return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&diff.AlreadyPresent[i]))
+		},
 		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&diff.Updates[i])) },
 		func(i int) string { return ctx.RowText.MonsterRowText(tr, monsterAPIToTracking(&diff.Inserts[i])) },
 	)
@@ -556,5 +553,3 @@ func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 
 	return filterByGenAndType(ctx, monsters, parsed)
 }
-
-

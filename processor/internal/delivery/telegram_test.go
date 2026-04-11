@@ -14,10 +14,10 @@ import (
 
 type telegramCall struct {
 	Method string
-	Body   map[string]interface{}
+	Body   map[string]any
 }
 
-func setupTelegramServer(t *testing.T, handler func(method string, body map[string]interface{}) (int, interface{})) (*httptest.Server, *TelegramSender, *[]telegramCall) {
+func setupTelegramServer(t *testing.T, handler func(method string, body map[string]any) (int, any)) (*httptest.Server, *TelegramSender, *[]telegramCall) {
 	t.Helper()
 	var mu sync.Mutex
 	var calls []telegramCall
@@ -32,7 +32,7 @@ func setupTelegramServer(t *testing.T, handler func(method string, body map[stri
 		apiMethod := parts[len(parts)-1]
 
 		bodyBytes, _ := io.ReadAll(r.Body)
-		var bodyMap map[string]interface{}
+		var bodyMap map[string]any
 		json.Unmarshal(bodyBytes, &bodyMap) //nolint:errcheck
 
 		mu.Lock()
@@ -54,15 +54,15 @@ func setupTelegramServer(t *testing.T, handler func(method string, body map[stri
 	return server, sender, &calls
 }
 
-func okResponse(msgID int) (int, interface{}) {
-	return http.StatusOK, map[string]interface{}{
+func okResponse(msgID int) (int, any) {
+	return http.StatusOK, map[string]any{
 		"ok":     true,
-		"result": map[string]interface{}{"message_id": msgID},
+		"result": map[string]any{"message_id": msgID},
 	}
 }
 
 func TestTelegramSendText(t *testing.T) {
-	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		return okResponse(42)
 	})
 	defer server.Close()
@@ -103,7 +103,7 @@ func TestTelegramSendText(t *testing.T) {
 
 func TestTelegramSendOrder(t *testing.T) {
 	msgCounter := 0
-	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		msgCounter++
 		return okResponse(msgCounter)
 	})
@@ -143,7 +143,7 @@ func TestTelegramSendOrder(t *testing.T) {
 }
 
 func TestTelegramSendDefaultOrder(t *testing.T) {
-	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		return okResponse(10)
 	})
 	defer server.Close()
@@ -168,7 +168,7 @@ func TestTelegramSendDefaultOrder(t *testing.T) {
 }
 
 func TestTelegramSendLocation(t *testing.T) {
-	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		return okResponse(50)
 	})
 	defer server.Close()
@@ -200,7 +200,7 @@ func TestTelegramSendLocation(t *testing.T) {
 }
 
 func TestTelegramSendVenue(t *testing.T) {
-	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		return okResponse(60)
 	})
 	defer server.Close()
@@ -256,8 +256,8 @@ func TestTelegramParseModeNormalization(t *testing.T) {
 }
 
 func TestTelegramDelete(t *testing.T) {
-	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
-		return http.StatusOK, map[string]interface{}{"ok": true}
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusOK, map[string]any{"ok": true}
 	})
 	defer server.Close()
 
@@ -283,8 +283,8 @@ func TestTelegramDelete(t *testing.T) {
 }
 
 func TestTelegramEdit(t *testing.T) {
-	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
-		return http.StatusOK, map[string]interface{}{"ok": true, "result": map[string]interface{}{"message_id": 99}}
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusOK, map[string]any{"ok": true, "result": map[string]any{"message_id": 99}}
 	})
 	defer server.Close()
 
@@ -314,13 +314,13 @@ func TestTelegramEdit(t *testing.T) {
 
 func TestTelegramRateLimit429(t *testing.T) {
 	attempt := 0
-	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		attempt++
 		if attempt == 1 {
-			return http.StatusTooManyRequests, map[string]interface{}{
+			return http.StatusTooManyRequests, map[string]any{
 				"ok":          false,
 				"description": "Too Many Requests: retry after 1",
-				"parameters":  map[string]interface{}{"retry_after": 1},
+				"parameters":  map[string]any{"retry_after": 1},
 			}
 		}
 		return okResponse(77)
@@ -345,8 +345,8 @@ func TestTelegramRateLimit429(t *testing.T) {
 }
 
 func TestTelegramPermanentError(t *testing.T) {
-	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
-		return http.StatusForbidden, map[string]interface{}{
+	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusForbidden, map[string]any{
 			"ok":          false,
 			"description": "Forbidden: bot was blocked by the user",
 		}
@@ -371,7 +371,7 @@ func TestTelegramPermanentError(t *testing.T) {
 }
 
 func TestTelegramSentIDFormat(t *testing.T) {
-	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]interface{}) (int, interface{}) {
+	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		return okResponse(12345)
 	})
 	defer server.Close()

@@ -44,13 +44,13 @@ func ParseJSONStringSlice(s string) []string {
 }
 
 // UpdateHuman updates selected fields on a human record using a dynamic UPDATE query.
-func UpdateHuman(dbx *sqlx.DB, id string, updates map[string]interface{}) {
+func UpdateHuman(dbx *sqlx.DB, id string, updates map[string]any) {
 	if len(updates) == 0 {
 		return
 	}
 
 	setClauses := make([]string, 0, len(updates))
-	args := make([]interface{}, 0, len(updates)+1)
+	args := make([]any, 0, len(updates)+1)
 	for col, val := range updates {
 		setClauses = append(setClauses, col+" = ?")
 		args = append(args, val)

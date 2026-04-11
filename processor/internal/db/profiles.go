@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/jmoiron/sqlx"
+	log "github.com/sirupsen/logrus"
 )
 
 // ProfileKey uniquely identifies a profile.
@@ -25,7 +25,7 @@ type ActiveHourEntry struct {
 }
 
 func (e *ActiveHourEntry) UnmarshalJSON(b []byte) error {
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func (e *ActiveHourEntry) UnmarshalJSON(b []byte) error {
 
 // flexToInt converts a JSON value that may be a number (9), a string ("9"),
 // or a zero-padded string ("00") to an int.
-func flexToInt(v interface{}) (int, error) {
+func flexToInt(v any) (int, error) {
 	switch val := v.(type) {
 	case float64:
 		return int(val), nil
@@ -60,7 +60,7 @@ func flexToInt(v interface{}) (int, error) {
 // Profile represents a row from the profiles table.
 type Profile struct {
 	ID          string  `db:"id"`
-	ProfileNo   int    `db:"profile_no"`
+	ProfileNo   int     `db:"profile_no"`
 	Name        string  `db:"name"`
 	Area        string  `db:"area"`
 	Latitude    float64 `db:"latitude"`

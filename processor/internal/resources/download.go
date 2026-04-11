@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -135,9 +136,7 @@ func downloadGameLocales(gameLocaleDir string) {
 			var manual map[string]string
 			if err := json.Unmarshal(manualData, &manual); err == nil {
 				// Manual overrides locales
-				for k, v := range manual {
-					merged[k] = v
-				}
+				maps.Copy(merged, manual)
 			}
 		}
 

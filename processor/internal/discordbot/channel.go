@@ -70,7 +70,10 @@ func (b *Bot) handleChannel(s *discordgo.Session, m *discordgo.MessageCreate, ar
 	}
 }
 
-func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate, isDM bool, webhookName, webhookURL, areaName, language string, tr interface{ T(string) string; Tf(string, ...interface{}) string }) {
+func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate, isDM bool, webhookName, webhookURL, areaName, language string, tr interface {
+	T(string) string
+	Tf(string, ...any) string
+}) {
 	// If only one of name/url provided, reject
 	if (webhookName != "" && webhookURL == "") || (webhookName == "" && webhookURL != "") {
 		s.ChannelMessageSend(m.ChannelID, "To add webhooks, provide both a name using the `name` parameter and a url")
@@ -161,7 +164,10 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 }
 
-func (b *Bot) handleChannelRemove(s *discordgo.Session, m *discordgo.MessageCreate, isDM bool, webhookName string, tr interface{ T(string) string; Tf(string, ...interface{}) string }) {
+func (b *Bot) handleChannelRemove(s *discordgo.Session, m *discordgo.MessageCreate, isDM bool, webhookName string, tr interface {
+	T(string) string
+	Tf(string, ...any) string
+}) {
 	if webhookName != "" {
 		// Remove webhook by name
 		var webhookID string

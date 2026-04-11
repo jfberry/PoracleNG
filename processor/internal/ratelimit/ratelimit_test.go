@@ -11,7 +11,7 @@ func TestUnderLimit(t *testing.T) {
 	l := New(Config{TimingPeriod: 60, DMLimit: 3, ChannelLimit: 5})
 	defer l.Close()
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		r := l.Check("user1", "discord:user")
 		if !r.Allowed {
 			t.Fatalf("message %d should be allowed", i+1)
@@ -27,7 +27,7 @@ func TestAtLimit(t *testing.T) {
 	defer l.Close()
 
 	// Send exactly 3 (the limit)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		r := l.Check("user1", "discord:user")
 		if !r.Allowed {
 			t.Fatalf("message %d should be allowed", i+1)
@@ -40,7 +40,7 @@ func TestOverLimit(t *testing.T) {
 	defer l.Close()
 
 	// Send 3 allowed
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		l.Check("user1", "discord:user")
 	}
 
@@ -70,7 +70,7 @@ func TestChannelLimit(t *testing.T) {
 	l := New(Config{TimingPeriod: 60, DMLimit: 3, ChannelLimit: 5, MaxLimitsBeforeStop: 10})
 	defer l.Close()
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		r := l.Check("chan1", "discord:channel")
 		if !r.Allowed {
 			t.Fatalf("channel message %d should be allowed", i+1)
@@ -111,7 +111,7 @@ func TestBannedAfterThreshold(t *testing.T) {
 	l := New(Config{TimingPeriod: 1, DMLimit: 1, ChannelLimit: 5, MaxLimitsBeforeStop: 3})
 	defer l.Close()
 
-	for violation := 0; violation < 3; violation++ {
+	for violation := range 3 {
 		// Fill window + breach
 		l.Check("user1", "discord:user")
 		r := l.Check("user1", "discord:user")
@@ -145,7 +145,7 @@ func TestOverrides(t *testing.T) {
 	defer l.Close()
 
 	// VIP user should use override limit
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		r := l.Check("vip_user", "discord:user")
 		if !r.Allowed {
 			t.Fatalf("VIP message %d should be allowed (limit 100)", i+1)
@@ -184,7 +184,7 @@ func TestTelegramChannelType(t *testing.T) {
 	defer l.Close()
 
 	// Telegram channel gets channel limit
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		r := l.Check("tgchan", "telegram:channel")
 		if !r.Allowed {
 			t.Fatalf("telegram channel message %d should be allowed", i+1)
@@ -201,7 +201,7 @@ func TestWebhookType(t *testing.T) {
 	defer l.Close()
 
 	// Webhook type gets channel limit
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		r := l.Check("wh1", "webhook")
 		if !r.Allowed {
 			t.Fatalf("webhook message %d should be allowed", i+1)
@@ -246,14 +246,12 @@ func TestConcurrentAccess(t *testing.T) {
 	var allowed atomic.Int64
 
 	for range 200 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			r := l.Check("user1", "discord:user")
 			if r.Allowed {
 				allowed.Add(1)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -267,7 +265,7 @@ func TestTelegramGroupGetsChannelLimit(t *testing.T) {
 	defer l.Close()
 
 	// telegram:group should use channel limit (5), not DM limit (2)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		r := l.Check("group1", "telegram:group")
 		if !r.Allowed {
 			t.Fatalf("telegram group message %d should be allowed (channel limit 5)", i+1)

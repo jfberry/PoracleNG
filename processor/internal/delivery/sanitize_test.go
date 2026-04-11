@@ -115,7 +115,7 @@ func TestSanitizeDiscordEmbed_DropsEmptyFooter(t *testing.T) {
 
 func TestSanitizeDiscordEmbed_CapsFieldsAt25(t *testing.T) {
 	var fields []any
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		fields = append(fields, map[string]any{"name": "n", "value": "v"})
 	}
 	embed := map[string]any{"title": "test", "fields": fields}
@@ -199,14 +199,14 @@ func TestSanitizeTelegramText_EmptyAfterStrip(t *testing.T) {
 
 func TestStripBlankURL(t *testing.T) {
 	cases := map[string]string{
-		"":                     "",
-		"   ":                  "",
-		"null":                 "",
-		"NULL":                 "",
-		"undefined":            "",
-		"<nil>":                "",
-		"https://example.com":  "https://example.com",
-		"  https://e.com  ":    "  https://e.com  ", // only fully empty/null returns ""
+		"":                    "",
+		"   ":                 "",
+		"null":                "",
+		"NULL":                "",
+		"undefined":           "",
+		"<nil>":               "",
+		"https://example.com": "https://example.com",
+		"  https://e.com  ":   "  https://e.com  ", // only fully empty/null returns ""
 	}
 	for in, want := range cases {
 		got := stripBlankURL(in)

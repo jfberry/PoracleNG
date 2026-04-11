@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 
 	log "github.com/sirupsen/logrus"
 
@@ -162,9 +163,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				if maxDespawn > 0 {
 					// Copy base enrichment to avoid mutating shared map
 					userEnrichment = make(map[string]any, len(baseEnrichment)+1)
-					for k, v := range baseEnrichment {
-						userEnrichment[k] = v
-					}
+					maps.Copy(userEnrichment, baseEnrichment)
 					userEnrichment["tth"] = geo.ComputeTTH(maxDespawn)
 				}
 			}

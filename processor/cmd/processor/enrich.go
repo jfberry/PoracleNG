@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/dts"
@@ -77,15 +78,9 @@ func (ps *ProcessorService) EnrichWebhook(webhookType string, raw json.RawMessag
 // mergeEnrichment is a simple fallback when the DTS renderer is not available.
 func mergeEnrichment(base, perLang, webhookFields map[string]any) map[string]any {
 	result := make(map[string]any, len(base)+len(perLang)+len(webhookFields))
-	for k, v := range webhookFields {
-		result[k] = v
-	}
-	for k, v := range base {
-		result[k] = v
-	}
-	for k, v := range perLang {
-		result[k] = v
-	}
+	maps.Copy(result, webhookFields)
+	maps.Copy(result, base)
+	maps.Copy(result, perLang)
 	return result
 }
 

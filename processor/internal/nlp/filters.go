@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -15,32 +16,32 @@ type contextSynonyms map[string]map[string]string
 
 var synonyms = contextSynonyms{
 	"track": {
-		"shiny":       "", // consumed but not filterable for track
-		"shinies":     "",
-		"hundo":       "iv100",
-		"hundos":      "iv100",
-		"hundred":     "iv100",
-		"perfect":     "iv100",
-		"100%":        "iv100",
-		"nundo":       "iv0 maxiv0",
-		"nundos":      "iv0 maxiv0",
-		"zero":        "iv0 maxiv0",
-		"0%":          "iv0 maxiv0",
-		"good ivs":    "iv80",
-		"good iv":     "iv80",
-		"shadow":      "form:shadow",
-		"tiny":        "size:xxs",
-		"xxs":         "size:xxs",
-		"small":       "size:xs",
-		"xs":          "size:xs",
-		"big":         "size:xl",
-		"large":       "size:xl",
-		"xl":          "size:xl",
-		"huge":        "size:xxl",
-		"xxl":         "size:xxl",
-		"male":        "male",
-		"female":      "female",
-		"gmax":        "gmax",
+		"shiny":    "", // consumed but not filterable for track
+		"shinies":  "",
+		"hundo":    "iv100",
+		"hundos":   "iv100",
+		"hundred":  "iv100",
+		"perfect":  "iv100",
+		"100%":     "iv100",
+		"nundo":    "iv0 maxiv0",
+		"nundos":   "iv0 maxiv0",
+		"zero":     "iv0 maxiv0",
+		"0%":       "iv0 maxiv0",
+		"good ivs": "iv80",
+		"good iv":  "iv80",
+		"shadow":   "form:shadow",
+		"tiny":     "size:xxs",
+		"xxs":      "size:xxs",
+		"small":    "size:xs",
+		"xs":       "size:xs",
+		"big":      "size:xl",
+		"large":    "size:xl",
+		"xl":       "size:xl",
+		"huge":     "size:xxl",
+		"xxl":      "size:xxl",
+		"male":     "male",
+		"female":   "female",
+		"gmax":     "gmax",
 	},
 	"raid": {
 		"shadow":         "level15",
@@ -53,12 +54,12 @@ var synonyms = contextSynonyms{
 		"exclusive":      "ex",
 	},
 	"quest": {
-		"shiny":      "shiny",
-		"shinies":    "shiny",
-		"stardust":   "stardust",
-		"energy":     "energy",
+		"shiny":       "shiny",
+		"shinies":     "shiny",
+		"stardust":    "stardust",
+		"energy":      "energy",
 		"mega energy": "energy",
-		"candy":      "candy",
+		"candy":       "candy",
 	},
 	"maxbattle": {
 		"gmax": "gmax",
@@ -192,7 +193,7 @@ func matchFilters(tokens []string, intent string) *FilterResult {
 			if allTokensConsumed(tokens, phrase, result) {
 				continue
 			}
-			if idx := strings.Index(joined, phrase); idx >= 0 {
+			if found := strings.Contains(joined, phrase); found {
 				markMultiWordConsumed(tokens, phrase, result)
 				replacement := synMap[phrase]
 				if replacement == "everything" {
@@ -347,7 +348,7 @@ func matchPVP(tokens []string, intent string, result *FilterResult) {
 	league := ""
 	for phrase, lg := range pvpLeagues {
 		if strings.Contains(phrase, " ") {
-			if idx := strings.Index(joined, phrase); idx >= 0 {
+			if found := strings.Contains(joined, phrase); found {
 				league = lg
 				markMultiWordConsumed(tokens, phrase, result)
 				break
@@ -424,8 +425,8 @@ func sortByLengthDesc(ss []string) {
 
 // allTokensConsumed checks if all tokens that would match a phrase are already consumed.
 func allTokensConsumed(tokens []string, phrase string, result *FilterResult) bool {
-	words := strings.Fields(phrase)
-	for _, w := range words {
+	words := strings.FieldsSeq(phrase)
+	for w := range words {
 		foundUnconsumed := false
 		for i, t := range tokens {
 			if t == w && !result.Consumed[i] {
@@ -453,11 +454,8 @@ func markMultiWordConsumed(tokens []string, phrase string, result *FilterResult)
 	for i, t := range tokens {
 		end := pos + len(t)
 		if pos >= idx && end <= idx+len(phrase) {
-			for _, w := range words {
-				if t == w {
-					result.Consumed[i] = true
-					break
-				}
+			if slices.Contains(words, t) {
+				result.Consumed[i] = true
 			}
 		}
 		pos = end + 1

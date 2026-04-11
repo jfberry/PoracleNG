@@ -41,8 +41,8 @@ func Normalize(input string) string {
 
 	// Strip filler prefixes (longest first).
 	for _, prefix := range fillerPrefixes {
-		if strings.HasPrefix(s, prefix) {
-			s = strings.TrimPrefix(s, prefix)
+		if after, ok := strings.CutPrefix(s, prefix); ok {
+			s = after
 			s = strings.TrimSpace(s)
 			break
 		}

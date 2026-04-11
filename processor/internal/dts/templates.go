@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -623,13 +625,7 @@ func (ts *TemplateStore) TemplateSummaryDetailed() map[string]map[string][]strin
 			id = "default"
 		}
 		// Deduplicate (same ID can appear for different languages)
-		found := false
-		for _, existing := range byPlatform[e.Platform] {
-			if existing == id {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(byPlatform[e.Platform], id)
 		if !found {
 			byPlatform[e.Platform] = append(byPlatform[e.Platform], id)
 		}
@@ -684,9 +680,7 @@ func (ts *TemplateStore) Partials() map[string]string {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 	result := make(map[string]string, len(ts.partials))
-	for k, v := range ts.partials {
-		result[k] = v
-	}
+	maps.Copy(result, ts.partials)
 	return result
 }
 

@@ -72,8 +72,8 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 
 			// Simplified leader/executive names
 			tmpl := strings.ToLower(grunt.Template)
-			if strings.HasPrefix(tmpl, "character_executive_") {
-				short := strings.TrimPrefix(tmpl, "character_executive_")
+			if after, ok := strings.CutPrefix(tmpl, "character_executive_"); ok {
+				short := after
 				short = strings.TrimSuffix(short, "_male")
 				short = strings.TrimSuffix(short, "_female")
 				if short != "" {
@@ -200,7 +200,9 @@ func (c *InvasionCommand) removeInvasions(ctx *bot.CommandContext, parsed *bot.P
 		tr := ctx.Tr()
 		return removeByUIDs(ctx, ctx.Tracking.Invasions, parsed.RemoveUIDs,
 			store.InvasionGetUID,
-			func(r *db.InvasionTrackingAPI) string { return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(r)) },
+			func(r *db.InvasionTrackingAPI) string {
+				return ctx.RowText.InvasionRowText(tr, invasionAPIToTracking(r))
+			},
 		)
 	}
 

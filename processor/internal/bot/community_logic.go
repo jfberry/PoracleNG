@@ -2,6 +2,7 @@ package bot
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
@@ -13,13 +14,7 @@ func AddCommunity(cfg *config.Config, existing []string, communityToAdd string) 
 	validKeys := communityKeysLower(cfg)
 
 	// Add if not already present
-	found := false
-	for _, e := range existing {
-		if e == lower {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(existing, lower)
 	result := existing
 	if !found {
 		result = append(result, lower)
@@ -77,10 +72,8 @@ func FindCommunityForChannel(cfg *config.Config, platform, channelID string) str
 		} else if platform == "telegram" {
 			channels = cc.Telegram.Channels
 		}
-		for _, ch := range channels {
-			if ch == channelID {
-				return cc.Name
-			}
+		if slices.Contains(channels, channelID) {
+			return cc.Name
 		}
 	}
 	return ""
@@ -97,12 +90,7 @@ func IsRegistrationChannel(cfg *config.Config, platform, channelID string) bool 
 	} else if platform == "telegram" {
 		channels = cfg.Telegram.Channels
 	}
-	for _, ch := range channels {
-		if ch == channelID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(channels, channelID)
 }
 
 // CommunityNames returns all configured community names sorted.
@@ -138,7 +126,7 @@ func sortStrings(s []string) []string {
 	if len(s) == 0 {
 		return s
 	}
-	for i := 0; i < len(s); i++ {
+	for i := range s {
 		for j := i + 1; j < len(s); j++ {
 			if s[j] < s[i] {
 				s[i], s[j] = s[j], s[i]

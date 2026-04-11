@@ -62,7 +62,7 @@ func getPlatform(options *raymond.Options) string {
 // ---------------------------------------------------------------------------
 
 func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *EmojiLookup) {
-	raymond.RegisterHelper("pokemonName", func(id interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("pokemonName", func(id any, options *raymond.Options) any {
 		pid := int(toFloat(id))
 		lang := getLang(options)
 		key := fmt.Sprintf("poke_%d", pid)
@@ -73,7 +73,7 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 		return name
 	})
 
-	raymond.RegisterHelper("pokemonNameEng", func(id interface{}) interface{} {
+	raymond.RegisterHelper("pokemonNameEng", func(id any) any {
 		pid := int(toFloat(id))
 		key := fmt.Sprintf("poke_%d", pid)
 		name := bundle.For("en").T(key)
@@ -83,7 +83,7 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 		return name
 	})
 
-	raymond.RegisterHelper("pokemonNameAlt", func(id interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("pokemonNameAlt", func(id any, options *raymond.Options) any {
 		pid := int(toFloat(id))
 		lang := getAltLang(options)
 		key := fmt.Sprintf("poke_%d", pid)
@@ -94,24 +94,24 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 		return name
 	})
 
-	raymond.RegisterHelper("pokemonForm", func(formID interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("pokemonForm", func(formID any, options *raymond.Options) any {
 		fid := int(toFloat(formID))
 		return bundle.For(getLang(options)).T(fmt.Sprintf("form_%d", fid))
 	})
 
-	raymond.RegisterHelper("pokemonFormEng", func(formID interface{}) interface{} {
+	raymond.RegisterHelper("pokemonFormEng", func(formID any) any {
 		fid := int(toFloat(formID))
 		return bundle.For("en").T(fmt.Sprintf("form_%d", fid))
 	})
 
-	raymond.RegisterHelper("pokemonFormAlt", func(formID interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("pokemonFormAlt", func(formID any, options *raymond.Options) any {
 		fid := int(toFloat(formID))
 		return bundle.For(getAltLang(options)).T(fmt.Sprintf("form_%d", fid))
 	})
 
 	// pokemon — block helper providing rich pokemon context.
 	// Usage: {{#pokemon id}}...{{/pokemon}} or {{#pokemon id formId}}...{{/pokemon}}
-	raymond.RegisterHelper("pokemon", func(id, form interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("pokemon", func(id, form any, options *raymond.Options) any {
 		pid := int(toFloat(id))
 		formID := int(toFloat(form))
 
@@ -134,7 +134,7 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 		fullNameEng := buildFullName(nameEng, formNameEng, formNameEng)
 
 		var typeNames, typeNamesEng, typeEmoji []string
-		baseStats := map[string]interface{}{
+		baseStats := map[string]any{
 			"baseAttack": 0, "baseDefense": 0, "baseStamina": 0,
 		}
 		hasEvolutions := false
@@ -156,7 +156,7 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 			}
 		}
 
-		ctx := map[string]interface{}{
+		ctx := map[string]any{
 			"name":          name,
 			"nameEng":       nameEng,
 			"formName":      formName,
@@ -175,22 +175,22 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 		return options.FnWith(ctx)
 	})
 
-	raymond.RegisterHelper("pokemonBaseStats", func(id, form interface{}) interface{} {
+	raymond.RegisterHelper("pokemonBaseStats", func(id, form any) any {
 		if gd == nil {
-			return map[string]interface{}{"baseAttack": 0, "baseDefense": 0, "baseStamina": 0}
+			return map[string]any{"baseAttack": 0, "baseDefense": 0, "baseStamina": 0}
 		}
 		mon := gd.GetMonster(int(toFloat(id)), int(toFloat(form)))
 		if mon == nil {
-			return map[string]interface{}{"baseAttack": 0, "baseDefense": 0, "baseStamina": 0}
+			return map[string]any{"baseAttack": 0, "baseDefense": 0, "baseStamina": 0}
 		}
-		return map[string]interface{}{
+		return map[string]any{
 			"baseAttack":  mon.Attack,
 			"baseDefense": mon.Defense,
 			"baseStamina": mon.Stamina,
 		}
 	})
 
-	raymond.RegisterHelper("calculateCp", func(baseStatsOrID interface{}, args ...interface{}) interface{} {
+	raymond.RegisterHelper("calculateCp", func(baseStatsOrID any, args ...any) any {
 		var baseAtk, baseDef, baseSta int
 		var level float64
 		var ivAtk, ivDef, ivSta int
@@ -208,7 +208,7 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 			ivAtk = int(toFloat(args[1]))
 			ivDef = int(toFloat(args[2]))
 			ivSta = int(toFloat(args[3]))
-		case map[string]interface{}:
+		case map[string]any:
 			if len(args) < 4 {
 				return 10
 			}
@@ -242,10 +242,7 @@ func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *E
 		attack := float64(baseAtk+ivAtk) * cpm
 		defense := float64(baseDef+ivDef) * cpm
 		stamina := float64(baseSta+ivSta) * cpm
-		cp := int(math.Floor(attack * math.Sqrt(defense) * math.Sqrt(stamina) / 10.0))
-		if cp < 10 {
-			cp = 10
-		}
+		cp := max(int(math.Floor(attack*math.Sqrt(defense)*math.Sqrt(stamina)/10.0)), 10)
 		return cp
 	})
 }
@@ -266,19 +263,19 @@ func buildFullName(name, formName, formNameEng string) string {
 // ---------------------------------------------------------------------------
 
 func registerMoveHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *EmojiLookup) {
-	raymond.RegisterHelper("moveName", func(moveID interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("moveName", func(moveID any, options *raymond.Options) any {
 		return bundle.For(getLang(options)).T(fmt.Sprintf("move_%d", int(toFloat(moveID))))
 	})
 
-	raymond.RegisterHelper("moveNameEng", func(moveID interface{}) interface{} {
+	raymond.RegisterHelper("moveNameEng", func(moveID any) any {
 		return bundle.For("en").T(fmt.Sprintf("move_%d", int(toFloat(moveID))))
 	})
 
-	raymond.RegisterHelper("moveNameAlt", func(moveID interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("moveNameAlt", func(moveID any, options *raymond.Options) any {
 		return bundle.For(getAltLang(options)).T(fmt.Sprintf("move_%d", int(toFloat(moveID))))
 	})
 
-	raymond.RegisterHelper("moveType", func(moveID interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("moveType", func(moveID any, options *raymond.Options) any {
 		if gd == nil {
 			return ""
 		}
@@ -289,7 +286,7 @@ func registerMoveHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *Emoj
 		return bundle.For(getLang(options)).T(fmt.Sprintf("poke_type_%d", move.TypeID))
 	})
 
-	raymond.RegisterHelper("moveTypeEng", func(moveID interface{}) interface{} {
+	raymond.RegisterHelper("moveTypeEng", func(moveID any) any {
 		if gd == nil {
 			return ""
 		}
@@ -300,7 +297,7 @@ func registerMoveHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *Emoj
 		return bundle.For("en").T(fmt.Sprintf("poke_type_%d", move.TypeID))
 	})
 
-	raymond.RegisterHelper("moveTypeAlt", func(moveID interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("moveTypeAlt", func(moveID any, options *raymond.Options) any {
 		if gd == nil {
 			return ""
 		}
@@ -312,7 +309,7 @@ func registerMoveHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *Emoj
 	})
 
 	// moveEmoji, moveEmojiEng, moveEmojiAlt — all resolve by type emoji key + platform
-	moveEmojiFunc := func(moveID interface{}, options *raymond.Options) interface{} {
+	moveEmojiFunc := func(moveID any, options *raymond.Options) any {
 		if gd == nil {
 			return ""
 		}
@@ -336,19 +333,19 @@ func registerMoveHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *Emoj
 // ---------------------------------------------------------------------------
 
 func registerMiscGameHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *EmojiLookup, configDir string) {
-	raymond.RegisterHelper("getEmoji", func(key interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("getEmoji", func(key any, options *raymond.Options) any {
 		return emoji.Lookup(toString(key), getPlatform(options))
 	})
 
-	raymond.RegisterHelper("translateAlt", func(text interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("translateAlt", func(text any, options *raymond.Options) any {
 		return bundle.For(getAltLang(options)).T(toString(text))
 	})
 
-	raymond.RegisterHelper("getPowerUpCost", func(startLevel, endLevel interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("getPowerUpCost", func(startLevel, endLevel any, options *raymond.Options) any {
 		start := toFloat(startLevel)
 		end := toFloat(endLevel)
 		stardust, candy, xlCandy := calculatePowerUpCost(gd, start, end)
-		result := map[string]interface{}{
+		result := map[string]any{
 			"stardust": stardust,
 			"candy":    candy,
 			"xlCandy":  xlCandy,
@@ -365,11 +362,11 @@ func registerMiscGameHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *
 
 	customMaps := loadCustomMaps(configDir)
 
-	raymond.RegisterHelper("map", func(mapName, value interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("map", func(mapName, value any, options *raymond.Options) any {
 		return lookupCustomMap(customMaps, toString(mapName), toString(value), "", getLang(options))
 	})
 
-	raymond.RegisterHelper("map2", func(mapName, value, value2 interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("map2", func(mapName, value, value2 any, options *raymond.Options) any {
 		return lookupCustomMap(customMaps, toString(mapName), toString(value), toString(value2), getLang(options))
 	})
 }

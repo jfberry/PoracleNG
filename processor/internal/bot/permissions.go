@@ -2,6 +2,7 @@ package bot
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
 )
@@ -15,12 +16,7 @@ func IsAdmin(cfg *config.Config, platform, userID string) bool {
 	case "telegram":
 		admins = cfg.Telegram.Admins
 	}
-	for _, a := range admins {
-		if a == userID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(admins, userID)
 }
 
 // CommandAllowed checks [discord] command_security for a command.
@@ -48,18 +44,14 @@ func CommandAllowed(cfg *config.Config, platform, cmdKey string, userID string, 
 	}
 
 	// Check user ID directly
-	for _, id := range allowedIDs {
-		if id == userID {
-			return true
-		}
+	if slices.Contains(allowedIDs, userID) {
+		return true
 	}
 
 	// Check user roles
 	for _, role := range userRoles {
-		for _, id := range allowedIDs {
-			if id == role {
-				return true
-			}
+		if slices.Contains(allowedIDs, role) {
+			return true
 		}
 	}
 
@@ -219,26 +211,17 @@ func CheckFeaturePermission(cfg *config.Config, platform, featureKey, userID str
 	if !ok || len(allowedIDs) == 0 {
 		return true // not restricted
 	}
-	for _, id := range allowedIDs {
-		if id == userID {
-			return true
-		}
+	if slices.Contains(allowedIDs, userID) {
+		return true
 	}
 	for _, role := range userRoles {
-		for _, id := range allowedIDs {
-			if id == role {
-				return true
-			}
+		if slices.Contains(allowedIDs, role) {
+			return true
 		}
 	}
 	return false
 }
 
 func containsStr(slice []string, s string) bool {
-	for _, v := range slice {
-		if v == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, s)
 }

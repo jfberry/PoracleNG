@@ -2,6 +2,7 @@ package dts
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -52,9 +53,7 @@ func (e *EmojiLookup) Defaults() map[string]string {
 		return nil
 	}
 	out := make(map[string]string, len(e.defaults))
-	for k, v := range e.defaults {
-		out[k] = v
-	}
+	maps.Copy(out, e.defaults)
 	return out
 }
 
@@ -66,9 +65,7 @@ func (e *EmojiLookup) PlatformOverrides() map[string]map[string]string {
 	out := make(map[string]map[string]string, len(e.custom))
 	for p, m := range e.custom {
 		inner := make(map[string]string, len(m))
-		for k, v := range m {
-			inner[k] = v
-		}
+		maps.Copy(inner, m)
 		out[p] = inner
 	}
 	return out
@@ -82,13 +79,9 @@ func (e *EmojiLookup) MergedFor(platform string) map[string]string {
 		return nil
 	}
 	out := make(map[string]string, len(e.defaults))
-	for k, v := range e.defaults {
-		out[k] = v
-	}
+	maps.Copy(out, e.defaults)
 	if platformMap, ok := e.custom[platform]; ok {
-		for k, v := range platformMap {
-			out[k] = v
-		}
+		maps.Copy(out, platformMap)
 	}
 	return out
 }

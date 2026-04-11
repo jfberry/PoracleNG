@@ -1,6 +1,7 @@
 package nlp
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -56,13 +57,7 @@ func TestMatchFiltersSynonyms(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := matchFilters(tt.tokens, tt.intent)
-			found := false
-			for _, f := range r.Filters {
-				if f == tt.wantAny {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(r.Filters, tt.wantAny)
 			if !found {
 				t.Errorf("matchFilters(%v, %q) filters=%v, want to contain %q", tt.tokens, tt.intent, r.Filters, tt.wantAny)
 			}
@@ -120,13 +115,7 @@ func TestMatchFiltersPVP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := matchFilters(tt.tokens, "track")
-			found := false
-			for _, f := range r.Filters {
-				if f == tt.want {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(r.Filters, tt.want)
 			if !found {
 				t.Errorf("matchFilters(%v, track) = %v, want to contain %q", tt.tokens, r.Filters, tt.want)
 			}

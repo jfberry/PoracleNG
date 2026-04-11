@@ -1,6 +1,7 @@
 package enrichment
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -134,9 +135,7 @@ func (e *Enricher) createPvpDisplay(leagueCap int, rawEntries any, minCP int, fi
 
 		displayRank := make(map[string]any, len(rank)+3)
 		// Copy all pre-enriched fields
-		for k, v := range rank {
-			displayRank[k] = v
-		}
+		maps.Copy(displayRank, rank)
 
 		// Ensure numeric fields are properly typed
 		displayRank["rank"] = rankVal

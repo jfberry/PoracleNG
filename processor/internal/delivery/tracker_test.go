@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -220,13 +221,7 @@ func TestTrackerLoadExpiredClean(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	deleted := mock.getDeleted()
-	found := false
-	for _, d := range deleted {
-		if d == "expired-msg" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(deleted, "expired-msg")
 	if !found {
 		t.Errorf("expected expired-msg to be deleted on load, got deletions: %v", deleted)
 	}

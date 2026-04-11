@@ -4,6 +4,7 @@
 package community
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
@@ -90,11 +91,8 @@ func RemoveCommunity(communities []config.CommunityConfig, existing []string, to
 func IsTelegramCommunityAdmin(communities []config.CommunityConfig, telegramID string) []string {
 	var result []string
 	for _, comm := range communities {
-		for _, admin := range comm.Telegram.Admins {
-			if admin == telegramID {
-				result = append(result, strings.ToLower(comm.Name))
-				break
-			}
+		if slices.Contains(comm.Telegram.Admins, telegramID) {
+			result = append(result, strings.ToLower(comm.Name))
 		}
 	}
 	return result

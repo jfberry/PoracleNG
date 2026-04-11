@@ -134,7 +134,7 @@ func TestTokenBucketConsume(t *testing.T) {
 	tb := newTokenBucket(5, 10)
 
 	// Should be able to consume 5 tokens immediately.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if !tb.tryConsume() {
 			t.Errorf("tryConsume() #%d should succeed", i+1)
 		}
@@ -150,7 +150,7 @@ func TestTokenBucketRefill(t *testing.T) {
 	tb := newTokenBucket(5, 100) // 100 tokens/sec for fast test
 
 	// Drain the bucket.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tb.tryConsume()
 	}
 	if tb.tryConsume() {

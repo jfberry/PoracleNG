@@ -43,14 +43,14 @@ func (ts *TelegramSender) WaitForRateLimit(target string) {}
 
 // telegramMessage holds the parsed fields from a Telegram job message.
 type telegramMessage struct {
-	Content        string      `json:"content"`
-	Sticker        string      `json:"sticker"`
-	Photo          string      `json:"photo"`
-	SendOrder      interface{} `json:"send_order"`
-	ParseMode      string      `json:"parse_mode"`
-	WebpagePreview bool        `json:"webpage_preview"`
-	Location       bool        `json:"location"`
-	Venue          *venue      `json:"venue"`
+	Content        string `json:"content"`
+	Sticker        string `json:"sticker"`
+	Photo          string `json:"photo"`
+	SendOrder      any    `json:"send_order"`
+	ParseMode      string `json:"parse_mode"`
+	WebpagePreview bool   `json:"webpage_preview"`
+	Location       bool   `json:"location"`
+	Venue          *venue `json:"venue"`
 }
 
 type venue struct {
@@ -159,7 +159,7 @@ func (ts *TelegramSender) Delete(ctx context.Context, sentID string) error {
 		return err
 	}
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":    chatID,
 		"message_id": messageID,
 	}
@@ -197,11 +197,11 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 
 	parseMode := normalizeTelegramParseMode(editMsg.ParseMode)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":                  chatID,
-		"message_id":              messageID,
-		"text":                    editMsg.Content,
-		"parse_mode":             parseMode,
+		"message_id":               messageID,
+		"text":                     editMsg.Content,
+		"parse_mode":               parseMode,
 		"disable_web_page_preview": true,
 	}
 	resp, err := ts.doPost(ctx, "editMessageText", body)
@@ -219,10 +219,10 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 
 // sendMessage sends a text message.
 func (ts *TelegramSender) sendMessage(ctx context.Context, chatID, text, parseMode string, webpagePreview bool) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":                  chatID,
-		"text":                    text,
-		"parse_mode":             parseMode,
+		"text":                     text,
+		"parse_mode":               parseMode,
 		"disable_web_page_preview": !webpagePreview,
 	}
 	return ts.callWithRetry(ctx, "sendMessage", body)
@@ -230,9 +230,9 @@ func (ts *TelegramSender) sendMessage(ctx context.Context, chatID, text, parseMo
 
 // sendSticker sends a sticker.
 func (ts *TelegramSender) sendSticker(ctx context.Context, chatID, stickerID string) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":              chatID,
-		"sticker":             stickerID,
+		"sticker":              stickerID,
 		"disable_notification": true,
 	}
 	return ts.callWithRetry(ctx, "sendSticker", body)
@@ -240,9 +240,9 @@ func (ts *TelegramSender) sendSticker(ctx context.Context, chatID, stickerID str
 
 // sendPhoto sends a photo by URL.
 func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID, photoURL string) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":              chatID,
-		"photo":               photoURL,
+		"photo":                photoURL,
 		"disable_notification": true,
 	}
 	return ts.callWithRetry(ctx, "sendPhoto", body)
@@ -250,10 +250,10 @@ func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID, photoURL string
 
 // sendLocation sends a location.
 func (ts *TelegramSender) sendLocation(ctx context.Context, chatID string, lat, lon float64) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":              chatID,
-		"latitude":            lat,
-		"longitude":           lon,
+		"latitude":             lat,
+		"longitude":            lon,
 		"disable_notification": true,
 	}
 	return ts.callWithRetry(ctx, "sendLocation", body)
@@ -261,19 +261,19 @@ func (ts *TelegramSender) sendLocation(ctx context.Context, chatID string, lat, 
 
 // sendVenue sends a venue.
 func (ts *TelegramSender) sendVenue(ctx context.Context, chatID string, lat, lon float64, title, address string, disableNotification bool) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":              chatID,
-		"latitude":            lat,
-		"longitude":           lon,
-		"title":               title,
-		"address":             address,
+		"latitude":             lat,
+		"longitude":            lon,
+		"title":                title,
+		"address":              address,
 		"disable_notification": disableNotification,
 	}
 	return ts.callWithRetry(ctx, "sendVenue", body)
 }
 
 // callWithRetry posts to a Telegram API method with retry logic.
-func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body map[string]interface{}) (int, error) {
+func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body map[string]any) (int, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return 0, fmt.Errorf("marshaling request body: %w", err)
@@ -356,7 +356,7 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 }
 
 // doPost marshals body to JSON and posts to the Telegram API.
-func (ts *TelegramSender) doPost(ctx context.Context, method string, body interface{}) (*http.Response, error) {
+func (ts *TelegramSender) doPost(ctx context.Context, method string, body any) (*http.Response, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling request body: %w", err)
@@ -386,13 +386,13 @@ func (ts *TelegramSender) hasStepAfter(order []string, currentIdx int, step stri
 }
 
 // parseSendOrder parses the send_order field which can be a []string, a delimited string, or nil.
-func parseSendOrder(raw interface{}) []string {
+func parseSendOrder(raw any) []string {
 	if raw == nil {
 		return defaultSendOrder
 	}
 
 	switch v := raw.(type) {
-	case []interface{}:
+	case []any:
 		result := make([]string, 0, len(v))
 		for _, item := range v {
 			if s, ok := item.(string); ok {

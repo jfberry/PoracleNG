@@ -121,7 +121,7 @@ func init() {
 }
 
 // renderWithData renders a template with a context and private data frame.
-func renderWithData(t *testing.T, source string, ctx interface{}, data map[string]interface{}) string {
+func renderWithData(t *testing.T, source string, ctx any, data map[string]any) string {
 	t.Helper()
 	tpl, err := raymond.Parse(source)
 	if err != nil {
@@ -143,8 +143,8 @@ func renderWithData(t *testing.T, source string, ctx interface{}, data map[strin
 // ---------------------------------------------------------------------------
 
 func TestPokemonName(t *testing.T) {
-	ctx := map[string]interface{}{"id": 1}
-	data := map[string]interface{}{"language": "en"}
+	ctx := map[string]any{"id": 1}
+	data := map[string]any{"language": "en"}
 
 	got := renderWithData(t, `{{pokemonName id}}`, ctx, data)
 	if got != "Bulbasaur" {
@@ -160,8 +160,8 @@ func TestPokemonName(t *testing.T) {
 }
 
 func TestPokemonNameUnknown(t *testing.T) {
-	ctx := map[string]interface{}{"id": 99999}
-	data := map[string]interface{}{"language": "en"}
+	ctx := map[string]any{"id": 99999}
+	data := map[string]any{"language": "en"}
 
 	got := renderWithData(t, `{{pokemonName id}}`, ctx, data)
 	if got != "99999" {
@@ -170,7 +170,7 @@ func TestPokemonNameUnknown(t *testing.T) {
 }
 
 func TestPokemonNameEng(t *testing.T) {
-	ctx := map[string]interface{}{"id": 1}
+	ctx := map[string]any{"id": 1}
 	got := renderWithData(t, `{{pokemonNameEng id}}`, ctx, nil)
 	if got != "Bulbasaur" {
 		t.Errorf("pokemonNameEng: got %q, want %q", got, "Bulbasaur")
@@ -178,8 +178,8 @@ func TestPokemonNameEng(t *testing.T) {
 }
 
 func TestPokemonNameAlt(t *testing.T) {
-	ctx := map[string]interface{}{"id": 1}
-	data := map[string]interface{}{"altLanguage": "de"}
+	ctx := map[string]any{"id": 1}
+	data := map[string]any{"altLanguage": "de"}
 
 	got := renderWithData(t, `{{pokemonNameAlt id}}`, ctx, data)
 	if got != "Bisasam" {
@@ -188,7 +188,7 @@ func TestPokemonNameAlt(t *testing.T) {
 }
 
 func TestPokemonNameAltFallback(t *testing.T) {
-	ctx := map[string]interface{}{"id": 1}
+	ctx := map[string]any{"id": 1}
 	// No altLanguage set → should fall back to "en"
 	got := renderWithData(t, `{{pokemonNameAlt id}}`, ctx, nil)
 	if got != "Bulbasaur" {
@@ -197,8 +197,8 @@ func TestPokemonNameAltFallback(t *testing.T) {
 }
 
 func TestPokemonForm(t *testing.T) {
-	ctx := map[string]interface{}{"form": 46}
-	data := map[string]interface{}{"language": "de"}
+	ctx := map[string]any{"form": 46}
+	data := map[string]any{"language": "de"}
 
 	got := renderWithData(t, `{{pokemonForm form}}`, ctx, data)
 	if got != "Alola" {
@@ -207,7 +207,7 @@ func TestPokemonForm(t *testing.T) {
 }
 
 func TestPokemonFormEng(t *testing.T) {
-	ctx := map[string]interface{}{"form": 65}
+	ctx := map[string]any{"form": 65}
 	got := renderWithData(t, `{{pokemonFormEng form}}`, ctx, nil)
 	if got != "Galarian" {
 		t.Errorf("pokemonFormEng: got %q, want %q", got, "Galarian")
@@ -219,8 +219,8 @@ func TestPokemonFormEng(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestPokemonBlockHelper(t *testing.T) {
-	ctx := map[string]interface{}{"id": 1, "form": 0}
-	data := map[string]interface{}{"language": "en", "platform": "discord"}
+	ctx := map[string]any{"id": 1, "form": 0}
+	data := map[string]any{"language": "en", "platform": "discord"}
 
 	got := renderWithData(t, `{{#pokemon id form}}{{name}} ATK:{{baseStats.baseAttack}}{{/pokemon}}`, ctx, data)
 	if got != "Bulbasaur ATK:118" {
@@ -230,8 +230,8 @@ func TestPokemonBlockHelper(t *testing.T) {
 
 func TestPokemonBlockHelperFullName(t *testing.T) {
 	// Bulbasaur form 65 (Galarian) — not "Normal" so should include form
-	ctx := map[string]interface{}{"id": 1, "form": 65}
-	data := map[string]interface{}{"language": "en", "platform": "discord"}
+	ctx := map[string]any{"id": 1, "form": 65}
+	data := map[string]any{"language": "en", "platform": "discord"}
 
 	got := renderWithData(t, `{{#pokemon id form}}{{fullName}}{{/pokemon}}`, ctx, data)
 	if got != "Bulbasaur (Galarian)" {
@@ -241,8 +241,8 @@ func TestPokemonBlockHelperFullName(t *testing.T) {
 
 func TestPokemonBlockHelperFormZero(t *testing.T) {
 	// form=0 → should still work
-	ctx := map[string]interface{}{"id": 25, "form": 0}
-	data := map[string]interface{}{"language": "en", "platform": "discord"}
+	ctx := map[string]any{"id": 25, "form": 0}
+	data := map[string]any{"language": "en", "platform": "discord"}
 
 	got := renderWithData(t, `{{#pokemon id form}}{{name}}{{/pokemon}}`, ctx, data)
 	if got != "Pikachu" {
@@ -251,8 +251,8 @@ func TestPokemonBlockHelperFormZero(t *testing.T) {
 }
 
 func TestPokemonBlockHasEvolutions(t *testing.T) {
-	ctx := map[string]interface{}{"id": 1, "form": 0}
-	data := map[string]interface{}{"language": "en", "platform": "discord"}
+	ctx := map[string]any{"id": 1, "form": 0}
+	data := map[string]any{"language": "en", "platform": "discord"}
 
 	got := renderWithData(t, `{{#pokemon id form}}{{#if hasEvolutions}}evolves{{else}}no{{/if}}{{/pokemon}}`, ctx, data)
 	if got != "evolves" {
@@ -277,7 +277,7 @@ func TestCalculateCp(t *testing.T) {
 	// stamina = (214+15)*0.5974 = 136.804
 	// CP = floor(188.181 * sqrt(117.688) * sqrt(136.804) / 10) = floor(188.181 * 10.849 * 11.697 / 10)
 	// = floor(188.181 * 126.896 / 10) = floor(23880.8 / 10) ≈ floor(2388.08) = 2387
-	ctx := map[string]interface{}{"id": 150, "form": 0}
+	ctx := map[string]any{"id": 150, "form": 0}
 
 	got := renderWithData(t, `{{calculateCp id form 20 15 15 15}}`, ctx, nil)
 	// Validate it's a reasonable CP for Mewtwo
@@ -288,7 +288,7 @@ func TestCalculateCp(t *testing.T) {
 
 func TestCalculateCpMinimum(t *testing.T) {
 	// Very low stats → should return at least 10
-	ctx := map[string]interface{}{}
+	ctx := map[string]any{}
 	got := renderWithData(t, `{{calculateCp 0 0 1 0 0 0}}`, ctx, nil)
 	if got != "10" {
 		t.Errorf("calculateCp minimum: got %q, want %q", got, "10")
@@ -297,7 +297,7 @@ func TestCalculateCpMinimum(t *testing.T) {
 
 func TestCalculateCpWithBaseStatsMap(t *testing.T) {
 	// Same Mewtwo calculation but passing baseStats as map[string]int (enrichment format)
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"baseStats": map[string]int{
 			"baseAttack":  300,
 			"baseDefense": 182,
@@ -315,8 +315,8 @@ func TestCalculateCpWithBaseStatsMap(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMoveName(t *testing.T) {
-	ctx := map[string]interface{}{"move": 14}
-	data := map[string]interface{}{"language": "en"}
+	ctx := map[string]any{"move": 14}
+	data := map[string]any{"language": "en"}
 
 	got := renderWithData(t, `{{moveName move}}`, ctx, data)
 	if got != "Hyper Beam" {
@@ -331,7 +331,7 @@ func TestMoveName(t *testing.T) {
 }
 
 func TestMoveNameEng(t *testing.T) {
-	ctx := map[string]interface{}{"move": 281}
+	ctx := map[string]any{"move": 281}
 	got := renderWithData(t, `{{moveNameEng move}}`, ctx, nil)
 	if got != "Razor Leaf" {
 		t.Errorf("moveNameEng: got %q, want %q", got, "Razor Leaf")
@@ -339,8 +339,8 @@ func TestMoveNameEng(t *testing.T) {
 }
 
 func TestMoveType(t *testing.T) {
-	ctx := map[string]interface{}{"move": 281}
-	data := map[string]interface{}{"language": "en"}
+	ctx := map[string]any{"move": 281}
+	data := map[string]any{"language": "en"}
 
 	got := renderWithData(t, `{{moveType move}}`, ctx, data)
 	if got != "Grass" {
@@ -355,10 +355,10 @@ func TestMoveType(t *testing.T) {
 }
 
 func TestMoveEmoji(t *testing.T) {
-	ctx := map[string]interface{}{"move": 281}
+	ctx := map[string]any{"move": 281}
 
 	// Discord platform (default)
-	data := map[string]interface{}{"platform": "discord"}
+	data := map[string]any{"platform": "discord"}
 	got := renderWithData(t, `{{moveEmoji move}}`, ctx, data)
 	if got != "🌿" {
 		t.Errorf("moveEmoji discord: got %q, want %q", got, "🌿")
@@ -373,8 +373,8 @@ func TestMoveEmoji(t *testing.T) {
 }
 
 func TestMoveTypeUnknownMove(t *testing.T) {
-	ctx := map[string]interface{}{"move": 99999}
-	data := map[string]interface{}{"language": "en"}
+	ctx := map[string]any{"move": 99999}
+	data := map[string]any{"language": "en"}
 
 	got := renderWithData(t, `{{moveType move}}`, ctx, data)
 	if got != "" {
@@ -387,8 +387,8 @@ func TestMoveTypeUnknownMove(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetEmoji(t *testing.T) {
-	ctx := map[string]interface{}{}
-	data := map[string]interface{}{"platform": "discord"}
+	ctx := map[string]any{}
+	data := map[string]any{"platform": "discord"}
 
 	got := renderWithData(t, `{{getEmoji "type_psychic"}}`, ctx, data)
 	if got != "🔮" {
@@ -397,10 +397,10 @@ func TestGetEmoji(t *testing.T) {
 }
 
 func TestGetEmojiPerPlatform(t *testing.T) {
-	ctx := map[string]interface{}{}
+	ctx := map[string]any{}
 
 	// Telegram has custom override for type_grass
-	data := map[string]interface{}{"platform": "telegram"}
+	data := map[string]any{"platform": "telegram"}
 	got := renderWithData(t, `{{getEmoji "type_grass"}}`, ctx, data)
 	if got != "🍃" {
 		t.Errorf("getEmoji telegram custom: got %q, want %q", got, "🍃")
@@ -419,8 +419,8 @@ func TestGetEmojiPerPlatform(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTranslateAlt(t *testing.T) {
-	ctx := map[string]interface{}{}
-	data := map[string]interface{}{"altLanguage": "de"}
+	ctx := map[string]any{}
+	data := map[string]any{"altLanguage": "de"}
 
 	got := renderWithData(t, `{{translateAlt "greeting"}}`, ctx, data)
 	if got != "Hallo" {
@@ -429,7 +429,7 @@ func TestTranslateAlt(t *testing.T) {
 }
 
 func TestTranslateAltFallbackEn(t *testing.T) {
-	ctx := map[string]interface{}{}
+	ctx := map[string]any{}
 	// No altLanguage → falls back to "en"
 	got := renderWithData(t, `{{translateAlt "greeting"}}`, ctx, nil)
 	if got != "Hello" {
@@ -442,7 +442,7 @@ func TestTranslateAltFallbackEn(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetPowerUpCostInline(t *testing.T) {
-	ctx := map[string]interface{}{}
+	ctx := map[string]any{}
 	// Level 1 to 2 = two power-ups (1.0 and 1.5), each 200 stardust, 1 candy
 	got := renderWithData(t, `{{getPowerUpCost 1 2}}`, ctx, nil)
 	expected := "400 stardust, 2 candy, 0 XL candy"
@@ -452,7 +452,7 @@ func TestGetPowerUpCostInline(t *testing.T) {
 }
 
 func TestGetPowerUpCostBlock(t *testing.T) {
-	ctx := map[string]interface{}{}
+	ctx := map[string]any{}
 	got := renderWithData(t, `{{#getPowerUpCost 1 2}}SD:{{stardust}} C:{{candy}} XL:{{xlCandy}}{{/getPowerUpCost}}`, ctx, nil)
 	expected := "SD:400 C:2 XL:0"
 	if got != expected {
@@ -461,7 +461,7 @@ func TestGetPowerUpCostBlock(t *testing.T) {
 }
 
 func TestGetPowerUpCostBlockWithAddCommas(t *testing.T) {
-	ctx := map[string]interface{}{}
+	ctx := map[string]any{}
 	got := renderWithData(t, `{{#getPowerUpCost 1 40}}{{addCommas stardust}} stardust & {{candy}} candy{{/getPowerUpCost}}`, ctx, nil)
 	if got == "" {
 		t.Error("getPowerUpCost block with addCommas: got empty")
@@ -475,9 +475,9 @@ func TestGetPowerUpCostBlockWithAddCommas(t *testing.T) {
 // cause infinite recursion. This reproduces the exact DTS template pattern:
 // {{#each pvp_rankings}}...{{getPowerUpCost ../level this.level}}...{{/each}}
 func TestGetPowerUpCostInlineInsideEach(t *testing.T) {
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"baseLevel": 25,
-		"rankings": []map[string]interface{}{
+		"rankings": []map[string]any{
 			{"targetLevel": 40, "name": "First"},
 			{"targetLevel": 50, "name": "Second"},
 		},
@@ -499,9 +499,9 @@ func TestGetPowerUpCostInlineInsideEach(t *testing.T) {
 // Same test but as a subexpression: (getPowerUpCost ...) inside {{#each}}
 // This matches the user's DTS pattern: {{{replace (getPowerUpCost ../level this.level) ...}}}
 func TestGetPowerUpCostSubexpressionInsideEach(t *testing.T) {
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"baseLevel": 25,
-		"rankings": []map[string]interface{}{
+		"rankings": []map[string]any{
 			{"targetLevel": 40},
 		},
 	}

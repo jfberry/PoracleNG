@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 
@@ -22,9 +23,7 @@ func HandleTemplateConfig(ts *dts.TemplateStore) gin.HandlerFunc {
 		metadata := ts.TemplateMetadata(includeDescriptions)
 
 		resp := map[string]any{"status": "ok"}
-		for k, v := range metadata {
-			resp[k] = v
-		}
+		maps.Copy(resp, metadata)
 		c.JSON(http.StatusOK, resp)
 	}
 }

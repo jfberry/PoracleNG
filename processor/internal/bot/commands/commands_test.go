@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -36,7 +37,7 @@ func testCtx(t *testing.T) (*bot.CommandContext, *store.MockHumanStore) {
 		Platform:     "discord",
 		ChannelID:    "ch1",
 		IsDM:         true,
-		Language:      "en",
+		Language:     "en",
 		ProfileNo:    1,
 		TargetID:     "user1",
 		TargetName:   "TestUser",
@@ -93,10 +94,8 @@ func findStr(s, sub string) bool {
 // assertCall checks that a specific method was called on the mock store.
 func assertCall(t *testing.T, mock *store.MockHumanStore, method string) {
 	t.Helper()
-	for _, c := range mock.Calls {
-		if c == method {
-			return
-		}
+	if slices.Contains(mock.Calls, method) {
+		return
 	}
 	t.Errorf("expected store method %q to be called, calls were: %v", method, mock.Calls)
 }
@@ -104,10 +103,8 @@ func assertCall(t *testing.T, mock *store.MockHumanStore, method string) {
 // assertNoCall checks that a specific method was NOT called.
 func assertNoCall(t *testing.T, mock *store.MockHumanStore, method string) {
 	t.Helper()
-	for _, c := range mock.Calls {
-		if c == method {
-			t.Errorf("expected store method %q NOT to be called, but it was", method)
-			return
-		}
+	if slices.Contains(mock.Calls, method) {
+		t.Errorf("expected store method %q NOT to be called, but it was", method)
+		return
 	}
 }

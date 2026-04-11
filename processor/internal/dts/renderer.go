@@ -603,7 +603,7 @@ func mapKeys(m map[string]map[string]any) []string {
 // safeExecWith wraps raymond Template.ExecWith with panic recovery.
 // Malformed templates can cause panics in raymond (e.g. nil Options in helpers).
 // This converts those panics into errors so a bad template doesn't crash the process.
-func safeExecWith(tmpl *raymond.Template, ctx interface{}, df *raymond.DataFrame) (result string, err error) {
+func safeExecWith(tmpl *raymond.Template, ctx any, df *raymond.DataFrame) (result string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("template panic: %v", r)

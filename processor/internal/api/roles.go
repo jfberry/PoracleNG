@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/gin-gonic/gin"
@@ -269,11 +270,8 @@ func HandleGetAdministrationRoles(deps *RoleDeps) gin.HandlerFunc {
 
 				for webhookName, allowedIDs := range da.WebhookTracking {
 					// Check by user ID
-					for _, aid := range allowedIDs {
-						if aid == id {
-							discord.Webhooks = append(discord.Webhooks, webhookName)
-							break
-						}
+					if slices.Contains(allowedIDs, id) {
+						discord.Webhooks = append(discord.Webhooks, webhookName)
 					}
 					// Check by role
 					if !contains(discord.Webhooks, webhookName) {
@@ -318,22 +316,16 @@ func HandleGetAdministrationRoles(deps *RoleDeps) gin.HandlerFunc {
 			// Channel tracking — Telegram uses user ID only (no roles)
 			if len(tda.ChannelTracking) > 0 {
 				for channelID, allowedIDs := range tda.ChannelTracking {
-					for _, aid := range allowedIDs {
-						if aid == id {
-							telegram.Channels = append(telegram.Channels, channelID)
-							break
-						}
+					if slices.Contains(allowedIDs, id) {
+						telegram.Channels = append(telegram.Channels, channelID)
 					}
 				}
 			}
 
 			// User tracking
 			if len(tda.UserTracking) > 0 {
-				for _, aid := range tda.UserTracking {
-					if aid == id {
-						telegram.Users = true
-						break
-					}
+				if slices.Contains(tda.UserTracking, id) {
+					telegram.Users = true
 				}
 			}
 
@@ -368,10 +360,5 @@ func containsAny(allowed []string, set map[string]bool) bool {
 
 // contains checks if a string slice contains a value.
 func contains(slice []string, val string) bool {
-	for _, s := range slice {
-		if s == val {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, val)
 }

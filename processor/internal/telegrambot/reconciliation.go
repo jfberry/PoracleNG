@@ -2,6 +2,7 @@ package telegrambot
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -221,7 +222,7 @@ func (r *TelegramReconciliation) reconcileNonAreaSecurity(id string, user *db.Hu
 
 	if before && after {
 		if syncNames && user.Name != name && name != "" {
-			bot.UpdateHuman(r.db, id, map[string]interface{}{"name": name})
+			bot.UpdateHuman(r.db, id, map[string]any{"name": name})
 		}
 	}
 }
@@ -289,7 +290,7 @@ func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *db.Human
 	}
 
 	if before && after {
-		updates := make(map[string]interface{})
+		updates := make(map[string]any)
 		if syncNames && user.Name != name && name != "" {
 			updates["name"] = name
 		}
@@ -330,7 +331,7 @@ func (r *TelegramReconciliation) UpdateTelegramChannels() {
 				existing := bot.ParseJSONStringSlice(user.AreaRestriction.ValueOrZero())
 				if !bot.HaveSameContents(areaRestriction, existing) {
 					areaRestrictionJSON, _ := json.Marshal(areaRestriction)
-					bot.UpdateHuman(r.db, user.ID, map[string]interface{}{
+					bot.UpdateHuman(r.db, user.ID, map[string]any{
 						"area_restriction": string(areaRestrictionJSON),
 					})
 					r.log.Infof("Update channel %s %s", user.ID, user.Name)
@@ -488,23 +489,15 @@ func extractTelegramText(raw map[string]json.RawMessage) string {
 
 // isTelegramAdminID checks if a user ID is in the Telegram admin list.
 func isTelegramAdminID(cfg *config.Config, id string) bool {
-	for _, admin := range cfg.Telegram.Admins {
-		if admin == id {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(cfg.Telegram.Admins, id)
 }
 
 // hasAnyChannel checks if any channel in the user's list matches a configured channel.
 func hasAnyChannel(userChannels, configuredChannels []string) bool {
 	for _, uc := range userChannels {
-		for _, cc := range configuredChannels {
-			if uc == cc {
-				return true
-			}
+		if slices.Contains(configuredChannels, uc) {
+			return true
 		}
 	}
 	return false
 }
-

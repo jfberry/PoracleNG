@@ -138,67 +138,84 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	if !cfg.DisablePokemon {
 		if v, err := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			monsters = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 	}
 	if !cfg.DisableRaid {
 		if v, err := ctx.Tracking.Raids.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			raidList = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 		if v, err := ctx.Tracking.Eggs.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			eggList = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 	}
 	if !cfg.DisableQuest {
 		if v, err := ctx.Tracking.Quests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			questList = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 	}
 	if !cfg.DisableInvasion {
 		if v, err := ctx.Tracking.Invasions.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			invasionList = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 	}
 	if !cfg.DisableLure {
 		if v, err := ctx.Tracking.Lures.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			lureList = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 	}
 	if !cfg.DisableGym {
 		if v, err := ctx.Tracking.Gyms.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			gymList = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 	}
 	if !cfg.DisableNest {
 		if v, err := ctx.Tracking.Nests.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			nestList = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 	}
 	if !cfg.DisableFortUpdate {
 		if v, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			fortList = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 	}
 	if !cfg.DisableMaxBattle {
 		if v, err := ctx.Tracking.Maxbattles.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo); err == nil {
 			maxbattleList = v
-			for i := range v { updateMaxUID(v[i].UID) }
+			for i := range v {
+				updateMaxUID(v[i].UID)
+			}
 		}
 	}
 
 	// Compute padding width from max UID
-	idWidth := len(fmt.Sprintf("%d", maxUID))
-	if idWidth < 1 {
-		idWidth = 1
-	}
+	idWidth := max(len(fmt.Sprintf("%d", maxUID)), 1)
 	fmtID := func(uid int64) string {
 		return fmt.Sprintf("[id:%*d] ", idWidth, uid)
 	}

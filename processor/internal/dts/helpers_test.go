@@ -12,7 +12,7 @@ func init() {
 }
 
 // render is a test helper that compiles and executes a template with a context.
-func render(t *testing.T, source string, ctx interface{}) string {
+func render(t *testing.T, source string, ctx any) string {
 	t.Helper()
 	result, err := raymond.Render(source, ctx)
 	if err != nil {
@@ -26,7 +26,7 @@ func render(t *testing.T, source string, ctx interface{}) string {
 // ---------------------------------------------------------------------------
 
 func TestEq(t *testing.T) {
-	ctx := map[string]interface{}{"a": "hello", "b": "hello", "n": 42}
+	ctx := map[string]any{"a": "hello", "b": "hello", "n": 42}
 
 	// Block mode: {{#eq ...}}...{{else}}...{{/eq}}
 	got := render(t, `{{#eq a b}}yes{{else}}no{{/eq}}`, ctx)
@@ -54,7 +54,7 @@ func TestEq(t *testing.T) {
 }
 
 func TestIsnt(t *testing.T) {
-	ctx := map[string]interface{}{"a": "foo", "b": "bar"}
+	ctx := map[string]any{"a": "foo", "b": "bar"}
 
 	// Block mode
 	got := render(t, `{{#isnt a b}}different{{else}}same{{/isnt}}`, ctx)
@@ -74,7 +74,7 @@ func TestIsnt(t *testing.T) {
 }
 
 func TestCompare(t *testing.T) {
-	ctx := map[string]interface{}{"x": 10, "y": 20}
+	ctx := map[string]any{"x": 10, "y": 20}
 
 	tests := []struct {
 		tmpl string
@@ -97,7 +97,7 @@ func TestCompare(t *testing.T) {
 }
 
 func TestGtGteLtLte(t *testing.T) {
-	ctx := map[string]interface{}{"a": 5, "b": 10}
+	ctx := map[string]any{"a": 5, "b": 10}
 
 	// Block mode
 	if got := render(t, `{{#gt b a}}yes{{else}}no{{/gt}}`, ctx); got != "yes" {
@@ -126,7 +126,7 @@ func TestGtGteLtLte(t *testing.T) {
 }
 
 func TestAndOr(t *testing.T) {
-	ctx := map[string]interface{}{"t": true, "f": false, "s": "hello", "e": ""}
+	ctx := map[string]any{"t": true, "f": false, "s": "hello", "e": ""}
 
 	if got := render(t, `{{#and t s}}yes{{else}}no{{/and}}`, ctx); got != "yes" {
 		t.Errorf("and both truthy: got %q", got)
@@ -167,8 +167,8 @@ func TestAndOr(t *testing.T) {
 	}
 
 	// Variadic with array values (like PVP lists)
-	pvpCtx := map[string]interface{}{
-		"pvpGreat":  []map[string]interface{}{{"rank": 1}},
+	pvpCtx := map[string]any{
+		"pvpGreat":  []map[string]any{{"rank": 1}},
 		"pvpUltra":  nil,
 		"pvpLittle": nil,
 	}
@@ -178,7 +178,7 @@ func TestAndOr(t *testing.T) {
 }
 
 func TestNot(t *testing.T) {
-	ctx := map[string]interface{}{"f": false, "t": true}
+	ctx := map[string]any{"f": false, "t": true}
 	if got := render(t, `{{#not f}}yes{{else}}no{{/not}}`, ctx); got != "yes" {
 		t.Errorf("not false: got %q", got)
 	}
@@ -188,7 +188,7 @@ func TestNot(t *testing.T) {
 }
 
 func TestContains(t *testing.T) {
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"s":   "hello world",
 		"arr": []string{"apple", "banana", "cherry"},
 	}
@@ -207,7 +207,7 @@ func TestContains(t *testing.T) {
 }
 
 func TestDefault(t *testing.T) {
-	ctx := map[string]interface{}{"val": "hello", "empty": ""}
+	ctx := map[string]any{"val": "hello", "empty": ""}
 	if got := render(t, `{{default val "fallback"}}`, ctx); got != "hello" {
 		t.Errorf("default truthy: got %q", got)
 	}
@@ -221,7 +221,7 @@ func TestDefault(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRoundFloorCeil(t *testing.T) {
-	ctx := map[string]interface{}{"n": 3.7}
+	ctx := map[string]any{"n": 3.7}
 	if got := render(t, `{{round n}}`, ctx); got != "4" {
 		t.Errorf("round: got %q", got)
 	}
@@ -232,14 +232,14 @@ func TestRoundFloorCeil(t *testing.T) {
 		t.Errorf("ceil: got %q", got)
 	}
 
-	ctx = map[string]interface{}{"n": 3.2}
+	ctx = map[string]any{"n": 3.2}
 	if got := render(t, `{{round n}}`, ctx); got != "3" {
 		t.Errorf("round 3.2: got %q", got)
 	}
 }
 
 func TestAddSubtract(t *testing.T) {
-	ctx := map[string]interface{}{"a": 10, "b": 3.5}
+	ctx := map[string]any{"a": 10, "b": 3.5}
 	if got := render(t, `{{add a b}}`, ctx); got != "13.5" {
 		t.Errorf("add: got %q", got)
 	}
@@ -255,7 +255,7 @@ func TestAddSubtract(t *testing.T) {
 }
 
 func TestMultiplyDivide(t *testing.T) {
-	ctx := map[string]interface{}{"a": 6, "b": 3}
+	ctx := map[string]any{"a": 6, "b": 3}
 	if got := render(t, `{{multiply a b}}`, ctx); got != "18" {
 		t.Errorf("multiply: got %q", got)
 	}
@@ -269,7 +269,7 @@ func TestMultiplyDivide(t *testing.T) {
 }
 
 func TestToFixed(t *testing.T) {
-	ctx := map[string]interface{}{"n": 3.14159}
+	ctx := map[string]any{"n": 3.14159}
 	if got := render(t, `{{toFixed n 2}}`, ctx); got != "3.14" {
 		t.Errorf("toFixed 2: got %q", got)
 	}
@@ -282,7 +282,7 @@ func TestToFixed(t *testing.T) {
 }
 
 func TestToInt(t *testing.T) {
-	ctx := map[string]interface{}{"n": 3.7, "s": "42"}
+	ctx := map[string]any{"n": 3.7, "s": "42"}
 	if got := render(t, `{{toInt n}}`, ctx); got != "3" {
 		t.Errorf("toInt float: got %q", got)
 	}
@@ -292,7 +292,7 @@ func TestToInt(t *testing.T) {
 }
 
 func TestMathWithNil(t *testing.T) {
-	ctx := map[string]interface{}{}
+	ctx := map[string]any{}
 	// Missing vars are nil → should produce 0
 	if got := render(t, `{{add missing 5}}`, ctx); got != "5" {
 		t.Errorf("add nil: got %q", got)
@@ -307,7 +307,7 @@ func TestMathWithNil(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestUppercaseLowercase(t *testing.T) {
-	ctx := map[string]interface{}{"s": "Hello World"}
+	ctx := map[string]any{"s": "Hello World"}
 	if got := render(t, `{{uppercase s}}`, ctx); got != "HELLO WORLD" {
 		t.Errorf("uppercase: got %q", got)
 	}
@@ -317,33 +317,33 @@ func TestUppercaseLowercase(t *testing.T) {
 }
 
 func TestCapitalize(t *testing.T) {
-	ctx := map[string]interface{}{"s": "hello"}
+	ctx := map[string]any{"s": "hello"}
 	if got := render(t, `{{capitalize s}}`, ctx); got != "Hello" {
 		t.Errorf("capitalize: got %q", got)
 	}
 
 	// Unicode
-	ctx = map[string]interface{}{"s": "über"}
+	ctx = map[string]any{"s": "über"}
 	if got := render(t, `{{capitalize s}}`, ctx); got != "Über" {
 		t.Errorf("capitalize unicode: got %q", got)
 	}
 
 	// Empty string
-	ctx = map[string]interface{}{"s": ""}
+	ctx = map[string]any{"s": ""}
 	if got := render(t, `{{capitalize s}}`, ctx); got != "" {
 		t.Errorf("capitalize empty: got %q", got)
 	}
 }
 
 func TestReplace(t *testing.T) {
-	ctx := map[string]interface{}{"s": "foo bar foo"}
+	ctx := map[string]any{"s": "foo bar foo"}
 	if got := render(t, `{{replace s "foo" "baz"}}`, ctx); got != "baz bar baz" {
 		t.Errorf("replace: got %q", got)
 	}
 }
 
 func TestTruncate(t *testing.T) {
-	ctx := map[string]interface{}{"s": "Hello, World!"}
+	ctx := map[string]any{"s": "Hello, World!"}
 
 	// Truncate with default "..." suffix
 	if got := render(t, `{{truncate s 8}}`, ctx); got != "Hello..." {
@@ -362,7 +362,7 @@ func TestTruncate(t *testing.T) {
 }
 
 func TestConcat(t *testing.T) {
-	ctx := map[string]interface{}{"a": "hello", "b": " ", "c": "world"}
+	ctx := map[string]any{"a": "hello", "b": " ", "c": "world"}
 	if got := render(t, `{{concat a b c}}`, ctx); got != "hello world" {
 		t.Errorf("concat: got %q", got)
 	}
@@ -373,7 +373,7 @@ func TestConcat(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestForEach(t *testing.T) {
-	ctx := map[string]interface{}{
+	ctx := map[string]any{
 		"items": []string{"a", "b", "c"},
 	}
 	// Basic iteration with @index
@@ -395,7 +395,7 @@ func TestForEach(t *testing.T) {
 	}
 
 	// Empty → inverse
-	ctx = map[string]interface{}{"items": []string{}}
+	ctx = map[string]any{"items": []string{}}
 	got = render(t, `{{#forEach items}}item{{else}}empty{{/forEach}}`, ctx)
 	if got != "empty" {
 		t.Errorf("forEach empty: got %q", got)
@@ -403,14 +403,14 @@ func TestForEach(t *testing.T) {
 }
 
 func TestJoin(t *testing.T) {
-	ctx := map[string]interface{}{"arr": []string{"a", "b", "c"}}
+	ctx := map[string]any{"arr": []string{"a", "b", "c"}}
 	if got := render(t, `{{join arr ", "}}`, ctx); got != "a, b, c" {
 		t.Errorf("join: got %q", got)
 	}
 }
 
 func TestLength(t *testing.T) {
-	ctx := map[string]interface{}{"arr": []int{1, 2, 3}, "s": "hello"}
+	ctx := map[string]any{"arr": []int{1, 2, 3}, "s": "hello"}
 	if got := render(t, `{{length arr}}`, ctx); got != "3" {
 		t.Errorf("length array: got %q", got)
 	}
@@ -420,7 +420,7 @@ func TestLength(t *testing.T) {
 }
 
 func TestFirst(t *testing.T) {
-	ctx := map[string]interface{}{"arr": []string{"a", "b", "c"}}
+	ctx := map[string]any{"arr": []string{"a", "b", "c"}}
 	// Default n=1 returns single item
 	if got := render(t, `{{first arr}}`, ctx); got != "a" {
 		t.Errorf("first default: got %q", got)
@@ -428,7 +428,7 @@ func TestFirst(t *testing.T) {
 }
 
 func TestLast(t *testing.T) {
-	ctx := map[string]interface{}{"arr": []string{"a", "b", "c"}}
+	ctx := map[string]any{"arr": []string{"a", "b", "c"}}
 	if got := render(t, `{{last arr}}`, ctx); got != "c" {
 		t.Errorf("last default: got %q", got)
 	}
@@ -439,7 +439,7 @@ func TestLast(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNumberFormat(t *testing.T) {
-	ctx := map[string]interface{}{"n": 1234.5}
+	ctx := map[string]any{"n": 1234.5}
 	// 2 decimals
 	if got := render(t, `{{numberFormat n 2}}`, ctx); got != "1234.50" {
 		t.Errorf("numberFormat 2: got %q", got)
@@ -455,7 +455,7 @@ func TestNumberFormat(t *testing.T) {
 }
 
 func TestPad0(t *testing.T) {
-	ctx := map[string]interface{}{"n": 7}
+	ctx := map[string]any{"n": 7}
 	// Width 3
 	if got := render(t, `{{pad0 n 3}}`, ctx); got != "007" {
 		t.Errorf("pad0 3: got %q", got)
@@ -476,7 +476,7 @@ func TestPad0(t *testing.T) {
 
 func TestToFloat(t *testing.T) {
 	tests := []struct {
-		in   interface{}
+		in   any
 		want float64
 	}{
 		{nil, 0},
@@ -498,7 +498,7 @@ func TestToFloat(t *testing.T) {
 
 func TestToBool(t *testing.T) {
 	tests := []struct {
-		in   interface{}
+		in   any
 		want bool
 	}{
 		{nil, false},

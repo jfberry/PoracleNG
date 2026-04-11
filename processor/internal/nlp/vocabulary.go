@@ -3,6 +3,7 @@ package nlp
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -199,7 +200,7 @@ func buildPokemonVocab(msgs map[string]string, baseDir string) *PokemonVocab {
 			if name, ok := idToName[id]; ok {
 				single[aliasLow] = name
 			}
-		case []interface{}:
+		case []any:
 			// Group of pokemon IDs
 			var names []string
 			for _, item := range v {
@@ -347,9 +348,7 @@ func loadPokemonAliases(baseDir string) map[string]any {
 			fmt.Fprintf(os.Stderr, "nlp: failed to parse %s: %v\n", path, err)
 			continue
 		}
-		for k, v := range m {
-			result[k] = v
-		}
+		maps.Copy(result, m)
 	}
 
 	return result
