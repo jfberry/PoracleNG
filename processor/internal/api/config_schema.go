@@ -169,8 +169,8 @@ var configSchema = []ConfigSection{
 				Description: "Self-service role assignment via !role command — users can add/remove roles from these lists",
 				Fields: []ConfigFieldDef{
 					{Name: "guild", Type: "string", Description: "Guild ID this subscription applies to", Resolve: "discord:guild"},
-					{Name: "roles", Type: "map", Description: "Independent roles users can freely add/remove (name → role ID)"},
-					{Name: "exclusive_roles", Type: "map[]", Description: "Array of exclusive role groups — each group is a map of name → role ID, user can only hold one role per group"},
+					{Name: "roles", Type: "map", Description: "Independent roles users can freely add/remove (name → role ID)", Resolve: "discord:role"},
+					{Name: "exclusive_roles", Type: "map[]", Description: "Array of exclusive role groups — each group is a map of name → role ID, user can only hold one role per group", Resolve: "discord:role"},
 				},
 			},
 		},
