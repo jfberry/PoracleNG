@@ -255,6 +255,29 @@ func (ts *TemplateStore) Exists(templateType, platform, templateID, language str
 	return false
 }
 
+// ResolveEntryContent resolves @include directives and joins string arrays
+// in the entry's template content. Returns a copy with the resolved template.
+// For templateFile entries, returns the resolved file content as a string.
+// Used by the API to return fully expanded templates to the editor.
+func (ts *TemplateStore) ResolveEntryContent(entry DTSEntry) (any, string) {
+	ts.mu.RLock()
+	configDir := ts.configDir
+	ts.mu.RUnlock()
+
+	if entry.TemplateFile != "" {
+		path := filepath.Join(configDir, entry.TemplateFile)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, ""
+		}
+		return nil, resolveIncludes(strings.TrimSpace(string(data)), configDir)
+	}
+	if entry.Template != nil {
+		return processTemplateValue(entry.Template, configDir), ""
+	}
+	return nil, ""
+}
+
 // ClearCache drops all compiled templates so the next render re-parses from
 // source. Used after template file content is updated via the API.
 func (ts *TemplateStore) ClearCache() {
