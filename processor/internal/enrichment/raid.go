@@ -105,6 +105,9 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 	// Map URLs
 	e.addMapURLs(m, raid.Latitude, raid.Longitude, "gyms", raid.GymID)
 
+	// Campfire deep link
+	m["campfireUrl"] = CampfireURL(raid.Latitude, raid.Longitude, raid.GymID, raid.GymName, raid.GymURL)
+
 	// Reverse geocoding
 	e.addGeoResult(m, raid.Latitude, raid.Longitude)
 

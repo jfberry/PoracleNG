@@ -175,6 +175,7 @@ var raidFields = []FieldDef{
 	{Name: "teamName", Type: "string", Description: "Team name", Category: "gym"},
 	{Name: "teamEmoji", Type: "string", Description: "Team emoji", Category: "gym"},
 	{Name: "ex", Type: "bool", Description: "EX raid eligible", Category: "gym", Preferred: true},
+	{Name: "campfireUrl", Type: "string", Description: "Niantic Campfire deep link for this gym", Category: "maps"},
 	// Stats
 	{Name: "cp", Type: "int", Description: "Boss CP (20/25)", Category: "stats"},
 	{Name: "cp20", Type: "int", Description: "Boss CP at level 20", Category: "stats"},
@@ -216,6 +217,7 @@ var eggFields = []FieldDef{
 	{Name: "teamName", Type: "string", Description: "Team name", Category: "gym"},
 	{Name: "teamEmoji", Type: "string", Description: "Team emoji", Category: "gym"},
 	{Name: "ex", Type: "bool", Description: "EX raid eligible", Category: "gym"},
+	{Name: "campfireUrl", Type: "string", Description: "Niantic Campfire deep link for this gym", Category: "maps"},
 	{Name: "time", Type: "string", Description: "Hatch time", Category: "time", Preferred: true},
 	{Name: "hatchTime", Type: "string", Description: "Hatch time", Category: "time"},
 	{Name: "hatchTimestamp", Type: "int", Description: "Unix hatch timestamp (for Discord <t:N:R>)", Category: "time"},
@@ -596,6 +598,7 @@ var raidSnippets = []Snippet{
 	{Label: "EX eligible", Insert: "{{#if ex}}🎟 EX{{/if}}", Description: "Show EX badge if eligible", Category: "raid"},
 	{Label: "Time remaining", Insert: "{{time}} ({{tthm}}m)", Description: "End time with TTH", Category: "raid"},
 	{Label: "Countdown", Insert: "<t:{{endTimestamp}}:R>", Description: "Discord relative countdown to raid end", Category: "raid", Platform: "discord"},
+	{Label: "Campfire link", Insert: "[Campfire]({{{campfireUrl}}})", Description: "Niantic Campfire deep link", Category: "raid"},
 }
 
 var eggSnippets = []Snippet{
