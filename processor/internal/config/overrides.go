@@ -183,6 +183,28 @@ func SaveOverrides(configDir string, updates map[string]any) error {
 	return nil
 }
 
+// lowercaseMapKeys recursively lowercases all map keys in the value.
+// Handles maps, slices, and nested combinations. Leaves non-map/slice
+// values unchanged. Used to normalise PascalCase keys from old migrations.
+func lowercaseMapKeys(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, child := range val {
+			out[strings.ToLower(k)] = lowercaseMapKeys(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, child := range val {
+			out[i] = lowercaseMapKeys(child)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
 // expandDottedKeys converts flat dotted keys like "reconciliation.discord"
 // into nested maps: {"reconciliation": {"discord": {...}}}. Non-dotted keys
 // are left unchanged.
@@ -276,7 +298,10 @@ func applyToStruct(v reflect.Value, overrides map[string]any) {
 			}
 		}
 
-		// Set the field value via JSON round-trip (handles type coercion)
+		// Set the field value via JSON round-trip (handles type coercion).
+		// Normalise map keys to lowercase first — overrides.json may contain
+		// PascalCase keys from migrations that ran before json tags were added.
+		override = lowercaseMapKeys(override)
 		jsonBytes, err := json.Marshal(override)
 		if err != nil {
 			log.Warnf("config: override %s: marshal error: %v", tag, err)
