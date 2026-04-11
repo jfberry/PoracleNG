@@ -466,6 +466,7 @@
   "language.nb-no": "Norweski",
   "language.pl": "Polski",
   "language.ru": "Rosyjski",
+  "language.es": "Español",
   "language.sv": "Svenska",
   "msg.help.text": "**Available commands:**\n{0}track <pokemon> [iv:N] [cp:N] [level:N] [d:N] — Track pokemon\n{0}untrack <pokemon> — Remove pokemon tracking\n{0}raid <pokemon|level:N|legendary> [d:N] — Track raids\n{0}egg <level:N|legendary|mega> [d:N] — Track eggs\n{0}quest <pokemon|stardust|energy:pokemon|candy:pokemon> — Track quests\n{0}invasion [everything|<type>] — Track invasions\n{0}lure <type|everything> — Track lures\n{0}gym <team|everything> [slot_changes] — Track gyms\n{0}nest <pokemon|everything> — Track nests\n{0}maxbattle <pokemon|level:N> — Track max battles\n{0}fort <pokestop|gym|everything> — Track fort updates\n{0}tracked — Show all tracking\n{0}script — Export tracking as commands\n{0}area [list|add|remove] — Manage areas\n{0}location <lat,lon> — Set location\n{0}profile [list|add|remove|switch] — Manage profiles\n{0}language <code> — Set language\n{0}start / {0}stop — Enable/disable alerts\n{0}version — Show version"
 }
