@@ -106,8 +106,17 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		// Filter by rate limit
 		matched = ps.filterRateLimited(matched)
 
-		// Filter by RSVP preference before sending
-		hasRSVPs := len(raid.RSVPs) > 0
+		// Filter by RSVP preference before sending.
+		// Check for future RSVPs only — past timeslots are stripped during
+		// enrichment so we must use the same cutoff here.
+		nowMs := time.Now().UnixMilli()
+		hasRSVPs := false
+		for _, r := range raid.RSVPs {
+			if r.Timeslot > nowMs {
+				hasRSVPs = true
+				break
+			}
+		}
 		filtered := matched[:0]
 		for _, m := range matched {
 			switch m.RSVPChanges {

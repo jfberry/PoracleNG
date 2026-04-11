@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -60,9 +61,11 @@ func (h *Handler) handle(c *gin.Context) {
 	metrics.WebhookBatchSize.Observe(float64(len(hooks)))
 
 	for _, hook := range hooks {
-		// Log each individual webhook as one line: {"type":"pokemon","message":{...}}
+		// Log each individual webhook as one line: 2026-04-11T16:57:03Z {"type":"pokemon","message":{...}}
 		if h.webhookLogger != nil {
 			if line, err := json.Marshal(hook); err == nil {
+				h.webhookLogger.Write([]byte(time.Now().UTC().Format(time.RFC3339)))
+				h.webhookLogger.Write([]byte(" "))
 				h.webhookLogger.Write(line)
 				h.webhookLogger.Write([]byte("\n"))
 			}
