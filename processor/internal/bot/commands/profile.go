@@ -181,7 +181,18 @@ func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) [
 
 	ctx.TriggerReload()
 
-	return []bot.Reply{{React: "✅", Text: tr.Tf("profile.switched", profileNo)}}
+	// Look up the profile name for the confirmation message
+	profileLabel := fmt.Sprintf("%d", profileNo)
+	if profiles, err := ctx.Humans.GetProfiles(ctx.TargetID); err == nil {
+		for _, p := range profiles {
+			if p.ProfileNo == profileNo && p.Name != "" {
+				profileLabel = fmt.Sprintf("%d: %s", profileNo, p.Name)
+				break
+			}
+		}
+	}
+
+	return []bot.Reply{{React: "✅", Text: tr.Tf("profile.switched", profileLabel)}}
 }
 
 // settimeRe matches day-prefix + hours:mins in multiple formats:
