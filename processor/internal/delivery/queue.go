@@ -166,15 +166,17 @@ func (fq *FairQueue) processJob(job *Job) {
 	if job.EditKey != "" {
 		existing := fq.tracker.LookupEdit(job.EditKey)
 		if existing != nil {
-			log.Debugf("delivery: attempting edit for key=%s target=%s", job.EditKey, job.Target)
+			log.Infof("%s: edit: found tracked message for key=%s, attempting edit", job.LogReference, job.EditKey)
 			if err := sender.Edit(fq.ctx, existing.SentID, job.Message); err == nil {
-				log.Debugf("delivery: edit succeeded for key=%s", job.EditKey)
+				log.Infof("%s: edit: succeeded for key=%s", job.LogReference, job.EditKey)
 				metrics.DeliveryTotal.WithLabelValues(platform, "edit_ok").Inc()
 				metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 				return
+			} else {
+				log.Warnf("%s: edit: failed for key=%s: %v, sending new message", job.LogReference, job.EditKey, err)
 			}
-			// Edit failed — fall through to send new message
-			log.Debugf("delivery: edit failed for key=%s, sending new message", job.EditKey)
+		} else {
+			log.Infof("%s: edit: no tracked message for key=%s, will send new and track", job.LogReference, job.EditKey)
 		}
 	}
 
@@ -230,6 +232,7 @@ func (fq *FairQueue) processJob(job *Job) {
 			Type:   job.Type,
 			Clean:  job.Clean,
 		}, ttl)
+		log.Debugf("%s: tracked message key=%s sentID=%s ttl=%v clean=%d", job.LogReference, key, sent.ID, ttl, job.Clean)
 	}
 }
 
