@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -178,6 +179,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				MatchedAreas:      matchedAreas,
 				TilePending:       tilePending,
 				LogReference:      raid.GymID,
+				EditKey:           fmt.Sprintf("raid:%s:%d", raid.GymID, raid.End),
 			}
 		} else {
 			if raid.PokemonID > 0 {
