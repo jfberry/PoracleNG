@@ -93,13 +93,18 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 		targetID = m.ChannelID
 		targetType = bot.TypeDiscordChannel
 
-		// Get channel name
+		// Get channel name and detect threads
 		ch, err := s.Channel(m.ChannelID)
 		if err != nil {
 			log.Warnf("discord bot: get channel %s: %v", m.ChannelID, err)
 			targetName = m.ChannelID
 		} else {
 			targetName = ch.Name
+			if ch.Type == discordgo.ChannelTypeGuildPublicThread ||
+				ch.Type == discordgo.ChannelTypeGuildPrivateThread ||
+				ch.Type == discordgo.ChannelTypeGuildNewsThread {
+				targetType = "discord:thread"
+			}
 		}
 	}
 
