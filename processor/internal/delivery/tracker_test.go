@@ -56,7 +56,7 @@ func TestTrackerTrackAndLookup(t *testing.T) {
 		SentID: "msg-123",
 		Target: "user-1",
 		Type:   "discord:user",
-		Clean:  false,
+		Clean:  0,
 	}
 	mt.Track("edit:pokemon:user-1", msg, 5*time.Minute)
 
@@ -88,7 +88,7 @@ func TestTrackerUpdateEdit(t *testing.T) {
 		SentID: "msg-100",
 		Target: "user-1",
 		Type:   "discord:user",
-		Clean:  false,
+		Clean:  0,
 	}
 	mt.Track("edit:raid:user-1", msg, 5*time.Minute)
 
@@ -110,7 +110,7 @@ func TestTrackerCleanOnExpiry(t *testing.T) {
 		SentID: "msg-clean-1",
 		Target: "chan-1",
 		Type:   "discord:channel",
-		Clean:  true,
+		Clean:  1,
 	}
 	mt.Track("clean:discord:channel:chan-1:msg-clean-1", msg, 50*time.Millisecond)
 
@@ -133,7 +133,7 @@ func TestTrackerNonCleanNoDelete(t *testing.T) {
 		SentID: "msg-noclean",
 		Target: "user-2",
 		Type:   "discord:user",
-		Clean:  false,
+		Clean:  0,
 	}
 	mt.Track("edit:pokemon:user-2", msg, 50*time.Millisecond)
 
@@ -151,8 +151,8 @@ func TestTrackerSaveLoad(t *testing.T) {
 	senders := map[string]Sender{"discord": mock}
 
 	mt1 := NewMessageTracker(dir, senders)
-	mt1.Track("edit:a", &TrackedMessage{SentID: "s1", Target: "t1", Type: "discord:user", Clean: false}, 5*time.Minute)
-	mt1.Track("edit:b", &TrackedMessage{SentID: "s2", Target: "t2", Type: "discord:channel", Clean: true}, 5*time.Minute)
+	mt1.Track("edit:a", &TrackedMessage{SentID: "s1", Target: "t1", Type: "discord:user", Clean: 0}, 5*time.Minute)
+	mt1.Track("edit:b", &TrackedMessage{SentID: "s2", Target: "t2", Type: "discord:channel", Clean: 1}, 5*time.Minute)
 
 	if err := mt1.Save(); err != nil {
 		t.Fatalf("Save failed: %v", err)
@@ -180,7 +180,7 @@ func TestTrackerSaveLoad(t *testing.T) {
 	if got2.SentID != "s2" {
 		t.Errorf("expected SentID s2, got %s", got2.SentID)
 	}
-	if !got2.Clean {
+	if got2.Clean == 0 {
 		t.Error("expected edit:b to have Clean=true")
 	}
 }
@@ -196,7 +196,7 @@ func TestTrackerLoadExpiredClean(t *testing.T) {
 		SentID: "expired-msg",
 		Target: "u1",
 		Type:   "discord:user",
-		Clean:  true,
+		Clean:  1,
 	}, 10*time.Millisecond)
 
 	// Wait for the TTL to pass but save before eviction processes it

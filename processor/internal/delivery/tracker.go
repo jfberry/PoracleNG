@@ -18,7 +18,7 @@ type TrackedMessage struct {
 	SentID string `json:"sent_id"`
 	Target string `json:"target"`
 	Type   string `json:"type"` // "discord:user", "telegram:group", etc.
-	Clean  bool   `json:"clean"`
+	Clean  int    `json:"clean"`
 }
 
 // MessageTracker manages sent messages with TTL-based expiry and clean deletion.
@@ -46,7 +46,7 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 		}
 		metrics.DeliveryTrackerEvictions.Inc()
 		msg := item.Value()
-		if !msg.Clean {
+		if msg.Clean&1 == 0 {
 			return
 		}
 		platform := PlatformFromType(msg.Type)
@@ -160,7 +160,7 @@ func (mt *MessageTracker) Load() error {
 	for _, entry := range entries {
 		if entry.ExpiresAt.Before(now) {
 			// Expired entry
-			if entry.Message.Clean {
+			if entry.Message.Clean&1 != 0 {
 				expiredClean++
 				msg := entry.Message
 				platform := PlatformFromType(msg.Type)

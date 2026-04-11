@@ -51,7 +51,7 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) []webhook.M
 			ProfileNo: inv.ProfileNo,
 			Distance:  inv.Distance,
 			Template:  inv.Template,
-			Clean:     inv.Clean,
+			Clean:     boolToInt(inv.Clean),
 			Ping:      inv.Ping,
 		})
 	}

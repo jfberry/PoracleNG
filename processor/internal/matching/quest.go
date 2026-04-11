@@ -49,7 +49,7 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) []webhook.Matched
 			ProfileNo: q.ProfileNo,
 			Distance:  q.Distance,
 			Template:  q.Template,
-			Clean:     q.Clean,
+			Clean:     boolToInt(q.Clean),
 			Ping:      q.Ping,
 		})
 	}

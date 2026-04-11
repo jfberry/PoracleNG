@@ -44,7 +44,7 @@ func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage,
 		Latitude: target.Latitude,
 		Longitude: target.Longitude,
 		Template: target.Template,
-		Clean:    false,
+		Clean:    0,
 	}
 
 	switch webhookType {

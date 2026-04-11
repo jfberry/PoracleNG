@@ -216,7 +216,7 @@ func TestFairQueueEditLookup(t *testing.T) {
 		SentID: "chan1:msg-original",
 		Target: "user1",
 		Type:   "discord:user",
-		Clean:  false,
+		Clean:  0,
 	}, 5*time.Minute)
 
 	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
@@ -267,7 +267,7 @@ func TestFairQueueEditFallback(t *testing.T) {
 		SentID: "chan1:msg-original",
 		Target: "user1",
 		Type:   "discord:user",
-		Clean:  false,
+		Clean:  0,
 	}, 5*time.Minute)
 
 	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
@@ -320,7 +320,7 @@ func TestFairQueueCleanTracking(t *testing.T) {
 		Target:  "chan1",
 		Type:    "discord:channel",
 		Message: json.RawMessage(`{"content":"hello"}`),
-		Clean:   true,
+		Clean:   1,
 		TTH:     TTH{Minutes: 5},
 	}
 
@@ -337,7 +337,7 @@ func TestFairQueueCleanTracking(t *testing.T) {
 	if tracked.SentID != "chan1:msg-42" {
 		t.Errorf("expected tracked SentID chan1:msg-42, got %s", tracked.SentID)
 	}
-	if !tracked.Clean {
+	if tracked.Clean == 0 {
 		t.Error("expected tracked message to have Clean=true")
 	}
 }

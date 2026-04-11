@@ -75,7 +75,7 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) []webhook.MatchedUser
 			ProfileNo: g.ProfileNo,
 			Distance:  g.Distance,
 			Template:  g.Template,
-			Clean:     g.Clean,
+			Clean:     boolToInt(g.Clean),
 			Ping:      g.Ping,
 		})
 	}

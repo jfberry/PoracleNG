@@ -86,7 +86,7 @@ func ValidateHumans(
 			Longitude:         human.Longitude,
 			Template:          monster.Template,
 			Distance:          actualDist,
-			Clean:             monster.Clean,
+			Clean:             boolToInt(monster.Clean),
 			Ping:              monster.Ping,
 			Bearing:           int(math.Round(bearing)),
 			CardinalDirection: CardinalDirection(bearing),
@@ -189,7 +189,7 @@ type raidUserData struct {
 	ProfileNo     int
 	Distance      int
 	Template      string
-	Clean         bool
+	Clean         int
 	Ping          string
 	RSVPChanges   int
 	IsSpecificGym bool

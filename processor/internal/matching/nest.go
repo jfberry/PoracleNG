@@ -49,7 +49,7 @@ func (m *NestMatcher) Match(data *NestData, st *state.State) []webhook.MatchedUs
 			ProfileNo: n.ProfileNo,
 			Distance:  n.Distance,
 			Template:  n.Template,
-			Clean:     n.Clean,
+			Clean:     boolToInt(n.Clean),
 			Ping:      n.Ping,
 		})
 	}

@@ -181,7 +181,7 @@ type MatchedUser struct {
 	Longitude         float64              `json:"longitude"`
 	Template          string               `json:"template"`
 	Distance          int                  `json:"distance"`
-	Clean             bool                 `json:"clean"`
+	Clean             int                  `json:"clean"`
 	Ping              string               `json:"ping"`
 	Bearing           int                  `json:"bearing"`
 	CardinalDirection string               `json:"cardinalDirection"`
@@ -417,7 +417,8 @@ type DeliveryJob struct {
 	Type         string          `json:"type"` // "discord:user", "telegram:group", etc.
 	Name         string          `json:"name"`
 	TTH          map[string]any  `json:"tth"`
-	Clean        bool            `json:"clean"`
+	Clean        int             `json:"clean"`
+	EditKey      string          `json:"editKey,omitempty"`
 	Emoji        []string        `json:"emoji"`
 	LogReference string          `json:"logReference"`
 	Language     string          `json:"language"`

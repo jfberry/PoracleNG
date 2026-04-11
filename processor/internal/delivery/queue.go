@@ -212,7 +212,7 @@ func (fq *FairQueue) processJob(job *Job) {
 	metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 
 	// 4. Track for clean/edit if needed
-	if sent != nil && (job.Clean || job.EditKey != "") {
+	if sent != nil && (job.Clean > 0 || job.EditKey != "") {
 		ttl := job.TTH.Duration()
 		if ttl <= 0 {
 			return

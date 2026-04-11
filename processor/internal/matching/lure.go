@@ -39,7 +39,7 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) []webhook.MatchedUs
 			ProfileNo: l.ProfileNo,
 			Distance:  l.Distance,
 			Template:  l.Template,
-			Clean:     l.Clean,
+			Clean:     boolToInt(l.Clean),
 			Ping:      l.Ping,
 		})
 	}

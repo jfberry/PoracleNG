@@ -29,7 +29,7 @@ type Job struct {
 	                                                   // "telegram:user", "telegram:group", "telegram:channel"
 	Message      json.RawMessage `json:"message"`      // pre-rendered message JSON
 	TTH          TTH             `json:"tth"`
-	Clean        bool            `json:"clean"`        // track for deletion on TTH expiry
+	Clean        int             `json:"clean"`        // track for deletion on TTH expiry
 	EditKey      string          `json:"editKey"`      // non-empty = track for future edits
 	Name         string          `json:"name"`         // human-readable destination name
 	LogReference string          `json:"logReference"` // encounter/gym ID for tracing

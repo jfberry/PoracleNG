@@ -152,7 +152,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			// This ensures the weather change message is cleaned when the last
 			// affected pokemon despawns (not at the weather hour boundary).
 			userEnrichment := baseEnrichment
-			if user.Clean && len(user.ActivePokemons) > 0 {
+			if user.Clean > 0 && len(user.ActivePokemons) > 0 {
 				var maxDespawn int64
 				for _, ap := range user.ActivePokemons {
 					if ap.DisappearTime > maxDespawn {

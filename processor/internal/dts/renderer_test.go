@@ -511,14 +511,14 @@ func TestRenderPokemonClean(t *testing.T) {
 		"tth":       map[string]any{"totalSeconds": 600},
 	}
 	users := []webhook.MatchedUser{
-		{ID: "u1", Type: "discord:user", Template: "1", Clean: true},
+		{ID: "u1", Type: "discord:user", Template: "1", Clean: 1},
 	}
 
 	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
-	if !jobs[0].Clean {
+	if jobs[0].Clean == 0 {
 		t.Error("expected Clean=true")
 	}
 }
