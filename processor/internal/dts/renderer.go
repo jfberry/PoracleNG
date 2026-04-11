@@ -8,6 +8,7 @@ import (
 	raymond "github.com/mailgun/raymond/v2"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
@@ -147,6 +148,7 @@ func (r *Renderer) RenderPokemon(
 	matchedAreas []webhook.MatchedArea,
 	isEncountered bool,
 	logReference string,
+	editKeyBase string,
 ) []webhook.DeliveryJob {
 	// 1. Check TTH
 	if r.isBelowMinAlertTime(enrichment) {
@@ -162,7 +164,7 @@ func (r *Renderer) RenderPokemon(
 		templateType = "monsterNoIv"
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, uniqueUsers, matchedAreas, logReference)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, uniqueUsers, matchedAreas, logReference, editKeyBase)
 }
 
 // RenderAlert renders alerts for any non-pokemon type and returns delivery jobs.
@@ -176,12 +178,13 @@ func (r *Renderer) RenderAlert(
 	matchedUsers []webhook.MatchedUser,
 	matchedAreas []webhook.MatchedArea,
 	logReference string,
+	editKeyBase string,
 ) []webhook.DeliveryJob {
 	if r.isBelowMinAlertTime(enrichment) {
 		return nil
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, matchedUsers, matchedAreas, logReference)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, matchedUsers, matchedAreas, logReference, editKeyBase)
 }
 
 // isBelowMinAlertTime checks whether the TTH in enrichment is below the configured minimum.
@@ -200,6 +203,7 @@ func (r *Renderer) renderForUsers(
 	users []webhook.MatchedUser,
 	areas []webhook.MatchedArea,
 	logReference string,
+	editKeyBase string,
 ) []webhook.DeliveryJob {
 	tthMap, _ := extractTTH(enrichment)
 	lat := truncateCoord(lookupFloat(enrichment, webhookFields, "latitude"))
@@ -216,7 +220,7 @@ func (r *Renderer) renderForUsers(
 	// enrichment, users with the same (template, platform, language) get identical
 	// rendered output. Render once per group and clone the result.
 	if perUserEnrichment == nil {
-		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, users, areas, logReference, tthMap, lat, lon, shlinkCache)
+		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, users, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)
 	}
 
 	var jobs []webhook.DeliveryJob
@@ -286,7 +290,13 @@ func (r *Renderer) renderForUsers(
 
 		emojiSlice := extractEmojiSlice(view)
 
-		// h. Build DeliveryJob
+		// h. Compute edit key
+		editKey := ""
+		if db.IsEdit(user.Clean) && editKeyBase != "" {
+			editKey = editKeyBase + ":" + user.ID
+		}
+
+		// i. Build DeliveryJob
 		jobs = append(jobs, webhook.DeliveryJob{
 			Lat:          lat,
 			Lon:          lon,
@@ -299,6 +309,7 @@ func (r *Renderer) renderForUsers(
 			Emoji:        emojiSlice,
 			LogReference: logReference,
 			Language:     language,
+			EditKey:      editKey,
 		})
 	}
 
@@ -326,6 +337,7 @@ func (r *Renderer) renderGrouped(
 	tthMap map[string]any,
 	lat, lon string,
 	shlinkCache map[string]string,
+	editKeyBase string,
 ) []webhook.DeliveryJob {
 	// Group users by rendering key
 	type groupEntry struct {
@@ -402,6 +414,11 @@ func (r *Renderer) renderGrouped(
 				userMessage = appendPingToRaw(rawMessage, user.Ping)
 			}
 
+			editKey := ""
+			if db.IsEdit(user.Clean) && editKeyBase != "" {
+				editKey = editKeyBase + ":" + user.ID
+			}
+
 			jobs = append(jobs, webhook.DeliveryJob{
 				Lat:          lat,
 				Lon:          lon,
@@ -414,6 +431,7 @@ func (r *Renderer) renderGrouped(
 				Emoji:        emojiSlice,
 				LogReference: logReference,
 				Language:     key.language,
+				EditKey:      editKey,
 			})
 		}
 	}

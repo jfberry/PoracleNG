@@ -27,6 +27,7 @@ type RenderJob struct {
 	IsEncountered     bool   // pokemon only
 	IsPokemon         bool   // true = RenderPokemon, false = RenderAlert
 	LogReference      string
+	EditKey           string
 }
 
 // renderWorker processes render jobs from the shared channel until it is closed.
@@ -83,6 +84,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 			job.MatchedAreas,
 			job.IsEncountered,
 			job.LogReference,
+			job.EditKey,
 		)
 	} else {
 		jobs = ps.dtsRenderer.RenderAlert(
@@ -93,6 +95,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 			job.MatchedUsers,
 			job.MatchedAreas,
 			job.LogReference,
+			job.EditKey,
 		)
 	}
 
@@ -114,6 +117,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				LogReference: j.LogReference,
 				Lat:          parseCoordFloat(j.Lat),
 				Lon:          parseCoordFloat(j.Lon),
+				EditKey:      j.EditKey,
 			})
 		}
 	}
