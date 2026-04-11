@@ -78,7 +78,10 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		m["tth"] = geo.ComputeTTH(raid.Start)
 	}
 
-	// Format RSVP timeslots — only include future timeslots (matching alerter behavior)
+	// Format RSVP timeslots — only include future timeslots (matching alerter behavior).
+	// Always set m["rsvps"] when the webhook has RSVP data to shadow the raw webhook
+	// layer — otherwise {{#if rsvps}} would find the unfiltered raw array via the
+	// webhook fields fallback and render expired entries with mismatched field names.
 	if len(raid.RSVPs) > 0 {
 		nowMs := time.Now().UnixMilli()
 		var rsvpTimes []map[string]any
@@ -97,9 +100,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 				"time":        geo.FormatTime(r.Timeslot/1000, tz, e.TimeLayout),
 			})
 		}
-		if len(rsvpTimes) > 0 {
-			m["rsvps"] = rsvpTimes
-		}
+		m["rsvps"] = rsvpTimes // nil if all expired — shadows raw webhook rsvps
 	}
 
 	// Map URLs
