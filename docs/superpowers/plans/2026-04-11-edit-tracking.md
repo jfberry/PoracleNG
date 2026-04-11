@@ -10,9 +10,10 @@
 
 ---
 
-### Task 1: Change Clean from bool to int across matching and delivery
+### Task 1: Add IsClean/IsEdit helpers and change Clean from bool to int
 
 **Files:**
+- Create: `processor/internal/db/clean.go` (IsClean, IsEdit helpers)
 - Modify: `processor/internal/webhook/types.go:184` (MatchedUser.Clean)
 - Modify: `processor/internal/webhook/types.go:421` (DeliveryJob.Clean)
 - Modify: `processor/internal/delivery/delivery.go:31` (Job.Clean)
@@ -20,7 +21,26 @@
 - Modify: `processor/internal/matching/human.go:193` (raidUserData.Clean)
 - Modify: `processor/internal/delivery/queue.go:214-232` (tracking decision)
 
-- [ ] **Step 1: Change MatchedUser.Clean from bool to int**
+- [ ] **Step 1: Create IsClean/IsEdit helpers**
+
+Create `processor/internal/db/clean.go`:
+```go
+package db
+
+// Clean flag bitmask values:
+//   0 = no tracking
+//   1 = clean (auto-delete on TTH expiry)
+//   2 = edit (track for message editing)
+//   3 = edit + clean
+
+// IsClean returns true if the clean flag has the auto-delete bit set.
+func IsClean(clean int) bool { return clean&1 != 0 }
+
+// IsEdit returns true if the clean flag has the edit-tracking bit set.
+func IsEdit(clean int) bool { return clean&2 != 0 }
+```
+
+- [ ] **Step 2: Change MatchedUser.Clean from bool to int**
 
 In `processor/internal/webhook/types.go`, change line 184:
 ```go
@@ -96,16 +116,16 @@ In `processor/internal/delivery/queue.go`, change the tracking condition at line
 // Before:
 if sent != nil && (job.Clean || job.EditKey != "") {
 // After:
-if sent != nil && (job.Clean > 0 || job.EditKey != "") {
+if sent != nil && (db.IsClean(job.Clean) || db.IsEdit(job.Clean) || job.EditKey != "") {
 ```
 
-And update `TrackedMessage.Clean` to use int — change `Clean bool` to `Clean int` in `tracker.go` and update the eviction callback to check `msg.Clean&1 != 0` for clean deletion:
+And update `TrackedMessage.Clean` to use int — change `Clean bool` to `Clean int` in `tracker.go` and update the eviction callback to use the helper:
 ```go
 // In tracker.go eviction callback:
 // Before:
 if msg.Clean {
 // After:
-if msg.Clean&1 != 0 {
+if db.IsClean(msg.Clean) {
 ```
 
 - [ ] **Step 8: Build and fix all compilation errors**
@@ -186,7 +206,7 @@ for _, j := range jobs {
 In `processor/internal/dts/renderer.go`, in the non-grouped per-user loop (around line 289), set `EditKey` when the user's `Clean` has the edit bit:
 ```go
 editKey := ""
-if user.Clean&2 != 0 && editKeyBase != "" {
+if db.IsEdit(user.Clean) && editKeyBase != "" {
     editKey = editKeyBase + ":" + user.ID
 }
 
@@ -213,7 +233,7 @@ The `editKeyBase` parameter needs to be passed into the render functions. Add it
 Same pattern in the grouped rendering path (around line 405):
 ```go
 editKey := ""
-if user.Clean&2 != 0 && editKeyBase != "" {
+if db.IsEdit(user.Clean) && editKeyBase != "" {
     editKey = editKeyBase + ":" + user.ID
 }
 
@@ -437,10 +457,10 @@ func standardText(tr *i18n.Translator, template, defaultTemplate string, clean i
     if template != "" && template != defaultTemplate {
         text += " " + tr.Tf("tracking.template_fmt", template)
     }
-    if clean&2 != 0 {
+    if db.IsEdit(clean) {
         text += " " + tr.T("tracking.edit")
     }
-    if clean&1 != 0 {
+    if db.IsClean(clean) {
         text += " " + tr.T("tracking.clean")
     }
     return text
