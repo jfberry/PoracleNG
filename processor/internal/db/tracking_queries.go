@@ -85,7 +85,7 @@ type LureTrackingAPI struct {
 	ID        string `db:"id"         json:"id"         diff:"-"`
 	ProfileNo int    `db:"profile_no" json:"profile_no" diff:"-"`
 	Ping      string `db:"ping"       json:"ping"`
-	Clean     IntBool `db:"clean"      json:"clean"      diff:"update"`
+	Clean     int    `db:"clean"      json:"clean"      diff:"update"`
 	Distance  int    `db:"distance"   json:"distance"   diff:"update"`
 	Template  string `db:"template"   json:"template"   diff:"update"`
 	LureID    int    `db:"lure_id"    json:"lure_id"    diff:"match"`
@@ -173,7 +173,7 @@ type InvasionTrackingAPI struct {
 	ID        string `db:"id"         json:"id"         diff:"-"`
 	ProfileNo int    `db:"profile_no" json:"profile_no" diff:"-"`
 	Ping      string `db:"ping"       json:"ping"`
-	Clean     IntBool `db:"clean"      json:"clean"      diff:"update"`
+	Clean     int    `db:"clean"      json:"clean"      diff:"update"`
 	Distance  int    `db:"distance"   json:"distance"   diff:"update"`
 	Template  string `db:"template"   json:"template"   diff:"update"`
 	Gender    int    `db:"gender"     json:"gender"`
@@ -216,7 +216,7 @@ type NestTrackingAPI struct {
 	ID          string `db:"id"            json:"id"            diff:"-"`
 	ProfileNo   int    `db:"profile_no"    json:"profile_no"    diff:"-"`
 	Ping        string `db:"ping"          json:"ping"`
-	Clean       IntBool `db:"clean"         json:"clean"         diff:"update"`
+	Clean       int    `db:"clean"         json:"clean"         diff:"update"`
 	Distance    int    `db:"distance"      json:"distance"      diff:"update"`
 	Template    string `db:"template"      json:"template"      diff:"update"`
 	PokemonID   int    `db:"pokemon_id"    json:"pokemon_id"    diff:"match"`
@@ -261,7 +261,7 @@ type QuestTrackingAPI struct {
 	ID         string `db:"id"          json:"id"          diff:"-"`
 	ProfileNo  int    `db:"profile_no"  json:"profile_no"  diff:"-"`
 	Ping       string `db:"ping"        json:"ping"`
-	Clean      IntBool `db:"clean"       json:"clean"       diff:"update"`
+	Clean      int    `db:"clean"       json:"clean"       diff:"update"`
 	Distance   int    `db:"distance"    json:"distance"    diff:"update"`
 	Template   string `db:"template"    json:"template"    diff:"update"`
 	RewardType int    `db:"reward_type" json:"reward_type"  diff:"match"`
@@ -310,7 +310,7 @@ type MonsterTrackingAPI struct {
 	ID              string `db:"id"                json:"id"                diff:"-"`
 	ProfileNo       int    `db:"profile_no"        json:"profile_no"        diff:"-"`
 	Ping            string `db:"ping"              json:"ping"`
-	Clean           IntBool `db:"clean"             json:"clean"             diff:"update"`
+	Clean           int    `db:"clean"             json:"clean"             diff:"update"`
 	Distance        int    `db:"distance"          json:"distance"          diff:"update"`
 	Template        string `db:"template"          json:"template"          diff:"update"`
 	PokemonID       int    `db:"pokemon_id"        json:"pokemon_id"`
@@ -420,7 +420,7 @@ type RaidTrackingAPI struct {
 	ID          string         `db:"id"           json:"id"           diff:"-"`
 	ProfileNo   int            `db:"profile_no"   json:"profile_no"   diff:"-"`
 	Ping        string         `db:"ping"         json:"ping"`
-	Clean       IntBool        `db:"clean"        json:"clean"        diff:"update"`
+	Clean       int            `db:"clean"        json:"clean"        diff:"update"`
 	Distance    int            `db:"distance"     json:"distance"     diff:"update"`
 	Template    string         `db:"template"     json:"template"     diff:"update"`
 	Team        int            `db:"team"         json:"team"         diff:"match"`
@@ -473,7 +473,7 @@ type EggTrackingAPI struct {
 	ID          string         `db:"id"           json:"id"           diff:"-"`
 	ProfileNo   int            `db:"profile_no"   json:"profile_no"   diff:"-"`
 	Ping        string         `db:"ping"         json:"ping"`
-	Clean       IntBool        `db:"clean"        json:"clean"        diff:"update"`
+	Clean       int            `db:"clean"        json:"clean"        diff:"update"`
 	Distance    int            `db:"distance"     json:"distance"     diff:"update"`
 	Template    string         `db:"template"     json:"template"     diff:"update"`
 	Team        int            `db:"team"         json:"team"         diff:"match"`
@@ -521,7 +521,7 @@ type GymTrackingAPI struct {
 	ID            string  `db:"id"             json:"id"             diff:"-"`
 	ProfileNo     int     `db:"profile_no"     json:"profile_no"     diff:"-"`
 	Ping          string  `db:"ping"           json:"ping"`
-	Clean         IntBool `db:"clean"          json:"clean"          diff:"update"`
+	Clean         int     `db:"clean"          json:"clean"          diff:"update"`
 	Distance      int     `db:"distance"       json:"distance"       diff:"update"`
 	Template      string  `db:"template"       json:"template"       diff:"update"`
 	Team          int     `db:"team"           json:"team"           diff:"match"`
@@ -569,7 +569,7 @@ type MaxbattleTrackingAPI struct {
 	ID        string  `db:"id"         json:"id"         diff:"-"`
 	ProfileNo int     `db:"profile_no" json:"profile_no" diff:"-"`
 	Ping      string  `db:"ping"       json:"ping"`
-	Clean     IntBool `db:"clean"      json:"clean"`
+	Clean     int     `db:"clean"      json:"clean"`
 	Distance  int     `db:"distance"   json:"distance"`
 	Template  string  `db:"template"   json:"template"`
 	PokemonID int     `db:"pokemon_id" json:"pokemon_id"`

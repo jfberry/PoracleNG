@@ -185,7 +185,7 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 				team = 4
 			}
 
-			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			clean := req.Clean.intValue(0)
 			exclusive := db.IntBool(req.Exclusive.intValue(0) != 0)
 
 			var gymID null.String
@@ -385,7 +385,7 @@ func toEggTracking(api *db.EggTrackingAPI) *db.EggTracking {
 		ID:          api.ID,
 		ProfileNo:   api.ProfileNo,
 		Ping:        api.Ping,
-		Clean:       bool(api.Clean),
+		Clean:       api.Clean,
 		Distance:    api.Distance,
 		Template:    api.Template,
 		Team:        api.Team,

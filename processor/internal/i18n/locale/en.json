@@ -39,6 +39,7 @@
 
   "tracking.template_fmt": "template: {0}",
   "tracking.clean": "clean",
+  "tracking.edit": "edit",
   "tracking.distance_fmt": "distance: {0}m",
   "tracking.iv_fmt": "iv: {0}%-{1}%",
   "tracking.cp_fmt": "cp: {0}-{1}",
@@ -159,6 +160,7 @@
   "arg.everything": "everything",
   "arg.any": "any",
   "arg.clean": "clean",
+  "arg.edit": "edit",
   "arg.individually": "individually",
   "arg.list": "list",
   "arg.add": "add",

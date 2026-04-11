@@ -185,7 +185,7 @@ func HandleCreateGym(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			clean := req.Clean.intValue(0)
 			slotChanges := db.IntBool(req.SlotChanges.intValue(0) != 0)
 			battleChanges := db.IntBool(req.BattleChanges.intValue(0) != 0)
 
@@ -372,7 +372,7 @@ func toGymTracking(api *db.GymTrackingAPI) *db.GymTracking {
 		ID:            api.ID,
 		ProfileNo:     api.ProfileNo,
 		Ping:          api.Ping,
-		Clean:         bool(api.Clean),
+		Clean:         api.Clean,
 		Distance:      api.Distance,
 		Template:      api.Template,
 		Team:          api.Team,

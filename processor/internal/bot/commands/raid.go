@@ -108,7 +108,7 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				GymID:       null.String{},
 				Distance:    common.Distance,
 				Template:    common.Template,
-				Clean:       db.IntBool(common.Clean),
+				Clean:       common.Clean,
 				RSVPChanges: rsvpChanges,
 			})
 		}
@@ -156,7 +156,7 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				GymID:       null.String{},
 				Distance:    common.Distance,
 				Template:    common.Template,
-				Clean:       db.IntBool(common.Clean),
+				Clean:       common.Clean,
 				RSVPChanges: rsvpChanges,
 			})
 		}

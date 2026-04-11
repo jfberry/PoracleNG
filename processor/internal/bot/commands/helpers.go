@@ -260,7 +260,7 @@ func removeByUIDs[T any](
 type commonTrackFields struct {
 	Template     string
 	Distance     int
-	Clean        bool
+	Clean        int
 	TemplateWarn string // non-empty if admin and template not found
 }
 
@@ -268,9 +268,16 @@ type commonTrackFields struct {
 // Validates the template if explicitly specified. Returns a blocking reply if a
 // non-admin user specifies a template that doesn't exist.
 func parseCommonTrackFields(ctx *bot.CommandContext, parsed *bot.ParsedArgs, dtsType string) (*commonTrackFields, *bot.Reply) {
+	cleanVal := 0
+	if parsed.HasKeyword("arg.clean") {
+		cleanVal |= 1
+	}
+	if parsed.HasKeyword("arg.edit") {
+		cleanVal |= 2
+	}
 	f := &commonTrackFields{
 		Template: ctx.DefaultTemplate(),
-		Clean:    parsed.HasKeyword("arg.clean"),
+		Clean:    cleanVal,
 	}
 
 	if t, ok := parsed.Strings["template"]; ok {

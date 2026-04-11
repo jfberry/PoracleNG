@@ -149,7 +149,7 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 			Ping:      pings,
 			Template:  common.Template,
 			Distance:  common.Distance,
-			Clean:     db.IntBool(common.Clean),
+			Clean:     common.Clean,
 			Gender:    gender,
 			GruntType: gt,
 		})

@@ -214,7 +214,7 @@ func (c *ScriptCommand) monsterToScript(ctx *bot.CommandContext, prefix string, 
 	if m.Distance > 0 {
 		parts = append(parts, fmt.Sprintf("d:%d", m.Distance))
 	}
-	parts = append(parts, c.commonSuffix(ctx, m.Template, bool(m.Clean))...)
+	parts = append(parts, c.commonSuffix(ctx, m.Template, m.Clean)...)
 
 	return strings.Join(parts, " ")
 }
@@ -243,7 +243,7 @@ func (c *ScriptCommand) raidToScript(ctx *bot.CommandContext, prefix string, r *
 		parts = append(parts, fmt.Sprintf("d:%d", r.Distance))
 	}
 	parts = append(parts, c.rsvpArg(r.RSVPChanges)...)
-	parts = append(parts, c.commonSuffix(ctx, r.Template, bool(r.Clean))...)
+	parts = append(parts, c.commonSuffix(ctx, r.Template, r.Clean)...)
 
 	return strings.Join(parts, " ")
 }
@@ -260,7 +260,7 @@ func (c *ScriptCommand) eggToScript(ctx *bot.CommandContext, prefix string, e *d
 		parts = append(parts, fmt.Sprintf("d:%d", e.Distance))
 	}
 	parts = append(parts, c.rsvpArg(e.RSVPChanges)...)
-	parts = append(parts, c.commonSuffix(ctx, e.Template, bool(e.Clean))...)
+	parts = append(parts, c.commonSuffix(ctx, e.Template, e.Clean)...)
 	return strings.Join(parts, " ")
 }
 
@@ -432,14 +432,17 @@ func (c *ScriptCommand) rsvpArg(rsvpChanges int) []string {
 	}
 }
 
-func (c *ScriptCommand) commonSuffix(ctx *bot.CommandContext, template string, clean bool) []string {
+func (c *ScriptCommand) commonSuffix(ctx *bot.CommandContext, template string, clean int) []string {
 	var parts []string
 	defaultTemplate := ctx.DefaultTemplate()
 	if template != defaultTemplate {
 		parts = append(parts, "template:"+template)
 	}
-	if clean {
+	if clean&1 != 0 {
 		parts = append(parts, "clean")
+	}
+	if clean&2 != 0 {
+		parts = append(parts, "edit")
 	}
 	return parts
 }

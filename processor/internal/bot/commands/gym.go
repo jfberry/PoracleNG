@@ -96,7 +96,7 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			Template:      common.Template,
 			Distance:      common.Distance,
 			Team:          team,
-			Clean:         db.IntBool(common.Clean),
+			Clean:         common.Clean,
 			SlotChanges:   db.IntBool(slotChanges),
 			BattleChanges: db.IntBool(battleChanges),
 			GymID:         nil,

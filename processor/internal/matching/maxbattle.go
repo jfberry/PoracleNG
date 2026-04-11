@@ -79,7 +79,7 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) []webhook
 			ProfileNo:        mb.ProfileNo,
 			Distance:         mb.Distance,
 			Template:         mb.Template,
-			Clean:            boolToInt(mb.Clean),
+			Clean:            mb.Clean,
 			Ping:             mb.Ping,
 			IsSpecificStation: isSpecificStation,
 		})

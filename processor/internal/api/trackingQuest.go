@@ -187,7 +187,7 @@ func HandleCreateQuest(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			clean := req.Clean.intValue(0)
 			form := req.Form.intValue(0)
 			shiny := db.IntBool(req.Shiny.intValue(0) != 0)
 			amount := req.Amount.intValue(0)
@@ -371,7 +371,7 @@ func toQuestTracking(api *db.QuestTrackingAPI) *db.QuestTracking {
 		ID:         api.ID,
 		ProfileNo:  api.ProfileNo,
 		Ping:       api.Ping,
-		Clean:      bool(api.Clean),
+		Clean:      api.Clean,
 		Distance:   api.Distance,
 		Template:   api.Template,
 		RewardType: api.RewardType,

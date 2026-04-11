@@ -189,7 +189,7 @@ func HandleCreateMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			clean := req.Clean.intValue(0)
 			form := req.Form.intValue(0)
 			move := req.Move.intValue(9000)
 			gmax := req.Gmax.intValue(0)
@@ -335,7 +335,7 @@ func toMaxbattleTracking(api *db.MaxbattleTrackingAPI) *db.MaxbattleTracking {
 		ID:        api.ID,
 		ProfileNo: api.ProfileNo,
 		Ping:      api.Ping,
-		Clean:     bool(api.Clean),
+		Clean:     api.Clean,
 		Distance:  api.Distance,
 		Template:  api.Template,
 		PokemonID: api.PokemonID,

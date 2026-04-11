@@ -175,7 +175,7 @@ func HandleCreateNest(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			clean := req.Clean.intValue(0)
 			minSpawnAvg := req.MinSpawnAvg.intValue(0)
 			form := req.Form.intValue(0)
 
@@ -356,7 +356,7 @@ func toNestTracking(api *db.NestTrackingAPI) *db.NestTracking {
 		ID:          api.ID,
 		ProfileNo:   api.ProfileNo,
 		Ping:        api.Ping,
-		Clean:       bool(api.Clean),
+		Clean:       api.Clean,
 		Distance:    api.Distance,
 		Template:    api.Template,
 		PokemonID:   api.PokemonID,

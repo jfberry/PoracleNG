@@ -38,7 +38,7 @@ func TestRaidMatchBasic(t *testing.T) {
 	raid := &db.RaidTracking{
 		ID: "user1", ProfileNo: 1, PokemonID: 150, Level: 5,
 		Team: 4, Exclusive: false, Form: 0, Evolution: 9000,
-		Move: 9000, Distance: 0, Template: "1", Clean: false,
+		Move: 9000, Distance: 0, Template: "1", Clean: 0,
 	}
 
 	st := makeRaidTestState([]*db.RaidTracking{raid}, nil, map[string]*db.Human{"user1": human})

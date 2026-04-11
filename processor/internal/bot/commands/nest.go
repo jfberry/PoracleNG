@@ -86,7 +86,7 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			Ping:        pings,
 			Template:    common.Template,
 			Distance:    common.Distance,
-			Clean:       db.IntBool(common.Clean),
+			Clean:       common.Clean,
 			PokemonID:   mon.PokemonID,
 			Form:        mon.Form,
 			MinSpawnAvg: minSpawnAvg,

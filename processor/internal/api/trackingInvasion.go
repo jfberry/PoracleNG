@@ -178,7 +178,7 @@ func HandleCreateInvasion(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			clean := req.Clean.intValue(0)
 			gender := req.Gender.intValue(0)
 
 			insert = append(insert, db.InvasionTrackingAPI{
@@ -357,7 +357,7 @@ func toInvasionTracking(api *db.InvasionTrackingAPI) *db.InvasionTracking {
 		ID:        api.ID,
 		ProfileNo: api.ProfileNo,
 		Ping:      api.Ping,
-		Clean:     bool(api.Clean),
+		Clean:     api.Clean,
 		Distance:  api.Distance,
 		Template:  api.Template,
 		Gender:    api.Gender,

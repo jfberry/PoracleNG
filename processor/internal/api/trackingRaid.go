@@ -170,7 +170,7 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Helper to build common fields from a request row
-		buildRaidCommon := func(req raidInsertRequest) (template string, distance int, team int, clean db.IntBool, exclusive db.IntBool, move int, evolution int, gymID null.String, rsvpChanges int) {
+		buildRaidCommon := func(req raidInsertRequest) (template string, distance int, team int, clean int, exclusive db.IntBool, move int, evolution int, gymID null.String, rsvpChanges int) {
 			template = defaultTemplate
 			if req.Template != nil {
 				switch v := req.Template.(type) {
@@ -192,7 +192,7 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 				team = 4
 			}
 
-			clean = db.IntBool(req.Clean.intValue(0) != 0)
+			clean = req.Clean.intValue(0)
 			exclusive = db.IntBool(req.Exclusive.intValue(0) != 0)
 			move = req.Move.intValue(9000)
 			evolution = req.Evolution.intValue(9000)
@@ -455,7 +455,7 @@ func toRaidTracking(api *db.RaidTrackingAPI) *db.RaidTracking {
 		ID:          api.ID,
 		ProfileNo:   api.ProfileNo,
 		Ping:        api.Ping,
-		Clean:       bool(api.Clean),
+		Clean:       api.Clean,
 		Distance:    api.Distance,
 		Template:    api.Template,
 		Team:        api.Team,

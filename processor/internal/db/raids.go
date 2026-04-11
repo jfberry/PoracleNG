@@ -20,7 +20,7 @@ type RaidTracking struct {
 	GymID       sql.NullString `db:"gym_id"`
 	Distance    int            `db:"distance"`
 	Template    string         `db:"template"`
-	Clean       bool           `db:"clean"`
+	Clean       int            `db:"clean"`
 	Ping        string         `db:"ping"`
 	RSVPChanges int            `db:"rsvp_changes"`
 }
@@ -35,7 +35,7 @@ type EggTracking struct {
 	GymID       sql.NullString `db:"gym_id"`
 	Distance    int            `db:"distance"`
 	Template    string         `db:"template"`
-	Clean       bool           `db:"clean"`
+	Clean       int            `db:"clean"`
 	Ping        string         `db:"ping"`
 	RSVPChanges int            `db:"rsvp_changes"`
 }

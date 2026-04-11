@@ -52,7 +52,7 @@ func HandleGetLure(deps *TrackingDeps) gin.HandlerFunc {
 				ID:        lures[i].ID,
 				ProfileNo: lures[i].ProfileNo,
 				Ping:      lures[i].Ping,
-				Clean:     bool(lures[i].Clean),
+				Clean:     lures[i].Clean,
 				Distance:  lures[i].Distance,
 				Template:  lures[i].Template,
 				LureID:    lures[i].LureID,
@@ -195,7 +195,7 @@ func HandleCreateLure(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			clean := req.Clean.intValue(0)
 
 			insert = append(insert, db.LureTrackingAPI{
 				ID:        human.ID,
@@ -373,7 +373,7 @@ func toLureTracking(api *db.LureTrackingAPI) *db.LureTracking {
 		ID:        api.ID,
 		ProfileNo: api.ProfileNo,
 		Ping:      api.Ping,
-		Clean:     bool(api.Clean),
+		Clean:     api.Clean,
 		Distance:  api.Distance,
 		Template:  api.Template,
 		LureID:    api.LureID,

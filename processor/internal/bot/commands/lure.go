@@ -85,7 +85,7 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			LureID:    id,
 			Distance:  common.Distance,
 			Template:  common.Template,
-			Clean:     db.IntBool(common.Clean),
+			Clean:     common.Clean,
 		})
 	}
 

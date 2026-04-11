@@ -162,7 +162,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				Size:             filters.size,
 				MaxSize:          filters.maxSize,
 				Template:         filters.template,
-				Clean:            db.IntBool(filters.clean),
+				Clean:            filters.clean,
 				PVPRankingLeague: pe.League,
 				PVPRankingBest:   pe.Best,
 				PVPRankingWorst:  pe.Worst,
@@ -292,7 +292,7 @@ type trackFilters struct {
 	size      int
 	maxSize   int
 	template  string
-	clean     bool
+	clean     int
 }
 
 func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) trackFilters {
@@ -328,8 +328,13 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 		f.minTime = t
 	}
 
-	// Clean
-	f.clean = parsed.HasKeyword("arg.clean")
+	// Clean / Edit
+	if parsed.HasKeyword("arg.clean") {
+		f.clean |= 1
+	}
+	if parsed.HasKeyword("arg.edit") {
+		f.clean |= 2
+	}
 
 	// Gender
 	f.gender = parsed.Gender

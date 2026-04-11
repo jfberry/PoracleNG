@@ -34,7 +34,7 @@ func monsterAPIToTracking(a *db.MonsterTrackingAPI) *db.MonsterTracking {
 		Size:             a.Size,
 		MaxSize:          a.MaxSize,
 		Template:         a.Template,
-		Clean:            bool(a.Clean),
+		Clean:            a.Clean,
 		Ping:             a.Ping,
 		PVPRankingLeague: a.PVPRankingLeague,
 		PVPRankingBest:   a.PVPRankingBest,
@@ -49,7 +49,7 @@ func eggAPIToTracking(api *db.EggTrackingAPI) *db.EggTracking {
 		ID:          api.ID,
 		ProfileNo:   api.ProfileNo,
 		Ping:        api.Ping,
-		Clean:       bool(api.Clean),
+		Clean:       api.Clean,
 		Distance:    api.Distance,
 		Template:    api.Template,
 		Team:        api.Team,
@@ -74,7 +74,7 @@ func raidAPIToTracking(a *db.RaidTrackingAPI) *db.RaidTracking {
 		GymID:       sql.NullString{String: a.GymID.String, Valid: a.GymID.Valid},
 		Distance:    a.Distance,
 		Template:    a.Template,
-		Clean:       bool(a.Clean),
+		Clean:       a.Clean,
 		Ping:        a.Ping,
 		RSVPChanges: a.RSVPChanges,
 	}
@@ -91,7 +91,7 @@ func questAPIToTracking(a *db.QuestTrackingAPI) *db.QuestTracking {
 		Shiny:      bool(a.Shiny),
 		Distance:   a.Distance,
 		Template:   a.Template,
-		Clean:      bool(a.Clean),
+		Clean:      a.Clean,
 		Ping:       a.Ping,
 	}
 }
@@ -104,7 +104,7 @@ func invasionAPIToTracking(a *db.InvasionTrackingAPI) *db.InvasionTracking {
 		Gender:    a.Gender,
 		Distance:  a.Distance,
 		Template:  a.Template,
-		Clean:     bool(a.Clean),
+		Clean:     a.Clean,
 		Ping:      a.Ping,
 	}
 }
@@ -116,7 +116,7 @@ func lureAPIToTracking(a *db.LureTrackingAPI) *db.LureTracking {
 		LureID:    a.LureID,
 		Distance:  a.Distance,
 		Template:  a.Template,
-		Clean:     bool(a.Clean),
+		Clean:     a.Clean,
 		Ping:      a.Ping,
 	}
 }
@@ -131,7 +131,7 @@ func gymAPIToTracking(a *db.GymTrackingAPI) *db.GymTracking {
 		GymID:         a.GymID,
 		Distance:      a.Distance,
 		Template:      a.Template,
-		Clean:         bool(a.Clean),
+		Clean:         a.Clean,
 		Ping:          a.Ping,
 	}
 }
@@ -145,7 +145,7 @@ func nestAPIToTracking(a *db.NestTrackingAPI) *db.NestTracking {
 		MinSpawnAvg: a.MinSpawnAvg,
 		Distance:    a.Distance,
 		Template:    a.Template,
-		Clean:       bool(a.Clean),
+		Clean:       a.Clean,
 		Ping:        a.Ping,
 	}
 }
@@ -176,7 +176,7 @@ func maxbattleAPIToTracking(a *db.MaxbattleTrackingAPI) *db.MaxbattleTracking {
 		StationID: a.StationID,
 		Distance:  a.Distance,
 		Template:  a.Template,
-		Clean:     bool(a.Clean),
+		Clean:     a.Clean,
 		Ping:      a.Ping,
 	}
 }

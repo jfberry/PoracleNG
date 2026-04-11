@@ -39,6 +39,7 @@
 
   "tracking.template_fmt": "plantilla: {0}",
   "tracking.clean": "limpiar",
+  "tracking.edit": "editar",
   "tracking.distance_fmt": "distancia: {0}m",
   "tracking.iv_fmt": "iv: {0}%-{1}%",
   "tracking.cp_fmt": "pc: {0}-{1}",
@@ -159,6 +160,7 @@
   "arg.everything": "todo",
   "arg.any": "cualquiera",
   "arg.clean": "limpiar",
+  "arg.edit": "editar",
   "arg.individually": "individualmente",
   "arg.list": "lista",
   "arg.add": "agregar",

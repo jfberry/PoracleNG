@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	log "github.com/sirupsen/logrus"
 )
@@ -212,7 +213,7 @@ func (fq *FairQueue) processJob(job *Job) {
 	metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 
 	// 4. Track for clean/edit if needed
-	if sent != nil && (job.Clean > 0 || job.EditKey != "") {
+	if sent != nil && (db.IsClean(job.Clean) || db.IsEdit(job.Clean) || job.EditKey != "") {
 		ttl := job.TTH.Duration()
 		if ttl <= 0 {
 			return

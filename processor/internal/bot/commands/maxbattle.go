@@ -86,7 +86,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 				Ping:      pings,
 				Template:  common.Template,
 				Distance:  common.Distance,
-				Clean:     db.IntBool(common.Clean),
+				Clean:     common.Clean,
 				PokemonID: mon.PokemonID,
 				Form:      mon.Form,
 				Level:     90, // 90 = all levels for specific pokemon
@@ -125,7 +125,7 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 				Ping:      pings,
 				Template:  common.Template,
 				Distance:  common.Distance,
-				Clean:     db.IntBool(common.Clean),
+				Clean:     common.Clean,
 				PokemonID: bot.WildcardID, // 9000 = by level
 				Level:     lvl,
 				Move:      move,

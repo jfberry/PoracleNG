@@ -86,7 +86,7 @@ func ValidateHumans(
 			Longitude:         human.Longitude,
 			Template:          monster.Template,
 			Distance:          actualDist,
-			Clean:             boolToInt(monster.Clean),
+			Clean:             monster.Clean,
 			Ping:              monster.Ping,
 			Bearing:           int(math.Round(bearing)),
 			CardinalDirection: CardinalDirection(bearing),

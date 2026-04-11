@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	log "github.com/sirupsen/logrus"
 )
@@ -46,7 +47,7 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 		}
 		metrics.DeliveryTrackerEvictions.Inc()
 		msg := item.Value()
-		if msg.Clean&1 == 0 {
+		if !db.IsClean(msg.Clean) {
 			return
 		}
 		platform := PlatformFromType(msg.Type)
@@ -160,7 +161,7 @@ func (mt *MessageTracker) Load() error {
 	for _, entry := range entries {
 		if entry.ExpiresAt.Before(now) {
 			// Expired entry
-			if entry.Message.Clean&1 != 0 {
+			if db.IsClean(entry.Message.Clean) {
 				expiredClean++
 				msg := entry.Message
 				platform := PlatformFromType(msg.Type)

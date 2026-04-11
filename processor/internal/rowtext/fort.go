@@ -19,7 +19,7 @@ func (g *Generator) FortUpdateRowText(tr *i18n.Translator, fort *db.FortTracking
 		s += " " + tr.T("tracking.including_empty")
 	}
 
-	s += " " + standardText(tr, fort.Template, g.DefaultTemplateName, false)
+	s += " " + standardText(tr, fort.Template, g.DefaultTemplateName, 0)
 
 	return s
 }

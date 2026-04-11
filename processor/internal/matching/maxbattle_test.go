@@ -20,7 +20,7 @@ func makeMaxbattle(id string, pokemonID, level int) *db.MaxbattleTracking {
 		Gmax:      0,    // any
 		Distance:  0,
 		Template:  "1",
-		Clean:     false,
+		Clean:     0,
 	}
 }
 

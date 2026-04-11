@@ -128,7 +128,7 @@ func TestMonsterRowText_WithGenderAndTime(t *testing.T) {
 		MinIV: 0, MaxIV: 100, MinCP: 0, MaxCP: 9000,
 		MinLevel: 0, MaxLevel: 40, MaxSize: 5, MaxRarity: 6,
 		MaxATK: 15, MaxDEF: 15, MaxSTA: 15,
-		Gender: 1, MinTime: 60, Clean: true,
+		Gender: 1, MinTime: 60, Clean: 1,
 	}
 
 	result := g.MonsterRowText(tr, m)
@@ -442,7 +442,7 @@ func TestStandardText_DefaultTemplate(t *testing.T) {
 	g := testGenerator(t)
 	tr := g.Translations.For("en")
 
-	result := standardText(tr, "1", g.DefaultTemplateName, false)
+	result := standardText(tr, "1", g.DefaultTemplateName, 0)
 	if result != "" {
 		t.Errorf("expected empty for default template, got: %q", result)
 	}
@@ -452,7 +452,7 @@ func TestStandardText_CustomTemplateAndClean(t *testing.T) {
 	g := testGenerator(t)
 	tr := g.Translations.For("en")
 
-	result := standardText(tr, "3", g.DefaultTemplateName, true)
+	result := standardText(tr, "3", g.DefaultTemplateName, 1)
 	if !strings.Contains(result, "template: 3") {
 		t.Errorf("expected template: 3, got: %q", result)
 	}

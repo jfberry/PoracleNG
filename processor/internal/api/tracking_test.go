@@ -113,8 +113,8 @@ func TestIntBoolInStruct(t *testing.T) {
 // --- diffTracking tests ---
 
 func TestDiffTrackingDuplicate(t *testing.T) {
-	a := &db.LureTrackingAPI{UID: 1, ID: "u1", ProfileNo: 1, Ping: "", Clean: false, Distance: 500, Template: "1", LureID: 501}
-	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Ping: "", Clean: false, Distance: 500, Template: "1", LureID: 501}
+	a := &db.LureTrackingAPI{UID: 1, ID: "u1", ProfileNo: 1, Ping: "", Clean: 0, Distance: 500, Template: "1", LureID: 501}
+	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Ping: "", Clean: 0, Distance: 500, Template: "1", LureID: 501}
 
 	noMatch, isDup, _, isUpdate := DiffTracking(a, b)
 	if noMatch {
@@ -139,8 +139,8 @@ func TestDiffTrackingNoMatch(t *testing.T) {
 }
 
 func TestDiffTrackingUpdate(t *testing.T) {
-	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Clean: false, Distance: 500, Template: "1", LureID: 501}
-	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Clean: true, Distance: 1000, Template: "2", LureID: 501}
+	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Clean: 0, Distance: 500, Template: "1", LureID: 501}
+	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Clean: 1, Distance: 1000, Template: "2", LureID: 501}
 
 	noMatch, isDup, uid, isUpdate := DiffTracking(a, b)
 	if noMatch || isDup {
@@ -301,7 +301,7 @@ func TestEggTrackingAPIJSON(t *testing.T) {
 		UID:       42,
 		ID:        "discord:123",
 		ProfileNo: 1,
-		Clean:     true,
+		Clean:     1,
 		Exclusive: false,
 		Distance:  1000,
 		Template:  "1",
@@ -329,14 +329,14 @@ func TestEggTrackingAPIJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(input), &parsed); err != nil {
 		t.Fatal(err)
 	}
-	if !bool(parsed.Clean) || !bool(parsed.Exclusive) {
-		t.Errorf("expected clean=true, exclusive=true from integer 1")
+	if parsed.Clean != 1 || !bool(parsed.Exclusive) {
+		t.Errorf("expected clean=1, exclusive=true from integer 1")
 	}
 }
 
 func TestGymTrackingAPIJSON(t *testing.T) {
 	gym := db.GymTrackingAPI{
-		Clean:         true,
+		Clean:         1,
 		SlotChanges:   false,
 		BattleChanges: true,
 	}
@@ -357,7 +357,7 @@ func TestGymTrackingAPIJSON(t *testing.T) {
 
 func TestQuestTrackingAPIJSON(t *testing.T) {
 	quest := db.QuestTrackingAPI{
-		Clean: true,
+		Clean: 1,
 		Shiny: false,
 	}
 
