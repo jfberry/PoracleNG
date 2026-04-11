@@ -97,12 +97,13 @@ func (ds *DiscordSender) Edit(ctx context.Context, sentID string, message json.R
 		return err
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body) //nolint:errcheck
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		io.Copy(io.Discard, resp.Body) //nolint:errcheck
 		return nil
 	}
-	return fmt.Errorf("discord edit returned status %d", resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("discord edit returned status %d: %s", resp.StatusCode, string(body))
 }
 
 // resolveMessageURL parses a sentID into a DELETE/PATCH URL plus auth flag.
