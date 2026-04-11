@@ -1,10 +1,10 @@
 # PoracleNG API Reference
 
-All API endpoints are available through the processor (default port 3030). The processor handles most endpoints directly and proxies remaining ones to the alerter transparently.
+All API endpoints are available through the processor (default port 3030). The processor handles all endpoints directly.
 
 ## Authentication
 
-All `/api/*` endpoints require the `X-Poracle-Secret` header matching the configured `[alerter] api_secret` value. Health and metrics endpoints do not require authentication.
+All `/api/*` endpoints require the `X-Poracle-Secret` header matching the configured `[processor] api_secret` value (with `[alerter] api_secret` as a backward-compatible fallback). Health and metrics endpoints do not require authentication.
 
 ```bash
 curl -H "X-Poracle-Secret: your-secret" http://localhost:3030/api/tracking/pokemon/123456789
@@ -1147,9 +1147,9 @@ Forward geocode a location name to coordinates.
 
 ## Confirmation Messages
 
-### POST /api/postMessage
+### POST /api/deliverMessages
 
-Send a confirmation message to a user via Discord or Telegram. Used internally by the processor for API operation confirmations (e.g. tracking added/removed). Handled by the alerter (proxied through the processor).
+Send a confirmation message to a user via Discord or Telegram. Used internally by the processor for API operation confirmations (e.g. tracking added/removed). This is the canonical endpoint; `POST /api/postMessage` is a legacy alias that behaves identically.
 
 ```json
 [{

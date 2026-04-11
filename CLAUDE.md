@@ -303,7 +303,7 @@ Reconciliation syncs Discord role membership with Poracle user registration. Run
 ## API Security
 
 **Shared secret** (`x-poracle-secret`):
-- All `/api/*` endpoints are protected by the `X-Poracle-Secret` header matching `[alerter] api_secret` (the `[alerter]` section name is kept for backward compatibility)
+- All `/api/*` endpoints are protected by the `X-Poracle-Secret` header matching `[processor] api_secret` (with `[alerter] api_secret` as a backward-compatible fallback — if the processor key is empty, the alerter key is copied over at config load)
 - If `api_secret` is empty/unset, auth is disabled (all requests allowed)
 - The `RequireSecret` middleware in `api/api.go` wraps all `/api/*` handlers
 
@@ -441,6 +441,7 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | GET | `/api/geocode/forward` | Forward geocode lookup |
 | GET | `/api/stats/rarity` | Rarity group statistics |
 | GET | `/api/stats/shiny` | Shiny rate statistics |
+| GET | `/api/stats/shiny-possible` | Shiny-possible spawn data |
 | GET | `/api/geofence/all` | All geofence data |
 | GET | `/api/geofence/all/hash` | MD5 hashes of geofence paths |
 | GET | `/api/geofence/all/geojson` | GeoJSON export |
@@ -451,24 +452,56 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | GET | `/api/geofence/weatherMap/{lat}/{lon}` | Weather S2 cell tile |
 | GET | `/api/config/templates` | DTS template list (?includeDescriptions=true) |
 | GET | `/api/config/poracleWeb` | Server config for web UI |
+| GET | `/api/config/schema` | Config editor schema with field metadata |
+| GET | `/api/config/values` | Current merged config values |
+| POST | `/api/config/values` | Save config changes (writes to overrides.json) |
+| POST | `/api/config/validate` | Dry-run config validation |
+| POST | `/api/config/migrate` | Move web-editable values from config.toml to overrides.json |
 | POST | `/api/dts/render` | Render a DTS template with provided data |
-| POST | `/api/postMessage` | Deliver confirmation/notification messages |
+| GET | `/api/dts/templates` | DTS template entries with full content (editor) |
+| POST | `/api/dts/templates` | Save DTS template entries |
+| DELETE | `/api/dts/templates` | Delete a DTS template entry |
+| PUT | `/api/dts/templates/file` | Update raw templateFile content |
+| GET | `/api/dts/emoji` | Emoji lookup map for template editing |
+| POST | `/api/dts/enrich` | Run webhook through enrichment pipeline |
+| GET | `/api/dts/fields` | List all DTS type names |
+| GET | `/api/dts/fields/{type}` | Template fields, block scopes, and snippets for a type |
+| GET | `/api/dts/partials` | Handlebars partials for client-side rendering |
+| POST | `/api/dts/sendtest` | Render and deliver a test message |
+| GET | `/api/dts/testdata` | Test webhook scenarios from testdata.json |
+| GET/POST | `/api/dts/reload` | Reload DTS templates and partials from disk |
+| POST | `/api/deliverMessages` | Deliver confirmation/notification messages |
+| POST | `/api/postMessage` | Legacy alias for /api/deliverMessages |
+| POST | `/api/resolve` | Batch resolve Discord/Telegram IDs to names |
+| POST | `/api/command` | Execute a bot command via API |
 | GET | `/api/masterdata/monsters` | All pokemon with names, forms, types (built from raw masterfile) |
 | GET | `/api/masterdata/grunts` | Grunt types (built from classic.json) |
 | GET | `/api/tracking/all/{id}` | All tracking for a user (all types) |
 | GET | `/api/tracking/allProfiles/{id}` | All tracking across all profiles |
+| GET | `/api/tracking/pokemon/refresh` | Force state reload |
 | GET | `/api/tracking/{type}/{id}` | List tracking rules with descriptions |
 | POST | `/api/tracking/{type}/{id}` | Create/update tracking rules (diff logic) |
 | DELETE | `/api/tracking/{type}/{id}/byUid/{uid}` | Delete single tracking rule |
-| PATCH | `/api/tracking/{type}/{id}/byUid/{uid}` | Update single tracking rule |
 | POST | `/api/tracking/{type}/{id}/delete` | Bulk delete by UID array |
-| GET | `/api/humans/{id}` | User info + available areas |
-| PATCH | `/api/humans/{id}` | Update user (location, area, language, etc.) |
-| DELETE | `/api/humans/{id}` | Delete user and all tracking |
+| GET | `/api/humans/{id}` | User available areas (filtered by community) |
+| GET | `/api/humans/one/{id}` | Full human record |
+| POST | `/api/humans` | Create a new user |
+| POST | `/api/humans/{id}/start` | Enable a user |
+| POST | `/api/humans/{id}/stop` | Disable a user |
+| POST | `/api/humans/{id}/adminDisabled` | Toggle admin disable flag |
+| POST | `/api/humans/{id}/setLocation/{lat}/{lon}` | Update user location |
+| GET | `/api/humans/{id}/checkLocation/{lat}/{lon}` | Check if location is in allowed areas |
+| POST | `/api/humans/{id}/setAreas` | Set user's selected geofence areas |
+| POST | `/api/humans/{id}/switchProfile/{profile}` | Switch active profile |
+| GET | `/api/humans/{id}/roles` | List Discord roles across guilds |
+| POST | `/api/humans/{id}/roles/add/{roleId}` | Add a Discord role to a user |
+| POST | `/api/humans/{id}/roles/remove/{roleId}` | Remove a Discord role from a user |
+| GET | `/api/humans/{id}/getAdministrationRoles` | Get delegated admin permissions |
 | GET | `/api/profiles/{id}` | List profiles |
-| POST | `/api/profiles/{id}` | Create/update profile |
-| DELETE | `/api/profiles/{id}/{profileNo}` | Delete profile |
-| POST | `/api/profiles/{id}/copy` | Copy profile |
+| POST | `/api/profiles/{id}/add` | Create new profile(s) |
+| POST | `/api/profiles/{id}/update` | Update profile active_hours |
+| POST | `/api/profiles/{id}/copy/{from}/{to}` | Copy tracking rules between profiles |
+| DELETE | `/api/profiles/{id}/byProfileNo/{profile_no}` | Delete profile |
 | GET | `/health` | Health check |
 | GET | `/metrics` | Prometheus metrics |
 
@@ -496,6 +529,17 @@ Tracking API routes call `triggerReload()` after mutations to push changes immed
 
 **Gym state persistence**: Gym team/slot state is saved to `config/.cache/gym-state.json` on shutdown and restored on startup. This prevents false team-change alerts after a restart, since the processor would otherwise treat all gyms as "new" and trigger change notifications.
 
+### Clean Flag Bitmask
+
+The `clean` field on tracking rules is a bitmask with two bits (`db/clean.go`):
+
+- `0` = no message lifecycle tracking
+- `1` = clean (auto-delete message on TTH expiry via MessageTracker)
+- `2` = edit (track message for later editing/updating)
+- `3` = edit + clean (both bits set)
+
+Helper functions `IsClean(clean)` and `IsEdit(clean)` test individual bits. When `IsEdit` is true, the renderer generates an `EditKey` (a stable identifier derived from the webhook event, e.g. gym ID + pokemon ID for raids). This EditKey flows through `RenderJob` into the `delivery.Job`. The `FairQueue` in delivery checks the `MessageTracker` for an existing message with the same EditKey; if found, it edits the existing message instead of sending a new one. First consumer: raids with RSVP updates (`rsvp_changes` tracking), where the same raid alert is edited in-place as RSVP counts change.
+
 ## Template System (DTS)
 
 DTS (Data Template System) templates are Handlebars templates rendered by the Go processor using `jfberry/raymond` (fork of `mailgun/raymond/v2` with `FieldResolver` interface). Templates define per-platform message formats for each alert type.
@@ -512,13 +556,15 @@ Templates are loaded from `config/dts.json` (or `fallbacks/dts.json` as fallback
 
 ### Template Selection Chain
 
-Template selection uses a 5-level fallback (first match wins):
+Template selection uses a two-pass mechanism. The first pass considers only user entries (non-readonly, from `config/dts.json` or `config/dts/`). If nothing matches, the second pass considers only fallback entries (readonly, from `fallbacks/dts.json`). Within each pass, 5 priority levels are tried in order:
 
 1. Exact match: type + template ID + platform + language
-2. Template + platform: type + template ID + platform (any language)
+2. Template + platform: type + template ID + platform (entry has empty language)
 3. Default + language: type + default template + platform + language
-4. Default: type + default template + platform
-5. Any platform: type + template ID (first platform match)
+4. Default: type + default template + platform (entry has empty language)
+5. Default + any language: type + default template + platform (last resort, any language)
+
+Within each level, the **last match wins** so that `config/dts/` overrides `config/dts.json` (later-loaded files are appended). Levels 3 and 4 share a return check: a level 4 match supersedes a level 3 match.
 
 ### LayeredView (zero-copy template context)
 
@@ -573,6 +619,7 @@ Templates receive the full view object with all enriched data. Common fields: `{
   3. `alerter/locale/*.json` — legacy shared strings (kept for backward compatibility)
   4. `config/custom.{lang}.json` — admin overrides
 - Identifier keys are stable: renaming English text doesn't break translations
+- **Per-key English fallback**: Non-English translators fall back to English on a per-key basis (not per-locale). After all locale files are loaded, `Bundle.LinkFallbacks()` links each non-English `Translator` to the English one. When `T("key")` finds no value in the user's language, it checks the English translator before returning the raw key. This means a German user still sees English pokemon names for any `poke_*` keys missing from the German locale files.
 
 ### Adding new translated strings
 
