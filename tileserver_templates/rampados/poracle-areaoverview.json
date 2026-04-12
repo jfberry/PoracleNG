@@ -1,0 +1,25 @@
+{
+  "style": "klokantech-basic",
+  "latitude": {{ latitude }},
+  "longitude": {{ longitude }},
+  "zoom": {{ zoom }},
+  "width": 1024,
+  "height": 768,
+  "scale": 1,
+
+  "polygons": [
+    {{ range i, fence := fences }}
+    {{ if i != 0 }},{{ end }}
+    {
+      "fill_color": "{{ fence.color }}40",
+      "stroke_color": "{{ fence.color }}",
+      "stroke_width": 2,
+      "path": [
+        {{ range i, coord := fence.path }}
+        {{ if i != 0 }},{{ end }}[{{ index(coord, 0) }}, {{ index(coord, 1) }}]
+        {{ end }}
+      ]
+    }
+    {{ end }}
+  ]
+}
