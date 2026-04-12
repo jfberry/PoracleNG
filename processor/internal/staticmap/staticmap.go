@@ -551,7 +551,7 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 		templateType = "multi-"
 	}
 
-	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?pregenerate=true&regeneratable=true",
+	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?pregenerate=true",
 		r.config.ProviderURL, mapPath, templateType, maptype)
 
 	body, err := json.Marshal(data)
