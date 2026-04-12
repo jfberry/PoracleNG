@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -161,6 +162,19 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 	return []bot.Reply{{React: react, Text: strings.Join(parts, "\n")}}
 }
 
+// parseDistanceArg checks if an arg matches d500, d:500, d1000 etc. Returns distance or 0.
+func parseDistanceArg(s string) int {
+	s = strings.ToLower(s)
+	if !strings.HasPrefix(s, "d") {
+		return 0
+	}
+	numStr := strings.TrimPrefix(s[1:], ":")
+	if n, err := strconv.Atoi(numStr); err == nil && n > 0 {
+		return n
+	}
+	return 0
+}
+
 func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	areas := humanAreas(getUserHuman(ctx))
@@ -173,16 +187,44 @@ func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Re
 
 	var replies []bot.Reply
 	for _, area := range areas {
-		displayName := area
-		fence := ctx.AreaLogic.FindFence(area)
-		if fence != nil {
-			displayName = fence.Name
+		// Check for distance pattern: d500, d:500, d1000
+		if dist := parseDistanceArg(area); dist > 0 {
+			human := getUserHuman(ctx)
+			if human == nil || (human.Latitude == 0 && human.Longitude == 0) {
+				replies = append(replies, bot.Reply{Text: tr.T("status.no_location")})
+				continue
+			}
+			reply := bot.Reply{Text: tr.Tf("msg.area.display", fmt.Sprintf("d%d", dist))}
+			if ctx.StaticMap != nil {
+				pos := staticmap.Autoposition(staticmap.AutopositionShape{
+					Circles: []staticmap.Circle{{
+						Latitude: human.Latitude, Longitude: human.Longitude, RadiusM: float64(dist),
+					}},
+				}, 500, 250, 1.25, 17.5)
+				if pos != nil {
+					data := map[string]any{
+						"zoom":      pos.Zoom,
+						"latitude":  human.Latitude,
+						"longitude": human.Longitude,
+						"distance":  dist,
+					}
+					reply.ImageURL = ctx.StaticMap.GetPregeneratedTileURL("distance", data, "staticMap")
+				}
+			}
+			replies = append(replies, reply)
+			continue
 		}
 
-		reply := bot.Reply{Text: tr.Tf("msg.area.display", displayName)}
+		fence := ctx.AreaLogic.FindFence(area)
+		if fence == nil {
+			replies = append(replies, bot.Reply{Text: tr.Tf("msg.area.not_found", area)})
+			continue
+		}
 
-		// Generate tile if static map is available and fence found
-		if ctx.StaticMap != nil && fence != nil {
+		reply := bot.Reply{Text: tr.Tf("msg.area.display", fence.Name)}
+
+		// Generate tile if static map is available
+		if ctx.StaticMap != nil {
 			paths := api.FencePaths(fence)
 			if len(paths) > 0 {
 				pos := staticmap.Autoposition(staticmap.AutopositionShape{
@@ -194,7 +236,7 @@ func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Re
 						"latitude":  pos.Latitude,
 						"longitude": pos.Longitude,
 						"polygons":  paths,
-						"coords":    paths[0], // backward compat for legacy tileserver templates
+						"coords":    paths[0],
 					}
 					reply.ImageURL = ctx.StaticMap.GetPregeneratedTileURL("area", data, "staticMap")
 				}
@@ -202,6 +244,10 @@ func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Re
 		}
 
 		replies = append(replies, reply)
+	}
+
+	if len(replies) == 0 {
+		return []bot.Reply{{Text: tr.T("status.no_areas")}}
 	}
 	return replies
 }
