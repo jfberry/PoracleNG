@@ -288,6 +288,7 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		evolutions, megaEvolutions := e.buildEvolutions(gd, tr, raid.PokemonID, raid.Form)
 		m["evolutions"] = evolutions
 		m["megaEvolutions"] = megaEvolutions
+		m["prevEvolutions"] = e.buildPrevEvolutions(gd, tr, raid.PokemonID)
 	}
 
 	return m

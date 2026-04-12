@@ -408,6 +408,9 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 	m["evolutions"] = evolutions
 	m["megaEvolutions"] = megaEvolutions
 
+	// Previous evolutions (what evolves into this pokemon)
+	m["prevEvolutions"] = e.buildPrevEvolutions(gd, tr, pokemon.PokemonID)
+
 	// Disguise name
 	if dpID, ok := base["disguisePokemonId"].(int); ok {
 		dpForm, _ := base["disguiseFormId"].(int)
@@ -565,6 +568,7 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 				"baseDefense": evoMon.Defense,
 				"baseStamina": evoMon.Stamina,
 			}
+			nameInfo["evolutionRequirement"] = gamedata.EvolutionRequirementText(tr, evo)
 			evolutions = append(evolutions, nameInfo)
 			walk(evoMon, depth+1)
 		}
@@ -596,6 +600,51 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 
 	walk(monster, 0)
 	return evolutions, megaEvolutions
+}
+
+// buildPrevEvolutions returns translated info about what pokemon evolve into this one,
+// walking backward recursively (max depth 5) through the precomputed PrevEvolutions index.
+func (e *Enricher) buildPrevEvolutions(gd *gamedata.GameData, tr *i18n.Translator, pokemonID int) []map[string]any {
+	if gd.PrevEvolutions == nil {
+		return nil
+	}
+
+	var result []map[string]any
+	visited := make(map[int]bool)
+
+	var walk func(id int, depth int)
+	walk = func(id int, depth int) {
+		if depth >= 5 {
+			return
+		}
+		prevs, ok := gd.PrevEvolutions[id]
+		if !ok {
+			return
+		}
+		for _, prev := range prevs {
+			if visited[prev.PokemonID] {
+				continue
+			}
+			visited[prev.PokemonID] = true
+
+			prevMon := gd.GetMonster(prev.PokemonID, prev.FormID)
+			if prevMon == nil {
+				continue
+			}
+
+			info := make(map[string]any)
+			TranslateMonsterNames(info, gd, tr, prev.PokemonID, prev.FormID, 0)
+			info["id"] = prev.PokemonID
+			info["form"] = prev.FormID
+			info["evolutionRequirement"] = gamedata.EvolutionRequirementText(tr, prev.Evolution)
+			result = append(result, info)
+
+			walk(prev.PokemonID, depth+1)
+		}
+	}
+
+	walk(pokemonID, 0)
+	return result
 }
 
 func computeSeenType(pokemon *webhook.PokemonWebhook) string {

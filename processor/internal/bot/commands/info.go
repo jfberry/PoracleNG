@@ -293,19 +293,30 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		}
 	}
 
-	// Evolutions with candy cost
+	// Evolutions with requirement text
 	if len(mon.Evolutions) > 0 {
 		sb.WriteByte('\n')
 		evoStrs := make([]string, 0, len(mon.Evolutions))
 		for _, evo := range mon.Evolutions {
 			evoName := tr.T(gamedata.PokemonTranslationKey(evo.PokemonID))
-			if evo.CandyCost > 0 {
-				evoStrs = append(evoStrs, fmt.Sprintf("%s (%d candy)", evoName, evo.CandyCost))
+			reqText := gamedata.EvolutionRequirementText(tr, evo)
+			if reqText != "" {
+				evoStrs = append(evoStrs, fmt.Sprintf("%s (%s)", evoName, reqText))
 			} else {
 				evoStrs = append(evoStrs, evoName)
 			}
 		}
 		sb.WriteString(tr.Tf("msg.info.evolves_to", strings.Join(evoStrs, ", ")) + "\n")
+	}
+
+	// Previous evolutions (walk backward, max depth 5)
+	if ctx.GameData.PrevEvolutions != nil {
+		var prevChain []string
+		c.collectPrevEvolutions(ctx, pokemonID, &prevChain, 5)
+		if len(prevChain) > 0 {
+			sb.WriteByte('\n')
+			sb.WriteString(tr.Tf("msg.info.evolves_from", strings.Join(prevChain, " <- ")) + "\n")
+		}
 	}
 
 	// Shiny rate (from stats tracker)
@@ -330,6 +341,36 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	}
 
 	return []bot.Reply{{Text: sb.String()}}
+}
+
+// collectPrevEvolutions walks backward through the previous evolution chain,
+// collecting display strings like "Eevee (25 candies)". Max depth prevents cycles.
+func (c *InfoCommand) collectPrevEvolutions(ctx *bot.CommandContext, pokemonID int, chain *[]string, maxDepth int) {
+	if maxDepth <= 0 {
+		return
+	}
+	prevs, ok := ctx.GameData.PrevEvolutions[pokemonID]
+	if !ok || len(prevs) == 0 {
+		return
+	}
+	tr := ctx.Tr()
+	// Deduplicate by pokemon ID (multiple forms may point to the same prev)
+	seen := make(map[int]bool)
+	for _, prev := range prevs {
+		if seen[prev.PokemonID] {
+			continue
+		}
+		seen[prev.PokemonID] = true
+		prevName := tr.T(gamedata.PokemonTranslationKey(prev.PokemonID))
+		reqText := gamedata.EvolutionRequirementText(tr, prev.Evolution)
+		if reqText != "" {
+			*chain = append(*chain, fmt.Sprintf("%s (%s)", prevName, reqText))
+		} else {
+			*chain = append(*chain, prevName)
+		}
+		// Walk further back
+		c.collectPrevEvolutions(ctx, prev.PokemonID, chain, maxDepth-1)
+	}
 }
 
 // availableForms returns a list of form display strings for a pokemon,

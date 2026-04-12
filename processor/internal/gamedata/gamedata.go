@@ -33,13 +33,14 @@ type MonsterKey struct {
 
 // GameData holds all loaded game master data for enrichment.
 type GameData struct {
-	Monsters map[MonsterKey]*Monster // {ID, Form} → Monster
-	Moves    map[int]*Move           // moveId → Move
-	Types    map[int]*TypeInfo       // typeId → TypeInfo
-	Items    map[int]*Item           // itemId → Item
-	Grunts   map[int]*Grunt          // gruntTypeId → Grunt
-	Weather  map[int]*WeatherData    // weatherId → WeatherData (boosted types)
-	Util     *UtilData               // static game constants
+	Monsters       map[MonsterKey]*Monster    // {ID, Form} → Monster
+	Moves          map[int]*Move              // moveId → Move
+	Types          map[int]*TypeInfo          // typeId → TypeInfo
+	Items          map[int]*Item              // itemId → Item
+	Grunts         map[int]*Grunt             // gruntTypeId → Grunt
+	Weather        map[int]*WeatherData       // weatherId → WeatherData (boosted types)
+	Util           *UtilData                  // static game constants
+	PrevEvolutions map[int][]PreviousEvolution // pokemonID → what evolves into it
 }
 
 // WeatherData holds weather boost information from the raw masterfile.
@@ -99,14 +100,17 @@ func Load(baseDir string) (*GameData, error) {
 		}
 	}
 
+	prevEvolutions := BuildPrevEvolutions(monsters)
+
 	return &GameData{
-		Monsters: monsters,
-		Moves:    moves,
-		Types:    types,
-		Items:    items,
-		Grunts:   grunts,
-		Weather:  weather,
-		Util:     util,
+		Monsters:       monsters,
+		Moves:          moves,
+		Types:          types,
+		Items:          items,
+		Grunts:         grunts,
+		Weather:        weather,
+		Util:           util,
+		PrevEvolutions: prevEvolutions,
 	}, nil
 }
 
