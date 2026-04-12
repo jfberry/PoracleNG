@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
 )
@@ -673,16 +675,38 @@ func (b *Bot) sendReplies(s *discordgo.Session, m *discordgo.MessageCreate, repl
 			}
 		}
 
-		// Image
+		// Image — download and upload as attachment so localhost tileserver URLs work
 		if reply.ImageURL != "" {
-			embed := &discordgo.MessageEmbed{
-				Image: &discordgo.MessageEmbedImage{URL: reply.ImageURL},
-			}
-			if reply.Text != "" {
-				embed.Description = reply.Text
-			}
-			if _, err := s.ChannelMessageSendEmbed(targetChannel, embed); err != nil {
-				log.Warnf("discord bot: send image embed: %v", err)
+			imageData, err := delivery.DownloadImage(http.DefaultClient, reply.ImageURL)
+			if err == nil {
+				embed := &discordgo.MessageEmbed{
+					Image: &discordgo.MessageEmbedImage{URL: "attachment://map.png"},
+				}
+				if reply.Text != "" {
+					embed.Description = reply.Text
+				}
+				msg := &discordgo.MessageSend{
+					Embeds: []*discordgo.MessageEmbed{embed},
+					Files: []*discordgo.File{{
+						Name:   "map.png",
+						Reader: bytes.NewReader(imageData),
+					}},
+				}
+				if _, err := s.ChannelMessageSendComplex(targetChannel, msg); err != nil {
+					log.Warnf("discord bot: send image: %v", err)
+				}
+			} else {
+				log.Warnf("discord bot: download image %s: %v", reply.ImageURL, err)
+				// Fallback: send as embed URL (works if tileserver is public)
+				embed := &discordgo.MessageEmbed{
+					Image: &discordgo.MessageEmbedImage{URL: reply.ImageURL},
+				}
+				if reply.Text != "" {
+					embed.Description = reply.Text
+				}
+				if _, err := s.ChannelMessageSendEmbed(targetChannel, embed); err != nil {
+					log.Warnf("discord bot: send image embed: %v", err)
+				}
 			}
 		}
 	}
