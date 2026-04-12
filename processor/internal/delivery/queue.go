@@ -176,7 +176,7 @@ func (fq *FairQueue) processJob(job *Job) {
 				log.Warnf("%s: edit: failed for key=%s: %v, sending new message", job.LogReference, job.EditKey, err)
 			}
 		} else {
-			log.Infof("%s: edit: no tracked message for key=%s, will send new and track", job.LogReference, job.EditKey)
+			log.Debugf("%s: edit: no tracked message for key=%s, will send new and track", job.LogReference, job.EditKey)
 		}
 	}
 
@@ -218,7 +218,7 @@ func (fq *FairQueue) processJob(job *Job) {
 	if sent != nil && (db.IsClean(job.Clean) || db.IsEdit(job.Clean) || job.EditKey != "") {
 		ttl := job.TTH.Duration()
 		if ttl <= 0 {
-			log.Infof("%s: clean/edit tracking skipped — TTL already expired (clean=%d)", job.LogReference, job.Clean)
+			log.Warnf("%s: clean/edit tracking skipped — TTL already expired (clean=%d)", job.LogReference, job.Clean)
 			return
 		}
 
@@ -233,7 +233,7 @@ func (fq *FairQueue) processJob(job *Job) {
 			Type:   job.Type,
 			Clean:  job.Clean,
 		}, ttl)
-		log.Infof("%s: tracked message key=%s sentID=%s ttl=%v clean=%d", job.LogReference, key, sent.ID, ttl, job.Clean)
+		log.Debugf("%s: tracked message key=%s sentID=%s ttl=%v clean=%d", job.LogReference, key, sent.ID, ttl, job.Clean)
 	}
 }
 
