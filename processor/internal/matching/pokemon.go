@@ -127,9 +127,11 @@ func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) []web
 	if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
 		for pokemonID, pvpMon := range pokemon.PVPEvoData {
 			for league, leagueDataArr := range pvpMon {
+				candidates := st.Monsters.PVPSpecific[league]
 				for _, leagueData := range leagueDataArr {
 					if leagueData.Rank <= m.PVPQueryMaxRank {
-						matched = append(matched, m.matchMonsters(pokemon, st.Monsters.PVPSpecific[league], pokemonID, 0, false, league, leagueData)...)
+						evoMatched := m.matchMonsters(pokemon, candidates, pokemonID, 0, false, league, leagueData)
+						matched = append(matched, evoMatched...)
 					}
 				}
 			}
