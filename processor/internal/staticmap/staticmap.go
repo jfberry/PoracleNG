@@ -561,7 +561,7 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 		return ""
 	}
 
-	log.Debugf("staticmap: POST %s type=%s%s fields=%v", reqURL, templateType, maptype, mapKeys(data))
+	log.Debugf("staticmap: POST %s type=%s%s body=%s", reqURL, templateType, maptype, string(body))
 
 	resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
 	if err != nil {
