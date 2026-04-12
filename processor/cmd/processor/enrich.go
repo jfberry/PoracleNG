@@ -8,6 +8,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -18,6 +19,7 @@ type enrichResult struct {
 	perLang       map[string]any
 	perUser       map[string]any
 	webhookFields map[string]any
+	tilePending   *staticmap.TilePending
 }
 
 // EnrichWebhook runs a raw webhook through the enrichment pipeline, builds a
@@ -53,6 +55,16 @@ func (ps *ProcessorService) EnrichWebhook(webhookType string, raw json.RawMessag
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// Resolve tile synchronously if pending (the normal render path does this async)
+	if result.tilePending != nil {
+		select {
+		case url := <-result.tilePending.Result:
+			result.tilePending.Apply(url)
+		case <-time.After(10 * time.Second):
+			result.tilePending.Apply(result.tilePending.Fallback)
+		}
 	}
 
 	// Build LayeredView with aliases, emoji resolution, and computed fields —
@@ -96,7 +108,7 @@ func (ps *ProcessorService) enrichPokemon(raw json.RawMessage, language string) 
 
 	rarityGroup := ps.stats.GetRarityGroup(pokemon.PokemonID)
 	processed := matching.ProcessPokemonWebhook(&pokemon, rarityGroup, ps.pvpCfg)
-	base, _ := ps.enricher.Pokemon(&pokemon, processed)
+	base, tilePending := ps.enricher.Pokemon(&pokemon, processed)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -124,6 +136,7 @@ func (ps *ProcessorService) enrichPokemon(raw json.RawMessage, language string) 
 		perLang:       perLang,
 		perUser:       perUser,
 		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
 	}, nil
 }
 
@@ -143,7 +156,7 @@ func (ps *ProcessorService) enrichRaid(raw json.RawMessage, language string, isE
 		templateType = "egg"
 	}
 
-	base, _ := ps.enricher.Raid(&raid, true)
+	base, tilePending := ps.enricher.Raid(&raid, true)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -155,6 +168,7 @@ func (ps *ProcessorService) enrichRaid(raw json.RawMessage, language string, isE
 		base:          base,
 		perLang:       perLang,
 		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
 	}, nil
 }
 
@@ -168,7 +182,7 @@ func (ps *ProcessorService) enrichQuest(raw json.RawMessage, language string) (*
 	for _, r := range quest.Rewards {
 		rewards = append(rewards, parseQuestReward(r))
 	}
-	base, _ := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
+	base, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -180,6 +194,7 @@ func (ps *ProcessorService) enrichQuest(raw json.RawMessage, language string) (*
 		base:          base,
 		perLang:       perLang,
 		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
 	}, nil
 }
 
@@ -206,7 +221,7 @@ func (ps *ProcessorService) enrichInvasion(raw json.RawMessage, language string)
 		displayType = inv.IncidentDisplayType
 	}
 
-	base, _ := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0)
+	base, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -218,6 +233,7 @@ func (ps *ProcessorService) enrichInvasion(raw json.RawMessage, language string)
 		base:          base,
 		perLang:       perLang,
 		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
 	}, nil
 }
 
@@ -227,7 +243,7 @@ func (ps *ProcessorService) enrichLure(raw json.RawMessage, language string) (*e
 		return nil, fmt.Errorf("parse lure: %w", err)
 	}
 
-	base, _ := ps.enricher.Lure(&lure)
+	base, tilePending := ps.enricher.Lure(&lure)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -239,6 +255,7 @@ func (ps *ProcessorService) enrichLure(raw json.RawMessage, language string) (*e
 		base:          base,
 		perLang:       perLang,
 		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
 	}, nil
 }
 
@@ -248,7 +265,7 @@ func (ps *ProcessorService) enrichNest(raw json.RawMessage, language string) (*e
 		return nil, fmt.Errorf("parse nest: %w", err)
 	}
 
-	base, _ := ps.enricher.Nest(&nest)
+	base, tilePending := ps.enricher.Nest(&nest)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -260,6 +277,7 @@ func (ps *ProcessorService) enrichNest(raw json.RawMessage, language string) (*e
 		base:          base,
 		perLang:       perLang,
 		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
 	}, nil
 }
 
@@ -279,7 +297,7 @@ func (ps *ProcessorService) enrichGym(raw json.RawMessage, language string) (*en
 	}
 	inBattle := bool(gym.IsInBattle) || bool(gym.InBattle)
 
-	base, _ := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, -1, inBattle, false, gymID)
+	base, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, -1, inBattle, false, gymID)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -291,6 +309,7 @@ func (ps *ProcessorService) enrichGym(raw json.RawMessage, language string) (*en
 		base:          base,
 		perLang:       perLang,
 		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
 	}, nil
 }
 
@@ -300,12 +319,13 @@ func (ps *ProcessorService) enrichFort(raw json.RawMessage, language string) (*e
 		return nil, fmt.Errorf("parse fort: %w", err)
 	}
 
-	base, _ := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID(), &fort)
+	base, tilePending := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID(), &fort)
 
 	return &enrichResult{
 		templateType:  "fort-update",
 		base:          base,
 		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
 	}, nil
 }
 
@@ -315,7 +335,7 @@ func (ps *ProcessorService) enrichMaxbattle(raw json.RawMessage, language string
 		return nil, fmt.Errorf("parse maxbattle: %w", err)
 	}
 
-	base, _ := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb)
+	base, tilePending := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -327,5 +347,6 @@ func (ps *ProcessorService) enrichMaxbattle(raw json.RawMessage, language string
 		base:          base,
 		perLang:       perLang,
 		webhookFields: parseWebhookFields(raw),
+		tilePending:   tilePending,
 	}, nil
 }
