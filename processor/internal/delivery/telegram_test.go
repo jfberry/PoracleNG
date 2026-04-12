@@ -75,8 +75,8 @@ func TestTelegramSendText(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.ID != "12345:42" {
-		t.Errorf("expected sentID '12345:42', got %q", result.ID)
+	if result.ID != "12345|text=42" {
+		t.Errorf("expected sentID '12345|text=42', got %q", result.ID)
 	}
 
 	c := *calls
@@ -136,9 +136,9 @@ func TestTelegramSendOrder(t *testing.T) {
 		t.Errorf("expected sendMessage third, got %s", c[2].Method)
 	}
 
-	// Text message ID (3) should be the primary ID
-	if result.ID != "999:3" {
-		t.Errorf("expected sentID '999:3', got %q", result.ID)
+	// All sent message IDs in send order
+	if result.ID != "999|sticker=1|photo=2|text=3" {
+		t.Errorf("expected sentID '999|sticker=1|photo=2|text=3', got %q", result.ID)
 	}
 }
 
@@ -194,8 +194,8 @@ func TestTelegramSendLocation(t *testing.T) {
 	if c[0].Body["longitude"] != -0.1278 {
 		t.Errorf("expected longitude -0.1278, got %v", c[0].Body["longitude"])
 	}
-	if result.ID != "222:50" {
-		t.Errorf("expected sentID '222:50', got %q", result.ID)
+	if result.ID != "222|location=50" {
+		t.Errorf("expected sentID '222|location=50', got %q", result.ID)
 	}
 }
 
@@ -339,8 +339,8 @@ func TestTelegramRateLimit429(t *testing.T) {
 	if len(c) != 2 {
 		t.Fatalf("expected 2 calls (1 retry), got %d", len(c))
 	}
-	if result.ID != "444:77" {
-		t.Errorf("expected sentID '444:77', got %q", result.ID)
+	if result.ID != "444|text=77" {
+		t.Errorf("expected sentID '444|text=77', got %q", result.ID)
 	}
 }
 
@@ -384,17 +384,25 @@ func TestTelegramSentIDFormat(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify format is "chatID:messageID"
-	parts := strings.SplitN(result.ID, ":", 2)
+	// Verify format is "chatID|type=messageID"
+	if result.ID != "98765|text=12345" {
+		t.Fatalf("expected sentID '98765|text=12345', got %q", result.ID)
+	}
+	parts := strings.Split(result.ID, "|")
 	if len(parts) != 2 {
-		t.Fatalf("expected sentID in format 'chatID:messageID', got %q", result.ID)
+		t.Fatalf("expected 2 parts (chatID + 1 message), got %d in %q", len(parts), result.ID)
 	}
 	if parts[0] != "98765" {
 		t.Errorf("expected chatID '98765', got %q", parts[0])
 	}
-	msgID, err := strconv.Atoi(parts[1])
+	// Verify type=msgID format
+	kv := strings.SplitN(parts[1], "=", 2)
+	if len(kv) != 2 || kv[0] != "text" {
+		t.Errorf("expected 'text=12345', got %q", parts[1])
+	}
+	msgID, err := strconv.Atoi(kv[1])
 	if err != nil {
-		t.Fatalf("expected numeric messageID, got %q: %v", parts[1], err)
+		t.Fatalf("expected numeric messageID, got %q: %v", kv[1], err)
 	}
 	if msgID != 12345 {
 		t.Errorf("expected messageID 12345, got %d", msgID)

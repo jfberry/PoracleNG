@@ -85,8 +85,8 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 	sendOrder := parseSendOrder(msg.SendOrder)
 	chatID := job.Target
 
-	var textMsgID int
-	var lastMsgID int
+	var allMsgIDs []int
+	var sentSteps []string
 	var sentAny bool
 
 	for i, step := range sendOrder {
@@ -111,9 +111,6 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 				continue
 			}
 			msgID, err = ts.sendMessage(ctx, chatID, msg.Content, parseMode, msg.WebpagePreview)
-			if err == nil {
-				textMsgID = msgID
-			}
 
 		case "location":
 			if !msg.Location || (job.Lat == 0 && job.Lon == 0) {
@@ -136,7 +133,8 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 		if err != nil {
 			return nil, err
 		}
-		lastMsgID = msgID
+		allMsgIDs = append(allMsgIDs, msgID)
+		sentSteps = append(sentSteps, step)
 		sentAny = true
 	}
 
@@ -144,21 +142,73 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 		return nil, fmt.Errorf("telegram: no content to send")
 	}
 
-	primaryID := lastMsgID
-	if textMsgID != 0 {
-		primaryID = textMsgID
+	// Store all message IDs with their types so clean deletes everything and
+	// edit can update the right component (e.g. sticker, text).
+	// Format: chatID|type=msgID|type=msgID  (e.g. "12345|sticker=100|photo=101|text=102")
+	sentParts := []string{chatID}
+	for i, id := range allMsgIDs {
+		if i < len(sentSteps) {
+			sentParts = append(sentParts, sentSteps[i]+"="+strconv.Itoa(id))
+		}
 	}
 
-	return &SentMessage{ID: chatID + ":" + strconv.Itoa(primaryID)}, nil
+	return &SentMessage{ID: strings.Join(sentParts, "|")}, nil
 }
 
-// Delete deletes a previously sent Telegram message.
+// Delete deletes all messages associated with a sent ID.
+// Format: chatID|type=msgID|type=msgID  (e.g. "12345|sticker=100|text=102")
+// Also supports legacy format: chatID:msgID (single message).
 func (ts *TelegramSender) Delete(ctx context.Context, sentID string) error {
-	chatID, messageID, err := parseTelegramSentID(sentID)
-	if err != nil {
-		return err
+	chatID, msgMap := parseTelegramSentIDMulti(sentID)
+	if chatID == "" {
+		return fmt.Errorf("invalid telegram sentID: %s", sentID)
 	}
 
+	var lastErr error
+	for _, messageID := range msgMap {
+		if err := ts.deleteMessage(ctx, chatID, messageID); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
+// parseTelegramSentIDMulti parses a sent ID into chatID and a map of step→messageID.
+// Supports two formats:
+//   - New: "chatID|sticker=100|text=101|location=102"
+//   - Legacy: "chatID:msgID" (stored as {"text": msgID})
+func parseTelegramSentIDMulti(sentID string) (string, map[string]int) {
+	// New format uses | separator
+	if strings.Contains(sentID, "|") {
+		parts := strings.Split(sentID, "|")
+		chatID := parts[0]
+		msgMap := make(map[string]int, len(parts)-1)
+		for _, part := range parts[1:] {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) != 2 {
+				continue
+			}
+			if id, err := strconv.Atoi(kv[1]); err == nil {
+				msgMap[kv[0]] = id
+			}
+		}
+		return chatID, msgMap
+	}
+
+	// Legacy format: chatID:msgID
+	idx := strings.LastIndex(sentID, ":")
+	if idx < 0 {
+		return "", nil
+	}
+	chatID := sentID[:idx]
+	msgID, err := strconv.Atoi(sentID[idx+1:])
+	if err != nil {
+		return "", nil
+	}
+	return chatID, map[string]int{"text": msgID}
+}
+
+func (ts *TelegramSender) deleteMessage(ctx context.Context, chatID string, messageID int) error {
 	body := map[string]any{
 		"chat_id":    chatID,
 		"message_id": messageID,
@@ -182,9 +232,19 @@ func (ts *TelegramSender) Delete(ctx context.Context, sentID string) error {
 
 // Edit edits a previously sent Telegram text message.
 func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
-	chatID, messageID, err := parseTelegramSentID(sentID)
-	if err != nil {
-		return err
+	chatID, msgMap := parseTelegramSentIDMulti(sentID)
+	if chatID == "" {
+		return fmt.Errorf("invalid telegram sentID: %s", sentID)
+	}
+
+	// Find the text message ID for editing
+	messageID, ok := msgMap["text"]
+	if !ok {
+		// Fallback: use the first (or only) message ID
+		for _, id := range msgMap {
+			messageID = id
+			break
+		}
 	}
 
 	var editMsg struct {
