@@ -192,7 +192,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 				contentType = ct
 			}
 		} else {
-			log.Debugf("discord: image download failed for %s, sending without: %v", channelID, err)
+			log.Warnf("discord: image download failed for %s (%s), sending without image: %v", channelID, imageURL, err)
 		}
 	}
 
@@ -225,7 +225,7 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 				contentType = ct
 			}
 		} else {
-			log.Debugf("discord: image download failed for %s, sending without: %v", webhookURL, err)
+			log.Warnf("discord: image download failed for webhook %s (%s), sending without image: %v", webhookURL, imageURL, err)
 		}
 	}
 
