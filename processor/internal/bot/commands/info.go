@@ -10,6 +10,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
@@ -296,17 +297,11 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	// Evolutions with requirement text
 	if len(mon.Evolutions) > 0 {
 		sb.WriteByte('\n')
-		evoStrs := make([]string, 0, len(mon.Evolutions))
-		for _, evo := range mon.Evolutions {
-			evoName := tr.T(gamedata.PokemonTranslationKey(evo.PokemonID))
-			reqText := gamedata.EvolutionRequirementText(tr, evo)
-			if reqText != "" {
-				evoStrs = append(evoStrs, fmt.Sprintf("%s (%s)", evoName, reqText))
-			} else {
-				evoStrs = append(evoStrs, evoName)
-			}
+		var evoLines []string
+		c.collectForwardEvolutions(ctx, mon, tr, &evoLines, 0, 5)
+		for _, line := range evoLines {
+			sb.WriteString(line + "\n")
 		}
-		sb.WriteString(tr.Tf("msg.info.evolves_to", strings.Join(evoStrs, ", ")) + "\n")
 	}
 
 	// Previous evolutions (walk backward, max depth 5)
@@ -341,6 +336,31 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	}
 
 	return []bot.Reply{{Text: sb.String()}}
+}
+
+// collectForwardEvolutions walks forward through the evolution chain recursively,
+// building indented lines like "Evolves to: Clefairy (50 candies)" with sub-evolutions indented.
+func (c *InfoCommand) collectForwardEvolutions(ctx *bot.CommandContext, mon *gamedata.Monster, tr *i18n.Translator, lines *[]string, depth, maxDepth int) {
+	if depth >= maxDepth || len(mon.Evolutions) == 0 {
+		return
+	}
+	indent := strings.Repeat("  ", depth)
+	for _, evo := range mon.Evolutions {
+		evoName := tr.T(gamedata.PokemonTranslationKey(evo.PokemonID))
+		reqText := gamedata.EvolutionRequirementText(tr, evo)
+		if reqText != "" {
+			*lines = append(*lines, fmt.Sprintf("%s%s", indent, tr.Tf("msg.info.evolves_to", evoName+" ("+reqText+")")))
+		} else {
+			*lines = append(*lines, fmt.Sprintf("%s%s", indent, tr.Tf("msg.info.evolves_to", evoName)))
+		}
+		// Recurse into this evolution's children
+		if ctx.GameData != nil {
+			evoMon := ctx.GameData.GetMonster(evo.PokemonID, evo.FormID)
+			if evoMon != nil {
+				c.collectForwardEvolutions(ctx, evoMon, tr, lines, depth+1, maxDepth)
+			}
+		}
+	}
 }
 
 // collectPrevEvolutions walks backward through the previous evolution chain,
