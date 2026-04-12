@@ -271,6 +271,25 @@ def matches_filters(obj, msg, args, pokemon_id):
     if args.has_evo and not has_evo:
         return False, None, False
 
+    # PVP rank filter
+    if args.pvp_rank is not None:
+        found_rank = False
+        if pvp and isinstance(pvp, dict):
+            leagues_to_check = [args.pvp_league] if args.pvp_league else list(pvp.keys())
+            for league in leagues_to_check:
+                entries = pvp.get(league)
+                if not entries:
+                    continue
+                for e in entries:
+                    rank = e.get("rank", 9999)
+                    if rank <= args.pvp_rank:
+                        found_rank = True
+                        break
+                if found_rank:
+                    break
+        if not found_rank:
+            return False, None, False
+
     if args.evo_pokemon is not None:
         found_evo = False
         if pvp and isinstance(pvp, dict):
@@ -583,6 +602,8 @@ def main():
     search.add_argument("--iv", type=float, help="IV percentage (e.g. 62.22)")
     search.add_argument("--has-evo", action="store_true", help="Only pokemon with PVP evolution entries")
     search.add_argument("--evo-pokemon", type=int, help="Filter by evolution pokemon ID in PVP data")
+    search.add_argument("--pvp-rank", type=int, help="Max PVP rank to match (e.g. 10 for top 10)")
+    search.add_argument("--pvp-league", help="PVP league filter: great, ultra, little (default: any)")
     search.add_argument("--type", "-t", help="Webhook type to search (default: pokemon). Use 'raid', 'quest', 'invasion', 'pokestop', 'max_battle', etc.")
 
     typed = parser.add_argument_group("Type-specific filters")
