@@ -637,6 +637,64 @@ func TestPokemonMatchPVPEvolutionDirectEevee(t *testing.T) {
 	}
 }
 
+// Test that PVP evolution matching uses the evolution's form (from PVP data)
+// not the spawned pokemon's form. A user tracking Sylveon form:3062 should
+// match an Eevee spawn that has PVP data showing Sylveon form 3062.
+func TestPokemonMatchPVPEvolutionFormCheck(t *testing.T) {
+	human := makeHuman("user1")
+
+	// Track Sylveon (700) with specific form 3062
+	monster := &db.MonsterTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 700, Form: 3062,
+		MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9999,
+		MinLevel: 0, MaxLevel: 55, ATK: 0, DEF: 0, STA: 0,
+		MaxATK: 15, MaxDEF: 15, MaxSTA: 15, Gender: 0,
+		MinWeight: 0, MaxWeight: 99999999, Rarity: -1, MaxRarity: 6,
+		Size: -1, MaxSize: 5, Template: "1",
+		PVPRankingLeague: 1500, PVPRankingBest: 1, PVPRankingWorst: 1000,
+		PVPRankingMinCP: 0, PVPRankingCap: 0,
+	}
+
+	st := makeTestState([]*db.MonsterTracking{monster}, map[string]*db.Human{"user1": human})
+	matcher := &PokemonMatcher{PVPQueryMaxRank: 4096, PVPEvolutionDirectTracking: true}
+
+	// Eevee (133, form 1092) with PVP evo data: Sylveon form 3062 rank 512
+	pokemon := &ProcessedPokemon{
+		PokemonID: 133, Form: 1092, IV: 44.4, CP: 125, Level: 5,
+		ATK: 5, DEF: 9, STA: 6, Weight: 9.308, Size: 3, RarityGroup: 1,
+		TTHSeconds: 1580, Latitude: 51.0, Longitude: 0.0, Encountered: true,
+		PVPBestRank: map[int][]pvp.LeagueRank{
+			1500: {{Rank: 2538, CP: 1052, Caps: []int{50}}},
+		},
+		PVPEvoData: map[int]map[int][]pvp.LeagueRank{
+			700: {1500: {{Rank: 512, CP: 1496, Caps: []int{50}, Form: 3062}}},
+		},
+	}
+
+	// Should match: PVP evo form 3062 matches tracking form 3062
+	matched := matcher.Match(pokemon, st)
+	if len(matched) != 1 {
+		t.Fatalf("Expected 1 match for Sylveon form:3062 via Eevee PVP evo, got %d", len(matched))
+	}
+
+	// Track Sylveon with wrong form — should NOT match
+	monsterWrongForm := &db.MonsterTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 700, Form: 9999,
+		MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9999,
+		MinLevel: 0, MaxLevel: 55, ATK: 0, DEF: 0, STA: 0,
+		MaxATK: 15, MaxDEF: 15, MaxSTA: 15, Gender: 0,
+		MinWeight: 0, MaxWeight: 99999999, Rarity: -1, MaxRarity: 6,
+		Size: -1, MaxSize: 5, Template: "1",
+		PVPRankingLeague: 1500, PVPRankingBest: 1, PVPRankingWorst: 1000,
+		PVPRankingMinCP: 0, PVPRankingCap: 0,
+	}
+	st2 := makeTestState([]*db.MonsterTracking{monsterWrongForm}, map[string]*db.Human{"user1": human})
+	matched2 := matcher.Match(pokemon, st2)
+	if len(matched2) != 0 {
+		t.Errorf("Expected 0 matches for Sylveon form:9999 (wrong form), got %d", len(matched2))
+	}
+}
+
 func TestPokemonMatchBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
 	human.SetBlockedAlerts(`["monster","pvp"]`)
