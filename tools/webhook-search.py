@@ -587,8 +587,37 @@ def search_and_display(args):
 
 
 def main():
+    examples = """
+examples:
+  # Pokemon search
+  %(prog)s --pokemon poliwag --atk 0 --def 15 --sta 13
+  %(prog)s --iv 100 --raw
+  %(prog)s --pokemon eevee --has-evo
+
+  # PVP search
+  %(prog)s --pvp-rank 10                        # top 10 any league
+  %(prog)s --pvp-rank 5 --pvp-league ultra      # top 5 ultra
+  %(prog)s --pvp-rank 1 --has-evo               # rank 1 evolutions
+
+  # Raids
+  %(prog)s --type raid --raid-pokemon aerodactyl
+  %(prog)s --type raid --raid-level 5 --egg
+  %(prog)s --type raid --hatched --raw
+
+  # Other types
+  %(prog)s --type quest --reward stardust
+  %(prog)s --type pokestop --lure-type 502      # glacial lures
+  %(prog)s --type max_battle --max-pokemon snorlax
+
+  # Replay into processor
+  %(prog)s --pokemon poliwag --has-evo --replay --dry-run
+  %(prog)s --pvp-rank 1 --replay-all --replay-tth 60
+  %(prog)s --inject @webhook.json
+  %(prog)s --inject '{"type":"pokemon","message":{...}}' --dry-run
+"""
     parser = argparse.ArgumentParser(
         description="Search webhook logs for pokemon and optionally replay them",
+        epilog=examples,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
