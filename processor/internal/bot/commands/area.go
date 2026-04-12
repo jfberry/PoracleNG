@@ -194,6 +194,7 @@ func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Re
 						"latitude":  pos.Latitude,
 						"longitude": pos.Longitude,
 						"polygons":  paths,
+						"coords":    paths[0], // backward compat for legacy tileserver templates
 					}
 					reply.ImageURL = ctx.StaticMap.GetPregeneratedTileURL("area", data, "staticMap")
 				}

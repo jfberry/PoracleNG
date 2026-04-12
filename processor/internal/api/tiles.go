@@ -29,6 +29,10 @@ type TileDeps struct {
 }
 
 func tileJSONOK(c *gin.Context, tileURL string) {
+	if tileURL == "" {
+		tileJSONError(c, http.StatusInternalServerError, "tile generation failed — check static map provider configuration and processor logs for 'staticmap:' warnings")
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "url": tileURL})
 }
 
@@ -113,6 +117,7 @@ func HandleGeofenceAreaMap(deps TileDeps) gin.HandlerFunc {
 			"latitude":  pos.Latitude,
 			"longitude": pos.Longitude,
 			"polygons":  paths,
+			"coords":    paths[0], // backward compat: first area for legacy templates using "coords"
 		}
 
 		tileURL := deps.StaticMap.GetPregeneratedTileURL("area", data, "staticMap")
