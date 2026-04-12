@@ -218,6 +218,7 @@ func (fq *FairQueue) processJob(job *Job) {
 	if sent != nil && (db.IsClean(job.Clean) || db.IsEdit(job.Clean) || job.EditKey != "") {
 		ttl := job.TTH.Duration()
 		if ttl <= 0 {
+			log.Infof("%s: clean/edit tracking skipped — TTL already expired (clean=%d)", job.LogReference, job.Clean)
 			return
 		}
 
@@ -232,7 +233,7 @@ func (fq *FairQueue) processJob(job *Job) {
 			Type:   job.Type,
 			Clean:  job.Clean,
 		}, ttl)
-		log.Debugf("%s: tracked message key=%s sentID=%s ttl=%v clean=%d", job.LogReference, key, sent.ID, ttl, job.Clean)
+		log.Infof("%s: tracked message key=%s sentID=%s ttl=%v clean=%d", job.LogReference, key, sent.ID, ttl, job.Clean)
 	}
 }
 

@@ -55,7 +55,7 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 		if !ok {
 			return
 		}
-		log.Infof("delivery: clean delete %s/%s", msg.Type, msg.Target)
+		log.Infof("delivery: clean delete %s/%s sentID=%s", msg.Type, msg.Target, msg.SentID)
 		go func() {
 			if err := sender.Delete(context.Background(), msg.SentID); err != nil {
 				log.Warnf("delivery: clean delete failed for %s: %v", msg.SentID, err)
