@@ -121,12 +121,11 @@ func (ps *ProcessorService) processTestRaid(raw json.RawMessage, target webhook.
 		return fmt.Errorf("parse raid: %w", err)
 	}
 
-	if msgType == "" {
-		if raid.PokemonID > 0 {
-			msgType = "raid"
-		} else {
-			msgType = "egg"
-		}
+	// Always determine type from webhook data — test data uses "raid" for both
+	if raid.PokemonID > 0 {
+		msgType = "raid"
+	} else {
+		msgType = "egg"
 	}
 
 	enrichment, tilePending := ps.enricher.Raid(&raid, true)
