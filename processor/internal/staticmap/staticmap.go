@@ -81,6 +81,7 @@ type Config struct {
 	TileserverCooldownMs       int // ms to keep circuit open (default 30000)
 	TileQueueSize              int // async tile request queue depth (default 100)
 	TileDeadlineMs             int // max time a payload waits for its tile (default 5000)
+	PregenTTL                  int // seconds for pregenerated tile TTL (0 = no TTL, tileserver manages cleanup)
 
 	// Fallback URL if tile generation fails
 	FallbackURL string
@@ -551,8 +552,12 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 		templateType = "multi-"
 	}
 
-	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?pregenerate=true",
-		r.config.ProviderURL, mapPath, templateType, maptype)
+	pregenQuery := "pregenerate=true"
+	if r.config.PregenTTL > 0 {
+		pregenQuery += fmt.Sprintf("&ttl=%d", r.config.PregenTTL)
+	}
+	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?%s",
+		r.config.ProviderURL, mapPath, templateType, maptype, pregenQuery)
 
 	body, err := json.Marshal(data)
 	if err != nil {

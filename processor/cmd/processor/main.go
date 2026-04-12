@@ -948,6 +948,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 			TileserverCooldownMs:       cfg.Tuning.TileserverCooldownMs,
 			TileQueueSize:              cfg.Tuning.TileserverQueueSize,
 			TileDeadlineMs:             cfg.Tuning.TileserverDeadlineMs,
+			PregenTTL:                  cfg.Tuning.TileserverPregenTTL,
 		}
 
 		// Convert tileserver settings
