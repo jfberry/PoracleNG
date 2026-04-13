@@ -63,6 +63,8 @@ type TemplateStore struct {
 	mu          sync.RWMutex
 	entries     []DTSEntry
 	cache       map[string]*raymond.Template
+	sourceCache map[string]string
+	tileUsage   map[string]bool
 	partials    map[string]string
 	configDir   string
 	fallbackDir string
@@ -72,6 +74,8 @@ type TemplateStore struct {
 func LoadTemplates(configDir, fallbackDir string) (*TemplateStore, error) {
 	ts := &TemplateStore{
 		cache:       make(map[string]*raymond.Template),
+		sourceCache: make(map[string]string),
+		tileUsage:   make(map[string]bool),
 		configDir:   configDir,
 		fallbackDir: fallbackDir,
 	}
@@ -185,6 +189,8 @@ func (ts *TemplateStore) Reload(configDir, fallbackDir string) error {
 	ts.entries = entries
 	ts.partials = partials
 	ts.cache = make(map[string]*raymond.Template)
+	ts.sourceCache = make(map[string]string)
+	ts.tileUsage = make(map[string]bool)
 	ts.configDir = configDir
 	ts.fallbackDir = fallbackDir
 	ts.mu.Unlock()
@@ -231,6 +237,7 @@ func (ts *TemplateStore) Get(templateType, platform, templateID, language string
 	// Cache under write lock
 	ts.mu.Lock()
 	ts.cache[key] = compiled
+	ts.sourceCache[key] = tmplStr
 	ts.mu.Unlock()
 
 	return compiled
@@ -285,7 +292,44 @@ func (ts *TemplateStore) ResolveEntryContent(entry DTSEntry) (any, string) {
 func (ts *TemplateStore) ClearCache() {
 	ts.mu.Lock()
 	ts.cache = make(map[string]*raymond.Template)
+	ts.sourceCache = make(map[string]string)
+	ts.tileUsage = make(map[string]bool)
 	ts.mu.Unlock()
+}
+
+// UsesTile checks whether the resolved template for the given parameters
+// references staticMap/staticmap. Uses the same selection chain as Get().
+// Returns true (conservative) if the template can't be found.
+func (ts *TemplateStore) UsesTile(templateType, platform, templateID, language string) bool {
+	key := cacheKey(templateType, platform, templateID, language)
+
+	ts.mu.RLock()
+	if result, ok := ts.tileUsage[key]; ok {
+		ts.mu.RUnlock()
+		return result
+	}
+	ts.mu.RUnlock()
+
+	// Trigger template resolution (which populates sourceCache)
+	tmpl := ts.Get(templateType, platform, templateID, language)
+	if tmpl == nil {
+		return true // conservative
+	}
+
+	ts.mu.RLock()
+	source, ok := ts.sourceCache[key]
+	ts.mu.RUnlock()
+	if !ok {
+		return true // conservative
+	}
+
+	uses := strings.Contains(strings.ToLower(source), "staticmap")
+
+	ts.mu.Lock()
+	ts.tileUsage[key] = uses
+	ts.mu.Unlock()
+
+	return uses
 }
 
 func cacheKey(templateType, platform, templateID, language string) string {
@@ -821,6 +865,8 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 
 	// Clear template cache
 	ts.cache = make(map[string]*raymond.Template)
+	ts.sourceCache = make(map[string]string)
+	ts.tileUsage = make(map[string]bool)
 	configDir := ts.configDir
 	ts.mu.Unlock()
 
@@ -866,6 +912,8 @@ func (ts *TemplateStore) DeleteEntry(filterType, filterPlatform, filterLanguage,
 			sourceFile = e.sourceFile
 			ts.entries = append(ts.entries[:i], ts.entries[i+1:]...)
 			ts.cache = make(map[string]*raymond.Template)
+			ts.sourceCache = make(map[string]string)
+			ts.tileUsage = make(map[string]bool)
 			found = true
 			break
 		}
