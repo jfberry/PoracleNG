@@ -3,6 +3,7 @@ package telegrambot
 import (
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -107,7 +108,7 @@ func (r *TelegramReconciliation) loadTelegramChannels(userID int64, channelList 
 			if member.User.UserName != "" {
 				n += " [" + member.User.UserName + "]"
 			}
-			name = n
+			name = stripNonASCII(n)
 		}
 
 		if member.Status != "left" && member.Status != "kicked" {
@@ -153,6 +154,23 @@ func (r *TelegramReconciliation) SyncTelegramUsers(syncNames, removeInvalidUsers
 	}
 
 	r.log.Info("User membership to Poracle users complete...")
+}
+
+// SyncSingleUser checks a single user's channel membership and reconciles.
+// Used by /start in DM to verify the user belongs to a registration channel
+// before registering them.
+func (r *TelegramReconciliation) SyncSingleUser(userID int64) {
+	id := strconv.FormatInt(userID, 10)
+	channelList := r.getChannelList()
+	telegramInfo := r.loadTelegramChannels(userID, channelList)
+
+	var user *db.HumanFull
+	existing, err := db.SelectOneHumanFull(r.db, id)
+	if err == nil {
+		user = existing
+	}
+
+	r.reconcileUser(id, user, telegramInfo, true, false)
 }
 
 // reconcileUser is the core reconciliation logic for a single Telegram user.
@@ -500,4 +518,18 @@ func hasAnyChannel(userChannels, configuredChannels []string) bool {
 		}
 	}
 	return false
+}
+
+// stripNonASCII removes non-ASCII characters from a string.
+// Matches the JS emojiStrip(/[^\x00-\xFF]/g) used to prevent MySQL
+// utf8 charset issues with emoji and other multi-byte characters.
+func stripNonASCII(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r <= 0xFF {
+			b.WriteRune(r)
+		}
+	}
+	return strings.TrimSpace(b.String())
 }

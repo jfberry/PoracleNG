@@ -52,10 +52,13 @@ func New(cfg Config) (*Bot, error) {
 	// Validate configured Telegram IDs
 	b.validateConfig()
 
-	// Initialize reconciliation if check_role is enabled.
-	if cfg.Cfg.Telegram.CheckRole && cfg.DTS != nil {
+	// Initialize reconciliation — needed for check_role periodic sync AND
+	// for /start DM registration (verifies channel membership via API).
+	if cfg.DTS != nil {
 		b.reconciliation = NewTelegramReconciliation(api, cfg.DB, cfg.Cfg, cfg.Translations, cfg.DTS)
-		go b.reconciliationLoop()
+		if cfg.Cfg.Telegram.CheckRole {
+			go b.reconciliationLoop()
+		}
 	}
 
 	go b.pollUpdates()
@@ -287,8 +290,18 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			continue
 		}
 
-		// register_on_start: /start triggers registration like /poracle
+		// register_on_start: /start triggers registration.
+		// In DMs: use reconciliation to verify channel membership via Telegram API
+		// (matching PoracleJS behaviour where /start in DM checks getChatMember).
+		// In groups: rewrite to cmd.poracle for normal group registration flow.
 		if !isRegistered && cmd.CommandKey == "cmd.start" && b.Cfg.Telegram.RegisterOnStart {
+			if isDM {
+				if b.reconciliation != nil {
+					log.Infof("telegram: /start DM from %s (%d), checking channel membership via reconciliation", userID, m.From.ID)
+					b.reconciliation.SyncSingleUser(m.From.ID)
+				}
+				continue
+			}
 			cmd.CommandKey = "cmd.poracle"
 		}
 
