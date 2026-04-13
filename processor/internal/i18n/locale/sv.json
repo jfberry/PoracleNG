@@ -1,6 +1,6 @@
 {
-  "weather.possible_change_at": "Possible weather change at",
-  "weather.unknown": "unknown",
+  "weather.possible_change_at": "Möjlig väderändring kl",
+  "weather.unknown": "okänt",
   "rate_limit.reached": "Du har nått gränsen på {0} meddelande under {1} sekunder",
   "rate_limit.banned_soft": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, use {0}start to resume",
   "rate_limit.banned_hard": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, contact an administrator to resume",
