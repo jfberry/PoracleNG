@@ -511,6 +511,7 @@ type TileserverConfig struct {
 	Height       int    `toml:"height"`
 	Zoom         int    `toml:"zoom"`
 	Pregenerate  *bool  `toml:"pregenerate"`
+	TTL          int    `toml:"ttl"` // seconds, 0 = use global tileserver_pregen_ttl
 }
 
 // FallbacksConfig holds fallback URLs from the [fallbacks] section.

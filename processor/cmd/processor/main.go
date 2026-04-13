@@ -960,6 +960,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 					Width:  v.Width,
 					Height: v.Height,
 					Zoom:   v.Zoom,
+					TTL:    v.TTL,
 				}
 				if v.IncludeStops != nil {
 					tc.IncludeStops = v.IncludeStops

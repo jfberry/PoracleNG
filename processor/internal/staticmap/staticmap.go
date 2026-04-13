@@ -35,6 +35,7 @@ type TileTypeConfig struct {
 	Height       int
 	Zoom         int
 	Pregenerate  *bool
+	TTL          int // seconds, 0 = use global PregenTTL default
 }
 
 // boolVal returns the value of a *bool, defaulting to false if nil.
@@ -486,6 +487,9 @@ func mergeOpts(dst *TileTypeConfig, src TileTypeConfig) {
 	if src.Pregenerate != nil {
 		dst.Pregenerate = src.Pregenerate
 	}
+	if src.TTL > 0 {
+		dst.TTL = src.TTL
+	}
 }
 
 // GetTileURL builds a non-pregenerated tile URL with query parameters.
@@ -553,8 +557,13 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 	}
 
 	pregenQuery := "pregenerate=true"
-	if r.config.PregenTTL > 0 {
-		pregenQuery += fmt.Sprintf("&ttl=%d", r.config.PregenTTL)
+	// Per-type TTL takes priority, then global default
+	ttl := r.config.PregenTTL
+	if tileOpts := r.getConfigForTileType(maptype); tileOpts.TTL > 0 {
+		ttl = tileOpts.TTL
+	}
+	if ttl > 0 {
+		pregenQuery += fmt.Sprintf("&ttl=%d", ttl)
 	}
 	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?%s",
 		r.config.ProviderURL, mapPath, templateType, maptype, pregenQuery)
