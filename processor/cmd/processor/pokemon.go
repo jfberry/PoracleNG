@@ -166,7 +166,8 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			}
 
 			enrichStart := time.Now()
-			baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed)
+			mode := ps.tileMode("monster", matched)
+			baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any

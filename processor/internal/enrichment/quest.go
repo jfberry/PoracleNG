@@ -49,7 +49,7 @@ type QuestCandyReward struct {
 }
 
 // Quest builds enrichment fields for a quest webhook.
-func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching.QuestRewardData) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching.QuestRewardData, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	endOfDay := geo.EndOfDay(lat, lon)
@@ -68,7 +68,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching
 	e.addGeoResult(m, lat, lon)
 
 	// Static map tile
-	pending := e.addStaticMap(m, "quest", lat, lon, nil)
+	pending := e.addStaticMap(m, "quest", lat, lon, nil, tileMode)
 
 	// Future event check
 	if e.EventChecker != nil {

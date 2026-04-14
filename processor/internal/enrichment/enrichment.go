@@ -165,12 +165,21 @@ func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
 	m["formattedAddress"] = addr.FormattedAddress
 }
 
+// Tile mode constants. Defined here to avoid import cycles with cmd/processor.
+const (
+	TileModeSkip   = 0 // no template uses staticMap → don't generate tile
+	TileModeInline = 1 // all users can accept bytes → POST without pregenerate
+	TileModeURL    = 2 // at least one user needs a fetchable URL → pregenerate
+)
+
 // addStaticMap generates a static map tile URL and adds it to the enrichment map.
 // For async-capable providers (tileservercache pregenerate), returns a TilePending
 // that the sender resolves before flushing. For instant providers, sets the URL
 // directly and returns nil.
-func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any) *staticmap.TilePending {
-	if e.StaticMap == nil {
+// tileMode controls whether to skip (0), generate inline bytes (1), or generate
+// a fetchable URL (2).
+func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any, tileMode int) *staticmap.TilePending {
+	if e.StaticMap == nil || tileMode == TileModeSkip {
 		return nil
 	}
 	// Build tileserver payload from enrichment + webhook fields
@@ -181,6 +190,15 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 	merged["longitude"] = lon
 	keys, pregenKeys := staticMapFieldsForType(maptype)
 
+	if tileMode == TileModeInline {
+		// Inline mode POSTs without pregenerate=true — the tileserver returns
+		// image bytes directly. Assumes tileservercache with POST-body support.
+		filtered := filterFields(merged, pregenKeys)
+		e.StaticMap.AddNearbyStops(filtered, merged, maptype)
+		return e.StaticMap.SubmitTileInline(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m)
+	}
+
+	// TileModeURL — current flow
 	url, pending := e.StaticMap.GetStaticMapURLAsync(maptype, merged, keys, pregenKeys, m)
 	if pending != nil {
 		// Tile will be resolved async by the sender
@@ -190,6 +208,17 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 	m["staticMap"] = url
 	m["staticmap"] = url // deprecated alias
 	return nil
+}
+
+// filterFields returns a new map containing only the keys in the allowed list.
+func filterFields(data map[string]any, allowed []string) map[string]any {
+	result := make(map[string]any, len(allowed))
+	for _, key := range allowed {
+		if v, ok := data[key]; ok {
+			result[key] = v
+		}
+	}
+	return result
 }
 
 // staticMapFieldsForType returns the field lists for non-pregenerate (keys) and

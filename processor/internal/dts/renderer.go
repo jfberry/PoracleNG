@@ -103,6 +103,11 @@ func (r *Renderer) resolveTemplate(trackingTemplate string) string {
 	return r.defaultTemplate
 }
 
+// ResolveTemplate returns the template ID to use, applying the default if empty.
+func (r *Renderer) ResolveTemplate(trackingTemplate string) string {
+	return r.resolveTemplate(trackingTemplate)
+}
+
 // CheckTemplate validates that a template can be found for the given parameters.
 // Returns nil if a template exists, or an error describing what's missing.
 func (r *Renderer) CheckTemplate(templateType, platform, templateID, language string) error {

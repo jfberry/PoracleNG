@@ -83,14 +83,15 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 				mb.BattleLevel, ps.pokemonName(mb.BattlePokemonID, mb.BattlePokemonForm),
 				mb.Name, mb.Latitude, mb.Longitude, areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb)
+			mode := ps.tileMode("maxbattle", matched)
+			enrichmentData, tilePending := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.MaxbattleTranslate(enrichment, &mb, lang)
+					perLang[lang] = ps.enricher.MaxbattleTranslate(enrichmentData, &mb, lang)
 				}
 			}
 
@@ -101,7 +102,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 
 			ps.renderCh <- RenderJob{
 				TemplateType:      "maxbattle",
-				Enrichment:        enrichment,
+				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,

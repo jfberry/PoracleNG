@@ -11,7 +11,7 @@ import (
 )
 
 // Raid builds enrichment fields for a raid or egg webhook.
-func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 	m["pokemon_id"] = raid.PokemonID
 	m["firstNotification"] = firstNotification
@@ -120,7 +120,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		"teamId":     raid.TeamID,
 		"evolution":  raid.Evolution,
 		"costume":    raid.Costume,
-	})
+	}, tileMode)
 
 	// Game data enrichment
 	if e.GameData != nil {

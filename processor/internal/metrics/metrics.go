@@ -204,6 +204,11 @@ var (
 		Help: "Tiles skipped due to render queue pressure",
 	})
 
+	TileModeTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_tile_mode_total",
+		Help: "Tile mode decisions: skip, inline, url",
+	}, []string{"mode"})
+
 	// Delivery metrics
 	DeliveryTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "poracle_delivery_total",

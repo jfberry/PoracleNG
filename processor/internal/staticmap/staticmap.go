@@ -82,7 +82,7 @@ type Config struct {
 	TileserverCooldownMs       int // ms to keep circuit open (default 30000)
 	TileQueueSize              int // async tile request queue depth (default 100)
 	TileDeadlineMs             int // max time a payload waits for its tile (default 5000)
-	PregenTTL                  int // seconds for pregenerated tile TTL (0 = no TTL, tileserver manages cleanup)
+	PregenTTL                  int // seconds for pregenerated tile TTL (default 300 = 5 minutes, -1 = no TTL hint)
 
 	// Fallback URL if tile generation fails
 	FallbackURL string
@@ -106,10 +106,12 @@ func (s Stats) AvgMs() int64 {
 // TilePending represents an in-flight tile generation request.
 // The sender checks Result (non-blocking) to see if the tile is ready.
 type TilePending struct {
-	Result   chan string     // receives tile URL when done (buffered, size 1)
-	Deadline time.Time      // if not resolved by this time, use Fallback
-	Fallback string         // fallback URL if deadline expires or generation fails
-	target   map[string]any // enrichment map to write staticMap/staticmap into
+	Result    chan string // URL mode: receives tile URL when done (buffered, size 1)
+	ResultImg chan []byte // Inline mode: receives PNG bytes
+	Inline    bool       // which mode was requested
+	Deadline  time.Time  // if not resolved by this time, use Fallback
+	Fallback  string     // fallback URL if deadline expires or generation fails
+	target    map[string]any // enrichment map to write staticMap/staticmap into
 }
 
 // Apply writes the resolved tile URL into the enrichment map.
@@ -117,6 +119,15 @@ func (tp *TilePending) Apply(url string) {
 	if tp.target != nil {
 		tp.target["staticMap"] = url
 		tp.target["staticmap"] = url
+	}
+}
+
+// ApplyInline writes a marker into the enrichment map indicating inline mode.
+// The actual bytes are carried through the RenderJob, not stored in enrichment.
+func (tp *TilePending) ApplyInline() {
+	if tp.target != nil {
+		tp.target["staticMap"] = "inline"
+		tp.target["staticmap"] = "inline"
 	}
 }
 
@@ -193,6 +204,9 @@ func New(config Config) *Resolver {
 	if config.TileDeadlineMs <= 0 {
 		config.TileDeadlineMs = 10000
 	}
+	if config.PregenTTL == 0 {
+		config.PregenTTL = 300 // 5 minutes
+	}
 
 	r := &Resolver{
 		config: config,
@@ -221,7 +235,11 @@ func (r *Resolver) Close() {
 	for {
 		select {
 		case req := <-r.tileQueue:
-			req.pending.Result <- req.pending.Fallback
+			if req.pending.Inline {
+				req.pending.ResultImg <- nil
+			} else {
+				req.pending.Result <- req.pending.Fallback
+			}
 		default:
 			return
 		}
@@ -257,6 +275,28 @@ func (r *Resolver) SubmitTile(maptype string, data map[string]any, staticMapType
 	return pending
 }
 
+// SubmitTileInline queues an inline tile request that returns image bytes.
+func (r *Resolver) SubmitTileInline(maptype string, data map[string]any, staticMapType string, target map[string]any) *TilePending {
+	pending := &TilePending{
+		ResultImg: make(chan []byte, 1),
+		Inline:    true,
+		Deadline:  time.Now().Add(r.TileDeadline()),
+		Fallback:  r.config.FallbackURL,
+		target:    target,
+	}
+
+	select {
+	case r.tileQueue <- tileRequest{pending: pending, maptype: maptype, data: data, staticMapType: staticMapType}:
+		metrics.TileQueueDepth.Set(float64(len(r.tileQueue)))
+	default:
+		pending.ResultImg <- nil
+		metrics.TileTotal.WithLabelValues("queue_full").Inc()
+		log.Warnf("staticmap: tile queue full, skipping inline tile for %s", maptype)
+	}
+
+	return pending
+}
+
 // tileWorker drains the tile queue and generates tiles.
 func (r *Resolver) tileWorker() {
 	defer r.wg.Done()
@@ -264,16 +304,26 @@ func (r *Resolver) tileWorker() {
 		select {
 		case req := <-r.tileQueue:
 			metrics.TileQueueDepth.Set(float64(len(r.tileQueue)))
-			if time.Now().After(req.pending.Deadline) {
-				req.pending.Result <- req.pending.Fallback
-				metrics.TileTotal.WithLabelValues("deadline").Inc()
-				continue
+			if req.pending.Inline {
+				if time.Now().After(req.pending.Deadline) {
+					req.pending.ResultImg <- nil
+					metrics.TileTotal.WithLabelValues("deadline").Inc()
+					continue
+				}
+				imgData := r.GenerateInlineTile(req.maptype, req.data, req.staticMapType)
+				req.pending.ResultImg <- imgData
+			} else {
+				if time.Now().After(req.pending.Deadline) {
+					req.pending.Result <- req.pending.Fallback
+					metrics.TileTotal.WithLabelValues("deadline").Inc()
+					continue
+				}
+				url := r.generatePregenTile(req.maptype, req.data, req.staticMapType)
+				if url == "" {
+					url = req.pending.Fallback
+				}
+				req.pending.Result <- url
 			}
-			url := r.generatePregenTile(req.maptype, req.data, req.staticMapType)
-			if url == "" {
-				url = req.pending.Fallback
-			}
-			req.pending.Result <- url
 		case <-r.done:
 			return
 		}
@@ -639,6 +689,114 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 	tileURL := fmt.Sprintf("%s/%s/pregenerated/%s", r.config.ProviderURL, mapPath, result)
 	log.Debugf("staticmap: tile generated %s (%dms)", tileURL, duration.Milliseconds())
 	return tileURL
+}
+
+// GenerateInlineTile POSTs to the tileserver without pregenerate=true,
+// receiving the rendered PNG bytes directly. No file is stored on disk.
+func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, staticMapType string) []byte {
+	// Circuit breaker check
+	r.mu.Lock()
+	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
+		elapsed := time.Since(r.circuitOpenSince)
+		cooldown := time.Duration(r.config.TileserverCooldownMs) * time.Millisecond
+		if elapsed < cooldown {
+			r.mu.Unlock()
+			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
+			return nil
+		}
+		if r.halfOpenProbeActive {
+			r.mu.Unlock()
+			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
+			return nil
+		}
+		r.halfOpenProbeActive = true
+	}
+	r.mu.Unlock()
+
+	metrics.TileInFlight.Inc()
+	defer metrics.TileInFlight.Dec()
+	start := time.Now()
+
+	mapPath := "staticmap"
+	templateType := ""
+	if strings.EqualFold(staticMapType, "multistaticmap") {
+		mapPath = "multistaticmap"
+		templateType = "multi-"
+	}
+
+	// No pregenerate=true — tileserver returns image bytes directly
+	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s",
+		r.config.ProviderURL, mapPath, templateType, maptype)
+
+	body, err := json.Marshal(data)
+	if err != nil {
+		log.Warnf("staticmap: marshal inline data: %s", err)
+		metrics.TileTotal.WithLabelValues("error").Inc()
+		return nil
+	}
+
+	log.Debugf("staticmap: POST inline %s type=%s%s body=%s", reqURL, templateType, maptype, string(body))
+
+	resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
+	if err != nil {
+		r.recordError()
+		r.statErrors.Add(1)
+		metrics.TileTotal.WithLabelValues("error").Inc()
+		metrics.TileDuration.Observe(time.Since(start).Seconds())
+		log.Warnf("staticmap: inline request failed: %s", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		r.recordError()
+		r.statErrors.Add(1)
+		metrics.TileTotal.WithLabelValues("error").Inc()
+		metrics.TileDuration.Observe(time.Since(start).Seconds())
+		log.Warnf("staticmap: read inline response: %s", err)
+		return nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		r.recordError()
+		r.statErrors.Add(1)
+		metrics.TileTotal.WithLabelValues("error").Inc()
+		metrics.TileDuration.Observe(time.Since(start).Seconds())
+		truncLen := len(respBody)
+		if truncLen > 200 {
+			truncLen = 200
+		}
+		log.Warnf("staticmap: inline %s got status %d: %s", reqURL, resp.StatusCode, string(respBody[:truncLen]))
+		return nil
+	}
+
+	// Reset circuit breaker on success
+	r.mu.Lock()
+	r.consecutiveErrors = 0
+	r.halfOpenProbeActive = false
+	r.mu.Unlock()
+	metrics.TileCircuitHealthy.Set(1)
+
+	duration := time.Since(start)
+	metrics.TileTotal.WithLabelValues("inline_ok").Inc()
+	metrics.TileDuration.Observe(duration.Seconds())
+	r.statCalls.Add(1)
+	r.statTotalMs.Add(duration.Milliseconds())
+
+	return respBody
+}
+
+// AddNearbyStops fetches nearby stops from the scanner DB and adds them to the target map.
+// Exported wrapper for use by inline tile generation in the enrichment layer.
+func (r *Resolver) AddNearbyStops(target, data map[string]any, maptype string) {
+	tileOpts := r.getConfigForTileType(maptype)
+	r.addNearbyStops(target, data, tileOpts)
+}
+
+// GetStaticMapType returns the tileserver template type for the given alert type.
+func (r *Resolver) GetStaticMapType(maptype string) string {
+	return r.getConfigForTileType(maptype).Type
 }
 
 // recordError increments the consecutive error counter and opens the circuit if threshold reached.

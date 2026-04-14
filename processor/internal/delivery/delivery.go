@@ -33,8 +33,9 @@ type Job struct {
 	EditKey      string          `json:"editKey"`      // non-empty = track for future edits
 	Name         string          `json:"name"`         // human-readable destination name
 	LogReference string          `json:"logReference"` // encounter/gym ID for tracing
-	Lat          float64         `json:"lat"`
-	Lon          float64         `json:"lon"`
+	Lat           float64         `json:"lat"`
+	Lon           float64         `json:"lon"`
+	StaticMapData []byte          `json:"-"` // inline tile image bytes
 }
 
 // SentMessage is returned after successful delivery.

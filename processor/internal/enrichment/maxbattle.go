@@ -9,7 +9,7 @@ import (
 )
 
 // Maxbattle builds enrichment fields for a maxbattle webhook.
-func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.MaxbattleWebhook) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.MaxbattleWebhook, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
@@ -62,7 +62,7 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	pending := e.addStaticMap(m, "maxbattle", lat, lon, map[string]any{
 		"battle_level":      mb.BattleLevel,
 		"battle_pokemon_id": mb.BattlePokemonID,
-	})
+	}, tileMode)
 
 	m["color"] = "D000C0" // hardcoded maxbattle color (matches alerter)
 

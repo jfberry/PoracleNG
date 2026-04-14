@@ -28,6 +28,7 @@ type RenderJob struct {
 	IsPokemon         bool   // true = RenderPokemon, false = RenderAlert
 	LogReference      string
 	EditKey           string
+	TileImageData     []byte // inline tile bytes, set during tile resolution
 }
 
 // renderWorker processes render jobs from the shared channel until it is closed.
@@ -48,9 +49,26 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 		queueLen := len(ps.renderCh)
 		queueCap := cap(ps.renderCh)
 		if queueCap > 0 && float64(queueLen)/float64(queueCap) > 0.8 {
-			// Queue is under pressure — skip waiting for tile, use fallback.
-			job.TilePending.Apply(job.TilePending.Fallback)
+			// Queue is under pressure — skip waiting for tile.
+			if job.TilePending.Inline {
+				// Don't set "inline" marker without image bytes — the template
+				// would render "inline" as the image URL. Drain the channel in
+				// the background so the tile worker doesn't block.
+				go func() { <-job.TilePending.ResultImg }()
+			} else {
+				job.TilePending.Apply(job.TilePending.Fallback)
+			}
 			metrics.RenderTileSkipped.Inc()
+		} else if job.TilePending.Inline {
+			select {
+			case imgData := <-job.TilePending.ResultImg:
+				if imgData != nil {
+					job.TilePending.ApplyInline()
+					job.TileImageData = imgData
+				}
+			case <-time.After(time.Until(job.TilePending.Deadline)):
+				// no image, proceed without
+			}
 		} else {
 			// Wait for tile to resolve or deadline to expire.
 			select {
@@ -108,16 +126,17 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 		}
 		for _, j := range jobs {
 			ps.dispatcher.Dispatch(&delivery.Job{
-				Target:       j.Target,
-				Type:         j.Type,
-				Message:      j.Message,
-				TTH:          tthFromMap(j.TTH),
-				Clean:        j.Clean,
-				Name:         j.Name,
-				LogReference: j.LogReference,
-				Lat:          parseCoordFloat(j.Lat),
-				Lon:          parseCoordFloat(j.Lon),
-				EditKey:      j.EditKey,
+				Target:        j.Target,
+				Type:          j.Type,
+				Message:       j.Message,
+				TTH:           tthFromMap(j.TTH),
+				Clean:         j.Clean,
+				Name:          j.Name,
+				LogReference:  j.LogReference,
+				Lat:           parseCoordFloat(j.Lat),
+				Lon:           parseCoordFloat(j.Lon),
+				EditKey:       j.EditKey,
+				StaticMapData: job.TileImageData,
 			})
 		}
 	}

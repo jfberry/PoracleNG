@@ -74,7 +74,8 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			l.Infof("Fort update %s (%s, %s) areas(%s) and %d humans cared",
 				fort.FortName(), fort.FortType(), fort.ChangeType, areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort)
+			mode := ps.tileMode("fort-update", matched)
+			enrichmentData, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort, mode)
 
 			if ps.renderCh == nil {
 				return
@@ -83,7 +84,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 
 			ps.renderCh <- RenderJob{
 				TemplateType:  "fort-update",
-				Enrichment:    enrichment,
+				Enrichment:    enrichmentData,
 				WebhookFields: webhookFields,
 				MatchedUsers:  matched,
 				MatchedAreas:  matchedAreas,

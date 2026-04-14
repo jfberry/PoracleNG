@@ -70,14 +70,15 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 			l.Infof("%s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				ps.lureName(lure.LureID), lure.Name, lure.Latitude, lure.Longitude, areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.Lure(&lure)
+			mode := ps.tileMode("lure", matched)
+			enrichmentData, tilePending := ps.enricher.Lure(&lure, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.LureTranslate(enrichment, lure.LureID, lang)
+					perLang[lang] = ps.enricher.LureTranslate(enrichmentData, lure.LureID, lang)
 				}
 			}
 
@@ -88,7 +89,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 
 			ps.renderCh <- RenderJob{
 				TemplateType:      "lure",
-				Enrichment:        enrichment,
+				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,

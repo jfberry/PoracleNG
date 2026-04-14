@@ -7,7 +7,7 @@ import (
 )
 
 // Lure builds enrichment fields for a lure webhook.
-func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Lure(lure *webhook.LureWebhook, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	// Pokestop name — lure webhook uses "name" field, normalize to pokestop_name
@@ -44,7 +44,7 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 	if lure.LureID != 0 {
 		tileFields = map[string]any{"lureTypeId": lure.LureID}
 	}
-	pending := e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields)
+	pending := e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields, tileMode)
 
 	// Lure data from util.json
 	m["lureTypeId"] = lure.LureID

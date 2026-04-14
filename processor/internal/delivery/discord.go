@@ -50,11 +50,11 @@ func (ds *DiscordSender) Send(ctx context.Context, job *Job) (*SentMessage, erro
 		if err != nil {
 			return nil, err
 		}
-		return ds.postMessage(ctx, channelID, job.Message)
+		return ds.postMessage(ctx, channelID, job.Message, job.StaticMapData)
 	case "discord:channel", "discord:thread":
-		return ds.postMessage(ctx, job.Target, job.Message)
+		return ds.postMessage(ctx, job.Target, job.Message, job.StaticMapData)
 	case "webhook":
-		return ds.postWebhook(ctx, job.Target, job.Message)
+		return ds.postWebhook(ctx, job.Target, job.Message, job.StaticMapData)
 	default:
 		return nil, fmt.Errorf("unsupported discord job type: %s", job.Type)
 	}
@@ -173,7 +173,7 @@ func (ds *DiscordSender) WaitForRateLimit(target string) {
 }
 
 // postMessage sends a message to a Discord channel via the bot API.
-func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage) (*SentMessage, error) {
+func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage, staticMapData []byte) (*SentMessage, error) {
 	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
@@ -182,7 +182,16 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 	var reqBody io.Reader
 	var contentType string
 
-	if imageURL != "" {
+	if len(staticMapData) > 0 && imageURL != "" {
+		// Inline tile: bytes already available, skip download
+		log.Debugf("discord: using inline tile for bot/%s (%d bytes)", channelID, len(staticMapData))
+		normalized = ReplaceEmbedImageURL(normalized)
+		buf, ct, err := BuildMultipartMessage(normalized, staticMapData, "files[0]")
+		if err == nil {
+			reqBody = buf
+			contentType = ct
+		}
+	} else if imageURL != "" {
 		log.Debugf("discord: uploading embed image for bot/%s", channelID)
 		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
@@ -206,7 +215,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 }
 
 // postWebhook sends a message via a Discord webhook URL.
-func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, message json.RawMessage) (*SentMessage, error) {
+func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, message json.RawMessage, staticMapData []byte) (*SentMessage, error) {
 	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
@@ -215,7 +224,16 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 	var reqBody io.Reader
 	var contentType string
 
-	if imageURL != "" {
+	if len(staticMapData) > 0 && imageURL != "" {
+		// Inline tile: bytes already available, skip download
+		log.Debugf("discord: using inline tile for webhook/%s (%d bytes)", webhookURL, len(staticMapData))
+		normalized = ReplaceEmbedImageURL(normalized)
+		buf, ct, err := BuildMultipartMessage(normalized, staticMapData, "file")
+		if err == nil {
+			reqBody = buf
+			contentType = ct
+		}
+	} else if imageURL != "" {
 		log.Debugf("discord: uploading embed image for webhook/%s", webhookURL)
 		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)

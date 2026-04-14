@@ -415,7 +415,7 @@ type TuningConfig struct {
 	TileserverCooldownMs       int `toml:"tileserver_cooldown_ms"`      // circuit breaker cooldown ms (default 30000)
 	TileserverQueueSize        int `toml:"tileserver_queue_size"`       // async tile queue depth (default 100)
 	TileserverDeadlineMs       int `toml:"tileserver_deadline"`         // max wait for tile before fallback ms (default 5000)
-	TileserverPregenTTL        int `toml:"tileserver_pregen_ttl"`       // seconds for pregenerated tile TTL (0 = no TTL hint)
+	TileserverPregenTTL        int `toml:"tileserver_pregen_ttl"`       // seconds for pregenerated tile TTL (default 300 = 5 min, -1 = no TTL)
 	GeocodingConcurrency       int `toml:"geocoding_concurrency"`
 	GeocodingTimeout           int `toml:"geocoding_timeout"`            // ms
 	GeocodingFailureThreshold  int `toml:"geocoding_failure_threshold"`

@@ -78,14 +78,15 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
+			mode := ps.tileMode("quest", matched)
+			enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.QuestTranslate(enrichment, &quest, rewards, lang)
+					perLang[lang] = ps.enricher.QuestTranslate(enrichmentData, &quest, rewards, lang)
 				}
 			}
 
@@ -96,7 +97,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 			ps.renderCh <- RenderJob{
 				TemplateType:      "quest",
-				Enrichment:        enrichment,
+				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,

@@ -17,7 +17,7 @@ import (
 // Pokemon builds enrichment fields for a pokemon webhook.
 // Returns a base enrichment map (universal fields) and, if GameData is loaded,
 // also includes game data enrichment (types, weakness, stats, maps, etc.).
-func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon, tileMode int) (map[string]any, *staticmap.TilePending) {
 	verified := pokemon.DisappearTimeVerified || pokemon.Verified
 	m := map[string]any{
 		"pokemon_id":       pokemon.PokemonID,
@@ -194,7 +194,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		"confirmedTime":      pokemon.DisappearTimeVerified || pokemon.Verified,
 		"weather":            weather,
 		"seen_type":          pokemon.SeenType,
-	})
+	}, tileMode)
 
 	e.setFallbackImg(m, e.FallbackImgURL)
 	return m, pending
