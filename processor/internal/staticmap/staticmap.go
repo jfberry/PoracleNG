@@ -724,8 +724,9 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 		templateType = "multi-"
 	}
 
-	// No pregenerate=true — tileserver returns image bytes directly
-	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s",
+	// No pregenerate — tileserver returns image bytes directly.
+	// nocache=true prevents the tileserver from writing to disk.
+	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?nocache=true",
 		r.config.ProviderURL, mapPath, templateType, maptype)
 
 	body, err := json.Marshal(data)
