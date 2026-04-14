@@ -327,13 +327,22 @@ func (am *ArgMatcher) tryPrefixRange(tok, key, lang string, result *ParsedArgs) 
 		parts := strings.SplitN(val, "-", 2)
 		min, err := strconv.Atoi(parts[0])
 		if err != nil {
-			continue
+			// Try resolving as a name (e.g. "xxl" → 5 for size, "rare" → 3 for rarity)
+			if resolved, ok := am.resolveRangeName(key, parts[0], lang); ok {
+				min = resolved
+			} else {
+				continue
+			}
 		}
 		shortKey := strings.TrimPrefix(key, "arg.prefix.")
 		if len(parts) == 2 {
 			max, err := strconv.Atoi(parts[1])
 			if err != nil {
-				continue
+				if resolved, ok := am.resolveRangeName(key, parts[1], lang); ok {
+					max = resolved
+				} else {
+					continue
+				}
 			}
 			result.Ranges[shortKey] = Range{Min: min, Max: max, HasMax: true}
 		} else {
@@ -343,6 +352,61 @@ func (am *ArgMatcher) tryPrefixRange(tok, key, lang string, result *ParsedArgs) 
 		return true
 	}
 	return false
+}
+
+// resolveRangeName resolves a name like "xxl" or "rare" to its numeric ID
+// for size and rarity prefix range parameters. Checks the user's language
+// translations first, then English, then the raw game data names.
+func (am *ArgMatcher) resolveRangeName(key, name, lang string) (int, bool) {
+	var keyPrefix string
+	var maxID int
+	switch key {
+	case "arg.prefix.size", "arg.prefix.maxsize":
+		keyPrefix = "size_"
+		maxID = 5
+	case "arg.prefix.rarity", "arg.prefix.maxrarity":
+		keyPrefix = "rarity_"
+		maxID = 6
+	default:
+		return 0, false
+	}
+
+	lower := strings.ToLower(name)
+
+	// Try user language, then English
+	if am.bundle != nil {
+		for _, tryLang := range []string{lang, "en"} {
+			if tryLang == "" {
+				continue
+			}
+			tr := am.bundle.For(tryLang)
+			if tr == nil {
+				continue
+			}
+			for id := 1; id <= maxID; id++ {
+				translated := tr.T(keyPrefix + strconv.Itoa(id))
+				if translated != "" && strings.ToLower(translated) == lower {
+					return id, true
+				}
+			}
+		}
+	}
+
+	// Fallback: raw game data util names
+	if am.gameData != nil && am.gameData.Util != nil {
+		var nameMap map[int]string
+		if keyPrefix == "size_" {
+			nameMap = am.gameData.Util.Size
+		} else {
+			nameMap = am.gameData.Util.Rarity
+		}
+		for id, n := range nameMap {
+			if strings.ToLower(n) == lower {
+				return id, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // tryPrefixSingle matches patterns like "d500", "d:500", "t60", "gen3".
@@ -358,6 +422,9 @@ func (am *ArgMatcher) tryPrefixSingle(tok, key, lang string, result *ParsedArgs)
 			// Try float for distance (d500.5)
 			if f, ferr := strconv.ParseFloat(val, 64); ferr == nil {
 				n = int(f)
+			} else if resolved, ok := am.resolveRangeName(key, val, lang); ok {
+				// Try name resolution (e.g. maxsize:xxl, maxrarity:rare)
+				n = resolved
 			} else {
 				continue
 			}
