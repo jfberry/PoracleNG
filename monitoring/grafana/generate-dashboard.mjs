@@ -692,6 +692,22 @@ panels.push(
 )
 panels.push(
 	timeseriesPanel({
+		title: 'Tile Mode Decisions',
+		x: 12,
+		y,
+		unit: 'ops',
+		targets: [
+			{
+				expr: `sum by(mode) (rate(poracle_tile_mode_total${processorFilter}[$__rate_interval]))`,
+				legendFormat: '{{mode}}',
+			},
+		],
+	}),
+)
+y += 8
+
+panels.push(
+	timeseriesPanel({
 		title: 'Shlink URL Shortening',
 		x: 12,
 		y,
@@ -1134,6 +1150,19 @@ panels.push(
 	}),
 )
 y += 8
+
+panels.push(
+	statPanel({
+		title: 'Build Info',
+		expr: `poracle_processor_build_info${processorFilter}`,
+		x: 0,
+		y,
+		w: 24,
+		h: 3,
+		thresholdSteps: [{ color: 'blue', value: null }],
+	}),
+)
+y += 3
 
 // ─── Runtime and Process Health ──────────────────────────────────────────────
 

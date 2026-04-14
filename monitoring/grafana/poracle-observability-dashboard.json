@@ -1788,7 +1788,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -1799,6 +1799,91 @@
         "y": 55
       },
       "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(mode) (rate(poracle_tile_mode_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{mode}}"
+        }
+      ],
+      "title": "Tile Mode Decisions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 63
+      },
+      "id": 26,
       "options": {
         "legend": {
           "calcs": [],
@@ -1832,9 +1917,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 71
       },
-      "id": 26,
+      "id": 27,
       "panels": [],
       "title": "Delivery",
       "type": "row"
@@ -1899,9 +1984,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 72
       },
-      "id": 27,
+      "id": 28,
       "options": {
         "legend": {
           "calcs": [],
@@ -1999,9 +2084,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 72
       },
-      "id": 28,
+      "id": 29,
       "options": {
         "legend": {
           "calcs": [],
@@ -2084,9 +2169,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 72
+        "y": 80
       },
-      "id": 29,
+      "id": 30,
       "options": {
         "legend": {
           "calcs": [],
@@ -2169,9 +2254,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 72
+        "y": 80
       },
-      "id": 30,
+      "id": 31,
       "options": {
         "legend": {
           "calcs": [],
@@ -2269,9 +2354,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 80
+        "y": 88
       },
-      "id": 31,
+      "id": 32,
       "options": {
         "legend": {
           "calcs": [],
@@ -2354,9 +2439,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 80
+        "y": 88
       },
-      "id": 32,
+      "id": 33,
       "options": {
         "legend": {
           "calcs": [],
@@ -2390,9 +2475,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 96
       },
-      "id": 33,
+      "id": 34,
       "panels": [],
       "title": "Processor Integrations",
       "type": "row"
@@ -2457,9 +2542,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 89
+        "y": 97
       },
-      "id": 34,
+      "id": 35,
       "options": {
         "legend": {
           "calcs": [],
@@ -2547,9 +2632,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 89
+        "y": 97
       },
-      "id": 35,
+      "id": 36,
       "options": {
         "legend": {
           "calcs": [],
@@ -2637,9 +2722,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 97
+        "y": 105
       },
-      "id": 36,
+      "id": 37,
       "options": {
         "legend": {
           "calcs": [],
@@ -2732,9 +2817,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 97
+        "y": 105
       },
-      "id": 37,
+      "id": 38,
       "options": {
         "legend": {
           "calcs": [],
@@ -2822,9 +2907,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 105
+        "y": 113
       },
-      "id": 38,
+      "id": 39,
       "options": {
         "legend": {
           "calcs": [],
@@ -2912,9 +2997,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 105
+        "y": 113
       },
-      "id": 39,
+      "id": 40,
       "options": {
         "legend": {
           "calcs": [],
@@ -3002,9 +3087,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 113
+        "y": 121
       },
-      "id": 40,
+      "id": 41,
       "options": {
         "legend": {
           "calcs": [],
@@ -3087,9 +3172,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 113
+        "y": 121
       },
-      "id": 41,
+      "id": 42,
       "options": {
         "legend": {
           "calcs": [],
@@ -3128,9 +3213,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 121
+        "y": 129
       },
-      "id": 42,
+      "id": 43,
       "panels": [],
       "title": "State & API",
       "type": "row"
@@ -3195,9 +3280,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 122
+        "y": 130
       },
-      "id": 43,
+      "id": 44,
       "options": {
         "legend": {
           "calcs": [],
@@ -3290,9 +3375,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 122
+        "y": 130
       },
-      "id": 44,
+      "id": 45,
       "options": {
         "legend": {
           "calcs": [],
@@ -3380,9 +3465,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 130
+        "y": 138
       },
-      "id": 45,
+      "id": 46,
       "options": {
         "legend": {
           "calcs": [],
@@ -3465,9 +3550,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 130
+        "y": 138
       },
-      "id": 46,
+      "id": 47,
       "options": {
         "legend": {
           "calcs": [],
@@ -3550,9 +3635,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 138
+        "y": 146
       },
-      "id": 47,
+      "id": 48,
       "options": {
         "legend": {
           "calcs": [],
@@ -3640,9 +3725,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 138
+        "y": 146
       },
-      "id": 48,
+      "id": 49,
       "options": {
         "legend": {
           "calcs": [],
@@ -3666,14 +3751,70 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 154
+      },
+      "id": 50,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "poracle_processor_build_info{job=~\"$processor_job\",instance=~\"$processor_instance\"}",
+          "legendFormat": ""
+        }
+      ],
+      "title": "Build Info",
+      "type": "stat"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 146
+        "y": 157
       },
-      "id": 49,
+      "id": 51,
       "panels": [],
       "title": "Runtime and Process Health",
       "type": "row"
@@ -3738,9 +3879,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 147
+        "y": 158
       },
-      "id": 50,
+      "id": 52,
       "options": {
         "legend": {
           "calcs": [],
@@ -3838,9 +3979,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 147
+        "y": 158
       },
-      "id": 51,
+      "id": 53,
       "options": {
         "legend": {
           "calcs": [],
@@ -3928,9 +4069,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 155
+        "y": 166
       },
-      "id": 52,
+      "id": 54,
       "options": {
         "legend": {
           "calcs": [],
@@ -4018,9 +4159,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 155
+        "y": 166
       },
-      "id": 53,
+      "id": 55,
       "options": {
         "legend": {
           "calcs": [],
@@ -4113,9 +4254,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 163
+        "y": 174
       },
-      "id": 54,
+      "id": 56,
       "options": {
         "legend": {
           "calcs": [],
@@ -4198,9 +4339,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 163
+        "y": 174
       },
-      "id": 55,
+      "id": 57,
       "options": {
         "legend": {
           "calcs": [],
@@ -4293,9 +4434,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 171
+        "y": 182
       },
-      "id": 56,
+      "id": 58,
       "options": {
         "legend": {
           "calcs": [],
@@ -4383,9 +4524,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 171
+        "y": 182
       },
-      "id": 57,
+      "id": 59,
       "options": {
         "legend": {
           "calcs": [],
