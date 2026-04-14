@@ -289,7 +289,7 @@ func TestLoadGeofenceFileInvalidJSON(t *testing.T) {
 
 // Test loading the real geofence.json file
 func TestLoadRealGeofenceFile(t *testing.T) {
-	realPath := "../../../../alerter/config/geofence.json"
+	realPath := "../../../../config/geofence.json"
 	if _, err := os.Stat(realPath); os.IsNotExist(err) {
 		t.Skip("Real geofence file not found, skipping")
 	}

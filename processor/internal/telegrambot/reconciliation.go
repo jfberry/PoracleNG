@@ -358,7 +358,7 @@ func (r *TelegramReconciliation) UpdateTelegramChannels() {
 		}
 	}
 
-	r.log.Debug("Channel membership to Poracle users complete...")
+	r.log.Info("Channel membership to Poracle users complete...")
 }
 
 // disableUser disables or deletes a user based on roleCheckMode.

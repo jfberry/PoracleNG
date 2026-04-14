@@ -733,7 +733,7 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 		}
 	}
 
-	r.log.Debug("Channel membership to Poracle users complete...")
+	r.log.Info("Channel membership to Poracle users complete...")
 }
 
 // --- Helper functions ---

@@ -303,7 +303,7 @@ Reconciliation syncs Discord role membership with Poracle user registration. Run
 ## API Security
 
 **Shared secret** (`x-poracle-secret`):
-- All `/api/*` endpoints are protected by the `X-Poracle-Secret` header matching `[processor] api_secret` (with `[alerter] api_secret` as a backward-compatible fallback — if the processor key is empty, the alerter key is copied over at config load)
+- All `/api/*` endpoints are protected by the `X-Poracle-Secret` header matching `[processor] api_secret` (with legacy `[alerter] api_secret` as a backward-compatible fallback — if the processor key is empty, the alerter key is copied over at config load)
 - If `api_secret` is empty/unset, auth is disabled (all requests allowed)
 - The `RequireSecret` middleware in `api/api.go` wraps all `/api/*` handlers
 
@@ -611,13 +611,12 @@ Templates receive the full view object with all enriched data. Common fields: `{
 
 `processor/internal/i18n/`
 - Flat JSON files with **dotted identifier keys**: `{"rate_limit.reached": "Das Limit von {0}..."}`
-- Same `{0}` placeholder syntax as the legacy alerter locale files, so existing translated strings are compatible
+- `{0}` placeholder syntax
 - English is a first-class locale file (`en.json`), not hardcoded in source
 - Merge order (later wins):
   1. Embedded (`processor/internal/i18n/locale/*.json`) — bundled processor messages
   2. `resources/locale/*.json` — game data from pogo-translations
-  3. `alerter/locale/*.json` — legacy shared strings (kept for backward compatibility)
-  4. `config/custom.{lang}.json` — admin overrides
+  3. `config/custom.{lang}.json` — admin overrides
 - Identifier keys are stable: renaming English text doesn't break translations
 - **Per-key English fallback**: Non-English translators fall back to English on a per-key basis (not per-locale). After all locale files are loaded, `Bundle.LinkFallbacks()` links each non-English `Translator` to the English one. When `T("key")` finds no value in the user's language, it checks the English translator before returning the raw key. This means a German user still sees English pokemon names for any `poke_*` keys missing from the German locale files.
 
@@ -696,7 +695,7 @@ Single TOML file at `config/config.toml`, used by the processor. See `config/con
 
 Key sections: `[processor]`, `[database]`, `[geofence]`, `[pvp]`, `[weather]`, `[discord]`, `[telegram]`, `[geocoding]`, `[tuning]`, `[tracking]`, `[alert_limits]`, `[stats]`, `[logging]`.
 
-The `[alerter]` section is kept for backward-compatible `api_secret` reading only.
+The legacy `[alerter]` section is still read for backward-compatible `api_secret` only (users upgrading from older versions); all other alerter functionality has been absorbed into the processor.
 
 ## Deployment
 
