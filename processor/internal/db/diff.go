@@ -7,8 +7,12 @@ import "reflect"
 // Tag values:
 //   - diff:"-"      skip (uid, id, profile_no — always same or irrelevant)
 //   - diff:"match"  match key — if different, rows aren't related (noMatch=true)
-//   - diff:"update" updatable field — if ALL diffs are updatable, it's an update
+//   - diff:"update" updatable field — a single updatable diff triggers an update
 //   - (no tag)      regular field — any diff here means new insert
+//
+// An update is only triggered when exactly one field differs and that field is
+// updatable. Multiple diffs (even if all updatable) create a new row, matching
+// PoracleJS behavior where e.g. iv95+d500 and iv90+d1000 are separate rules.
 //
 // Both existing and toInsert must be pointers to the same struct type.
 func DiffTracking(existing, toInsert any) (noMatch, isDuplicate bool, existingUID int64, isUpdate bool) {
@@ -47,8 +51,8 @@ func DiffTracking(existing, toInsert any) (noMatch, isDuplicate bool, existingUI
 	if totalDiffs == 0 {
 		return false, true, 0, false // duplicate — all fields match
 	}
-	if nonUpdatableDiffs == 0 {
-		return false, false, uid, true // update — only updatable fields differ
+	if totalDiffs == 1 && nonUpdatableDiffs == 0 {
+		return false, false, uid, true // update — exactly one updatable field differs
 	}
-	return false, false, 0, false // new insert — non-updatable fields differ
+	return false, false, 0, false // new insert
 }

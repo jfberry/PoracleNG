@@ -315,7 +315,7 @@ type MonsterTrackingAPI struct {
 	Template        string `db:"template"          json:"template"          diff:"update"`
 	PokemonID       int    `db:"pokemon_id"        json:"pokemon_id"`
 	Form            int    `db:"form"              json:"form"`
-	MinIV           int    `db:"min_iv"            json:"min_iv"`
+	MinIV           int    `db:"min_iv"            json:"min_iv"            diff:"update"`
 	MaxIV           int    `db:"max_iv"            json:"max_iv"`
 	MinCP           int    `db:"min_cp"            json:"min_cp"`
 	MaxCP           int    `db:"max_cp"            json:"max_cp"`

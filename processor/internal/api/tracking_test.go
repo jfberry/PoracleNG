@@ -138,19 +138,34 @@ func TestDiffTrackingNoMatch(t *testing.T) {
 	}
 }
 
-func TestDiffTrackingUpdate(t *testing.T) {
+func TestDiffTrackingSingleUpdate(t *testing.T) {
+	// Exactly one updatable field differs → update
 	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Clean: 0, Distance: 500, Template: "1", LureID: 501}
-	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Clean: 1, Distance: 1000, Template: "2", LureID: 501}
+	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Clean: 0, Distance: 1000, Template: "1", LureID: 501}
 
 	noMatch, isDup, uid, isUpdate := DiffTracking(a, b)
 	if noMatch || isDup {
 		t.Error("expected neither noMatch nor duplicate")
 	}
 	if !isUpdate {
-		t.Error("expected update since clean/distance/template are all diff:\"update\"")
+		t.Error("expected update since only distance differs (diff:\"update\")")
 	}
 	if uid != 5 {
 		t.Errorf("expected uid=5, got %d", uid)
+	}
+}
+
+func TestDiffTrackingMultiUpdateIsInsert(t *testing.T) {
+	// Multiple updatable fields differ → new insert (not update)
+	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Clean: 0, Distance: 500, Template: "1", LureID: 501}
+	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Clean: 1, Distance: 1000, Template: "2", LureID: 501}
+
+	noMatch, isDup, _, isUpdate := DiffTracking(a, b)
+	if noMatch || isDup {
+		t.Error("expected neither noMatch nor duplicate")
+	}
+	if isUpdate {
+		t.Error("expected new insert when multiple updatable fields differ")
 	}
 }
 
