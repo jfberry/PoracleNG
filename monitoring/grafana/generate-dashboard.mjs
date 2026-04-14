@@ -6,7 +6,6 @@ const datasource = {
 }
 
 const processorFilter = '{job=~"$processor_job",instance=~"$processor_instance"}'
-const alerterFilter = '{job=~"$alerter_job",instance=~"$alerter_instance"}'
 
 let nextPanelId = 1
 
@@ -205,44 +204,6 @@ function commonTemplating() {
 			sort: 1,
 			type: 'query',
 		},
-		{
-			current: {
-				selected: true,
-				text: 'All',
-				value: ['$__all'],
-			},
-			datasource,
-			definition: 'label_values(process_resident_memory_bytes{job!~"$processor_job"}, job)',
-			hide: 0,
-			includeAll: true,
-			label: 'Alerter job',
-			multi: true,
-			name: 'alerter_job',
-			options: [],
-			query: 'label_values(process_resident_memory_bytes{job!~"$processor_job"}, job)',
-			refresh: 1,
-			sort: 1,
-			type: 'query',
-		},
-		{
-			current: {
-				selected: true,
-				text: 'All',
-				value: ['$__all'],
-			},
-			datasource,
-			definition: 'label_values(process_resident_memory_bytes{job=~"$alerter_job"}, instance)',
-			hide: 0,
-			includeAll: true,
-			label: 'Alerter instance',
-			multi: true,
-			name: 'alerter_instance',
-			options: [],
-			query: 'label_values(process_resident_memory_bytes{job=~"$alerter_job"}, instance)',
-			refresh: 2,
-			sort: 1,
-			type: 'query',
-		},
 	]
 }
 
@@ -336,22 +297,9 @@ panels.push(
 )
 panels.push(
 	statPanel({
-		title: 'Alerter Up',
-		expr: `min(up{job=~"$alerter_job",instance=~"$alerter_instance"})`,
-		x: 3,
-		y,
-		mappings: upMappings,
-		thresholdSteps: [
-			{ color: 'red', value: null },
-			{ color: 'green', value: 1 },
-		],
-	}),
-)
-panels.push(
-	statPanel({
 		title: 'Webhooks/s',
 		expr: `sum(rate(poracle_processor_webhooks_received_total${processorFilter}[$__rate_interval]))`,
-		x: 6,
+		x: 3,
 		y,
 		unit: 'ops',
 	}),
@@ -360,7 +308,7 @@ panels.push(
 	statPanel({
 		title: 'Matched Users/s',
 		expr: `sum(rate(poracle_processor_matched_users_total${processorFilter}[$__rate_interval]))`,
-		x: 9,
+		x: 6,
 		y,
 		unit: 'ops',
 	}),
@@ -369,7 +317,7 @@ panels.push(
 	statPanel({
 		title: 'Delivered/s',
 		expr: `sum(rate(poracle_delivery_total${processorFilter}[$__rate_interval]))`,
-		x: 12,
+		x: 9,
 		y,
 		unit: 'ops',
 	}),
@@ -380,7 +328,7 @@ panels.push(
 		expr:
 			`100 * sum(rate(poracle_delivery_total{status!="ok",job=~"$processor_job",instance=~"$processor_instance"}[$__rate_interval])) / ` +
 			`clamp_min(sum(rate(poracle_delivery_total${processorFilter}[$__rate_interval])), 0.001)`,
-		x: 15,
+		x: 12,
 		y,
 		unit: 'percent',
 		thresholdSteps: [
@@ -396,7 +344,7 @@ panels.push(
 		expr:
 			`100 * sum(poracle_processor_worker_pool_in_use${processorFilter}) / ` +
 			`clamp_min(sum(poracle_processor_worker_pool_capacity${processorFilter}), 1)`,
-		x: 18,
+		x: 15,
 		y,
 		unit: 'percent',
 		thresholdSteps: [
@@ -412,7 +360,7 @@ panels.push(
 		expr:
 			`100 * sum(poracle_render_queue_depth${processorFilter}) / ` +
 			`clamp_min(sum(poracle_render_queue_capacity${processorFilter}), 1)`,
-		x: 21,
+		x: 18,
 		y,
 		unit: 'percent',
 		thresholdSteps: [
@@ -1184,14 +1132,6 @@ panels.push(
 				expr: `process_virtual_memory_bytes{job=~"$processor_job",instance=~"$processor_instance"}`,
 				legendFormat: 'processor virtual {{instance}}',
 			},
-			{
-				expr: `process_resident_memory_bytes{job=~"$alerter_job",instance=~"$alerter_instance"}`,
-				legendFormat: 'alerter rss {{instance}}',
-			},
-			{
-				expr: `process_virtual_memory_bytes{job=~"$alerter_job",instance=~"$alerter_instance"}`,
-				legendFormat: 'alerter virtual {{instance}}',
-			},
 		],
 	}),
 )
@@ -1206,11 +1146,6 @@ panels.push(
 				expr:
 					`rate(process_cpu_seconds_total{job=~"$processor_job",instance=~"$processor_instance"}[$__rate_interval])`,
 				legendFormat: 'processor {{instance}}',
-			},
-			{
-				expr:
-					`rate(process_cpu_seconds_total{job=~"$alerter_job",instance=~"$alerter_instance"}[$__rate_interval])`,
-				legendFormat: 'alerter {{instance}}',
 			},
 		],
 	}),
@@ -1273,75 +1208,13 @@ panels.push(
 		],
 	}),
 )
-panels.push(
-	timeseriesPanel({
-		title: 'Node.js Heap',
-		x: 12,
-		y,
-		unit: 'bytes',
-		targets: [
-			{
-				expr: `nodejs_heap_size_used_bytes{job=~"$alerter_job",instance=~"$alerter_instance"}`,
-				legendFormat: 'heap used {{instance}}',
-			},
-			{
-				expr: `nodejs_heap_size_total_bytes{job=~"$alerter_job",instance=~"$alerter_instance"}`,
-				legendFormat: 'heap total {{instance}}',
-			},
-			{
-				expr: `nodejs_external_memory_bytes{job=~"$alerter_job",instance=~"$alerter_instance"}`,
-				legendFormat: 'external {{instance}}',
-			},
-		],
-	}),
-)
-y += 8
-
-panels.push(
-	timeseriesPanel({
-		title: 'Node.js Event Loop and GC',
-		x: 0,
-		y,
-		unit: 's',
-		targets: [
-			{
-				expr: `nodejs_eventloop_lag_seconds{job=~"$alerter_job",instance=~"$alerter_instance"}`,
-				legendFormat: 'event loop lag {{instance}}',
-			},
-			{
-				expr:
-					`histogram_quantile(0.95, ` +
-					`sum by(le) (rate(nodejs_gc_duration_seconds_bucket{job=~"$alerter_job",instance=~"$alerter_instance"}[$__rate_interval])))`,
-				legendFormat: 'gc p95',
-			},
-		],
-	}),
-)
-panels.push(
-	timeseriesPanel({
-		title: 'Node.js Handles and Requests',
-		x: 12,
-		y,
-		unit: 'short',
-		targets: [
-			{
-				expr: `nodejs_active_handles_total{job=~"$alerter_job",instance=~"$alerter_instance"}`,
-				legendFormat: 'handles {{instance}}',
-			},
-			{
-				expr: `nodejs_active_requests_total{job=~"$alerter_job",instance=~"$alerter_instance"}`,
-				legendFormat: 'requests {{instance}}',
-			},
-		],
-	}),
-)
 
 const dashboard = buildDashboard({
 	title: 'PoracleNG Observability',
 	uid: 'poracleng-observability',
-	version: 3,
+	version: 4,
 	description:
-		'Complete observability dashboard for PoracleNG processor and alerter Prometheus metrics, including render pipeline, delivery, and runtime telemetry.',
+		'Complete observability dashboard for PoracleNG processor Prometheus metrics, including render pipeline, delivery, and runtime telemetry.',
 	panels,
 })
 
@@ -1370,22 +1243,9 @@ litePanels.push(
 )
 litePanels.push(
 	statPanel({
-		title: 'Alerter Up',
-		expr: `min(up{job=~"$alerter_job",instance=~"$alerter_instance"})`,
-		x: 3,
-		y: liteY,
-		mappings: upMappings,
-		thresholdSteps: [
-			{ color: 'red', value: null },
-			{ color: 'green', value: 1 },
-		],
-	}),
-)
-litePanels.push(
-	statPanel({
 		title: 'Webhooks/s',
 		expr: `sum(rate(poracle_processor_webhooks_received_total${processorFilter}[$__rate_interval]))`,
-		x: 6,
+		x: 3,
 		y: liteY,
 		unit: 'ops',
 	}),
@@ -1394,7 +1254,7 @@ litePanels.push(
 	statPanel({
 		title: 'Matched Users/s',
 		expr: `sum(rate(poracle_processor_matched_users_total${processorFilter}[$__rate_interval]))`,
-		x: 9,
+		x: 6,
 		y: liteY,
 		unit: 'ops',
 	}),
@@ -1403,7 +1263,7 @@ litePanels.push(
 	statPanel({
 		title: 'Delivered/s',
 		expr: `sum(rate(poracle_delivery_total${processorFilter}[$__rate_interval]))`,
-		x: 12,
+		x: 9,
 		y: liteY,
 		unit: 'ops',
 	}),
@@ -1414,7 +1274,7 @@ litePanels.push(
 		expr:
 			`100 * sum(rate(poracle_delivery_total{status!="ok",job=~"$processor_job",instance=~"$processor_instance"}[$__rate_interval])) / ` +
 			`clamp_min(sum(rate(poracle_delivery_total${processorFilter}[$__rate_interval])), 0.001)`,
-		x: 15,
+		x: 12,
 		y: liteY,
 		unit: 'percent',
 		thresholdSteps: [
@@ -1430,7 +1290,7 @@ litePanels.push(
 		expr:
 			`100 * sum(poracle_processor_worker_pool_in_use${processorFilter}) / ` +
 			`clamp_min(sum(poracle_processor_worker_pool_capacity${processorFilter}), 1)`,
-		x: 18,
+		x: 15,
 		y: liteY,
 		unit: 'percent',
 		thresholdSteps: [
@@ -1446,7 +1306,7 @@ litePanels.push(
 		expr:
 			`100 * sum(poracle_render_queue_depth${processorFilter}) / ` +
 			`clamp_min(sum(poracle_render_queue_capacity${processorFilter}), 1)`,
-		x: 21,
+		x: 18,
 		y: liteY,
 		unit: 'percent',
 		thresholdSteps: [
@@ -1614,10 +1474,6 @@ litePanels.push(
 				expr: `process_resident_memory_bytes{job=~"$processor_job",instance=~"$processor_instance"}`,
 				legendFormat: 'processor rss {{instance}}',
 			},
-			{
-				expr: `process_resident_memory_bytes{job=~"$alerter_job",instance=~"$alerter_instance"}`,
-				legendFormat: 'alerter rss {{instance}}',
-			},
 		],
 	}),
 )
@@ -1633,11 +1489,6 @@ litePanels.push(
 					`rate(process_cpu_seconds_total{job=~"$processor_job",instance=~"$processor_instance"}[$__rate_interval])`,
 				legendFormat: 'processor {{instance}}',
 			},
-			{
-				expr:
-					`rate(process_cpu_seconds_total{job=~"$alerter_job",instance=~"$alerter_instance"}[$__rate_interval])`,
-				legendFormat: 'alerter {{instance}}',
-			},
 		],
 	}),
 )
@@ -1645,7 +1496,7 @@ litePanels.push(
 const liteDashboard = buildDashboard({
 	title: 'PoracleNG Operations Lite',
 	uid: 'poracleng-ops-lite',
-	version: 2,
+	version: 3,
 	description:
 		'Concise Grafana dashboard for day-to-day PoracleNG operations, focusing on service health, flow pressure, delivery, and runtime.',
 	panels: litePanels,
