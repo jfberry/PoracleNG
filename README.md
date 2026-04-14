@@ -209,13 +209,37 @@ max_age = 7              # days to keep log files
 
 > **Prerequisite:** Make sure you are on the latest PoracleJS so that your database schema is up to date before migrating.
 
-An automated migration script converts your existing PoracleJS configuration. Run it from a checkout of this repo (Node.js required just for this one-time script — the PoracleNG runtime itself is pure Go):
+An automated migration script converts your existing PoracleJS configuration. Node.js is needed for this one-time script only — the PoracleNG runtime itself is pure Go.
+
+### Bare metal (with Node.js installed)
+
+Clone this repo and run:
 
 ```sh
 node scripts/migrate-from-poracle.js
 ```
 
 When prompted, enter the path to your existing PoracleJS installation.
+
+### Docker (no Node.js installed)
+
+Run a throwaway `node:alpine` container that fetches the migration tooling and writes into your mounted config dir:
+
+```sh
+docker run --rm -it \
+  -v /path/to/your/poraclejs:/oldporacle \
+  -v /path/to/your/poracleng-config:/workspace/config \
+  -w /workspace \
+  node:20-alpine \
+  sh -c 'apk add --no-cache git >/dev/null && \
+    git clone --depth=1 https://github.com/jfberry/PoracleNG /tmp/ng && \
+    cd /tmp/ng && rm -rf config && ln -s /workspace/config config && \
+    node scripts/migrate-from-poracle.js'
+```
+
+When prompted for `Path to your existing PoracleJS installation:` enter `/oldporacle`.
+
+> **Note:** The migrated config files may be owned by `root` depending on your Docker setup — you may need to `chown` them before editing.
 
 ### What the script does
 
