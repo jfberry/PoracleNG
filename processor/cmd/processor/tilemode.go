@@ -17,8 +17,7 @@ func (ps *ProcessorService) tileMode(templateType string, matched []webhook.Matc
 	}
 	ts := ps.dtsRenderer.Templates()
 
-	anyNeedsTile := false
-	anyNeedsURL := false
+	var anyNeedsTile, anyNeedsURL, anyDiscordUpload bool
 
 	for _, u := range matched {
 		// Resolve the template ID the same way the renderer does
@@ -40,25 +39,31 @@ func (ps *ProcessorService) tileMode(templateType string, matched []webhook.Matc
 
 		anyNeedsTile = true
 
-		if !canUploadInline(u.Type, ps.cfg.Discord.UploadEmbedImages) {
+		if canUploadInline(u.Type, ps.cfg.Discord.UploadEmbedImages) {
+			anyDiscordUpload = true
+		} else {
 			anyNeedsURL = true
-			break // one URL-needer is enough, no need to check further
 		}
 	}
 
-	if !anyNeedsTile {
+	switch {
+	case !anyNeedsTile:
 		log.Debugf("tileMode: %s → skip (no template uses staticMap)", templateType)
 		metrics.TileModeTotal.WithLabelValues("skip").Inc()
 		return enrichment.TileModeSkip
-	}
-	if anyNeedsURL {
+	case anyNeedsURL && anyDiscordUpload:
+		log.Debugf("tileMode: %s → url_with_bytes (%d users, mixed URL-needers + Discord upload)", templateType, len(matched))
+		metrics.TileModeTotal.WithLabelValues("url_with_bytes").Inc()
+		return enrichment.TileModeURLWithBytes
+	case anyNeedsURL:
 		log.Debugf("tileMode: %s → url (%d users, at least one needs fetchable URL)", templateType, len(matched))
 		metrics.TileModeTotal.WithLabelValues("url").Inc()
 		return enrichment.TileModeURL
+	default:
+		log.Debugf("tileMode: %s → inline (%d users, all support upload)", templateType, len(matched))
+		metrics.TileModeTotal.WithLabelValues("inline").Inc()
+		return enrichment.TileModeInline
 	}
-	log.Debugf("tileMode: %s → inline (%d users, all support upload)", templateType, len(matched))
-	metrics.TileModeTotal.WithLabelValues("inline").Inc()
-	return enrichment.TileModeInline
 }
 
 // canUploadInline returns true if this destination type supports receiving

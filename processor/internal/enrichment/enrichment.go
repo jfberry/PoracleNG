@@ -167,9 +167,10 @@ func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
 
 // Tile mode constants. Defined here to avoid import cycles with cmd/processor.
 const (
-	TileModeSkip   = 0 // no template uses staticMap → don't generate tile
-	TileModeInline = 1 // all users can accept bytes → POST without pregenerate
-	TileModeURL    = 2 // at least one user needs a fetchable URL → pregenerate
+	TileModeSkip         = 0 // no template uses staticMap → don't generate tile
+	TileModeInline       = 1 // all users can accept bytes → POST without pregenerate
+	TileModeURL          = 2 // at least one user needs a fetchable URL → pregenerate
+	TileModeURLWithBytes = 3 // mixed: pregenerate (public URL embedded in message) + fetch bytes once via internal URL for Discord-upload destinations in the batch
 )
 
 // addStaticMap generates a static map tile URL and adds it to the enrichment map.
@@ -198,6 +199,7 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 		return e.StaticMap.SubmitTileInline(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m)
 	}
 
+	// TileModeURLWithBytes routing is wired in Task 7 once SubmitTileBoth exists.
 	// TileModeURL — current flow
 	url, pending := e.StaticMap.GetStaticMapURLAsync(maptype, merged, keys, pregenKeys, m)
 	if pending != nil {
