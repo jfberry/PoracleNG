@@ -1,46 +1,12 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/guregu/null/v6"
 	"github.com/jmoiron/sqlx"
 )
-
-// HumanAPI represents a human record for API operations.
-type HumanAPI struct {
-	ID               string         `db:"id" json:"id"`
-	Name             string         `db:"name" json:"name"`
-	Type             string         `db:"type" json:"type"`
-	Enabled          IntBool        `db:"enabled" json:"enabled"`
-	Language         sql.NullString `db:"language" json:"-"`
-	CurrentProfileNo int            `db:"current_profile_no" json:"current_profile_no"`
-}
-
-// LanguageOrDefault returns the human's language, or the given default if not set.
-func (h *HumanAPI) LanguageOrDefault(defaultLang string) string {
-	if h.Language.Valid && h.Language.String != "" {
-		return h.Language.String
-	}
-	return defaultLang
-}
-
-// SelectOneHuman looks up a single human by ID.
-func SelectOneHuman(db *sqlx.DB, id string) (*HumanAPI, error) {
-	var h HumanAPI
-	err := db.Get(&h,
-		`SELECT id, name, type, enabled, language, current_profile_no
-		 FROM humans WHERE id = ?`, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("select human %s: %w", id, err)
-	}
-	return &h, nil
-}
 
 // DeleteByUID deletes a single row from a tracking table by id and uid.
 func DeleteByUID(db *sqlx.DB, table, id string, uid int64) error {

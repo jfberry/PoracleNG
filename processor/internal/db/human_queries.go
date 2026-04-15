@@ -1,7 +1,6 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
@@ -9,6 +8,8 @@ import (
 )
 
 // ProfileRow represents a row from the profiles table.
+// Retained for CopyProfile's dynamic-column code path; API responses that
+// include profiles go through store.Profile / api.ProfileResponse.
 type ProfileRow struct {
 	UID       int     `db:"uid" json:"uid"`
 	ID        string  `db:"id" json:"id"`
@@ -37,69 +38,13 @@ func DeleteHumanAndTracking(dbx *sqlx.DB, id string) error {
 	return nil
 }
 
-// UpdateHumanEnabled sets the enabled flag on a human.
-func UpdateHumanEnabled(db *sqlx.DB, id string, enabled bool) error {
-	val := 0
-	if enabled {
-		val = 1
-	}
-	_, err := db.Exec(`UPDATE humans SET enabled = ? WHERE id = ?`, val, id)
-	if err != nil {
-		return fmt.Errorf("update human enabled %s: %w", id, err)
-	}
-	return nil
-}
-
-// UpdateHumanAdminDisable sets the admin_disable flag on a human.
-func UpdateHumanAdminDisable(db *sqlx.DB, id string, disable bool) error {
-	val := 0
-	if disable {
-		val = 1
-	}
-	_, err := db.Exec(`UPDATE humans SET admin_disable = ? WHERE id = ?`, val, id)
-	if err != nil {
-		return fmt.Errorf("update human admin_disable %s: %w", id, err)
-	}
-	return nil
-}
-
-// SwitchProfile reads the profile row and updates the human's current_profile_no, area,
-// latitude, and longitude to match. Returns false if the profile was not found.
-func SwitchProfile(db *sqlx.DB, id string, profileNo int) (bool, error) {
-	var profile ProfileRow
-	err := db.Get(&profile, `SELECT * FROM profiles WHERE id = ? AND profile_no = ?`, id, profileNo)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
-		return false, fmt.Errorf("select profile %s/%d: %w", id, profileNo, err)
-	}
-
-	_, err = db.Exec(
-		`UPDATE humans SET current_profile_no = ?, area = ?, latitude = ?, longitude = ? WHERE id = ?`,
-		profileNo, profile.Area, profile.Latitude, profile.Longitude, id)
-	if err != nil {
-		return false, fmt.Errorf("update human for switch profile %s: %w", id, err)
-	}
-	return true, nil
-}
-
-// SelectProfiles returns all profiles for a given human ID.
-func SelectProfiles(db *sqlx.DB, id string) ([]ProfileRow, error) {
-	var profiles []ProfileRow
-	err := db.Select(&profiles, `SELECT * FROM profiles WHERE id = ?`, id)
-	if err != nil {
-		return nil, fmt.Errorf("select profiles for %s: %w", id, err)
-	}
-	return profiles, nil
-}
-
 // trackingTables lists all tracking tables that hold per-profile data.
 var trackingTables = []string{
 	"monsters", "raid", "egg", "quest", "invasion", "weather", "lures", "gym", "nests", "maxbattle", "forts",
 }
 
 // UpdateProfileHours updates the active_hours on a profile.
+// TODO: move to store.HumanStore as a follow-up.
 func UpdateProfileHours(dbx *sqlx.DB, id string, profileNo int, activeHours string) error {
 	_, err := dbx.Exec(
 		`UPDATE profiles SET active_hours = ? WHERE id = ? AND profile_no = ?`,
@@ -112,6 +57,7 @@ func UpdateProfileHours(dbx *sqlx.DB, id string, profileNo int, activeHours stri
 
 // CopyProfile copies all tracking data from one profile to another.
 // It deletes existing tracking in the destination profile first, then copies from source.
+// TODO: move to store.HumanStore as a follow-up (cross-table operation).
 func CopyProfile(dbx *sqlx.DB, id string, fromProfile, toProfile int) error {
 	for _, table := range trackingTables {
 		// Delete existing data in destination profile.
@@ -175,36 +121,3 @@ func CopyProfile(dbx *sqlx.DB, id string, fromProfile, toProfile int) error {
 	}
 	return nil
 }
-
-// UpdateHumanLocation updates the latitude and longitude on both the humans
-// table and the matching profile row.
-func UpdateHumanLocation(dbx *sqlx.DB, id string, lat, lon float64, profileNo int) error {
-	if _, err := dbx.Exec(
-		`UPDATE humans SET latitude = ?, longitude = ? WHERE id = ?`,
-		lat, lon, id); err != nil {
-		return fmt.Errorf("update human location %s: %w", id, err)
-	}
-	if _, err := dbx.Exec(
-		`UPDATE profiles SET latitude = ?, longitude = ? WHERE id = ? AND profile_no = ?`,
-		lat, lon, id, profileNo); err != nil {
-		return fmt.Errorf("update profile location %s/%d: %w", id, profileNo, err)
-	}
-	return nil
-}
-
-// UpdateHumanAreas updates the area JSON on both the humans table and the
-// matching profile row.
-func UpdateHumanAreas(dbx *sqlx.DB, id string, areaJSON string, profileNo int) error {
-	if _, err := dbx.Exec(
-		`UPDATE humans SET area = ? WHERE id = ?`,
-		areaJSON, id); err != nil {
-		return fmt.Errorf("update human areas %s: %w", id, err)
-	}
-	if _, err := dbx.Exec(
-		`UPDATE profiles SET area = ? WHERE id = ? AND profile_no = ?`,
-		areaJSON, id, profileNo); err != nil {
-		return fmt.Errorf("update profile areas %s/%d: %w", id, profileNo, err)
-	}
-	return nil
-}
-
