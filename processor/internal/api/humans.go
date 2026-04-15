@@ -11,7 +11,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/community"
-	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -48,7 +47,7 @@ func HandleStartHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for start: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -59,7 +58,7 @@ func HandleStartHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := db.UpdateHumanEnabled(deps.DB, id, true); err != nil {
+		if err := deps.Humans.SetEnabled(id, true); err != nil {
 			log.Errorf("Humans API: start human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -79,7 +78,7 @@ func HandleStopHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for stop: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -90,7 +89,7 @@ func HandleStopHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := db.UpdateHumanEnabled(deps.DB, id, false); err != nil {
+		if err := deps.Humans.SetEnabled(id, false); err != nil {
 			log.Errorf("Humans API: stop human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -115,7 +114,7 @@ func HandleAdminDisabled(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for adminDisabled: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -136,15 +135,17 @@ func HandleAdminDisabled(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := db.UpdateHumanAdminDisable(deps.DB, id, *body.State); err != nil {
-			log.Errorf("Humans API: adminDisabled: %s", err)
-			trackingJSONError(c, http.StatusInternalServerError, "database error")
-			return
-		}
-
+		// Flag-only semantics: do NOT use humanStore.SetAdminDisable here,
+		// which also clears disabled_date and resets enabled/fails. This
+		// endpoint has historically toggled just the admin_disable flag.
 		adminDisable := 0
 		if *body.State {
 			adminDisable = 1
+		}
+		if err := deps.Humans.Update(id, map[string]any{"admin_disable": adminDisable}); err != nil {
+			log.Errorf("Humans API: adminDisabled: %s", err)
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
+			return
 		}
 
 		reloadState(deps)
@@ -161,7 +162,7 @@ func HandleSwitchProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for switchProfile: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -182,7 +183,7 @@ func HandleSwitchProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		found, err := db.SwitchProfile(deps.DB, id, profileNo)
+		found, err := deps.Humans.SwitchProfile(id, profileNo)
 		if err != nil {
 			log.Errorf("Humans API: switchProfile: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")

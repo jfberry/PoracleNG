@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -28,7 +27,6 @@ type TelegramUserInfo struct {
 // It checks membership in configured Telegram channels/groups via getChatMember API.
 type TelegramReconciliation struct {
 	api          *tgbotapi.BotAPI
-	db           *sqlx.DB
 	humanStore   store.HumanStore
 	cfg          *config.Config
 	translations *i18n.Bundle
@@ -39,7 +37,6 @@ type TelegramReconciliation struct {
 // NewTelegramReconciliation creates a new TelegramReconciliation instance.
 func NewTelegramReconciliation(
 	api *tgbotapi.BotAPI,
-	dbx *sqlx.DB,
 	humanStore store.HumanStore,
 	cfg *config.Config,
 	translations *i18n.Bundle,
@@ -47,7 +44,6 @@ func NewTelegramReconciliation(
 ) *TelegramReconciliation {
 	return &TelegramReconciliation{
 		api:          api,
-		db:           dbx,
 		humanStore:   humanStore,
 		cfg:          cfg,
 		translations: translations,

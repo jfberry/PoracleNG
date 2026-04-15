@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -30,7 +29,6 @@ type DiscordUserInfo struct {
 // It syncs Discord role membership with Poracle user registration.
 type Reconciliation struct {
 	session      *discordgo.Session
-	db           *sqlx.DB
 	humanStore   store.HumanStore
 	cfg          *config.Config
 	translations *i18n.Bundle
@@ -46,7 +44,6 @@ type Reconciliation struct {
 // NewReconciliation creates a new Reconciliation instance.
 func NewReconciliation(
 	session *discordgo.Session,
-	dbx *sqlx.DB,
 	humanStore store.HumanStore,
 	cfg *config.Config,
 	translations *i18n.Bundle,
@@ -54,7 +51,6 @@ func NewReconciliation(
 ) *Reconciliation {
 	return &Reconciliation{
 		session:      session,
-		db:           dbx,
 		humanStore:   humanStore,
 		cfg:          cfg,
 		translations: translations,
@@ -735,14 +731,6 @@ func hasAnyRole(roleList, required []string) bool {
 		}
 	}
 	return false
-}
-
-// nullableStr returns the dereferenced string, or "" if nil.
-func nullableStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
 
 // nullableSqlArg returns the string value or nil for SQL NULL.
