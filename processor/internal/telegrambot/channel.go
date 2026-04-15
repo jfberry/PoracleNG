@@ -1,7 +1,6 @@
 package telegrambot
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 var (
@@ -118,29 +118,23 @@ func (b *Bot) handleChannel(m *tgbotapi.Message, args []string) {
 
 func (b *Bot) handleChannelAdd(chatID int64, targetID, targetName, targetType string, communityList, areaRestriction []string) {
 	// Check if already registered.
-	existing, _ := db.SelectOneHumanFull(b.DB, targetID)
+	existing, _ := b.Humans.Get(targetID)
 	if existing != nil {
 		msg := tgbotapi.NewMessage(chatID, "👌")
 		b.api.Send(msg)
 		return
 	}
 
-	communityJSON, _ := json.Marshal(communityList)
-
-	h := &db.HumanFull{
+	h := &store.Human{
 		ID:                  targetID,
 		Type:                targetType,
 		Name:                targetName,
-		Enabled:             1,
-		Area:                "[]",
-		CommunityMembership: string(communityJSON),
-	}
-	if areaRestriction != nil {
-		areaRestrictionJSON, _ := json.Marshal(areaRestriction)
-		h.AreaRestriction.SetValid(string(areaRestrictionJSON))
+		Enabled:             true,
+		CommunityMembership: communityList,
+		AreaRestriction:     areaRestriction,
 	}
 
-	if err := db.CreateHuman(b.DB, h); err != nil {
+	if err := b.Humans.Create(h); err != nil {
 		log.Errorf("telegram bot: create human for %s %s: %v", targetType, targetID, err)
 		msg := tgbotapi.NewMessage(chatID, "Failed to register, check logs")
 		b.api.Send(msg)
@@ -148,7 +142,7 @@ func (b *Bot) handleChannelAdd(chatID int64, targetID, targetName, targetType st
 	}
 
 	// Create default profile.
-	if err := db.CreateDefaultProfile(b.DB, targetID, targetName, "[]", 0, 0); err != nil {
+	if err := b.Humans.CreateDefaultProfile(targetID, targetName, nil, 0, 0); err != nil {
 		log.Warnf("telegram bot: create default profile for %s: %v", targetID, err)
 	}
 
@@ -161,7 +155,7 @@ func (b *Bot) handleChannelAdd(chatID int64, targetID, targetName, targetType st
 }
 
 func (b *Bot) handleChannelRemove(chatID int64, targetID, targetName, targetType string) {
-	existing, _ := db.SelectOneHumanFull(b.DB, targetID)
+	existing, _ := b.Humans.Get(targetID)
 	if existing == nil {
 		msg := tgbotapi.NewMessage(chatID,
 			fmt.Sprintf("%s does not seem to be registered. Add it with /channel add", targetID))
