@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
-	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // channelTemplate represents one entry in config/channelTemplate.json.
@@ -267,22 +267,20 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		}
 
 		// Register in DB.
-		h := &db.HumanFull{
-			ID:                  targetID,
-			Type:                targetType,
-			Name:                targetName,
-			Enabled:             1,
-			Area:                "[]",
-			CommunityMembership: "[]",
+		h := &store.Human{
+			ID:      targetID,
+			Type:    targetType,
+			Name:    targetName,
+			Enabled: true,
 		}
-		if err := db.CreateHuman(b.DB, h); err != nil {
+		if err := b.Humans.Create(h); err != nil {
 			log.Errorf("discord bot: autocreate register %s: %v", targetName, err)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to register %s", targetName))
 			continue
 		}
 
 		// Create default profile.
-		if err := db.CreateDefaultProfile(b.DB, targetID, targetName, "[]", 0, 0); err != nil {
+		if err := b.Humans.CreateDefaultProfile(targetID, targetName, nil, 0, 0); err != nil {
 			log.Warnf("discord bot: autocreate default profile %s: %v", targetName, err)
 		}
 
