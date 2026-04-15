@@ -58,7 +58,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.lureMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("lure").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("lure").Inc()

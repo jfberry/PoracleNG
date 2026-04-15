@@ -75,6 +75,30 @@ func (l *Limiter) Close() {
 	close(l.done)
 }
 
+// IsBlocked reports whether the destination is currently over its limit
+// within the live window. It is non-mutating: no counter increment, no
+// violation tracking, no notification side effects. Use this at match
+// time as a cheap pre-filter to skip render work for paused destinations.
+// The authoritative count and breach detection happens in Check, which
+// is called at delivery time.
+func (l *Limiter) IsBlocked(destinationID, destinationType string) bool {
+	limit := l.limitFor(destinationID, destinationType)
+	windowDuration := time.Duration(l.cfg.TimingPeriod) * time.Second
+	now := time.Now()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	c := l.counters[destinationID]
+	if c == nil {
+		return false
+	}
+	if now.Sub(c.windowAt) >= windowDuration {
+		return false
+	}
+	return c.count >= limit
+}
+
 // Check increments the message counter for the given destination and returns
 // whether the message should be sent.
 func (l *Limiter) Check(destinationID, destinationType string) RateResult {

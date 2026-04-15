@@ -104,7 +104,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(matchStart).Seconds())
 
 		// Filter by rate limit
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		// Filter by RSVP preference before sending.
 		// Check for future RSVPs only — past timeslots are stripped during

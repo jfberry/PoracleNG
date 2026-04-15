@@ -165,6 +165,8 @@ func main() {
 				OnDisabled: func(target, name, jobType string) {
 					proc.disableUserForDeliveryFailure(target, name, jobType)
 				},
+				RateLimiter:    proc.rateLimiter,
+				RateLimitHooks: proc,
 			},
 		})
 		if err != nil {

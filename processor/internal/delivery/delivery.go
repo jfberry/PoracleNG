@@ -36,6 +36,25 @@ type Job struct {
 	Lat           float64         `json:"lat"`
 	Lon           float64         `json:"lon"`
 	StaticMapData []byte          `json:"-"` // inline tile image bytes
+	Language      string          `json:"-"` // matched user's language (for hooks notifications)
+
+	// BypassRateLimit tells the delivery queue not to count this job against
+	// the per-destination rate limit and not to drop it if the destination is
+	// over the limit. Used for rate-limit notifications and disable messages
+	// — without this, the limiter could swallow the very message telling the
+	// user they were rate-limited.
+	BypassRateLimit bool `json:"-"`
+}
+
+// RateLimitHooks lets the delivery queue notify the host application when a
+// destination first breaches its limit (so a notification can be sent) and when
+// the destination has accumulated enough breaches to be banned. The host
+// implementation is responsible for dispatching any user-visible message and
+// updating any persistent state (e.g. setting enabled=0). All hook methods are
+// invoked from delivery worker goroutines and must be safe for concurrent use.
+type RateLimitHooks interface {
+	OnBreach(target, typ, name, language string, limit, resetSeconds int)
+	OnBan(target, typ, name, language string)
 }
 
 // SentMessage is returned after successful delivery.

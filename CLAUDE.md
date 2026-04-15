@@ -261,11 +261,15 @@ Delivery is handled via platform REST APIs (Discord API v10, Telegram Bot API).
 
 ## Rate Limiting
 
-Rate limiting is handled by the processor (`internal/ratelimit/`), applied before rendering:
+Rate limiting is handled by the processor (`internal/ratelimit/`) using a two-phase model: a cheap pre-filter at match time and the authoritative count at delivery time.
 
-- **Per-destination limits**: Configurable via `[alert_limits]` — `dm_limit` (default 20), `channel_limit` (default 40) per `timing_period` (default 240 minutes)
-- **Implementation**: Sliding window counter per destination ID. When a destination exceeds its limit, the matched payload is dropped and an i18n-translated rate limit message is sent to the user instead.
-- **`max_limits_before_stop`**: After N consecutive rate limit hits (default 10), the user is auto-disabled (`admin_disable = 1`) to prevent permanent flood. User must re-register with `!poracle`.
+- **Per-destination limits**: Configurable via `[alert_limits]` — `dm_limit` (default 20), `channel_limit` (default 40) per `timing_period` (default 240 **seconds**, ~4 min). Fixed/tumbling window: when the first message arrives the window starts and lasts `timing_period` seconds; a new window only begins after full expiry.
+- **Phase 1 — pre-filter (match time)**: After matching, each webhook handler calls `filterBlocked(matched)` which uses `Limiter.IsBlocked()` to drop users whose destination is currently over the limit. **Non-mutating** — it does not increment counters or fire notifications. This avoids burning render/enrichment work on destinations we already know are paused.
+- **Phase 2 — authoritative count (delivery time)**: `FairQueue.processJob` (in `internal/delivery/queue.go`) calls `Limiter.Check()` per job, immediately before `Sender.Send`. Only deliveries that actually go on the wire count against a destination's quota. `JustBreached` triggers `RateLimitHooks.OnBreach` (which dispatches the i18n notification); `Banned` triggers `OnBan` (which disables the user, sends a farewell, and posts to the shame channel if configured). Hooks are implemented by `ProcessorService` in `cmd/processor/helpers.go`.
+- **What does NOT count**:
+  - **Edits** of an already-tracked message (`EditKey` matched in `MessageTracker`) — these are mutations of a send we already counted.
+  - Jobs marked `BypassRateLimit=true` — used for the rate-limit notification itself and the ban farewell, so the limiter cannot swallow the message reporting on itself. Use `Dispatcher.DispatchBypass(job)` to enqueue these.
+- **`max_limits_before_stop`**: After N consecutive rate-limit breaches in 24h (default 10), the user is auto-disabled to prevent permanent flood. `disable_on_stop=true` sets `admin_disable=1` (user must re-register with `!poracle`); `false` sets `enabled=0` (user can `!start` again). A debounced state reload follows so the user is removed from matching.
 - **`blocked_alerts`**: Per-user JSON array in `humans` table (e.g., `["pokemon","raid"]`). Parsed into a `BlockedAlertsSet` map at state load for O(1) lookup. Blocks specific alert types without disabling the user entirely.
 - **Limit overrides**: `[alert_limits.overrides]` allows per-user or per-role custom limits (array-of-tables format in TOML).
 
