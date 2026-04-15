@@ -27,6 +27,19 @@ type Human struct {
 	BlockedAlerts       []string // nil = no blocked alerts
 }
 
+// HumanLite is a minimal projection of the humans table used on hot paths
+// (tracking CRUD handlers) where only identity and profile selection matter.
+// Skips the JSON-column parsing that Get does for Area, CommunityMembership,
+// AreaRestriction, and BlockedAlerts.
+type HumanLite struct {
+	ID               string
+	Type             string
+	Name             string
+	Enabled          bool
+	AdminDisable     bool
+	CurrentProfileNo int
+}
+
 // Profile represents a row from the profiles table.
 type Profile struct {
 	UID         int
@@ -46,6 +59,11 @@ type HumanStore interface {
 
 	// Get returns a human by ID, or nil if not found.
 	Get(id string) (*Human, error)
+
+	// GetLite returns identity + profile fields for a human by ID without
+	// parsing any JSON columns. Cheaper than Get for hot-path handlers that
+	// only need ID / CurrentProfileNo / enable state.
+	GetLite(id string) (*HumanLite, error)
 
 	// Create inserts a new human record.
 	Create(h *Human) error

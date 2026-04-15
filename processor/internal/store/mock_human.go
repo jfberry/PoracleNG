@@ -56,6 +56,24 @@ func (m *MockHumanStore) Get(id string) (*Human, error) {
 	return &cp, nil
 }
 
+func (m *MockHumanStore) GetLite(id string) (*HumanLite, error) {
+	m.record("GetLite")
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	h, ok := m.humans[id]
+	if !ok {
+		return nil, nil
+	}
+	return &HumanLite{
+		ID:               h.ID,
+		Type:             h.Type,
+		Name:             h.Name,
+		Enabled:          h.Enabled,
+		AdminDisable:     h.AdminDisable,
+		CurrentProfileNo: h.CurrentProfileNo,
+	}, nil
+}
+
 func (m *MockHumanStore) Create(h *Human) error {
 	m.record("Create")
 	m.mu.Lock()

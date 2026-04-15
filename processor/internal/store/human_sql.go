@@ -69,6 +69,38 @@ func (s *SQLHumanStore) DB() *sqlx.DB {
 	return s.db
 }
 
+// humanLiteColumns is the column list for HumanLite. Explicit so operator-
+// added columns don't break scans.
+const humanLiteColumns = `id, type, name, enabled, admin_disable, current_profile_no`
+
+type humanLiteRow struct {
+	ID               string `db:"id"`
+	Type             string `db:"type"`
+	Name             string `db:"name"`
+	Enabled          int    `db:"enabled"`
+	AdminDisable     int    `db:"admin_disable"`
+	CurrentProfileNo int    `db:"current_profile_no"`
+}
+
+func (s *SQLHumanStore) GetLite(id string) (*HumanLite, error) {
+	var r humanLiteRow
+	err := s.db.Get(&r, `SELECT `+humanLiteColumns+` FROM humans WHERE id = ?`, id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("select human lite %s: %w", id, err)
+	}
+	return &HumanLite{
+		ID:               r.ID,
+		Type:             r.Type,
+		Name:             r.Name,
+		Enabled:          r.Enabled != 0,
+		AdminDisable:     r.AdminDisable != 0,
+		CurrentProfileNo: r.CurrentProfileNo,
+	}, nil
+}
+
 func (s *SQLHumanStore) Get(id string) (*Human, error) {
 	var r humanRow
 	err := s.db.Get(&r, `SELECT `+humanRowColumns+` FROM humans WHERE id = ?`, id)
