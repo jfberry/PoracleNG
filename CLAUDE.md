@@ -672,12 +672,24 @@ Migrations in `processor/internal/db/migrations/` (SQL files, run on processor s
 
 ### HumanStore boundary
 
-All `humans` and `profiles` table access outside the store implementation goes through the `store.HumanStore` interface (`processor/internal/store/human.go`). Callers work with the typed `*store.Human` shape (`bool` flags, `[]string` for JSON-array columns, `string` for Language) and never touch raw SQL. The SQL and JSON-marshaling is confined to `store/human_sql.go`.
+All `humans` and `profiles` table reads and mutations outside the store implementation go through `store.HumanStore` (`processor/internal/store/human.go`). The interface covers:
+
+- `Get` — full record (typed `*store.Human` with `bool` flags and `[]string` JSON columns) for cold paths that need parsed data.
+- `GetLite` — lightweight projection (`*store.HumanLite`) for hot paths (tracking CRUD `lookupHuman`) that only need ID / profile / language.
+- `ListByType`, `ListByTypeEnabled`, `ListByTypes`, `ListAll` — bulk queries.
+- `GetProfiles` / `SwitchProfile` / `AddProfile` / `DeleteProfile` — profile management.
+- Per-field setters (`SetEnabled`, `SetArea`, `SetLocation`, `SetAdminDisable`, etc.) plus a dynamic `Update(id, map)` escape hatch for partial updates that don't fit a dedicated setter.
+
+Two cross-table operations remain in `db/human_queries.go` for a follow-up migration, marked `TODO`: `CopyProfile` (dynamic-schema row copy across 11 tracking tables) and `UpdateProfileHours`. Both trivially movable once the corresponding store methods exist.
+
+API handlers serialise through DTOs to preserve the legacy JSON wire format:
+- `api.HumanResponse` (`processor/internal/api/human_response.go`) mirrors the legacy `db.HumanFull` shape (int flags, JSON-string array columns, `null.String` for nullable columns). `humanToResponse(*store.Human)` adapts at the boundary.
+- `api.ProfileResponse` (`processor/internal/api/profile_response.go`) mirrors the legacy `db.ProfileRow` shape (area as JSON-encoded string). `profileToResponse(store.Profile)` / `profilesToResponse([]store.Profile)` adapt at the boundary.
 
 Key benefits this boundary provides:
 - **User-customised schemas are tolerated.** Explicit column lists in the store mean operators can add their own columns to `humans` (e.g. `sub_end` for subscription tracking) without the processor failing to scan.
-- **Typed end-state for internal code.** `db.HumanFull` and `db.SelectOneHumanFull` were retired; there is no raw-row shape outside the store.
-- **API wire format is preserved.** The `/api/humans/*` endpoints serialise `api.HumanResponse` (in `processor/internal/api/human_response.go`), which mirrors the legacy JSON shape clients expect (int flags, JSON-string array columns, `null.String` for nullable columns). `humanToResponse(*store.Human)` adapts at the API boundary.
+- **Typed end-state for internal code.** `db.HumanFull`, `db.HumanAPI`, `db.SelectOneHumanFull`, `db.SelectOneHuman`, and the `UpdateHuman*` helpers were retired; there is no raw-row shape outside the store.
+- **API wire format is preserved.** Existing clients (PoracleWeb) continue to receive the same JSON shape for every endpoint.
 
 ## Game Data
 
