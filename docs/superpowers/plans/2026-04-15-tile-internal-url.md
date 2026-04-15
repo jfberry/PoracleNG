@@ -418,28 +418,38 @@ Add `Both bool` to the `TilePending` struct so render.go can detect the mode.
 
 - [ ] **Step 4: Implement the worker branch**
 
-In the worker loop's switch on `req.mode`:
+Refactor first: the existing pregenerate path at `staticmap.go:619-689` builds the public URL inline. Extract the raw tile ID (the hash/filename the tileserver returns) into its own helper so we can construct the internal and public URLs from the same ID — no substring rewrite, no assumption that `ProviderURL` is a clean prefix of any URL we've already built.
+
+```go
+// pregenerateID submits a pregenerate request to the tileserver (via
+// internal_url) and returns the tile ID the tileserver assigns. Empty
+// string on failure. Caller is responsible for formatting the public
+// or internal URL from the ID.
+func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapType string) (id, mapPath string) {
+    // (body extracted from the existing pregenerate path; stops short
+    //  of the final fmt.Sprintf that builds the full URL)
+}
+```
+
+Then in the worker loop's switch on `req.mode`:
 
 ```go
 case tileRequestBoth:
-    // Step 1: pregenerate to get the public URL.
-    publicURL := r.generatePregenerateURL(req.maptype, req.data, req.staticMapType)
-    if publicURL == "" {
+    id, mapPath := r.pregenerateID(req.maptype, req.data, req.staticMapType)
+    if id == "" {
         req.pending.Result <- req.pending.Fallback
         req.pending.ResultImg <- nil
         continue
     }
+    publicURL := fmt.Sprintf("%s/%s/pregenerated/%s", r.config.ProviderURL, mapPath, id)
+    fetchURL := fmt.Sprintf("%s/%s/pregenerated/%s", r.internalBase(), mapPath, id)
     req.pending.Result <- publicURL
-
-    // Step 2: fetch the bytes via internal_url using the same path.
-    // publicURL has form "{ProviderURL}/staticmap/pregenerated/{id}".
-    // Rewrite the base to internalBase() for the fetch.
-    fetchURL := strings.Replace(publicURL, r.config.ProviderURL, r.internalBase(), 1)
-    imgBytes := r.downloadTileBytes(fetchURL)
-    req.pending.ResultImg <- imgBytes // may be nil — render.go tolerates nil
+    req.pending.ResultImg <- r.downloadTileBytes(fetchURL) // may be nil — render.go tolerates nil
 ```
 
-Extract the pregenerate logic into `generatePregenerateURL` (returns string, empty on failure) and the download into `downloadTileBytes(url string) []byte` (returns nil on failure). These are refactor extracts from the existing inline/pregenerate paths.
+Both URLs are built from the same returned ID via separate `fmt.Sprintf` calls — no string replacement, no prefix assumption. If `ProviderURL` and `InternalURL` expose the same tile at different path shapes (unusual deployment) the fetch fails cleanly and Discord-upload destinations fall back to per-destination URL fetch.
+
+Also extract `downloadTileBytes(url string) []byte` (GET url, read body, return bytes or nil on any failure — no retries, no caching, just a one-shot fetch).
 
 - [ ] **Step 5: Test**
 
@@ -663,5 +673,6 @@ Type consistency:
 Placeholder scan: every step has concrete code or exact commands. No "TBD".
 
 Risk areas:
-- The URL rewrite in Task 5's worker assumes `publicURL` starts with `ProviderURL` verbatim. This holds because the pregenerate code at `staticmap.go:689` builds the URL as `fmt.Sprintf("%s/%s/pregenerated/%s", r.config.ProviderURL, ...)`. If a future change introduces CDN-style path divergence between `ProviderURL` and `InternalURL`, the rewrite breaks silently (falls through to the fetch against the wrong host). Mitigation: the fetch failure will log a tile-download error and the affected Discord-upload destinations will fall back to fetching the public URL themselves (existing behaviour today) — degradation, not breakage.
+- Task 5 builds the public and internal URLs from the same tile ID via two separate `fmt.Sprintf` calls (no substring replacement). Assumes only that the tileserver serves the same pregenerated ID at the same path under both hostnames — which is true for any deployment that isn't deliberately exposing different path shapes. If the assumption breaks, the fetch fails cleanly and Discord-upload destinations fall back to per-destination URL fetch (today's behaviour).
 - The bytes-timeout in Task 6 is separate from the URL-timeout. If bytes fetch hangs, URL still applied and Telegram/upload-off Discord jobs still deliver; upload-on Discord jobs get no bytes and fall back to per-destination URL fetch. This is strictly no worse than today.
+- Dispatch ordering: the entire batch waits for both URL and bytes before any job is enqueued (i.e. Telegram doesn't leave early). This trades a few hundred ms of latency in mixed batches for a single consistent exit point and no partial-send surprises when bytes time out.
