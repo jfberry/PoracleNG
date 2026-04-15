@@ -680,7 +680,7 @@ All `humans` and `profiles` table reads and mutations outside the store implemen
 - `GetProfiles` / `SwitchProfile` / `AddProfile` / `DeleteProfile` — profile management.
 - Per-field setters (`SetEnabled`, `SetArea`, `SetLocation`, `SetAdminDisable`, etc.) plus a dynamic `Update(id, map)` escape hatch for partial updates that don't fit a dedicated setter.
 
-Two cross-table operations remain in `db/human_queries.go` for a follow-up migration, marked `TODO`: `CopyProfile` (dynamic-schema row copy across 11 tracking tables) and `UpdateProfileHours`. Both trivially movable once the corresponding store methods exist.
+The only human/profile-related code remaining in `db/human_queries.go` is `DeleteHumanAndTracking` (used by the store itself for cross-table cascade) and the `trackingTables` list it walks. Everything a caller would reach for is on `store.HumanStore`.
 
 API handlers serialise through DTOs to preserve the legacy JSON wire format:
 - `api.HumanResponse` (`processor/internal/api/human_response.go`) mirrors the legacy `db.HumanFull` shape (int flags, JSON-string array columns, `null.String` for nullable columns). `humanToResponse(*store.Human)` adapts at the boundary.
