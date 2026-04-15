@@ -199,7 +199,16 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 		return e.StaticMap.SubmitTileInline(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m)
 	}
 
-	// TileModeURLWithBytes routing is wired in Task 7 once SubmitTileBoth exists.
+	if tileMode == TileModeURLWithBytes {
+		// Mixed batch: pregenerate to produce a public URL (embedded in the
+		// rendered message for Telegram / upload-off Discord) AND download
+		// the bytes once via internal_url so Discord-upload destinations in
+		// the same batch don't each re-fetch the public URL.
+		filtered := filterFields(merged, pregenKeys)
+		e.StaticMap.AddNearbyStops(filtered, merged, maptype)
+		return e.StaticMap.SubmitTileBoth(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m)
+	}
+
 	// TileModeURL — current flow
 	url, pending := e.StaticMap.GetStaticMapURLAsync(maptype, merged, keys, pregenKeys, m)
 	if pending != nil {
