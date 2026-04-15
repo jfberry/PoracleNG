@@ -22,6 +22,7 @@ import (
 // TrackingDeps holds shared dependencies for all tracking CRUD handlers.
 type TrackingDeps struct {
 	DB           *sqlx.DB
+	Humans       store.HumanStore
 	Tracking     *store.TrackingStores
 	StateMgr     *state.Manager
 	RowText      *rowtext.Generator

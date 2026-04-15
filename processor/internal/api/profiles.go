@@ -53,7 +53,7 @@ func HandleDeleteProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := db.DeleteProfile(deps.DB, id, profileNo); err != nil {
+		if err := deps.Humans.DeleteProfile(id, profileNo); err != nil {
 			log.Errorf("Profiles API: delete profile: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -133,7 +133,7 @@ func HandleAddProfile(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			if err := db.AddProfile(deps.DB, id, req.Name, activeHours); err != nil {
+			if err := deps.Humans.AddProfile(id, req.Name, activeHours); err != nil {
 				log.Errorf("Profiles API: add profile: %s", err)
 				trackingJSONError(c, http.StatusInternalServerError, "Exception raised during execution")
 				return

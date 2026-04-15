@@ -30,6 +30,15 @@ type HumanFull struct {
 	BlockedAlerts       null.String `db:"blocked_alerts" json:"blocked_alerts"`
 }
 
+// HumanFullColumns lists the columns we read into HumanFull. Explicit lists
+// (rather than SELECT *) keep the query in sync with the struct AND let
+// operators add their own columns to the humans table — common in the wild,
+// e.g. subscription_end — without breaking sqlx scans with "missing
+// destination name <col> in *db.HumanFull".
+const HumanFullColumns = `id, type, name, enabled, area, latitude, longitude, fails, ` +
+	`last_checked, language, admin_disable, disabled_date, current_profile_no, ` +
+	`community_membership, area_restriction, notes, blocked_alerts`
+
 // ProfileRow represents a row from the profiles table.
 type ProfileRow struct {
 	UID       int     `db:"uid" json:"uid"`
@@ -45,7 +54,7 @@ type ProfileRow struct {
 // SelectOneHumanFull returns all columns for a single human by ID.
 func SelectOneHumanFull(db *sqlx.DB, id string) (*HumanFull, error) {
 	var h HumanFull
-	err := db.Get(&h, `SELECT * FROM humans WHERE id = ?`, id)
+	err := db.Get(&h, `SELECT `+HumanFullColumns+` FROM humans WHERE id = ?`, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -132,117 +141,6 @@ func SelectProfiles(db *sqlx.DB, id string) ([]ProfileRow, error) {
 // trackingTables lists all tracking tables that hold per-profile data.
 var trackingTables = []string{
 	"monsters", "raid", "egg", "quest", "invasion", "weather", "lures", "gym", "nests", "maxbattle", "forts",
-}
-
-// DeleteProfile deletes a profile and all its associated tracking data.
-// If the deleted profile was the current one, it switches to the lowest remaining profile.
-func DeleteProfile(dbx *sqlx.DB, id string, profileNo int) error {
-	// Delete the profile row itself.
-	_, err := dbx.Exec(`DELETE FROM profiles WHERE id = ? AND profile_no = ?`, id, profileNo)
-	if err != nil {
-		return fmt.Errorf("delete profile %s/%d: %w", id, profileNo, err)
-	}
-
-	// Load remaining profiles to check if we need to handle special cases.
-	var remaining []ProfileRow
-	if err := dbx.Select(&remaining, `SELECT * FROM profiles WHERE id = ?`, id); err != nil {
-		return fmt.Errorf("select remaining profiles for %s: %w", id, err)
-	}
-
-	// Delete tracking data for this profile (unless it's the only profile=1 scenario
-	// where JS skips deletion — but we match JS: "if profiles.length !== 1 || profileNo !== 1")
-	// The JS condition means: skip deletion only when there was exactly 1 profile AND profileNo=1.
-	// Since we already deleted the profile row, remaining.length is profiles.length-1.
-	// The original check was before deletion, so we replicate with (remaining+1 profiles originally).
-	originalCount := len(remaining) + 1
-	if originalCount != 1 || profileNo != 1 {
-		for _, table := range trackingTables {
-			_, err := dbx.Exec(
-				fmt.Sprintf("DELETE FROM `%s` WHERE id = ? AND profile_no = ?", table),
-				id, profileNo)
-			if err != nil {
-				return fmt.Errorf("delete tracking from %s for %s/%d: %w", table, id, profileNo, err)
-			}
-		}
-	}
-
-	// If the human's current profile was the deleted one, switch to the lowest remaining.
-	var human HumanFull
-	err = dbx.Get(&human, `SELECT * FROM humans WHERE id = ?`, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil // human doesn't exist, nothing to update
-		}
-		return fmt.Errorf("select human %s after profile delete: %w", id, err)
-	}
-
-	if human.CurrentProfileNo == profileNo {
-		if len(remaining) == 0 {
-			_, err = dbx.Exec(`UPDATE humans SET current_profile_no = 1 WHERE id = ?`, id)
-		} else {
-			// Find lowest profile_no
-			lowest := remaining[0]
-			for _, p := range remaining[1:] {
-				if p.ProfileNo < lowest.ProfileNo {
-					lowest = p
-				}
-			}
-			_, err = dbx.Exec(
-				`UPDATE humans SET current_profile_no = ?, area = ?, latitude = ?, longitude = ? WHERE id = ?`,
-				lowest.ProfileNo, lowest.Area, lowest.Latitude, lowest.Longitude, id)
-		}
-		if err != nil {
-			return fmt.Errorf("update human after profile delete %s: %w", id, err)
-		}
-	}
-
-	return nil
-}
-
-// AddProfile creates a new profile for a human, auto-assigning the next available profile_no.
-// The new profile inherits the human's current area, latitude, and longitude.
-func AddProfile(dbx *sqlx.DB, id string, name string, activeHours string) error {
-	// Load existing profiles to find next available number.
-	var profiles []ProfileRow
-	if err := dbx.Select(&profiles, `SELECT * FROM profiles WHERE id = ?`, id); err != nil {
-		return fmt.Errorf("select profiles for %s: %w", id, err)
-	}
-
-	// Load human for area/lat/lon defaults.
-	var human HumanFull
-	if err := dbx.Get(&human, `SELECT * FROM humans WHERE id = ?`, id); err != nil {
-		return fmt.Errorf("select human %s for add profile: %w", id, err)
-	}
-
-	// Find next available profile_no (same algorithm as JS).
-	newProfileNo := 1
-	for {
-		found := false
-		for _, p := range profiles {
-			if p.ProfileNo == newProfileNo {
-				newProfileNo++
-				found = true
-				break
-			}
-		}
-		if !found {
-			break
-		}
-	}
-
-	if activeHours == "" {
-		activeHours = "{}"
-	}
-
-	_, err := dbx.Exec(
-		`INSERT INTO profiles (id, profile_no, name, area, latitude, longitude, active_hours)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		id, newProfileNo, name, human.Area, human.Latitude, human.Longitude, activeHours)
-	if err != nil {
-		return fmt.Errorf("insert profile %s/%d: %w", id, newProfileNo, err)
-	}
-
-	return nil
 }
 
 // UpdateProfileHours updates the active_hours on a profile.

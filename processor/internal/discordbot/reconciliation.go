@@ -135,7 +135,7 @@ func (r *Reconciliation) SyncDiscordRole(registerNewUsers, syncNames, removeInva
 	r.log.Info("User role membership to Poracle users starting...")
 
 	var usersToCheck []db.HumanFull
-	err := r.db.Select(&usersToCheck, `SELECT * FROM humans WHERE type = 'discord:user'`)
+	err := r.db.Select(&usersToCheck, `SELECT `+db.HumanFullColumns+` FROM humans WHERE type = 'discord:user'`)
 	if err != nil {
 		r.log.Errorf("User role check failed: load humans: %v", err)
 		return
@@ -642,7 +642,7 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 	r.log.Info("Channel membership to Poracle users starting...")
 
 	var channels []db.HumanFull
-	err := r.db.Select(&channels, `SELECT * FROM humans WHERE type = 'discord:channel' AND admin_disable = 0`)
+	err := r.db.Select(&channels, `SELECT `+db.HumanFullColumns+` FROM humans WHERE type = 'discord:channel' AND admin_disable = 0`)
 	if err != nil {
 		r.log.Errorf("Verification of Poracle channels failed: %v", err)
 		return

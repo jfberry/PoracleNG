@@ -127,7 +127,7 @@ func (r *TelegramReconciliation) SyncTelegramUsers(syncNames, removeInvalidUsers
 	r.log.Info("User membership to Poracle users starting...")
 
 	var usersToCheck []db.HumanFull
-	if err := r.db.Select(&usersToCheck, `SELECT * FROM humans WHERE type = 'telegram:user'`); err != nil {
+	if err := r.db.Select(&usersToCheck, `SELECT `+db.HumanFullColumns+` FROM humans WHERE type = 'telegram:user'`); err != nil {
 		r.log.Errorf("User check failed: load humans: %v", err)
 		return
 	}
@@ -334,7 +334,7 @@ func (r *TelegramReconciliation) UpdateTelegramChannels() {
 
 	var channelsToCheck []db.HumanFull
 	if err := r.db.Select(&channelsToCheck,
-		`SELECT * FROM humans WHERE (type = 'telegram:channel' OR type = 'telegram:group') AND admin_disable = 0`); err != nil {
+		`SELECT `+db.HumanFullColumns+` FROM humans WHERE (type = 'telegram:channel' OR type = 'telegram:group') AND admin_disable = 0`); err != nil {
 		r.log.Errorf("Verification of Poracle channels failed: %v", err)
 		return
 	}

@@ -291,6 +291,7 @@ func main() {
 	}
 	trackingDeps := &api.TrackingDeps{
 		DB:           database,
+		Humans:       humanStore,
 		Tracking:     trackingStores,
 		StateMgr:     stateMgr,
 		RowText: &rowtext.Generator{
