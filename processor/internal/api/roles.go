@@ -6,12 +6,11 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/gin-gonic/gin"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
-	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/discordroles"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // RoleDeps holds dependencies for the role API endpoints.
@@ -21,7 +20,7 @@ type RoleDeps struct {
 	// be initialized after routes are registered.
 	SessionFunc func() *discordgo.Session
 	Config      *config.Config
-	DB          *sqlx.DB
+	Humans      store.HumanStore
 }
 
 // session returns the current Discord session from the deps, or nil.
@@ -42,7 +41,7 @@ func HandleGetRoles(deps *RoleDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Roles API: get human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -99,7 +98,7 @@ func handleRoleChange(deps *RoleDeps, add bool) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Roles API: get human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -159,7 +158,7 @@ func HandleGetAdministrationRoles(deps *RoleDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Roles API: get human for admin roles: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")

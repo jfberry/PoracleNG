@@ -373,7 +373,7 @@ func main() {
 			return nil
 		},
 		Config: cfg,
-		DB:     database,
+		Humans: humanStore,
 	}
 	humans := apiGroup.Group("/humans")
 	humans.GET("/one/:id", api.HandleGetOneHuman(trackingDeps))
