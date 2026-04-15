@@ -50,36 +50,68 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 		queueCap := cap(ps.renderCh)
 		if queueCap > 0 && float64(queueLen)/float64(queueCap) > 0.8 {
 			// Queue is under pressure — skip waiting for tile.
-			if job.TilePending.Inline {
+			switch {
+			case job.TilePending.Both:
+				// Drain both channels so the tile worker doesn't block; apply fallback URL.
+				go func() { <-job.TilePending.ResultImg }()
+				job.TilePending.Apply(job.TilePending.Fallback)
+			case job.TilePending.Inline:
 				// Don't set "inline" marker without image bytes — the template
 				// would render "inline" as the image URL. Drain the channel in
 				// the background so the tile worker doesn't block.
 				go func() { <-job.TilePending.ResultImg }()
-			} else {
+			default:
 				job.TilePending.Apply(job.TilePending.Fallback)
 			}
 			metrics.RenderTileSkipped.Inc()
-		} else if job.TilePending.Inline {
-			select {
-			case imgData := <-job.TilePending.ResultImg:
-				if imgData != nil {
-					job.TilePending.ApplyInline()
-					job.TileImageData = imgData
-				}
-			case <-time.After(time.Until(job.TilePending.Deadline)):
-				// no image, proceed without
-			}
 		} else {
-			// Wait for tile to resolve or deadline to expire.
-			select {
-			case url := <-job.TilePending.Result:
-				if url != "" {
-					job.TilePending.Apply(url)
-				} else {
+			switch {
+			case job.TilePending.Both:
+				// Wait for the public URL first (embedded in the message).
+				select {
+				case url := <-job.TilePending.Result:
+					if url != "" {
+						job.TilePending.Apply(url)
+					} else {
+						job.TilePending.Apply(job.TilePending.Fallback)
+					}
+				case <-time.After(time.Until(job.TilePending.Deadline)):
+					job.TilePending.Apply(job.TilePending.Fallback)
+					// Drain bytes channel in the background.
+					go func() { <-job.TilePending.ResultImg }()
+				}
+				// Then wait for the bytes (independent deadline). Nil bytes
+				// are fine — Discord-upload destinations fall back to URL fetch.
+				select {
+				case imgData := <-job.TilePending.ResultImg:
+					if imgData != nil {
+						job.TileImageData = imgData
+					}
+				case <-time.After(time.Until(job.TilePending.Deadline)):
+					// bytes timed out — Discord-upload destinations fall back to URL fetch
+				}
+			case job.TilePending.Inline:
+				select {
+				case imgData := <-job.TilePending.ResultImg:
+					if imgData != nil {
+						job.TilePending.ApplyInline()
+						job.TileImageData = imgData
+					}
+				case <-time.After(time.Until(job.TilePending.Deadline)):
+					// no image, proceed without
+				}
+			default:
+				// Wait for tile to resolve or deadline to expire.
+				select {
+				case url := <-job.TilePending.Result:
+					if url != "" {
+						job.TilePending.Apply(url)
+					} else {
+						job.TilePending.Apply(job.TilePending.Fallback)
+					}
+				case <-time.After(time.Until(job.TilePending.Deadline)):
 					job.TilePending.Apply(job.TilePending.Fallback)
 				}
-			case <-time.After(time.Until(job.TilePending.Deadline)):
-				job.TilePending.Apply(job.TilePending.Fallback)
 			}
 		}
 	}
