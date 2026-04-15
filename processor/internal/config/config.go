@@ -489,6 +489,13 @@ type GeocodingConfig struct {
 	// Static map tile provider
 	StaticProvider    string                       `toml:"static_provider"`
 	StaticProviderURL string                       `toml:"static_provider_url"`
+	// Optional private URL the processor uses for its own tileserver HTTP
+	// (render, pregenerate POST, upload-images prefetch). If unset,
+	// StaticProviderURL is used for everything. Useful when
+	// StaticProviderURL is a public HTTPS endpoint (e.g. Cloudflare-fronted)
+	// and the processor can reach the tileserver directly on a private
+	// network — avoids proxy buffering / timeout on the hot path.
+	StaticInternalURL string                       `toml:"static_internal_url"`
 	StaticKey         []string                     `toml:"static_key"`
 	Width             int                          `toml:"width"`
 	Height            int                          `toml:"height"`

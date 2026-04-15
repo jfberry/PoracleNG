@@ -320,6 +320,7 @@ var configSchema = []ConfigSection{
 				{Value: "mapbox", Label: "Mapbox", Description: "Mapbox Static Images API"},
 			}},
 			{Name: "static_provider_url", Type: "string", Default: "", Description: "Static map tile provider URL"},
+			{Name: "static_internal_url", Type: "string", Default: "", Description: "Private URL the processor uses for its own tileserver calls (render, pregenerate fetch, upload-images pre-fetch). Leave empty to reuse static_provider_url.", Advanced: true},
 			{Name: "static_key", Type: "string[]", Default: []string{}, Description: "API keys for the static map provider (Google/Mapbox), rotated through array", Sensitive: true, HotReload: true},
 			{Name: "width", Type: "int", Default: 320, Description: "Static map image width in pixels"},
 			{Name: "height", Type: "int", Default: 200, Description: "Static map image height in pixels"},
