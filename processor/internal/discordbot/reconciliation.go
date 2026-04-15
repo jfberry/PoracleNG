@@ -18,6 +18,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // DiscordUserInfo holds the display name and roles for a Discord user across all guilds.
@@ -31,6 +32,7 @@ type DiscordUserInfo struct {
 type Reconciliation struct {
 	session      *discordgo.Session
 	db           *sqlx.DB
+	humanStore   store.HumanStore
 	cfg          *config.Config
 	translations *i18n.Bundle
 	dtsStore     *dts.TemplateStore
@@ -46,6 +48,7 @@ type Reconciliation struct {
 func NewReconciliation(
 	session *discordgo.Session,
 	dbx *sqlx.DB,
+	humanStore store.HumanStore,
 	cfg *config.Config,
 	translations *i18n.Bundle,
 	dtsStore *dts.TemplateStore,
@@ -53,6 +56,7 @@ func NewReconciliation(
 	return &Reconciliation{
 		session:      session,
 		db:           dbx,
+		humanStore:   humanStore,
 		cfg:          cfg,
 		translations: translations,
 		dtsStore:     dtsStore,

@@ -55,7 +55,7 @@ func New(cfg Config) (*Bot, error) {
 	// Initialize reconciliation — needed for check_role periodic sync AND
 	// for /start DM registration (verifies channel membership via API).
 	if cfg.DTS != nil {
-		b.reconciliation = NewTelegramReconciliation(api, cfg.DB, cfg.Cfg, cfg.Translations, cfg.DTS)
+		b.reconciliation = NewTelegramReconciliation(api, cfg.DB, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS)
 		if cfg.Cfg.Telegram.CheckRole {
 			go b.reconciliationLoop()
 		}

@@ -16,6 +16,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // TelegramUserInfo holds the display name and channel memberships for a Telegram user.
@@ -29,6 +30,7 @@ type TelegramUserInfo struct {
 type TelegramReconciliation struct {
 	api          *tgbotapi.BotAPI
 	db           *sqlx.DB
+	humanStore   store.HumanStore
 	cfg          *config.Config
 	translations *i18n.Bundle
 	dtsStore     *dts.TemplateStore
@@ -39,6 +41,7 @@ type TelegramReconciliation struct {
 func NewTelegramReconciliation(
 	api *tgbotapi.BotAPI,
 	dbx *sqlx.DB,
+	humanStore store.HumanStore,
 	cfg *config.Config,
 	translations *i18n.Bundle,
 	dtsStore *dts.TemplateStore,
@@ -46,6 +49,7 @@ func NewTelegramReconciliation(
 	return &TelegramReconciliation{
 		api:          api,
 		db:           dbx,
+		humanStore:   humanStore,
 		cfg:          cfg,
 		translations: translations,
 		dtsStore:     dtsStore,
