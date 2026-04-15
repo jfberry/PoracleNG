@@ -932,6 +932,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		smCfg := staticmap.Config{
 			Provider:                   cfg.Geocoding.StaticProvider,
 			ProviderURL:                cfg.Geocoding.StaticProviderURL,
+			InternalURL:                cfg.Geocoding.StaticInternalURL,
 			StaticKeys:                 cfg.Geocoding.StaticKey,
 			Width:                      cfg.Geocoding.Width,
 			Height:                     cfg.Geocoding.Height,

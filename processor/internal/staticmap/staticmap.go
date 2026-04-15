@@ -49,7 +49,12 @@ func boolVal(b *bool) bool {
 // Config holds all static map configuration.
 type Config struct {
 	Provider    string // "none", "tileservercache", "google", "osm", "mapbox"
-	ProviderURL string // tileserver URL
+	ProviderURL string // tileserver URL (public — this is what appears in rendered message URLs for Discord/Telegram to fetch)
+	// InternalURL is the URL the processor uses for its own tileserver HTTP
+	// (render POST, pregenerate POST, upload-images pre-fetch). Empty =
+	// fall back to ProviderURL. Set when ProviderURL is a public
+	// HTTPS endpoint and the processor has a direct internal path.
+	InternalURL string
 
 	StaticKeys []string // API keys (cycled randomly)
 	Width      int
@@ -207,6 +212,9 @@ func New(config Config) *Resolver {
 	if config.PregenTTL == 0 {
 		config.PregenTTL = 300 // 5 minutes
 	}
+	if config.InternalURL == "" {
+		config.InternalURL = config.ProviderURL
+	}
 
 	r := &Resolver{
 		config: config,
@@ -249,6 +257,13 @@ func (r *Resolver) Close() {
 // TileDeadline returns the configured deadline duration for async tile requests.
 func (r *Resolver) TileDeadline() time.Duration {
 	return time.Duration(r.config.TileDeadlineMs) * time.Millisecond
+}
+
+// internalBase returns the URL the processor uses for its own tileserver
+// HTTP calls (render, pregenerate POST, upload-images prefetch). Always
+// non-empty after New (defaults to ProviderURL).
+func (r *Resolver) internalBase() string {
+	return r.config.InternalURL
 }
 
 // SubmitTile queues an async tile generation request and returns a TilePending.
