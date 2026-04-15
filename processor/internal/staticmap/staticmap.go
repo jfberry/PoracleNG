@@ -630,8 +630,9 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 	if ttl > 0 {
 		pregenQuery += fmt.Sprintf("&ttl=%d", ttl)
 	}
+	// Use internalBase: this POST is processor→tileserver.
 	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?%s",
-		r.config.ProviderURL, mapPath, templateType, maptype, pregenQuery)
+		r.internalBase(), mapPath, templateType, maptype, pregenQuery)
 
 	body, err := json.Marshal(data)
 	if err != nil {
@@ -741,8 +742,9 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 
 	// No pregenerate — tileserver returns image bytes directly.
 	// nocache=true prevents the tileserver from writing to disk.
+	// Use internalBase: this POST is processor→tileserver.
 	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?nocache=true",
-		r.config.ProviderURL, mapPath, templateType, maptype)
+		r.internalBase(), mapPath, templateType, maptype)
 
 	body, err := json.Marshal(data)
 	if err != nil {
