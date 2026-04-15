@@ -106,7 +106,7 @@ func HandleDeleteLure(deps *TrackingDeps) gin.HandlerFunc {
 		var message string
 		for _, e := range existing {
 			if e.UID == uid {
-				message = tr.T("tracking.removed") + deps.RowText.LureRowText(tr, toLureTracking(&e))
+				message = tr.T("tracking.removed_prefix") + deps.RowText.LureRowText(tr, toLureTracking(&e))
 				break
 			}
 		}
@@ -353,7 +353,7 @@ func HandleBulkDeleteLure(deps *TrackingDeps) gin.HandlerFunc {
 			var sb strings.Builder
 			for _, e := range existing {
 				if uidSet[e.UID] {
-					sb.WriteString(tr.T("tracking.removed"))
+					sb.WriteString(tr.T("tracking.removed_prefix"))
 					sb.WriteString(deps.RowText.LureRowText(tr, toLureTracking(&e)))
 					sb.WriteByte('\n')
 				}

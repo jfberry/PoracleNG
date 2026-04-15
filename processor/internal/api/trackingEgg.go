@@ -96,7 +96,7 @@ func HandleDeleteEgg(deps *TrackingDeps) gin.HandlerFunc {
 		var message string
 		for _, e := range existing {
 			if e.UID == uid {
-				message = tr.T("tracking.removed") + deps.RowText.EggRowText(tr, toEggTracking(&e))
+				message = tr.T("tracking.removed_prefix") + deps.RowText.EggRowText(tr, toEggTracking(&e))
 				break
 			}
 		}
@@ -365,7 +365,7 @@ func HandleBulkDeleteEgg(deps *TrackingDeps) gin.HandlerFunc {
 			var sb strings.Builder
 			for _, e := range existing {
 				if uidSet[e.UID] {
-					sb.WriteString(tr.T("tracking.removed"))
+					sb.WriteString(tr.T("tracking.removed_prefix"))
 					sb.WriteString(deps.RowText.EggRowText(tr, toEggTracking(&e)))
 					sb.WriteByte('\n')
 				}
