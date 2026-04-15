@@ -388,8 +388,8 @@ func HandleGetAllProfilesTracking(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Profiles
-		if profiles, err := db.SelectProfiles(deps.DB, id); err == nil {
-			result["profile"] = profiles
+		if profiles, err := deps.Humans.GetProfiles(id); err == nil {
+			result["profile"] = profilesToResponse(profiles)
 		} else {
 			log.Warnf("Tracking API: get all profiles: %s", err)
 		}
