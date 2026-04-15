@@ -71,15 +71,16 @@ func (s *SQLHumanStore) DB() *sqlx.DB {
 
 // humanLiteColumns is the column list for HumanLite. Explicit so operator-
 // added columns don't break scans.
-const humanLiteColumns = `id, type, name, enabled, admin_disable, current_profile_no`
+const humanLiteColumns = `id, type, name, enabled, admin_disable, language, current_profile_no`
 
 type humanLiteRow struct {
-	ID               string `db:"id"`
-	Type             string `db:"type"`
-	Name             string `db:"name"`
-	Enabled          int    `db:"enabled"`
-	AdminDisable     int    `db:"admin_disable"`
-	CurrentProfileNo int    `db:"current_profile_no"`
+	ID               string      `db:"id"`
+	Type             string      `db:"type"`
+	Name             string      `db:"name"`
+	Enabled          int         `db:"enabled"`
+	AdminDisable     int         `db:"admin_disable"`
+	Language         null.String `db:"language"`
+	CurrentProfileNo int         `db:"current_profile_no"`
 }
 
 func (s *SQLHumanStore) GetLite(id string) (*HumanLite, error) {
@@ -97,6 +98,7 @@ func (s *SQLHumanStore) GetLite(id string) (*HumanLite, error) {
 		Name:             r.Name,
 		Enabled:          r.Enabled != 0,
 		AdminDisable:     r.AdminDisable != 0,
+		Language:         r.Language.ValueOrZero(),
 		CurrentProfileNo: r.CurrentProfileNo,
 	}, nil
 }

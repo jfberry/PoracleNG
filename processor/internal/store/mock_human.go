@@ -70,6 +70,7 @@ func (m *MockHumanStore) GetLite(id string) (*HumanLite, error) {
 		Name:             h.Name,
 		Enabled:          h.Enabled,
 		AdminDisable:     h.AdminDisable,
+		Language:         h.Language,
 		CurrentProfileNo: h.CurrentProfileNo,
 	}, nil
 }

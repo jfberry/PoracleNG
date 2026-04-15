@@ -35,13 +35,13 @@ type TrackingDeps struct {
 // lookupHuman resolves the human from the {id} path parameter and the profile_no
 // from the query string (falling back to the human's current_profile_no).
 // Returns (nil, 0, nil) if the human is not found — caller should return an error response.
-func lookupHuman(deps *TrackingDeps, c *gin.Context) (*db.HumanAPI, int, error) {
+func lookupHuman(deps *TrackingDeps, c *gin.Context) (*store.HumanLite, int, error) {
 	id := c.Param("id")
 	if id == "" {
 		return nil, 0, fmt.Errorf("missing id parameter")
 	}
 
-	human, err := db.SelectOneHuman(deps.DB, id)
+	human, err := deps.Humans.GetLite(id)
 	if err != nil {
 		return nil, 0, fmt.Errorf("lookup human: %w", err)
 	}
@@ -68,7 +68,7 @@ func reloadState(deps *TrackingDeps) {
 }
 
 // sendConfirmation dispatches a confirmation message to the user via the delivery system.
-func sendConfirmation(deps *TrackingDeps, human *db.HumanAPI, message, language string) {
+func sendConfirmation(deps *TrackingDeps, human *store.HumanLite, message, language string) {
 	if deps.Dispatcher == nil || message == "" {
 		return
 	}
@@ -112,12 +112,12 @@ func trackingJSONError(c *gin.Context, statusCode int, message string) {
 }
 
 // resolveLanguage returns the human's language or the configured default locale.
-func resolveLanguage(deps *TrackingDeps, human *db.HumanAPI) string {
+func resolveLanguage(deps *TrackingDeps, human *store.HumanLite) string {
 	return human.LanguageOrDefault(deps.Config.General.Locale)
 }
 
 // translatorFor returns the translator for the given human's language.
-func translatorFor(deps *TrackingDeps, human *db.HumanAPI) *i18n.Translator {
+func translatorFor(deps *TrackingDeps, human *store.HumanLite) *i18n.Translator {
 	lang := resolveLanguage(deps, human)
 	return deps.Translations.For(lang)
 }
