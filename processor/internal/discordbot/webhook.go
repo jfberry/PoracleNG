@@ -9,6 +9,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 func (b *Bot) handleWebhook(s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
@@ -146,7 +147,7 @@ func (b *Bot) handleWebhookCreate(s *discordgo.Session, m *discordgo.MessageCrea
 
 func (b *Bot) handleWebhookAdd(s *discordgo.Session, m *discordgo.MessageCreate, name string) {
 	// Check if channel is already registered as bot-controlled
-	existing, _ := db.SelectOneHumanFull(b.DB, m.ChannelID)
+	existing, _ := b.Humans.Get(m.ChannelID)
 	if existing != nil {
 		dmCh, _ := s.UserChannelCreate(m.Author.ID)
 		if dmCh != nil {
@@ -224,22 +225,20 @@ func (b *Bot) handleWebhookAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 
 	// Register the webhook
-	h := &db.HumanFull{
-		ID:                  webhookURL,
-		Type:                bot.TypeWebhook,
-		Name:                name,
-		Enabled:             1,
-		Area:                "[]",
-		CommunityMembership: "[]",
+	h := &store.Human{
+		ID:      webhookURL,
+		Type:    bot.TypeWebhook,
+		Name:    name,
+		Enabled: true,
 	}
-	if err := db.CreateHuman(b.DB, h); err != nil {
+	if err := b.Humans.Create(h); err != nil {
 		log.Errorf("discord bot: create human for webhook %s: %v", name, err)
 		s.ChannelMessageSend(m.ChannelID, "Failed to register webhook, check logs")
 		return
 	}
 
 	// Create default profile
-	if err := db.CreateDefaultProfile(b.DB, webhookURL, name, "[]", 0, 0); err != nil {
+	if err := b.Humans.CreateDefaultProfile(webhookURL, name, nil, 0, 0); err != nil {
 		log.Warnf("discord bot: create default profile for webhook %s: %v", name, err)
 	}
 
@@ -252,7 +251,7 @@ func (b *Bot) handleWebhookAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 
 func (b *Bot) handleWebhookRemove(s *discordgo.Session, m *discordgo.MessageCreate, name string) {
 	// Check if channel is registered as bot-controlled
-	existing, _ := db.SelectOneHumanFull(b.DB, m.ChannelID)
+	existing, _ := b.Humans.Get(m.ChannelID)
 	if existing != nil {
 		dmCh, _ := s.UserChannelCreate(m.Author.ID)
 		if dmCh != nil {
