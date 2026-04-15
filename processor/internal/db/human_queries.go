@@ -5,39 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/guregu/null/v6"
 	"github.com/jmoiron/sqlx"
 )
-
-// HumanFull represents a complete human record with all columns.
-type HumanFull struct {
-	ID                  string         `db:"id" json:"id"`
-	Type                string         `db:"type" json:"type"`
-	Name                string         `db:"name" json:"name"`
-	Enabled             int            `db:"enabled" json:"enabled"`
-	Area                string         `db:"area" json:"area"`
-	Latitude            float64        `db:"latitude" json:"latitude"`
-	Longitude           float64        `db:"longitude" json:"longitude"`
-	Fails               int            `db:"fails" json:"fails"`
-	LastChecked         null.Time   `db:"last_checked" json:"last_checked"`
-	Language            null.String `db:"language" json:"language"`
-	AdminDisable        int            `db:"admin_disable" json:"admin_disable"`
-	DisabledDate        null.Time   `db:"disabled_date" json:"disabled_date"`
-	CurrentProfileNo    int            `db:"current_profile_no" json:"current_profile_no"`
-	CommunityMembership string         `db:"community_membership" json:"community_membership"`
-	AreaRestriction     null.String `db:"area_restriction" json:"area_restriction"`
-	Notes               string         `db:"notes" json:"notes"`
-	BlockedAlerts       null.String `db:"blocked_alerts" json:"blocked_alerts"`
-}
-
-// HumanFullColumns lists the columns we read into HumanFull. Explicit lists
-// (rather than SELECT *) keep the query in sync with the struct AND let
-// operators add their own columns to the humans table — common in the wild,
-// e.g. subscription_end — without breaking sqlx scans with "missing
-// destination name <col> in *db.HumanFull".
-const HumanFullColumns = `id, type, name, enabled, area, latitude, longitude, fails, ` +
-	`last_checked, language, admin_disable, disabled_date, current_profile_no, ` +
-	`community_membership, area_restriction, notes, blocked_alerts`
 
 // ProfileRow represents a row from the profiles table.
 type ProfileRow struct {
@@ -49,19 +18,6 @@ type ProfileRow struct {
 	Latitude  float64 `db:"latitude" json:"latitude"`
 	Longitude float64 `db:"longitude" json:"longitude"`
 	ActiveHours string `db:"active_hours" json:"active_hours"`
-}
-
-// SelectOneHumanFull returns all columns for a single human by ID.
-func SelectOneHumanFull(db *sqlx.DB, id string) (*HumanFull, error) {
-	var h HumanFull
-	err := db.Get(&h, `SELECT `+HumanFullColumns+` FROM humans WHERE id = ?`, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("select human full %s: %w", id, err)
-	}
-	return &h, nil
 }
 
 // DeleteHumanAndTracking deletes a human and all their tracking data.
@@ -251,31 +207,4 @@ func UpdateHumanAreas(dbx *sqlx.DB, id string, areaJSON string, profileNo int) e
 	}
 	return nil
 }
-
-// CreateHuman inserts a new human record into the humans table.
-func CreateHuman(dbx *sqlx.DB, h *HumanFull) error {
-	_, err := dbx.Exec(
-		`INSERT INTO humans (id, name, type, enabled, area, latitude, longitude, admin_disable, language, current_profile_no, community_membership, area_restriction, notes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		h.ID, h.Name, h.Type, h.Enabled, h.Area, h.Latitude, h.Longitude,
-		h.AdminDisable, h.Language, h.CurrentProfileNo,
-		h.CommunityMembership, h.AreaRestriction, h.Notes)
-	if err != nil {
-		return fmt.Errorf("insert human %s: %w", h.ID, err)
-	}
-	return nil
-}
-
-// CreateDefaultProfile inserts profile_no=1 for a new human.
-func CreateDefaultProfile(dbx *sqlx.DB, id, name, area string, lat, lon float64) error {
-	_, err := dbx.Exec(
-		`INSERT INTO profiles (id, profile_no, name, area, latitude, longitude)
-		 VALUES (?, 1, ?, ?, ?, ?)`,
-		id, name, area, lat, lon)
-	if err != nil {
-		return fmt.Errorf("insert default profile for %s: %w", id, err)
-	}
-	return nil
-}
-
 

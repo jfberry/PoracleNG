@@ -9,8 +9,16 @@ import (
 
 	"github.com/guregu/null/v6"
 	"github.com/jmoiron/sqlx"
-	"github.com/pokemon/poracleng/processor/internal/db"
 )
+
+// humanRowColumns lists the columns we read into humanRow. Explicit lists
+// (rather than SELECT *) keep the query in sync with the struct AND let
+// operators add their own columns to the humans table — common in the wild,
+// e.g. subscription_end — without breaking sqlx scans with "missing
+// destination name <col>".
+const humanRowColumns = `id, type, name, enabled, area, latitude, longitude, fails, ` +
+	`last_checked, language, admin_disable, disabled_date, current_profile_no, ` +
+	`community_membership, area_restriction, notes, blocked_alerts`
 
 // humanRow maps directly to the humans table columns with JSON stored as strings.
 type humanRow struct {
@@ -63,7 +71,7 @@ func (s *SQLHumanStore) DB() *sqlx.DB {
 
 func (s *SQLHumanStore) Get(id string) (*Human, error) {
 	var r humanRow
-	err := s.db.Get(&r, `SELECT `+db.HumanFullColumns+` FROM humans WHERE id = ?`, id)
+	err := s.db.Get(&r, `SELECT `+humanRowColumns+` FROM humans WHERE id = ?`, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -228,7 +236,7 @@ func (s *SQLHumanStore) Update(id string, fields map[string]any) error {
 
 func (s *SQLHumanStore) ListByType(typ string) ([]*Human, error) {
 	var rows []humanRow
-	err := s.db.Select(&rows, `SELECT `+db.HumanFullColumns+` FROM humans WHERE type = ?`, typ)
+	err := s.db.Select(&rows, `SELECT `+humanRowColumns+` FROM humans WHERE type = ?`, typ)
 	if err != nil {
 		return nil, fmt.Errorf("list humans by type %s: %w", typ, err)
 	}
@@ -237,7 +245,7 @@ func (s *SQLHumanStore) ListByType(typ string) ([]*Human, error) {
 
 func (s *SQLHumanStore) ListByTypeEnabled(typ string) ([]*Human, error) {
 	var rows []humanRow
-	err := s.db.Select(&rows, `SELECT `+db.HumanFullColumns+` FROM humans WHERE type = ? AND admin_disable = 0`, typ)
+	err := s.db.Select(&rows, `SELECT `+humanRowColumns+` FROM humans WHERE type = ? AND admin_disable = 0`, typ)
 	if err != nil {
 		return nil, fmt.Errorf("list humans by type enabled %s: %w", typ, err)
 	}
@@ -248,7 +256,7 @@ func (s *SQLHumanStore) ListByTypes(types []string) ([]*Human, error) {
 	if len(types) == 0 {
 		return nil, nil
 	}
-	query, args, err := sqlx.In(`SELECT `+db.HumanFullColumns+` FROM humans WHERE type IN (?) AND admin_disable = 0`, types)
+	query, args, err := sqlx.In(`SELECT `+humanRowColumns+` FROM humans WHERE type IN (?) AND admin_disable = 0`, types)
 	if err != nil {
 		return nil, fmt.Errorf("build IN query: %w", err)
 	}
@@ -262,7 +270,7 @@ func (s *SQLHumanStore) ListByTypes(types []string) ([]*Human, error) {
 
 func (s *SQLHumanStore) ListAll() ([]*Human, error) {
 	var rows []humanRow
-	err := s.db.Select(&rows, `SELECT `+db.HumanFullColumns+` FROM humans ORDER BY type, name`)
+	err := s.db.Select(&rows, `SELECT `+humanRowColumns+` FROM humans ORDER BY type, name`)
 	if err != nil {
 		return nil, fmt.Errorf("list all humans: %w", err)
 	}
@@ -330,7 +338,7 @@ func (s *SQLHumanStore) AddProfile(id string, name string, activeHours string) e
 	}
 
 	var human humanRow
-	if err := s.db.Get(&human, `SELECT `+db.HumanFullColumns+` FROM humans WHERE id = ?`, id); err != nil {
+	if err := s.db.Get(&human, `SELECT `+humanRowColumns+` FROM humans WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("select human %s for add profile: %w", id, err)
 	}
 
@@ -386,7 +394,7 @@ func (s *SQLHumanStore) DeleteProfile(id string, profileNo int) error {
 	}
 
 	var human humanRow
-	err = s.db.Get(&human, `SELECT `+db.HumanFullColumns+` FROM humans WHERE id = ?`, id)
+	err = s.db.Get(&human, `SELECT `+humanRowColumns+` FROM humans WHERE id = ?`, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil
