@@ -670,6 +670,15 @@ All tracking tables have: `id` (FK to humans), `profile_no`, `distance`, `templa
 
 Migrations in `processor/internal/db/migrations/` (SQL files, run on processor startup). The DSN includes `multiStatements=true` to support multi-statement migration files on fresh installations.
 
+### HumanStore boundary
+
+All `humans` and `profiles` table access outside the store implementation goes through the `store.HumanStore` interface (`processor/internal/store/human.go`). Callers work with the typed `*store.Human` shape (`bool` flags, `[]string` for JSON-array columns, `string` for Language) and never touch raw SQL. The SQL and JSON-marshaling is confined to `store/human_sql.go`.
+
+Key benefits this boundary provides:
+- **User-customised schemas are tolerated.** Explicit column lists in the store mean operators can add their own columns to `humans` (e.g. `sub_end` for subscription tracking) without the processor failing to scan.
+- **Typed end-state for internal code.** `db.HumanFull` and `db.SelectOneHumanFull` were retired; there is no raw-row shape outside the store.
+- **API wire format is preserved.** The `/api/humans/*` endpoints serialise `api.HumanResponse` (in `processor/internal/api/human_response.go`), which mirrors the legacy JSON shape clients expect (int flags, JSON-string array columns, `null.String` for nullable columns). `humanToResponse(*store.Human)` adapts at the API boundary.
+
 ## Game Data
 
 The processor uses the **raw masterfile** (`master-latest-raw.json`) from Masterfile-Generator, split into `resources/rawdata/` (pokemon, forms, moves, types, items, invasions, weather). The masterdata API endpoints (`/api/masterdata/monsters`, `/api/masterdata/grunts`) build poracle-v2 format on-the-fly from the raw masterfile for PoracleWeb compatibility.
