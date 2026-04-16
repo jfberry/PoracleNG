@@ -118,6 +118,13 @@ func main() {
 		log.Fatalf("Failed to load initial state: %s", err)
 	}
 
+	// Validate community area names against the loaded fence set so a typo in
+	// allowed_areas / location_fence surfaces in the startup banner rather
+	// than silently contributing nothing at match time.
+	if cfg.Area.Enabled {
+		validateCommunityAreas(stateMgr.Get().Fences, cfg.Area.Communities)
+	}
+
 	// Create processor
 	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
