@@ -25,7 +25,7 @@ func (m *mockSender) Delete(ctx context.Context, sentID string) error {
 	return nil
 }
 
-func (m *mockSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
+func (m *mockSender) Edit(ctx context.Context, sentID string, message json.RawMessage, _ []byte) error {
 	return nil
 }
 

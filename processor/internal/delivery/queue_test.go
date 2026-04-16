@@ -73,7 +73,7 @@ func (m *queueMockSender) Delete(_ context.Context, sentID string) error {
 	return nil
 }
 
-func (m *queueMockSender) Edit(_ context.Context, sentID string, _ json.RawMessage) error {
+func (m *queueMockSender) Edit(_ context.Context, sentID string, _ json.RawMessage, _ []byte) error {
 	m.mu.Lock()
 	m.editCalls = append(m.editCalls, sentID)
 	m.mu.Unlock()
@@ -224,8 +224,8 @@ func (s *concurrencyTrackingSender) Delete(ctx context.Context, sentID string) e
 	return s.inner.Delete(ctx, sentID)
 }
 
-func (s *concurrencyTrackingSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
-	return s.inner.Edit(ctx, sentID, message)
+func (s *concurrencyTrackingSender) Edit(ctx context.Context, sentID string, message json.RawMessage, _ []byte) error {
+	return s.inner.Edit(ctx, sentID, message, nil)
 }
 
 func (s *concurrencyTrackingSender) WaitForRateLimit(target string) {}

@@ -231,7 +231,7 @@ func (ts *TelegramSender) deleteMessage(ctx context.Context, chatID string, mess
 }
 
 // Edit edits a previously sent Telegram text message.
-func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
+func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.RawMessage, _ []byte) error {
 	chatID, msgMap := parseTelegramSentIDMulti(sentID)
 	if chatID == "" {
 		return fmt.Errorf("invalid telegram sentID: %s", sentID)

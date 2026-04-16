@@ -186,7 +186,7 @@ func (fq *FairQueue) processJob(job *Job) {
 		existing := fq.tracker.LookupEdit(job.EditKey)
 		if existing != nil {
 			log.Infof("%s: edit: found tracked message for key=%s, attempting edit", job.LogReference, job.EditKey)
-			if err := sender.Edit(fq.ctx, existing.SentID, job.Message); err == nil {
+			if err := sender.Edit(fq.ctx, existing.SentID, job.Message, job.StaticMapData); err == nil {
 				log.Infof("%s: edit: succeeded for key=%s", job.LogReference, job.EditKey)
 				metrics.DeliveryTotal.WithLabelValues(platform, "edit_ok").Inc()
 				metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())

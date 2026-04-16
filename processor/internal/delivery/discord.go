@@ -86,19 +86,55 @@ func (ds *DiscordSender) Delete(ctx context.Context, sentID string) error {
 	}
 }
 
-// Edit edits a previously sent message.
-func (ds *DiscordSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
-	// Run the same normalisation as Send — coerce embed colours, sanitise fields.
-	normalized, _, err := NormalizeAndExtractImage(message, false)
+// Edit edits a previously sent message. Supports multipart image upload
+// (same as Send) so inline-mode tiles are preserved on edits rather than
+// falling back to the placeholder URL.
+func (ds *DiscordSender) Edit(ctx context.Context, sentID string, message json.RawMessage, staticMapData []byte) error {
+	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err == nil && normalized != nil {
 		message = normalized
+	}
+
+	// Webhook-sent messages use "file" as the multipart field name;
+	// bot-sent messages use "files[0]". Match the send path.
+	fileField := "files[0]"
+	if strings.HasPrefix(sentID, "http") {
+		fileField = "file"
+	}
+
+	var reqBody io.Reader
+	var contentType string
+
+	if len(staticMapData) > 0 && imageURL != "" {
+		normalized = ReplaceEmbedImageURL(normalized)
+		buf, ct, err := BuildMultipartMessage(normalized, staticMapData, fileField)
+		if err == nil {
+			reqBody = buf
+			contentType = ct
+		}
+	} else if imageURL != "" {
+		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
+			normalized = ReplaceEmbedImageURL(normalized)
+			buf, ct, err := BuildMultipartMessage(normalized, imageData, fileField)
+			if err == nil {
+				reqBody = buf
+				contentType = ct
+			}
+		} else {
+			log.Warnf("discord: edit image download failed (%s), editing without image: %v", imageURL, err)
+		}
+	}
+
+	if reqBody == nil {
+		reqBody = bytes.NewReader(message)
+		contentType = "application/json"
 	}
 
 	url, auth, err := ds.resolveMessageURL(sentID)
 	if err != nil {
 		return err
 	}
-	resp, err := ds.doRequest(ctx, http.MethodPatch, url, bytes.NewReader(message), "application/json", auth)
+	resp, err := ds.doRequest(ctx, http.MethodPatch, url, reqBody, contentType, auth)
 	if err != nil {
 		return err
 	}

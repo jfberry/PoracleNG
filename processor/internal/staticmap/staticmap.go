@@ -134,12 +134,18 @@ func (tp *TilePending) Apply(url string) {
 	}
 }
 
-// ApplyInline writes a marker into the enrichment map indicating inline mode.
+// ApplyInline writes the fallback URL into the enrichment map for inline mode.
 // The actual bytes are carried through the RenderJob, not stored in enrichment.
+// We use the real fallback URL rather than a marker string because the rendered
+// message JSON must contain a valid URL: Discord's edit endpoint (PATCH) sends
+// the embed JSON directly, and "inline" isn't a valid URL. The fallback URL
+// works for both new sends (where delivery's StaticMapData short-circuit fires
+// first and replaces it with attachment://map.png) and edits (where the fallback
+// URL appears in the embed if no bytes are available).
 func (tp *TilePending) ApplyInline() {
 	if tp.target != nil {
-		tp.target["staticMap"] = "inline"
-		tp.target["staticmap"] = "inline"
+		tp.target["staticMap"] = tp.Fallback
+		tp.target["staticmap"] = tp.Fallback
 	}
 }
 
@@ -815,6 +821,15 @@ func (r *Resolver) downloadTileBytes(fetchURL string) []byte {
 		log.Warnf("staticmap: read tile bytes from %s: %s", fetchURL, err)
 		return nil
 	}
+	// Diagnostic: log size, content-type, and the first 8 magic bytes so we
+	// can tell valid image responses from error-page bodies. A valid PNG
+	// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
+	prefixLen := 8
+	if len(b) < prefixLen {
+		prefixLen = len(b)
+	}
+	log.Debugf("staticmap: downloaded %d bytes from %s (ct=%s, first=%x)",
+		len(b), fetchURL, resp.Header.Get("Content-Type"), b[:prefixLen])
 	return b
 }
 
@@ -912,6 +927,16 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 	metrics.TileDuration.Observe(duration.Seconds())
 	r.statCalls.Add(1)
 	r.statTotalMs.Add(duration.Milliseconds())
+
+	// Diagnostic: log size, content-type, and the first 8 magic bytes so we
+	// can tell valid image responses from error-page bodies. A valid PNG
+	// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
+	prefixLen := 8
+	if len(respBody) < prefixLen {
+		prefixLen = len(respBody)
+	}
+	log.Debugf("staticmap: inline %d bytes from %s (ct=%s, first=%x) in %dms",
+		len(respBody), reqURL, resp.Header.Get("Content-Type"), respBody[:prefixLen], duration.Milliseconds())
 
 	return respBody
 }

@@ -289,7 +289,7 @@ func TestTelegramEdit(t *testing.T) {
 	defer server.Close()
 
 	editMsg := json.RawMessage(`{"content":"Updated text","parse_mode":"HTML"}`)
-	err := sender.Edit(context.Background(), "12345:99", editMsg)
+	err := sender.Edit(context.Background(), "12345:99", editMsg, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

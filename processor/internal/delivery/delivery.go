@@ -66,7 +66,7 @@ type SentMessage struct {
 type Sender interface {
 	Send(ctx context.Context, job *Job) (*SentMessage, error)
 	Delete(ctx context.Context, sentID string) error
-	Edit(ctx context.Context, sentID string, message json.RawMessage) error
+	Edit(ctx context.Context, sentID string, message json.RawMessage, staticMapData []byte) error
 	Platform() string // "discord" or "telegram"
 	// WaitForRateLimit blocks until the target is not rate-limited.
 	// Called BEFORE acquiring the platform semaphore so that rate-limited
