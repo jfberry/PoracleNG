@@ -37,6 +37,12 @@ COPY resources/data/util.json resources/data/util.json
 # Bundled defaults (util.json is now embedded in the Go binary)
 COPY fallbacks/ fallbacks/
 
+# Bind to all interfaces inside the container so docker-compose port
+# mapping (and bridge networking) can reach the processor. The code
+# default is 127.0.0.1 for bare-metal safety; this env var flips it
+# without requiring users to touch config.toml.
+ENV PORACLE_HOST=0.0.0.0
+
 EXPOSE 3030
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

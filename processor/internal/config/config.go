@@ -551,10 +551,19 @@ func Load(baseDir string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", configPath, err)
 	}
+	// Default host: 127.0.0.1 (loopback only) for safety on bare-metal.
+	// PORACLE_HOST overrides the default so the Dockerfile can bind to
+	// 0.0.0.0 without the user touching config.toml. An explicit [processor]
+	// host in TOML always wins because it's applied after this default by
+	// toml.Unmarshal below.
+	defaultHost := "127.0.0.1"
+	if envHost := os.Getenv("PORACLE_HOST"); envHost != "" {
+		defaultHost = envHost
+	}
 	cfg := &Config{
 		BaseDir: absDir,
 		Processor: ProcessorConfig{
-			Host: "0.0.0.0",
+			Host: defaultHost,
 			Port: 3030,
 		},
 		Reconciliation: ReconciliationConfig{
