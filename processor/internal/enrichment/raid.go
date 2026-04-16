@@ -213,7 +213,9 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 	}
 
 	// Weather forecast names — only set when base enrichment determined a
-	// meaningful weather change (weatherNext is set).
+	// meaningful weather change (weatherNext is set). When weatherCurrent is
+	// 0 (de-boost case), weatherCurrentName falls back to the translated
+	// "unknown" string, matching JS monster.js behavior.
 	weatherNext, _ := base["weatherNext"].(int)
 	if weatherNext > 0 {
 		weatherCurrent, _ := base["weatherCurrent"].(int)
@@ -222,13 +224,14 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 			if wInfo, ok := gd.Util.Weather[weatherCurrent]; ok {
 				m["weatherCurrentEmojiKey"] = wInfo.Emoji
 			}
+		} else {
+			m["weatherCurrentName"] = tr.T("weather.unknown")
 		}
 		m["weatherNextName"] = TranslateWeatherName(tr, weatherNext)
 		if wInfo, ok := gd.Util.Weather[weatherNext]; ok {
 			m["weatherNextEmojiKey"] = wInfo.Emoji
 		}
 		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
-		m["weatherCurrentUnknown"] = tr.T("weather.unknown")
 	}
 
 	// Level name

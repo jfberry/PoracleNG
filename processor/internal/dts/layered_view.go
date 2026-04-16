@@ -420,18 +420,14 @@ func composeWeatherChange(computed map[string]any, base, perLang map[string]any,
 		nextEmoji = emoji.Lookup(nextEmojiKey, platform)
 	}
 
+	currentName, _ := lookupField(base, perLang, "weatherCurrentName").(string)
 	weatherCurrent, _ := lookupField(base, perLang, "weatherCurrent").(int)
 	if weatherCurrent == 0 {
-		// Unknown current weather
-		currentName, _ := lookupField(base, perLang, "weatherCurrentUnknown").(string)
-		if currentName == "" {
-			currentName = "unknown"
-		}
-		computed["weatherCurrentName"] = currentName
+		// De-boost case: per-language sets weatherCurrentName to translated
+		// "unknown"; JS hardcodes ❓ for the emoji.
 		computed["weatherCurrentEmoji"] = "❓"
 		computed["weatherChange"] = fmt.Sprintf("⚠️ %s %s : ➡️ %s %s", prefix, weatherChangeTime, nextName, nextEmoji)
 	} else {
-		currentName, _ := lookupField(base, perLang, "weatherCurrentName").(string)
 		currentEmojiKey, _ := lookupField(base, perLang, "weatherCurrentEmojiKey").(string)
 		currentEmoji := ""
 		if currentEmojiKey != "" && emoji != nil {

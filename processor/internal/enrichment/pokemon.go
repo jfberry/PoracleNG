@@ -368,6 +368,9 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 	// meaningful weather change (weatherNext is set). Use the processed
 	// weatherCurrent (which may be overridden to the pokemon's actual boost
 	// weather), not the raw forecastCurrent — matching JS behavior.
+	// When weatherCurrent is 0 (de-boost case), weatherCurrentName gets the
+	// translated "unknown" string, matching JS monster.js which sets
+	// weatherCurrentName = translator.translate('unknown').
 	weatherNext, _ := base["weatherNext"].(int)
 	if weatherNext > 0 {
 		weatherCurrent, _ := base["weatherCurrent"].(int)
@@ -376,13 +379,14 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 			if wInfo, ok := gd.Util.Weather[weatherCurrent]; ok {
 				m["weatherCurrentEmojiKey"] = wInfo.Emoji
 			}
+		} else {
+			m["weatherCurrentName"] = tr.T("weather.unknown")
 		}
 		m["weatherNextName"] = TranslateWeatherName(tr, weatherNext)
 		if wInfo, ok := gd.Util.Weather[weatherNext]; ok {
 			m["weatherNextEmojiKey"] = wInfo.Emoji
 		}
 		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
-		m["weatherCurrentUnknown"] = tr.T("weather.unknown")
 	}
 
 	// Generation name
