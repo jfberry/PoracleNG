@@ -38,7 +38,7 @@ processor/                      # Go binary
     fort.go                     # Fort update webhook handler
     maxbattle.go                # Max battle webhook handler
     render.go                   # Render pool: processRenderJob, delivery job construction
-    test.go                     # poracle-test handlers (all 9 types)
+    test.go                     # poracle-test handlers (all 8 types)
     ...                         # One file per webhook type
   internal/
     config/                     # TOML config loader
@@ -216,7 +216,7 @@ The processor renders DTS templates using `jfberry/raymond` (a fork of `mailgun/
 
 **Queue pressure**: When the render channel is >80% full, tile generation is skipped to reduce backpressure.
 
-**Shutdown ordering**: webhook workers → render channel (close) → render workers (drain) → dispatcher (stop) → sender (close) → static map (close).
+**Shutdown ordering** (`ProcessorService.Close` in `cmd/processor/main.go`): webhook workers → render channel (close) → render workers (drain) → dispatcher (stop, which stops its queue and tracker) → static map (close) → duplicates → rate limiter → gym state save → geocoder (close).
 
 ### 6. Message Delivery (Processor)
 
@@ -309,7 +309,7 @@ Reconciliation syncs Discord role membership with Poracle user registration. Run
 **Shared secret** (`x-poracle-secret`):
 - All `/api/*` endpoints are protected by the `X-Poracle-Secret` header matching `[processor] api_secret` (with legacy `[alerter] api_secret` as a backward-compatible fallback — if the processor key is empty, the alerter key is copied over at config load)
 - If `api_secret` is empty/unset, auth is disabled (all requests allowed)
-- The `RequireSecret` middleware in `api/api.go` wraps all `/api/*` handlers
+- The `RequireSecretGin` middleware in `api/middleware.go` is applied to the `/api/*` route group in `cmd/processor/main.go`
 
 **Unprotected endpoints**:
 - `GET /health` — health check
