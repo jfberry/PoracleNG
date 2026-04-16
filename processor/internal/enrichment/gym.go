@@ -47,7 +47,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldS
 
 	// Static map tile
 	pending := e.addStaticMap(m, "gym", lat, lon, map[string]any{
-		"team_id":        teamID,
+		"teamId":         teamID,
 		"slotsAvailable": slotsAvailable,
 		"inBattle":       inBattle,
 		"ex":             ex,
