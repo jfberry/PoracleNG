@@ -140,6 +140,19 @@ func (b *Bot) validateConfig() {
 		log.Warnf("config: telegram.admins is empty — no Telegram admins configured")
 	}
 
+	// Community admins (area security) — resolve each so operators can spot
+	// typos the same way they do for community channels.
+	for _, comm := range b.Cfg.Area.Communities {
+		if len(comm.Telegram.Admins) == 0 {
+			continue
+		}
+		var descs []string
+		for _, id := range comm.Telegram.Admins {
+			descs = append(descs, resolveUser(id))
+		}
+		log.Infof("config: community %s telegram.admins: %s", comm.Name, strings.Join(descs, ", "))
+	}
+
 	// Log delegated admins (channel tracking)
 	for target, admins := range b.Cfg.Telegram.DelegatedAdministration.ChannelTracking {
 		targetDesc := target
