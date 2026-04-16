@@ -440,7 +440,7 @@ type AreaConfig struct {
 type CommunityConfig struct {
 	Name          string   `toml:"name" json:"name"`
 	AllowedAreas  []string `toml:"allowed_areas" json:"allowed_areas"`
-	LocationFence []string `toml:"location_fence" json:"location_fence"`
+	LocationFence FlexStrings `toml:"location_fence" json:"location_fence"`
 	Discord       struct {
 		Channels []string `toml:"channels" json:"channels"`
 		UserRole []string `toml:"user_role" json:"user_role"`
