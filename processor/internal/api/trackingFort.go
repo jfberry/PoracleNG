@@ -97,7 +97,7 @@ func HandleDeleteFort(deps *TrackingDeps) gin.HandlerFunc {
 		var message string
 		for _, e := range existing {
 			if e.UID == uid {
-				message = tr.T("tracking.removed") + deps.RowText.FortUpdateRowText(tr, toFortTracking(&e))
+				message = tr.T("tracking.removed_prefix") + deps.RowText.FortUpdateRowText(tr, toFortTracking(&e))
 				break
 			}
 		}
@@ -356,7 +356,7 @@ func HandleBulkDeleteFort(deps *TrackingDeps) gin.HandlerFunc {
 			var sb strings.Builder
 			for _, e := range existing {
 				if uidSet[e.UID] {
-					sb.WriteString(tr.T("tracking.removed"))
+					sb.WriteString(tr.T("tracking.removed_prefix"))
 					sb.WriteString(deps.RowText.FortUpdateRowText(tr, toFortTracking(&e)))
 					sb.WriteByte('\n')
 				}

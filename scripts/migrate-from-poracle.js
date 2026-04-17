@@ -116,6 +116,24 @@ function isArrayOfTables(arr) {
 	return arr.length > 0 && arr.every((item) => typeof item === 'object' && item !== null && !Array.isArray(item))
 }
 
+/**
+ * Write a field inside an [[array.of.tables]] entry, flattening nested
+ * config-like objects into dotted keys so the output reads as
+ *   discord.channels = [...]
+ *   discord.user_role = [...]
+ * rather than a single inline-table blob.
+ */
+function writeItemField(key, value, lines) {
+	if (value === null || value === undefined) return
+	if (typeof value === 'object' && !Array.isArray(value) && hasOnlyConfigKeys(value)) {
+		for (const [k, v] of Object.entries(value)) {
+			writeItemField(`${key}.${tomlKey(k)}`, v, lines)
+		}
+		return
+	}
+	lines.push(`${key} = ${tomlValue(value)}`)
+}
+
 function writeToml(obj, prefix = '') {
 	const lines = []
 	const tables = []
@@ -153,8 +171,7 @@ function writeToml(obj, prefix = '') {
 			lines.push('')
 			lines.push(`[[${fullKey}]]`)
 			for (const [k, v] of Object.entries(item)) {
-				if (v === null || v === undefined) continue
-				lines.push(`${tomlKey(k)} = ${tomlValue(v)}`)
+				writeItemField(tomlKey(k), v, lines)
 			}
 		}
 	}

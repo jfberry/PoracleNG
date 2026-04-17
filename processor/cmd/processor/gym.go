@@ -95,7 +95,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.gymMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("gym").Inc()

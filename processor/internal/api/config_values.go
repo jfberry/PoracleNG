@@ -101,6 +101,10 @@ func HandleConfigSave(deps ConfigDeps) gin.HandlerFunc {
 		// a form without wiping secrets the user didn't touch.
 		stripMaskedSensitiveValues(updates)
 
+		// Convert flat table-row fields (discord_channels etc.) back into
+		// the nested struct shape before persisting.
+		nestTableUpdates(updates)
+
 		// Save to overrides.json
 		if err := config.SaveOverrides(deps.ConfigDir, updates); err != nil {
 			log.Errorf("config save: %v", err)
@@ -164,9 +168,20 @@ func extractValues(cfg *config.Config, filterSection string) map[string]any {
 		// Extract table values
 		for _, table := range section.Tables {
 			val := getFieldByTag(sectionStruct, table.Name)
-			if val.IsValid() {
-				sectionValues[table.Name] = val.Interface()
+			if !val.IsValid() {
+				continue
 			}
+			// Some tables store nested sub-structs that the schema exposes as
+			// flat fields (e.g. area_security.communities has a Discord
+			// sub-struct surfaced as discord_channels / discord_user_role).
+			// Flatten here so the editor sees the shape its schema describes.
+			if section.Name == "area_security" && table.Name == "communities" {
+				if comms, ok := val.Interface().([]config.CommunityConfig); ok {
+					sectionValues[table.Name] = flattenCommunities(comms)
+					continue
+				}
+			}
+			sectionValues[table.Name] = val.Interface()
 		}
 
 		result[section.Name] = sectionValues
@@ -214,6 +229,7 @@ func getFieldByTag(v reflect.Value, tagName string) reflect.Value {
 func validateUpdates(updates map[string]any) error {
 	// Build lookup
 	schemaLookup := make(map[string]map[string]bool)
+	tableRowFields := make(map[string]map[string]bool) // "section.table" → set of row field names
 	for _, section := range configSchema {
 		fields := make(map[string]bool)
 		for _, f := range section.Fields {
@@ -221,6 +237,11 @@ func validateUpdates(updates map[string]any) error {
 		}
 		for _, t := range section.Tables {
 			fields[t.Name] = true
+			rowFields := make(map[string]bool, len(t.Fields))
+			for _, rf := range t.Fields {
+				rowFields[rf.Name] = true
+			}
+			tableRowFields[section.Name+"."+t.Name] = rowFields
 		}
 		schemaLookup[section.Name] = fields
 	}
@@ -230,10 +251,32 @@ func validateUpdates(updates map[string]any) error {
 		if !ok {
 			return fmt.Errorf("unknown config section: %s", sectionName)
 		}
-		if sectionMap, ok := sectionVal.(map[string]any); ok {
-			for fieldName := range sectionMap {
-				if !fields[fieldName] {
-					return fmt.Errorf("unknown field %s.%s", sectionName, fieldName)
+		sectionMap, ok := sectionVal.(map[string]any)
+		if !ok {
+			continue
+		}
+		for fieldName, fieldVal := range sectionMap {
+			if !fields[fieldName] {
+				return fmt.Errorf("unknown field %s.%s", sectionName, fieldName)
+			}
+			// If this field corresponds to a table, validate per-row keys.
+			rowFields, isTable := tableRowFields[sectionName+"."+fieldName]
+			if !isTable {
+				continue
+			}
+			rows, ok := fieldVal.([]any)
+			if !ok {
+				continue
+			}
+			for i, row := range rows {
+				rowMap, ok := row.(map[string]any)
+				if !ok {
+					continue
+				}
+				for k := range rowMap {
+					if !rowFields[k] {
+						return fmt.Errorf("unknown field %s.%s[%d].%s", sectionName, fieldName, i, k)
+					}
 				}
 			}
 		}
@@ -299,6 +342,81 @@ func stripMaskedSensitiveValues(updates map[string]any) {
 			}
 		}
 	}
+}
+
+// flattenCommunities converts []config.CommunityConfig into the flat-field
+// shape the schema exposes to the editor (discord_channels, discord_user_role,
+// telegram_channels, telegram_admins). Inverse of nestCommunityRows.
+func flattenCommunities(communities []config.CommunityConfig) []map[string]any {
+	out := make([]map[string]any, 0, len(communities))
+	for _, c := range communities {
+		out = append(out, map[string]any{
+			"name":              c.Name,
+			"allowed_areas":     c.AllowedAreas,
+			"location_fence":    []string(c.LocationFence),
+			"discord_channels":  c.Discord.Channels,
+			"discord_user_role": c.Discord.UserRole,
+			"telegram_channels": c.Telegram.Channels,
+			"telegram_admins":   c.Telegram.Admins,
+		})
+	}
+	return out
+}
+
+// nestCommunityRows takes the editor's flat community rows and rebuilds the
+// nested struct shape expected by CommunityConfig (discord: {channels, user_role},
+// telegram: {channels, admins}). Leaves unrelated keys alone so that any schema
+// field we forgot to flatten still round-trips unchanged.
+func nestCommunityRows(rows []any) []any {
+	out := make([]any, 0, len(rows))
+	for _, row := range rows {
+		m, ok := row.(map[string]any)
+		if !ok {
+			out = append(out, row)
+			continue
+		}
+		nested := make(map[string]any, len(m))
+		var discord, telegram map[string]any
+		for k, v := range m {
+			switch k {
+			case "discord_channels", "discord_user_role":
+				if discord == nil {
+					discord = map[string]any{}
+				}
+				discord[strings.TrimPrefix(k, "discord_")] = v
+			case "telegram_channels", "telegram_admins":
+				if telegram == nil {
+					telegram = map[string]any{}
+				}
+				telegram[strings.TrimPrefix(k, "telegram_")] = v
+			default:
+				nested[k] = v
+			}
+		}
+		if discord != nil {
+			nested["discord"] = discord
+		}
+		if telegram != nil {
+			nested["telegram"] = telegram
+		}
+		out = append(out, nested)
+	}
+	return out
+}
+
+// nestTableUpdates applies any table-row flattening inverse transforms on an
+// incoming save payload. Keeps overrides.json aligned with the Go struct's
+// tagged shape so ApplyOverrides can deserialise it cleanly.
+func nestTableUpdates(updates map[string]any) {
+	area, ok := updates["area_security"].(map[string]any)
+	if !ok {
+		return
+	}
+	comms, ok := area["communities"].([]any)
+	if !ok {
+		return
+	}
+	area["communities"] = nestCommunityRows(comms)
 }
 
 // countFields counts the total number of individual field changes.

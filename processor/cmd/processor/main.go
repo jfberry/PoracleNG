@@ -118,6 +118,13 @@ func main() {
 		log.Fatalf("Failed to load initial state: %s", err)
 	}
 
+	// Validate community area names against the loaded fence set so a typo in
+	// allowed_areas / location_fence surfaces in the startup banner rather
+	// than silently contributing nothing at match time.
+	if cfg.Area.Enabled {
+		validateCommunityAreas(stateMgr.Get().Fences, cfg.Area.Communities)
+	}
+
 	// Create processor
 	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
@@ -165,6 +172,8 @@ func main() {
 				OnDisabled: func(target, name, jobType string) {
 					proc.disableUserForDeliveryFailure(target, name, jobType)
 				},
+				RateLimiter:    proc.rateLimiter,
+				RateLimitHooks: proc,
 			},
 		})
 		if err != nil {
@@ -289,6 +298,7 @@ func main() {
 	}
 	trackingDeps := &api.TrackingDeps{
 		DB:           database,
+		Humans:       humanStore,
 		Tracking:     trackingStores,
 		StateMgr:     stateMgr,
 		RowText: &rowtext.Generator{
@@ -370,7 +380,7 @@ func main() {
 			return nil
 		},
 		Config: cfg,
-		DB:     database,
+		Humans: humanStore,
 	}
 	humans := apiGroup.Group("/humans")
 	humans.GET("/one/:id", api.HandleGetOneHuman(trackingDeps))
@@ -929,6 +939,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		smCfg := staticmap.Config{
 			Provider:                   cfg.Geocoding.StaticProvider,
 			ProviderURL:                cfg.Geocoding.StaticProviderURL,
+			InternalURL:                cfg.Geocoding.StaticInternalURL,
 			StaticKeys:                 cfg.Geocoding.StaticKey,
 			Width:                      cfg.Geocoding.Width,
 			Height:                     cfg.Geocoding.Height,

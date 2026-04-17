@@ -8,7 +8,36 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 )
+
+// recordingHooks captures OnBreach/OnBan invocations for assertions.
+type recordingHooks struct {
+	mu      sync.Mutex
+	breach  []string // target
+	ban     []string // target
+}
+
+func (h *recordingHooks) OnBreach(target, _, _, _ string, _, _ int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.breach = append(h.breach, target)
+}
+
+func (h *recordingHooks) OnBan(target, _, _, _ string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.ban = append(h.ban, target)
+}
+
+func (h *recordingHooks) snapshot() (breach, ban []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	breach = append(breach, h.breach...)
+	ban = append(ban, h.ban...)
+	return
+}
 
 // queueMockSender is a configurable mock for queue tests.
 // (Named differently from mockSender in tracker_test.go to avoid conflict.)
@@ -44,7 +73,7 @@ func (m *queueMockSender) Delete(_ context.Context, sentID string) error {
 	return nil
 }
 
-func (m *queueMockSender) Edit(_ context.Context, sentID string, _ json.RawMessage) error {
+func (m *queueMockSender) Edit(_ context.Context, sentID string, _ json.RawMessage, _ []byte) error {
 	m.mu.Lock()
 	m.editCalls = append(m.editCalls, sentID)
 	m.mu.Unlock()
@@ -195,8 +224,8 @@ func (s *concurrencyTrackingSender) Delete(ctx context.Context, sentID string) e
 	return s.inner.Delete(ctx, sentID)
 }
 
-func (s *concurrencyTrackingSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
-	return s.inner.Edit(ctx, sentID, message)
+func (s *concurrencyTrackingSender) Edit(ctx context.Context, sentID string, message json.RawMessage, _ []byte) error {
+	return s.inner.Edit(ctx, sentID, message, nil)
 }
 
 func (s *concurrencyTrackingSender) WaitForRateLimit(target string) {}
@@ -341,6 +370,221 @@ func TestFairQueueCleanTracking(t *testing.T) {
 		t.Error("expected tracked message to have Clean=true")
 	}
 }
+
+// TestRateLimitAtDelivery proves the count happens at delivery time and that
+// only deliveries past the limit are dropped (with a single OnBreach hook).
+func TestRateLimitAtDelivery(t *testing.T) {
+	mock := &queueMockSender{platform: "discord"}
+	senders := map[string]Sender{"discord": mock}
+	hooks := &recordingHooks{}
+	limiter := ratelimit.New(ratelimit.Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5, MaxLimitsBeforeStop: 10})
+	defer limiter.Close()
+
+	fq, ch := newTestFairQueue(t, senders, QueueConfig{
+		ConcurrentDiscord: 1,
+		RateLimiter:       limiter,
+		RateLimitHooks:    hooks,
+	})
+	fq.Start()
+
+	for range 5 {
+		ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	}
+	time.Sleep(300 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(mock.getSendCalls()); got != 2 {
+		t.Fatalf("expected 2 sends (DM limit), got %d", got)
+	}
+	breaches, _ := hooks.snapshot()
+	if len(breaches) != 1 || breaches[0] != "u1" {
+		t.Fatalf("expected exactly one OnBreach for u1, got %v", breaches)
+	}
+}
+
+// TestRateLimitBypass proves jobs flagged BypassRateLimit are sent regardless
+// of the limit and do not consume budget that would otherwise apply to other
+// jobs to the same destination.
+func TestRateLimitBypass(t *testing.T) {
+	mock := &queueMockSender{platform: "discord"}
+	senders := map[string]Sender{"discord": mock}
+	limiter := ratelimit.New(ratelimit.Config{TimingPeriod: 60, DMLimit: 1, ChannelLimit: 5})
+	defer limiter.Close()
+
+	fq, ch := newTestFairQueue(t, senders, QueueConfig{
+		ConcurrentDiscord: 1,
+		RateLimiter:       limiter,
+	})
+	fq.Start()
+
+	// Burn the only DM slot
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	// Bypass job — must still be delivered even though u1 is now over limit
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`), BypassRateLimit: true}
+	// Non-bypass job — must be dropped
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+
+	time.Sleep(300 * time.Millisecond)
+	fq.Stop()
+
+	calls := mock.getSendCalls()
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 sends (1 normal + 1 bypass), got %d", len(calls))
+	}
+	if !calls[1].BypassRateLimit {
+		t.Fatal("second send should be the bypass job")
+	}
+}
+
+// TestRateLimitEditNotCounted proves that a successful edit-before-send does
+// not consume rate-limit budget. The first job creates the tracked message,
+// the second edits it, and a third new send should still be allowed even
+// though DMLimit is 2.
+func TestRateLimitEditNotCounted(t *testing.T) {
+	mock := &queueMockSender{platform: "discord"}
+	senders := map[string]Sender{"discord": mock}
+	limiter := ratelimit.New(ratelimit.Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5})
+	defer limiter.Close()
+
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+	ch := make(chan *Job, 10)
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord: 1,
+		RateLimiter:       limiter,
+	})
+	fq.Start()
+
+	// First send establishes the tracked message under EditKey "raid:1".
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
+		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}
+	time.Sleep(80 * time.Millisecond)
+
+	// Edit reuses the existing message — must not count.
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
+		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}
+	time.Sleep(80 * time.Millisecond)
+
+	// Second new send — would only succeed if the edit didn't consume the budget.
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	time.Sleep(80 * time.Millisecond)
+
+	// Third new send — over the DMLimit of 2; must be dropped.
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	time.Sleep(80 * time.Millisecond)
+	fq.Stop()
+
+	sends := len(mock.getSendCalls())
+	edits := len(mock.getEditCalls())
+	if sends != 2 {
+		t.Fatalf("expected exactly 2 Send calls (initial + one new), got %d", sends)
+	}
+	if edits != 1 {
+		t.Fatalf("expected exactly 1 Edit call, got %d", edits)
+	}
+}
+
+// TestRateLimitFailedEditCounts proves that when an Edit attempt fails and
+// the queue falls through to the new-send path, that send DOES count against
+// the limit (it went on the wire as a Send).
+func TestRateLimitFailedEditCounts(t *testing.T) {
+	mock := &queueMockSender{platform: "discord", editErr: errors.New("nope")}
+	senders := map[string]Sender{"discord": mock}
+	// DMLimit=2: the initial send and the edit-failure fallback send both
+	// consume budget, leaving no room for a third.
+	limiter := ratelimit.New(ratelimit.Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5})
+	defer limiter.Close()
+
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+	ch := make(chan *Job, 10)
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord: 1,
+		RateLimiter:       limiter,
+	})
+	fq.Start()
+
+	// First send establishes the tracked message under EditKey "raid:1".
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
+		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}
+	time.Sleep(80 * time.Millisecond)
+
+	// Edit attempt fails (mock.editErr). Falls through to a new Send — which
+	// MUST count, because it produced a real wire delivery.
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
+		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}
+	time.Sleep(80 * time.Millisecond)
+
+	// Limit is 1 and we have already counted two real sends — this third one
+	// must be dropped.
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	time.Sleep(80 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(mock.getEditCalls()); got != 1 {
+		t.Fatalf("expected 1 Edit attempt, got %d", got)
+	}
+	if got := len(mock.getSendCalls()); got != 2 {
+		t.Fatalf("expected 2 Send calls (initial + edit-fallback), got %d", got)
+	}
+}
+
+// TestRateLimitHookDoesNotDeadlock proves the worker does not deadlock when
+// the breach hook tries to dispatch a bypass job into a full channel where
+// other jobs target the same destination as the breaching one. Hooks are
+// fire-and-forget, so the worker must release the per-destination mutex even
+// if the hook's bypass dispatch is still pending channel space.
+func TestRateLimitHookDoesNotDeadlock(t *testing.T) {
+	mock := &queueMockSender{platform: "discord"}
+	senders := map[string]Sender{"discord": mock}
+	limiter := ratelimit.New(ratelimit.Config{TimingPeriod: 60, DMLimit: 1, ChannelLimit: 5, MaxLimitsBeforeStop: 10})
+	defer limiter.Close()
+
+	// Hook that itself tries to dispatch — but we route its dispatch through
+	// the same (small) channel to simulate the deadlock-prone scenario.
+	hookCalled := make(chan struct{}, 1)
+	hooks := dispatchingHooks{onBreach: func() { hookCalled <- struct{}{} }}
+
+	// Tiny channel so it fills fast.
+	ch := make(chan *Job, 2)
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord: 1,
+		RateLimiter:       limiter,
+		RateLimitHooks:    hooks,
+	})
+	fq.Start()
+
+	// Burn the DM slot.
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	// Trigger the breach.
+	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+
+	// Hook should fire promptly even though processJob holds the dest lock,
+	// because it runs in its own goroutine.
+	select {
+	case <-hookCalled:
+		// good
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnBreach hook did not fire — likely deadlocked under dest mutex")
+	}
+
+	fq.Stop()
+}
+
+// dispatchingHooks is a minimal RateLimitHooks impl that just signals when
+// OnBreach fires, used by TestRateLimitHookDoesNotDeadlock.
+type dispatchingHooks struct {
+	onBreach func()
+}
+
+func (d dispatchingHooks) OnBreach(_, _, _, _ string, _, _ int) {
+	if d.onBreach != nil {
+		d.onBreach()
+	}
+}
+func (d dispatchingHooks) OnBan(_, _, _, _ string) {}
 
 func TestFairQueueStop(t *testing.T) {
 	discordMock := &queueMockSender{platform: "discord"}

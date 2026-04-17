@@ -7,8 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 // HandleGetProfiles returns the GET /api/profiles/{id} handler.
@@ -20,7 +18,7 @@ func HandleGetProfiles(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Profiles API: lookup human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -31,14 +29,14 @@ func HandleGetProfiles(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		profiles, err := db.SelectProfiles(deps.DB, id)
+		profiles, err := deps.Humans.GetProfiles(id)
 		if err != nil {
 			log.Errorf("Profiles API: get profiles: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		trackingJSONOK(c, map[string]any{"profile": profiles})
+		trackingJSONOK(c, map[string]any{"profile": profilesToResponse(profiles)})
 	}
 }
 
@@ -53,7 +51,7 @@ func HandleDeleteProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := db.DeleteProfile(deps.DB, id, profileNo); err != nil {
+		if err := deps.Humans.DeleteProfile(id, profileNo); err != nil {
 			log.Errorf("Profiles API: delete profile: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -79,7 +77,7 @@ func HandleAddProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Profiles API: lookup human for add: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -133,7 +131,7 @@ func HandleAddProfile(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			if err := db.AddProfile(deps.DB, id, req.Name, activeHours); err != nil {
+			if err := deps.Humans.AddProfile(id, req.Name, activeHours); err != nil {
 				log.Errorf("Profiles API: add profile: %s", err)
 				trackingJSONError(c, http.StatusInternalServerError, "Exception raised during execution")
 				return
@@ -160,7 +158,7 @@ func HandleUpdateProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Profiles API: lookup human for update: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -212,7 +210,7 @@ func HandleUpdateProfile(deps *TrackingDeps) gin.HandlerFunc {
 				}
 			}
 
-			if err := db.UpdateProfileHours(deps.DB, id, *req.ProfileNo, activeHours); err != nil {
+			if err := deps.Humans.UpdateProfileHours(id, *req.ProfileNo, activeHours); err != nil {
 				log.Errorf("Profiles API: update profile hours: %s", err)
 				trackingJSONError(c, http.StatusInternalServerError, "Exception raised during execution")
 				return
@@ -233,7 +231,7 @@ func HandleCopyProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Profiles API: lookup human for copy: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -257,7 +255,7 @@ func HandleCopyProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := db.CopyProfile(deps.DB, id, from, to); err != nil {
+		if err := deps.Humans.CopyProfile(id, from, to); err != nil {
 			log.Errorf("Profiles API: copy profile: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "Exception raised during execution")
 			return

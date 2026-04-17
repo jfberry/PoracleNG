@@ -110,12 +110,12 @@ No type-specific fields beyond the common set. The quest icon is in `imgUrl`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `team_id` | int | Gym team ID (0-3) |
+| `teamId` | int | Gym team ID (0-3) |
 | `slotsAvailable` | int | Number of available defender slots |
 | `inBattle` | bool | Whether the gym is currently in battle |
 | `ex` | bool | Whether the gym is EX raid eligible |
 
-**Non-pregen keys:** `latitude`, `longitude`, `imgUrl`, `team_id`, `style`
+**Non-pregen keys:** `latitude`, `longitude`, `imgUrl`, `teamId`, `style`
 
 ---
 

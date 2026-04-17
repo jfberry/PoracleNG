@@ -7,15 +7,14 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/config"
-	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // TelegramUserInfo holds the display name and channel memberships for a Telegram user.
@@ -28,7 +27,7 @@ type TelegramUserInfo struct {
 // It checks membership in configured Telegram channels/groups via getChatMember API.
 type TelegramReconciliation struct {
 	api          *tgbotapi.BotAPI
-	db           *sqlx.DB
+	humanStore   store.HumanStore
 	cfg          *config.Config
 	translations *i18n.Bundle
 	dtsStore     *dts.TemplateStore
@@ -38,14 +37,14 @@ type TelegramReconciliation struct {
 // NewTelegramReconciliation creates a new TelegramReconciliation instance.
 func NewTelegramReconciliation(
 	api *tgbotapi.BotAPI,
-	dbx *sqlx.DB,
+	humanStore store.HumanStore,
 	cfg *config.Config,
 	translations *i18n.Bundle,
 	dtsStore *dts.TemplateStore,
 ) *TelegramReconciliation {
 	return &TelegramReconciliation{
 		api:          api,
-		db:           dbx,
+		humanStore:   humanStore,
 		cfg:          cfg,
 		translations: translations,
 		dtsStore:     dtsStore,
@@ -126,14 +125,14 @@ func (r *TelegramReconciliation) loadTelegramChannels(userID int64, channelList 
 func (r *TelegramReconciliation) SyncTelegramUsers(syncNames, removeInvalidUsers bool) {
 	r.log.Info("User membership to Poracle users starting...")
 
-	var usersToCheck []db.HumanFull
-	if err := r.db.Select(&usersToCheck, `SELECT * FROM humans WHERE type = 'telegram:user'`); err != nil {
+	usersToCheck, err := r.humanStore.ListByType("telegram:user")
+	if err != nil {
 		r.log.Errorf("User check failed: load humans: %v", err)
 		return
 	}
 
 	// Filter out admins.
-	var filtered []db.HumanFull
+	filtered := usersToCheck[:0]
 	for _, u := range usersToCheck {
 		if !isTelegramAdminID(r.cfg, u.ID) {
 			filtered = append(filtered, u)
@@ -143,8 +142,7 @@ func (r *TelegramReconciliation) SyncTelegramUsers(syncNames, removeInvalidUsers
 
 	channelList := r.getChannelList()
 
-	for i := range usersToCheck {
-		user := &usersToCheck[i]
+	for _, user := range usersToCheck {
 		userID, ok := parseTelegramChannelID(user.ID)
 		if !ok {
 			continue
@@ -164,8 +162,8 @@ func (r *TelegramReconciliation) SyncSingleUser(userID int64) {
 	channelList := r.getChannelList()
 	telegramInfo := r.loadTelegramChannels(userID, channelList)
 
-	var user *db.HumanFull
-	existing, err := db.SelectOneHumanFull(r.db, id)
+	var user *store.Human
+	existing, err := r.humanStore.Get(id)
 	if err == nil {
 		user = existing
 	}
@@ -174,7 +172,7 @@ func (r *TelegramReconciliation) SyncSingleUser(userID int64) {
 }
 
 // reconcileUser is the core reconciliation logic for a single Telegram user.
-func (r *TelegramReconciliation) reconcileUser(id string, user *db.HumanFull, telegramUser *TelegramUserInfo, syncNames, removeInvalidUsers bool) {
+func (r *TelegramReconciliation) reconcileUser(id string, user *store.Human, telegramUser *TelegramUserInfo, syncNames, removeInvalidUsers bool) {
 	defer func() {
 		if rv := recover(); rv != nil {
 			r.log.Errorf("Synchronisation of Poracle user %s panicked: %v", id, rv)
@@ -194,37 +192,36 @@ func (r *TelegramReconciliation) reconcileUser(id string, user *db.HumanFull, te
 }
 
 // reconcileNonAreaSecurity handles reconciliation when area security is disabled.
-func (r *TelegramReconciliation) reconcileNonAreaSecurity(id string, user *db.HumanFull, name string, channels []string, syncNames, removeInvalidUsers bool) {
-	before := user != nil && user.AdminDisable == 0
+func (r *TelegramReconciliation) reconcileNonAreaSecurity(id string, user *store.Human, name string, channels []string, syncNames, removeInvalidUsers bool) {
+	before := user != nil && !user.AdminDisable
 	after := hasAnyChannel(channels, r.cfg.Telegram.Channels)
 
 	if !before && after {
 		if user == nil {
 			r.log.Infof("Create user %s %s", id, name)
 
-			h := &db.HumanFull{
-				ID:                  id,
-				Type:                bot.TypeTelegramUser,
-				Name:                name,
-				Enabled:             1,
-				Area:                "[]",
-				CommunityMembership: "[]",
+			h := &store.Human{
+				ID:      id,
+				Type:    bot.TypeTelegramUser,
+				Name:    name,
+				Enabled: true,
 			}
-			if err := db.CreateHuman(r.db, h); err != nil {
+			if err := r.humanStore.Create(h); err != nil {
 				r.log.Errorf("Create user %s: %v", id, err)
 				return
 			}
-			if err := db.CreateDefaultProfile(r.db, id, name, "[]", 0, 0); err != nil {
+			if err := r.humanStore.CreateDefaultProfile(id, name, nil, 0, 0); err != nil {
 				r.log.Errorf("Create default profile for %s: %v", id, err)
 			}
 			r.sendGreetings(id)
 
-		} else if user.AdminDisable == 1 && user.DisabledDate.Valid {
+		} else if user.AdminDisable && user.DisabledDate.Valid {
 			r.log.Infof("Reactivate user %s %s", id, name)
 
-			if _, err := r.db.Exec(
-				`UPDATE humans SET admin_disable = 0, disabled_date = NULL WHERE id = ?`,
-				id); err != nil {
+			if err := r.humanStore.Update(id, map[string]any{
+				"admin_disable": 0,
+				"disabled_date": nil,
+			}); err != nil {
 				r.log.Errorf("Reactivate user %s: %v", id, err)
 				return
 			}
@@ -240,13 +237,15 @@ func (r *TelegramReconciliation) reconcileNonAreaSecurity(id string, user *db.Hu
 
 	if before && after {
 		if syncNames && user.Name != name && name != "" {
-			bot.UpdateHuman(r.db, id, map[string]any{"name": name})
+			if err := r.humanStore.Update(id, map[string]any{"name": name}); err != nil {
+				r.log.Errorf("Update user %s: %v", id, err)
+			}
 		}
 	}
 }
 
 // reconcileAreaSecurity handles reconciliation when area security is enabled.
-func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *db.HumanFull, name string, channels []string, syncNames, removeInvalidUsers bool) {
+func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *store.Human, name string, channels []string, syncNames, removeInvalidUsers bool) {
 	// Build community list from channel membership.
 	var communityList []string
 	for _, comm := range r.cfg.Area.Communities {
@@ -255,45 +254,43 @@ func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *db.Human
 		}
 	}
 
-	before := user != nil && user.AdminDisable == 0
+	before := user != nil && !user.AdminDisable
 	after := len(communityList) > 0
 	areaRestriction := community.CalculateLocationRestrictions(r.cfg.Area.Communities, communityList)
-
-	areaRestrictionJSON, _ := json.Marshal(areaRestriction)
-	communityJSON, _ := json.Marshal(communityList)
 
 	if !before && after {
 		if user == nil {
 			r.log.Infof("Create user %s %s with communities %v", id, name, communityList)
 
-			h := &db.HumanFull{
+			h := &store.Human{
 				ID:                  id,
 				Type:                bot.TypeTelegramUser,
 				Name:                name,
-				Enabled:             1,
-				Area:                "[]",
-				CommunityMembership: string(communityJSON),
+				Enabled:             true,
+				CommunityMembership: communityList,
+				AreaRestriction:     areaRestriction,
 			}
-			h.AreaRestriction.SetValid(string(areaRestrictionJSON))
 
-			if err := db.CreateHuman(r.db, h); err != nil {
+			if err := r.humanStore.Create(h); err != nil {
 				r.log.Errorf("Create user %s: %v", id, err)
 				return
 			}
-			if err := db.CreateDefaultProfile(r.db, id, name, "[]", 0, 0); err != nil {
+			if err := r.humanStore.CreateDefaultProfile(id, name, nil, 0, 0); err != nil {
 				r.log.Errorf("Create default profile for %s: %v", id, err)
 			}
 			r.sendGreetings(id)
 
-		} else if user.AdminDisable == 1 && user.DisabledDate.Valid {
+		} else if user.AdminDisable && user.DisabledDate.Valid {
 			r.log.Infof("Reactivate user %s %s with communities %v", id, name, communityList)
 
-			_, err := r.db.Exec(
-				`UPDATE humans SET admin_disable = 0, disabled_date = NULL,
-				 area_restriction = ?, community_membership = ?
-				 WHERE id = ?`,
-				string(areaRestrictionJSON), string(communityJSON), id)
-			if err != nil {
+			areaRestrictionJSON, _ := json.Marshal(areaRestriction)
+			communityJSON, _ := json.Marshal(communityList)
+			if err := r.humanStore.Update(id, map[string]any{
+				"admin_disable":        0,
+				"disabled_date":        nil,
+				"area_restriction":     string(areaRestrictionJSON),
+				"community_membership": string(communityJSON),
+			}); err != nil {
 				r.log.Errorf("Reactivate user %s: %v", id, err)
 				return
 			}
@@ -313,16 +310,21 @@ func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *db.Human
 			updates["name"] = name
 		}
 
-		if !user.AreaRestriction.Valid || !bot.HaveSameContents(areaRestriction, bot.ParseJSONStringSlice(user.AreaRestriction.ValueOrZero())) {
+		if !bot.HaveSameContents(areaRestriction, user.AreaRestriction) {
+			areaRestrictionJSON, _ := json.Marshal(areaRestriction)
 			updates["area_restriction"] = string(areaRestrictionJSON)
 		}
 
-		if !bot.HaveSameContents(communityList, bot.ParseJSONStringSlice(user.CommunityMembership)) {
+		if !bot.HaveSameContents(communityList, user.CommunityMembership) {
+			communityJSON, _ := json.Marshal(communityList)
 			updates["community_membership"] = string(communityJSON)
 		}
 
 		if len(updates) > 0 {
-			bot.UpdateHuman(r.db, id, updates)
+			if err := r.humanStore.Update(id, updates); err != nil {
+				r.log.Errorf("Update user %s: %v", id, err)
+				return
+			}
 			r.log.Infof("Update user %s %s with communities %v", id, name, communityList)
 		}
 	}
@@ -332,9 +334,8 @@ func (r *TelegramReconciliation) reconcileAreaSecurity(id string, user *db.Human
 func (r *TelegramReconciliation) UpdateTelegramChannels() {
 	r.log.Info("Channel membership to Poracle users starting...")
 
-	var channelsToCheck []db.HumanFull
-	if err := r.db.Select(&channelsToCheck,
-		`SELECT * FROM humans WHERE (type = 'telegram:channel' OR type = 'telegram:group') AND admin_disable = 0`); err != nil {
+	channelsToCheck, err := r.humanStore.ListByTypes([]string{"telegram:channel", "telegram:group"})
+	if err != nil {
 		r.log.Errorf("Verification of Poracle channels failed: %v", err)
 		return
 	}
@@ -342,34 +343,30 @@ func (r *TelegramReconciliation) UpdateTelegramChannels() {
 	for _, user := range channelsToCheck {
 		r.log.Debugf("Check channel %s %s", user.ID, user.Name)
 
-		if user.AreaRestriction.Valid && user.CommunityMembership != "" {
-			membership := bot.ParseJSONStringSlice(user.CommunityMembership)
-			if len(membership) > 0 {
-				areaRestriction := community.CalculateLocationRestrictions(r.cfg.Area.Communities, membership)
-				existing := bot.ParseJSONStringSlice(user.AreaRestriction.ValueOrZero())
-				if !bot.HaveSameContents(areaRestriction, existing) {
-					areaRestrictionJSON, _ := json.Marshal(areaRestriction)
-					bot.UpdateHuman(r.db, user.ID, map[string]any{
-						"area_restriction": string(areaRestrictionJSON),
-					})
-					r.log.Infof("Update channel %s %s", user.ID, user.Name)
+		if user.AreaRestriction != nil && len(user.CommunityMembership) > 0 {
+			areaRestriction := community.CalculateLocationRestrictions(r.cfg.Area.Communities, user.CommunityMembership)
+			if !bot.HaveSameContents(areaRestriction, user.AreaRestriction) {
+				areaRestrictionJSON, _ := json.Marshal(areaRestriction)
+				if err := r.humanStore.Update(user.ID, map[string]any{
+					"area_restriction": string(areaRestrictionJSON),
+				}); err != nil {
+					r.log.Errorf("Update channel %s: %v", user.ID, err)
+					continue
 				}
+				r.log.Infof("Update channel %s %s", user.ID, user.Name)
 			}
 		}
 	}
 
-	r.log.Debug("Channel membership to Poracle users complete...")
+	r.log.Info("Channel membership to Poracle users complete...")
 }
 
 // disableUser disables or deletes a user based on roleCheckMode.
-func (r *TelegramReconciliation) disableUser(user *db.HumanFull) {
+func (r *TelegramReconciliation) disableUser(user *store.Human) {
 	switch r.cfg.General.RoleCheckMode {
 	case "disable-user":
-		if user.AdminDisable == 0 {
-			_, err := r.db.Exec(
-				`UPDATE humans SET admin_disable = 1, disabled_date = NOW() WHERE id = ?`,
-				user.ID)
-			if err != nil {
+		if !user.AdminDisable {
+			if err := r.humanStore.SetAdminDisable(user.ID, true); err != nil {
 				r.log.Errorf("Disable user %s: %v", user.ID, err)
 				return
 			}
@@ -378,7 +375,7 @@ func (r *TelegramReconciliation) disableUser(user *db.HumanFull) {
 		}
 
 	case "delete":
-		if err := db.DeleteHumanAndTracking(r.db, user.ID); err != nil {
+		if err := r.humanStore.Delete(user.ID); err != nil {
 			r.log.Errorf("Delete user %s: %v", user.ID, err)
 			return
 		}

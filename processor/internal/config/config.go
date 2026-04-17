@@ -440,7 +440,7 @@ type AreaConfig struct {
 type CommunityConfig struct {
 	Name          string   `toml:"name" json:"name"`
 	AllowedAreas  []string `toml:"allowed_areas" json:"allowed_areas"`
-	LocationFence []string `toml:"location_fence" json:"location_fence"`
+	LocationFence FlexStrings `toml:"location_fence" json:"location_fence"`
 	Discord       struct {
 		Channels []string `toml:"channels" json:"channels"`
 		UserRole []string `toml:"user_role" json:"user_role"`
@@ -489,6 +489,13 @@ type GeocodingConfig struct {
 	// Static map tile provider
 	StaticProvider    string                       `toml:"static_provider"`
 	StaticProviderURL string                       `toml:"static_provider_url"`
+	// Optional private URL the processor uses for its own tileserver HTTP
+	// (render, pregenerate POST, upload-images prefetch). If unset,
+	// StaticProviderURL is used for everything. Useful when
+	// StaticProviderURL is a public HTTPS endpoint (e.g. Cloudflare-fronted)
+	// and the processor can reach the tileserver directly on a private
+	// network — avoids proxy buffering / timeout on the hot path.
+	StaticInternalURL string                       `toml:"static_internal_url"`
 	StaticKey         []string                     `toml:"static_key"`
 	Width             int                          `toml:"width"`
 	Height            int                          `toml:"height"`
@@ -544,10 +551,19 @@ func Load(baseDir string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", configPath, err)
 	}
+	// Default host: 127.0.0.1 (loopback only) for safety on bare-metal.
+	// PORACLE_HOST overrides the default so the Dockerfile can bind to
+	// 0.0.0.0 without the user touching config.toml. An explicit [processor]
+	// host in TOML always wins because it's applied after this default by
+	// toml.Unmarshal below.
+	defaultHost := "127.0.0.1"
+	if envHost := os.Getenv("PORACLE_HOST"); envHost != "" {
+		defaultHost = envHost
+	}
 	cfg := &Config{
 		BaseDir: absDir,
 		Processor: ProcessorConfig{
-			Host: "0.0.0.0",
+			Host: defaultHost,
 			Port: 3030,
 		},
 		Reconciliation: ReconciliationConfig{

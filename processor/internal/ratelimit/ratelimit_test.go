@@ -260,6 +260,56 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 }
 
+func TestIsBlocked(t *testing.T) {
+	l := New(Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5})
+	defer l.Close()
+
+	// Fresh destination is never blocked.
+	if l.IsBlocked("user1", "discord:user") {
+		t.Fatal("fresh destination should not be blocked")
+	}
+
+	// Under limit: still not blocked.
+	l.Check("user1", "discord:user")
+	if l.IsBlocked("user1", "discord:user") {
+		t.Fatal("destination under limit should not be blocked")
+	}
+
+	// At limit (2 sends consumed quota): now blocked for new sends.
+	l.Check("user1", "discord:user")
+	if !l.IsBlocked("user1", "discord:user") {
+		t.Fatal("destination at limit should be blocked")
+	}
+
+	// IsBlocked must not mutate state — successive calls return the same answer
+	// without ever incrementing the counter or producing JustBreached.
+	for range 5 {
+		if !l.IsBlocked("user1", "discord:user") {
+			t.Fatal("repeated IsBlocked should remain blocked")
+		}
+	}
+	r := l.Check("user1", "discord:user")
+	if !r.JustBreached {
+		t.Fatal("first Check after IsBlocked spam should still be JustBreached — IsBlocked must not increment")
+	}
+}
+
+func TestIsBlockedRespectsWindowExpiry(t *testing.T) {
+	l := New(Config{TimingPeriod: 1, DMLimit: 1, ChannelLimit: 5})
+	defer l.Close()
+
+	l.Check("user1", "discord:user")
+	if !l.IsBlocked("user1", "discord:user") {
+		t.Fatal("should be blocked at limit")
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+
+	if l.IsBlocked("user1", "discord:user") {
+		t.Fatal("should be unblocked after window expiry")
+	}
+}
+
 func TestTelegramGroupGetsChannelLimit(t *testing.T) {
 	l := New(Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5})
 	defer l.Close()

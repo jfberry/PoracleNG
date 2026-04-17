@@ -8,11 +8,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/community"
-	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // HandleGetOneHuman returns the GET /api/humans/one/{id} handler.
@@ -24,7 +23,7 @@ func HandleGetOneHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHumanFull(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: get human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -35,7 +34,7 @@ func HandleGetOneHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		trackingJSONOK(c, map[string]any{"human": human})
+		trackingJSONOK(c, map[string]any{"human": humanToResponse(human)})
 	}
 }
 
@@ -48,7 +47,7 @@ func HandleStartHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for start: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -59,7 +58,7 @@ func HandleStartHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := db.UpdateHumanEnabled(deps.DB, id, true); err != nil {
+		if err := deps.Humans.SetEnabled(id, true); err != nil {
 			log.Errorf("Humans API: start human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -79,7 +78,7 @@ func HandleStopHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for stop: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -90,7 +89,7 @@ func HandleStopHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := db.UpdateHumanEnabled(deps.DB, id, false); err != nil {
+		if err := deps.Humans.SetEnabled(id, false); err != nil {
 			log.Errorf("Humans API: stop human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -115,7 +114,7 @@ func HandleAdminDisabled(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for adminDisabled: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -136,15 +135,17 @@ func HandleAdminDisabled(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := db.UpdateHumanAdminDisable(deps.DB, id, *body.State); err != nil {
-			log.Errorf("Humans API: adminDisabled: %s", err)
-			trackingJSONError(c, http.StatusInternalServerError, "database error")
-			return
-		}
-
+		// Flag-only semantics: do NOT use humanStore.SetAdminDisable here,
+		// which also clears disabled_date and resets enabled/fails. This
+		// endpoint has historically toggled just the admin_disable flag.
 		adminDisable := 0
 		if *body.State {
 			adminDisable = 1
+		}
+		if err := deps.Humans.Update(id, map[string]any{"admin_disable": adminDisable}); err != nil {
+			log.Errorf("Humans API: adminDisabled: %s", err)
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
+			return
 		}
 
 		reloadState(deps)
@@ -161,7 +162,7 @@ func HandleSwitchProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for switchProfile: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -182,7 +183,7 @@ func HandleSwitchProfile(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		found, err := db.SwitchProfile(deps.DB, id, profileNo)
+		found, err := deps.Humans.SwitchProfile(id, profileNo)
 		if err != nil {
 			log.Errorf("Humans API: switchProfile: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -236,7 +237,7 @@ func HandleGetHumanAreas(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHumanFull(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: get human areas: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -257,9 +258,8 @@ func HandleGetHumanAreas(deps *TrackingDeps) gin.HandlerFunc {
 
 		allowedAreas := allAreas
 		if deps.Config.Area.Enabled && !isAdmin(deps, id) {
-			membership := parseMembership(human.CommunityMembership)
 			allowedAreas = community.FilterAreas(
-				deps.Config.Area.Communities, membership, allAreas)
+				deps.Config.Area.Communities, human.CommunityMembership, allAreas)
 		}
 
 		// Build allowed set for fast lookup.
@@ -297,7 +297,7 @@ func HandleCheckLocation(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHumanFull(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: check location: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -324,10 +324,7 @@ func HandleCheckLocation(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		var allowedFences []string
-		if human.AreaRestriction.Valid {
-			allowedFences = parseMembership(human.AreaRestriction.String)
-		}
+		allowedFences := human.AreaRestriction
 
 		st := deps.StateMgr.Get()
 		matched := st.Geofence.MatchedAreaNames(lat, lon)
@@ -354,7 +351,7 @@ func HandleSetLocation(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHumanFull(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: set location: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -377,27 +374,24 @@ func HandleSetLocation(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Validate location against area restrictions if enabled.
-		if deps.Config.Area.Enabled && human.AreaRestriction.Valid && human.AreaRestriction.String != "" {
-			var allowedFences []string
-			if err := json.Unmarshal([]byte(human.AreaRestriction.String), &allowedFences); err == nil && len(allowedFences) > 0 {
-				st := deps.StateMgr.Get()
-				matched := st.Geofence.MatchedAreaNames(lat, lon)
+		if deps.Config.Area.Enabled && len(human.AreaRestriction) > 0 {
+			st := deps.StateMgr.Get()
+			matched := st.Geofence.MatchedAreaNames(lat, lon)
 
-				permitted := false
-				for _, fence := range allowedFences {
-					if matched[strings.ToLower(fence)] {
-						permitted = true
-						break
-					}
+			permitted := false
+			for _, fence := range human.AreaRestriction {
+				if matched[strings.ToLower(fence)] {
+					permitted = true
+					break
 				}
-				if !permitted {
-					trackingJSONError(c, http.StatusForbidden, "Location not permitted")
-					return
-				}
+			}
+			if !permitted {
+				trackingJSONError(c, http.StatusForbidden, "Location not permitted")
+				return
 			}
 		}
 
-		if err := db.UpdateHumanLocation(deps.DB, id, lat, lon, human.CurrentProfileNo); err != nil {
+		if err := deps.Humans.SetLocation(id, human.CurrentProfileNo, lat, lon); err != nil {
 			log.Errorf("Humans API: update location: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -418,7 +412,7 @@ func HandleSetAreas(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := db.SelectOneHumanFull(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Humans API: set areas: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -455,9 +449,8 @@ func HandleSetAreas(deps *TrackingDeps) gin.HandlerFunc {
 
 		// If area security is enabled and user is not admin, filter by community.
 		if deps.Config.Area.Enabled && !admin {
-			membership := parseMembership(human.CommunityMembership)
 			allowedAreas = community.FilterAreas(
-				deps.Config.Area.Communities, membership, allowedAreas)
+				deps.Config.Area.Communities, human.CommunityMembership, allowedAreas)
 		}
 
 		// Build allowed set for intersection.
@@ -479,9 +472,7 @@ func HandleSetAreas(deps *TrackingDeps) gin.HandlerFunc {
 			newAreas = []string{}
 		}
 
-		areaJSON, _ := json.Marshal(newAreas)
-
-		if err := db.UpdateHumanAreas(deps.DB, id, string(areaJSON), human.CurrentProfileNo); err != nil {
+		if err := deps.Humans.SetArea(id, human.CurrentProfileNo, newAreas); err != nil {
 			log.Errorf("Humans API: update areas: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -524,7 +515,7 @@ func HandleCreateHuman(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Check user doesn't already exist.
-		existing, err := db.SelectOneHumanFull(deps.DB, body.ID)
+		existing, err := deps.Humans.Get(body.ID)
 		if err != nil {
 			log.Errorf("Humans API: create human lookup: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -536,29 +527,26 @@ func HandleCreateHuman(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Build the human record.
-		human := &db.HumanFull{
+		human := &store.Human{
 			ID:               body.ID,
 			Name:             body.Name,
 			Type:             body.Type,
-			Enabled:          1,
-			Area:             body.Area,
+			Enabled:          true,
+			Area:             parseMembership(body.Area),
 			Latitude:         body.Latitude,
 			Longitude:        body.Longitude,
-			AdminDisable:     0,
 			CurrentProfileNo: 1,
+			Notes:            body.Notes,
 		}
 
 		if human.Type == "" {
 			human.Type = "discord:user"
 		}
 		if body.Enabled != nil && !*body.Enabled {
-			human.Enabled = 0
-		}
-		if human.Area == "" {
-			human.Area = "[]"
+			human.Enabled = false
 		}
 		if body.AdminDisable != nil && *body.AdminDisable {
-			human.AdminDisable = 1
+			human.AdminDisable = true
 		}
 
 		lang := body.Language
@@ -568,11 +556,7 @@ func HandleCreateHuman(deps *TrackingDeps) gin.HandlerFunc {
 				lang = "en"
 			}
 		}
-		human.Language = null.StringFrom(lang)
-
-		if body.Notes != "" {
-			human.Notes = body.Notes
-		}
+		human.Language = lang
 
 		// Handle community membership.
 		if body.Community != nil {
@@ -591,22 +575,19 @@ func HandleCreateHuman(deps *TrackingDeps) gin.HandlerFunc {
 			}
 
 			if len(communities) > 0 {
-				membershipJSON, _ := json.Marshal(communities)
-				human.CommunityMembership = string(membershipJSON)
+				human.CommunityMembership = communities
 
 				st := deps.StateMgr.Get()
 				allAreas := make([]string, len(st.Fences))
 				for i, f := range st.Fences {
 					allAreas[i] = strings.ToLower(f.Name)
 				}
-				communityAreas := community.FilterAreas(
+				human.AreaRestriction = community.FilterAreas(
 					deps.Config.Area.Communities, communities, allAreas)
-				restrictionJSON, _ := json.Marshal(communityAreas)
-				human.AreaRestriction = null.StringFrom(string(restrictionJSON))
 			}
 		}
 
-		if err := db.CreateHuman(deps.DB, human); err != nil {
+		if err := deps.Humans.Create(human); err != nil {
 			log.Errorf("Humans API: create human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -617,7 +598,7 @@ func HandleCreateHuman(deps *TrackingDeps) gin.HandlerFunc {
 		if profileName == "" {
 			profileName = "Default"
 		}
-		if err := db.CreateDefaultProfile(deps.DB, body.ID, profileName, human.Area, human.Latitude, human.Longitude); err != nil {
+		if err := deps.Humans.CreateDefaultProfile(body.ID, profileName, human.Area, human.Latitude, human.Longitude); err != nil {
 			log.Errorf("Humans API: create default profile: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
@@ -626,7 +607,7 @@ func HandleCreateHuman(deps *TrackingDeps) gin.HandlerFunc {
 		reloadState(deps)
 		trackingJSONOK(c, map[string]any{
 			"message": "User created successfully",
-			"human":   human,
+			"human":   humanToResponse(human),
 		})
 	}
 }

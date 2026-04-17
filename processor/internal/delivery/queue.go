@@ -11,6 +11,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -29,6 +30,16 @@ type QueueConfig struct {
 	// OnDisabled is invoked when a target hits the failure threshold.
 	// Implementation should: disable the user in DB, notify them, post shame.
 	OnDisabled func(target, name, jobType string)
+
+	// RateLimiter is the authoritative per-destination message-rate limiter.
+	// When set, the queue calls Check before each genuine new send (edits and
+	// jobs with BypassRateLimit=true are exempt). When nil, no rate limiting
+	// is enforced at delivery time.
+	RateLimiter *ratelimit.Limiter
+	// RateLimitHooks receives notifications when a destination just breached
+	// the limit or has been banned by accumulated breaches. Optional; when
+	// nil, only metrics and logs are updated.
+	RateLimitHooks RateLimitHooks
 }
 
 // FairQueue provides per-destination serialization with platform-level concurrency control.
@@ -64,6 +75,9 @@ type FairQueue struct {
 	failThreshold     int
 	failBlockDuration time.Duration
 	onDisabled        func(target, name, jobType string)
+
+	rateLimiter    *ratelimit.Limiter
+	rateLimitHooks RateLimitHooks
 }
 
 // NewFairQueue creates a FairQueue that reads jobs from ch and dispatches them
@@ -96,6 +110,8 @@ func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTrack
 		failThreshold:     failThreshold,
 		failBlockDuration: 5 * time.Minute,
 		onDisabled:        cfg.OnDisabled,
+		rateLimiter:       cfg.RateLimiter,
+		rateLimitHooks:    cfg.RateLimitHooks,
 	}
 }
 
@@ -162,12 +178,15 @@ func (fq *FairQueue) processJob(job *Job) {
 
 	start := time.Now()
 
-	// If job has EditKey, try editing existing message first
+	// If job has EditKey, try editing existing message first.
+	// Edits are mutations of an already-counted send — they do NOT consume
+	// rate-limit budget. Only fall through to the new-send path (which does
+	// count) if no tracked message exists or the edit attempt fails.
 	if job.EditKey != "" {
 		existing := fq.tracker.LookupEdit(job.EditKey)
 		if existing != nil {
 			log.Infof("%s: edit: found tracked message for key=%s, attempting edit", job.LogReference, job.EditKey)
-			if err := sender.Edit(fq.ctx, existing.SentID, job.Message); err == nil {
+			if err := sender.Edit(fq.ctx, existing.SentID, job.Message, job.StaticMapData); err == nil {
 				log.Infof("%s: edit: succeeded for key=%s", job.LogReference, job.EditKey)
 				metrics.DeliveryTotal.WithLabelValues(platform, "edit_ok").Inc()
 				metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
@@ -184,6 +203,48 @@ func (fq *FairQueue) processJob(job *Job) {
 	if fq.isTargetDisabled(job.Target) {
 		metrics.DeliveryTotal.WithLabelValues(platform, "stopped").Inc()
 		return
+	}
+
+	// 3b. Authoritative rate-limit count. Bypass jobs (rate-limit
+	//     notifications, ban farewells) skip the check entirely so the
+	//     limiter can never swallow the very message reporting on itself.
+	if fq.rateLimiter != nil && !job.BypassRateLimit {
+		result := fq.rateLimiter.Check(job.Target, job.Type)
+		if !result.Allowed {
+			if result.JustBreached {
+				metrics.RateLimitBreaches.Inc()
+				metrics.RateLimitDropped.Inc()
+				log.Infof("%s: rate limit reached for %s %s %s (%d messages in %ds)",
+					job.LogReference, job.Type, job.Target, job.Name, result.Limit, result.ResetSeconds)
+				if fq.rateLimitHooks != nil {
+					// Hooks dispatch bypass jobs back into the same channel.
+					// Calling them synchronously here would block this worker
+					// while it still holds the per-destination mutex — and if
+					// the channel is full of further jobs to the same target
+					// (the very condition that produced the breach) those
+					// jobs cannot drain because we hold their lock. Fire and
+					// forget instead, so the worker can release the dest lock
+					// promptly while the hook completes asynchronously.
+					hooks := fq.rateLimitHooks
+					target, typ, name, lang := job.Target, job.Type, job.Name, job.Language
+					limit, reset, banned, ref := result.Limit, result.ResetSeconds, result.Banned, job.LogReference
+					go func() {
+						hooks.OnBreach(target, typ, name, lang, limit, reset)
+						if banned {
+							metrics.RateLimitDisabled.Inc()
+							log.Infof("%s: rate limit: banning %s %s %s (too many violations)",
+								ref, typ, target, name)
+							hooks.OnBan(target, typ, name, lang)
+						}
+					}()
+				}
+			} else {
+				metrics.RateLimitDropped.Inc()
+				log.Debugf("%s: rate limited: dropping message for %s %s %s",
+					job.LogReference, job.Type, job.Target, job.Name)
+			}
+			return
+		}
 	}
 
 	destKind := strings.ToUpper(strings.TrimPrefix(job.Type, platform+":"))

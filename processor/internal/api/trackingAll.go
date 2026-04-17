@@ -228,7 +228,7 @@ func HandleGetAllTracking(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		// Fetch full human record for the response (includes lat/lon/area)
-		humanFull, err := db.SelectOneHumanFull(deps.DB, human.ID)
+		humanFull, err := deps.Humans.Get(human.ID)
 		if err != nil {
 			log.Errorf("Tracking API: get full human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -242,7 +242,7 @@ func HandleGetAllTracking(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		result := map[string]any{
-			"human": humanFull,
+			"human": humanToResponse(humanFull),
 		}
 
 		if pokemon, err := db.SelectMonstersByIDProfile(deps.DB, human.ID, profileNo); err == nil {
@@ -357,7 +357,7 @@ func HandleGetAllProfilesTracking(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		humanFull, err := db.SelectOneHumanFull(deps.DB, id)
+		humanFull, err := deps.Humans.Get(id)
 		if err != nil {
 			trackingJSONError(c, http.StatusInternalServerError, fmt.Sprintf("lookup human: %s", err))
 			return
@@ -376,20 +376,20 @@ func HandleGetAllProfilesTracking(deps *TrackingDeps) gin.HandlerFunc {
 		// Resolve translator for descriptions.
 		var tr *i18n.Translator
 		if wantDesc {
-			lang := humanFull.Language.String
-			if !humanFull.Language.Valid || lang == "" {
+			lang := humanFull.Language
+			if lang == "" {
 				lang = deps.Config.General.Locale
 			}
 			tr = deps.Translations.For(lang)
 		}
 
 		result := map[string]any{
-			"human": humanFull,
+			"human": humanToResponse(humanFull),
 		}
 
 		// Profiles
-		if profiles, err := db.SelectProfiles(deps.DB, id); err == nil {
-			result["profile"] = profiles
+		if profiles, err := deps.Humans.GetProfiles(id); err == nil {
+			result["profile"] = profilesToResponse(profiles)
 		} else {
 			log.Warnf("Tracking API: get all profiles: %s", err)
 		}

@@ -9,15 +9,14 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/community"
 	"github.com/pokemon/poracleng/processor/internal/config"
-	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // DiscordUserInfo holds the display name and roles for a Discord user across all guilds.
@@ -30,7 +29,7 @@ type DiscordUserInfo struct {
 // It syncs Discord role membership with Poracle user registration.
 type Reconciliation struct {
 	session      *discordgo.Session
-	db           *sqlx.DB
+	humanStore   store.HumanStore
 	cfg          *config.Config
 	translations *i18n.Bundle
 	dtsStore     *dts.TemplateStore
@@ -45,14 +44,14 @@ type Reconciliation struct {
 // NewReconciliation creates a new Reconciliation instance.
 func NewReconciliation(
 	session *discordgo.Session,
-	dbx *sqlx.DB,
+	humanStore store.HumanStore,
 	cfg *config.Config,
 	translations *i18n.Bundle,
 	dtsStore *dts.TemplateStore,
 ) *Reconciliation {
 	return &Reconciliation{
 		session:      session,
-		db:           dbx,
+		humanStore:   humanStore,
 		cfg:          cfg,
 		translations: translations,
 		dtsStore:     dtsStore,
@@ -134,15 +133,14 @@ func (r *Reconciliation) LoadAllGuildUsers() (map[string]*DiscordUserInfo, error
 func (r *Reconciliation) SyncDiscordRole(registerNewUsers, syncNames, removeInvalidUsers bool) {
 	r.log.Info("User role membership to Poracle users starting...")
 
-	var usersToCheck []db.HumanFull
-	err := r.db.Select(&usersToCheck, `SELECT * FROM humans WHERE type = 'discord:user'`)
+	usersToCheck, err := r.humanStore.ListByType("discord:user")
 	if err != nil {
 		r.log.Errorf("User role check failed: load humans: %v", err)
 		return
 	}
 
 	// Filter out admins.
-	var filtered []db.HumanFull
+	filtered := usersToCheck[:0]
 	for _, u := range usersToCheck {
 		if !isAdminID(r.cfg, u.ID) {
 			filtered = append(filtered, u)
@@ -158,8 +156,7 @@ func (r *Reconciliation) SyncDiscordRole(registerNewUsers, syncNames, removeInva
 
 	checked := make(map[string]bool, len(usersToCheck))
 
-	for i := range usersToCheck {
-		user := &usersToCheck[i]
+	for _, user := range usersToCheck {
 		checked[user.ID] = true
 		r.ReconcileUser(user.ID, user, discordUserList[user.ID], syncNames, removeInvalidUsers)
 	}
@@ -220,7 +217,7 @@ func (r *Reconciliation) ReconcileSingleUser(id string, removeInvalidUsers bool)
 		}
 	}
 
-	user, err := db.SelectOneHumanFull(r.db, id)
+	user, err := r.humanStore.Get(id)
 	if err != nil {
 		r.log.Errorf("Check single user %s: select human: %v", id, err)
 		return
@@ -235,7 +232,7 @@ func (r *Reconciliation) ReconcileSingleUser(id string, removeInvalidUsers bool)
 // ReconcileUser is the core reconciliation logic for a single user.
 // It compares the user's current state in the DB with their Discord roles
 // and creates, reactivates, disables, or updates the user as needed.
-func (r *Reconciliation) ReconcileUser(id string, user *db.HumanFull, discordUser *DiscordUserInfo, syncNames, removeInvalidUsers bool) {
+func (r *Reconciliation) ReconcileUser(id string, user *store.Human, discordUser *DiscordUserInfo, syncNames, removeInvalidUsers bool) {
 	defer func() {
 		if rv := recover(); rv != nil {
 			r.log.Errorf("Synchronisation of Poracle user %s panicked: %v", id, rv)
@@ -263,12 +260,12 @@ func (r *Reconciliation) ReconcileUser(id string, user *db.HumanFull, discordUse
 
 // reconcileNonAreaSecurity handles reconciliation when area security is disabled.
 // Simple user_role membership check.
-func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *db.HumanFull, name string, roleList []string, blocked *string, syncNames, removeInvalidUsers bool) {
+func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *store.Human, name string, roleList []string, blocked *string, syncNames, removeInvalidUsers bool) {
 	if len(r.cfg.Discord.UserRole) == 0 {
 		return
 	}
 
-	before := user != nil && user.AdminDisable == 0
+	before := user != nil && !user.AdminDisable
 	after := hasAnyRole(roleList, r.cfg.Discord.UserRole)
 
 	if !before && after {
@@ -276,42 +273,33 @@ func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *db.HumanFull,
 			// Create new user.
 			r.log.Infof("Create user %s %s", id, name)
 
-			h := &db.HumanFull{
-				ID:                  id,
-				Type:                bot.TypeDiscordUser,
-				Name:                name,
-				Enabled:             1,
-				Area:                "[]",
-				CommunityMembership: "[]",
-			}
-			if blocked != nil {
-				h.BlockedAlerts.SetValid(*blocked)
+			h := &store.Human{
+				ID:            id,
+				Type:          bot.TypeDiscordUser,
+				Name:          name,
+				Enabled:       true,
+				BlockedAlerts: parseBlockedAlertsJSON(blocked),
 			}
 
-			if err := db.CreateHuman(r.db, h); err != nil {
+			if err := r.humanStore.Create(h); err != nil {
 				r.log.Errorf("Create user %s: %v", id, err)
 				return
 			}
-			if err := db.CreateDefaultProfile(r.db, id, name, "[]", 0, 0); err != nil {
+			if err := r.humanStore.CreateDefaultProfile(id, name, nil, 0, 0); err != nil {
 				r.log.Errorf("Create default profile for %s: %v", id, err)
 			}
 			r.SendGreetings(id)
 
-		} else if user.AdminDisable == 1 && user.DisabledDate.Valid {
+		} else if user.AdminDisable && user.DisabledDate.Valid {
 			// Reactivate user.
 			r.log.Infof("Reactivate user %s %s", id, name)
 
-			args := []any{0, nil}
-			setClauses := "admin_disable = ?, disabled_date = ?"
-			if blocked != nil {
-				setClauses += ", blocked_alerts = ?"
-				args = append(args, *blocked)
-			} else {
-				setClauses += ", blocked_alerts = ?"
-				args = append(args, nil)
+			updates := map[string]any{
+				"admin_disable":  0,
+				"disabled_date": nil,
+				"blocked_alerts": nullableSqlArg(blocked),
 			}
-			args = append(args, id)
-			if _, err := r.db.Exec("UPDATE humans SET "+setClauses+" WHERE id = ?", args...); err != nil {
+			if err := r.humanStore.Update(id, updates); err != nil {
 				r.log.Errorf("Reactivate user %s: %v", id, err)
 				return
 			}
@@ -331,18 +319,15 @@ func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *db.HumanFull,
 			updates["name"] = name
 		}
 
-		blockedStr := nullableStr(blocked)
-		userBlockedStr := user.BlockedAlerts.ValueOrZero()
-		if blockedStr != userBlockedStr {
-			if blocked != nil {
-				updates["blocked_alerts"] = *blocked
-			} else {
-				updates["blocked_alerts"] = nil
-			}
+		if !sameBlockedAlerts(user.BlockedAlerts, blocked) {
+			updates["blocked_alerts"] = nullableSqlArg(blocked)
 		}
 
 		if len(updates) > 0 {
-			bot.UpdateHuman(r.db, id, updates)
+			if err := r.humanStore.Update(id, updates); err != nil {
+				r.log.Errorf("Update user %s: %v", id, err)
+				return
+			}
 			r.log.Infof("Update user %s %s", id, name)
 		}
 	}
@@ -350,7 +335,7 @@ func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *db.HumanFull,
 
 // reconcileAreaSecurity handles reconciliation when area security is enabled.
 // Builds community membership from roles matching community discord.user_role.
-func (r *Reconciliation) reconcileAreaSecurity(id string, user *db.HumanFull, name string, roleList []string, blocked *string, syncNames, removeInvalidUsers bool) {
+func (r *Reconciliation) reconcileAreaSecurity(id string, user *store.Human, name string, roleList []string, blocked *string, syncNames, removeInvalidUsers bool) {
 	// Build community list from roles.
 	var communityList []string
 	for _, comm := range r.cfg.Area.Communities {
@@ -359,51 +344,48 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *db.HumanFull, na
 		}
 	}
 
-	before := user != nil && user.AdminDisable == 0
+	before := user != nil && !user.AdminDisable
 	after := len(communityList) > 0
 	areaRestriction := community.CalculateLocationRestrictions(r.cfg.Area.Communities, communityList)
-
-	areaRestrictionJSON, _ := json.Marshal(areaRestriction)
-	communityJSON, _ := json.Marshal(communityList)
 
 	if !before && after {
 		if user == nil {
 			// Create new user with community membership.
 			r.log.Infof("Create user %s %s with communities %v", id, name, communityList)
 
-			h := &db.HumanFull{
+			h := &store.Human{
 				ID:                  id,
 				Type:                bot.TypeDiscordUser,
 				Name:                name,
-				Enabled:             1,
-				Area:                "[]",
-				CommunityMembership: string(communityJSON),
-			}
-			h.AreaRestriction.SetValid(string(areaRestrictionJSON))
-			if blocked != nil {
-				h.BlockedAlerts.SetValid(*blocked)
+				Enabled:             true,
+				CommunityMembership: communityList,
+				AreaRestriction:     areaRestriction,
+				BlockedAlerts:       parseBlockedAlertsJSON(blocked),
 			}
 
-			if err := db.CreateHuman(r.db, h); err != nil {
+			if err := r.humanStore.Create(h); err != nil {
 				r.log.Errorf("Create user %s: %v", id, err)
 				return
 			}
-			if err := db.CreateDefaultProfile(r.db, id, name, "[]", 0, 0); err != nil {
+			if err := r.humanStore.CreateDefaultProfile(id, name, nil, 0, 0); err != nil {
 				r.log.Errorf("Create default profile for %s: %v", id, err)
 			}
 			r.SendGreetings(id)
 
-		} else if user.AdminDisable == 1 && user.DisabledDate.Valid {
+		} else if user.AdminDisable && user.DisabledDate.Valid {
 			// Reactivate user with community membership.
 			r.log.Infof("Reactivate user %s %s with communities %v", id, name, communityList)
 
-			_, err := r.db.Exec(
-				`UPDATE humans SET admin_disable = 0, disabled_date = NULL,
-				 area_restriction = ?, community_membership = ?, blocked_alerts = ?
-				 WHERE id = ?`,
-				string(areaRestrictionJSON), string(communityJSON),
-				nullableSqlArg(blocked), id)
-			if err != nil {
+			areaRestrictionJSON, _ := json.Marshal(areaRestriction)
+			communityJSON, _ := json.Marshal(communityList)
+			updates := map[string]any{
+				"admin_disable":         0,
+				"disabled_date":         nil,
+				"area_restriction":      string(areaRestrictionJSON),
+				"community_membership":  string(communityJSON),
+				"blocked_alerts":        nullableSqlArg(blocked),
+			}
+			if err := r.humanStore.Update(id, updates); err != nil {
 				r.log.Errorf("Reactivate user %s: %v", id, err)
 				return
 			}
@@ -423,38 +405,38 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *db.HumanFull, na
 			updates["name"] = name
 		}
 
-		blockedStr := nullableStr(blocked)
-		userBlockedStr := user.BlockedAlerts.ValueOrZero()
-		if blockedStr != userBlockedStr {
+		if !sameBlockedAlerts(user.BlockedAlerts, blocked) {
 			updates["blocked_alerts"] = nullableSqlArg(blocked)
 		}
 
 		// Check area_restriction changes.
-		if !user.AreaRestriction.Valid || !bot.HaveSameContents(areaRestriction, bot.ParseJSONStringSlice(user.AreaRestriction.ValueOrZero())) {
+		if !bot.HaveSameContents(areaRestriction, user.AreaRestriction) {
+			areaRestrictionJSON, _ := json.Marshal(areaRestriction)
 			updates["area_restriction"] = string(areaRestrictionJSON)
 		}
 
 		// Check community_membership changes.
-		if !bot.HaveSameContents(communityList, bot.ParseJSONStringSlice(user.CommunityMembership)) {
+		if !bot.HaveSameContents(communityList, user.CommunityMembership) {
+			communityJSON, _ := json.Marshal(communityList)
 			updates["community_membership"] = string(communityJSON)
 		}
 
 		if len(updates) > 0 {
-			bot.UpdateHuman(r.db, id, updates)
+			if err := r.humanStore.Update(id, updates); err != nil {
+				r.log.Errorf("Update user %s: %v", id, err)
+				return
+			}
 			r.log.Infof("Update user %s %s with communities %v", id, name, communityList)
 		}
 	}
 }
 
 // DisableUser disables or deletes a user based on roleCheckMode.
-func (r *Reconciliation) DisableUser(user *db.HumanFull) {
+func (r *Reconciliation) DisableUser(user *store.Human) {
 	switch r.cfg.General.RoleCheckMode {
 	case "disable-user":
-		if user.AdminDisable == 0 {
-			_, err := r.db.Exec(
-				`UPDATE humans SET admin_disable = 1, disabled_date = NOW() WHERE id = ?`,
-				user.ID)
-			if err != nil {
+		if !user.AdminDisable {
+			if err := r.humanStore.SetAdminDisable(user.ID, true); err != nil {
 				r.log.Errorf("Disable user %s: %v", user.ID, err)
 				return
 			}
@@ -464,7 +446,7 @@ func (r *Reconciliation) DisableUser(user *db.HumanFull) {
 		}
 
 	case "delete":
-		if err := db.DeleteHumanAndTracking(r.db, user.ID); err != nil {
+		if err := r.humanStore.Delete(user.ID); err != nil {
 			r.log.Errorf("Delete user %s: %v", user.ID, err)
 			return
 		}
@@ -591,7 +573,7 @@ func (r *Reconciliation) SendGoodbye(id string) {
 
 // RemoveRoles removes all subscription roles and exclusive roles from a user
 // across all guilds configured in role_subscriptions.
-func (r *Reconciliation) RemoveRoles(user *db.HumanFull) {
+func (r *Reconciliation) RemoveRoles(user *store.Human) {
 	subscriptions := r.cfg.Discord.RoleSubscriptionMap()
 	if len(subscriptions) == 0 {
 		return
@@ -641,8 +623,7 @@ func (r *Reconciliation) RemoveRoles(user *db.HumanFull) {
 func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalidChannels bool) {
 	r.log.Info("Channel membership to Poracle users starting...")
 
-	var channels []db.HumanFull
-	err := r.db.Select(&channels, `SELECT * FROM humans WHERE type = 'discord:channel' AND admin_disable = 0`)
+	channels, err := r.humanStore.ListByTypeEnabled("discord:channel")
 	if err != nil {
 		r.log.Errorf("Verification of Poracle channels failed: %v", err)
 		return
@@ -658,9 +639,9 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 				if restErr.Response.StatusCode == 404 {
 					if removeInvalidChannels {
 						r.log.Infof("Disable channel %s %s", user.ID, user.Name)
-						r.db.Exec(
-							`UPDATE humans SET admin_disable = 1, disabled_date = NOW() WHERE id = ?`,
-							user.ID)
+						if err := r.humanStore.SetAdminDisable(user.ID, true); err != nil {
+							r.log.Errorf("Disable channel %s: %v", user.ID, err)
+						}
 					}
 					continue
 				}
@@ -715,25 +696,24 @@ func (r *Reconciliation) SyncDiscordChannels(syncNames, syncNotes, removeInvalid
 		}
 
 		// If there is currently an area restriction for a channel, ensure the location restrictions are correct.
-		if user.AreaRestriction.Valid && user.CommunityMembership != "" {
-			membership := bot.ParseJSONStringSlice(user.CommunityMembership)
-			if len(membership) > 0 {
-				areaRestriction := community.CalculateLocationRestrictions(r.cfg.Area.Communities, membership)
-				existing := bot.ParseJSONStringSlice(user.AreaRestriction.ValueOrZero())
-				if !bot.HaveSameContents(areaRestriction, existing) {
-					areaRestrictionJSON, _ := json.Marshal(areaRestriction)
-					updates["area_restriction"] = string(areaRestrictionJSON)
-				}
+		if user.AreaRestriction != nil && len(user.CommunityMembership) > 0 {
+			areaRestriction := community.CalculateLocationRestrictions(r.cfg.Area.Communities, user.CommunityMembership)
+			if !bot.HaveSameContents(areaRestriction, user.AreaRestriction) {
+				areaRestrictionJSON, _ := json.Marshal(areaRestriction)
+				updates["area_restriction"] = string(areaRestrictionJSON)
 			}
 		}
 
 		if len(updates) > 0 {
-			bot.UpdateHuman(r.db, user.ID, updates)
+			if err := r.humanStore.Update(user.ID, updates); err != nil {
+				r.log.Errorf("Update channel %s: %v", user.ID, err)
+				continue
+			}
 			r.log.Infof("Update channel %s %s", user.ID, name)
 		}
 	}
 
-	r.log.Debug("Channel membership to Poracle users complete...")
+	r.log.Info("Channel membership to Poracle users complete...")
 }
 
 // --- Helper functions ---
@@ -753,20 +733,34 @@ func hasAnyRole(roleList, required []string) bool {
 	return false
 }
 
-// nullableStr returns the dereferenced string, or "" if nil.
-func nullableStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
 // nullableSqlArg returns the string value or nil for SQL NULL.
 func nullableSqlArg(s *string) any {
 	if s == nil {
 		return nil
 	}
 	return *s
+}
+
+// parseBlockedAlertsJSON decodes a JSON-array string pointer into a []string.
+// Returns nil if the pointer is nil, the input is empty, or parsing fails.
+// Used to build *store.Human.BlockedAlerts from bot.BlockedAlerts output
+// (which returns a JSON-encoded string for backward compatibility).
+func parseBlockedAlertsJSON(blocked *string) []string {
+	if blocked == nil || *blocked == "" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(*blocked), &out); err != nil {
+		return nil
+	}
+	return out
+}
+
+// sameBlockedAlerts reports whether the user's current blocked_alerts slice
+// matches the JSON-encoded string that bot.BlockedAlerts produced. Both sides
+// are compared as sets (order-insensitive).
+func sameBlockedAlerts(current []string, desired *string) bool {
+	return bot.HaveSameContents(current, parseBlockedAlertsJSON(desired))
 }
 
 // stripEmojis removes common emoji characters from a display name.

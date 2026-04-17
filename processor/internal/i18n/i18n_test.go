@@ -176,6 +176,49 @@ func TestEmbeddedAllLanguages(t *testing.T) {
 	}
 }
 
+// TestZhCNPokemonNames verifies that the Simplified Chinese Pokemon names
+// seeded into processor/internal/i18n/locale/zh-cn.json are reachable via
+// the normal Bundle lookup path — the same path enrichment uses to resolve
+// {{name}} from the poke_{id} identifier. Catches regressions if the file
+// gets corrupted, overwritten by a Crowdin sync that drops keys, or if the
+// embed directive ever stops picking up zh-cn.json.
+func TestZhCNPokemonNames(t *testing.T) {
+	b := Load("")
+	tr := b.For("zh-cn")
+	if tr.Lang() != "zh-cn" {
+		t.Fatalf("expected zh-cn translator, got %s", tr.Lang())
+	}
+
+	// Sample a handful across the dex and verify Simplified Chinese
+	// characters (not Traditional, not English, not raw key).
+	cases := map[string]string{
+		"poke_1":   "妙蛙种子", // Bulbasaur — differs from zh-tw's 妙蛙種子
+		"poke_6":   "喷火龙",   // Charizard — differs from zh-tw's 噴火龍
+		"poke_25":  "皮卡丘",   // Pikachu — same in Simplified and Traditional
+		"poke_150": "超梦",    // Mewtwo — differs from zh-tw's 超夢
+		"poke_445": "烈咬陆鲨",  // Garchomp — differs from zh-tw's 烈咬陸鯊
+	}
+	for key, want := range cases {
+		got := tr.T(key)
+		if got != want {
+			t.Errorf("zh-cn %s = %q, want %q", key, got, want)
+		}
+	}
+
+	// Nidoran was split into ♀/♂ in modern masterfiles; both IDs should
+	// resolve to the user's single original translation.
+	for _, id := range []string{"poke_29", "poke_32"} {
+		if got := tr.T(id); got != "尼多兰" {
+			t.Errorf("zh-cn %s = %q, want 尼多兰", id, got)
+		}
+	}
+
+	// A UI key should still work alongside the new Pokemon names.
+	if got := tr.T("weather.unknown"); got != "未知" {
+		t.Errorf("zh-cn weather.unknown = %q, want 未知", got)
+	}
+}
+
 func TestAllKeysPresent(t *testing.T) {
 	b := Load("")
 	keys := []string{

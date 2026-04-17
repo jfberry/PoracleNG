@@ -55,7 +55,7 @@ func New(cfg Config) (*Bot, error) {
 	// Initialize reconciliation — needed for check_role periodic sync AND
 	// for /start DM registration (verifies channel membership via API).
 	if cfg.DTS != nil {
-		b.reconciliation = NewTelegramReconciliation(api, cfg.DB, cfg.Cfg, cfg.Translations, cfg.DTS)
+		b.reconciliation = NewTelegramReconciliation(api, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS)
 		if cfg.Cfg.Telegram.CheckRole {
 			go b.reconciliationLoop()
 		}
@@ -138,6 +138,19 @@ func (b *Bot) validateConfig() {
 		log.Infof("config: telegram.admins: %s", strings.Join(descs, ", "))
 	} else {
 		log.Warnf("config: telegram.admins is empty — no Telegram admins configured")
+	}
+
+	// Community admins (area security) — resolve each so operators can spot
+	// typos the same way they do for community channels.
+	for _, comm := range b.Cfg.Area.Communities {
+		if len(comm.Telegram.Admins) == 0 {
+			continue
+		}
+		var descs []string
+		for _, id := range comm.Telegram.Admins {
+			descs = append(descs, resolveUser(id))
+		}
+		log.Infof("config: community %s telegram.admins: %s", comm.Name, strings.Join(descs, ", "))
 	}
 
 	// Log delegated admins (channel tracking)

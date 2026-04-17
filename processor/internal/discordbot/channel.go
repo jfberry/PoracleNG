@@ -1,7 +1,6 @@
 package discordbot
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 
@@ -10,6 +9,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 var (
@@ -112,38 +112,34 @@ func (b *Bot) handleChannelAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 
 	// Check if already registered
-	existing, _ := db.SelectOneHumanFull(b.DB, targetID)
+	existing, _ := b.Humans.Get(targetID)
 	if existing != nil {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "👌")
 		return
 	}
 
 	// Insert new human
-	area := "[]"
+	var area []string
 	if areaName != "" {
-		areaJSON, _ := json.Marshal([]string{areaName})
-		area = string(areaJSON)
+		area = []string{areaName}
 	}
 
-	h := &db.HumanFull{
-		ID:                  targetID,
-		Type:                targetType,
-		Name:                targetName,
-		Enabled:             1,
-		Area:                area,
-		CommunityMembership: "[]",
+	h := &store.Human{
+		ID:       targetID,
+		Type:     targetType,
+		Name:     targetName,
+		Enabled:  true,
+		Area:     area,
+		Language: language,
 	}
-	if language != "" {
-		h.Language.SetValid(language)
-	}
-	if err := db.CreateHuman(b.DB, h); err != nil {
+	if err := b.Humans.Create(h); err != nil {
 		log.Errorf("discord bot: create human for channel/webhook %s: %v", targetID, err)
 		s.ChannelMessageSend(m.ChannelID, "Failed to register, check logs")
 		return
 	}
 
 	// Create default profile
-	if err := db.CreateDefaultProfile(b.DB, targetID, targetName, "[]", 0, 0); err != nil {
+	if err := b.Humans.CreateDefaultProfile(targetID, targetName, nil, 0, 0); err != nil {
 		log.Warnf("discord bot: create default profile for %s: %v", targetID, err)
 	}
 
@@ -190,7 +186,7 @@ func (b *Bot) handleChannelRemove(s *discordgo.Session, m *discordgo.MessageCrea
 		}
 
 		targetID := m.ChannelID
-		existing, _ := db.SelectOneHumanFull(b.DB, targetID)
+		existing, _ := b.Humans.Get(targetID)
 		if existing == nil {
 			prefix := b.Cfg.Discord.Prefix
 			if prefix == "" {

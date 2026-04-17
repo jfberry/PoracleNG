@@ -1,16 +1,12 @@
 // Package i18n provides message translation for the processor.
 //
-// Translations use flat key-value JSON files — the same format as the alerter's
-// locale files and pogo-translations. This means one format across the Go
-// processor, Node alerter, and React frontend.
-//
-// Placeholders use {0}, {1}, ... syntax (matching the alerter's convention).
+// Translations use flat key-value JSON files — the same format as
+// pogo-translations. Placeholders use {0}, {1}, ... syntax.
 //
 // Merge order (later wins):
 //  1. Embedded locale JSON  (bundled defaults for processor-specific messages)
 //  2. External locale dir   (e.g. resources/locale/ — game data + shared strings)
-//  3. Alerter locale dir    (e.g. alerter/locale/ — alerter message strings)
-//  4. Custom overrides      (e.g. config/custom.{locale}.json — admin overrides)
+//  3. Custom overrides      (e.g. config/custom.{locale}.json — admin overrides)
 //
 // Supported by Crowdin, Transifex, Weblate, POEditor, and most i18n platforms.
 package i18n

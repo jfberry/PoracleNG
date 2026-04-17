@@ -38,7 +38,7 @@ processor/                      # Go binary
     fort.go                     # Fort update webhook handler
     maxbattle.go                # Max battle webhook handler
     render.go                   # Render pool: processRenderJob, delivery job construction
-    test.go                     # poracle-test handlers (all 9 types)
+    test.go                     # poracle-test handlers (all 8 types)
     ...                         # One file per webhook type
   internal/
     config/                     # TOML config loader
@@ -74,6 +74,7 @@ processor/                      # Go binary
     ratelimit/                  # Per-destination alert rate limiting (not Discord API rate limiting)
     i18n/                       # Translation system (flat JSON, identifier keys, {0} placeholders)
       locale/                   # Embedded locale files (en.json, de.json, ...)
+        pokemon/                # Pokemon-name gap fillers for locales pogo-translations doesn't ship (zh-cn, ...); not a Crowdin source
     uicons/                     # Icon URL resolution (pokemon, raid, gym, weather) with scheduled index refresh
     staticmap/                  # Static map tile generation (tileservercache, google, osm, mapbox)
     geocoding/                  # Reverse/forward geocoding (nominatim, google) with pogreb + ttlcache
@@ -216,7 +217,7 @@ The processor renders DTS templates using `jfberry/raymond` (a fork of `mailgun/
 
 **Queue pressure**: When the render channel is >80% full, tile generation is skipped to reduce backpressure.
 
-**Shutdown ordering**: webhook workers → render channel (close) → render workers (drain) → dispatcher (stop) → sender (close) → static map (close).
+**Shutdown ordering** (`ProcessorService.Close` in `cmd/processor/main.go`): webhook workers → render channel (close) → render workers (drain) → dispatcher (stop, which stops its queue and tracker) → static map (close) → duplicates → rate limiter → gym state save → geocoder (close).
 
 ### 6. Message Delivery (Processor)
 
@@ -261,11 +262,15 @@ Delivery is handled via platform REST APIs (Discord API v10, Telegram Bot API).
 
 ## Rate Limiting
 
-Rate limiting is handled by the processor (`internal/ratelimit/`), applied before rendering:
+Rate limiting is handled by the processor (`internal/ratelimit/`) using a two-phase model: a cheap pre-filter at match time and the authoritative count at delivery time.
 
-- **Per-destination limits**: Configurable via `[alert_limits]` — `dm_limit` (default 20), `channel_limit` (default 40) per `timing_period` (default 240 minutes)
-- **Implementation**: Sliding window counter per destination ID. When a destination exceeds its limit, the matched payload is dropped and an i18n-translated rate limit message is sent to the user instead.
-- **`max_limits_before_stop`**: After N consecutive rate limit hits (default 10), the user is auto-disabled (`admin_disable = 1`) to prevent permanent flood. User must re-register with `!poracle`.
+- **Per-destination limits**: Configurable via `[alert_limits]` — `dm_limit` (default 20), `channel_limit` (default 40) per `timing_period` (default 240 **seconds**, ~4 min). Fixed/tumbling window: when the first message arrives the window starts and lasts `timing_period` seconds; a new window only begins after full expiry.
+- **Phase 1 — pre-filter (match time)**: After matching, each webhook handler calls `filterBlocked(matched)` which uses `Limiter.IsBlocked()` to drop users whose destination is currently over the limit. **Non-mutating** — it does not increment counters or fire notifications. This avoids burning render/enrichment work on destinations we already know are paused.
+- **Phase 2 — authoritative count (delivery time)**: `FairQueue.processJob` (in `internal/delivery/queue.go`) calls `Limiter.Check()` per job, immediately before `Sender.Send`. Only deliveries that actually go on the wire count against a destination's quota. `JustBreached` triggers `RateLimitHooks.OnBreach` (which dispatches the i18n notification); `Banned` triggers `OnBan` (which disables the user, sends a farewell, and posts to the shame channel if configured). Hooks are implemented by `ProcessorService` in `cmd/processor/helpers.go`.
+- **What does NOT count**:
+  - **Edits** of an already-tracked message (`EditKey` matched in `MessageTracker`) — these are mutations of a send we already counted.
+  - Jobs marked `BypassRateLimit=true` — used for the rate-limit notification itself and the ban farewell, so the limiter cannot swallow the message reporting on itself. Use `Dispatcher.DispatchBypass(job)` to enqueue these.
+- **`max_limits_before_stop`**: After N consecutive rate-limit breaches in 24h (default 10), the user is auto-disabled to prevent permanent flood. `disable_on_stop=true` sets `admin_disable=1` (user must re-register with `!poracle`); `false` sets `enabled=0` (user can `!start` again). A debounced state reload follows so the user is removed from matching.
 - **`blocked_alerts`**: Per-user JSON array in `humans` table (e.g., `["pokemon","raid"]`). Parsed into a `BlockedAlertsSet` map at state load for O(1) lookup. Blocks specific alert types without disabling the user entirely.
 - **Limit overrides**: `[alert_limits.overrides]` allows per-user or per-role custom limits (array-of-tables format in TOML).
 
@@ -303,9 +308,9 @@ Reconciliation syncs Discord role membership with Poracle user registration. Run
 ## API Security
 
 **Shared secret** (`x-poracle-secret`):
-- All `/api/*` endpoints are protected by the `X-Poracle-Secret` header matching `[processor] api_secret` (with `[alerter] api_secret` as a backward-compatible fallback — if the processor key is empty, the alerter key is copied over at config load)
+- All `/api/*` endpoints are protected by the `X-Poracle-Secret` header matching `[processor] api_secret` (with legacy `[alerter] api_secret` as a backward-compatible fallback — if the processor key is empty, the alerter key is copied over at config load)
 - If `api_secret` is empty/unset, auth is disabled (all requests allowed)
-- The `RequireSecret` middleware in `api/api.go` wraps all `/api/*` handlers
+- The `RequireSecretGin` middleware in `api/middleware.go` is applied to the `/api/*` route group in `cmd/processor/main.go`
 
 **Unprotected endpoints**:
 - `GET /health` — health check
@@ -611,13 +616,13 @@ Templates receive the full view object with all enriched data. Common fields: `{
 
 `processor/internal/i18n/`
 - Flat JSON files with **dotted identifier keys**: `{"rate_limit.reached": "Das Limit von {0}..."}`
-- Same `{0}` placeholder syntax as the legacy alerter locale files, so existing translated strings are compatible
+- `{0}` placeholder syntax
 - English is a first-class locale file (`en.json`), not hardcoded in source
 - Merge order (later wins):
-  1. Embedded (`processor/internal/i18n/locale/*.json`) — bundled processor messages
+  1. Embedded (`processor/internal/i18n/locale/*.json` and `processor/internal/i18n/locale/pokemon/*.json`) — bundled processor messages + Pokemon-name gap fillers
   2. `resources/locale/*.json` — game data from pogo-translations
-  3. `alerter/locale/*.json` — legacy shared strings (kept for backward compatibility)
-  4. `config/custom.{lang}.json` — admin overrides
+  3. `config/custom.{lang}.json` — admin overrides
+- The `locale/pokemon/` subdirectory is for Pokemon-name translations (`poke_{id}` keys) in locales pogo-translations doesn't ship — zh-cn currently. Files there merge into the same locale translator as the UI file (e.g. `pokemon/zh-cn.json` adds to the zh-cn translator alongside `locale/zh-cn.json`). Only Crowdin-managed files sit directly in `locale/`; `locale/pokemon/` is intentionally outside Crowdin's source list so translators for other languages aren't asked to re-translate Pokemon names that already come from gamelocale.
 - Identifier keys are stable: renaming English text doesn't break translations
 - **Per-key English fallback**: Non-English translators fall back to English on a per-key basis (not per-locale). After all locale files are loaded, `Bundle.LinkFallbacks()` links each non-English `Translator` to the English one. When `T("key")` finds no value in the user's language, it checks the English translator before returning the raw key. This means a German user still sees English pokemon names for any `poke_*` keys missing from the German locale files.
 
@@ -667,6 +672,27 @@ All tracking tables have: `id` (FK to humans), `profile_no`, `distance`, `templa
 
 Migrations in `processor/internal/db/migrations/` (SQL files, run on processor startup). The DSN includes `multiStatements=true` to support multi-statement migration files on fresh installations.
 
+### HumanStore boundary
+
+All `humans` and `profiles` table reads and mutations outside the store implementation go through `store.HumanStore` (`processor/internal/store/human.go`). The interface covers:
+
+- `Get` — full record (typed `*store.Human` with `bool` flags and `[]string` JSON columns) for cold paths that need parsed data.
+- `GetLite` — lightweight projection (`*store.HumanLite`) for hot paths (tracking CRUD `lookupHuman`) that only need ID / profile / language.
+- `ListByType`, `ListByTypeEnabled`, `ListByTypes`, `ListAll` — bulk queries.
+- `GetProfiles` / `SwitchProfile` / `AddProfile` / `DeleteProfile` — profile management.
+- Per-field setters (`SetEnabled`, `SetArea`, `SetLocation`, `SetAdminDisable`, etc.) plus a dynamic `Update(id, map)` escape hatch for partial updates that don't fit a dedicated setter.
+
+The only human/profile-related code remaining in `db/human_queries.go` is `DeleteHumanAndTracking` (used by the store itself for cross-table cascade) and the `trackingTables` list it walks. Everything a caller would reach for is on `store.HumanStore`.
+
+API handlers serialise through DTOs to preserve the legacy JSON wire format:
+- `api.HumanResponse` (`processor/internal/api/human_response.go`) mirrors the legacy `db.HumanFull` shape (int flags, JSON-string array columns, `null.String` for nullable columns). `humanToResponse(*store.Human)` adapts at the boundary.
+- `api.ProfileResponse` (`processor/internal/api/profile_response.go`) mirrors the legacy `db.ProfileRow` shape (area as JSON-encoded string). `profileToResponse(store.Profile)` / `profilesToResponse([]store.Profile)` adapt at the boundary.
+
+Key benefits this boundary provides:
+- **User-customised schemas are tolerated.** Explicit column lists in the store mean operators can add their own columns to `humans` (e.g. `sub_end` for subscription tracking) without the processor failing to scan.
+- **Typed end-state for internal code.** `db.HumanFull`, `db.HumanAPI`, `db.SelectOneHumanFull`, `db.SelectOneHuman`, and the `UpdateHuman*` helpers were retired; there is no raw-row shape outside the store.
+- **API wire format is preserved.** Existing clients (PoracleWeb) continue to receive the same JSON shape for every endpoint.
+
 ## Game Data
 
 The processor uses the **raw masterfile** (`master-latest-raw.json`) from Masterfile-Generator, split into `resources/rawdata/` (pokemon, forms, moves, types, items, invasions, weather). The masterdata API endpoints (`/api/masterdata/monsters`, `/api/masterdata/grunts`) build poracle-v2 format on-the-fly from the raw masterfile for PoracleWeb compatibility.
@@ -690,13 +716,36 @@ Resources are downloaded at startup (`resources.Download`):
 
 `resources/data/util.json` provides UI constants (teams, genders, types with colors/emoji, weather, generation ranges, raid levels, lures, pokestop events). Loaded via `gamedata.LoadUtilData`.
 
+## Tileserver
+
+Static map tiles are generated by an external tileserver (typically
+[tileservercache](https://github.com/123FLO321/SwiftTileserverCache)). The
+processor talks to it over HTTP; the rendered message carries a URL that
+Discord/Telegram fetch to display the image.
+
+### Configuration
+
+- `[geocoding] static_provider_url` — the **public** URL of the tileserver. Embedded in rendered messages; must be reachable by Discord/Telegram.
+- `[geocoding] static_internal_url` — optional **private** URL the processor uses for its own tileserver calls (render POST, pregenerate POST, upload-images pre-fetch). Defaults to `static_provider_url`. Set this when the public URL goes through a proxy/CDN (e.g. Cloudflare) and the processor can reach the tileserver directly — avoids proxy buffering/latency on the hot path.
+
+### Tile modes
+
+`cmd/processor/tilemode.go` decides per render batch:
+
+- `Skip` — template doesn't reference `{{staticMap}}`.
+- `Inline` — every destination supports upload-images (Discord with `uploadEmbedImages=true`). The processor POSTs for bytes directly (no pregenerate); bytes flow through `RenderJob.TileImageData` and attach to each `delivery.Job`. No second fetch.
+- `URL` — at least one destination needs a fetchable URL (Telegram always; Discord with `uploadEmbedImages=false`). The processor pregenerates; the returned URL is embedded in the rendered message; each consumer fetches the URL itself. If `uploadEmbedImages=true` and no Telegram/upload-off destinations are in the batch, this mode isn't used.
+- `URLWithBytes` — mixed batches where some destinations need a URL (Telegram / upload-off Discord) and some would benefit from prefetched bytes (Discord with `uploadEmbedImages=true`). The processor pregenerates once to obtain the public URL, then issues a single internal GET via `static_internal_url` for the bytes. The public URL goes into the message; the bytes attach to every `delivery.Job` in the batch. Delivery's existing `len(StaticMapData) > 0 && imageURL != ""` short-circuit in `delivery/discord.go` means Discord-upload jobs consume the bytes (no per-destination fetch), Telegram jobs ignore them, and upload-off Discord jobs also ignore them (because `NormalizeAndExtractImage` returns empty `imageURL` when `uploadImages=false`).
+
+Why `URLWithBytes` exists: before this mode, a single event fanning out to N Discord-upload destinations plus a Telegram destination triggered N separate downloads of the public URL from the processor (one per destination, inside each job's critical section). Each download was a chance for Cloudflare-style proxy buffering to fail — losing the map for that destination. `URLWithBytes` collapses those N downloads into one, routes it through the internal URL, and guarantees the same bytes for every Discord destination in the batch.
+
 ## Configuration
 
 Single TOML file at `config/config.toml`, used by the processor. See `config/config.example.toml` for all options with comments.
 
 Key sections: `[processor]`, `[database]`, `[geofence]`, `[pvp]`, `[weather]`, `[discord]`, `[telegram]`, `[geocoding]`, `[tuning]`, `[tracking]`, `[alert_limits]`, `[stats]`, `[logging]`.
 
-The `[alerter]` section is kept for backward-compatible `api_secret` reading only.
+The legacy `[alerter]` section is still read for backward-compatible `api_secret` only (users upgrading from older versions); all other alerter functionality has been absorbed into the processor.
 
 ## Deployment
 

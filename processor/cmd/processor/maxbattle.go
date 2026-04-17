@@ -70,7 +70,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.maxbattleMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("maxbattle").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("maxbattle").Inc()

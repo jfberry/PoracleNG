@@ -3,7 +3,7 @@
 # Only include settings you want to override — defaults are built in.
 
 [processor]
-host = "0.0.0.0"                        # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces
+host = "127.0.0.1"                      # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces. Defaults to 127.0.0.1 if unset, or the PORACLE_HOST env var if set (Dockerfile exports this as 0.0.0.0)
 port = 3030                              # processor takes the original Poracle port
 ip_whitelist = []
 ip_blacklist = []
@@ -310,6 +310,15 @@ night_style = ""
 #   google, osm, or mapbox
 static_provider = "none"
 static_provider_url = ""
+# static_internal_url - optional private URL the processor uses for its own
+# tileserver calls (render POST, pregenerate POST, upload-images pre-fetch).
+# Leave empty to reuse static_provider_url. Useful when static_provider_url
+# points at a public HTTPS endpoint (e.g. behind Cloudflare) but the
+# processor can reach the tileserver directly on the internal network —
+# avoids proxy buffering / intermittent body-read timeouts for the
+# processor's own fetches. The URL embedded in rendered messages
+# (what Discord/Telegram fetch) always uses static_provider_url.
+static_internal_url = ""
 # geocoding_key - google API keys for geolocation (array, poracle will cycle)
 geocoding_key = [""]
 # static_key - google or mapquest keys for tiles (array, poracle will cycle)

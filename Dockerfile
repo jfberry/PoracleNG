@@ -31,11 +31,17 @@ COPY scripts/ scripts/
 RUN mkdir -p config/.cache/geofences resources/rawdata resources/gamelocale logs backups
 
 # Pre-packaged game data (util.json is also embedded in the Go binary,
-# but the alerter reads it from disk)
+# but some code paths read it from disk)
 COPY resources/data/util.json resources/data/util.json
 
 # Bundled defaults (util.json is now embedded in the Go binary)
 COPY fallbacks/ fallbacks/
+
+# Bind to all interfaces inside the container so docker-compose port
+# mapping (and bridge networking) can reach the processor. The code
+# default is 127.0.0.1 for bare-metal safety; this env var flips it
+# without requiring users to touch config.toml.
+ENV PORACLE_HOST=0.0.0.0
 
 EXPOSE 3030
 
