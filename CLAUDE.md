@@ -74,6 +74,7 @@ processor/                      # Go binary
     ratelimit/                  # Per-destination alert rate limiting (not Discord API rate limiting)
     i18n/                       # Translation system (flat JSON, identifier keys, {0} placeholders)
       locale/                   # Embedded locale files (en.json, de.json, ...)
+        pokemon/                # Pokemon-name gap fillers for locales pogo-translations doesn't ship (zh-cn, ...); not a Crowdin source
     uicons/                     # Icon URL resolution (pokemon, raid, gym, weather) with scheduled index refresh
     staticmap/                  # Static map tile generation (tileservercache, google, osm, mapbox)
     geocoding/                  # Reverse/forward geocoding (nominatim, google) with pogreb + ttlcache
@@ -618,9 +619,10 @@ Templates receive the full view object with all enriched data. Common fields: `{
 - `{0}` placeholder syntax
 - English is a first-class locale file (`en.json`), not hardcoded in source
 - Merge order (later wins):
-  1. Embedded (`processor/internal/i18n/locale/*.json`) — bundled processor messages
+  1. Embedded (`processor/internal/i18n/locale/*.json` and `processor/internal/i18n/locale/pokemon/*.json`) — bundled processor messages + Pokemon-name gap fillers
   2. `resources/locale/*.json` — game data from pogo-translations
   3. `config/custom.{lang}.json` — admin overrides
+- The `locale/pokemon/` subdirectory is for Pokemon-name translations (`poke_{id}` keys) in locales pogo-translations doesn't ship — zh-cn currently. Files there merge into the same locale translator as the UI file (e.g. `pokemon/zh-cn.json` adds to the zh-cn translator alongside `locale/zh-cn.json`). Only Crowdin-managed files sit directly in `locale/`; `locale/pokemon/` is intentionally outside Crowdin's source list so translators for other languages aren't asked to re-translate Pokemon names that already come from gamelocale.
 - Identifier keys are stable: renaming English text doesn't break translations
 - **Per-key English fallback**: Non-English translators fall back to English on a per-key basis (not per-locale). After all locale files are loaded, `Bundle.LinkFallbacks()` links each non-English `Translator` to the English one. When `T("key")` finds no value in the user's language, it checks the English translator before returning the raw key. This means a German user still sees English pokemon names for any `poke_*` keys missing from the German locale files.
 
