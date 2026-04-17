@@ -364,6 +364,7 @@
   "language.es": "西班牙语",
   "language.sv": "瑞典语",
   "language.zh-cn": "简体中文",
+  "language.ja": "日语",
 
   "msg.help.text": "**可用命令：**\n{0}track <宝可梦> [iv:N] [cp:N] [level:N] [d:N] — 追踪宝可梦\n{0}untrack <宝可梦> — 移除宝可梦追踪\n{0}raid <宝可梦|level:N|legendary> [d:N] — 追踪团战\n{0}egg <level:N|legendary|mega> [d:N] — 追踪蛋\n{0}quest <宝可梦|stardust|energy:宝可梦|candy:宝可梦> — 追踪任务\n{0}invasion [everything|<类型>] — 追踪入侵\n{0}lure <类型|everything> — 追踪诱饵\n{0}gym <队伍|everything> [slot_changes] — 追踪道馆\n{0}nest <宝可梦|everything> — 追踪巢穴\n{0}maxbattle <宝可梦|level:N> — 追踪极巨战\n{0}fort <pokestop|gym|everything> — 追踪据点更新\n{0}tracked — 显示所有追踪\n{0}script — 将追踪导出为命令\n{0}area [list|add|remove] — 管理区域\n{0}location <纬度,经度> — 设置位置\n{0}profile [list|add|remove|switch] — 管理配置\n{0}language <代码> — 设置语言\n{0}start / {0}stop — 启用/停用提醒\n{0}version — 显示版本"
 }

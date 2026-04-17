@@ -508,6 +508,7 @@
   "language.ru": "Ruso",
   "language.sv": "Sueco",
   "language.zh-cn": "Chino (simplificado)",
+  "language.ja": "Japonés",
 
   "msg.help.text": "**Comandos disponibles:**\n{0}track <pokemon> [iv:N] [pc:N] [nivel:N] [d:N] — Rastrear pokemon\n{0}untrack <pokemon> — Dejar de rastrear pokemon\n{0}raid <pokemon|nivel:N|legendario> [d:N] — Rastrear incursiones\n{0}egg <nivel:N|legendario|mega> [d:N] — Rastrear huevos\n{0}quest <pokemon|polvo|energía:pokemon|caramelo:pokemon> — Rastrear misiones\n{0}invasion [todo|<tipo>] — Rastrear invasiones\n{0}lure <tipo|todo> — Rastrear cebos\n{0}gym <equipo|todo> [cambios de espacio] — Rastrear gimnasios\n{0}nest <pokemon|todo> — Rastrear nidos\n{0}maxbattle <pokemon|nivel:N> — Rastrear maxibatallas\n{0}fort <pokeparada|gimnasio|todo> — Rastrear actualizaciones de fort\n{0}tracked — Mostrar seguimiento\n{0}script — Exportar seguimiento como comandos\n{0}area [lista|agregar|eliminar] — Gestionar áreas\n{0}ubicación <lat,lon> — Configurar ubicación\n{0}profile [lista|agregar|eliminar|cambiar] — Gestionar perfiles\n{0}idioma <código> — Configurar idioma\n{0}start / {0}stop — Activar/desactivar alertas\n{0}version — Mostrar versión"
 }
