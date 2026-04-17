@@ -47,7 +47,7 @@ func HandleStartHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := deps.Humans.Get(id)
+		human, err := deps.Humans.GetLite(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for start: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -58,14 +58,23 @@ func HandleStartHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		if err := deps.Humans.SetEnabled(id, true); err != nil {
+		if err := deps.Humans.SetEnabledWithFails(id); err != nil {
 			log.Errorf("Humans API: start human: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
 		reloadState(deps)
-		trackingJSONOK(c, nil)
+
+		tr := translatorFor(deps, human)
+		language := resolveLanguage(deps, human)
+		silent := isSilent(c)
+		message := tr.T("msg.start.success")
+		if !silent && message != "" {
+			sendConfirmation(deps, human, message, language)
+		}
+
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -78,7 +87,7 @@ func HandleStopHuman(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		human, err := deps.Humans.Get(id)
+		human, err := deps.Humans.GetLite(id)
 		if err != nil {
 			log.Errorf("Humans API: lookup human for stop: %s", err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -96,7 +105,16 @@ func HandleStopHuman(deps *TrackingDeps) gin.HandlerFunc {
 		}
 
 		reloadState(deps)
-		trackingJSONOK(c, nil)
+
+		tr := translatorFor(deps, human)
+		language := resolveLanguage(deps, human)
+		silent := isSilent(c)
+		message := tr.Tf("msg.stop.success", commandPrefixForHuman(deps, human), tr.T("cmd.start"))
+		if !silent && message != "" {
+			sendConfirmation(deps, human, message, language)
+		}
+
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
