@@ -261,7 +261,7 @@ func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string)
 		keys = common
 		pregenKeys = keys
 	case "gym":
-		typeFields := []string{"team_id", "slotsAvailable", "inBattle", "ex"}
+		typeFields := []string{"teamId", "slotsAvailable", "inBattle", "ex"}
 		keys = append(common, typeFields...)
 		pregenKeys = keys
 	case "nest":
