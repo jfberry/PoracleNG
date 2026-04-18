@@ -1,0 +1,22 @@
+[{
+  "id": "start",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!start",
+      "description": "Resume alert delivery after you've paused it with `{{prefix}}stop`.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}start` — re-enable alerts. Your tracking rules are preserved while alerts are paused, so this immediately resumes the alerts you had before."
+        },
+        {
+          "name": "Related",
+          "value": "`{{prefix}}stop` — pause alerts without losing your tracking rules\n`{{prefix}}poracle` — full registration (new users)"
+        }
+      ]
+    }
+  }
+}]

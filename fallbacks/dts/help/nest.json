@@ -1,0 +1,38 @@
+[{
+  "id": "nest",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!nest",
+      "description": "Alerts for pokemon nest spawns — reliable repeat spawn points as reported by nest data sources.",
+      "fields": [
+        {
+          "name": "By pokemon",
+          "value": "`{{prefix}}nest charmander`\n`{{prefix}}nest dratini larvitar beldum d:3000`\n`{{prefix}}nest everything` — any nest (likely a lot of alerts!)"
+        },
+        {
+          "name": "Minimum spawn rate",
+          "value": "`minspawn:10` — only nests with 10+ spawns per hour (helps filter out low-activity reports)"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:3000` — nests are typically worth larger radii than live alerts\n`area:region_north`"
+        },
+        {
+          "name": "Message flags",
+          "value": "`clean` — auto-delete when the nest rotates\n`ping`"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}nest remove charmander`\n`{{prefix}}nest remove everything`\n`{{prefix}}untrack id:<N>`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

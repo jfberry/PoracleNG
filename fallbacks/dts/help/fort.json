@@ -1,0 +1,38 @@
+[{
+  "id": "fort",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!fort",
+      "description": "Alerts for pokestop and gym location updates — new stops appearing, removed stops, renames, location moves, photo changes.",
+      "fields": [
+        {
+          "name": "Fort type",
+          "value": "`{{prefix}}fort pokestop` — only pokestops\n`{{prefix}}fort gym` — only gyms\n`{{prefix}}fort everything` — both"
+        },
+        {
+          "name": "Change types",
+          "value": "`new` — new stops/gyms being added\n`removal` — stops being removed\n`name` — name changes\n`location` — location moves\n`photo` — photo updates\n`include_empty` — also alert on empty/no-change events (noisy)"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:2000`\n`area:region_north`"
+        },
+        {
+          "name": "Message flags",
+          "value": "`ping`\n`clean` — auto-delete (fort changes don't have a natural expiry, so clean has little effect)"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}fort remove pokestop`\n`{{prefix}}fort remove everything`\n`{{prefix}}untrack id:<N>`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

@@ -1,0 +1,42 @@
+[{
+  "id": "quest",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!quest",
+      "description": "Alerts for field research task rewards at pokestops.",
+      "fields": [
+        {
+          "name": "Pokemon rewards",
+          "value": "`{{prefix}}quest pikachu`\n`{{prefix}}quest pikachu charmander d:500` — either pokemon as a reward, within 500m\n`{{prefix}}quest shiny pikachu` — only tasks that can give a shiny"
+        },
+        {
+          "name": "Item rewards — use underscores for multi-word names",
+          "value": "`{{prefix}}quest razz_berry`\n`{{prefix}}quest golden_razz_berry`\n`{{prefix}}quest rare_candy`\n`{{prefix}}quest silver_pinap_berry`\n`{{prefix}}quest fast_tm charged_tm`\n\nUse `{{prefix}}info items` to see every item name the bot recognises — the list it prints is the exact token to use here (replacing spaces with underscores)."
+        },
+        {
+          "name": "Stardust / mega energy / candy",
+          "value": "`{{prefix}}quest stardust:1000` — tasks rewarding 1000+ stardust\n`{{prefix}}quest energy:charizard` — Mega Charizard energy\n`{{prefix}}quest candy:lapras` — rare candy awarded specifically for Lapras\n\nMultiple rewards in one command are OR-matched:\n`{{prefix}}quest pikachu rare_candy silver_pinap_berry`"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:500`\n`area:city_centre`"
+        },
+        {
+          "name": "Message flags",
+          "value": "`clean` — auto-delete when the quest expires\n`edit` — single message edited in place\n`ping`"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}quest remove pikachu`\n`{{prefix}}quest remove all_items` — every item-reward rule\n`{{prefix}}quest remove all_pokemon` — every pokemon-reward rule\n`{{prefix}}quest remove stardust`\n`{{prefix}}untrack id:<N>`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

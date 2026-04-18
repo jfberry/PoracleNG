@@ -1,0 +1,34 @@
+[{
+  "id": "lure",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!lure",
+      "description": "Alerts for lure modules active at pokestops.",
+      "fields": [
+        {
+          "name": "Lure types",
+          "value": "`{{prefix}}lure glacial` — Glacial Lure (ice/water)\n`{{prefix}}lure mossy` — Mossy Lure (bug/grass/poison)\n`{{prefix}}lure magnetic` — Magnetic Lure (electric/rock/steel)\n`{{prefix}}lure rainy` — Rainy Lure (psychic-exclusive spawns in the rain)\n`{{prefix}}lure sparkly` — Sparkly Lure\n`{{prefix}}lure normal` — standard Lure Module\n`{{prefix}}lure everything` — any lure"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:500`\n`area:city_centre`"
+        },
+        {
+          "name": "Message flags",
+          "value": "`clean` — auto-delete when the lure expires\n`edit` — single message edited in place\n`ping`"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}lure remove mossy`\n`{{prefix}}lure remove everything`\n`{{prefix}}untrack id:<N>`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

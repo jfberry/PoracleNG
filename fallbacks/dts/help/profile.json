@@ -1,0 +1,30 @@
+[{
+  "id": "profile",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!profile",
+      "description": "Separate sets of tracking rules that you can switch between — e.g. one profile for home, another for work, another for weekends.",
+      "fields": [
+        {
+          "name": "View",
+          "value": "`{{prefix}}profile list` — list your profiles\n`{{prefix}}profile` — show current profile"
+        },
+        {
+          "name": "Create, switch, delete",
+          "value": "`{{prefix}}profile add work` — create a new profile named \"work\"\n`{{prefix}}profile switch work` — make \"work\" the active profile\n`{{prefix}}profile remove work` — delete \"work\" and its tracking"
+        },
+        {
+          "name": "Auto-switch by time",
+          "value": "`{{prefix}}profile settime mon09:00 tue18:30 weekday09:00 weekend10:00`\n\nTimes are when the profile becomes active. Use `monHH:MM`, `weekdayHH:MM`, `weekendHH:MM` — the processor switches profiles automatically at those times each day."
+        },
+        {
+          "name": "Copy between profiles",
+          "value": "`{{prefix}}profile copyto work` — copy the current profile's tracking to \"work\"\n`{{prefix}}profile copyto all` — copy to every other profile"
+        }
+      ]
+    }
+  }
+}]

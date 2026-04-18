@@ -1,0 +1,50 @@
+[{
+  "id": "raid",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!raid",
+      "description": "Alerts for raid bosses at gyms. Track by pokemon name, raid level, or both.",
+      "fields": [
+        {
+          "name": "By pokemon",
+          "value": "`{{prefix}}raid tyranitar`\n`{{prefix}}raid tyranitar metagross salamence d:1000` — any of these, within 1km"
+        },
+        {
+          "name": "By level",
+          "value": "`{{prefix}}raid level:5` — all 5-star raids\n`{{prefix}}raid legendary` — alias for level:5\n`{{prefix}}raid mega` — level:6\n`{{prefix}}raid elite` — elite raids\n`{{prefix}}raid shadow` — shadow raids (level:15)\n`{{prefix}}raid ultra beast` — level:8\n`{{prefix}}raid primal` — level:10"
+        },
+        {
+          "name": "Team and gym filters",
+          "value": "`team:instinct` / `team:valor` / `team:mystic` / `team:harmony`\n`ex` — EX raid eligible gyms only\n`gym:gymname` — a specific gym by name\n\nExample: `{{prefix}}raid level:5 team:valor d:1500`"
+        },
+        {
+          "name": "Move filter",
+          "value": "`move:meteor_mash` — only if the boss has this move (use underscores for multi-word move names)"
+        },
+        {
+          "name": "RSVP",
+          "value": "`rsvp` — include raid RSVP updates in the alert\n`rsvp_only` — only send RSVP change updates, not the initial spawn"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:1500` — within 1500m of your location\n`area:city_centre` — only in a specific area"
+        },
+        {
+          "name": "Message flags",
+          "value": "`clean` — auto-delete when the raid ends\n`edit` — single message, edited in place as RSVP counts change\n`ping` — @-mention you"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}raid remove tyranitar`\n`{{prefix}}raid remove level:5`\n`{{prefix}}raid remove everything`\n`{{prefix}}untrack id:12` — remove by UID from `{{prefix}}tracked`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

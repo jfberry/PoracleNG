@@ -1,0 +1,38 @@
+[{
+  "id": "index",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "Help",
+      "description": "Type `{{prefix}}help <command>` for details on any of the commands below.",
+      "fields": [
+        {
+          "name": "Tracking commands",
+          "value": "`{{prefix}}help track` — alerts for specific pokemon (IV, CP, PVP)\n`{{prefix}}help raid` — raid bosses at gyms\n`{{prefix}}help egg` — raid eggs before they hatch\n`{{prefix}}help quest` — field research tasks\n`{{prefix}}help incident` — Team Rocket, Kecleon, Showcases, gold stops\n`{{prefix}}help lure` — lure modules at pokestops\n`{{prefix}}help nest` — pokemon nest spawns\n`{{prefix}}help gym` — gym team changes and battles\n`{{prefix}}help fort` — pokestop/gym location updates\n`{{prefix}}help maxbattle` — dynamax/gigantamax raids"
+        },
+        {
+          "name": "Review and remove tracking",
+          "value": "`{{prefix}}help tracked` — list everything you're tracking\n`{{prefix}}help untrack` — remove tracking entries\n`{{prefix}}help script` — export your tracking as commands"
+        },
+        {
+          "name": "Your account and alerts",
+          "value": "`{{prefix}}help poracle` — register (or re-enable) your account\n`{{prefix}}help area` — choose which areas to receive alerts for\n`{{prefix}}help location` — set your home/current location\n`{{prefix}}help profile` — multiple tracking profiles (home/work/weekend)\n`{{prefix}}help language` — change bot response language\n`{{prefix}}help start` / `{{prefix}}help stop` — pause or resume alerts\n`{{prefix}}help unregister` — delete your account and all tracking"
+        },
+        {
+          "name": "{{#if userIsAdmin}}Admin commands{{/if}}",
+          "value": "{{#if userIsAdmin}}`{{prefix}}help enable` / `{{prefix}}help disable` — manage other users\n`{{prefix}}help broadcast` — send a message to everyone\n`{{prefix}}help userlist` — list registered users\n`{{prefix}}help community` — area-security community membership{{/if}}"
+        },
+        {
+          "name": "Filter syntax (applies to most tracking commands)",
+          "value": "All filters use `key:value` form — e.g. `iv:100`, `cp:2000-3000`, `level:25-35`, `d:500`. Ranges are written `low-high` and are always preferred over separate `miniv`/`maxiv` variants — easier to read and easier to change. Use `everything` as the pokemon name to match all pokemon."
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

@@ -1,0 +1,22 @@
+[{
+  "id": "unregister",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!unregister",
+      "description": "Permanently delete your account and every tracking rule you have. This cannot be undone.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}unregister` — deletes you. You'll have to `{{prefix}}poracle` again from scratch if you change your mind."
+        },
+        {
+          "name": "Softer alternative",
+          "value": "If you just want alerts to stop for a while, use `{{prefix}}stop` instead — your tracking rules are preserved and `{{prefix}}start` brings them all back."
+        }
+      ]
+    }
+  }
+}]

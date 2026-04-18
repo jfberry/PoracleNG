@@ -1,0 +1,30 @@
+[{
+  "id": "untrack",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!untrack",
+      "description": "Remove pokemon tracking entries. Also available as `{{prefix}}track remove <pokemon>` if you prefer that style.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}untrack pikachu` — remove all pikachu tracking\n`{{prefix}}untrack pikachu charmander` — remove multiple\n`{{prefix}}untrack everything` — wipe every pokemon tracking entry in your current profile\n`{{prefix}}untrack id:45` — remove one specific entry by its UID (see `{{prefix}}tracked` — each row shows `[id:XX]`)"
+        },
+        {
+          "name": "Targeted removal by ID",
+          "value": "`{{prefix}}untrack id:45` is the safest way to remove a single rule without affecting other entries for the same pokemon. Use `{{prefix}}tracked` to see every rule's ID before using it. `{{prefix}}untrack id:45` also works for raid, egg, quest, etc.; it's not pokemon-specific."
+        },
+        {
+          "name": "Removing by filter",
+          "value": "`{{prefix}}untrack gen:1` — remove all Kanto pokemon tracking\n`{{prefix}}untrack type:dragon` — remove all dragon-type tracking\n\nNote: this removes any rule that named a matching pokemon, not rules containing the filter itself."
+        },
+        {
+          "name": "Other commands have their own remove form",
+          "value": "`{{prefix}}raid remove <pokemon|level>`\n`{{prefix}}egg remove <level>`\n`{{prefix}}quest remove <reward>`\n`{{prefix}}lure remove <type>`\n…and so on for every tracking type. Or use `{{prefix}}untrack id:<N>` which works regardless of type."
+        }
+      ]
+    }
+  }
+}]

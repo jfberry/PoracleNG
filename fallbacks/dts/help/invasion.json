@@ -1,0 +1,26 @@
+[{
+  "id": "invasion",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!invasion",
+      "description": "Alias for `{{prefix}}incident`. Both commands do the same thing, but `{{prefix}}incident` is preferred because it covers more than just Team Rocket grunts — Kecleon, Pokemon Showcases, and gold pokestops all come through the same webhook.",
+      "fields": [
+        {
+          "name": "See the full help",
+          "value": "Type `{{prefix}}help incident` for the complete list of grunt types, leaders, and other incident kinds you can track."
+        },
+        {
+          "name": "Quick examples",
+          "value": "`{{prefix}}invasion dragon` — dragon-type grunts\n`{{prefix}}invasion kecleon` — Kecleon appearances\n`{{prefix}}invasion giovanni` — Giovanni incidents\n`{{prefix}}invasion remove everything`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

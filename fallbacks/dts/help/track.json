@@ -1,0 +1,46 @@
+[{
+  "id": "track",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!track",
+      "description": "Alerts for specific pokemon spawns. The most flexible command — supports IV, CP, level, stat, PVP, form, size, gender, distance, and area filters.",
+      "fields": [
+        {
+          "name": "Basic usage",
+          "value": "`{{prefix}}track pikachu`\n`{{prefix}}track pikachu charmander squirtle bulbasaur d:500`\n`{{prefix}}track everything iv:100 d:1000` — every 100% spawn within 1km"
+        },
+        {
+          "name": "IV / CP / level (ranges are preferred over min/max)",
+          "value": "`iv:90-100` — between 90% and 100% IV\n`cp:1500-2500` — between 1500 and 2500 CP\n`level:25-35` — only level 25 to 35\n`atk:13-15 def:13-15 sta:13-15` — individual IV ranges\n\n*Tip: always prefer `iv:90-100` over `miniv:90 maxiv:100`. Both work, the range form reads better and is easier to edit later.*"
+        },
+        {
+          "name": "PVP ranks",
+          "value": "`great:1-10` — Great league rank 1-10\n`ultra:1-10` — Ultra league rank 1-10\n`little:1-10` — Little league rank 1-10\n\nCombine multiple leagues in one command:\n`{{prefix}}track pikachu great:1-10 ultra:1-10`\n\n`greatcp:1400` sets a minimum league CP floor (often used together with `great:1-10`)."
+        },
+        {
+          "name": "Forms",
+          "value": "`form:alolan`, `form:galarian`, `form:hisuian`, `form:paldean`\n`form:shadow`, `form:purified` — team rocket shadows\n`form:santa`, `form:halloween`, etc. — costumed forms\n\nExample: `{{prefix}}track pidgey form:alolan`"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:1000` — within 1000 metres of your `!location`\n`area:sw_london` — only inside a specific geofence area (see `{{prefix}}help area`)\n\nIf you set neither, alerts come from every area you've added via `{{prefix}}area`."
+        },
+        {
+          "name": "Message flags",
+          "value": "`clean` — auto-delete the alert when the pokemon despawns\n`edit` — keep one message and edit it in place as the pokemon's data changes\n`ping` — @-mention you when the alert fires\n`template:2` — use a specific DTS template (see `{{prefix}}info templates`)"
+        },
+        {
+          "name": "Remove tracking",
+          "value": "`{{prefix}}untrack pikachu` — remove all pikachu tracking\n`{{prefix}}track remove pikachu` — same as above\n`{{prefix}}untrack id:45` — remove one specific entry by ID (see `{{prefix}}tracked`)"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

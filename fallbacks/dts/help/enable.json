@@ -1,0 +1,22 @@
+[{
+  "id": "enable",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!enable (admin)",
+      "description": "Re-enable a user that's been disabled (rate-limit auto-disable, admin disable, or lost role).",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}enable user:<discord_id>`\n`{{prefix}}enable user:12345 user:67890` — multiple"
+        },
+        {
+          "name": "Related",
+          "value": "`{{prefix}}disable` — disable a user\n`{{prefix}}userlist` — list registered users\n`{{prefix}}help broadcast` — send a message to all users"
+        }
+      ]
+    }
+  }
+}]

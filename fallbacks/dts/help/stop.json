@@ -1,0 +1,26 @@
+[{
+  "id": "stop",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!stop",
+      "description": "Pause all alert delivery without losing your tracking rules.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}stop` — stop receiving alerts. Tracking rules are preserved.\n`{{prefix}}start` — resume."
+        },
+        {
+          "name": "When to use it",
+          "value": "Going on holiday, in a long meeting, or just overwhelmed with notifications. `{{prefix}}stop` is preferable to `{{prefix}}untrack everything` because you keep all your filters for when you come back."
+        },
+        {
+          "name": "Related",
+          "value": "`{{prefix}}unregister` — delete your account and all tracking (permanent)"
+        }
+      ]
+    }
+  }
+}]

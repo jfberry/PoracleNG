@@ -1,0 +1,38 @@
+[{
+  "id": "egg",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!egg",
+      "description": "Alerts for raid eggs before they hatch — useful for knowing a raid boss is incoming so you can plan.",
+      "fields": [
+        {
+          "name": "By level",
+          "value": "`{{prefix}}egg level:5` — level 5 eggs\n`{{prefix}}egg level:3-6` — range\n`{{prefix}}egg legendary` — level:5\n`{{prefix}}egg mega` — level:6\n`{{prefix}}egg elite` — elite raid eggs\n`{{prefix}}egg primal` — level:10"
+        },
+        {
+          "name": "Team and gym filters",
+          "value": "`team:instinct` / `team:valor` / `team:mystic` / `team:harmony`\n`ex` — EX raid eligible gyms only\n\nExample: `{{prefix}}egg level:5 team:valor d:1500`"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:1500` — within 1500m of your location\n`area:city_centre`"
+        },
+        {
+          "name": "RSVP and message flags",
+          "value": "`rsvp` — include RSVP updates\n`rsvp_only` — only RSVP updates\n`clean` — auto-delete after hatch\n`edit` — single message edited in place\n`ping`"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}egg remove level:5`\n`{{prefix}}egg remove everything`\n`{{prefix}}untrack id:<N>`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

@@ -1,0 +1,42 @@
+[{
+  "id": "gym",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!gym",
+      "description": "Alerts for gym control changes and battle activity.",
+      "fields": [
+        {
+          "name": "By team",
+          "value": "`{{prefix}}gym valor` — every gym takeover involving Valor\n`{{prefix}}gym instinct mystic` — either team\n`{{prefix}}gym everything` — every gym change in your area\n\nTeam names: `valor`, `mystic`, `instinct`, `harmony`, plus color aliases `red`/`blue`/`yellow`/`gray`."
+        },
+        {
+          "name": "Change types",
+          "value": "`slot_changes` — include alerts when a defender is added or removed (not just full takeovers)\n`battle_changes` — include live-battle notifications\n`ex` — EX raid eligible gyms only"
+        },
+        {
+          "name": "Gym filter",
+          "value": "`gym:gymname` — only a specific gym by name"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:1500`\n`area:city_centre`"
+        },
+        {
+          "name": "Message flags",
+          "value": "`clean` — auto-delete (less useful for gym changes since they don't have an obvious expiry)\n`ping`"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}gym remove valor`\n`{{prefix}}gym remove everything`\n`{{prefix}}untrack id:<N>`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

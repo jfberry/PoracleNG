@@ -1,0 +1,26 @@
+[{
+  "id": "community",
+  "type": "help",
+  "platform": "",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "!community (admin)",
+      "description": "Manage a user's membership in area-security communities. Each community defines which geofence areas its members can select and an optional location restriction.",
+      "fields": [
+        {
+          "name": "View",
+          "value": "`{{prefix}}community list` — list all configured communities\n`{{prefix}}community show user:<id>` — show a user's current memberships\n`{{prefix}}community show channel:<id>` / `name:<webhookname>` — same for channels/webhooks"
+        },
+        {
+          "name": "Add and remove",
+          "value": "`{{prefix}}community add london user:<id>` — put this user in the \"london\" community\n`{{prefix}}community remove london user:<id>` — remove\n`{{prefix}}community clear user:<id>` — remove from every community"
+        },
+        {
+          "name": "How it relates to the rest of the bot",
+          "value": "Community membership is usually synced automatically from Discord roles (see the reconciliation settings in config.toml). Use `{{prefix}}community` as a manual override — e.g. for Telegram users, for webhooks, or when you need to grant access outside Discord."
+        }
+      ]
+    }
+  }
+}]
