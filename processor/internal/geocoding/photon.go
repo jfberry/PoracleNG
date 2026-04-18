@@ -15,23 +15,24 @@ import (
 // Photon implements Provider using the Photon geocoder API (komoot/photon).
 // Photon returns GeoJSON responses based on OpenStreetMap data.
 type Photon struct {
-	baseURL    string
-	client     *http.Client
-	formatter  *ocfmt.Formatter
-	useCompact bool // if true, use compact format instead of OpenCage templates
+	baseURL   string
+	client    *http.Client
+	formatter *ocfmt.Formatter
 }
 
-// NewPhoton creates a Photon provider. If useCompact is true, FormattedAddress
-// uses the compact "suburb: street, city" format instead of OpenCage templates.
-func NewPhoton(baseURL string, timeout time.Duration, useCompact bool) *Photon {
+// NewPhoton creates a Photon provider.
+// FormattedAddress is always populated via OpenCage country-specific
+// templates (ocfmt). Callers who want a different shape can drive it via
+// the existing address_format template with the per-field helpers
+// ({{{streetName}}}, {{{suburb}}}, {{{city}}}, etc.).
+func NewPhoton(baseURL string, timeout time.Duration) *Photon {
 	if timeout == 0 {
 		timeout = 10 * time.Second
 	}
 	return &Photon{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		client:     &http.Client{Timeout: timeout},
-		formatter:  ocfmt.Global(),
-		useCompact: useCompact,
+		baseURL:   strings.TrimRight(baseURL, "/"),
+		client:    &http.Client{Timeout: timeout},
+		formatter: ocfmt.Global(),
 	}
 }
 
@@ -81,7 +82,12 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 	if err != nil {
 		return nil, fmt.Errorf("photon: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// Drain remaining body before close so HTTP/1.1 keep-alive can
+		// reuse the connection. Matches the pattern in nominatim/google.
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= 500 {
 		return nil, fmt.Errorf("photon: server error %d", resp.StatusCode)
@@ -119,7 +125,7 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 	countryCode := strings.ToUpper(strings.TrimSpace(props.CountryCode))
 	suburb := firstNonEmpty(components["suburb"], strings.TrimSpace(props.District))
 
-	streetName := photonStreetName(props, components, p.useCompact)
+	streetName := photonStreetName(props, components)
 
 	addr := &Address{
 		Latitude:      resultLat,
@@ -136,12 +142,8 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 		Suburb:        suburb,
 	}
 
-	// Build FormattedAddress
-	if p.useCompact {
-		addr.FormattedAddress = FormatCompactAddress(*addr)
-	} else {
-		addr.FormattedAddress = p.formatOpenCage(components, countryCode)
-	}
+	// Build FormattedAddress via OpenCage country-specific templates.
+	addr.FormattedAddress = p.formatOpenCage(components, countryCode)
 
 	return addr, nil
 }
@@ -191,12 +193,15 @@ func photonComponents(props photonProperties) map[string]string {
 	return components
 }
 
-func photonStreetName(props photonProperties, components map[string]string, useCompact bool) string {
+func photonStreetName(props photonProperties, components map[string]string) string {
 	streetName := firstNonEmpty(strings.TrimSpace(props.Street), components["street"], components["road"])
-	if !useCompact || streetName != "" {
+	if streetName != "" {
 		return streetName
 	}
 
+	// Photon returns "type":"other" for POIs and named features that aren't
+	// on a street. Surface Name as a sensible street-line fallback so
+	// templates like {{{streetName}}} don't render empty.
 	if strings.EqualFold(strings.TrimSpace(props.Type), "other") {
 		return strings.TrimSpace(props.Name)
 	}
@@ -249,7 +254,10 @@ func (p *Photon) Forward(query string) ([]ForwardResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("photon: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= 500 {
 		return nil, fmt.Errorf("photon: server error %d", resp.StatusCode)

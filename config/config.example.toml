@@ -298,10 +298,11 @@ register_on_start = false                # whether auto registration is attempte
 #   (https://github.com/komoot/photon), or 'google'
 provider = "none"
 provider_url = ""                               # nominatim or photon URL, e.g. "https://photon.example.com"
-# photon_address_format - how Photon builds formattedAddress:
-#   "opencage" (default) = country-specific formatting via OpenCage templates
-#   "compact"            = short "suburb: street, city" format
-#photon_address_format = "opencage"
+# formattedAddress is always populated using OpenCage country-specific
+# templates (https://github.com/OpenCageData/address-formatting). Use
+# address_format below to shape the final {{addr}} field — e.g. set it to
+# "{{{formattedAddress}}}" for the country-idiomatic string, or build your
+# own template like "{{{streetName}}} {{streetNumber}}, {{{city}}}".
 forward_only = false                     # when true, disable reverse geocoding lookup
 cache_detail = 3                         # decimal places of lon/lat for caching (3 or 4 for 100x more detail)
 # Styles for different times of day using tileservercache

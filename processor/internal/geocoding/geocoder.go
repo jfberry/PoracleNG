@@ -12,13 +12,12 @@ import (
 
 // Config holds all geocoder settings.
 type Config struct {
-	Provider         string   // "none", "nominatim", "photon", "google"
-	ProviderURL      string   // nominatim/photon URL
-	GeocodingKeys    []string // google API keys
-	PhotonAddrFormat string // "opencage" (default) or "compact"
-	CacheDetail      int    // decimal places for cache key rounding (default 3)
-	CachePath        string // pogreb database path
-	ForwardOnly      bool   // if true, skip reverse geocoding
+	Provider      string   // "none", "nominatim", "photon", "google"
+	ProviderURL   string   // nominatim/photon URL
+	GeocodingKeys []string // google API keys
+	CacheDetail   int      // decimal places for cache key rounding (default 3)
+	CachePath     string   // pogreb database path
+	ForwardOnly   bool     // if true, skip reverse geocoding
 	AddressFormat string   // template for addr field, e.g. "{{{streetName}}} {{streetNumber}}"
 	Timeout       int      // HTTP timeout in ms (default 5000)
 
@@ -76,7 +75,7 @@ func New(config Config) (*Geocoder, error) {
 	case "nominatim":
 		provider = NewNominatim(config.ProviderURL, timeout)
 	case "photon":
-		provider = NewPhoton(config.ProviderURL, timeout, config.PhotonAddrFormat == "compact")
+		provider = NewPhoton(config.ProviderURL, timeout)
 	case "google":
 		provider = NewGoogle(config.GeocodingKeys, timeout)
 	default:

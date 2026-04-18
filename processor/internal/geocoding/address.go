@@ -72,65 +72,6 @@ func EscapeAddress(addr *Address) {
 	addr.Zipcode = escapeString(addr.Zipcode)
 }
 
-// FormatCompactAddress builds a compact formatted address string from an Address.
-//
-// It follows the Photon compact logic used in PoracleJS/Python migration:
-// - Start with suburb
-// - If suburb is missing and city exists, start with city
-// - Add street (optionally with house number)
-// - Add city when it is not already part of the result
-// - Add a colon after the first context part
-// - If still empty, fall back to splitting FormattedAddress into words
-func FormatCompactAddress(addr Address) string {
-	var parts []string
-	if addr.Suburb != "" {
-		parts = append(parts, addr.Suburb)
-	}
-
-	if addr.Suburb == "" && addr.City != "" {
-		parts = append(parts, addr.City)
-	}
-
-	colonsAt := len(parts) - 1
-
-	street := strings.TrimSpace(addr.StreetName)
-	if street != "" {
-		if addr.StreetNumber != "" {
-			street += " " + strings.TrimSpace(addr.StreetNumber)
-		}
-		parts = append(parts, street)
-	}
-
-	if addr.City != "" && !containsString(parts, addr.City) {
-		if street != "" && len(parts) > 0 {
-			parts[len(parts)-1] += ","
-		}
-		parts = append(parts, addr.City)
-	}
-
-	if colonsAt >= 0 && colonsAt < len(parts) {
-		parts[colonsAt] += ":"
-	}
-
-	if len(parts) == 0 && strings.TrimSpace(addr.FormattedAddress) != "" {
-		parts = strings.Fields(addr.FormattedAddress)
-	}
-
-	return strings.Join(parts, " ")
-}
-
-// containsString checks if a string slice contains a given string.
-func containsString(ss []string, s string) bool {
-	for _, v := range ss {
-		// Strip trailing punctuation for comparison
-		clean := strings.TrimRight(v, ":,")
-		if clean == s {
-			return true
-		}
-	}
-	return false
-}
-
 func escapeString(s string) string {
 	if s == "" {
 		return s
