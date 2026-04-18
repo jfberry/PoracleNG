@@ -46,6 +46,8 @@ func (t *AddressTemplate) Render(addr Address) string {
 
 // addressFields exposes addr as the key/value pairs operators reference in
 // their templates. Kept in sync with the Address struct's json tags.
+// compactAddress is pre-computed here rather than being a helper — no
+// args, fixed output, no reason for the helper round-trip.
 func addressFields(addr Address) map[string]string {
 	return map[string]string{
 		"formattedAddress": addr.FormattedAddress,
@@ -63,6 +65,7 @@ func addressFields(addr Address) map[string]string {
 		"town":             addr.Town,
 		"village":          addr.Village,
 		"flag":             addr.Flag,
+		"compactAddress":   formatCompactAddress(addr),
 	}
 }
 

@@ -12,6 +12,10 @@ var helpersOnce sync.Once
 // registerAddressHelpers registers the raymond helpers address_format
 // templates can use. Called lazily from CompileAddressTemplate; the once
 // guard protects against raymond's panic on re-registering the same name.
+//
+// Only truly variadic helpers live here. Fixed-output helpers like
+// compactAddress get pre-computed by addressFields into a regular map
+// key instead — simpler, same cost, no helper-context round-trip.
 func registerAddressHelpers() {
 	helpersOnce.Do(func() {
 		// {{coalesce a b c}} — first non-empty argument.
@@ -23,40 +27,14 @@ func registerAddressHelpers() {
 			}
 			return ""
 		})
-
-		// {{compactAddress}} — PoracleJS-equivalent compact layout
-		// ("Mitte: Friedrichstrasse 42, Berlin"). Lives here rather
-		// than as a config flag so operators opt in via template.
-		raymond.RegisterHelper("compactAddress", func(options *raymond.Options) string {
-			return formatCompactAddress(extractAddressFromContext(options))
-		})
 	})
 }
 
-// extractAddressFromContext pulls the fields compactAddress needs out of
-// the raymond context. Kept deliberately minimal — only reads what the
-// helper uses, not the whole Address.
-func extractAddressFromContext(options *raymond.Options) Address {
-	field := func(name string) string {
-		v := options.Value(name)
-		if s, ok := v.(string); ok {
-			return s
-		}
-		return ""
-	}
-	return Address{
-		Suburb:           field("suburb"),
-		City:             field("city"),
-		StreetName:       field("streetName"),
-		StreetNumber:     field("streetNumber"),
-		FormattedAddress: field("formattedAddress"),
-	}
-}
-
-// formatCompactAddress — vendored from ccev's PR as the implementation
-// behind {{compactAddress}}. Handles the suburb==city dedup and the
-// all-empty-components fallback to FormattedAddress, which stock
-// Handlebars can't express cleanly.
+// formatCompactAddress — vendored from ccev's PR. Used by addressFields
+// to populate the "compactAddress" template key, so operators writing
+// address_format = "{{compactAddress}}" get the PoracleJS-equivalent
+// "Mitte: Friedrichstrasse 42, Berlin" layout. Handles suburb==city
+// dedup and the all-empty-components fallback to FormattedAddress.
 func formatCompactAddress(addr Address) string {
 	var parts []string
 	if addr.Suburb != "" {
