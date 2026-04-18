@@ -121,23 +121,28 @@ date = "L"
 #   streetName, streetNumber, suburb, neighbourhood, city, town, village,
 #   county, state, zipcode, country, countryCode, flag
 #
-# Leaving this empty (or using "{{{formattedAddress}}}") renders the OpenCage
-# country-idiomatic default, which is usually what you want.
+# Helpers (in addition to every helper DTS templates have):
+#   {{coalesce a b c}}       - first non-empty argument
+#   {{compactAddress}}       - exact "Mitte: Friedrichstrasse 42, Berlin" /
+#                              "Springfield: Main Street 1" layout (the
+#                              PoracleJS/Photon compact format)
 #
 # Examples:
+#   address_format = ""
+#       Empty — skips template rendering entirely and uses the OpenCage
+#       country-idiomatic formattedAddress directly. Recommended default
+#       for new installs.
 #   address_format = "{{{streetName}}} {{streetNumber}}"
-#       Just the street line (current default for new installs).
+#       Just the street line (the previous shipped default).
 #   address_format = "{{{formattedAddress}}}"
-#       Full country-idiomatic address (e.g. "Unter den Linden 1, 10117 Berlin, Germany").
+#       Full country-idiomatic address (e.g. "Unter den Linden 1, 10117 Berlin").
 #   address_format = "{{{displayName}}}"
-#       Nominatim's original display_name layout, for operators migrating from
-#       older PoracleJS installs who relied on that shape.
-#   address_format = "{{#if suburb}}{{suburb}}{{else}}{{city}}{{/if}}:{{#if streetName}} {{streetName}}{{#if streetNumber}} {{streetNumber}}{{/if}}{{/if}}{{#if suburb}}, {{city}}{{/if}}"
-#       Equivalent to the old Photon/PoracleJS compact format —
+#       Nominatim's original display_name layout, for operators migrating
+#       from older PoracleJS installs who relied on that shape.
+#   address_format = "{{compactAddress}}"
+#       Exact equivalent of the PoracleJS/Photon compact format —
 #       "Mitte: Friedrichstrasse 42, Berlin" when suburb is present,
 #       "Springfield: Main Street 1" when only city is known.
-#
-# Leave empty for the country-idiomatic default (recommended for new installs).
 address_format = ""
 # address_include_country controls whether the country name trails the
 # OpenCage-formatted {{{formattedAddress}}}. Defaults to false because most

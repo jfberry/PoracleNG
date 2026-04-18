@@ -19,11 +19,15 @@ type AddressTemplate struct {
 // FormattedAddress" rather than render anything. A parse error is surfaced
 // so the operator can fix their config; the caller should log+skip so the
 // processor starts with an unusable template rather than crash.
+//
+// Address helpers ({{coalesce}}, {{compactAddress}}) are registered lazily
+// on first call so operators don't need to worry about init order.
 func CompileAddressTemplate(src string) (*AddressTemplate, error) {
 	src = strings.TrimSpace(src)
 	if src == "" {
 		return nil, nil
 	}
+	registerAddressHelpers()
 	t, err := raymond.Parse(src)
 	if err != nil {
 		return nil, fmt.Errorf("address_format: %w", err)
