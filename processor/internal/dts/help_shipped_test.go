@@ -54,3 +54,29 @@ func TestShippedHelpTemplatesLoadAndRender(t *testing.T) {
 		}
 	}
 }
+
+// TestShippedHelpFallsBackForForeignLanguages — a zh-cn / de / fr user
+// who doesn't have translated help entries should still get the English
+// content as a fallback, not "unknown topic". Shipped entries use
+// language: "" (wildcard) so level 2 of the selection chain matches any
+// requested language. When someone ships a localised entry with an
+// explicit language value, their entry wins (level 1 exact match).
+func TestShippedHelpFallsBackForForeignLanguages(t *testing.T) {
+	_, thisFile, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+	ts, err := LoadTemplates(t.TempDir(), filepath.Join(repoRoot, "fallbacks"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, lang := range []string{"zh-cn", "ja", "de", "fr", "nb-no", "xx-unknown"} {
+		for _, platform := range []string{"discord", "telegram"} {
+			t.Run(lang+"/"+platform, func(t *testing.T) {
+				tmpl := ts.Get("help", platform, "track", lang)
+				if tmpl == nil {
+					t.Fatalf("!help track for language=%q platform=%q should fall back to the English wildcard entry, got nil", lang, platform)
+				}
+			})
+		}
+	}
+}

@@ -2,7 +2,7 @@
   "id": "track",
   "type": "help",
   "platform": "",
-  "language": "en",
+  "language": "",
   "template": {
     "embed": {
       "title": "!track",

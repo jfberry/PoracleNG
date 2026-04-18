@@ -2,7 +2,7 @@
   "id": "community",
   "type": "help",
   "platform": "",
-  "language": "en",
+  "language": "",
   "template": {
     "embed": {
       "title": "!community (admin)",

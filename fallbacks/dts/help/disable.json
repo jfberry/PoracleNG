@@ -2,7 +2,7 @@
   "id": "disable",
   "type": "help",
   "platform": "",
-  "language": "en",
+  "language": "",
   "template": {
     "embed": {
       "title": "!disable (admin)",

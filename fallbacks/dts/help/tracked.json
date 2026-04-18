@@ -2,7 +2,7 @@
   "id": "tracked",
   "type": "help",
   "platform": "",
-  "language": "en",
+  "language": "",
   "template": {
     "embed": {
       "title": "!tracked",

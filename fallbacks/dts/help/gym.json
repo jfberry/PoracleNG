@@ -2,7 +2,7 @@
   "id": "gym",
   "type": "help",
   "platform": "",
-  "language": "en",
+  "language": "",
   "template": {
     "embed": {
       "title": "!gym",

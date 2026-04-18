@@ -2,7 +2,7 @@
   "id": "untrack",
   "type": "help",
   "platform": "",
-  "language": "en",
+  "language": "",
   "template": {
     "embed": {
       "title": "!untrack",

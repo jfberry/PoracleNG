@@ -2,7 +2,7 @@
   "id": "language",
   "type": "help",
   "platform": "",
-  "language": "en",
+  "language": "",
   "template": {
     "embed": {
       "title": "!language",
