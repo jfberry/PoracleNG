@@ -113,7 +113,29 @@ strict_locations = false
 timeformat = "en-gb"
 time = "LTS"
 date = "L"
-# address_format - how an address is constructed into the {{addr}} tag
+# address_format - Handlebars template used to build the {{addr}} tag from
+# the reverse-geocode result. Compiled once at startup; rendered per address.
+# Available fields (all providers):
+#   formattedAddress  - country-idiomatic string from OpenCage templates
+#   displayName       - the provider's own formatted string (Nominatim only)
+#   streetName, streetNumber, suburb, neighbourhood, city, town, village,
+#   county, state, zipcode, country, countryCode, flag
+#
+# Leaving this empty (or using "{{{formattedAddress}}}") renders the OpenCage
+# country-idiomatic default, which is usually what you want.
+#
+# Examples:
+#   address_format = "{{{streetName}}} {{streetNumber}}"
+#       Just the street line (current default for new installs).
+#   address_format = "{{{formattedAddress}}}"
+#       Full country-idiomatic address (e.g. "Unter den Linden 1, 10117 Berlin, Germany").
+#   address_format = "{{{displayName}}}"
+#       Nominatim's original display_name layout, for operators migrating from
+#       older PoracleJS installs who relied on that shape.
+#   address_format = "{{#if suburb}}{{suburb}}{{else}}{{city}}{{/if}}:{{#if streetName}} {{streetName}}{{#if streetNumber}} {{streetNumber}}{{/if}}{{/if}}{{#if suburb}}, {{city}}{{/if}}"
+#       Equivalent to the old Photon/PoracleJS compact format —
+#       "Mitte: Friedrichstrasse 42, Berlin" when suburb is present,
+#       "Springfield: Main Street 1" when only city is known.
 address_format = "{{{streetName}}} {{streetNumber}}"
 # language - secondary language used for 'alt' translation in DTS; useful for
 #   retrieving english language detail for web links

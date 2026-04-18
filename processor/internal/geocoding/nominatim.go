@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/geocoding/ocfmt"
 )
 
 // userAgent identifies the application to Nominatim per their usage policy.
@@ -47,6 +49,7 @@ type nominatimAddress struct {
 	Country       string `json:"country"`
 	CountryCode   string `json:"country_code"`
 	State         string `json:"state"`
+	County        string `json:"county"`
 	City          string `json:"city"`
 	Town          string `json:"town"`
 	Village       string `json:"village"`
@@ -59,6 +62,27 @@ type nominatimAddress struct {
 	Neighbourhood string `json:"neighbourhood"`
 	Suburb        string `json:"suburb"`
 	Shop          string `json:"shop"`
+}
+
+// nominatimToOCFMT maps Nominatim's address components to the OpenCage
+// component names ocfmt's templates expect. Keeps the mapping in one place
+// so additions to nominatimAddress only need to update here.
+func nominatimToOCFMT(a nominatimAddress, streetName, city string) map[string]string {
+	return map[string]string{
+		"road":          streetName,
+		"house_number":  a.HouseNumber,
+		"neighbourhood": a.Neighbourhood,
+		"suburb":        a.Suburb,
+		"city":          city,
+		"town":          a.Town,
+		"village":       a.Village,
+		"hamlet":        a.Hamlet,
+		"county":        a.County,
+		"state":         a.State,
+		"postcode":      a.Postcode,
+		"country":       a.Country,
+		"country_code":  strings.ToLower(a.CountryCode),
+	}
 }
 
 // Reverse performs a reverse geocode lookup.
@@ -95,13 +119,23 @@ func (n *Nominatim) Reverse(lat, lon float64) (*Address, error) {
 	city := firstNonEmpty(result.Address.City, result.Address.Town, result.Address.Village, result.Address.Hamlet)
 	streetName := firstNonEmpty(result.Address.Road, result.Address.Quarter, result.Address.Cycleway)
 
+	components := nominatimToOCFMT(result.Address, streetName, city)
+	formatted := ocfmt.Global().Format(components)
+	if strings.TrimSpace(formatted) == "" {
+		// Fall back to Nominatim's own display_name if OpenCage can't produce
+		// anything (e.g. components too sparse to hit any template branch).
+		formatted = result.DisplayName
+	}
+
 	return &Address{
 		Latitude:         resultLat,
 		Longitude:        resultLon,
-		FormattedAddress: result.DisplayName,
+		FormattedAddress: formatted,
+		DisplayName:      result.DisplayName,
 		Country:          result.Address.Country,
 		CountryCode:      countryCode,
 		State:            result.Address.State,
+		County:           result.Address.County,
 		City:             city,
 		Zipcode:          result.Address.Postcode,
 		StreetName:       streetName,

@@ -36,7 +36,8 @@ type Geocoder struct {
 	provider Provider
 	cache    *Cache
 	config   Config
-	sem      chan struct{} // concurrency limiter
+	addrTmpl *AddressTemplate // compiled once from config.AddressFormat
+	sem      chan struct{}    // concurrency limiter
 
 	// Circuit breaker state
 	consecutiveErrors   int
@@ -92,10 +93,19 @@ func New(config Config) (*Geocoder, error) {
 		}
 	}
 
+	// Compile the address_format template once so we don't re-parse on every
+	// lookup. A parse error is logged; rendering then falls back to
+	// FormattedAddress (what ocfmt produced per-provider).
+	addrTmpl, err := CompileAddressTemplate(config.AddressFormat)
+	if err != nil {
+		log.Warnf("Geocoder: %s — falling back to formattedAddress", err)
+	}
+
 	return &Geocoder{
 		provider: provider,
 		cache:    cache,
 		config:   config,
+		addrTmpl: addrTmpl,
 		sem:      make(chan struct{}, config.Concurrency),
 	}, nil
 }
@@ -179,9 +189,10 @@ func (g *Geocoder) GetAddress(lat, lon float64) *Address {
 	g.statTotalMs.Add(duration.Milliseconds())
 	metrics.GeocodeTotal.WithLabelValues("success").Inc()
 
-	// Add flag and formatted address
+	// Add flag and formatted address (template rendered via raymond so
+	// operators get {{#if}}/{{#unless}}/helpers for conditional layout).
 	addr.Flag = CountryFlag(addr.CountryCode)
-	addr.Addr = FormatAddress(g.config.AddressFormat, *addr)
+	addr.Addr = g.addrTmpl.Render(*addr)
 
 	log.Debugf("Geocode %.4f,%.4f → street=%q number=%q city=%q addr=%q (%dms)",
 		lat, lon, addr.StreetName, addr.StreetNumber, addr.City, addr.Addr, duration.Milliseconds())

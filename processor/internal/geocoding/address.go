@@ -1,44 +1,74 @@
 package geocoding
 
 import (
+	"fmt"
 	"strings"
+
+	"github.com/mailgun/raymond/v2"
 )
 
-// FormatAddress applies a simple template to an Address, replacing
-// {{fieldName}} placeholders with the corresponding field value.
-// This matches the alerter's Handlebars addressFormat behaviour.
-func FormatAddress(tmpl string, addr Address) string {
-	if tmpl == "" {
+// AddressTemplate is a pre-compiled address_format template. Compile once at
+// Geocoder construction; execute per address — parsing on every call would
+// re-allocate the Handlebars AST for what is typically a short static string.
+type AddressTemplate struct {
+	tmpl *raymond.Template
+}
+
+// CompileAddressTemplate parses the user-supplied address_format string. An
+// empty template is valid — the caller should treat it as "fall back to
+// FormattedAddress" rather than render anything. A parse error is surfaced
+// so the operator can fix their config; the caller should log+skip so the
+// processor starts with an unusable template rather than crash.
+func CompileAddressTemplate(src string) (*AddressTemplate, error) {
+	src = strings.TrimSpace(src)
+	if src == "" {
+		return nil, nil
+	}
+	t, err := raymond.Parse(src)
+	if err != nil {
+		return nil, fmt.Errorf("address_format: %w", err)
+	}
+	return &AddressTemplate{tmpl: t}, nil
+}
+
+// Render executes the compiled template against the Address's fields. If the
+// template is nil (i.e. operator left address_format empty), returns the
+// address's FormattedAddress so the default behaviour is "use the country-
+// idiomatic string from the provider".
+func (t *AddressTemplate) Render(addr Address) string {
+	if t == nil || t.tmpl == nil {
 		return addr.FormattedAddress
 	}
+	result, err := t.tmpl.Exec(addressFields(addr))
+	if err != nil {
+		// Runtime error means the template compiled but blew up against the
+		// data (unlikely once Parse succeeded). Fall back to the OpenCage
+		// string so operators don't see an empty addr in production.
+		return addr.FormattedAddress
+	}
+	return strings.TrimSpace(result)
+}
 
-	fields := map[string]string{
+// addressFields returns the Address's fields as a map keyed by the names
+// operators use in their address_format templates.
+func addressFields(addr Address) map[string]string {
+	return map[string]string{
 		"formattedAddress": addr.FormattedAddress,
+		"displayName":      addr.DisplayName,
 		"country":          addr.Country,
 		"countryCode":      addr.CountryCode,
 		"state":            addr.State,
+		"county":           addr.County,
 		"city":             addr.City,
 		"zipcode":          addr.Zipcode,
 		"streetName":       addr.StreetName,
 		"streetNumber":     addr.StreetNumber,
 		"neighbourhood":    addr.Neighbourhood,
-		"county":           addr.County,
 		"suburb":           addr.Suburb,
 		"town":             addr.Town,
 		"village":          addr.Village,
 		"flag":             addr.Flag,
 	}
-
-	result := tmpl
-	// Replace triple-braces FIRST to avoid partial matches
-	// (e.g., {{{streetName}}} must not become {value} from {{streetName}} match)
-	for field, value := range fields {
-		result = strings.ReplaceAll(result, "{{{"+field+"}}}", value)
-	}
-	for field, value := range fields {
-		result = strings.ReplaceAll(result, "{{"+field+"}}", value)
-	}
-	return strings.TrimSpace(result)
 }
 
 // CountryFlag returns the flag emoji for a two-letter country code.
@@ -61,6 +91,7 @@ func EscapeAddress(addr *Address) {
 	addr.StreetNumber = escapeString(addr.StreetNumber)
 	addr.Addr = escapeString(addr.Addr)
 	addr.FormattedAddress = escapeString(addr.FormattedAddress)
+	addr.DisplayName = escapeString(addr.DisplayName)
 	addr.City = escapeString(addr.City)
 	addr.State = escapeString(addr.State)
 	addr.Country = escapeString(addr.Country)
