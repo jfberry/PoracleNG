@@ -9,21 +9,12 @@ import (
 
 var helpersOnce sync.Once
 
-// registerAddressHelpers registers raymond helpers used by address_format
-// templates. Called lazily from CompileAddressTemplate so operators don't
-// need to know about init order; also means tests that touch address
-// templates pick up the helpers automatically.
-//
-// Registration is process-global (raymond's model). Safe to call multiple
-// times thanks to the once guard — re-registering the same helper name
-// panics in raymond.
+// registerAddressHelpers registers the raymond helpers address_format
+// templates can use. Called lazily from CompileAddressTemplate; the once
+// guard protects against raymond's panic on re-registering the same name.
 func registerAddressHelpers() {
 	helpersOnce.Do(func() {
-		// coalesce — return the first non-empty argument. Useful for
-		// "suburb, else city" style openers and similar fallback chains.
-		//
-		//   {{coalesce suburb city}}               → "Mitte" or "Berlin"
-		//   {{coalesce streetName road name}}      → whichever is set
+		// {{coalesce a b c}} — first non-empty argument.
 		raymond.RegisterHelper("coalesce", func(args ...any) string {
 			for _, a := range args {
 				if s, ok := a.(string); ok && strings.TrimSpace(s) != "" {
@@ -33,26 +24,18 @@ func registerAddressHelpers() {
 			return ""
 		})
 
-		// compactAddress — drop-in equivalent for PoracleJS/ccev's
-		// FormatCompactAddress. Operators migrating from that layout set
-		//   address_format = "{{compactAddress}}"
-		// and get the exact "Mitte: Friedrichstrasse 42, Berlin" shape,
-		// including the de-duplication of city when suburb == city and
-		// the all-empty-components fallback to FormattedAddress. Lives as
-		// a helper rather than a config knob so the spec stays in Go
-		// (testable) while the call site stays in the template where
-		// operators already customise.
+		// {{compactAddress}} — PoracleJS-equivalent compact layout
+		// ("Mitte: Friedrichstrasse 42, Berlin"). Lives here rather
+		// than as a config flag so operators opt in via template.
 		raymond.RegisterHelper("compactAddress", func(options *raymond.Options) string {
-			addr := extractAddressFromContext(options)
-			return formatCompactAddress(addr)
+			return formatCompactAddress(extractAddressFromContext(options))
 		})
 	})
 }
 
-// extractAddressFromContext reconstructs an Address from the per-field
-// string map that Render passes to Exec. Only the fields compactAddress
-// consults need to be populated — this keeps the helper independent of
-// Address struct layout changes elsewhere.
+// extractAddressFromContext pulls the fields compactAddress needs out of
+// the raymond context. Kept deliberately minimal — only reads what the
+// helper uses, not the whole Address.
 func extractAddressFromContext(options *raymond.Options) Address {
 	field := func(name string) string {
 		v := options.Value(name)
@@ -70,12 +53,10 @@ func extractAddressFromContext(options *raymond.Options) Address {
 	}
 }
 
-// formatCompactAddress builds the compact "suburb: street number, city"
-// layout from ccev's PR. Retained here as the implementation behind the
-// {{compactAddress}} raymond helper — operators who want this shape write
-// address_format = "{{compactAddress}}" rather than hand-authoring the
-// Handlebars equivalent (which runs into edge cases around suburb==city
-// and fully-empty components).
+// formatCompactAddress — vendored from ccev's PR as the implementation
+// behind {{compactAddress}}. Handles the suburb==city dedup and the
+// all-empty-components fallback to FormattedAddress, which stock
+// Handlebars can't express cleanly.
 func formatCompactAddress(addr Address) string {
 	var parts []string
 	if addr.Suburb != "" {

@@ -50,16 +50,14 @@ var (
 )
 
 // Global returns the shared Formatter instance, loading templates on first call.
+// The embedded worldwide.yaml is validated at build time (it's compiled into
+// the binary), so a parse error here indicates a developer mistake — panic
+// rather than silently degrade to a useless fallback.
 func Global() *Formatter {
 	globalOnce.Do(func() {
 		f, err := newFormatter()
 		if err != nil {
-			// Should not happen with embedded data
-			globalFormatter = &Formatter{
-				countries:    map[string]*countryEntry{},
-				defaultEntry: &countryEntry{AddressTemplate: "{{{road}}} {{{house_number}}}, {{{postcode}}} {{{city}}}, {{{country}}}"},
-			}
-			return
+			panic("ocfmt: embedded worldwide.yaml failed to parse: " + err.Error())
 		}
 		globalFormatter = f
 	})
@@ -206,10 +204,12 @@ func (f *Formatter) Format(components map[string]string) string {
 }
 
 // resolve looks up the country entry, following use_country redirects.
+// Caps redirect depth at 4 rather than tracking a visited set — cycles
+// in the OpenCage YAML are a data bug, and real chains never exceed 2
+// hops (e.g. GG → UK).
 func (f *Formatter) resolve(cc string) *countryEntry {
-	seen := make(map[string]bool)
 	cc = strings.ToUpper(cc)
-	for {
+	for depth := 0; depth < 4; depth++ {
 		entry, ok := f.countries[cc]
 		if !ok {
 			return f.defaultEntry
@@ -217,12 +217,9 @@ func (f *Formatter) resolve(cc string) *countryEntry {
 		if entry.UseCountry == "" {
 			return entry
 		}
-		if seen[cc] {
-			return entry // break infinite loop
-		}
-		seen[cc] = true
 		cc = strings.ToUpper(entry.UseCountry)
 	}
+	return f.defaultEntry
 }
 
 // renderTemplate processes a Mustache-like template with {{{field}}} substitutions

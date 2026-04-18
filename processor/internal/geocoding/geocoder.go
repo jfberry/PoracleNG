@@ -97,9 +97,6 @@ func New(config Config) (*Geocoder, error) {
 		}
 	}
 
-	// Compile the address_format template once so we don't re-parse on every
-	// lookup. A parse error is logged; rendering then falls back to
-	// FormattedAddress (what ocfmt produced per-provider).
 	addrTmpl, err := CompileAddressTemplate(config.AddressFormat)
 	if err != nil {
 		log.Warnf("Geocoder: %s — falling back to formattedAddress", err)

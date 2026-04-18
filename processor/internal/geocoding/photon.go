@@ -17,16 +17,11 @@ import (
 type Photon struct {
 	baseURL        string
 	client         *http.Client
-	formatter      *ocfmt.Formatter
-	includeCountry bool // render country into FormattedAddress via ocfmt
+	includeCountry bool
 }
 
 // NewPhoton creates a Photon provider. includeCountry controls whether the
 // OpenCage-formatted FormattedAddress trails with the country name.
-// FormattedAddress is always populated via OpenCage country-specific
-// templates (ocfmt). Callers who want a different shape can drive it via
-// the existing address_format template with the per-field helpers
-// ({{{streetName}}}, {{{suburb}}}, {{{city}}}, etc.).
 func NewPhoton(baseURL string, timeout time.Duration, includeCountry bool) *Photon {
 	if timeout == 0 {
 		timeout = 10 * time.Second
@@ -34,7 +29,6 @@ func NewPhoton(baseURL string, timeout time.Duration, includeCountry bool) *Phot
 	return &Photon{
 		baseURL:        strings.TrimRight(baseURL, "/"),
 		client:         &http.Client{Timeout: timeout},
-		formatter:      ocfmt.Global(),
 		includeCountry: includeCountry,
 	}
 }
@@ -85,12 +79,7 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 	if err != nil {
 		return nil, fmt.Errorf("photon: request failed: %w", err)
 	}
-	defer func() {
-		// Drain remaining body before close so HTTP/1.1 keep-alive can
-		// reuse the connection. Matches the pattern in nominatim/google.
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-	}()
+	defer drainClose(resp)
 
 	if resp.StatusCode >= 500 {
 		return nil, fmt.Errorf("photon: server error %d", resp.StatusCode)
@@ -160,7 +149,7 @@ func (p *Photon) formatOpenCage(components map[string]string, countryCode string
 		delete(components, "country")
 	}
 
-	result := p.formatter.Format(components)
+	result := ocfmt.Global().Format(components)
 	if result == "" {
 		// Fallback: build a simple comma-separated string
 		parts := filterNonEmpty(
@@ -188,32 +177,39 @@ func photonComponents(props photonProperties) map[string]string {
 		"postcode":    strings.TrimSpace(props.Postcode),
 	}
 
+	// Add the OpenCage-named aliases ("road" for "street", "house_number"
+	// for "housenumber", etc.) in a second pass so we never mutate the
+	// map while ranging over it, and only insert when the alias differs.
+	aliases := make(map[string]string, len(components))
 	for k, v := range components {
-		components[photonToOCKey(k)] = v
+		if alias := photonToOCKey(k); alias != k {
+			aliases[alias] = v
+		}
+	}
+	for k, v := range aliases {
+		components[k] = v
 	}
 
 	if propsType, name := components["type"], components["name"]; propsType != "" && name != "" && propsType != "house" {
 		components[propsType] = name
-		components[photonToOCKey(propsType)] = name
+		if alias := photonToOCKey(propsType); alias != propsType {
+			components[alias] = name
+		}
 	}
 
 	return components
 }
 
 func photonStreetName(props photonProperties, components map[string]string) string {
-	streetName := firstNonEmpty(strings.TrimSpace(props.Street), components["street"], components["road"])
-	if streetName != "" {
-		return streetName
+	if s := firstNonEmpty(strings.TrimSpace(props.Street), components["street"], components["road"]); s != "" {
+		return s
 	}
-
-	// Photon returns "type":"other" for POIs and named features that aren't
-	// on a street. Surface Name as a sensible street-line fallback so
-	// templates like {{{streetName}}} don't render empty.
+	// Photon returns "type":"other" for POIs that aren't on a street.
+	// Use Name so {{{streetName}}} doesn't render empty for those.
 	if strings.EqualFold(strings.TrimSpace(props.Type), "other") {
 		return strings.TrimSpace(props.Name)
 	}
-
-	return streetName
+	return ""
 }
 
 // photonToOCKey maps Photon property names to OpenCage component names.
@@ -261,10 +257,7 @@ func (p *Photon) Forward(query string) ([]ForwardResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("photon: request failed: %w", err)
 	}
-	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-	}()
+	defer drainClose(resp)
 
 	if resp.StatusCode >= 500 {
 		return nil, fmt.Errorf("photon: server error %d", resp.StatusCode)
@@ -298,4 +291,11 @@ func (p *Photon) Forward(query string) ([]ForwardResult, error) {
 		})
 	}
 	return out, nil
+}
+
+// drainClose reads any remaining body bytes and closes the response so
+// HTTP/1.1 keep-alive can reuse the connection. Matches nominatim/google.
+func drainClose(resp *http.Response) {
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
 }

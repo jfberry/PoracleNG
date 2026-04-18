@@ -7,21 +7,16 @@ import (
 	"github.com/mailgun/raymond/v2"
 )
 
-// AddressTemplate is a pre-compiled address_format template. Compile once at
-// Geocoder construction; execute per address — parsing on every call would
-// re-allocate the Handlebars AST for what is typically a short static string.
+// AddressTemplate wraps a pre-compiled Handlebars template so we parse
+// address_format once at Geocoder construction rather than per render.
 type AddressTemplate struct {
 	tmpl *raymond.Template
 }
 
-// CompileAddressTemplate parses the user-supplied address_format string. An
-// empty template is valid — the caller should treat it as "fall back to
-// FormattedAddress" rather than render anything. A parse error is surfaced
-// so the operator can fix their config; the caller should log+skip so the
-// processor starts with an unusable template rather than crash.
-//
-// Address helpers ({{coalesce}}, {{compactAddress}}) are registered lazily
-// on first call so operators don't need to worry about init order.
+// CompileAddressTemplate parses the user-supplied address_format. An empty
+// src returns a nil template — Render then falls back to FormattedAddress.
+// Address helpers ({{coalesce}}, {{compactAddress}}) register lazily here
+// so init order doesn't matter.
 func CompileAddressTemplate(src string) (*AddressTemplate, error) {
 	src = strings.TrimSpace(src)
 	if src == "" {
@@ -35,26 +30,22 @@ func CompileAddressTemplate(src string) (*AddressTemplate, error) {
 	return &AddressTemplate{tmpl: t}, nil
 }
 
-// Render executes the compiled template against the Address's fields. If the
-// template is nil (i.e. operator left address_format empty), returns the
-// address's FormattedAddress so the default behaviour is "use the country-
-// idiomatic string from the provider".
+// Render executes the compiled template against addr's fields, falling back
+// to addr.FormattedAddress for empty/nil template and for runtime errors
+// (so operators don't see an empty addr if a template blows up in prod).
 func (t *AddressTemplate) Render(addr Address) string {
 	if t == nil || t.tmpl == nil {
 		return addr.FormattedAddress
 	}
 	result, err := t.tmpl.Exec(addressFields(addr))
 	if err != nil {
-		// Runtime error means the template compiled but blew up against the
-		// data (unlikely once Parse succeeded). Fall back to the OpenCage
-		// string so operators don't see an empty addr in production.
 		return addr.FormattedAddress
 	}
 	return strings.TrimSpace(result)
 }
 
-// addressFields returns the Address's fields as a map keyed by the names
-// operators use in their address_format templates.
+// addressFields exposes addr as the key/value pairs operators reference in
+// their templates. Kept in sync with the Address struct's json tags.
 func addressFields(addr Address) map[string]string {
 	return map[string]string{
 		"formattedAddress": addr.FormattedAddress,

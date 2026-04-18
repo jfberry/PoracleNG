@@ -134,14 +134,9 @@ type LocaleConfig struct {
 	TimeFormat    string `toml:"timeformat"`
 	Time          string `toml:"time"`
 	Date          string `toml:"date"`
-	AddressFormat string `toml:"address_format"`
-	// AddressIncludeCountry controls whether the OpenCage-formatted
-	// FormattedAddress includes the country name. Defaults to false so
-	// {{addr}} reads as "Unter den Linden 1, 10117 Berlin" rather than
-	// the more verbose "…, Germany" — set true for audiences who aren't
-	// all in the same country.
-	AddressIncludeCountry bool   `toml:"address_include_country"`
-	Language              string `toml:"language"` // alt language for DTS helpers (pokemonNameAlt, moveNameAlt, etc.) — default "en"
+	AddressFormat         string `toml:"address_format"`
+	AddressIncludeCountry bool   `toml:"address_include_country"` // see config.example.toml for defaults/rationale
+	Language              string `toml:"language"`                // alt language for DTS helpers — default "en"
 }
 
 type LoggingConfig struct {
