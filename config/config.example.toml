@@ -136,7 +136,9 @@ date = "L"
 #       Equivalent to the old Photon/PoracleJS compact format —
 #       "Mitte: Friedrichstrasse 42, Berlin" when suburb is present,
 #       "Springfield: Main Street 1" when only city is known.
-address_format = "{{{streetName}}} {{streetNumber}}"
+#
+# Leave empty for the country-idiomatic default (recommended for new installs).
+address_format = ""
 # language - secondary language used for 'alt' translation in DTS; useful for
 #   retrieving english language detail for web links
 language = "en"

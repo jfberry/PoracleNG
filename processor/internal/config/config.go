@@ -613,11 +613,14 @@ func Load(baseDir string) (*Config, error) {
 			UltraRare:           0.01,
 		},
 		Locale: LocaleConfig{
-			TimeFormat:    "en-gb",
-			Time:          "LTS",
-			Date:          "L",
-			Language:      "en",
-			AddressFormat: "{{{streetName}}} {{streetNumber}}",
+			TimeFormat: "en-gb",
+			Time:       "LTS",
+			Date:       "L",
+			Language:   "en",
+			// AddressFormat left empty so {{addr}} gets the OpenCage-formatted
+			// FormattedAddress straight from the provider — the country-
+			// idiomatic default is what most operators want. Operators who
+			// need a specific shape override in config.toml.
 		},
 		Weather: WeatherConfig{
 			ShowAlteredPokemonMaxCount: 10,
