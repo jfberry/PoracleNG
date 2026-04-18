@@ -76,12 +76,18 @@ func DetectIntent(normalized string, invasionEvents map[string]bool) IntentResul
 		return result
 	}
 
-	// --- Remove detection (multi-word phrases first, then single words) ---
+	// --- Remove detection (multi-word phrases first, then single words).
+	// Match whole tokens / whole phrases only so tokens like "auto-delete"
+	// don't get partial-matched on "delete" and misclassified as remove.
 	joined := strings.Join(tokens, " ")
 	for _, kw := range removeKeywords {
-		if idx := strings.Index(joined, kw); idx >= 0 {
+		padded := " " + joined + " "
+		search := " " + kw + " "
+		if idx := strings.Index(padded, search); idx >= 0 {
 			result.IsRemove = true
-			joined = joined[:idx] + joined[idx+len(kw):]
+			start := idx                  // position in padded
+			end := idx + len(search) - 1  // keep one surrounding space on the right
+			joined = strings.TrimSpace(padded[:start] + " " + padded[end:])
 			joined = collapseSpaces(joined)
 			break
 		}

@@ -67,12 +67,50 @@ var synonyms = contextSynonyms{
 	"fort": {
 		"new": "new",
 	},
+	"lure": {
+		// Lure types — the six known modules. Users who type the Poracle
+		// name ("glacial") hit the passthrough regex; this context adds
+		// natural-language aliases ("ice lure", "rock lure", etc.) and
+		// disambiguates unambiguous singletons ("glacial" on its own in
+		// a lure-intent message) into type:<name> syntax the tracking
+		// command expects.
+		"normal":    "type:normal",
+		"regular":   "type:normal",
+		"glacial":   "type:glacial",
+		"ice":       "type:glacial",
+		"mossy":     "type:mossy",
+		"grass":     "type:mossy",
+		"plant":     "type:mossy",
+		"magnetic": "type:magnetic",
+		"magnet":    "type:magnetic",
+		"rock":      "type:magnetic",
+		"rainy":     "type:rainy",
+		"rain":      "type:rainy",
+		"sparkly":   "type:sparkly",
+		"sparkle":   "type:sparkly",
+		"shiny":     "type:sparkly",
+	},
 	"*": {
-		"nearby":     "d1000",
-		"near me":    "d1000",
-		"close":      "d1000",
-		"everything": "everything",
-		"all":        "everything",
+		"nearby":      "d1000",
+		"near me":     "d1000",
+		"close":       "d1000",
+		"everything":  "everything",
+		"all":         "everything",
+		// Quality-of-life flags — synonyms for clean/edit/ping that survive
+		// through assemble as raw Poracle filter tokens. Single-word
+		// synonyms only: anything multi-word containing "me" / "with" /
+		// "to" / etc. is stripped by Normalize. Anything multi-word
+		// containing a remove keyword ("delete", "remove") trips the
+		// remove-intent detector — so "auto delete" is out, "autodelete"
+		// stays because the intent detector now matches whole tokens only.
+		"autodelete":  "clean",
+		"auto-delete": "clean",
+		"autoclean":   "clean",
+		"auto-clean":  "clean",
+		"cleanup":     "clean",
+		"editable":    "edit",
+		"notify":      "ping",
+		"pinged":      "ping",
 	},
 }
 
@@ -102,7 +140,9 @@ var poracleFilterRe = regexp.MustCompile(
 		`|weight\d+|maxweight\d+` +
 		`|rarity:\w+|maxrarity:\w+` +
 		`|template:\d+` +
-		`|clean` +
+		`|clean|edit|ping` +
+		`|individually` +
+		`|type:\w+` +
 		`|size:\w+` +
 		`|form:\w+` +
 		`|move:\S+` +
@@ -126,6 +166,17 @@ var pvpLeagues = map[string]string{
 	"ul":            "ultra",
 	"little league": "little",
 	"ll":            "little",
+}
+
+// bareLeagueWords are the single-token forms that should trigger a league
+// match when a user drops the word "league" in a multi-league list
+// ("great and ultra league top 10" — "and" is a noise word, so after
+// normalize we see ["great", "ultra", "league"]; we want both leagues).
+// Matched in matchPVP only; outside PVP context these are ordinary tokens.
+var bareLeagueWords = map[string]string{
+	"great":  "great",
+	"ultra":  "ultra",
+	"little": "little",
 }
 
 // statWords are words that combine with a following number into a filter.
@@ -337,39 +388,67 @@ func parseDistance(s string) string {
 }
 
 // matchPVP handles PVP-related token sequences.
+//
+// Collects every league mention in the input rather than bailing after the
+// first match, so "pikachu great and ultra top 10" produces both great10
+// and ultra10 filters — matching the bot's own multi-league support
+// (!track pikachu great5 ultra10). Rank applies to all detected leagues.
 func matchPVP(tokens []string, intent string, result *FilterResult) {
 	if intent != "track" {
 		return
 	}
 
-	joined := strings.Join(tokens, " ")
+	// Collect all league mentions. Multi-word phrases first (longest match
+	// wins implicitly thanks to the token consumption below preventing the
+	// single-word pass from re-matching "ultra" inside "ultra league").
+	leagues := make([]string, 0, 3)
+	seen := map[string]bool{}
+	addLeague := func(lg string) {
+		if !seen[lg] {
+			seen[lg] = true
+			leagues = append(leagues, lg)
+		}
+	}
 
-	// Detect league (multi-word first)
-	league := ""
+	// Multi-word phrases, e.g. "great league", "ultra league" — but we
+	// can't rely on these alone because users often drop the word
+	// "league" from all-but-the-last entry ("great and ultra league").
+	// Match every occurrence by marking consumed tokens as we go and
+	// re-joining before each scan.
 	for phrase, lg := range pvpLeagues {
-		if strings.Contains(phrase, " ") {
-			if found := strings.Contains(joined, phrase); found {
-				league = lg
-				markMultiWordConsumed(tokens, phrase, result)
+		if !strings.Contains(phrase, " ") {
+			continue
+		}
+		for {
+			if allTokensConsumed(tokens, phrase, result) {
 				break
 			}
+			if !strings.Contains(currentJoined(tokens, result), phrase) {
+				break
+			}
+			addLeague(lg)
+			markMultiWordConsumed(tokens, phrase, result)
 		}
 	}
-	// Single-word league abbreviations
-	if league == "" {
-		for i, t := range tokens {
-			if result.Consumed[i] {
-				continue
-			}
-			if lg, ok := pvpLeagues[t]; ok {
-				league = lg
-				result.Consumed[i] = true
-				break
-			}
+	// Single-word league abbreviations ("gl", "ul", "ll") and bare league
+	// words ("great", "ultra", "little") — the latter only count as a
+	// league mention in PVP context, so the map is kept separate.
+	for i, t := range tokens {
+		if result.Consumed[i] {
+			continue
+		}
+		if lg, ok := pvpLeagues[t]; ok {
+			addLeague(lg)
+			result.Consumed[i] = true
+			continue
+		}
+		if lg, ok := bareLeagueWords[t]; ok {
+			addLeague(lg)
+			result.Consumed[i] = true
 		}
 	}
 
-	// Detect rank/top N
+	// Detect rank/top N (single value, applied to every league)
 	rank := 0
 	for i, t := range tokens {
 		if result.Consumed[i] {
@@ -402,15 +481,21 @@ func matchPVP(tokens []string, intent string, result *FilterResult) {
 		}
 	}
 
-	// Build PVP filter
-	if league != "" || rank > 0 || hasPVPWord {
-		if league == "" {
-			league = "great"
+	// Build PVP filters — one per league mentioned, or default to great if
+	// the user said "pvp"/"top 10" without naming a league.
+	if len(leagues) == 0 && (rank > 0 || hasPVPWord) {
+		addLeague("great")
+	}
+	if rank == 0 {
+		rank = 5
+	}
+	// Emit in canonical league order (great → ultra → little) so the
+	// Poracle command reads predictably regardless of the order the user
+	// mentioned them.
+	for _, canonical := range []string{"great", "ultra", "little"} {
+		if seen[canonical] {
+			result.Filters = append(result.Filters, fmt.Sprintf("%s%d", canonical, rank))
 		}
-		if rank == 0 {
-			rank = 5
-		}
-		result.Filters = append(result.Filters, fmt.Sprintf("%s%d", league, rank))
 	}
 }
 
@@ -421,6 +506,21 @@ func sortByLengthDesc(ss []string) {
 			ss[j], ss[j-1] = ss[j-1], ss[j]
 		}
 	}
+}
+
+// currentJoined joins the tokens that remain unconsumed into a single
+// string for substring matching. Used by matchPVP to re-check for
+// multi-word league phrases after each match so multiple occurrences get
+// picked up.
+func currentJoined(tokens []string, result *FilterResult) string {
+	var parts []string
+	for i, t := range tokens {
+		if result.Consumed[i] {
+			continue
+		}
+		parts = append(parts, t)
+	}
+	return strings.Join(parts, " ")
 }
 
 // allTokensConsumed checks if all tokens that would match a phrase are already consumed.
