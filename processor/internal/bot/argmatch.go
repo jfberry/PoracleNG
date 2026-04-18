@@ -24,6 +24,13 @@ type ArgMatcher struct {
 	raidLevelMap map[string]map[string][]int  // lang → name → level IDs
 	prefixMap    map[string][]string          // (lang + "\x00" + key) → prefix strings
 	keywordMap   map[string]map[string]string // lang → lowercase_translated → original key
+
+	// Multi-word vocabularies — lets the parser collapse "razz berry"
+	// into a single token before per-param matching runs, so users don't
+	// need to type underscores or quotes for known multi-word names.
+	// See collapseMultiWord.
+	bareMultiWord      map[string]bool            // items + pokemon names (multi-word entries only)
+	prefixedMultiWord  map[string]map[string]bool // "move" → multi-word move names, "form" → form names
 }
 
 // NewArgMatcher builds the pre-computed lookup tables for argument matching.
@@ -139,7 +146,150 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 		}
 	}
 
+	am.buildMultiWordVocabularies(languages)
+
 	return am
+}
+
+// buildMultiWordVocabularies walks the game data and resolver maps,
+// collecting every multi-word phrase the argument parser might want to
+// match as a single token (items, moves, forms, pokemon names). Built
+// once at startup; the scan in collapseMultiWord is O(tokens * window)
+// against a pre-computed set.
+func (am *ArgMatcher) buildMultiWordVocabularies(languages []string) {
+	am.bareMultiWord = make(map[string]bool)
+	am.prefixedMultiWord = map[string]map[string]bool{
+		"move": {},
+		"form": {},
+	}
+
+	// Bare multi-word: items (quest rewards) and pokemon names (track,
+	// raid, etc. — bare in argument position, no prefix).
+	if am.gameData != nil {
+		for _, lang := range languages {
+			tr := am.bundle.For(lang)
+			if tr == nil {
+				continue
+			}
+			// Items — the game-data loader gives us a set of known IDs.
+			// Iterate a wide range; missing translations fall through.
+			for id := 1; id < 3000; id++ {
+				name := strings.ToLower(tr.T(gamedata.ItemTranslationKey(id)))
+				if name == "" || !strings.Contains(name, " ") {
+					continue
+				}
+				am.bareMultiWord[name] = true
+			}
+			// Moves — prefix-scoped.
+			for id := 1; id < 1000; id++ {
+				name := strings.ToLower(tr.T(gamedata.MoveTranslationKey(id)))
+				if name == "" || !strings.Contains(name, " ") {
+					continue
+				}
+				am.prefixedMultiWord["move"][name] = true
+			}
+			// Forms — prefix-scoped.
+			for id := 1; id < 5000; id++ {
+				name := strings.ToLower(tr.T(gamedata.FormTranslationKey(id)))
+				if name == "" || !strings.Contains(name, " ") {
+					continue
+				}
+				am.prefixedMultiWord["form"][name] = true
+			}
+		}
+	}
+	// Pokemon names with spaces OR with de-punctuated variants the
+	// resolver registered (e.g. "mr mime" for "mr. mime"). Grab them
+	// straight from the resolver's per-language maps so we don't
+	// duplicate the depunctuation logic here.
+	if am.resolver != nil {
+		for _, langMap := range am.resolver.nameToIDs {
+			for name := range langMap {
+				if strings.Contains(name, " ") {
+					am.bareMultiWord[name] = true
+				}
+			}
+		}
+	}
+}
+
+// collapseMultiWord greedily joins sequences of tokens that form a known
+// multi-word phrase into single tokens, so "razz berry" / "mr mime" /
+// "move:hyper beam" / "form:low key form" all reach the per-param
+// matchers as single tokens. Greedy-longest at each position: tries
+// windows of 4, 3, 2 tokens before falling through to the unchanged
+// single-token case. Prefixed tokens (move:X, form:X) consult a
+// scoped vocabulary to avoid false matches.
+//
+// The pre-computed vocabulary is lowercased; tokens from the parser
+// are already lowercased. maxWindow of 4 covers every known phrase
+// (longest real entries are things like "Galarian Zen Mode", "Silver
+// Pinap Berry", "Mega Charizard X").
+func (am *ArgMatcher) collapseMultiWord(tokens []string) []string {
+	if len(tokens) < 2 {
+		return tokens
+	}
+	const maxWindow = 4
+
+	out := make([]string, 0, len(tokens))
+	i := 0
+	for i < len(tokens) {
+		matched := false
+		// Detect a prefix like "move:" / "form:" on the first token —
+		// the remainder is the start of a potential multi-word value
+		// that we want to consume into the same prefixed token.
+		prefix, remainder := splitParamPrefix(tokens[i], am.prefixedMultiWord)
+		for window := maxWindow; window >= 2; window-- {
+			if i+window > len(tokens) {
+				continue
+			}
+			if prefix != "" {
+				joined := remainder
+				for j := 1; j < window; j++ {
+					joined += " " + tokens[i+j]
+				}
+				if am.prefixedMultiWord[prefix][joined] {
+					out = append(out, prefix+":"+joined)
+					i += window
+					matched = true
+					break
+				}
+			} else {
+				joined := tokens[i]
+				for j := 1; j < window; j++ {
+					joined += " " + tokens[i+j]
+				}
+				if am.bareMultiWord[joined] {
+					out = append(out, joined)
+					i += window
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			out = append(out, tokens[i])
+			i++
+		}
+	}
+	return out
+}
+
+// splitParamPrefix returns (prefix, remainder) if tok looks like
+// "<knownPrefix>:<rest>" for any prefix present in prefixedMultiWord,
+// otherwise ("", ""). "move:hyper" → ("move", "hyper"). We only match
+// the colon form so users who typed "move:ice beam" get multi-word
+// lookahead; single-word "moveice" (no colon) still parses as before.
+func splitParamPrefix(tok string, prefixedMultiWord map[string]map[string]bool) (string, string) {
+	colon := strings.IndexByte(tok, ':')
+	if colon <= 0 {
+		return "", ""
+	}
+	prefix := tok[:colon]
+	if _, ok := prefixedMultiWord[prefix]; !ok {
+		return "", ""
+	}
+	return prefix, tok[colon+1:]
 }
 
 // knownPrefixKeys lists all arg.prefix.* keys used by any command.
@@ -177,6 +327,11 @@ var knownKeywordKeys = []string{
 // Uses lang (user's language) + "en" (English fallback).
 // Consumed tokens are removed from consideration. Unmatched tokens go to Unrecognized.
 func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *ParsedArgs {
+	// Collapse known multi-word phrases first so "!quest razz berry"
+	// or "!raid move:hyper beam" reach the per-param matchers as single
+	// tokens the same way "razz_berry" / "move:hyper_beam" would.
+	tokens = am.collapseMultiWord(tokens)
+
 	result := NewParsedArgs()
 	consumed := make([]bool, len(tokens))
 

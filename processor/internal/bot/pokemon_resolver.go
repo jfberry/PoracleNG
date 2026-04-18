@@ -39,13 +39,30 @@ func NewPokemonResolver(gd *gamedata.GameData, bundle *i18n.Bundle, languages []
 		r.aliases = make(map[string][]int)
 	}
 
-	// Build name→ID maps per language from poke_{id} translation keys
+	// Build name→ID maps per language from poke_{id} translation keys.
+	// For each pokemon, register both the raw lowercased name and a
+	// de-punctuated variant so "Mr. Mime" matches "mr mime" and "mr.
+	// mime", "Farfetch'd" matches "farfetch'd" and "farfetchd",
+	// "Type: Null" matches "type: null" / "type null" / "typenull".
 	for _, lang := range languages {
 		tr := bundle.For(lang)
 		if tr == nil {
 			continue
 		}
 		langMap := make(map[string][]int)
+		add := func(key string, id int) {
+			if key == "" {
+				return
+			}
+			// Avoid duplicate entries for the same ID on repeat variants.
+			existing := langMap[key]
+			for _, e := range existing {
+				if e == id {
+					return
+				}
+			}
+			langMap[key] = append(existing, id)
+		}
 		for id := 1; id <= 2000; id++ {
 			key := gamedata.PokemonTranslationKey(id)
 			name := tr.T(key)
@@ -53,12 +70,64 @@ func NewPokemonResolver(gd *gamedata.GameData, bundle *i18n.Bundle, languages []
 				continue // no translation found
 			}
 			lower := toLower(name)
-			langMap[lower] = append(langMap[lower], id)
+			add(lower, id)
+			for _, variant := range depunctuatedVariants(lower) {
+				add(variant, id)
+			}
 		}
 		r.nameToIDs[lang] = langMap
 	}
 
 	return r
+}
+
+// depunctuatedVariants returns variants of a lowercased pokemon name with
+// common punctuation stripped or normalised. "mr. mime" yields "mr mime"
+// (period + space collapsed to space). "farfetch'd" yields "farfetchd".
+// "type: null" yields "type null" and "typenull". Duplicates of the
+// input are filtered by the caller.
+func depunctuatedVariants(name string) []string {
+	var out []string
+	seen := map[string]bool{name: true}
+	add := func(s string) {
+		s = strings.TrimSpace(collapseInternalWhitespace(s))
+		if s == "" || seen[s] {
+			return
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	// Drop apostrophes entirely: "farfetch'd" → "farfetchd".
+	add(strings.ReplaceAll(name, "'", ""))
+	// Drop periods/colons, collapse resulting double spaces: "mr. mime"
+	// → "mr mime", "type: null" → "type null".
+	noPunct := strings.NewReplacer(".", "", ":", "").Replace(name)
+	add(noPunct)
+	// Drop all punctuation AND internal spaces: "type null" → "typenull".
+	noSpace := strings.ReplaceAll(noPunct, " ", "")
+	add(noSpace)
+	// Hyphens as spaces: "ho-oh" → "ho oh".
+	add(strings.ReplaceAll(name, "-", " "))
+	// Hyphens dropped entirely: "ho-oh" → "hooh".
+	add(strings.ReplaceAll(name, "-", ""))
+	return out
+}
+
+func collapseInternalWhitespace(s string) string {
+	var b strings.Builder
+	prevSpace := false
+	for _, r := range s {
+		if r == ' ' {
+			if !prevSpace {
+				b.WriteRune(r)
+			}
+			prevSpace = true
+			continue
+		}
+		b.WriteRune(r)
+		prevSpace = false
+	}
+	return b.String()
 }
 
 // Resolve returns matching pokemon for a user-typed name.

@@ -488,3 +488,191 @@ func TestArgMatchMultiWordKeyword(t *testing.T) {
 		t.Error("expected arg.no_rsvp for multi-word keyword")
 	}
 }
+
+// newMultiWordTestMatcher builds an ArgMatcher with a minimal set of
+// multi-word items / moves / forms / pokemon names, exercising the
+// collapseMultiWord pre-pass without dragging in the full game data
+// or pokemon resolver setup.
+func newMultiWordTestMatcher() *ArgMatcher {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"arg.prefix.move":     "move",
+		"arg.prefix.form":     "form",
+		"arg.prefix.d":        "d",
+		"arg.prefix.iv":       "iv",
+		"arg.prefix.template": "template",
+		"arg.remove":          "remove",
+		"arg.everything":      "everything",
+		"arg.clean":           "clean",
+		// Items — two multi-word entries, one single-word distractor.
+		"item_1":   "Pokeball",
+		"item_701": "Razz Berry",
+		"item_702": "Golden Razz Berry",
+		"item_708": "Silver Pinap Berry",
+		"item_1201": "Rare Candy",
+		// Moves — multi-word.
+		"move_14": "Hyper Beam",
+		"move_58": "Ice Beam",
+		"move_94": "Rock Slide",
+		"move_101": "Shadow Ball",
+		// Forms — multi-word.
+		"form_2463": "Low Key Form",
+		"form_2464": "Amped Form",
+		"form_147":  "Black Kyurem",
+		"form_140":  "Incarnate Forme",
+	}))
+	gd := &gamedata.GameData{Util: &gamedata.UtilData{}}
+	am := NewArgMatcher(bundle, gd, nil, []string{"en"})
+
+	// The real setup pulls multi-word pokemon names out of the
+	// PokemonResolver. Seed the parser's bare vocabulary directly for
+	// tests; mirrors what the resolver registers ("mr. mime" and the
+	// de-punctuated "mr mime").
+	am.bareMultiWord["mr. mime"] = true
+	am.bareMultiWord["mr mime"] = true
+	am.bareMultiWord["tapu koko"] = true
+	return am
+}
+
+// TestCollapseMultiWordItems — bare multi-word item names collapse into
+// single tokens so "razz berry" reaches the item matcher as one arg.
+func TestCollapseMultiWordItems(t *testing.T) {
+	am := newMultiWordTestMatcher()
+	cases := []struct {
+		in   []string
+		want []string
+	}{
+		{[]string{"razz", "berry"}, []string{"razz berry"}},
+		{[]string{"golden", "razz", "berry"}, []string{"golden razz berry"}},
+		{[]string{"silver", "pinap", "berry"}, []string{"silver pinap berry"}},
+		{[]string{"pikachu", "rare", "candy", "d:500"}, []string{"pikachu", "rare candy", "d:500"}},
+		// Greedy-longest: prefer "golden razz berry" over "razz berry".
+		{[]string{"golden", "razz", "berry", "pikachu"}, []string{"golden razz berry", "pikachu"}},
+		// Single-word items stay untouched.
+		{[]string{"pokeball", "razz", "berry"}, []string{"pokeball", "razz berry"}},
+		// No match → tokens unchanged.
+		{[]string{"pikachu", "charizard"}, []string{"pikachu", "charizard"}},
+	}
+	for _, c := range cases {
+		got := am.collapseMultiWord(c.in)
+		if !equalStringSlices(got, c.want) {
+			t.Errorf("collapseMultiWord(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+// TestCollapseMultiWordPokemonNames — multi-word pokemon names collapse
+// (including the de-punctuated variants the resolver registers).
+func TestCollapseMultiWordPokemonNames(t *testing.T) {
+	am := newMultiWordTestMatcher()
+	cases := []struct {
+		in   []string
+		want []string
+	}{
+		{[]string{"mr", "mime"}, []string{"mr mime"}},
+		{[]string{"mr.", "mime"}, []string{"mr. mime"}},
+		{[]string{"tapu", "koko"}, []string{"tapu koko"}},
+		{[]string{"pikachu", "mr", "mime"}, []string{"pikachu", "mr mime"}},
+	}
+	for _, c := range cases {
+		got := am.collapseMultiWord(c.in)
+		if !equalStringSlices(got, c.want) {
+			t.Errorf("collapseMultiWord(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+// TestCollapseMultiWordPrefixed — move:X and form:X consume following
+// tokens when they complete a known multi-word entry.
+func TestCollapseMultiWordPrefixed(t *testing.T) {
+	am := newMultiWordTestMatcher()
+	cases := []struct {
+		in   []string
+		want []string
+	}{
+		{[]string{"move:hyper", "beam"}, []string{"move:hyper beam"}},
+		{[]string{"move:ice", "beam"}, []string{"move:ice beam"}},
+		{[]string{"move:rock", "slide"}, []string{"move:rock slide"}},
+		{[]string{"form:low", "key", "form"}, []string{"form:low key form"}},
+		{[]string{"form:black", "kyurem"}, []string{"form:black kyurem"}},
+		// Mixed with other args.
+		{[]string{"tyranitar", "move:hyper", "beam", "d:1000"}, []string{"tyranitar", "move:hyper beam", "d:1000"}},
+		// Already-complete single-word move: stays as-is.
+		{[]string{"move:earthquake"}, []string{"move:earthquake"}},
+		// Unknown prefix — doesn't trigger prefix-scoped collapse.
+		{[]string{"iv:100", "razz", "berry"}, []string{"iv:100", "razz berry"}},
+	}
+	for _, c := range cases {
+		got := am.collapseMultiWord(c.in)
+		if !equalStringSlices(got, c.want) {
+			t.Errorf("collapseMultiWord(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+// TestCollapseMultiWordMultiLanguage — the vocabulary is built from
+// every configured language's translations, so a German user can type
+// "süßer apfel" just like an English user types "razz berry".
+func TestCollapseMultiWordMultiLanguage(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"arg.prefix.move": "move",
+		"arg.prefix.form": "form",
+		"arg.prefix.iv":   "iv",
+		"item_701":        "Razz Berry",
+		"move_14":         "Hyper Beam",
+	}))
+	bundle.AddTranslator(i18n.NewTranslator("de", map[string]string{
+		"arg.prefix.move": "move",
+		"arg.prefix.form": "form",
+		"arg.prefix.iv":   "iv",
+		"item_701":        "Himmihbeere", // single-word in German
+		"item_702":        "Süßer Apfel", // multi-word in German
+		"move_14":         "Hyperstrahl", // single-word in German
+		"move_25":         "Draco Meteor", // happens to stay English in German
+	}))
+	gd := &gamedata.GameData{Util: &gamedata.UtilData{}}
+	am := NewArgMatcher(bundle, gd, nil, []string{"en", "de"})
+
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"english bare item", []string{"razz", "berry"}, []string{"razz berry"}},
+		{"german bare item", []string{"süßer", "apfel"}, []string{"süßer apfel"}},
+		{"english prefixed move", []string{"move:hyper", "beam"}, []string{"move:hyper beam"}},
+		{"german prefixed move (kept english in-game)", []string{"move:draco", "meteor"}, []string{"move:draco meteor"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := am.collapseMultiWord(c.in)
+			if !equalStringSlices(got, c.want) {
+				t.Errorf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestCollapseMultiWordPassthrough — tokens that aren't multi-word
+// prefixes stay exactly as they were.
+func TestCollapseMultiWordPassthrough(t *testing.T) {
+	am := newMultiWordTestMatcher()
+	in := []string{"pikachu", "d:500", "iv:100", "clean"}
+	got := am.collapseMultiWord(in)
+	if !equalStringSlices(got, in) {
+		t.Errorf("tokens unchanged expected, got %v", got)
+	}
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
