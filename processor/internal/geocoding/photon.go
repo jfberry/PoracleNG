@@ -15,24 +15,27 @@ import (
 // Photon implements Provider using the Photon geocoder API (komoot/photon).
 // Photon returns GeoJSON responses based on OpenStreetMap data.
 type Photon struct {
-	baseURL   string
-	client    *http.Client
-	formatter *ocfmt.Formatter
+	baseURL        string
+	client         *http.Client
+	formatter      *ocfmt.Formatter
+	includeCountry bool // render country into FormattedAddress via ocfmt
 }
 
-// NewPhoton creates a Photon provider.
+// NewPhoton creates a Photon provider. includeCountry controls whether the
+// OpenCage-formatted FormattedAddress trails with the country name.
 // FormattedAddress is always populated via OpenCage country-specific
 // templates (ocfmt). Callers who want a different shape can drive it via
 // the existing address_format template with the per-field helpers
 // ({{{streetName}}}, {{{suburb}}}, {{{city}}}, etc.).
-func NewPhoton(baseURL string, timeout time.Duration) *Photon {
+func NewPhoton(baseURL string, timeout time.Duration, includeCountry bool) *Photon {
 	if timeout == 0 {
 		timeout = 10 * time.Second
 	}
 	return &Photon{
-		baseURL:   strings.TrimRight(baseURL, "/"),
-		client:    &http.Client{Timeout: timeout},
-		formatter: ocfmt.Global(),
+		baseURL:        strings.TrimRight(baseURL, "/"),
+		client:         &http.Client{Timeout: timeout},
+		formatter:      ocfmt.Global(),
+		includeCountry: includeCountry,
 	}
 }
 
@@ -152,6 +155,10 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 func (p *Photon) formatOpenCage(components map[string]string, countryCode string) string {
 	// Ensure country_code is set (uppercase)
 	components["country_code"] = countryCode
+
+	if !p.includeCountry {
+		delete(components, "country")
+	}
 
 	result := p.formatter.Format(components)
 	if result == "" {

@@ -139,6 +139,11 @@ date = "L"
 #
 # Leave empty for the country-idiomatic default (recommended for new installs).
 address_format = ""
+# address_include_country controls whether the country name trails the
+# OpenCage-formatted {{{formattedAddress}}}. Defaults to false because most
+# operators serve a single country and the suffix is noise. Set true for
+# multi-country audiences.
+address_include_country = false
 # language - secondary language used for 'alt' translation in DTS; useful for
 #   retrieving english language detail for web links
 language = "en"

@@ -125,7 +125,7 @@ func TestPhotonReverse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewPhoton(srv.URL, 2*time.Second)
+	p := NewPhoton(srv.URL, 2*time.Second, true)
 	addr, err := p.Reverse(52.517, 13.389)
 	if err != nil {
 		t.Fatalf("Reverse: %v", err)
@@ -163,7 +163,7 @@ func TestPhotonReverseEmptyFeatures(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewPhoton(srv.URL, 2*time.Second)
+	p := NewPhoton(srv.URL, 2*time.Second, true)
 	if _, err := p.Reverse(0, 0); err == nil {
 		t.Fatal("expected error for empty features")
 	}
@@ -175,9 +175,51 @@ func TestPhotonReverseServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewPhoton(srv.URL, 2*time.Second)
+	p := NewPhoton(srv.URL, 2*time.Second, true)
 	if _, err := p.Reverse(0, 0); err == nil {
 		t.Fatal("expected error for 500 response")
+	}
+}
+
+// TestPhotonReverseCountryExcluded verifies that includeCountry=false (the
+// default) strips the trailing country name from FormattedAddress while still
+// producing a country-idiomatic layout everywhere else. OpenCage's postformat
+// regex rules handle the dangling separator, so no manual cleanup needed.
+func TestPhotonReverseCountryExcluded(t *testing.T) {
+	const body = `{
+        "features": [{
+            "geometry": {"coordinates": [13.388860, 52.517037]},
+            "properties": {
+                "type": "house", "countrycode": "DE", "housenumber": "1",
+                "street": "Unter den Linden", "city": "Berlin",
+                "state": "Berlin", "country": "Germany", "postcode": "10117"
+            }
+        }]
+    }`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	p := NewPhoton(srv.URL, 2*time.Second, false)
+	addr, err := p.Reverse(52.517, 13.389)
+	if err != nil {
+		t.Fatalf("Reverse: %v", err)
+	}
+	if strings.Contains(addr.FormattedAddress, "Germany") {
+		t.Errorf("FormattedAddress should not contain country when includeCountry=false, got %q", addr.FormattedAddress)
+	}
+	// The rest of the country-idiomatic layout should still be present.
+	for _, want := range []string{"Unter den Linden", "10117", "Berlin"} {
+		if !strings.Contains(addr.FormattedAddress, want) {
+			t.Errorf("FormattedAddress %q missing %q", addr.FormattedAddress, want)
+		}
+	}
+	// Country component fields stay populated — templates that reference
+	// {{{country}}} still work; we only control FormattedAddress shape.
+	if addr.Country != "Germany" || addr.CountryCode != "DE" {
+		t.Errorf("component fields should stay populated, got Country=%q CountryCode=%q", addr.Country, addr.CountryCode)
 	}
 }
 
@@ -202,7 +244,7 @@ func TestPhotonForward(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewPhoton(srv.URL, 2*time.Second)
+	p := NewPhoton(srv.URL, 2*time.Second, true)
 	results, err := p.Forward("london")
 	if err != nil {
 		t.Fatalf("Forward: %v", err)

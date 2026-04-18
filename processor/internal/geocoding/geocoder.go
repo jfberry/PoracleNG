@@ -19,7 +19,11 @@ type Config struct {
 	CachePath     string   // pogreb database path
 	ForwardOnly   bool     // if true, skip reverse geocoding
 	AddressFormat string   // template for addr field, e.g. "{{{streetName}}} {{streetNumber}}"
-	Timeout       int      // HTTP timeout in ms (default 5000)
+	// IncludeCountry controls whether ocfmt renders the country name into
+	// FormattedAddress. Defaults to false — the country tends to be noise
+	// for single-country operator audiences.
+	IncludeCountry bool
+	Timeout        int // HTTP timeout in ms (default 5000)
 
 	// Circuit breaker
 	FailureThreshold int // consecutive errors before circuit opens (default 5)
@@ -74,9 +78,9 @@ func New(config Config) (*Geocoder, error) {
 	var provider Provider
 	switch config.Provider {
 	case "nominatim":
-		provider = NewNominatim(config.ProviderURL, timeout)
+		provider = NewNominatim(config.ProviderURL, timeout, config.IncludeCountry)
 	case "photon":
-		provider = NewPhoton(config.ProviderURL, timeout)
+		provider = NewPhoton(config.ProviderURL, timeout, config.IncludeCountry)
 	case "google":
 		provider = NewGoogle(config.GeocodingKeys, timeout)
 	default:

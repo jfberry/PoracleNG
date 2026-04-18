@@ -40,7 +40,7 @@ func TestNominatimReverseOCFMT(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	n := NewNominatim(srv.URL, 2*time.Second)
+	n := NewNominatim(srv.URL, 2*time.Second, true)
 	addr, err := n.Reverse(52.517, 13.389)
 	if err != nil {
 		t.Fatalf("Reverse: %v", err)
@@ -67,6 +67,45 @@ func TestNominatimReverseOCFMT(t *testing.T) {
 	}
 }
 
+// TestNominatimReverseCountryExcluded verifies the default includeCountry=false
+// suppresses the country suffix from FormattedAddress without touching the
+// rest of the country-idiomatic layout. Matches the Photon test of the same
+// behaviour.
+func TestNominatimReverseCountryExcluded(t *testing.T) {
+	const body = `{
+        "lat": "52.517037", "lon": "13.388860",
+        "display_name": "…",
+        "address": {
+            "country": "Germany", "country_code": "de", "state": "Berlin",
+            "city": "Berlin", "postcode": "10117",
+            "road": "Unter den Linden", "house_number": "1"
+        }
+    }`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	n := NewNominatim(srv.URL, 2*time.Second, false)
+	addr, err := n.Reverse(52.517, 13.389)
+	if err != nil {
+		t.Fatalf("Reverse: %v", err)
+	}
+	if strings.Contains(addr.FormattedAddress, "Germany") {
+		t.Errorf("FormattedAddress should not contain country, got %q", addr.FormattedAddress)
+	}
+	for _, want := range []string{"Unter den Linden", "10117", "Berlin"} {
+		if !strings.Contains(addr.FormattedAddress, want) {
+			t.Errorf("FormattedAddress %q missing %q", addr.FormattedAddress, want)
+		}
+	}
+	// Component field unchanged; only FormattedAddress is shaped by the flag.
+	if addr.Country != "Germany" {
+		t.Errorf("Country field should stay populated, got %q", addr.Country)
+	}
+}
+
 // TestNominatimFallsBackToDisplayName — if ocfmt can't produce anything from
 // the sparse components, we still surface a sensible FormattedAddress from
 // Nominatim's own display_name.
@@ -83,7 +122,7 @@ func TestNominatimFallsBackToDisplayName(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	n := NewNominatim(srv.URL, 2*time.Second)
+	n := NewNominatim(srv.URL, 2*time.Second, true)
 	addr, err := n.Reverse(0, 0)
 	if err != nil {
 		t.Fatalf("Reverse: %v", err)

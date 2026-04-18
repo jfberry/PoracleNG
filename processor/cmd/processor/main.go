@@ -1006,6 +1006,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 			CachePath:        filepath.Join(cfg.BaseDir, "config", ".cache", "geocache"),
 			ForwardOnly:      cfg.Geocoding.ForwardOnly,
 			AddressFormat:    cfg.Locale.AddressFormat,
+			IncludeCountry:   cfg.Locale.AddressIncludeCountry,
 			Timeout:          cfg.Tuning.GeocodingTimeout,
 			FailureThreshold: cfg.Tuning.GeocodingFailureThreshold,
 			CooldownMs:       cfg.Tuning.GeocodingCooldownMs,

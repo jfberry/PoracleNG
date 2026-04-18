@@ -19,17 +19,20 @@ const userAgent = "PoracleNG/1.0"
 
 // Nominatim implements Provider using the Nominatim API (OpenStreetMap).
 type Nominatim struct {
-	baseURL string
-	client  *http.Client
+	baseURL        string
+	includeCountry bool // render country into FormattedAddress via ocfmt
+	client         *http.Client
 }
 
-// NewNominatim creates a Nominatim provider.
-func NewNominatim(baseURL string, timeout time.Duration) *Nominatim {
+// NewNominatim creates a Nominatim provider. includeCountry controls whether
+// the OpenCage-formatted FormattedAddress trails with the country name.
+func NewNominatim(baseURL string, timeout time.Duration, includeCountry bool) *Nominatim {
 	if timeout == 0 {
 		timeout = 10 * time.Second
 	}
 	return &Nominatim{
-		baseURL: strings.TrimRight(baseURL, "/"),
+		baseURL:        strings.TrimRight(baseURL, "/"),
+		includeCountry: includeCountry,
 		client: &http.Client{
 			Timeout: timeout,
 		},
@@ -120,6 +123,9 @@ func (n *Nominatim) Reverse(lat, lon float64) (*Address, error) {
 	streetName := firstNonEmpty(result.Address.Road, result.Address.Quarter, result.Address.Cycleway)
 
 	components := nominatimToOCFMT(result.Address, streetName, city)
+	if !n.includeCountry {
+		delete(components, "country")
+	}
 	formatted := ocfmt.Global().Format(components)
 	if strings.TrimSpace(formatted) == "" {
 		// Fall back to Nominatim's own display_name if OpenCage can't produce
