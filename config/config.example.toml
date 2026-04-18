@@ -453,6 +453,13 @@ img_url_pokestop = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/f
 pokestop_url = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png"
 
 
+# NLP command assistant — parses natural-language requests into structured
+# tracking commands. Used by the !ask command and (optionally) to suggest
+# commands when a user DMs something the bot doesn't recognise.
+[ai]
+enabled = false                          # enables the !ask command + NLP suggest infrastructure
+suggest_on_dm = false                    # when true, DMs that don't match a command get a "did you mean …?" suggestion
+
 
 # ---- Logging ----
 # Log levels: silly, debug, verbose, info, warn
