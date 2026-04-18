@@ -151,11 +151,9 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 	return am
 }
 
-// buildMultiWordVocabularies walks the game data and resolver maps,
-// collecting every multi-word phrase the argument parser might want to
-// match as a single token (items, moves, forms, pokemon names). Built
-// once at startup; the scan in collapseMultiWord is O(tokens * window)
-// against a pre-computed set.
+// buildMultiWordVocabularies collects every multi-word phrase the argument
+// parser might want to match as a single token. Built once at startup;
+// collapseMultiWord scans are O(tokens × window) against this set.
 func (am *ArgMatcher) buildMultiWordVocabularies(languages []string) {
 	am.bareMultiWord = make(map[string]bool)
 	am.prefixedMultiWord = map[string]map[string]bool{
@@ -163,45 +161,39 @@ func (am *ArgMatcher) buildMultiWordVocabularies(languages []string) {
 		"form": {},
 	}
 
-	// Bare multi-word: items (quest rewards) and pokemon names (track,
-	// raid, etc. — bare in argument position, no prefix).
 	if am.gameData != nil {
+		// Form IDs are scattered across Monsters; collect once.
+		formIDs := make(map[int]bool, len(am.gameData.Monsters))
+		for key := range am.gameData.Monsters {
+			if key.Form > 0 {
+				formIDs[key.Form] = true
+			}
+		}
+
+		add := func(dest map[string]bool, tr *i18n.Translator, key string) {
+			name := strings.ToLower(tr.T(key))
+			if name != "" && strings.Contains(name, " ") {
+				dest[name] = true
+			}
+		}
 		for _, lang := range languages {
 			tr := am.bundle.For(lang)
 			if tr == nil {
 				continue
 			}
-			// Items — the game-data loader gives us a set of known IDs.
-			// Iterate a wide range; missing translations fall through.
-			for id := 1; id < 3000; id++ {
-				name := strings.ToLower(tr.T(gamedata.ItemTranslationKey(id)))
-				if name == "" || !strings.Contains(name, " ") {
-					continue
-				}
-				am.bareMultiWord[name] = true
+			for id := range am.gameData.Items {
+				add(am.bareMultiWord, tr, gamedata.ItemTranslationKey(id))
 			}
-			// Moves — prefix-scoped.
-			for id := 1; id < 1000; id++ {
-				name := strings.ToLower(tr.T(gamedata.MoveTranslationKey(id)))
-				if name == "" || !strings.Contains(name, " ") {
-					continue
-				}
-				am.prefixedMultiWord["move"][name] = true
+			for id := range am.gameData.Moves {
+				add(am.prefixedMultiWord["move"], tr, gamedata.MoveTranslationKey(id))
 			}
-			// Forms — prefix-scoped.
-			for id := 1; id < 5000; id++ {
-				name := strings.ToLower(tr.T(gamedata.FormTranslationKey(id)))
-				if name == "" || !strings.Contains(name, " ") {
-					continue
-				}
-				am.prefixedMultiWord["form"][name] = true
+			for id := range formIDs {
+				add(am.prefixedMultiWord["form"], tr, gamedata.FormTranslationKey(id))
 			}
 		}
 	}
-	// Pokemon names with spaces OR with de-punctuated variants the
-	// resolver registered (e.g. "mr mime" for "mr. mime"). Grab them
-	// straight from the resolver's per-language maps so we don't
-	// duplicate the depunctuation logic here.
+	// Pokemon names with spaces OR with the de-punctuated variants the
+	// resolver registers (so "mr mime" collapses alongside "mr. mime").
 	if am.resolver != nil {
 		for _, langMap := range am.resolver.nameToIDs {
 			for name := range langMap {
@@ -213,18 +205,11 @@ func (am *ArgMatcher) buildMultiWordVocabularies(languages []string) {
 	}
 }
 
-// collapseMultiWord greedily joins sequences of tokens that form a known
-// multi-word phrase into single tokens, so "razz berry" / "mr mime" /
-// "move:hyper beam" / "form:low key form" all reach the per-param
-// matchers as single tokens. Greedy-longest at each position: tries
-// windows of 4, 3, 2 tokens before falling through to the unchanged
-// single-token case. Prefixed tokens (move:X, form:X) consult a
-// scoped vocabulary to avoid false matches.
-//
-// The pre-computed vocabulary is lowercased; tokens from the parser
-// are already lowercased. maxWindow of 4 covers every known phrase
-// (longest real entries are things like "Galarian Zen Mode", "Silver
-// Pinap Berry", "Mega Charizard X").
+// collapseMultiWord greedily joins token sequences that form a known
+// multi-word phrase into a single token. Greedy-longest at each
+// position. Tokens starting with "move:" / "form:" consult the
+// prefix-scoped vocabulary; everything else consults the bare set.
+// Window capped at 4 — covers every known phrase.
 func (am *ArgMatcher) collapseMultiWord(tokens []string) []string {
 	if len(tokens) < 2 {
 		return tokens

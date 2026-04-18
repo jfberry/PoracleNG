@@ -16,11 +16,8 @@ import (
 // !help <command> renders the "help" DTS template with id=<command>.
 type HelpCommand struct{}
 
-// adminOnlyHelpTopics guards per-command help lookups: a non-admin asking
-// for `!help enable` gets an "unknown topic" reply instead of having the
-// admin command syntax leaked to them. Admins see the full help. The
-// index template gets a parallel isAdmin flag so it can gate the admin
-// commands section too.
+// adminOnlyHelpTopics — non-admins asking "!help enable" get the 🙅
+// unknown-topic reply rather than the admin command surface.
 var adminOnlyHelpTopics = map[string]bool{
 	"enable":    true,
 	"disable":   true,
@@ -42,26 +39,17 @@ func (c *HelpCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		platform = "discord"
 	}
 
-	// View data for template rendering. Both flag names are exposed so
-	// template authors can use whichever reads better in context.
 	view := map[string]any{
 		"prefix":      prefix,
-		"isAdmin":     ctx.IsAdmin,
 		"userIsAdmin": ctx.IsAdmin,
 	}
 
 	if len(args) > 0 {
 		topic := strings.ToLower(args[0])
-		// Admin-only help topics are hidden from non-admins — showing the
-		// syntax for commands they can't run is just confusing noise, and
-		// !enable / !disable / !broadcast don't belong in a user-facing
-		// command surface. Non-admins see the same "unknown topic" reply
-		// they'd see for any non-existent command.
 		if adminOnlyHelpTopics[topic] && !ctx.IsAdmin {
 			tr := ctx.Tr()
 			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.help.unknown_topic", topic, prefix)}}
 		}
-		// !help <command> — render help DTS for that command
 		return c.renderHelpTemplate(ctx, "help", topic, platform, view)
 	}
 
@@ -139,12 +127,9 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 			return []bot.Reply{{Text: result}}
 		}
 
-		// For help/greeting templates, clear title and description if present
-		// (set to empty string, not delete — Discord requires the field to exist)
-		// and drop any fields whose name+value both rendered empty — this
-		// lets templates use {{#if userIsAdmin}}...{{/if}} around field
-		// name/value strings to omit whole sections cleanly (matches the
-		// convention in delivery/image.go for alert messages).
+		// Clear title/description (Discord requires the keys to exist) and
+		// drop fields whose name+value both rendered empty — lets template
+		// authors gate whole sections via {{#if ...}} around the strings.
 		if embed, ok := msg["embed"].(map[string]any); ok {
 			if _, has := embed["title"]; has {
 				embed["title"] = ""
@@ -202,9 +187,8 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 	}
 
 	// Build text from embed fields, splitting at 1024 chars per message.
-	// Fields whose name AND value both rendered empty (e.g. guarded by
-	// {{#if userIsAdmin}}) are dropped so the Telegram text output
-	// doesn't contain blank sections.
+	// Empty-on-both-sides fields drop out so {{#if}}-gated sections
+	// don't leave blank gaps in the Telegram output.
 	var replies []bot.Reply
 	var current strings.Builder
 	for _, f := range fields {

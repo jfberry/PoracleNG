@@ -97,18 +97,11 @@ func depunctuatedVariants(name string) []string {
 		seen[s] = true
 		out = append(out, s)
 	}
-	// Drop apostrophes entirely: "farfetch'd" → "farfetchd".
 	add(strings.ReplaceAll(name, "'", ""))
-	// Drop periods/colons, collapse resulting double spaces: "mr. mime"
-	// → "mr mime", "type: null" → "type null".
 	noPunct := strings.NewReplacer(".", "", ":", "").Replace(name)
 	add(noPunct)
-	// Drop all punctuation AND internal spaces: "type null" → "typenull".
-	noSpace := strings.ReplaceAll(noPunct, " ", "")
-	add(noSpace)
-	// Hyphens as spaces: "ho-oh" → "ho oh".
+	add(strings.ReplaceAll(noPunct, " ", ""))
 	add(strings.ReplaceAll(name, "-", " "))
-	// Hyphens dropped entirely: "ho-oh" → "hooh".
 	add(strings.ReplaceAll(name, "-", ""))
 	return out
 }

@@ -159,24 +159,20 @@ var poracleFilterRe = regexp.MustCompile(
 var distanceRe = regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*(km|m)$`)
 
 // pvpLeagues maps league names/abbreviations to Poracle league prefix.
+// The bare "great"/"ultra"/"little" forms cover the case where a user
+// drops the word "league" from all but the last entry
+// ("great and ultra league top 10"). Only consulted inside matchPVP,
+// so they don't collide with other contexts.
 var pvpLeagues = map[string]string{
 	"great league":  "great",
 	"gl":            "great",
+	"great":         "great",
 	"ultra league":  "ultra",
 	"ul":            "ultra",
+	"ultra":         "ultra",
 	"little league": "little",
 	"ll":            "little",
-}
-
-// bareLeagueWords are the single-token forms that should trigger a league
-// match when a user drops the word "league" in a multi-league list
-// ("great and ultra league top 10" — "and" is a noise word, so after
-// normalize we see ["great", "ultra", "league"]; we want both leagues).
-// Matched in matchPVP only; outside PVP context these are ordinary tokens.
-var bareLeagueWords = map[string]string{
-	"great":  "great",
-	"ultra":  "ultra",
-	"little": "little",
+	"little":        "little",
 }
 
 // statWords are words that combine with a following number into a filter.
@@ -387,28 +383,16 @@ func parseDistance(s string) string {
 	return fmt.Sprintf("d%d", meters)
 }
 
-// matchPVP handles PVP-related token sequences.
-//
-// Collects every league mention in the input rather than bailing after the
-// first match, so "pikachu great and ultra top 10" produces both great10
-// and ultra10 filters — matching the bot's own multi-league support
-// (!track pikachu great5 ultra10). Rank applies to all detected leagues.
+// matchPVP handles PVP-related token sequences, collecting every league
+// mention so "pikachu great and ultra top 10" emits both great10 and
+// ultra10 filters. Rank applies to every detected league.
 func matchPVP(tokens []string, intent string, result *FilterResult) {
 	if intent != "track" {
 		return
 	}
 
-	// Collect all league mentions. Multi-word phrases first (longest match
-	// wins implicitly thanks to the token consumption below preventing the
-	// single-word pass from re-matching "ultra" inside "ultra league").
-	leagues := make([]string, 0, 3)
 	seen := map[string]bool{}
-	addLeague := func(lg string) {
-		if !seen[lg] {
-			seen[lg] = true
-			leagues = append(leagues, lg)
-		}
-	}
+	addLeague := func(lg string) { seen[lg] = true }
 
 	// Multi-word phrases, e.g. "great league", "ultra league" — but we
 	// can't rely on these alone because users often drop the word
@@ -430,19 +414,13 @@ func matchPVP(tokens []string, intent string, result *FilterResult) {
 			markMultiWordConsumed(tokens, phrase, result)
 		}
 	}
-	// Single-word league abbreviations ("gl", "ul", "ll") and bare league
-	// words ("great", "ultra", "little") — the latter only count as a
-	// league mention in PVP context, so the map is kept separate.
+	// Single-word league tokens — "gl"/"ul"/"ll" abbreviations plus bare
+	// "great"/"ultra"/"little" for the "great and ultra" shorthand.
 	for i, t := range tokens {
 		if result.Consumed[i] {
 			continue
 		}
 		if lg, ok := pvpLeagues[t]; ok {
-			addLeague(lg)
-			result.Consumed[i] = true
-			continue
-		}
-		if lg, ok := bareLeagueWords[t]; ok {
 			addLeague(lg)
 			result.Consumed[i] = true
 		}
@@ -481,17 +459,15 @@ func matchPVP(tokens []string, intent string, result *FilterResult) {
 		}
 	}
 
-	// Build PVP filters — one per league mentioned, or default to great if
-	// the user said "pvp"/"top 10" without naming a league.
-	if len(leagues) == 0 && (rank > 0 || hasPVPWord) {
-		addLeague("great")
+	// Default to "great" when the user named no league but used "pvp" /
+	// "top N". Emit in canonical great→ultra→little order so the output
+	// reads predictably regardless of mention order.
+	if len(seen) == 0 && (rank > 0 || hasPVPWord) {
+		seen["great"] = true
 	}
 	if rank == 0 {
 		rank = 5
 	}
-	// Emit in canonical league order (great → ultra → little) so the
-	// Poracle command reads predictably regardless of the order the user
-	// mentioned them.
 	for _, canonical := range []string{"great", "ultra", "little"} {
 		if seen[canonical] {
 			result.Filters = append(result.Filters, fmt.Sprintf("%s%d", canonical, rank))

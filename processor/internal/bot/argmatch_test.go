@@ -521,7 +521,18 @@ func newMultiWordTestMatcher() *ArgMatcher {
 		"form_147":  "Black Kyurem",
 		"form_140":  "Incarnate Forme",
 	}))
-	gd := &gamedata.GameData{Util: &gamedata.UtilData{}}
+	// buildMultiWordVocabularies iterates gd.Items / gd.Moves / the form
+	// IDs in gd.Monsters, so the test GameData has to enumerate which
+	// IDs exist even though the translator holds the names.
+	gd := &gamedata.GameData{
+		Util:  &gamedata.UtilData{},
+		Items: map[int]*gamedata.Item{1: {}, 701: {}, 702: {}, 708: {}, 1201: {}},
+		Moves: map[int]*gamedata.Move{14: {}, 58: {}, 94: {}, 101: {}},
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
+			{ID: 1, Form: 140}: {}, {ID: 1, Form: 147}: {},
+			{ID: 1, Form: 2463}: {}, {ID: 1, Form: 2464}: {},
+		},
+	}
 	am := NewArgMatcher(bundle, gd, nil, []string{"en"})
 
 	// The real setup pulls multi-word pokemon names out of the
@@ -631,7 +642,11 @@ func TestCollapseMultiWordMultiLanguage(t *testing.T) {
 		"move_14":         "Hyperstrahl", // single-word in German
 		"move_25":         "Draco Meteor", // happens to stay English in German
 	}))
-	gd := &gamedata.GameData{Util: &gamedata.UtilData{}}
+	gd := &gamedata.GameData{
+		Util:  &gamedata.UtilData{},
+		Items: map[int]*gamedata.Item{701: {}, 702: {}},
+		Moves: map[int]*gamedata.Move{14: {}, 25: {}},
+	}
 	am := NewArgMatcher(bundle, gd, nil, []string{"en", "de"})
 
 	cases := []struct {
