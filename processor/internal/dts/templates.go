@@ -130,6 +130,34 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 		entries = append(entries, fallbackEntries...)
 	}
 
+	// 1b. Load fallback dts/**/*.json (readonly — bundled help, info,
+	// info sub-topic files; kept out of the monolithic fallbacks/dts.json
+	// so each topic is one small file that operators can copy verbatim
+	// into config/dts/ to customise).
+	fallbackDtsDir := filepath.Join(fallbackDir, "dts")
+	filepath.WalkDir(fallbackDtsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".json") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			log.Warnf("dts: failed to read %s: %s", path, err)
+			return nil
+		}
+		var extraEntries []DTSEntry
+		if err := json.Unmarshal(data, &extraEntries); err != nil {
+			log.Warnf("dts: failed to parse %s: %s", path, err)
+			return nil
+		}
+		for i := range extraEntries {
+			extraEntries[i].sourceFile = path
+			extraEntries[i].Readonly = true
+		}
+		entries = append(entries, extraEntries...)
+		log.Debugf("dts: loaded %d fallback entries from %s", len(extraEntries), path)
+		return nil
+	})
+
 	// 2. Load config dts.json (user's main config, editable)
 	configPath := filepath.Join(configDir, "dts.json")
 	if data, err := os.ReadFile(configPath); err == nil {
@@ -364,7 +392,29 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 
 // selectEntryPass walks the priority chain over a subset of entries
 // (readonly==false → user entries; readonly==true → fallback entries).
+//
+// Runs the priority chain twice: first against entries whose Platform
+// matches the request exactly, then — if nothing matched — against
+// entries with Platform: "" (the platform wildcard). Matches the same
+// pattern that empty Language already uses as a wildcard inside the
+// chain. Lets authors ship one entry that serves both Discord and
+// Telegram for simple text content (help pages, info dumps) while
+// still honouring platform-specific templates where they exist.
 func selectEntryPass(entries []DTSEntry, templateType, platform, idLower, language string, readonly bool) *DTSEntry {
+	if m := selectEntryPassForPlatform(entries, templateType, platform, idLower, language, readonly); m != nil {
+		return m
+	}
+	if platform != "" {
+		return selectEntryPassForPlatform(entries, templateType, "", idLower, language, readonly)
+	}
+	return nil
+}
+
+// selectEntryPassForPlatform walks the 5-level priority chain for a
+// specific platform value (possibly "" to target platform-agnostic
+// entries). Extracted from selectEntryPass so the caller can retry with
+// platform: "" when no platform-specific match exists.
+func selectEntryPassForPlatform(entries []DTSEntry, templateType, platform, idLower, language string, readonly bool) *DTSEntry {
 	var match *DTSEntry
 
 	// 1. type + id + platform + language (exact)

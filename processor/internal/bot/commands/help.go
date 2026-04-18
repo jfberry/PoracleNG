@@ -10,7 +10,9 @@ import (
 )
 
 // HelpCommand implements !help — renders DTS help/greeting templates.
-// !help (no args) renders the "greeting" DTS template.
+// !help (no args) renders type="help" id="index" (a concise command
+// list operators can override), falling back to the "greeting" template
+// for installs that customised greeting before help/index shipped.
 // !help <command> renders the "help" DTS template with id=<command>.
 type HelpCommand struct{}
 
@@ -34,7 +36,18 @@ func (c *HelpCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return c.renderHelpTemplate(ctx, "help", args[0], platform, view)
 	}
 
-	// !help (no args) — render greeting DTS
+	// !help (no args) — prefer the dedicated help index, fall back to the
+	// greeting template so operators with legacy customised greetings (no
+	// index override yet) keep seeing a useful response.
+	if ctx.DTS != nil {
+		language := ctx.Language
+		if hint := ctx.GetLanguageHint(); hint != "" {
+			language = hint
+		}
+		if ctx.DTS.Get("help", platform, "index", language) != nil {
+			return c.renderHelpTemplate(ctx, "help", "index", platform, view)
+		}
+	}
 	return c.renderHelpTemplate(ctx, "greeting", "", platform, view)
 }
 

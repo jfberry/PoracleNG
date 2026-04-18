@@ -413,3 +413,143 @@ func TestTemplateReloadClearsCache(t *testing.T) {
 		t.Fatal("expected different pointer after reload")
 	}
 }
+
+// TestTemplatePlatformWildcard — entries with platform: "" match any
+// platform once the platform-specific selection chain returns nothing,
+// matching the pattern empty Language already uses as a wildcard.
+// Platform-specific entries always win so the fallback only kicks in
+// when nothing more specific is available.
+func TestTemplatePlatformWildcard(t *testing.T) {
+	configDir := t.TempDir()
+	writeDTS(t, configDir, `[
+		{
+			"type": "help",
+			"id": "track",
+			"platform": "",
+			"language": "en",
+			"template": {"embed": {"title": "Shared {{prefix}}track help"}}
+		},
+		{
+			"type": "help",
+			"id": "raid",
+			"platform": "discord",
+			"language": "en",
+			"template": {"embed": {"title": "Discord-specific raid help"}}
+		}
+	]`)
+
+	ts, err := LoadTemplates(configDir, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Discord requester hits the platform: "" entry for track (no
+	// discord-specific track entry exists).
+	if tmpl := ts.Get("help", "discord", "track", "en"); tmpl == nil {
+		t.Error("discord requesting help/track should match the platform-wildcard entry")
+	}
+	// Telegram requester hits the same wildcard entry for track.
+	if tmpl := ts.Get("help", "telegram", "track", "en"); tmpl == nil {
+		t.Error("telegram requesting help/track should also match the platform-wildcard entry")
+	}
+	// Discord requester for raid gets the platform-specific entry — the
+	// wildcard tier only runs if the platform-specific tier returns nil.
+	tmpl := ts.Get("help", "discord", "raid", "en")
+	if tmpl == nil {
+		t.Fatal("discord requesting help/raid should match the discord entry")
+	}
+	// Telegram requester for raid — no telegram or wildcard entry —
+	// returns nil (absence proof, not a fallthrough).
+	if ts.Get("help", "telegram", "raid", "en") != nil {
+		t.Error("telegram requesting help/raid should return nil (no match)")
+	}
+}
+
+// TestTemplatePlatformSpecificWinsOverWildcard — when both a
+// platform-specific and a platform-wildcard entry exist, the specific
+// one wins regardless of file order.
+func TestTemplatePlatformSpecificWinsOverWildcard(t *testing.T) {
+	configDir := t.TempDir()
+	writeDTS(t, configDir, `[
+		{
+			"type": "help",
+			"id": "track",
+			"platform": "",
+			"language": "en",
+			"template": {"embed": {"title": "Shared"}}
+		},
+		{
+			"type": "help",
+			"id": "track",
+			"platform": "discord",
+			"language": "en",
+			"template": {"embed": {"title": "Discord"}}
+		}
+	]`)
+
+	ts, err := LoadTemplates(configDir, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ts.Get("help", "discord", "track", "en").Exec(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The discord-specific entry should win; if the wildcard were winning
+	// we'd see "Shared" in the rendered JSON.
+	if !contains(result, "Discord") {
+		t.Errorf("expected discord-specific template to win, got %q", result)
+	}
+}
+
+// TestFallbackDtsSubdir — bundled fallback entries can ship in
+// fallbacks/dts/**/*.json alongside fallbacks/dts.json, so each help
+// topic lives in its own file rather than bloating the monolithic
+// fallback. Loaded entries are stamped Readonly like the main fallback.
+func TestFallbackDtsSubdir(t *testing.T) {
+	configDir := t.TempDir()
+	fallbackDir := t.TempDir()
+
+	// Main fallback file — one entry for monster.
+	writeDTS(t, fallbackDir, `[{
+		"type": "monster",
+		"id": "1",
+		"platform": "discord",
+		"language": "en",
+		"default": true,
+		"template": {"embed": {"title": "Fallback monster"}}
+	}]`)
+
+	// Subdirectory file — separate fallback entry for help.
+	subDir := filepath.Join(fallbackDir, "dts", "help")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subFile := filepath.Join(subDir, "track.json")
+	if err := os.WriteFile(subFile, []byte(`[{
+		"type": "help",
+		"id": "track",
+		"platform": "",
+		"language": "en",
+		"template": {"embed": {"title": "Bundled track help"}}
+	}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ts, err := LoadTemplates(configDir, fallbackDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if tmpl := ts.Get("monster", "discord", "1", "en"); tmpl == nil {
+		t.Error("main fallbacks/dts.json entry should still load")
+	}
+	if tmpl := ts.Get("help", "discord", "track", "en"); tmpl == nil {
+		t.Error("fallbacks/dts/help/track.json entry should load for discord (platform wildcard)")
+	}
+	if tmpl := ts.Get("help", "telegram", "track", "en"); tmpl == nil {
+		t.Error("fallbacks/dts/help/track.json entry should load for telegram (platform wildcard)")
+	}
+}
+
