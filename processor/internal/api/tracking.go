@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -121,18 +120,6 @@ func resolveLanguage(deps *TrackingDeps, human *store.HumanLite) string {
 func translatorFor(deps *TrackingDeps, human *store.HumanLite) *i18n.Translator {
 	lang := resolveLanguage(deps, human)
 	return deps.Translations.For(lang)
-}
-
-// commandPrefixForHuman returns the platform-appropriate command prefix for the
-// human receiving an API confirmation.
-func commandPrefixForHuman(deps *TrackingDeps, human *store.HumanLite) string {
-	if human != nil && strings.HasPrefix(human.Type, "telegram") {
-		return "/"
-	}
-	if deps != nil && deps.Config != nil && deps.Config.Discord.Prefix != "" {
-		return deps.Config.Discord.Prefix
-	}
-	return "!"
 }
 
 // readBody reads the raw request body from a gin context.
