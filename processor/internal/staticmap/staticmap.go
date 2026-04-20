@@ -866,11 +866,21 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 		templateType = "multi-"
 	}
 
-	// No pregenerate — tileserver returns image bytes directly.
-	// nocache=true prevents the tileserver from writing to disk.
+	// No pregenerate — tileserver returns image bytes directly. Send the same
+	// ttl hint as the pregenerate path so retries / parallel renders of the
+	// same tile can share the cached file rather than regenerating. Per-type
+	// TileserverConfig.TTL overrides the global default.
+	query := ""
+	ttl := r.config.PregenTTL
+	if tileOpts := r.getConfigForTileType(maptype); tileOpts.TTL > 0 {
+		ttl = tileOpts.TTL
+	}
+	if ttl > 0 {
+		query = fmt.Sprintf("?ttl=%d", ttl)
+	}
 	// Use internalBase: this POST is processor→tileserver.
-	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?nocache=true",
-		r.internalBase(), mapPath, templateType, maptype)
+	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s%s",
+		r.internalBase(), mapPath, templateType, maptype, query)
 
 	body, err := json.Marshal(data)
 	if err != nil {
