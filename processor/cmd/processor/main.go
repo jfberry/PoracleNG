@@ -198,9 +198,16 @@ func main() {
 	go proc.runProfileScheduler()
 	log.Infof("Profile scheduler enabled (10-minute interval)")
 
-	// HTTP server — Gin router
+	// HTTP server — Gin router.
+	// UseRawPath + UnescapePathValues lets :id capture percent-encoded
+	// path params that contain forward slashes (webhook URLs used as
+	// human IDs, e.g. /api/humans/https%3A%2F%2Fdiscord.com%2F...).
+	// Without this, Go's HTTP layer decodes %2F before gin routes, and
+	// the webhook URL fans out into multiple path segments → 404.
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	r.UseRawPath = true
+	r.UnescapePathValues = true
 	r.Use(gin.Recovery())
 	r.Use(api.CORSMiddleware())
 	r.Use(api.RequestLogger())

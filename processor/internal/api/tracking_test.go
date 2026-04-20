@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -272,6 +273,39 @@ func TestHandlerMissingID(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["status"] != "error" {
 		t.Errorf("expected error status, got %v", resp["status"])
+	}
+}
+
+// TestPathParamCapturesEncodedSlashes proves that percent-encoded slashes in a
+// path param (e.g. webhook URLs used as human IDs) round-trip as a single
+// captured value rather than fanning out across path segments. This requires
+// UseRawPath + UnescapePathValues on the engine.
+func TestPathParamCapturesEncodedSlashes(t *testing.T) {
+	r := gin.New()
+	r.UseRawPath = true
+	r.UnescapePathValues = true
+
+	var captured string
+	r.GET("/api/humans/:id", func(c *gin.Context) {
+		captured = c.Param("id")
+		c.Status(http.StatusOK)
+	})
+
+	// Fake webhook-style id — structure mirrors Discord's webhook URL so the
+	// test exercises the same encoded-slash routing case without a real token.
+	webhookID := "https://discord.com/api/webhooks/000000000000000000/REDACTED-PLACEHOLDER-TOKEN-FOR-TEST-FIXTURE-ONLY"
+	encoded := url.PathEscape(webhookID)
+	// PathEscape leaves ':' and '-' alone but encodes '/' as %2F — matching
+	// what PHP's rawurlencode produces for these characters.
+	req := httptest.NewRequest(http.MethodGet, "/api/humans/"+encoded, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (captured=%q)", w.Code, captured)
+	}
+	if captured != webhookID {
+		t.Errorf("expected id %q, got %q", webhookID, captured)
 	}
 }
 
