@@ -98,7 +98,7 @@ func HandleConfigMigrate(deps ConfigDeps) gin.HandlerFunc {
 				if !val.IsValid() {
 					continue
 				}
-				if val.Kind() == reflect.Slice && val.Len() == 0 {
+				if (val.Kind() == reflect.Slice || val.Kind() == reflect.Map) && val.Len() == 0 {
 					continue
 				}
 				sectionUpdates[table.Name] = val.Interface()

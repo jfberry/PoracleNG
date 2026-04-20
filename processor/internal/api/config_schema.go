@@ -17,6 +17,13 @@ type ConfigFieldDef struct {
 	Deprecated  bool                 `json:"deprecated,omitempty"`  // editor should warn / hide unless already set
 	Advanced    bool                 `json:"advanced,omitempty"`    // editor hides behind "show advanced" toggle
 	HideDefault bool                 `json:"hideDefault,omitempty"` // editor should not pre-fill the default
+	// Nullable marks a scalar field (typically bool) as tri-state: null is a
+	// meaningful third value distinct from the zero value, and the backend
+	// relies on the distinction — usually to layer per-row overrides on top
+	// of a base/default entry. The editor MUST render null as a distinct
+	// "inherit / unset" state and preserve null on save (not coerce to false
+	// or the type's zero value).
+	Nullable    bool                 `json:"nullable,omitempty"`
 	MinLength   int                  `json:"minLength,omitempty"`   // for arrays: minimum number of entries
 	MaxLength   int                  `json:"maxLength,omitempty"`   // for arrays: maximum number of entries
 	Resolve     string               `json:"resolve,omitempty"`
@@ -330,6 +337,26 @@ var configSchema = []ConfigSection{
 			{Name: "dawn_style", Type: "string", Default: "", Description: "TileserverCache style name for dawn maps"},
 			{Name: "dusk_style", Type: "string", Default: "", Description: "TileserverCache style name for dusk maps"},
 			{Name: "night_style", Type: "string", Default: "", Description: "TileserverCache style name for nighttime maps"},
+		},
+		Tables: []ConfigTableDef{
+			{
+				Name:        "tileserver_settings",
+				Title:       "Tileserver Settings",
+				Description: "Per-alert-type tile overrides. \"default\" applies to any alert type without its own entry. Known maptypes: default, monster, raid, pokestop, quest, weather, location, nest, gym.",
+				Fields: []ConfigFieldDef{
+					{Name: "maptype", Type: "string", Description: "Alert type this entry applies to (e.g. default, monster, raid, gym)"},
+					{Name: "type", Type: "select", Default: "staticMap", Description: "TileserverCache endpoint to call", Options: []ConfigSelectOption{
+						{Value: "staticMap", Label: "staticMap", Description: "Single-marker endpoint"},
+						{Value: "multiStaticMap", Label: "multiStaticMap", Description: "Multi-marker endpoint (required for overlays like pokestops/gyms)"},
+					}},
+					{Name: "include_stops", Type: "bool", Nullable: true, Description: "Overlay nearby pokestops and gyms on the tile (requires multiStaticMap type and a scanner DB). On non-default rows, leave unset to inherit from the default entry."},
+					{Name: "width", Type: "int", Default: 500, Description: "Image width in pixels"},
+					{Name: "height", Type: "int", Default: 250, Description: "Image height in pixels"},
+					{Name: "zoom", Type: "int", Default: 15, Description: "Map zoom level"},
+					{Name: "pregenerate", Type: "bool", Nullable: true, Description: "Pregenerate the tile on the tileserver before sending the URL. On non-default rows, leave unset to inherit from the default entry."},
+					{Name: "ttl", Type: "int", Default: 0, Description: "Tile cache TTL in seconds (0 = use global tileserver_pregen_ttl)"},
+				},
+			},
 		},
 	},
 

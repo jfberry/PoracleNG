@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -178,6 +179,15 @@ func extractValues(cfg *config.Config, filterSection string) map[string]any {
 			if section.Name == "area_security" && table.Name == "communities" {
 				if comms, ok := val.Interface().([]config.CommunityConfig); ok {
 					sectionValues[table.Name] = flattenCommunities(comms)
+					continue
+				}
+			}
+			// tileserver_settings is a map keyed by maptype — flatten into an
+			// array of rows with maptype as a regular field so the editor can
+			// edit it with the standard Tables UI.
+			if section.Name == "geocoding" && table.Name == "tileserver_settings" {
+				if settings, ok := val.Interface().(map[string]config.TileserverConfig); ok {
+					sectionValues[table.Name] = flattenTileserverSettings(settings)
 					continue
 				}
 			}
@@ -408,15 +418,88 @@ func nestCommunityRows(rows []any) []any {
 // incoming save payload. Keeps overrides.json aligned with the Go struct's
 // tagged shape so ApplyOverrides can deserialise it cleanly.
 func nestTableUpdates(updates map[string]any) {
-	area, ok := updates["area_security"].(map[string]any)
-	if !ok {
-		return
+	if area, ok := updates["area_security"].(map[string]any); ok {
+		if comms, ok := area["communities"].([]any); ok {
+			area["communities"] = nestCommunityRows(comms)
+		}
 	}
-	comms, ok := area["communities"].([]any)
-	if !ok {
-		return
+	if geo, ok := updates["geocoding"].(map[string]any); ok {
+		if rows, ok := geo["tileserver_settings"].([]any); ok {
+			geo["tileserver_settings"] = nestTileserverRows(rows)
+		}
 	}
-	area["communities"] = nestCommunityRows(comms)
+}
+
+// flattenTileserverSettings converts map[string]TileserverConfig into the flat
+// array-of-rows shape the editor expects, with maptype as a regular field.
+// Inverse of nestTileserverRows.
+//
+// include_stops and pregenerate are emitted as JSON null when unset (nil *bool)
+// rather than false. The merge in staticmap.go:mergeOpts distinguishes nil
+// ("inherit from default") from *bool(false) ("explicit override"), so a
+// round-trip that coerced nil→false would silently clobber a default=true
+// setting on every per-maptype entry.
+func flattenTileserverSettings(settings map[string]config.TileserverConfig) []map[string]any {
+	keys := make([]string, 0, len(settings))
+	for k := range settings {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	out := make([]map[string]any, 0, len(keys))
+	for _, k := range keys {
+		v := settings[k]
+		row := map[string]any{
+			"maptype":       k,
+			"type":          v.Type,
+			"width":         v.Width,
+			"height":        v.Height,
+			"zoom":          v.Zoom,
+			"ttl":           v.TTL,
+			"include_stops": boolPtrOrNull(v.IncludeStops),
+			"pregenerate":   boolPtrOrNull(v.Pregenerate),
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// nestTileserverRows rebuilds a map[string]<config> keyed by maptype from the
+// editor's array-of-rows payload. The TileserverConfig struct has JSON tags
+// matching the row field names, so ApplyOverrides' JSON round-trip will
+// deserialise it into the live config cleanly.
+func nestTileserverRows(rows []any) map[string]any {
+	out := make(map[string]any, len(rows))
+	for _, row := range rows {
+		m, ok := row.(map[string]any)
+		if !ok {
+			continue
+		}
+		key, _ := m["maptype"].(string)
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		entry := make(map[string]any, len(m))
+		for k, v := range m {
+			if k == "maptype" {
+				continue
+			}
+			entry[k] = v
+		}
+		out[key] = entry
+	}
+	return out
+}
+
+// boolPtrOrNull returns the underlying bool as any, or an untyped nil (which
+// marshals to JSON null) when the pointer is nil. Used so tri-state *bool
+// config fields round-trip through the editor without collapsing nil to false.
+func boolPtrOrNull(b *bool) any {
+	if b == nil {
+		return nil
+	}
+	return *b
 }
 
 // countFields counts the total number of individual field changes.

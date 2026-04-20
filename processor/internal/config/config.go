@@ -511,14 +511,16 @@ type GeocodingConfig struct {
 
 // TileserverConfig holds per-tile-type settings under [geocoding.tileserver_settings.*].
 // Booleans use *bool so empty TOML sections don't override defaults.
+// JSON tags mirror TOML tags so overrides.json written by the config editor
+// round-trips cleanly through ApplyOverrides.
 type TileserverConfig struct {
-	Type         string `toml:"type"`
-	IncludeStops *bool  `toml:"include_stops"`
-	Width        int    `toml:"width"`
-	Height       int    `toml:"height"`
-	Zoom         int    `toml:"zoom"`
-	Pregenerate  *bool  `toml:"pregenerate"`
-	TTL          int    `toml:"ttl"` // seconds, 0 = use global tileserver_pregen_ttl
+	Type         string `toml:"type" json:"type,omitempty"`
+	IncludeStops *bool  `toml:"include_stops" json:"include_stops,omitempty"`
+	Width        int    `toml:"width" json:"width,omitempty"`
+	Height       int    `toml:"height" json:"height,omitempty"`
+	Zoom         int    `toml:"zoom" json:"zoom,omitempty"`
+	Pregenerate  *bool  `toml:"pregenerate" json:"pregenerate,omitempty"`
+	TTL          int    `toml:"ttl" json:"ttl,omitempty"` // seconds, 0 = use global tileserver_pregen_ttl
 }
 
 // FallbacksConfig holds fallback URLs from the [fallbacks] section.
