@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"maps"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -50,15 +51,31 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 
 		// Build matched users, skipping those with no affected pokemon
 		var matched []webhook.MatchedUser
+		minAlert := int64(ps.cfg.General.AlertMinimumTime)
+		now := time.Now().Unix()
 		for _, u := range caringUsers {
+			// Squash clean weather alerts whose TTH (CaresUntil) is too short
+			// to be usefully tracked. Without this, the alert ships with
+			// Clean=1 but a TTL of a few seconds — the delivery queue either
+			// drops it on the "TTL already expired" path or the user sees a
+			// message that vanishes almost immediately.
+			if u.Clean > 0 {
+				remaining := u.CaresUntil - now
+				if u.CaresUntil == 0 || remaining < minAlert {
+					l.Debugf("Weather alert suppressed for %s (%s) — TTH %ds below alert_minimum_time %ds",
+						u.Name, u.ID, remaining, minAlert)
+					continue
+				}
+			}
 			mu := webhook.MatchedUser{
-				ID:       u.ID,
-				Name:     u.Name,
-				Type:     u.Type,
-				Language: u.Language,
-				Template: u.Template,
-				Clean:    u.Clean,
-				Ping:     u.Ping,
+				ID:         u.ID,
+				Name:       u.Name,
+				Type:       u.Type,
+				Language:   u.Language,
+				Template:   u.Template,
+				Clean:      u.Clean,
+				Ping:       u.Ping,
+				CaresUntil: u.CaresUntil,
 			}
 
 			// Attach active pokemon affected by this weather change
@@ -152,23 +169,18 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				perLang = map[string]map[string]any{lang: langEnrichment}
 			}
 
-			// For clean weather alerts, TTH is the latest pokemon despawn time.
-			// This ensures the weather change message is cleaned when the last
-			// affected pokemon despawns (not at the weather hour boundary).
+			// For clean weather alerts, TTH aligns with the longest TTH of any
+			// matched pokemon (CaresUntil). This is maintained by the weather
+			// care tracker independently of show_altered_pokemon, so clean
+			// weather alerts get a correct TTH even when the active-pokemon
+			// tracker is disabled. Users below the min-alert threshold were
+			// already dropped when matched was built.
 			userEnrichment := baseEnrichment
-			if user.Clean > 0 && len(user.ActivePokemons) > 0 {
-				var maxDespawn int64
-				for _, ap := range user.ActivePokemons {
-					if ap.DisappearTime > maxDespawn {
-						maxDespawn = ap.DisappearTime
-					}
-				}
-				if maxDespawn > 0 {
-					// Copy base enrichment to avoid mutating shared map
-					userEnrichment = make(map[string]any, len(baseEnrichment)+1)
-					maps.Copy(userEnrichment, baseEnrichment)
-					userEnrichment["tth"] = geo.ComputeTTH(maxDespawn)
-				}
+			if user.Clean > 0 && user.CaresUntil > 0 {
+				// Copy base enrichment to avoid mutating shared map
+				userEnrichment = make(map[string]any, len(baseEnrichment)+1)
+				maps.Copy(userEnrichment, baseEnrichment)
+				userEnrichment["tth"] = geo.ComputeTTH(user.CaresUntil)
 			}
 
 			// Use per-user tile if available, otherwise base tile

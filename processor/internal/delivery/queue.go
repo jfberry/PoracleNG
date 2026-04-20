@@ -199,6 +199,21 @@ func (fq *FairQueue) processJob(job *Job) {
 		}
 	}
 
+	// 2b. Squash sends that ask for clean but whose TTH is already expired.
+	// The tracker can't schedule a deletion for a past TTL, so sending would
+	// leave the message in the channel forever. This commonly hits alerts
+	// about events that expired before enrichment ran (Golbat flush delay,
+	// webhook queue backpressure). Edit-only jobs are allowed through — a
+	// one-shot message that won't be edited later is still useful, and an
+	// edit whose original has already expired in the tracker falls back to
+	// a new send which may still want to be visible.
+	if db.IsClean(job.Clean) && job.TTH.Duration() <= 0 {
+		log.Warnf("%s: clean message suppressed — TTL already expired before send (clean=%d type=%s target=%s)",
+			job.LogReference, job.Clean, job.Type, job.Target)
+		metrics.DeliveryTotal.WithLabelValues(platform, "suppressed_expired").Inc()
+		return
+	}
+
 	// 3. Send new message — skip if target has been disabled from repeated failures
 	if fq.isTargetDisabled(job.Target) {
 		metrics.DeliveryTotal.WithLabelValues(platform, "stopped").Inc()
@@ -276,7 +291,12 @@ func (fq *FairQueue) processJob(job *Job) {
 	metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 
 	// 4. Track for clean/edit if needed
-	if sent != nil && (db.IsClean(job.Clean) || db.IsEdit(job.Clean) || job.EditKey != "") {
+	wantsTracking := db.IsClean(job.Clean) || db.IsEdit(job.Clean) || job.EditKey != ""
+	if wantsTracking && sent == nil {
+		log.Warnf("%s: clean/edit tracking skipped — sender returned no SentMessage (clean=%d editKey=%q)", job.LogReference, job.Clean, job.EditKey)
+		return
+	}
+	if sent != nil && wantsTracking {
 		ttl := job.TTH.Duration()
 		if ttl <= 0 {
 			log.Warnf("%s: clean/edit tracking skipped — TTL already expired (clean=%d)", job.LogReference, job.Clean)

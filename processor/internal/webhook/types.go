@@ -191,6 +191,10 @@ type MatchedUser struct {
 	PVPRankingWorst   int                  `json:"pvp_ranking_worst"`
 	RSVPChanges       int                  `json:"rsvp_changes"`
 	ActivePokemons    []ActivePokemonEntry `json:"active_pokemons,omitempty"`
+	// CaresUntil is the unix timestamp of the latest matched pokemon's disappear
+	// time in the weather cell. Only populated for weather change alerts, where
+	// it drives the clean-alert TTH and the "too short to bother" drop.
+	CaresUntil int64 `json:"cares_until,omitempty"`
 }
 
 // InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.

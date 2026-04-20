@@ -43,6 +43,7 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 
 	cache.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[string, *TrackedMessage]) {
 		if reason != ttlcache.EvictionReasonExpired {
+			log.Debugf("delivery: tracker evicted %s (reason=%v) — not a TTL expiry, skipping clean", item.Key(), reason)
 			return
 		}
 		metrics.DeliveryTrackerEvictions.Inc()
@@ -53,6 +54,7 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 		platform := PlatformFromType(msg.Type)
 		sender, ok := mt.senders[platform]
 		if !ok {
+			log.Warnf("delivery: clean delete skipped — no sender for platform %q (type=%s target=%s sentID=%s)", platform, msg.Type, msg.Target, msg.SentID)
 			return
 		}
 		log.Infof("delivery: clean delete %s/%s sentID=%s", msg.Type, msg.Target, msg.SentID)
@@ -167,6 +169,7 @@ func (mt *MessageTracker) Load() error {
 				platform := PlatformFromType(msg.Type)
 				sender, ok := mt.senders[platform]
 				if !ok {
+					log.Warnf("delivery: clean delete on load skipped — no sender for platform %q (type=%s target=%s sentID=%s)", platform, msg.Type, msg.Target, msg.SentID)
 					continue
 				}
 				go func() {

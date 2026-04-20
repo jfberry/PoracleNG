@@ -371,6 +371,75 @@ func TestFairQueueCleanTracking(t *testing.T) {
 	}
 }
 
+// TestFairQueueSuppressesExpiredCleanMessage proves that clean-requested jobs
+// with a zero/negative TTH are dropped BEFORE send — otherwise the message
+// would post and never be cleaned (the tracker can't schedule a deletion for
+// a past TTL, so it would live forever in the destination).
+func TestFairQueueSuppressesExpiredCleanMessage(t *testing.T) {
+	discordMock := &queueMockSender{platform: "discord", sentID: "chan1:msg-99"}
+	senders := map[string]Sender{"discord": discordMock}
+
+	ch := make(chan *Job, 10)
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	})
+	fq.Start()
+
+	ch <- &Job{
+		Target:  "chan1",
+		Type:    "discord:channel",
+		Message: json.RawMessage(`{"content":"late"}`),
+		Clean:   1,
+		TTH:     TTH{}, // all zero — event already expired at enrichment
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(discordMock.getSendCalls()); got != 0 {
+		t.Errorf("expected clean+expired message to be suppressed, got %d send calls", got)
+	}
+}
+
+// TestFairQueueEditOnlyExpiredStillSends proves that edit-only (clean=2)
+// jobs with expired TTH are NOT suppressed — the message is still valid as
+// a one-shot even if it can't be tracked for future edits.
+func TestFairQueueEditOnlyExpiredStillSends(t *testing.T) {
+	discordMock := &queueMockSender{platform: "discord", sentID: "chan1:msg-100"}
+	senders := map[string]Sender{"discord": discordMock}
+
+	ch := make(chan *Job, 10)
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	})
+	fq.Start()
+
+	ch <- &Job{
+		Target:  "chan1",
+		Type:    "discord:channel",
+		Message: json.RawMessage(`{"content":"edit-only"}`),
+		Clean:   2, // edit bit, no clean bit
+		TTH:     TTH{},
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := len(discordMock.getSendCalls()); got != 1 {
+		t.Errorf("edit-only job should still send even with expired TTH, got %d send calls", got)
+	}
+}
+
 // TestRateLimitAtDelivery proves the count happens at delivery time and that
 // only deliveries past the limit are dropped (with a single OnBreach hook).
 func TestRateLimitAtDelivery(t *testing.T) {
