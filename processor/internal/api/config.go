@@ -59,10 +59,12 @@ func HandleConfigPoracleWeb(cfg *config.Config) gin.HandlerFunc {
 	// channelNotesContainsCategory matches alerter logic.
 	channelNotesContainsCategory := cfg.Discord.CheckRole && cfg.Reconciliation.Discord.UpdateChannelNotes
 
-	// Resolve static key — use first entry if configured as an array.
-	staticKey := ""
-	if len(cfg.Geocoding.StaticKey) > 0 {
-		staticKey = cfg.Geocoding.StaticKey[0]
+	// staticKey is exposed as the raw config array — PoracleWeb's session
+	// loader indexes [0] into it to match the legacy alerter's shape.
+	// Coerce a nil slice to an empty slice so the JSON is [] not null.
+	staticKeys := cfg.Geocoding.StaticKey
+	if staticKeys == nil {
+		staticKeys = []string{}
 	}
 
 	// Build the response once since config is immutable after load.
@@ -73,7 +75,7 @@ func HandleConfigPoracleWeb(cfg *config.Config) gin.HandlerFunc {
 		"prefix":                       cfg.Discord.Prefix,
 		"providerURL":                  cfg.Geocoding.ProviderURL,
 		"addressFormat":                cfg.Locale.AddressFormat,
-		"staticKey":                    staticKey,
+		"staticKey":                    staticKeys,
 		"pvpFilterMaxRank":             cfg.PVP.PVPFilterMaxRank,
 		"pvpFilterGreatMinCP":          cfg.PVP.PVPFilterGreatMinCP,
 		"pvpFilterUltraMinCP":          cfg.PVP.PVPFilterUltraMinCP,
