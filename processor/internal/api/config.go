@@ -67,6 +67,18 @@ func HandleConfigPoracleWeb(cfg *config.Config) gin.HandlerFunc {
 		staticKeys = []string{}
 	}
 
+	// PoracleWeb does array_merge($json['admins']['discord'], ['telegram']),
+	// which fails on null. A nil []string serialises to null, so coerce both
+	// lists to [] when unset.
+	discordAdmins := cfg.Discord.Admins
+	if discordAdmins == nil {
+		discordAdmins = []string{}
+	}
+	telegramAdmins := cfg.Telegram.Admins
+	if telegramAdmins == nil {
+		telegramAdmins = []string{}
+	}
+
 	// Build the response once since config is immutable after load.
 	resp := map[string]any{
 		"status":                       "ok",
@@ -87,8 +99,8 @@ func HandleConfigPoracleWeb(cfg *config.Config) gin.HandlerFunc {
 		"defaultTemplateName":          defaultTemplateName,
 		"channelNotesContainsCategory": channelNotesContainsCategory,
 		"admins": map[string]any{
-			"discord":  cfg.Discord.Admins,
-			"telegram": cfg.Telegram.Admins,
+			"discord":  discordAdmins,
+			"telegram": telegramAdmins,
 		},
 		"maxDistance":                cfg.Tracking.MaxDistance,
 		"defaultDistance":            cfg.Tracking.DefaultDistance,
