@@ -307,7 +307,7 @@ func TestDiscordEdit(t *testing.T) {
 	defer server.Close()
 
 	ds := newTestDiscordSender(server.URL)
-	err := ds.Edit(context.Background(), "channel123:msg456", json.RawMessage(`{"content":"edited"}`))
+	err := ds.Edit(context.Background(), "channel123:msg456", json.RawMessage(`{"content":"edited"}`), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

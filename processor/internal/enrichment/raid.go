@@ -11,7 +11,7 @@ import (
 )
 
 // Raid builds enrichment fields for a raid or egg webhook.
-func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 	m["pokemon_id"] = raid.PokemonID
 	m["firstNotification"] = firstNotification
@@ -54,15 +54,17 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 	// DTS templates use these for Discord timestamps: <t:{{start}}:R>
 	m["start"] = raid.Start
 	m["end"] = raid.End
+	m["endTimestamp"] = raid.End       // unix int for Discord <t:N:R>
+	m["hatchTimestamp"] = raid.Start   // unix int for Discord <t:N:R>
 
 	if raid.PokemonID > 0 {
 		// Hatched raid: disappearTime from end, tth from now to end
 		m["disappearTime"] = geo.FormatTime(raid.End, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(raid.End)
 
-		// Weather change time: the hour boundary before end
-		weatherChangeTS := raid.End - (raid.End % 3600)
-		m["weatherChangeTime"] = geo.FormatTime(weatherChangeTS, tz, e.TimeLayout)
+		// Weather change timestamp: the hour boundary before end
+		// (used later in per-language enrichment if forecast shows a boost change)
+		m["weatherChangeTS"] = raid.End - (raid.End % 3600)
 
 		// Weather forecast for boost change detection (triggers AccuWeather fetch if configured)
 		forecast := e.GetForecast(cellID)
@@ -76,7 +78,10 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		m["tth"] = geo.ComputeTTH(raid.Start)
 	}
 
-	// Format RSVP timeslots — only include future timeslots (matching alerter behavior)
+	// Format RSVP timeslots — only include future timeslots (matching alerter behavior).
+	// Always set m["rsvps"] when the webhook has RSVP data to shadow the raw webhook
+	// layer — otherwise {{#if rsvps}} would find the unfiltered raw array via the
+	// webhook fields fallback and render expired entries with mismatched field names.
 	if len(raid.RSVPs) > 0 {
 		nowMs := time.Now().UnixMilli()
 		var rsvpTimes []map[string]any
@@ -95,13 +100,14 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 				"time":        geo.FormatTime(r.Timeslot/1000, tz, e.TimeLayout),
 			})
 		}
-		if len(rsvpTimes) > 0 {
-			m["rsvps"] = rsvpTimes
-		}
+		m["rsvps"] = rsvpTimes // nil if all expired — shadows raw webhook rsvps
 	}
 
 	// Map URLs
 	e.addMapURLs(m, raid.Latitude, raid.Longitude, "gyms", raid.GymID)
+
+	// Campfire deep link
+	m["campfireUrl"] = CampfireURL(raid.Latitude, raid.Longitude, raid.GymID, raid.GymName, raid.GymURL)
 
 	// Reverse geocoding
 	e.addGeoResult(m, raid.Latitude, raid.Longitude)
@@ -114,7 +120,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 		"teamId":     raid.TeamID,
 		"evolution":  raid.Evolution,
 		"costume":    raid.Costume,
-	})
+	}, tileMode)
 
 	// Game data enrichment
 	if e.GameData != nil {
@@ -176,7 +182,9 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool) (map[
 	}
 
 	if raid.PokemonID > 0 {
+		e.setFallbackImg(m, e.FallbackImgURL)
 	} else {
+		e.setFallbackImg(m, e.FallbackImgEgg)
 	}
 	return m, pending
 }
@@ -204,22 +212,26 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		}
 	}
 
-	// Weather forecast names (for weatherChange composition)
-	forecastCurrent, _ := base["weatherForecastCurrent"].(int)
-	forecastNext, _ := base["weatherForecastNext"].(int)
-	if forecastCurrent > 0 {
-		m["weatherCurrentName"] = TranslateWeatherName(tr, forecastCurrent)
-		if wInfo, ok := gd.Util.Weather[forecastCurrent]; ok {
-			m["weatherCurrentEmojiKey"] = wInfo.Emoji
+	// Weather forecast names — only set when base enrichment determined a
+	// meaningful weather change (weatherNext is set). When weatherCurrent is
+	// 0 (de-boost case), weatherCurrentName falls back to the translated
+	// "unknown" string, matching JS monster.js behavior.
+	weatherNext, _ := base["weatherNext"].(int)
+	if weatherNext > 0 {
+		weatherCurrent, _ := base["weatherCurrent"].(int)
+		if weatherCurrent > 0 {
+			m["weatherCurrentName"] = TranslateWeatherName(tr, weatherCurrent)
+			if wInfo, ok := gd.Util.Weather[weatherCurrent]; ok {
+				m["weatherCurrentEmojiKey"] = wInfo.Emoji
+			}
+		} else {
+			m["weatherCurrentName"] = tr.T("weather.unknown")
 		}
-	}
-	if forecastNext > 0 {
-		m["weatherNextName"] = TranslateWeatherName(tr, forecastNext)
-		if wInfo, ok := gd.Util.Weather[forecastNext]; ok {
+		m["weatherNextName"] = TranslateWeatherName(tr, weatherNext)
+		if wInfo, ok := gd.Util.Weather[weatherNext]; ok {
 			m["weatherNextEmojiKey"] = wInfo.Emoji
 		}
 		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
-		m["weatherCurrentUnknown"] = tr.T("weather.unknown")
 	}
 
 	// Level name
@@ -279,6 +291,7 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		evolutions, megaEvolutions := e.buildEvolutions(gd, tr, raid.PokemonID, raid.Form)
 		m["evolutions"] = evolutions
 		m["megaEvolutions"] = megaEvolutions
+		m["prevEvolutions"] = e.buildPrevEvolutions(gd, tr, raid.PokemonID)
 	}
 
 	return m

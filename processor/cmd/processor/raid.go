@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -13,6 +14,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
+	if ps.cfg.General.DisableRaid {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():
@@ -99,10 +104,19 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(matchStart).Seconds())
 
 		// Filter by rate limit
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
-		// Filter by RSVP preference before sending
-		hasRSVPs := len(raid.RSVPs) > 0
+		// Filter by RSVP preference before sending.
+		// Check for future RSVPs only — past timeslots are stripped during
+		// enrichment so we must use the same cutoff here.
+		nowMs := time.Now().UnixMilli()
+		hasRSVPs := false
+		for _, r := range raid.RSVPs {
+			if r.Timeslot > nowMs {
+				hasRSVPs = true
+				break
+			}
+		}
 		filtered := matched[:0]
 		for _, m := range matched {
 			switch m.RSVPChanges {
@@ -140,9 +154,6 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			}
 
 			gymName := raid.GymName
-			if gymName == "" {
-				gymName = raid.Name
-			}
 
 			if raid.PokemonID > 0 {
 				l.Infof("Raid %s L%d on %s at [%.3f,%.3f] areas(%s) and %d humans cared",
@@ -153,7 +164,8 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 					raid.Level, gymName, raid.Latitude, raid.Longitude, areaNames(matchedAreas), len(matched))
 			}
 
-			baseEnrichment, tilePending := ps.enricher.Raid(&raid, isFirstNotification)
+			mode := ps.tileMode(msgType, matched)
+			baseEnrichment, tilePending := ps.enricher.Raid(&raid, isFirstNotification, mode)
 
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -177,6 +189,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				MatchedAreas:      matchedAreas,
 				TilePending:       tilePending,
 				LogReference:      raid.GymID,
+				EditKey:           fmt.Sprintf("raid:%s:%d", raid.GymID, raid.End),
 			}
 		} else {
 			if raid.PokemonID > 0 {

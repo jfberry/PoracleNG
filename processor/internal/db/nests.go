@@ -7,7 +7,7 @@ type NestTracking struct {
 	ID          string `db:"id"`
 	ProfileNo   int    `db:"profile_no"`
 	Ping        string `db:"ping"`
-	Clean       bool   `db:"clean"`
+	Clean       int    `db:"clean"`
 	Distance    int    `db:"distance"`
 	Template    string `db:"template"`
 	PokemonID   int    `db:"pokemon_id"`

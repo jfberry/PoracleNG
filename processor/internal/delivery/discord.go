@@ -50,11 +50,11 @@ func (ds *DiscordSender) Send(ctx context.Context, job *Job) (*SentMessage, erro
 		if err != nil {
 			return nil, err
 		}
-		return ds.postMessage(ctx, channelID, job.Message)
+		return ds.postMessage(ctx, channelID, job.Message, job.StaticMapData)
 	case "discord:channel", "discord:thread":
-		return ds.postMessage(ctx, job.Target, job.Message)
+		return ds.postMessage(ctx, job.Target, job.Message, job.StaticMapData)
 	case "webhook":
-		return ds.postWebhook(ctx, job.Target, job.Message)
+		return ds.postWebhook(ctx, job.Target, job.Message, job.StaticMapData)
 	default:
 		return nil, fmt.Errorf("unsupported discord job type: %s", job.Type)
 	}
@@ -86,23 +86,66 @@ func (ds *DiscordSender) Delete(ctx context.Context, sentID string) error {
 	}
 }
 
-// Edit edits a previously sent message.
-func (ds *DiscordSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
+// Edit edits a previously sent message. Supports multipart image upload
+// (same as Send) so inline-mode tiles are preserved on edits rather than
+// falling back to the placeholder URL.
+func (ds *DiscordSender) Edit(ctx context.Context, sentID string, message json.RawMessage, staticMapData []byte) error {
+	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
+	if err == nil && normalized != nil {
+		message = normalized
+	}
+
+	// Webhook-sent messages use "file" as the multipart field name;
+	// bot-sent messages use "files[0]". Match the send path.
+	fileField := "files[0]"
+	if strings.HasPrefix(sentID, "http") {
+		fileField = "file"
+	}
+
+	var reqBody io.Reader
+	var contentType string
+
+	if len(staticMapData) > 0 && imageURL != "" {
+		normalized = ReplaceEmbedImageURL(normalized)
+		buf, ct, err := BuildMultipartMessage(normalized, staticMapData, fileField)
+		if err == nil {
+			reqBody = buf
+			contentType = ct
+		}
+	} else if imageURL != "" {
+		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
+			normalized = ReplaceEmbedImageURL(normalized)
+			buf, ct, err := BuildMultipartMessage(normalized, imageData, fileField)
+			if err == nil {
+				reqBody = buf
+				contentType = ct
+			}
+		} else {
+			log.Warnf("discord: edit image download failed (%s), editing without image: %v", imageURL, err)
+		}
+	}
+
+	if reqBody == nil {
+		reqBody = bytes.NewReader(message)
+		contentType = "application/json"
+	}
+
 	url, auth, err := ds.resolveMessageURL(sentID)
 	if err != nil {
 		return err
 	}
-	resp, err := ds.doRequest(ctx, http.MethodPatch, url, bytes.NewReader(message), "application/json", auth)
+	resp, err := ds.doRequest(ctx, http.MethodPatch, url, reqBody, contentType, auth)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body) //nolint:errcheck
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		io.Copy(io.Discard, resp.Body) //nolint:errcheck
 		return nil
 	}
-	return fmt.Errorf("discord edit returned status %d", resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("discord edit returned status %d: %s", resp.StatusCode, string(body))
 }
 
 // resolveMessageURL parses a sentID into a DELETE/PATCH URL plus auth flag.
@@ -160,10 +203,13 @@ func (ds *DiscordSender) ensureDMChannel(ctx context.Context, userID string) (st
 	return result.ID, nil
 }
 
-// postMessage sends a message to a Discord channel via the bot API.
-func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage) (*SentMessage, error) {
-	ds.rateLimiter.Wait(channelID)
+// WaitForRateLimit blocks until the target is not rate-limited.
+func (ds *DiscordSender) WaitForRateLimit(target string) {
+	ds.rateLimiter.Wait(target)
+}
 
+// postMessage sends a message to a Discord channel via the bot API.
+func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage, staticMapData []byte) (*SentMessage, error) {
 	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
@@ -172,7 +218,16 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 	var reqBody io.Reader
 	var contentType string
 
-	if imageURL != "" {
+	if len(staticMapData) > 0 && imageURL != "" {
+		// Inline tile: bytes already available, skip download
+		log.Debugf("discord: using inline tile for bot/%s (%d bytes)", channelID, len(staticMapData))
+		normalized = ReplaceEmbedImageURL(normalized)
+		buf, ct, err := BuildMultipartMessage(normalized, staticMapData, "files[0]")
+		if err == nil {
+			reqBody = buf
+			contentType = ct
+		}
+	} else if imageURL != "" {
 		log.Debugf("discord: uploading embed image for bot/%s", channelID)
 		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
@@ -182,7 +237,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 				contentType = ct
 			}
 		} else {
-			log.Debugf("discord: image download failed for %s, sending without: %v", channelID, err)
+			log.Warnf("discord: image download failed for %s (%s), sending without image: %v", channelID, imageURL, err)
 		}
 	}
 
@@ -196,9 +251,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 }
 
 // postWebhook sends a message via a Discord webhook URL.
-func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, message json.RawMessage) (*SentMessage, error) {
-	ds.rateLimiter.Wait(webhookURL)
-
+func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, message json.RawMessage, staticMapData []byte) (*SentMessage, error) {
 	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
@@ -207,7 +260,16 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 	var reqBody io.Reader
 	var contentType string
 
-	if imageURL != "" {
+	if len(staticMapData) > 0 && imageURL != "" {
+		// Inline tile: bytes already available, skip download
+		log.Debugf("discord: using inline tile for webhook/%s (%d bytes)", webhookURL, len(staticMapData))
+		normalized = ReplaceEmbedImageURL(normalized)
+		buf, ct, err := BuildMultipartMessage(normalized, staticMapData, "file")
+		if err == nil {
+			reqBody = buf
+			contentType = ct
+		}
+	} else if imageURL != "" {
 		log.Debugf("discord: uploading embed image for webhook/%s", webhookURL)
 		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
@@ -217,7 +279,7 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 				contentType = ct
 			}
 		} else {
-			log.Debugf("discord: image download failed for %s, sending without: %v", webhookURL, err)
+			log.Warnf("discord: image download failed for webhook %s (%s), sending without image: %v", webhookURL, imageURL, err)
 		}
 	}
 

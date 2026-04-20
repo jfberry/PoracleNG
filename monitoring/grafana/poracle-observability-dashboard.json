@@ -25,7 +25,7 @@
       }
     ]
   },
-  "description": "Complete observability dashboard for PoracleNG processor and alerter Prometheus metrics, including render pipeline, delivery, and runtime telemetry.",
+  "description": "Complete observability dashboard for PoracleNG processor Prometheus metrics, including render pipeline, delivery, and runtime telemetry.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -129,78 +129,6 @@
             "mode": "thresholds"
           },
           "decimals": 2,
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "text": "Down"
-                },
-                "1": {
-                  "text": "Up"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 3,
-        "y": 1
-      },
-      "id": 3,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "min(up{job=~\"$alerter_job\",instance=~\"$alerter_instance\"})",
-          "legendFormat": ""
-        }
-      ],
-      "title": "Alerter Up",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 2,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -218,10 +146,10 @@
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 6,
+        "x": 3,
         "y": 1
       },
-      "id": 4,
+      "id": 3,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -274,10 +202,10 @@
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 9,
+        "x": 6,
         "y": 1
       },
-      "id": 5,
+      "id": 4,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -330,10 +258,10 @@
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 12,
+        "x": 9,
         "y": 1
       },
-      "id": 6,
+      "id": 5,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -394,10 +322,10 @@
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 15,
+        "x": 12,
         "y": 1
       },
-      "id": 7,
+      "id": 6,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -458,10 +386,10 @@
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 18,
+        "x": 15,
         "y": 1
       },
-      "id": 8,
+      "id": 7,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -522,10 +450,10 @@
       "gridPos": {
         "h": 4,
         "w": 3,
-        "x": 21,
+        "x": 18,
         "y": 1
       },
-      "id": 9,
+      "id": 8,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -558,7 +486,7 @@
         "x": 0,
         "y": 5
       },
-      "id": 10,
+      "id": 9,
       "panels": [],
       "title": "Processor Pipeline",
       "type": "row"
@@ -625,7 +553,7 @@
         "x": 0,
         "y": 6
       },
-      "id": 11,
+      "id": 10,
       "options": {
         "legend": {
           "calcs": [],
@@ -710,7 +638,7 @@
         "x": 12,
         "y": 6
       },
-      "id": 12,
+      "id": 11,
       "options": {
         "legend": {
           "calcs": [],
@@ -795,7 +723,7 @@
         "x": 0,
         "y": 14
       },
-      "id": 13,
+      "id": 12,
       "options": {
         "legend": {
           "calcs": [],
@@ -890,7 +818,7 @@
         "x": 12,
         "y": 14
       },
-      "id": 14,
+      "id": 13,
       "options": {
         "legend": {
           "calcs": [],
@@ -980,7 +908,7 @@
         "x": 0,
         "y": 22
       },
-      "id": 15,
+      "id": 14,
       "options": {
         "legend": {
           "calcs": [],
@@ -1065,7 +993,7 @@
         "x": 12,
         "y": 22
       },
-      "id": 16,
+      "id": 15,
       "options": {
         "legend": {
           "calcs": [],
@@ -1150,7 +1078,7 @@
         "x": 0,
         "y": 30
       },
-      "id": 17,
+      "id": 16,
       "options": {
         "legend": {
           "calcs": [],
@@ -1255,7 +1183,7 @@
         "x": 12,
         "y": 30
       },
-      "id": 18,
+      "id": 17,
       "options": {
         "legend": {
           "calcs": [],
@@ -1291,7 +1219,7 @@
         "x": 0,
         "y": 38
       },
-      "id": 19,
+      "id": 18,
       "panels": [],
       "title": "Render Pipeline",
       "type": "row"
@@ -1358,7 +1286,7 @@
         "x": 0,
         "y": 39
       },
-      "id": 20,
+      "id": 19,
       "options": {
         "legend": {
           "calcs": [],
@@ -1453,7 +1381,7 @@
         "x": 12,
         "y": 39
       },
-      "id": 21,
+      "id": 20,
       "options": {
         "legend": {
           "calcs": [],
@@ -1543,7 +1471,7 @@
         "x": 0,
         "y": 47
       },
-      "id": 22,
+      "id": 21,
       "options": {
         "legend": {
           "calcs": [],
@@ -1628,7 +1556,7 @@
         "x": 12,
         "y": 47
       },
-      "id": 23,
+      "id": 22,
       "options": {
         "legend": {
           "calcs": [],
@@ -1713,7 +1641,7 @@
         "x": 0,
         "y": 55
       },
-      "id": 24,
+      "id": 23,
       "options": {
         "legend": {
           "calcs": [],
@@ -1788,7 +1716,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "ops"
         },
         "overrides": []
       },
@@ -1797,6 +1725,91 @@
         "w": 12,
         "x": 12,
         "y": 55
+      },
+      "id": 24,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(mode) (rate(poracle_tile_mode_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval]))",
+          "legendFormat": "{{mode}}"
+        }
+      ],
+      "title": "Tile Mode Decisions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 63
       },
       "id": 25,
       "options": {
@@ -1832,7 +1845,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 71
       },
       "id": 26,
       "panels": [],
@@ -1899,7 +1912,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 72
       },
       "id": 27,
       "options": {
@@ -1999,7 +2012,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 72
       },
       "id": 28,
       "options": {
@@ -2084,7 +2097,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "id": 29,
       "options": {
@@ -2169,7 +2182,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 72
+        "y": 80
       },
       "id": 30,
       "options": {
@@ -2269,7 +2282,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 80
+        "y": 88
       },
       "id": 31,
       "options": {
@@ -2354,7 +2367,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 80
+        "y": 88
       },
       "id": 32,
       "options": {
@@ -2390,7 +2403,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 96
       },
       "id": 33,
       "panels": [],
@@ -2457,7 +2470,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 89
+        "y": 97
       },
       "id": 34,
       "options": {
@@ -2547,7 +2560,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 89
+        "y": 97
       },
       "id": 35,
       "options": {
@@ -2637,7 +2650,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 97
+        "y": 105
       },
       "id": 36,
       "options": {
@@ -2732,7 +2745,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 97
+        "y": 105
       },
       "id": 37,
       "options": {
@@ -2822,7 +2835,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 105
+        "y": 113
       },
       "id": 38,
       "options": {
@@ -2912,7 +2925,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 105
+        "y": 113
       },
       "id": 39,
       "options": {
@@ -3002,7 +3015,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 113
+        "y": 121
       },
       "id": 40,
       "options": {
@@ -3087,7 +3100,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 113
+        "y": 121
       },
       "id": 41,
       "options": {
@@ -3128,7 +3141,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 121
+        "y": 129
       },
       "id": 42,
       "panels": [],
@@ -3195,7 +3208,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 122
+        "y": 130
       },
       "id": 43,
       "options": {
@@ -3290,7 +3303,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 122
+        "y": 130
       },
       "id": 44,
       "options": {
@@ -3380,7 +3393,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 130
+        "y": 138
       },
       "id": 45,
       "options": {
@@ -3465,7 +3478,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 130
+        "y": 138
       },
       "id": 46,
       "options": {
@@ -3550,7 +3563,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 138
+        "y": 146
       },
       "id": 47,
       "options": {
@@ -3640,7 +3653,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 138
+        "y": 146
       },
       "id": 48,
       "options": {
@@ -3666,14 +3679,70 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 154
+      },
+      "id": 49,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "poracle_processor_build_info{job=~\"$processor_job\",instance=~\"$processor_instance\"}",
+          "legendFormat": ""
+        }
+      ],
+      "title": "Build Info",
+      "type": "stat"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 146
+        "y": 157
       },
-      "id": 49,
+      "id": 50,
       "panels": [],
       "title": "Runtime and Process Health",
       "type": "row"
@@ -3738,9 +3807,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 147
+        "y": 158
       },
-      "id": 50,
+      "id": 51,
       "options": {
         "legend": {
           "calcs": [],
@@ -3763,16 +3832,6 @@
           "refId": "B",
           "expr": "process_virtual_memory_bytes{job=~\"$processor_job\",instance=~\"$processor_instance\"}",
           "legendFormat": "processor virtual {{instance}}"
-        },
-        {
-          "refId": "C",
-          "expr": "process_resident_memory_bytes{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}",
-          "legendFormat": "alerter rss {{instance}}"
-        },
-        {
-          "refId": "D",
-          "expr": "process_virtual_memory_bytes{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}",
-          "legendFormat": "alerter virtual {{instance}}"
         }
       ],
       "title": "Process Memory",
@@ -3838,9 +3897,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 147
+        "y": 158
       },
-      "id": 51,
+      "id": 52,
       "options": {
         "legend": {
           "calcs": [],
@@ -3858,11 +3917,6 @@
           "refId": "A",
           "expr": "rate(process_cpu_seconds_total{job=~\"$processor_job\",instance=~\"$processor_instance\"}[$__rate_interval])",
           "legendFormat": "processor {{instance}}"
-        },
-        {
-          "refId": "B",
-          "expr": "rate(process_cpu_seconds_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])",
-          "legendFormat": "alerter {{instance}}"
         }
       ],
       "title": "Process CPU",
@@ -3928,9 +3982,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 155
+        "y": 166
       },
-      "id": 52,
+      "id": 53,
       "options": {
         "legend": {
           "calcs": [],
@@ -4018,9 +4072,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 155
+        "y": 166
       },
-      "id": 53,
+      "id": 54,
       "options": {
         "legend": {
           "calcs": [],
@@ -4113,9 +4167,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 163
+        "y": 174
       },
-      "id": 54,
+      "id": 55,
       "options": {
         "legend": {
           "calcs": [],
@@ -4136,281 +4190,6 @@
         }
       ],
       "title": "Go GC Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 163
-      },
-      "id": 55,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "nodejs_heap_size_used_bytes{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}",
-          "legendFormat": "heap used {{instance}}"
-        },
-        {
-          "refId": "B",
-          "expr": "nodejs_heap_size_total_bytes{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}",
-          "legendFormat": "heap total {{instance}}"
-        },
-        {
-          "refId": "C",
-          "expr": "nodejs_external_memory_bytes{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}",
-          "legendFormat": "external {{instance}}"
-        }
-      ],
-      "title": "Node.js Heap",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 171
-      },
-      "id": 56,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "nodejs_eventloop_lag_seconds{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}",
-          "legendFormat": "event loop lag {{instance}}"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by(le) (rate(nodejs_gc_duration_seconds_bucket{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}[$__rate_interval])))",
-          "legendFormat": "gc p95"
-        }
-      ],
-      "title": "Node.js Event Loop and GC",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 171
-      },
-      "id": 57,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "nodejs_active_handles_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}",
-          "legendFormat": "handles {{instance}}"
-        },
-        {
-          "refId": "B",
-          "expr": "nodejs_active_requests_total{job=~\"$alerter_job\",instance=~\"$alerter_instance\"}",
-          "legendFormat": "requests {{instance}}"
-        }
-      ],
-      "title": "Node.js Handles and Requests",
       "type": "timeseries"
     }
   ],
@@ -4471,54 +4250,6 @@
         "refresh": 2,
         "sort": 1,
         "type": "query"
-      },
-      {
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": [
-            "$__all"
-          ]
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
-        "definition": "label_values(process_resident_memory_bytes{job!~\"$processor_job\"}, job)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "Alerter job",
-        "multi": true,
-        "name": "alerter_job",
-        "options": [],
-        "query": "label_values(process_resident_memory_bytes{job!~\"$processor_job\"}, job)",
-        "refresh": 1,
-        "sort": 1,
-        "type": "query"
-      },
-      {
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": [
-            "$__all"
-          ]
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${DS_PROMETHEUS}"
-        },
-        "definition": "label_values(process_resident_memory_bytes{job=~\"$alerter_job\"}, instance)",
-        "hide": 0,
-        "includeAll": true,
-        "label": "Alerter instance",
-        "multi": true,
-        "name": "alerter_instance",
-        "options": [],
-        "query": "label_values(process_resident_memory_bytes{job=~\"$alerter_job\"}, instance)",
-        "refresh": 2,
-        "sort": 1,
-        "type": "query"
       }
     ]
   },
@@ -4530,6 +4261,6 @@
   "timezone": "browser",
   "title": "PoracleNG Observability",
   "uid": "poracleng-observability",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }

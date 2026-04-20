@@ -21,10 +21,7 @@ func (g *Generator) MonsterRowText(tr *i18n.Translator, monster *db.MonsterTrack
 		minRarity = 1
 	}
 
-	minSize := monster.Size
-	if minSize < 1 {
-		minSize = 1
-	}
+	minSize := max(monster.Size, 1)
 
 	// PVP string
 	var pvpString string

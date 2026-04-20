@@ -41,7 +41,7 @@ func TestRaidIconURLs_HatchedRaid(t *testing.T) {
 		End:       time.Now().Add(30 * time.Minute).Unix(),
 		Start:     time.Now().Add(-15 * time.Minute).Unix(),
 	}
-	m, _ := e.Raid(raid, true)
+	m, _ := e.Raid(raid, true, TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -63,7 +63,7 @@ func TestRaidIconURLs_Egg(t *testing.T) {
 		Start:     time.Now().Add(15 * time.Minute).Unix(),
 		End:       time.Now().Add(60 * time.Minute).Unix(),
 	}
-	m, _ := e.Raid(raid, true)
+	m, _ := e.Raid(raid, true, TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -87,7 +87,7 @@ func TestRaidIconURLs_NilUicons(t *testing.T) {
 		End:       time.Now().Add(30 * time.Minute).Unix(),
 		Start:     time.Now().Add(-15 * time.Minute).Unix(),
 	}
-	m, _ := e.Raid(raid, true)
+	m, _ := e.Raid(raid, true, TileModeURL)
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")
@@ -116,7 +116,7 @@ func TestRaidIconURLs_AltAndSticker(t *testing.T) {
 		End:       time.Now().Add(30 * time.Minute).Unix(),
 		Start:     time.Now().Add(-15 * time.Minute).Unix(),
 	}
-	m, _ := e.Raid(raid, true)
+	m, _ := e.Raid(raid, true, TileModeURL)
 
 	if _, ok := m["imgUrl"].(string); !ok {
 		t.Error("expected imgUrl")
@@ -140,7 +140,7 @@ func TestMaxbattleIconURLs(t *testing.T) {
 		BattlePokemonForm: 0,
 		BattleEnd:         time.Now().Add(30 * time.Minute).Unix(),
 	}
-	m, _ := e.Maxbattle(52.5, 13.4, mb.BattleEnd, mb)
+	m, _ := e.Maxbattle(52.5, 13.4, mb.BattleEnd, mb, TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -159,7 +159,7 @@ func TestMaxbattleIconURLs_NoPokemon(t *testing.T) {
 		BattlePokemonID: 0,
 		BattleEnd:       time.Now().Add(30 * time.Minute).Unix(),
 	}
-	m, _ := e.Maxbattle(52.5, 13.4, mb.BattleEnd, mb)
+	m, _ := e.Maxbattle(52.5, 13.4, mb.BattleEnd, mb, TileModeURL)
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("maxbattle with no pokemon should not have imgUrl")
@@ -171,7 +171,7 @@ func TestMaxbattleIconURLs_NoPokemon(t *testing.T) {
 func TestGymIconURLs(t *testing.T) {
 	e := newTestEnricher()
 
-	m, _ := e.Gym(52.5, 13.4, 1, 0, 3, -1, false, false, "gym123")
+	m, _ := e.Gym(52.5, 13.4, 1, 0, 3, -1, false, false, "gym123", TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -187,7 +187,7 @@ func TestGymIconURLs_NilUicons(t *testing.T) {
 		WeatherProvider: &mockWeather{},
 		TimeLayout:      "15:04:05",
 	}
-	m, _ := e.Gym(52.5, 13.4, 1, 0, 3, -1, false, false, "gym123")
+	m, _ := e.Gym(52.5, 13.4, 1, 0, 3, -1, false, false, "gym123", TileModeURL)
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")
@@ -199,7 +199,7 @@ func TestGymIconURLs_NilUicons(t *testing.T) {
 func TestInvasionIconURLs_RegularGrunt(t *testing.T) {
 	e := newTestEnricher()
 
-	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", 41, 0, 0)
+	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", 41, 0, 0, TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -214,7 +214,7 @@ func TestInvasionIconURLs_EventInvasion(t *testing.T) {
 	e := newTestEnricher()
 
 	// Event invasion: gruntTypeID=0, displayType>=7 uses pokestop icon
-	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", 0, 7, 501)
+	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", 0, 7, 501, TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -230,7 +230,7 @@ func TestInvasionIconURLs_NilUicons(t *testing.T) {
 		WeatherProvider: &mockWeather{},
 		TimeLayout:      "15:04:05",
 	}
-	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", 41, 0, 0)
+	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", 41, 0, 0, TileModeURL)
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")
@@ -249,7 +249,7 @@ func TestLureIconURLs(t *testing.T) {
 		LureExpiration: time.Now().Add(30 * time.Minute).Unix(),
 		LureID:         501,
 	}
-	m, _ := e.Lure(lure)
+	m, _ := e.Lure(lure, TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -272,7 +272,7 @@ func TestLureIconURLs_NilUicons(t *testing.T) {
 		LureExpiration: time.Now().Add(30 * time.Minute).Unix(),
 		LureID:         501,
 	}
-	m, _ := e.Lure(lure)
+	m, _ := e.Lure(lure, TileModeURL)
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")
@@ -291,7 +291,7 @@ func TestNestIconURLs(t *testing.T) {
 		Lon: 13.4,
 		ResetTime: time.Now().Unix(),
 	}
-	m, _ := e.Nest(nest)
+	m, _ := e.Nest(nest, TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -315,7 +315,7 @@ func TestNestIconURLs_NilUicons(t *testing.T) {
 		Lon: 13.4,
 		ResetTime: time.Now().Unix(),
 	}
-	m, _ := e.Nest(nest)
+	m, _ := e.Nest(nest, TileModeURL)
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")
@@ -329,7 +329,7 @@ func TestWeatherIconURLs(t *testing.T) {
 	e.Translations = newTestBundle()
 	e.GameData = newTestGameData()
 
-	base, _ := e.Weather(52.5, 13.4, 3, nil, false)
+	base, _ := e.Weather(52.5, 13.4, 3, nil, false, TileModeURL)
 	// WeatherTranslate returns only translated fields; imgUrl is in base enrichment
 	_ = e // suppress unused warning for translate call
 
@@ -349,8 +349,8 @@ func TestWeatherIconURLs_NilUicons(t *testing.T) {
 		Translations:    newTestBundle(),
 		GameData:        newTestGameData(),
 	}
-	base, _ := e.Weather(52.5, 13.4, 3, nil, false)
-	m, _ := e.WeatherTranslate(base, 1, 3, nil, "en", false)
+	base, _ := e.Weather(52.5, 13.4, 3, nil, false, TileModeURL)
+	m, _ := e.WeatherTranslate(base, 1, 3, nil, "en", false, TileModeURL)
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")

@@ -8,6 +8,7 @@ import (
 	raymond "github.com/mailgun/raymond/v2"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
@@ -18,30 +19,34 @@ import (
 
 // RendererConfig holds configuration for creating a Renderer.
 type RendererConfig struct {
-	ConfigDir     string
-	FallbackDir   string
-	GameData      *gamedata.GameData
-	Translations  *i18n.Bundle
-	UtilEmojis    map[string]string  // from GameData.Util.Emojis
-	ShlinkURL     string             // empty = no shortening
-	ShlinkKey     string
-	ShlinkDomain  string
-	DTSDictionary map[string]any     // from config [general] dts_dictionary
-	DefaultLocale string             // fallback language (e.g. "en")
-	MinAlertTime  int                // minimum seconds remaining for alert
+	ConfigDir           string
+	FallbackDir         string
+	GameData            *gamedata.GameData
+	Translations        *i18n.Bundle
+	UtilEmojis          map[string]string // from GameData.Util.Emojis
+	ShlinkURL           string            // empty = no shortening
+	ShlinkKey           string
+	ShlinkDomain        string
+	DTSDictionary       map[string]any // from config [general] dts_dictionary
+	DefaultLocale       string         // fallback language (e.g. "en")
+	AltLanguage         string         // alt language for *Alt helpers (default "en")
+	DefaultTemplateName string         // from config default_template_name (e.g. "1")
+	MinAlertTime        int            // minimum seconds remaining for alert
 }
 
 // Renderer ties together templates, enrichment, emoji, and URL shortening
 // to produce DeliveryJobs from matched webhook data.
 type Renderer struct {
-	templates   *TemplateStore
-	viewBuilder *ViewBuilder
-	shortener   *ShlinkShortener // nil if not configured
-	gd          *gamedata.GameData
-	bundle      *i18n.Bundle
-	emoji       *EmojiLookup
-	locale      string
-	minAlertSec int
+	templates       *TemplateStore
+	viewBuilder     *ViewBuilder
+	shortener       *ShlinkShortener // nil if not configured
+	gd              *gamedata.GameData
+	bundle          *i18n.Bundle
+	emoji           *EmojiLookup
+	locale          string
+	defaultTemplate string // config default_template_name, used when tracking has no explicit template
+	altLanguage     string
+	minAlertSec     int
 }
 
 // NewRenderer creates a Renderer from the given configuration.
@@ -67,21 +72,74 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 	if locale == "" {
 		locale = "en"
 	}
+	altLang := cfg.AltLanguage
+	if altLang == "" {
+		altLang = "en"
+	}
 
 	return &Renderer{
-		templates:   ts,
-		viewBuilder: vb,
-		shortener:   shortener,
-		gd:          cfg.GameData,
-		bundle:      cfg.Translations,
-		emoji:       emoji,
-		locale:      locale,
-		minAlertSec: cfg.MinAlertTime,
+		templates:       ts,
+		viewBuilder:     vb,
+		shortener:       shortener,
+		gd:              cfg.GameData,
+		bundle:          cfg.Translations,
+		emoji:           emoji,
+		locale:          locale,
+		altLanguage:     altLang,
+		defaultTemplate: cfg.DefaultTemplateName,
+		minAlertSec:     cfg.MinAlertTime,
 	}, nil
+}
+
+// resolveTemplate returns the template ID to use for DTS lookup.
+// If the tracking rule has no explicit template (empty string), the
+// configured default_template_name is used first. If that is also empty,
+// an empty string is returned which causes Get() to fall through to
+// the DTS entry marked as default.
+func (r *Renderer) resolveTemplate(trackingTemplate string) string {
+	if trackingTemplate != "" {
+		return trackingTemplate
+	}
+	return r.defaultTemplate
+}
+
+// ResolveTemplate returns the template ID to use, applying the default if empty.
+func (r *Renderer) ResolveTemplate(trackingTemplate string) string {
+	return r.resolveTemplate(trackingTemplate)
+}
+
+// CheckTemplate validates that a template can be found for the given parameters.
+// Returns nil if a template exists, or an error describing what's missing.
+func (r *Renderer) CheckTemplate(templateType, platform, templateID, language string) error {
+	resolvedID := r.resolveTemplate(templateID)
+	tmpl := r.templates.Get(templateType, platform, resolvedID, language)
+	if tmpl != nil {
+		return nil
+	}
+	// Try monsterNoIv → monster fallback
+	if templateType == "monsterNoIv" {
+		tmpl = r.templates.Get("monster", platform, resolvedID, language)
+		if tmpl != nil {
+			return nil
+		}
+	}
+	if resolvedID == "" {
+		return fmt.Errorf("no DTS template found for type=%q platform=%q (no default template configured)", templateType, platform)
+	}
+	return fmt.Errorf("no DTS template found for type=%q platform=%q template=%q language=%q", templateType, platform, resolvedID, language)
 }
 
 // Templates returns the underlying TemplateStore.
 func (r *Renderer) Templates() *TemplateStore { return r.templates }
+
+// Emoji returns the emoji lookup used by this renderer.
+func (r *Renderer) Emoji() *EmojiLookup { return r.emoji }
+
+// Shortener returns the URL shortener (nil if not configured).
+func (r *Renderer) Shortener() *ShlinkShortener { return r.shortener }
+
+// ViewBuilder returns the view builder used for LayeredView construction.
+func (r *Renderer) ViewBuilder() *ViewBuilder { return r.viewBuilder }
 
 // RenderPokemon renders pokemon alerts for all matched users and returns delivery jobs.
 // Pokemon has special handling: user deduplication (the alerter historically deduped,
@@ -95,6 +153,7 @@ func (r *Renderer) RenderPokemon(
 	matchedAreas []webhook.MatchedArea,
 	isEncountered bool,
 	logReference string,
+	editKeyBase string,
 ) []webhook.DeliveryJob {
 	// 1. Check TTH
 	if r.isBelowMinAlertTime(enrichment) {
@@ -110,7 +169,7 @@ func (r *Renderer) RenderPokemon(
 		templateType = "monsterNoIv"
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, uniqueUsers, matchedAreas, logReference)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, uniqueUsers, matchedAreas, logReference, editKeyBase)
 }
 
 // RenderAlert renders alerts for any non-pokemon type and returns delivery jobs.
@@ -124,12 +183,13 @@ func (r *Renderer) RenderAlert(
 	matchedUsers []webhook.MatchedUser,
 	matchedAreas []webhook.MatchedArea,
 	logReference string,
+	editKeyBase string,
 ) []webhook.DeliveryJob {
 	if r.isBelowMinAlertTime(enrichment) {
 		return nil
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, matchedUsers, matchedAreas, logReference)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, matchedUsers, matchedAreas, logReference, editKeyBase)
 }
 
 // isBelowMinAlertTime checks whether the TTH in enrichment is below the configured minimum.
@@ -148,6 +208,7 @@ func (r *Renderer) renderForUsers(
 	users []webhook.MatchedUser,
 	areas []webhook.MatchedArea,
 	logReference string,
+	editKeyBase string,
 ) []webhook.DeliveryJob {
 	tthMap, _ := extractTTH(enrichment)
 	lat := truncateCoord(lookupFloat(enrichment, webhookFields, "latitude"))
@@ -164,7 +225,7 @@ func (r *Renderer) renderForUsers(
 	// enrichment, users with the same (template, platform, language) get identical
 	// rendered output. Render once per group and clone the result.
 	if perUserEnrichment == nil {
-		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, users, areas, logReference, tthMap, lat, lon, shlinkCache)
+		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, users, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)
 	}
 
 	var jobs []webhook.DeliveryJob
@@ -189,26 +250,27 @@ func (r *Renderer) renderForUsers(
 		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, perUser, webhookFields, platform, areas)
 
 		// f. Get template (with monsterNoIv -> monster fallback)
-		tmpl := r.templates.Get(templateType, platform, user.Template, language)
+		templateID := r.resolveTemplate(user.Template)
+		tmpl := r.templates.Get(templateType, platform, templateID, language)
 		if tmpl == nil && templateType == "monsterNoIv" {
-			tmpl = r.templates.Get("monster", platform, user.Template, language)
+			tmpl = r.templates.Get("monster", platform, templateID, language)
 		}
 
 		var rendered string
 		if tmpl == nil {
-			rendered = fallbackMessage(templateType, platform, user.Template, language)
+			rendered = fallbackMessage(templateType, platform, templateID, language)
 		} else {
 			df := raymond.NewDataFrame()
 			df.Set("language", language)
 			df.Set("platform", platform)
-			df.Set("altLanguage", "en")
+			df.Set("altLanguage", r.altLanguage)
 
 			tStart := time.Now()
 			result, err := safeExecWith(tmpl, view, df)
 			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
 				log.Errorf("dts: render %s for user %s: %v", templateType, user.ID, err)
-				rendered = fallbackMessage(templateType, platform, user.Template, language)
+				rendered = fallbackMessage(templateType, platform, templateID, language)
 				metrics.TemplateTotal.WithLabelValues(templateType, "error").Inc()
 			} else {
 				rendered = result
@@ -223,7 +285,7 @@ func (r *Renderer) renderForUsers(
 		rawMessage := json.RawMessage(rendered)
 		if !json.Valid(rawMessage) {
 			log.Errorf("dts: invalid rendered JSON for user %s (raw: %.200s)", user.ID, rendered)
-			rawMessage = fallbackMessageRaw(templateType, platform, user.Template, language)
+			rawMessage = fallbackMessageRaw(templateType, platform, templateID, language)
 		}
 
 		// Append ping to content
@@ -233,7 +295,13 @@ func (r *Renderer) renderForUsers(
 
 		emojiSlice := extractEmojiSlice(view)
 
-		// h. Build DeliveryJob
+		// h. Compute edit key
+		editKey := ""
+		if db.IsEdit(user.Clean) && editKeyBase != "" {
+			editKey = editKeyBase + ":" + user.ID
+		}
+
+		// i. Build DeliveryJob
 		jobs = append(jobs, webhook.DeliveryJob{
 			Lat:          lat,
 			Lon:          lon,
@@ -246,6 +314,7 @@ func (r *Renderer) renderForUsers(
 			Emoji:        emojiSlice,
 			LogReference: logReference,
 			Language:     language,
+			EditKey:      editKey,
 		})
 	}
 
@@ -273,6 +342,7 @@ func (r *Renderer) renderGrouped(
 	tthMap map[string]any,
 	lat, lon string,
 	shlinkCache map[string]string,
+	editKeyBase string,
 ) []webhook.DeliveryJob {
 	// Group users by rendering key
 	type groupEntry struct {
@@ -288,7 +358,7 @@ func (r *Renderer) renderGrouped(
 		if language == "" {
 			language = r.locale
 		}
-		key := renderGroupKey{templateID: user.Template, platform: platform, language: language}
+		key := renderGroupKey{templateID: r.resolveTemplate(user.Template), platform: platform, language: language}
 		if g, ok := groupMap[key]; ok {
 			g.users = append(g.users, user)
 		} else {
@@ -315,7 +385,7 @@ func (r *Renderer) renderGrouped(
 			df := raymond.NewDataFrame()
 			df.Set("language", key.language)
 			df.Set("platform", key.platform)
-			df.Set("altLanguage", "en")
+			df.Set("altLanguage", r.altLanguage)
 
 			tStart := time.Now()
 			result, err := safeExecWith(tmpl, view, df)
@@ -349,6 +419,11 @@ func (r *Renderer) renderGrouped(
 				userMessage = appendPingToRaw(rawMessage, user.Ping)
 			}
 
+			editKey := ""
+			if db.IsEdit(user.Clean) && editKeyBase != "" {
+				editKey = editKeyBase + ":" + user.ID
+			}
+
 			jobs = append(jobs, webhook.DeliveryJob{
 				Lat:          lat,
 				Lon:          lon,
@@ -361,6 +436,7 @@ func (r *Renderer) renderGrouped(
 				Emoji:        emojiSlice,
 				LogReference: logReference,
 				Language:     key.language,
+				EditKey:      editKey,
 			})
 		}
 	}
@@ -532,7 +608,7 @@ func mapKeys(m map[string]map[string]any) []string {
 // safeExecWith wraps raymond Template.ExecWith with panic recovery.
 // Malformed templates can cause panics in raymond (e.g. nil Options in helpers).
 // This converts those panics into errors so a bad template doesn't crash the process.
-func safeExecWith(tmpl *raymond.Template, ctx interface{}, df *raymond.DataFrame) (result string, err error) {
+func safeExecWith(tmpl *raymond.Template, ctx any, df *raymond.DataFrame) (result string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("template panic: %v", r)

@@ -2,6 +2,7 @@ package dts
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -44,6 +45,45 @@ func LoadEmoji(configDir string, utilEmojis map[string]string) *EmojiLookup {
 	}
 	e.custom = custom
 	return e
+}
+
+// Defaults returns the default key→emoji map (from util.json).
+func (e *EmojiLookup) Defaults() map[string]string {
+	if e == nil {
+		return nil
+	}
+	out := make(map[string]string, len(e.defaults))
+	maps.Copy(out, e.defaults)
+	return out
+}
+
+// PlatformOverrides returns the per-platform custom overrides (from emoji.json).
+func (e *EmojiLookup) PlatformOverrides() map[string]map[string]string {
+	if e == nil {
+		return nil
+	}
+	out := make(map[string]map[string]string, len(e.custom))
+	for p, m := range e.custom {
+		inner := make(map[string]string, len(m))
+		maps.Copy(inner, m)
+		out[p] = inner
+	}
+	return out
+}
+
+// MergedFor returns the effective key→emoji map for a given platform: defaults
+// overlaid with the platform's overrides. Useful for clients that want a
+// single flat map to resolve from.
+func (e *EmojiLookup) MergedFor(platform string) map[string]string {
+	if e == nil {
+		return nil
+	}
+	out := make(map[string]string, len(e.defaults))
+	maps.Copy(out, e.defaults)
+	if platformMap, ok := e.custom[platform]; ok {
+		maps.Copy(out, platformMap)
+	}
+	return out
 }
 
 // Lookup resolves an emoji string for the given key and platform.

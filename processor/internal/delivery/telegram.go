@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -37,16 +38,19 @@ func NewTelegramSender(token string) *TelegramSender {
 // Platform returns the platform identifier.
 func (ts *TelegramSender) Platform() string { return "telegram" }
 
+// WaitForRateLimit is a no-op for Telegram — rate limiting is handled inline via 429 retry.
+func (ts *TelegramSender) WaitForRateLimit(target string) {}
+
 // telegramMessage holds the parsed fields from a Telegram job message.
 type telegramMessage struct {
-	Content        string      `json:"content"`
-	Sticker        string      `json:"sticker"`
-	Photo          string      `json:"photo"`
-	SendOrder      interface{} `json:"send_order"`
-	ParseMode      string      `json:"parse_mode"`
-	WebpagePreview bool        `json:"webpage_preview"`
-	Location       bool        `json:"location"`
-	Venue          *venue      `json:"venue"`
+	Content        string `json:"content"`
+	Sticker        string `json:"sticker"`
+	Photo          string `json:"photo"`
+	SendOrder      any    `json:"send_order"`
+	ParseMode      string `json:"parse_mode"`
+	WebpagePreview bool   `json:"webpage_preview"`
+	Location       bool   `json:"location"`
+	Venue          *venue `json:"venue"`
 }
 
 type venue struct {
@@ -71,6 +75,8 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 	if err := json.Unmarshal(job.Message, &msg); err != nil {
 		return nil, fmt.Errorf("parsing telegram message: %w", err)
 	}
+
+	sanitizeTelegramMessage(&msg)
 
 	log.Debugf("[telegram] Send to %s: location=%v lat=%.6f lon=%.6f content_len=%d sticker=%q photo=%q send_order=%v",
 		job.Target, msg.Location, job.Lat, job.Lon, len(msg.Content), msg.Sticker, msg.Photo, msg.SendOrder)
@@ -225,7 +231,7 @@ func (ts *TelegramSender) deleteMessage(ctx context.Context, chatID string, mess
 }
 
 // Edit edits a previously sent Telegram text message.
-func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.RawMessage) error {
+func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.RawMessage, _ []byte) error {
 	chatID, msgMap := parseTelegramSentIDMulti(sentID)
 	if chatID == "" {
 		return fmt.Errorf("invalid telegram sentID: %s", sentID)
@@ -251,11 +257,11 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 
 	parseMode := normalizeTelegramParseMode(editMsg.ParseMode)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":                  chatID,
-		"message_id":              messageID,
-		"text":                    editMsg.Content,
-		"parse_mode":             parseMode,
+		"message_id":               messageID,
+		"text":                     editMsg.Content,
+		"parse_mode":               parseMode,
 		"disable_web_page_preview": true,
 	}
 	resp, err := ts.doPost(ctx, "editMessageText", body)
@@ -273,10 +279,10 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 
 // sendMessage sends a text message.
 func (ts *TelegramSender) sendMessage(ctx context.Context, chatID, text, parseMode string, webpagePreview bool) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":                  chatID,
-		"text":                    text,
-		"parse_mode":             parseMode,
+		"text":                     text,
+		"parse_mode":               parseMode,
 		"disable_web_page_preview": !webpagePreview,
 	}
 	return ts.callWithRetry(ctx, "sendMessage", body)
@@ -284,9 +290,9 @@ func (ts *TelegramSender) sendMessage(ctx context.Context, chatID, text, parseMo
 
 // sendSticker sends a sticker.
 func (ts *TelegramSender) sendSticker(ctx context.Context, chatID, stickerID string) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":              chatID,
-		"sticker":             stickerID,
+		"sticker":              stickerID,
 		"disable_notification": true,
 	}
 	return ts.callWithRetry(ctx, "sendSticker", body)
@@ -294,9 +300,9 @@ func (ts *TelegramSender) sendSticker(ctx context.Context, chatID, stickerID str
 
 // sendPhoto sends a photo by URL.
 func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID, photoURL string) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":              chatID,
-		"photo":               photoURL,
+		"photo":                photoURL,
 		"disable_notification": true,
 	}
 	return ts.callWithRetry(ctx, "sendPhoto", body)
@@ -304,10 +310,10 @@ func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID, photoURL string
 
 // sendLocation sends a location.
 func (ts *TelegramSender) sendLocation(ctx context.Context, chatID string, lat, lon float64) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":              chatID,
-		"latitude":            lat,
-		"longitude":           lon,
+		"latitude":             lat,
+		"longitude":            lon,
 		"disable_notification": true,
 	}
 	return ts.callWithRetry(ctx, "sendLocation", body)
@@ -315,19 +321,19 @@ func (ts *TelegramSender) sendLocation(ctx context.Context, chatID string, lat, 
 
 // sendVenue sends a venue.
 func (ts *TelegramSender) sendVenue(ctx context.Context, chatID string, lat, lon float64, title, address string, disableNotification bool) (int, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"chat_id":              chatID,
-		"latitude":            lat,
-		"longitude":           lon,
-		"title":               title,
-		"address":             address,
+		"latitude":             lat,
+		"longitude":            lon,
+		"title":                title,
+		"address":              address,
 		"disable_notification": disableNotification,
 	}
 	return ts.callWithRetry(ctx, "sendVenue", body)
 }
 
 // callWithRetry posts to a Telegram API method with retry logic.
-func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body map[string]interface{}) (int, error) {
+func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body map[string]any) (int, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return 0, fmt.Errorf("marshaling request body: %w", err)
@@ -384,6 +390,7 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 			if tgResp.Parameters != nil && tgResp.Parameters.RetryAfter > 0 {
 				retryAfter = tgResp.Parameters.RetryAfter
 			}
+			// Cap retry to 60 seconds — values like 23501s indicate a permanent block
 			if retryAfter > 60 {
 				log.Warnf("telegram: 429 rate limited for %s %s, retry_after=%ds is excessive — capping to 60s and giving up (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
 				return 0, fmt.Errorf("telegram rate limit too long: %ds", retryAfter)
@@ -409,7 +416,7 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 }
 
 // doPost marshals body to JSON and posts to the Telegram API.
-func (ts *TelegramSender) doPost(ctx context.Context, method string, body interface{}) (*http.Response, error) {
+func (ts *TelegramSender) doPost(ctx context.Context, method string, body any) (*http.Response, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling request body: %w", err)
@@ -439,13 +446,13 @@ func (ts *TelegramSender) hasStepAfter(order []string, currentIdx int, step stri
 }
 
 // parseSendOrder parses the send_order field which can be a []string, a delimited string, or nil.
-func parseSendOrder(raw interface{}) []string {
+func parseSendOrder(raw any) []string {
 	if raw == nil {
 		return defaultSendOrder
 	}
 
 	switch v := raw.(type) {
-	case []interface{}:
+	case []any:
 		result := make([]string, 0, len(v))
 		for _, item := range v {
 			if s, ok := item.(string); ok {
@@ -486,6 +493,69 @@ func parseSendOrder(raw interface{}) []string {
 	default:
 		return defaultSendOrder
 	}
+}
+
+// Telegram message limits — see https://core.telegram.org/bots/api#sendmessage
+const (
+	maxTelegramText    = 4096 // text messages, captions are 1024 but we don't enforce that here
+	maxTelegramCaption = 1024
+)
+
+// emptyMarkdownLinkRegex matches [text]() or [](url) — both forms cause Telegram
+// markdown parser errors. The first has empty target, the second has empty label.
+var emptyMarkdownLinkRegex = regexp.MustCompile(`\[\s*\]\([^)]*\)|\[[^\]]*\]\(\s*\)`)
+
+// nullLiteralRegex matches "null", "undefined", "<nil>" as standalone tokens
+// (whitespace-bounded). Common DTS rendering bug for missing variables.
+var nullLiteralRegex = regexp.MustCompile(`(^|\s)(null|undefined|<nil>)(\s|$)`)
+
+// sanitizeTelegramMessage strips known footguns from a Telegram message in
+// place. Rules:
+//
+//   - Truncate text content to 4096 chars (Telegram limit)
+//   - Strip empty markdown links [text]() or [](url) which cause parse errors
+//   - Strip "null"/"undefined"/"<nil>" string literals (DTS rendering bugs)
+//   - Drop sticker/photo URLs that are empty/whitespace/null literals
+//   - Drop content if it's empty or only whitespace
+func sanitizeTelegramMessage(msg *telegramMessage) {
+	msg.Content = sanitizeTelegramText(msg.Content, maxTelegramText)
+	msg.Sticker = stripBlankURL(msg.Sticker)
+	msg.Photo = stripBlankURL(msg.Photo)
+}
+
+// sanitizeTelegramText cleans up a single text body. Returns the cleaned
+// string (may be empty if the input was nothing but null literals/whitespace).
+func sanitizeTelegramText(s string, maxLen int) string {
+	if s == "" {
+		return s
+	}
+	// Strip empty markdown links
+	s = emptyMarkdownLinkRegex.ReplaceAllString(s, "")
+	// Strip "null"/"undefined" tokens — keep the surrounding whitespace
+	s = nullLiteralRegex.ReplaceAllString(s, "$1$3")
+	// Truncate
+	if maxLen > 0 {
+		s = truncateRunes(s, maxLen)
+	}
+	// If only whitespace remains, return empty so the caller skips the send
+	if strings.TrimSpace(s) == "" {
+		return ""
+	}
+	return s
+}
+
+// stripBlankURL returns "" if the input is empty/whitespace or a known null
+// literal; otherwise returns the input unchanged.
+func stripBlankURL(s string) string {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return ""
+	}
+	lower := strings.ToLower(trimmed)
+	if lower == "null" || lower == "undefined" || lower == "<nil>" {
+		return ""
+	}
+	return s
 }
 
 // normalizeTelegramParseMode normalizes Telegram parse mode strings.

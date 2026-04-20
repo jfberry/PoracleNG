@@ -7,13 +7,21 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
+// boolToInt converts a bool to 0/1 int for the Clean field.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // trackingUserData holds common tracking fields for human validation.
 type trackingUserData struct {
 	HumanID           string
 	ProfileNo         int
 	Distance          int
 	Template          string
-	Clean             bool
+	Clean             int
 	Ping              string
 	IsSpecificStation bool // maxbattle: station-specific tracking (for specificstation blocked check)
 }

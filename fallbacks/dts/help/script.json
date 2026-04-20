@@ -1,0 +1,22 @@
+[{
+  "id": "script",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!script",
+      "description": "Export your current tracking as a list of commands you could paste back in. Useful as a personal backup before making big changes, or for migrating between installs.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}script` — returns your tracking as a text file attachment (or inline text on Telegram)"
+        },
+        {
+          "name": "Tip",
+          "value": "The output covers every tracking type — pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle — for your currently-active profile only. Switch profile first (`{{prefix}}profile switch <name>`) to export a different profile."
+        }
+      ]
+    }
+  }
+}]

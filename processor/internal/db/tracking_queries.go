@@ -1,46 +1,12 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/guregu/null/v6"
 	"github.com/jmoiron/sqlx"
 )
-
-// HumanAPI represents a human record for API operations.
-type HumanAPI struct {
-	ID               string         `db:"id" json:"id"`
-	Name             string         `db:"name" json:"name"`
-	Type             string         `db:"type" json:"type"`
-	Enabled          IntBool        `db:"enabled" json:"enabled"`
-	Language         sql.NullString `db:"language" json:"-"`
-	CurrentProfileNo int            `db:"current_profile_no" json:"current_profile_no"`
-}
-
-// LanguageOrDefault returns the human's language, or the given default if not set.
-func (h *HumanAPI) LanguageOrDefault(defaultLang string) string {
-	if h.Language.Valid && h.Language.String != "" {
-		return h.Language.String
-	}
-	return defaultLang
-}
-
-// SelectOneHuman looks up a single human by ID.
-func SelectOneHuman(db *sqlx.DB, id string) (*HumanAPI, error) {
-	var h HumanAPI
-	err := db.Get(&h,
-		`SELECT id, name, type, enabled, language, current_profile_no
-		 FROM humans WHERE id = ?`, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("select human %s: %w", id, err)
-	}
-	return &h, nil
-}
 
 // DeleteByUID deletes a single row from a tracking table by id and uid.
 func DeleteByUID(db *sqlx.DB, table, id string, uid int64) error {
@@ -85,7 +51,7 @@ type LureTrackingAPI struct {
 	ID        string `db:"id"         json:"id"         diff:"-"`
 	ProfileNo int    `db:"profile_no" json:"profile_no" diff:"-"`
 	Ping      string `db:"ping"       json:"ping"`
-	Clean     IntBool `db:"clean"      json:"clean"      diff:"update"`
+	Clean     int    `db:"clean"      json:"clean"      diff:"update"`
 	Distance  int    `db:"distance"   json:"distance"   diff:"update"`
 	Template  string `db:"template"   json:"template"   diff:"update"`
 	LureID    int    `db:"lure_id"    json:"lure_id"    diff:"match"`
@@ -173,7 +139,7 @@ type InvasionTrackingAPI struct {
 	ID        string `db:"id"         json:"id"         diff:"-"`
 	ProfileNo int    `db:"profile_no" json:"profile_no" diff:"-"`
 	Ping      string `db:"ping"       json:"ping"`
-	Clean     IntBool `db:"clean"      json:"clean"      diff:"update"`
+	Clean     int    `db:"clean"      json:"clean"      diff:"update"`
 	Distance  int    `db:"distance"   json:"distance"   diff:"update"`
 	Template  string `db:"template"   json:"template"   diff:"update"`
 	Gender    int    `db:"gender"     json:"gender"`
@@ -216,7 +182,7 @@ type NestTrackingAPI struct {
 	ID          string `db:"id"            json:"id"            diff:"-"`
 	ProfileNo   int    `db:"profile_no"    json:"profile_no"    diff:"-"`
 	Ping        string `db:"ping"          json:"ping"`
-	Clean       IntBool `db:"clean"         json:"clean"         diff:"update"`
+	Clean       int    `db:"clean"         json:"clean"         diff:"update"`
 	Distance    int    `db:"distance"      json:"distance"      diff:"update"`
 	Template    string `db:"template"      json:"template"      diff:"update"`
 	PokemonID   int    `db:"pokemon_id"    json:"pokemon_id"    diff:"match"`
@@ -261,7 +227,7 @@ type QuestTrackingAPI struct {
 	ID         string `db:"id"          json:"id"          diff:"-"`
 	ProfileNo  int    `db:"profile_no"  json:"profile_no"  diff:"-"`
 	Ping       string `db:"ping"        json:"ping"`
-	Clean      IntBool `db:"clean"       json:"clean"       diff:"update"`
+	Clean      int    `db:"clean"       json:"clean"       diff:"update"`
 	Distance   int    `db:"distance"    json:"distance"    diff:"update"`
 	Template   string `db:"template"    json:"template"    diff:"update"`
 	RewardType int    `db:"reward_type" json:"reward_type"  diff:"match"`
@@ -310,12 +276,12 @@ type MonsterTrackingAPI struct {
 	ID              string `db:"id"                json:"id"                diff:"-"`
 	ProfileNo       int    `db:"profile_no"        json:"profile_no"        diff:"-"`
 	Ping            string `db:"ping"              json:"ping"`
-	Clean           IntBool `db:"clean"             json:"clean"             diff:"update"`
+	Clean           int    `db:"clean"             json:"clean"             diff:"update"`
 	Distance        int    `db:"distance"          json:"distance"          diff:"update"`
 	Template        string `db:"template"          json:"template"          diff:"update"`
 	PokemonID       int    `db:"pokemon_id"        json:"pokemon_id"`
 	Form            int    `db:"form"              json:"form"`
-	MinIV           int    `db:"min_iv"            json:"min_iv"`
+	MinIV           int    `db:"min_iv"            json:"min_iv"            diff:"update"`
 	MaxIV           int    `db:"max_iv"            json:"max_iv"`
 	MinCP           int    `db:"min_cp"            json:"min_cp"`
 	MaxCP           int    `db:"max_cp"            json:"max_cp"`
@@ -420,7 +386,7 @@ type RaidTrackingAPI struct {
 	ID          string         `db:"id"           json:"id"           diff:"-"`
 	ProfileNo   int            `db:"profile_no"   json:"profile_no"   diff:"-"`
 	Ping        string         `db:"ping"         json:"ping"`
-	Clean       IntBool        `db:"clean"        json:"clean"        diff:"update"`
+	Clean       int            `db:"clean"        json:"clean"        diff:"update"`
 	Distance    int            `db:"distance"     json:"distance"     diff:"update"`
 	Template    string         `db:"template"     json:"template"     diff:"update"`
 	Team        int            `db:"team"         json:"team"         diff:"match"`
@@ -473,7 +439,7 @@ type EggTrackingAPI struct {
 	ID          string         `db:"id"           json:"id"           diff:"-"`
 	ProfileNo   int            `db:"profile_no"   json:"profile_no"   diff:"-"`
 	Ping        string         `db:"ping"         json:"ping"`
-	Clean       IntBool        `db:"clean"        json:"clean"        diff:"update"`
+	Clean       int            `db:"clean"        json:"clean"        diff:"update"`
 	Distance    int            `db:"distance"     json:"distance"     diff:"update"`
 	Template    string         `db:"template"     json:"template"     diff:"update"`
 	Team        int            `db:"team"         json:"team"         diff:"match"`
@@ -521,7 +487,7 @@ type GymTrackingAPI struct {
 	ID            string  `db:"id"             json:"id"             diff:"-"`
 	ProfileNo     int     `db:"profile_no"     json:"profile_no"     diff:"-"`
 	Ping          string  `db:"ping"           json:"ping"`
-	Clean         IntBool `db:"clean"          json:"clean"          diff:"update"`
+	Clean         int     `db:"clean"          json:"clean"          diff:"update"`
 	Distance      int     `db:"distance"       json:"distance"       diff:"update"`
 	Template      string  `db:"template"       json:"template"       diff:"update"`
 	Team          int     `db:"team"           json:"team"           diff:"match"`
@@ -569,7 +535,7 @@ type MaxbattleTrackingAPI struct {
 	ID        string  `db:"id"         json:"id"         diff:"-"`
 	ProfileNo int     `db:"profile_no" json:"profile_no" diff:"-"`
 	Ping      string  `db:"ping"       json:"ping"`
-	Clean     IntBool `db:"clean"      json:"clean"`
+	Clean     int     `db:"clean"      json:"clean"`
 	Distance  int     `db:"distance"   json:"distance"`
 	Template  string  `db:"template"   json:"template"`
 	PokemonID int     `db:"pokemon_id" json:"pokemon_id"`

@@ -1,6 +1,8 @@
 package pvp
 
 import (
+	"slices"
+
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -205,10 +207,5 @@ func filterMega(entries []webhook.PVPRankEntry, includeMega bool) []webhook.PVPR
 
 // CapsContain checks if the caps list contains a specific cap value.
 func CapsContain(caps []int, target int) bool {
-	for _, c := range caps {
-		if c == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(caps, target)
 }

@@ -1,0 +1,22 @@
+[{
+  "id": "language",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!language",
+      "description": "Change the language the bot uses for responses and alert content.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}language` — show the current setting and list available languages\n`{{prefix}}language en` — set to English\n`{{prefix}}language de` — set to German\n`{{prefix}}language zh-cn` — set to Simplified Chinese\n\nAvailable languages depend on what the operator has enabled; `{{prefix}}language` with no argument lists them."
+        },
+        {
+          "name": "What changes",
+          "value": "- Pokemon, move, type, item, form, and team names in alerts\n- Bot reply text (help, errors, confirmations)\n- The command keywords themselves don't change — `{{prefix}}track` is always `{{prefix}}track`, regardless of your language setting."
+        }
+      ]
+    }
+  }
+}]

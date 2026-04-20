@@ -15,7 +15,7 @@ type MaxbattleTracking struct {
 	Distance  int     `db:"distance"`
 	StationID *string `db:"station_id"`
 	Ping      string  `db:"ping"`
-	Clean     bool    `db:"clean"`
+	Clean     int     `db:"clean"`
 	Template  string  `db:"template"`
 }
 

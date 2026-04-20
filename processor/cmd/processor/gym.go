@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
+	if ps.cfg.General.DisableGym {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():
@@ -58,7 +62,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		// Update gym state and get old state.
 		// On first sight (oldState == nil), use -1 for old values to signal
 		// "unknown previous state" — this triggers team-change alerts matching
-		// the alerter's behavior where old_team_id=-1 means "team changed".
+		// the original behavior where old_team_id=-1 means "team changed".
 		oldState := ps.gymState.Update(gymID, teamID, gym.SlotsAvailable, inBattle, gym.LastOwnerID)
 
 		oldTeamID := -1
@@ -91,7 +95,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.gymMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("gym").Inc()
@@ -103,14 +107,15 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
 				gym.Name, ps.teamName(oldTeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldTeamID, gym.SlotsAvailable, oldSlotsAvailable, inBattle, false, gymID)
+			mode := ps.tileMode("gym", matched)
+			enrichmentData, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldTeamID, gym.SlotsAvailable, oldSlotsAvailable, inBattle, false, gymID, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.GymTranslate(enrichment, teamID, oldTeamID, gym.LastOwnerID, lang)
+					perLang[lang] = ps.enricher.GymTranslate(enrichmentData, teamID, oldTeamID, gym.LastOwnerID, lang)
 				}
 			}
 
@@ -121,7 +126,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 
 			ps.renderCh <- RenderJob{
 				TemplateType:      "gym",
-				Enrichment:        enrichment,
+				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,

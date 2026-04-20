@@ -1,16 +1,12 @@
 // Package i18n provides message translation for the processor.
 //
-// Translations use flat key-value JSON files — the same format as the alerter's
-// locale files and pogo-translations. This means one format across the Go
-// processor, Node alerter, and React frontend.
-//
-// Placeholders use {0}, {1}, ... syntax (matching the alerter's convention).
+// Translations use flat key-value JSON files — the same format as
+// pogo-translations. Placeholders use {0}, {1}, ... syntax.
 //
 // Merge order (later wins):
 //  1. Embedded locale JSON  (bundled defaults for processor-specific messages)
 //  2. External locale dir   (e.g. resources/locale/ — game data + shared strings)
-//  3. Alerter locale dir    (e.g. alerter/locale/ — alerter message strings)
-//  4. Custom overrides      (e.g. config/custom.{locale}.json — admin overrides)
+//  3. Custom overrides      (e.g. config/custom.{locale}.json — admin overrides)
 //
 // Supported by Crowdin, Transifex, Weblate, POEditor, and most i18n platforms.
 package i18n
@@ -19,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -60,6 +57,14 @@ func (t *Translator) Tf(key string, args ...any) string {
 // TfNamed translates a key and substitutes %{name} placeholders from the map.
 func (t *Translator) TfNamed(key string, values map[string]string) string {
 	return FormatNamed(t.T(key), values)
+}
+
+// Messages returns the raw message map for building lookup tables.
+func (t *Translator) Messages() map[string]string {
+	if t == nil || t.messages == nil {
+		return nil
+	}
+	return t.messages
 }
 
 // Lang returns the locale code for this translator.
@@ -221,9 +226,7 @@ func (b *Bundle) merge(locale string, msgs map[string]string) {
 		}
 		b.translators[locale] = t
 	}
-	for k, v := range msgs {
-		t.messages[k] = v
-	}
+	maps.Copy(t.messages, msgs)
 }
 
 // linkFallbacks sets the English fallback on all non-English translators.

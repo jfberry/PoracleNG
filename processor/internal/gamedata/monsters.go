@@ -26,9 +26,16 @@ type Monster struct {
 
 // Evolution represents a regular pokemon evolution.
 type Evolution struct {
-	PokemonID int
-	FormID    int
-	CandyCost int
+	PokemonID        int
+	FormID           int
+	CandyCost        int
+	ItemRequirement  int
+	MustBeBuddy      bool
+	OnlyDaytime      bool
+	OnlyNighttime    bool
+	QuestRequirement string
+	TradeBonus       bool
+	GenderRequirement int
 }
 
 // TempEvolution represents a mega/primal evolution.
@@ -56,9 +63,16 @@ type rawPokemon struct {
 	UltraBeast    bool   `json:"ultraBeast"`
 	Forms         []int  `json:"forms"`
 	Evolutions    []struct {
-		EvoID     int `json:"evoId"`
-		FormID    int `json:"formId"`
-		CandyCost int `json:"candyCost"`
+		EvoID             int    `json:"evoId"`
+		FormID            int    `json:"formId"`
+		CandyCost         int    `json:"candyCost"`
+		ItemRequirement   int    `json:"itemRequirement"`
+		MustBeBuddy       bool   `json:"mustBeBuddy"`
+		OnlyDaytime       bool   `json:"onlyDaytime"`
+		OnlyNighttime     bool   `json:"onlyNighttime"`
+		QuestRequirement  string `json:"questRequirement"`
+		TradeBonus        bool   `json:"tradeBonus"`
+		GenderRequirement int    `json:"genderRequirement"`
 	} `json:"evolutions"`
 	TempEvolutions []struct {
 		TempEvoID int   `json:"tempEvoId"`
@@ -79,9 +93,16 @@ type rawForm struct {
 	Stamina  int    `json:"stamina"`
 	Types    []int  `json:"types"`
 	Evolutions []struct {
-		EvoID     int `json:"evoId"`
-		FormID    int `json:"formId"`
-		CandyCost int `json:"candyCost"`
+		EvoID             int    `json:"evoId"`
+		FormID            int    `json:"formId"`
+		CandyCost         int    `json:"candyCost"`
+		ItemRequirement   int    `json:"itemRequirement"`
+		MustBeBuddy       bool   `json:"mustBeBuddy"`
+		OnlyDaytime       bool   `json:"onlyDaytime"`
+		OnlyNighttime     bool   `json:"onlyNighttime"`
+		QuestRequirement  string `json:"questRequirement"`
+		TradeBonus        bool   `json:"tradeBonus"`
+		GenderRequirement int    `json:"genderRequirement"`
 	} `json:"evolutions"`
 	TempEvolutions []struct {
 		TempEvoID int   `json:"tempEvoId"`
@@ -123,9 +144,16 @@ func LoadMonsters(pokemonPath, formsPath string) (map[MonsterKey]*Monster, error
 		baseEvolutions := make([]Evolution, len(poke.Evolutions))
 		for i, e := range poke.Evolutions {
 			baseEvolutions[i] = Evolution{
-				PokemonID: e.EvoID,
-				FormID:    e.FormID,
-				CandyCost: e.CandyCost,
+				PokemonID:        e.EvoID,
+				FormID:           e.FormID,
+				CandyCost:        e.CandyCost,
+				ItemRequirement:  e.ItemRequirement,
+				MustBeBuddy:      e.MustBeBuddy,
+				OnlyDaytime:      e.OnlyDaytime,
+				OnlyNighttime:    e.OnlyNighttime,
+				QuestRequirement: e.QuestRequirement,
+				TradeBonus:       e.TradeBonus,
+				GenderRequirement: e.GenderRequirement,
 			}
 		}
 
@@ -202,9 +230,16 @@ func LoadMonsters(pokemonPath, formsPath string) (map[MonsterKey]*Monster, error
 				evos = make([]Evolution, len(form.Evolutions))
 				for i, e := range form.Evolutions {
 					evos[i] = Evolution{
-						PokemonID: e.EvoID,
-						FormID:    e.FormID,
-						CandyCost: e.CandyCost,
+						PokemonID:        e.EvoID,
+						FormID:           e.FormID,
+						CandyCost:        e.CandyCost,
+						ItemRequirement:  e.ItemRequirement,
+						MustBeBuddy:      e.MustBeBuddy,
+						OnlyDaytime:      e.OnlyDaytime,
+						OnlyNighttime:    e.OnlyNighttime,
+						QuestRequirement: e.QuestRequirement,
+						TradeBonus:       e.TradeBonus,
+						GenderRequirement: e.GenderRequirement,
 					}
 				}
 			}

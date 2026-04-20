@@ -1,20 +1,17 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
-	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -133,120 +130,130 @@ func toInt(v any) int {
 	return 0
 }
 
-// filterRateLimited removes rate-limited users from matched results.
-// It sends notifications for first breaches and disables users who exceed the violation threshold.
-func (ps *ProcessorService) filterRateLimited(matched []webhook.MatchedUser) []webhook.MatchedUser {
-	var allowed []webhook.MatchedUser
+// filterBlocked drops matched users whose destination is currently over its
+// rate limit. Non-mutating: it does not increment the counter or trigger
+// notifications. The authoritative count lives in the delivery queue (see
+// FairQueue.processJob) and only fires on actual delivery attempts.
+//
+// This is a cheap pre-filter to skip render/enrichment work for destinations
+// we already know are paused.
+func (ps *ProcessorService) filterBlocked(matched []webhook.MatchedUser) []webhook.MatchedUser {
+	if ps.rateLimiter == nil {
+		return matched
+	}
+	allowed := matched[:0]
 	for _, m := range matched {
-		result := ps.rateLimiter.Check(m.ID, m.Type)
-		if result.Allowed {
-			allowed = append(allowed, m)
-		} else if result.JustBreached {
-			metrics.RateLimitBreaches.Inc()
+		if ps.rateLimiter.IsBlocked(m.ID, m.Type) {
 			metrics.RateLimitDropped.Inc()
-			log.Infof("Rate limit reached for %s %s %s (%d messages in %ds)",
-				m.Type, m.ID, m.Name, result.Limit, result.ResetSeconds)
-			ps.sendRateLimitNotification(m, result)
-			if result.Banned {
-				metrics.RateLimitDisabled.Inc()
-				log.Infof("Rate limit: disabling %s %s %s (too many violations)", m.Type, m.ID, m.Name)
-				ps.disableUser(m, result)
-			}
-		} else {
-			metrics.RateLimitDropped.Inc()
-			log.Debugf("Rate limited: dropping message for %s %s %s", m.Type, m.ID, m.Name)
+			log.Debugf("Rate limit pre-filter: skipping render for %s %s %s", m.Type, m.ID, m.Name)
+			continue
 		}
+		allowed = append(allowed, m)
 	}
 	return allowed
 }
 
-// postMessage is a message payload for the alerter's POST /api/postMessage endpoint.
-type postMessage struct {
-	Target       string         `json:"target"`
-	Type         string         `json:"type"`
-	Name         string         `json:"name"`
-	Message      messageContent `json:"message"`
-	Language     string         `json:"language"`
-	TTH          tth            `json:"tth"`
-	Clean        bool           `json:"clean"`
-	AlwaysSend   bool           `json:"alwaysSend"`
-	LogReference string         `json:"logReference"`
-}
-
-type messageContent struct {
-	Content string `json:"content"`
-}
-
-type tth struct {
-	Hours   int `json:"hours"`
-	Minutes int `json:"minutes"`
-	Seconds int `json:"seconds"`
-}
-
-// sendRateLimitNotification sends a rate limit warning message to the user via the alerter.
-func (ps *ProcessorService) sendRateLimitNotification(user webhook.MatchedUser, result ratelimit.RateResult) {
-	tr := ps.translations.For(user.Language)
-	msg := tr.Tf("rate_limit.reached", result.Limit, ps.cfg.AlertLimits.TimingPeriod)
-
-	ps.postMessageToAlerter(postMessage{
-		Target:       user.ID,
-		Type:         user.Type,
-		Name:         user.Name,
-		Message:      messageContent{Content: msg},
-		Language:     user.Language,
-		TTH:          tth{Hours: 1},
-		AlwaysSend:   true,
-		LogReference: "RateLimit",
+// dispatchMessage sends a message directly via the delivery dispatcher.
+func (ps *ProcessorService) dispatchMessage(target, typ, name, content, logRef string) {
+	if ps.dispatcher == nil || content == "" {
+		return
+	}
+	msgJSON, _ := json.Marshal(map[string]string{"content": content})
+	ps.dispatcher.Dispatch(&delivery.Job{
+		Target:       target,
+		Type:         typ,
+		Name:         name,
+		Message:      msgJSON,
+		TTH:          delivery.TTH{Hours: 1},
+		LogReference: logRef,
 	})
 }
 
-// disableUser disables a user in the DB and sends a final notification.
-func (ps *ProcessorService) disableUser(user webhook.MatchedUser, result ratelimit.RateResult) {
-	tr := ps.translations.For(user.Language)
+// dispatchBypass sends a message that must skip the rate-limit count and
+// not be dropped if the destination is over its limit. Used for rate-limit
+// notifications and ban farewells.
+func (ps *ProcessorService) dispatchBypass(target, typ, name, content, logRef string) {
+	if ps.dispatcher == nil || content == "" {
+		return
+	}
+	msgJSON, _ := json.Marshal(map[string]string{"content": content})
+	ps.dispatcher.DispatchBypass(&delivery.Job{
+		Target:       target,
+		Type:         typ,
+		Name:         name,
+		Message:      msgJSON,
+		TTH:          delivery.TTH{Hours: 1},
+		LogReference: logRef,
+	})
+}
+
+// OnBreach implements delivery.RateLimitHooks. Invoked from a delivery worker
+// the first time a destination crosses the rate limit within the current
+// window. Sends a single notification telling the user they have been muted.
+func (ps *ProcessorService) OnBreach(target, typ, name, language string, limit, _ int) {
+	tr := ps.translations.For(language)
+	msg := tr.Tf("rate_limit.reached", limit, ps.cfg.AlertLimits.TimingPeriod)
+	ps.dispatchBypass(target, typ, name, msg, "RateLimit")
+}
+
+// OnBan implements delivery.RateLimitHooks. Invoked when a destination has
+// accumulated enough breaches in 24h to be banned. Disables the human in the
+// DB, sends a farewell message, posts to the shame channel if configured, and
+// triggers a debounced state reload so the user is removed from matching.
+func (ps *ProcessorService) OnBan(target, typ, name, language string) {
+	tr := ps.translations.For(language)
 	var msg string
 	if ps.cfg.AlertLimits.DisableOnStop {
-		_, err := ps.database.Exec("UPDATE humans SET admin_disable = 1, disabled_date = NULL WHERE id = ?", user.ID)
-		if err != nil {
-			log.Errorf("Rate limit: failed to admin_disable user %s: %s", user.ID, err)
+		if ps.humans != nil {
+			if err := ps.humans.SetAdminDisable(target, true); err != nil {
+				log.Errorf("Rate limit: failed to admin_disable user %s: %s", target, err)
+			}
 		}
 		msg = tr.T("rate_limit.banned_hard")
 	} else {
-		_, err := ps.database.Exec("UPDATE humans SET enabled = 0 WHERE id = ?", user.ID)
-		if err != nil {
-			log.Errorf("Rate limit: failed to disable user %s: %s", user.ID, err)
+		if ps.humans != nil {
+			if err := ps.humans.SetEnabled(target, false); err != nil {
+				log.Errorf("Rate limit: failed to disable user %s: %s", target, err)
+			}
 		}
 		prefix := ps.cfg.Discord.Prefix
-		if user.Type == "telegram:user" || user.Type == "telegram:channel" || user.Type == "telegram:group" {
+		if typ == "telegram:user" || typ == "telegram:channel" || typ == "telegram:group" {
 			prefix = "/"
 		}
 		msg = tr.Tf("rate_limit.banned_soft", prefix)
 	}
 
-	ps.postMessageToAlerter(postMessage{
-		Target:       user.ID,
-		Type:         user.Type,
-		Name:         user.Name,
-		Message:      messageContent{Content: msg},
-		Language:     user.Language,
-		TTH:          tth{Hours: 1},
-		AlwaysSend:   true,
-		LogReference: "RateLimit",
-	})
+	ps.dispatchBypass(target, typ, name, msg, "RateLimit")
 
-	// Send shame message if configured
 	if ps.cfg.AlertLimits.ShameChannel != "" {
-		shameContent := tr.Tf("rate_limit.shame", user.ID)
-		ps.postMessageToAlerter(postMessage{
-			Target:       ps.cfg.AlertLimits.ShameChannel,
-			Type:         "discord:channel",
-			Name:         "Shame channel",
-			Message:      messageContent{Content: shameContent},
-			Language:     "en",
-			LogReference: "RateLimit",
-		})
+		shameContent := tr.Tf("rate_limit.shame", target)
+		ps.dispatchBypass(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "RateLimit")
 	}
 
-	// Trigger debounced state reload so user is removed from matching
+	ps.triggerReload()
+}
+
+// disableUserForDeliveryFailure is invoked by the delivery queue after N consecutive
+// send failures. Sets enabled=0 via the human store, posts to the shame channel
+// (if configured), and triggers a state reload so the user is removed from matching.
+//
+// Called from a delivery worker goroutine — must be safe for concurrent use.
+func (ps *ProcessorService) disableUserForDeliveryFailure(target, name, jobType string) {
+	if ps.humans == nil {
+		return
+	}
+	if err := ps.humans.SetEnabled(target, false); err != nil {
+		log.Errorf("Delivery failure: failed to disable user %s: %s", target, err)
+		return
+	}
+
+	// Post shame message if configured (Discord users only — Telegram doesn't have channel pings the same way)
+	if ps.cfg.AlertLimits.ShameChannel != "" && strings.HasPrefix(jobType, "discord:") {
+		tr := ps.translations.For(ps.cfg.General.Locale)
+		shameContent := tr.Tf("delivery.shame", target)
+		ps.dispatchMessage(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "DeliveryFail")
+	}
+
 	ps.triggerReload()
 }
 
@@ -267,32 +274,3 @@ func (ps *ProcessorService) triggerReload() {
 	})
 }
 
-// postMessageToAlerter sends a message via the alerter's POST /api/postMessage endpoint.
-func (ps *ProcessorService) postMessageToAlerter(msg postMessage) {
-	data, err := json.Marshal([]postMessage{msg})
-	if err != nil {
-		log.Errorf("Rate limit: failed to marshal postMessage: %s", err)
-		return
-	}
-
-	req, err := http.NewRequest("POST", ps.cfg.Processor.AlerterURL+"/api/postMessage", bytes.NewReader(data))
-	if err != nil {
-		log.Errorf("Rate limit: failed to create postMessage request: %s", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if ps.cfg.Processor.APISecret != "" {
-		req.Header.Set("X-Poracle-Secret", ps.cfg.Processor.APISecret)
-	}
-
-	resp, err := ps.alerterClient.Do(req)
-	if err != nil {
-		log.Errorf("Rate limit: failed to send postMessage to alerter: %s", err)
-		return
-	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		log.Errorf("Rate limit: alerter returned status %d for postMessage", resp.StatusCode)
-	}
-}

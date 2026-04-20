@@ -1,0 +1,30 @@
+[{
+  "id": "area",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!area",
+      "description": "Manage which geofence areas you receive alerts for. Areas are shapes your admin has configured — neighbourhoods, zones, routes.",
+      "fields": [
+        {
+          "name": "View",
+          "value": "`{{prefix}}area list` — list every area configured by the admin that you're allowed to use\n`{{prefix}}area` — show your currently selected areas"
+        },
+        {
+          "name": "Add and remove",
+          "value": "`{{prefix}}area add north_london` — receive alerts from this area\n`{{prefix}}area add north south east` — add multiple\n`{{prefix}}area remove north`\n`{{prefix}}area clear` — remove all your areas"
+        },
+        {
+          "name": "Interaction with `d:` (distance)",
+          "value": "If your tracking rule has `d:<metres>` set, it uses your `{{prefix}}location` + distance circle instead of areas. If your rule has no `d:` filter, it uses your selected areas."
+        },
+        {
+          "name": "Related",
+          "value": "`{{prefix}}location` — set a point for distance-based tracking\n`{{prefix}}community` — area-security community membership"
+        }
+      ]
+    }
+  }
+}]

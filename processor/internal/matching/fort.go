@@ -57,7 +57,7 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) []webhook.MatchedUs
 			ProfileNo: f.ProfileNo,
 			Distance:  f.Distance,
 			Template:  f.Template,
-			Clean:     false, // forts table doesn't have clean
+			Clean:     0, // forts table doesn't have clean
 			Ping:      f.Ping,
 		})
 	}

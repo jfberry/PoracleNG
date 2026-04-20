@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
+	if ps.cfg.General.DisableFortUpdate {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():
@@ -58,7 +62,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.fortMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("fort_update").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("fort_update").Inc()
@@ -70,7 +74,8 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			l.Infof("Fort update %s (%s, %s) areas(%s) and %d humans cared",
 				fort.FortName(), fort.FortType(), fort.ChangeType, areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort)
+			mode := ps.tileMode("fort-update", matched)
+			enrichmentData, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort, mode)
 
 			if ps.renderCh == nil {
 				return
@@ -79,7 +84,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 
 			ps.renderCh <- RenderJob{
 				TemplateType:  "fort-update",
-				Enrichment:    enrichment,
+				Enrichment:    enrichmentData,
 				WebhookFields: webhookFields,
 				MatchedUsers:  matched,
 				MatchedAreas:  matchedAreas,

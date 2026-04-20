@@ -1,0 +1,288 @@
+{
+	"egg": [
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 5,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 4,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 12,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 9,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 1,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 11,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 3,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 13,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 7,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 10,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 2,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 15,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 14,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 0,
+			"team": 4,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"exclusive": 0,
+			"gym_id": null,
+			"id": "0",
+			"level": 5,
+			"ping": "",
+			"profile_no": 0,
+			"rsvp_changes": 2,
+			"team": 4,
+			"template": "1"
+		}
+	],
+	"forts": [
+		{
+			"change_types": "[]",
+			"distance": 0,
+			"fort_type": "everything",
+			"id": "0",
+			"include_empty": 0,
+			"ping": "",
+			"profile_no": 0,
+			"template": "1"
+		}
+	],
+	"gym": [],
+	"invasion": [
+		{
+			"clean": 0,
+			"distance": 0,
+			"gender": 0,
+			"grunt_type": "dragon",
+			"id": "0",
+			"ping": "",
+			"profile_no": 0,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"gender": 0,
+			"grunt_type": "electric",
+			"id": "0",
+			"ping": "",
+			"profile_no": 0,
+			"template": "1"
+		},
+		{
+			"clean": 0,
+			"distance": 0,
+			"gender": 0,
+			"grunt_type": "ground",
+			"id": "0",
+			"ping": "",
+			"profile_no": 0,
+			"template": "1"
+		}
+	],
+	"lures": [
+		{
+			"clean": 0,
+			"distance": 0,
+			"id": "0",
+			"lure_id": 0,
+			"ping": "",
+			"profile_no": 0,
+			"template": "1"
+		}
+	],
+	"maxbattle": [],
+	"monsters": [],
+	"nests": [],
+	"quest": [
+		{
+			"amount": 0,
+			"clean": 0,
+			"distance": 0,
+			"form": 0,
+			"id": "0",
+			"ping": "",
+			"profile_no": 0,
+			"reward": 327,
+			"reward_type": 7,
+			"shiny": 0,
+			"template": "1"
+		},
+		{
+			"amount": 0,
+			"clean": 0,
+			"distance": 0,
+			"form": 0,
+			"id": "0",
+			"ping": "",
+			"profile_no": 0,
+			"reward": 0,
+			"reward_type": 3,
+			"shiny": 0,
+			"template": "1"
+		},
+		{
+			"amount": 0,
+			"clean": 0,
+			"distance": 0,
+			"form": 0,
+			"id": "0",
+			"ping": "",
+			"profile_no": 0,
+			"reward": 1,
+			"reward_type": 7,
+			"shiny": 0,
+			"template": "1"
+		}
+	],
+	"raid": [],
+	"weather": []
+}

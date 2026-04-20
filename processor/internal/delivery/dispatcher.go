@@ -15,6 +15,14 @@ type DispatcherConfig struct {
 	Queue         QueueConfig
 }
 
+// DispatchBypass enqueues a job that must skip the rate-limit count and
+// will not be dropped if the destination is over its limit. Used for the
+// rate-limit notification and ban farewell.
+func (d *Dispatcher) DispatchBypass(job *Job) {
+	job.BypassRateLimit = true
+	d.ch <- job
+}
+
 // Dispatcher is the top-level entry point for message delivery.
 // It owns the job channel, fair queue, and message tracker.
 type Dispatcher struct {
@@ -91,3 +99,12 @@ func (d *Dispatcher) WebhookDepth() int { return d.queue.WebhookDepth() }
 
 // TelegramDepth returns the number of telegram jobs currently in-flight.
 func (d *Dispatcher) TelegramDepth() int { return d.queue.TelegramDepth() }
+
+// RateLimitWaiting returns the number of delivery goroutines currently blocked
+// waiting for Discord rate limits to clear.
+func (d *Dispatcher) RateLimitWaiting() int64 {
+	if ds, ok := d.queue.senders["discord"].(*DiscordSender); ok {
+		return ds.rateLimiter.WaitingCount()
+	}
+	return 0
+}

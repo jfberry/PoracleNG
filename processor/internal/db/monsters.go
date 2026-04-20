@@ -30,7 +30,7 @@ type MonsterTracking struct {
 	Size             int    `db:"size"`
 	MaxSize          int    `db:"max_size"`
 	Template         string `db:"template"`
-	Clean            bool   `db:"clean"`
+	Clean            int    `db:"clean"`
 	Ping             string `db:"ping"`
 	PVPRankingLeague int    `db:"pvp_ranking_league"`
 	PVPRankingBest   int    `db:"pvp_ranking_best"`

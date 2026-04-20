@@ -2,6 +2,7 @@ package dts
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -24,14 +25,14 @@ import (
 //  6. base enrichment (universal: weather, maps, icons, geocoding)
 //  7. dtsDictionary (user-defined config overrides)
 type LayeredView struct {
-	base      map[string]any
-	perLang   map[string]any
-	perUser   map[string]any
-	emoji     map[string]string // resolved emoji key → string
-	aliases   map[string]string // alias name → source field name
-	computed  map[string]any    // pre-computed fields (tthh, areas, etc.)
-	webhook   map[string]any    // raw webhook fields (lowest priority, for custom DTS)
-	dtsDict   map[string]any
+	base     map[string]any
+	perLang  map[string]any
+	perUser  map[string]any
+	emoji    map[string]string // resolved emoji key → string
+	aliases  map[string]string // alias name → source field name
+	computed map[string]any    // pre-computed fields (tthh, areas, etc.)
+	webhook  map[string]any    // raw webhook fields (lowest priority, for custom DTS)
+	dtsDict  map[string]any
 }
 
 // NewLayeredView creates a view from enrichment layers without copying.
@@ -63,7 +64,7 @@ func NewLayeredView(
 
 	// Resolve emoji arrays into computed (they're []string, not simple strings)
 	for _, m := range arrayEmojiKeys {
-		var raw interface{}
+		var raw any
 		if perLang != nil {
 			raw = perLang[m.keyField]
 		}
@@ -75,7 +76,7 @@ func NewLayeredView(
 		}
 	}
 	// Special: typeEmojiKeys → "emoji" array
-	var typeRaw interface{}
+	var typeRaw any
 	if perLang != nil {
 		typeRaw = perLang["typeEmojiKeys"]
 	}
@@ -103,7 +104,7 @@ func NewLayeredView(
 
 // GetField implements raymond.FieldResolver.
 // Checks layers in priority order, returns first match.
-func (lv *LayeredView) GetField(name string) (interface{}, bool) {
+func (lv *LayeredView) GetField(name string) (any, bool) {
 	// 1. Per-user enrichment (PVP, distance)
 	if lv.perUser != nil {
 		if v, ok := lv.perUser[name]; ok {
@@ -158,7 +159,7 @@ func (lv *LayeredView) GetField(name string) (interface{}, bool) {
 }
 
 // resolveSource looks up a field by name across all non-alias layers.
-func (lv *LayeredView) resolveSource(name string) (interface{}, bool) {
+func (lv *LayeredView) resolveSource(name string) (any, bool) {
 	if lv.perUser != nil {
 		if v, ok := lv.perUser[name]; ok {
 			return v, true
@@ -214,7 +215,7 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang map[string]any, platform st
 
 	// Resolve array emoji keys
 	for _, m := range arrayEmojiKeys {
-		var raw interface{}
+		var raw any
 		if perLang != nil {
 			raw = perLang[m.keyField]
 		}
@@ -227,7 +228,7 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang map[string]any, platform st
 	}
 
 	// Special case: typeEmojiKeys → emoji ([]string) + emojiString
-	var typeRaw interface{}
+	var typeRaw any
 	if perLang != nil {
 		typeRaw = perLang["typeEmojiKeys"]
 	}
@@ -393,8 +394,10 @@ func buildAliasLookup(templateType string) map[string]string {
 // Format matches JS: "⚠️ {Possible weather change at} {time} : {currentEmoji} {current} ➡️ {nextEmoji} {next}"
 // When weatherCurrent is unknown: "⚠️ {Possible weather change at} {time} : ➡️ {nextEmoji} {next}"
 func composeWeatherChange(computed map[string]any, base, perLang map[string]any, emoji *EmojiLookup, platform string) {
-	// weatherNext must exist (set by forecast impact detection)
-	weatherNext, _ := lookupField(base, perLang, "weatherForecastNext").(int)
+	// weatherNext is only set when the base enrichment determines the weather
+	// change actually affects the pokemon's boost status. weatherForecastNext
+	// is the raw forecast and may be the same as current — don't use it here.
+	weatherNext, _ := lookupField(base, perLang, "weatherNext").(int)
 	if weatherNext == 0 {
 		return
 	}
@@ -417,18 +420,14 @@ func composeWeatherChange(computed map[string]any, base, perLang map[string]any,
 		nextEmoji = emoji.Lookup(nextEmojiKey, platform)
 	}
 
-	weatherCurrent, _ := lookupField(base, perLang, "weatherForecastCurrent").(int)
+	currentName, _ := lookupField(base, perLang, "weatherCurrentName").(string)
+	weatherCurrent, _ := lookupField(base, perLang, "weatherCurrent").(int)
 	if weatherCurrent == 0 {
-		// Unknown current weather
-		currentName, _ := lookupField(base, perLang, "weatherCurrentUnknown").(string)
-		if currentName == "" {
-			currentName = "unknown"
-		}
-		computed["weatherCurrentName"] = currentName
+		// De-boost case: per-language sets weatherCurrentName to translated
+		// "unknown"; JS hardcodes ❓ for the emoji.
 		computed["weatherCurrentEmoji"] = "❓"
 		computed["weatherChange"] = fmt.Sprintf("⚠️ %s %s : ➡️ %s %s", prefix, weatherChangeTime, nextName, nextEmoji)
 	} else {
-		currentName, _ := lookupField(base, perLang, "weatherCurrentName").(string)
 		currentEmojiKey, _ := lookupField(base, perLang, "weatherCurrentEmojiKey").(string)
 		currentEmoji := ""
 		if currentEmojiKey != "" && emoji != nil {
@@ -436,6 +435,42 @@ func composeWeatherChange(computed map[string]any, base, perLang map[string]any,
 		}
 		computed["weatherChange"] = fmt.Sprintf("⚠️ %s %s : %s %s ➡️ %s %s", prefix, weatherChangeTime, currentName, currentEmoji, nextName, nextEmoji)
 	}
+}
+
+// Flatten merges all layers into a single flat map for API responses.
+// This produces the same field resolution as GetField but as a materialized map.
+func (lv *LayeredView) Flatten() map[string]any {
+	// Start with lowest priority, overlay higher
+	result := make(map[string]any, 128)
+
+	// 8. DTS dictionary
+	maps.Copy(result, lv.dtsDict)
+	// 7. Raw webhook
+	maps.Copy(result, lv.webhook)
+	// 5. Base enrichment
+	maps.Copy(result, lv.base)
+	// 4. Computed fields
+	maps.Copy(result, lv.computed)
+	// 3. Per-language
+	maps.Copy(result, lv.perLang)
+	// 2. Emoji
+	for k, v := range lv.emoji {
+		result[k] = v
+	}
+	// 1. Per-user
+	maps.Copy(result, lv.perUser)
+
+	// 6. Aliases — resolve each alias from the result (not from a separate layer)
+	for alias, source := range lv.aliases {
+		if _, already := result[alias]; already {
+			continue // direct field takes precedence over alias
+		}
+		if v, ok := result[source]; ok {
+			result[alias] = v
+		}
+	}
+
+	return result
 }
 
 // lookupField checks perLang first, then base, for a field value.

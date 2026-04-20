@@ -1,0 +1,22 @@
+[{
+  "id": "userlist",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!userlist (admin)",
+      "description": "List registered users. Useful for auditing membership, spotting disabled accounts, and finding IDs for `{{prefix}}enable`/`{{prefix}}disable`.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}userlist` — every user\n`{{prefix}}userlist type:discord:user` — only Discord user accounts\n`{{prefix}}userlist type:discord:channel` — only Discord channel subscriptions\n`{{prefix}}userlist type:telegram:user` — only Telegram users\n`{{prefix}}userlist type:webhook` — only webhook destinations"
+        },
+        {
+          "name": "Output",
+          "value": "For each user: display name, ID, type, registration date, current profile, enabled/disabled status. Long lists come as a file attachment on Discord."
+        }
+      ]
+    }
+  }
+}]

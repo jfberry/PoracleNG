@@ -14,6 +14,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
+	if ps.cfg.General.DisablePokemon {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():
@@ -95,13 +99,13 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.pokemonMatcher.Match(processed, st)
 		metrics.MatchingDuration.WithLabelValues("pokemon").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
 			metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
 
-			// Get matched areas for the alerter
+			// Get matched areas for enrichment
 			areas := st.Geofence.PointInAreas(pokemon.Latitude, pokemon.Longitude)
 			matchedAreas := make([]webhook.MatchedArea, len(areas))
 			for i, a := range areas {
@@ -162,7 +166,8 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			}
 
 			enrichStart := time.Now()
-			baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed)
+			mode := ps.tileMode("monster", matched)
+			baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
@@ -225,6 +230,5 @@ func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessag
 		ps.pokemonName(change.New.PokemonID, change.New.Form))
 
 	// TODO: Route pokemon_changed through render queue with EditKey for message editing.
-	// For now, skip delivery — the old alerter path no longer has controllers to handle it.
 	_ = oldIV
 }

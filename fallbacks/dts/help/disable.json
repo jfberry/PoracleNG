@@ -1,0 +1,26 @@
+[{
+  "id": "disable",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!disable (admin)",
+      "description": "Admin-disable a user — they stop receiving alerts until an admin re-enables with `{{prefix}}enable`.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}disable user:<discord_id>`\n`{{prefix}}disable user:12345 user:67890` — multiple"
+        },
+        {
+          "name": "Difference from unregister",
+          "value": "Disabled users keep their tracking rules; they just stop receiving alerts. A user `{{prefix}}unregister`ing themselves deletes everything; disable is reversible."
+        },
+        {
+          "name": "Related",
+          "value": "`{{prefix}}enable` — reverse this\n`{{prefix}}userlist` — see who's registered"
+        }
+      ]
+    }
+  }
+}]

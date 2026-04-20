@@ -29,12 +29,32 @@ type Job struct {
 	                                                   // "telegram:user", "telegram:group", "telegram:channel"
 	Message      json.RawMessage `json:"message"`      // pre-rendered message JSON
 	TTH          TTH             `json:"tth"`
-	Clean        bool            `json:"clean"`        // track for deletion on TTH expiry
+	Clean        int             `json:"clean"`        // track for deletion on TTH expiry
 	EditKey      string          `json:"editKey"`      // non-empty = track for future edits
 	Name         string          `json:"name"`         // human-readable destination name
 	LogReference string          `json:"logReference"` // encounter/gym ID for tracing
-	Lat          float64         `json:"lat"`
-	Lon          float64         `json:"lon"`
+	Lat           float64         `json:"lat"`
+	Lon           float64         `json:"lon"`
+	StaticMapData []byte          `json:"-"` // inline tile image bytes
+	Language      string          `json:"-"` // matched user's language (for hooks notifications)
+
+	// BypassRateLimit tells the delivery queue not to count this job against
+	// the per-destination rate limit and not to drop it if the destination is
+	// over the limit. Used for rate-limit notifications and disable messages
+	// — without this, the limiter could swallow the very message telling the
+	// user they were rate-limited.
+	BypassRateLimit bool `json:"-"`
+}
+
+// RateLimitHooks lets the delivery queue notify the host application when a
+// destination first breaches its limit (so a notification can be sent) and when
+// the destination has accumulated enough breaches to be banned. The host
+// implementation is responsible for dispatching any user-visible message and
+// updating any persistent state (e.g. setting enabled=0). All hook methods are
+// invoked from delivery worker goroutines and must be safe for concurrent use.
+type RateLimitHooks interface {
+	OnBreach(target, typ, name, language string, limit, resetSeconds int)
+	OnBan(target, typ, name, language string)
 }
 
 // SentMessage is returned after successful delivery.
@@ -46,8 +66,12 @@ type SentMessage struct {
 type Sender interface {
 	Send(ctx context.Context, job *Job) (*SentMessage, error)
 	Delete(ctx context.Context, sentID string) error
-	Edit(ctx context.Context, sentID string, message json.RawMessage) error
+	Edit(ctx context.Context, sentID string, message json.RawMessage, staticMapData []byte) error
 	Platform() string // "discord" or "telegram"
+	// WaitForRateLimit blocks until the target is not rate-limited.
+	// Called BEFORE acquiring the platform semaphore so that rate-limited
+	// goroutines don't hold concurrency slots.
+	WaitForRateLimit(target string)
 }
 
 // PermanentError wraps an error that should not be retried (e.g. user blocked bot).

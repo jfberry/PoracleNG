@@ -1,19 +1,26 @@
 .DS_Store
 
-# User config (config.example.toml is tracked, user configs are not)
-config/config.toml
-config/*.toml
-config/dts.json
-config/dts/
-config/.cache/
-config/custom.*.json
-config/customMaps/*.json
+# User config — ignore everything except the explicitly allowlisted files.
+# config.example.toml is the documented reference; .gitkeep / .gitignore
+# files preserve directory structure for first-time clones.
+config/*
+config/**
+!config/config.example.toml
+!config/customMaps/
+!config/customMaps/.gitkeep
+!config/geofences/
+!config/geofences/.gitignore
+!config/.cache/
+!config/.cache/geofences/
+!config/.cache/geofences/.gitignore
 
 # Runtime logs
 logs/
 
 # Compiled binaries
 processor/poracle-processor
+processor/go_build_*
+**/go_build_*
 
 # Downloaded resources (fetched at startup)
 resources/rawdata/
@@ -23,8 +30,9 @@ resources/locale/
 
 # Node
 node_modules/
+backups/
 
 # IDE
 .idea/
+**/.idea/
 *.iml
-processor/go_build_*

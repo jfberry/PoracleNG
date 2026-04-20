@@ -36,36 +36,26 @@ func Bearing(lat1, lon1, lat2, lon2 float64) float64 {
 	return brng
 }
 
-// CardinalDirection returns a direction label used as an emoji lookup key.
-// The labels appear mirrored vs standard compass directions (e.g. 45° returns
-// "northwest" not "northeast") because the original JS getBearingEmoji used
-// these keys to index into util.json's emoji map where they resolve to the
-// correct arrow emoji. The user sees the correct arrow — the string itself
-// is never displayed in templates.
+// CardinalDirection returns the compass direction label for a bearing in
+// degrees clockwise from north. Used as an emoji lookup key into util.json.
 func CardinalDirection(brng float64) string {
-	if brng < 22.5 {
+	switch {
+	case brng < 22.5:
 		return "north"
-	}
-	if brng < 67.5 {
-		return "northwest"
-	}
-	if brng < 112.5 {
-		return "west"
-	}
-	if brng < 157.5 {
-		return "southwest"
-	}
-	if brng < 202.5 {
-		return "south"
-	}
-	if brng < 247.5 {
-		return "southeast"
-	}
-	if brng < 292.5 {
-		return "east"
-	}
-	if brng < 337.5 {
+	case brng < 67.5:
 		return "northeast"
+	case brng < 112.5:
+		return "east"
+	case brng < 157.5:
+		return "southeast"
+	case brng < 202.5:
+		return "south"
+	case brng < 247.5:
+		return "southwest"
+	case brng < 292.5:
+		return "west"
+	case brng < 337.5:
+		return "northwest"
 	}
 	return "north"
 }

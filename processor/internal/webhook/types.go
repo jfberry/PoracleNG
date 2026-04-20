@@ -3,8 +3,6 @@ package webhook
 import (
 	"encoding/json"
 	"strconv"
-
-	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
 // FlexBool handles JSON booleans that may arrive as true/false or 0/1.
@@ -61,38 +59,38 @@ type InboundWebhook struct {
 
 // PokemonWebhook mirrors Golbat's pokemon webhook message.
 type PokemonWebhook struct {
-	EncounterID           string  `json:"encounter_id"`
-	PokemonID             int     `json:"pokemon_id"`
-	Form                  int     `json:"form"`
-	Latitude              float64 `json:"latitude"`
-	Longitude             float64 `json:"longitude"`
-	DisappearTime         int64   `json:"disappear_time"`
-	DisappearTimeVerified bool    `json:"disappear_time_verified"`
-	Verified              bool    `json:"verified"`
-	IndividualAttack      *int    `json:"individual_attack"`
-	IndividualDefense     *int    `json:"individual_defense"`
-	IndividualStamina     *int    `json:"individual_stamina"`
-	CP                    int     `json:"cp"`
-	PokemonLevel          int     `json:"pokemon_level"`
-	Move1                 int     `json:"move_1"`
-	Move2                 int     `json:"move_2"`
-	Gender                int     `json:"gender"`
-	Weight                float64 `json:"weight"`
-	Height                float64 `json:"height"`
-	Size                  int     `json:"size"`
-	Weather               int     `json:"weather"`
-	BoostedWeather        int     `json:"boosted_weather"`
-	Costume               int     `json:"costume"`
-	DisplayPokemonID      int     `json:"display_pokemon_id"`
-	DisplayForm           int     `json:"display_form"`
-	SeenType              string  `json:"seen_type"`
+	EncounterID           string     `json:"encounter_id"`
+	PokemonID             int        `json:"pokemon_id"`
+	Form                  int        `json:"form"`
+	Latitude              float64    `json:"latitude"`
+	Longitude             float64    `json:"longitude"`
+	DisappearTime         int64      `json:"disappear_time"`
+	DisappearTimeVerified bool       `json:"disappear_time_verified"`
+	Verified              bool       `json:"verified"`
+	IndividualAttack      *int       `json:"individual_attack"`
+	IndividualDefense     *int       `json:"individual_defense"`
+	IndividualStamina     *int       `json:"individual_stamina"`
+	CP                    int        `json:"cp"`
+	PokemonLevel          int        `json:"pokemon_level"`
+	Move1                 int        `json:"move_1"`
+	Move2                 int        `json:"move_2"`
+	Gender                int        `json:"gender"`
+	Weight                float64    `json:"weight"`
+	Height                float64    `json:"height"`
+	Size                  int        `json:"size"`
+	Weather               int        `json:"weather"`
+	BoostedWeather        int        `json:"boosted_weather"`
+	Costume               int        `json:"costume"`
+	DisplayPokemonID      int        `json:"display_pokemon_id"`
+	DisplayForm           int        `json:"display_form"`
+	SeenType              string     `json:"seen_type"`
 	PokestopID            string     `json:"pokestop_id"`
 	SpawnpointID          FlexString `json:"spawnpoint_id"`
-	PokestopName          string  `json:"pokestop_name"`
-	BaseCatch             float64 `json:"base_catch"`
-	GreatCatch            float64 `json:"great_catch"`
-	UltraCatch            float64 `json:"ultra_catch"`
-	Shiny                 *bool   `json:"shiny"` // null = unknown, true/false = reported by worker
+	PokestopName          string     `json:"pokestop_name"`
+	BaseCatch             float64    `json:"base_catch"`
+	GreatCatch            float64    `json:"great_catch"`
+	UltraCatch            float64    `json:"ultra_catch"`
+	Shiny                 *bool      `json:"shiny"` // null = unknown, true/false = reported by worker
 
 	// PVP data from Golbat (sole source of PVP rankings)
 	PVP                     map[string][]PVPRankEntry `json:"pvp"`
@@ -119,8 +117,6 @@ type RaidWebhook struct {
 	GymID            string   `json:"gym_id"`
 	GymName          string   `json:"gym_name"`
 	GymURL           string   `json:"gym_url"`
-	Name             string   `json:"name"`
-	URL              string   `json:"url"`
 	Latitude         float64  `json:"latitude"`
 	Longitude        float64  `json:"longitude"`
 	PokemonID        int      `json:"pokemon_id"`
@@ -185,7 +181,7 @@ type MatchedUser struct {
 	Longitude         float64              `json:"longitude"`
 	Template          string               `json:"template"`
 	Distance          int                  `json:"distance"`
-	Clean             bool                 `json:"clean"`
+	Clean             int                  `json:"clean"`
 	Ping              string               `json:"ping"`
 	Bearing           int                  `json:"bearing"`
 	CardinalDirection string               `json:"cardinalDirection"`
@@ -195,28 +191,10 @@ type MatchedUser struct {
 	PVPRankingWorst   int                  `json:"pvp_ranking_worst"`
 	RSVPChanges       int                  `json:"rsvp_changes"`
 	ActivePokemons    []ActivePokemonEntry `json:"active_pokemons,omitempty"`
-}
-
-// OutboundPayload is sent from processor to alerter.
-type OutboundPayload struct {
-	Type                   string                    `json:"type"`
-	Message                json.RawMessage           `json:"message"`
-	Enrichment             map[string]any            `json:"enrichment,omitempty"`
-	PerLanguageEnrichment  map[string]map[string]any `json:"per_language_enrichment,omitempty"` // lang → enrichment
-	PerUserEnrichment      map[string]map[string]any `json:"per_user_enrichment,omitempty"`     // userId → enrichment
-	MatchedAreas           []MatchedArea             `json:"matched_areas"`
-	MatchedUsers           []MatchedUser             `json:"matched_users"`
-	OldState               *EncounterOld             `json:"old_state,omitempty"`
-	TilePending            *staticmap.TilePending    `json:"-"` // async tile, resolved by sender before flush
-}
-
-// EncounterOld holds old state for pokemon_changed events.
-type EncounterOld struct {
-	PokemonID int     `json:"pokemon_id"`
-	Form      int     `json:"form"`
-	Weather   int     `json:"weather"`
-	CP        int     `json:"cp"`
-	IV        float64 `json:"iv"`
+	// CaresUntil is the unix timestamp of the latest matched pokemon's disappear
+	// time in the weather cell. Only populated for weather change alerts, where
+	// it drives the clean-alert TTH and the "too short to bother" drop.
+	CaresUntil int64 `json:"cares_until,omitempty"`
 }
 
 // InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.
@@ -270,9 +248,9 @@ type LureWebhook struct {
 	LureExpiration int64   `json:"lure_expiration"`
 	LureID         int     `json:"lure_id"`
 	// Invasion fields — a pokestop can have both a lure and an invasion
-	IncidentGruntType   int `json:"incident_grunt_type"`
-	GruntType           int `json:"grunt_type"`
-	DisplayType         int `json:"display_type"`
+	IncidentGruntType  int `json:"incident_grunt_type"`
+	GruntType          int `json:"grunt_type"`
+	DisplayType        int `json:"display_type"`
 	IncidentDisplayType int `json:"incident_display_type"`
 }
 
@@ -308,27 +286,27 @@ type NestWebhook struct {
 
 // MaxbattleWebhook mirrors Golbat's max_battle webhook message.
 type MaxbattleWebhook struct {
-	ID                      string  `json:"id"`
-	Name                    string  `json:"name"`
-	Latitude                float64 `json:"latitude"`
-	Longitude               float64 `json:"longitude"`
-	StartTime               int64   `json:"start_time"`
-	EndTime                 int64   `json:"end_time"`
-	IsBattleAvailable       bool    `json:"is_battle_available"`
-	BattleLevel             int     `json:"battle_level"`
-	BattleStart             int64   `json:"battle_start"`
-	BattleEnd               int64   `json:"battle_end"`
-	BattlePokemonID         int     `json:"battle_pokemon_id"`
-	BattlePokemonForm       int     `json:"battle_pokemon_form"`
-	BattlePokemonCostume    int     `json:"battle_pokemon_costume"`
-	BattlePokemonGender     int     `json:"battle_pokemon_gender"`
-	BattlePokemonAlignment  int     `json:"battle_pokemon_alignment"`
-	BattlePokemonBreadMode  int     `json:"battle_pokemon_bread_mode"`
-	BattlePokemonMove1      int     `json:"battle_pokemon_move_1"`
-	BattlePokemonMove2      int     `json:"battle_pokemon_move_2"`
-	TotalStationedPokemon   int     `json:"total_stationed_pokemon"`
-	TotalStationedGmax      int     `json:"total_stationed_gmax"`
-	Updated                 int64   `json:"updated"`
+	ID                     string  `json:"id"`
+	Name                   string  `json:"name"`
+	Latitude               float64 `json:"latitude"`
+	Longitude              float64 `json:"longitude"`
+	StartTime              int64   `json:"start_time"`
+	EndTime                int64   `json:"end_time"`
+	IsBattleAvailable      bool    `json:"is_battle_available"`
+	BattleLevel            int     `json:"battle_level"`
+	BattleStart            int64   `json:"battle_start"`
+	BattleEnd              int64   `json:"battle_end"`
+	BattlePokemonID        int     `json:"battle_pokemon_id"`
+	BattlePokemonForm      int     `json:"battle_pokemon_form"`
+	BattlePokemonCostume   int     `json:"battle_pokemon_costume"`
+	BattlePokemonGender    int     `json:"battle_pokemon_gender"`
+	BattlePokemonAlignment int     `json:"battle_pokemon_alignment"`
+	BattlePokemonBreadMode int     `json:"battle_pokemon_bread_mode"`
+	BattlePokemonMove1     int     `json:"battle_pokemon_move_1"`
+	BattlePokemonMove2     int     `json:"battle_pokemon_move_2"`
+	TotalStationedPokemon  int     `json:"total_stationed_pokemon"`
+	TotalStationedGmax     int     `json:"total_stationed_gmax"`
+	Updated                int64   `json:"updated"`
 }
 
 // FortWebhook mirrors Golbat's fort_update webhook message.
@@ -436,15 +414,16 @@ func (f *FortWebhook) FortName() string {
 
 // DeliveryJob represents a rendered alert ready for delivery to Discord/Telegram.
 type DeliveryJob struct {
-	Lat          string         `json:"lat"`
-	Lon          string         `json:"lon"`
-	Message      json.RawMessage `json:"message"`     // pre-rendered JSON from DTS template
-	Target       string         `json:"target"`
-	Type         string         `json:"type"`         // "discord:user", "telegram:group", etc.
-	Name         string         `json:"name"`
-	TTH          map[string]any `json:"tth"`
-	Clean        bool           `json:"clean"`
-	Emoji        []string       `json:"emoji"`
-	LogReference string         `json:"logReference"`
-	Language     string         `json:"language"`
+	Lat          string          `json:"lat"`
+	Lon          string          `json:"lon"`
+	Message      json.RawMessage `json:"message"` // pre-rendered JSON from DTS template
+	Target       string          `json:"target"`
+	Type         string          `json:"type"` // "discord:user", "telegram:group", etc.
+	Name         string          `json:"name"`
+	TTH          map[string]any  `json:"tth"`
+	Clean        int             `json:"clean"`
+	EditKey      string          `json:"editKey,omitempty"`
+	Emoji        []string        `json:"emoji"`
+	LogReference string          `json:"logReference"`
+	Language     string          `json:"language"`
 }

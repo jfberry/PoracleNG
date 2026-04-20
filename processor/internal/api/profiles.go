@@ -5,61 +5,60 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 // HandleGetProfiles returns the GET /api/profiles/{id} handler.
-func HandleGetProfiles(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleGetProfiles(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 		if id == "" {
-			trackingJSONError(w, http.StatusBadRequest, "missing id parameter")
+			trackingJSONError(c, http.StatusBadRequest, "missing id parameter")
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Profiles API: lookup human: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
-		profiles, err := db.SelectProfiles(deps.DB, id)
+		profiles, err := deps.Humans.GetProfiles(id)
 		if err != nil {
 			log.Errorf("Profiles API: get profiles: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		trackingJSONOK(w, map[string]any{"profile": profiles})
+		trackingJSONOK(c, map[string]any{"profile": profilesToResponse(profiles)})
 	}
 }
 
 // HandleDeleteProfile returns the DELETE /api/profiles/{id}/byProfileNo/{profile_no} handler.
-func HandleDeleteProfile(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		profileNoStr := r.PathValue("profile_no")
+func HandleDeleteProfile(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		profileNoStr := c.Param("profile_no")
 		profileNo, err := strconv.Atoi(profileNoStr)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid profile_no")
+			trackingJSONError(c, http.StatusBadRequest, "invalid profile_no")
 			return
 		}
 
-		if err := db.DeleteProfile(deps.DB, id, profileNo); err != nil {
+		if err := deps.Humans.DeleteProfile(id, profileNo); err != nil {
 			log.Errorf("Profiles API: delete profile: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+		trackingJSONOK(c, nil)
 	}
 }
 
@@ -70,42 +69,42 @@ type profileAddRequest struct {
 }
 
 // HandleAddProfile returns the POST /api/profiles/{id}/add handler.
-func HandleAddProfile(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleAddProfile(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 		if id == "" {
-			trackingJSONError(w, http.StatusBadRequest, "missing id parameter")
+			trackingJSONError(c, http.StatusBadRequest, "missing id parameter")
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Profiles API: lookup human for add: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		// Parse body: single object or array
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var reqs []profileAddRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &reqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single profileAddRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			reqs = []profileAddRequest{single}
@@ -113,7 +112,7 @@ func HandleAddProfile(deps *TrackingDeps) http.HandlerFunc {
 
 		for _, req := range reqs {
 			if req.Name == "" {
-				trackingJSONError(w, http.StatusBadRequest, "name must be specified")
+				trackingJSONError(c, http.StatusBadRequest, "name must be specified")
 				return
 			}
 
@@ -132,15 +131,15 @@ func HandleAddProfile(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			if err := db.AddProfile(deps.DB, id, req.Name, activeHours); err != nil {
+			if err := deps.Humans.AddProfile(id, req.Name, activeHours); err != nil {
 				log.Errorf("Profiles API: add profile: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "Exception raised during execution")
+				trackingJSONError(c, http.StatusInternalServerError, "Exception raised during execution")
 				return
 			}
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+		trackingJSONOK(c, nil)
 	}
 }
 
@@ -151,42 +150,42 @@ type profileUpdateRequest struct {
 }
 
 // HandleUpdateProfile returns the POST /api/profiles/{id}/update handler.
-func HandleUpdateProfile(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleUpdateProfile(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 		if id == "" {
-			trackingJSONError(w, http.StatusBadRequest, "missing id parameter")
+			trackingJSONError(c, http.StatusBadRequest, "missing id parameter")
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Profiles API: lookup human for update: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		// Parse body: single object or array
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var reqs []profileUpdateRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &reqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single profileUpdateRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			reqs = []profileUpdateRequest{single}
@@ -194,7 +193,7 @@ func HandleUpdateProfile(deps *TrackingDeps) http.HandlerFunc {
 
 		for _, req := range reqs {
 			if req.ProfileNo == nil {
-				trackingJSONError(w, http.StatusBadRequest, "profile_no must be specified")
+				trackingJSONError(c, http.StatusBadRequest, "profile_no must be specified")
 				return
 			}
 
@@ -211,58 +210,58 @@ func HandleUpdateProfile(deps *TrackingDeps) http.HandlerFunc {
 				}
 			}
 
-			if err := db.UpdateProfileHours(deps.DB, id, *req.ProfileNo, activeHours); err != nil {
+			if err := deps.Humans.UpdateProfileHours(id, *req.ProfileNo, activeHours); err != nil {
 				log.Errorf("Profiles API: update profile hours: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "Exception raised during execution")
+				trackingJSONError(c, http.StatusInternalServerError, "Exception raised during execution")
 				return
 			}
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+		trackingJSONOK(c, nil)
 	}
 }
 
 // HandleCopyProfile returns the POST /api/profiles/{id}/copy/{from}/{to} handler.
-func HandleCopyProfile(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleCopyProfile(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 		if id == "" {
-			trackingJSONError(w, http.StatusBadRequest, "missing id parameter")
+			trackingJSONError(c, http.StatusBadRequest, "missing id parameter")
 			return
 		}
 
-		human, err := db.SelectOneHuman(deps.DB, id)
+		human, err := deps.Humans.Get(id)
 		if err != nil {
 			log.Errorf("Profiles API: lookup human for copy: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
-		fromStr := r.PathValue("from")
-		toStr := r.PathValue("to")
+		fromStr := c.Param("from")
+		toStr := c.Param("to")
 		from, err := strconv.Atoi(fromStr)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid from profile number")
+			trackingJSONError(c, http.StatusBadRequest, "invalid from profile number")
 			return
 		}
 		to, err := strconv.Atoi(toStr)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid to profile number")
+			trackingJSONError(c, http.StatusBadRequest, "invalid to profile number")
 			return
 		}
 
-		if err := db.CopyProfile(deps.DB, id, from, to); err != nil {
+		if err := deps.Humans.CopyProfile(id, from, to); err != nil {
 			log.Errorf("Profiles API: copy profile: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "Exception raised during execution")
+			trackingJSONError(c, http.StatusInternalServerError, "Exception raised during execution")
 			return
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+		trackingJSONOK(c, nil)
 	}
 }

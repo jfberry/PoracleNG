@@ -256,7 +256,7 @@ func TestResolveGruntTypeName(t *testing.T) {
 		{"event overrides grunt", 49, 8, "kecleon"},
 		{"electric grunt", 49, 1, "electric"},
 		{"grass grunt", 23, 1, "grass"},
-		{"metal grunt (TypeID=0)", 28, 1, "metal"},
+		{"metal grunt (TypeID=0) → steel", 28, 1, "steel"},
 		{"darkness grunt (TypeID=0)", 8, 1, "darkness"},
 		{"mixed grunt (TypeID=0)", 4, 1, "mixed"},
 		{"unknown grunt falls back to ID", 999, 1, "999"},

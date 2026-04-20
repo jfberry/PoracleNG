@@ -110,16 +110,7 @@ func (ps *ProcessorService) checkProfileSwitches() {
 		tr := ps.translations.For(human.Language)
 		msg := tr.Tf("profile.switched", p.Name)
 
-		ps.postMessageToAlerter(postMessage{
-			Target:       human.ID,
-			Type:         human.Type,
-			Name:         human.Name,
-			Message:      messageContent{Content: msg},
-			Language:     human.Language,
-			TTH:          tth{Hours: 1},
-			AlwaysSend:   true,
-			LogReference: "ProfileScheduler",
-		})
+		ps.dispatchMessage(human.ID, human.Type, human.Name, msg, "ProfileScheduler")
 	}
 
 	if needsReload {
@@ -158,7 +149,7 @@ func isProfileActive(entries []db.ActiveHourEntry, lat, lon float64) bool {
 	return false
 }
 
-// matchesTimeWindow implements the same 10-minute window logic as the alerter:
+// matchesTimeWindow implements the same 10-minute window logic as the original implementation:
 //   - Same day, same hour, within 10 minutes of scheduled minute
 //   - First 10 minutes of new hour matching last 10 minutes of previous hour
 //   - Midnight boundary (hour 0, minute <10, yesterday at hour 23, minute >50)

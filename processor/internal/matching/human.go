@@ -189,7 +189,7 @@ type raidUserData struct {
 	ProfileNo     int
 	Distance      int
 	Template      string
-	Clean         bool
+	Clean         int
 	Ping          string
 	RSVPChanges   int
 	IsSpecificGym bool

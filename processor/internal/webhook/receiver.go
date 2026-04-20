@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/metrics"
@@ -30,42 +32,40 @@ type Processor interface {
 	ProcessMaxbattle(raw json.RawMessage) error
 }
 
-// NewHandler creates a new webhook handler.
+// NewHandler creates a new webhook handler that returns a Gin handler function.
 // webhookLogger is optional — if non-nil, raw webhook bodies are written to it.
-func NewHandler(processor Processor, webhookLogger io.Writer) *Handler {
-	return &Handler{
+func NewHandler(processor Processor, webhookLogger io.Writer) gin.HandlerFunc {
+	h := &Handler{
 		processor:     processor,
 		webhookLogger: webhookLogger,
 	}
+	return h.handle
 }
 
-// ServeHTTP handles POST / with Golbat webhook payload.
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
+// handle processes POST / with Golbat webhook payload.
+func (h *Handler) handle(c *gin.Context) {
+	body, err := c.GetRawData()
 	if err != nil {
 		log.Errorf("Failed to read webhook body: %s", err)
-		w.WriteHeader(http.StatusBadRequest)
+		c.Status(http.StatusBadRequest)
 		return
 	}
 
 	var hooks []InboundWebhook
 	if err := json.Unmarshal(body, &hooks); err != nil {
 		log.Errorf("Failed to parse webhooks: %s", err)
-		w.WriteHeader(http.StatusBadRequest)
+		c.Status(http.StatusBadRequest)
 		return
 	}
 
 	metrics.WebhookBatchSize.Observe(float64(len(hooks)))
 
 	for _, hook := range hooks {
-		// Log each individual webhook as one line: {"type":"pokemon","message":{...}}
+		// Log each individual webhook as one line: 2026-04-11T16:57:03Z {"type":"pokemon","message":{...}}
 		if h.webhookLogger != nil {
 			if line, err := json.Marshal(hook); err == nil {
+				h.webhookLogger.Write([]byte(time.Now().UTC().Format(time.RFC3339)))
+				h.webhookLogger.Write([]byte(" "))
 				h.webhookLogger.Write(line)
 				h.webhookLogger.Write([]byte("\n"))
 			}
@@ -119,7 +119,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
+	c.Status(http.StatusOK)
 }
 
 // routePokestop inspects a pokestop webhook to determine if it's an invasion or lure.

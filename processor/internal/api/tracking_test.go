@@ -4,11 +4,23 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pokemon/poracleng/processor/internal/db"
 )
+
+func init() {
+	gin.SetMode(gin.TestMode)
+}
+
+// newTestGinContext creates a gin.Context backed by the given recorder.
+func newTestGinContext(w *httptest.ResponseRecorder) *gin.Context {
+	c, _ := gin.CreateTestContext(w)
+	return c
+}
 
 // --- IntBool JSON serialization tests ---
 
@@ -102,10 +114,10 @@ func TestIntBoolInStruct(t *testing.T) {
 // --- diffTracking tests ---
 
 func TestDiffTrackingDuplicate(t *testing.T) {
-	a := &db.LureTrackingAPI{UID: 1, ID: "u1", ProfileNo: 1, Ping: "", Clean: false, Distance: 500, Template: "1", LureID: 501}
-	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Ping: "", Clean: false, Distance: 500, Template: "1", LureID: 501}
+	a := &db.LureTrackingAPI{UID: 1, ID: "u1", ProfileNo: 1, Ping: "", Clean: 0, Distance: 500, Template: "1", LureID: 501}
+	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Ping: "", Clean: 0, Distance: 500, Template: "1", LureID: 501}
 
-	noMatch, isDup, _, isUpdate := diffTracking(a, b)
+	noMatch, isDup, _, isUpdate := DiffTracking(a, b)
 	if noMatch {
 		t.Error("expected match")
 	}
@@ -121,25 +133,40 @@ func TestDiffTrackingNoMatch(t *testing.T) {
 	a := &db.LureTrackingAPI{UID: 1, ID: "u1", ProfileNo: 1, LureID: 501}
 	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, LureID: 502} // different match key
 
-	noMatch, _, _, _ := diffTracking(a, b)
+	noMatch, _, _, _ := DiffTracking(a, b)
 	if !noMatch {
 		t.Error("expected noMatch for different lure_id")
 	}
 }
 
-func TestDiffTrackingUpdate(t *testing.T) {
-	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Clean: false, Distance: 500, Template: "1", LureID: 501}
-	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Clean: true, Distance: 1000, Template: "2", LureID: 501}
+func TestDiffTrackingSingleUpdate(t *testing.T) {
+	// Exactly one updatable field differs → update
+	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Clean: 0, Distance: 500, Template: "1", LureID: 501}
+	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Clean: 0, Distance: 1000, Template: "1", LureID: 501}
 
-	noMatch, isDup, uid, isUpdate := diffTracking(a, b)
+	noMatch, isDup, uid, isUpdate := DiffTracking(a, b)
 	if noMatch || isDup {
 		t.Error("expected neither noMatch nor duplicate")
 	}
 	if !isUpdate {
-		t.Error("expected update since clean/distance/template are all diff:\"update\"")
+		t.Error("expected update since only distance differs (diff:\"update\")")
 	}
 	if uid != 5 {
 		t.Errorf("expected uid=5, got %d", uid)
+	}
+}
+
+func TestDiffTrackingMultiUpdateIsInsert(t *testing.T) {
+	// Multiple updatable fields differ → new insert (not update)
+	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Clean: 0, Distance: 500, Template: "1", LureID: 501}
+	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Clean: 1, Distance: 1000, Template: "2", LureID: 501}
+
+	noMatch, isDup, _, isUpdate := DiffTracking(a, b)
+	if noMatch || isDup {
+		t.Error("expected neither noMatch nor duplicate")
+	}
+	if isUpdate {
+		t.Error("expected new insert when multiple updatable fields differ")
 	}
 }
 
@@ -148,7 +175,7 @@ func TestDiffTrackingNewInsert(t *testing.T) {
 	a := &db.LureTrackingAPI{UID: 5, ID: "u1", ProfileNo: 1, Ping: "role1", LureID: 501}
 	b := &db.LureTrackingAPI{UID: 0, ID: "u1", ProfileNo: 1, Ping: "role2", LureID: 501}
 
-	noMatch, isDup, _, isUpdate := diffTracking(a, b)
+	noMatch, isDup, _, isUpdate := DiffTracking(a, b)
 	if noMatch || isDup || isUpdate {
 		t.Error("expected new insert when non-updatable field differs")
 	}
@@ -158,7 +185,8 @@ func TestDiffTrackingNewInsert(t *testing.T) {
 
 func TestTrackingJSONOK(t *testing.T) {
 	w := httptest.NewRecorder()
-	trackingJSONOK(w, map[string]any{"count": 3})
+	c := newTestGinContext(w)
+	trackingJSONOK(c, map[string]any{"count": 3})
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
@@ -177,7 +205,8 @@ func TestTrackingJSONOK(t *testing.T) {
 
 func TestTrackingJSONError(t *testing.T) {
 	w := httptest.NewRecorder()
-	trackingJSONError(w, http.StatusNotFound, "User not found")
+	c := newTestGinContext(w)
+	trackingJSONError(c, http.StatusNotFound, "User not found")
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", w.Code)
@@ -196,7 +225,8 @@ func TestTrackingJSONError(t *testing.T) {
 
 func TestTrackingJSONOKNilData(t *testing.T) {
 	w := httptest.NewRecorder()
-	trackingJSONOK(w, nil)
+	c := newTestGinContext(w)
+	trackingJSONOK(c, nil)
 
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
@@ -227,10 +257,13 @@ func TestHandlerMissingID(t *testing.T) {
 	deps := &TrackingDeps{} // nil DB — should fail before DB call
 	handler := HandleGetLure(deps)
 
+	r := gin.New()
+	// Register without :id param so gin provides empty string
+	r.GET("/api/tracking/lure/", handler)
+
 	req := httptest.NewRequest(http.MethodGet, "/api/tracking/lure/", nil)
-	// No {id} path value set → lookupHuman will get empty string → error
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 for missing id, got %d", w.Code)
@@ -243,17 +276,49 @@ func TestHandlerMissingID(t *testing.T) {
 	}
 }
 
+// TestPathParamCapturesEncodedSlashes proves that percent-encoded slashes in a
+// path param (e.g. webhook URLs used as human IDs) round-trip as a single
+// captured value rather than fanning out across path segments. This requires
+// UseRawPath + UnescapePathValues on the engine.
+func TestPathParamCapturesEncodedSlashes(t *testing.T) {
+	r := gin.New()
+	r.UseRawPath = true
+	r.UnescapePathValues = true
+
+	var captured string
+	r.GET("/api/humans/:id", func(c *gin.Context) {
+		captured = c.Param("id")
+		c.Status(http.StatusOK)
+	})
+
+	// Fake webhook-style id — structure mirrors Discord's webhook URL so the
+	// test exercises the same encoded-slash routing case without a real token.
+	webhookID := "https://discord.com/api/webhooks/000000000000000000/REDACTED-PLACEHOLDER-TOKEN-FOR-TEST-FIXTURE-ONLY"
+	encoded := url.PathEscape(webhookID)
+	// PathEscape leaves ':' and '-' alone but encodes '/' as %2F — matching
+	// what PHP's rawurlencode produces for these characters.
+	req := httptest.NewRequest(http.MethodGet, "/api/humans/"+encoded, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d (captured=%q)", w.Code, captured)
+	}
+	if captured != webhookID {
+		t.Errorf("expected id %q, got %q", webhookID, captured)
+	}
+}
+
 func TestDeleteInvalidUID(t *testing.T) {
 	deps := &TrackingDeps{}
 	handler := HandleDeleteLure(deps)
 
-	// Use Go 1.22+ ServeMux to set path values
-	mux := http.NewServeMux()
-	mux.HandleFunc("DELETE /api/tracking/lure/{id}/byUid/{uid}", handler)
+	r := gin.New()
+	r.DELETE("/api/tracking/lure/:id/byUid/:uid", handler)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/tracking/lure/user1/byUid/notanumber", nil)
 	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for invalid uid, got %d", w.Code)
@@ -264,19 +329,17 @@ func TestCreateLureInvalidBody(t *testing.T) {
 	deps := &TrackingDeps{}
 	handler := HandleCreateLure(deps)
 
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.POST("/api/tracking/lure/:id", handler)
+
 	req := httptest.NewRequest(http.MethodPost, "/api/tracking/lure/user1", strings.NewReader("not json"))
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
+	r.ServeHTTP(w, req)
 
-	// Should fail at lookupHuman (nil DB) or body parse — either way, error response
+	// Should fail at lookupHuman (nil DB panics) — recovery middleware returns 500
 	if w.Code == http.StatusOK {
 		t.Error("expected error for invalid body, got 200")
-	}
-
-	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["status"] != "error" {
-		t.Errorf("expected error status, got %v", resp["status"])
 	}
 }
 
@@ -287,7 +350,7 @@ func TestEggTrackingAPIJSON(t *testing.T) {
 		UID:       42,
 		ID:        "discord:123",
 		ProfileNo: 1,
-		Clean:     true,
+		Clean:     1,
 		Exclusive: false,
 		Distance:  1000,
 		Template:  "1",
@@ -315,14 +378,14 @@ func TestEggTrackingAPIJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(input), &parsed); err != nil {
 		t.Fatal(err)
 	}
-	if !bool(parsed.Clean) || !bool(parsed.Exclusive) {
-		t.Errorf("expected clean=true, exclusive=true from integer 1")
+	if parsed.Clean != 1 || !bool(parsed.Exclusive) {
+		t.Errorf("expected clean=1, exclusive=true from integer 1")
 	}
 }
 
 func TestGymTrackingAPIJSON(t *testing.T) {
 	gym := db.GymTrackingAPI{
-		Clean:         true,
+		Clean:         1,
 		SlotChanges:   false,
 		BattleChanges: true,
 	}
@@ -343,7 +406,7 @@ func TestGymTrackingAPIJSON(t *testing.T) {
 
 func TestQuestTrackingAPIJSON(t *testing.T) {
 	quest := db.QuestTrackingAPI{
-		Clean: true,
+		Clean: 1,
 		Shiny: false,
 	}
 

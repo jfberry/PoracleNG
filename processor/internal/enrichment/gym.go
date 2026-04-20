@@ -6,7 +6,7 @@ import (
 )
 
 // Gym builds enrichment fields for a gym webhook.
-func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldSlotsAvailable int, inBattle, ex bool, gymID string) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldSlotsAvailable int, inBattle, ex bool, gymID string, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
@@ -47,11 +47,11 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldS
 
 	// Static map tile
 	pending := e.addStaticMap(m, "gym", lat, lon, map[string]any{
-		"team_id":        teamID,
+		"teamId":         teamID,
 		"slotsAvailable": slotsAvailable,
 		"inBattle":       inBattle,
 		"ex":             ex,
-	})
+	}, tileMode)
 
 	// Game data enrichment
 	if e.GameData != nil {
@@ -61,6 +61,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldS
 		}
 	}
 
+	e.setFallbackImg(m, e.FallbackImgGym)
 
 	return m, pending
 }

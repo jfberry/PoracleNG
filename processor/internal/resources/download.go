@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,33 +14,24 @@ import (
 )
 
 const (
-	gameMasterURL    = "https://raw.githubusercontent.com/WatWowMap/Masterfile-Generator/master/master-latest-poracle-v2.json"
-	rawMasterURL     = "https://raw.githubusercontent.com/WatWowMap/Masterfile-Generator/master/master-latest-raw.json"
-	gruntsURL        = "https://raw.githubusercontent.com/WatWowMap/event-info/main/grunts/classic.json"
-	localeIndex      = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/index.json"
-	localeBaseURL    = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/static/enRefMerged/"
-	localesBaseURL   = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/static/locales/"
-	manualBaseURL    = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/static/manual/"
+	rawMasterURL   = "https://raw.githubusercontent.com/WatWowMap/Masterfile-Generator/master/master-latest-raw.json"
+	gruntsURL      = "https://raw.githubusercontent.com/WatWowMap/event-info/main/grunts/classic.json"
+	localeIndex    = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/index.json"
+	localesBaseURL = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/static/locales/"
+	manualBaseURL  = "https://raw.githubusercontent.com/WatWowMap/pogo-translations/master/static/manual/"
 )
 
 // Download fetches game data and locale files into the resources directory.
 // On fetch failure, existing cached files are preserved.
 func Download(baseDir string) error {
-	dataDir := filepath.Join(baseDir, "resources", "data")
 	rawDir := filepath.Join(baseDir, "resources", "rawdata")
-	localeDir := filepath.Join(baseDir, "resources", "locale")
 	gameLocaleDir := filepath.Join(baseDir, "resources", "gamelocale")
 
-	for _, dir := range []string{dataDir, rawDir, localeDir, gameLocaleDir} {
+	for _, dir := range []string{rawDir, gameLocaleDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("create dir %s: %w", dir, err)
 		}
 	}
-
-	// Poracle-v2 data + enRefMerged locales: used by the alerter only.
-	// Remove these once the alerter is fully migrated to use processor enrichment.
-	downloadGameMaster(dataDir)
-	downloadLocales(localeDir)
 
 	// Grunt data (classic.json format) saved to rawdata/ for the processor.
 	downloadGrunts(rawDir)
@@ -49,32 +41,6 @@ func Download(baseDir string) error {
 	downloadGameLocales(gameLocaleDir)
 
 	return nil
-}
-
-func downloadGameMaster(dataDir string) {
-	log.Info("[Resources] Fetching latest Game Master (poracle-v2)...")
-
-	body, err := httpGet(gameMasterURL)
-	if err != nil {
-		log.Warnf("[Resources] Could not fetch Game Master, using existing: %s", err)
-		return
-	}
-
-	// Game master is an object with category keys (monsters, moves, items, etc.)
-	var master map[string]json.RawMessage
-	if err := json.Unmarshal(body, &master); err != nil {
-		log.Warnf("[Resources] Could not parse Game Master: %s", err)
-		return
-	}
-
-	for category, data := range master {
-		path := filepath.Join(dataDir, category+".json")
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			log.Warnf("[Resources] Could not write %s: %s", path, err)
-		}
-	}
-
-	log.Infof("[Resources] Game Master (poracle-v2) saved (%d categories)", len(master))
 }
 
 func downloadRawMaster(rawDir string) {
@@ -125,39 +91,6 @@ func downloadGrunts(rawDir string) {
 	log.Info("[Resources] Grunts saved (classic.json → rawdata/invasions.json)")
 }
 
-// downloadLocales fetches enRefMerged locale files (English-as-key format) for the alerter.
-func downloadLocales(localeDir string) {
-	log.Info("[Resources] Fetching locales (enRefMerged)...")
-
-	body, err := httpGet(localeIndex)
-	if err != nil {
-		log.Warnf("[Resources] Could not fetch locale index, using existing: %s", err)
-		return
-	}
-
-	var locales []string
-	if err := json.Unmarshal(body, &locales); err != nil {
-		log.Warnf("[Resources] Could not parse locale index: %s", err)
-		return
-	}
-
-	for _, locale := range locales {
-		data, err := httpGet(localeBaseURL + locale)
-		if err != nil {
-			log.Warnf("[Resources] Could not fetch locale %s: %s", locale, err)
-			continue
-		}
-
-		path := filepath.Join(localeDir, locale)
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			log.Warnf("[Resources] Could not write %s: %s", path, err)
-			continue
-		}
-	}
-
-	log.Infof("[Resources] Locales (enRefMerged) saved (%d files)", len(locales))
-}
-
 // downloadGameLocales fetches identifier-key locale files (locales/ + manual/) for the processor.
 // For each language, downloads both locales/{lang}.json and manual/{lang}.json,
 // merges them (manual overrides locales), and writes to resources/gamelocale/{lang}.json.
@@ -203,9 +136,7 @@ func downloadGameLocales(gameLocaleDir string) {
 			var manual map[string]string
 			if err := json.Unmarshal(manualData, &manual); err == nil {
 				// Manual overrides locales
-				for k, v := range manual {
-					merged[k] = v
-				}
+				maps.Copy(merged, manual)
 			}
 		}
 

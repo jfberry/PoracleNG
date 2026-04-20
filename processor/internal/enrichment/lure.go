@@ -7,7 +7,7 @@ import (
 )
 
 // Lure builds enrichment fields for a lure webhook.
-func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Lure(lure *webhook.LureWebhook, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	// Pokestop name — lure webhook uses "name" field, normalize to pokestop_name
@@ -15,6 +15,8 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 
 	if lure.LureExpiration > 0 {
 		tz := geo.GetTimezone(lure.Latitude, lure.Longitude)
+		m["lure_expiration"] = lure.LureExpiration
+		m["expirationTimestamp"] = lure.LureExpiration // unix int for Discord <t:N:R>
 		m["disappearTime"] = geo.FormatTime(lure.LureExpiration, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(lure.LureExpiration)
 		addSunTimes(m, lure.Latitude, lure.Longitude, tz)
@@ -42,7 +44,7 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 	if lure.LureID != 0 {
 		tileFields = map[string]any{"lureTypeId": lure.LureID}
 	}
-	pending := e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields)
+	pending := e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields, tileMode)
 
 	// Lure data from util.json
 	m["lureTypeId"] = lure.LureID
@@ -66,6 +68,11 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook) (map[string]any, *staticmap.T
 	m["gruntTypeId"] = gruntTypeID
 	m["displayTypeId"] = displayType
 
+	e.setFallbackImg(m, e.FallbackImgPokestop)
+	if _, ok := m["pokestop_url"]; !ok && e.FallbackPokestopURL != "" {
+		m["pokestop_url"] = e.FallbackPokestopURL
+	}
+
 	return m, pending
 }
 
@@ -75,9 +82,9 @@ func (e *Enricher) LureTranslate(base map[string]any, lureID int, lang string) m
 		return nil
 	}
 
-	gd := e.GameData
 	m := make(map[string]any, 8)
 
+	gd := e.GameData
 	tr := e.Translations.For(lang)
 	if info, ok := gd.Util.Lures[lureID]; ok {
 		m["lureTypeName"] = tr.T(info.Name)

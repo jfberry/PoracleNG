@@ -6,14 +6,37 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
+	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
-// ProcessTest processes a test webhook through the enrichment pipeline
-// without matching or dedup, sending the result to the specified target.
-func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage, target api.TestTarget) error {
+func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage, target bot.TestTarget) error {
+	if ps.dtsRenderer == nil {
+		return fmt.Errorf("DTS templates not loaded — check startup logs for template loading errors")
+	}
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	if ps.dispatcher == nil {
+		return fmt.Errorf("message delivery not configured — check Discord/Telegram token settings")
+	}
+
+	// Validate that a matching DTS template exists before enqueueing.
+	// Resolve the actual DTS type by peeking at the webhook data for types
+	// that branch (pokestop→lure/invasion, raid→egg/raid).
+	dtsType := resolveDTSTypeFromRaw(webhookType, raw)
+	platform := delivery.PlatformFromType(target.Type)
+	language := target.Language
+	if language == "" {
+		language = ps.cfg.General.Locale
+	}
+	if err := ps.dtsRenderer.CheckTemplate(dtsType, platform, target.Template, language); err != nil {
+		return err
+	}
+
 	matchedUser := webhook.MatchedUser{
 		ID:       target.ID,
 		Name:     target.Name,
@@ -22,7 +45,7 @@ func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage,
 		Latitude: target.Latitude,
 		Longitude: target.Longitude,
 		Template: target.Template,
-		Clean:    false,
+		Clean:    0,
 	}
 
 	switch webhookType {
@@ -57,13 +80,13 @@ func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webho
 
 	rarityGroup := ps.stats.GetRarityGroup(pokemon.PokemonID)
 	processed := matching.ProcessPokemonWebhook(&pokemon, rarityGroup, ps.pvpCfg)
-	enrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed)
+	enrichmentData, tilePending := ps.enricher.Pokemon(&pokemon, processed, enrichment.TileModeURL)
 
 	matched := []webhook.MatchedUser{target}
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.PokemonTranslate(enrichment, &pokemon, target.Language),
+			target.Language: ps.enricher.PokemonTranslate(enrichmentData, &pokemon, target.Language),
 		}
 	}
 
@@ -81,7 +104,7 @@ func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webho
 	ps.renderCh <- RenderJob{
 		IsPokemon:         true,
 		IsEncountered:     processed.Encountered,
-		Enrichment:        enrichment,
+		Enrichment:        enrichmentData,
 		PerLangEnrichment: perLang,
 		PerUserEnrichment: perUser,
 		WebhookFields:     webhookFields,
@@ -99,21 +122,20 @@ func (ps *ProcessorService) processTestRaid(raw json.RawMessage, target webhook.
 		return fmt.Errorf("parse raid: %w", err)
 	}
 
-	if msgType == "" {
-		if raid.PokemonID > 0 {
-			msgType = "raid"
-		} else {
-			msgType = "egg"
-		}
+	// Always determine type from webhook data — test data uses "raid" for both
+	if raid.PokemonID > 0 {
+		msgType = "raid"
+	} else {
+		msgType = "egg"
 	}
 
-	enrichment, tilePending := ps.enricher.Raid(&raid, true)
+	enrichmentData, tilePending := ps.enricher.Raid(&raid, true, enrichment.TileModeURL)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.RaidTranslate(enrichment, &raid, target.Language),
+			target.Language: ps.enricher.RaidTranslate(enrichmentData, &raid, target.Language),
 		}
 	}
 
@@ -125,7 +147,7 @@ func (ps *ProcessorService) processTestRaid(raw json.RawMessage, target webhook.
 	webhookFields := parseWebhookFields(raw)
 	ps.renderCh <- RenderJob{
 		TemplateType:      msgType,
-		Enrichment:        enrichment,
+		Enrichment:        enrichmentData,
 		PerLangEnrichment: perLang,
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
@@ -155,13 +177,13 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 	if displayType == 0 {
 		displayType = inv.IncidentDisplayType
 	}
-	enrichment, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0)
+	enrichmentData, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0, enrichment.TileModeURL)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.InvasionTranslate(enrichment, gruntTypeID, inv.Lineup, target.Language),
+			target.Language: ps.enricher.InvasionTranslate(enrichmentData, gruntTypeID, inv.Lineup, target.Language),
 		}
 	}
 
@@ -171,7 +193,7 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 	webhookFields := parseWebhookFields(raw)
 	ps.renderCh <- RenderJob{
 		TemplateType:      "invasion",
-		Enrichment:        enrichment,
+		Enrichment:        enrichmentData,
 		PerLangEnrichment: perLang,
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
@@ -192,12 +214,12 @@ func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook
 	for _, r := range quest.Rewards {
 		rewards = append(rewards, parseQuestReward(r))
 	}
-	enrichment, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
+	enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards, enrichment.TileModeURL)
 
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.QuestTranslate(enrichment, &quest, rewards, target.Language),
+			target.Language: ps.enricher.QuestTranslate(enrichmentData, &quest, rewards, target.Language),
 		}
 	}
 
@@ -207,7 +229,7 @@ func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook
 	webhookFields := parseWebhookFields(raw)
 	ps.renderCh <- RenderJob{
 		TemplateType:      "quest",
-		Enrichment:        enrichment,
+		Enrichment:        enrichmentData,
 		PerLangEnrichment: perLang,
 		WebhookFields:     webhookFields,
 		MatchedUsers:      []webhook.MatchedUser{target},
@@ -234,13 +256,13 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 	}
 
 	inBattle := bool(gym.IsInBattle) || bool(gym.InBattle)
-	enrichment, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, -1, inBattle, false, gymID)
+	enrichmentData, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, -1, inBattle, false, gymID, enrichment.TileModeURL)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.GymTranslate(enrichment, teamID, 0, 0, target.Language),
+			target.Language: ps.enricher.GymTranslate(enrichmentData, teamID, 0, 0, target.Language),
 		}
 	}
 
@@ -250,7 +272,7 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 	webhookFields := parseWebhookFields(raw)
 	ps.renderCh <- RenderJob{
 		TemplateType:      "gym",
-		Enrichment:        enrichment,
+		Enrichment:        enrichmentData,
 		PerLangEnrichment: perLang,
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
@@ -267,13 +289,13 @@ func (ps *ProcessorService) processTestNest(raw json.RawMessage, target webhook.
 		return fmt.Errorf("parse nest: %w", err)
 	}
 
-	enrichment, tilePending := ps.enricher.Nest(&nest)
+	enrichmentData, tilePending := ps.enricher.Nest(&nest, enrichment.TileModeURL)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.NestTranslate(enrichment, nest.PokemonID, nest.Form, target.Language),
+			target.Language: ps.enricher.NestTranslate(enrichmentData, nest.PokemonID, nest.Form, target.Language),
 		}
 	}
 
@@ -283,7 +305,7 @@ func (ps *ProcessorService) processTestNest(raw json.RawMessage, target webhook.
 	webhookFields := parseWebhookFields(raw)
 	ps.renderCh <- RenderJob{
 		TemplateType:      "nest",
-		Enrichment:        enrichment,
+		Enrichment:        enrichmentData,
 		PerLangEnrichment: perLang,
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
@@ -300,7 +322,7 @@ func (ps *ProcessorService) processTestFort(raw json.RawMessage, target webhook.
 		return fmt.Errorf("parse fort: %w", err)
 	}
 
-	enrichment, tilePending := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID(), &fort)
+	enrichmentData, tilePending := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID(), &fort, enrichment.TileModeURL)
 
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
@@ -308,7 +330,7 @@ func (ps *ProcessorService) processTestFort(raw json.RawMessage, target webhook.
 	webhookFields := parseWebhookFields(raw)
 	ps.renderCh <- RenderJob{
 		TemplateType:  "fort-update",
-		Enrichment:    enrichment,
+		Enrichment:    enrichmentData,
 		WebhookFields: webhookFields,
 		MatchedUsers:  []webhook.MatchedUser{target},
 		MatchedAreas:  []webhook.MatchedArea{},
@@ -324,13 +346,13 @@ func (ps *ProcessorService) processTestMaxbattle(raw json.RawMessage, target web
 		return fmt.Errorf("parse maxbattle: %w", err)
 	}
 
-	enrichment, tilePending := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb)
+	enrichmentData, tilePending := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb, enrichment.TileModeURL)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.MaxbattleTranslate(enrichment, &mb, target.Language),
+			target.Language: ps.enricher.MaxbattleTranslate(enrichmentData, &mb, target.Language),
 		}
 	}
 
@@ -340,7 +362,7 @@ func (ps *ProcessorService) processTestMaxbattle(raw json.RawMessage, target web
 	webhookFields := parseWebhookFields(raw)
 	ps.renderCh <- RenderJob{
 		TemplateType:      "maxbattle",
-		Enrichment:        enrichment,
+		Enrichment:        enrichmentData,
 		PerLangEnrichment: perLang,
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
@@ -366,12 +388,12 @@ func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webh
 		if err := json.Unmarshal(raw, &lure); err != nil {
 			return fmt.Errorf("parse lure: %w", err)
 		}
-		enrichment, tilePending := ps.enricher.Lure(&lure)
+		enrichmentData, tilePending := ps.enricher.Lure(&lure, enrichment.TileModeURL)
 		matched := []webhook.MatchedUser{target}
 		var perLang map[string]map[string]any
 		if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 			perLang = map[string]map[string]any{
-				target.Language: ps.enricher.LureTranslate(enrichment, lure.LureID, target.Language),
+				target.Language: ps.enricher.LureTranslate(enrichmentData, lure.LureID, target.Language),
 			}
 		}
 		if ps.renderCh == nil {
@@ -380,7 +402,7 @@ func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webh
 		webhookFields := parseWebhookFields(raw)
 		ps.renderCh <- RenderJob{
 			TemplateType:      "lure",
-			Enrichment:        enrichment,
+			Enrichment:        enrichmentData,
 			PerLangEnrichment: perLang,
 			WebhookFields:     webhookFields,
 			MatchedUsers:      matched,
@@ -394,5 +416,38 @@ func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webh
 	return ps.processTestInvasion(raw, target)
 }
 
+// resolveDTSTypeFromRaw determines the DTS template type by peeking at the raw webhook JSON.
+// Handles branching types: pokestop→lure/invasion, raid→egg/raid.
+func resolveDTSTypeFromRaw(webhookType string, raw json.RawMessage) string {
+	switch webhookType {
+	case "pokemon":
+		return "monster"
+	case "raid":
+		var peek struct {
+			PokemonID int `json:"pokemon_id"`
+		}
+		if json.Unmarshal(raw, &peek) == nil && peek.PokemonID > 0 {
+			return "raid"
+		}
+		return "egg"
+	case "egg":
+		return "egg"
+	case "pokestop":
+		var peek struct {
+			LureExpiration int64 `json:"lure_expiration"`
+		}
+		if json.Unmarshal(raw, &peek) == nil && peek.LureExpiration > 0 {
+			return "lure"
+		}
+		return "invasion"
+	case "fort_update":
+		return "fort-update"
+	case "max_battle":
+		return "maxbattle"
+	default:
+		return webhookType
+	}
+}
+
 // Ensure ProcessorService implements TestProcessor
-var _ api.TestProcessor = (*ProcessorService)(nil)
+var _ bot.TestProcessor = (*ProcessorService)(nil)

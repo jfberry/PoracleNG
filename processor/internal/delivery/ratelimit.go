@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -18,6 +19,7 @@ type DiscordRateLimiter struct {
 	mu      sync.Mutex
 	targets map[string]*targetLimit
 	global  *tokenBucket
+	waiting atomic.Int64 // number of goroutines currently blocked in Wait()
 }
 
 type targetLimit struct {
@@ -125,7 +127,9 @@ func (rl *DiscordRateLimiter) Wait(target string) {
 			} else {
 				log.Debugf("discord: rate limit wait %.1fs for %s", d.Seconds(), target)
 			}
+			rl.waiting.Add(1)
 			time.Sleep(d)
+			rl.waiting.Add(-1)
 			metrics.DeliveryRateLimitWait.WithLabelValues("discord").Observe(d.Seconds())
 		}
 	} else {
@@ -140,6 +144,11 @@ func (rl *DiscordRateLimiter) Wait(target string) {
 		}
 		time.Sleep(wait)
 	}
+}
+
+// WaitingCount returns the number of goroutines currently blocked waiting for rate limits.
+func (rl *DiscordRateLimiter) WaitingCount() int64 {
+	return rl.waiting.Load()
 }
 
 // Update parses Discord rate limit response headers and updates the target's state.

@@ -3,18 +3,11 @@
 # Only include settings you want to override — defaults are built in.
 
 [processor]
-host = "0.0.0.0"                        # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces
+host = "127.0.0.1"                      # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces. Defaults to 127.0.0.1 if unset, or the PORACLE_HOST env var if set (Dockerfile exports this as 0.0.0.0)
 port = 3030                              # processor takes the original Poracle port
-alerter_url = "http://localhost:3031"
-ip_whitelist = []
-
-[alerter]
-host = "127.0.0.1"                       # 127.0.0.1 = localhost only; 0.0.0.0 = all interfaces
-port = 3031                              # alerter runs on processor port + 1
 ip_whitelist = []
 ip_blacklist = []
-api_secret = ""                          # API secret for Poracle API access (blank = API disabled)
-processor_url = "http://localhost:3030"
+api_secret = ""
 
 # ---- Databases ----
 
@@ -40,7 +33,6 @@ database = "scannerdb"
 [geofence]
 paths = ["geofences/geofence.json"]
 default_name = "city"                    # default fence name if your fence does not have names
-default_color = "#3399ff"
 
 [geofence.koji]
 bearer_token = ""                        # Koji API token for HTTP geofence downloads
@@ -74,13 +66,13 @@ change_alert = false                     # enable or disable weather change aler
 show_altered_pokemon = false             # track weather changed pokemon to show in DTS
 show_altered_pokemon_static_map = false  # show weather changed pokemon on static map
 show_altered_pokemon_max_count = 10      # max number of changed pokemon per alert
-#enable_inference = true                 # processor-only: infer weather from pokemon boosts
+#enable_inference = true                 # infer weather from pokemon boosts
 
 # AccuWeather forecast - predicts next hour weather for boost change detection
 # API keys are rotated; poracle will cycle through the array
 enable_forecast = false
 accuweather_api_keys = []
-accuweather_day_quota = 50               # max API calls per key per day
+accuweather_day_quota = 500              # max API calls per key per day
 forecast_refresh_interval = 8            # hours between API calls per cell
 local_first_fetch_hod = 3                # first fetch hour of the day (3 = 3am local)
 smart_forecast = false                   # pull on demand if no data for a cell
@@ -313,12 +305,20 @@ day_style = ""
 dawn_style = ""
 dusk_style = ""
 night_style = ""
-intersection_users = []                  # list of geonames usernames for street intersections
 # static_provider - map tile provider: tileservercache
 #   (https://github.com/123FLO321/SwiftTileserverCache),
 #   google, osm, or mapbox
 static_provider = "none"
 static_provider_url = ""
+# static_internal_url - optional private URL the processor uses for its own
+# tileserver calls (render POST, pregenerate POST, upload-images pre-fetch).
+# Leave empty to reuse static_provider_url. Useful when static_provider_url
+# points at a public HTTPS endpoint (e.g. behind Cloudflare) but the
+# processor can reach the tileserver directly on the internal network —
+# avoids proxy buffering / intermittent body-read timeouts for the
+# processor's own fetches. The URL embedded in rendered messages
+# (what Discord/Telegram fetch) always uses static_provider_url.
+static_internal_url = ""
 # geocoding_key - google API keys for geolocation (array, poracle will cycle)
 geocoding_key = [""]
 # static_key - google or mapquest keys for tiles (array, poracle will cycle)
@@ -444,14 +444,21 @@ rarity_group_5_ultra_rare = 0.01     # % ultra rare
 # Fallback URLs if something goes wrong
 
 [fallbacks]
-static_map = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/staticMap.png"
-img_url = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/mon.png"
-img_url_weather = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/weather.png"
-img_url_egg = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/uni.png"
-img_url_gym = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/gym.png"
-img_url_pokestop = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png"
-pokestop_url = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png"
+static_map = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/staticMap.png"
+img_url = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/mon.png"
+img_url_weather = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/weather.png"
+img_url_egg = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/uni.png"
+img_url_gym = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/gym.png"
+img_url_pokestop = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png"
+pokestop_url = "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png"
 
+
+# NLP command assistant — parses natural-language requests into structured
+# tracking commands. Used by the !ask command and (optionally) to suggest
+# commands when a user DMs something the bot doesn't recognise.
+[ai]
+enabled = false                          # enables the !ask command + NLP suggest infrastructure
+suggest_on_dm = false                    # when true, DMs that don't match a command get a "did you mean …?" suggestion
 
 
 # ---- Logging ----
@@ -459,31 +466,21 @@ pokestop_url = "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fa
 # Suggestion: start at verbose; info is a bit less logging; debug has more detail
 
 [logging]
-level = "verbose"                        # log level for both console and file output
-# console_log_level = "info"             # alerter only: override console log level
-# log_level = "info"                     # alerter only: override file log level
-timing_stats = false                     # increase log level of key timing stats to 'verbose'
-max_age = 7                              # days to keep log files
+level = "verbose"                        # log level: debug, verbose, info, warn
+file_logging_enabled = true              # write logs to file
+filename = "logs/processor.log"          # log file path
 max_size = 50                            # max log file size in megabytes
+max_age = 7                              # days to keep log files
 max_backups = 5                          # number of old log files to keep
-compress = false                         # gzip compress rotated log files
-webhook_log_limit = 12                   # hours to keep hourly webhook logs (alerter)
+compress = true                          # gzip compress rotated log files
 
-# Processor file logging (processor writes to logs/ relative to project root)
-# file_logging_enabled = true            # processor-only: write logs to file
-# filename = "logs/processor.log"        # processor-only: log file path
-
-# Raw webhook logging (processor only — logs raw webhook bodies received from Golbat)
+# Raw webhook logging — logs raw webhook bodies received from Golbat
+# Useful for debugging, creating test data, and replaying webhooks
 [webhookLogging]
 enabled = false
 filename = "logs/webhooks.log"
-max_size = 100                           # max log file size in megabytes
+max_size = 100                           # max log file size in megabytes (also rotates on interval)
 max_age = 1                              # days to keep old log files
-max_backups = 3                          # number of old log files to keep
-compress = false
-
-[logging.enable_logs]
-webhooks = false                         # matched webhook log (can be quite large)
-discord = true                           # outbound messages to discord users and channels
-telegram = true                          # outbound messages to telegram users, groups and channels
-pvp = false                              # pvp info/calculations (at verbose level)
+max_backups = 12                         # number of old rotated files to keep (~12 hours at hourly rotation)
+compress = true                          # gzip compress rotated log files
+rotate_interval = 60                     # minutes between forced rotations (0 = size-based only)

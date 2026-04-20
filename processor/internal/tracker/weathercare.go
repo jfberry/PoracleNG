@@ -13,7 +13,7 @@ type WeatherCareEntry struct {
 	Type       string
 	Language   string
 	Template   string
-	Clean      bool
+	Clean      int
 	Ping       string
 	CaresUntil int64 // unix timestamp (pokemon disappear_time)
 }
@@ -51,9 +51,9 @@ func (wct *WeatherCareTracker) Register(cellID string, entry WeatherCareEntry) {
 		if entry.CaresUntil > existing.CaresUntil {
 			existing.CaresUntil = entry.CaresUntil
 		}
-		// Clean is true if ANY matched pokemon has clean=true
-		if entry.Clean {
-			existing.Clean = true
+		// Merge clean flags: OR the bits so any matched pokemon's flags are preserved
+		if entry.Clean > 0 {
+			existing.Clean = existing.Clean | entry.Clean
 		}
 		existing.Ping = entry.Ping
 		existing.Language = entry.Language

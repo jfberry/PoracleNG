@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
+	if ps.cfg.General.DisableMaxBattle {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():
@@ -66,7 +70,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.maxbattleMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("maxbattle").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("maxbattle").Inc()
@@ -79,14 +83,15 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 				mb.BattleLevel, ps.pokemonName(mb.BattlePokemonID, mb.BattlePokemonForm),
 				mb.Name, mb.Latitude, mb.Longitude, areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb)
+			mode := ps.tileMode("maxbattle", matched)
+			enrichmentData, tilePending := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.MaxbattleTranslate(enrichment, &mb, lang)
+					perLang[lang] = ps.enricher.MaxbattleTranslate(enrichmentData, &mb, lang)
 				}
 			}
 
@@ -97,7 +102,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 
 			ps.renderCh <- RenderJob{
 				TemplateType:      "maxbattle",
-				Enrichment:        enrichment,
+				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,

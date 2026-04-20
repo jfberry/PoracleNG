@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -21,11 +23,19 @@ type DTSEntry struct {
 	Language     string `json:"language"`
 	Default      bool   `json:"default"`
 	Hidden       bool   `json:"hidden"`
+	Readonly     bool   `json:"readonly,omitempty"`
 	Name         string `json:"name,omitempty"`
 	Description  string `json:"description,omitempty"`
 	Template     any    `json:"template"`
 	TemplateFile string `json:"templateFile"`
+
+	// sourceFile tracks where this entry was loaded from (not serialized).
+	// Used to remove the entry from its original file when saving elsewhere.
+	sourceFile string
 }
+
+// SourceFile returns the file path this entry was loaded from.
+func (e *DTSEntry) SourceFile() string { return e.sourceFile }
 
 // jsonID handles DTS id fields that may be either a JSON string or number.
 type jsonID string
@@ -53,6 +63,8 @@ type TemplateStore struct {
 	mu          sync.RWMutex
 	entries     []DTSEntry
 	cache       map[string]*raymond.Template
+	sourceCache map[string]string
+	tileUsage   map[string]bool
 	partials    map[string]string
 	configDir   string
 	fallbackDir string
@@ -62,6 +74,8 @@ type TemplateStore struct {
 func LoadTemplates(configDir, fallbackDir string) (*TemplateStore, error) {
 	ts := &TemplateStore{
 		cache:       make(map[string]*raymond.Template),
+		sourceCache: make(map[string]string),
+		tileUsage:   make(map[string]bool),
 		configDir:   configDir,
 		fallbackDir: fallbackDir,
 	}
@@ -96,29 +110,71 @@ func loadPartials(configDir, fallbackDir string) map[string]string {
 		return nil
 	}
 
-	log.Infof("dts: loaded %d partials from %s", len(partials), path)
 	return partials
 }
 
 func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
-	path := filepath.Join(configDir, "dts.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("read dts.json from config: %w", err)
-		}
-		path = filepath.Join(fallbackDir, "dts.json")
-		data, err = os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read dts.json from fallback: %w", err)
-		}
-	}
 	var entries []DTSEntry
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, fmt.Errorf("parse dts.json: %w", err)
+
+	// 1. Load fallback dts.json (readonly — bundled defaults)
+	fallbackPath := filepath.Join(fallbackDir, "dts.json")
+	if data, err := os.ReadFile(fallbackPath); err == nil {
+		var fallbackEntries []DTSEntry
+		if err := json.Unmarshal(data, &fallbackEntries); err != nil {
+			return nil, fmt.Errorf("parse fallback dts.json: %w", err)
+		}
+		for i := range fallbackEntries {
+			fallbackEntries[i].sourceFile = fallbackPath
+			fallbackEntries[i].Readonly = true
+		}
+		entries = append(entries, fallbackEntries...)
 	}
 
-	// Load additional DTS files from config/dts/ directory (matches alerter's dtsloader behavior).
+	// 1b. Load fallback dts/**/*.json (readonly — bundled help, info,
+	// info sub-topic files; kept out of the monolithic fallbacks/dts.json
+	// so each topic is one small file that operators can copy verbatim
+	// into config/dts/ to customise).
+	fallbackDtsDir := filepath.Join(fallbackDir, "dts")
+	filepath.WalkDir(fallbackDtsDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".json") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			log.Warnf("dts: failed to read %s: %s", path, err)
+			return nil
+		}
+		var extraEntries []DTSEntry
+		if err := json.Unmarshal(data, &extraEntries); err != nil {
+			log.Warnf("dts: failed to parse %s: %s", path, err)
+			return nil
+		}
+		for i := range extraEntries {
+			extraEntries[i].sourceFile = path
+			extraEntries[i].Readonly = true
+		}
+		entries = append(entries, extraEntries...)
+		log.Debugf("dts: loaded %d fallback entries from %s", len(extraEntries), path)
+		return nil
+	})
+
+	// 2. Load config dts.json (user's main config, editable)
+	configPath := filepath.Join(configDir, "dts.json")
+	if data, err := os.ReadFile(configPath); err == nil {
+		var configEntries []DTSEntry
+		if err := json.Unmarshal(data, &configEntries); err != nil {
+			return nil, fmt.Errorf("parse config dts.json: %w", err)
+		}
+		for i := range configEntries {
+			configEntries[i].sourceFile = configPath
+		}
+		entries = append(entries, configEntries...)
+	} else if entries == nil {
+		// Neither fallback nor config found
+		return nil, fmt.Errorf("no dts.json found in %s or %s", configDir, fallbackDir)
+	}
+
+	// 3. Load additional DTS files from config/dts/ directory.
 	// Each JSON file is an array of DTSEntry objects, concatenated to the main list.
 	// Later entries override earlier ones via the template selection chain.
 	dtsDir := filepath.Join(configDir, "dts")
@@ -139,6 +195,9 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 				log.Warnf("dts: failed to parse %s: %s", extraPath, err)
 				continue
 			}
+			for i := range extraEntries {
+				extraEntries[i].sourceFile = extraPath
+			}
 			entries = append(entries, extraEntries...)
 			log.Debugf("dts: loaded %d entries from %s", len(extraEntries), f.Name())
 		}
@@ -158,6 +217,8 @@ func (ts *TemplateStore) Reload(configDir, fallbackDir string) error {
 	ts.entries = entries
 	ts.partials = partials
 	ts.cache = make(map[string]*raymond.Template)
+	ts.sourceCache = make(map[string]string)
+	ts.tileUsage = make(map[string]bool)
 	ts.configDir = configDir
 	ts.fallbackDir = fallbackDir
 	ts.mu.Unlock()
@@ -204,6 +265,7 @@ func (ts *TemplateStore) Get(templateType, platform, templateID, language string
 	// Cache under write lock
 	ts.mu.Lock()
 	ts.cache[key] = compiled
+	ts.sourceCache[key] = tmplStr
 	ts.mu.Unlock()
 
 	return compiled
@@ -230,72 +292,209 @@ func (ts *TemplateStore) Exists(templateType, platform, templateID, language str
 	return false
 }
 
+// ResolveEntryContent resolves @include directives and joins string arrays
+// in the entry's template content. Returns a copy with the resolved template.
+// For templateFile entries, returns the resolved file content as a string.
+// Used by the API to return fully expanded templates to the editor.
+func (ts *TemplateStore) ResolveEntryContent(entry DTSEntry) (any, string) {
+	ts.mu.RLock()
+	configDir := ts.configDir
+	ts.mu.RUnlock()
+
+	if entry.TemplateFile != "" {
+		path := filepath.Join(configDir, entry.TemplateFile)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, ""
+		}
+		return nil, resolveIncludes(strings.TrimSpace(string(data)), configDir)
+	}
+	if entry.Template != nil {
+		return processTemplateValue(entry.Template, configDir), ""
+	}
+	return nil, ""
+}
+
+// ClearCache drops all compiled templates so the next render re-parses from
+// source. Used after template file content is updated via the API.
+func (ts *TemplateStore) ClearCache() {
+	ts.mu.Lock()
+	ts.cache = make(map[string]*raymond.Template)
+	ts.sourceCache = make(map[string]string)
+	ts.tileUsage = make(map[string]bool)
+	ts.mu.Unlock()
+}
+
+// UsesTile checks whether the resolved template for the given parameters
+// references staticMap/staticmap. Uses the same selection chain as Get().
+// Returns true (conservative) if the template can't be found.
+func (ts *TemplateStore) UsesTile(templateType, platform, templateID, language string) bool {
+	key := cacheKey(templateType, platform, templateID, language)
+
+	ts.mu.RLock()
+	if result, ok := ts.tileUsage[key]; ok {
+		ts.mu.RUnlock()
+		return result
+	}
+	ts.mu.RUnlock()
+
+	// Trigger template resolution (which populates sourceCache)
+	tmpl := ts.Get(templateType, platform, templateID, language)
+	if tmpl == nil {
+		return true // conservative
+	}
+
+	ts.mu.RLock()
+	source, ok := ts.sourceCache[key]
+	ts.mu.RUnlock()
+	if !ok {
+		return true // conservative
+	}
+
+	uses := strings.Contains(strings.ToLower(source), "staticmap")
+
+	ts.mu.Lock()
+	ts.tileUsage[key] = uses
+	ts.mu.Unlock()
+
+	return uses
+}
+
 func cacheKey(templateType, platform, templateID, language string) string {
 	return templateType + " " + platform + " " + templateID + " " + language
 }
 
 // selectEntry applies the selection chain to find the best matching entry.
+//
+// User entries (non-readonly, from config/dts.json or config/dts/) always
+// beat fallback entries (readonly, bundled defaults). The chain is run twice:
+// first over user entries only, then — if nothing matched — over readonly
+// entries. Within each pass, the priority order is:
+//
+//  1. type + id + platform + language  (exact)
+//  2. type + id + platform              (entry has empty language)
+//  3. default + type + platform + language
+//  4. default + type + platform         (entry has empty language)
+//  5. default + type + platform         (any language — last resort)
+//
+// Within each level the LAST match wins, so config/dts/ overrides
+// config/dts.json since later-loaded files are appended to the entries slice.
 func (ts *TemplateStore) selectEntry(templateType, platform, templateID, language string) *DTSEntry {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
 	idLower := strings.ToLower(templateID)
+	if e := selectEntryPass(ts.entries, templateType, platform, idLower, language, false); e != nil {
+		return e
+	}
+	return selectEntryPass(ts.entries, templateType, platform, idLower, language, true)
+}
+
+// selectEntryPass walks the priority chain over a subset of entries
+// (readonly==false → user entries; readonly==true → fallback entries).
+//
+// Runs the priority chain twice: first against entries whose Platform
+// matches the request exactly, then — if nothing matched — against
+// entries with Platform: "" (the platform wildcard). Matches the same
+// pattern that empty Language already uses as a wildcard inside the
+// chain. Lets authors ship one entry that serves both Discord and
+// Telegram for simple text content (help pages, info dumps) while
+// still honouring platform-specific templates where they exist.
+func selectEntryPass(entries []DTSEntry, templateType, platform, idLower, language string, readonly bool) *DTSEntry {
+	if m := selectEntryPassForPlatform(entries, templateType, platform, idLower, language, readonly); m != nil {
+		return m
+	}
+	if platform != "" {
+		return selectEntryPassForPlatform(entries, templateType, "", idLower, language, readonly)
+	}
+	return nil
+}
+
+// selectEntryPassForPlatform walks the 5-level priority chain for a
+// specific platform value (possibly "" to target platform-agnostic
+// entries). Extracted from selectEntryPass so the caller can retry with
+// platform: "" when no platform-specific match exists.
+func selectEntryPassForPlatform(entries []DTSEntry, templateType, platform, idLower, language string, readonly bool) *DTSEntry {
+	var match *DTSEntry
 
 	// 1. type + id + platform + language (exact)
-	for i := range ts.entries {
-		e := &ts.entries[i]
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Type == templateType &&
 			strings.ToLower(e.ID.String()) == idLower &&
 			e.Platform == platform &&
 			e.Language == language {
-			return e
+			match = e
 		}
 	}
+	if match != nil {
+		return match
+	}
 
-	// 2. type + id + platform (no language — entry has empty language)
-	for i := range ts.entries {
-		e := &ts.entries[i]
+	// 2. type + id + platform (entry has empty language)
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Type == templateType &&
 			strings.ToLower(e.ID.String()) == idLower &&
 			e.Platform == platform &&
 			e.Language == "" {
-			return e
+			match = e
 		}
+	}
+	if match != nil {
+		return match
 	}
 
 	// 3. default + type + platform + language
-	for i := range ts.entries {
-		e := &ts.entries[i]
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Default &&
 			e.Type == templateType &&
 			e.Platform == platform &&
 			e.Language == language {
-			return e
+			match = e
 		}
 	}
 
-	// 4. default + type + platform (no language — entry has empty language)
-	for i := range ts.entries {
-		e := &ts.entries[i]
+	// 4. default + type + platform (entry has empty language)
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Default &&
 			e.Type == templateType &&
 			e.Platform == platform &&
 			e.Language == "" {
-			return e
+			match = e
 		}
+	}
+	if match != nil {
+		return match
 	}
 
 	// 5. default + type + platform (any language — last resort)
-	for i := range ts.entries {
-		e := &ts.entries[i]
+	for i := range entries {
+		e := &entries[i]
+		if e.Readonly != readonly {
+			continue
+		}
 		if e.Default &&
 			e.Type == templateType &&
 			e.Platform == platform {
-			return e
+			match = e
 		}
 	}
-
-	return nil
+	return match
 }
 
 // resolveTemplate produces the Handlebars template string from a DTSEntry.
@@ -437,6 +636,97 @@ func (ts *TemplateStore) TemplateMetadata(includeDescriptions bool) map[string]a
 	return result
 }
 
+// UserTemplateInfo holds template info for user-facing display.
+type UserTemplateInfo struct {
+	ID          string
+	Name        string
+	Description string
+	IsDefault   bool
+}
+
+// ListForPlatform returns non-hidden templates for a given platform, grouped by type.
+// Deduplicates by ID within each type (same ID can appear for different languages).
+func (ts *TemplateStore) ListForPlatform(platform string) map[string][]UserTemplateInfo {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	type seen struct{ typ, id string }
+	dedup := make(map[seen]bool)
+	result := make(map[string][]UserTemplateInfo)
+
+	for _, e := range ts.entries {
+		if e.Hidden || e.Platform != platform {
+			continue
+		}
+		id := e.ID.String()
+		if id == "" {
+			id = "default"
+		}
+		key := seen{e.Type, id}
+		if dedup[key] {
+			continue
+		}
+		dedup[key] = true
+
+		result[e.Type] = append(result[e.Type], UserTemplateInfo{
+			ID:          id,
+			Name:        e.Name,
+			Description: e.Description,
+			IsDefault:   e.Default,
+		})
+	}
+	return result
+}
+
+// TemplateSummary returns a map of type → platform → count for loaded templates.
+// Hidden entries are excluded.
+func (ts *TemplateStore) TemplateSummary() map[string]map[string]int {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	result := make(map[string]map[string]int)
+	for _, e := range ts.entries {
+		if e.Hidden {
+			continue
+		}
+		byPlatform, ok := result[e.Type]
+		if !ok {
+			byPlatform = make(map[string]int)
+			result[e.Type] = byPlatform
+		}
+		byPlatform[e.Platform]++
+	}
+	return result
+}
+
+// TemplateSummaryDetailed returns type → platform → list of template IDs.
+func (ts *TemplateStore) TemplateSummaryDetailed() map[string]map[string][]string {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	result := make(map[string]map[string][]string)
+	for _, e := range ts.entries {
+		if e.Hidden {
+			continue
+		}
+		byPlatform, ok := result[e.Type]
+		if !ok {
+			byPlatform = make(map[string][]string)
+			result[e.Type] = byPlatform
+		}
+		id := string(e.ID)
+		if id == "" {
+			id = "default"
+		}
+		// Deduplicate (same ID can appear for different languages)
+		found := slices.Contains(byPlatform[e.Platform], id)
+		if !found {
+			byPlatform[e.Platform] = append(byPlatform[e.Platform], id)
+		}
+	}
+	return result
+}
+
 // LogSummary logs a summary of loaded templates and warns about types missing defaults.
 func (ts *TemplateStore) LogSummary() {
 	ts.mu.RLock()
@@ -454,7 +744,8 @@ func (ts *TemplateStore) LogSummary() {
 		}
 	}
 
-	log.Infof("DTS loaded: %d templates (%d discord, %d telegram)", total, discordCount, telegramCount)
+	partialCount := len(ts.partials)
+	log.Infof("DTS loaded: %d templates (%d discord, %d telegram), %d partials", total, discordCount, telegramCount, partialCount)
 
 	// Check for types missing default templates per platform
 	// Collect all (type, platform) pairs that have entries
@@ -476,6 +767,286 @@ func (ts *TemplateStore) LogSummary() {
 			log.Warnf("DTS: no default template for type=%q platform=%q", key.typ, key.platform)
 		}
 	}
+}
+
+// Partials returns the registered Handlebars partials as a name→template map.
+func (ts *TemplateStore) Partials() map[string]string {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	result := make(map[string]string, len(ts.partials))
+	maps.Copy(result, ts.partials)
+	return result
+}
+
+// FilteredEntries returns DTS entries matching the given filters.
+// Empty filter values match all entries for that dimension.
+func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLanguage, filterID string) []DTSEntry {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	// First pass: record (type|platform) combos that have at least one user
+	// (non-readonly) entry. Fallback (readonly) entries for those combos are
+	// suppressed in the second pass — the user has already taken ownership of
+	// that surface in the editor and the bundled defaults would just be noise.
+	hasUser := make(map[string]bool)
+	for _, e := range ts.entries {
+		if !e.Readonly {
+			hasUser[e.Type+"|"+e.Platform] = true
+		}
+	}
+
+	var result []DTSEntry
+	for _, e := range ts.entries {
+		if filterType != "" && e.Type != filterType {
+			continue
+		}
+		if filterPlatform != "" && e.Platform != filterPlatform {
+			continue
+		}
+		if filterLanguage != "" && e.Language != filterLanguage {
+			continue
+		}
+		if filterID != "" && strings.ToLower(e.ID.String()) != strings.ToLower(filterID) {
+			continue
+		}
+		if e.Readonly && hasUser[e.Type+"|"+e.Platform] {
+			continue
+		}
+		result = append(result, e)
+	}
+	return result
+}
+
+// GetEntry returns a copy of the entry matching the four key fields, or nil
+// if not found. Used by the API to look up an entry without exposing internals.
+func (ts *TemplateStore) GetEntry(filterType, filterPlatform, filterLanguage, filterID string) *DTSEntry {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	target := entryKey(&DTSEntry{
+		Type: filterType, Platform: filterPlatform,
+		Language: filterLanguage, ID: jsonID(filterID),
+	})
+	for i := range ts.entries {
+		if entryKey(&ts.entries[i]) == target {
+			e := ts.entries[i]
+			return &e
+		}
+	}
+	return nil
+}
+
+// entryKey returns the matching key for a DTSEntry.
+func entryKey(e *DTSEntry) string {
+	return e.Type + "|" + e.Platform + "|" + e.Language + "|" + strings.ToLower(e.ID.String())
+}
+
+// entryFilename generates a filename for saving an entry to config/dts/.
+// Format: {type}-{id}-{platform}[-{lang}].json
+func entryFilename(e *DTSEntry) string {
+	id := strings.ToLower(e.ID.String())
+	if id == "" {
+		id = "default"
+	}
+	name := e.Type + "-" + id + "-" + e.Platform
+	if e.Language != "" {
+		name += "-" + e.Language
+	}
+	return name + ".json"
+}
+
+// SaveEntry saves a single DTS entry: updates in-memory state, writes to its
+// own file in config/dts/, and removes it from its previous source file.
+// If the existing entry is readonly (e.g. from fallbacks), a new override
+// entry is appended — the readonly original is left untouched, and the
+// last-match-wins selection chain ensures the new entry takes precedence.
+func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
+	ts.mu.Lock()
+
+	// Find existing entries. There may be multiple matches (e.g. one from
+	// fallback readonly + one from config/dts.json). We need to:
+	// - Note if any are readonly (so we know to append an override)
+	// - Update the first non-readonly match in place
+	// - Record the old source file so we can clean it up on disk
+	var oldSourceFile string
+	found := false
+	isOverride := false
+	incKey := entryKey(&inc)
+	for i := range ts.entries {
+		e := &ts.entries[i]
+		if entryKey(e) != incKey {
+			continue
+		}
+		if e.Readonly {
+			isOverride = true
+			continue // keep looking for a non-readonly copy to update
+		}
+		oldSourceFile = e.sourceFile
+		// Update in place
+		e.Template = inc.Template
+		e.TemplateFile = inc.TemplateFile
+		e.Name = inc.Name
+		e.Description = inc.Description
+		e.Default = inc.Default
+		e.Hidden = inc.Hidden
+		found = true
+		break
+	}
+
+	if !found {
+		// New entry (or override of readonly)
+		ts.entries = append(ts.entries, inc)
+		if isOverride {
+			log.Infof("dts: creating override for readonly template %s", entryFilename(&inc))
+		}
+	}
+
+	// Determine the save path
+	dtsDir := filepath.Join(ts.configDir, "dts")
+	savePath := filepath.Join(dtsDir, entryFilename(&inc))
+
+	// Update the source file on the entry
+	for i := range ts.entries {
+		if entryKey(&ts.entries[i]) == incKey {
+			ts.entries[i].sourceFile = savePath
+			break
+		}
+	}
+
+	// Clear template cache
+	ts.cache = make(map[string]*raymond.Template)
+	ts.sourceCache = make(map[string]string)
+	ts.tileUsage = make(map[string]bool)
+	configDir := ts.configDir
+	ts.mu.Unlock()
+
+	// Ensure config/dts/ directory exists
+	if err := os.MkdirAll(dtsDir, 0755); err != nil {
+		return fmt.Errorf("create dts dir: %w", err)
+	}
+
+	// Write the entry to its own file (single-element array)
+	if err := writeEntryFile(savePath, inc); err != nil {
+		return err
+	}
+
+	// Remove from previous source file (if it was in a config file, not fallback)
+	if oldSourceFile != "" && oldSourceFile != savePath {
+		if err := removeEntryFromFile(oldSourceFile, incKey, configDir); err != nil {
+			log.Warnf("dts: failed to remove old entry from %s: %v", oldSourceFile, err)
+		}
+	}
+
+	log.Infof("dts: saved template %s to %s", entryFilename(&inc), savePath)
+	return nil
+}
+
+// DeleteEntry removes a single entry matching all four key fields.
+// Removes from in-memory state and from the source file on disk.
+// Returns an error if the entry is readonly or not found.
+func (ts *TemplateStore) DeleteEntry(filterType, filterPlatform, filterLanguage, filterID string) error {
+	ts.mu.Lock()
+
+	target := DTSEntry{Type: filterType, Platform: filterPlatform, Language: filterLanguage, ID: jsonID(filterID)}
+	targetKey := entryKey(&target)
+
+	var sourceFile string
+	found := false
+	for i := range ts.entries {
+		e := &ts.entries[i]
+		if entryKey(e) == targetKey {
+			if e.Readonly {
+				ts.mu.Unlock()
+				return fmt.Errorf("template %s/%s/%s/%s is readonly", e.Type, e.Platform, e.ID, e.Language)
+			}
+			sourceFile = e.sourceFile
+			ts.entries = append(ts.entries[:i], ts.entries[i+1:]...)
+			ts.cache = make(map[string]*raymond.Template)
+			ts.sourceCache = make(map[string]string)
+			ts.tileUsage = make(map[string]bool)
+			found = true
+			break
+		}
+	}
+
+	configDir := ts.configDir
+	ts.mu.Unlock()
+
+	if !found {
+		return fmt.Errorf("template not found")
+	}
+
+	// Remove from source file on disk
+	if sourceFile != "" {
+		if err := removeEntryFromFile(sourceFile, targetKey, configDir); err != nil {
+			log.Warnf("dts: failed to remove entry from %s: %v", sourceFile, err)
+		}
+	}
+
+	return nil
+}
+
+// writeEntryFile writes a single DTSEntry as a one-element JSON array.
+func writeEntryFile(path string, entry DTSEntry) error {
+	// Don't serialize internal fields
+	clean := entry
+	clean.sourceFile = ""
+	clean.Readonly = false
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode([]DTSEntry{clean}); err != nil {
+		return fmt.Errorf("marshal entry: %w", err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+// removeEntryFromFile removes an entry (by key) from a JSON file containing
+// an array of DTSEntry objects. If the file becomes empty, it is deleted
+// (unless it's the main dts.json).
+func removeEntryFromFile(filePath, targetKey, configDir string) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	var entries []DTSEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("parse %s: %w", filePath, err)
+	}
+
+	// Filter out the target entry
+	var remaining []DTSEntry
+	for _, e := range entries {
+		if entryKey(&e) != targetKey {
+			remaining = append(remaining, e)
+		}
+	}
+
+	if len(remaining) == len(entries) {
+		return nil // entry wasn't in this file
+	}
+
+	mainDTS := filepath.Join(configDir, "dts.json")
+	if len(remaining) == 0 && filePath != mainDTS {
+		// File is empty and it's not the main dts.json — delete it
+		return os.Remove(filePath)
+	}
+
+	// Write back the remaining entries
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(remaining); err != nil {
+		return fmt.Errorf("marshal remaining: %w", err)
+	}
+	return os.WriteFile(filePath, buf.Bytes(), 0644)
 }
 
 // resolveIncludes replaces @include directives in s with the file contents.

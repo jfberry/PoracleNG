@@ -30,7 +30,7 @@ func TestLoadGeofenceFilePoracleFormat(t *testing.T) {
 	]`
 
 	path := writeTempFile(t, content, "poracle_*.json")
-	fences, err := LoadGeofenceFile(path)
+	fences, err := LoadGeofenceFile(path, "")
 	if err != nil {
 		t.Fatalf("LoadGeofenceFile failed: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestLoadGeofenceFilePorFormatExplicitFalse(t *testing.T) {
 	]`
 
 	path := writeTempFile(t, content, "poracle_false_*.json")
-	fences, err := LoadGeofenceFile(path)
+	fences, err := LoadGeofenceFile(path, "")
 	if err != nil {
 		t.Fatalf("LoadGeofenceFile failed: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestLoadGeofenceFileGeoJSON(t *testing.T) {
 	}`
 
 	path := writeTempFile(t, content, "geojson_*.json")
-	fences, err := LoadGeofenceFile(path)
+	fences, err := LoadGeofenceFile(path, "")
 	if err != nil {
 		t.Fatalf("LoadGeofenceFile failed: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestLoadGeofenceFileGeoJSONMultiPolygon(t *testing.T) {
 	}`
 
 	path := writeTempFile(t, content, "multipolygon_*.json")
-	fences, err := LoadGeofenceFile(path)
+	fences, err := LoadGeofenceFile(path, "")
 	if err != nil {
 		t.Fatalf("LoadGeofenceFile failed: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestLoadGeofenceFileGeoJSONProperties(t *testing.T) {
 	}`
 
 	path := writeTempFile(t, content, "props_*.json")
-	fences, err := LoadGeofenceFile(path)
+	fences, err := LoadGeofenceFile(path, "")
 	if err != nil {
 		t.Fatalf("LoadGeofenceFile failed: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestLoadGeofenceFileGeoJSONNoName(t *testing.T) {
 	}`
 
 	path := writeTempFile(t, content, "noname_*.json")
-	fences, err := LoadGeofenceFile(path)
+	fences, err := LoadGeofenceFile(path, "")
 	if err != nil {
 		t.Fatalf("LoadGeofenceFile failed: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestLoadGeofenceFileWithComments(t *testing.T) {
 	]`
 
 	path := writeTempFile(t, content, "comments_*.json")
-	fences, err := LoadGeofenceFile(path)
+	fences, err := LoadGeofenceFile(path, "")
 	if err != nil {
 		t.Fatalf("LoadGeofenceFile with comments failed: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestLoadGeofenceFileWithComments(t *testing.T) {
 }
 
 func TestLoadGeofenceFileNotFound(t *testing.T) {
-	_, err := LoadGeofenceFile("/nonexistent/file.json")
+	_, err := LoadGeofenceFile("/nonexistent/file.json", "")
 	if err == nil {
 		t.Error("Expected error for nonexistent file")
 	}
@@ -281,7 +281,7 @@ func TestLoadGeofenceFileNotFound(t *testing.T) {
 
 func TestLoadGeofenceFileInvalidJSON(t *testing.T) {
 	path := writeTempFile(t, "not valid json {{{", "invalid_*.json")
-	_, err := LoadGeofenceFile(path)
+	_, err := LoadGeofenceFile(path, "")
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
 	}
@@ -289,12 +289,12 @@ func TestLoadGeofenceFileInvalidJSON(t *testing.T) {
 
 // Test loading the real geofence.json file
 func TestLoadRealGeofenceFile(t *testing.T) {
-	realPath := "../../../../alerter/config/geofence.json"
+	realPath := "../../../../config/geofence.json"
 	if _, err := os.Stat(realPath); os.IsNotExist(err) {
 		t.Skip("Real geofence file not found, skipping")
 	}
 
-	fences, err := LoadGeofenceFile(realPath)
+	fences, err := LoadGeofenceFile(realPath, "")
 	if err != nil {
 		t.Fatalf("Failed to load real geofence: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestLoadAllGeofences(t *testing.T) {
 	file1 := writeTempFile(t, `[{"name": "A", "path": [[51,0],[52,0],[52,1],[51,1]]}]`, "fence1_*.json")
 	file2 := writeTempFile(t, `[{"name": "B", "path": [[40,0],[41,0],[41,1],[40,1]]}]`, "fence2_*.json")
 
-	si, fences, err := LoadAllGeofences([]string{file1, file2}, "")
+	si, fences, err := LoadAllGeofences([]string{file1, file2}, "", "")
 	if err != nil {
 		t.Fatalf("LoadAllGeofences failed: %v", err)
 	}
@@ -418,7 +418,7 @@ func TestLoadAllGeofences(t *testing.T) {
 }
 
 func TestLoadAllGeofencesFileNotFound(t *testing.T) {
-	_, _, err := LoadAllGeofences([]string{"/nonexistent.json"}, "")
+	_, _, err := LoadAllGeofences([]string{"/nonexistent.json"}, "", "")
 	if err == nil {
 		t.Error("Expected error for nonexistent file")
 	}

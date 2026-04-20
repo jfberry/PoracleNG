@@ -1,0 +1,52 @@
+{
+    "style": "klokantech-basic",
+    "latitude": {{ if isEditLocation }} {{ map_latitude }} {{ else }} {{ latitude }} {{ end }},
+    "longitude": {{ if isEditLocation }} {{ map_longitude }} {{ else }} {{ longitude }} {{ end }},
+    "zoom": {{ if zoom != nil && isEditLocation }} {{ zoom }} {{ else }} 17.5 {{ end }},
+    "width": 1000,
+    "height": 500,
+    "scale": 1,
+    "markers": [
+    {{ if isEditLocation }}
+            {
+                {{ if fortType == "pokestop" }}
+                    "url": "https://github.com/ccev/stopwatcher-icons/raw/master/tileserver/stop_gray.png",
+                {{ else }}
+                    "url": "https://github.com/ccev/stopwatcher-icons/raw/master/tileserver/gym_gray.png",
+                {{ end }}
+                "latitude": {{ oldLatitude }},
+                "longitude": {{ oldLongitude }},
+                "width": 48,
+                "height": 48,
+                "y_offset": -24
+            },
+    {{ else if nearbyStops != nil }}
+        {{ range i, stop := nearbyStops }}
+        {
+            {{ if stop.type == "gym" }}
+                "url": "https://raw.githubusercontent.com/ccev/stopwatcher-icons/master/tileserver/gym_gray.png",
+            {{ else }}
+                "url": "https://raw.githubusercontent.com/ccev/stopwatcher-icons/master/tileserver/stop_gray.png",
+            {{ end }}
+            "latitude": {{ stop.latitude }},
+            "longitude": {{ stop.longitude }},
+            "width": 48,
+            "height": 48,
+            "y_offset": -24
+        },
+        {{ end }}
+    {{ end }}
+        {
+            {{ if fortType == "pokestop" }}
+                "url": "https://github.com/ccev/stopwatcher-icons/raw/master/tileserver/stop_normal.png",
+            {{ else }}
+                "url": "https://github.com/ccev/stopwatcher-icons/raw/master/tileserver/gym_normal.png",
+            {{ end }}
+            "latitude": {{ latitude }},
+            "longitude": {{ longitude }},
+            "width": 64,
+            "height": 64,
+            "y_offset": -32
+        }
+    ]
+}

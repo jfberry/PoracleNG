@@ -12,6 +12,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
+	if ps.cfg.General.DisableInvasion {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():
@@ -87,7 +91,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.invasionMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("invasion").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("invasion").Inc()
@@ -99,7 +103,8 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			l.Infof("Invasion grunt %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				gruntType, inv.Name, inv.Latitude, inv.Longitude, areaNames(matchedAreas), len(matched))
 
-			baseEnrichment, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0)
+			mode := ps.tileMode("invasion", matched)
+			baseEnrichment, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any

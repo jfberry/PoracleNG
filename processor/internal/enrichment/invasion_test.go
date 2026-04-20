@@ -69,7 +69,7 @@ func TestInvasionBaseGruntTypeColorAndEmoji(t *testing.T) {
 	}
 
 	e := newInvasionEnricher(t, gd, newTestBundle())
-	m, _ := e.Invasion(52.52, 13.40, 0, "stop1", 44, 0, 0)
+	m, _ := e.Invasion(52.52, 13.40, 0, "stop1", 44, 0, 0, TileModeURL)
 
 	if m["gruntTypeColor"] != "6AAD38" {
 		t.Errorf("gruntTypeColor = %q, want %q", m["gruntTypeColor"], "6AAD38")
@@ -100,7 +100,7 @@ func TestInvasionBaseEventInvasion(t *testing.T) {
 	}
 
 	e := newInvasionEnricher(t, gd, newTestBundle())
-	m, _ := e.Invasion(52.52, 13.40, 0, "stop2", 0, 7, 0)
+	m, _ := e.Invasion(52.52, 13.40, 0, "stop2", 0, 7, 0, TileModeURL)
 
 	if m["gruntTypeColor"] != "AABBCC" {
 		t.Errorf("gruntTypeColor = %q, want %q", m["gruntTypeColor"], "AABBCC")

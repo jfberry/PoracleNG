@@ -6,28 +6,30 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // HandleGetMonster returns the GET /api/tracking/pokemon/{id} handler.
-func HandleGetMonster(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleGetMonster(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		monsters, err := db.SelectMonstersByIDProfile(deps.DB, human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: get monsters: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -46,29 +48,57 @@ func HandleGetMonster(deps *TrackingDeps) http.HandlerFunc {
 			}
 		}
 
-		trackingJSONOK(w, map[string]any{"pokemon": result})
+		trackingJSONOK(c, map[string]any{"pokemon": result})
 	}
 }
 
 // HandleDeleteMonster returns the DELETE /api/tracking/pokemon/{id}/byUid/{uid} handler.
-func HandleDeleteMonster(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		uidStr := r.PathValue("uid")
+func HandleDeleteMonster(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		uidStr := c.Param("uid")
 		uid, err := strconv.ParseInt(uidStr, 10, 64)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid uid")
+			trackingJSONError(c, http.StatusBadRequest, "invalid uid")
 			return
 		}
 
+		human, profileNo, err := lookupHuman(deps, c)
+		if err != nil || human == nil {
+			if err := db.DeleteByUID(deps.DB, "monsters", id, uid); err != nil {
+				log.Errorf("Tracking API: delete monster: %s", err)
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
+				return
+			}
+			reloadState(deps)
+			trackingJSONOK(c, nil)
+			return
+		}
+
+		existing, _ := db.SelectMonstersByIDProfile(deps.DB, human.ID, profileNo)
+
 		if err := db.DeleteByUID(deps.DB, "monsters", id, uid); err != nil {
 			log.Errorf("Tracking API: delete monster: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		tr := translatorFor(deps, human)
+		language := resolveLanguage(deps, human)
+		silent := isSilent(c)
+		var message string
+		for _, e := range existing {
+			if e.UID == uid {
+				message = tr.T("tracking.removed_prefix") + deps.RowText.MonsterRowText(tr, toMonsterTracking(&e))
+				break
+			}
+		}
+		if !silent && message != "" {
+			sendConfirmation(deps, human, message, language)
+		}
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -112,38 +142,38 @@ type monsterInsertRequest struct {
 // HandleCreateMonster returns the POST /api/tracking/pokemon/{id} handler.
 // The JS handler splits rows by uid presence: rows with uid are updates, without are inserts.
 // Then it diffs inserts against existing rows to find duplicates and auto-updates.
-func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		language := resolveLanguage(deps, human)
 		tr := translatorFor(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var insertReqs []monsterInsertRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &insertReqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single monsterInsertRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			insertReqs = []monsterInsertRequest{single}
@@ -208,7 +238,7 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 				MaxSTA:           req.MaxSTA.intValue(15),
 				Gender:           req.Gender.intValue(0),
 				Form:             req.Form.intValue(0),
-				Clean:            db.IntBool(req.Clean.intValue(0) != 0),
+				Clean:            req.Clean.intValue(0),
 				MinWeight:        req.MinWeight.intValue(0),
 				MaxWeight:        req.MaxWeight.intValue(9000000),
 				MinTime:          req.MinTime.intValue(0),
@@ -237,7 +267,7 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 		for _, req := range insertReqs {
 			row, err := cleanRow(req)
 			if err != nil {
-				trackingJSONError(w, http.StatusBadRequest, err.Error())
+				trackingJSONError(c, http.StatusBadRequest, err.Error())
 				return
 			}
 			if req.UID.isSet() {
@@ -248,52 +278,28 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 		}
 
 		// Fetch existing for diff (only for new inserts)
-		tracked, err := db.SelectMonstersByIDProfile(deps.DB, human.ID, profileNo)
+		tracked, err := deps.Tracking.Monsters.SelectByIDProfile(human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: select existing monsters: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		var alreadyPresent []db.MonsterTrackingAPI
+		diff := store.DiffAndClassify(tracked, insert, store.MonsterGetUID, store.MonsterSetUID)
 
-		// Monster JS: filters by pokemon_id before diff, but uses generic diff with no match keys.
-		// Since MonsterTrackingAPI has no diff:"match" fields, diffTracking will compare all
-		// non-skipped fields. We pre-filter by pokemon_id to match the JS behavior.
-		for i := len(insert) - 1; i >= 0; i-- {
-			for _, existing := range tracked {
-				if existing.PokemonID != insert[i].PokemonID {
-					continue
-				}
-				noMatch, isDup, uid, isUpd := diffTracking(&existing, &insert[i])
-				if noMatch {
-					continue
-				}
-				if isDup {
-					alreadyPresent = append(alreadyPresent, insert[i])
-					insert = append(insert[:i], insert[i+1:]...)
-					break
-				}
-				if isUpd {
-					update := insert[i]
-					update.UID = uid
-					updates = append(updates, update)
-					insert = append(insert[:i], insert[i+1:]...)
-					break
-				}
-			}
-		}
+		// Merge: diff-classified updates go into the explicit updates slice
+		updates = append(updates, diff.Updates...)
 
 		// Build confirmation message
 		var message string
-		totalChanges := len(alreadyPresent) + len(updates) + len(insert)
+		totalChanges := len(diff.AlreadyPresent) + len(updates) + len(diff.Inserts)
 		if totalChanges > 50 {
 			message = tr.Tf("tracking.bulk_changes",
 				deps.Config.Discord.Prefix, tr.T("tracking.tracked"))
 		} else {
 			var sb strings.Builder
-			for i := range alreadyPresent {
-				mt := toMonsterTracking(&alreadyPresent[i])
+			for i := range diff.AlreadyPresent {
+				mt := toMonsterTracking(&diff.AlreadyPresent[i])
 				sb.WriteString(tr.T("tracking.unchanged"))
 				sb.WriteString(deps.RowText.MonsterRowText(tr, mt))
 				sb.WriteByte('\n')
@@ -304,8 +310,8 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 				sb.WriteString(deps.RowText.MonsterRowText(tr, mt))
 				sb.WriteByte('\n')
 			}
-			for i := range insert {
-				mt := toMonsterTracking(&insert[i])
+			for i := range diff.Inserts {
+				mt := toMonsterTracking(&diff.Inserts[i])
 				sb.WriteString(tr.T("tracking.new"))
 				sb.WriteString(deps.RowText.MonsterRowText(tr, mt))
 				sb.WriteByte('\n')
@@ -316,11 +322,11 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 		// JS monster: inserts new rows, then updates existing by uid
 		var newUIDs []int64
 
-		for i := range insert {
-			uid, err := db.InsertMonster(deps.DB, &insert[i])
+		for i := range diff.Inserts {
+			uid, err := deps.Tracking.Monsters.Insert(&diff.Inserts[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert monster: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -329,7 +335,7 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 		for i := range updates {
 			if err := db.UpdateMonsterByUID(deps.DB, &updates[i]); err != nil {
 				log.Errorf("Tracking API: update monster: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, updates[i].UID)
@@ -346,12 +352,12 @@ func HandleCreateMonster(deps *TrackingDeps) http.HandlerFunc {
 			responseMsg = ""
 		}
 
-		trackingJSONOK(w, map[string]any{
+		trackingJSONOK(c, map[string]any{
 			"message":        responseMsg,
 			"newUids":        newUIDs,
-			"alreadyPresent": len(alreadyPresent),
+			"alreadyPresent": len(diff.AlreadyPresent),
 			"updates":        len(updates),
-			"insert":         len(insert),
+			"insert":         len(diff.Inserts),
 		})
 	}
 }
@@ -364,39 +370,68 @@ type errMsg string
 func (e errMsg) Error() string { return string(e) }
 
 // HandleBulkDeleteMonster returns the POST /api/tracking/pokemon/{id}/delete handler.
-func HandleBulkDeleteMonster(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleBulkDeleteMonster(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var uids []int64
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &uids); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single int64
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			uids = []int64{single}
 		}
 
+		human, profileNo, err := lookupHuman(deps, c)
+		var existing []db.MonsterTrackingAPI
+		if err == nil && human != nil {
+			existing, _ = db.SelectMonstersByIDProfile(deps.DB, human.ID, profileNo)
+		}
+
 		if err := db.DeleteByUIDs(deps.DB, "monsters", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete monsters: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		var message string
+		if human != nil && len(existing) > 0 {
+			tr := translatorFor(deps, human)
+			language := resolveLanguage(deps, human)
+			silent := isSilent(c)
+			uidSet := make(map[int64]bool, len(uids))
+			for _, u := range uids {
+				uidSet[u] = true
+			}
+			var sb strings.Builder
+			for _, e := range existing {
+				if uidSet[e.UID] {
+					sb.WriteString(tr.T("tracking.removed_prefix"))
+					sb.WriteString(deps.RowText.MonsterRowText(tr, toMonsterTracking(&e)))
+					sb.WriteByte('\n')
+				}
+			}
+			message = sb.String()
+			if !silent && message != "" {
+				sendConfirmation(deps, human, message, language)
+			}
+		}
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -406,7 +441,7 @@ func toMonsterTracking(api *db.MonsterTrackingAPI) *db.MonsterTracking {
 		ID:               api.ID,
 		ProfileNo:        api.ProfileNo,
 		Ping:             api.Ping,
-		Clean:            bool(api.Clean),
+		Clean:            api.Clean,
 		Distance:         api.Distance,
 		Template:         api.Template,
 		PokemonID:        api.PokemonID,

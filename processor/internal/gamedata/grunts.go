@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -11,14 +12,14 @@ import (
 // Grunt represents a Team Rocket grunt type parsed from the classic.json format.
 type Grunt struct {
 	ID         int
-	Template   string              // e.g. "CHARACTER_GRASS_GRUNT_MALE"
-	Gender     int                 // 1=male, 2=female
-	Boss       bool                // true for leaders (Giovanni, executives)
-	TypeID     int                 // pokemon type ID (12=Grass, 7=Bug, etc.) — 0 if untyped
-	Active     bool                // whether this grunt type is currently active
+	Template   string                   // e.g. "CHARACTER_GRASS_GRUNT_MALE"
+	Gender     int                      // 1=male, 2=female
+	Boss       bool                     // true for leaders (Giovanni, executives)
+	TypeID     int                      // pokemon type ID (12=Grass, 7=Bug, etc.) — 0 if untyped
+	Active     bool                     // whether this grunt type is currently active
 	Team       [3][]GruntEncounterEntry // team[0]=slot 1, [1]=slot 2, [2]=slot 3
-	Rewards    []int               // reward-eligible slot indices (e.g. [0,1,2])
-	CategoryID int                 // derived: character_category_{id} translation key
+	Rewards    []int                    // reward-eligible slot indices (e.g. [0,1,2])
+	CategoryID int                      // derived: character_category_{id} translation key
 }
 
 // GruntEncounterEntry holds a pokemon in a grunt encounter slot.
@@ -29,12 +30,7 @@ type GruntEncounterEntry struct {
 
 // HasRewardSlot returns true if the given slot index is reward-eligible.
 func (g *Grunt) HasRewardSlot(slot int) bool {
-	for _, r := range g.Rewards {
-		if r == slot {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(g.Rewards, slot)
 }
 
 // CategoryKey returns the i18n translation key for the grunt category.
@@ -54,11 +50,15 @@ func (g *Grunt) TypeKey() string {
 // TypeNameFromTemplate extracts the grunt type name from the character template string.
 // Used as a fallback when TypeID is 0 (Metal, Darkness, Mixed grunts).
 // Returns lowercased name matching what the !invasion command stores in the DB.
+//
+// Pokemon GO uses "Metal" internally for what players know as the Steel type,
+// so we normalise METAL → "steel" — this lets users track Metal grunts using
+// !invasion steel (matching PoracleJS behaviour).
 func TypeNameFromTemplate(template string) string {
 	// Special cases that don't have a standard pokemon type ID
 	switch {
 	case strings.Contains(template, "METAL"):
-		return "metal"
+		return "steel"
 	case strings.Contains(template, "DARKNESS"):
 		return "darkness"
 	case strings.Contains(template, "GRUNTB"):

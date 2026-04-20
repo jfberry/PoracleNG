@@ -6,29 +6,31 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // HandleGetEgg returns the GET /api/tracking/egg/{id} handler.
-func HandleGetEgg(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleGetEgg(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		eggs, err := db.SelectEggsByIDProfile(deps.DB, human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: get eggs: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -47,29 +49,61 @@ func HandleGetEgg(deps *TrackingDeps) http.HandlerFunc {
 			}
 		}
 
-		trackingJSONOK(w, map[string]any{"egg": result})
+		trackingJSONOK(c, map[string]any{"egg": result})
 	}
 }
 
 // HandleDeleteEgg returns the DELETE /api/tracking/egg/{id}/byUid/{uid} handler.
-func HandleDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		uidStr := r.PathValue("uid")
+func HandleDeleteEgg(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		uidStr := c.Param("uid")
 		uid, err := strconv.ParseInt(uidStr, 10, 64)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid uid")
+			trackingJSONError(c, http.StatusBadRequest, "invalid uid")
 			return
 		}
 
+		// Look up human + existing rows for row text
+		human, profileNo, err := lookupHuman(deps, c)
+		if err != nil || human == nil {
+			// Fall back to simple delete without row text
+			if err := db.DeleteByUID(deps.DB, "egg", id, uid); err != nil {
+				log.Errorf("Tracking API: delete egg: %s", err)
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
+				return
+			}
+			reloadState(deps)
+			trackingJSONOK(c, nil)
+			return
+		}
+
+		// Select existing to find the row being deleted (for description)
+		existing, _ := db.SelectEggsByIDProfile(deps.DB, human.ID, profileNo)
+
 		if err := db.DeleteByUID(deps.DB, "egg", id, uid); err != nil {
 			log.Errorf("Tracking API: delete egg: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		// Generate removed row text
+		tr := translatorFor(deps, human)
+		language := resolveLanguage(deps, human)
+		silent := isSilent(c)
+		var message string
+		for _, e := range existing {
+			if e.UID == uid {
+				message = tr.T("tracking.removed_prefix") + deps.RowText.EggRowText(tr, toEggTracking(&e))
+				break
+			}
+		}
+		if !silent && message != "" {
+			sendConfirmation(deps, human, message, language)
+		}
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -86,38 +120,38 @@ type eggInsertRequest struct {
 }
 
 // HandleCreateEgg returns the POST /api/tracking/egg/{id} handler.
-func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		language := resolveLanguage(deps, human)
 		tr := translatorFor(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var insertReqs []eggInsertRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &insertReqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single eggInsertRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			insertReqs = []eggInsertRequest{single}
@@ -151,7 +185,7 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 				team = 4
 			}
 
-			clean := db.IntBool(req.Clean.intValue(0) != 0)
+			clean := req.Clean.intValue(0)
 			exclusive := db.IntBool(req.Exclusive.intValue(0) != 0)
 
 			var gymID null.String
@@ -168,7 +202,7 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 			levels := parseLevelArray(req.Level)
 			for _, lvl := range levels {
 				if lvl < 1 {
-					trackingJSONError(w, http.StatusBadRequest, "Invalid level")
+					trackingJSONError(c, http.StatusBadRequest, "Invalid level")
 					return
 				}
 
@@ -188,87 +222,69 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 			}
 		}
 
-		tracked, err := db.SelectEggsByIDProfile(deps.DB, human.ID, profileNo)
+		tracked, err := deps.Tracking.Eggs.SelectByIDProfile(human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: select existing eggs: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		var updates []db.EggTrackingAPI
-		var alreadyPresent []db.EggTrackingAPI
+		diff := store.DiffAndClassify(tracked, insert, store.EggGetUID, store.EggSetUID)
 
-		for i := len(insert) - 1; i >= 0; i-- {
-			for _, existing := range tracked {
-				noMatch, isDup, uid, isUpd := diffTracking(&existing, &insert[i])
-				if noMatch {
-					continue
-				}
-				if isDup {
-					alreadyPresent = append(alreadyPresent, insert[i])
-					insert = append(insert[:i], insert[i+1:]...)
-					break
-				}
-				if isUpd {
-					update := insert[i]
-					update.UID = uid
-					updates = append(updates, update)
-					insert = append(insert[:i], insert[i+1:]...)
-					break
-				}
-			}
-		}
-
+		// Build confirmation message before applying changes
 		var message string
-		totalChanges := len(alreadyPresent) + len(updates) + len(insert)
+		totalChanges := len(diff.AlreadyPresent) + len(diff.Updates) + len(diff.Inserts)
 		if totalChanges > 50 {
 			message = tr.Tf("tracking.bulk_changes",
 				deps.Config.Discord.Prefix, tr.T("tracking.tracked"))
 		} else {
 			var sb strings.Builder
-			for i := range alreadyPresent {
-				et := toEggTracking(&alreadyPresent[i])
+			for i := range diff.AlreadyPresent {
 				sb.WriteString(tr.T("tracking.unchanged"))
-				sb.WriteString(deps.RowText.EggRowText(tr, et))
+				sb.WriteString(deps.RowText.EggRowText(tr, toEggTracking(&diff.AlreadyPresent[i])))
 				sb.WriteByte('\n')
 			}
-			for i := range updates {
-				et := toEggTracking(&updates[i])
+			for i := range diff.Updates {
 				sb.WriteString(tr.T("tracking.updated"))
-				sb.WriteString(deps.RowText.EggRowText(tr, et))
+				sb.WriteString(deps.RowText.EggRowText(tr, toEggTracking(&diff.Updates[i])))
 				sb.WriteByte('\n')
 			}
-			for i := range insert {
-				et := toEggTracking(&insert[i])
+			for i := range diff.Inserts {
 				sb.WriteString(tr.T("tracking.new"))
-				sb.WriteString(deps.RowText.EggRowText(tr, et))
+				sb.WriteString(deps.RowText.EggRowText(tr, toEggTracking(&diff.Inserts[i])))
 				sb.WriteByte('\n')
 			}
 			message = sb.String()
 		}
 
-		if len(updates) > 0 {
-			uids := make([]int64, len(updates))
-			for i, u := range updates {
-				uids[i] = u.UID
+		// Apply: delete updated UIDs, insert new + updated
+		if len(diff.Updates) > 0 {
+			uids := make([]int64, len(diff.Updates))
+			for i := range diff.Updates {
+				uids[i] = diff.Updates[i].UID
 			}
-			if err := db.DeleteByUIDs(deps.DB, "egg", human.ID, uids); err != nil {
+			if err := deps.Tracking.Eggs.DeleteByUIDs(human.ID, uids); err != nil {
 				log.Errorf("Tracking API: delete updated eggs: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 		}
 
-		toInsert := make([]db.EggTrackingAPI, 0, len(insert)+len(updates))
-		toInsert = append(toInsert, insert...)
-		toInsert = append(toInsert, updates...)
-
 		var newUIDs []int64
-		for i := range toInsert {
-			uid, err := db.InsertEgg(deps.DB, &toInsert[i])
+		for i := range diff.Inserts {
+			uid, err := deps.Tracking.Eggs.Insert(&diff.Inserts[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert egg: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
+				return
+			}
+			newUIDs = append(newUIDs, uid)
+		}
+		for i := range diff.Updates {
+			uid, err := deps.Tracking.Eggs.Insert(&diff.Updates[i])
+			if err != nil {
+				log.Errorf("Tracking API: insert egg: %s", err)
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -285,50 +301,81 @@ func HandleCreateEgg(deps *TrackingDeps) http.HandlerFunc {
 			responseMsg = ""
 		}
 
-		trackingJSONOK(w, map[string]any{
+		trackingJSONOK(c, map[string]any{
 			"message":        responseMsg,
 			"newUids":        newUIDs,
-			"alreadyPresent": len(alreadyPresent),
-			"updates":        len(updates),
-			"insert":         len(insert),
+			"alreadyPresent": len(diff.AlreadyPresent),
+			"updates":        len(diff.Updates),
+			"insert":         len(diff.Inserts),
 		})
 	}
 }
 
 // HandleBulkDeleteEgg returns the POST /api/tracking/egg/{id}/delete handler.
-func HandleBulkDeleteEgg(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleBulkDeleteEgg(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var uids []int64
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &uids); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single int64
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			uids = []int64{single}
 		}
 
+		// Look up human + existing rows for row text
+		human, profileNo, err := lookupHuman(deps, c)
+		var existing []db.EggTrackingAPI
+		if err == nil && human != nil {
+			existing, _ = db.SelectEggsByIDProfile(deps.DB, human.ID, profileNo)
+		}
+
 		if err := db.DeleteByUIDs(deps.DB, "egg", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete eggs: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		// Generate removed row text
+		var message string
+		if human != nil && len(existing) > 0 {
+			tr := translatorFor(deps, human)
+			language := resolveLanguage(deps, human)
+			silent := isSilent(c)
+			uidSet := make(map[int64]bool, len(uids))
+			for _, u := range uids {
+				uidSet[u] = true
+			}
+			var sb strings.Builder
+			for _, e := range existing {
+				if uidSet[e.UID] {
+					sb.WriteString(tr.T("tracking.removed_prefix"))
+					sb.WriteString(deps.RowText.EggRowText(tr, toEggTracking(&e)))
+					sb.WriteByte('\n')
+				}
+			}
+			message = sb.String()
+			if !silent && message != "" {
+				sendConfirmation(deps, human, message, language)
+			}
+		}
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -338,7 +385,7 @@ func toEggTracking(api *db.EggTrackingAPI) *db.EggTracking {
 		ID:          api.ID,
 		ProfileNo:   api.ProfileNo,
 		Ping:        api.Ping,
-		Clean:       bool(api.Clean),
+		Clean:       api.Clean,
 		Distance:    api.Distance,
 		Template:    api.Template,
 		Team:        api.Team,

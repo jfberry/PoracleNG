@@ -28,9 +28,12 @@ files:
     languages_mapping:
       locale:
         de: "de"
+        es-ES: "es"
         fr: "fr"
         it: "it"
         "no": "nb-no"
         pl: "pl"
         ru: "ru"
-        sv-SE: "se"
+        sv-SE: "sv"
+        zh-CN: "zh-cn"
+        ja: "ja"

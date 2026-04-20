@@ -3,6 +3,7 @@ package logging
 import (
 	"fmt"
 	"io"
+	stdlog "log"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -52,6 +53,12 @@ func Setup(cfg Config) {
 	log.SetFormatter(logFormatter)
 	log.SetLevel(logLevel)
 	log.SetOutput(output)
+
+	// Redirect Go's standard log package (used by third-party libraries like
+	// go-telegram-bot-api) through logrus so their output goes to our log file
+	// and uses our formatter.
+	stdlog.SetOutput(log.StandardLogger().Writer())
+	stdlog.SetFlags(0) // logrus handles timestamps
 }
 
 // RotateLogs triggers a log file rotation.

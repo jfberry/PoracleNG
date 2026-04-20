@@ -1,0 +1,38 @@
+{
+  "style": "klokantech-basic",
+  "latitude": {{ map_latitude }},
+  "longitude": {{ map_longitude }},
+  "zoom": {{ zoom }},
+  "width": 500,
+  "height": 250,
+  "scale": 1,
+  {{ if isset(poly_path) }}
+  "polygons": [
+    {{ range i, polygon := poly_path }}
+    {{ if i != 0 }},{{ end }}
+    {
+      "fill_color": "rgba(46,204,113,0.3)",
+      "stroke_color": "rgba(46,204,113)",
+      "stroke_width": 2,
+      "path":
+      [
+        {{ range i, coord := polygon }}
+        {{ if i != 0 }},{{ end }}[{{ index(coord, 0) }}, {{ index(coord, 1) }}]
+        {{ end }}
+      ]
+    }
+    {{ end }}
+    ],
+  {{ end }}
+
+  "markers": [
+  {
+    "url": "{{ imgUrl }}",
+    "fallback_url": "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/mon.png",
+    "latitude": {{ latitude }},
+    "longitude": {{ longitude }},
+    "width": 30,
+    "height": 30
+  }
+  ]
+}

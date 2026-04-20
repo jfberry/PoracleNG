@@ -1,0 +1,42 @@
+[{
+  "id": "maxbattle",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!maxbattle",
+      "description": "Alerts for Dynamax and Gigantamax raids at PokeStops / Power Spots.",
+      "fields": [
+        {
+          "name": "By pokemon",
+          "value": "`{{prefix}}maxbattle charizard`\n`{{prefix}}maxbattle kingler snorlax d:1500`"
+        },
+        {
+          "name": "By level",
+          "value": "`{{prefix}}maxbattle level:3` — level 3 dynamax raids\n`{{prefix}}maxbattle level:4-5` — high-tier\n`{{prefix}}maxbattle gmax` — Gigantamax only (alias for level:7)"
+        },
+        {
+          "name": "Move filter",
+          "value": "`move:mud_slap` — only if the boss has this move (underscores for multi-word names)"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:1500`\n`area:city_centre`"
+        },
+        {
+          "name": "Message flags",
+          "value": "`clean` — auto-delete when the battle ends\n`edit` — single message edited in place\n`ping`"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}maxbattle remove charizard`\n`{{prefix}}maxbattle remove level:3`\n`{{prefix}}maxbattle remove everything`\n`{{prefix}}untrack id:<N>`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

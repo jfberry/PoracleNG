@@ -1,0 +1,34 @@
+[{
+  "id": "location",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!location",
+      "description": "Set your location — the point that distance filters (`d:<metres>`) measure from.",
+      "fields": [
+        {
+          "name": "By coordinates",
+          "value": "`{{prefix}}location 51.5074,-0.1278` — lat,lon"
+        },
+        {
+          "name": "By address",
+          "value": "`{{prefix}}location 10 Downing Street, London`\n\nRequires the operator to have configured a geocoder (Nominatim / Photon / Google)."
+        },
+        {
+          "name": "By area name",
+          "value": "`{{prefix}}location north_london` — if there's an area with that name, location is set to that area's centre point"
+        },
+        {
+          "name": "Clear",
+          "value": "`{{prefix}}location` (with no argument) — removes your location. Any tracking rule with `d:<metres>` will stop firing until you set it again."
+        },
+        {
+          "name": "Related",
+          "value": "`{{prefix}}area` — set areas for area-based tracking (no distance required)"
+        }
+      ]
+    }
+  }
+}]

@@ -554,6 +554,147 @@ func TestPokemonMatchPVPEvolutionDirect(t *testing.T) {
 	}
 }
 
+// Test from real webhook: Eevee (133) spawns with PVP evolution data showing
+// Sylveon (700) rank 512 in great league. User tracks Sylveon (700) with PVP great league.
+// This should match via PVP evolution direct tracking.
+func TestPokemonMatchPVPEvolutionDirectEevee(t *testing.T) {
+	human := makeHuman("user1")
+
+	// User tracks Sylveon (700) in great league PVP
+	monster := &db.MonsterTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 700, Form: 0,
+		MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9999,
+		MinLevel: 0, MaxLevel: 55, ATK: 0, DEF: 0, STA: 0,
+		MaxATK: 15, MaxDEF: 15, MaxSTA: 15, Gender: 0,
+		MinWeight: 0, MaxWeight: 99999999, Rarity: -1, MaxRarity: 6,
+		Size: -1, MaxSize: 5, Template: "1",
+		PVPRankingLeague: 1500, PVPRankingBest: 1, PVPRankingWorst: 1000,
+		PVPRankingMinCP: 0, PVPRankingCap: 0,
+	}
+
+	st := makeTestState([]*db.MonsterTracking{monster}, map[string]*db.Human{"user1": human})
+	matcher := &PokemonMatcher{PVPQueryMaxRank: 4096, PVPEvolutionDirectTracking: true}
+
+	// Real Eevee webhook: pokemon_id=133, form=1092
+	// PVP great league has evolution entry: pokemon=700 (Sylveon), form=3062, rank=512, cp=1496
+	pokemon := &ProcessedPokemon{
+		PokemonID: 133, Form: 1092, IV: 44.4, CP: 125, Level: 5,
+		ATK: 5, DEF: 9, STA: 6, Weight: 9.308, Size: 3, RarityGroup: 1,
+		TTHSeconds: 1580, Latitude: 51.0, Longitude: 0.0, Encountered: true,
+		PVPBestRank: map[int][]pvp.LeagueRank{
+			1500: {{Rank: 2538, CP: 1052, Caps: []int{50}}},
+		},
+		PVPEvoData: map[int]map[int][]pvp.LeagueRank{
+			134: {1500: {{Rank: 1498, CP: 1479, Caps: []int{50}}}},
+			135: {1500: {{Rank: 1780, CP: 1481, Caps: []int{50}}}},
+			136: {1500: {{Rank: 1602, CP: 1477, Caps: []int{50}}}},
+			196: {1500: {{Rank: 2891, CP: 1464, Caps: []int{50}}}},
+			197: {1500: {{Rank: 1474, CP: 1484, Caps: []int{50}}}},
+			470: {1500: {{Rank: 2447, CP: 1470, Caps: []int{50}}}},
+			471: {1500: {{Rank: 1541, CP: 1484, Caps: []int{50}}}},
+			700: {1500: {{Rank: 512, CP: 1496, Caps: []int{50}}}},
+		},
+	}
+
+	matched := matcher.Match(pokemon, st)
+	if len(matched) != 1 {
+		t.Fatalf("Expected 1 PVP evolution match for Sylveon via Eevee, got %d", len(matched))
+	}
+	if matched[0].PokemonID != 700 {
+		t.Errorf("Expected matched PokemonID 700 (Sylveon), got %d", matched[0].PokemonID)
+	}
+
+	// With evolution direct tracking disabled, should not match
+	matcher2 := &PokemonMatcher{PVPQueryMaxRank: 4096, PVPEvolutionDirectTracking: false}
+	matched2 := matcher2.Match(pokemon, st)
+	if len(matched2) != 0 {
+		t.Errorf("Expected 0 matches with evo direct tracking disabled, got %d", len(matched2))
+	}
+
+	// Track Umbreon (197) ultra league — Eevee also has ultra evo data for it
+	monsterUmbreon := &db.MonsterTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 197, Form: 0,
+		MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9999,
+		MinLevel: 0, MaxLevel: 55, ATK: 0, DEF: 0, STA: 0,
+		MaxATK: 15, MaxDEF: 15, MaxSTA: 15, Gender: 0,
+		MinWeight: 0, MaxWeight: 99999999, Rarity: -1, MaxRarity: 6,
+		Size: -1, MaxSize: 5, Template: "1",
+		PVPRankingLeague: 2500, PVPRankingBest: 1, PVPRankingWorst: 4096,
+		PVPRankingMinCP: 0, PVPRankingCap: 0,
+	}
+
+	st2 := makeTestState([]*db.MonsterTracking{monsterUmbreon}, map[string]*db.Human{"user1": human})
+
+	// Add ultra league evo data for Umbreon
+	pokemon.PVPEvoData[197][2500] = []pvp.LeagueRank{{Rank: 2688, CP: 2174, Caps: nil}}
+
+	matched3 := matcher.Match(pokemon, st2)
+	if len(matched3) != 1 {
+		t.Fatalf("Expected 1 PVP evolution match for Umbreon via Eevee in ultra, got %d", len(matched3))
+	}
+	if matched3[0].PokemonID != 197 {
+		t.Errorf("Expected matched PokemonID 197 (Umbreon), got %d", matched3[0].PokemonID)
+	}
+}
+
+// Test that PVP evolution matching uses the evolution's form (from PVP data)
+// not the spawned pokemon's form. A user tracking Sylveon form:3062 should
+// match an Eevee spawn that has PVP data showing Sylveon form 3062.
+func TestPokemonMatchPVPEvolutionFormCheck(t *testing.T) {
+	human := makeHuman("user1")
+
+	// Track Sylveon (700) with specific form 3062
+	monster := &db.MonsterTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 700, Form: 3062,
+		MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9999,
+		MinLevel: 0, MaxLevel: 55, ATK: 0, DEF: 0, STA: 0,
+		MaxATK: 15, MaxDEF: 15, MaxSTA: 15, Gender: 0,
+		MinWeight: 0, MaxWeight: 99999999, Rarity: -1, MaxRarity: 6,
+		Size: -1, MaxSize: 5, Template: "1",
+		PVPRankingLeague: 1500, PVPRankingBest: 1, PVPRankingWorst: 1000,
+		PVPRankingMinCP: 0, PVPRankingCap: 0,
+	}
+
+	st := makeTestState([]*db.MonsterTracking{monster}, map[string]*db.Human{"user1": human})
+	matcher := &PokemonMatcher{PVPQueryMaxRank: 4096, PVPEvolutionDirectTracking: true}
+
+	// Eevee (133, form 1092) with PVP evo data: Sylveon form 3062 rank 512
+	pokemon := &ProcessedPokemon{
+		PokemonID: 133, Form: 1092, IV: 44.4, CP: 125, Level: 5,
+		ATK: 5, DEF: 9, STA: 6, Weight: 9.308, Size: 3, RarityGroup: 1,
+		TTHSeconds: 1580, Latitude: 51.0, Longitude: 0.0, Encountered: true,
+		PVPBestRank: map[int][]pvp.LeagueRank{
+			1500: {{Rank: 2538, CP: 1052, Caps: []int{50}}},
+		},
+		PVPEvoData: map[int]map[int][]pvp.LeagueRank{
+			700: {1500: {{Rank: 512, CP: 1496, Caps: []int{50}, Form: 3062}}},
+		},
+	}
+
+	// Should match: PVP evo form 3062 matches tracking form 3062
+	matched := matcher.Match(pokemon, st)
+	if len(matched) != 1 {
+		t.Fatalf("Expected 1 match for Sylveon form:3062 via Eevee PVP evo, got %d", len(matched))
+	}
+
+	// Track Sylveon with wrong form — should NOT match
+	monsterWrongForm := &db.MonsterTracking{
+		ID: "user1", ProfileNo: 1, PokemonID: 700, Form: 9999,
+		MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9999,
+		MinLevel: 0, MaxLevel: 55, ATK: 0, DEF: 0, STA: 0,
+		MaxATK: 15, MaxDEF: 15, MaxSTA: 15, Gender: 0,
+		MinWeight: 0, MaxWeight: 99999999, Rarity: -1, MaxRarity: 6,
+		Size: -1, MaxSize: 5, Template: "1",
+		PVPRankingLeague: 1500, PVPRankingBest: 1, PVPRankingWorst: 1000,
+		PVPRankingMinCP: 0, PVPRankingCap: 0,
+	}
+	st2 := makeTestState([]*db.MonsterTracking{monsterWrongForm}, map[string]*db.Human{"user1": human})
+	matched2 := matcher.Match(pokemon, st2)
+	if len(matched2) != 0 {
+		t.Errorf("Expected 0 matches for Sylveon form:9999 (wrong form), got %d", len(matched2))
+	}
+}
+
 func TestPokemonMatchBlockedAlerts(t *testing.T) {
 	human := makeHuman("user1")
 	human.SetBlockedAlerts(`["monster","pvp"]`)

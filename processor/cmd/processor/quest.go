@@ -14,6 +14,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
+	if ps.cfg.General.DisableQuest {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():
@@ -63,7 +67,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.questMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("quest").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("quest").Inc()
@@ -74,14 +78,15 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards)
+			mode := ps.tileMode("quest", matched)
+			enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.QuestTranslate(enrichment, &quest, rewards, lang)
+					perLang[lang] = ps.enricher.QuestTranslate(enrichmentData, &quest, rewards, lang)
 				}
 			}
 
@@ -92,7 +97,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 			ps.renderCh <- RenderJob{
 				TemplateType:      "quest",
-				Enrichment:        enrichment,
+				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,

@@ -1,25 +1,21 @@
 <p align="center">
-  <img width="200" src="https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/starchy.svg?sanitize=true">
+  <img width="200" src="https://raw.githubusercontent.com/jfberry/PoracleNG/images/starchy.svg?sanitize=true">
 </p>
 
 # PoracleNG
 
-PoracleNG splits Poracle into two components: a high-performance **Processor** (Go) that receives webhooks, matches, renders templates, and delivers messages directly to Discord and Telegram, and an **Alerter** (Node.js) that handles Discord/Telegram bot commands and reconciliation.
+PoracleNG is a high-performance Pokemon GO webhook alerting system written in Go. It receives webhooks from a scanner (Golbat), matches them against user-defined tracking rules, and delivers personalised alerts to Discord and Telegram — including bot commands, reconciliation, and all APIs in a single process.
 
 ## Architecture
 
 ```
 Golbat ──webhook──▶ Processor (Go :3030) ──REST API──▶ Discord / Telegram
-                         │                                   ▲
-                         │◀──── /api/* (commands) ───────────│
-                         │                                   │
-                         ▼                                   │
-                    MySQL (read/write)              Alerter (Node.js :3031)
-                                                    (bot commands, reconciliation)
+                         │
+                         ▼
+                    MySQL (read/write)
 ```
 
-- The **Processor** receives raw webhooks from Golbat, matches them against all user tracking rules in memory, enriches with game data and translations, renders DTS Handlebars templates, and delivers messages directly via Discord REST API and Telegram Bot API.
-- The **Alerter** handles Discord and Telegram bot commands (e.g. `!track`, `!raid`, `!area`), Discord role reconciliation, and sends confirmation messages from processor API operations. It does not render templates or deliver alert messages.
+The processor receives raw webhooks from Golbat, matches them against all user tracking rules in memory, enriches with game data and translations, renders DTS Handlebars templates, and delivers messages directly via the Discord REST API and Telegram Bot API. It also runs the Discord and Telegram bots (commands, reconciliation) and exposes the full `/api/*` surface consumed by external tools like PoracleWeb.
 
 **Migrating from PoracleJS?** See [Migrating from PoracleJS](#migrating-from-poraclejs) for an automated migration script and what has changed.
 
@@ -27,8 +23,7 @@ Golbat ──webhook──▶ Processor (Go :3030) ──REST API──▶ Disco
 
 ### Prerequisites
 
-- Go 1.21+ (for the processor)
-- Node.js 18+ (for the alerter)
+- Go 1.21+
 - MySQL 8.0+
 - A Golbat instance sending webhooks
 
@@ -65,7 +60,7 @@ See `config/config.example.toml` for the full list of settings with documentatio
 make build
 ```
 
-This builds the Go processor binary and runs `npm ci` for the alerter. You can also build each component separately with `make build-processor` or `make install-alerter`.
+This builds the Go processor binary.
 
 ### 3. Start
 
@@ -83,19 +78,15 @@ The included `ecosystem.config.js` sets `kill_timeout: 10000` (10 seconds) to al
 ./start.sh
 ```
 
-The start script:
-- Builds the processor and installs alerter dependencies if needed
-- Starts the processor and waits for it to pass a health check
-- Starts the alerter
-- Monitors both processes and shuts them down together on Ctrl-C
+The start script builds the processor binary if needed and runs it.
 
 You can also use `make start` which builds first then runs `start.sh`.
 
 On first startup, the processor downloads game data (pokemon names, moves, locales) into `resources/`, loads all tracking data from the database, and begins accepting webhooks. Rarity and shiny stats will be empty until enough pokemon sightings accumulate.
 
-### 5. Point Golbat at the processor
+### 4. Point Golbat at the processor
 
-Configure Golbat to send webhooks to the **processor** (not the alerter):
+Configure Golbat to send webhooks to the processor:
 
 ```
 http://<your-host>:3030/
@@ -112,7 +103,6 @@ services:
     image: ghcr.io/jfberry/poracleng:main
     ports:
       - "3030:3030"
-      - "3031:3031"
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
@@ -129,7 +119,7 @@ The processor downloads game data on first startup. Logs are written to the `log
 
 ## Configuration
 
-PoracleNG uses a single shared TOML config file at `config/config.toml` for both the processor and alerter. Both components read from the same file, eliminating the need to keep settings in sync.
+PoracleNG uses a single TOML config file at `config/config.toml`.
 
 ```
 config/
@@ -138,21 +128,15 @@ config/
   geofences/               # Geofence files (GeoJSON or Poracle format)
 ```
 
-The only settings specific to each component are their networking:
+The processor listens on port 3030 by default:
 
 ```toml
 [processor]
-host = "0.0.0.0"                        # Processor listen address
-port = 3030                              # Processor takes the original Poracle port
-alerter_url = "http://localhost:3031"    # Where the alerter is listening
-
-[alerter]
-host = "127.0.0.1"                      # Alerter listen address
-port = 3031                              # Alerter runs on processor port + 1
-processor_url = "http://localhost:3030"  # Where the processor is listening
+host = "0.0.0.0"
+port = 3030
 ```
 
-Everything else (database, PVP, weather, geofence, discord, telegram, geocoding, tuning, etc.) is shared.
+See `config/config.example.toml` for the full list of settings (database, PVP, weather, geofence, discord, telegram, geocoding, tuning, etc.).
 
 ### Config Data Files
 
@@ -191,7 +175,7 @@ These are cached in `resources/` and reused if the download fails. No manual set
 ```
 PoracleNG/
   config/                  # Your configuration
-    config.toml            # Shared TOML config (both components)
+    config.toml            # Your TOML config
     config.example.toml    # Full reference
     geofences/             # Your geofence files
     dts.json               # Your DTS templates (optional, falls back to default)
@@ -201,23 +185,17 @@ PoracleNG/
     dts/                   # Example DTS templates from the community
     customMaps/            # Example custom map definitions
   processor/               # Go processor source
-  alerter/                 # Node.js alerter source
   resources/               # Downloaded game data (auto-managed)
-  logs/                    # Log files from both components
+  logs/                    # Log files
   scripts/                 # Migration and utility scripts
+  tileserver_templates/    # Tileservercache JSON templates (deployed to your tileserver)
 ```
 
 ## Logging
 
-Both components write logs to the shared `logs/` directory at the project root:
+The processor writes logs to the `logs/` directory at the project root:
 
-**Processor logs:**
 - `logs/processor.log` — main processor log (rotated by size)
-
-**Alerter logs:**
-- `logs/general-<date>.log` — main alerter log (rotated daily)
-- `logs/errors-<date>.log` — warnings and errors
-- `logs/commands-<date>.log` — user commands
 
 Log level and retention are configured in the `[logging]` section of `config.toml`:
 
@@ -231,9 +209,11 @@ max_age = 7              # days to keep log files
 
 > **Prerequisite:** Make sure you are on the latest PoracleJS so that your database schema is up to date before migrating.
 
-An automated migration script converts your existing PoracleJS configuration. You can run it directly or via Docker.
+An automated migration script converts your existing PoracleJS configuration. Node.js is needed for this one-time script only — the PoracleNG runtime itself is pure Go.
 
-### Bare metal
+### Bare metal (with Node.js installed)
+
+Clone this repo and run:
 
 ```sh
 node scripts/migrate-from-poracle.js
@@ -241,14 +221,20 @@ node scripts/migrate-from-poracle.js
 
 When prompted, enter the path to your existing PoracleJS installation.
 
-### Docker
+### Docker (no Node.js installed)
+
+Run a throwaway `node:alpine` container that fetches the migration tooling and writes into your mounted config dir:
 
 ```sh
 docker run --rm -it \
   -v /path/to/your/poraclejs:/oldporacle \
-  -v /path/to/your/poracleng/config:/app/config \
-  ghcr.io/jfberry/poracleng:main \
-  node scripts/migrate-from-poracle.js
+  -v /path/to/your/poracleng-config:/workspace/config \
+  -w /workspace \
+  node:20-alpine \
+  sh -c 'apk add --no-cache git >/dev/null && \
+    git clone --depth=1 https://github.com/jfberry/PoracleNG /tmp/ng && \
+    cd /tmp/ng && rm -rf config && ln -s /workspace/config config && \
+    node scripts/migrate-from-poracle.js'
 ```
 
 When prompted for `Path to your existing PoracleJS installation:` enter `/oldporacle`.
@@ -265,39 +251,27 @@ After migrating, review `config/config.toml` for any incorrect ports or values, 
 
 ### What changes
 
-**Webhook destination changes.** Golbat must now send webhooks to the **processor** (default port 3030), not the old alerter port. The processor matches and forwards results to the alerter internally.
+**Single process.** PoracleNG is a single Go binary — webhook handling, matching, rendering, delivery, bots, and all `/api/*` endpoints run in one process. External tools like PoracleWeb only need the processor's address.
 
-**Single entry point.** Both the processor and alerter start together via `start.sh` (or `pm2 start ecosystem.config.js`). The processor must be running before the alerter can receive matched results. External tools like PoracleWeb only need the processor's address — all APIs are available through it.
+**Webhook destination changes.** Golbat must now send webhooks to the processor (default port 3030), not the old alerter port.
 
-**New URL settings.** Both components need to know where the other is listening:
+**Config format.** The JS alerter's `default.json` / `local.json` system is replaced by a single `config/config.toml`. All settings use `snake_case`. See `config/config.example.toml` for the full reference.
 
-```toml
-[processor]
-alerter_url = "http://localhost:3031"
-
-[alerter]
-processor_url = "http://localhost:3030"
-```
-
-**Config format.** The alerter's `default.json` / `local.json` system is replaced by a single `config/config.toml`. All settings use `snake_case`. See `config/config.example.toml` for the full reference.
-
-**Data files moved.** DTS templates, aliases, and other data files are now loaded from `config/` (at the project root) instead of `alerter/config/`. Files you haven't customized don't need to be copied — bundled fallbacks in `fallbacks/` are used automatically.
+**Data files moved.** DTS templates, aliases, and other data files are now loaded from `config/` (at the project root). Files you haven't customised don't need to be copied — bundled fallbacks in `fallbacks/` are used automatically.
 
 **Scanner type.** MAD scanner support has been removed. The default scanner type is now `golbat`. If you use RDM, add `scanner_type = "rdm"` under `[database]`.
 
-**Logs directory.** Both components now write to `logs/` at the project root instead of `alerter/logs/`.
+**Logs directory.** The processor writes to `logs/` at the project root.
 
 **pm2 users.** Use the included `ecosystem.config.js` instead of `pm2 start start.sh` directly — it sets `kill_timeout: 10000` (10s) to allow graceful shutdown of message queues. The default pm2 timeout of 1.6s can leave orphaned processes.
 
-**Tileserver templates.** The processor now generates static map tiles instead of the alerter. The same tileservercache templates work, but available fields have changed slightly. See [TILESERVER.md](TILESERVER.md) for the complete field reference per alert type.
+**Tileserver templates.** The processor generates static map tiles via tileservercache. The templates are in `tileserver_templates/` at the repo root — deploy them to your tileserver. Available fields differ slightly from the JS alerter; see [TILESERVER.md](TILESERVER.md) for the full field reference.
 
 **DTS templates.** Templates have access to both pre-translated Poracle fields (recommended) and raw webhook fields. See [DTS.md](DTS.md) for the full field reference.
 
 ## API Endpoints
 
-All API endpoints are available through the processor (default port 3030). External tools like PoracleWeb only need to know the processor's address. See [API.md](API.md) for the full reference with request/response examples.
-
-### Processor (Go)
+All API endpoints are served by the processor (default port 3030). See [API.md](API.md) for the full reference with request/response examples.
 
 | Category | Endpoints | Description |
 |----------|-----------|-------------|
@@ -310,31 +284,24 @@ All API endpoints are available through the processor (default port 3030). Exter
 | Stats | `/api/stats/*` | Rarity, shiny rate, shiny possible |
 | Weather | `GET /api/weather` | Weather cell data |
 | Geocoding | `GET /api/geocode/forward` | Forward geocode lookup |
+| Messages | `POST /api/deliverMessages` | Send confirmation messages to Discord/Telegram |
+| Game data | `GET /api/masterdata/*` | Pokemon and grunt master data |
+| Config | `GET /api/config/poracleWeb` | Server config for web UI |
 | Test | `POST /api/test` | Test webhook simulation |
 | Health | `GET /health`, `GET /metrics` | Health check and Prometheus metrics |
 
-### Alerter (Node.js, proxied through processor)
-
-| Category | Endpoints | Description |
-|----------|-----------|-------------|
-| Messages | `POST /api/postMessage` | Send confirmation messages to Discord/Telegram |
-| Config | `GET /api/config/poracleWeb` | Server config for web UI |
-| Game data | `GET /api/masterdata/*` | Pokemon and grunt master data |
-
-The processor proxies unhandled `/api/*` requests to the alerter transparently. Both components expose `/health` and `/metrics` on their respective ports for Prometheus monitoring.
-
 ## Monitoring
 
-Two importable Grafana dashboards for the Prometheus metrics exposed by both services are included:
+Two importable Grafana dashboards for the Prometheus metrics exposed by the processor are included:
 
 - `monitoring/grafana/poracle-operations-lite-dashboard.json` for a concise day-to-day operations view
 - `monitoring/grafana/poracle-observability-dashboard.json` for the complete observability view
 
-There is also an example Prometheus scrape config at `monitoring/prometheus.yml.example`. If you are using [Zapdos](https://github.com/UnownHash/Zapdos), add `poracle_processor` and `poracle_alerter` jobs to `Zapdos/vmagnet/prometheus.yml`.
+There is also an example Prometheus scrape config at `monitoring/prometheus.yml.example`. If you are using [Zapdos](https://github.com/UnownHash/Zapdos), add a `poracle_processor` job to `Zapdos/vmagnet/prometheus.yml`.
 
 Then:
 
-1. Point Prometheus at the processor and alerter `/metrics` endpoints.
+1. Point Prometheus at the processor's `/metrics` endpoint.
 2. Add Prometheus as a Grafana data source.
 3. Import `monitoring/grafana/poracle-operations-lite-dashboard.json` for a compact operational view, or `monitoring/grafana/poracle-observability-dashboard.json` for the full dashboard.
 
@@ -343,18 +310,15 @@ Then:
 | From | To | Endpoint | Purpose |
 |------|----|----------|---------|
 | Golbat | Processor | `POST /` | Raw webhooks (all types) |
-| Processor | Discord | Discord REST API v10 | Alert delivery (DM, channel, thread, webhook) |
-| Processor | Telegram | Telegram Bot API | Alert delivery (user, group, channel) |
-| Processor | Alerter | `POST /api/postMessage` | Confirmation messages from API operations |
-| Alerter | Processor | `/api/tracking/*`, `/api/humans/*` | Command processing (track, area, location, etc.) |
+| Processor | Discord | Discord REST API v10 + gateway | Alert delivery and bot commands |
+| Processor | Telegram | Telegram Bot API + polling | Alert delivery and bot commands |
+| PoracleWeb / other | Processor | `/api/tracking/*`, `/api/humans/*`, etc. | External tool integration |
 
 ## Building
 
 ```sh
-make build              # Build everything
-make build-processor    # Build Go processor only
-make install-alerter    # Install alerter Node.js dependencies only
+make build              # Build the Go processor
 make clean              # Remove processor binary
 make test               # Run processor tests
-make start              # Build + start both components
+make start              # Build + start the processor
 ```

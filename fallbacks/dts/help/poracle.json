@@ -1,0 +1,26 @@
+[{
+  "id": "poracle",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!poracle",
+      "description": "Register yourself with the bot, or re-enable tracking after you've been disabled.",
+      "fields": [
+        {
+          "name": "First-time registration",
+          "value": "Run `{{prefix}}poracle` in a designated registration channel (ask your admin which channel that is). The bot will DM you a welcome message with a starter command list.\n\nOn Telegram, run it in the group your admin has configured for registration — not in a direct message."
+        },
+        {
+          "name": "Re-enable after admin disable",
+          "value": "If you've been disabled (you'll have seen a message about lost roles, or too many rate-limit breaches), re-run `{{prefix}}poracle` to reactivate."
+        },
+        {
+          "name": "Next steps after registering",
+          "value": "`{{prefix}}location <address or lat,lon>` — set your location\n`{{prefix}}track pikachu iv:90-100 d:1000` — first tracking rule\n`{{prefix}}help track` — full filter guide"
+        }
+      ]
+    }
+  }
+}]

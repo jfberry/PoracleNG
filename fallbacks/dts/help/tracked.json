@@ -1,0 +1,26 @@
+[{
+  "id": "tracked",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!tracked",
+      "description": "Show everything you're currently tracking, across every tracking type, grouped by category.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}tracked` — list your active profile's tracking"
+        },
+        {
+          "name": "Output format",
+          "value": "Each rule appears with a `[id:XX]` prefix. Use that ID with `{{prefix}}untrack id:XX` to remove one specific rule without disturbing the others."
+        },
+        {
+          "name": "Related commands",
+          "value": "`{{prefix}}script` — export your tracking as a list of commands (useful for backups)\n`{{prefix}}untrack id:<N>` — remove one rule\n`{{prefix}}profile` — switch to a different tracking profile"
+        }
+      ]
+    }
+  }
+}]

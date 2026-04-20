@@ -17,7 +17,7 @@ import (
 // Pokemon builds enrichment fields for a pokemon webhook.
 // Returns a base enrichment map (universal fields) and, if GameData is loaded,
 // also includes game data enrichment (types, weakness, stats, maps, etc.).
-func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.ProcessedPokemon, tileMode int) (map[string]any, *staticmap.TilePending) {
 	verified := pokemon.DisappearTimeVerified || pokemon.Verified
 	m := map[string]any{
 		"pokemon_id":       pokemon.PokemonID,
@@ -79,18 +79,16 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	// Time enrichment
 	if pokemon.DisappearTime > 0 {
 		tz := geo.GetTimezone(pokemon.Latitude, pokemon.Longitude)
-		m["disappear_time"] = pokemon.DisappearTime // integer for <t:{{disappear_time}}:R>
+		m["disappear_time"] = pokemon.DisappearTime
+		m["despawnTimestamp"] = pokemon.DisappearTime // unix int for Discord <t:N:R>
 		m["disappearTime"] = geo.FormatTime(pokemon.DisappearTime, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(pokemon.DisappearTime)
-		tthSec := pokemon.DisappearTime - time.Now().Unix()
-		if tthSec < 0 {
-			tthSec = 0
-		}
+		tthSec := max(pokemon.DisappearTime-time.Now().Unix(), 0)
 		m["tthSeconds"] = int(tthSec)
 
-		// Weather change time: the hour boundary before disappear_time
-		weatherChangeTS := pokemon.DisappearTime - (pokemon.DisappearTime % 3600)
-		m["weatherChangeTime"] = geo.FormatTime(weatherChangeTS, tz, e.TimeLayout)
+		// Weather change timestamp: the hour boundary before disappear_time
+		// (used later if forecast shows a boost change)
+		m["weatherChangeTS"] = pokemon.DisappearTime - (pokemon.DisappearTime % 3600)
 
 		addSunTimes(m, pokemon.Latitude, pokemon.Longitude, tz)
 
@@ -196,8 +194,9 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		"confirmedTime":      pokemon.DisappearTimeVerified || pokemon.Verified,
 		"weather":            weather,
 		"seen_type":          pokemon.SeenType,
-	})
+	}, tileMode)
 
+	e.setFallbackImg(m, e.FallbackImgURL)
 	return m, pending
 }
 
@@ -270,6 +269,16 @@ func (e *Enricher) enrichPokemonGameData(m map[string]any, pokemon *webhook.Poke
 							m["weatherCurrent"] = forecastCurrent
 						}
 						m["weatherNext"] = forecastNext
+						// Format weatherChangeTime only when change matters (matching JS)
+						// Strip seconds — JS uses .slice(0, -3) to remove ":SS"
+						if ts, ok := m["weatherChangeTS"].(int64); ok {
+							tz := geo.GetTimezone(pokemon.Latitude, pokemon.Longitude)
+							formatted := geo.FormatTime(ts, tz, e.TimeLayout)
+							if len(formatted) >= 3 {
+								formatted = formatted[:len(formatted)-3]
+							}
+							m["weatherChangeTime"] = formatted
+						}
 					}
 				}
 			}
@@ -355,23 +364,29 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		}
 	}
 
-	// Weather forecast names (for weather change templates)
-	forecastCurrent, _ := base["weatherForecastCurrent"].(int)
-	forecastNext, _ := base["weatherForecastNext"].(int)
-	if forecastCurrent > 0 {
-		m["weatherCurrentName"] = TranslateWeatherName(tr, forecastCurrent)
-		if wInfo, ok := gd.Util.Weather[forecastCurrent]; ok {
-			m["weatherCurrentEmojiKey"] = wInfo.Emoji
+	// Weather forecast names — only set when base enrichment determined a
+	// meaningful weather change (weatherNext is set). Use the processed
+	// weatherCurrent (which may be overridden to the pokemon's actual boost
+	// weather), not the raw forecastCurrent — matching JS behavior.
+	// When weatherCurrent is 0 (de-boost case), weatherCurrentName gets the
+	// translated "unknown" string, matching JS monster.js which sets
+	// weatherCurrentName = translator.translate('unknown').
+	weatherNext, _ := base["weatherNext"].(int)
+	if weatherNext > 0 {
+		weatherCurrent, _ := base["weatherCurrent"].(int)
+		if weatherCurrent > 0 {
+			m["weatherCurrentName"] = TranslateWeatherName(tr, weatherCurrent)
+			if wInfo, ok := gd.Util.Weather[weatherCurrent]; ok {
+				m["weatherCurrentEmojiKey"] = wInfo.Emoji
+			}
+		} else {
+			m["weatherCurrentName"] = tr.T("weather.unknown")
 		}
-	}
-	if forecastNext > 0 {
-		m["weatherNextName"] = TranslateWeatherName(tr, forecastNext)
-		if wInfo, ok := gd.Util.Weather[forecastNext]; ok {
+		m["weatherNextName"] = TranslateWeatherName(tr, weatherNext)
+		if wInfo, ok := gd.Util.Weather[weatherNext]; ok {
 			m["weatherNextEmojiKey"] = wInfo.Emoji
 		}
-		// Translated strings for weatherChange composition (in layered view)
 		m["weatherChangePossibleAt"] = tr.T("weather.possible_change_at")
-		m["weatherCurrentUnknown"] = tr.T("weather.unknown")
 	}
 
 	// Generation name
@@ -396,6 +411,9 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 	evolutions, megaEvolutions := e.buildEvolutions(gd, tr, pokemon.PokemonID, pokemon.Form)
 	m["evolutions"] = evolutions
 	m["megaEvolutions"] = megaEvolutions
+
+	// Previous evolutions (what evolves into this pokemon)
+	m["prevEvolutions"] = e.buildPrevEvolutions(gd, tr, pokemon.PokemonID)
 
 	// Disguise name
 	if dpID, ok := base["disguisePokemonId"].(int); ok {
@@ -554,6 +572,7 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 				"baseDefense": evoMon.Defense,
 				"baseStamina": evoMon.Stamina,
 			}
+			nameInfo["evolutionRequirement"] = gamedata.EvolutionRequirementText(tr, evo)
 			evolutions = append(evolutions, nameInfo)
 			walk(evoMon, depth+1)
 		}
@@ -585,6 +604,51 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 
 	walk(monster, 0)
 	return evolutions, megaEvolutions
+}
+
+// buildPrevEvolutions returns translated info about what pokemon evolve into this one,
+// walking backward recursively (max depth 5) through the precomputed PrevEvolutions index.
+func (e *Enricher) buildPrevEvolutions(gd *gamedata.GameData, tr *i18n.Translator, pokemonID int) []map[string]any {
+	if gd.PrevEvolutions == nil {
+		return nil
+	}
+
+	var result []map[string]any
+	visited := make(map[int]bool)
+
+	var walk func(id int, depth int)
+	walk = func(id int, depth int) {
+		if depth >= 5 {
+			return
+		}
+		prevs, ok := gd.PrevEvolutions[id]
+		if !ok {
+			return
+		}
+		for _, prev := range prevs {
+			if visited[prev.PokemonID] {
+				continue
+			}
+			visited[prev.PokemonID] = true
+
+			prevMon := gd.GetMonster(prev.PokemonID, prev.FormID)
+			if prevMon == nil {
+				continue
+			}
+
+			info := make(map[string]any)
+			TranslateMonsterNames(info, gd, tr, prev.PokemonID, prev.FormID, 0)
+			info["id"] = prev.PokemonID
+			info["form"] = prev.FormID
+			info["evolutionRequirement"] = gamedata.EvolutionRequirementText(tr, prev.Evolution)
+			result = append(result, info)
+
+			walk(prev.PokemonID, depth+1)
+		}
+	}
+
+	walk(pokemonID, 0)
+	return result
 }
 
 func computeSeenType(pokemon *webhook.PokemonWebhook) string {

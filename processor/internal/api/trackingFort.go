@@ -3,12 +3,15 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // validFortTypes defines the set of valid fort_type values.
@@ -17,22 +20,22 @@ var validFortTypes = map[string]bool{
 }
 
 // HandleGetFort returns the GET /api/tracking/fort/{id} handler.
-func HandleGetFort(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleGetFort(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		forts, err := db.SelectFortsByIDProfile(deps.DB, human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: get forts: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
@@ -51,29 +54,57 @@ func HandleGetFort(deps *TrackingDeps) http.HandlerFunc {
 			}
 		}
 
-		trackingJSONOK(w, map[string]any{"fort": result})
+		trackingJSONOK(c, map[string]any{"fort": result})
 	}
 }
 
 // HandleDeleteFort returns the DELETE /api/tracking/fort/{id}/byUid/{uid} handler.
-func HandleDeleteFort(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-		uidStr := r.PathValue("uid")
+func HandleDeleteFort(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		uidStr := c.Param("uid")
 		uid, err := strconv.ParseInt(uidStr, 10, 64)
 		if err != nil {
-			trackingJSONError(w, http.StatusBadRequest, "invalid uid")
+			trackingJSONError(c, http.StatusBadRequest, "invalid uid")
 			return
 		}
 
+		human, profileNo, err := lookupHuman(deps, c)
+		if err != nil || human == nil {
+			if err := db.DeleteByUID(deps.DB, "forts", id, uid); err != nil {
+				log.Errorf("Tracking API: delete fort: %s", err)
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
+				return
+			}
+			reloadState(deps)
+			trackingJSONOK(c, nil)
+			return
+		}
+
+		existing, _ := db.SelectFortsByIDProfile(deps.DB, human.ID, profileNo)
+
 		if err := db.DeleteByUID(deps.DB, "forts", id, uid); err != nil {
 			log.Errorf("Tracking API: delete fort: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		tr := translatorFor(deps, human)
+		language := resolveLanguage(deps, human)
+		silent := isSilent(c)
+		var message string
+		for _, e := range existing {
+			if e.UID == uid {
+				message = tr.T("tracking.removed_prefix") + deps.RowText.FortUpdateRowText(tr, toFortTracking(&e))
+				break
+			}
+		}
+		if !silent && message != "" {
+			sendConfirmation(deps, human, message, language)
+		}
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 
@@ -87,38 +118,38 @@ type fortInsertRequest struct {
 }
 
 // HandleCreateFort returns the POST /api/tracking/fort/{id} handler.
-func HandleCreateFort(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		human, profileNo, err := lookupHuman(deps, r)
+func HandleCreateFort(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		human, profileNo, err := lookupHuman(deps, c)
 		if err != nil {
-			trackingJSONError(w, http.StatusInternalServerError, err.Error())
+			trackingJSONError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if human == nil {
-			trackingJSONError(w, http.StatusNotFound, "User not found")
+			trackingJSONError(c, http.StatusNotFound, "User not found")
 			return
 		}
 
 		language := resolveLanguage(deps, human)
 		tr := translatorFor(deps, human)
-		silent := isSilent(r)
+		silent := isSilent(c)
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var insertReqs []fortInsertRequest
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &insertReqs); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single fortInsertRequest
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			insertReqs = []fortInsertRequest{single}
@@ -136,7 +167,7 @@ func HandleCreateFort(deps *TrackingDeps) http.HandlerFunc {
 				fortType = *req.FortType
 			}
 			if !validFortTypes[fortType] {
-				trackingJSONError(w, http.StatusBadRequest, "Invalid fort_type: "+fortType+" (must be pokestop, gym, or everything)")
+				trackingJSONError(c, http.StatusBadRequest, "Invalid fort_type: "+fortType+" (must be pokestop, gym, or everything)")
 				return
 			}
 
@@ -181,58 +212,37 @@ func HandleCreateFort(deps *TrackingDeps) http.HandlerFunc {
 			})
 		}
 
-		tracked, err := db.SelectFortsByIDProfile(deps.DB, human.ID, profileNo)
+		tracked, err := deps.Tracking.Forts.SelectByIDProfile(human.ID, profileNo)
 		if err != nil {
 			log.Errorf("Tracking API: select existing forts: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
-		var updates []db.FortTrackingAPI
-		var alreadyPresent []db.FortTrackingAPI
+		diff := store.DiffAndClassify(tracked, insert, store.FortGetUID, store.FortSetUID)
 
-		for i := len(insert) - 1; i >= 0; i-- {
-			for _, existing := range tracked {
-				noMatch, isDup, uid, isUpd := diffTracking(&existing, &insert[i])
-				if noMatch {
-					continue
-				}
-				if isDup {
-					alreadyPresent = append(alreadyPresent, insert[i])
-					insert = append(insert[:i], insert[i+1:]...)
-					break
-				}
-				if isUpd {
-					update := insert[i]
-					update.UID = uid
-					updates = append(updates, update)
-					insert = append(insert[:i], insert[i+1:]...)
-					break
-				}
-			}
-		}
-
+		// Build confirmation message before applying changes
 		var message string
-		totalChanges := len(alreadyPresent) + len(updates) + len(insert)
+		totalChanges := len(diff.AlreadyPresent) + len(diff.Updates) + len(diff.Inserts)
 		if totalChanges > 50 {
 			message = tr.Tf("tracking.bulk_changes",
 				deps.Config.Discord.Prefix, tr.T("tracking.tracked"))
 		} else {
 			var sb strings.Builder
-			for i := range alreadyPresent {
-				ft := toFortTracking(&alreadyPresent[i])
+			for i := range diff.AlreadyPresent {
+				ft := toFortTracking(&diff.AlreadyPresent[i])
 				sb.WriteString(tr.T("tracking.unchanged"))
 				sb.WriteString(deps.RowText.FortUpdateRowText(tr, ft))
 				sb.WriteByte('\n')
 			}
-			for i := range updates {
-				ft := toFortTracking(&updates[i])
+			for i := range diff.Updates {
+				ft := toFortTracking(&diff.Updates[i])
 				sb.WriteString(tr.T("tracking.updated"))
 				sb.WriteString(deps.RowText.FortUpdateRowText(tr, ft))
 				sb.WriteByte('\n')
 			}
-			for i := range insert {
-				ft := toFortTracking(&insert[i])
+			for i := range diff.Inserts {
+				ft := toFortTracking(&diff.Inserts[i])
 				sb.WriteString(tr.T("tracking.new"))
 				sb.WriteString(deps.RowText.FortUpdateRowText(tr, ft))
 				sb.WriteByte('\n')
@@ -240,28 +250,34 @@ func HandleCreateFort(deps *TrackingDeps) http.HandlerFunc {
 			message = sb.String()
 		}
 
-		if len(updates) > 0 {
-			uids := make([]int64, len(updates))
-			for i, u := range updates {
-				uids[i] = u.UID
+		// Apply: delete updated UIDs, insert new + updated
+		if len(diff.Updates) > 0 {
+			uids := make([]int64, len(diff.Updates))
+			for i := range diff.Updates {
+				uids[i] = diff.Updates[i].UID
 			}
-			if err := db.DeleteByUIDs(deps.DB, "forts", human.ID, uids); err != nil {
+			if err := deps.Tracking.Forts.DeleteByUIDs(human.ID, uids); err != nil {
 				log.Errorf("Tracking API: delete updated forts: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 		}
 
-		toInsert := make([]db.FortTrackingAPI, 0, len(insert)+len(updates))
-		toInsert = append(toInsert, insert...)
-		toInsert = append(toInsert, updates...)
-
 		var newUIDs []int64
-		for i := range toInsert {
-			uid, err := db.InsertFort(deps.DB, &toInsert[i])
+		for i := range diff.Inserts {
+			uid, err := deps.Tracking.Forts.Insert(&diff.Inserts[i])
 			if err != nil {
 				log.Errorf("Tracking API: insert fort: %s", err)
-				trackingJSONError(w, http.StatusInternalServerError, "database error")
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
+				return
+			}
+			newUIDs = append(newUIDs, uid)
+		}
+		for i := range diff.Updates {
+			uid, err := deps.Tracking.Forts.Insert(&diff.Updates[i])
+			if err != nil {
+				log.Errorf("Tracking API: insert fort: %s", err)
+				trackingJSONError(c, http.StatusInternalServerError, "database error")
 				return
 			}
 			newUIDs = append(newUIDs, uid)
@@ -278,50 +294,79 @@ func HandleCreateFort(deps *TrackingDeps) http.HandlerFunc {
 			responseMsg = ""
 		}
 
-		trackingJSONOK(w, map[string]any{
+		trackingJSONOK(c, map[string]any{
 			"message":        responseMsg,
 			"newUids":        newUIDs,
-			"alreadyPresent": len(alreadyPresent),
-			"updates":        len(updates),
-			"insert":         len(insert),
+			"alreadyPresent": len(diff.AlreadyPresent),
+			"updates":        len(diff.Updates),
+			"insert":         len(diff.Inserts),
 		})
 	}
 }
 
 // HandleBulkDeleteFort returns the POST /api/tracking/fort/{id}/delete handler.
-func HandleBulkDeleteFort(deps *TrackingDeps) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
+func HandleBulkDeleteFort(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
 
-		var rawBody json.RawMessage
-		if err := readJSONBody(r, &rawBody); err != nil {
-			trackingJSONError(w, http.StatusBadRequest, err.Error())
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 
 		var uids []int64
 		if len(rawBody) > 0 && rawBody[0] == '[' {
 			if err := json.Unmarshal(rawBody, &uids); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 		} else {
 			var single int64
 			if err := json.Unmarshal(rawBody, &single); err != nil {
-				trackingJSONError(w, http.StatusBadRequest, "invalid request body")
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
 				return
 			}
 			uids = []int64{single}
 		}
 
+		human, profileNo, err := lookupHuman(deps, c)
+		var existing []db.FortTrackingAPI
+		if err == nil && human != nil {
+			existing, _ = db.SelectFortsByIDProfile(deps.DB, human.ID, profileNo)
+		}
+
 		if err := db.DeleteByUIDs(deps.DB, "forts", id, uids); err != nil {
 			log.Errorf("Tracking API: bulk delete forts: %s", err)
-			trackingJSONError(w, http.StatusInternalServerError, "database error")
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
 			return
 		}
 
 		reloadState(deps)
-		trackingJSONOK(w, nil)
+
+		var message string
+		if human != nil && len(existing) > 0 {
+			tr := translatorFor(deps, human)
+			language := resolveLanguage(deps, human)
+			silent := isSilent(c)
+			uidSet := make(map[int64]bool, len(uids))
+			for _, u := range uids {
+				uidSet[u] = true
+			}
+			var sb strings.Builder
+			for _, e := range existing {
+				if uidSet[e.UID] {
+					sb.WriteString(tr.T("tracking.removed_prefix"))
+					sb.WriteString(deps.RowText.FortUpdateRowText(tr, toFortTracking(&e)))
+					sb.WriteByte('\n')
+				}
+			}
+			message = sb.String()
+			if !silent && message != "" {
+				sendConfirmation(deps, human, message, language)
+			}
+		}
+		trackingJSONOK(c, map[string]any{"message": message})
 	}
 }
 

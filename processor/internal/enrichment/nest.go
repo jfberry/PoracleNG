@@ -12,7 +12,7 @@ import (
 )
 
 // Nest builds enrichment fields for a nest webhook.
-func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	expiration := nest.ResetTime + 7*24*60*60
@@ -91,7 +91,7 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.T
 		"pokemon_id":      nest.PokemonID,
 		"form":            nest.Form,
 		"pokemonSpawnAvg": nest.PokemonAvg,
-	})
+	}, tileMode)
 
 	// Pokemon identity
 	m["pokemonId"] = nest.PokemonID
@@ -117,6 +117,7 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook) (map[string]any, *staticmap.T
 		}
 	}
 
+	e.setFallbackImg(m, e.FallbackImgURL)
 
 	return m, pending
 }

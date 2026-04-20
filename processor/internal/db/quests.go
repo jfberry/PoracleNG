@@ -7,7 +7,7 @@ type QuestTracking struct {
 	ID         string `db:"id"`
 	ProfileNo  int    `db:"profile_no"`
 	Ping       string `db:"ping"`
-	Clean      bool   `db:"clean"`
+	Clean      int    `db:"clean"`
 	Reward     int    `db:"reward"`
 	Template   string `db:"template"`
 	Shiny      bool   `db:"shiny"`

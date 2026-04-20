@@ -9,7 +9,7 @@ import (
 )
 
 // FortUpdate builds enrichment fields for a fort_update webhook.
-func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.FortWebhook) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.FortWebhook, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
@@ -197,8 +197,9 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.For
 		webhookFields["map_latitude"] = position.Latitude
 		webhookFields["map_longitude"] = position.Longitude
 	}
-	pending := e.addStaticMap(m, "fort-update", mapLat, mapLon, webhookFields)
+	pending := e.addStaticMap(m, "fort-update", mapLat, mapLon, webhookFields, tileMode)
 
+	e.setFallbackImg(m, e.FallbackImgPokestop)
 
 	return m, pending
 }

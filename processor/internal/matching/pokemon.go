@@ -127,9 +127,11 @@ func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) []web
 	if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
 		for pokemonID, pvpMon := range pokemon.PVPEvoData {
 			for league, leagueDataArr := range pvpMon {
+				candidates := st.Monsters.PVPSpecific[league]
 				for _, leagueData := range leagueDataArr {
 					if leagueData.Rank <= m.PVPQueryMaxRank {
-						matched = append(matched, m.matchMonsters(pokemon, st.Monsters.PVPSpecific[league], pokemonID, 0, false, league, leagueData)...)
+						evoMatched := m.matchMonsters(pokemon, candidates, pokemonID, leagueData.Form, false, league, leagueData)
+						matched = append(matched, evoMatched...)
 					}
 				}
 			}
@@ -168,8 +170,14 @@ func (m *PokemonMatcher) matchMonsters(
 		if !(monster.PokemonID == targetPokemonID || (includeEverything && monster.PokemonID == 0)) {
 			continue
 		}
-		// Form check (0 = any)
-		if monster.Form != 0 && monster.Form != data.Form {
+		// Form check (0 = any).
+		// For PVP evolution matching, targetForm is the evolved form from PVP data
+		// (e.g. Sylveon 3062), not the spawned pokemon's form (Eevee 1092).
+		formToCheck := data.Form
+		if targetForm != 0 {
+			formToCheck = targetForm
+		}
+		if monster.Form != 0 && monster.Form != formToCheck {
 			continue
 		}
 		// PVP league filters

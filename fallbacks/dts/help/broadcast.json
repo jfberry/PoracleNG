@@ -1,0 +1,26 @@
+[{
+  "id": "broadcast",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!broadcast (admin)",
+      "description": "Send a message to every registered user. Useful for maintenance notices, feature announcements, or event warnings.",
+      "fields": [
+        {
+          "name": "Usage",
+          "value": "`{{prefix}}broadcast Server restart tonight at 22:00 UTC — alerts will pause briefly.`\n\nThe message is sent as-is to every registered user via DM (Discord) or direct message (Telegram)."
+        },
+        {
+          "name": "Filter the audience",
+          "value": "`{{prefix}}broadcast type:discord:user Your message` — only Discord users\n`{{prefix}}broadcast type:telegram:user Your message` — only Telegram users\n\nOther filter types: `role:<roleId>`, `community:<name>`. Consult the admin manual for the full list."
+        },
+        {
+          "name": "Care",
+          "value": "Broadcasts count against per-user rate limits. A large broadcast can take minutes to complete as the dispatcher paces it through platform API limits. You'll see delivery progress in logs."
+        }
+      ]
+    }
+  }
+}]

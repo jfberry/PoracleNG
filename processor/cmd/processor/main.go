@@ -17,13 +17,20 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bwmarrin/discordgo"
+	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/pokemon/poracleng/processor"
 	"github.com/pokemon/poracleng/processor/internal/api"
+	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/discordbot"
+	"github.com/pokemon/poracleng/processor/internal/telegrambot"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
@@ -34,6 +41,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
+	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
@@ -41,6 +49,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/resources"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
@@ -51,9 +60,10 @@ func main() {
 	baseDir := flag.String("basedir", "..", "path to project root directory")
 	flag.Parse()
 
-	// Register build info from Go's embedded VCS metadata
+	// Register build info from version.go + Go's embedded VCS metadata
 	buildVersion, buildCommit, buildDate := readBuildInfo()
 	metrics.BuildInfo.WithLabelValues(buildVersion, buildCommit, buildDate).Set(1)
+	api.Version = buildVersion
 
 	cfg, err := config.Load(*baseDir)
 	if err != nil {
@@ -73,6 +83,11 @@ func main() {
 
 	log.Infof("Poracle processor %s (commit %s, built %s)", buildVersion, buildCommit, buildDate)
 
+	// Now that logging is set up, report any override layering. The status
+	// was computed during config.Load() but couldn't be logged before
+	// logging.Setup ran.
+	config.LogOverrideStatus(cfg.OverrideStatus)
+
 	// Download game resources (monsters, moves, locales, etc.)
 	if err := resources.Download(cfg.BaseDir); err != nil {
 		log.Warnf("Resource download had errors: %s", err)
@@ -83,6 +98,9 @@ func main() {
 		log.Fatalf("Failed to open database: %s", err)
 	}
 	defer database.Close()
+
+	humanStore := store.NewSQLHumanStore(database)
+	trackingStores := store.NewTrackingStores(database)
 
 	// Database migrations: adopt existing Knex DB if needed, drop FK constraints, run pending
 	if err := db.AdoptExistingDatabase(database.DB); err != nil {
@@ -100,9 +118,17 @@ func main() {
 		log.Fatalf("Failed to load initial state: %s", err)
 	}
 
+	// Validate community area names against the loaded fence set so a typo in
+	// allowed_areas / location_fence surfaces in the startup banner rather
+	// than silently contributing nothing at match time.
+	if cfg.Area.Enabled {
+		validateCommunityAreas(stateMgr.Get().Fences, cfg.Area.Communities)
+	}
+
 	// Create processor
 	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
+	proc.humans = humanStore
 
 	// Restore gym state cache from previous run
 	if err := proc.gymState.Load(); err != nil {
@@ -143,6 +169,11 @@ func main() {
 				ConcurrentDiscord:  cfg.Tuning.ConcurrentDiscordDestinations,
 				ConcurrentWebhook:  cfg.Tuning.ConcurrentDiscordWebhooks,
 				ConcurrentTelegram: cfg.Tuning.ConcurrentTelegramDestinations,
+				OnDisabled: func(target, name, jobType string) {
+					proc.disableUserForDeliveryFailure(target, name, jobType)
+				},
+				RateLimiter:    proc.rateLimiter,
+				RateLimitHooks: proc,
 			},
 		})
 		if err != nil {
@@ -167,50 +198,88 @@ func main() {
 	go proc.runProfileScheduler()
 	log.Infof("Profile scheduler enabled (10-minute interval)")
 
-	// HTTP server
-	mux := http.NewServeMux()
+	// HTTP server — Gin router.
+	// UseRawPath + UnescapePathValues lets :id capture percent-encoded
+	// path params that contain forward slashes (webhook URLs used as
+	// human IDs, e.g. /api/humans/https%3A%2F%2Fdiscord.com%2F...).
+	// Without this, Go's HTTP layer decodes %2F before gin routes, and
+	// the webhook URL fans out into multiple path segments → 404.
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.UseRawPath = true
+	r.UnescapePathValues = true
+	r.Use(gin.Recovery())
+	r.Use(api.CORSMiddleware())
+	r.Use(api.RequestLogger())
+	r.Use(api.IPFilter(cfg.Processor.IPWhitelist, cfg.Processor.IPBlacklist))
 
 	// Webhook receiver
 	var webhookLogger io.Writer
-	log.Infof("Webhook logging config: enabled=%v filename=%q", cfg.WebhookLogging.Enabled, cfg.WebhookLogging.Filename)
 	if cfg.WebhookLogging.Enabled && cfg.WebhookLogging.Filename != "" {
 		maxSize := cfg.WebhookLogging.MaxSize
 		if maxSize == 0 {
 			maxSize = 100
 		}
-		webhookLogger = &lumberjack.Logger{
+		lj := &lumberjack.Logger{
 			Filename:   cfg.WebhookLogging.Filename,
 			MaxSize:    maxSize,
 			MaxAge:     cfg.WebhookLogging.MaxAge,
 			MaxBackups: cfg.WebhookLogging.MaxBackups,
 			Compress:   cfg.WebhookLogging.Compress,
 		}
-		log.Infof("Webhook logging enabled: %s", cfg.WebhookLogging.Filename)
+		webhookLogger = lj
+
+		// Timer-based rotation (e.g. hourly) in addition to size-based
+		if cfg.WebhookLogging.RotateInterval > 0 {
+			go func() {
+				ticker := time.NewTicker(time.Duration(cfg.WebhookLogging.RotateInterval) * time.Minute)
+				defer ticker.Stop()
+				for range ticker.C {
+					lj.Rotate() //nolint:errcheck
+				}
+			}()
+		}
+		log.Infof("Webhook logging enabled: %s (rotate every %dm)", cfg.WebhookLogging.Filename, cfg.WebhookLogging.RotateInterval)
 	}
 	webhookHandler := webhook.NewHandler(proc, webhookLogger)
-	mux.Handle("/", webhookHandler)
 
-	// API endpoints (protected by x-poracle-secret when configured, with metrics)
-	secret := cfg.Processor.APISecret
-	auth := func(h http.HandlerFunc) http.HandlerFunc { return api.RequireSecret(secret, h) }
-	// apiRoute wraps a handler with auth + instrumentation
-	apiRoute := func(endpoint string, h http.HandlerFunc) http.HandlerFunc {
-		return api.InstrumentAPI(endpoint, auth(h))
+	// Public endpoints (no auth)
+	r.POST("/", webhookHandler)
+	r.GET("/health", api.HandleHealth())
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// pprof endpoints
+	pprofGroup := r.Group("/debug/pprof")
+	{
+		pprofGroup.GET("/", gin.WrapF(http.DefaultServeMux.ServeHTTP))
+		pprofGroup.GET("/:name", gin.WrapF(http.DefaultServeMux.ServeHTTP))
 	}
 
-	mux.HandleFunc("/api/reload", auth(api.HandleReload(func() error {
+	// Authenticated API group
+	apiGroup := r.Group("/api")
+	apiGroup.Use(api.RequireSecretGin(cfg.Processor.APISecret))
+
+	// Reload
+	apiGroup.POST("/reload", api.HandleReload(func() error {
 		return state.Load(stateMgr, database)
-	})))
-	mux.HandleFunc("/api/geofence/reload", auth(api.HandleReload(func() error {
+	}))
+	apiGroup.GET("/reload", api.HandleReload(func() error {
+		return state.Load(stateMgr, database)
+	}))
+	apiGroup.POST("/geofence/reload", api.HandleReload(func() error {
 		return state.LoadWithGeofences(stateMgr, database, cfg.Geofence)
-	})))
-	mux.HandleFunc("/api/weather", auth(api.HandleWeather(proc.weather)))
-	mux.HandleFunc("/api/stats/rarity", auth(api.HandleStats(func() any { return proc.stats.ExportGroups() })))
-	mux.HandleFunc("/api/stats/shiny", auth(api.HandleStats(func() any { return proc.stats.ExportShinyStats() })))
-	mux.HandleFunc("/api/stats/shiny-possible", auth(api.HandleStats(func() any { return proc.stats.ExportShinyPossible() })))
-	mux.HandleFunc("/health", api.HandleHealth())
-	mux.HandleFunc("/api/test", auth(api.HandleTest(proc)))
-	mux.HandleFunc("/api/geocode/forward", auth(api.HandleGeocode(proc.enricher.Geocoder)))
+	}))
+	apiGroup.GET("/geofence/reload", api.HandleReload(func() error {
+		return state.LoadWithGeofences(stateMgr, database, cfg.Geofence)
+	}))
+
+	// Weather, stats, geocode, test
+	apiGroup.GET("/weather", api.HandleWeather(proc.weather))
+	apiGroup.GET("/stats/rarity", api.HandleStats(func() any { return proc.stats.ExportGroups() }))
+	apiGroup.GET("/stats/shiny", api.HandleStats(func() any { return proc.stats.ExportShinyStats() }))
+	apiGroup.GET("/stats/shiny-possible", api.HandleStats(func() any { return proc.stats.ExportShinyPossible() }))
+	apiGroup.POST("/test", api.HandleTest(proc))
+	apiGroup.GET("/geocode/forward", api.HandleGeocode(proc.enricher.Geocoder))
 
 	// Geofence data and tile generation endpoints
 	tileDeps := api.TileDeps{
@@ -219,14 +288,15 @@ func main() {
 		ImgUicons: proc.enricher.ImgUicons,
 		Weather:   proc.weather,
 	}
-	mux.HandleFunc("GET /api/geofence/all/hash", auth(api.HandleGeofenceHash(stateMgr)))
-	mux.HandleFunc("GET /api/geofence/all/geojson", auth(api.HandleGeofenceGeoJSON(stateMgr)))
-	mux.HandleFunc("GET /api/geofence/all", auth(api.HandleGeofenceAll(stateMgr)))
-	mux.HandleFunc("GET /api/geofence/weatherMap/{lat}/{lon}", auth(api.HandleWeatherMap(tileDeps)))
-	mux.HandleFunc("GET /api/geofence/locationMap/{lat}/{lon}", auth(api.HandleLocationMap(tileDeps)))
-	mux.HandleFunc("GET /api/geofence/distanceMap/{lat}/{lon}/{distance}", auth(api.HandleDistanceMap(tileDeps)))
-	mux.HandleFunc("POST /api/geofence/overviewMap", auth(api.HandleOverviewMap(tileDeps)))
-	mux.HandleFunc("GET /api/geofence/{area}/map", auth(api.HandleGeofenceAreaMap(tileDeps)))
+	geofence := apiGroup.Group("/geofence")
+	geofence.GET("/all/hash", api.HandleGeofenceHash(stateMgr))
+	geofence.GET("/all/geojson", api.HandleGeofenceGeoJSON(stateMgr))
+	geofence.GET("/all", api.HandleGeofenceAll(stateMgr))
+	geofence.GET("/weatherMap/:lat/:lon", api.HandleWeatherMap(tileDeps))
+	geofence.GET("/locationMap/:lat/:lon", api.HandleLocationMap(tileDeps))
+	geofence.GET("/distanceMap/:lat/:lon/:distance", api.HandleDistanceMap(tileDeps))
+	geofence.POST("/overviewMap", api.HandleOverviewMap(tileDeps))
+	geofence.GET("/:area/map", api.HandleGeofenceAreaMap(tileDeps))
 
 	// Tracking CRUD endpoints (registered after proc is created so enricher/scanner are available)
 	defaultTemplate := "1"
@@ -235,6 +305,8 @@ func main() {
 	}
 	trackingDeps := &api.TrackingDeps{
 		DB:           database,
+		Humans:       humanStore,
+		Tracking:     trackingStores,
 		StateMgr:     stateMgr,
 		RowText: &rowtext.Generator{
 			GD:                  proc.enricher.GameData,
@@ -244,107 +316,277 @@ func main() {
 		},
 		Config:       cfg,
 		Translations: proc.enricher.Translations,
-		AlerterURL:   cfg.Processor.AlerterURL,
-		APISecret:    cfg.Processor.APISecret,
+		Dispatcher:   proc.dispatcher,
 		ReloadFunc:   proc.triggerReload,
 	}
+	tracking := apiGroup.Group("/tracking")
 	// Pokemon (monster) tracking
-	mux.HandleFunc("GET /api/tracking/pokemon/{id}", apiRoute("tracking/pokemon", api.HandleGetMonster(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/pokemon/{id}", apiRoute("tracking/pokemon", api.HandleCreateMonster(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/pokemon/{id}/byUid/{uid}", apiRoute("tracking/pokemon", api.HandleDeleteMonster(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/pokemon/{id}/delete", apiRoute("tracking/pokemon", api.HandleBulkDeleteMonster(trackingDeps)))
-	mux.HandleFunc("GET /api/tracking/pokemon/refresh", auth(api.HandleReload(func() error {
+	tracking.GET("/pokemon/:id", api.HandleGetMonster(trackingDeps))
+	tracking.POST("/pokemon/:id", api.HandleCreateMonster(trackingDeps))
+	tracking.DELETE("/pokemon/:id/byUid/:uid", api.HandleDeleteMonster(trackingDeps))
+	tracking.POST("/pokemon/:id/delete", api.HandleBulkDeleteMonster(trackingDeps))
+	tracking.GET("/pokemon/refresh", api.HandleReload(func() error {
 		return state.Load(stateMgr, database)
-	})))
+	}))
 	// Raid tracking
-	mux.HandleFunc("GET /api/tracking/raid/{id}", apiRoute("tracking/raid", api.HandleGetRaid(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/raid/{id}", apiRoute("tracking/raid", api.HandleCreateRaid(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/raid/{id}/byUid/{uid}", apiRoute("tracking/raid", api.HandleDeleteRaid(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/raid/{id}/delete", apiRoute("tracking/raid", api.HandleBulkDeleteRaid(trackingDeps)))
+	tracking.GET("/raid/:id", api.HandleGetRaid(trackingDeps))
+	tracking.POST("/raid/:id", api.HandleCreateRaid(trackingDeps))
+	tracking.DELETE("/raid/:id/byUid/:uid", api.HandleDeleteRaid(trackingDeps))
+	tracking.POST("/raid/:id/delete", api.HandleBulkDeleteRaid(trackingDeps))
 	// Egg tracking
-	mux.HandleFunc("GET /api/tracking/egg/{id}", apiRoute("tracking/egg", api.HandleGetEgg(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/egg/{id}", apiRoute("tracking/egg", api.HandleCreateEgg(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/egg/{id}/byUid/{uid}", apiRoute("tracking/egg", api.HandleDeleteEgg(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/egg/{id}/delete", apiRoute("tracking/egg", api.HandleBulkDeleteEgg(trackingDeps)))
+	tracking.GET("/egg/:id", api.HandleGetEgg(trackingDeps))
+	tracking.POST("/egg/:id", api.HandleCreateEgg(trackingDeps))
+	tracking.DELETE("/egg/:id/byUid/:uid", api.HandleDeleteEgg(trackingDeps))
+	tracking.POST("/egg/:id/delete", api.HandleBulkDeleteEgg(trackingDeps))
 	// Quest tracking
-	mux.HandleFunc("GET /api/tracking/quest/{id}", apiRoute("tracking/quest", api.HandleGetQuest(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/quest/{id}", apiRoute("tracking/quest", api.HandleCreateQuest(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/quest/{id}/byUid/{uid}", apiRoute("tracking/quest", api.HandleDeleteQuest(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/quest/{id}/delete", apiRoute("tracking/quest", api.HandleBulkDeleteQuest(trackingDeps)))
+	tracking.GET("/quest/:id", api.HandleGetQuest(trackingDeps))
+	tracking.POST("/quest/:id", api.HandleCreateQuest(trackingDeps))
+	tracking.DELETE("/quest/:id/byUid/:uid", api.HandleDeleteQuest(trackingDeps))
+	tracking.POST("/quest/:id/delete", api.HandleBulkDeleteQuest(trackingDeps))
 	// Invasion tracking
-	mux.HandleFunc("GET /api/tracking/invasion/{id}", apiRoute("tracking/invasion", api.HandleGetInvasion(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/invasion/{id}", apiRoute("tracking/invasion", api.HandleCreateInvasion(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/invasion/{id}/byUid/{uid}", apiRoute("tracking/invasion", api.HandleDeleteInvasion(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/invasion/{id}/delete", apiRoute("tracking/invasion", api.HandleBulkDeleteInvasion(trackingDeps)))
+	tracking.GET("/invasion/:id", api.HandleGetInvasion(trackingDeps))
+	tracking.POST("/invasion/:id", api.HandleCreateInvasion(trackingDeps))
+	tracking.DELETE("/invasion/:id/byUid/:uid", api.HandleDeleteInvasion(trackingDeps))
+	tracking.POST("/invasion/:id/delete", api.HandleBulkDeleteInvasion(trackingDeps))
 	// Lure tracking
-	mux.HandleFunc("GET /api/tracking/lure/{id}", apiRoute("tracking/lure", api.HandleGetLure(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/lure/{id}", apiRoute("tracking/lure", api.HandleCreateLure(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/lure/{id}/byUid/{uid}", apiRoute("tracking/lure", api.HandleDeleteLure(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/lure/{id}/delete", apiRoute("tracking/lure", api.HandleBulkDeleteLure(trackingDeps)))
+	tracking.GET("/lure/:id", api.HandleGetLure(trackingDeps))
+	tracking.POST("/lure/:id", api.HandleCreateLure(trackingDeps))
+	tracking.DELETE("/lure/:id/byUid/:uid", api.HandleDeleteLure(trackingDeps))
+	tracking.POST("/lure/:id/delete", api.HandleBulkDeleteLure(trackingDeps))
 	// Nest tracking
-	mux.HandleFunc("GET /api/tracking/nest/{id}", apiRoute("tracking/nest", api.HandleGetNest(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/nest/{id}", apiRoute("tracking/nest", api.HandleCreateNest(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/nest/{id}/byUid/{uid}", apiRoute("tracking/nest", api.HandleDeleteNest(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/nest/{id}/delete", apiRoute("tracking/nest", api.HandleBulkDeleteNest(trackingDeps)))
+	tracking.GET("/nest/:id", api.HandleGetNest(trackingDeps))
+	tracking.POST("/nest/:id", api.HandleCreateNest(trackingDeps))
+	tracking.DELETE("/nest/:id/byUid/:uid", api.HandleDeleteNest(trackingDeps))
+	tracking.POST("/nest/:id/delete", api.HandleBulkDeleteNest(trackingDeps))
 	// Gym tracking
-	mux.HandleFunc("GET /api/tracking/gym/{id}", apiRoute("tracking/gym", api.HandleGetGym(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/gym/{id}", apiRoute("tracking/gym", api.HandleCreateGym(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/gym/{id}/byUid/{uid}", apiRoute("tracking/gym", api.HandleDeleteGym(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/gym/{id}/delete", apiRoute("tracking/gym", api.HandleBulkDeleteGym(trackingDeps)))
+	tracking.GET("/gym/:id", api.HandleGetGym(trackingDeps))
+	tracking.POST("/gym/:id", api.HandleCreateGym(trackingDeps))
+	tracking.DELETE("/gym/:id/byUid/:uid", api.HandleDeleteGym(trackingDeps))
+	tracking.POST("/gym/:id/delete", api.HandleBulkDeleteGym(trackingDeps))
 	// Fort tracking
-	mux.HandleFunc("GET /api/tracking/fort/{id}", apiRoute("tracking/fort", api.HandleGetFort(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/fort/{id}", apiRoute("tracking/fort", api.HandleCreateFort(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/fort/{id}/byUid/{uid}", apiRoute("tracking/fort", api.HandleDeleteFort(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/fort/{id}/delete", apiRoute("tracking/fort", api.HandleBulkDeleteFort(trackingDeps)))
+	tracking.GET("/fort/:id", api.HandleGetFort(trackingDeps))
+	tracking.POST("/fort/:id", api.HandleCreateFort(trackingDeps))
+	tracking.DELETE("/fort/:id/byUid/:uid", api.HandleDeleteFort(trackingDeps))
+	tracking.POST("/fort/:id/delete", api.HandleBulkDeleteFort(trackingDeps))
 	// Maxbattle tracking
-	mux.HandleFunc("GET /api/tracking/maxbattle/{id}", apiRoute("tracking/maxbattle", api.HandleGetMaxbattle(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/maxbattle/{id}", apiRoute("tracking/maxbattle", api.HandleCreateMaxbattle(trackingDeps)))
-	mux.HandleFunc("DELETE /api/tracking/maxbattle/{id}/byUid/{uid}", apiRoute("tracking/maxbattle", api.HandleDeleteMaxbattle(trackingDeps)))
-	mux.HandleFunc("POST /api/tracking/maxbattle/{id}/delete", apiRoute("tracking/maxbattle", api.HandleBulkDeleteMaxbattle(trackingDeps)))
+	tracking.GET("/maxbattle/:id", api.HandleGetMaxbattle(trackingDeps))
+	tracking.POST("/maxbattle/:id", api.HandleCreateMaxbattle(trackingDeps))
+	tracking.DELETE("/maxbattle/:id/byUid/:uid", api.HandleDeleteMaxbattle(trackingDeps))
+	tracking.POST("/maxbattle/:id/delete", api.HandleBulkDeleteMaxbattle(trackingDeps))
 	// Aggregate tracking endpoints
-	mux.HandleFunc("GET /api/tracking/all/{id}", apiRoute("tracking/all", api.HandleGetAllTracking(trackingDeps)))
-	mux.HandleFunc("GET /api/tracking/allProfiles/{id}", apiRoute("tracking/allProfiles", api.HandleGetAllProfilesTracking(trackingDeps)))
+	tracking.GET("/all/:id", api.HandleGetAllTracking(trackingDeps))
+	tracking.GET("/allProfiles/:id", api.HandleGetAllProfilesTracking(trackingDeps))
 
-	// Human endpoints
-	mux.HandleFunc("GET /api/humans/one/{id}", apiRoute("humans/one", api.HandleGetOneHuman(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/start", apiRoute("humans/start", api.HandleStartHuman(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/stop", apiRoute("humans/stop", api.HandleStopHuman(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/adminDisabled", apiRoute("humans/adminDisabled", api.HandleAdminDisabled(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/switchProfile/{profile}", apiRoute("humans/switchProfile", api.HandleSwitchProfile(trackingDeps)))
-	mux.HandleFunc("GET /api/humans/{id}/checkLocation/{lat}/{lon}", apiRoute("humans/checkLocation", api.HandleCheckLocation(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/setLocation/{lat}/{lon}", apiRoute("humans/setLocation", api.HandleSetLocation(trackingDeps)))
-	mux.HandleFunc("POST /api/humans/{id}/setAreas", apiRoute("humans/setAreas", api.HandleSetAreas(trackingDeps)))
-	mux.HandleFunc("POST /api/humans", apiRoute("humans/create", api.HandleCreateHuman(trackingDeps)))
-	mux.HandleFunc("GET /api/humans/{id}", apiRoute("humans", api.HandleGetHumanAreas(trackingDeps)))
+	// Human endpoints — Gin handles path parameter conflicts natively
+	var discordBotRef *discordbot.Bot
+	roleDeps := &api.RoleDeps{
+		SessionFunc: func() *discordgo.Session {
+			if discordBotRef != nil {
+				return discordBotRef.Session()
+			}
+			return nil
+		},
+		Config: cfg,
+		Humans: humanStore,
+	}
+	humans := apiGroup.Group("/humans")
+	humans.GET("/one/:id", api.HandleGetOneHuman(trackingDeps))
+	humans.GET("/:id", api.HandleGetHumanAreas(trackingDeps))
+	humans.GET("/:id/roles", api.HandleGetRoles(roleDeps))
+	humans.GET("/:id/getAdministrationRoles", api.HandleGetAdministrationRoles(roleDeps))
+	humans.GET("/:id/checkLocation/:lat/:lon", api.HandleCheckLocation(trackingDeps))
+	humans.POST("", api.HandleCreateHuman(trackingDeps))
+	humans.POST("/:id/start", api.HandleStartHuman(trackingDeps))
+	humans.POST("/:id/stop", api.HandleStopHuman(trackingDeps))
+	humans.POST("/:id/adminDisabled", api.HandleAdminDisabled(trackingDeps))
+	humans.POST("/:id/switchProfile/:profile", api.HandleSwitchProfile(trackingDeps))
+	humans.POST("/:id/setLocation/:lat/:lon", api.HandleSetLocation(trackingDeps))
+	humans.POST("/:id/setAreas", api.HandleSetAreas(trackingDeps))
+	humans.POST("/:id/roles/add/:roleId", api.HandleAddRole(roleDeps))
+	humans.POST("/:id/roles/remove/:roleId", api.HandleRemoveRole(roleDeps))
 
 	// Profile endpoints
-	mux.HandleFunc("GET /api/profiles/{id}", apiRoute("profiles", api.HandleGetProfiles(trackingDeps)))
-	mux.HandleFunc("DELETE /api/profiles/{id}/byProfileNo/{profile_no}", apiRoute("profiles/delete", api.HandleDeleteProfile(trackingDeps)))
-	mux.HandleFunc("POST /api/profiles/{id}/add", apiRoute("profiles/add", api.HandleAddProfile(trackingDeps)))
-	mux.HandleFunc("POST /api/profiles/{id}/update", apiRoute("profiles/update", api.HandleUpdateProfile(trackingDeps)))
-	mux.HandleFunc("POST /api/profiles/{id}/copy/{from}/{to}", apiRoute("profiles/copy", api.HandleCopyProfile(trackingDeps)))
+	profiles := apiGroup.Group("/profiles")
+	profiles.GET("/:id", api.HandleGetProfiles(trackingDeps))
+	profiles.DELETE("/:id/byProfileNo/:profile_no", api.HandleDeleteProfile(trackingDeps))
+	profiles.POST("/:id/add", api.HandleAddProfile(trackingDeps))
+	profiles.POST("/:id/update", api.HandleUpdateProfile(trackingDeps))
+	profiles.POST("/:id/copy/:from/:to", api.HandleCopyProfile(trackingDeps))
 
 	// DTS template endpoints
 	if proc.dtsRenderer != nil {
-		mux.HandleFunc("GET /api/config/templates", auth(api.HandleTemplateConfig(proc.dtsRenderer.Templates())))
-		mux.HandleFunc("POST /api/dts/render", auth(api.HandleDTSRender(proc.dtsRenderer.Templates())))
+		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/render", api.HandleDTSRender(proc.dtsRenderer.Templates()))
+		apiGroup.GET("/dts/emoji", api.HandleDTSEmoji(proc.dtsRenderer.Emoji()))
+		dtsConfigDir := filepath.Join(cfg.BaseDir, "config")
+		apiGroup.GET("/dts/templates", api.HandleDTSGetTemplates(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/templates", api.HandleDTSSaveTemplates(proc.dtsRenderer.Templates()))
+		apiGroup.DELETE("/dts/templates", api.HandleDTSDeleteTemplate(proc.dtsRenderer.Templates()))
+		apiGroup.PUT("/dts/templates/file", api.HandleDTSTemplateFileWrite(proc.dtsRenderer.Templates(), dtsConfigDir))
+		apiGroup.POST("/dts/enrich", api.HandleDTSEnrich(proc))
+		apiGroup.GET("/dts/fields", api.HandleDTSFieldTypes())
+		apiGroup.GET("/dts/fields/:type", api.HandleDTSFields())
+		apiGroup.GET("/dts/partials", api.HandleDTSPartials(proc.dtsRenderer.Templates()))
+		apiGroup.POST("/dts/sendtest", api.HandleDTSSendTest(proc.dispatcher, proc.dtsRenderer.Templates(), proc.dtsRenderer))
+		apiGroup.POST("/dts/reload", api.HandleReload(func() error {
+			return proc.dtsRenderer.Templates().Reload(
+				filepath.Join(cfg.BaseDir, "config"),
+				filepath.Join(cfg.BaseDir, "fallbacks"),
+			)
+		}))
+		apiGroup.GET("/dts/reload", api.HandleReload(func() error {
+			return proc.dtsRenderer.Templates().Reload(
+				filepath.Join(cfg.BaseDir, "config"),
+				filepath.Join(cfg.BaseDir, "fallbacks"),
+			)
+		}))
+		apiGroup.GET("/dts/testdata", api.HandleDTSTestdata(
+			filepath.Join(cfg.BaseDir, "config"),
+			filepath.Join(cfg.BaseDir, "fallbacks"),
+		))
 	}
 
-	// Delivery endpoint — accepts pre-rendered jobs from alerter commands (broadcast, etc.)
-	mux.HandleFunc("POST /api/deliverMessages", auth(api.HandleDeliverMessages(proc.dispatcher)))
+	// Config and master data endpoints
+	apiGroup.GET("/config/poracleWeb", api.HandleConfigPoracleWeb(cfg))
+	configDeps := api.ConfigDeps{
+		Cfg:       cfg,
+		ConfigDir: filepath.Join(cfg.BaseDir, "config"),
+		ReloadFn:  func() {
+			// Hot-reloadable config changes are already applied in-memory via ApplyOverrides.
+			// Trigger a state reload so matching rules pick up any changed config values.
+			proc.triggerReload()
+		},
+	}
+	apiGroup.GET("/config/schema", api.HandleConfigSchema())
+	apiGroup.GET("/config/values", api.HandleConfigValues(configDeps))
+	apiGroup.POST("/config/values", api.HandleConfigSave(configDeps))
+	apiGroup.POST("/config/validate", api.HandleConfigValidate(configDeps))
+	apiGroup.POST("/config/migrate", api.HandleConfigMigrate(configDeps))
+	apiGroup.GET("/masterdata/monsters", api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations))
+	apiGroup.GET("/masterdata/grunts", api.HandleMasterdataGrunts(proc.enricher.GameData))
 
-	// Proxy unhandled /api/ requests to the alerter (config, humans, profiles, etc.)
-	mux.Handle("/api/", api.NewAlerterProxy(cfg.Processor.AlerterURL))
+	// Resolution cache — populated after bot init below
+	resolveCache := api.NewResolveCache()
 
-	// Prometheus metrics
-	mux.Handle("/metrics", promhttp.Handler())
+	// Delivery endpoint — accepts pre-rendered jobs
+	apiGroup.POST("/deliverMessages", api.HandleDeliverMessages(proc.dispatcher))
+	apiGroup.POST("/postMessage", api.HandleDeliverMessages(proc.dispatcher)) // legacy alias
 
-	// pprof endpoints (cpu, heap, goroutine, etc.)
-	mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
+	// Command framework — shared by API endpoint and Discord/Telegram bots
+	var cmdLanguages []string
+	if len(cfg.General.AvailableLanguages) > 0 {
+		for code := range cfg.General.AvailableLanguages {
+			cmdLanguages = append(cmdLanguages, code)
+		}
+		// Ensure English and default locale are included
+		hasEn := false
+		hasLocale := false
+		for _, l := range cmdLanguages {
+			if l == "en" { hasEn = true }
+			if l == cfg.General.Locale { hasLocale = true }
+		}
+		if !hasEn { cmdLanguages = append(cmdLanguages, "en") }
+		if cfg.General.Locale != "" && !hasLocale { cmdLanguages = append(cmdLanguages, cfg.General.Locale) }
+	} else {
+		cmdLanguages = []string{"en"}
+		if cfg.General.Locale != "" && cfg.General.Locale != "en" {
+			cmdLanguages = append(cmdLanguages, cfg.General.Locale)
+		}
+	}
+	cmdPrefix := cfg.Discord.Prefix
+	if cmdPrefix == "" {
+		cmdPrefix = "!"
+	}
+	cmdParser := bot.NewParser(cmdPrefix, proc.enricher.Translations, cmdLanguages, cfg.General.AvailableLanguages)
+	tgParser := bot.NewParser("/", proc.enricher.Translations, cmdLanguages, cfg.General.AvailableLanguages)
+	pokemonAliases := bot.LoadPokemonAliases(filepath.Join(cfg.BaseDir, "config"), filepath.Join(cfg.BaseDir, "fallbacks"))
+	cmdResolver := bot.NewPokemonResolver(proc.enricher.GameData, proc.enricher.Translations, cmdLanguages, pokemonAliases)
+	cmdArgMatcher := bot.NewArgMatcher(proc.enricher.Translations, proc.enricher.GameData, cmdResolver, cmdLanguages)
+	cmdRegistry := bot.NewRegistry()
+	cmdRegistry.Register(&commands.StartCommand{})
+	cmdRegistry.Register(&commands.StopCommand{})
+	cmdRegistry.Register(&commands.EggCommand{})
+	cmdRegistry.Register(&commands.RaidCommand{})
+	cmdRegistry.Register(&commands.TrackCommand{})
+	cmdRegistry.Register(&commands.TrackedCommand{})
+	cmdRegistry.Register(&commands.UntrackCommand{})
+	cmdRegistry.Register(&commands.GymCommand{})
+	cmdRegistry.Register(&commands.InvasionCommand{})
+	cmdRegistry.Register(&commands.NestCommand{})
+	cmdRegistry.Register(&commands.FortCommand{})
+	cmdRegistry.Register(&commands.MaxbattleCommand{})
+	cmdRegistry.Register(&commands.QuestCommand{})
+	cmdRegistry.Register(&commands.LureCommand{})
+	cmdRegistry.Register(&commands.WeatherCommand{})
+	cmdRegistry.Register(&commands.LanguageCommand{})
+	cmdRegistry.Register(&commands.ProfileCommand{})
+	cmdRegistry.Register(&commands.LocationCommand{})
+	cmdRegistry.Register(&commands.AreaCommand{})
+	cmdRegistry.Register(&commands.ScriptCommand{})
+	cmdRegistry.Register(&commands.VersionCommand{})
+	cmdRegistry.Register(&commands.EnableCommand{})
+	cmdRegistry.Register(&commands.DisableCommand{})
+	cmdRegistry.Register(&commands.HelpCommand{})
+	cmdRegistry.Register(&commands.InfoCommand{})
+	cmdRegistry.Register(&commands.PoracleTestCommand{})
+	cmdRegistry.Register(&commands.UserlistCommand{})
+	cmdRegistry.Register(&commands.PoracleCommand{})
+	cmdRegistry.Register(&commands.UnregisterCommand{})
+	cmdRegistry.Register(&commands.CommunityCommand{})
+	cmdRegistry.Register(&commands.AskCommand{})
+	cmdRegistry.Register(&commands.BackupCommand{})
+	cmdRegistry.Register(&commands.RestoreCommand{})
+	cmdRegistry.Register(&commands.BroadcastCommand{})
+	cmdRegistry.Register(&commands.ApplyCommand{})
+
+	// NLP parser for !ask command and suggest_on_dm
+	var nlpParser *nlp.Parser
+	if cfg.AI.Enabled {
+		enTr := proc.enricher.Translations.For("en")
+		invasionEvents := make(map[string]bool)
+		if proc.enricher.GameData != nil && proc.enricher.GameData.Util != nil {
+			for _, event := range proc.enricher.GameData.Util.PokestopEvent {
+				invasionEvents[strings.ToLower(event.Name)] = true
+			}
+		}
+		nlpParser = nlp.NewParser(enTr, cfg.BaseDir, invasionEvents)
+		log.Info("NLP command parser initialized")
+	}
+
+	// Command API endpoint (for testing commands without bots)
+	var cmdDTS *dts.TemplateStore
+	var cmdEmoji *dts.EmojiLookup
+	if proc.dtsRenderer != nil {
+		cmdDTS = proc.dtsRenderer.Templates()
+		cmdEmoji = proc.dtsRenderer.Emoji()
+	}
+	cmdDeps := &api.CommandDeps{
+		DB:           database,
+		Humans:       humanStore,
+		Tracking:     trackingStores,
+		Config:       cfg,
+		StateMgr:     stateMgr,
+		GameData:     proc.enricher.GameData,
+		Translations: proc.enricher.Translations,
+		Dispatcher:   proc.dispatcher,
+		RowText:      trackingDeps.RowText,
+		Resolver:     cmdResolver,
+		ArgMatcher:   cmdArgMatcher,
+		Parser:       cmdParser,
+		Registry:     cmdRegistry,
+		Weather:      proc.weather,
+		Stats:        proc.stats,
+		DTS:          cmdDTS,
+		Emoji:        cmdEmoji,
+		NLPParser:     nlpParser,
+		TestProcessor: proc,
+		ReloadFunc:    proc.triggerReload,
+	}
+	apiGroup.POST("/command", api.HandleCommand(cmdDeps))
 
 	server := &http.Server{
 		Addr:    cfg.Processor.ListenAddr(),
-		Handler: mux,
+		Handler: r,
 	}
 
 	// Periodic reload
@@ -396,11 +638,12 @@ func main() {
 				metrics.RenderQueueDepth.Set(float64(depth))
 			}
 			if proc.dispatcher != nil {
-				statusParts = append(statusParts, fmt.Sprintf("Delivery: Discord:%d+%d Telegram:%d Tracked:%d",
+				statusParts = append(statusParts, fmt.Sprintf("Delivery: Discord:%d+%d Telegram:%d Tracked:%d RateLimited:%d",
 					proc.dispatcher.DiscordDepth(),
 					proc.dispatcher.WebhookDepth(),
 					proc.dispatcher.TelegramDepth(),
-					proc.dispatcher.TrackerSize()))
+					proc.dispatcher.TrackerSize(),
+					proc.dispatcher.RateLimitWaiting()))
 				metrics.DeliveryQueueDepth.Set(float64(proc.dispatcher.QueueDepth()))
 				metrics.DeliveryDiscordQueueDepth.Set(float64(proc.dispatcher.DiscordDepth()))
 				metrics.DeliveryWebhookQueueDepth.Set(float64(proc.dispatcher.WebhookDepth()))
@@ -408,8 +651,84 @@ func main() {
 				metrics.DeliveryTrackerSize.Set(float64(proc.dispatcher.TrackerSize()))
 			}
 			log.Infof("[Status] %s", strings.Join(statusParts, " | "))
+			if webhooks == 0 {
+				log.Warn("[Status] No webhooks have been received — check your scanner or networking configuration")
+			}
 		}
 	}()
+
+	// Start Discord bot (if token configured)
+	var discordBot *discordbot.Bot
+	// Shared bot dependencies — constructed once, passed to both Discord and Telegram bots.
+	sharedBotDeps := bot.BotDeps{
+		DB:           database,
+		Humans:       humanStore,
+		Tracking:     trackingStores,
+		Cfg:          cfg,
+		StateMgr:     stateMgr,
+		GameData:     proc.enricher.GameData,
+		Translations: proc.enricher.Translations,
+		Dispatcher:   proc.dispatcher,
+		RowText:      trackingDeps.RowText,
+		Registry:     cmdRegistry,
+		ArgMatcher:   cmdArgMatcher,
+		Resolver:     cmdResolver,
+		Geocoder:     proc.enricher.Geocoder,
+		StaticMap:    proc.enricher.StaticMap,
+		Weather:      proc.weather,
+		Stats:        proc.stats,
+		DTS:          cmdDTS,
+		Emoji:        cmdEmoji,
+		NLPParser:     nlpParser,
+		TestProcessor: proc,
+		ReloadFunc:    proc.triggerReload,
+	}
+
+	discordTokens := cfg.Discord.DiscordTokens()
+	if cfg.Discord.Enabled && len(discordTokens) > 0 && discordTokens[0] != "" {
+		deps := sharedBotDeps
+		deps.Parser = cmdParser
+		dbot, err := discordbot.New(discordbot.Config{
+			Token:   discordTokens[0],
+			BotDeps: deps,
+		})
+		if err != nil {
+			log.Warnf("Discord bot failed to start: %v", err)
+		} else {
+			discordBot = dbot
+			discordBotRef = dbot
+		}
+	}
+
+	// Start Telegram bot (if token configured)
+	var telegramBot *telegrambot.Bot
+	telegramTokens := cfg.Telegram.TelegramTokens()
+	if cfg.Telegram.Enabled && len(telegramTokens) > 0 && telegramTokens[0] != "" {
+		deps := sharedBotDeps
+		deps.Parser = tgParser
+		tbot, err := telegrambot.New(telegrambot.Config{
+			Token:   telegramTokens[0],
+			BotDeps: deps,
+		})
+		if err != nil {
+			log.Warnf("Telegram bot failed to start: %v", err)
+		} else {
+			telegramBot = tbot
+		}
+	}
+
+	// Register resolve endpoint now that bots are initialized
+	resolveDeps := api.ResolveDeps{
+		Cache:  resolveCache,
+		Humans: humanStore,
+	}
+	if discordBot != nil {
+		resolveDeps.DiscordSession = discordBot.Session()
+	}
+	if telegramBot != nil {
+		resolveDeps.TelegramAPI = telegramBot.API()
+	}
+	apiGroup.POST("/resolve", api.HandleResolve(resolveDeps))
 
 	// Start server
 	go func() {
@@ -425,22 +744,36 @@ func main() {
 	<-sigCh
 
 	log.Infof("Shutting down...")
-	close(periodicDone)
+
+	// 1. Stop accepting new requests — no more webhooks enter the pipeline
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	server.Shutdown(ctx)
+	log.Infof("HTTP server stopped")
+
+	// 2. Stop bots (no more command processing)
+	close(periodicDone)
+	if discordBot != nil {
+		discordBot.Close()
+		log.Infof("Discord bot disconnected")
+	}
+	if telegramBot != nil {
+		telegramBot.Close()
+		log.Infof("Telegram bot disconnected")
+	}
+
+	// 3. Drain webhook workers → render queue → delivery queue
 	proc.Close()
 	log.Infof("Shutdown complete")
 }
 
 func readBuildInfo() (version, commit, date string) {
-	version, commit, date = "dev", "unknown", "unknown"
+	// Static version from version.go (bumped per release).
+	// Commit and build date come from Go's embedded VCS info.
+	version, commit, date = processor.Version, "unknown", "unknown"
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return
-	}
-	if info.Main.Version != "" && info.Main.Version != "(devel)" {
-		version = info.Main.Version
 	}
 	for _, s := range info.Settings {
 		switch s.Key {
@@ -466,7 +799,6 @@ type ProcessorService struct {
 	cfg             *config.Config
 	stateMgr        *state.Manager
 	database        *sqlx.DB
-	sender          *webhook.Sender
 	weather         *tracker.WeatherTracker
 	weatherCares    *tracker.WeatherCareTracker
 	encounters      *tracker.EncounterTracker
@@ -488,10 +820,10 @@ type ProcessorService struct {
 	enricher        *enrichment.Enricher
 	dtsRenderer     *dts.Renderer
 	dispatcher      *delivery.Dispatcher
+	humans          store.HumanStore
 	scanner         scanner.Scanner
 	rateLimiter     *ratelimit.Limiter
 	translations    *i18n.Bundle
-	alerterClient   *http.Client
 	renderCh        chan RenderJob
 	renderWg        sync.WaitGroup
 	reloadMu        sync.Mutex
@@ -584,6 +916,14 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	enricher.DefaultLocale = cfg.General.Locale
 	enricher.RequestShinyImages = cfg.General.RequestShinyImages
 
+	// Fallback icon URLs
+	enricher.FallbackImgURL = cfg.Fallbacks.ImgURL
+	enricher.FallbackImgWeather = cfg.Fallbacks.ImgURLWeather
+	enricher.FallbackImgEgg = cfg.Fallbacks.ImgURLEgg
+	enricher.FallbackImgGym = cfg.Fallbacks.ImgURLGym
+	enricher.FallbackImgPokestop = cfg.Fallbacks.ImgURLPokestop
+	enricher.FallbackPokestopURL = cfg.Fallbacks.PokestopURL
+
 	// Scanner DB and static map tile resolver
 	var scannerInstance scanner.Scanner
 	if cfg.Database.Scanner.Configured() {
@@ -606,6 +946,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		smCfg := staticmap.Config{
 			Provider:                   cfg.Geocoding.StaticProvider,
 			ProviderURL:                cfg.Geocoding.StaticProviderURL,
+			InternalURL:                cfg.Geocoding.StaticInternalURL,
 			StaticKeys:                 cfg.Geocoding.StaticKey,
 			Width:                      cfg.Geocoding.Width,
 			Height:                     cfg.Geocoding.Height,
@@ -625,6 +966,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 			TileserverCooldownMs:       cfg.Tuning.TileserverCooldownMs,
 			TileQueueSize:              cfg.Tuning.TileserverQueueSize,
 			TileDeadlineMs:             cfg.Tuning.TileserverDeadlineMs,
+			PregenTTL:                  cfg.Tuning.TileserverPregenTTL,
 		}
 
 		// Convert tileserver settings
@@ -636,6 +978,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 					Width:  v.Width,
 					Height: v.Height,
 					Zoom:   v.Zoom,
+					TTL:    v.TTL,
 				}
 				if v.IncludeStops != nil {
 					tc.IncludeStops = v.IncludeStops
@@ -728,21 +1071,28 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		shlinkDomain = cfg.General.ShortlinkDomain
 	}
 
+	dtsDefaultTemplate := "1"
+	if cfg.General.DefaultTemplateName != nil {
+		dtsDefaultTemplate = fmt.Sprintf("%v", cfg.General.DefaultTemplateName)
+	}
+
 	dtsRenderer, err = dts.NewRenderer(dts.RendererConfig{
-		ConfigDir:     filepath.Join(cfg.BaseDir, "config"),
-		FallbackDir:   filepath.Join(cfg.BaseDir, "fallbacks"),
-		GameData:      gd,
-		Translations:  enricher.Translations,
-		UtilEmojis:    utilEmojis,
-		DefaultLocale: cfg.General.Locale,
-		MinAlertTime:  cfg.General.AlertMinimumTime,
-		ShlinkURL:     shlinkURL,
-		ShlinkKey:     shlinkKey,
-		ShlinkDomain:  shlinkDomain,
-		DTSDictionary: cfg.General.DTSDictionary,
+		ConfigDir:           filepath.Join(cfg.BaseDir, "config"),
+		FallbackDir:         filepath.Join(cfg.BaseDir, "fallbacks"),
+		GameData:            gd,
+		Translations:        enricher.Translations,
+		UtilEmojis:          utilEmojis,
+		DefaultLocale:       cfg.General.Locale,
+		AltLanguage:         cfg.Locale.Language,
+		DefaultTemplateName: dtsDefaultTemplate,
+		MinAlertTime:        cfg.General.AlertMinimumTime,
+		ShlinkURL:           shlinkURL,
+		ShlinkKey:           shlinkKey,
+		ShlinkDomain:        shlinkDomain,
+		DTSDictionary:       cfg.General.DTSDictionary,
 	})
 	if err != nil {
-		log.Warnf("DTS renderer initialization failed: %s", err)
+		log.Errorf("DTS renderer initialization failed (alerts will not be sent!): %s", err)
 		dtsRenderer = nil
 	} else {
 		dtsRenderer.Templates().LogSummary()
@@ -768,8 +1118,6 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		enricher:      enricher,
 		dtsRenderer:   dtsRenderer,
 		scanner:       scannerInstance,
-		alerterClient: &http.Client{Timeout: 5 * time.Second},
-		sender:       webhook.NewSender(cfg.Processor.AlerterURL, cfg.Processor.APISecret, cfg.Tuning.BatchSize, cfg.Tuning.FlushIntervalMillis),
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),
 		encounters:   tracker.NewEncounterTracker(),
@@ -816,10 +1164,6 @@ func (ps *ProcessorService) Close() {
 		ps.dispatcher.Stop()
 		log.Info("Delivery dispatcher stopped")
 	}
-	log.Info("Stopping legacy sender...")
-	// Sender must close before resolver: sender's final flush may need
-	// tile workers still running to resolve pending tiles within deadline.
-	ps.sender.Close()
 	if ps.enricher.StaticMap != nil {
 		ps.enricher.StaticMap.Close()
 	}

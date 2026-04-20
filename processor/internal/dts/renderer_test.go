@@ -68,7 +68,7 @@ func TestRenderPokemonBasic(t *testing.T) {
 		{ID: "user1", Name: "TestUser", Type: "discord:user", Template: "1", Language: "en"},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "test-ref")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "test-ref", "")
 
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -124,7 +124,7 @@ func TestRenderPokemonMonsterNoIv(t *testing.T) {
 	}
 
 	// Encountered -> monster template
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
@@ -134,7 +134,7 @@ func TestRenderPokemonMonsterNoIv(t *testing.T) {
 	}
 
 	// Not encountered -> monsterNoIv template
-	jobs = r.RenderPokemon(enrichment, nil, nil, nil, users, nil, false, "")
+	jobs = r.RenderPokemon(enrichment, nil, nil, nil, users, nil, false, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
@@ -174,7 +174,7 @@ func TestRenderPokemonMultiUser(t *testing.T) {
 		{ID: "t1", Type: "telegram:user", Template: "1"},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 2 {
 		t.Fatalf("expected 2 jobs, got %d", len(jobs))
 	}
@@ -222,7 +222,7 @@ func TestRenderPokemonDeduplication(t *testing.T) {
 		{ID: "u1", Type: "discord:user", Template: "1", Name: "Alice"},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job after dedup, got %d", len(jobs))
 	}
@@ -250,7 +250,7 @@ func TestRenderPokemonPing(t *testing.T) {
 		{ID: "u1", Type: "discord:user", Template: "1", Ping: "<@&12345>"},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
@@ -298,7 +298,7 @@ func TestRenderPokemonTTHExpiry(t *testing.T) {
 		{ID: "u1", Type: "discord:user", Template: "1"},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 0 {
 		t.Fatalf("expected 0 jobs for expired TTH, got %d", len(jobs))
 	}
@@ -326,7 +326,7 @@ func TestRenderPokemonMissingTemplate(t *testing.T) {
 		{ID: "u1", Type: "discord:user", Template: "42", Language: "en"},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 fallback job, got %d", len(jobs))
 	}
@@ -377,7 +377,7 @@ func TestRenderPokemonLanguageFallback(t *testing.T) {
 		{ID: "u1", Type: "discord:user", Template: "1", Language: ""},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
@@ -409,7 +409,7 @@ func TestRenderPokemonWebhookPlatform(t *testing.T) {
 		{ID: "wh1", Type: "webhook", Template: "1"},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
@@ -447,7 +447,7 @@ func TestRenderPokemonAreas(t *testing.T) {
 		{Name: "Munich", DisplayInMatches: true},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, areas, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, areas, true, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
@@ -480,7 +480,7 @@ func TestRenderPokemonLatLonTruncation(t *testing.T) {
 		{ID: "u1", Type: "discord:user", Template: "1"},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
@@ -511,14 +511,14 @@ func TestRenderPokemonClean(t *testing.T) {
 		"tth":       map[string]any{"totalSeconds": 600},
 	}
 	users := []webhook.MatchedUser{
-		{ID: "u1", Type: "discord:user", Template: "1", Clean: true},
+		{ID: "u1", Type: "discord:user", Template: "1", Clean: 1},
 	}
 
-	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "")
+	jobs := r.RenderPokemon(enrichment, nil, nil, nil, users, nil, true, "", "")
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
 	}
-	if !jobs[0].Clean {
+	if jobs[0].Clean == 0 {
 		t.Error("expected Clean=true")
 	}
 }
@@ -611,7 +611,7 @@ func TestRenderAlertBasicRaid(t *testing.T) {
 		{ID: "user1", Name: "TestUser", Type: "discord:user", Template: "1", Language: "en"},
 	}
 
-	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "raid-ref")
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "raid-ref", "")
 
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -655,7 +655,7 @@ func TestRenderAlertNoPerLangEnrichment(t *testing.T) {
 	}
 
 	// No TTH, no per-language enrichment
-	jobs := r.RenderAlert("fort-update", enrichment, nil, nil, users, nil, "")
+	jobs := r.RenderAlert("fort-update", enrichment, nil, nil, users, nil, "", "")
 
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -701,7 +701,7 @@ func TestRenderAlertMultipleUsers(t *testing.T) {
 		{ID: "d2", Type: "discord:channel", Template: "1", Language: "en"},
 	}
 
-	jobs := r.RenderAlert("invasion", enrichment, perLang, nil, users, nil, "")
+	jobs := r.RenderAlert("invasion", enrichment, perLang, nil, users, nil, "", "")
 
 	if len(jobs) != 3 {
 		t.Fatalf("expected 3 jobs, got %d", len(jobs))
@@ -764,7 +764,7 @@ func TestRenderAlertTTHExpiry(t *testing.T) {
 		{ID: "u1", Type: "discord:user", Template: "1"},
 	}
 
-	jobs := r.RenderAlert("quest", enrichment, nil, nil, users, nil, "")
+	jobs := r.RenderAlert("quest", enrichment, nil, nil, users, nil, "", "")
 	if len(jobs) != 0 {
 		t.Fatalf("expected 0 jobs for expired TTH, got %d", len(jobs))
 	}
@@ -794,7 +794,7 @@ func TestRenderAlertNoDeduplication(t *testing.T) {
 		{ID: "u1", Type: "discord:user", Template: "1"},
 	}
 
-	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "")
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "", "")
 	if len(jobs) != 2 {
 		t.Fatalf("expected 2 jobs (no dedup), got %d", len(jobs))
 	}

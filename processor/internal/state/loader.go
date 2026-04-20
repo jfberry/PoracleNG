@@ -76,7 +76,7 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 		return fmt.Errorf("load database: %w", err)
 	}
 
-	spatial, fences, err := geofence.LoadAllGeofences(geofenceCfg.Paths, geofenceCfg.Koji.CacheDir)
+	spatial, fences, err := geofence.LoadAllGeofences(geofenceCfg.Paths, geofenceCfg.Koji.CacheDir, geofenceCfg.DefaultName)
 	if err != nil {
 		return fmt.Errorf("load geofences: %w", err)
 	}

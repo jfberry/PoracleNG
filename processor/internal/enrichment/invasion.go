@@ -13,7 +13,7 @@ import (
 )
 
 // Invasion builds enrichment fields for an invasion webhook.
-func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID string, gruntTypeID, displayType, lureID int) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID string, gruntTypeID, displayType, lureID int, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
@@ -23,9 +23,10 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
 
 	if expiration > 0 {
-		m["expiration"] = expiration                    // integer for <t:{{expiration}}:R>
-		m["incidentExpiration"] = expiration            // camelCase alias
-		m["incident_expire_timestamp"] = expiration     // webhook field name alias
+		m["expiration"] = expiration
+		m["incidentExpiration"] = expiration
+		m["incident_expire_timestamp"] = expiration
+		m["expirationTimestamp"] = expiration           // consistent unix int for Discord <t:N:R>
 		m["disappearTime"] = geo.FormatTime(expiration, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(expiration)
 	}
@@ -75,7 +76,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	if lureID != 0 {
 		tileFields["lureTypeId"] = lureID
 	}
-	pending := e.addStaticMap(m, "pokestop", lat, lon, tileFields)
+	pending := e.addStaticMap(m, "pokestop", lat, lon, tileFields, tileMode)
 
 	// Grunt data
 	if e.GameData != nil {
@@ -110,6 +111,11 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 				m["gruntTypeEmojiKey"] = eventInfo.Emoji
 			}
 		}
+	}
+
+	e.setFallbackImg(m, e.FallbackImgPokestop)
+	if _, ok := m["pokestop_url"]; !ok && e.FallbackPokestopURL != "" {
+		m["pokestop_url"] = e.FallbackPokestopURL
 	}
 
 	return m, pending

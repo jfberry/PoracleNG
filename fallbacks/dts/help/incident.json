@@ -1,0 +1,46 @@
+[{
+  "id": "incident",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!incident",
+      "description": "Alerts for pokestop incidents — Team Rocket invasions, Kecleon appearances, Pokemon Showcase events, and gold (special) pokestops.\n\n`{{prefix}}incident` is preferred over `{{prefix}}invasion` because the underlying webhook covers every incident type, not just Team Rocket grunts. `{{prefix}}invasion` is still supported as an alias.",
+      "fields": [
+        {
+          "name": "Team Rocket invasions (by grunt type)",
+          "value": "`{{prefix}}incident dragon` — dragon-type grunt\n`{{prefix}}incident fire ice electric` — any of these types\n`{{prefix}}incident mixed` — the mixed-type grunt\n`{{prefix}}incident everything` — every grunt type\n\nGrunt types match pokemon types: normal, fire, water, grass, electric, ice, fighting, poison, ground, flying, psychic, bug, rock, ghost, dragon, dark, steel, fairy, plus special ones like `mixed`, `dark_water_fire`, etc."
+        },
+        {
+          "name": "Team Rocket leaders and Giovanni",
+          "value": "`{{prefix}}incident arlo`\n`{{prefix}}incident cliff`\n`{{prefix}}incident sierra`\n`{{prefix}}incident giovanni`\n`{{prefix}}incident leader` — all three leaders (not Giovanni)"
+        },
+        {
+          "name": "Other incident types",
+          "value": "`{{prefix}}incident kecleon` — Kecleon appearance\n`{{prefix}}incident showcase` — Pokemon Showcase event\n`{{prefix}}incident gold` — gold/special pokestops\n`{{prefix}}incident balloon` — rocket balloon incidents"
+        },
+        {
+          "name": "Gender filter",
+          "value": "`gender:male` / `gender:female` — only alert when the grunt is a specific gender (useful for costume hunting)"
+        },
+        {
+          "name": "Distance and area",
+          "value": "`d:500`\n`area:city_centre`"
+        },
+        {
+          "name": "Message flags",
+          "value": "`clean` — auto-delete after the incident expires\n`edit` — single message edited in place\n`ping`"
+        },
+        {
+          "name": "Remove",
+          "value": "`{{prefix}}incident remove dragon`\n`{{prefix}}incident remove everything`\n`{{prefix}}incident remove kecleon`\n`{{prefix}}untrack id:<N>`"
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

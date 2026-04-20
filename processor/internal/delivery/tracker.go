@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	log "github.com/sirupsen/logrus"
 )
@@ -18,7 +19,7 @@ type TrackedMessage struct {
 	SentID string `json:"sent_id"`
 	Target string `json:"target"`
 	Type   string `json:"type"` // "discord:user", "telegram:group", etc.
-	Clean  bool   `json:"clean"`
+	Clean  int    `json:"clean"`
 }
 
 // MessageTracker manages sent messages with TTL-based expiry and clean deletion.
@@ -42,19 +43,21 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 
 	cache.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[string, *TrackedMessage]) {
 		if reason != ttlcache.EvictionReasonExpired {
+			log.Debugf("delivery: tracker evicted %s (reason=%v) — not a TTL expiry, skipping clean", item.Key(), reason)
 			return
 		}
 		metrics.DeliveryTrackerEvictions.Inc()
 		msg := item.Value()
-		if !msg.Clean {
+		if !db.IsClean(msg.Clean) {
 			return
 		}
 		platform := PlatformFromType(msg.Type)
 		sender, ok := mt.senders[platform]
 		if !ok {
+			log.Warnf("delivery: clean delete skipped — no sender for platform %q (type=%s target=%s sentID=%s)", platform, msg.Type, msg.Target, msg.SentID)
 			return
 		}
-		log.Infof("delivery: clean delete %s/%s", msg.Type, msg.Target)
+		log.Infof("delivery: clean delete %s/%s sentID=%s", msg.Type, msg.Target, msg.SentID)
 		go func() {
 			if err := sender.Delete(context.Background(), msg.SentID); err != nil {
 				log.Warnf("delivery: clean delete failed for %s: %v", msg.SentID, err)
@@ -160,12 +163,13 @@ func (mt *MessageTracker) Load() error {
 	for _, entry := range entries {
 		if entry.ExpiresAt.Before(now) {
 			// Expired entry
-			if entry.Message.Clean {
+			if db.IsClean(entry.Message.Clean) {
 				expiredClean++
 				msg := entry.Message
 				platform := PlatformFromType(msg.Type)
 				sender, ok := mt.senders[platform]
 				if !ok {
+					log.Warnf("delivery: clean delete on load skipped — no sender for platform %q (type=%s target=%s sentID=%s)", platform, msg.Type, msg.Target, msg.SentID)
 					continue
 				}
 				go func() {

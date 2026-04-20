@@ -13,6 +13,10 @@ import (
 )
 
 func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
+	if ps.cfg.General.DisableNest {
+		return nil
+	}
+
 	select {
 	case ps.workerPool <- struct{}{}:
 	case <-ps.ctx.Done():
@@ -57,7 +61,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 		matchStart := time.Now()
 		matched := ps.nestMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("nest").Observe(time.Since(matchStart).Seconds())
-		matched = ps.filterRateLimited(matched)
+		matched = ps.filterBlocked(matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("nest").Inc()
@@ -69,14 +73,15 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 			l.Infof("Nest %s (avg %.1f/hr) areas(%s) and %d humans cared",
 				ps.pokemonName(nest.PokemonID, nest.Form), nest.PokemonAvg, areaNames(matchedAreas), len(matched))
 
-			enrichment, tilePending := ps.enricher.Nest(&nest)
+			mode := ps.tileMode("nest", matched)
+			enrichmentData, tilePending := ps.enricher.Nest(&nest, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.NestTranslate(enrichment, nest.PokemonID, nest.Form, lang)
+					perLang[lang] = ps.enricher.NestTranslate(enrichmentData, nest.PokemonID, nest.Form, lang)
 				}
 			}
 
@@ -87,7 +92,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 
 			ps.renderCh <- RenderJob{
 				TemplateType:      "nest",
-				Enrichment:        enrichment,
+				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,

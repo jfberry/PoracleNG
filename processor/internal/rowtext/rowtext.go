@@ -7,6 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -21,13 +22,16 @@ type Generator struct {
 	Scanner             scanner.Scanner
 }
 
-// standardText appends template and clean indicators.
-func standardText(tr *i18n.Translator, template, defaultTemplate string, clean bool) string {
+// standardText appends template, clean, and edit indicators.
+func standardText(tr *i18n.Translator, template, defaultTemplate string, clean int) string {
 	var text string
 	if template != "" && template != defaultTemplate {
 		text += " " + tr.Tf("tracking.template_fmt", template)
 	}
-	if clean {
+	if db.IsEdit(clean) {
+		text += " " + tr.T("tracking.edit")
+	}
+	if db.IsClean(clean) {
 		text += " " + tr.T("tracking.clean")
 	}
 	return text

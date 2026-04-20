@@ -12,8 +12,8 @@ var testCommunities = []config.CommunityConfig{
 		AllowedAreas:  []string{"Manhattan", "Bronx", "Brooklyn"},
 		LocationFence: []string{"WholeNewYork"},
 		Telegram:      struct {
-			Channels []string `toml:"channels"`
-			Admins   []string `toml:"admins"`
+			Channels []string `toml:"channels" json:"channels"`
+			Admins   []string `toml:"admins" json:"admins"`
 		}{Admins: []string{"111", "222"}},
 	},
 	{
@@ -21,8 +21,8 @@ var testCommunities = []config.CommunityConfig{
 		AllowedAreas:  []string{"NorthSide", "SouthSide"},
 		LocationFence: []string{"WholeChicago", "GreaterChicago"},
 		Telegram:      struct {
-			Channels []string `toml:"channels"`
-			Admins   []string `toml:"admins"`
+			Channels []string `toml:"channels" json:"channels"`
+			Admins   []string `toml:"admins" json:"admins"`
 		}{Admins: []string{"333"}},
 	},
 	{

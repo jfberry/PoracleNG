@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,7 +50,7 @@ func RegisterHelpers() {
 // looseEqual compares two values the way the JS templates expect: if both
 // values parse as numbers, compare numerically (so "100.00" == 100); otherwise
 // fall back to string comparison via %v. nil equals nil.
-func looseEqual(a, b interface{}) bool {
+func looseEqual(a, b any) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
@@ -63,7 +64,7 @@ func looseEqual(a, b interface{}) bool {
 
 // tryFloat returns the float64 value of v and true if it can be interpreted
 // as a number (numeric kinds, bool, or numeric strings).
-func tryFloat(v interface{}) (float64, bool) {
+func tryFloat(v any) (float64, bool) {
 	switch x := v.(type) {
 	case float64:
 		return x, true
@@ -94,7 +95,7 @@ func tryFloat(v interface{}) (float64, bool) {
 	return 0, false
 }
 
-func boolResult(result bool, options *raymond.Options) interface{} {
+func boolResult(result bool, options *raymond.Options) any {
 	if options.IsSubExpression() {
 		return result
 	}
@@ -104,7 +105,7 @@ func boolResult(result bool, options *raymond.Options) interface{} {
 	return options.Inverse()
 }
 
-func toFloat(v interface{}) float64 {
+func toFloat(v any) float64 {
 	if v == nil {
 		return 0
 	}
@@ -133,12 +134,12 @@ func toFloat(v interface{}) float64 {
 }
 
 // toBool returns Handlebars truthiness: 0, "", nil, false, empty array/map → false.
-func toBool(v interface{}) bool {
+func toBool(v any) bool {
 	return raymond.IsTrue(v)
 }
 
 // toString converts any value to its string representation.
-func toString(v interface{}) string {
+func toString(v any) string {
 	if v == nil {
 		return ""
 	}
@@ -159,48 +160,48 @@ func registerComparisonHelpers() {
 
 	// eq — true if a == b. Numeric comparison when both sides parse as numbers
 	// (so "100.00" equals 100), string comparison otherwise.
-	raymond.RegisterHelper("eq", func(a, b interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("eq", func(a, b any, options *raymond.Options) any {
 		return boolResult(looseEqual(a, b), options)
 	})
 
 	// ne — true if a != b (loose comparison, see eq).
-	raymond.RegisterHelper("ne", func(a, b interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("ne", func(a, b any, options *raymond.Options) any {
 		return boolResult(!looseEqual(a, b), options)
 	})
 
 	// isnt — alias for ne
-	raymond.RegisterHelper("isnt", func(a, b interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("isnt", func(a, b any, options *raymond.Options) any {
 		return boolResult(!looseEqual(a, b), options)
 	})
 
 	// compare — supports ==, !=, <, >, <=, >=
-	raymond.RegisterHelper("compare", func(a interface{}, op string, b interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("compare", func(a any, op string, b any, options *raymond.Options) any {
 		result := evalCompare(a, op, b)
 		return boolResult(result, options)
 	})
 
 	// gt — a > b (numeric)
-	raymond.RegisterHelper("gt", func(a, b interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("gt", func(a, b any, options *raymond.Options) any {
 		return boolResult(toFloat(a) > toFloat(b), options)
 	})
 
 	// gte — a >= b (numeric)
-	raymond.RegisterHelper("gte", func(a, b interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("gte", func(a, b any, options *raymond.Options) any {
 		return boolResult(toFloat(a) >= toFloat(b), options)
 	})
 
 	// lt — a < b (numeric)
-	raymond.RegisterHelper("lt", func(a, b interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("lt", func(a, b any, options *raymond.Options) any {
 		return boolResult(toFloat(a) < toFloat(b), options)
 	})
 
 	// lte — a <= b (numeric)
-	raymond.RegisterHelper("lte", func(a, b interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("lte", func(a, b any, options *raymond.Options) any {
 		return boolResult(toFloat(a) <= toFloat(b), options)
 	})
 
 	// and — all args truthy (variadic)
-	raymond.RegisterHelper("and", func(options *raymond.Options) interface{} {
+	raymond.RegisterHelper("and", func(options *raymond.Options) any {
 		result := true
 		for _, p := range options.Params() {
 			if !toBool(p) {
@@ -212,29 +213,21 @@ func registerComparisonHelpers() {
 	})
 
 	// or — any arg truthy (variadic)
-	raymond.RegisterHelper("or", func(options *raymond.Options) interface{} {
-		result := false
-		for _, p := range options.Params() {
-			if toBool(p) {
-				result = true
-				break
-			}
-		}
+	raymond.RegisterHelper("or", func(options *raymond.Options) any {
+		result := slices.ContainsFunc(options.Params(), toBool)
 		return boolResult(result, options)
 	})
 
 	// neither — none of the args truthy (variadic, inverse of or)
-	raymond.RegisterHelper("neither", func(options *raymond.Options) interface{} {
-		for _, p := range options.Params() {
-			if toBool(p) {
-				return boolResult(false, options)
-			}
+	raymond.RegisterHelper("neither", func(options *raymond.Options) any {
+		if slices.ContainsFunc(options.Params(), toBool) {
+			return boolResult(false, options)
 		}
 		return boolResult(true, options)
 	})
 
 	// not — logical negation (block helper)
-	raymond.RegisterHelper("not", func(value interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("not", func(value any, options *raymond.Options) any {
 		if !toBool(value) {
 			return options.Fn()
 		}
@@ -242,7 +235,7 @@ func registerComparisonHelpers() {
 	})
 
 	// contains — string contains or slice includes
-	raymond.RegisterHelper("contains", func(collection, value interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("contains", func(collection, value any, options *raymond.Options) any {
 		if evalContains(collection, value) {
 			return options.Fn()
 		}
@@ -250,7 +243,7 @@ func registerComparisonHelpers() {
 	})
 
 	// default — inline helper: return value if truthy, else defaultValue
-	raymond.RegisterHelper("default", func(value, defaultValue interface{}) interface{} {
+	raymond.RegisterHelper("default", func(value, defaultValue any) any {
 		if toBool(value) {
 			return toString(value)
 		}
@@ -259,7 +252,7 @@ func registerComparisonHelpers() {
 }
 
 // evalCompare evaluates a comparison with the given operator.
-func evalCompare(a interface{}, op string, b interface{}) bool {
+func evalCompare(a any, op string, b any) bool {
 	switch op {
 	case "==":
 		return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
@@ -279,7 +272,7 @@ func evalCompare(a interface{}, op string, b interface{}) bool {
 }
 
 // evalContains checks if collection contains value.
-func evalContains(collection, value interface{}) bool {
+func evalContains(collection, value any) bool {
 	if collection == nil {
 		return false
 	}
@@ -306,39 +299,39 @@ func evalContains(collection, value interface{}) bool {
 // ---------------------------------------------------------------------------
 
 func registerMathHelpers() {
-	raymond.RegisterHelper("round", func(n interface{}) interface{} {
+	raymond.RegisterHelper("round", func(n any) any {
 		return math.Round(toFloat(n))
 	})
 
-	raymond.RegisterHelper("floor", func(n interface{}) interface{} {
+	raymond.RegisterHelper("floor", func(n any) any {
 		return math.Floor(toFloat(n))
 	})
 
-	raymond.RegisterHelper("ceil", func(n interface{}) interface{} {
+	raymond.RegisterHelper("ceil", func(n any) any {
 		return math.Ceil(toFloat(n))
 	})
 
-	raymond.RegisterHelper("add", func(a, b interface{}) interface{} {
+	raymond.RegisterHelper("add", func(a, b any) any {
 		return toFloat(a) + toFloat(b)
 	})
 
-	raymond.RegisterHelper("plus", func(a, b interface{}) interface{} {
+	raymond.RegisterHelper("plus", func(a, b any) any {
 		return toFloat(a) + toFloat(b)
 	})
 
-	raymond.RegisterHelper("subtract", func(a, b interface{}) interface{} {
+	raymond.RegisterHelper("subtract", func(a, b any) any {
 		return toFloat(a) - toFloat(b)
 	})
 
-	raymond.RegisterHelper("minus", func(a, b interface{}) interface{} {
+	raymond.RegisterHelper("minus", func(a, b any) any {
 		return toFloat(a) - toFloat(b)
 	})
 
-	raymond.RegisterHelper("multiply", func(a, b interface{}) interface{} {
+	raymond.RegisterHelper("multiply", func(a, b any) any {
 		return toFloat(a) * toFloat(b)
 	})
 
-	raymond.RegisterHelper("divide", func(a, b interface{}) interface{} {
+	raymond.RegisterHelper("divide", func(a, b any) any {
 		bv := toFloat(b)
 		if bv == 0 {
 			return float64(0)
@@ -346,12 +339,12 @@ func registerMathHelpers() {
 		return toFloat(a) / bv
 	})
 
-	raymond.RegisterHelper("toFixed", func(n, decimals interface{}) interface{} {
+	raymond.RegisterHelper("toFixed", func(n, decimals any) any {
 		d := int(toFloat(decimals))
 		return strconv.FormatFloat(toFloat(n), 'f', d, 64)
 	})
 
-	raymond.RegisterHelper("toInt", func(n interface{}) interface{} {
+	raymond.RegisterHelper("toInt", func(n any) any {
 		return int(toFloat(n))
 	})
 }
@@ -361,15 +354,15 @@ func registerMathHelpers() {
 // ---------------------------------------------------------------------------
 
 func registerStringHelpers() {
-	raymond.RegisterHelper("uppercase", func(s interface{}) interface{} {
+	raymond.RegisterHelper("uppercase", func(s any) any {
 		return strings.ToUpper(toString(s))
 	})
 
-	raymond.RegisterHelper("lowercase", func(s interface{}) interface{} {
+	raymond.RegisterHelper("lowercase", func(s any) any {
 		return strings.ToLower(toString(s))
 	})
 
-	raymond.RegisterHelper("capitalize", func(s interface{}) interface{} {
+	raymond.RegisterHelper("capitalize", func(s any) any {
 		str := toString(s)
 		if str == "" {
 			return ""
@@ -378,12 +371,12 @@ func registerStringHelpers() {
 		return string(unicode.ToUpper(r)) + str[size:]
 	})
 
-	raymond.RegisterHelper("replace", func(s, old, new interface{}) interface{} {
+	raymond.RegisterHelper("replace", func(s, old, new any) any {
 		return strings.ReplaceAll(toString(s), toString(old), toString(new))
 	})
 
 	// truncate — truncate with suffix. Usage: {{truncate s 8}} or {{truncate s 8 suffix="--"}}
-	raymond.RegisterHelper("truncate", func(s, length interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("truncate", func(s, length any, options *raymond.Options) any {
 		str := toString(s)
 		maxLen := int(toFloat(length))
 		sfx := "..."
@@ -399,7 +392,7 @@ func registerStringHelpers() {
 		return str[:maxLen-len(sfx)] + sfx
 	})
 
-	raymond.RegisterHelper("concat", func(args ...interface{}) interface{} {
+	raymond.RegisterHelper("concat", func(args ...any) any {
 		var sb strings.Builder
 		for _, a := range args {
 			sb.WriteString(toString(a))
@@ -415,7 +408,7 @@ func registerStringHelpers() {
 // eachContextWithMeta injects isFirst/isLast into the iteration context.
 // For map contexts: adds the keys directly. For non-map contexts: wraps in
 // an eachWrapper that implements FieldResolver so {{this}} still works.
-func eachContextWithMeta(ctx interface{}, index, length int) interface{} {
+func eachContextWithMeta(ctx any, index, length int) any {
 	isFirst := index == 0
 	isLast := index == length-1
 
@@ -425,7 +418,7 @@ func eachContextWithMeta(ctx interface{}, index, length int) interface{} {
 		m["isLast"] = isLast
 		return m
 	}
-	if m, ok := ctx.(map[string]interface{}); ok {
+	if m, ok := ctx.(map[string]any); ok {
 		m["isFirst"] = isFirst
 		m["isLast"] = isLast
 		return m
@@ -438,12 +431,12 @@ func eachContextWithMeta(ctx interface{}, index, length int) interface{} {
 // eachWrapper implements raymond.FieldResolver to provide isFirst/isLast
 // while preserving the original value for {{this}}.
 type eachWrapper struct {
-	value   interface{}
+	value   any
 	isFirst bool
 	isLast  bool
 }
 
-func (w *eachWrapper) GetField(name string) (interface{}, bool) {
+func (w *eachWrapper) GetField(name string) (any, bool) {
 	switch name {
 	case "isFirst":
 		return w.isFirst, true
@@ -464,7 +457,7 @@ func registerArrayHelpers() {
 	// Standard Handlebars provides @first/@last (data variables) but PoracleJS templates
 	// use isFirst/isLast as context properties (bare names without @).
 	raymond.RemoveHelper("each")
-	raymond.RegisterHelper("each", func(context interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("each", func(context any, options *raymond.Options) any {
 		if !raymond.IsTrue(context) {
 			return options.Inverse()
 		}
@@ -477,7 +470,7 @@ func registerArrayHelpers() {
 				return options.Inverse()
 			}
 			var sb strings.Builder
-			for i := 0; i < length; i++ {
+			for i := range length {
 				data := options.NewDataFrame()
 				data.Set("index", i)
 				data.Set("first", i == 0)
@@ -510,7 +503,7 @@ func registerArrayHelpers() {
 		}
 	})
 
-	raymond.RegisterHelper("forEach", func(context interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("forEach", func(context any, options *raymond.Options) any {
 		if !raymond.IsTrue(context) {
 			return options.Inverse()
 		}
@@ -526,7 +519,7 @@ func registerArrayHelpers() {
 		}
 
 		var sb strings.Builder
-		for i := 0; i < length; i++ {
+		for i := range length {
 			data := options.NewDataFrame()
 			data.Set("index", i)
 			data.Set("first", i == 0)
@@ -540,7 +533,7 @@ func registerArrayHelpers() {
 	})
 
 	// first — inline, first N elements. Usage: {{first arr}} or {{first arr n=2}}
-	raymond.RegisterHelper("first", func(arr interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("first", func(arr any, options *raymond.Options) any {
 		if arr == nil {
 			return ""
 		}
@@ -564,7 +557,7 @@ func registerArrayHelpers() {
 		if n == 1 {
 			return val.Index(0).Interface()
 		}
-		result := make([]interface{}, n)
+		result := make([]any, n)
 		for i := 0; i < n; i++ {
 			result[i] = val.Index(i).Interface()
 		}
@@ -572,7 +565,7 @@ func registerArrayHelpers() {
 	})
 
 	// last — inline, last N elements. Usage: {{last arr}} or {{last arr n=2}}
-	raymond.RegisterHelper("last", func(arr interface{}, options *raymond.Options) interface{} {
+	raymond.RegisterHelper("last", func(arr any, options *raymond.Options) any {
 		if arr == nil {
 			return ""
 		}
@@ -597,7 +590,7 @@ func registerArrayHelpers() {
 		if n == 1 {
 			return val.Index(start).Interface()
 		}
-		result := make([]interface{}, n)
+		result := make([]any, n)
 		for i := 0; i < n; i++ {
 			result[i] = val.Index(start + i).Interface()
 		}
@@ -605,7 +598,7 @@ func registerArrayHelpers() {
 	})
 
 	// length — inline, works on arrays and strings
-	raymond.RegisterHelper("length", func(v interface{}) interface{} {
+	raymond.RegisterHelper("length", func(v any) any {
 		if v == nil {
 			return 0
 		}
@@ -619,7 +612,7 @@ func registerArrayHelpers() {
 	})
 
 	// join — inline, joins array elements with separator
-	raymond.RegisterHelper("join", func(arr interface{}, sep interface{}) interface{} {
+	raymond.RegisterHelper("join", func(arr any, sep any) any {
 		if arr == nil {
 			return ""
 		}
@@ -641,13 +634,13 @@ func registerArrayHelpers() {
 
 func registerFormattingHelpers() {
 	// numberFormat — format with N decimal places. Usage: {{numberFormat n 2}}
-	raymond.RegisterHelper("numberFormat", func(value, decimals interface{}) interface{} {
+	raymond.RegisterHelper("numberFormat", func(value, decimals any) any {
 		d := int(toFloat(decimals))
 		return strconv.FormatFloat(toFloat(value), 'f', d, 64)
 	})
 
 	// pad0 — zero-pad to width characters. Usage: {{pad0 n 3}}
-	raymond.RegisterHelper("pad0", func(value interface{}, args ...interface{}) interface{} {
+	raymond.RegisterHelper("pad0", func(value any, args ...any) any {
 		w := 3
 		if len(args) > 0 {
 			switch v := args[0].(type) {
@@ -661,12 +654,12 @@ func registerFormattingHelpers() {
 	})
 
 	// replaceFirst — replace first occurrence only. Usage: {{replaceFirst "Mr. Mime" ". " "_"}} → "Mr_Mime"
-	raymond.RegisterHelper("replaceFirst", func(s, old, new interface{}) interface{} {
+	raymond.RegisterHelper("replaceFirst", func(s, old, new any) any {
 		return strings.Replace(toString(s), toString(old), toString(new), 1)
 	})
 
 	// addCommas — format number with thousand separators. Usage: {{addCommas 12345}} → "12,345"
-	raymond.RegisterHelper("addCommas", func(value interface{}) interface{} {
+	raymond.RegisterHelper("addCommas", func(value any) any {
 		n := int64(toFloat(value))
 		if n == 0 {
 			return "0"

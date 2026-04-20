@@ -1,6 +1,7 @@
 package enrichment
 
 import (
+	"maps"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -48,24 +49,39 @@ type PVPDisplayConfig struct {
 // sent to the alerter. The enrichment map is sent alongside the original
 // raw message so neither needs to be re-encoded.
 type Enricher struct {
-	TimeLayout       string
-	DateLayout       string
-	WeatherProvider  WeatherProvider
-	ForecastProvider ForecastProvider  // optional; triggers AccuWeather fetch
-	ShinyProvider    ShinyRateProvider // optional; provides shiny rates
-	EventChecker     *PogoEventChecker
-	GameData         *gamedata.GameData  // game master data for enrichment
-	Translations     *i18n.Bundle        // translations for per-language enrichment
-	MapConfig        *MapConfig          // map URL configuration
+	TimeLayout         string
+	DateLayout         string
+	WeatherProvider    WeatherProvider
+	ForecastProvider   ForecastProvider  // optional; triggers AccuWeather fetch
+	ShinyProvider      ShinyRateProvider // optional; provides shiny rates
+	EventChecker       *PogoEventChecker
+	GameData           *gamedata.GameData  // game master data for enrichment
+	Translations       *i18n.Bundle        // translations for per-language enrichment
+	MapConfig          *MapConfig          // map URL configuration
 	IvColors           []string            // Discord IV color hex strings (6 thresholds)
 	PVPDisplay         *PVPDisplayConfig   // PVP display filtering config
-	ImgUicons          *uicons.Uicons        // Primary icon resolver
-	ImgUiconsAlt       *uicons.Uicons        // Alternative icon resolver
-	StickerUicons      *uicons.Uicons        // Sticker icon resolver (webp)
-	DefaultLocale      string                   // Fallback locale when user has no language set
-	RequestShinyImages bool                   // Whether to request shiny icon variants
-	StaticMap          *staticmap.Resolver    // Static map tile resolver (nil = disabled)
-	Geocoder           *geocoding.Geocoder    // Reverse geocoder (nil = disabled)
+	ImgUicons          *uicons.Uicons      // Primary icon resolver
+	ImgUiconsAlt       *uicons.Uicons      // Alternative icon resolver
+	StickerUicons      *uicons.Uicons      // Sticker icon resolver (webp)
+	DefaultLocale      string              // Fallback locale when user has no language set
+	RequestShinyImages bool                // Whether to request shiny icon variants
+	StaticMap          *staticmap.Resolver // Static map tile resolver (nil = disabled)
+	Geocoder           *geocoding.Geocoder // Reverse geocoder (nil = disabled)
+
+	// Fallback icon URLs when uicons are not configured or fail
+	FallbackImgURL      string
+	FallbackImgWeather  string
+	FallbackImgEgg      string
+	FallbackImgGym      string
+	FallbackImgPokestop string
+	FallbackPokestopURL string
+}
+
+// setFallbackImg sets imgUrl to the fallback if it wasn't set by uicons.
+func (e *Enricher) setFallbackImg(m map[string]any, fallback string) {
+	if _, ok := m["imgUrl"]; !ok && fallback != "" {
+		m["imgUrl"] = fallback
+	}
 }
 
 // New creates a new Enricher.
@@ -149,26 +165,51 @@ func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
 	m["formattedAddress"] = addr.FormattedAddress
 }
 
+// Tile mode constants. Defined here to avoid import cycles with cmd/processor.
+const (
+	TileModeSkip         = 0 // no template uses staticMap → don't generate tile
+	TileModeInline       = 1 // all users can accept bytes → POST without pregenerate
+	TileModeURL          = 2 // at least one user needs a fetchable URL → pregenerate
+	TileModeURLWithBytes = 3 // mixed: pregenerate (public URL embedded in message) + fetch bytes once via internal URL for Discord-upload destinations in the batch
+)
+
 // addStaticMap generates a static map tile URL and adds it to the enrichment map.
 // For async-capable providers (tileservercache pregenerate), returns a TilePending
 // that the sender resolves before flushing. For instant providers, sets the URL
 // directly and returns nil.
-func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any) *staticmap.TilePending {
-	if e.StaticMap == nil {
+// tileMode controls whether to skip (0), generate inline bytes (1), or generate
+// a fetchable URL (2).
+func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any, tileMode int) *staticmap.TilePending {
+	if e.StaticMap == nil || tileMode == TileModeSkip {
 		return nil
 	}
 	// Build tileserver payload from enrichment + webhook fields
 	merged := make(map[string]any, len(m)+len(webhookFields)+2)
-	for k, v := range m {
-		merged[k] = v
-	}
-	for k, v := range webhookFields {
-		merged[k] = v
-	}
+	maps.Copy(merged, m)
+	maps.Copy(merged, webhookFields)
 	merged["latitude"] = lat
 	merged["longitude"] = lon
 	keys, pregenKeys := staticMapFieldsForType(maptype)
 
+	if tileMode == TileModeInline {
+		// Inline mode POSTs without pregenerate=true — the tileserver returns
+		// image bytes directly. Assumes tileservercache with POST-body support.
+		filtered := filterFields(merged, pregenKeys)
+		e.StaticMap.AddNearbyStops(filtered, merged, maptype)
+		return e.StaticMap.SubmitTileInline(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m)
+	}
+
+	if tileMode == TileModeURLWithBytes {
+		// Mixed batch: pregenerate to produce a public URL (embedded in the
+		// rendered message for Telegram / upload-off Discord) AND download
+		// the bytes once via internal_url so Discord-upload destinations in
+		// the same batch don't each re-fetch the public URL.
+		filtered := filterFields(merged, pregenKeys)
+		e.StaticMap.AddNearbyStops(filtered, merged, maptype)
+		return e.StaticMap.SubmitTileBoth(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m)
+	}
+
+	// TileModeURL — current flow
 	url, pending := e.StaticMap.GetStaticMapURLAsync(maptype, merged, keys, pregenKeys, m)
 	if pending != nil {
 		// Tile will be resolved async by the sender
@@ -178,6 +219,17 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 	m["staticMap"] = url
 	m["staticmap"] = url // deprecated alias
 	return nil
+}
+
+// filterFields returns a new map containing only the keys in the allowed list.
+func filterFields(data map[string]any, allowed []string) map[string]any {
+	result := make(map[string]any, len(allowed))
+	for _, key := range allowed {
+		if v, ok := data[key]; ok {
+			result[key] = v
+		}
+	}
+	return result
 }
 
 // staticMapFieldsForType returns the field lists for non-pregenerate (keys) and
@@ -209,7 +261,7 @@ func staticMapFieldsForType(maptype string) (keys []string, pregenKeys []string)
 		keys = common
 		pregenKeys = keys
 	case "gym":
-		typeFields := []string{"team_id", "slotsAvailable", "inBattle", "ex"}
+		typeFields := []string{"teamId", "slotsAvailable", "inBattle", "ex"}
 		keys = append(common, typeFields...)
 		pregenKeys = keys
 	case "nest":

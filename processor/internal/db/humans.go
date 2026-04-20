@@ -69,7 +69,7 @@ func LoadHumans(db *sqlx.DB) (map[string]*Human, error) {
 			AdminDisable:     r.AdminDisable,
 			Latitude:         r.Latitude,
 			Longitude:        r.Longitude,
-			Language:         r.Language.String,
+			Language:         normalizeLanguage(r.Language.String),
 			CurrentProfileNo: r.CurrentProfileNo,
 			BlockedAlerts:    r.BlockedAlerts.String,
 			BlockedAlertsSet: parseBlockedAlerts(r.BlockedAlerts.String),
@@ -81,6 +81,18 @@ func LoadHumans(db *sqlx.DB) (map[string]*Human, error) {
 		humans[h.ID] = h
 	}
 	return humans, nil
+}
+
+// normalizeLanguage fixes historically misconfigured locale codes.
+var languageAliases = map[string]string{
+	"se": "sv", // Northern Sami → Swedish
+}
+
+func normalizeLanguage(lang string) string {
+	if alias, ok := languageAliases[lang]; ok {
+		return alias
+	}
+	return lang
 }
 
 func parseBlockedAlerts(jsonStr string) map[string]bool {

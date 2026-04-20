@@ -72,7 +72,7 @@ func TestDispatcherTrackerSize(t *testing.T) {
 		Target:  "chan1",
 		Type:    "discord:channel",
 		Message: json.RawMessage(`{"content":"tracked"}`),
-		Clean:   true,
+		Clean:   1,
 		TTH:     TTH{Minutes: 10},
 	})
 
