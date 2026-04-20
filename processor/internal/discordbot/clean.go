@@ -14,14 +14,17 @@ func (b *Bot) handleClean(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
+	userLang, _, _, _, _ := bot.LookupUserStateFromStore(b.Humans, m.Author.ID, b.Cfg.General.Locale)
+	tr := b.Translations.For(userLang)
+
 	messages, err := s.ChannelMessages(m.ChannelID, 100, "", "", "")
 	if err != nil {
 		log.Warnf("discord bot: fetch messages for clean in %s: %v", m.ChannelID, err)
-		s.ChannelMessageSend(m.ChannelID, "Failed to run clean, check logs")
+		s.ChannelMessageSend(m.ChannelID, tr.T("msg.poracle_clean.failed"))
 		return
 	}
 
-	startMsg, _ := s.ChannelMessageSend(m.ChannelID, "Will start cleaning up to 100 messages back - do not re-run until finished")
+	startMsg, _ := s.ChannelMessageSend(m.ChannelID, tr.T("msg.poracle_clean.start"))
 
 	for _, msg := range messages {
 		if msg.Author.ID == s.State.User.ID {
@@ -36,7 +39,7 @@ func (b *Bot) handleClean(s *discordgo.Session, m *discordgo.MessageCreate) {
 		s.ChannelMessageDelete(m.ChannelID, startMsg.ID)
 	}
 
-	finishMsg, _ := s.ChannelMessageSend(m.ChannelID, "Cleaning finished")
+	finishMsg, _ := s.ChannelMessageSend(m.ChannelID, tr.T("msg.poracle_clean.finished"))
 
 	// Auto-delete the finish message after 15 seconds
 	if finishMsg != nil {

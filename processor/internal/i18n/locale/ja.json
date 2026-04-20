@@ -340,6 +340,9 @@
   "msg.poracle_test.not_found": "hook タイプ {0} テスト id {1} が見つかりません",
   "msg.poracle_test.queued": "{0} テスト hook [{1}] テンプレート [{2}] をキュー中",
   "msg.poracle_test.failed": "テストの送信に失敗: {0}",
+  "msg.poracle_clean.start": "Will start cleaning up to 100 messages back — do not re-run until finished",
+  "msg.poracle_clean.finished": "Cleaning finished",
+  "msg.poracle_clean.failed": "Failed to run clean, check logs",
 
   "msg.backup.invalid_name": "有効なバックアップ名を使用してください（英数字・ハイフン・アンダースコアのみ）",
   "msg.backup.need_name": "バックアップには有効な名前が必要です（英数字・ハイフン・アンダースコアのみ）",
