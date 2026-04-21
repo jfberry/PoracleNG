@@ -94,6 +94,7 @@ func ValidateHumans(
 			PVPRankingCap:     monster.PVPRankingCap,
 			PVPRankingLeague:  monster.PVPRankingLeague,
 			PVPRankingWorst:   monster.PVPRankingWorst,
+			TrackDistance:     monster.Distance,
 		})
 	}
 	return result
@@ -179,6 +180,7 @@ func ValidateHumansForRaid(
 			Bearing:           int(math.Round(bearing)),
 			CardinalDirection: CardinalDirection(bearing),
 			RSVPChanges:       td.RSVPChanges,
+			TrackDistance:     td.Distance,
 		})
 	}
 	return result

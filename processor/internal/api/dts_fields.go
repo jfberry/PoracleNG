@@ -47,6 +47,8 @@ var commonFields = []FieldDef{
 	{Name: "distance", Type: "number", Description: "Distance from user location", Category: "location"},
 	{Name: "bearing", Type: "int", Description: "Bearing degrees from user", Category: "location"},
 	{Name: "bearingEmoji", Type: "string", Description: "Directional arrow emoji", Category: "location"},
+	{Name: "userDistanceTrack", Type: "bool", Description: "True when the matched rule was distance-based (e.g. d:500) vs area-based", Category: "location"},
+	{Name: "userTrackDistance", Type: "int", Description: "The matched rule's distance threshold in metres (0 = area-based rule)", Category: "location"},
 	// Maps
 	{Name: "staticMap", Type: "string", Description: "Static map image URL", Category: "maps", Preferred: true},
 	{Name: "staticmap", Type: "string", Description: "Deprecated alias for staticMap", Category: "maps", Deprecated: true, PreferredAlternative: "staticMap"},
@@ -140,6 +142,12 @@ var monsterFields = []FieldDef{
 	{Name: "pvpGreat", Type: "array", Description: "Great League PVP display list", Category: "pvp", Preferred: true},
 	{Name: "pvpUltra", Type: "array", Description: "Ultra League PVP display list", Category: "pvp", Preferred: true},
 	{Name: "pvpLittle", Type: "array", Description: "Little League PVP display list", Category: "pvp"},
+	{Name: "pvpGreatBest", Type: "object", Description: "Best entry from pvpGreat (rank, list, name)", Category: "pvp"},
+	{Name: "pvpUltraBest", Type: "object", Description: "Best entry from pvpUltra", Category: "pvp"},
+	{Name: "pvpLittleBest", Type: "object", Description: "Best entry from pvpLittle", Category: "pvp"},
+	{Name: "pvpAvailable", Type: "bool", Description: "True when any PVP data is available for this pokemon", Category: "pvp"},
+	{Name: "pvpUserRanking", Type: "int", Description: "The matched rule's worst-rank threshold (0 when the rule was not PVP-based)", Category: "pvp"},
+	{Name: "userHasPvpTracks", Type: "bool", Description: "True when at least one matched rule was a real PVP tracking rule", Category: "pvp"},
 	// Other
 	{Name: "generation", Type: "int", Description: "Generation number", Category: "other"},
 	{Name: "generationName", Type: "string", Description: "Generation name", Category: "other"},

@@ -323,9 +323,10 @@ func (r *Renderer) renderForUsers(
 
 // renderGroupKey identifies a unique (template, platform, language) combination.
 type renderGroupKey struct {
-	templateID string
-	platform   string
-	language   string
+	templateID    string
+	platform      string
+	language      string
+	distanceTrack bool
 }
 
 // renderGrouped renders once per unique (template, platform, language) group and
@@ -358,7 +359,12 @@ func (r *Renderer) renderGrouped(
 		if language == "" {
 			language = r.locale
 		}
-		key := renderGroupKey{templateID: r.resolveTemplate(user.Template), platform: platform, language: language}
+		key := renderGroupKey{
+			templateID:    r.resolveTemplate(user.Template),
+			platform:      platform,
+			language:      language,
+			distanceTrack: user.TrackDistance > 0,
+		}
 		if g, ok := groupMap[key]; ok {
 			g.users = append(g.users, user)
 		} else {
@@ -372,9 +378,13 @@ func (r *Renderer) renderGrouped(
 	for _, key := range groupOrder {
 		g := groupMap[key]
 
-		// Render once for this group
+		// Render once for this group. Distance-track flag is shared by every
+		// user in the group (it's part of the group key), so we can stash it
+		// in a tiny perUser map and let {{userDistanceTrack}} resolve from
+		// the LayeredView's perUser layer.
 		perLang := mapOrEmpty(perLangEnrichment, key.language)
-		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, nil, webhookFields, key.platform, areas)
+		groupPerUser := map[string]any{"userDistanceTrack": key.distanceTrack}
+		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, groupPerUser, webhookFields, key.platform, areas)
 
 		tmpl := r.templates.Get(templateType, key.platform, key.templateID, key.language)
 

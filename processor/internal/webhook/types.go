@@ -185,6 +185,10 @@ type MatchedUser struct {
 	Ping              string               `json:"ping"`
 	Bearing           int                  `json:"bearing"`
 	CardinalDirection string               `json:"cardinalDirection"`
+	// TrackDistance is the matched rule's distance threshold in metres (the
+	// `d:500` argument on track commands). Zero indicates an area-based rule.
+	// Used to set the userDistanceTrack per-user template flag.
+	TrackDistance     int                  `json:"track_distance,omitempty"`
 	PokemonID         int                  `json:"pokemon_id"`
 	PVPRankingCap     int                  `json:"pvp_ranking_cap"`
 	PVPRankingLeague  int                  `json:"pvp_ranking_league"`

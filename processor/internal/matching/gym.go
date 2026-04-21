@@ -175,6 +175,7 @@ func validateHumansForGym(
 			Ping:              td.Ping,
 			Bearing:           int(math.Round(bearing)),
 			CardinalDirection: CardinalDirection(bearing),
+			TrackDistance:     td.Distance,
 		})
 	}
 	return result

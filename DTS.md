@@ -83,6 +83,11 @@ These fields are available in every template:
 | `tthm` | int | Minutes component of time remaining |
 | `tths` | int | Seconds component of time remaining |
 | `distime` | string | *Deprecated* — alias for `disappearTime` |
+| `distance` | number | Distance from the user's registered location to the alert, in metres |
+| `bearing` | int | Bearing from user to alert, in degrees |
+| `bearingEmoji` | string | Directional arrow emoji for `bearing` |
+| `userDistanceTrack` | bool | True when the matched tracking rule was distance-based (e.g. `!track pikachu d:500` or `!raid T5 d:1000`) rather than area-based. Useful for conditioning the template on *why* the user received the alert. |
+| `userTrackDistance` | int | The matched rule's distance threshold in metres. `0` when the rule was area-based. For pokemon alerts where multiple rules can match one user, this is the largest threshold across matching rules. |
 
 ### Weather Fields (types with S2 cell data: pokemon, raid, egg, invasion, maxbattle)
 
@@ -207,7 +212,8 @@ Per-user enrichment (varies based on user's tracking filters):
 | `pvpLittle` | array | Little League PVP display list |
 | `pvpLittleBest` | object | Best entry from `pvpLittle` |
 | `pvpAvailable` | bool | Any PVP data available for this pokemon |
-| `userHasPvpTracks` | bool | User has PVP tracking rules that matched |
+| `userHasPvpTracks` | bool | True when at least one matched rule was a real PVP tracking rule (league > 0 with a meaningful worst threshold). Pokemon alerts only. |
+| `pvpUserRanking` | int | The matched rule's worst-rank threshold (0 when the rule was not PVP-based) |
 | `pvpDisplayGreatMinCP` | int | Minimum CP threshold for Great League display |
 | `pvpDisplayUltraMinCP` | int | Minimum CP threshold for Ultra League display |
 
@@ -261,9 +267,8 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `megaEvolutions` | array | Mega evolution entries |
 | `hasMegaEvolutions` | bool | Has mega evolutions |
 | `pokestopName` | string | Nearby pokestop name (if applicable) |
-| `distance` | number | Distance from user (per-user enrichment) |
-| `bearing` | int | Bearing degrees from user |
-| `bearingEmoji` | string | Directional arrow emoji |
+
+`distance`, `bearing`, `bearingEmoji`, `userDistanceTrack`, `userTrackDistance` are documented in Common Fields.
 
 ---
 
