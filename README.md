@@ -6,6 +6,9 @@
 
 PoracleNG is a high-performance Pokemon GO webhook alerting system written in Go. It receives webhooks from a scanner (Golbat), matches them against user-defined tracking rules, and delivers personalised alerts to Discord and Telegram — including bot commands, reconciliation, and all APIs in a single process.
 
+- 📖 **Manual / Wiki**: <https://jfberry.github.io/PoracleNG-docs/>
+- 💬 **Discord**: <https://discord.gg/AathPCp>
+
 ## Architecture
 
 ```
