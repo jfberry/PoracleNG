@@ -321,6 +321,7 @@
   "msg.location.usage": "Valid commands are e.g. `{0}location <lat>,<lon>`, `{0}location <your address>`",
   "msg.location.specify": "Konnte den Standort nicht verstehen",
   "msg.location.set": "Neuer Standort: {0},{1}",
+  "msg.location.current": "Your current location is {0},{1}",
   "msg.area.none_available": "Keine Gebiete verfügbar",
   "msg.area.available": "**Verfügbare Gebiete:**",
   "msg.area.specify_add": "Bitte Gebietsnamen angeben",
