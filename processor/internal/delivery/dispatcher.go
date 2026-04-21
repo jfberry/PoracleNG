@@ -13,6 +13,14 @@ type DispatcherConfig struct {
 	QueueSize     int
 	CacheDir      string
 	Queue         QueueConfig
+	// TileProviderURL / TileInternalURL let the Discord sender rewrite a
+	// remote tile URL (embed.image.url, which is the public tileserver URL
+	// for Discord clients to resolve) to the internal URL before the
+	// processor itself downloads the bytes for multipart re-upload. This
+	// avoids the CDN/proxy fronting the public URL serving stale bytes to
+	// our re-upload path. Empty TileInternalURL falls back to TileProviderURL.
+	TileProviderURL string
+	TileInternalURL string
 }
 
 // DispatchBypass enqueues a job that must skip the rate-limit count and
@@ -35,7 +43,9 @@ type Dispatcher struct {
 func NewDispatcher(cfg DispatcherConfig) (*Dispatcher, error) {
 	senders := make(map[string]Sender)
 	if cfg.DiscordToken != "" {
-		senders["discord"] = NewDiscordSender(cfg.DiscordToken, cfg.UploadImages, cfg.DeleteDelayMs)
+		ds := NewDiscordSender(cfg.DiscordToken, cfg.UploadImages, cfg.DeleteDelayMs)
+		ds.SetTileURLRewrite(cfg.TileProviderURL, cfg.TileInternalURL)
+		senders["discord"] = ds
 	}
 	if cfg.TelegramToken != "" {
 		senders["telegram"] = NewTelegramSender(cfg.TelegramToken)

@@ -25,6 +25,38 @@ type DiscordSender struct {
 	uploadImages bool
 	deleteDelay  time.Duration
 	dmChannels   sync.Map // userID → DM channelID
+
+	// Tile URL rewrite: when re-downloading a tile for multipart upload,
+	// substitute the public tileserver base with the internal one so our
+	// download bypasses any CDN/proxy in front of the public URL.
+	tilePublicBase   string
+	tileInternalBase string
+}
+
+// SetTileURLRewrite configures the tile URL rewrite applied before the
+// processor downloads an embed image for re-upload. publicBase is the URL
+// that appears in embed.image.url (what Discord clients resolve);
+// internalBase is the private URL the processor should hit instead.
+// Empty internalBase disables the rewrite.
+func (ds *DiscordSender) SetTileURLRewrite(publicBase, internalBase string) {
+	ds.tilePublicBase = strings.TrimRight(publicBase, "/")
+	ds.tileInternalBase = strings.TrimRight(internalBase, "/")
+}
+
+// rewriteTileURL returns url with the public tile base swapped for the
+// internal base. Returns url unchanged if rewrite isn't configured or the
+// URL doesn't start with the public base.
+func (ds *DiscordSender) rewriteTileURL(url string) string {
+	if ds.tileInternalBase == "" || ds.tilePublicBase == "" {
+		return url
+	}
+	if ds.tileInternalBase == ds.tilePublicBase {
+		return url
+	}
+	if !strings.HasPrefix(url, ds.tilePublicBase) {
+		return url
+	}
+	return ds.tileInternalBase + strings.TrimPrefix(url, ds.tilePublicBase)
 }
 
 // NewDiscordSender creates a new Discord sender.
@@ -113,7 +145,7 @@ func (ds *DiscordSender) Edit(ctx context.Context, sentID string, message json.R
 			contentType = ct
 		}
 	} else if imageURL != "" {
-		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
+		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
 			buf, ct, err := BuildMultipartMessage(normalized, imageData, fileField)
 			if err == nil {
@@ -229,7 +261,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 		}
 	} else if imageURL != "" {
 		log.Debugf("discord: uploading embed image for bot/%s", channelID)
-		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
+		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
 			buf, ct, err := BuildMultipartMessage(normalized, imageData, "files[0]")
 			if err == nil {
@@ -271,7 +303,7 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 		}
 	} else if imageURL != "" {
 		log.Debugf("discord: uploading embed image for webhook/%s", webhookURL)
-		if imageData, err := DownloadImage(ds.client, imageURL); err == nil {
+		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
 			buf, ct, err := BuildMultipartMessage(normalized, imageData, "file")
 			if err == nil {

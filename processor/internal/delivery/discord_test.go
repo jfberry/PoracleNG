@@ -17,6 +17,46 @@ func newTestDiscordSender(serverURL string) *DiscordSender {
 	return ds
 }
 
+func TestRewriteTileURL(t *testing.T) {
+	ds := NewDiscordSender("t", false, 0)
+
+	// No rewrite configured — return as-is.
+	if got := ds.rewriteTileURL("https://cdn.example.com/tile/abc.png"); got != "https://cdn.example.com/tile/abc.png" {
+		t.Errorf("no rewrite: got %q", got)
+	}
+
+	ds.SetTileURLRewrite("https://cdn.example.com", "http://tileserver.internal:8080")
+
+	cases := []struct {
+		in, want string
+	}{
+		{"https://cdn.example.com/multistaticmap/pregenerated/abc.png", "http://tileserver.internal:8080/multistaticmap/pregenerated/abc.png"},
+		{"https://cdn.example.com/staticmap/pregenerated/def.png?ttl=300", "http://tileserver.internal:8080/staticmap/pregenerated/def.png?ttl=300"},
+		{"https://cdn.example.com", "http://tileserver.internal:8080"},
+		// URLs that don't match the public base are left alone.
+		{"https://other.example.com/tile/xyz.png", "https://other.example.com/tile/xyz.png"},
+	}
+	for _, tc := range cases {
+		if got := ds.rewriteTileURL(tc.in); got != tc.want {
+			t.Errorf("rewriteTileURL(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+
+	// Identical bases: rewrite is a no-op.
+	dsSame := NewDiscordSender("t", false, 0)
+	dsSame.SetTileURLRewrite("https://cdn.example.com", "https://cdn.example.com")
+	if got := dsSame.rewriteTileURL("https://cdn.example.com/x.png"); got != "https://cdn.example.com/x.png" {
+		t.Errorf("identical bases should not rewrite, got %q", got)
+	}
+
+	// Trailing slashes on the configured bases get trimmed.
+	dsTrim := NewDiscordSender("t", false, 0)
+	dsTrim.SetTileURLRewrite("https://cdn.example.com/", "http://tileserver.internal:8080/")
+	if got := dsTrim.rewriteTileURL("https://cdn.example.com/tile.png"); got != "http://tileserver.internal:8080/tile.png" {
+		t.Errorf("trim-slash rewrite: got %q", got)
+	}
+}
+
 func TestDiscordSendChannel(t *testing.T) {
 	var gotAuth string
 	var gotBody []byte

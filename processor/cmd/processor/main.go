@@ -159,12 +159,14 @@ func main() {
 	if discordToken != "" || telegramToken != "" {
 		var err error
 		proc.dispatcher, err = delivery.NewDispatcher(delivery.DispatcherConfig{
-			DiscordToken:  discordToken,
-			TelegramToken: telegramToken,
-			UploadImages:  cfg.Discord.UploadEmbedImages,
-			DeleteDelayMs: cfg.Discord.MessageDeleteDelay,
-			QueueSize:     cfg.Tuning.DeliveryQueueSize,
-			CacheDir:      filepath.Join(cfg.BaseDir, "config", ".cache"),
+			DiscordToken:    discordToken,
+			TelegramToken:   telegramToken,
+			UploadImages:    cfg.Discord.UploadEmbedImages,
+			DeleteDelayMs:   cfg.Discord.MessageDeleteDelay,
+			QueueSize:       cfg.Tuning.DeliveryQueueSize,
+			CacheDir:        filepath.Join(cfg.BaseDir, "config", ".cache"),
+			TileProviderURL: cfg.Geocoding.StaticProviderURL,
+			TileInternalURL: cfg.Geocoding.StaticInternalURL,
 			Queue: delivery.QueueConfig{
 				ConcurrentDiscord:  cfg.Tuning.ConcurrentDiscordDestinations,
 				ConcurrentWebhook:  cfg.Tuning.ConcurrentDiscordWebhooks,
