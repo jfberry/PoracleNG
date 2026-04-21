@@ -181,6 +181,42 @@ func TestLayeredView_ComputedAreasEmpty(t *testing.T) {
 	assert.Equal(t, "", v)
 }
 
+// TestLayeredView_BearingEmojiFromPerUser verifies that emoji keys living
+// in the per-user enrichment layer (such as bearingEmojiKey, populated by
+// PokemonPerUser) resolve to their platform-specific glyph. The previous
+// resolveEmojiMap only walked base+perLang, leaving {{bearingEmoji}}
+// empty for every pokemon alert.
+func TestLayeredView_BearingEmojiFromPerUser(t *testing.T) {
+	emoji := &EmojiLookup{
+		custom:   make(map[string]map[string]string),
+		defaults: map[string]string{"northeast": "↗️"},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.emoji = emoji
+		o.perUser = map[string]any{"bearingEmojiKey": "northeast"}
+	})
+	v, ok := lv.GetField("bearingEmoji")
+	require.True(t, ok, "bearingEmoji should resolve from perUser.bearingEmojiKey")
+	assert.Equal(t, "↗️", v)
+}
+
+// TestLayeredView_PerUserEmojiOverridesBase proves the resolution order is
+// perUser → perLang → base, so a per-user override wins even if the base
+// layer also happens to carry the same key.
+func TestLayeredView_PerUserEmojiOverridesBase(t *testing.T) {
+	emoji := &EmojiLookup{
+		custom:   make(map[string]map[string]string),
+		defaults: map[string]string{"north": "⬆️", "south": "⬇️"},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.emoji = emoji
+		o.base = map[string]any{"bearingEmojiKey": "north"}
+		o.perUser = map[string]any{"bearingEmojiKey": "south"}
+	})
+	v, _ := lv.GetField("bearingEmoji")
+	assert.Equal(t, "⬇️", v, "perUser should win")
+}
+
 func TestLayeredView_ComputedGenderData(t *testing.T) {
 	emoji := &EmojiLookup{
 		custom:   make(map[string]map[string]string),

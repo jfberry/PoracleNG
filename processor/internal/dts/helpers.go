@@ -226,6 +226,26 @@ func registerComparisonHelpers() {
 		return boolResult(true, options)
 	})
 
+	// oneOf — block fires when the first arg equals any of the following
+	// args. Uses the same loose numeric equality as `eq` so
+	// `{{#oneOf size 1 5}}` matches when size is 1 or 5. This is the
+	// "value in set" semantic that authors sometimes reach for via
+	// `{{#or size 1 5}}` — which actually tests "any arg truthy" and
+	// always fires for non-zero size. variadic (2+ args).
+	raymond.RegisterHelper("oneOf", func(options *raymond.Options) any {
+		params := options.Params()
+		if len(params) < 2 {
+			return boolResult(false, options)
+		}
+		value := params[0]
+		for _, candidate := range params[1:] {
+			if looseEqual(value, candidate) {
+				return boolResult(true, options)
+			}
+		}
+		return boolResult(false, options)
+	})
+
 	// not — logical negation (block helper)
 	raymond.RegisterHelper("not", func(value any, options *raymond.Options) any {
 		if !toBool(value) {

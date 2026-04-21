@@ -721,7 +721,7 @@ Templates can use built-in Handlebars block helpers plus custom helpers register
 - `{{#each array}}` — iteration (`{{this}}` for current item, `{{@index}}` for index, `{{isFirst}}`/`{{isLast}}` as context properties)
 - `{{#forEach array}}` — like each, with `{{@total}}` data variable
 
-**Comparison:** `{{#eq a b}}`, `{{#ne a b}}`, `{{#isnt a b}}`, `{{#gt a b}}`, `{{#lt a b}}`, `{{#gte a b}}`, `{{#lte a b}}`, `{{#and a b ...}}` (variadic), `{{#or a b ...}}` (variadic), `{{#neither a b ...}}` (variadic, inverse of or), `{{#not a}}`, `{{#contains collection value}}`, `{{#compare a "op" b}}`
+**Comparison:** `{{#eq a b}}`, `{{#ne a b}}`, `{{#isnt a b}}`, `{{#gt a b}}`, `{{#lt a b}}`, `{{#gte a b}}`, `{{#lte a b}}`, `{{#and a b ...}}` (variadic), `{{#or a b ...}}` (variadic), `{{#neither a b ...}}` (variadic, inverse of or), `{{#oneOf value a b c ...}}` (value equals any of a/b/c — use this instead of `{{#or value a b}}` which is "any arg truthy"), `{{#not a}}`, `{{#contains collection value}}`, `{{#compare a "op" b}}`
 
 All comparison helpers work both as block helpers (`{{#eq a b}}X{{else}}Y{{/eq}}`) and as subexpressions (`{{#if (eq a b)}}`).
 

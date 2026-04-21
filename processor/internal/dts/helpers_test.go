@@ -177,6 +177,47 @@ func TestAndOr(t *testing.T) {
 	}
 }
 
+func TestOneOf(t *testing.T) {
+	ctx := map[string]any{"size": 3, "sizeOne": 1, "sizeFive": 5, "name": "mr mime"}
+
+	// Value-in-set semantic: size is 3 — not in {1, 5}.
+	if got := render(t, `{{#oneOf size 1 5}}yes{{else}}no{{/oneOf}}`, ctx); got != "no" {
+		t.Errorf("oneOf size=3 in {1,5}: got %q, want %q", got, "no")
+	}
+	// size is 1 — in {1, 5}.
+	if got := render(t, `{{#oneOf sizeOne 1 5}}yes{{else}}no{{/oneOf}}`, ctx); got != "yes" {
+		t.Errorf("oneOf size=1 in {1,5}: got %q, want %q", got, "yes")
+	}
+	// size is 5 — in {1, 5}.
+	if got := render(t, `{{#oneOf sizeFive 1 5}}yes{{else}}no{{/oneOf}}`, ctx); got != "yes" {
+		t.Errorf("oneOf size=5 in {1,5}: got %q, want %q", got, "yes")
+	}
+
+	// String comparison.
+	if got := render(t, `{{#oneOf name "pikachu" "mr mime"}}yes{{else}}no{{/oneOf}}`, ctx); got != "yes" {
+		t.Errorf("oneOf string match: got %q", got)
+	}
+	if got := render(t, `{{#oneOf name "pikachu" "charizard"}}yes{{else}}no{{/oneOf}}`, ctx); got != "no" {
+		t.Errorf("oneOf string no match: got %q", got)
+	}
+
+	// Loose numeric equality — matches the `eq` helper's behaviour so
+	// "3" and 3 are considered equal.
+	if got := render(t, `{{#oneOf size "3" "4"}}yes{{else}}no{{/oneOf}}`, ctx); got != "yes" {
+		t.Errorf("oneOf loose numeric: got %q", got)
+	}
+
+	// Subexpression form.
+	if got := render(t, `{{#if (oneOf sizeOne 1 5)}}yes{{else}}no{{/if}}`, ctx); got != "yes" {
+		t.Errorf("oneOf subexpression: got %q", got)
+	}
+
+	// Edge: 0 or 1 args → no match (no candidates to compare against).
+	if got := render(t, `{{#oneOf size}}yes{{else}}no{{/oneOf}}`, ctx); got != "no" {
+		t.Errorf("oneOf with only value arg: got %q", got)
+	}
+}
+
 func TestNot(t *testing.T) {
 	ctx := map[string]any{"f": false, "t": true}
 	if got := render(t, `{{#not f}}yes{{else}}no{{/not}}`, ctx); got != "yes" {

@@ -56,8 +56,9 @@ func NewLayeredView(
 		dtsDict: vb.dtsDictionary,
 	}
 
-	// Resolve emoji (small map, only populated keys)
-	lv.emoji = vb.resolveEmojiMap(base, perLang, platform)
+	// Resolve emoji (small map, only populated keys). Pass perUser so
+	// per-user keys like bearingEmojiKey (set by PokemonPerUser) resolve.
+	lv.emoji = vb.resolveEmojiMap(base, perLang, perUser, platform)
 
 	// Build computed fields (small map — needs resolved emoji for genderData)
 	lv.computed = buildComputedFields(templateType, base, perLang, lv.emoji, areas)
@@ -188,17 +189,25 @@ func (lv *LayeredView) resolveSource(name string) (any, bool) {
 }
 
 // resolveEmojiMap builds a small map of resolved emoji strings from emoji keys.
-func (vb *ViewBuilder) resolveEmojiMap(base, perLang map[string]any, platform string) map[string]string {
+// Checks perUser → perLang → base in that order so per-user keys like
+// bearingEmojiKey (populated by PokemonPerUser) take precedence without
+// shadowing more general per-language and base keys.
+func (vb *ViewBuilder) resolveEmojiMap(base, perLang, perUser map[string]any, platform string) map[string]string {
 	if vb.emoji == nil {
 		return nil
 	}
 
 	result := make(map[string]string, 16)
 
-	// Resolve single emoji keys from both base and perLang
+	// Resolve single emoji keys from perUser → perLang → base
 	for _, m := range singleEmojiKeys {
 		key := ""
-		if perLang != nil {
+		if perUser != nil {
+			if k, ok := perUser[m.keyField].(string); ok && k != "" {
+				key = k
+			}
+		}
+		if key == "" && perLang != nil {
 			if k, ok := perLang[m.keyField].(string); ok && k != "" {
 				key = k
 			}
@@ -213,10 +222,14 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang map[string]any, platform st
 		}
 	}
 
-	// Resolve array emoji keys
+	// Resolve array emoji keys (no per-user array keys today, but check
+	// perUser first for symmetry with the single-key path).
 	for _, m := range arrayEmojiKeys {
 		var raw any
-		if perLang != nil {
+		if perUser != nil {
+			raw = perUser[m.keyField]
+		}
+		if raw == nil && perLang != nil {
 			raw = perLang[m.keyField]
 		}
 		if raw == nil {
@@ -229,7 +242,10 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang map[string]any, platform st
 
 	// Special case: typeEmojiKeys → emoji ([]string) + emojiString
 	var typeRaw any
-	if perLang != nil {
+	if perUser != nil {
+		typeRaw = perUser["typeEmojiKeys"]
+	}
+	if typeRaw == nil && perLang != nil {
 		typeRaw = perLang["typeEmojiKeys"]
 	}
 	if typeRaw == nil {
