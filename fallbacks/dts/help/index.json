@@ -29,8 +29,8 @@
           "value": "All filters use `key:value` form — e.g. `iv:100`, `cp:2000-3000`, `level:25-35`, `d:500`. Ranges are written `low-high` and are always preferred over separate `miniv`/`maxiv` variants — easier to read and easier to change. Use `everything` as the pokemon name to match all pokemon."
         },
         {
-          "name": "More help",
-          "value": "📖 Manual: https://jfberry.github.io/PoracleNG-docs/\n💬 Discord: https://discord.gg/AathPCp"
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
         }
       ]
     }
