@@ -321,6 +321,7 @@
   "msg.location.usage": "有効なコマンド例: `{0}location <緯度>,<経度>`、`{0}location <住所>`",
   "msg.location.specify": "座標または住所を指定してください",
   "msg.location.set": "位置を {0},{1} に設定しました",
+  "msg.location.current": "Your current location is {0},{1}",
   "msg.area.none_available": "利用可能なエリアがありません",
   "msg.area.available": "**利用可能なエリア:**",
   "msg.area.specify_add": "追加するエリア名を指定してください",
