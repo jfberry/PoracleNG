@@ -17,6 +17,25 @@ Each entry may use:
 - `"templateFile": "dts/filename.txt"` — external file read as raw Handlebars text (allows non-JSON constructs like unquoted Handlebars expressions in value positions)
 - `"@include filename"` — include directive for shared partials
 
+### The `default: true` flag and help templates
+
+`default: true` on an entry means "match any query of this (type, platform, language) whose id doesn't have an exact match". It's evaluated at priority level 3 of the selection chain and **does not check the id**.
+
+For most template types that's harmless — a default monster template legitimately catches any tracking rule that didn't specify its own template id. For `type: "help"` it has a subtle side-effect:
+
+- `!help` (no args) queries id `"index"`.
+- `!help track` queries id `"track"`.
+- `!help raid` queries id `"raid"`. ...etc.
+
+If your custom help entry is `{type: "help", default: true, ...}` with any id (e.g. `"1"`), it matches **every one of those queries** at level 3, shadowing the shipped `help/track`, `help/raid`, etc. entries entirely. That's the correct behavior if you want your entry to be the complete help surface — but it surprises operators migrating from PoracleJS where no per-topic help shipped.
+
+| Intent | Config |
+|---|---|
+| My entry is the complete help (replaces all topics too) | `{id: "<anything>", default: true}` |
+| My entry is the landing page; shipped `!help track` / `!help raid` / ... still work | `{id: "index", default: false}` |
+
+The processor emits a startup advisory when it sees a user `type: "help"` entry with `default: true`, pointing to this doc.
+
 ## Template Saving (DTS Editor API)
 
 The `POST /api/dts/templates` endpoint saves templates safely without destroying user file organization:

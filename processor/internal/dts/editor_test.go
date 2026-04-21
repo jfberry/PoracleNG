@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	raymond "github.com/mailgun/raymond/v2"
+	"github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus/hooks/test"
 )
 
 // newTestStore builds a TemplateStore with a real temp config dir so the
@@ -276,5 +278,72 @@ func TestSaveEntryCleansAllStaleDuplicates(t *testing.T) {
 	wantPath := filepath.Join(dtsDir, "monster-1-discord.json")
 	if got[0].sourceFile != wantPath {
 		t.Errorf("sourceFile = %q, want %q", got[0].sourceFile, wantPath)
+	}
+}
+
+// TestLogSummaryHelpShadowingAdvisory verifies the startup advisory fires
+// when (and only when) a user-provided help entry has default:true. The
+// default-flag semantic makes such an entry match every !help <topic> call,
+// shadowing shipped per-topic help — operators should see a log line
+// pointing to the DTS.md section so they can self-correct.
+func TestLogSummaryHelpShadowingAdvisory(t *testing.T) {
+	cases := []struct {
+		name        string
+		entries     []DTSEntry
+		wantAdvice  bool
+		wantPhrase  string
+	}{
+		{
+			name: "user help with default:true fires advisory",
+			entries: []DTSEntry{
+				{Type: "help", ID: "1", Platform: "discord", Language: "en", Default: true},
+			},
+			wantAdvice: true,
+			wantPhrase: "shadowing the shipped help/<topic>",
+		},
+		{
+			name: "user help without default:true stays silent",
+			entries: []DTSEntry{
+				{Type: "help", ID: "index", Platform: "discord", Language: "en", Default: false},
+			},
+			wantAdvice: false,
+		},
+		{
+			name: "readonly (shipped) help with default:true stays silent",
+			entries: []DTSEntry{
+				{Type: "help", ID: "1", Platform: "discord", Language: "en", Default: true, Readonly: true},
+			},
+			wantAdvice: false,
+		},
+		{
+			name: "non-help default-flagged entry stays silent",
+			entries: []DTSEntry{
+				{Type: "monster", ID: "1", Platform: "discord", Language: "en", Default: true},
+			},
+			wantAdvice: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hook := test.NewGlobal()
+			t.Cleanup(hook.Reset)
+
+			ts, _ := newTestStore(t, tc.entries)
+			ts.LogSummary()
+
+			sawAdvisory := false
+			for _, e := range hook.AllEntries() {
+				if e.Level == logrus.InfoLevel && strings.Contains(e.Message, "default-flagged") {
+					sawAdvisory = true
+					if tc.wantPhrase != "" && !strings.Contains(e.Message, tc.wantPhrase) {
+						t.Errorf("advisory message missing expected phrase %q, got %q", tc.wantPhrase, e.Message)
+					}
+				}
+			}
+			if sawAdvisory != tc.wantAdvice {
+				t.Errorf("advisory fired=%v, want %v. messages: %v", sawAdvisory, tc.wantAdvice, hook.AllEntries())
+			}
+		})
 	}
 }

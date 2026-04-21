@@ -770,6 +770,24 @@ func (ts *TemplateStore) LogSummary() {
 			log.Warnf("DTS: no default template for type=%q platform=%q", key.typ, key.platform)
 		}
 	}
+
+	// Advisory: default-flagged user help entries shadow shipped per-topic
+	// help (help/track, help/raid, etc.) for every !help <topic> call,
+	// because the selection chain's default-flag priority (level 3) matches
+	// any id, not just "index". Operators who want shipped topic help to
+	// still surface should rename the entry to id:"index" and set
+	// default:false. Not a bug, just a discoverability pitfall for
+	// operators coming from PoracleJS where no per-topic help was shipped.
+	for _, e := range ts.entries {
+		if e.Readonly || e.Type != "help" || !e.Default {
+			continue
+		}
+		log.Infof("DTS: user help entry id=%q platform=%q language=%q is default-flagged — "+
+			"it will match every \"!help <topic>\" call, shadowing the shipped help/<topic> "+
+			"entries. If you want shipped per-topic help to still appear for topics you "+
+			"haven't customised, rename this entry to id:\"index\" and set default:false.",
+			e.ID.String(), e.Platform, e.Language)
+	}
 }
 
 // Partials returns the registered Handlebars partials as a name→template map.
