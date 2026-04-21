@@ -27,7 +27,7 @@ type DTSEntry struct {
 	Name         string `json:"name,omitempty"`
 	Description  string `json:"description,omitempty"`
 	Template     any    `json:"template"`
-	TemplateFile string `json:"templateFile"`
+	TemplateFile string `json:"templateFile,omitempty"`
 
 	// sourceFile tracks where this entry was loaded from (not serialized).
 	// Used to remove the entry from its original file when saving elsewhere.
@@ -595,7 +595,10 @@ func (ts *TemplateStore) TemplateMetadata(includeDescriptions bool) map[string]a
 		"telegram": make(map[string]any),
 	}
 
-	for _, e := range ts.entries {
+	// Deduplicate so the dropdown never lists the same (type,platform,
+	// language,id) twice when an override in config/dts/ shadows an entry
+	// in config/dts.json.
+	for _, e := range dedupEntriesPreferLast(ts.entries) {
 		if e.Hidden {
 			continue
 		}
@@ -784,19 +787,14 @@ func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLangu
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
-	// First pass: record (type|platform) combos that have at least one user
-	// (non-readonly) entry. Fallback (readonly) entries for those combos are
-	// suppressed in the second pass — the user has already taken ownership of
-	// that surface in the editor and the bundled defaults would just be noise.
-	hasUser := make(map[string]bool)
-	for _, e := range ts.entries {
-		if !e.Readonly {
-			hasUser[e.Type+"|"+e.Platform] = true
-		}
-	}
+	// Deduplicate so the editor never sees two entries with the same key
+	// (e.g. one in config/dts.json plus an override in config/dts/*.json).
+	// dedupEntriesPreferLast keeps the last-loaded copy, which is the same
+	// one selectEntry would pick at render time.
+	deduped := dedupEntriesPreferLast(ts.entries)
 
 	var result []DTSEntry
-	for _, e := range ts.entries {
+	for _, e := range deduped {
 		if filterType != "" && e.Type != filterType {
 			continue
 		}
@@ -809,9 +807,6 @@ func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLangu
 		if filterID != "" && strings.ToLower(e.ID.String()) != strings.ToLower(filterID) {
 			continue
 		}
-		if e.Readonly && hasUser[e.Type+"|"+e.Platform] {
-			continue
-		}
 		result = append(result, e)
 	}
 	return result
@@ -819,6 +814,9 @@ func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLangu
 
 // GetEntry returns a copy of the entry matching the four key fields, or nil
 // if not found. Used by the API to look up an entry without exposing internals.
+// Returns the LAST matching entry in load order — the same one selectEntry
+// would resolve at render time — so an override in config/dts/ correctly
+// shadows an earlier entry in config/dts.json.
 func (ts *TemplateStore) GetEntry(filterType, filterPlatform, filterLanguage, filterID string) *DTSEntry {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
@@ -827,7 +825,7 @@ func (ts *TemplateStore) GetEntry(filterType, filterPlatform, filterLanguage, fi
 		Type: filterType, Platform: filterPlatform,
 		Language: filterLanguage, ID: jsonID(filterID),
 	})
-	for i := range ts.entries {
+	for i := len(ts.entries) - 1; i >= 0; i-- {
 		if entryKey(&ts.entries[i]) == target {
 			e := ts.entries[i]
 			return &e
@@ -839,6 +837,46 @@ func (ts *TemplateStore) GetEntry(filterType, filterPlatform, filterLanguage, fi
 // entryKey returns the matching key for a DTSEntry.
 func entryKey(e *DTSEntry) string {
 	return e.Type + "|" + e.Platform + "|" + e.Language + "|" + strings.ToLower(e.ID.String())
+}
+
+// dedupEntriesPreferLast returns a slice containing each entry keyed by
+// entryKey, keeping only the last occurrence. Load order is
+// fallback → config/dts.json → config/dts/*.json, so the "last" entry is
+// the override that also wins at template selection time (selectEntryPass
+// uses last-match-wins). Readonly fallback entries are dropped if any
+// non-readonly override exists for the same (type,platform) combo to
+// match FilteredEntries' existing "user took ownership of this surface"
+// rule. Preserves the relative order of the retained entries.
+func dedupEntriesPreferLast(entries []DTSEntry) []DTSEntry {
+	hasUser := make(map[string]bool)
+	for _, e := range entries {
+		if !e.Readonly {
+			hasUser[e.Type+"|"+e.Platform] = true
+		}
+	}
+
+	// Walk backwards to find the last occurrence of each key; remember which
+	// indices win so we can emit results in the original order.
+	seen := make(map[string]int, len(entries))
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := &entries[i]
+		if e.Readonly && hasUser[e.Type+"|"+e.Platform] {
+			continue
+		}
+		k := entryKey(e)
+		if _, ok := seen[k]; !ok {
+			seen[k] = i
+		}
+	}
+
+	result := make([]DTSEntry, 0, len(seen))
+	for i, e := range entries {
+		k := entryKey(&e)
+		if idx, ok := seen[k]; ok && idx == i {
+			result = append(result, e)
+		}
+	}
+	return result
 }
 
 // entryFilename generates a filename for saving an entry to config/dts/.
@@ -863,15 +901,21 @@ func entryFilename(e *DTSEntry) string {
 func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 	ts.mu.Lock()
 
-	// Find existing entries. There may be multiple matches (e.g. one from
-	// fallback readonly + one from config/dts.json). We need to:
-	// - Note if any are readonly (so we know to append an override)
-	// - Update the first non-readonly match in place
-	// - Record the old source file so we can clean it up on disk
-	var oldSourceFile string
-	found := false
-	isOverride := false
+	// Determine the save path up front so we can decide per-duplicate
+	// whether its source file needs cleaning.
+	dtsDir := filepath.Join(ts.configDir, "dts")
+	savePath := filepath.Join(dtsDir, entryFilename(&inc))
+
+	// Find all entries matching the incoming key. We treat the in-memory
+	// state as authoritative about where duplicates live: every
+	// non-readonly match whose source file isn't the target savePath gets
+	// cleaned up, so stale copies in config/dts.json AND in differently-
+	// named files under config/dts/ are both removed — not just the first
+	// match we happen to encounter in load order.
 	incKey := entryKey(&inc)
+	isOverride := false
+	oldSources := make(map[string]struct{})
+	newIndices := make([]int, 0, 2)
 	for i := range ts.entries {
 		e := &ts.entries[i]
 		if entryKey(e) != incKey {
@@ -879,37 +923,46 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 		}
 		if e.Readonly {
 			isOverride = true
-			continue // keep looking for a non-readonly copy to update
+			continue
 		}
-		oldSourceFile = e.sourceFile
-		// Update in place
+		if e.sourceFile != "" && e.sourceFile != savePath {
+			oldSources[e.sourceFile] = struct{}{}
+		}
+		newIndices = append(newIndices, i)
+	}
+
+	if len(newIndices) == 0 {
+		// New entry (possibly overriding a readonly fallback).
+		inc.sourceFile = savePath
+		ts.entries = append(ts.entries, inc)
+		if isOverride {
+			log.Infof("dts: creating override for readonly template %s", entryFilename(&inc))
+		}
+	} else {
+		// Update the first match in place and drop any later duplicates.
+		keep := newIndices[0]
+		e := &ts.entries[keep]
 		e.Template = inc.Template
 		e.TemplateFile = inc.TemplateFile
 		e.Name = inc.Name
 		e.Description = inc.Description
 		e.Default = inc.Default
 		e.Hidden = inc.Hidden
-		found = true
-		break
-	}
+		e.sourceFile = savePath
 
-	if !found {
-		// New entry (or override of readonly)
-		ts.entries = append(ts.entries, inc)
-		if isOverride {
-			log.Infof("dts: creating override for readonly template %s", entryFilename(&inc))
-		}
-	}
-
-	// Determine the save path
-	dtsDir := filepath.Join(ts.configDir, "dts")
-	savePath := filepath.Join(dtsDir, entryFilename(&inc))
-
-	// Update the source file on the entry
-	for i := range ts.entries {
-		if entryKey(&ts.entries[i]) == incKey {
-			ts.entries[i].sourceFile = savePath
-			break
+		if len(newIndices) > 1 {
+			drop := make(map[int]struct{}, len(newIndices)-1)
+			for _, i := range newIndices[1:] {
+				drop[i] = struct{}{}
+			}
+			filtered := ts.entries[:0]
+			for i, entry := range ts.entries {
+				if _, skip := drop[i]; skip {
+					continue
+				}
+				filtered = append(filtered, entry)
+			}
+			ts.entries = filtered
 		}
 	}
 
@@ -930,10 +983,10 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 		return err
 	}
 
-	// Remove from previous source file (if it was in a config file, not fallback)
-	if oldSourceFile != "" && oldSourceFile != savePath {
-		if err := removeEntryFromFile(oldSourceFile, incKey, configDir); err != nil {
-			log.Warnf("dts: failed to remove old entry from %s: %v", oldSourceFile, err)
+	// Clean up every old source file that referenced this key.
+	for oldPath := range oldSources {
+		if err := removeEntryFromFile(oldPath, incKey, configDir); err != nil {
+			log.Warnf("dts: failed to remove old entry from %s: %v", oldPath, err)
 		}
 	}
 
