@@ -54,18 +54,45 @@ func (c *HelpCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	// !help (no args) — prefer the dedicated help index, fall back to the
-	// greeting template so operators with legacy customised greetings (no
-	// index override yet) keep seeing a useful response.
+	// greeting template as a last resort so operators with legacy
+	// customised greetings keep seeing a useful response.
+	//
+	// Resolve empty languages to the configured default locale BEFORE
+	// calling Get. Otherwise an operator who customised help with
+	// `language: "en"` loses to the shipped fallback whenever the
+	// caller's ctx.Language is "" (unregistered users, users who never
+	// ran !language): selectEntryPass's default-flag priority level
+	// (#3) requires entry-language to match the query language exactly,
+	// and level #4 requires entry-language="" — both fail when the
+	// query is "" and the entry is "en". Falling back to the server
+	// default gives the user's "en" entry a chance to match at level 3.
 	if ctx.DTS != nil {
-		language := ctx.Language
-		if hint := ctx.GetLanguageHint(); hint != "" {
-			language = hint
-		}
+		language := helpEffectiveLanguage(ctx)
 		if ctx.DTS.Get("help", platform, "index", language) != nil {
 			return c.renderHelpTemplate(ctx, "help", "index", platform, view)
 		}
 	}
 	return c.renderHelpTemplate(ctx, "greeting", "", platform, view)
+}
+
+// helpEffectiveLanguage resolves the language to use for help template
+// lookups. Priority: language hint (from language-specific command
+// variants like !dasporacle) → ctx.Language → server default locale.
+// Without the default-locale fallback, operators whose custom help has
+// an explicit language: "en" would lose to the shipped readonly
+// fallback for any caller with ctx.Language == "" (unregistered users,
+// users who never ran !language).
+func helpEffectiveLanguage(ctx *bot.CommandContext) string {
+	if hint := ctx.GetLanguageHint(); hint != "" {
+		return hint
+	}
+	if ctx.Language != "" {
+		return ctx.Language
+	}
+	if ctx.Config != nil && ctx.Config.General.Locale != "" {
+		return ctx.Config.General.Locale
+	}
+	return "en"
 }
 
 func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, templateID, platform string, view map[string]any) []bot.Reply {
@@ -76,11 +103,7 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 		return []bot.Reply{{Text: tr.Tf("msg.help.text", prefix)}}
 	}
 
-	language := ctx.Language
-	// Use language hint if available (from language-specific help command variant)
-	if hint := ctx.GetLanguageHint(); hint != "" {
-		language = hint
-	}
+	language := helpEffectiveLanguage(ctx)
 
 	// Look up the compiled template
 	var tmpl = ctx.DTS.Get(templateType, platform, templateID, language)

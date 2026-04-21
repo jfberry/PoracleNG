@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 )
 
@@ -108,5 +110,77 @@ func TestHelpIndexHidesAdminSectionForNonAdmins(t *testing.T) {
 		if !strings.Contains(v, "Tracking commands") {
 			t.Errorf("index view missing tracking commands section:\n%s", v)
 		}
+	}
+}
+
+// TestHelpPicksUserCustomWhenCallerHasEmptyLanguage simulates the
+// reported end-user scenario: operator has a custom help entry shaped
+// {"type":"help","id":"1","default":true,"language":"en","platform":"discord"},
+// and a caller whose ctx.Language is "" (unregistered user, or user
+// who never ran !language). Before the language fallback, the lookup
+// passed language="" which fails to match entry-language="en" at
+// priority levels 3 and 4, so pass-1 (user) returned nil and pass-2
+// (readonly) picked the shipped help/index. After the fix the effective
+// language resolves to the server default locale, so the user's entry
+// matches at level 3 via the default flag.
+func TestHelpPicksUserCustomWhenCallerHasEmptyLanguage(t *testing.T) {
+	_, thisFile, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..")
+	fallbackDir := filepath.Join(repoRoot, "fallbacks")
+
+	configDir := t.TempDir()
+	userHelp := `[{
+		"type": "help",
+		"id": "1",
+		"platform": "discord",
+		"language": "en",
+		"default": true,
+		"template": {
+			"embed": {
+				"title": "Custom Operator Help",
+				"fields": [{"name": "Area tracking", "value": "area list"}]
+			}
+		}
+	}]`
+	if err := os.WriteFile(filepath.Join(configDir, "dts.json"), []byte(userHelp), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ts, err := dts.LoadTemplates(configDir, fallbackDir)
+	if err != nil {
+		t.Fatalf("LoadTemplates: %v", err)
+	}
+
+	ctx, _ := testCtx(t)
+	ctx.DTS = ts
+	ctx.Language = "" // unregistered / never-ran-!language user
+	ctx.Config = &config.Config{}
+	ctx.Config.General.Locale = "en"
+
+	cmd := &HelpCommand{}
+	replies := cmd.Run(ctx, nil)
+	if len(replies) == 0 {
+		t.Fatal("expected a reply")
+	}
+
+	// Flatten the reply to a string to search for the distinctive title.
+	var out strings.Builder
+	if replies[0].Embed != nil {
+		out.Write(replies[0].Embed)
+	}
+	for _, r := range replies {
+		out.WriteString(r.Text)
+	}
+
+	// The help renderer blanks title/description intentionally, so we
+	// search for the custom FIELD name — unique enough to distinguish
+	// from the shipped help/index.
+	if !strings.Contains(out.String(), "Area tracking") {
+		t.Errorf("expected user's custom help fields to be rendered, got:\n%s", out.String())
+	}
+	// Sanity: make sure we didn't accidentally render the shipped index,
+	// which has distinctive field name "Tracking commands".
+	if strings.Contains(out.String(), "Tracking commands") {
+		t.Errorf("user's custom help was shadowed by shipped help/index:\n%s", out.String())
 	}
 }

@@ -92,6 +92,79 @@ func TestTemplateMetadataDedupesOverride(t *testing.T) {
 	}
 }
 
+// TestLoadTemplatesDedupesIntVsStringID reproduces the user's reported
+// scenario: config/dts.json has "id": 1 (integer) and
+// config/dts/monster-1-discord.json has "id": "1" (string). After loading,
+// the editor endpoints (TemplateMetadata, FilteredEntries) must treat these
+// as the same key and show only the override.
+func TestLoadTemplatesDedupesIntVsStringID(t *testing.T) {
+	tmp := t.TempDir()
+
+	// config/dts.json with integer id.
+	dtsJSONPath := filepath.Join(tmp, "dts.json")
+	if err := os.WriteFile(dtsJSONPath, []byte(`[
+		{"type": "monster", "id": 1, "platform": "discord", "language": "", "template": {"content": "int-id"}}
+	]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// config/dts/monster-1-discord.json with string id.
+	dtsDir := filepath.Join(tmp, "dts")
+	if err := os.MkdirAll(dtsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	overridePath := filepath.Join(dtsDir, "monster-1-discord.json")
+	if err := os.WriteFile(overridePath, []byte(`[
+		{"type": "monster", "id": "1", "platform": "discord", "language": "", "template": {"content": "string-id override"}}
+	]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fallbackDir := filepath.Join(tmp, "fallback")
+	if err := os.MkdirAll(fallbackDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Minimal fallback dts.json so LoadTemplates doesn't error.
+	if err := os.WriteFile(filepath.Join(fallbackDir, "dts.json"), []byte(`[]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ts, err := LoadTemplates(tmp, fallbackDir)
+	if err != nil {
+		t.Fatalf("LoadTemplates: %v", err)
+	}
+
+	// Both files are loaded — raw ts.entries should have 2 entries with the
+	// same entryKey.
+	if len(ts.entries) != 2 {
+		t.Fatalf("expected 2 raw entries loaded, got %d", len(ts.entries))
+	}
+	if entryKey(&ts.entries[0]) != entryKey(&ts.entries[1]) {
+		t.Fatalf("entryKey mismatch for int (%q) vs string (%q) id — dedup will not collapse them",
+			entryKey(&ts.entries[0]), entryKey(&ts.entries[1]))
+	}
+
+	// The editor endpoints should only show one entry, and it should be the
+	// override (last-loaded).
+	list := ts.FilteredEntries("monster", "discord", "", "1")
+	if len(list) != 1 {
+		t.Fatalf("FilteredEntries returned %d entries, want 1", len(list))
+	}
+	tmplMap, _ := list[0].Template.(map[string]any)
+	if tmplMap["content"] != "string-id override" {
+		t.Errorf("expected override template content, got %v", list[0].Template)
+	}
+
+	meta := ts.TemplateMetadata(false)
+	discord, _ := meta["discord"].(map[string]any)
+	monster, _ := discord["monster"].(map[string]any)
+	// Blank language is keyed as "%" in the metadata map.
+	ids, _ := monster["%"].([]string)
+	if len(ids) != 1 || ids[0] != "1" {
+		t.Errorf("TemplateMetadata dropdown ids = %v, want [\"1\"]", ids)
+	}
+}
+
 // TestSaveEntryOmitsEmptyTemplateFile proves the on-disk JSON for a saved
 // entry with no templateFile does not include `"templateFile": ""`.
 func TestSaveEntryOmitsEmptyTemplateFile(t *testing.T) {
