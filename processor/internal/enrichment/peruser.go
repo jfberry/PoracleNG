@@ -90,6 +90,14 @@ func (e *Enricher) PokemonPerUser(
 }
 
 // consolidateUsers groups matched users by ID and merges their PVP filters.
+//
+// A filter is only recorded when the matched rule is actually a PVP rule, i.e.
+// has a non-zero pvp_ranking_league AND a meaningful pvp_ranking_worst
+// (between 1 and 4095). The legacy JS check was just `worst < 4096`, which
+// relied on non-PVP rules storing 4096 in the DB. In PoracleNG the tracking
+// INSERT passes the Go struct's zero value for unset fields, so non-PVP rules
+// persist with worst=0 and would otherwise be mistaken for real PVP filters,
+// making userHasPvpTracks universally true and polluting per-user PVP display.
 func consolidateUsers(matchedUsers []webhook.MatchedUser) []consolidatedUser {
 	seen := make(map[string]int, len(matchedUsers))
 	var consolidated []consolidatedUser
@@ -101,7 +109,7 @@ func consolidateUsers(matchedUsers []webhook.MatchedUser) []consolidatedUser {
 			seen[u.ID] = idx
 			consolidated = append(consolidated, consolidatedUser{MatchedUser: u})
 		}
-		if u.PVPRankingWorst < 4096 {
+		if u.PVPRankingLeague > 0 && u.PVPRankingWorst > 0 && u.PVPRankingWorst < 4096 {
 			consolidated[idx].Filters = append(consolidated[idx].Filters, pvpFilter{
 				League: u.PVPRankingLeague,
 				Worst:  u.PVPRankingWorst,

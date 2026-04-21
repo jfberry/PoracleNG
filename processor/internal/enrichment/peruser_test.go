@@ -45,6 +45,65 @@ func TestConsolidateUsers(t *testing.T) {
 	}
 }
 
+// TestConsolidateUsersNonPVPMatch verifies that a non-PVP tracking rule (league
+// unset) does NOT register as a PVP filter, even if PVPRankingWorst happens to
+// be 0 (the Go zero value the DB may have stored because non-PVP INSERTs pass
+// the struct's zero value rather than the column default of 4096). Before the
+// fix this set userHasPvpTracks=true for every basic IV match.
+func TestConsolidateUsersNonPVPMatch(t *testing.T) {
+	cases := []struct {
+		name string
+		user webhook.MatchedUser
+	}{
+		{
+			name: "basic IV match with league=0 worst=0 (legacy Go zero-value INSERTs)",
+			user: webhook.MatchedUser{ID: "u1", PVPRankingLeague: 0, PVPRankingWorst: 0},
+		},
+		{
+			name: "basic IV match with league=0 worst=4096 (DB default, JS-style)",
+			user: webhook.MatchedUser{ID: "u1", PVPRankingLeague: 0, PVPRankingWorst: 4096},
+		},
+		{
+			name: "PVP rule with explicit worst=4096 (== any rank, not a real filter)",
+			user: webhook.MatchedUser{ID: "u1", PVPRankingLeague: 1500, PVPRankingWorst: 4096},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := consolidateUsers([]webhook.MatchedUser{tc.user})
+			if len(got) != 1 {
+				t.Fatalf("expected 1 consolidated user, got %d", len(got))
+			}
+			if len(got[0].Filters) != 0 {
+				t.Errorf("expected 0 filters, got %d (Filters=%+v)", len(got[0].Filters), got[0].Filters)
+			}
+		})
+	}
+}
+
+// TestConsolidateUsersMixedMatches covers the real multi-rule case: one user
+// matched by a basic IV rule AND a PVP rule. Only the PVP rule should become
+// a filter entry; userHasPvpTracks should be true because at least one real
+// PVP rule matched.
+func TestConsolidateUsersMixedMatches(t *testing.T) {
+	users := []webhook.MatchedUser{
+		// Basic IV match — league=0, worst=0 after Go zero-value INSERT
+		{ID: "u1", PVPRankingLeague: 0, PVPRankingWorst: 0},
+		// Real great-league PVP match
+		{ID: "u1", PVPRankingLeague: 1500, PVPRankingWorst: 10, PVPRankingCap: 50},
+	}
+	got := consolidateUsers(users)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 consolidated user, got %d", len(got))
+	}
+	if len(got[0].Filters) != 1 {
+		t.Fatalf("expected 1 filter (only the PVP rule), got %d", len(got[0].Filters))
+	}
+	if got[0].Filters[0].League != 1500 || got[0].Filters[0].Worst != 10 {
+		t.Errorf("filter mismatch: %+v", got[0].Filters[0])
+	}
+}
+
 func TestCreatePvpDisplay(t *testing.T) {
 	enricher := &Enricher{
 		PVPDisplay: &PVPDisplayConfig{
