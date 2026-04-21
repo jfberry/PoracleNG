@@ -338,6 +338,7 @@
   "msg.location.usage": "Comandos válidos: `{0}ubicación <lat>,<lon>`, `{0}ubicación <tu dirección>`",
   "msg.location.specify": "Por favor especifica coordenadas o una dirección",
   "msg.location.set": "Ubicación establecida en {0},{1}",
+  "msg.location.current": "Your current location is {0},{1}",
 
   "msg.area.none_available": "No hay áreas disponibles",
   "msg.area.available": "**Áreas disponibles:**",

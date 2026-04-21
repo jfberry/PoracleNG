@@ -321,6 +321,7 @@
   "msg.location.usage": "Valid commands are e.g. `{0}location <lat>,<lon>`, `{0}location <your address>`",
   "msg.location.specify": "Please specify coordinates or an address",
   "msg.location.set": "Position définie à {0},{1}",
+  "msg.location.current": "Your current location is {0},{1}",
   "msg.area.none_available": "No areas available",
   "msg.area.available": "**Available areas:**",
   "msg.area.specify_add": "Please specify area names to add",

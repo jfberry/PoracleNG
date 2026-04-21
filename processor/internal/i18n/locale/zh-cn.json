@@ -321,6 +321,7 @@
   "msg.location.usage": "有效命令如：`{0}location <纬度>,<经度>`、`{0}location <您的地址>`",
   "msg.location.specify": "请指定坐标或地址",
   "msg.location.set": "位置已设为 {0},{1}",
+  "msg.location.current": "Your current location is {0},{1}",
   "msg.area.none_available": "没有可用的区域",
   "msg.area.available": "**可用区域：**",
   "msg.area.specify_add": "请指定要添加的区域名称",

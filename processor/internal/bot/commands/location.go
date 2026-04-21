@@ -22,9 +22,24 @@ var locationParams = []bot.ParamDef{
 func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
-	if usage := usageReply(ctx, args, "msg.location.usage"); usage != nil {
-		return []bot.Reply{*usage}
+	// Bare `!location` with no args: show the user's current location (if
+	// set) before the usage help so they can see what's stored without
+	// having to run a different command.
+	if len(args) == 0 {
+		var replies []bot.Reply
+		if ctx.HasLocation {
+			if human, err := ctx.Humans.Get(ctx.TargetID); err == nil && human != nil &&
+				(human.Latitude != 0 || human.Longitude != 0) {
+				mapLink := fmt.Sprintf("<https://maps.google.com/maps?q=%f,%f>", human.Latitude, human.Longitude)
+				replies = append(replies, bot.Reply{
+					Text: tr.Tf("msg.location.current", human.Latitude, human.Longitude) + "\n" + mapLink,
+				})
+			}
+		}
+		replies = append(replies, bot.Reply{Text: tr.Tf("msg.location.usage", commandPrefix(ctx))})
+		return replies
 	}
+
 	if help := helpArgReply(ctx, args, "msg.location.usage"); help != nil {
 		return []bot.Reply{*help}
 	}
