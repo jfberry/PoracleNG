@@ -2,6 +2,35 @@
 
 All API endpoints are available through the processor (default port 3030). The processor handles all endpoints directly.
 
+## Contents
+
+- [Authentication](#authentication)
+- [Response Format](#response-format)
+- [Health & Monitoring](#health--monitoring)
+- [Tracking CRUD](#tracking-crud)
+- [Type-Specific POST Fields](#type-specific-post-fields)
+- [Human Management](#human-management)
+- [Profile Management](#profile-management)
+- [Geofence Data & Tiles](#geofence-data--tiles)
+- [State Management](#state-management)
+- [Statistics](#statistics)
+- [Weather](#weather)
+- [Configuration](#configuration)
+- [DTS Editor](#dts-editor) — includes [`/api/dts/reload`](#getpost-apidtsreload)
+- [Config Editor](#config-editor)
+- [Game Data](#game-data)
+- [Geocoding](#geocoding)
+- [Confirmation Messages](#confirmation-messages)
+- [Test](#test)
+
+### Reload endpoints at a glance
+
+| Endpoint | What it reloads |
+|----------|-----------------|
+| [`/api/reload`](#getpost-apireload) | Tracking rules from the database. Keeps current geofences and DTS templates in place. |
+| [`/api/geofence/reload`](#getpost-apigeofencereload) | Geofence files on disk **and re-fetches Koji geofences**, then reloads tracking rules. Use after editing fences or rotating a Koji bearer token. |
+| [`/api/dts/reload`](#getpost-apidtsreload) | DTS templates and partials from `config/dts.json`, `config/dts/`, and `config/partials.json`. Does **not** refresh Koji or tracking rules. |
+
 ## Authentication
 
 All `/api/*` endpoints require the `X-Poracle-Secret` header matching the configured `[processor] api_secret` value (with `[alerter] api_secret` as a backward-compatible fallback). Health and metrics endpoints do not require authentication.
@@ -865,7 +894,9 @@ Available test scenarios: boring, hundo, great-rank1, great-rank9, ultra1, unenc
 
 ### GET/POST /api/dts/reload
 
-Reload DTS templates and partials from disk. Use after editing files directly or after saving via the API if you want to pick up changes from other sources.
+Reload DTS templates and partials from disk (`config/dts.json`, `config/dts/*.json`, `config/partials.json`, plus the shipped fallbacks). Use after editing files directly or after saving via the API if you want to pick up changes from other sources.
+
+Scope is DTS only — this does **not** re-fetch Koji geofences or reload tracking rules. Use [`/api/geofence/reload`](#getpost-apigeofencereload) for a Koji refresh and [`/api/reload`](#getpost-apireload) for the DB tracking state.
 
 ```json
 {"status": "ok"}
