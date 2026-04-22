@@ -3,6 +3,7 @@ package enrichment
 import (
 	"encoding/json"
 	"math"
+	"strconv"
 
 	log "github.com/sirupsen/logrus"
 
@@ -25,6 +26,7 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any
 	m["resetDate"] = geo.FormatTime(nest.ResetTime, tz, e.DateLayout)
 
 	// Nest identity
+	m["nest_id"] = nest.NestID
 	m["nest_name"] = nest.Name
 	m["pokemonCount"] = nest.PokemonCount
 	m["pokemonSpawnAvg"] = nest.PokemonAvg
@@ -35,13 +37,13 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any
 
 	// Icon URLs
 	if e.ImgUicons != nil {
-		m["imgUrl"] = e.ImgUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
+		m["imgUrl"] = e.ImgUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false, 0)
 	}
 	if e.ImgUiconsAlt != nil {
-		m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
+		m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false, 0)
 	}
 	if e.StickerUicons != nil {
-		m["stickerUrl"] = e.StickerUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false)
+		m["stickerUrl"] = e.StickerUicons.PokemonIcon(nest.PokemonID, nest.Form, 0, 0, 0, 0, false, 0)
 	}
 
 	// Autoposition from polygon paths
@@ -74,8 +76,8 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any
 		}
 	}
 
-	// Map URLs
-	e.addMapURLs(m, nest.Lat, nest.Lon, "nests", "")
+	// Map URLs — ReactMap deep-links by nest id (`/id/nests/{nest_id}`)
+	e.addMapURLs(m, nest.Lat, nest.Lon, "nests", strconv.FormatInt(nest.NestID, 10))
 
 	// Reverse geocoding
 	e.addGeoResult(m, nest.Lat, nest.Lon)

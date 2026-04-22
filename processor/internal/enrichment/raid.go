@@ -14,6 +14,7 @@ import (
 func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 	m["pokemon_id"] = raid.PokemonID
+	m["gym_id"] = raid.GymID
 	m["firstNotification"] = firstNotification
 
 	tz := geo.GetTimezone(raid.Latitude, raid.Longitude)
@@ -28,13 +29,13 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 	if raid.PokemonID > 0 {
 		// Hatched raid pokemon icon
 		if e.ImgUicons != nil {
-			m["imgUrl"] = e.ImgUicons.PokemonIcon(raid.PokemonID, raid.Form, raid.Evolution, raid.Gender, raid.Costume, raid.Alignment, false)
+			m["imgUrl"] = e.ImgUicons.PokemonIcon(raid.PokemonID, raid.Form, raid.Evolution, raid.Gender, raid.Costume, raid.Alignment, false, 0)
 		}
 		if e.ImgUiconsAlt != nil {
-			m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(raid.PokemonID, raid.Form, raid.Evolution, raid.Gender, raid.Costume, raid.Alignment, false)
+			m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(raid.PokemonID, raid.Form, raid.Evolution, raid.Gender, raid.Costume, raid.Alignment, false, 0)
 		}
 		if e.StickerUicons != nil {
-			m["stickerUrl"] = e.StickerUicons.PokemonIcon(raid.PokemonID, raid.Form, raid.Evolution, raid.Gender, raid.Costume, raid.Alignment, false)
+			m["stickerUrl"] = e.StickerUicons.PokemonIcon(raid.PokemonID, raid.Form, raid.Evolution, raid.Gender, raid.Costume, raid.Alignment, false, 0)
 		}
 	} else {
 		// Egg icon

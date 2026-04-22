@@ -114,6 +114,9 @@ var typeAliases = map[string][]aliasPair{
 		{"formname", "formName"},
 		{"ivcolor", "ivColor"},
 		{"pokestopName", "pokestop_name"},
+		{"pokestopId", "pokestop_id"},
+		{"spawnpointId", "spawnpoint_id"},
+		{"encounterId", "encounter_id"},
 		{"individual_attack", "atk"},
 		{"individual_defense", "def"},
 		{"individual_stamina", "sta"},
@@ -125,6 +128,9 @@ var typeAliases = map[string][]aliasPair{
 	},
 	"monsterNoIv": {
 		{"formname", "formName"},
+		{"pokestopId", "pokestop_id"},
+		{"spawnpointId", "spawnpoint_id"},
+		{"encounterId", "encounter_id"},
 		{"pokemonId", "pokemon_id"},
 	},
 	"raid": {
@@ -163,6 +169,7 @@ var typeAliases = map[string][]aliasPair{
 	"invasion": {
 		{"pokestopName", "pokestop_name"},
 		{"pokestopUrl", "pokestop_url"},
+		{"pokestopId", "pokestop_id"},
 		{"name", "pokestop_name"},
 		{"url", "pokestop_url"},
 		{"gruntType", "gruntTypeName"},
@@ -171,12 +178,14 @@ var typeAliases = map[string][]aliasPair{
 	"quest": {
 		{"pokestopName", "pokestop_name"},
 		{"pokestopUrl", "pokestop_url"},
+		{"pokestopId", "pokestop_id"},
 		{"name", "pokestop_name"},
 		{"url", "pokestop_url"},
 	},
 	"lure": {
 		{"pokestopName", "pokestop_name"},
 		{"pokestopUrl", "pokestop_url"},
+		{"pokestopId", "pokestop_id"},
 		{"name", "pokestop_name"},
 		{"url", "pokestop_url"},
 		{"lureTypeColor", "lureColor"},
@@ -184,6 +193,7 @@ var typeAliases = map[string][]aliasPair{
 	},
 	"nest": {
 		{"nestName", "nest_name"},
+		{"nestId", "nest_id"},
 	},
 	"weather":     {},
 	"fort-update": {},
@@ -191,6 +201,8 @@ var typeAliases = map[string][]aliasPair{
 		{"gymName", "gym_name"},
 		{"gymUrl", "gym_url"},
 		{"gymId", "gym_id"},
+		{"stationId", "station_id"},
+		{"stationName", "station_name"},
 		{"formname", "formName"},
 		{"quickMove", "quickMoveName"},
 		{"chargeMove", "chargeMoveName"},

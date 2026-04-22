@@ -107,7 +107,7 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 			entry["fullNameEng"] = nameInfo["fullNameEng"]
 			// Active pokemon icon URLs
 			if e.ImgUicons != nil {
-				entry["imgUrl"] = e.ImgUicons.PokemonIcon(pok.PokemonID, pok.Form, 0, 0, 0, 0, false)
+				entry["imgUrl"] = e.ImgUicons.PokemonIcon(pok.PokemonID, pok.Form, 0, 0, 0, 0, false, 0)
 			}
 			enrichedPokemon[i] = entry
 		}

@@ -19,6 +19,9 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 	tz := geo.GetTimezone(lat, lon)
 	addSunTimes(m, lat, lon, tz)
 
+	// Pokestop identity
+	m["pokestop_id"] = pokestopID
+
 	cellID := tracker.GetWeatherCellID(lat, lon)
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
 

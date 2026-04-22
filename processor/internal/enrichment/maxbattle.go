@@ -34,16 +34,36 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	m["weatherForecastNext"] = forecast.Next
 	m["nextHourTimestamp"] = tracker.GetNextHourTimestamp()
 
-	// Icon URLs
+	// Station identity and battle metadata for DTS templates
+	if mb != nil {
+		m["station_id"] = mb.ID
+		m["station_name"] = mb.Name
+		m["battle_start"] = mb.BattleStart
+		m["total_stationed_pokemon"] = mb.TotalStationedPokemon
+		m["total_stationed_gmax"] = mb.TotalStationedGmax
+		m["bread_mode"] = mb.BattlePokemonBreadMode
+		// Authoritative gmax from bread_mode (2=gigantamax). Fall back to the
+		// battle-level heuristic when bread_mode is absent (older Golbat builds).
+		gmax := 0
+		if mb.BattlePokemonBreadMode == 2 {
+			gmax = 1
+		} else if mb.BattlePokemonBreadMode == 0 && mb.BattleLevel > 6 {
+			gmax = 1
+		}
+		m["gmax"] = gmax
+	}
+
+	// Icon URLs — pass bread_mode so _b1 (Dynamax) / _b2 (Gigantamax) icons resolve
 	if mb != nil && mb.BattlePokemonID > 0 {
+		bread := mb.BattlePokemonBreadMode
 		if e.ImgUicons != nil {
-			m["imgUrl"] = e.ImgUicons.PokemonIcon(mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonGender, mb.BattlePokemonCostume, mb.BattlePokemonAlignment, false)
+			m["imgUrl"] = e.ImgUicons.PokemonIcon(mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonGender, mb.BattlePokemonCostume, mb.BattlePokemonAlignment, false, bread)
 		}
 		if e.ImgUiconsAlt != nil {
-			m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonGender, mb.BattlePokemonCostume, mb.BattlePokemonAlignment, false)
+			m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonGender, mb.BattlePokemonCostume, mb.BattlePokemonAlignment, false, bread)
 		}
 		if e.StickerUicons != nil {
-			m["stickerUrl"] = e.StickerUicons.PokemonIcon(mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonGender, mb.BattlePokemonCostume, mb.BattlePokemonAlignment, false)
+			m["stickerUrl"] = e.StickerUicons.PokemonIcon(mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonGender, mb.BattlePokemonCostume, mb.BattlePokemonAlignment, false, bread)
 		}
 	}
 
@@ -52,8 +72,8 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 		return m, nil
 	}
 
-	// Map URLs
-	e.addMapURLs(m, lat, lon, "pokestops", mb.ID)
+	// Map URLs — stations are their own entity type (ReactMap `/id/stations/{id}`)
+	e.addMapURLs(m, lat, lon, "stations", mb.ID)
 
 	// Reverse geocoding
 	e.addGeoResult(m, lat, lon)

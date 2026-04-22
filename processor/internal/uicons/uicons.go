@@ -175,12 +175,17 @@ func toSet(items []string) map[string]bool {
 }
 
 // PokemonIcon resolves the URL for a pokemon icon.
-func (u *Uicons) PokemonIcon(pokemonID, form, evolution, gender, costume, alignment int, shiny bool) string {
+// bread is the Niantic BreadMode enum (1=Dynamax, 2=Gigantamax, 0=none).
+func (u *Uicons) PokemonIcon(pokemonID, form, evolution, gender, costume, alignment int, shiny bool, bread int) string {
 	if idx := u.index.Load(); idx != nil {
-		file := resolvePokemonIcon(idx.Pokemon, u.imageType, pokemonID, form, evolution, gender, costume, alignment, shiny)
+		file := resolvePokemonIcon(idx.Pokemon, u.imageType, pokemonID, form, evolution, gender, costume, alignment, shiny, bread)
 		return u.url + "/pokemon/" + file
 	}
 	// Fallback path (no index available)
+	breadSuffix := ""
+	if bread > 0 {
+		breadSuffix = fmt.Sprintf("_b%d", bread)
+	}
 	evoSuffix := ""
 	if evolution > 0 {
 		evoSuffix = fmt.Sprintf("_%d", evolution)
@@ -189,7 +194,7 @@ func (u *Uicons) PokemonIcon(pokemonID, form, evolution, gender, costume, alignm
 	if form > 0 {
 		formStr = fmt.Sprintf("%d", form)
 	}
-	return fmt.Sprintf("%s/pokemon_icon_%03d_%s%s.%s", u.url, pokemonID, formStr, evoSuffix, u.imageType)
+	return fmt.Sprintf("%s/pokemon_icon_%03d_%s%s%s.%s", u.url, pokemonID, formStr, evoSuffix, breadSuffix, u.imageType)
 }
 
 // EggIcon resolves the URL for a raid egg icon.
@@ -303,7 +308,14 @@ func (u *Uicons) RewardMegaEnergyIcon(pokemonID, amount int) string {
 // --- resolve functions ---
 // These match the JS implementation's fallback chains exactly.
 
-func resolvePokemonIcon(avail map[string]bool, imageType string, pokemonID, form, evolution, gender, costume, alignment int, shiny bool) string {
+// resolvePokemonIcon builds the icon filename by trying combinations of
+// suffixes in fallback order. bread (_b1 / _b2) is placed first after the
+// pokemon ID, matching the JS implementation in ReuschelCGN/PoracleJS.
+func resolvePokemonIcon(avail map[string]bool, imageType string, pokemonID, form, evolution, gender, costume, alignment int, shiny bool, bread int) string {
+	breadSuffixes := []string{""}
+	if bread != 0 {
+		breadSuffixes = []string{fmt.Sprintf("_b%d", bread), ""}
+	}
 	evolutionSuffixes := []string{""}
 	if evolution != 0 {
 		evolutionSuffixes = []string{fmt.Sprintf("_e%d", evolution), ""}
@@ -330,15 +342,17 @@ func resolvePokemonIcon(avail map[string]bool, imageType string, pokemonID, form
 	}
 
 	ext := "." + imageType
-	for _, evoSfx := range evolutionSuffixes {
-		for _, formSfx := range formSuffixes {
-			for _, costumeSfx := range costumeSuffixes {
-				for _, genderSfx := range genderSuffixes {
-					for _, alignSfx := range alignmentSuffixes {
-						for _, shinySfx := range shinySuffixes {
-							result := fmt.Sprintf("%d%s%s%s%s%s%s%s", pokemonID, evoSfx, formSfx, costumeSfx, genderSfx, alignSfx, shinySfx, ext)
-							if avail[result] {
-								return result
+	for _, breadSfx := range breadSuffixes {
+		for _, evoSfx := range evolutionSuffixes {
+			for _, formSfx := range formSuffixes {
+				for _, costumeSfx := range costumeSuffixes {
+					for _, genderSfx := range genderSuffixes {
+						for _, alignSfx := range alignmentSuffixes {
+							for _, shinySfx := range shinySuffixes {
+								result := fmt.Sprintf("%d%s%s%s%s%s%s%s%s", pokemonID, breadSfx, evoSfx, formSfx, costumeSfx, genderSfx, alignSfx, shinySfx, ext)
+								if avail[result] {
+									return result
+								}
 							}
 						}
 					}

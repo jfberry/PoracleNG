@@ -54,7 +54,7 @@ func TestResolvePokemonIconBasic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := u.PokemonIcon(tt.pokemonID, tt.form, tt.evolution, tt.gender, tt.costume, tt.alignment, tt.shiny)
+			got := u.PokemonIcon(tt.pokemonID, tt.form, tt.evolution, tt.gender, tt.costume, tt.alignment, tt.shiny, 0)
 			if got != tt.want {
 				t.Errorf("PokemonIcon() = %q, want %q", got, tt.want)
 			}
@@ -80,7 +80,7 @@ func TestResolvePokemonIconFallbackPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := u.PokemonIcon(tt.pokemonID, tt.form, tt.evolution, 0, 0, 0, false)
+			got := u.PokemonIcon(tt.pokemonID, tt.form, tt.evolution, 0, 0, 0, false, 0)
 			if got != tt.want {
 				t.Errorf("PokemonIcon() = %q, want %q", got, tt.want)
 			}
@@ -209,13 +209,41 @@ func TestPokemonIconComplexFallback(t *testing.T) {
 	})
 
 	// form=1, gender=2 -> should fall back to form=1 (no gender match)
-	if got := u.PokemonIcon(150, 1, 0, 2, 0, 0, false); got != "https://example.com/icons/pokemon/150_f1.png" {
+	if got := u.PokemonIcon(150, 1, 0, 2, 0, 0, false, 0); got != "https://example.com/icons/pokemon/150_f1.png" {
 		t.Errorf("got %q, want form fallback", got)
 	}
 
 	// form=999, gender=2 -> should fall back to base
-	if got := u.PokemonIcon(150, 999, 0, 2, 0, 0, false); got != "https://example.com/icons/pokemon/150.png" {
+	if got := u.PokemonIcon(150, 999, 0, 2, 0, 0, false, 0); got != "https://example.com/icons/pokemon/150.png" {
 		t.Errorf("got %q, want base fallback", got)
+	}
+}
+
+func TestPokemonIconBread(t *testing.T) {
+	// Dynamax (bread=1) and Gigantamax (bread=2) append _b1 / _b2 right
+	// after the pokemon ID, matching the JS uicons convention
+	// (ReuschelCGN/PoracleJS src/lib/uicons.js).
+	u := newTestUicons("https://example.com/icons", "png", &Index{
+		Pokemon: setFrom("25_b1.png", "25_b2.png", "25.png", "0.png"),
+	})
+
+	if got := u.PokemonIcon(25, 0, 0, 0, 0, 0, false, 1); got != "https://example.com/icons/pokemon/25_b1.png" {
+		t.Errorf("bread=1: got %q, want Dynamax icon", got)
+	}
+	if got := u.PokemonIcon(25, 0, 0, 0, 0, 0, false, 2); got != "https://example.com/icons/pokemon/25_b2.png" {
+		t.Errorf("bread=2: got %q, want Gigantamax icon", got)
+	}
+	// bread=0 must not append _b0 (regression guard)
+	if got := u.PokemonIcon(25, 0, 0, 0, 0, 0, false, 0); got != "https://example.com/icons/pokemon/25.png" {
+		t.Errorf("bread=0: got %q, want base icon", got)
+	}
+
+	// Fallback: if the bread variant is missing, fall through to the non-bread icon
+	u2 := newTestUicons("https://example.com/icons", "png", &Index{
+		Pokemon: setFrom("25.png", "0.png"),
+	})
+	if got := u2.PokemonIcon(25, 0, 0, 0, 0, 0, false, 1); got != "https://example.com/icons/pokemon/25.png" {
+		t.Errorf("missing _b1: got %q, want base fallback", got)
 	}
 }
 
@@ -238,7 +266,7 @@ func TestUrlTrailingSlashTrimmed(t *testing.T) {
 		Pokemon: setFrom("1.png"),
 	})
 
-	got := u.PokemonIcon(1, 0, 0, 0, 0, 0, false)
+	got := u.PokemonIcon(1, 0, 0, 0, 0, 0, false, 0)
 	if got != "https://example.com/icons/pokemon/1.png" {
 		t.Errorf("URL should have trailing slash trimmed, got %q", got)
 	}
@@ -249,7 +277,7 @@ func TestWebpImageType(t *testing.T) {
 		Pokemon: setFrom("25.webp", "0.webp"),
 	})
 
-	got := u.PokemonIcon(25, 0, 0, 0, 0, 0, false)
+	got := u.PokemonIcon(25, 0, 0, 0, 0, 0, false, 0)
 	if got != "https://example.com/stickers/pokemon/25.webp" {
 		t.Errorf("got %q, want webp extension", got)
 	}
@@ -271,18 +299,18 @@ func TestLiveUiconsIndex(t *testing.T) {
 		len(idx.Pokemon), len(idx.Gym), len(idx.Egg), len(idx.Weather))
 
 	// Bulbasaur should exist
-	got := u.PokemonIcon(1, 0, 0, 0, 0, 0, false)
+	got := u.PokemonIcon(1, 0, 0, 0, 0, 0, false, 0)
 	if got == "" || got == "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS/pokemon/0.png" {
 		t.Errorf("Bulbasaur icon resolved to fallback: %q", got)
 	}
 	t.Logf("Bulbasaur: %s", got)
 
 	// Pikachu
-	got = u.PokemonIcon(25, 0, 0, 0, 0, 0, false)
+	got = u.PokemonIcon(25, 0, 0, 0, 0, 0, false, 0)
 	t.Logf("Pikachu: %s", got)
 
 	// Charizard with mega
-	got = u.PokemonIcon(6, 0, 1, 0, 0, 0, false)
+	got = u.PokemonIcon(6, 0, 1, 0, 0, 0, false, 0)
 	t.Logf("Mega Charizard: %s", got)
 
 	// Egg level 5

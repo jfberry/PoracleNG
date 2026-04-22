@@ -10,7 +10,8 @@ import (
 func (e *Enricher) Lure(lure *webhook.LureWebhook, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
-	// Pokestop name — lure webhook uses "name" field, normalize to pokestop_name
+	// Pokestop identity — lure webhook uses "name" field, normalize to pokestop_name
+	m["pokestop_id"] = lure.PokestopID
 	m["pokestop_name"] = lure.Name
 
 	if lure.LureExpiration > 0 {

@@ -47,9 +47,12 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 			return
 		}
 
-		// Derive gmax from battle level
+		// Derive gmax from bread_mode (2=Gigantamax). Fall back to the
+		// battle-level heuristic when bread_mode is absent.
 		gmax := 0
-		if mb.BattleLevel > 6 {
+		if mb.BattlePokemonBreadMode == 2 {
+			gmax = 1
+		} else if mb.BattlePokemonBreadMode == 0 && mb.BattleLevel > 6 {
 			gmax = 1
 		}
 

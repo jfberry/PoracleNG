@@ -66,6 +66,11 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		}
 	}
 
+	// Pokemon identity
+	m["encounter_id"] = pokemon.EncounterID
+	m["pokestop_id"] = pokemon.PokestopID
+	m["spawnpoint_id"] = string(pokemon.SpawnpointID)
+
 	// Cell weather
 	cellID := tracker.GetWeatherCellID(pokemon.Latitude, pokemon.Longitude)
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)
@@ -162,13 +167,13 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	shinyPossible, _ := m["shinyPossible"].(bool)
 	shiny := shinyPossible && e.RequestShinyImages
 	if e.ImgUicons != nil {
-		m["imgUrl"] = e.ImgUicons.PokemonIcon(pokemon.PokemonID, pokemon.Form, 0, pokemon.Gender, pokemon.Costume, 0, shiny)
+		m["imgUrl"] = e.ImgUicons.PokemonIcon(pokemon.PokemonID, pokemon.Form, 0, pokemon.Gender, pokemon.Costume, 0, shiny, 0)
 	}
 	if e.ImgUiconsAlt != nil {
-		m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(pokemon.PokemonID, pokemon.Form, 0, pokemon.Gender, pokemon.Costume, 0, shiny)
+		m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(pokemon.PokemonID, pokemon.Form, 0, pokemon.Gender, pokemon.Costume, 0, shiny, 0)
 	}
 	if e.StickerUicons != nil {
-		m["stickerUrl"] = e.StickerUicons.PokemonIcon(pokemon.PokemonID, pokemon.Form, 0, pokemon.Gender, pokemon.Costume, 0, shiny)
+		m["stickerUrl"] = e.StickerUicons.PokemonIcon(pokemon.PokemonID, pokemon.Form, 0, pokemon.Gender, pokemon.Costume, 0, shiny, 0)
 	}
 
 	// Game data enrichment (types, weakness, stats, maps, generation, etc.)

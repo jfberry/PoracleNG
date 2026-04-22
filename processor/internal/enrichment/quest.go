@@ -52,6 +52,9 @@ type QuestCandyReward struct {
 func (e *Enricher) Quest(lat, lon float64, pokestopID string, rewards []matching.QuestRewardData, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
+	// Pokestop identity
+	m["pokestop_id"] = pokestopID
+
 	endOfDay := geo.EndOfDay(lat, lon)
 	tz := geo.GetTimezone(lat, lon)
 	m["disappearTime"] = geo.FormatTime(endOfDay, tz, e.TimeLayout)
@@ -312,13 +315,13 @@ func (e *Enricher) addQuestIconURLs(m map[string]any, rewards []matching.QuestRe
 	case r.Type == 7 && r.PokemonID > 0: // Pokemon reward
 		shiny := r.Shiny || e.RequestShinyImages
 		if e.ImgUicons != nil {
-			m["imgUrl"] = e.ImgUicons.PokemonIcon(r.PokemonID, r.FormID, 0, 0, 0, 0, shiny)
+			m["imgUrl"] = e.ImgUicons.PokemonIcon(r.PokemonID, r.FormID, 0, 0, 0, 0, shiny, 0)
 		}
 		if e.ImgUiconsAlt != nil {
-			m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(r.PokemonID, r.FormID, 0, 0, 0, 0, shiny)
+			m["imgUrlAlt"] = e.ImgUiconsAlt.PokemonIcon(r.PokemonID, r.FormID, 0, 0, 0, 0, shiny, 0)
 		}
 		if e.StickerUicons != nil {
-			m["stickerUrl"] = e.StickerUicons.PokemonIcon(r.PokemonID, r.FormID, 0, 0, 0, 0, shiny)
+			m["stickerUrl"] = e.StickerUicons.PokemonIcon(r.PokemonID, r.FormID, 0, 0, 0, 0, shiny, 0)
 		}
 	case r.Type == 2 && r.ItemID > 0: // Item reward
 		if e.ImgUicons != nil {
