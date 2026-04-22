@@ -35,26 +35,45 @@ type testdataEntry struct {
 }
 
 // loadTestdata loads and merges bundled + user testdata.json files.
+// User entries (config/testdata.json) override bundled entries (fallbacks/testdata.json)
+// with the same (type, test) key.
 func loadTestdata(baseDir string) ([]testdataEntry, error) {
 	bundledPath := filepath.Join(baseDir, "fallbacks", "testdata.json")
 	userPath := filepath.Join(baseDir, "config", "testdata.json")
 
-	var result []testdataEntry
+	var bundled, user []testdataEntry
 
 	if data, err := os.ReadFile(bundledPath); err == nil {
-		var entries []testdataEntry
-		if err := json.Unmarshal(data, &entries); err != nil {
+		if err := json.Unmarshal(data, &bundled); err != nil {
 			return nil, fmt.Errorf("parse %s: %w", bundledPath, err)
 		}
-		result = append(result, entries...)
 	}
 
 	if data, err := os.ReadFile(userPath); err == nil {
-		var entries []testdataEntry
-		if err := json.Unmarshal(data, &entries); err != nil {
+		if err := json.Unmarshal(data, &user); err != nil {
 			log.Warnf("poracle-test: failed to parse %s: %v", userPath, err)
+			user = nil
+		}
+	}
+
+	userByKey := make(map[string]testdataEntry, len(user))
+	for _, e := range user {
+		userByKey[e.Type+"/"+e.Test] = e
+	}
+
+	result := make([]testdataEntry, 0, len(bundled)+len(user))
+	for _, e := range bundled {
+		key := e.Type + "/" + e.Test
+		if override, ok := userByKey[key]; ok {
+			result = append(result, override)
+			delete(userByKey, key)
 		} else {
-			result = append(result, entries...)
+			result = append(result, e)
+		}
+	}
+	for _, e := range user {
+		if _, ok := userByKey[e.Type+"/"+e.Test]; ok {
+			result = append(result, e)
 		}
 	}
 
