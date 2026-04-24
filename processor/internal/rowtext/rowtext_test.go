@@ -33,12 +33,12 @@ func testGenerator(t *testing.T) *Generator {
 		},
 		Util: &gamedata.UtilData{
 			Genders: map[int]gamedata.GenderInfo{
-				1: {Name: "male", Emoji: "♂"},
-				2: {Name: "female", Emoji: "♀"},
+				1: {Emoji: "♂"},
+				2: {Emoji: "♀"},
 			},
 			Lures: map[int]gamedata.LureInfo{
-				501: {Name: "Normal Lure"},
-				502: {Name: "Glacial Lure"},
+				501: {},
+				502: {},
 			},
 		},
 	}

@@ -49,14 +49,17 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook, tileMode int) (map[string]any
 	}
 	pending := e.addStaticMap(m, "pokestop", lure.Latitude, lure.Longitude, tileFields, tileMode)
 
-	// Lure data from util.json
+	// Lure data from util.json (colour + emoji key); English display name
+	// comes from pogo-translations key lure_{id} via the English translator.
 	m["lureTypeId"] = lure.LureID
 	if e.GameData != nil {
 		if info, ok := e.GameData.Util.Lures[lure.LureID]; ok {
 			m["lureColor"] = info.Color
 			m["lureEmojiKey"] = info.Emoji
-			m["lureTypeNameEng"] = info.Name // util.json names are English
 		}
+	}
+	if e.Translations != nil && lure.LureID != 0 {
+		m["lureTypeNameEng"] = e.Translations.For("en").T(fmt.Sprintf("lure_%d", lure.LureID))
 	}
 
 	// Invasion fields — a pokestop can have both a lure and an invasion

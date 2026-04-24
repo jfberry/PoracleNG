@@ -111,12 +111,9 @@ func newTestArgMatcher() *ArgMatcher {
 	// Minimal gamedata with util for raid levels
 	gd := &gamedata.GameData{
 		Util: &gamedata.UtilData{
-			RaidLevels: map[int]string{
-				1: "Level 1", 2: "Level 2", 3: "Level 3", 4: "Level 4",
-				5: "Legendary", 6: "Mega", 7: "Mega Legendary",
-				8: "Ultra Beast", 9: "Elite", 10: "Primal",
-				11: "Level 1 Shadow", 12: "Level 2 Shadow",
-				13: "Level 3 Shadow", 14: "Level 4 Shadow", 15: "Shadow Legendary",
+			RaidLevels: map[int]struct{}{
+				1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, 7: {}, 8: {},
+				9: {}, 10: {}, 11: {}, 12: {}, 13: {}, 14: {}, 15: {},
 			},
 		},
 		Types: map[int]*gamedata.TypeInfo{

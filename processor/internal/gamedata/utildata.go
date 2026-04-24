@@ -9,25 +9,33 @@ import (
 )
 
 // UtilData holds static game constants loaded from util.json.
+//
+// Display strings (team names, weather names, lure names, rarity labels,
+// generation names, raid/max-battle level titles, etc.) are NOT loaded from
+// util.json anymore — those come from pogo-translations / embedded i18n
+// identifier keys (team_N, weather_N, lure_N, rarity_N, generation_N,
+// raid_N, max_battle_N, display_type_N, gender_N, evo_N, poke_{id}_e{N}).
+// util.json is the authoritative source for non-translatable metadata only:
+// emoji keys, hex colours, level-cost tables, type IDs, weather boosts, etc.
 type UtilData struct {
 	Genders          map[int]GenderInfo
-	Rarity           map[int]string       // rarityGroup → English name
-	Size             map[int]string       // sizeGroup → English name
-	MegaName         map[int]string       // tempEvoId → format pattern e.g. "Mega {0}"
-	Evolution        map[int]EvolutionInfo
+	Rarity           map[int]struct{} // valid rarity IDs (display via embedded rarity_N)
+	Size             map[int]struct{} // valid size IDs (display via embedded size_N)
+	MegaName         map[int]string   // tempEvoId → format pattern e.g. "Mega {0}" (fallback when poke_{id}_e{N} is absent)
+	Evolution        map[int]struct{} // valid temp-evolution IDs (display via evo_N)
 	Teams            map[int]TeamInfo
 	Types            map[string]TypeDisplay // English name → {ID, Emoji, Color}
 	Weather          map[int]WeatherInfo
 	WeatherTypeBoost map[int][]int
 	GenData          map[int]GenInfo
 	GenException     map[MonsterKey]int // {pokemonID, form} → generation
-	RaidLevels       map[int]string // level → English name
-	MaxbattleLevels  map[int]string // level → English name
+	RaidLevels       map[int]struct{}   // valid raid level IDs (display via raid_N)
+	MaxbattleLevels  map[int]struct{}   // valid max-battle level IDs (display via max_battle_N)
 	Lures            map[int]LureInfo
 	PokestopEvent    map[int]EventInfo
 	PowerUpCost      map[string]PowerUpCostEntry // level string → {stardust, candy, xlCandy}
-	CpMultipliers    map[string]float64 // level string → CP multiplier
-	Emojis           map[string]string // emoji key → unicode
+	CpMultipliers    map[string]float64          // level string → CP multiplier
+	Emojis           map[string]string           // emoji key → unicode
 }
 
 // PowerUpCostEntry holds the cost to power up one half-level.
@@ -37,20 +45,15 @@ type PowerUpCostEntry struct {
 	XLCandy  int `json:"xlCandy"`
 }
 
-// GenderInfo holds gender display data.
+// GenderInfo holds gender display metadata. The display name comes from
+// embedded i18n gender_N, not util.json.
 type GenderInfo struct {
-	Name  string `json:"name"`
 	Emoji string `json:"emoji"` // emoji key (e.g. "gender-male")
 }
 
-// EvolutionInfo holds evolution type display data.
-type EvolutionInfo struct {
-	Name string `json:"name"`
-}
-
-// TeamInfo holds team display data.
+// TeamInfo holds team display metadata. The display name comes from
+// pogo-translations team_N, not util.json.
 type TeamInfo struct {
-	Name  string `json:"name"`
 	Color string `json:"color"`
 	Emoji string `json:"emoji"` // emoji key (e.g. "team-mystic")
 }
@@ -62,28 +65,33 @@ type TypeDisplay struct {
 	Color string `json:"color"` // hex color
 }
 
-// WeatherInfo holds weather display data.
+// WeatherInfo holds weather display metadata. The display name comes from
+// pogo-translations weather_N, not util.json.
 type WeatherInfo struct {
-	Name  string `json:"name"`
 	Emoji string `json:"emoji"` // emoji key (e.g. "weather-sunny")
 }
 
-// GenInfo holds generation range data.
+// GenInfo holds generation range data. The display name comes from
+// pogo-translations generation_N; Min/Max/Roman remain in util.json.
 type GenInfo struct {
 	Min   int    `json:"min"`
 	Max   int    `json:"max"`
-	Name  string `json:"name"`  // English name (e.g. "Kanto")
 	Roman string `json:"roman"` // Roman numeral (e.g. "I")
 }
 
-// LureInfo holds lure display data.
+// LureInfo holds lure display metadata. The display name comes from
+// pogo-translations lure_N, not util.json.
 type LureInfo struct {
-	Name  string `json:"name"`
 	Emoji string `json:"emoji"` // emoji key
 	Color string `json:"color"` // hex color
 }
 
-// EventInfo holds pokestop event display data.
+// EventInfo holds pokestop event display metadata.
+//
+// Name is retained because it's the canonical English identifier stored in
+// the invasion tracking DB (see matching/invasion.go ResolveGruntTypeName
+// and bot/commands/invasion.go). Display text for templates comes from
+// pogo-translations display_type_N.
 type EventInfo struct {
 	Name  string `json:"name"`
 	Color string `json:"color"`
@@ -112,17 +120,17 @@ func ParseUtilData(data []byte) (*UtilData, error) {
 	// Genders: {"0": {...}, "1": {...}}
 	u.Genders = parseIntKeyMap[GenderInfo](raw["genders"])
 
-	// Rarity: {"1": "Common", ...}
-	u.Rarity = parseIntStringMap(raw["rarity"])
+	// Rarity: keep IDs only; display strings come from embedded i18n rarity_N
+	u.Rarity = parseIntKeySet(raw["rarity"])
 
-	// Size: {"1": "XXS", ...}
-	u.Size = parseIntStringMap(raw["size"])
+	// Size: keep IDs only; display strings come from embedded i18n size_N
+	u.Size = parseIntKeySet(raw["size"])
 
-	// MegaName: {"0": "{0}", "1": "Mega {0}", ...}
+	// MegaName: {"0": "{0}", "1": "Mega {0}", ...} — fallback format pattern
 	u.MegaName = parseIntStringMap(raw["megaName"])
 
-	// Evolution: {"0": {"name": ""}, ...}
-	u.Evolution = parseIntKeyMap[EvolutionInfo](raw["evolution"])
+	// Evolution: keep IDs only; display strings come from pogo-translations evo_N
+	u.Evolution = parseIntKeySet(raw["evolution"])
 
 	// Teams: {"0": {...}, ...}
 	u.Teams = parseIntKeyMap[TeamInfo](raw["teams"])
@@ -168,11 +176,11 @@ func ParseUtilData(data []byte) (*UtilData, error) {
 		}
 	}
 
-	// RaidLevels: {"1": "Level 1", ...}
-	u.RaidLevels = parseIntStringMap(raw["raidLevels"])
+	// RaidLevels: keep IDs only; display strings come from pogo-translations raid_N
+	u.RaidLevels = parseIntKeySet(raw["raidLevels"])
 
-	// MaxbattleLevels: {"1": "1 Star Max Battle", ...}
-	u.MaxbattleLevels = parseIntStringMap(raw["maxbattleLevels"])
+	// MaxbattleLevels: keep IDs only; display strings come from pogo-translations max_battle_N
+	u.MaxbattleLevels = parseIntKeySet(raw["maxbattleLevels"])
 
 	// Lures: {"501": {...}, ...}
 	u.Lures = parseIntKeyMap[LureInfo](raw["lures"])
@@ -238,6 +246,28 @@ func parseIntStringMap(data json.RawMessage) map[int]string {
 	for k, v := range raw {
 		if id, err := strconv.Atoi(k); err == nil {
 			result[id] = v
+		}
+	}
+	return result
+}
+
+// parseIntKeySet parses a JSON object with string-int keys into a set
+// (map[int]struct{}), ignoring whatever the values are. Used for util.json
+// maps whose English string values have been superseded by translator keys —
+// the set membership still matters (e.g. "is this a valid raid level?") but
+// the English label is no longer needed.
+func parseIntKeySet(data json.RawMessage) map[int]struct{} {
+	if data == nil {
+		return nil
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+	result := make(map[int]struct{}, len(raw))
+	for k := range raw {
+		if id, err := strconv.Atoi(k); err == nil {
+			result[id] = struct{}{}
 		}
 	}
 	return result

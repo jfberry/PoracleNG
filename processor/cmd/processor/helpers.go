@@ -30,31 +30,37 @@ func (ps *ProcessorService) pokemonName(pokemonID, form int) string {
 	return fmt.Sprintf("Pokemon %d", pokemonID)
 }
 
-// teamName returns a human-readable team name for logging.
+// teamName returns a human-readable team name for logging
+// (pogo-translations team_N via the English translator).
 func (ps *ProcessorService) teamName(teamID int) string {
-	if ps.enricher.GameData != nil && ps.enricher.GameData.Util != nil {
-		if info, ok := ps.enricher.GameData.Util.Teams[teamID]; ok {
-			return info.Name
+	if ps.enricher.Translations != nil {
+		key := fmt.Sprintf("team_%d", teamID)
+		if v := ps.enricher.Translations.For("en").T(key); v != "" && v != key {
+			return v
 		}
 	}
 	return fmt.Sprintf("team %d", teamID)
 }
 
-// weatherName returns a human-readable weather name for logging.
+// weatherName returns a human-readable weather name for logging
+// (pogo-translations weather_N via the English translator).
 func (ps *ProcessorService) weatherName(weatherID int) string {
-	if ps.enricher.GameData != nil && ps.enricher.GameData.Util != nil {
-		if info, ok := ps.enricher.GameData.Util.Weather[weatherID]; ok {
-			return info.Name
+	if ps.enricher.Translations != nil {
+		key := fmt.Sprintf("weather_%d", weatherID)
+		if v := ps.enricher.Translations.For("en").T(key); v != "" && v != key {
+			return v
 		}
 	}
 	return fmt.Sprintf("weather %d", weatherID)
 }
 
-// lureName returns a human-readable lure name for logging.
+// lureName returns a human-readable lure name for logging
+// (pogo-translations lure_N via the English translator).
 func (ps *ProcessorService) lureName(lureID int) string {
-	if ps.enricher.GameData != nil && ps.enricher.GameData.Util != nil {
-		if info, ok := ps.enricher.GameData.Util.Lures[lureID]; ok {
-			return info.Name
+	if ps.enricher.Translations != nil {
+		key := fmt.Sprintf("lure_%d", lureID)
+		if v := ps.enricher.Translations.For("en").T(key); v != "" && v != key {
+			return v
 		}
 	}
 	return fmt.Sprintf("Lure %d", lureID)

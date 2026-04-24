@@ -11,13 +11,9 @@ import (
 func (g *Generator) LureRowText(tr *i18n.Translator, lure *db.LureTracking) string {
 	typeText := tr.T("tracking.any")
 	if lure.LureID != 0 {
-		// Look up lure name from game data first, fall back to i18n key
-		if g.GD != nil && g.GD.Util != nil {
-			if lureInfo, ok := g.GD.Util.Lures[lure.LureID]; ok && lureInfo.Name != "" {
-				typeText = lureInfo.Name
-			} else {
-				typeText = fmt.Sprintf("Lure %d", lure.LureID)
-			}
+		key := fmt.Sprintf("lure_%d", lure.LureID)
+		if v := tr.T(key); v != "" && v != key {
+			typeText = v
 		} else {
 			typeText = fmt.Sprintf("Lure %d", lure.LureID)
 		}

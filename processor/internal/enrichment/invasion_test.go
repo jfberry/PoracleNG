@@ -205,7 +205,7 @@ func TestInvasionTranslateGender(t *testing.T) {
 		Types: map[int]*gamedata.TypeInfo{},
 		Util: &gamedata.UtilData{
 			Genders: map[int]gamedata.GenderInfo{
-				1: {Name: "Male", Emoji: "gender_male"},
+				1: {Emoji: "gender_male"},
 			},
 		},
 	}

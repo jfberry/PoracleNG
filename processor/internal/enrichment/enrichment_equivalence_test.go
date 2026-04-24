@@ -435,24 +435,20 @@ func TestPokemonEnrichmentEquivalence(t *testing.T) {
 				t.Errorf("appleMapUrl format wrong: %q", goApple)
 			}
 
-			// --- Gender ---
+			// --- Gender emoji key ---
+			// Gender display names now come from pogo-translations gender_N
+			// (not util.json), so JS parity on the raw English name is no
+			// longer meaningful — we only compare the emoji key, which is
+			// still sourced from util.json.
 			if genderInfo, ok := gd.Util.Genders[pokemon.Gender]; ok {
-				if genderInfo.Name != exp.GenderName {
-					t.Errorf("genderName: Go=%q JS=%q", genderInfo.Name, exp.GenderName)
-				}
 				if genderInfo.Emoji != exp.GenderEmojiKey {
 					t.Errorf("genderEmojiKey: Go=%q JS=%q", genderInfo.Emoji, exp.GenderEmojiKey)
 				}
 			}
 
 			// --- Size ---
-			if exp.SizeName != "" {
-				if sizeName, ok := gd.Util.Size[pokemon.Size]; ok {
-					if sizeName != exp.SizeName {
-						t.Errorf("sizeName: Go=%q JS=%q", sizeName, exp.SizeName)
-					}
-				}
-			}
+			// Size display names now come from embedded i18n size_N; the
+			// util.json string is no longer loaded.
 
 			// --- PVP enrichment ---
 			if exp.HasPvp {
@@ -518,10 +514,10 @@ func TestRaidEnrichmentEquivalence(t *testing.T) {
 				}
 			}
 
-			if levelName, ok := gd.Util.RaidLevels[exp.Level]; ok {
-				if levelName != exp.LevelNameEng {
-					t.Errorf("levelName: Go=%q JS=%q", levelName, exp.LevelNameEng)
-				}
+			// Raid level name comes from pogo-translations raid_N now;
+			// util.json only confirms the level id is valid.
+			if _, ok := gd.Util.RaidLevels[exp.Level]; !ok {
+				t.Errorf("raid level %d not found in util.json", exp.Level)
 			}
 
 			if exp.PokemonID > 0 {
@@ -563,12 +559,11 @@ func TestGymEnrichmentEquivalence(t *testing.T) {
 		}
 
 		t.Run(fmt.Sprintf("gym_team_%d", exp.TeamID), func(t *testing.T) {
+			// Team display names now come from pogo-translations team_N;
+			// util.json keeps only the colour and emoji key.
 			teamInfo, ok := gd.Util.Teams[exp.TeamID]
 			if !ok {
 				t.Fatalf("team %d not found in util data", exp.TeamID)
-			}
-			if teamInfo.Name != exp.TeamName {
-				t.Errorf("teamName: Go=%q JS=%q", teamInfo.Name, exp.TeamName)
 			}
 			if teamInfo.Color != exp.TeamColor {
 				t.Errorf("teamColor: Go=%q JS=%q", teamInfo.Color, exp.TeamColor)
@@ -637,11 +632,10 @@ func TestMaxbattleEnrichmentEquivalence(t *testing.T) {
 		}
 
 		t.Run(fmt.Sprintf("maxbattle_level_%d_pokemon_%d", exp.BattleLevel, exp.PokemonID), func(t *testing.T) {
-			// Level name
-			if levelName, ok := gd.Util.MaxbattleLevels[exp.BattleLevel]; ok {
-				if levelName != exp.LevelNameEng {
-					t.Errorf("levelName: Go=%q JS=%q", levelName, exp.LevelNameEng)
-				}
+			// Max-battle level name comes from pogo-translations max_battle_N;
+			// util.json only confirms the level id is valid.
+			if _, ok := gd.Util.MaxbattleLevels[exp.BattleLevel]; !ok {
+				t.Errorf("maxbattle level %d not found in util.json", exp.BattleLevel)
 			}
 
 			if exp.PokemonID > 0 {

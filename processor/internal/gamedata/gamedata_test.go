@@ -212,9 +212,6 @@ func TestGetGenerationInfo(t *testing.T) {
 	if info == nil {
 		t.Fatal("Gen 1 info is nil")
 	}
-	if info.Name != "Kanto" {
-		t.Errorf("Gen 1 name = %q, want %q", info.Name, "Kanto")
-	}
 	if info.Roman != "I" {
 		t.Errorf("Gen 1 roman = %q, want %q", info.Roman, "I")
 	}

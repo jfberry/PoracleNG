@@ -523,7 +523,9 @@ func (am *ArgMatcher) resolveRangeName(key, name, lang string) (int, bool) {
 
 	lower := strings.ToLower(name)
 
-	// Try user language, then English
+	// Try user language, then English. size_N / rarity_N are shipped in the
+	// embedded i18n files (processor/internal/i18n/locale/) for every
+	// supported language, so no util.json fallback is needed.
 	if am.bundle != nil {
 		for _, tryLang := range []string{lang, "en"} {
 			if tryLang == "" {
@@ -538,21 +540,6 @@ func (am *ArgMatcher) resolveRangeName(key, name, lang string) (int, bool) {
 				if translated != "" && strings.ToLower(translated) == lower {
 					return id, true
 				}
-			}
-		}
-	}
-
-	// Fallback: raw game data util names
-	if am.gameData != nil && am.gameData.Util != nil {
-		var nameMap map[int]string
-		if keyPrefix == "size_" {
-			nameMap = am.gameData.Util.Size
-		} else {
-			nameMap = am.gameData.Util.Rarity
-		}
-		for id, n := range nameMap {
-			if strings.ToLower(n) == lower {
-				return id, true
 			}
 		}
 	}
