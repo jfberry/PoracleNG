@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -73,7 +74,10 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 		genders[strings.ToLower(tr.T("arg.genderless"))] = 3
 		am.genderMap[lang] = genders
 
-		// Lure types
+		// Lure types — accept pogo-translations keys lure_501..lure_506
+		// (resources/gamelocale/) in addition to the legacy arg.* keys.
+		// The lure_N values are added last so they take precedence over
+		// arg.normal if they ever collide in the user's language.
 		lures := make(map[string]int)
 		lures[strings.ToLower(tr.T("arg.normal"))] = 0
 		lures[strings.ToLower(tr.T("arg.glacial"))] = 502
@@ -81,6 +85,12 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 		lures[strings.ToLower(tr.T("arg.magnetic"))] = 504
 		lures[strings.ToLower(tr.T("arg.rainy"))] = 505
 		lures[strings.ToLower(tr.T("arg.sparkly"))] = 506
+		for lureID := 501; lureID <= 506; lureID++ {
+			key := fmt.Sprintf("lure_%d", lureID)
+			if name := strings.ToLower(tr.T(key)); name != "" && name != key {
+				lures[name] = lureID
+			}
+		}
 		am.lureMap[lang] = lures
 
 		// Type names from poke_type_{id} translation keys

@@ -1,6 +1,8 @@
 package enrichment
 
 import (
+	"fmt"
+
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -87,8 +89,10 @@ func (e *Enricher) LureTranslate(base map[string]any, lureID int, lang string) m
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
-	if info, ok := gd.Util.Lures[lureID]; ok {
-		m["lureTypeName"] = tr.T(info.Name)
+	// Lure display name comes from pogo-translations key lure_{id}
+	// (resources/gamelocale/), not util.json's English "Normal Lure" string.
+	if _, ok := gd.Util.Lures[lureID]; ok {
+		m["lureTypeName"] = tr.T(fmt.Sprintf("lure_%d", lureID))
 	}
 
 	// Translate invasion fields if present on this pokestop
