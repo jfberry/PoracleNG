@@ -395,7 +395,7 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 	}
 
 	// Generation name
-	addGenerationFields(m, gd, tr, pokemon.PokemonID, pokemon.Form)
+	addGenerationFields(m, gd, tr, enTr, pokemon.PokemonID, pokemon.Form)
 
 	// Gender name
 	addGenderFields(m, gd, tr, enTr, pokemon.Gender)

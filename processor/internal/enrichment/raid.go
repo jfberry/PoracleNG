@@ -268,7 +268,7 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		addWeatherFields(m, gd, tr, monster.Types, weather)
 
 		// Generation
-		addGenerationFields(m, gd, tr, raid.PokemonID, raid.Form)
+		addGenerationFields(m, gd, tr, e.Translations.For("en"), raid.PokemonID, raid.Form)
 
 		// Gender
 		addGenderFields(m, gd, tr, enTr, raid.Gender)

@@ -223,19 +223,31 @@ func translateTeamName(tr *i18n.Translator, teamID int) string {
 }
 
 // addGenerationFields adds translated generation info to the enrichment map.
-func addGenerationFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, pokemonID, form int) {
+// Generation display names come from pogo-translations identifier keys
+// generation_1..generation_N (Kanto / Johto / ...); util.json is only used
+// for the roman numeral.
+func addGenerationFields(m map[string]any, gd *gamedata.GameData, tr, enTr *i18n.Translator, pokemonID, form int) {
 	gen := gd.GetGeneration(pokemonID, form)
 	m["generation"] = gen
 	info := gd.GetGenerationInfo(gen)
 	if info != nil {
-		m["generationName"] = tr.T(info.Name)
-		m["generationNameEng"] = info.Name // util.json names are already English
+		m["generationName"] = translateGenerationName(tr, gen)
+		m["generationNameEng"] = translateGenerationName(enTr, gen)
 		m["generationRoman"] = info.Roman
 	} else {
 		m["generationName"] = fmt.Sprintf("Gen %d", gen)
 		m["generationNameEng"] = fmt.Sprintf("Gen %d", gen)
 		m["generationRoman"] = ""
 	}
+}
+
+// translateGenerationName returns the pogo-translations value for a
+// generation (generation_1 = Kanto, etc.). Returns "" when tr is nil.
+func translateGenerationName(tr *i18n.Translator, gen int) string {
+	if tr == nil {
+		return ""
+	}
+	return tr.T(fmt.Sprintf("generation_%d", gen))
 }
 
 // addWeatherFields adds weather-related enrichment fields.
