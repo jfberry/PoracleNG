@@ -149,9 +149,12 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lineu
 	var grunt *gamedata.Grunt
 
 	if isEventInvasion && gd.Util != nil {
-		if eventInfo, ok := gd.Util.PokestopEvent[displayType]; ok {
-			m["gruntName"] = eventInfo.Name
-			m["gruntTypeName"] = eventInfo.Name
+		if _, ok := gd.Util.PokestopEvent[displayType]; ok {
+			// Event names come from pogo-translations display_type_N
+			// (resources/gamelocale/), not util.json's English labels.
+			name := tr.T(fmt.Sprintf("display_type_%d", displayType))
+			m["gruntName"] = name
+			m["gruntTypeName"] = name
 		}
 	} else {
 		// Regular grunt name

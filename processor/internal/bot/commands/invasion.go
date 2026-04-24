@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -102,12 +103,27 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 			}
 		}
 
-		// Pokestop events (kecleon, showcase, gold-stop)
+		// Pokestop events (kecleon, showcase, gold-stop). The canonical DB
+		// value is the lowercased English util.json name (see
+		// matching/invasion.go ResolveGruntTypeName). Accept both the
+		// English util.json name and the translated display_type_N name
+		// (from resources/gamelocale/) in the user's language and English.
 		if ctx.GameData.Util != nil {
-			for _, event := range ctx.GameData.Util.PokestopEvent {
-				name := strings.ToLower(event.Name)
-				if name != "" {
-					validTypes[name] = name
+			for id, event := range ctx.GameData.Util.PokestopEvent {
+				canonical := strings.ToLower(event.Name)
+				if canonical == "" {
+					continue
+				}
+				validTypes[canonical] = canonical
+
+				key := fmt.Sprintf("display_type_%d", id)
+				translated := strings.ToLower(tr.T(key))
+				if translated != "" && translated != key {
+					validTypes[translated] = canonical
+				}
+				enTranslated := strings.ToLower(enTr.T(key))
+				if enTranslated != "" && enTranslated != key && enTranslated != translated {
+					validTypes[enTranslated] = canonical
 				}
 			}
 		}
