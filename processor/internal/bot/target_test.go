@@ -1,11 +1,15 @@
 package bot
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
+
+// errorsAs is a thin alias around errors.As so the test body stays readable.
+func errorsAs(err error, target any) bool { return errors.As(err, target) }
 
 // newTargetCtx builds a CommandContext and a MockHumanStore seeded with the
 // sender (user1) and the channel (ch1) as a registered humans row.
@@ -77,6 +81,18 @@ func TestBuildTarget_NonAdminInRegisteredChannelRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "channel admins") {
 		t.Errorf("error message should mention channel admins; got %q", err.Error())
+	}
+
+	// The error must be a *TargetError so callers can translate it.
+	var te *TargetError
+	if !errorsAs(err, &te) {
+		t.Fatalf("expected *TargetError, got %T", err)
+	}
+	if te.Key != "msg.channel_admin_only" {
+		t.Errorf("expected i18n key msg.channel_admin_only, got %q", te.Key)
+	}
+	if len(te.Args) == 0 {
+		t.Error("expected command prefix to be passed as a format arg")
 	}
 }
 

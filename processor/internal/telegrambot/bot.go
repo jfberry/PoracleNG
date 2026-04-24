@@ -407,7 +407,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 		} else {
 			target, args, err := bot.BuildTarget(ctx, cmd.Args)
 			if err != nil {
-				msg := tgbotapi.NewMessage(chatID, err.Error())
+				msg := tgbotapi.NewMessage(chatID, bot.LocalizeTargetError(b.Translations.For(userLang), err))
 				b.api.Send(msg)
 				continue
 			}

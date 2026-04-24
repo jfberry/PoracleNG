@@ -169,7 +169,7 @@ func HandleCommand(deps *CommandDeps) gin.HandlerFunc {
 			target, remainingArgs, err := bot.BuildTarget(ctx, cmd.Args)
 			if err != nil {
 				log.Debugf("command: target resolution failed: %v", err)
-				allReplies = append(allReplies, bot.Reply{React: "🙅", Text: err.Error()})
+				allReplies = append(allReplies, bot.Reply{React: "🙅", Text: bot.LocalizeTargetError(deps.Translations.For(userLang), err)})
 				continue
 			}
 			if target != nil {

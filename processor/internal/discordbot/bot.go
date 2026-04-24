@@ -519,7 +519,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			target, args, err := bot.BuildTarget(ctx, cmd.Args)
 			if err != nil {
 				s.MessageReactionAdd(channelID, m.ID, "🙅")
-				reply(err.Error())
+				reply(bot.LocalizeTargetError(tr, err))
 				continue
 			}
 			remainingArgs = args

@@ -1,11 +1,48 @@
 package bot
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
+
+// TargetError is returned by BuildTarget when target resolution fails in a
+// user-facing way. It carries an i18n key + args so the caller can render
+// the message in the sender's language; Error() returns an English fallback
+// so callers that don't translate still get a sensible string.
+type TargetError struct {
+	Key      string
+	Args     []any
+	Fallback string
+}
+
+func (e *TargetError) Error() string { return e.Fallback }
+
+// Localize renders the error message in tr's language, falling back to the
+// English string if tr is nil or has no entry for the key.
+func (e *TargetError) Localize(tr *i18n.Translator) string {
+	if tr == nil || e.Key == "" {
+		return e.Fallback
+	}
+	if localized := tr.Tf(e.Key, e.Args...); localized != "" && localized != e.Key {
+		return localized
+	}
+	return e.Fallback
+}
+
+// LocalizeTargetError renders err in tr's language if it is a *TargetError,
+// otherwise it returns err.Error(). Call sites that already have a translator
+// should prefer this over err.Error() so translatable errors are honoured.
+func LocalizeTargetError(tr *i18n.Translator, err error) string {
+	var te *TargetError
+	if errors.As(err, &te) {
+		return te.Localize(tr)
+	}
+	return err.Error()
+}
 
 // Target holds the resolved command target — who the command operates on.
 type Target struct {
@@ -90,7 +127,11 @@ func BuildTarget(ctx *CommandContext, args []string) (*Target, []string, error) 
 		if ctx.Platform == "telegram" {
 			prefix = "/"
 		}
-		return nil, remaining, fmt.Errorf("only channel admins can run commands in this channel — DM the bot with %syourcommand to manage your personal tracking", prefix)
+		return nil, remaining, &TargetError{
+			Key:      "msg.channel_admin_only",
+			Args:     []any{prefix},
+			Fallback: fmt.Sprintf("Only channel admins can run commands in this channel. DM the bot with %syourcommand to manage your personal tracking.", prefix),
+		}
 	}
 
 	// user: override requires admin, user tracking, or channel tracking permission
