@@ -275,8 +275,11 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 
 		// Evolution name + megaName
 		if raid.Evolution > 0 {
-			if info, ok := gd.Util.Evolution[raid.Evolution]; ok {
-				m["evolutionName"] = tr.T(info.Name)
+			// Evolution prefix comes from pogo-translations evo_N
+			// ("Mega", "Mega X", "Primal", ...), not util.json's English
+			// Evolution.Name.
+			if _, ok := gd.Util.Evolution[raid.Evolution]; ok {
+				m["evolutionName"] = tr.T(fmt.Sprintf("evo_%d", raid.Evolution))
 			}
 			// megaName = fullName when evolved (mega/primal)
 			if fn, ok := m["fullName"].(string); ok {

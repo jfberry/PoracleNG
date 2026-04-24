@@ -40,15 +40,12 @@ func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i
 	m["formName"] = formName
 	m["formNormalised"] = formNormalised
 
-	// Full name
-	fullName := name
-	if formNormalised != "" {
-		fullName = name + " " + formNormalised
-	}
-	if evolution > 0 {
-		fullName = i18n.Format(nameKeys.MegaNamePattern, fullName)
-	}
-	m["fullName"] = fullName
+	// Full name — for mega/primal pokemon, prefer the combined
+	// poke_{id}_e{evolution} key from pogo-translations (e.g. poke_6_e2 =
+	// "Mega Charizard X") since that gives a fully localised mega name.
+	// Fall back to the util.json format pattern for species without a
+	// dedicated translation.
+	m["fullName"] = buildFullName(tr, nameKeys, name, formNormalised, pokemonID, evolution)
 
 	// English names for templates that show both translated + English
 	if bundle != nil {
@@ -61,13 +58,6 @@ func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i
 				enFormNormalised = enForm
 			}
 		}
-		enFullName := enName
-		if enFormNormalised != "" {
-			enFullName = enName + " " + enFormNormalised
-		}
-		if evolution > 0 {
-			enFullName = i18n.Format(nameKeys.MegaNamePattern, enFullName)
-		}
 		enFormName := ""
 		if nameKeys.FormKey != "" {
 			enFormName = enTr.T(nameKeys.FormKey)
@@ -75,8 +65,28 @@ func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i
 		m["nameEng"] = enName
 		m["formNameEng"] = enFormName
 		m["formNormalisedEng"] = enFormNormalised
-		m["fullNameEng"] = enFullName
+		m["fullNameEng"] = buildFullName(enTr, nameKeys, enName, enFormNormalised, pokemonID, evolution)
 	}
+}
+
+// buildFullName constructs a pokemon's localized display name. For mega/primal
+// evolutions it first tries the combo key poke_{id}_e{evolution} and falls
+// back to applying the util.json MegaName format pattern to the base+form name.
+func buildFullName(tr *i18n.Translator, nameKeys gamedata.MonsterNameInfo, name, formNormalised string, pokemonID, evolution int) string {
+	if evolution > 0 && tr != nil {
+		comboKey := fmt.Sprintf("poke_%d_e%d", pokemonID, evolution)
+		if translated := tr.T(comboKey); translated != comboKey && translated != "" {
+			return translated
+		}
+	}
+	fullName := name
+	if formNormalised != "" {
+		fullName = name + " " + formNormalised
+	}
+	if evolution > 0 {
+		fullName = i18n.Format(nameKeys.MegaNamePattern, fullName)
+	}
+	return fullName
 }
 
 // IsNormalForm returns true if a form name is "Normal" in any common language.

@@ -588,13 +588,24 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 			}
 
 			megaInfo := make(map[string]any)
-			// Mega name: apply pattern like "Mega {0}"
-			baseName := tr.T(gamedata.PokemonTranslationKey(m.PokemonID))
-			pattern := "{0}"
-			if p, ok := gd.Util.MegaName[te.TempEvoID]; ok {
-				pattern = p
+			// Mega name: prefer the pokemon+mega-evolution combination key
+			// poke_{id}_e{tempEvoID} (e.g. poke_6_e2 = "Mega Charizard X")
+			// when pogo-translations ships one. Fall back to the util.json
+			// format pattern ("Mega {0}" applied to the translated base
+			// pokemon name) for species that don't have a dedicated key.
+			fullName := ""
+			comboKey := fmt.Sprintf("poke_%d_e%d", m.PokemonID, te.TempEvoID)
+			if translated := tr.T(comboKey); translated != comboKey && translated != "" {
+				fullName = translated
+			} else {
+				baseName := tr.T(gamedata.PokemonTranslationKey(m.PokemonID))
+				pattern := "{0}"
+				if p, ok := gd.Util.MegaName[te.TempEvoID]; ok {
+					pattern = p
+				}
+				fullName = i18n.Format(pattern, baseName)
 			}
-			megaInfo["fullName"] = i18n.Format(pattern, baseName)
+			megaInfo["fullName"] = fullName
 			megaInfo["evolution"] = te.TempEvoID
 			megaInfo["typeEmojiKeys"] = gd.GetTypeEmojiKeys(types)
 			TranslateTypeNames(megaInfo, tr, nil, types)
