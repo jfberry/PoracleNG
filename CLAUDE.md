@@ -353,7 +353,7 @@ These rules govern who can execute commands, what they target, and where they ca
 | Context | Target Resolution | Notes |
 |---------|-------------------|-------|
 | **DM** | Always targets the sender | Any registered user can run commands |
-| **Guild channel (registered)** | Admin/delegated → targets the channel; Non-admin → targets the sender | Channel must be registered with `!channel add` |
+| **Guild channel (registered)** | Admin/delegated → targets the channel; Non-admin → **BLOCKED** with "only channel admins can run commands" | Non-admin members must DM the bot to manage their own tracking — a channel they have access to must not double as a personal-tracking shortcut |
 | **Guild channel (unregistered)** | **BLOCKED** — error "does not seem to be registered" | Prevents users from accidentally modifying personal tracking from random channels |
 | **`user:ID` override** | Admin only — targets the specified user by ID | Bypasses channel check (explicit target) |
 | **`name:webhookname` override** | Admin or webhook admin — targets the named webhook | Bypasses channel check (explicit target) |

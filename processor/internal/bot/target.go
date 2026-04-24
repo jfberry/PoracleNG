@@ -82,16 +82,15 @@ func BuildTarget(ctx *CommandContext, args []string) (*Target, []string, error) 
 			return channelTarget, remaining, nil
 		}
 
-		// Non-admin in registered channel: target is the sender
-		target, err := lookupTarget(hs, ctx.TargetID)
-		if err != nil {
-			return nil, remaining, err
+		// Non-admin in a registered channel: reject. Personal tracking
+		// must be managed from DM so that members without channel-admin
+		// rights can't silently mutate their own tracking through a
+		// channel they happen to have access to.
+		prefix := "!"
+		if ctx.Platform == "telegram" {
+			prefix = "/"
 		}
-		if target == nil {
-			return nil, remaining, fmt.Errorf("user %s not found", ctx.TargetID)
-		}
-		target.IsAdmin = ctx.IsAdmin
-		return target, remaining, nil
+		return nil, remaining, fmt.Errorf("only channel admins can run commands in this channel — DM the bot with %syourcommand to manage your personal tracking", prefix)
 	}
 
 	// user: override requires admin, user tracking, or channel tracking permission
