@@ -461,6 +461,7 @@
   "msg.dm_only": "Skriv alla kommandon i PM till botten",
   "msg.admin_no_distance": "Varning: Admin-kommandot upptäcktes utan distans - använder standardavstånd",
   "msg.not_registered": "Du är inte registrerad. Vänligen registrera dig först.",
+  "msg.channel_admin_only": "Only channel admins can run commands in this channel. DM the bot with {0}yourcommand to manage your personal tracking.",
   "msg.backup.invalid_name": "Ange ett giltigt namn på säkerhetskopian (bokstäver, siffror, bindestreck och understreck endast)",
   "msg.backup.need_name": "Din säkerhetskopia behöver ett giltigt namn (endast bokstäver, siffror eller bindestreck)",
   "msg.restore.no_backups_dir": "Ingen säkerhetskopieringsmapp hittades",
