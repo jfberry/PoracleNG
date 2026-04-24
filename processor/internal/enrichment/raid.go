@@ -1,6 +1,7 @@
 package enrichment
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -133,9 +134,12 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 			m["color"] = info.Color // deprecated alias
 		}
 
-		// Raid level name
-		if levelName, ok := gd.Util.RaidLevels[raid.Level]; ok {
-			m["levelNameEng"] = levelName
+		// Raid level name — pogo-translations uses identifier keys raid_1..raid_N,
+		// NOT the English strings from util.json. util.json is only used to
+		// enumerate valid levels (see bot/argmatch.go).
+		if e.Translations != nil && raid.Level > 0 {
+			key := fmt.Sprintf("raid_%d", raid.Level)
+			m["levelNameEng"] = e.Translations.For("en").T(key)
 		}
 
 		if raid.PokemonID > 0 {
@@ -236,8 +240,10 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 	}
 
 	// Level name
-	if levelName, ok := base["levelNameEng"].(string); ok {
-		m["levelName"] = tr.T(levelName)
+	// Raid level name — look up pogo-translations identifier key for the
+	// user's language (raid_1..raid_N).
+	if raid.Level > 0 {
+		m["levelName"] = tr.T(fmt.Sprintf("raid_%d", raid.Level))
 	}
 
 	if raid.PokemonID > 0 {

@@ -1,6 +1,8 @@
 package enrichment
 
 import (
+	"fmt"
+
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
@@ -91,8 +93,12 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 		gd := e.GameData
 
 		// Level name
-		if levelName, ok := gd.Util.MaxbattleLevels[mb.BattleLevel]; ok {
-			m["levelNameEng"] = levelName
+		// Max battle level name — pogo-translations identifier keys
+		// max_battle_1..max_battle_N. util.json's maxbattleLevels map is no
+		// longer consulted for display strings.
+		if e.Translations != nil && mb.BattleLevel > 0 {
+			key := fmt.Sprintf("max_battle_%d", mb.BattleLevel)
+			m["levelNameEng"] = e.Translations.For("en").T(key)
 		}
 
 		// Battle pokemon data
@@ -135,8 +141,8 @@ func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.Maxbattle
 		}
 	}
 
-	if levelName, ok := base["levelNameEng"].(string); ok {
-		m["levelName"] = tr.T(levelName)
+	if mb.BattleLevel > 0 {
+		m["levelName"] = tr.T(fmt.Sprintf("max_battle_%d", mb.BattleLevel))
 	}
 
 	if mb.BattlePokemonID > 0 {
