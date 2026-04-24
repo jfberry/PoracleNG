@@ -106,10 +106,7 @@ func BuildTarget(ctx *CommandContext, args []string) (*Target, []string, error) 
 		// Guild channel: must be registered
 		channelTarget, _ := lookupTarget(hs, ctx.ChannelID)
 		if channelTarget == nil {
-			prefix := "!"
-			if ctx.Platform == "telegram" {
-				prefix = "/"
-			}
+			prefix := CommandPrefix(ctx)
 			return nil, remaining, fmt.Errorf("%s does not seem to be registered. add it with %schannel add", ctx.ChannelID, prefix)
 		}
 
@@ -123,10 +120,7 @@ func BuildTarget(ctx *CommandContext, args []string) (*Target, []string, error) 
 		// must be managed from DM so that members without channel-admin
 		// rights can't silently mutate their own tracking through a
 		// channel they happen to have access to.
-		prefix := "!"
-		if ctx.Platform == "telegram" {
-			prefix = "/"
-		}
+		prefix := CommandPrefix(ctx)
 		return nil, remaining, &TargetError{
 			Key:      "msg.channel_admin_only",
 			Args:     []any{prefix},

@@ -27,7 +27,7 @@ func (c *StopCommand) Aliases() []string { return nil }
 
 func (c *StopCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
-	prefix := commandPrefix(ctx)
+	prefix := bot.CommandPrefix(ctx)
 
 	if len(args) > 0 {
 		// User typed "!stop pokemon" or similar — warn them and do NOT stop

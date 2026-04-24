@@ -10,6 +10,7 @@ import (
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
@@ -236,7 +237,7 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 		totalChanges := len(diff.AlreadyPresent) + len(diff.Updates) + len(diff.Inserts)
 		if totalChanges > 50 {
 			message = tr.Tf("tracking.bulk_changes",
-				deps.Config.Discord.Prefix, tr.T("tracking.tracked"))
+				bot.CommandPrefixForType(deps.Config, human.Type), tr.T("tracking.tracked"))
 		} else {
 			var sb strings.Builder
 			for i := range diff.AlreadyPresent {

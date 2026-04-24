@@ -8,6 +8,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
@@ -222,11 +223,7 @@ func (ps *ProcessorService) OnBan(target, typ, name, language string) {
 				log.Errorf("Rate limit: failed to disable user %s: %s", target, err)
 			}
 		}
-		prefix := ps.cfg.Discord.Prefix
-		if typ == "telegram:user" || typ == "telegram:channel" || typ == "telegram:group" {
-			prefix = "/"
-		}
-		msg = tr.Tf("rate_limit.banned_soft", prefix)
+		msg = tr.Tf("rate_limit.banned_soft", bot.CommandPrefixForType(ps.cfg, typ))
 	}
 
 	ps.dispatchBypass(target, typ, name, msg, "RateLimit")

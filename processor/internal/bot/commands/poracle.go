@@ -175,7 +175,7 @@ func (c *PoracleCommand) renderGreeting(ctx *bot.CommandContext) *bot.Reply {
 		return nil
 	}
 
-	prefix := commandPrefix(ctx)
+	prefix := bot.CommandPrefix(ctx)
 	platform := ctx.Platform
 	if platform == bot.TypeWebhook {
 		platform = "discord"

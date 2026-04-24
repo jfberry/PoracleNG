@@ -19,7 +19,7 @@ func (c *ScriptCommand) Aliases() []string { return nil }
 
 func (c *ScriptCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
-	prefix := commandPrefix(ctx)
+	prefix := bot.CommandPrefix(ctx)
 
 	var sb strings.Builder
 

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
@@ -295,7 +296,7 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 		totalChanges := len(diff.AlreadyPresent) + len(updates) + len(diff.Inserts)
 		if totalChanges > 50 {
 			message = tr.Tf("tracking.bulk_changes",
-				deps.Config.Discord.Prefix, tr.T("tracking.tracked"))
+				bot.CommandPrefixForType(deps.Config, human.Type), tr.T("tracking.tracked"))
 		} else {
 			var sb strings.Builder
 			for i := range diff.AlreadyPresent {

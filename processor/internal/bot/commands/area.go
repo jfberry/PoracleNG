@@ -26,7 +26,7 @@ func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if len(args) == 0 {
 		// Show current areas + usage hint
 		currentAreas := humanAreas(getUserHuman(ctx))
-		prefix := commandPrefix(ctx)
+		prefix := bot.CommandPrefix(ctx)
 		var text string
 		if len(currentAreas) > 0 {
 			displayNames := ctx.AreaLogic.ResolveDisplayNames(currentAreas)

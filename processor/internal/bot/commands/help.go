@@ -33,7 +33,7 @@ func (c *HelpCommand) Name() string      { return "cmd.help" }
 func (c *HelpCommand) Aliases() []string { return nil }
 
 func (c *HelpCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
-	prefix := commandPrefix(ctx)
+	prefix := bot.CommandPrefix(ctx)
 	platform := strings.SplitN(ctx.TargetType, ":", 2)[0]
 	if platform == bot.TypeWebhook {
 		platform = "discord"
@@ -99,7 +99,7 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 	if ctx.DTS == nil {
 		// No DTS system — fall back to i18n text
 		tr := ctx.Tr()
-		prefix := commandPrefix(ctx)
+		prefix := bot.CommandPrefix(ctx)
 		return []bot.Reply{{Text: tr.Tf("msg.help.text", prefix)}}
 	}
 
@@ -119,7 +119,7 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 		if templateID != "" {
 			// Specific help topic not found — try the usage key for this command
 			tr := ctx.Tr()
-			prefix := commandPrefix(ctx)
+			prefix := bot.CommandPrefix(ctx)
 			usageKey := "cmd." + templateID + ".usage"
 			text := tr.Tf(usageKey, prefix)
 			if text != usageKey {
@@ -130,7 +130,7 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 		}
 		// No greeting template
 		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.Tf("msg.help.no_greeting", commandPrefix(ctx))}}
+		return []bot.Reply{{Text: tr.Tf("msg.help.no_greeting", bot.CommandPrefix(ctx))}}
 	}
 
 	// Render the template
@@ -138,7 +138,7 @@ func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, 
 	if err != nil {
 		log.Warnf("help: render %s/%s: %v", templateType, templateID, err)
 		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.Tf("msg.help.text", commandPrefix(ctx))}}
+		return []bot.Reply{{Text: tr.Tf("msg.help.text", bot.CommandPrefix(ctx))}}
 	}
 
 	// Parse the rendered JSON

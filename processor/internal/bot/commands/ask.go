@@ -25,7 +25,7 @@ func (c *AskCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	input := strings.Join(args, " ")
 	result := ctx.NLP.Parse(input)
-	prefix := commandPrefix(ctx)
+	prefix := bot.CommandPrefix(ctx)
 
 	suggestion := FormatNLPSuggestion(result, prefix)
 	if suggestion != "" {

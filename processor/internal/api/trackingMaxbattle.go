@@ -10,6 +10,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
@@ -221,7 +222,7 @@ func HandleCreateMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
 		var message string
 		if len(insert) > 50 {
 			message = tr.Tf("tracking.bulk_changes",
-				deps.Config.Discord.Prefix, tr.T("tracking.tracked"))
+				bot.CommandPrefixForType(deps.Config, human.Type), tr.T("tracking.tracked"))
 		} else {
 			var sb strings.Builder
 			for i := range insert {

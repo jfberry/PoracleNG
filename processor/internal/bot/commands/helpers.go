@@ -11,32 +11,20 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
-// commandPrefix returns the appropriate command prefix for the platform.
-func commandPrefix(ctx *bot.CommandContext) string {
-	if ctx.Platform == "telegram" {
-		return "/"
-	}
-	prefix := ctx.Config.Discord.Prefix
-	if prefix == "" {
-		return "!"
-	}
-	return prefix
-}
-
 // usageReply returns a usage help reply if args are empty, or nil if args are present.
 func usageReply(ctx *bot.CommandContext, args []string, usageKey string) *bot.Reply {
 	if len(args) > 0 {
 		return nil
 	}
 	tr := ctx.Tr()
-	return &bot.Reply{Text: tr.Tf(usageKey, commandPrefix(ctx))}
+	return &bot.Reply{Text: tr.Tf(usageKey, bot.CommandPrefix(ctx))}
 }
 
 // helpArgReply returns a usage reply if the first argument is "help", or nil otherwise.
 func helpArgReply(ctx *bot.CommandContext, args []string, usageKey string) *bot.Reply {
 	if len(args) > 0 && args[0] == "help" {
 		tr := ctx.Tr()
-		return &bot.Reply{Text: tr.Tf(usageKey, commandPrefix(ctx))}
+		return &bot.Reply{Text: tr.Tf(usageKey, bot.CommandPrefix(ctx))}
 	}
 	return nil
 }
@@ -76,19 +64,19 @@ func trackingWarnings(ctx *bot.CommandContext, distance int) string {
 	// Check if user has stopped alerts
 	if ctx.Humans != nil {
 		if h, err := ctx.Humans.Get(ctx.TargetID); err == nil && h != nil && !h.Enabled {
-			prefix := commandPrefix(ctx)
+			prefix := bot.CommandPrefix(ctx)
 			warnings = append(warnings, tr.Tf("tracking.warn_stopped", prefix))
 		}
 	}
 
 	// Check distance with no location
 	if distance > 0 && !ctx.HasLocation {
-		warnings = append(warnings, tr.T("tracking.warn_no_location"))
+		warnings = append(warnings, tr.Tf("tracking.warn_no_location", bot.CommandPrefix(ctx)))
 	}
 
 	// Check no distance and no areas
 	if distance == 0 && !ctx.HasArea {
-		warnings = append(warnings, tr.T("tracking.warn_no_area"))
+		warnings = append(warnings, tr.Tf("tracking.warn_no_area", bot.CommandPrefix(ctx)))
 	}
 
 	// Check max distance was applied
@@ -161,7 +149,7 @@ func buildTrackingMessage(
 	total := unchangedCount + updateCount + insertCount
 	if total > 20 {
 		return tr.Tf("tracking.bulk_changes",
-			commandPrefix(ctx), tr.T("tracking.tracked"))
+			bot.CommandPrefix(ctx), tr.T("tracking.tracked"))
 	}
 
 	var sb strings.Builder

@@ -48,7 +48,7 @@ func (c *CommunityCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 }
 
 func (c *CommunityCommand) usageReply(ctx *bot.CommandContext) []bot.Reply {
-	prefix := commandPrefix(ctx)
+	prefix := bot.CommandPrefix(ctx)
 	tr := ctx.Tr()
 	return []bot.Reply{{Text: tr.Tf("msg.community.usage", prefix)}}
 }

@@ -363,19 +363,19 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	// Hint about id-based removal
 	if hasAnyRules {
-		prefix := commandPrefix(ctx)
+		prefix := bot.CommandPrefix(ctx)
 		sb.WriteString("\n" + tr.Tf("tracking.id_hint", prefix, prefix))
 	}
 
 	// Summary warnings at the end
 	if hasLocationWarning {
-		sb.WriteString("\n⚠️ " + tr.T("tracking.warn_no_location"))
+		sb.WriteString("\n⚠️ " + tr.Tf("tracking.warn_no_location", bot.CommandPrefix(ctx)))
 	}
 	if hasAreaWarning {
-		sb.WriteString("\n⚠️ " + tr.T("tracking.warn_no_area"))
+		sb.WriteString("\n⚠️ " + tr.Tf("tracking.warn_no_area", bot.CommandPrefix(ctx)))
 	}
 	if human != nil && !human.Enabled {
-		prefix := commandPrefix(ctx)
+		prefix := bot.CommandPrefix(ctx)
 		sb.WriteString("\n⚠️ " + tr.Tf("tracking.warn_stopped", prefix))
 	}
 

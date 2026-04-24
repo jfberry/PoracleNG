@@ -70,7 +70,7 @@ func (c *InfoCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 func (c *InfoCommand) usage(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
-	prefix := commandPrefix(ctx)
+	prefix := bot.CommandPrefix(ctx)
 	text := tr.Tf("msg.info.usage", prefix)
 	return []bot.Reply{{Text: text}}
 }

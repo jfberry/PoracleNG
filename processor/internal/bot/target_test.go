@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -93,6 +94,31 @@ func TestBuildTarget_NonAdminInRegisteredChannelRejected(t *testing.T) {
 	}
 	if len(te.Args) == 0 {
 		t.Error("expected command prefix to be passed as a format arg")
+	}
+}
+
+// TestBuildTarget_NonAdminChannelUsesConfiguredPrefix verifies the error
+// message points users at the operator's actual Discord prefix (e.g. "?")
+// rather than the default "!".
+func TestBuildTarget_NonAdminChannelUsesConfiguredPrefix(t *testing.T) {
+	ctx := newTargetCtx(t, false, false)
+	cfg := &config.Config{}
+	cfg.Discord.Prefix = "?"
+	ctx.Config = cfg
+
+	_, _, err := BuildTarget(ctx, []string{"tracked"})
+	if err == nil {
+		t.Fatal("expected rejection")
+	}
+	var te *TargetError
+	if !errorsAs(err, &te) {
+		t.Fatalf("expected *TargetError, got %T", err)
+	}
+	if len(te.Args) != 1 || te.Args[0] != "?" {
+		t.Errorf("expected prefix arg \"?\", got %v", te.Args)
+	}
+	if !strings.Contains(te.Fallback, "?yourcommand") {
+		t.Errorf("fallback should reference ?yourcommand; got %q", te.Fallback)
 	}
 }
 
