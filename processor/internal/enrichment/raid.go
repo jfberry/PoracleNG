@@ -206,7 +206,7 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 	tr := e.Translations.For(lang)
 
 	// Team
-	addTeamFields(m, gd, tr, raid.TeamID)
+	addTeamFields(m, gd, tr, e.Translations.For("en"), raid.TeamID)
 
 	// Weather
 	gameWeatherID := toInt(base["gameWeatherId"])

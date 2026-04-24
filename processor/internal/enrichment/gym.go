@@ -76,20 +76,21 @@ func (e *Enricher) GymTranslate(base map[string]any, teamID, oldTeamID, lastOwne
 	m := make(map[string]any, 8) // only translated fields; caller merges base + perLang
 
 	tr := e.Translations.For(lang)
-	addTeamFields(m, e.GameData, tr, teamID)
+	enTr := e.Translations.For("en")
+	addTeamFields(m, e.GameData, tr, enTr, teamID)
 	if oldTeamID >= 0 {
 		if info, ok := e.GameData.Util.Teams[oldTeamID]; ok {
-			m["oldTeamName"] = tr.T(info.Name)
-			m["oldTeamNameEng"] = info.Name
+			m["oldTeamName"] = translateTeamName(tr, oldTeamID)
+			m["oldTeamNameEng"] = translateTeamName(enTr, oldTeamID)
 			m["oldTeamEmojiKey"] = info.Emoji
 		}
 	}
 	// Previous controller's team (from webhook last_owner_id — may differ from old_team_id)
 	m["previousControlId"] = lastOwnerID
 	if lastOwnerID >= 0 {
-		if info, ok := e.GameData.Util.Teams[lastOwnerID]; ok {
-			m["previousControlName"] = tr.T(info.Name)
-			m["previousControlNameEng"] = info.Name
+		if _, ok := e.GameData.Util.Teams[lastOwnerID]; ok {
+			m["previousControlName"] = translateTeamName(tr, lastOwnerID)
+			m["previousControlNameEng"] = translateTeamName(enTr, lastOwnerID)
 		}
 	}
 

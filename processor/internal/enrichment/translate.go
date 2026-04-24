@@ -197,10 +197,12 @@ func addSizeFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator,
 }
 
 // addTeamFields adds translated team name and emoji key to the enrichment map.
-func addTeamFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, teamID int) {
+// Team display names come from pogo-translations identifier keys team_0..team_3;
+// util.json is only consulted for the emoji key and colour.
+func addTeamFields(m map[string]any, gd *gamedata.GameData, tr, enTr *i18n.Translator, teamID int) {
 	if info, ok := gd.Util.Teams[teamID]; ok {
-		m["teamName"] = tr.T(info.Name)
-		m["teamNameEng"] = info.Name
+		m["teamName"] = translateTeamName(tr, teamID)
+		m["teamNameEng"] = translateTeamName(enTr, teamID)
 		m["teamEmojiKey"] = info.Emoji
 		m["teamColor"] = info.Color
 	} else {
@@ -209,6 +211,15 @@ func addTeamFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator,
 		m["teamEmojiKey"] = ""
 		m["teamColor"] = ""
 	}
+}
+
+// translateTeamName returns the pogo-translations value for a team by id
+// (team_0 = No Team, team_1 = Mystic, etc.). Returns "" when tr is nil.
+func translateTeamName(tr *i18n.Translator, teamID int) string {
+	if tr == nil {
+		return ""
+	}
+	return tr.T(fmt.Sprintf("team_%d", teamID))
 }
 
 // addGenerationFields adds translated generation info to the enrichment map.
