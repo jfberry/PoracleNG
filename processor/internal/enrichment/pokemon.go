@@ -402,10 +402,10 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 
 	// Rarity name
 	rarityGroup, _ := base["rarityGroup"].(int)
-	addRarityFields(m, gd, tr, rarityGroup)
+	addRarityFields(m, gd, tr, enTr, rarityGroup)
 
 	// Size name
-	addSizeFields(m, gd, tr, pokemon.Size)
+	addSizeFields(m, gd, tr, enTr, pokemon.Size)
 
 	// Translated weakness list
 	if weaknesses, ok := base["weaknessList"].([]gamedata.WeaknessCategory); ok {

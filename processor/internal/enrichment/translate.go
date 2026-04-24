@@ -159,13 +159,15 @@ func TranslateWeaknessCategories(categories []gamedata.WeaknessCategory, tr *i18
 	return result
 }
 
-// addGenderFields adds translated gender name and emoji key to the enrichment map.
-func addGenderFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, enTr *i18n.Translator, gender int) {
+// addGenderFields adds translated gender name and emoji key to the enrichment
+// map. Gender display names use pogo-translations identifier keys gender_0..3
+// (gender_3 is supplied by processor/internal/i18n/locale/*.json since
+// pogo-translations only ships 0..2). util.json is consulted only for the
+// emoji key.
+func addGenderFields(m map[string]any, gd *gamedata.GameData, tr, enTr *i18n.Translator, gender int) {
 	if info, ok := gd.Util.Genders[gender]; ok {
-		m["genderName"] = tr.T(info.Name)
-		if enTr != nil {
-			m["genderNameEng"] = enTr.T(info.Name)
-		}
+		m["genderName"] = translateGenderName(tr, gender)
+		m["genderNameEng"] = translateGenderName(enTr, gender)
 		m["genderEmojiKey"] = info.Emoji
 	} else {
 		m["genderName"] = ""
@@ -174,26 +176,52 @@ func addGenderFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translato
 	}
 }
 
+// translateGenderName returns the pogo-translations value for a gender id.
+func translateGenderName(tr *i18n.Translator, gender int) string {
+	if tr == nil {
+		return ""
+	}
+	return tr.T(fmt.Sprintf("gender_%d", gender))
+}
+
 // addRarityFields adds translated rarity name to the enrichment map.
-func addRarityFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, rarityGroup int) {
-	if name, ok := gd.Util.Rarity[rarityGroup]; ok {
-		m["rarityName"] = tr.T(name)
-		m["rarityNameEng"] = name // util.json names are already English
+// Rarity names use identifier keys rarity_1..rarity_6 from the embedded
+// i18n files; util.json is only used to detect valid ids.
+func addRarityFields(m map[string]any, gd *gamedata.GameData, tr, enTr *i18n.Translator, rarityGroup int) {
+	if _, ok := gd.Util.Rarity[rarityGroup]; ok {
+		m["rarityName"] = translateRarityName(tr, rarityGroup)
+		m["rarityNameEng"] = translateRarityName(enTr, rarityGroup)
 	} else {
 		m["rarityName"] = ""
 		m["rarityNameEng"] = ""
 	}
 }
 
+func translateRarityName(tr *i18n.Translator, rarityGroup int) string {
+	if tr == nil {
+		return ""
+	}
+	return tr.T(fmt.Sprintf("rarity_%d", rarityGroup))
+}
+
 // addSizeFields adds translated size name to the enrichment map.
-func addSizeFields(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, size int) {
-	if name, ok := gd.Util.Size[size]; ok {
-		m["sizeName"] = tr.T(name)
-		m["sizeNameEng"] = name // util.json names are already English
+// Size names use identifier keys size_1..size_5 from the embedded i18n
+// files; util.json is only used to detect valid ids.
+func addSizeFields(m map[string]any, gd *gamedata.GameData, tr, enTr *i18n.Translator, size int) {
+	if _, ok := gd.Util.Size[size]; ok {
+		m["sizeName"] = translateSizeName(tr, size)
+		m["sizeNameEng"] = translateSizeName(enTr, size)
 	} else {
 		m["sizeName"] = ""
 		m["sizeNameEng"] = ""
 	}
+}
+
+func translateSizeName(tr *i18n.Translator, size int) string {
+	if tr == nil {
+		return ""
+	}
+	return tr.T(fmt.Sprintf("size_%d", size))
 }
 
 // addTeamFields adds translated team name and emoji key to the enrichment map.

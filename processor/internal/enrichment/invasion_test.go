@@ -213,7 +213,7 @@ func TestInvasionTranslateGender(t *testing.T) {
 	bundle := newInvasionBundle(t, map[string]map[string]string{
 		"en": {
 			"character_category_2": "Grunt",
-			"Male":                "Male",
+			"gender_1":             "Male",
 		},
 	})
 
