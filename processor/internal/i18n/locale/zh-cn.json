@@ -461,6 +461,7 @@
   "msg.dm_only": "请在私聊中运行此命令",
   "msg.admin_no_distance": "警告：检测到管理员命令但未设置距离——使用默认距离",
   "msg.not_registered": "您尚未注册。请先注册。",
+  "msg.channel_admin_only": "Only channel admins can run commands in this channel. DM the bot with {0}yourcommand to manage your personal tracking.",
   "msg.backup.invalid_name": "请使用有效的备份名称（仅允许字母、数字、连字符、下划线）",
   "msg.backup.need_name": "备份需要有效名称（仅允许字母、数字、连字符、下划线）",
   "msg.restore.no_backups_dir": "未找到备份目录",
