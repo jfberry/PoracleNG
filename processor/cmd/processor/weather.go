@@ -78,30 +78,32 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				CaresUntil: u.CaresUntil,
 			}
 
-			// Attach active pokemon affected by this weather change
+			// Attach active pokemon affected by this weather change.
+			// show_altered_pokemon is a display-content flag (see
+			// config.example.toml: "track weather changed pokemon to show
+			// in DTS"), NOT a filter. An empty affected list must not
+			// suppress the alert — the weather change itself is the news.
 			if ps.activePokemon != nil {
 				affected := ps.activePokemon.GetAffectedPokemon(
 					change.S2CellID, u.ID,
 					change.OldGameplayCondition, change.GameplayCondition,
 					ps.cfg.Weather.ShowAlteredPokemonMaxCount,
 				)
-				if len(affected) == 0 {
-					l.Debugf("User %s (%s) cares about cell but has no affected pokemon, skipping", u.Name, u.ID)
-					continue
-				}
-				entries := make([]webhook.ActivePokemonEntry, len(affected))
-				for j, ap := range affected {
-					entries[j] = webhook.ActivePokemonEntry{
-						PokemonID:     ap.PokemonID,
-						Form:          ap.Form,
-						IV:            ap.IV,
-						CP:            ap.CP,
-						Latitude:      ap.Latitude,
-						Longitude:     ap.Longitude,
-						DisappearTime: ap.DisappearTime,
+				if len(affected) > 0 {
+					entries := make([]webhook.ActivePokemonEntry, len(affected))
+					for j, ap := range affected {
+						entries[j] = webhook.ActivePokemonEntry{
+							PokemonID:     ap.PokemonID,
+							Form:          ap.Form,
+							IV:            ap.IV,
+							CP:            ap.CP,
+							Latitude:      ap.Latitude,
+							Longitude:     ap.Longitude,
+							DisappearTime: ap.DisappearTime,
+						}
 					}
+					mu.ActivePokemons = entries
 				}
-				mu.ActivePokemons = entries
 			}
 
 			matched = append(matched, mu)
@@ -110,7 +112,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 		matched = ps.filterBlocked(matched)
 
 		if len(matched) == 0 {
-			l.Debugf("Weather changed to %d (from %d, source=%s) but no users have affected pokemon",
+			l.Debugf("Weather changed to %d (from %d, source=%s) but all caring users were filtered (rate limit / blocked alerts / clean TTH)",
 				change.GameplayCondition, change.OldGameplayCondition, change.Source)
 			continue
 		}
@@ -127,7 +129,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			}
 		}
 
-		l.Infof("Weather changed %s -> %s (source=%s) areas(%s) and %d users have affected pokemon",
+		l.Infof("Weather changed %s -> %s (source=%s) areas(%s) and %d users care",
 			ps.weatherName(change.OldGameplayCondition), ps.weatherName(change.GameplayCondition),
 			change.Source, areaNames(matchedAreas), len(matched))
 
