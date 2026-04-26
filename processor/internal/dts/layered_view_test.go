@@ -510,3 +510,43 @@ func TestLayeredView_AllNilLayers(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "", v)
 }
+
+// TestLayeredView_WeatherChangeAliases verifies the lowercase template
+// fields used in legacy / hand-written weather alerts ({{weather}},
+// {{oldweather}}, {{weatheremoji}}, {{oldweatheremoji}}) resolve to the
+// canonical enrichment outputs.
+func TestLayeredView_WeatherChangeAliases(t *testing.T) {
+	emoji := &EmojiLookup{
+		defaults: map[string]string{
+			"weather-rain":  "🌧️",
+			"weather-clear": "☀️",
+		},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.templateType = "weatherchange"
+		o.base = map[string]any{}
+		o.perLang = map[string]any{
+			"weatherName":        "Rain",
+			"oldWeatherName":     "Clear",
+			"weatherEmojiKey":    "weather-rain",
+			"oldWeatherEmojiKey": "weather-clear",
+		}
+		o.emoji = emoji
+	})
+
+	for _, tc := range []struct {
+		alias string
+		want  any
+	}{
+		{"weather", "Rain"},
+		{"oldweather", "Clear"},
+		{"weathername", "Rain"},
+		{"oldweathername", "Clear"},
+		{"weatheremoji", "🌧️"},
+		{"oldweatheremoji", "☀️"},
+	} {
+		v, ok := lv.GetField(tc.alias)
+		require.Truef(t, ok, "alias %q should resolve", tc.alias)
+		assert.Equalf(t, tc.want, v, "alias %q", tc.alias)
+	}
+}

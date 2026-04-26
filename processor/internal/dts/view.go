@@ -195,7 +195,18 @@ var typeAliases = map[string][]aliasPair{
 		{"nestName", "nest_name"},
 		{"nestId", "nest_id"},
 	},
-	"weather":     {},
+	"weatherchange": {
+		// Lowercase aliases for legacy / hand-written templates.
+		// The canonical fields (weatherName, oldWeatherName) come from
+		// per-language enrichment; weatherEmoji / oldWeatherEmoji come from
+		// the resolved-emoji layer (singleEmojiKeys).
+		{"weather", "weatherName"},
+		{"oldweather", "oldWeatherName"},
+		{"weathername", "weatherName"},
+		{"oldweathername", "oldWeatherName"},
+		{"weatheremoji", "weatherEmoji"},
+		{"oldweatheremoji", "oldWeatherEmoji"},
+	},
 	"fort-update": {},
 	"maxbattle": {
 		{"gymName", "gym_name"},
