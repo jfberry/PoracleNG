@@ -177,6 +177,32 @@ type Resolver struct {
 	statErrors  atomic.Int64
 }
 
+// StyleForSunTimes returns the configured tileserver style for the current
+// time of day. Priority: night > dusk > dawn > day. Returns "" if the
+// matching style isn't configured (so callers can avoid emitting an empty
+// "style" field). Time-of-day booleans typically come from addSunTimes
+// (nightTime / duskTime / dawnTime).
+//
+// The TOML keys feeding these are:
+//
+//	[geocoding]
+//	day_style   = "..."
+//	dawn_style  = "..."
+//	dusk_style  = "..."
+//	night_style = "..."
+func (r *Resolver) StyleForSunTimes(night, dusk, dawn bool) string {
+	switch {
+	case night:
+		return r.config.NightStyle
+	case dusk:
+		return r.config.DuskStyle
+	case dawn:
+		return r.config.DawnStyle
+	default:
+		return r.config.DayStyle
+	}
+}
+
 // GetStats returns the current tile generation statistics.
 func (r *Resolver) GetStats() Stats {
 	return Stats{

@@ -184,11 +184,27 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 		return nil
 	}
 	// Build tileserver payload from enrichment + webhook fields
-	merged := make(map[string]any, len(m)+len(webhookFields)+2)
+	merged := make(map[string]any, len(m)+len(webhookFields)+3)
 	maps.Copy(merged, m)
 	maps.Copy(merged, webhookFields)
 	merged["latitude"] = lat
 	merged["longitude"] = lon
+
+	// Pick a tileserver style based on time of day. nightTime / duskTime /
+	// dawnTime come from addSunTimes (which most enrichers call before
+	// addStaticMap). Without this, the tileserver request omitted the
+	// "style" field entirely and the templates fell back to whatever the
+	// tileserver chose by default — day_style / night_style / dawn_style /
+	// dusk_style in [geocoding] were loaded into Config and never read.
+	if r := e.StaticMap; r != nil {
+		night, _ := merged["nightTime"].(bool)
+		dusk, _ := merged["duskTime"].(bool)
+		dawn, _ := merged["dawnTime"].(bool)
+		if style := r.StyleForSunTimes(night, dusk, dawn); style != "" {
+			merged["style"] = style
+		}
+	}
+
 	keys, pregenKeys := staticMapFieldsForType(maptype)
 
 	if tileMode == TileModeInline {

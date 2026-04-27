@@ -475,3 +475,44 @@ func TestAdjustLongitude(t *testing.T) {
 		t.Errorf("1km west should decrease longitude: got %f", lon)
 	}
 }
+
+func TestStyleForSunTimes(t *testing.T) {
+	r := New(Config{
+		DayStyle:   "day-style",
+		DawnStyle:  "dawn-style",
+		DuskStyle:  "dusk-style",
+		NightStyle: "night-style",
+	})
+
+	cases := []struct {
+		name              string
+		night, dusk, dawn bool
+		want              string
+	}{
+		{"plain day", false, false, false, "day-style"},
+		{"dawn", false, false, true, "dawn-style"},
+		{"dusk", false, true, false, "dusk-style"},
+		{"night", true, false, false, "night-style"},
+		// Priority: night beats dusk beats dawn
+		{"night beats everything", true, true, true, "night-style"},
+		{"dusk beats dawn", false, true, true, "dusk-style"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := r.StyleForSunTimes(tc.night, tc.dusk, tc.dawn)
+			if got != tc.want {
+				t.Errorf("got %q want %q", got, tc.want)
+			}
+		})
+	}
+
+	// When the matching style isn't configured, return "" so the caller can
+	// avoid emitting an empty "style" field.
+	bare := New(Config{})
+	if got := bare.StyleForSunTimes(true, false, false); got != "" {
+		t.Errorf("unconfigured night should return empty, got %q", got)
+	}
+	if got := bare.StyleForSunTimes(false, false, false); got != "" {
+		t.Errorf("unconfigured day should return empty, got %q", got)
+	}
+}
