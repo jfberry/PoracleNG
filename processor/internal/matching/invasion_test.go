@@ -76,6 +76,39 @@ func TestInvasionMatchEverything(t *testing.T) {
 	}
 }
 
+func TestInvasionMatchBossKeyword(t *testing.T) {
+	human := makeHuman("user1")
+	inv := &db.InvasionTracking{
+		ID: "user1", ProfileNo: 1, GruntType: "boss",
+		Distance: 0, Template: "1",
+	}
+	st := makeInvasionTestState([]*db.InvasionTracking{inv}, map[string]*db.Human{"user1": human})
+	matcher := &InvasionMatcher{}
+
+	// Boss webhook (any boss; the GruntType string is what ResolveGruntTypeName
+	// produces — for an event Giovanni it's "giovanni") matches the "boss" rule.
+	bossData := &InvasionData{
+		PokestopID: "stop1",
+		GruntType:  "giovanni",
+		Boss:       true,
+		Latitude:   51.0, Longitude: 0.0,
+	}
+	if matched := matcher.Match(bossData, st); len(matched) != 1 {
+		t.Errorf("boss rule should match a boss invasion (got %d matches)", len(matched))
+	}
+
+	// A non-boss invasion (e.g. Electric grunt) must NOT match the boss rule.
+	gruntData := &InvasionData{
+		PokestopID: "stop1",
+		GruntType:  "electric",
+		Boss:       false,
+		Latitude:   51.0, Longitude: 0.0,
+	}
+	if matched := matcher.Match(gruntData, st); len(matched) != 0 {
+		t.Errorf("boss rule must not match a non-boss grunt (got %d matches)", len(matched))
+	}
+}
+
 func TestInvasionMatchWrongGrunt(t *testing.T) {
 	human := makeHuman("user1")
 	inv := &db.InvasionTracking{

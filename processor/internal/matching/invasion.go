@@ -13,6 +13,7 @@ import (
 type InvasionData struct {
 	PokestopID string
 	GruntType  string // lowercased grunt type string
+	Boss       bool   // true for Giovanni/Arlo/Cliff/Sierra (regular and event variants)
 	Gender     int
 	Latitude   float64
 	Longitude  float64
@@ -36,9 +37,12 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) []webhook.M
 	gruntType := strings.ToLower(data.GruntType)
 
 	for _, inv := range st.Invasions {
-		// grunt_type match OR 'everything'
+		// grunt_type match OR 'everything' OR 'boss' (when this invasion is a
+		// boss encounter; see Grunt.Boss in grunts.go).
 		invGrunt := strings.ToLower(inv.GruntType)
-		if !(invGrunt == gruntType || invGrunt == "everything") {
+		if !(invGrunt == gruntType ||
+			invGrunt == "everything" ||
+			(invGrunt == "boss" && data.Boss)) {
 			continue
 		}
 		// gender match OR 0 (any)

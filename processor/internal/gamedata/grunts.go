@@ -47,9 +47,19 @@ func (g *Grunt) TypeKey() string {
 	return fmt.Sprintf("poke_type_%d", g.TypeID)
 }
 
-// TypeNameFromTemplate extracts the grunt type name from the character template string.
-// Used as a fallback when TypeID is 0 (Metal, Darkness, Mixed grunts).
-// Returns lowercased name matching what the !invasion command stores in the DB.
+// TypeNameFromTemplate extracts the grunt type name from the character template
+// string. Returns a lowercased name matching what the !invasion command stores
+// in the DB.
+//
+// Boss / leader templates collapse to a single bare name across regular and
+// event variants:
+//
+//	CHARACTER_GIOVANNI                       -> "giovanni"
+//	CHARACTER_EXECUTIVE_ARLO                 -> "arlo"
+//	CHARACTER_EVENT_GIOVANNI_UNTICKETED      -> "giovanni"
+//	CHARACTER_EVENT_ARLO_UNTICKETED          -> "arlo"
+//
+// so a single `!invasion giovanni` rule catches every Giovanni encounter.
 //
 // Pokemon GO uses "Metal" internally for what players know as the Steel type,
 // so we normalise METAL → "steel" — this lets users track Metal grunts using
@@ -72,19 +82,30 @@ func TypeNameFromTemplate(template string) string {
 	if idx := strings.Index(t, "_GRUNT"); idx > 0 {
 		return strings.ToLower(t[:idx])
 	}
-	return strings.ToLower(template)
+	// Bosses, team leaders, decoys: strip framing prefixes/suffixes so
+	// regular and event variants collapse to the same bare name.
+	t = strings.TrimPrefix(t, "EVENT_")
+	t = strings.TrimPrefix(t, "EXECUTIVE_")
+	for _, suffix := range []string{"_UNTICKETED", "_TICKETED", "_NOEVOLVE", "_MALE", "_FEMALE"} {
+		t = strings.TrimSuffix(t, suffix)
+	}
+	return strings.ToLower(t)
 }
 
-// categoryFromTemplate derives the category ID from the character template string.
+// categoryFromTemplate derives the character_category_N translation key index
+// from the template string. Both regular and CHARACTER_EVENT_*_UNTICKETED
+// variants of each leader collapse to the same category so DTS templates
+// render the right name (e.g. "Giovanni" rather than category_0 "Unset")
+// for event-only encounters.
 func categoryFromTemplate(template string) int {
 	switch {
-	case template == "CHARACTER_GIOVANNI":
+	case strings.Contains(template, "GIOVANNI"):
 		return 6
-	case strings.HasPrefix(template, "CHARACTER_EXECUTIVE_ARLO"):
+	case strings.Contains(template, "ARLO"):
 		return 3
-	case strings.HasPrefix(template, "CHARACTER_EXECUTIVE_CLIFF"):
+	case strings.Contains(template, "CLIFF"):
 		return 4
-	case strings.HasPrefix(template, "CHARACTER_EXECUTIVE_SIERRA"):
+	case strings.Contains(template, "SIERRA"):
 		return 5
 	case strings.Contains(template, "GRUNT"):
 		return 2

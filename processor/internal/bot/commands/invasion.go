@@ -63,6 +63,10 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		tr := ctx.Tr()
 		enTr := ctx.Translations.For("en")
 
+		// Group keyword: !invasion boss matches any grunt with Boss=true
+		// (Giovanni / Arlo / Cliff / Sierra, regular and event variants).
+		validTypes["boss"] = "boss"
+
 		// Grunt types from template strings
 		for _, grunt := range ctx.GameData.Grunts {
 			canonical := strings.ToLower(gamedata.TypeNameFromTemplate(grunt.Template))
