@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -11,9 +12,9 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
-	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/validation"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -111,18 +112,6 @@ func parseWebhookFields(raw json.RawMessage) map[string]any {
 	return fields
 }
 
-// buildMatchedAreas converts geofence areas to webhook MatchedArea structs.
-func buildMatchedAreas(areas []geofence.MatchedArea) []webhook.MatchedArea {
-	result := make([]webhook.MatchedArea, len(areas))
-	for i, a := range areas {
-		result[i] = webhook.MatchedArea{
-			Name:             a.Name,
-			DisplayInMatches: a.DisplayInMatches,
-			Group:            a.Group,
-		}
-	}
-	return result
-}
 
 // toInt converts a JSON number (float64) to int.
 func toInt(v any) int {
@@ -156,6 +145,72 @@ func (ps *ProcessorService) filterBlocked(matched []webhook.MatchedUser) []webho
 			continue
 		}
 		allowed = append(allowed, m)
+	}
+	return allowed
+}
+
+// filterValidation runs the configured external validator (one HTTP call per
+// matched user, fanned out under a semaphore). Users the validator denies are
+// dropped from the alert; if the validator returned a failure_message it is
+// delivered to the user as a bypass message (skipping rate limits).
+//
+// When [validation] url is empty, the no-op validator returns immediately and
+// the input slice is passed through unchanged. The matched-areas slice comes
+// from the matcher (every Match() returns it alongside the user list) so
+// validation reuses the geofence walk that already happened.
+func (ps *ProcessorService) filterValidation(
+	webhookType string,
+	raw json.RawMessage,
+	matchedAreas []webhook.MatchedArea,
+	matched []webhook.MatchedUser,
+) []webhook.MatchedUser {
+	if ps.validator == nil || !ps.validator.Enabled() || len(matched) == 0 {
+		return matched
+	}
+
+	areaNames := make([]string, 0, len(matchedAreas))
+	for _, a := range matchedAreas {
+		areaNames = append(areaNames, a.Name)
+	}
+
+	maxConc := ps.validator.Concurrency()
+	if maxConc <= 0 || maxConc > len(matched) {
+		maxConc = len(matched)
+	}
+	sem := make(chan struct{}, maxConc)
+	decisions := make([]validation.Decision, len(matched))
+
+	var wg sync.WaitGroup
+	wg.Add(len(matched))
+	for i := range matched {
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			decisions[i] = ps.validator.Validate(ps.ctx, validation.Request{
+				Human: validation.Human{
+					ID:   matched[i].ID,
+					Type: matched[i].Type,
+					Name: matched[i].Name,
+				},
+				Areas:       areaNames,
+				WebhookType: webhookType,
+				Webhook:     raw,
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	allowed := matched[:0]
+	for i, d := range decisions {
+		if d.Allow {
+			allowed = append(allowed, matched[i])
+			continue
+		}
+		log.Debugf("validation: denied %s %s %s (msg=%q)", matched[i].Type, matched[i].ID, matched[i].Name, d.FailureMessage)
+		if d.FailureMessage != "" {
+			ps.dispatchBypass(matched[i].ID, matched[i].Type, matched[i].Name, d.FailureMessage, "Validation")
+		}
 	}
 	return allowed
 }

@@ -48,7 +48,7 @@ func TestInvasionMatchBasic(t *testing.T) {
 		Latitude:   51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match, got %d", len(matched))
 	}
@@ -70,7 +70,7 @@ func TestInvasionMatchEverything(t *testing.T) {
 		Latitude:   51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for 'everything' grunt type, got %d", len(matched))
 	}
@@ -93,7 +93,7 @@ func TestInvasionMatchBossKeyword(t *testing.T) {
 		Boss:       true,
 		Latitude:   51.0, Longitude: 0.0,
 	}
-	if matched := matcher.Match(bossData, st); len(matched) != 1 {
+	if matched, _ := matcher.Match(bossData, st); len(matched) != 1 {
 		t.Errorf("boss rule should match a boss invasion (got %d matches)", len(matched))
 	}
 
@@ -104,7 +104,7 @@ func TestInvasionMatchBossKeyword(t *testing.T) {
 		Boss:       false,
 		Latitude:   51.0, Longitude: 0.0,
 	}
-	if matched := matcher.Match(gruntData, st); len(matched) != 0 {
+	if matched, _ := matcher.Match(gruntData, st); len(matched) != 0 {
 		t.Errorf("boss rule must not match a non-boss grunt (got %d matches)", len(matched))
 	}
 }
@@ -125,7 +125,7 @@ func TestInvasionMatchWrongGrunt(t *testing.T) {
 		Latitude:   51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong grunt, got %d", len(matched))
 	}
@@ -148,14 +148,14 @@ func TestInvasionMatchGender(t *testing.T) {
 		Gender:     2,
 		Latitude:   51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong gender, got %d", len(matched))
 	}
 
 	// Correct gender
 	data.Gender = 1
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct gender, got %d", len(matched))
 	}
@@ -178,7 +178,7 @@ func TestInvasionMatchGenderAny(t *testing.T) {
 		Latitude:   51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for gender=0 (any), got %d", len(matched))
 	}
@@ -201,7 +201,7 @@ func TestInvasionBlockedAlerts(t *testing.T) {
 		Latitude:   51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
 	}
@@ -223,7 +223,7 @@ func TestInvasionOutsideArea(t *testing.T) {
 		Latitude:   40.0, Longitude: 0.0, // outside TestArea fence
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches outside area, got %d", len(matched))
 	}
@@ -247,7 +247,7 @@ func TestInvasionRealWorldData(t *testing.T) {
 		Longitude:  0.863187,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for real world invasion, got %d", len(matched))
 	}

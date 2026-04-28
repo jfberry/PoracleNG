@@ -339,4 +339,15 @@ var (
 		Help:    "Enrichment computation time by webhook type",
 		Buckets: []float64{0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5},
 	}, []string{"type"})
+
+	// Validation hook ([validation] HTTP callback)
+	ValidationTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_processor_validation_total",
+		Help: "Validation hook outcomes (allow / deny / error_*)",
+	}, []string{"result"})
+	ValidationDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "poracle_processor_validation_seconds",
+		Help:    "Validation hook latency",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
+	})
 )

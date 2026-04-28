@@ -25,13 +25,14 @@ type MaxbattleMatcher struct {
 	AreaSecurityEnabled bool
 }
 
-// Match returns all matched users for a maxbattle.
-func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) []webhook.MatchedUser {
+// Match returns all matched users for a maxbattle along with the geofence
+// areas that contain the station.
+func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	if st == nil {
-		return nil
+		return nil, nil
 	}
 
-	matchedAreaNames := st.Geofence.MatchedAreaNames(data.Latitude, data.Longitude)
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 	var trackings []trackingUserData
 
 	for _, mb := range st.Maxbattles {
@@ -97,7 +98,7 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) []webhook
 		filtered = append(filtered, td)
 	}
 
-	return ValidateHumansGeneric(
+	users := ValidateHumansGeneric(
 		filtered,
 		data.Latitude, data.Longitude,
 		matchedAreaNames,
@@ -105,4 +106,5 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) []webhook
 		st.Humans,
 		"maxbattle",
 	)
+	return users, ConvertAreas(areas)
 }

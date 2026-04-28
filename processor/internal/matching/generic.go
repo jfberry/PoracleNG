@@ -4,8 +4,28 @@ import (
 	"math"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
+
+// ConvertAreas converts the geofence package's MatchedArea slice to the
+// webhook package's MatchedArea slice. Used by every matcher so handlers
+// receive an already-converted []webhook.MatchedArea and don't have to
+// re-walk the geofence rtree.
+func ConvertAreas(in []geofence.MatchedArea) []webhook.MatchedArea {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]webhook.MatchedArea, len(in))
+	for i, a := range in {
+		out[i] = webhook.MatchedArea{
+			Name:             a.Name,
+			DisplayInMatches: a.DisplayInMatches,
+			Group:            a.Group,
+		}
+	}
+	return out
+}
 
 // boolToInt converts a bool to 0/1 int for the Clean field.
 func boolToInt(b bool) int {

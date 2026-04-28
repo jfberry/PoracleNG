@@ -56,16 +56,14 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 
 		st := ps.stateMgr.Get()
 		matchStart := time.Now()
-		matched := ps.lureMatcher.Match(data, st)
+		matched, matchedAreas := ps.lureMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("lure").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
+		matched = ps.filterValidation("pokestop", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("lure").Inc()
 			metrics.MatchedUsers.WithLabelValues("lure").Add(float64(len(matched)))
-
-			areas := st.Geofence.PointInAreas(lure.Latitude, lure.Longitude)
-			matchedAreas := buildMatchedAreas(areas)
 
 			l.Infof("%s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				ps.lureName(lure.LureID), lure.Name, lure.Latitude, lure.Longitude, areaNames(matchedAreas), len(matched))

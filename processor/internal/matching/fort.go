@@ -25,12 +25,12 @@ type FortMatcher struct {
 }
 
 // Match returns all matched users for a fort update.
-func (m *FortMatcher) Match(data *FortData, st *state.State) []webhook.MatchedUser {
+func (m *FortMatcher) Match(data *FortData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	if st == nil {
-		return nil
+		return nil, nil
 	}
 
-	matchedAreaNames := st.Geofence.MatchedAreaNames(data.Latitude, data.Longitude)
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 	var trackings []trackingUserData
 
 	for _, f := range st.Forts {
@@ -62,7 +62,7 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) []webhook.MatchedUs
 		})
 	}
 
-	return ValidateHumansGeneric(
+	users := ValidateHumansGeneric(
 		trackings,
 		data.Latitude, data.Longitude,
 		matchedAreaNames,
@@ -70,6 +70,7 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) []webhook.MatchedUs
 		st.Humans,
 		"forts",
 	)
+	return users, ConvertAreas(areas)
 }
 
 // changeTypesMatch checks if any of the actual change types match

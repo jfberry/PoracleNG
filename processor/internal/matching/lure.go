@@ -19,13 +19,14 @@ type LureMatcher struct {
 	AreaSecurityEnabled bool
 }
 
-// Match returns all matched users for a lure.
-func (m *LureMatcher) Match(data *LureData, st *state.State) []webhook.MatchedUser {
+// Match returns all matched users for a lure along with the geofence areas
+// that contain the pokestop.
+func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	if st == nil {
-		return nil
+		return nil, nil
 	}
 
-	matchedAreaNames := st.Geofence.MatchedAreaNames(data.Latitude, data.Longitude)
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 	var trackings []trackingUserData
 
 	for _, l := range st.Lures {
@@ -44,7 +45,7 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) []webhook.MatchedUs
 		})
 	}
 
-	return ValidateHumansGeneric(
+	users := ValidateHumansGeneric(
 		trackings,
 		data.Latitude, data.Longitude,
 		matchedAreaNames,
@@ -52,4 +53,5 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) []webhook.MatchedUs
 		st.Humans,
 		"lure",
 	)
+	return users, ConvertAreas(areas)
 }

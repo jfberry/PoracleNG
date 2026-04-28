@@ -45,6 +45,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
+	"github.com/pokemon/poracleng/processor/internal/validation"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/resources"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
@@ -825,6 +826,7 @@ type ProcessorService struct {
 	humans          store.HumanStore
 	scanner         scanner.Scanner
 	rateLimiter     *ratelimit.Limiter
+	validator       validation.Validator
 	translations    *i18n.Bundle
 	renderCh        chan RenderJob
 	renderWg        sync.WaitGroup
@@ -1144,6 +1146,12 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		activePokemon:   activePokemon,
 		pokemonTypes:    pokemonTypes,
 		rateLimiter:     rateLimiter,
+		validator: validation.New(
+			cfg.Validation.URL,
+			cfg.Validation.FailMode,
+			cfg.Tuning.ValidationTimeoutMs,
+			cfg.Tuning.ValidationMaxConcurrent,
+		),
 		translations:    enricher.Translations,
 		workerPool:      make(chan struct{}, cfg.Tuning.WorkerPoolSize),
 	}

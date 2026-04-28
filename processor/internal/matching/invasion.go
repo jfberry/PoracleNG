@@ -25,13 +25,15 @@ type InvasionMatcher struct {
 	AreaSecurityEnabled bool
 }
 
-// Match returns all matched users for an invasion.
-func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) []webhook.MatchedUser {
+// Match returns all matched users for an invasion plus the geofence areas
+// that contain the invasion's pokestop. Handlers reuse the area slice for
+// rendering / validation so the geofence rtree is walked once per event.
+func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	if st == nil {
-		return nil
+		return nil, nil
 	}
 
-	matchedAreaNames := st.Geofence.MatchedAreaNames(data.Latitude, data.Longitude)
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 	var trackings []trackingUserData
 
 	gruntType := strings.ToLower(data.GruntType)
@@ -60,7 +62,7 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) []webhook.M
 		})
 	}
 
-	return ValidateHumansGeneric(
+	users := ValidateHumansGeneric(
 		trackings,
 		data.Latitude, data.Longitude,
 		matchedAreaNames,
@@ -68,6 +70,7 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) []webhook.M
 		st.Humans,
 		"invasion",
 	)
+	return users, ConvertAreas(areas)
 }
 
 // ResolveGruntTypeName returns the type name for matching against tracking rules.

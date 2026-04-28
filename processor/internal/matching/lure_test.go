@@ -47,7 +47,7 @@ func TestLureMatchBasic(t *testing.T) {
 		Latitude:   51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match, got %d", len(matched))
 	}
@@ -69,7 +69,7 @@ func TestLureMatchAnyLure(t *testing.T) {
 		Latitude:   51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for lure_id=0 (any), got %d", len(matched))
 	}
@@ -91,7 +91,7 @@ func TestLureMatchWrongLure(t *testing.T) {
 		Latitude:   51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong lure, got %d", len(matched))
 	}
@@ -116,14 +116,14 @@ func TestLureMatchDistance(t *testing.T) {
 		LureID:     501,
 		Latitude:   51.5005, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match within distance, got %d", len(matched))
 	}
 
 	// Too far
 	data.Latitude = 51.6
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for distant lure, got %d", len(matched))
 	}
@@ -145,7 +145,7 @@ func TestLureBlockedAlerts(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
 	}
@@ -191,7 +191,7 @@ func TestLureRealWorldData(t *testing.T) {
 		Longitude:  1.063606,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for real world lure, got %d", len(matched))
 	}

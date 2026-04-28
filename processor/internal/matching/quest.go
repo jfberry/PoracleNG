@@ -30,13 +30,14 @@ type QuestMatcher struct {
 	AreaSecurityEnabled bool
 }
 
-// Match returns all matched users for a quest.
-func (m *QuestMatcher) Match(data *QuestData, st *state.State) []webhook.MatchedUser {
+// Match returns all matched users for a quest along with the geofence areas
+// that contain the pokestop.
+func (m *QuestMatcher) Match(data *QuestData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	if st == nil {
-		return nil
+		return nil, nil
 	}
 
-	matchedAreaNames := st.Geofence.MatchedAreaNames(data.Latitude, data.Longitude)
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 	var trackings []trackingUserData
 
 	for _, q := range st.Quests {
@@ -54,7 +55,7 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) []webhook.Matched
 		})
 	}
 
-	return ValidateHumansGeneric(
+	users := ValidateHumansGeneric(
 		trackings,
 		data.Latitude, data.Longitude,
 		matchedAreaNames,
@@ -62,6 +63,7 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) []webhook.Matched
 		st.Humans,
 		"quest",
 	)
+	return users, ConvertAreas(areas)
 }
 
 // questRewardMatches checks if any quest reward matches the tracking entry.

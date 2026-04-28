@@ -99,10 +99,11 @@ type PokemonMatcher struct {
 	AreaSecurityEnabled        bool
 }
 
-// Match returns all matched users for a pokemon.
-func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) []webhook.MatchedUser {
+// Match returns all matched users for a pokemon along with the geofence
+// areas that contain the encounter.
+func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	if st == nil || st.Monsters == nil {
-		return nil
+		return nil, nil
 	}
 
 	var matched []*db.MonsterTracking
@@ -139,14 +140,15 @@ func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) []web
 	}
 
 	// Validate humans
-	matchedAreaNames := st.Geofence.MatchedAreaNames(pokemon.Latitude, pokemon.Longitude)
-	return ValidateHumans(
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(pokemon.Latitude, pokemon.Longitude)
+	users := ValidateHumans(
 		matched,
 		pokemon.Latitude, pokemon.Longitude,
 		matchedAreaNames,
 		m.AreaSecurityEnabled && m.StrictLocations,
 		st.Humans,
 	)
+	return users, ConvertAreas(areas)
 }
 
 // matchMonsters filters monster trackings against pokemon data.

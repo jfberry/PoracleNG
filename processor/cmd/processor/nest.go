@@ -59,16 +59,14 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 
 		st := ps.stateMgr.Get()
 		matchStart := time.Now()
-		matched := ps.nestMatcher.Match(data, st)
+		matched, matchedAreas := ps.nestMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("nest").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
+		matched = ps.filterValidation("nest", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("nest").Inc()
 			metrics.MatchedUsers.WithLabelValues("nest").Add(float64(len(matched)))
-
-			areas := st.Geofence.PointInAreas(nest.Lat, nest.Lon)
-			matchedAreas := buildMatchedAreas(areas)
 
 			l.Infof("Nest %s (avg %.1f/hr) areas(%s) and %d humans cared",
 				ps.pokemonName(nest.PokemonID, nest.Form), nest.PokemonAvg, areaNames(matchedAreas), len(matched))

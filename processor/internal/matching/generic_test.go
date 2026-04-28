@@ -221,32 +221,32 @@ func TestAreaOverlap(t *testing.T) {
 func TestNilState(t *testing.T) {
 	// All matchers should handle nil state gracefully
 	gymMatcher := &GymMatcher{}
-	if result := gymMatcher.Match(&GymData{}, nil); result != nil {
+	if result, _ := gymMatcher.Match(&GymData{}, nil); result != nil {
 		t.Errorf("GymMatcher with nil state should return nil")
 	}
 
 	invMatcher := &InvasionMatcher{}
-	if result := invMatcher.Match(&InvasionData{}, nil); result != nil {
+	if result, _ := invMatcher.Match(&InvasionData{}, nil); result != nil {
 		t.Errorf("InvasionMatcher with nil state should return nil")
 	}
 
 	lureMatcher := &LureMatcher{}
-	if result := lureMatcher.Match(&LureData{}, nil); result != nil {
+	if result, _ := lureMatcher.Match(&LureData{}, nil); result != nil {
 		t.Errorf("LureMatcher with nil state should return nil")
 	}
 
 	nestMatcher := &NestMatcher{}
-	if result := nestMatcher.Match(&NestData{}, nil); result != nil {
+	if result, _ := nestMatcher.Match(&NestData{}, nil); result != nil {
 		t.Errorf("NestMatcher with nil state should return nil")
 	}
 
 	questMatcher := &QuestMatcher{}
-	if result := questMatcher.Match(&QuestData{}, nil); result != nil {
+	if result, _ := questMatcher.Match(&QuestData{}, nil); result != nil {
 		t.Errorf("QuestMatcher with nil state should return nil")
 	}
 
 	fortMatcher := &FortMatcher{}
-	if result := fortMatcher.Match(&FortData{}, nil); result != nil {
+	if result, _ := fortMatcher.Match(&FortData{}, nil); result != nil {
 		t.Errorf("FortMatcher with nil state should return nil")
 	}
 }

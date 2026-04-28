@@ -37,13 +37,14 @@ type RaidMatcher struct {
 	AreaSecurityEnabled bool
 }
 
-// MatchRaid returns all matched users for a raid.
-func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) []webhook.MatchedUser {
+// MatchRaid returns all matched users for a raid along with the geofence
+// areas that contain the gym.
+func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	if st == nil {
-		return nil
+		return nil, nil
 	}
 
-	matchedAreaNames := st.Geofence.MatchedAreaNames(raid.Latitude, raid.Longitude)
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(raid.Latitude, raid.Longitude)
 	var trackingData []raidUserData
 
 	exVal := 0
@@ -101,7 +102,7 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) []webhook.Match
 		})
 	}
 
-	return ValidateHumansForRaid(
+	users := ValidateHumansForRaid(
 		trackingData,
 		raid.Latitude, raid.Longitude,
 		matchedAreaNames,
@@ -109,16 +110,18 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) []webhook.Match
 		st.Humans,
 		"raid",
 	)
+	return users, ConvertAreas(areas)
 }
 
-// MatchEgg returns all matched users for an egg.
+// MatchEgg returns all matched users for an egg along with the geofence
+// areas that contain the gym.
 // Port of raid.js:71-131 (eggWhoCares).
-func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) []webhook.MatchedUser {
+func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	if st == nil {
-		return nil
+		return nil, nil
 	}
 
-	matchedAreaNames := st.Geofence.MatchedAreaNames(egg.Latitude, egg.Longitude)
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(egg.Latitude, egg.Longitude)
 	var trackingData []raidUserData
 
 	exVal := 0
@@ -163,7 +166,7 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) []webhook.MatchedU
 		})
 	}
 
-	return ValidateHumansForRaid(
+	users := ValidateHumansForRaid(
 		trackingData,
 		egg.Latitude, egg.Longitude,
 		matchedAreaNames,
@@ -171,4 +174,5 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) []webhook.MatchedU
 		st.Humans,
 		"egg",
 	)
+	return users, ConvertAreas(areas)
 }

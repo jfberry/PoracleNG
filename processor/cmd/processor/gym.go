@@ -93,16 +93,14 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 
 		st := ps.stateMgr.Get()
 		matchStart := time.Now()
-		matched := ps.gymMatcher.Match(data, st)
+		matched, matchedAreas := ps.gymMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
+		matched = ps.filterValidation("gym", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("gym").Inc()
 			metrics.MatchedUsers.WithLabelValues("gym").Add(float64(len(matched)))
-
-			areas := st.Geofence.PointInAreas(gym.Latitude, gym.Longitude)
-			matchedAreas := buildMatchedAreas(areas)
 
 			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
 				gym.Name, ps.teamName(oldTeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))

@@ -97,24 +97,14 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		// Match
 		st := ps.stateMgr.Get()
 		matchStart := time.Now()
-		matched := ps.pokemonMatcher.Match(processed, st)
+		matched, matchedAreas := ps.pokemonMatcher.Match(processed, st)
 		metrics.MatchingDuration.WithLabelValues("pokemon").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
+		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
 			metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
-
-			// Get matched areas for enrichment
-			areas := st.Geofence.PointInAreas(pokemon.Latitude, pokemon.Longitude)
-			matchedAreas := make([]webhook.MatchedArea, len(areas))
-			for i, a := range areas {
-				matchedAreas[i] = webhook.MatchedArea{
-					Name:             a.Name,
-					DisplayInMatches: a.DisplayInMatches,
-					Group:            a.Group,
-				}
-			}
 
 			// Register matched users as caring about weather in this cell
 			if ps.cfg.Weather.ChangeAlert {

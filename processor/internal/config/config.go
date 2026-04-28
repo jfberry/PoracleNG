@@ -31,6 +31,7 @@ type Config struct {
 	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 	Tracking       TrackingConfig       `toml:"tracking"`
 	AI             AIConfig             `toml:"ai"`
+	Validation     ValidationConfig     `toml:"validation"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
@@ -428,6 +429,23 @@ type TuningConfig struct {
 	ConcurrentTelegramDestinations int `toml:"concurrent_telegram_destinations"`
 	ConcurrentDiscordWebhooks      int `toml:"concurrent_discord_webhooks"`
 	DeliveryQueueSize              int `toml:"delivery_queue_size"`
+
+	// Validation hook tuning (see [validation])
+	ValidationTimeoutMs     int `toml:"validation_timeout_ms"`     // per-call HTTP timeout (default 1500)
+	ValidationMaxConcurrent int `toml:"validation_max_concurrent"` // cap on parallel validator calls per event (default 16)
+}
+
+// ValidationConfig describes an external HTTP hook called once per matched
+// user, after rate-limit pre-filtering and before enrichment. The hook can
+// approve or deny each user; denied users are dropped from the alert and may
+// receive a notification message specified by the hook.
+type ValidationConfig struct {
+	// URL is the validator endpoint. Empty disables validation entirely.
+	URL string `toml:"url"`
+	// FailMode controls behaviour when the validator times out or errors.
+	// "open" (default) treats failures as success; "closed" treats failures
+	// as deny.
+	FailMode string `toml:"fail_mode"`
 }
 
 type AreaConfig struct {
@@ -602,6 +620,11 @@ func Load(baseDir string) (*Config, error) {
 			ConcurrentTelegramDestinations: 10,
 			ConcurrentDiscordWebhooks:      10,
 			DeliveryQueueSize:              200,
+			ValidationTimeoutMs:            1500,
+			ValidationMaxConcurrent:        16,
+		},
+		Validation: ValidationConfig{
+			FailMode: "open",
 		},
 		Stats: StatsConfig{
 			MinSampleSize:       10000,

@@ -48,7 +48,7 @@ func TestGymMatchTeamChange(t *testing.T) {
 		Latitude:  51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for team change, got %d", len(matched))
 	}
@@ -71,7 +71,7 @@ func TestGymMatchTeamAny(t *testing.T) {
 		Latitude:  51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for team=4 (any), got %d", len(matched))
 	}
@@ -94,7 +94,7 @@ func TestGymMatchWrongTeam(t *testing.T) {
 		Latitude:  51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong team, got %d", len(matched))
 	}
@@ -122,7 +122,7 @@ func TestGymNoTeamChangeWithoutSlotOrBattle(t *testing.T) {
 		Latitude:          51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches when nothing changed, got %d", len(matched))
 	}
@@ -148,7 +148,7 @@ func TestGymSlotChange(t *testing.T) {
 		Latitude:          51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for slot change, got %d", len(matched))
 	}
@@ -174,7 +174,7 @@ func TestGymBattleChange(t *testing.T) {
 		Latitude:    51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for battle change, got %d", len(matched))
 	}
@@ -197,14 +197,14 @@ func TestGymSpecificGym(t *testing.T) {
 		GymID: "gym1", TeamID: 2, OldTeamID: 1,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for specific gym, got %d", len(matched))
 	}
 
 	// Wrong gym
 	data.GymID = "gym2"
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong gym, got %d", len(matched))
 	}
@@ -226,7 +226,7 @@ func TestGymBlockedAlerts(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
 	}
@@ -249,7 +249,7 @@ func TestGymBlockedSpecificGymNotGym(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match (specificgym blocked should not block gym alerts), got %d", len(matched))
 	}
@@ -275,7 +275,7 @@ func TestGymRealWorldData(t *testing.T) {
 		Longitude:      0.87744,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for real world gym data, got %d", len(matched))
 	}

@@ -49,7 +49,7 @@ func TestNestMatchBasic(t *testing.T) {
 		Latitude:   51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match, got %d", len(matched))
 	}
@@ -70,7 +70,7 @@ func TestNestMatchAnyPokemon(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for pokemon_id=0 (any), got %d", len(matched))
 	}
@@ -91,7 +91,7 @@ func TestNestMatchWrongPokemon(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong pokemon, got %d", len(matched))
 	}
@@ -112,14 +112,14 @@ func TestNestMatchFormFilter(t *testing.T) {
 		NestID: 1234, PokemonID: 25, Form: 0, PokemonAvg: 5.0,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong form, got %d", len(matched))
 	}
 
 	// Correct form
 	data.Form = 5
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct form, got %d", len(matched))
 	}
@@ -140,7 +140,7 @@ func TestNestMatchFormAny(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for form=0 (any), got %d", len(matched))
 	}
@@ -162,14 +162,14 @@ func TestNestMatchMinSpawnAvg(t *testing.T) {
 		NestID: 1234, PokemonID: 25, PokemonAvg: 5.0,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for low spawn avg, got %d", len(matched))
 	}
 
 	// Above minimum
 	data.PokemonAvg = 15.0
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for high spawn avg, got %d", len(matched))
 	}
@@ -191,7 +191,7 @@ func TestNestBlockedAlerts(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
 	}

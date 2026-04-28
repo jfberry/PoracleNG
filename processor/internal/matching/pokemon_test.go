@@ -131,7 +131,7 @@ func TestPokemonMatchBasic(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match, got %d", len(matched))
 	}
@@ -168,7 +168,7 @@ func TestPokemonMatchCatchAll(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match (catch-all), got %d", len(matched))
 	}
@@ -204,7 +204,7 @@ func TestPokemonMatchIVFilter(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for low IV, got %d", len(matched))
 	}
@@ -214,7 +214,7 @@ func TestPokemonMatchIVFilter(t *testing.T) {
 	pokemon.ATK = 14
 	pokemon.DEF = 14
 	pokemon.STA = 15
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for high IV, got %d", len(matched))
 	}
@@ -237,14 +237,14 @@ func TestPokemonMatchFormFilter(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong form, got %d", len(matched))
 	}
 
 	// Correct form
 	pokemon.Form = 5
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct form, got %d", len(matched))
 	}
@@ -266,13 +266,13 @@ func TestPokemonMatchGenderFilter(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for female when tracking male, got %d", len(matched))
 	}
 
 	pokemon.Gender = 1
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for male, got %d", len(matched))
 	}
@@ -294,7 +294,7 @@ func TestPokemonUnencounteredDefaultFilters(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Unencountered with default filters should match, got %d", len(matched))
 	}
@@ -334,7 +334,7 @@ func TestPokemonUnencounteredStatFilters(t *testing.T) {
 			tt.modify(monster)
 			st := makeTestState([]*db.MonsterTracking{monster}, map[string]*db.Human{"user1": human})
 
-			matched := matcher.Match(pokemon, st)
+			matched, _ := matcher.Match(pokemon, st)
 			if len(matched) != 0 {
 				t.Errorf("Unencountered should not match %s filter, got %d", tt.name, len(matched))
 			}
@@ -362,14 +362,14 @@ func TestPokemonMatchDistanceFilter(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for distant pokemon, got %d", len(matched))
 	}
 
 	// Close - should match
 	pokemon.Latitude = 51.5005
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for close pokemon, got %d", len(matched))
 	}
@@ -392,13 +392,13 @@ func TestPokemonMatchWeightFilter(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for weight in range, got %d", len(matched))
 	}
 
 	pokemon.Weight = 15.0 // Too heavy
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for heavy pokemon, got %d", len(matched))
 	}
@@ -430,14 +430,14 @@ func TestPokemonMatchPVPFilter(t *testing.T) {
 		PVPEvoData: make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 PVP match, got %d", len(matched))
 	}
 
 	// Rank too high
 	pokemon.PVPBestRank[1500] = []pvp.LeagueRank{{Rank: 100, CP: 1490, Caps: []int{50}}}
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for bad PVP rank, got %d", len(matched))
 	}
@@ -472,14 +472,14 @@ func TestPokemonMatchPVPCapFilter(t *testing.T) {
 		PVPEvoData: make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for PVP cap 50, got %d", len(matched))
 	}
 
 	// Pokemon only has cap 51 — should not match cap 50 tracking
 	pokemon.PVPBestRank[1500] = []pvp.LeagueRank{{Rank: 10, CP: 1490, Caps: []int{51}}}
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for PVP cap 51 when tracking cap 50, got %d", len(matched))
 	}
@@ -488,7 +488,7 @@ func TestPokemonMatchPVPCapFilter(t *testing.T) {
 	monster.PVPRankingCap = 0
 	st = makeTestState([]*db.MonsterTracking{monster}, map[string]*db.Human{"user1": human})
 	pokemon.PVPBestRank[1500] = []pvp.LeagueRank{{Rank: 10, CP: 1490, Caps: []int{51}}}
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for PVP cap 0 (any), got %d", len(matched))
 	}
@@ -497,7 +497,7 @@ func TestPokemonMatchPVPCapFilter(t *testing.T) {
 	monster.PVPRankingCap = 50
 	st = makeTestState([]*db.MonsterTracking{monster}, map[string]*db.Human{"user1": human})
 	pokemon.PVPBestRank[1500] = []pvp.LeagueRank{{Rank: 10, CP: 1490, Caps: nil}}
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match when pokemon has no caps (filter skipped), got %d", len(matched))
 	}
@@ -538,7 +538,7 @@ func TestPokemonMatchPVPEvolutionDirect(t *testing.T) {
 		},
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 PVP evolution direct match for Scolipede, got %d", len(matched))
 	}
@@ -548,7 +548,7 @@ func TestPokemonMatchPVPEvolutionDirect(t *testing.T) {
 
 	// With evolution direct tracking disabled, should not match
 	matcher2 := &PokemonMatcher{PVPQueryMaxRank: 100, PVPEvolutionDirectTracking: false}
-	matched = matcher2.Match(pokemon, st)
+	matched, _ = matcher2.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches with evo direct tracking disabled, got %d", len(matched))
 	}
@@ -596,7 +596,7 @@ func TestPokemonMatchPVPEvolutionDirectEevee(t *testing.T) {
 		},
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Fatalf("Expected 1 PVP evolution match for Sylveon via Eevee, got %d", len(matched))
 	}
@@ -606,7 +606,7 @@ func TestPokemonMatchPVPEvolutionDirectEevee(t *testing.T) {
 
 	// With evolution direct tracking disabled, should not match
 	matcher2 := &PokemonMatcher{PVPQueryMaxRank: 4096, PVPEvolutionDirectTracking: false}
-	matched2 := matcher2.Match(pokemon, st)
+	matched2, _ := matcher2.Match(pokemon, st)
 	if len(matched2) != 0 {
 		t.Errorf("Expected 0 matches with evo direct tracking disabled, got %d", len(matched2))
 	}
@@ -628,7 +628,7 @@ func TestPokemonMatchPVPEvolutionDirectEevee(t *testing.T) {
 	// Add ultra league evo data for Umbreon
 	pokemon.PVPEvoData[197][2500] = []pvp.LeagueRank{{Rank: 2688, CP: 2174, Caps: nil}}
 
-	matched3 := matcher.Match(pokemon, st2)
+	matched3, _ := matcher.Match(pokemon, st2)
 	if len(matched3) != 1 {
 		t.Fatalf("Expected 1 PVP evolution match for Umbreon via Eevee in ultra, got %d", len(matched3))
 	}
@@ -672,7 +672,7 @@ func TestPokemonMatchPVPEvolutionFormCheck(t *testing.T) {
 	}
 
 	// Should match: PVP evo form 3062 matches tracking form 3062
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Fatalf("Expected 1 match for Sylveon form:3062 via Eevee PVP evo, got %d", len(matched))
 	}
@@ -689,7 +689,7 @@ func TestPokemonMatchPVPEvolutionFormCheck(t *testing.T) {
 		PVPRankingMinCP: 0, PVPRankingCap: 0,
 	}
 	st2 := makeTestState([]*db.MonsterTracking{monsterWrongForm}, map[string]*db.Human{"user1": human})
-	matched2 := matcher.Match(pokemon, st2)
+	matched2, _ := matcher.Match(pokemon, st2)
 	if len(matched2) != 0 {
 		t.Errorf("Expected 0 matches for Sylveon form:9999 (wrong form), got %d", len(matched2))
 	}
@@ -712,7 +712,7 @@ func TestPokemonMatchBlockedAlerts(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
 	}
@@ -735,13 +735,13 @@ func TestPokemonMatchMinTime(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for low TTH, got %d", len(matched))
 	}
 
 	pokemon.TTHSeconds = 600
-	matched = matcher.Match(pokemon, st)
+	matched, _ = matcher.Match(pokemon, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for sufficient TTH, got %d", len(matched))
 	}
@@ -765,7 +765,7 @@ func TestPokemonMatchProfileFilter(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matched := matcher.Match(pokemon, st)
+	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong profile, got %d", len(matched))
 	}

@@ -49,7 +49,7 @@ func TestFortMatchNewPokestop(t *testing.T) {
 		Latitude:    51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for new pokestop, got %d", len(matched))
 	}
@@ -73,7 +73,7 @@ func TestFortMatchEverything(t *testing.T) {
 		Latitude:    51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for fort_type=everything, got %d", len(matched))
 	}
@@ -97,7 +97,7 @@ func TestFortMatchWrongType(t *testing.T) {
 		Latitude:    51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong fort type, got %d", len(matched))
 	}
@@ -121,14 +121,14 @@ func TestFortMatchChangeTypes(t *testing.T) {
 		ChangeTypes: []string{"edit", "name"},
 		Latitude:    51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for matching change type, got %d", len(matched))
 	}
 
 	// Non-matching change type
 	data.ChangeTypes = []string{"edit", "description"}
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for non-matching change type, got %d", len(matched))
 	}
@@ -152,7 +152,7 @@ func TestFortMatchEmptyChangeTypesFilter(t *testing.T) {
 		Latitude:    51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for empty change types filter, got %d", len(matched))
 	}
@@ -178,7 +178,7 @@ func TestFortMatchEmpty(t *testing.T) {
 		Latitude:    51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for empty fort when include_empty=false, got %d", len(matched))
 	}
@@ -186,7 +186,7 @@ func TestFortMatchEmpty(t *testing.T) {
 	// With include_empty=true
 	fort.IncludeEmpty = true
 	st = makeFortTestState([]*db.FortTracking{fort}, map[string]*db.Human{"user1": human})
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for empty fort when include_empty=true, got %d", len(matched))
 	}
@@ -211,7 +211,7 @@ func TestFortBlockedAlerts(t *testing.T) {
 		Latitude:    51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
 	}
@@ -239,7 +239,7 @@ func TestFortRealWorldData(t *testing.T) {
 		Longitude:   0.900055,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for real world fort update, got %d", len(matched))
 	}

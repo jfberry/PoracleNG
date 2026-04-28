@@ -54,14 +54,14 @@ func TestMaxbattleMatchPokemon(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct pokemon, got %d", len(matched))
 	}
 
 	// Wrong pokemon
 	data.PokemonID = 26
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong pokemon, got %d", len(matched))
 	}
@@ -79,14 +79,14 @@ func TestMaxbattleMatchLevelBased(t *testing.T) {
 		StationID: "station1", PokemonID: 150, Level: 5,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct level, got %d", len(matched))
 	}
 
 	// Wrong level
 	data.Level = 3
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong level, got %d", len(matched))
 	}
@@ -104,7 +104,7 @@ func TestMaxbattleMatchAllLevels(t *testing.T) {
 			StationID: "station1", PokemonID: 150, Level: lvl,
 			Latitude: 51.0, Longitude: 0.0,
 		}
-		matched := matcher.Match(data, st)
+		matched, _ := matcher.Match(data, st)
 		if len(matched) != 1 {
 			t.Errorf("Expected 1 match for level %d with level=90, got %d", lvl, len(matched))
 		}
@@ -124,14 +124,14 @@ func TestMaxbattleMatchGmax(t *testing.T) {
 		StationID: "station1", PokemonID: 150, Level: 7, Gmax: 0,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for non-gmax when tracking gmax, got %d", len(matched))
 	}
 
 	// Gmax should match
 	data.Gmax = 1
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for gmax, got %d", len(matched))
 	}
@@ -149,13 +149,13 @@ func TestMaxbattleMatchForm(t *testing.T) {
 		StationID: "station1", PokemonID: 25, Level: 3, Form: 5,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct form, got %d", len(matched))
 	}
 
 	data.Form = 6 // wrong form
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong form, got %d", len(matched))
 	}
@@ -175,7 +175,7 @@ func TestMaxbattleMatchMove(t *testing.T) {
 		Move1: 14, Move2: 99,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for move1, got %d", len(matched))
 	}
@@ -183,7 +183,7 @@ func TestMaxbattleMatchMove(t *testing.T) {
 	// Match on move2
 	data.Move1 = 99
 	data.Move2 = 14
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for move2, got %d", len(matched))
 	}
@@ -191,7 +191,7 @@ func TestMaxbattleMatchMove(t *testing.T) {
 	// Neither move matches
 	data.Move1 = 88
 	data.Move2 = 99
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong moves, got %d", len(matched))
 	}
@@ -211,14 +211,14 @@ func TestMaxbattleMatchSpecificStation(t *testing.T) {
 		StationID: "station-abc", PokemonID: 150, Level: 5,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct station, got %d", len(matched))
 	}
 
 	// Wrong station
 	data.StationID = "station-xyz"
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong station, got %d", len(matched))
 	}
@@ -236,7 +236,7 @@ func TestMaxbattleBlockedAlerts(t *testing.T) {
 		StationID: "station1", PokemonID: 25, Level: 3,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked maxbattle, got %d", len(matched))
 	}
@@ -256,7 +256,7 @@ func TestMaxbattleBlockedSpecificStation(t *testing.T) {
 		StationID: "station-abc", PokemonID: 150, Level: 5,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked specificstation, got %d", len(matched))
 	}
@@ -274,13 +274,13 @@ func TestMaxbattleEvolution(t *testing.T) {
 		StationID: "station1", PokemonID: 25, Level: 3, Evolution: 2,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct evolution, got %d", len(matched))
 	}
 
 	data.Evolution = 1
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong evolution, got %d", len(matched))
 	}

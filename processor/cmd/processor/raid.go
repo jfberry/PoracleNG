@@ -71,6 +71,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		ex := bool(raid.ExRaidEligible) || bool(raid.IsExRaidEligible)
 
 		var matched []webhook.MatchedUser
+		var matchedAreas []webhook.MatchedArea
 
 		matchStart := time.Now()
 		if raid.PokemonID > 0 {
@@ -88,7 +89,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				Latitude:  raid.Latitude,
 				Longitude: raid.Longitude,
 			}
-			matched = ps.raidMatcher.MatchRaid(raidData, st)
+			matched, matchedAreas = ps.raidMatcher.MatchRaid(raidData, st)
 		} else {
 			// Egg
 			eggData := &matching.EggData{
@@ -99,7 +100,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				Latitude:  raid.Latitude,
 				Longitude: raid.Longitude,
 			}
-			matched = ps.raidMatcher.MatchEgg(eggData, st)
+			matched, matchedAreas = ps.raidMatcher.MatchEgg(eggData, st)
 		}
 		metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(matchStart).Seconds())
 
@@ -134,19 +135,17 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		}
 		matched = filtered
 
+		// External validation hook last so denied users don't burn validator
+		// load when they would have been dropped by RSVP/rate-limit anyway.
+		raidType := "raid"
+		if raid.PokemonID == 0 {
+			raidType = "egg"
+		}
+		matched = ps.filterValidation(raidType, raw, matchedAreas, matched)
+
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("raid").Inc()
 			metrics.MatchedUsers.WithLabelValues("raid").Add(float64(len(matched)))
-
-			areas := st.Geofence.PointInAreas(raid.Latitude, raid.Longitude)
-			matchedAreas := make([]webhook.MatchedArea, len(areas))
-			for i, a := range areas {
-				matchedAreas[i] = webhook.MatchedArea{
-					Name:             a.Name,
-					DisplayInMatches: a.DisplayInMatches,
-					Group:            a.Group,
-				}
-			}
 
 			msgType := "raid"
 			if raid.PokemonID == 0 {

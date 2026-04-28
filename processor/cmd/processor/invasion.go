@@ -94,16 +94,14 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 
 		st := ps.stateMgr.Get()
 		matchStart := time.Now()
-		matched := ps.invasionMatcher.Match(data, st)
+		matched, matchedAreas := ps.invasionMatcher.Match(data, st)
 		metrics.MatchingDuration.WithLabelValues("invasion").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
+		matched = ps.filterValidation("invasion", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("invasion").Inc()
 			metrics.MatchedUsers.WithLabelValues("invasion").Add(float64(len(matched)))
-
-			areas := st.Geofence.PointInAreas(inv.Latitude, inv.Longitude)
-			matchedAreas := buildMatchedAreas(areas)
 
 			l.Infof("Invasion grunt %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				gruntType, inv.Name, inv.Latitude, inv.Longitude, areaNames(matchedAreas), len(matched))

@@ -27,17 +27,18 @@ type GymMatcher struct {
 	AreaSecurityEnabled bool
 }
 
-// Match returns all matched users for a gym change.
-func (m *GymMatcher) Match(data *GymData, st *state.State) []webhook.MatchedUser {
+// Match returns all matched users for a gym change along with the geofence
+// areas that contain the gym.
+func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	if st == nil {
-		return nil
+		return nil, nil
 	}
 
 	teamChanged := data.OldTeamID != data.TeamID
 	slotsChanged := data.OldSlotsAvailable != data.SlotsAvailable
 	battleChanged := data.InBattle && !data.OldInBattle
 
-	matchedAreaNames := st.Geofence.MatchedAreaNames(data.Latitude, data.Longitude)
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 	var trackings []trackingUserData
 
 	for _, g := range st.Gyms {
@@ -80,7 +81,7 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) []webhook.MatchedUser
 		})
 	}
 
-	return validateHumansForGym(
+	users := validateHumansForGym(
 		trackings,
 		data.Latitude, data.Longitude,
 		matchedAreaNames,
@@ -89,6 +90,7 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) []webhook.MatchedUser
 		st.Gyms,
 		data.GymID,
 	)
+	return users, ConvertAreas(areas)
 }
 
 // validateHumansForGym is like ValidateHumansGeneric but handles specific gym tracking.

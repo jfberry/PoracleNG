@@ -384,7 +384,7 @@ func TestQuestRealSquirtleEncounter(t *testing.T) {
 		},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Squirtle quest, got %d", len(matched))
 	}
@@ -405,14 +405,14 @@ func TestQuestRealSquirtleFormFilter(t *testing.T) {
 		Latitude:   51.282747, Longitude: 1.063537,
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 7, FormID: 181}},
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct form 181, got %d", len(matched))
 	}
 
 	// Different form from webhook (172 = Charmander form)
 	data.Rewards[0].FormID = 172
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for form 172 when tracking form 181, got %d", len(matched))
 	}
@@ -432,7 +432,7 @@ func TestQuestRealItemPotion(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 2, ItemID: 2, Amount: 5}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for potion quest, got %d", len(matched))
 	}
@@ -452,7 +452,7 @@ func TestQuestRealItem701(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 2, ItemID: 701, Amount: 3}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for item 701 quest, got %d", len(matched))
 	}
@@ -472,7 +472,7 @@ func TestQuestRealStardust(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 200}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for stardust quest, got %d", len(matched))
 	}
@@ -492,7 +492,7 @@ func TestQuestRealStardustBelowThreshold(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 200}}, // only 200
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for stardust below threshold, got %d", len(matched))
 	}
@@ -512,7 +512,7 @@ func TestQuestRealArchenEncounter(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 566}}, // no form_id in this webhook
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Archen quest, got %d", len(matched))
 	}
@@ -533,7 +533,7 @@ func TestQuestRealPikachuForm(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25, FormID: 598}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Pikachu (any form), got %d", len(matched))
 	}
@@ -553,7 +553,7 @@ func TestQuestRealMegaEnergyAggron(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 12, PokemonID: 306, Amount: 10}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Aggron mega energy, got %d", len(matched))
 	}
@@ -574,7 +574,7 @@ func TestQuestRealLaprasWithBackground(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 131, FormID: 322}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Lapras quest, got %d", len(matched))
 	}
@@ -605,7 +605,7 @@ func TestQuestMultipleUsersMultipleTrackings(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 7, FormID: 181}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match (user2 for Squirtle), got %d", len(matched))
 	}
@@ -632,7 +632,7 @@ func TestQuestSameUserMultipleTrackingsDedup(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 200}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match (deduped), got %d", len(matched))
 	}
@@ -654,7 +654,7 @@ func TestQuestBlockedAlerts(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 500}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
 	}
@@ -673,7 +673,7 @@ func TestQuestOutsideArea(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 500}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches outside area, got %d", len(matched))
 	}
@@ -693,7 +693,7 @@ func TestQuestWrongProfile(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong profile, got %d", len(matched))
 	}
@@ -715,14 +715,14 @@ func TestQuestDistanceFilter(t *testing.T) {
 		Latitude:   51.5001, Longitude: 0.0,
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25}},
 	}
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match within distance, got %d", len(matched))
 	}
 
 	// Too far
 	data.Latitude = 51.6
-	matched = matcher.Match(data, st)
+	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches out of distance, got %d", len(matched))
 	}
@@ -739,7 +739,7 @@ func TestQuestNoTrackings(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25}},
 	}
 
-	matched := matcher.Match(data, st)
+	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches with no trackings, got %d", len(matched))
 	}

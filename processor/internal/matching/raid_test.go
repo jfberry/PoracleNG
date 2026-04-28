@@ -50,7 +50,7 @@ func TestRaidMatchBasic(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 raid match, got %d", len(matched))
 	}
@@ -73,7 +73,7 @@ func TestRaidMatchLevel9000(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 raid match for pokemon_id=9000, got %d", len(matched))
 	}
@@ -97,7 +97,7 @@ func TestRaidMatchTeamFilter(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong team, got %d", len(matched))
 	}
@@ -120,7 +120,7 @@ func TestRaidMatchMoveFilter(t *testing.T) {
 		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for matching move_1, got %d", len(matched))
 	}
@@ -128,7 +128,7 @@ func TestRaidMatchMoveFilter(t *testing.T) {
 	// Move matches move_2
 	raidData.Move1 = 300
 	raidData.Move2 = 100
-	matched = matcher.MatchRaid(raidData, st)
+	matched, _ = matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for matching move_2, got %d", len(matched))
 	}
@@ -136,7 +136,7 @@ func TestRaidMatchMoveFilter(t *testing.T) {
 	// No match
 	raidData.Move1 = 300
 	raidData.Move2 = 400
-	matched = matcher.MatchRaid(raidData, st)
+	matched, _ = matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for non-matching moves, got %d", len(matched))
 	}
@@ -160,14 +160,14 @@ func TestRaidMatchSpecificGym(t *testing.T) {
 		TeamID: 1, Latitude: 51.0, Longitude: 0.0,
 		Evolution: 0, Move1: 100, Move2: 200,
 	}
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for specific gym, got %d", len(matched))
 	}
 
 	// Wrong gym
 	raidData.GymID = "gym2"
-	matched = matcher.MatchRaid(raidData, st)
+	matched, _ = matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong gym, got %d", len(matched))
 	}
@@ -189,7 +189,7 @@ func TestEggMatchBasic(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchEgg(eggData, st)
+	matched, _ := matcher.MatchEgg(eggData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 egg match, got %d", len(matched))
 	}
@@ -211,7 +211,7 @@ func TestEggMatchLevel90(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchEgg(eggData, st)
+	matched, _ := matcher.MatchEgg(eggData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for level=90 (any), got %d", len(matched))
 	}
@@ -235,7 +235,7 @@ func TestRaidBlockedAlerts(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked raid alerts, got %d", len(matched))
 	}
@@ -258,14 +258,14 @@ func TestRaidMatchExclusive(t *testing.T) {
 		TeamID: 1, Ex: true, Evolution: 0, Move1: 100, Move2: 200,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for EX raid, got %d", len(matched))
 	}
 
 	// Non-EX raid — should not match
 	raidData.Ex = false
-	matched = matcher.MatchRaid(raidData, st)
+	matched, _ = matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for non-EX raid with exclusive tracking, got %d", len(matched))
 	}
@@ -288,14 +288,14 @@ func TestRaidMatchFormFilter(t *testing.T) {
 		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct form, got %d", len(matched))
 	}
 
 	// Wrong form
 	raidData.Form = 181
-	matched = matcher.MatchRaid(raidData, st)
+	matched, _ = matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong form, got %d", len(matched))
 	}
@@ -318,14 +318,14 @@ func TestRaidMatchEvolution(t *testing.T) {
 		TeamID: 1, Ex: false, Evolution: 1, Move1: 100, Move2: 200,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct evolution, got %d", len(matched))
 	}
 
 	// Wrong evolution
 	raidData.Evolution = 2
-	matched = matcher.MatchRaid(raidData, st)
+	matched, _ = matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong evolution, got %d", len(matched))
 	}
@@ -350,14 +350,14 @@ func TestRaidMatchDistance(t *testing.T) {
 		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
 		Latitude: 51.005, Longitude: 0.005,
 	}
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match within distance, got %d", len(matched))
 	}
 
 	// Outside distance
 	raidData.Latitude = 51.5
-	matched = matcher.MatchRaid(raidData, st)
+	matched, _ = matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches outside distance, got %d", len(matched))
 	}
@@ -380,7 +380,7 @@ func TestRaidMatchWrongLevel(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong level, got %d", len(matched))
 	}
@@ -405,7 +405,7 @@ func TestRaidSpecificGymBlockedAlerts(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for specificgym blocked, got %d", len(matched))
 	}
@@ -428,7 +428,7 @@ func TestEggBlockedAlerts(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchEgg(eggData, st)
+	matched, _ := matcher.MatchEgg(eggData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked egg alerts, got %d", len(matched))
 	}
@@ -451,14 +451,14 @@ func TestEggMatchSpecificGym(t *testing.T) {
 		GymID: "gym1", Level: 5, TeamID: 1, Ex: false,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.MatchEgg(eggData, st)
+	matched, _ := matcher.MatchEgg(eggData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for specific gym, got %d", len(matched))
 	}
 
 	// Wrong gym
 	eggData.GymID = "gym2"
-	matched = matcher.MatchEgg(eggData, st)
+	matched, _ = matcher.MatchEgg(eggData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong gym, got %d", len(matched))
 	}
@@ -480,14 +480,14 @@ func TestEggMatchExclusive(t *testing.T) {
 		GymID: "gym1", Level: 5, TeamID: 1, Ex: true,
 		Latitude: 51.0, Longitude: 0.0,
 	}
-	matched := matcher.MatchEgg(eggData, st)
+	matched, _ := matcher.MatchEgg(eggData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for EX egg, got %d", len(matched))
 	}
 
 	// Non-EX — no match
 	eggData.Ex = false
-	matched = matcher.MatchEgg(eggData, st)
+	matched, _ = matcher.MatchEgg(eggData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for non-EX egg with exclusive tracking, got %d", len(matched))
 	}
@@ -511,14 +511,14 @@ func TestEggMatchDistance(t *testing.T) {
 		GymID: "gym1", Level: 5, TeamID: 1, Ex: false,
 		Latitude: 51.005, Longitude: 0.005,
 	}
-	matched := matcher.MatchEgg(eggData, st)
+	matched, _ := matcher.MatchEgg(eggData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match within distance, got %d", len(matched))
 	}
 
 	// Outside distance
 	eggData.Latitude = 51.5
-	matched = matcher.MatchEgg(eggData, st)
+	matched, _ = matcher.MatchEgg(eggData, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches outside distance, got %d", len(matched))
 	}
@@ -547,7 +547,7 @@ func TestRaidMatchDedup(t *testing.T) {
 		Latitude: 51.0, Longitude: 0.0,
 	}
 
-	matched := matcher.MatchRaid(raidData, st)
+	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match (deduped), got %d", len(matched))
 	}

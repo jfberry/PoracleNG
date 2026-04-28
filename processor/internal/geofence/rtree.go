@@ -75,6 +75,39 @@ func (si *SpatialIndex) PointInAreas(lat, lon float64) []MatchedArea {
 	return results
 }
 
+// PointAreasAndNames does a single rtree walk and returns both the full
+// MatchedArea slice (for rendering / validation) and the normalized-name
+// set (for area-overlap checks inside ValidateHumansGeneric). Use this in
+// matchers so a successful match doesn't trigger a second geofence walk in
+// the calling handler.
+func (si *SpatialIndex) PointAreasAndNames(lat, lon float64) ([]MatchedArea, map[string]bool) {
+	if si == nil {
+		return nil, nil
+	}
+	var results []MatchedArea
+	names := make(map[string]bool)
+	seen := make(map[string]bool)
+
+	si.tree.Search(
+		[2]float64{lat, lon},
+		[2]float64{lat, lon},
+		func(min, max [2]float64, entry *fenceEntry) bool {
+			if !seen[entry.fence.Name] && PointInPolygon(lat, lon, entry.path) {
+				seen[entry.fence.Name] = true
+				results = append(results, MatchedArea{
+					Name:             entry.fence.Name,
+					Description:      entry.fence.Description,
+					DisplayInMatches: entry.fence.DisplayInMatches,
+					Group:            entry.fence.Group,
+				})
+				names[entry.fence.NormalizedName] = true
+			}
+			return true
+		},
+	)
+	return results, names
+}
+
 // MatchedAreaNames returns a set of normalized area names for a point.
 func (si *SpatialIndex) MatchedAreaNames(lat, lon float64) map[string]bool {
 	if si == nil {
