@@ -7,7 +7,7 @@
 		"template": {
 			"embed": {
 				"color": "{{color}}",
-				"title": "{{fullName}} {{#eq pokemonId 132}}({{disguisePokemonName}}){{/eq}} {{genderData.emoji}} {{#eq iv '100.00'}} 💯{{/eq}} |{{#if userHasPvpTracks}}{{#or pvpGreat pvpUltra pvpLittle}}{{#if pvpLittle}} 👶#{{pvpLittleBest.rank}} ({{pvpLittleBest.name}}){{/if}}{{#if pvpGreat}} 🔵#{{pvpGreatBest.rank}} ({{pvpGreatBest.name}}){{/if}}{{#if pvpUltra}} 🟡#{{pvpUltraBest.rank}} ({{pvpUltraBest.name}}){{/if}}{{/or}}{{else}} {{round iv}}% ({{atk}}/{{def}}/{{sta}}){{/if}} | {{areas}} {{#or (lte size 1) (gte size 5)}}📐 {{/or}}{{boostWeatherEmoji}}{{#if weatherChange}}⚠{{/if}}",
+				"title": "{{fullName}} {{#eq pokemonId 132}}({{disguisePokemonName}}){{/eq}} {{genderData.emoji}} {{#eq seenType 'tappable_encounter'}} 🥸{{/eq}} {{#eq iv '100.00'}} 💯{{/eq}} |{{#if userHasPvpTracks}}{{#or pvpGreat pvpUltra pvpLittle}}{{#if pvpLittle}} 👶#{{pvpLittleBest.rank}} ({{pvpLittleBest.name}}){{/if}}{{#if pvpGreat}} 🔵#{{pvpGreatBest.rank}} ({{pvpGreatBest.name}}){{/if}}{{#if pvpUltra}} 🟡#{{pvpUltraBest.rank}} ({{pvpUltraBest.name}}){{/if}}{{/or}}{{else}} {{round iv}}% ({{atk}}/{{def}}/{{sta}}){{/if}} | {{areas}} {{#or (lte size 1) (gte size 5)}}📐 {{/or}}{{boostWeatherEmoji}}{{#if weatherChange}}⚠{{/if}}",
 				"url": "{{{reactMapUrl}}}",
 				"description": "@include mon.txt",
 				"thumbnail": {
@@ -61,7 +61,7 @@
 					},
 					{
 						"name": "<:premierball:958744027971321947> **Catch CP**",
-						"value": "☑️ {{calculateCp baseStats 20 10 10 10}}-**{{calculateCp baseStats 20 15 15 15}}**\n⤴ {{calculateCp baseStats 25 10 10 10}}-**{{calculateCp baseStats 25 15 15 15}}** {{boostingWeathersEmoji}}"
+						"value": "☑️ {{calculateCp baseStats 20 10 10 10}}-**{{calculateCp baseStats 20 15 15 15}}**\n⤴ {{calculateCp baseStats 25 10 10 10}}-**{{calculateCp baseStats 25 15 15 15}}** {{boostingWeathersEmoji}}{{#if rsvps}}\n🙋 **RSVPS:**{{#each rsvps}}\n🏁: {{time}} <t:{{timeSlot}}:R> ✅: {{goingCount}} 🤷: {{maybeCount}}{{/each}}{{/if}}"
 					},
 					{
 						"name": "**Directions**",
@@ -88,7 +88,7 @@
 			"embed": {
 				"title": "{{#if (eq level 8)}}🌀{{else}}🥚{{/if}} {{levelName}} | {{{gymName}}} {{#ex}}(Ex) {{/ex}}| {{areas}}",
 				"url": "{{{reactMapUrl}}}",
-				"description": "🐣 **Hatch:** {{time}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\n\n🗺 [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}) | [ReactMap]({{{reactMapUrl}}})",
+				"description": "🐣 **Hatch:** {{time}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s){{#if rsvps}}\n🙋 **RSVPS:**{{#each rsvps}}\n🏁: {{time}} <t:{{timeSlot}}:R> ✅: {{goingCount}} 🤷: {{maybeCount}}{{/each}}{{/if}}\n\n🗺 [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}) | [ReactMap]({{{reactMapUrl}}})",
 				"color": "{{gymColor}}",
 				"thumbnail": {
 					"url": "{{{gymUrl}}}"
@@ -155,7 +155,7 @@
 				"color": "{{lureTypeColor}}",
 				"description": "⏰ **Ends:** {{time}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\n\n🗺 [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}) | [ReactMap]({{{reactMapUrl}}})",
 				"thumbnail": {
-					"url": "{{{imgUrl}}}"
+					"url": "{{{imgUrlAlt}}}"
 				},
 				"image": {
 					"url": "{{{staticMap}}}"

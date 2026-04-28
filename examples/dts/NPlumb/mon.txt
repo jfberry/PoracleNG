@@ -1,5 +1,6 @@
 ⏰ {{time}} ({{tthm}}m {{tths}}s)
-📊 CP {{cp}} | Lvl {{level}} | {{atk}}/{{def}}/{{sta}}{{#and (eq pokemonId 129) (gte weight 13.13)}}
+📊 CP {{cp}} | Lvl {{level}} | {{atk}}/{{def}}/{{sta}}{{#and (eq seenType tappable_encounter)}}
+🥸 Disguised as an item!{{/and}}{{#and (eq pokemonId 129) (gte weight 13.13)}}
 ⚖️ Big Fish! {{weight}}kg{{/and}}{{#and (eq pokemonId 19) (lte weight 2.41)}}
 ⚖️ Tiny Rat! {{weight}}kg{{/and}}{{#or (lte size 1) (gte size 5)}}
 📐 {{sizeName}}{{/or}}
@@ -10,14 +11,14 @@
 {{#each pvpLittle}}{{#if this.rank}}{{#compare this.rank '<=' ../pvpUserRanking}}
 {{{getEmoji 'little-league'}}}{{this.fullName}} #{{this.rank}} ({{this.cp}}CP Lvl. {{this.levelWithCap}})
 {{#getPowerUpCost ../level this.level}}{{{getEmoji 'stardust'}}}{{addCommas stardust}} & {{{getEmoji 'rarecandy'}}}{{candy}}{{#compare xlCandy '>' 0}} {{{getEmoji 'rarecandyxl'}}} {{xlCandy}}{{/compare}}{{/getPowerUpCost}}
-[PvP IVs Rank](https://pvpivs.com/?mon={{nameEng}}&r=10&cp=500&max={{cap}}&IVs={{../atk}}_{{../def}}_{{../sta}}) | [Pvpoke Rank](https://pvpoke.com/rankings/all/500/overall/{{lowercase this.nameEng}}/)
+[PvP IVs Rank](https://pvpivs.com/?mon={{replace this.fullNameEng ' ' '_'}}&r=10&cp=500&max={{cap}}&IVs={{../atk}}_{{../def}}_{{../sta}}) | [Pvpoke Rank](https://pvpoke.com/rankings/all/500/overall/{{replace (lowercase this.fullNameEng) ' ' '_'}}/)
 {{/compare}}{{/if}}{{/each}}{{#each pvpGreat}}{{#if this.rank}}{{#compare this.rank '<=' ../pvpUserRanking}}
 {{{getEmoji 'great-league'}}}{{this.fullName}} #{{this.rank}} ({{this.cp}}CP Lvl. {{this.levelWithCap}})
 {{#getPowerUpCost ../level this.level}}{{{getEmoji 'stardust'}}}{{addCommas stardust}} & {{{getEmoji 'rarecandy'}}}{{candy}}{{#compare xlCandy '>' 0}} {{{getEmoji 'rarecandyxl'}}} {{xlCandy}}{{/compare}}{{/getPowerUpCost}}
-[PvP IVs Rank](https://pvpivs.com/?mon={{nameEng}}&r=10&cp=1500&max={{cap}}&IVs={{../atk}}_{{../def}}_{{../sta}}) | [Pvpoke Rank](https://pvpoke.com/rankings/all/1500/overall/{{lowercase this.nameEng}}/)
+[PvP IVs Rank](https://pvpivs.com/?mon={{replace this.fullNameEng ' ' '_'}}&r=10&cp=1500&max={{cap}}&IVs={{../atk}}_{{../def}}_{{../sta}}) | [Pvpoke Rank](https://pvpoke.com/rankings/all/1500/overall/{{replace (lowercase this.fullNameEng) ' ' '_'}}/)
 {{/compare}}{{/if}}{{/each}}{{#each pvpUltra}}{{#if this.rank}}{{#compare this.rank '<=' ../pvpUserRanking}}
 {{{getEmoji 'ultra-league'}}}{{this.fullName}} #{{this.rank}} ({{this.cp}}CP Lvl. {{this.levelWithCap}})
 {{#getPowerUpCost ../level this.level}}{{{getEmoji 'stardust'}}}{{addCommas stardust}} & {{{getEmoji 'rarecandy'}}}{{candy}}{{#compare xlCandy '>' 0}} {{{getEmoji 'rarecandyxl'}}} {{xlCandy}}{{/compare}}{{/getPowerUpCost}}
-[PvP IVs Rank](https://pvpivs.com/?mon={{nameEng}}&r=10&cp=2500&max={{cap}}&IVs={{../atk}}_{{../def}}_{{../sta}}) | [Pvpoke Rank](https://pvpoke.com/rankings/all/2500/overall/{{lowercase this.nameEng}}/)
+[PvP IVs Rank](https://pvpivs.com/?mon={{replace this.fullNameEng ' ' '_'}}&r=10&cp=2500&max={{cap}}&IVs={{../atk}}_{{../def}}_{{../sta}}) | [Pvpoke Rank](https://pvpoke.com/rankings/all/2500/overall/{{replace (lowercase this.fullNameEng) ' ' '_'}}/)
 {{/compare}}{{/if}}{{/each}}
 🗺️ [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}) | [ReactMap]({{{reactMapUrl}}})
