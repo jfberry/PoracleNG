@@ -85,19 +85,18 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 	// layer — otherwise {{#if rsvps}} would find the unfiltered raw array via the
 	// webhook fields fallback and render expired entries with mismatched field names.
 	//
-	// Unit-tolerance: Golbat's webhooks-reference PR documents `timeslot` as
-	// Unix seconds, but the legacy alerter and existing JS templates expect
-	// milliseconds. To work with either emitter, detect the unit by magnitude —
-	// any current epoch in ms is > 1e12, while seconds is < 1e11 — and
-	// normalize to seconds before filtering and rendering.
+	// Note on units: Golbat emits rsvps[].timeslot in **milliseconds** (despite
+	// what its webhooks-reference PR claims — see real traffic showing values
+	// like 1777407634000). Compare against UnixMilli(), divide by 1000 for the
+	// seconds-based template fields.
 	if len(raid.RSVPs) > 0 {
-		nowSec := time.Now().Unix()
+		nowMs := time.Now().UnixMilli()
 		var rsvpTimes []map[string]any
 		for _, r := range raid.RSVPs {
-			tsSec := normalizeTimeslotToSeconds(r.Timeslot)
-			if tsSec <= nowSec {
+			if r.Timeslot <= nowMs {
 				continue // skip past timeslots
 			}
+			tsSec := (r.Timeslot + 999) / 1000 // ceil to seconds (matching alerter Math.ceil)
 			rsvpTimes = append(rsvpTimes, map[string]any{
 				"timeslot":    tsSec,
 				"timeSlot":    tsSec,        // camelCase for DTS templates
@@ -105,7 +104,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 				"goingCount":  r.GoingCount, // camelCase for DTS templates
 				"maybe_count": r.MaybeCount,
 				"maybeCount":  r.MaybeCount, // camelCase for DTS templates
-				"time":        geo.FormatTime(tsSec, tz, e.TimeLayout),
+				"time":        geo.FormatTime(r.Timeslot/1000, tz, e.TimeLayout),
 			})
 		}
 		m["rsvps"] = rsvpTimes // nil if all expired — shadows raw webhook rsvps
@@ -311,18 +310,4 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 	}
 
 	return m
-}
-
-// normalizeTimeslotToSeconds returns a unix-seconds timestamp regardless of
-// whether the input is in seconds (per the Golbat webhooks-reference PR) or
-// milliseconds (legacy / older Golbat builds). Values >= 1e12 are treated as
-// milliseconds — that magnitude corresponds to ~2001-09-09 if interpreted as
-// seconds, so any plausible future raid timeslot in seconds is well below
-// the threshold while any plausible ms epoch is well above it.
-func normalizeTimeslotToSeconds(ts int64) int64 {
-	const msThreshold = int64(1e12)
-	if ts >= msThreshold {
-		return ts / 1000
-	}
-	return ts
 }
