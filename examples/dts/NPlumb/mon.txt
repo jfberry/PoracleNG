@@ -21,4 +21,4 @@
 {{#getPowerUpCost ../level this.level}}{{{getEmoji 'stardust'}}}{{addCommas stardust}} & {{{getEmoji 'rarecandy'}}}{{candy}}{{#compare xlCandy '>' 0}} {{{getEmoji 'rarecandyxl'}}} {{xlCandy}}{{/compare}}{{/getPowerUpCost}}
 [PvP IVs Rank](https://pvpivs.com/?mon={{replace this.fullNameEng ' ' '_'}}&r=10&cp=2500&max={{cap}}&IVs={{../atk}}_{{../def}}_{{../sta}}) | [Pvpoke Rank](https://pvpoke.com/rankings/all/2500/overall/{{replace (lowercase this.fullNameEng) ' ' '_'}}/)
 {{/compare}}{{/if}}{{/each}}
-🗺️ [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}) | [PoGoStoke]({{{reactMapUrl}}})
+🗺️ [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}) | [ReactMap]({{{reactMapUrl}}})
