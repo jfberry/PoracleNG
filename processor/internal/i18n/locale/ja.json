@@ -461,6 +461,7 @@
   "msg.dm_only": "コマンドは DM で実行してください",
   "msg.admin_no_distance": "警告: 距離未設定の管理コマンドを検出 - デフォルト距離を使用します",
   "msg.not_registered": "未登録です。先に登録してください。",
+  "msg.channel_admin_only": "Only channel admins can run commands in this channel. DM the bot with {0}yourcommand to manage your personal tracking.",
   "msg.backup.invalid_name": "有効なバックアップ名を使用してください（英数字・ハイフン・アンダースコアのみ）",
   "msg.backup.need_name": "バックアップには有効な名前が必要です（英数字・ハイフン・アンダースコアのみ）",
   "msg.restore.no_backups_dir": "バックアップディレクトリが見つかりません",
