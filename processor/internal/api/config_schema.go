@@ -386,6 +386,21 @@ var configSchema = []ConfigSection{
 			{Name: "concurrent_telegram_destinations", Type: "int", Default: 10, Description: "Concurrent Telegram sends per bot", Advanced: true},
 			{Name: "concurrent_discord_webhooks", Type: "int", Default: 10, Description: "Concurrent Discord webhook sends", Advanced: true},
 			{Name: "delivery_queue_size", Type: "int", Default: 200, Description: "Maximum buffered delivery jobs", Advanced: true},
+			{Name: "validation_timeout_ms", Type: "int", Default: 1500, Description: "External validation hook: per-call HTTP timeout in milliseconds", Advanced: true},
+			{Name: "validation_max_concurrent", Type: "int", Default: 16, Description: "External validation hook: cap on parallel validator calls per webhook event", Advanced: true},
+		},
+	},
+
+	// ---- validation ----
+	{
+		Name:  "validation",
+		Title: "External Validation Hook",
+		Fields: []ConfigFieldDef{
+			{Name: "url", Type: "string", Default: "", Description: "Validator endpoint POSTed once per matched user (after rate-limit pre-filter, before enrichment). Empty disables the hook entirely. See API.md \"Validation Hook\" for the request/response shape.", Advanced: true},
+			{Name: "fail_mode", Type: "select", Default: "open", Description: "Behaviour when the validator times out, errors, or returns non-2xx", Advanced: true, Options: []ConfigSelectOption{
+				{Value: "open", Label: "Open (allow)", Description: "Treat failures as success — alerts continue to flow if the validator is down (recommended for soft gating)"},
+				{Value: "closed", Label: "Closed (deny)", Description: "Treat failures as deny — alerts are dropped when the validator is unreachable (use for hard licensing where un-validated alerts are unacceptable)"},
+			}},
 		},
 	},
 

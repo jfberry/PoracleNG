@@ -474,36 +474,11 @@ max_age = 7                              # days to keep log files
 max_backups = 5                          # number of old log files to keep
 compress = true                          # gzip compress rotated log files
 
-# ---- External validation hook ----
-# Optional HTTP callback invoked once per matched user, after rate-limit
-# pre-filtering and before enrichment. The hook can approve or deny each
-# user; denied users are dropped from the alert and may be sent a
-# notification message specified by the hook (delivered as a bypass
-# message that ignores rate limits).
-#
-# Request body (POST application/json):
-#   {
-#     "human": { "id": "...", "type": "discord:user", "name": "..." },
-#     "areas": [ "Region/Area" ],
-#     "webhook_type": "raid",
-#     "webhook": { ... raw Golbat message ... }
-#   }
-#
-# Response: { "success": true }                                — allow
-#           { "success": false }                               — silent deny
-#           { "success": false, "failure_message": "..." }    — deny + tell user
-#
-# Leave url empty to disable the hook entirely (zero overhead).
+# External validation hook — see API.md "Validation Hook" for the wire
+# protocol and full configuration reference.
 [validation]
-url       = ""                            # validator endpoint; empty = disabled
-fail_mode = "open"                        # behaviour on timeout / network / 5xx:
-                                          #   "open"   — treat failures as allow (default, safe)
-                                          #   "closed" — treat failures as deny (high-trust use cases)
-
-# Tuning knobs for the validation hook live in [tuning] alongside other
-# processor tuning options:
-#   validation_timeout_ms     — per-call HTTP timeout (default 1500)
-#   validation_max_concurrent — cap on parallel calls per event (default 16)
+url       = ""        # validator endpoint; empty = disabled
+fail_mode = "open"    # "open" (allow on error) or "closed" (deny on error)
 
 # Raw webhook logging — logs raw webhook bodies received from Golbat
 # Useful for debugging, creating test data, and replaying webhooks

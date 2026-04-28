@@ -22,6 +22,7 @@ All API endpoints are available through the processor (default port 3030). The p
 - [Geocoding](#geocoding)
 - [Confirmation Messages](#confirmation-messages)
 - [Test](#test)
+- [Validation Hook](#validation-hook) — outbound POST sent by the processor to an operator-supplied URL
 
 ### Reload endpoints at a glance
 
@@ -1209,3 +1210,114 @@ Simulate a webhook for testing DTS templates. Used by the `!poracle-test` comman
   "target": {"id": "123", "name": "User", "type": "discord:user", "language": "en", "template": "1"}
 }
 ```
+
+## Validation Hook
+
+PoracleNG can call an operator-supplied URL once per matched user, after rate-limit pre-filtering and before enrichment. This is an **outbound** webhook from the processor — the operator implements the receiving endpoint. It exists so external services (subscription/licensing servers, A/B testing controllers, custom business logic) can approve or deny each user without touching PoracleNG's source.
+
+The hook is disabled by default. Configure it under `[validation]` (see [Configuration → validation](#config-editor)) — leave `url` empty to skip the call entirely (zero overhead).
+
+### Configuration
+
+| Setting | Default | Description |
+|---|---|---|
+| `[validation] url` | `""` | Endpoint POSTed once per matched user. Empty disables the hook. |
+| `[validation] fail_mode` | `"open"` | `"open"` allows on timeout/error/non-2xx (safe default — your validator going down doesn't take alerts down with it). `"closed"` denies on the same conditions (use for hard licensing where un-validated alerts are unacceptable). |
+| `[tuning] validation_timeout_ms` | `1500` | Per-call HTTP timeout in milliseconds. |
+| `[tuning] validation_max_concurrent` | `16` | Maximum parallel validator calls per webhook event. The processor fans out matched users under a semaphore at this size. |
+
+### Request
+
+```
+POST <url>
+Content-Type: application/json
+```
+
+```json
+{
+  "human": {
+    "id":   "123456789012345678",
+    "type": "discord:user",
+    "name": "Alice"
+  },
+  "areas":        ["SanFrancisco/Downtown", "Oakland/Lake"],
+  "webhook_type": "raid",
+  "webhook":      { "gym_id": "...", "level": 5, ... }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `human.id` | string | The matched destination's primary key (Discord user/channel/webhook id, Telegram user/chat id). |
+| `human.type` | string | `discord:user`, `discord:channel`, `discord:webhook`, `telegram:user`, `telegram:channel`, `telegram:group`. |
+| `human.name` | string | Friendly name from the `humans` row. |
+| `areas` | string[] | Geofence area names containing the event's coordinates. Same set the matcher used for area-overlap checks (case as configured in your geofences, not lower-cased). |
+| `webhook_type` | string | One of `pokemon`, `raid`, `egg`, `quest`, `pokestop`, `invasion`, `nest`, `gym`, `fort_update`, `max_battle`. |
+| `webhook` | object | The original Golbat message verbatim. Useful when the validator's decision depends on event details (raid level, pokemon IV, etc.). |
+
+### Response
+
+`200 OK` with JSON. Anything else is treated according to `fail_mode`.
+
+| Body | Effect |
+|---|---|
+| `{"success": true}` | Allow — the user proceeds to enrichment / render / delivery. |
+| `{"success": false}` | Silent deny — the user is dropped from the alert. No notification is sent. |
+| `{"success": false, "failure_message": "Subscription expired"}` | Deny + notify — the user is dropped, AND the `failure_message` is delivered to them as a single bypass message (skips the rate-limit budget so the user always sees the explanation). |
+
+The `failure_message` text is delivered verbatim. PoracleNG does **not** translate or template it — the validator owns the wording (and any localisation, if needed).
+
+### Failure modes
+
+| Outcome | `fail_mode = "open"` (default) | `fail_mode = "closed"` |
+|---|---|---|
+| HTTP timeout (exceeded `validation_timeout_ms`) | Allow | Deny |
+| Network error | Allow | Deny |
+| Non-2xx response | Allow | Deny |
+| Malformed JSON / missing `success` field | Allow | Deny |
+
+A denied user produced by `fail_mode = "closed"` does **not** receive a `failure_message` (there's nothing to deliver — the validator wasn't reachable).
+
+### Worked example
+
+Tracking system with a paid tier. Free users get raid alerts only; paid users get everything. The validator endpoint is `https://license.example.com/poracle/validate` and configured with `fail_mode = "open"` so a license-server outage doesn't take the bot down.
+
+```python
+# Pseudocode for the validator endpoint
+def handle(req):
+    user = lookup_subscription(req["human"]["id"])
+    if user.tier == "paid":
+        return {"success": True}
+    if req["webhook_type"] == "raid":
+        return {"success": True}                # free tier gets raids
+    return {                                    # everything else denied
+        "success": False,
+        "failure_message": (
+            "Pokemon and quest alerts are paid-tier only. "
+            "Upgrade at example.com/poracle to unlock all alert types."
+        ),
+    }
+```
+
+### Pipeline ordering
+
+Per matched user, in this order:
+
+1. **Match** (against tracking rules in memory)
+2. **Rate-limit pre-filter** (skip users whose destination is over its limit)
+3. **Type-specific filter** (raid: RSVP preference; etc.)
+4. **Validation hook** ← this endpoint
+5. **Enrichment** (game data, translations, maps, geocoding)
+6. **DTS render**
+7. **Delivery**
+
+The validator runs after the in-process filters so denied users don't burn validator load when they would have been dropped anyway.
+
+### Metrics
+
+| Prometheus metric | Description |
+|---|---|
+| `poracle_processor_validation_total{result="allow"}` | Count of allowed users (200 + `success: true`). |
+| `poracle_processor_validation_total{result="deny"}` | Count of denied users (200 + `success: false`, silent + with-message combined). |
+| `poracle_processor_validation_total{result="error_<reason>"}` | Count of failures by reason: `http_error` (network / timeout), `status_<code>` (non-2xx), `decode_error` (malformed body), `marshal_error`, `build_error`. The error counter is incremented regardless of `fail_mode`; whether the user was allowed or denied as a result is determined by `fail_mode` and is **not** separately counted under `allow` / `deny`. |
+| `poracle_processor_validation_seconds` | Latency histogram per call. |
