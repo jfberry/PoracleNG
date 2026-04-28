@@ -135,8 +135,9 @@ type LocaleConfig struct {
 	TimeFormat    string `toml:"timeformat"`
 	Time          string `toml:"time"`
 	Date          string `toml:"date"`
-	AddressFormat string `toml:"address_format"`
-	Language      string `toml:"language"` // alt language for DTS helpers (pokemonNameAlt, moveNameAlt, etc.) — default "en"
+	AddressFormat         string `toml:"address_format"`
+	AddressIncludeCountry bool   `toml:"address_include_country"` // see config.example.toml for defaults/rationale
+	Language              string `toml:"language"`                // alt language for DTS helpers — default "en"
 }
 
 type LoggingConfig struct {
@@ -498,8 +499,8 @@ type WebhookLoggingConfig struct {
 // and address geocoding.
 type GeocodingConfig struct {
 	// Address geocoding provider
-	Provider     string   `toml:"provider"`      // "none", "nominatim", "google"
-	ProviderURL  string   `toml:"provider_url"`  // nominatim URL
+	Provider     string   `toml:"provider"`      // "none", "nominatim", "photon", "google"
+	ProviderURL  string   `toml:"provider_url"`  // nominatim/photon URL
 	GeocodingKey []string `toml:"geocoding_key"` // google API keys
 	CacheDetail  int      `toml:"cache_detail"`  // decimal places for cache key rounding (default 3)
 	ForwardOnly  bool     `toml:"forward_only"`  // if true, skip reverse geocoding
@@ -636,11 +637,14 @@ func Load(baseDir string) (*Config, error) {
 			UltraRare:           0.01,
 		},
 		Locale: LocaleConfig{
-			TimeFormat:    "en-gb",
-			Time:          "LTS",
-			Date:          "L",
-			Language:      "en",
-			AddressFormat: "{{{streetName}}} {{streetNumber}}",
+			TimeFormat: "en-gb",
+			Time:       "LTS",
+			Date:       "L",
+			Language:   "en",
+			// AddressFormat left empty so {{addr}} gets the OpenCage-formatted
+			// FormattedAddress straight from the provider — the country-
+			// idiomatic default is what most operators want. Operators who
+			// need a specific shape override in config.toml.
 		},
 		Weather: WeatherConfig{
 			ShowAlteredPokemonMaxCount: 10,

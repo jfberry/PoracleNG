@@ -12,14 +12,18 @@ import (
 
 // Config holds all geocoder settings.
 type Config struct {
-	Provider      string   // "none", "nominatim", "google"
-	ProviderURL   string   // nominatim URL
+	Provider      string   // "none", "nominatim", "photon", "google"
+	ProviderURL   string   // nominatim/photon URL
 	GeocodingKeys []string // google API keys
 	CacheDetail   int      // decimal places for cache key rounding (default 3)
 	CachePath     string   // pogreb database path
 	ForwardOnly   bool     // if true, skip reverse geocoding
 	AddressFormat string   // template for addr field, e.g. "{{{streetName}}} {{streetNumber}}"
-	Timeout       int      // HTTP timeout in ms (default 5000)
+	// IncludeCountry controls whether ocfmt renders the country name into
+	// FormattedAddress. Defaults to false — the country tends to be noise
+	// for single-country operator audiences.
+	IncludeCountry bool
+	Timeout        int // HTTP timeout in ms (default 5000)
 
 	// Circuit breaker
 	FailureThreshold int // consecutive errors before circuit opens (default 5)
@@ -36,7 +40,8 @@ type Geocoder struct {
 	provider Provider
 	cache    *Cache
 	config   Config
-	sem      chan struct{} // concurrency limiter
+	addrTmpl *AddressTemplate // compiled once from config.AddressFormat
+	sem      chan struct{}    // concurrency limiter
 
 	// Circuit breaker state
 	consecutiveErrors   int
@@ -73,7 +78,9 @@ func New(config Config) (*Geocoder, error) {
 	var provider Provider
 	switch config.Provider {
 	case "nominatim":
-		provider = NewNominatim(config.ProviderURL, timeout)
+		provider = NewNominatim(config.ProviderURL, timeout, config.IncludeCountry)
+	case "photon":
+		provider = NewPhoton(config.ProviderURL, timeout, config.IncludeCountry)
 	case "google":
 		provider = NewGoogle(config.GeocodingKeys, timeout)
 	default:
@@ -90,10 +97,16 @@ func New(config Config) (*Geocoder, error) {
 		}
 	}
 
+	addrTmpl, err := CompileAddressTemplate(config.AddressFormat)
+	if err != nil {
+		log.Warnf("Geocoder: %s — falling back to formattedAddress", err)
+	}
+
 	return &Geocoder{
 		provider: provider,
 		cache:    cache,
 		config:   config,
+		addrTmpl: addrTmpl,
 		sem:      make(chan struct{}, config.Concurrency),
 	}, nil
 }
@@ -177,9 +190,10 @@ func (g *Geocoder) GetAddress(lat, lon float64) *Address {
 	g.statTotalMs.Add(duration.Milliseconds())
 	metrics.GeocodeTotal.WithLabelValues("success").Inc()
 
-	// Add flag and formatted address
+	// Add flag and formatted address (template rendered via raymond so
+	// operators get {{#if}}/{{#unless}}/helpers for conditional layout).
 	addr.Flag = CountryFlag(addr.CountryCode)
-	addr.Addr = FormatAddress(g.config.AddressFormat, *addr)
+	addr.Addr = g.addrTmpl.Render(*addr)
 
 	log.Debugf("Geocode %.4f,%.4f → street=%q number=%q city=%q addr=%q (%dms)",
 		lat, lon, addr.StreetName, addr.StreetNumber, addr.City, addr.Addr, duration.Milliseconds())

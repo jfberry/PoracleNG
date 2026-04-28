@@ -113,8 +113,42 @@ strict_locations = false
 timeformat = "en-gb"
 time = "LTS"
 date = "L"
-# address_format - how an address is constructed into the {{addr}} tag
-address_format = "{{{streetName}}} {{streetNumber}}"
+# address_format - Handlebars template used to build the {{addr}} tag from
+# the reverse-geocode result. Compiled once at startup; rendered per address.
+# Available fields (all providers):
+#   formattedAddress  - country-idiomatic string from OpenCage templates
+#   displayName       - the provider's own formatted string (Nominatim only)
+#   streetName, streetNumber, suburb, neighbourhood, city, town, village,
+#   county, state, zipcode, country, countryCode, flag
+#
+# Helpers (in addition to every helper DTS templates have):
+#   {{coalesce a b c}}       - first non-empty argument
+#   {{compactAddress}}       - exact "Mitte: Friedrichstrasse 42, Berlin" /
+#                              "Springfield: Main Street 1" layout (the
+#                              PoracleJS/Photon compact format)
+#
+# Examples:
+#   address_format = ""
+#       Empty — skips template rendering entirely and uses the OpenCage
+#       country-idiomatic formattedAddress directly. Recommended default
+#       for new installs.
+#   address_format = "{{{streetName}}} {{streetNumber}}"
+#       Just the street line (the previous shipped default).
+#   address_format = "{{{formattedAddress}}}"
+#       Full country-idiomatic address (e.g. "Unter den Linden 1, 10117 Berlin").
+#   address_format = "{{{displayName}}}"
+#       Nominatim's original display_name layout, for operators migrating
+#       from older PoracleJS installs who relied on that shape.
+#   address_format = "{{compactAddress}}"
+#       Exact equivalent of the PoracleJS/Photon compact format —
+#       "Mitte: Friedrichstrasse 42, Berlin" when suburb is present,
+#       "Springfield: Main Street 1" when only city is known.
+address_format = ""
+# address_include_country controls whether the country name trails the
+# OpenCage-formatted {{{formattedAddress}}}. Defaults to false because most
+# operators serve a single country and the suffix is noise. Set true for
+# multi-country audiences.
+address_include_country = false
 # language - secondary language used for 'alt' translation in DTS; useful for
 #   retrieving english language detail for web links
 language = "en"
@@ -294,9 +328,15 @@ register_on_start = false                # whether auto registration is attempte
 
 [geocoding]
 # provider - address lookups: 'none', 'nominatim' (recommended, see
-#   https://github.com/mediagis/nominatim-docker) or 'google'
+#   https://github.com/mediagis/nominatim-docker), 'photon'
+#   (https://github.com/komoot/photon), or 'google'
 provider = "none"
-provider_url = ""
+provider_url = ""                               # nominatim or photon URL, e.g. "https://photon.example.com"
+# formattedAddress is always populated using OpenCage country-specific
+# templates (https://github.com/OpenCageData/address-formatting). Use
+# address_format below to shape the final {{addr}} field — e.g. set it to
+# "{{{formattedAddress}}}" for the country-idiomatic string, or build your
+# own template like "{{{streetName}}} {{streetNumber}}, {{{city}}}".
 forward_only = false                     # when true, disable reverse geocoding lookup
 cache_detail = 3                         # decimal places of lon/lat for caching (3 or 4 for 100x more detail)
 # Styles for different times of day using tileservercache

@@ -5,8 +5,16 @@
 package geocoding
 
 // Address holds reverse geocode result fields matching the alerter's format.
+//
+// FormattedAddress is populated by every provider using OpenCage country-
+// specific templates (via the ocfmt package), so it gives the same country-
+// idiomatic layout regardless of which provider is configured. DisplayName
+// carries the provider's own pre-formatted string when it has one — today
+// that's Nominatim's display_name — so users who preferred the original
+// Nominatim layout can set address_format = "{{{displayName}}}".
 type Address struct {
 	FormattedAddress string  `json:"formattedAddress"`
+	DisplayName      string  `json:"displayName"`
 	Country          string  `json:"country"`
 	CountryCode      string  `json:"countryCode"`
 	State            string  `json:"state"`
@@ -15,6 +23,7 @@ type Address struct {
 	StreetName       string  `json:"streetName"`
 	StreetNumber     string  `json:"streetNumber"`
 	Neighbourhood    string  `json:"neighbourhood"`
+	County           string  `json:"county"`
 	Suburb           string  `json:"suburb"`
 	Town             string  `json:"town"`
 	Village          string  `json:"village"`
