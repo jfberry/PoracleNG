@@ -117,13 +117,26 @@ func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd s
 		userType = bot.TypeTelegramUser
 	}
 
-	// Build community membership
-	var communities []string
-	var restrictions []string
+	// Build community membership.
+	// New users get an explicit empty restriction list (not nil) so
+	// area_security applies to them: the API's NULL-vs-[]-vs-set
+	// distinction means nil = "no restriction / full access" — that's
+	// the path channels and webhooks (created via !channel add /
+	// !webhook add) use, and we must not put regular users on it. An
+	// empty non-nil slice round-trips to DB '[]', which means
+	// "restriction set, no areas yet" — the right starting state for a
+	// user who hasn't been reconciled into a community yet.
+	communities := []string{}
+	restrictions := []string{}
 	if communityToAdd != "" {
 		communities = []string{communityToAdd}
 		restrictions = bot.CalculateLocationRestrictions(ctx.Config, communities)
 	}
+	// TODO: trigger ReconcileSingleUser here so a freshly-registered
+	// user's roles populate community_membership / area_restriction
+	// immediately rather than waiting for the next periodic
+	// reconciliation cycle. Needs a hook from bot/commands into
+	// discordbot/telegrambot — out of scope for this change.
 
 	human := &store.Human{
 		ID:                  ctx.UserID,
