@@ -42,6 +42,7 @@
   "tracking.form_fmt": "forme: {0}",
   "tracking.size_fmt": "taille: {0}-{1}",
   "tracking.rarity_fmt": "rareté: {0}-{1}",
+  "tracking.weight_fmt": "weight: {0}-{1}g ⚠️ legacy filter — weight is no longer reliable; use untrack id:N to remove this rule",
   "tracking.gender_fmt": "sexe: {0}",
   "tracking.min_time_fmt": "minimum time: {0}s",
   "tracking.pvp_ranking": "classement PVP:",
