@@ -550,3 +550,21 @@ func TestLayeredView_WeatherChangeAliases(t *testing.T) {
 		assert.Equalf(t, tc.want, v, "alias %q", tc.alias)
 	}
 }
+
+// TestLayeredView_GymUrlAliasFromWebhook covers the gym_details photo URL:
+// the gym webhook ships it as `url`, the gym alias table maps `gymUrl` →
+// `url`, and the value flows through the raw-webhook fallback layer.
+// Regression guard for the GymWebhook.URL field that was missing from
+// the struct until the webhook's `url` field was wired up.
+func TestLayeredView_GymUrlAliasFromWebhook(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.templateType = "gym"
+		o.base = map[string]any{}
+		o.webhook = map[string]any{
+			"url": "https://lh3.googleusercontent.com/abc123",
+		}
+	})
+	v, ok := lv.GetField("gymUrl")
+	require.True(t, ok)
+	assert.Equal(t, "https://lh3.googleusercontent.com/abc123", v)
+}

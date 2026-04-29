@@ -259,10 +259,17 @@ type LureWebhook struct {
 }
 
 // GymWebhook mirrors Golbat's gym/gym_details webhook message.
+//
+// The URL field is the gym photo URL (Niantic CDN). Per the Golbat
+// webhooks-reference, gym_details emits this as `url` (not `gym_url`,
+// which is the field name on the raid envelope). Templates reach it via
+// the `gymUrl` alias on the gym template type — see internal/dts/view.go
+// typeAliases["gym"].
 type GymWebhook struct {
 	GymID          string   `json:"gym_id"`
 	ID             string   `json:"id"`
 	Name           string   `json:"name"`
+	URL            string   `json:"url"`
 	Latitude       float64  `json:"latitude"`
 	Longitude      float64  `json:"longitude"`
 	TeamID         int      `json:"team_id"`

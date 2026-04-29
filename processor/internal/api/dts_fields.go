@@ -297,6 +297,7 @@ var nestFields = []FieldDef{
 
 var gymFields = []FieldDef{
 	{Name: "gymName", Type: "string", Description: "Gym name", Category: "gym", Preferred: true},
+	{Name: "gymUrl", Type: "string", Description: "Gym photo URL (Niantic CDN)", Category: "gym"},
 	{Name: "teamName", Type: "string", Description: "Current team name", Category: "gym", Preferred: true},
 	{Name: "teamEmoji", Type: "string", Description: "Team emoji", Category: "gym"},
 	{Name: "gymColor", Type: "string", Description: "Team color hex", Category: "gym"},
