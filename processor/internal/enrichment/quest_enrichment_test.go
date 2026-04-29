@@ -268,3 +268,136 @@ func TestQuestTranslateRewardString(t *testing.T) {
 		t.Errorf("rewardString = %q, want parts joined with %q", rewardString, ", ")
 	}
 }
+
+// --- Condition translation tests ---
+
+// Real captured webhook payload — type 8 (Throw Type) with throw_type_id 12 (Excellent)
+// expected to produce "Excellent Throw" via quest_condition_8_formatted.
+func TestQuestTranslateConditionThrowType(t *testing.T) {
+	gd := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{}}
+	e := newQuestEnricher(t, gd, map[string]map[string]string{
+		"en": {
+			"quest_condition_8":           "Throw Type",
+			"quest_condition_8_formatted": "%{throw_type} Throw",
+			"throw_type_12":               "Excellent",
+		},
+	})
+	quest := &webhook.QuestWebhook{
+		Conditions: []webhook.QuestCondition{
+			{Type: 8, Info: map[string]any{"throw_type_id": float64(12), "hit": false}},
+		},
+	}
+	m := e.QuestTranslate(map[string]any{}, quest, nil, "en")
+	if got := m["conditionString"]; got != "Excellent Throw" {
+		t.Errorf("conditionString = %q, want %q", got, "Excellent Throw")
+	}
+	list, _ := m["conditionList"].([]map[string]any)
+	if len(list) != 1 || list[0]["formatted"] != "Excellent Throw" || list[0]["name"] != "Throw Type" {
+		t.Errorf("conditionList[0] = %+v", list)
+	}
+}
+
+// Captured shape — type 14 (In a Row) with a "hit:true" payload but no
+// throw_type_id. Should fall back to the bare name rather than emit the
+// raw "%{throw_type}" placeholder.
+func TestQuestTranslateConditionInARowFallback(t *testing.T) {
+	gd := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{}}
+	e := newQuestEnricher(t, gd, map[string]map[string]string{
+		"en": {
+			"quest_condition_14":           "In a Row",
+			"quest_condition_14_formatted": "%{throw_type} Throw In a Row",
+		},
+	})
+	quest := &webhook.QuestWebhook{
+		Conditions: []webhook.QuestCondition{
+			{Type: 14, Info: map[string]any{"hit": true}},
+		},
+	}
+	m := e.QuestTranslate(map[string]any{}, quest, nil, "en")
+	if got := m["conditionString"]; got != "In a Row" {
+		t.Errorf("conditionString = %q, want bare-name fallback %q", got, "In a Row")
+	}
+}
+
+// Captured shape — type 1 (Pokemon Type) with pokemon_type_ids list.
+// Verifies array placeholders translate via poke_type_{id} and join with
+// ", ".
+func TestQuestTranslateConditionPokemonType(t *testing.T) {
+	gd := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{}}
+	e := newQuestEnricher(t, gd, map[string]map[string]string{
+		"en": {
+			"quest_condition_1":           "Pokemon Type",
+			"quest_condition_1_formatted": "Type(s): %{types}",
+			"poke_type_10":                "Fire",
+			"poke_type_11":                "Water",
+		},
+	})
+	quest := &webhook.QuestWebhook{
+		Conditions: []webhook.QuestCondition{
+			{Type: 1, Info: map[string]any{"pokemon_type_ids": []any{float64(10), float64(11)}}},
+		},
+	}
+	m := e.QuestTranslate(map[string]any{}, quest, nil, "en")
+	if got := m["conditionString"]; got != "Type(s): Fire, Water" {
+		t.Errorf("conditionString = %q, want %q", got, "Type(s): Fire, Water")
+	}
+}
+
+// Captured shape — type 27 (Invasion Category) with character_category_ids.
+// "Catch a Pokemon during a Team Rocket Invasion" — category 2 = Grunt.
+func TestQuestTranslateConditionInvasion(t *testing.T) {
+	gd := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{}}
+	e := newQuestEnricher(t, gd, map[string]map[string]string{
+		"en": {
+			"quest_condition_27":           "Invasion Category",
+			"quest_condition_27_formatted": "Invasion Category(s): %{categories}",
+			"character_category_2":         "Grunt",
+		},
+	})
+	quest := &webhook.QuestWebhook{
+		Conditions: []webhook.QuestCondition{
+			{Type: 27, Info: map[string]any{"character_category_ids": []any{float64(2)}}},
+		},
+	}
+	m := e.QuestTranslate(map[string]any{}, quest, nil, "en")
+	if got := m["conditionString"]; got != "Invasion Category(s): Grunt" {
+		t.Errorf("conditionString = %q, want %q", got, "Invasion Category(s): Grunt")
+	}
+}
+
+// Multiple conditions on a single quest — verify they join in order with ", ".
+func TestQuestTranslateConditionMultiple(t *testing.T) {
+	gd := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{}}
+	e := newQuestEnricher(t, gd, map[string]map[string]string{
+		"en": {
+			"quest_condition_8":            "Throw Type",
+			"quest_condition_8_formatted":  "%{throw_type} Throw",
+			"quest_condition_15":           "Curve Ball",
+			"throw_type_11":                "Great",
+		},
+	})
+	quest := &webhook.QuestWebhook{
+		Conditions: []webhook.QuestCondition{
+			{Type: 8, Info: map[string]any{"throw_type_id": float64(11), "hit": false}},
+			{Type: 15, Info: map[string]any{}},
+		},
+	}
+	m := e.QuestTranslate(map[string]any{}, quest, nil, "en")
+	if got := m["conditionString"]; got != "Great Throw, Curve Ball" {
+		t.Errorf("conditionString = %q, want %q", got, "Great Throw, Curve Ball")
+	}
+}
+
+// Quests without conditions should not surface conditionString / conditionList.
+func TestQuestTranslateConditionEmpty(t *testing.T) {
+	gd := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{}}
+	e := newQuestEnricher(t, gd, map[string]map[string]string{"en": {}})
+	quest := &webhook.QuestWebhook{}
+	m := e.QuestTranslate(map[string]any{}, quest, nil, "en")
+	if _, ok := m["conditionString"]; ok {
+		t.Errorf("conditionString should be absent when no conditions")
+	}
+	if _, ok := m["conditionList"]; ok {
+		t.Errorf("conditionList should be absent when no conditions")
+	}
+}

@@ -249,6 +249,10 @@ var questFields = []FieldDef{
 	{Name: "xlCandyAmount", Type: "int", Description: "XL candy amount", Category: "quest"},
 	{Name: "xlCandyMonsterName", Type: "string", Description: "XL candy pokemon name", Category: "quest"},
 	{Name: "shiny", Type: "bool", Description: "Reward is shiny", Category: "quest"},
+	{Name: "conditionString", Type: "string", Description: "Quest completion conditions, joined (e.g. 'Excellent Throw, Curve Ball')", Category: "quest"},
+	{Name: "conditionStringEng", Type: "string", Description: "English copy of conditionString", Category: "quest"},
+	{Name: "conditionList", Type: "array", Description: "Quest conditions as objects with type/name/formatted", Category: "quest"},
+	{Name: "conditionListEng", Type: "array", Description: "English copy of conditionList", Category: "quest"},
 }
 
 var invasionFields = []FieldDef{

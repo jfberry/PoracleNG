@@ -237,20 +237,31 @@ type InvasionLineupEntry struct {
 // envelopes which use `url`). Templates reach it via the `pokestopUrl`
 // alias on the quest type.
 type QuestWebhook struct {
-	PokestopID string        `json:"pokestop_id"`
-	Name       string        `json:"pokestop_name"`
-	URL        string        `json:"pokestop_url"`
-	Latitude   float64       `json:"latitude"`
-	Longitude  float64       `json:"longitude"`
-	Title      string        `json:"title"`
-	Target     int           `json:"target"`
-	QuestType  int           `json:"type"`
-	Template   string        `json:"template"`
-	Rewards    []QuestReward `json:"rewards"`
+	PokestopID string           `json:"pokestop_id"`
+	Name       string           `json:"pokestop_name"`
+	URL        string           `json:"pokestop_url"`
+	Latitude   float64          `json:"latitude"`
+	Longitude  float64          `json:"longitude"`
+	Title      string           `json:"title"`
+	Target     int              `json:"target"`
+	QuestType  int              `json:"type"`
+	Template   string           `json:"template"`
+	Rewards    []QuestReward    `json:"rewards"`
+	Conditions []QuestCondition `json:"conditions"`
 }
 
 // QuestReward represents a single quest reward.
 type QuestReward struct {
+	Type int            `json:"type"`
+	Info map[string]any `json:"info"`
+}
+
+// QuestCondition represents a single quest completion requirement
+// (e.g. "throw a curveball", "catch a fire-type pokemon"). Type maps
+// to a `quest_condition_{type}` translation key; Info carries the
+// payload referenced by the matching `quest_condition_{type}_formatted`
+// placeholder (e.g. throw_type_id, pokemon_type_ids).
+type QuestCondition struct {
 	Type int            `json:"type"`
 	Info map[string]any `json:"info"`
 }

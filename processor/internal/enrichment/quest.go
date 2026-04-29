@@ -9,6 +9,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -306,7 +307,162 @@ func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebho
 		}
 	}
 
+	// Quest completion conditions (e.g. "Curve Ball", "Excellent Throw",
+	// "Catch a Fire-type Pokemon"). Translation keys ship with
+	// pogo-translations gamelocale: `quest_condition_{type}` for the bare
+	// label and `quest_condition_{type}_formatted` for the variant with a
+	// payload placeholder like `%{throw_type}` or `%{types}`.
+	if len(quest.Conditions) > 0 {
+		condList := make([]map[string]any, 0, len(quest.Conditions))
+		condListEng := make([]map[string]any, 0, len(quest.Conditions))
+		var condTexts, condTextsEng []string
+		for _, c := range quest.Conditions {
+			text, name := translateQuestCondition(tr, gd, c)
+			textEng, nameEng := translateQuestCondition(enTr, gd, c)
+			condList = append(condList, map[string]any{
+				"type":      c.Type,
+				"name":      name,
+				"formatted": text,
+			})
+			condListEng = append(condListEng, map[string]any{
+				"type":      c.Type,
+				"name":      nameEng,
+				"formatted": textEng,
+			})
+			if text != "" {
+				condTexts = append(condTexts, text)
+			}
+			if textEng != "" {
+				condTextsEng = append(condTextsEng, textEng)
+			}
+		}
+		m["conditionList"] = condList
+		m["conditionListEng"] = condListEng
+		m["conditionString"] = strings.Join(condTexts, ", ")
+		m["conditionStringEng"] = strings.Join(condTextsEng, ", ")
+	}
+
 	return m
+}
+
+// translateQuestCondition returns the formatted ("Curve Ball Throw") and
+// bare ("Throw Type") translations for a quest condition. The formatted
+// variant falls back to the bare name when the payload is missing or the
+// `_formatted` key is absent for that locale.
+func translateQuestCondition(tr *i18n.Translator, gd *gamedata.GameData, c webhook.QuestCondition) (formatted, name string) {
+	bareKey := fmt.Sprintf("quest_condition_%d", c.Type)
+	name = tr.T(bareKey)
+
+	args := buildConditionPlaceholders(tr, gd, c)
+	if len(args) > 0 {
+		formattedKey := bareKey + "_formatted"
+		if raw := tr.T(formattedKey); raw != formattedKey {
+			formatted = i18n.FormatNamed(raw, args)
+			// If a placeholder couldn't be resolved (still contains %{...})
+			// fall back to the bare name to avoid surfacing raw template
+			// markers to the user.
+			if strings.Contains(formatted, "%{") {
+				formatted = name
+			}
+			return formatted, name
+		}
+	}
+	return name, name
+}
+
+// buildConditionPlaceholders maps a condition's `info` payload to the
+// named placeholders referenced by its `_formatted` translation. Returns
+// nil when the payload doesn't carry the required IDs (e.g. type 14 with
+// only `{"hit": true}` — falls through to the bare name).
+func buildConditionPlaceholders(tr *i18n.Translator, gd *gamedata.GameData, c webhook.QuestCondition) map[string]string {
+	if len(c.Info) == 0 {
+		return nil
+	}
+
+	switch c.Type {
+	case 1: // Pokemon Type
+		if names := translateIDList(tr, c.Info["pokemon_type_ids"], gamedata.TypeTranslationKey); names != "" {
+			return map[string]string{"types": names}
+		}
+	case 2: // Pokemon Category — webhook payload is pokemon_ids
+		if names := translateIDList(tr, c.Info["pokemon_ids"], gamedata.PokemonTranslationKey); names != "" {
+			return map[string]string{"pokemon": names}
+		}
+	case 7: // Raid Level
+		if names := joinIDList(c.Info["raid_levels"]); names != "" {
+			return map[string]string{"levels": names}
+		}
+	case 8, 14: // Throw Type / Throw Type In a Row
+		if id := toInt(c.Info["throw_type_id"]); id > 0 {
+			return map[string]string{"throw_type": tr.T(fmt.Sprintf("throw_type_%d", id))}
+		}
+	case 11: // Item
+		if id := toInt(c.Info["item_id"]); id > 0 {
+			return map[string]string{"item": tr.T(gamedata.ItemTranslationKey(id))}
+		}
+	case 26: // Pokemon Alignment
+		if names := translateIDList(tr, c.Info["alignment_ids"], func(id int) string {
+			return fmt.Sprintf("alignment_%d", id)
+		}); names != "" {
+			return map[string]string{"alignments": names}
+		}
+	case 27: // Invasion Category
+		if names := translateIDList(tr, c.Info["character_category_ids"], func(id int) string {
+			return fmt.Sprintf("character_category_%d", id)
+		}); names != "" {
+			return map[string]string{"categories": names}
+		}
+	case 42: // Geotargeted POI Scan
+		if poi, ok := c.Info["poi"].(string); ok && poi != "" {
+			return map[string]string{"poi": poi}
+		}
+	case 43: // With Item Type
+		if names := translateIDList(tr, c.Info["pokemon_type_ids"], gamedata.TypeTranslationKey); names != "" {
+			return map[string]string{"types": names}
+		}
+	case 44: // Within Time (seconds)
+		if t := toInt(c.Info["time"]); t > 0 {
+			return map[string]string{"time": strconv.Itoa(t)}
+		}
+		if t := toInt(c.Info["seconds"]); t > 0 {
+			return map[string]string{"time": strconv.Itoa(t)}
+		}
+	}
+	_ = gd
+	return nil
+}
+
+// translateIDList takes an arbitrary `info` value (expected to be a
+// JSON-decoded number array), translates each ID via keyFn, and joins.
+// Empty / wrong-typed input returns "".
+func translateIDList(tr *i18n.Translator, v any, keyFn func(int) string) string {
+	ids, ok := v.([]any)
+	if !ok || len(ids) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(ids))
+	for _, raw := range ids {
+		if id := toInt(raw); id > 0 {
+			names = append(names, tr.T(keyFn(id)))
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// joinIDList comma-joins a JSON-decoded number array verbatim (used for
+// raid levels which don't have a translation, just a digit).
+func joinIDList(v any) string {
+	ids, ok := v.([]any)
+	if !ok || len(ids) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(ids))
+	for _, raw := range ids {
+		if id := toInt(raw); id > 0 {
+			parts = append(parts, strconv.Itoa(id))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // addQuestIconURLs resolves icon URLs based on the quest reward type.
