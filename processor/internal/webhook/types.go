@@ -248,6 +248,11 @@ type QuestWebhook struct {
 	Template   string           `json:"template"`
 	Rewards    []QuestReward    `json:"rewards"`
 	Conditions []QuestCondition `json:"conditions"`
+	// WithAR distinguishes a single stop's regular quest from its
+	// AR-required quest. The same stop can host both at the same time
+	// (separate objectives, separate rewards), so AR / non-AR firings
+	// must dedup independently — see buildQuestDedupKey.
+	WithAR bool `json:"with_ar"`
 }
 
 // QuestReward represents a single quest reward.
