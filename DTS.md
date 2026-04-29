@@ -464,6 +464,10 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are computed from hatch t
 | `questStringEng` | string | English quest objective |
 | `rewardString` | string | All rewards as text (translated) |
 | `rewardStringEng` | string | English rewards text |
+| `conditionString` | string | Comma-joined completion conditions, translated, e.g. "Excellent Throw, Curve Ball" |
+| `conditionStringEng` | string | English copy of `conditionString` |
+| `conditionList` | array | Per-condition objects: `{type, name, formatted}` where `name` is the bare label ("Throw Type") and `formatted` includes the payload ("Excellent Throw"). Falls back to bare name when the webhook payload doesn't carry the data needed for the formatted variant. |
+| `conditionListEng` | array | English copy of `conditionList` |
 | `dustAmount` | int | Stardust reward amount |
 | `itemAmount` | int | Item reward amount |
 | `energyAmount` | int | Mega energy amount (first reward) |
@@ -505,19 +509,6 @@ These are flat top-level strings, not nested under a `rewardData` object:
 | `items` | array | Item rewards: `{id, amount, name, nameEng}` |
 | `energyMonsters` | array | Mega energy rewards: `{pokemonId, amount, name, nameEng}` |
 | `candy` | array | Candy rewards: `{pokemonId, amount, name, nameEng}` |
-
-### Quest Conditions
-
-Quests carry a `conditions` array describing how the objective must be completed (e.g. "Curve Ball", "Excellent Throw", "Catch a Fire-type Pokemon"). Translation keys come from the bundled pogo-translations gamelocale.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `conditionString` | string | Comma-joined conditions, translated, e.g. "Excellent Throw, Curve Ball" |
-| `conditionStringEng` | string | English copy of `conditionString` |
-| `conditionList` | array | Per-condition objects: `{type, name, formatted}` where `name` is the bare label ("Throw Type") and `formatted` includes the payload ("Excellent Throw") |
-| `conditionListEng` | array | English copy of `conditionList` |
-
-Conditions whose webhook payload is missing the data needed for the formatted variant (e.g. type 14 with only `{"hit": true}`) fall back to the bare name to avoid surfacing raw `%{...}` placeholders.
 
 ---
 
