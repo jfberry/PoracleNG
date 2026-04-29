@@ -167,9 +167,8 @@ func (c *ScriptCommand) monsterToScript(ctx *bot.CommandContext, prefix string, 
 	if m.STA > 0 || m.MaxSTA != 15 {
 		parts = append(parts, fmt.Sprintf("sta:%d-%d", m.STA, m.MaxSTA))
 	}
-	if m.MinWeight > 0 || m.MaxWeight != 9000000 {
-		parts = append(parts, fmt.Sprintf("weight:%d-%d", m.MinWeight, m.MaxWeight))
-	}
+	// weight intentionally not exported — !track no longer accepts weight
+	// arguments, so re-importing the script would fail to parse "weight:".
 	if m.Gender != 0 {
 		switch m.Gender {
 		case 1:

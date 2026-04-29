@@ -81,6 +81,17 @@ func (g *Generator) MonsterRowText(tr *i18n.Translator, monster *db.MonsterTrack
 		s += " | " + tr.Tf("tracking.rarity_fmt", minRarityName, maxRarityName)
 	}
 
+	// Weight is a legacy filter: !track no longer accepts it because
+	// Golbat's weight field is unreliable, but existing rows with
+	// non-default values still suppress matches at match time. Surface
+	// them here so users can see why their old rule isn't firing and
+	// remove the rule via !untrack id:N. The DB stores grams
+	// (webhook kg × 1000) — display as the same integer the user
+	// originally typed at !track weight:N-M.
+	if monster.MinWeight > 0 || (monster.MaxWeight > 0 && monster.MaxWeight < 9000000) {
+		s += " | " + tr.Tf("tracking.weight_fmt", monster.MinWeight, monster.MaxWeight)
+	}
+
 	if monster.Gender != 0 {
 		genderEmoji := ""
 		if gi, ok := g.GD.Util.Genders[monster.Gender]; ok {

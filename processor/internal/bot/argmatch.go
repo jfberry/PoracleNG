@@ -295,7 +295,12 @@ var knownPrefixKeys = []string{
 	"arg.prefix.atk", "arg.prefix.maxatk",
 	"arg.prefix.def", "arg.prefix.maxdef",
 	"arg.prefix.sta", "arg.prefix.maxsta",
-	"arg.prefix.weight", "arg.prefix.maxweight",
+	// arg.prefix.weight / arg.prefix.maxweight are intentionally absent —
+	// !track no longer accepts weight filters because Golbat's weight
+	// field is observer-specific and reset to null on any display change
+	// (see Golbat webhooks-reference). Existing min_weight rows still
+	// filter at match time so old rules don't fire spuriously; new rules
+	// can't add weight constraints.
 	"arg.prefix.rarity", "arg.prefix.maxrarity",
 	"arg.prefix.size", "arg.prefix.maxsize",
 	"arg.prefix.d", "arg.prefix.t", "arg.prefix.gen", "arg.prefix.cap",
