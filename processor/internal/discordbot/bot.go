@@ -498,6 +498,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			TestProcessor: b.TestProcessor,
 			Registry:      b.Registry,
 			ReloadFunc:    b.ReloadFunc,
+			PostRegister:  b.postRegisterHook(),
 		}
 
 		// Populate delegated admin permissions
@@ -780,4 +781,20 @@ func (b *Bot) runReconciliation() {
 	rcfg := b.Cfg.Reconciliation.Discord
 	b.reconciliation.SyncDiscordRole(rcfg.RegisterNewUsers, rcfg.UpdateUserNames, rcfg.RemoveInvalidUsers)
 	b.reconciliation.SyncDiscordChannels(rcfg.UpdateChannelNames, rcfg.UpdateChannelNotes, rcfg.UnregisterMissingChannels)
+}
+
+// postRegisterHook returns the bot.CommandContext.PostRegister callback,
+// or nil if reconciliation isn't configured. Invoked by !poracle after a
+// successful registration so the new user's community_membership /
+// area_restriction get populated from current Discord roles immediately.
+// removeInvalidUsers is forced to false: the user we just created can't
+// be missing a role we haven't checked yet.
+func (b *Bot) postRegisterHook() func(string) {
+	if b.reconciliation == nil {
+		return nil
+	}
+	r := b.reconciliation
+	return func(userID string) {
+		go r.ReconcileSingleUser(userID, false)
+	}
 }

@@ -390,6 +390,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			TestProcessor: b.TestProcessor,
 			Registry:      b.Registry,
 			ReloadFunc:    b.ReloadFunc,
+			PostRegister:  b.postRegisterHook(),
 		}
 
 		// Populate delegated admin permissions
@@ -530,6 +531,27 @@ func (b *Bot) runReconciliation() {
 	rcfg := b.Cfg.Reconciliation.Telegram
 	b.reconciliation.SyncTelegramUsers(rcfg.UpdateUserNames, rcfg.RemoveInvalidUsers)
 	b.reconciliation.UpdateTelegramChannels()
+}
+
+// postRegisterHook returns the bot.CommandContext.PostRegister callback
+// for Telegram, or nil if reconciliation isn't configured. Invoked by
+// !poracle / /poracle so a freshly-registered user has their channel
+// memberships verified and area_restriction populated immediately
+// rather than waiting for the next periodic cycle. The user ID arrives
+// as a decimal string; SyncSingleUser takes int64 — silently skip if
+// the parse fails (shouldn't happen for real Telegram IDs).
+func (b *Bot) postRegisterHook() func(string) {
+	if b.reconciliation == nil {
+		return nil
+	}
+	r := b.reconciliation
+	return func(userID string) {
+		id, err := strconv.ParseInt(userID, 10, 64)
+		if err != nil {
+			return
+		}
+		go r.SyncSingleUser(id)
+	}
 }
 
 // handleTelegramCommand dispatches Telegram-specific commands that require the

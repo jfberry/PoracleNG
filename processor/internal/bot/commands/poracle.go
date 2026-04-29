@@ -132,12 +132,6 @@ func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd s
 		communities = []string{communityToAdd}
 		restrictions = bot.CalculateLocationRestrictions(ctx.Config, communities)
 	}
-	// TODO: trigger ReconcileSingleUser here so a freshly-registered
-	// user's roles populate community_membership / area_restriction
-	// immediately rather than waiting for the next periodic
-	// reconciliation cycle. Needs a hook from bot/commands into
-	// discordbot/telegrambot — out of scope for this change.
-
 	human := &store.Human{
 		ID:                  ctx.UserID,
 		Name:                ctx.UserName,
@@ -161,6 +155,17 @@ func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd s
 
 	ctx.TriggerReload()
 	log.Infof("poracle: %s registered as %s", ctx.UserName, userType)
+
+	// Kick off single-user reconciliation so the new human's
+	// community_membership / area_restriction get populated from their
+	// current roles or channel memberships immediately. The platform
+	// sets PostRegister to its async reconciliation hook; if
+	// reconciliation isn't configured it's nil and we skip — the user
+	// keeps the registration-channel community granted above (or the
+	// "[]" placeholder when no community context exists).
+	if ctx.PostRegister != nil {
+		ctx.PostRegister(ctx.UserID)
+	}
 
 	replies := []bot.Reply{{React: "✅"}}
 

@@ -138,6 +138,14 @@ type CommandContext struct {
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
 
+	// PostRegister, when set, is invoked after !poracle creates a new
+	// human row. The platform sets this to its single-user reconciliation
+	// hook so a freshly-registered user has their community_membership /
+	// area_restriction populated from current Discord roles or Telegram
+	// channel memberships immediately, rather than waiting for the next
+	// periodic sweep. nil when reconciliation isn't configured.
+	PostRegister func(userID string)
+
 	// languageHint from available_languages (set by bot when command uses a language variant)
 	languageHint string
 }
