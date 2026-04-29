@@ -318,7 +318,7 @@ var knownKeywordKeys = []string{
 	"arg.clean", "arg.edit", "arg.shiny", "arg.ex",
 	"arg.rsvp", "arg.no_rsvp", "arg.rsvp_only",
 	"arg.gmax",
-	"arg.pokestop", "arg.gym", "arg.location", "arg.new", "arg.removal", "arg.photo", "arg.include_empty",
+	"arg.pokestop", "arg.gym", "arg.station", "arg.location", "arg.new", "arg.removal", "arg.photo", "arg.name", "arg.description", "arg.include_empty",
 	"arg.stardust", "arg.energy", "arg.candy",
 	"arg.slot_changes", "arg.battle_changes",
 }

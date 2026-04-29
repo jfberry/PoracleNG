@@ -154,6 +154,52 @@ func TestFort_ChangeTypes(t *testing.T) {
 
 	rows, _ := ctx.Tracking.Forts.SelectByIDProfile("user1", 1)
 	require.Len(t, rows, 1)
-	assert.Contains(t, rows[0].ChangeTypes, "location")
-	assert.Contains(t, rows[0].ChangeTypes, "new")
+	// Stored as a JSON array — the matcher in matching/fort.go does
+	// json.Unmarshal on this, so the previous comma-separated format
+	// silently failed to match.
+	assert.Equal(t, `["location","new"]`, rows[0].ChangeTypes)
+}
+
+// TestFort_PhotoMapsToImageURL covers the bug where !fort photo stored
+// the literal "photo" but Golbat emits "image_url" — the matcher's
+// changeTypesMatch never paired them so photo-tracked rules never fired.
+func TestFort_PhotoMapsToImageURL(t *testing.T) {
+	ctx := fortCtx(t)
+	replies := runFort(t, ctx, "everything photo")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Forts.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, `["image_url"]`, rows[0].ChangeTypes,
+		"photo keyword must store image_url to match Golbat's edit_types")
+}
+
+// TestFort_NewKeywords covers the previously missing name / description
+// keywords (per Golbat webhooks-reference, edit_types can include both).
+func TestFort_NewKeywords(t *testing.T) {
+	ctx := fortCtx(t)
+	replies := runFort(t, ctx, "everything name description")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Forts.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, `["name","description"]`, rows[0].ChangeTypes)
+}
+
+// TestFort_Station covers the new station fort-type filter, exposing
+// fort-update events for max-battle stations to !fort tracking.
+func TestFort_Station(t *testing.T) {
+	ctx := fortCtx(t)
+	replies := runFort(t, ctx, "station")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Forts.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "station", rows[0].FortType)
 }
