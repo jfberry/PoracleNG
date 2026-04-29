@@ -259,7 +259,7 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | Field | Type | Description |
 |-------|------|-------------|
 | `encountered` | bool | Whether pokemon was encountered (has IV data) |
-| `seenType` | string | Encounter type from scanner (e.g. "wild", "pokestop", "encounter") |
+| `seenType` | string | Normalised encounter source. See [seenType values](#seentype-values). |
 | `cell_coords` | array | S2 cell vertices for cell spawns |
 | `generation` | int | Generation number |
 | `generationRoman` | string | Generation as Roman numeral (I, II, etc.) |
@@ -288,6 +288,26 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `pokestopName` | string | Nearby pokestop name (if applicable) |
 
 `distance`, `bearing`, `bearingEmoji`, `userDistanceTrack`, `userTrackDistance` are documented in Common Fields.
+
+### seenType values
+
+`{{seenType}}` is normalised from Golbat's raw `seen_type` (see Golbat's
+webhooks reference). Use it in templates to switch on how the pokemon was
+discovered — wild encounters carry IVs / weight / height, nearby spawns
+do not.
+
+| `seenType` | Source `seen_type` | Meaning |
+|---|---|---|
+| `cell` | `nearby_cell` | Seen on a cell's nearby list — location is the S2 cell centre, imprecise. Also returned for RDM-style scanners that report no spawn id and no fort id. |
+| `pokestop` | `nearby_stop` | Seen on a fort's nearby list — location is the fort's coordinates, imprecise. |
+| `wild` | `wild` | Seen in the wild feed — real spawn-point location, no IVs yet. |
+| `encounter` | `encounter` | Full encounter decoded — IVs, moves, weight, height, size, PVP all known. |
+| `lure` | `lure_wild` | Seen on a lure's map list (pre-encounter). No IVs yet. |
+| `lure_encounter` | `lure_encounter` | Full disk encounter decoded for a lure-spawned pokemon. |
+| `tappable` | `tappable_encounter`, `tappable_lure_encounter` | Full encounter decoded via `PROCESS_TAPPABLE` — overworld tappable objects (and their lured variant). Both Golbat sub-types collapse to a single value here so templates only need one switch arm. |
+
+Empty string is returned when no `seen_type` is supplied and the legacy
+RDM-style fallback can't infer one.
 
 ---
 
