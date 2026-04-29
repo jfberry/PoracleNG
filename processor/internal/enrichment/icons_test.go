@@ -199,7 +199,7 @@ func TestGymIconURLs_NilUicons(t *testing.T) {
 func TestInvasionIconURLs_RegularGrunt(t *testing.T) {
 	e := newTestEnricher()
 
-	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", 41, 0, 0, TileModeURL)
+	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", "", 41, 0, 0, TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -214,7 +214,7 @@ func TestInvasionIconURLs_EventInvasion(t *testing.T) {
 	e := newTestEnricher()
 
 	// Event invasion: gruntTypeID=0, displayType>=7 uses pokestop icon
-	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", 0, 7, 501, TileModeURL)
+	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", "", 0, 7, 501, TileModeURL)
 
 	imgUrl, ok := m["imgUrl"].(string)
 	if !ok || imgUrl == "" {
@@ -230,7 +230,7 @@ func TestInvasionIconURLs_NilUicons(t *testing.T) {
 		WeatherProvider: &mockWeather{},
 		TimeLayout:      "15:04:05",
 	}
-	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", 41, 0, 0, TileModeURL)
+	m, _ := e.Invasion(52.5, 13.4, time.Now().Add(15*time.Minute).Unix(), "stop1", "", 41, 0, 0, TileModeURL)
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")

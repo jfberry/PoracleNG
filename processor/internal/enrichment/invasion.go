@@ -13,7 +13,7 @@ import (
 )
 
 // Invasion builds enrichment fields for an invasion webhook.
-func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID string, gruntTypeID, displayType, lureID int, tileMode int) (map[string]any, *staticmap.TilePending) {
+func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, pokestopURL string, gruntTypeID, displayType, lureID int, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
 	tz := geo.GetTimezone(lat, lon)
@@ -21,6 +21,9 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID strin
 
 	// Pokestop identity
 	m["pokestop_id"] = pokestopID
+	if pokestopURL != "" {
+		m["pokestop_url"] = pokestopURL
+	}
 
 	cellID := tracker.GetWeatherCellID(lat, lon)
 	m["gameWeatherId"] = e.WeatherProvider.GetCurrentWeatherInCell(cellID)

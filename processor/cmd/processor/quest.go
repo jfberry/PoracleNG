@@ -77,7 +77,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))
 
 			mode := ps.tileMode("quest", matched)
-			enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards, mode)
+			enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, quest.URL, rewards, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any

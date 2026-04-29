@@ -202,9 +202,15 @@ type MatchedUser struct {
 }
 
 // InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.
+//
+// URL is the pokestop photo URL — Golbat emits this as `url` on the
+// invasion envelope (same field name as the pokestop/lure envelope, but
+// different from the quest envelope which uses `pokestop_url`).
+// Templates reach it via the `pokestopUrl` alias on the invasion type.
 type InvasionWebhook struct {
 	PokestopID              string  `json:"pokestop_id"`
 	Name                    string  `json:"pokestop_name"`
+	URL                     string  `json:"url"`
 	Latitude                float64 `json:"latitude"`
 	Longitude               float64 `json:"longitude"`
 	IncidentExpiration      int64   `json:"incident_expiration"`
@@ -225,9 +231,15 @@ type InvasionLineupEntry struct {
 }
 
 // QuestWebhook mirrors Golbat's quest webhook message.
+//
+// URL is the pokestop photo URL — Golbat emits this as `pokestop_url`
+// on the quest envelope (a different field name to the invasion / lure
+// envelopes which use `url`). Templates reach it via the `pokestopUrl`
+// alias on the quest type.
 type QuestWebhook struct {
 	PokestopID string        `json:"pokestop_id"`
 	Name       string        `json:"pokestop_name"`
+	URL        string        `json:"pokestop_url"`
 	Latitude   float64       `json:"latitude"`
 	Longitude  float64       `json:"longitude"`
 	Title      string        `json:"title"`
@@ -244,9 +256,14 @@ type QuestReward struct {
 }
 
 // LureWebhook mirrors a pokestop webhook with lure data.
+//
+// URL is the pokestop photo URL — Golbat emits this as `url` on the
+// pokestop envelope. Templates reach it via the `pokestopUrl` alias on
+// the lure type.
 type LureWebhook struct {
 	PokestopID     string  `json:"pokestop_id"`
 	Name           string  `json:"name"`
+	URL            string  `json:"url"`
 	Latitude       float64 `json:"latitude"`
 	Longitude      float64 `json:"longitude"`
 	LureExpiration int64   `json:"lure_expiration"`

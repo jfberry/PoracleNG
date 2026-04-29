@@ -177,7 +177,7 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 	if displayType == 0 {
 		displayType = inv.IncidentDisplayType
 	}
-	enrichmentData, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0, enrichment.TileModeURL)
+	enrichmentData, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, inv.URL, gruntTypeID, displayType, 0, enrichment.TileModeURL)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any
@@ -214,7 +214,7 @@ func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook
 	for _, r := range quest.Rewards {
 		rewards = append(rewards, parseQuestReward(r))
 	}
-	enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards, enrichment.TileModeURL)
+	enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, quest.URL, rewards, enrichment.TileModeURL)
 
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {

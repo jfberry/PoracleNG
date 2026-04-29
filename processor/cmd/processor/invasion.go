@@ -107,7 +107,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 				gruntType, inv.Name, inv.Latitude, inv.Longitude, areaNames(matchedAreas), len(matched))
 
 			mode := ps.tileMode("invasion", matched)
-			baseEnrichment, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0, mode)
+			baseEnrichment, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, inv.URL, gruntTypeID, displayType, 0, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
