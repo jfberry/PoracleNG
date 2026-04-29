@@ -16,9 +16,33 @@ PoracleNG is a single Go binary. Most additions today are *tracking types* again
 ## Instructions
 
 1. If a reference PR URL is provided ($1), fetch the diff and description first.
-2. Decide whether $0 needs a **new webhook handler** or piggybacks on an existing one (e.g. showcases ride on `fort_update` or `invasion`).
-3. Read a similar existing tracking type end-to-end first (`fort` is the most recent and most complete reference). Don't guess; mirror the actual code.
+2. **Run the Characteristics interview below with the user before generating tasks.** The answers determine which optional steps apply and which existing type makes the best reference. Don't guess — ask.
+3. Pick the closest existing type (see the Reference files section near the end) and read it end-to-end. Mirror the actual code, don't extrapolate.
 4. Substitute $0 into every checklist item, drop sections that don't apply, add steps the reference PR requires that aren't covered. Present the full list before creating tasks.
+
+## Characteristics — decide first
+
+Ask the user each of these. Their answers map onto specific files and patterns; capture the answers in the task list so the implementation phase doesn't re-derive them.
+
+| Question | Yes / No effect | Pattern to copy when "yes" |
+|----------|-----------------|----------------------------|
+| **1. Webhook source** — new event type, or piggyback on an existing handler? | If new: add struct + receiver case + handler. If piggyback: extend the existing handler to fan out to the new matcher; skip the receiver work. | New: `cmd/processor/maxbattle.go` + `webhook/receiver.go:115`. Piggyback: see how `gym` and `gym_details` share `case "gym", "gym_details":` at `receiver.go:103`. |
+| **2. Pokemon-by-ID filter** — does the rule say "this pokemon" / "any pokemon"? | Adds `pokemon_id` column with `9000` sentinel = "any". Adds pokemon-resolver wiring in the bot command + tests. | `db/maxbattle.go` (column default 9000), `bot/commands/maxbattle.go` (uses `ctx.Resolver`), `matching/maxbattle.go` (skip filter when `9000`). |
+| **3. Form-aware** — does form matter (e.g. Alolan vs normal)? | Adds `form` column (default 0). Pokemon resolver is already form-aware. | `db/maxbattle.go`, `matching/maxbattle.go`. |
+| **4. Numeric range filters** — IV / level / CP / similar? | Per-range pair of columns with `9000`/`-1`/`0` sentinels. | `db/monsters.go` (IV/CP/level pairs). For a single threshold see `db/maxbattle.go:level`. |
+| **5. List filters** — type IDs, move IDs, item IDs as a multi-select? | Stored as JSON-encoded array in a TEXT column; matcher does `json.Unmarshal` and `slices.Contains`. | `db/forts.go:ChangeTypes` + `matching/fort.go:changeTypesMatch`. **Don't store comma-separated** — the silent dedup bug at fort.go showed why. |
+| **6. Time-bound expiry** — does the alert have a "fires until" timestamp? | Enrichment computes `tth` and `disappearTime` via `geo.ComputeTTH` + `geo.FormatTime`. Templates can use `{{tthm}}:{{tths}}`. Affects clean/edit semantics (next row). | `enrichment/raid.go`, `enrichment/maxbattle.go`. |
+| **7. Edit support** — should the *same* event update an *existing* message rather than send a new one (e.g. RSVP changes, contest entry counts, ranking shifts)? | Adds `clean` bit 2 = "edit"; renderer generates a stable `EditKey` per event; `delivery.FairQueue` looks up `MessageTracker` and edits in place if found. | `db/clean.go` (bitmask), `cmd/processor/raid.go` (EditKey derivation per type), `delivery/tracker.go` (MessageTracker lookup), `dts.RenderJob.EditKey`, the `rsvp_changes` column in `db/raid.go`. **This is a non-trivial design decision — discuss the EditKey shape with the user (what fields make a "same alert"?).** |
+| **8. Auto-delete on TTH** — should the message be deleted when the event ends? | Adds `clean` bit 1 = "clean". MessageTracker schedules a deletion callback at `tth`. Implies #6 (must have an expiry). | Same files as #7; the bit is independent — a rule can be edit+clean (3) or just one or neither. |
+| **9. Multi-rule per user with metadata** — can one user legitimately match the same event multiple times with different rule context (cf. pokemon PVP great + ultra leagues both matching)? | Matcher does **not** dedup by user ID; per-user enrichment merges entries. | `matching/pokemon.go` + `enrichment/peruser.go::consolidateUsers`. Most types should dedup; this is the rare exception. |
+| **10. Bound to a fixed POI** — stop, gym, station, nest? | Stores `*_id` text column with default NULL/empty meaning "any of this POI type". | `db/maxbattle.go:station_id`, `db/raid.go:gym_id`, `db/nests.go:nest_id`. |
+| **11. Per-type tile / icon** — does the static map need a custom tileserver template, or use a custom fallback img? | Add `tileserver_templates/<set>/poracle-$0.json` (per tile-set: `rampardos`, `swifttileserver-night`, etc.) and optionally a new `Fallbacks.ImgURL$0` field. | `tileserver_templates/rampardos/poracle-monster.json` for tile shape; `config.go:FallbacksConfig` + `config_schema.go:489` for fallback wiring. |
+| **12. Pokemon-resolver in command** — does `!$0 pikachu` need to resolve the pokemon name? | Use `ctx.Resolver` in the bot command; reuse `parameterDefinition`-style arg parsing from `commands/track.go`. | `bot/commands/maxbattle.go`, `bot/pokemon_resolver.go`, `bot/argmatch.go`. |
+| **13. Repeat-firing webhook** — does Golbat re-emit the same event multiple times (every minute / every scan) so we need version-aware dedup? | Dedup key includes a version / AR / timestamp field, not just IDs. | `cmd/processor/quest.go::buildQuestRewardsKey` (with the AR prefix), `tracker/duplicate.go::CheckQuest`. |
+| **14. Validation hook participation** — should an outbound HTTP validator be called per matched user before enrichment (the existing `[validation] url` mechanism)? | No new code — the hook fires for any type whose matcher returns matches. Just verify the type label is plumbed through `filterValidation`. | `cmd/processor/quest.go:71` and the implementation in `validation/`. |
+| **15. Translation requirements** — does the rendered alert need translated pokemon / type / move / weather names? | Add a `$0Translate` per-language enrichment function. | `enrichment/maxbattle.go::MaxbattleTranslate`. |
+
+Capture each answer (yes/no plus chosen design notes) in the plan before generating the implementation tasks. The "Reference files" section at the end of this document lists which type matches each combination.
 
 ## Architecture
 
@@ -212,27 +236,38 @@ There is **one** code path per type — no duplicate platform-specific files. Th
 
 ## Reference files (read these first)
 
-The most recent and most complete walk-through of all 17 sections is the `fort` type. Read these in order:
+Pick the closest existing type as your reference. Don't pick `fort` by default — it's enum-only and won't show you how to handle pokemon IDs or numeric ranges.
+
+| Reference | Use when… |
+|-----------|-----------|
+| **`maxbattle`** (recommended default) | Type binds to a stop/station, references pokemon by ID with the `9000`="any" sentinel, has level/form/move/evolution numeric filters, no edit/RSVP. Most recent type added — its scaffolding follows current conventions throughout. |
+| **`raid`** | You need the edit/RSVP pattern (clean bit 2 → `EditKey` → `tracker.MessageTracker` for in-place message edits as RSVP counts change). Otherwise the same shape as maxbattle. |
+| **`egg`** | Pure level/team filter, no pokemon references — pick this only when the new type genuinely doesn't reference any pokemon ID. |
+| **`fort`** | Pure enum filter (fort_type, change_types). Useful only when the new type has no numeric ranges, no monster references, and no time-bound expiry. |
+
+For most new types — including showcase — read `maxbattle` end-to-end:
 
 ```
-processor/internal/db/migrations/000002_add_maxbattle.{up,down}.sql   # migration template
-processor/internal/db/forts.go                                         # {Type}Tracking, {Type}TrackingAPI, query helpers
+processor/internal/db/migrations/000002_add_maxbattle.{up,down}.sql    # migration template
+processor/internal/db/maxbattle.go                                     # {Type}Tracking + {Type}TrackingAPI + query helpers
 processor/internal/state/state.go + loader.go                          # state wiring
 processor/internal/store/tracking_sql.go                               # store generic + UID accessors
-processor/internal/matching/fort.go + fort_test.go                     # matcher
-processor/internal/enrichment/fort.go                                  # base + Translate
-processor/cmd/processor/fort.go                                        # webhook handler
+processor/internal/matching/maxbattle.go + maxbattle_test.go           # matcher (with 9000-sentinel handling)
+processor/internal/enrichment/maxbattle.go                             # base + Translate (pokemon name lookup)
+processor/cmd/processor/maxbattle.go                                   # webhook handler
 processor/cmd/processor/main.go                                        # routes + command registration + matcher init
-processor/internal/api/trackingFort.go                                 # CRUD handlers
-processor/internal/api/trackingAll.go                                  # enrichForts + branch in both loops
-processor/internal/bot/commands/fort.go + fort_test.go                 # bot command
+processor/internal/api/trackingMaxbattle.go                            # CRUD handlers
+processor/internal/api/trackingAll.go                                  # enrich helper + branch in both loops
+processor/internal/bot/commands/maxbattle.go                           # bot command (pokemon-resolver wiring)
 processor/internal/bot/commands/tracked.go                             # !tracked block
-processor/internal/rowtext/fort.go                                     # rowtext
-processor/internal/api/dts_fields.go                                   # fortUpdateFields + fieldsByType row
-processor/internal/api/config_schema.go                                # disable_fort_update
+processor/internal/rowtext/maxbattle.go                                # rowtext (pokemon-name resolution)
+processor/internal/api/dts_fields.go                                   # maxbattleFields + fieldsByType row
+processor/internal/api/config_schema.go                                # disable_max_battle entry
 fallbacks/dts.json                                                     # default template entry
 fallbacks/testdata.json                                                # test scenarios
-config/config.example.toml                                             # disable_fort_update line
-processor/internal/i18n/locale/en.json                                 # cmd.fort, section.forts, tracking.* keys
+config/config.example.toml                                             # disable_max_battle line
+processor/internal/i18n/locale/en.json                                 # cmd.maxbattle, section.maxbattles, tracking.* keys
 DTS.md                                                                 # type field documentation
 ```
+
+Skim `raid.go` in the same folders if you need RSVP/edit. Read `fort.go` only if your type is genuinely enum-only.
