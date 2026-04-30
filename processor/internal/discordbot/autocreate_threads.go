@@ -40,9 +40,35 @@ func decodeThreadJoinID(id string) (masterID, threadID string, ok bool) {
 }
 
 // threadCacheEntry is one button on one master channel's picker.
+// Style is the configured button style ("primary"/"secondary"/"success"/
+// "danger"). Empty defaults to "secondary" at render time.
 type threadCacheEntry struct {
 	ThreadID string `json:"threadId"`
 	Label    string `json:"label"`
+	Style    string `json:"style,omitempty"`
+}
+
+// pickerMaxButtons is the maximum number of buttons that fit in a
+// single Discord ActionsRow. The picker uses one row per master and
+// silently truncates beyond this limit (with a warning at autocreate
+// time when configured threads exceed it).
+const pickerMaxButtons = 5
+
+// buttonStyleFor maps the configured string style to its discordgo
+// constant. Unknown / empty values fall back to SecondaryButton.
+func buttonStyleFor(s string) discordgo.ButtonStyle {
+	switch strings.ToLower(s) {
+	case "primary":
+		return discordgo.PrimaryButton
+	case "success":
+		return discordgo.SuccessButton
+	case "danger":
+		return discordgo.DangerButton
+	case "secondary", "":
+		return discordgo.SecondaryButton
+	default:
+		return discordgo.SecondaryButton
+	}
 }
 
 // threadCacheMaster is the per-master section of the on-disk cache.
@@ -91,7 +117,10 @@ func (c *threadCache) save() error {
 	if err != nil {
 		return fmt.Errorf("marshal thread cache: %w", err)
 	}
-	if err := os.WriteFile(c.path, data, 0644); err != nil {
+	if err := os.MkdirAll(filepath.Dir(c.path), 0o755); err != nil {
+		return fmt.Errorf("create thread cache dir %s: %w", filepath.Dir(c.path), err)
+	}
+	if err := os.WriteFile(c.path, data, 0o644); err != nil {
 		return fmt.Errorf("write thread cache %s: %w", c.path, err)
 	}
 	return nil
@@ -173,11 +202,15 @@ func buildPickerPayload(masterID string, picker *threadPickerDef, threads []thre
 		Description: desc,
 	}}
 
-	buttons := make([]discordgo.MessageComponent, 0, len(threads))
-	for _, th := range threads {
+	visible := threads
+	if len(visible) > pickerMaxButtons {
+		visible = visible[:pickerMaxButtons]
+	}
+	buttons := make([]discordgo.MessageComponent, 0, len(visible))
+	for _, th := range visible {
 		buttons = append(buttons, discordgo.Button{
 			Label:    th.Label,
-			Style:    discordgo.SecondaryButton,
+			Style:    buttonStyleFor(th.Style),
 			CustomID: encodeThreadJoinID(masterID, th.ThreadID),
 		})
 	}

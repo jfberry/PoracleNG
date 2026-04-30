@@ -431,8 +431,8 @@ func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.Message
 	if len(chDef.Threads) == 0 {
 		return nil
 	}
-	if len(chDef.Threads) > 5 {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠️ %s: only first 5 threads will get buttons (Discord ActionsRow limit)", chDef.ChannelName))
+	if len(chDef.Threads) > pickerMaxButtons {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠️ %s: %d threads configured but Discord allows %d buttons per row — extra threads will be created and registered, but won't appear in the picker", chDef.ChannelName, len(chDef.Threads), pickerMaxButtons))
 	}
 
 	cached, _ := b.threadCache.master(masterChannelID)
@@ -497,7 +497,7 @@ func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.Message
 			b.runOneAutocreateCommand(s, m, guildID, threadID, threadName, bot.TypeDiscordThread, expanded)
 		}
 
-		entry := threadCacheEntry{ThreadID: threadID, Label: label}
+		entry := threadCacheEntry{ThreadID: threadID, Label: label, Style: th.ButtonStyle}
 		entries = append(entries, entry)
 		b.threadCache.upsertMaster(guildID, masterChannelID, "")
 		b.threadCache.upsertThread(masterChannelID, entry)

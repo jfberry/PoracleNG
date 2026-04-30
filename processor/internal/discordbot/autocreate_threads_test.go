@@ -121,3 +121,75 @@ func TestBuildPickerPayload(t *testing.T) {
 		t.Errorf("custom_id = %q, want %q", btn0.CustomID, wantID)
 	}
 }
+
+// TestBuildPickerPayloadHonoursStyle exercises the styled-button path so a
+// future refactor that drops the field doesn't silently regress to "all
+// buttons are secondary".
+func TestBuildPickerPayloadHonoursStyle(t *testing.T) {
+	picker := &threadPickerDef{EmbedTitle: "t", EmbedDescription: "d"}
+	threads := []threadCacheEntry{
+		{ThreadID: "a", Label: "A", Style: "primary"},
+		{ThreadID: "b", Label: "B", Style: "success"},
+		{ThreadID: "c", Label: "C", Style: "danger"},
+		{ThreadID: "d", Label: "D", Style: ""}, // default → secondary
+	}
+	_, components := buildPickerPayload("m", picker, threads, nil)
+	row := components[0].(discordgo.ActionsRow)
+	wants := []discordgo.ButtonStyle{
+		discordgo.PrimaryButton, discordgo.SuccessButton, discordgo.DangerButton, discordgo.SecondaryButton,
+	}
+	for i, want := range wants {
+		got := row.Components[i].(discordgo.Button).Style
+		if got != want {
+			t.Errorf("button %d style = %v, want %v", i, got, want)
+		}
+	}
+}
+
+// TestBuildPickerPayloadTruncates ensures we never emit a row with more
+// than the Discord ActionsRow limit, matching the warning surfaced to
+// admins at autocreate time.
+func TestBuildPickerPayloadTruncates(t *testing.T) {
+	picker := &threadPickerDef{EmbedTitle: "t", EmbedDescription: "d"}
+	threads := make([]threadCacheEntry, 8)
+	for i := range threads {
+		threads[i] = threadCacheEntry{ThreadID: "t", Label: "L"}
+	}
+	_, components := buildPickerPayload("m", picker, threads, nil)
+	row := components[0].(discordgo.ActionsRow)
+	if len(row.Components) != pickerMaxButtons {
+		t.Errorf("row buttons = %d, want %d (truncation)", len(row.Components), pickerMaxButtons)
+	}
+}
+
+// TestThreadCacheSaveCreatesDir confirms save() materialises the cache
+// directory on a fresh install rather than failing silently — a real
+// regression risk for first-run !autocreate where config/.cache may not
+// yet exist.
+func TestThreadCacheSaveCreatesDir(t *testing.T) {
+	root := t.TempDir()
+	// Path nested two directories deep that don't exist yet.
+	path := filepath.Join(root, "config", ".cache", "autocreate-threads.json")
+
+	c := newThreadCache(path)
+	c.upsertMaster("g1", "m1", "msg1")
+	c.upsertThread("m1", threadCacheEntry{ThreadID: "t1", Label: "Hundo"})
+
+	if err := c.save(); err != nil {
+		t.Fatalf("save into non-existent dir: %v", err)
+	}
+
+	// Reload via a fresh instance to confirm what was persisted is what
+	// emitPickerPost would see on the next !autocreate run.
+	c2 := newThreadCache(path)
+	if err := c2.load(); err != nil {
+		t.Fatalf("reload after save: %v", err)
+	}
+	m, ok := c2.master("m1")
+	if !ok || m.PickerMessageID != "msg1" {
+		t.Errorf("PickerMessageID = %q after round-trip, want %q", m.PickerMessageID, "msg1")
+	}
+	if len(m.Threads) != 1 || m.Threads[0].Label != "Hundo" {
+		t.Errorf("threads = %+v, want one entry with Label=Hundo", m.Threads)
+	}
+}
