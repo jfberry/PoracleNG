@@ -349,7 +349,9 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		// Create configured threads under this master channel and emit
 		// the picker if one is configured.
 		threadEntries := b.createThreadsForChannel(s, m, guildID, channel.ID, chDef, subArgsUnder)
-		_ = threadEntries // used in Task 7 (picker post)
+		if chDef.ThreadPicker != nil {
+			b.emitPickerPost(s, channel.ID, chDef.ThreadPicker, threadEntries, subArgsUnder)
+		}
 	}
 
 	// Trigger reload after all creations.
@@ -601,6 +603,54 @@ func computePermissions(role roleEntry) (allow, deny int64) {
 	checkPerm(role.Move, "move")
 
 	return allow, deny
+}
+
+// emitPickerPost creates or edits the picker message for masterChannelID.
+// Idempotent: if the cache holds a PickerMessageID and the message still
+// exists, it's edited in place; otherwise a fresh message is posted and
+// its ID is written back to the cache.
+func (b *Bot) emitPickerPost(s *discordgo.Session, masterChannelID string, picker *threadPickerDef, entries []threadCacheEntry, args []string) {
+	if picker == nil || len(entries) == 0 {
+		return
+	}
+	embeds, components := buildPickerPayload(masterChannelID, picker, entries, args)
+
+	cached, _ := b.threadCache.master(masterChannelID)
+	if cached != nil && cached.PickerMessageID != "" {
+		_, err := s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+			Channel:    masterChannelID,
+			ID:         cached.PickerMessageID,
+			Embeds:     &embeds,
+			Components: &components,
+		})
+		if err == nil {
+			return
+		}
+		log.Warnf("discord bot: edit picker %s/%s failed (%v) — posting fresh", masterChannelID, cached.PickerMessageID, err)
+	}
+
+	msg, err := s.ChannelMessageSendComplex(masterChannelID, &discordgo.MessageSend{
+		Embeds:     embeds,
+		Components: components,
+	})
+	if err != nil {
+		log.Warnf("discord bot: post picker in %s: %v", masterChannelID, err)
+		return
+	}
+	guildID := ""
+	if cached != nil {
+		guildID = cached.GuildID
+	}
+	b.threadCache.upsertMaster(guildID, masterChannelID, msg.ID)
+	if err := b.threadCache.save(); err != nil {
+		log.Warnf("discord bot: persist picker message id: %v", err)
+	}
+
+	if picker.Pinned {
+		if err := s.ChannelMessagePin(masterChannelID, msg.ID); err != nil {
+			log.Warnf("discord bot: pin picker %s/%s: %v", masterChannelID, msg.ID, err)
+		}
+	}
 }
 
 // formatTemplate replaces {0}, {1}, etc. placeholders with the provided arguments.
