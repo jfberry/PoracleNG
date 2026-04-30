@@ -496,6 +496,37 @@ func TestLayeredView_EscapeFromWebhook(t *testing.T) {
 	assert.Equal(t, "Gym ''With'' Quotes", v)
 }
 
+// TestLayeredView_EscapeAllScannerNameFields locks the full set of
+// scanner-derived text fields that produce JSON inside templates and
+// must therefore be escaped. Mirrors PoracleJS's escapeJsonString
+// coverage so a regression here would re-introduce broken-JSON bugs.
+func TestLayeredView_EscapeAllScannerNameFields(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.base = map[string]any{
+			"nest_name":      "Park \"East\"",
+			"description":    "Has a \"plaque\" on it",
+			"oldName":        "Old \"Stop\"",
+			"newName":        "New \"Stop\"",
+			"oldDescription": "Old \"plaque\"",
+			"newDescription": "New \"plaque\"",
+		}
+	})
+
+	cases := map[string]string{
+		"nest_name":      "Park ''East''",
+		"description":    "Has a ''plaque'' on it",
+		"oldName":        "Old ''Stop''",
+		"newName":        "New ''Stop''",
+		"oldDescription": "Old ''plaque''",
+		"newDescription": "New ''plaque''",
+	}
+	for field, want := range cases {
+		got, ok := lv.GetField(field)
+		require.True(t, ok, "field %s missing", field)
+		assert.Equal(t, want, got, "field %s", field)
+	}
+}
+
 // --- Nil layer handling ---
 
 func TestLayeredView_AllNilLayers(t *testing.T) {
