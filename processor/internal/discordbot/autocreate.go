@@ -38,6 +38,28 @@ type channelEntry struct {
 	WebhookName string      `json:"webhookName"`
 	Roles       []roleEntry `json:"roles"`
 	Commands    []string    `json:"commands"`
+
+	// New thread-picker fields. Both are optional; an entry with no
+	// Threads block behaves exactly as before.
+	ThreadPicker *threadPickerDef `json:"threadPicker,omitempty"`
+	Threads      []threadEntry    `json:"threads,omitempty"`
+}
+
+// threadPickerDef configures the per-master "click to join" embed.
+// Strings support {0}-style placeholder expansion against the same
+// template args as the rest of channelTemplate.
+type threadPickerDef struct {
+	EmbedTitle       string `json:"embedTitle"`
+	EmbedDescription string `json:"embedDescription"`
+	Pinned           bool   `json:"pinned"`
+}
+
+// threadEntry is one private thread under a parent text channel.
+type threadEntry struct {
+	Name        string   `json:"name"`        // thread name (also default button label)
+	ButtonLabel string   `json:"buttonLabel"` // optional override
+	ButtonStyle string   `json:"buttonStyle"` // "primary" / "secondary" / "success" / "danger" — secondary if blank
+	Commands    []string `json:"commands"`    // run as the thread's human at creation
 }
 
 type roleEntry struct {
