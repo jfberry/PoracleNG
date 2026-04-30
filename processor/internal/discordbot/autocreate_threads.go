@@ -48,11 +48,13 @@ type threadCacheEntry struct {
 	Style    string `json:"style,omitempty"`
 }
 
-// pickerMaxButtons is the maximum number of buttons that fit in a
-// single Discord ActionsRow. The picker uses one row per master and
-// silently truncates beyond this limit (with a warning at autocreate
-// time when configured threads exceed it).
-const pickerMaxButtons = 5
+// Discord component limits — buttons spread across ActionsRows, then
+// across messages when a master has more threads than fit in one.
+const (
+	pickerButtonsPerRow     = 5
+	pickerRowsPerMessage    = 5
+	pickerButtonsPerMessage = pickerButtonsPerRow * pickerRowsPerMessage // 25
+)
 
 // buttonStyleFor maps the configured string style to its discordgo
 // constant. Unknown / empty values fall back to SecondaryButton.
@@ -72,10 +74,18 @@ func buttonStyleFor(s string) discordgo.ButtonStyle {
 }
 
 // threadCacheMaster is the per-master section of the on-disk cache.
+//
+// PickerMessageIDs is the ordered list of message IDs that make up the
+// picker — one per chunk of up to pickerButtonsPerMessage buttons.
+//
+// PickerMessageID is the legacy single-message field from before
+// multi-message support; it's read on load() and migrated into
+// PickerMessageIDs, then never written.
 type threadCacheMaster struct {
-	GuildID         string             `json:"guildId"`
-	PickerMessageID string             `json:"pickerMessageId,omitempty"`
-	Threads         []threadCacheEntry `json:"threads"`
+	GuildID          string             `json:"guildId"`
+	PickerMessageIDs []string           `json:"pickerMessageIds,omitempty"`
+	PickerMessageID  string             `json:"pickerMessageId,omitempty"`
+	Threads          []threadCacheEntry `json:"threads"`
 }
 
 // threadCache is a JSON-backed map of master channel ID -> threadCacheMaster.
@@ -107,6 +117,13 @@ func (c *threadCache) load() error {
 	if err := json.Unmarshal(data, &c.masters); err != nil {
 		return fmt.Errorf("parse thread cache %s: %w", c.path, err)
 	}
+	// Migrate legacy single-ID schema written before multi-message support.
+	for _, m := range c.masters {
+		if m.PickerMessageID != "" && len(m.PickerMessageIDs) == 0 {
+			m.PickerMessageIDs = []string{m.PickerMessageID}
+		}
+		m.PickerMessageID = ""
+	}
 	return nil
 }
 
@@ -126,7 +143,10 @@ func (c *threadCache) save() error {
 	return nil
 }
 
-func (c *threadCache) upsertMaster(guildID, masterID, pickerMessageID string) {
+// ensureMaster creates the master entry if absent and (optionally) records
+// the guild ID. It never touches PickerMessageIDs — use setPickerMessageIDs
+// for that, after the picker post(s) have been emitted.
+func (c *threadCache) ensureMaster(guildID, masterID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.masters == nil {
@@ -137,10 +157,21 @@ func (c *threadCache) upsertMaster(guildID, masterID, pickerMessageID string) {
 		m = &threadCacheMaster{}
 		c.masters[masterID] = m
 	}
-	m.GuildID = guildID
-	if pickerMessageID != "" {
-		m.PickerMessageID = pickerMessageID
+	if guildID != "" {
+		m.GuildID = guildID
 	}
+}
+
+// setPickerMessageIDs replaces the master's picker-message ID list.
+// Pass an empty slice to record "no picker currently posted".
+func (c *threadCache) setPickerMessageIDs(masterID string, ids []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	m := c.masters[masterID]
+	if m == nil {
+		return
+	}
+	m.PickerMessageIDs = append([]string(nil), ids...)
 }
 
 // upsertThread adds the entry if its ThreadID is not yet known, otherwise
@@ -189,35 +220,68 @@ func (c *threadCache) allMasters() []string {
 	return out
 }
 
-// buildPickerPayload returns the embed and components for the master
-// channel's picker post. Discord caps action rows at 5 buttons, so
-// callers should keep configured threads ≤ 5 per master in v1
-// (validation in autocreate enforces this).
-func buildPickerPayload(masterID string, picker *threadPickerDef, threads []threadCacheEntry, args []string) ([]*discordgo.MessageEmbed, []discordgo.MessageComponent) {
-	title := formatTemplate(picker.EmbedTitle, args)
-	desc := formatTemplate(picker.EmbedDescription, args)
+// pickerMessage is one Discord message in the picker. Most masters fit
+// in one message (up to pickerButtonsPerMessage buttons across rows);
+// pickers with more threads spill into additional messages with no
+// embed (the embed lives only on the first message).
+type pickerMessage struct {
+	Embeds     []*discordgo.MessageEmbed
+	Components []discordgo.MessageComponent
+}
 
-	embeds := []*discordgo.MessageEmbed{{
-		Title:       title,
-		Description: desc,
-	}}
+// buildPickerMessages chunks threads into one or more Discord messages.
+// Each message holds up to pickerButtonsPerMessage buttons, spread across
+// ActionsRows of pickerButtonsPerRow buttons each. Only the first message
+// carries the configured embed; subsequent messages are button-only so
+// the title doesn't repeat.
+func buildPickerMessages(masterID string, picker *threadPickerDef, threads []threadCacheEntry, args []string) []pickerMessage {
+	if len(threads) == 0 {
+		return nil
+	}
 
-	visible := threads
-	if len(visible) > pickerMaxButtons {
-		visible = visible[:pickerMaxButtons]
+	var messages []pickerMessage
+	for i := 0; i < len(threads); i += pickerButtonsPerMessage {
+		end := i + pickerButtonsPerMessage
+		if end > len(threads) {
+			end = len(threads)
+		}
+		chunk := threads[i:end]
+
+		msg := pickerMessage{
+			Components: chunkButtonsIntoRows(masterID, chunk),
+		}
+		if i == 0 {
+			msg.Embeds = []*discordgo.MessageEmbed{{
+				Title:       formatTemplate(picker.EmbedTitle, args),
+				Description: formatTemplate(picker.EmbedDescription, args),
+			}}
+		}
+		messages = append(messages, msg)
 	}
-	buttons := make([]discordgo.MessageComponent, 0, len(visible))
-	for _, th := range visible {
-		buttons = append(buttons, discordgo.Button{
-			Label:    th.Label,
-			Style:    buttonStyleFor(th.Style),
-			CustomID: encodeThreadJoinID(masterID, th.ThreadID),
-		})
+	return messages
+}
+
+// chunkButtonsIntoRows splits one message's worth of threads into
+// ActionsRows of up to pickerButtonsPerRow buttons each.
+func chunkButtonsIntoRows(masterID string, threads []threadCacheEntry) []discordgo.MessageComponent {
+	var rows []discordgo.MessageComponent
+	for i := 0; i < len(threads); i += pickerButtonsPerRow {
+		end := i + pickerButtonsPerRow
+		if end > len(threads) {
+			end = len(threads)
+		}
+		rowChunk := threads[i:end]
+		buttons := make([]discordgo.MessageComponent, 0, len(rowChunk))
+		for _, th := range rowChunk {
+			buttons = append(buttons, discordgo.Button{
+				Label:    th.Label,
+				Style:    buttonStyleFor(th.Style),
+				CustomID: encodeThreadJoinID(masterID, th.ThreadID),
+			})
+		}
+		rows = append(rows, discordgo.ActionsRow{Components: buttons})
 	}
-	if len(buttons) == 0 {
-		return embeds, nil
-	}
-	return embeds, []discordgo.MessageComponent{discordgo.ActionsRow{Components: buttons}}
+	return rows
 }
 
 // threadCachePath returns the on-disk location for the cache file,

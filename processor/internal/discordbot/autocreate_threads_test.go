@@ -1,6 +1,7 @@
 package discordbot
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -46,7 +47,8 @@ func TestThreadCacheRoundTrip(t *testing.T) {
 		t.Fatalf("load empty: %v", err)
 	}
 
-	c.upsertMaster("guild1", "master1", "999")
+	c.ensureMaster("guild1", "master1")
+	c.setPickerMessageIDs("master1", []string{"999"})
 	c.upsertThread("master1", threadCacheEntry{ThreadID: "t1", Label: "Hundo"})
 	c.upsertThread("master1", threadCacheEntry{ThreadID: "t2", Label: "Nundo"})
 
@@ -62,7 +64,7 @@ func TestThreadCacheRoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("master not found after reload")
 	}
-	if m.GuildID != "guild1" || m.PickerMessageID != "999" {
+	if m.GuildID != "guild1" || len(m.PickerMessageIDs) != 1 || m.PickerMessageIDs[0] != "999" {
 		t.Errorf("master fields = %+v", m)
 	}
 	if len(m.Threads) != 2 || m.Threads[0].ThreadID != "t1" || m.Threads[1].Label != "Nundo" {
@@ -72,8 +74,8 @@ func TestThreadCacheRoundTrip(t *testing.T) {
 
 func TestThreadCacheMastersForUser(t *testing.T) {
 	c := &threadCache{}
-	c.upsertMaster("g1", "m1", "")
-	c.upsertMaster("g1", "m2", "")
+	c.ensureMaster("g1", "m1")
+	c.ensureMaster("g1", "m2")
 	c.upsertThread("m1", threadCacheEntry{ThreadID: "t1"})
 	c.upsertThread("m2", threadCacheEntry{ThreadID: "t2"})
 
@@ -83,7 +85,44 @@ func TestThreadCacheMastersForUser(t *testing.T) {
 	}
 }
 
-func TestBuildPickerPayload(t *testing.T) {
+// TestThreadCacheLegacyMigration confirms that a cache file written by
+// the single-message-only schema is migrated cleanly on load: the old
+// pickerMessageId becomes the first element of pickerMessageIds, and
+// the old field is cleared so it isn't written back.
+func TestThreadCacheLegacyMigration(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "autocreate-threads.json")
+
+	legacy := []byte(`{
+		"master1": {
+			"guildId": "g1",
+			"pickerMessageId": "old-msg",
+			"threads": [{"threadId": "t1", "label": "L"}]
+		}
+	}`)
+	if err := os.WriteFile(path, legacy, 0o644); err != nil {
+		t.Fatalf("seed legacy: %v", err)
+	}
+
+	c := newThreadCache(path)
+	if err := c.load(); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	m, ok := c.master("master1")
+	if !ok {
+		t.Fatal("master not found")
+	}
+	if len(m.PickerMessageIDs) != 1 || m.PickerMessageIDs[0] != "old-msg" {
+		t.Errorf("PickerMessageIDs = %v, want [old-msg]", m.PickerMessageIDs)
+	}
+	if m.PickerMessageID != "" {
+		t.Errorf("legacy PickerMessageID = %q after migration, want empty", m.PickerMessageID)
+	}
+}
+
+// TestBuildPickerMessagesSingle covers the small-master case: a handful
+// of threads fit in one message with one ActionsRow and the embed.
+func TestBuildPickerMessagesSingle(t *testing.T) {
 	picker := &threadPickerDef{
 		EmbedTitle:       "Area alerts for {0}",
 		EmbedDescription: "Click to join.",
@@ -94,38 +133,31 @@ func TestBuildPickerPayload(t *testing.T) {
 		{ThreadID: "t2", Label: "Nundo"},
 	}
 
-	embeds, components := buildPickerPayload("master1", picker, threads, []string{"amsterdam_apollo"})
-
-	if len(embeds) != 1 {
-		t.Fatalf("embeds len = %d, want 1", len(embeds))
+	messages := buildPickerMessages("master1", picker, threads, []string{"amsterdam_apollo"})
+	if len(messages) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(messages))
 	}
-	if embeds[0].Title != "Area alerts for amsterdam_apollo" {
-		t.Errorf("title = %q, want template-expanded", embeds[0].Title)
+	msg := messages[0]
+	if len(msg.Embeds) != 1 || msg.Embeds[0].Title != "Area alerts for amsterdam_apollo" {
+		t.Errorf("embed = %+v, want template-expanded title", msg.Embeds)
 	}
-	if len(components) != 1 {
-		t.Fatalf("components len = %d, want one ActionsRow", len(components))
+	if len(msg.Components) != 1 {
+		t.Fatalf("rows = %d, want 1", len(msg.Components))
 	}
-	row, ok := components[0].(discordgo.ActionsRow)
-	if !ok {
-		t.Fatalf("first component not ActionsRow: %T", components[0])
-	}
+	row := msg.Components[0].(discordgo.ActionsRow)
 	if len(row.Components) != 2 {
 		t.Errorf("buttons = %d, want 2", len(row.Components))
 	}
 	btn0 := row.Components[0].(discordgo.Button)
-	if btn0.Label != "Hundo" {
-		t.Errorf("button label = %q, want Hundo", btn0.Label)
-	}
-	wantID := "poracle:thread:master1:t1:join"
-	if btn0.CustomID != wantID {
-		t.Errorf("custom_id = %q, want %q", btn0.CustomID, wantID)
+	if btn0.Label != "Hundo" || btn0.CustomID != "poracle:thread:master1:t1:join" {
+		t.Errorf("button[0] = %+v", btn0)
 	}
 }
 
-// TestBuildPickerPayloadHonoursStyle exercises the styled-button path so a
+// TestBuildPickerMessagesHonoursStyle exercises the styled-button path so a
 // future refactor that drops the field doesn't silently regress to "all
 // buttons are secondary".
-func TestBuildPickerPayloadHonoursStyle(t *testing.T) {
+func TestBuildPickerMessagesHonoursStyle(t *testing.T) {
 	picker := &threadPickerDef{EmbedTitle: "t", EmbedDescription: "d"}
 	threads := []threadCacheEntry{
 		{ThreadID: "a", Label: "A", Style: "primary"},
@@ -133,8 +165,8 @@ func TestBuildPickerPayloadHonoursStyle(t *testing.T) {
 		{ThreadID: "c", Label: "C", Style: "danger"},
 		{ThreadID: "d", Label: "D", Style: ""}, // default → secondary
 	}
-	_, components := buildPickerPayload("m", picker, threads, nil)
-	row := components[0].(discordgo.ActionsRow)
+	messages := buildPickerMessages("m", picker, threads, nil)
+	row := messages[0].Components[0].(discordgo.ActionsRow)
 	wants := []discordgo.ButtonStyle{
 		discordgo.PrimaryButton, discordgo.SuccessButton, discordgo.DangerButton, discordgo.SecondaryButton,
 	}
@@ -146,19 +178,74 @@ func TestBuildPickerPayloadHonoursStyle(t *testing.T) {
 	}
 }
 
-// TestBuildPickerPayloadTruncates ensures we never emit a row with more
-// than the Discord ActionsRow limit, matching the warning surfaced to
-// admins at autocreate time.
-func TestBuildPickerPayloadTruncates(t *testing.T) {
+// TestBuildPickerMessagesRowChunking exercises the in-message chunking:
+// 12 threads fit in one message but spill into multiple ActionsRows of
+// 5 buttons (5 + 5 + 2).
+func TestBuildPickerMessagesRowChunking(t *testing.T) {
 	picker := &threadPickerDef{EmbedTitle: "t", EmbedDescription: "d"}
-	threads := make([]threadCacheEntry, 8)
+	threads := make([]threadCacheEntry, 12)
 	for i := range threads {
 		threads[i] = threadCacheEntry{ThreadID: "t", Label: "L"}
 	}
-	_, components := buildPickerPayload("m", picker, threads, nil)
-	row := components[0].(discordgo.ActionsRow)
-	if len(row.Components) != pickerMaxButtons {
-		t.Errorf("row buttons = %d, want %d (truncation)", len(row.Components), pickerMaxButtons)
+	messages := buildPickerMessages("m", picker, threads, nil)
+	if len(messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(messages))
+	}
+	rows := messages[0].Components
+	wantRowSizes := []int{5, 5, 2}
+	if len(rows) != len(wantRowSizes) {
+		t.Fatalf("rows = %d, want %d", len(rows), len(wantRowSizes))
+	}
+	for i, want := range wantRowSizes {
+		got := len(rows[i].(discordgo.ActionsRow).Components)
+		if got != want {
+			t.Errorf("row %d size = %d, want %d", i, got, want)
+		}
+	}
+}
+
+// TestBuildPickerMessagesMultipleMessages confirms that 30 threads spill
+// into two messages: the first has the embed and 25 buttons across 5
+// rows, the second has only the remaining 5 buttons in one row and no
+// embed.
+func TestBuildPickerMessagesMultipleMessages(t *testing.T) {
+	picker := &threadPickerDef{EmbedTitle: "Title", EmbedDescription: "Desc"}
+	threads := make([]threadCacheEntry, 30)
+	for i := range threads {
+		threads[i] = threadCacheEntry{ThreadID: "t", Label: "L"}
+	}
+	messages := buildPickerMessages("m", picker, threads, nil)
+	if len(messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(messages))
+	}
+
+	// First message: embed + 5 rows of 5 = 25 buttons.
+	first := messages[0]
+	if len(first.Embeds) != 1 {
+		t.Errorf("first.Embeds len = %d, want 1", len(first.Embeds))
+	}
+	if len(first.Components) != 5 {
+		t.Errorf("first.Components rows = %d, want 5", len(first.Components))
+	}
+	totalFirst := 0
+	for _, r := range first.Components {
+		totalFirst += len(r.(discordgo.ActionsRow).Components)
+	}
+	if totalFirst != 25 {
+		t.Errorf("first message buttons = %d, want 25", totalFirst)
+	}
+
+	// Second message: no embed, 1 row of 5 = 5 buttons.
+	second := messages[1]
+	if len(second.Embeds) != 0 {
+		t.Errorf("second.Embeds = %v, want none (only first carries the title)", second.Embeds)
+	}
+	if len(second.Components) != 1 {
+		t.Errorf("second.Components rows = %d, want 1", len(second.Components))
+	}
+	totalSecond := len(second.Components[0].(discordgo.ActionsRow).Components)
+	if totalSecond != 5 {
+		t.Errorf("second message buttons = %d, want 5", totalSecond)
 	}
 }
 
@@ -172,7 +259,8 @@ func TestThreadCacheSaveCreatesDir(t *testing.T) {
 	path := filepath.Join(root, "config", ".cache", "autocreate-threads.json")
 
 	c := newThreadCache(path)
-	c.upsertMaster("g1", "m1", "msg1")
+	c.ensureMaster("g1", "m1")
+	c.setPickerMessageIDs("m1", []string{"msg1"})
 	c.upsertThread("m1", threadCacheEntry{ThreadID: "t1", Label: "Hundo"})
 
 	if err := c.save(); err != nil {
@@ -186,8 +274,8 @@ func TestThreadCacheSaveCreatesDir(t *testing.T) {
 		t.Fatalf("reload after save: %v", err)
 	}
 	m, ok := c2.master("m1")
-	if !ok || m.PickerMessageID != "msg1" {
-		t.Errorf("PickerMessageID = %q after round-trip, want %q", m.PickerMessageID, "msg1")
+	if !ok || len(m.PickerMessageIDs) != 1 || m.PickerMessageIDs[0] != "msg1" {
+		t.Errorf("PickerMessageIDs = %v after round-trip, want [msg1]", m.PickerMessageIDs)
 	}
 	if len(m.Threads) != 1 || m.Threads[0].Label != "Hundo" {
 		t.Errorf("threads = %+v, want one entry with Label=Hundo", m.Threads)

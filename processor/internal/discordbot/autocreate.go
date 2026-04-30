@@ -431,9 +431,6 @@ func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.Message
 	if len(chDef.Threads) == 0 {
 		return nil
 	}
-	if len(chDef.Threads) > pickerMaxButtons {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠️ %s: %d threads configured but Discord allows %d buttons per row — extra threads will be created and registered, but won't appear in the picker", chDef.ChannelName, len(chDef.Threads), pickerMaxButtons))
-	}
 
 	cached, _ := b.threadCache.master(masterChannelID)
 	cachedByLabel := map[string]threadCacheEntry{}
@@ -499,7 +496,7 @@ func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.Message
 
 		entry := threadCacheEntry{ThreadID: threadID, Label: label, Style: th.ButtonStyle}
 		entries = append(entries, entry)
-		b.threadCache.upsertMaster(guildID, masterChannelID, "")
+		b.threadCache.ensureMaster(guildID, masterChannelID)
 		b.threadCache.upsertThread(masterChannelID, entry)
 		if err := b.threadCache.save(); err != nil {
 			log.Warnf("discord bot: persist thread cache: %v", err)
@@ -605,50 +602,76 @@ func computePermissions(role roleEntry) (allow, deny int64) {
 	return allow, deny
 }
 
-// emitPickerPost creates or edits the picker message for masterChannelID.
-// Idempotent: if the cache holds a PickerMessageID and the message still
-// exists, it's edited in place; otherwise a fresh message is posted and
-// its ID is written back to the cache.
+// emitPickerPost creates or edits the picker message(s) for masterChannelID.
+// Idempotent across re-runs: existing message IDs cached from a previous
+// run are edited in place; new chunks are sent fresh; chunks no longer
+// needed (because the thread count shrank) are deleted. Each step is
+// best-effort — a single failure logs and moves on so subsequent chunks
+// still get a chance.
 func (b *Bot) emitPickerPost(s *discordgo.Session, masterChannelID string, picker *threadPickerDef, entries []threadCacheEntry, args []string) {
 	if picker == nil || len(entries) == 0 {
 		return
 	}
-	embeds, components := buildPickerPayload(masterChannelID, picker, entries, args)
+	messages := buildPickerMessages(masterChannelID, picker, entries, args)
 
 	cached, _ := b.threadCache.master(masterChannelID)
-	if cached != nil && cached.PickerMessageID != "" {
-		_, err := s.ChannelMessageEditComplex(&discordgo.MessageEdit{
-			Channel:    masterChannelID,
-			ID:         cached.PickerMessageID,
-			Embeds:     &embeds,
-			Components: &components,
-		})
-		if err == nil {
-			return
-		}
-		log.Warnf("discord bot: edit picker %s/%s failed (%v) — posting fresh", masterChannelID, cached.PickerMessageID, err)
-	}
-
-	msg, err := s.ChannelMessageSendComplex(masterChannelID, &discordgo.MessageSend{
-		Embeds:     embeds,
-		Components: components,
-	})
-	if err != nil {
-		log.Warnf("discord bot: post picker in %s: %v", masterChannelID, err)
-		return
-	}
+	var existingIDs []string
 	guildID := ""
 	if cached != nil {
+		existingIDs = cached.PickerMessageIDs
 		guildID = cached.GuildID
 	}
-	b.threadCache.upsertMaster(guildID, masterChannelID, msg.ID)
-	if err := b.threadCache.save(); err != nil {
-		log.Warnf("discord bot: persist picker message id: %v", err)
+
+	newIDs := make([]string, 0, len(messages))
+	for i, msg := range messages {
+		// Try to edit the corresponding existing message.
+		if i < len(existingIDs) && existingIDs[i] != "" {
+			embedsCopy := msg.Embeds
+			componentsCopy := msg.Components
+			_, err := s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+				Channel:    masterChannelID,
+				ID:         existingIDs[i],
+				Embeds:     &embedsCopy,
+				Components: &componentsCopy,
+			})
+			if err == nil {
+				newIDs = append(newIDs, existingIDs[i])
+				continue
+			}
+			log.Warnf("discord bot: edit picker %s/%s failed (%v) — posting fresh", masterChannelID, existingIDs[i], err)
+		}
+		// Send fresh.
+		sent, err := s.ChannelMessageSendComplex(masterChannelID, &discordgo.MessageSend{
+			Embeds:     msg.Embeds,
+			Components: msg.Components,
+		})
+		if err != nil {
+			log.Warnf("discord bot: post picker chunk %d in %s: %v", i, masterChannelID, err)
+			continue
+		}
+		newIDs = append(newIDs, sent.ID)
 	}
 
-	if picker.Pinned {
-		if err := s.ChannelMessagePin(masterChannelID, msg.ID); err != nil {
-			log.Warnf("discord bot: pin picker %s/%s: %v", masterChannelID, msg.ID, err)
+	// Delete stale messages from a previous run that have no chunk now.
+	for i := len(messages); i < len(existingIDs); i++ {
+		if existingIDs[i] == "" {
+			continue
+		}
+		if err := s.ChannelMessageDelete(masterChannelID, existingIDs[i]); err != nil {
+			log.Warnf("discord bot: delete stale picker %s/%s: %v", masterChannelID, existingIDs[i], err)
+		}
+	}
+
+	b.threadCache.ensureMaster(guildID, masterChannelID)
+	b.threadCache.setPickerMessageIDs(masterChannelID, newIDs)
+	if err := b.threadCache.save(); err != nil {
+		log.Warnf("discord bot: persist picker message ids: %v", err)
+	}
+
+	// Pin the first message only — that's where the embed lives.
+	if picker.Pinned && len(newIDs) > 0 {
+		if err := s.ChannelMessagePin(masterChannelID, newIDs[0]); err != nil {
+			log.Warnf("discord bot: pin picker %s/%s: %v", masterChannelID, newIDs[0], err)
 		}
 	}
 }
