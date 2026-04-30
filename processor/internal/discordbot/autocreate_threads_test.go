@@ -3,6 +3,8 @@ package discordbot
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 func TestEncodeThreadJoinID(t *testing.T) {
@@ -78,5 +80,44 @@ func TestThreadCacheMastersForUser(t *testing.T) {
 	all := c.allMasters()
 	if len(all) != 2 {
 		t.Errorf("allMasters len = %d, want 2", len(all))
+	}
+}
+
+func TestBuildPickerPayload(t *testing.T) {
+	picker := &threadPickerDef{
+		EmbedTitle:       "Area alerts for {0}",
+		EmbedDescription: "Click to join.",
+		Pinned:           true,
+	}
+	threads := []threadCacheEntry{
+		{ThreadID: "t1", Label: "Hundo"},
+		{ThreadID: "t2", Label: "Nundo"},
+	}
+
+	embeds, components := buildPickerPayload("master1", picker, threads, []string{"amsterdam_apollo"})
+
+	if len(embeds) != 1 {
+		t.Fatalf("embeds len = %d, want 1", len(embeds))
+	}
+	if embeds[0].Title != "Area alerts for amsterdam_apollo" {
+		t.Errorf("title = %q, want template-expanded", embeds[0].Title)
+	}
+	if len(components) != 1 {
+		t.Fatalf("components len = %d, want one ActionsRow", len(components))
+	}
+	row, ok := components[0].(discordgo.ActionsRow)
+	if !ok {
+		t.Fatalf("first component not ActionsRow: %T", components[0])
+	}
+	if len(row.Components) != 2 {
+		t.Errorf("buttons = %d, want 2", len(row.Components))
+	}
+	btn0 := row.Components[0].(discordgo.Button)
+	if btn0.Label != "Hundo" {
+		t.Errorf("button label = %q, want Hundo", btn0.Label)
+	}
+	wantID := "poracle:thread:master1:t1:join"
+	if btn0.CustomID != wantID {
+		t.Errorf("custom_id = %q, want %q", btn0.CustomID, wantID)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 // Discord limits custom_id to 100 chars; this prefix scheme leaves
@@ -155,4 +157,31 @@ func (c *threadCache) allMasters() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// buildPickerPayload returns the embed and components for the master
+// channel's picker post. Discord caps action rows at 5 buttons, so
+// callers should keep configured threads ≤ 5 per master in v1
+// (validation in autocreate enforces this).
+func buildPickerPayload(masterID string, picker *threadPickerDef, threads []threadCacheEntry, args []string) ([]*discordgo.MessageEmbed, []discordgo.MessageComponent) {
+	title := formatTemplate(picker.EmbedTitle, args)
+	desc := formatTemplate(picker.EmbedDescription, args)
+
+	embeds := []*discordgo.MessageEmbed{{
+		Title:       title,
+		Description: desc,
+	}}
+
+	buttons := make([]discordgo.MessageComponent, 0, len(threads))
+	for _, th := range threads {
+		buttons = append(buttons, discordgo.Button{
+			Label:    th.Label,
+			Style:    discordgo.SecondaryButton,
+			CustomID: encodeThreadJoinID(masterID, th.ThreadID),
+		})
+	}
+	if len(buttons) == 0 {
+		return embeds, nil
+	}
+	return embeds, []discordgo.MessageComponent{discordgo.ActionsRow{Components: buttons}}
 }
