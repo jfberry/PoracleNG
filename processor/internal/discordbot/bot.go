@@ -69,6 +69,9 @@ func New(cfg Config) (*Bot, error) {
 	session.AddHandler(b.onGuildMemberRemove)
 	session.AddHandler(b.onChannelDelete)
 
+	// Thread-join button interactions.
+	session.AddHandler(b.onInteractionCreate)
+
 	if err := session.Open(); err != nil {
 		return nil, err
 	}
