@@ -224,6 +224,7 @@ type Attachment struct {
 const (
 	TypeDiscordUser    = "discord:user"
 	TypeDiscordChannel = "discord:channel"
+	TypeDiscordThread  = "discord:thread"
 	TypeTelegramUser   = "telegram:user"
 	TypeTelegramGroup  = "telegram:group"
 	// TypeTelegramTopic identifies a forum-supergroup topic. The human

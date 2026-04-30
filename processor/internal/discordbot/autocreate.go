@@ -343,63 +343,13 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		for _, cmdText := range chDef.Commands {
 			expanded := formatTemplate(cmdText, quotedSubArgs)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">>> Executing %s", expanded))
-
-			// Parse and execute the command through the shared registry.
-			parsed := b.Parser.Parse(b.Cfg.Discord.Prefix + expanded)
-			for _, pc := range parsed {
-				handler := b.Registry.Lookup(pc.CommandKey)
-				if handler == nil {
-					s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Unknown command: %s", pc.CommandKey))
-					continue
-				}
-
-				ctx := &bot.CommandContext{
-					UserID:        m.Author.ID,
-					UserName:      m.Author.Username,
-					Platform:      "discord",
-					ChannelID:     m.ChannelID,
-					GuildID:       guildID,
-					IsDM:          false,
-					IsAdmin:       true,
-					Language:      b.Cfg.General.Locale,
-					ProfileNo:     1,
-					TargetID:      targetID,
-					TargetName:    targetName,
-					TargetType:    targetType,
-					DB:            b.DB,
-					Humans:        b.Humans,
-					Tracking:      b.Tracking,
-					Config:        b.Cfg,
-					StateMgr:      b.StateMgr,
-					GameData:      b.GameData,
-					Translations:  b.Translations,
-					Dispatcher:    b.Dispatcher,
-					RowText:       b.RowText,
-					Resolver:      b.Resolver,
-					ArgMatcher:    b.ArgMatcher,
-					Geocoder:      b.Geocoder,
-					StaticMap:     b.StaticMap,
-					Weather:       b.Weather,
-					Stats:         b.Stats,
-					DTS:           b.DTS,
-					Emoji:         b.Emoji,
-					NLP:           b.nlpParser,
-					TestProcessor: b.TestProcessor,
-					Registry:      b.Registry,
-					ReloadFunc:    b.ReloadFunc,
-				}
-
-				st := b.StateMgr.Get()
-				if st != nil {
-					ctx.Geofence = st.Geofence
-					ctx.Fences = st.Fences
-					ctx.AreaLogic = bot.NewAreaLogic(st.Fences, b.Cfg)
-				}
-
-				replies := handler.Run(ctx, pc.Args)
-				b.sendReplies(s, m, replies)
-			}
+			b.runOneAutocreateCommand(s, m, guildID, targetID, targetName, targetType, expanded)
 		}
+
+		// Create configured threads under this master channel and emit
+		// the picker if one is configured.
+		threadEntries := b.createThreadsForChannel(s, m, guildID, channel.ID, chDef, subArgsUnder)
+		_ = threadEntries // used in Task 7 (picker post)
 	}
 
 	// Trigger reload after all creations.
@@ -408,6 +358,152 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 
 	s.ChannelMessageSend(m.ChannelID, "Autocreate complete!")
+}
+
+// runOneAutocreateCommand parses one !-prefixed command string and
+// executes it through the shared registry as the named target. Used by
+// both the per-channel and per-thread command-execution loops.
+func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, m *discordgo.MessageCreate, guildID, targetID, targetName, targetType, expanded string) {
+	parsed := b.Parser.Parse(b.Cfg.Discord.Prefix + expanded)
+	for _, pc := range parsed {
+		handler := b.Registry.Lookup(pc.CommandKey)
+		if handler == nil {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Unknown command: %s", pc.CommandKey))
+			continue
+		}
+
+		ctx := &bot.CommandContext{
+			UserID:        m.Author.ID,
+			UserName:      m.Author.Username,
+			Platform:      "discord",
+			ChannelID:     m.ChannelID,
+			GuildID:       guildID,
+			IsDM:          false,
+			IsAdmin:       true,
+			Language:      b.Cfg.General.Locale,
+			ProfileNo:     1,
+			TargetID:      targetID,
+			TargetName:    targetName,
+			TargetType:    targetType,
+			DB:            b.DB,
+			Humans:        b.Humans,
+			Tracking:      b.Tracking,
+			Config:        b.Cfg,
+			StateMgr:      b.StateMgr,
+			GameData:      b.GameData,
+			Translations:  b.Translations,
+			Dispatcher:    b.Dispatcher,
+			RowText:       b.RowText,
+			Resolver:      b.Resolver,
+			ArgMatcher:    b.ArgMatcher,
+			Geocoder:      b.Geocoder,
+			StaticMap:     b.StaticMap,
+			Weather:       b.Weather,
+			Stats:         b.Stats,
+			DTS:           b.DTS,
+			Emoji:         b.Emoji,
+			NLP:           b.nlpParser,
+			TestProcessor: b.TestProcessor,
+			Registry:      b.Registry,
+			ReloadFunc:    b.ReloadFunc,
+		}
+
+		st := b.StateMgr.Get()
+		if st != nil {
+			ctx.Geofence = st.Geofence
+			ctx.Fences = st.Fences
+			ctx.AreaLogic = bot.NewAreaLogic(st.Fences, b.Cfg)
+		}
+
+		replies := handler.Run(ctx, pc.Args)
+		b.sendReplies(s, m, replies)
+	}
+}
+
+// createThreadsForChannel iterates chDef.Threads, creates each private
+// thread under masterChannelID (or reuses cached ID), registers the
+// thread as a discord:thread Poracle human, and runs its commands list
+// against the shared execution path. Returns the cache entries for the
+// threads it owns so the caller can emit the picker.
+func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.MessageCreate, guildID, masterChannelID string, chDef channelEntry, subArgs []string) []threadCacheEntry {
+	if len(chDef.Threads) == 0 {
+		return nil
+	}
+	if len(chDef.Threads) > 5 {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠️ %s: only first 5 threads will get buttons (Discord ActionsRow limit)", chDef.ChannelName))
+	}
+
+	cached, _ := b.threadCache.master(masterChannelID)
+	cachedByLabel := map[string]threadCacheEntry{}
+	if cached != nil {
+		for _, e := range cached.Threads {
+			cachedByLabel[e.Label] = e
+		}
+	}
+
+	var entries []threadCacheEntry
+	for _, th := range chDef.Threads {
+		threadName := formatTemplate(th.Name, subArgs)
+		label := th.ButtonLabel
+		if label == "" {
+			label = threadName
+		} else {
+			label = formatTemplate(label, subArgs)
+		}
+
+		var threadID string
+		if existing, ok := cachedByLabel[label]; ok {
+			threadID = existing.ThreadID
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Thread %s already cached (%s); skipping create", threadName, threadID))
+		} else {
+			created, err := s.ThreadStartComplex(masterChannelID, &discordgo.ThreadStart{
+				Name:                threadName,
+				Type:                discordgo.ChannelTypeGuildPrivateThread,
+				AutoArchiveDuration: 10080,
+				Invitable:           false,
+			})
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("❌ Failed to create thread %s: %v", threadName, err))
+				continue
+			}
+			threadID = created.ID
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("✅ Created private thread %s (%s)", threadName, threadID))
+		}
+
+		// Register a discord:thread human row.
+		h := &store.Human{
+			ID:      threadID,
+			Type:    bot.TypeDiscordThread,
+			Name:    threadName,
+			Enabled: true,
+		}
+		if err := b.Humans.Create(h); err != nil {
+			// Already-registered is benign on re-runs; log and continue.
+			log.Warnf("discord bot: autocreate register thread %s: %v", threadName, err)
+		} else {
+			_ = b.Humans.CreateDefaultProfile(threadID, threadName, nil, 0, 0)
+		}
+
+		// Run the thread's commands against the thread's human. The
+		// thread name is appended to subArgs as an extra placeholder so
+		// commands can reference it (e.g. `!area add {0}` if the parent
+		// args put the area name first).
+		threadArgs := append(append([]string{}, subArgs...), threadName)
+		for _, cmdText := range th.Commands {
+			expanded := formatTemplate(cmdText, threadArgs)
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">>> [%s] %s", threadName, expanded))
+			b.runOneAutocreateCommand(s, m, guildID, threadID, threadName, bot.TypeDiscordThread, expanded)
+		}
+
+		entry := threadCacheEntry{ThreadID: threadID, Label: label}
+		entries = append(entries, entry)
+		b.threadCache.upsertMaster(guildID, masterChannelID, "")
+		b.threadCache.upsertThread(masterChannelID, entry)
+		if err := b.threadCache.save(); err != nil {
+			log.Warnf("discord bot: persist thread cache: %v", err)
+		}
+	}
+	return entries
 }
 
 // buildPermissionOverwrites resolves role names to IDs and builds permission overwrites.
