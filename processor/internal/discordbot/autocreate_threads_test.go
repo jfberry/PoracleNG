@@ -1,7 +1,6 @@
 package discordbot
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -82,41 +81,6 @@ func TestThreadCacheMastersForUser(t *testing.T) {
 	all := c.allMasters()
 	if len(all) != 2 {
 		t.Errorf("allMasters len = %d, want 2", len(all))
-	}
-}
-
-// TestThreadCacheLegacyMigration confirms that a cache file written by
-// the single-message-only schema is migrated cleanly on load: the old
-// pickerMessageId becomes the first element of pickerMessageIds, and
-// the old field is cleared so it isn't written back.
-func TestThreadCacheLegacyMigration(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "autocreate-threads.json")
-
-	legacy := []byte(`{
-		"master1": {
-			"guildId": "g1",
-			"pickerMessageId": "old-msg",
-			"threads": [{"threadId": "t1", "label": "L"}]
-		}
-	}`)
-	if err := os.WriteFile(path, legacy, 0o644); err != nil {
-		t.Fatalf("seed legacy: %v", err)
-	}
-
-	c := newThreadCache(path)
-	if err := c.load(); err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	m, ok := c.master("master1")
-	if !ok {
-		t.Fatal("master not found")
-	}
-	if len(m.PickerMessageIDs) != 1 || m.PickerMessageIDs[0] != "old-msg" {
-		t.Errorf("PickerMessageIDs = %v, want [old-msg]", m.PickerMessageIDs)
-	}
-	if m.PickerMessageID != "" {
-		t.Errorf("legacy PickerMessageID = %q after migration, want empty", m.PickerMessageID)
 	}
 }
 

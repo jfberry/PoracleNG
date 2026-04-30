@@ -74,17 +74,11 @@ func buttonStyleFor(s string) discordgo.ButtonStyle {
 }
 
 // threadCacheMaster is the per-master section of the on-disk cache.
-//
 // PickerMessageIDs is the ordered list of message IDs that make up the
 // picker — one per chunk of up to pickerButtonsPerMessage buttons.
-//
-// PickerMessageID is the legacy single-message field from before
-// multi-message support; it's read on load() and migrated into
-// PickerMessageIDs, then never written.
 type threadCacheMaster struct {
 	GuildID          string             `json:"guildId"`
 	PickerMessageIDs []string           `json:"pickerMessageIds,omitempty"`
-	PickerMessageID  string             `json:"pickerMessageId,omitempty"`
 	Threads          []threadCacheEntry `json:"threads"`
 }
 
@@ -116,13 +110,6 @@ func (c *threadCache) load() error {
 	}
 	if err := json.Unmarshal(data, &c.masters); err != nil {
 		return fmt.Errorf("parse thread cache %s: %w", c.path, err)
-	}
-	// Migrate legacy single-ID schema written before multi-message support.
-	for _, m := range c.masters {
-		if m.PickerMessageID != "" && len(m.PickerMessageIDs) == 0 {
-			m.PickerMessageIDs = []string{m.PickerMessageID}
-		}
-		m.PickerMessageID = ""
 	}
 	return nil
 }
