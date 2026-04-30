@@ -379,6 +379,16 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, m *discordgo.Message
 			continue
 		}
 
+		// Refresh HasArea / HasLocation from the DB before each command.
+		// Earlier commands in the same autocreate run (e.g. !area add)
+		// mutate the human row, so a stale-false value would otherwise
+		// cause the next command to spuriously warn "no area set".
+		hasArea, hasLocation := false, false
+		if h, err := b.Humans.Get(targetID); err == nil && h != nil {
+			hasArea = len(h.Area) > 0
+			hasLocation = h.Latitude != 0 || h.Longitude != 0
+		}
+
 		ctx := &bot.CommandContext{
 			UserID:        m.Author.ID,
 			UserName:      m.Author.Username,
@@ -392,6 +402,8 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, m *discordgo.Message
 			TargetID:      targetID,
 			TargetName:    targetName,
 			TargetType:    targetType,
+			HasArea:       hasArea,
+			HasLocation:   hasLocation,
 			DB:            b.DB,
 			Humans:        b.Humans,
 			Tracking:      b.Tracking,
