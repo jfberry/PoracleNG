@@ -12,10 +12,10 @@ func TestEncodeThreadJoinID(t *testing.T) {
 
 func TestDecodeThreadJoinID(t *testing.T) {
 	tests := []struct {
-		in            string
-		wantMaster    string
-		wantThread    string
-		wantOK        bool
+		in         string
+		wantMaster string
+		wantThread string
+		wantOK     bool
 	}{
 		{"poracle:thread:111:222:join", "111", "222", true},
 		{"poracle:thread:111:222", "", "", false},
