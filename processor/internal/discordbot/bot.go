@@ -28,6 +28,7 @@ type Bot struct {
 	nlpParser      *nlp.Parser
 	reconciliation *Reconciliation
 	stopCh         chan struct{}
+	threadCache    *threadCache
 }
 
 // Config holds everything needed to create a Discord bot.
@@ -48,6 +49,11 @@ func New(cfg Config) (*Bot, error) {
 		session:   session,
 		nlpParser: cfg.NLPParser,
 		stopCh:    make(chan struct{}),
+	}
+
+	b.threadCache = newThreadCache(threadCachePath(cfg.Cfg.BaseDir))
+	if err := b.threadCache.load(); err != nil {
+		log.Warnf("discord bot: load thread cache: %v", err)
 	}
 
 	session.Identify.Intents = discordgo.IntentsGuildMessages |

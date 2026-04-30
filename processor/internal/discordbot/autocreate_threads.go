@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -184,4 +185,11 @@ func buildPickerPayload(masterID string, picker *threadPickerDef, threads []thre
 		return embeds, nil
 	}
 	return embeds, []discordgo.MessageComponent{discordgo.ActionsRow{Components: buttons}}
+}
+
+// threadCachePath returns the on-disk location for the cache file,
+// rooted at the project's config directory. Mirrors the convention used
+// by other config/.cache files (e.g. gym-state.json).
+func threadCachePath(baseDir string) string {
+	return filepath.Join(baseDir, "config", ".cache", "autocreate-threads.json")
 }
