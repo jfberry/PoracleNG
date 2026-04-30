@@ -310,11 +310,16 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		}
 
 		// Register in DB.
+		// CurrentProfileNo: 1 must match the ProfileNo used when running
+		// the configured commands below — otherwise the autocreate-time
+		// inserts land on profile 1 but BuildTarget reads back 0 from
+		// humans.current_profile_no on a later !tracked, finding nothing.
 		h := &store.Human{
-			ID:      targetID,
-			Type:    targetType,
-			Name:    targetName,
-			Enabled: true,
+			ID:               targetID,
+			Type:             targetType,
+			Name:             targetName,
+			Enabled:          true,
+			CurrentProfileNo: 1,
 		}
 		if err := b.Humans.Create(h); err != nil {
 			log.Errorf("discord bot: autocreate register %s: %v", targetName, err)
@@ -469,12 +474,16 @@ func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.Message
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("✅ Created private thread %s (%s)", threadName, threadID))
 		}
 
-		// Register a discord:thread human row.
+		// Register a discord:thread human row. CurrentProfileNo: 1 must
+		// match the hardcoded ProfileNo used when the per-thread commands
+		// run below — otherwise inserts land at profile 1 but later
+		// !tracked target-resolution reads 0 from the DB, finding nothing.
 		h := &store.Human{
-			ID:      threadID,
-			Type:    bot.TypeDiscordThread,
-			Name:    threadName,
-			Enabled: true,
+			ID:               threadID,
+			Type:             bot.TypeDiscordThread,
+			Name:             threadName,
+			Enabled:          true,
+			CurrentProfileNo: 1,
 		}
 		if err := b.Humans.Create(h); err != nil {
 			// Already-registered is benign on re-runs; log and continue.
