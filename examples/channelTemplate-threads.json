@@ -1,0 +1,121 @@
+[
+  {
+    "name": "area",
+    "definition": {
+      "category": {
+        "categoryName": "{0}",
+        "roles": [
+          { "name": "@everyone", "view": false }
+        ]
+      },
+      "channels": [
+        {
+          "channelName": "{0}_master",
+          "channelType": "text",
+          "topic": "Master area channel for {0} — pick which alerts you want via the picker",
+          "controlType": "bot",
+          "roles": [
+            { "name": "@everyone", "view": true, "viewHistory": true, "send": false, "react": true }
+          ],
+          "commands": [
+            "area add {0}"
+          ],
+          "threadPicker": {
+            "embedTitle": "Area alerts for {0}",
+            "embedDescription": "Click the buttons below to activate the private thread for the alerts you want to follow.",
+            "pinned": true
+          },
+          "threads": [
+            {
+              "name": "{0}-Hundo",
+              "buttonLabel": "💯 Hundos",
+              "buttonStyle": "success",
+              "commands": [
+                "area add {0}",
+                "track everything iv100"
+              ]
+            },
+            {
+              "name": "{0}-Nundo",
+              "buttonLabel": "🥚 Nundos",
+              "buttonStyle": "danger",
+              "commands": [
+                "area add {0}",
+                "track everything iv0-0"
+              ]
+            },
+            {
+              "name": "{0}-GreatPVP",
+              "buttonLabel": "Great-league top 5",
+              "buttonStyle": "primary",
+              "commands": [
+                "area add {0}",
+                "track everything great5"
+              ]
+            },
+            {
+              "name": "{0}-UltraPVP",
+              "buttonLabel": "Ultra-league top 5",
+              "buttonStyle": "primary",
+              "commands": [
+                "area add {0}",
+                "track everything ultra5"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "stress",
+    "definition": {
+      "channels": [
+        {
+          "channelName": "stress-{0}",
+          "channelType": "text",
+          "controlType": "bot",
+          "commands": [
+            "area add {0}"
+          ],
+          "threadPicker": {
+            "embedTitle": "Stress test ({0}) — 30 threads",
+            "embedDescription": "Should render across 2 messages: 25 buttons in 5 rows on the first, 5 buttons in 1 row on the second. The embed only appears on the first message."
+          },
+          "threads": [
+            { "name": "{0}-t01", "commands": ["area add {0}", "track everything iv100"] },
+            { "name": "{0}-t02", "commands": ["area add {0}", "track everything iv99"] },
+            { "name": "{0}-t03", "commands": ["area add {0}", "track everything iv98"] },
+            { "name": "{0}-t04", "commands": ["area add {0}", "track everything iv97"] },
+            { "name": "{0}-t05", "commands": ["area add {0}", "track everything iv96"] },
+            { "name": "{0}-t06", "commands": ["area add {0}", "track everything iv95"] },
+            { "name": "{0}-t07", "commands": ["area add {0}", "track everything iv94"] },
+            { "name": "{0}-t08", "commands": ["area add {0}", "track everything iv93"] },
+            { "name": "{0}-t09", "commands": ["area add {0}", "track everything iv92"] },
+            { "name": "{0}-t10", "commands": ["area add {0}", "track everything iv91"] },
+            { "name": "{0}-t11", "commands": ["area add {0}", "track everything iv90"] },
+            { "name": "{0}-t12", "commands": ["area add {0}", "track everything iv89"] },
+            { "name": "{0}-t13", "commands": ["area add {0}", "track everything iv88"] },
+            { "name": "{0}-t14", "commands": ["area add {0}", "track everything iv87"] },
+            { "name": "{0}-t15", "commands": ["area add {0}", "track everything iv86"] },
+            { "name": "{0}-t16", "commands": ["area add {0}", "track everything iv85"] },
+            { "name": "{0}-t17", "commands": ["area add {0}", "track everything iv84"] },
+            { "name": "{0}-t18", "commands": ["area add {0}", "track everything iv83"] },
+            { "name": "{0}-t19", "commands": ["area add {0}", "track everything iv82"] },
+            { "name": "{0}-t20", "commands": ["area add {0}", "track everything iv81"] },
+            { "name": "{0}-t21", "commands": ["area add {0}", "track everything iv80"] },
+            { "name": "{0}-t22", "commands": ["area add {0}", "track everything iv79"] },
+            { "name": "{0}-t23", "commands": ["area add {0}", "track everything iv78"] },
+            { "name": "{0}-t24", "commands": ["area add {0}", "track everything iv77"] },
+            { "name": "{0}-t25", "commands": ["area add {0}", "track everything iv76"] },
+            { "name": "{0}-t26", "commands": ["area add {0}", "track everything iv75"] },
+            { "name": "{0}-t27", "commands": ["area add {0}", "track everything iv74"] },
+            { "name": "{0}-t28", "commands": ["area add {0}", "track everything iv73"] },
+            { "name": "{0}-t29", "commands": ["area add {0}", "track everything iv72"] },
+            { "name": "{0}-t30", "commands": ["area add {0}", "track everything iv71"] }
+          ]
+        }
+      ]
+    }
+  }
+]

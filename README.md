@@ -154,7 +154,7 @@ Some features use JSON data files (DTS templates, pokemon aliases, etc.). These 
 | `geofences/*.json` | Geofence definitions | Yes (`fallbacks/geofence.json`) |
 | `dts/` | Additional DTS files (merged with dts.json) | No |
 | `broadcast.json` | Broadcast message templates | No |
-| `channelTemplate.json` | Discord channel auto-creation templates | No |
+| `channelTemplate.json` | Discord channel auto-creation templates ([AUTOCREATE.md](AUTOCREATE.md)) | No |
 | `customMaps/` | Custom static map definitions | No |
 | `emoji.json` | Custom emoji mappings | No |
 | `custom.<lang>.json` | Custom locale translations | No |

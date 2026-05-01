@@ -307,7 +307,7 @@ Reconciliation syncs Discord role membership with Poracle user registration. Run
 
 ### Picker-managed threads
 
-`!autocreate` can create private threads under a master text channel and post a button-driven picker. Each thread is registered as its own `discord:thread` Poracle human and runs its configured `commands` block at creation time, so it has tracking rules from the moment it exists. Button `custom_id`s are stateless (`poracle:thread:<masterID>:<threadID>:join`), so click handling survives bot restarts. The master→threads map is cached at `config/.cache/autocreate-threads.json`.
+`!autocreate` can create private threads under a master text channel and post a button-driven picker. Each thread is registered as its own `discord:thread` Poracle human and runs its configured `commands` block at creation time, so it has tracking rules from the moment it exists. Button `custom_id`s are stateless (`poracle:thread:<masterID>:<threadID>:join`), so click handling survives bot restarts. The master→threads map is cached at `config/.cache/autocreate-threads.json`. End-user reference for the JSON format: [AUTOCREATE.md](AUTOCREATE.md).
 
 Role-loss handling is left to Discord: private-thread visibility inherits View Channel permission on the parent text channel, so a user who loses the master-channel role automatically loses access to the threads under it without any reconciler involvement.
 
