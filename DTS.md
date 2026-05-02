@@ -126,6 +126,7 @@ These fields are available in every template:
 | `boostWeatherId` | int/string | Boosting weather ID (empty string if not boosted) |
 | `boostWeatherName` | string | Translated boost weather name |
 | `boostWeatherEmoji` | string | Boost weather emoji |
+| `boostingWeathersEmoji` | string | Concatenated emoji string for every weather that boosts this pokemon's types (e.g. `"☀️💨"`) |
 | `boost` | string | *Deprecated* — alias for `boostWeatherName` |
 | `boostemoji` | string | *Deprecated* — alias for `boostWeatherEmoji` |
 
@@ -178,7 +179,7 @@ Template type `monster` is used for encountered pokemon (with IV data). Template
 | `emojiString` | string | Type emojis concatenated |
 | `typeEmoji` | string | Type emojis concatenated (resolved from emoji keys) |
 | `weaknessList` | array | Weakness categories: `{value, types: [{typeId, name, typeEmoji}]}` |
-| `weaknessEmoji` | string | Flat space-separated `"<value>x<typeEmoji>"` per category, e.g. `"2x💧⚡ 4x🪨 "`. PoracleJS-compatible shorthand for templates that don't iterate `weaknessList`. |
+| `weaknessEmoji` | string | Flat space-separated `"<value>x<typeEmoji>"` per category, e.g. `"2x💧⚡ 4x🪨 "` — for templates that don't iterate `weaknessList`. |
 
 ### Moves
 
@@ -371,7 +372,7 @@ Hatched raid with a boss pokemon.
 | `typeEmoji` | string | Type emojis concatenated |
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
 | `weaknessList` | array | Weakness categories |
-| `weaknessEmoji` | string | Flat `"<value>x<typeEmoji>"` per category (PoracleJS-compatible) |
+| `weaknessEmoji` | string | Flat `"<value>x<typeEmoji>"` per category |
 | `generation` | int | Generation number |
 | `generationRoman` | string | Roman numeral |
 | `generationName` | string | Translated generation name |
@@ -671,7 +672,7 @@ Map URLs (`googleMapUrl`, `appleMapUrl`, `wazeMapUrl`, etc.) are available for n
 | `genderData` | object | `{name, emoji}` |
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
 | `weaknessList` | array | Weakness categories |
-| `weaknessEmoji` | string | Flat `"<value>x<typeEmoji>"` per category (PoracleJS-compatible) |
+| `weaknessEmoji` | string | Flat `"<value>x<typeEmoji>"` per category |
 | `evolutions` | array | Evolution chain |
 | `megaEvolutions` | array | Mega evolutions |
 | `time` | string | Battle end time |

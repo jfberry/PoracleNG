@@ -89,7 +89,8 @@ func NewLayeredView(
 	}
 
 	// Resolve emoji keys inside weaknessList entries (per-platform) and
-	// build the flat {{weaknessEmoji}} string (PoracleJS compatibility).
+	// build the flat {{weaknessEmoji}} string for templates that don't
+	// iterate weaknessList.
 	resolveWeaknessEmojis(vb.emoji, perLang, platform, lv.computed)
 
 	// Compose weatherChange text from forecast fields (needs resolved emoji + translated names)
@@ -264,9 +265,9 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang, perUser map[string]any, pl
 //
 // Per category: each type entry gets "emoji" resolved (per-platform),
 // and the category gets "typeEmoji" as a joined string. The flat
-// weaknessEmoji is the space-separated concatenation of "{value}x{typeEmoji}"
-// per category, matching PoracleJS controllers/raid.js for template
-// compatibility.
+// weaknessEmoji is the space-separated concatenation of
+// "{value}x{typeEmoji}" per category — the field many shipped templates
+// reference directly without iterating weaknessList.
 //
 // Resolution must happen during view construction because it requires
 // the platform for the emoji lookup.

@@ -133,6 +133,7 @@ var monsterFields = []FieldDef{
 	{Name: "boostWeatherEmoji", Type: "string", Description: "Boost weather emoji", Category: "weather", Preferred: true},
 	{Name: "boostWeatherName", Type: "string", Description: "Translated boost weather", Category: "weather"},
 	{Name: "boosted", Type: "bool", Description: "Is weather boosted", Category: "weather"},
+	{Name: "boostingWeathersEmoji", Type: "string", Description: "Concatenated emoji string for every weather that boosts this pokemon's types (e.g. \"☀️💨\")", Category: "weather"},
 	{Name: "gameWeatherName", Type: "string", Description: "Current game weather name", Category: "weather"},
 	{Name: "gameWeatherEmoji", Type: "string", Description: "Current game weather emoji", Category: "weather"},
 	{Name: "weatherChange", Type: "string", Description: "Weather forecast text", Category: "weather"},
@@ -158,7 +159,7 @@ var monsterFields = []FieldDef{
 	{Name: "costume", Type: "int", Description: "Costume ID", Category: "other"},
 	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
 	{Name: "weaknessList", Type: "array", Description: "Type weakness list", Category: "other"},
-	{Name: "weaknessEmoji", Type: "string", Description: "Flat string of all weakness multipliers + type emoji (e.g. \"2x💧⚡ 4x🪨 \"). PoracleJS-compatible.", Category: "other"},
+	{Name: "weaknessEmoji", Type: "string", Description: "Flat string of all weakness multipliers + type emoji (e.g. \"2x💧⚡ 4x🪨 \").", Category: "other"},
 	{Name: "evolutions", Type: "array", Description: "Evolution entries", Category: "other"},
 	{Name: "megaEvolutions", Type: "array", Description: "Mega evolution entries", Category: "other"},
 	{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions", Category: "other"},
@@ -207,6 +208,7 @@ var raidFields = []FieldDef{
 	// Weather
 	{Name: "boostWeatherEmoji", Type: "string", Description: "Boost weather emoji", Category: "weather"},
 	{Name: "boostWeatherName", Type: "string", Description: "Translated boost weather", Category: "weather"},
+	{Name: "boostingWeathersEmoji", Type: "string", Description: "Concatenated emoji string for every weather that boosts the raid boss's types", Category: "weather"},
 	// Other
 	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
 	{Name: "evolutions", Type: "array", Description: "Evolution entries", Category: "other"},
@@ -214,7 +216,7 @@ var raidFields = []FieldDef{
 	{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions", Category: "other"},
 	{Name: "hasMegaEvolutions", Type: "bool", Description: "Has mega evolutions", Category: "other"},
 	{Name: "weaknessList", Type: "array", Description: "Type weakness list", Category: "other"},
-	{Name: "weaknessEmoji", Type: "string", Description: "Flat string of all weakness multipliers + type emoji (e.g. \"2x💧⚡ 4x🪨 \"). PoracleJS-compatible.", Category: "other"},
+	{Name: "weaknessEmoji", Type: "string", Description: "Flat string of all weakness multipliers + type emoji (e.g. \"2x💧⚡ 4x🪨 \").", Category: "other"},
 	{Name: "rsvps", Type: "array", Description: "RSVP timeslot entries", Category: "other"},
 }
 

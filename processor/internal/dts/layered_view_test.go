@@ -582,10 +582,33 @@ func TestLayeredView_WeatherChangeAliases(t *testing.T) {
 	}
 }
 
-// TestLayeredView_WeaknessEmojiFlatString locks the PoracleJS-compatible
-// {{weaknessEmoji}} flat string. Templates that pre-date the structured
-// weaknessList (e.g. NPlumb's dts_all.json) reference {{weaknessEmoji}}
-// directly; without this the field resolves to nothing.
+// TestLayeredView_BoostingWeathersEmoji locks {{boostingWeathersEmoji}}
+// — the field every long-running pokemon / raid template references.
+// resolveEmojiMap joins the per-platform emoji for every weather that
+// boosts the pokemon's types into one string.
+func TestLayeredView_BoostingWeathersEmoji(t *testing.T) {
+	emoji := &EmojiLookup{
+		custom: make(map[string]map[string]string),
+		defaults: map[string]string{
+			"weather_3": "☀️",
+			"weather_5": "💨",
+		},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.emoji = emoji
+		o.base = map[string]any{
+			"boostingWeatherEmojiKeys": []string{"weather_3", "weather_5"},
+		}
+	})
+
+	v, ok := lv.GetField("boostingWeathersEmoji")
+	require.True(t, ok)
+	assert.Equal(t, "☀️💨", v)
+}
+
+// TestLayeredView_WeaknessEmojiFlatString locks the {{weaknessEmoji}}
+// flat string. Templates that don't iterate the structured weaknessList
+// (e.g. NPlumb's dts_all.json) reference {{weaknessEmoji}} directly.
 func TestLayeredView_WeaknessEmojiFlatString(t *testing.T) {
 	emoji := &EmojiLookup{
 		custom: make(map[string]map[string]string),

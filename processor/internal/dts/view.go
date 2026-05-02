@@ -50,12 +50,15 @@ var singleEmojiKeys = []struct {
 }
 
 // arrayEmojiKeys lists enrichment fields that contain arrays of emoji key strings.
+// outputField is where the resolved per-platform emoji land — as a joined
+// string in the emoji layer (resolveEmojiMap), as a []string in the
+// computed layer (the latter is currently shadowed by the former).
 var arrayEmojiKeys = []struct {
 	keyField    string
 	outputField string
 }{
 	{"typeEmojiKeys", "typeEmoji"},
-	{"boostingWeatherEmojiKeys", "boostingWeatherEmojis"},
+	{"boostingWeatherEmojiKeys", "boostingWeathersEmoji"},
 }
 
 // resolveEmojiArray resolves an array of emoji keys to emoji strings.
