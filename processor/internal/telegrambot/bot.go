@@ -82,21 +82,26 @@ func New(cfg Config) (*Bot, error) {
 // validateConfig checks all configured Telegram IDs (channels, groups, communities)
 // by calling getChat and logs whether they resolve.
 func (b *Bot) validateConfig() {
+	getChat := func(chatID int64) (*models.ChatFullInfo, error) {
+		ctx, cancel := requestCtx()
+		defer cancel()
+		return b.api.GetChat(ctx, &gotgbot.GetChatParams{ChatID: chatID})
+	}
+
 	checkChat := func(label, chatIDStr string) {
 		chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 		if err != nil {
 			log.Warnf("config: %s %s — invalid ID", label, chatIDStr)
 			return
 		}
-		chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
-		chat, err := b.api.GetChat(chatCfg)
+		chat, err := getChat(chatID)
 		if err != nil {
 			log.Warnf("config: %s %s — NOT ACCESSIBLE (bot may not be a member): %v", label, chatIDStr, err)
 			return
 		}
 		name := chat.Title
 		if name == "" {
-			name = chat.UserName
+			name = chat.Username
 		}
 		if name == "" {
 			name = chat.FirstName
@@ -122,8 +127,7 @@ func (b *Bot) validateConfig() {
 		if err != nil {
 			return idStr
 		}
-		chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
-		chat, err := b.api.GetChat(chatCfg)
+		chat, err := getChat(chatID)
 		if err != nil {
 			return idStr
 		}
@@ -132,7 +136,7 @@ func (b *Bot) validateConfig() {
 			name += " " + chat.LastName
 		}
 		if name == "" {
-			name = chat.UserName
+			name = chat.Username
 		}
 		if name == "" {
 			name = chat.Title
@@ -170,13 +174,11 @@ func (b *Bot) validateConfig() {
 	// Log delegated admins (channel tracking)
 	for target, admins := range b.Cfg.Telegram.DelegatedAdministration.ChannelTracking {
 		targetDesc := target
-		chatID, err := strconv.ParseInt(target, 10, 64)
-		if err == nil {
-			chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
-			if chat, err := b.api.GetChat(chatCfg); err == nil {
+		if chatID, err := strconv.ParseInt(target, 10, 64); err == nil {
+			if chat, err := getChat(chatID); err == nil {
 				name := chat.Title
 				if name == "" {
-					name = chat.UserName
+					name = chat.Username
 				}
 				targetDesc = fmt.Sprintf("%s (%s, %s)", name, target, chat.Type)
 			}
@@ -372,7 +374,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 
 		ctx := &bot.CommandContext{
 			UserID:        userID,
-			UserName:      m.From.UserName,
+			UserName:      m.From.Username,
 			Platform:      "telegram",
 			ChannelID:     composeTopicChannelID(chatID, threadID),
 			IsDM:          isDM,
