@@ -418,8 +418,13 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			continue
 		}
 
-		// Registration check — skip for poracle (registration), poracle_test, and version commands
-		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
+		// Registration check — DM only. In a group/channel context, BuildTarget
+		// runs the channel-level registration check and routes through that
+		// path's "channel admins only" / "not registered, add with !channel add"
+		// replies; firing this user-registration short-circuit in groups
+		// would falsely tell every non-admin member "you are not registered."
+		// Skipped for poracle (registration), poracle_test, and version commands.
+		if isDM && !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
 			if msg := b.Cfg.Discord.UnregisteredUserMessage; msg != "" {
 				reply(msg)
 			} else {

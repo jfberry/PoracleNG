@@ -336,8 +336,13 @@ func (b *Bot) handleMessage(m *models.Message) {
 			cmd.CommandKey = "cmd.poracle"
 		}
 
-		// Registration check — skip for poracle (registration), poracle_test, and version commands
-		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
+		// Registration check — DM only. In a group/topic context, BuildTarget
+		// runs the channel/topic-level registration check and routes through
+		// that path's reply; firing this user-registration short-circuit in
+		// groups would falsely tell every non-admin member "you are not
+		// registered." Skipped for poracle (registration), poracle_test, and
+		// version commands.
+		if isDM && !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
 			if customMsg := b.Cfg.Telegram.UnregisteredUserMessage; customMsg != "" {
 				_, _ = b.sendTopicMessage(chatID, threadID, customMsg)
 			} else {
