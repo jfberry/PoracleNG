@@ -523,7 +523,7 @@ These are flat top-level strings, not nested under a `rewardData` object:
 | `pokestopUrl` | string | Pokestop image URL (alias for `pokestop_url`) |
 | `gruntTypeId` | int | Grunt type ID |
 | `gruntName` | string | Translated grunt name |
-| `gruntType` | string | Translated grunt type, e.g. "Water" (alias for `gruntTypeName`) |
+| `gruntType` | string | English title-case grunt type for regular grunts (e.g. "Water"). Lowercase event name for events (e.g. "kecleon", "showcase", "gold-stop"). Use this for `{{#if (eq gruntType 'kecleon')}}` template dispatch — for displaying the localised name use `gruntTypeName`. |
 | `gruntTypeName` | string | Translated grunt type name |
 | `gruntTypeColor` | string | Type color hex |
 | `gruntTypeEmoji` | string | Type emoji |

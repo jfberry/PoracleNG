@@ -32,7 +32,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, poke
 		m["expiration"] = expiration
 		m["incidentExpiration"] = expiration
 		m["incident_expire_timestamp"] = expiration
-		m["expirationTimestamp"] = expiration           // consistent unix int for Discord <t:N:R>
+		m["expirationTimestamp"] = expiration // consistent unix int for Discord <t:N:R>
 		m["disappearTime"] = geo.FormatTime(expiration, tz, e.TimeLayout)
 		m["tth"] = geo.ComputeTTH(expiration)
 	}
@@ -91,11 +91,15 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, poke
 			m["gruntTypeID"] = grunt.TypeID
 			m["gruntGender"] = grunt.Gender
 
-			// Type color and emoji key via TypeInfo (keyed by numeric type ID)
+			// Type color, emoji key, and English type name via TypeInfo
+			// (keyed by numeric type ID). gruntType is the English title-case
+			// type name (e.g. "Fire", "Grass") for {{#if (eq gruntType 'Fire')}}
+			// template comparisons.
 			if grunt.TypeID > 0 {
 				if typeInfo, ok := e.GameData.Types[grunt.TypeID]; ok {
 					m["gruntTypeColor"] = typeInfo.Color
 					m["gruntTypeEmojiKey"] = typeInfo.Emoji
+					m["gruntType"] = typeInfo.Name
 				}
 			}
 
@@ -109,12 +113,16 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, poke
 			}
 		}
 
-		// Event invasions (gruntTypeID == 0 && displayType >= 7) use PokestopEvent data
+		// Event invasions (gruntTypeID == 0 && displayType >= 7) use PokestopEvent data.
+		// gruntType is the lowercase util.json event name
+		// (e.g. "kecleon", "showcase", "gold-stop") so templates can do
+		// {{#if (eq gruntType 'kecleon')}} dispatch.
 		if gruntTypeID == 0 && displayType >= 7 {
 			if eventInfo, ok := e.GameData.Util.PokestopEvent[displayType]; ok {
 				m["gruntTypeID"] = 0
 				m["gruntTypeColor"] = eventInfo.Color
 				m["gruntTypeEmojiKey"] = eventInfo.Emoji
+				m["gruntType"] = strings.ToLower(eventInfo.Name)
 			}
 		}
 	}

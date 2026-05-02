@@ -175,7 +175,6 @@ var typeAliases = map[string][]aliasPair{
 		{"pokestopId", "pokestop_id"},
 		{"name", "pokestop_name"},
 		{"url", "pokestop_url"},
-		{"gruntType", "gruntTypeName"},
 		{"gender", "gruntGender"},
 	},
 	"quest": {

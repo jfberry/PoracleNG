@@ -95,6 +95,7 @@ func TestInvasionBaseEventInvasion(t *testing.T) {
 		Util: &gamedata.UtilData{
 			PokestopEvent: map[int]gamedata.EventInfo{
 				7: {Name: "Showcase", Color: "AABBCC", Emoji: "pokestop_event_showcase"},
+				8: {Name: "Kecleon", Color: "BABABA", Emoji: "pokestop_event_kecleon"},
 			},
 		},
 	}
@@ -107,6 +108,55 @@ func TestInvasionBaseEventInvasion(t *testing.T) {
 	}
 	if m["gruntTypeEmojiKey"] != "pokestop_event_showcase" {
 		t.Errorf("gruntTypeEmojiKey = %q, want %q", m["gruntTypeEmojiKey"], "pokestop_event_showcase")
+	}
+	// gruntType is the lowercase event name for {{#if (eq gruntType 'showcase')}} dispatch.
+	if m["gruntType"] != "showcase" {
+		t.Errorf("gruntType = %q, want %q", m["gruntType"], "showcase")
+	}
+}
+
+// TestInvasionBaseGruntTypeKecleon — the user-reported case:
+// {{#if (eq gruntType 'kecleon')}} should match for displayType 8.
+func TestInvasionBaseGruntTypeKecleon(t *testing.T) {
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
+		Grunts:   map[int]*gamedata.Grunt{},
+		Types:    map[int]*gamedata.TypeInfo{},
+		Util: &gamedata.UtilData{
+			PokestopEvent: map[int]gamedata.EventInfo{
+				8: {Name: "Kecleon", Color: "BABABA", Emoji: "pokestop_event_kecleon"},
+			},
+		},
+	}
+	e := newInvasionEnricher(t, gd, newTestBundle())
+	m, _ := e.Invasion(52.52, 13.40, 0, "stop3", "", 0, 8, 0, TileModeURL)
+
+	if m["gruntType"] != "kecleon" {
+		t.Errorf("gruntType = %q, want %q", m["gruntType"], "kecleon")
+	}
+}
+
+// TestInvasionBaseGruntTypeRegular — for regular grunts, gruntType is
+// the English title-case type name from the type info.
+func TestInvasionBaseGruntTypeRegular(t *testing.T) {
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
+		Grunts: map[int]*gamedata.Grunt{
+			44: {ID: 44, TypeID: 12, Gender: 1, Template: "CHARACTER_GRASS_GRUNT_MALE",
+				Team: [3][]gamedata.GruntEncounterEntry{}},
+		},
+		Types: map[int]*gamedata.TypeInfo{
+			12: {TypeID: 12, Name: "Grass", Color: "78C850", Emoji: "type-grass"},
+		},
+		Util: &gamedata.UtilData{
+			PokestopEvent: map[int]gamedata.EventInfo{},
+		},
+	}
+	e := newInvasionEnricher(t, gd, newTestBundle())
+	m, _ := e.Invasion(52.52, 13.40, 0, "stop4", "", 44, 0, 0, TileModeURL)
+
+	if m["gruntType"] != "Grass" {
+		t.Errorf("gruntType = %q, want %q", m["gruntType"], "Grass")
 	}
 }
 
@@ -133,7 +183,7 @@ func TestInvasionTranslateGruntName(t *testing.T) {
 	bundle := newInvasionBundle(t, map[string]map[string]string{
 		"en": {
 			"character_category_2": "Grunt",
-			"poke_type_12":        "Grass",
+			"poke_type_12":         "Grass",
 		},
 	})
 
@@ -172,7 +222,7 @@ func TestInvasionTranslateGruntNameGerman(t *testing.T) {
 	bundle := newInvasionBundle(t, map[string]map[string]string{
 		"de": {
 			"character_category_2": "Ruepel",
-			"poke_type_12":        "Pflanze",
+			"poke_type_12":         "Pflanze",
 		},
 	})
 
@@ -262,12 +312,12 @@ func TestInvasionTranslateRewardsTwoSlots(t *testing.T) {
 	bundle := newInvasionBundle(t, map[string]map[string]string{
 		"en": {
 			"character_category_2": "Grunt",
-			"poke_type_12":        "Grass",
-			"poke_650":            "Chespin",
-			"poke_598":            "Ferrothorn",
-			"poke_652":            "Chesnaught",
-			"form_0":              "Normal",
-			"form_2186":           "Normal",
+			"poke_type_12":         "Grass",
+			"poke_650":             "Chespin",
+			"poke_598":             "Ferrothorn",
+			"poke_652":             "Chesnaught",
+			"form_0":               "Normal",
+			"form_2186":            "Normal",
 		},
 	})
 
@@ -357,8 +407,8 @@ func TestInvasionTranslateRewardsSingleSlot(t *testing.T) {
 	bundle := newInvasionBundle(t, map[string]map[string]string{
 		"en": {
 			"character_category_2": "Grunt",
-			"poke_25":             "Pikachu",
-			"form_0":              "Normal",
+			"poke_25":              "Pikachu",
+			"form_0":               "Normal",
 		},
 	})
 
@@ -421,9 +471,9 @@ func TestInvasionTranslateRewardsThirdSlotFallback(t *testing.T) {
 	bundle := newInvasionBundle(t, map[string]map[string]string{
 		"en": {
 			"character_category_2": "Grunt",
-			"poke_1":              "Bulbasaur",
-			"poke_3":              "Venusaur",
-			"form_0":              "Normal",
+			"poke_1":               "Bulbasaur",
+			"poke_3":               "Venusaur",
+			"form_0":               "Normal",
 		},
 	})
 

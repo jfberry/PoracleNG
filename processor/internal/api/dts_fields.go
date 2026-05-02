@@ -262,7 +262,8 @@ var questFields = []FieldDef{
 var invasionFields = []FieldDef{
 	{Name: "pokestopName", Type: "string", Description: "Pokestop name", Category: "location", Preferred: true},
 	{Name: "gruntName", Type: "string", Description: "Grunt name", Category: "invasion", Preferred: true},
-	{Name: "gruntTypeName", Type: "string", Description: "Grunt type name", Category: "invasion", Preferred: true},
+	{Name: "gruntTypeName", Type: "string", Description: "Grunt type name (translated)", Category: "invasion", Preferred: true},
+	{Name: "gruntType", Type: "string", Description: "English type name for grunts (e.g. \"Fire\"), lowercase event name for events (e.g. \"kecleon\"). Use for {{#if (eq gruntType 'kecleon')}} dispatch.", Category: "invasion"},
 	{Name: "gruntTypeEmoji", Type: "string", Description: "Grunt type emoji", Category: "invasion"},
 	{Name: "gruntTypeColor", Type: "string", Description: "Grunt type color hex", Category: "invasion"},
 	{Name: "gruntTypeId", Type: "int", Description: "Grunt type ID", Category: "invasion"},
