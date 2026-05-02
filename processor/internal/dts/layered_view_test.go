@@ -582,6 +582,74 @@ func TestLayeredView_WeatherChangeAliases(t *testing.T) {
 	}
 }
 
+// TestLayeredView_WeaknessEmojiFlatString locks the PoracleJS-compatible
+// {{weaknessEmoji}} flat string. Templates that pre-date the structured
+// weaknessList (e.g. NPlumb's dts_all.json) reference {{weaknessEmoji}}
+// directly; without this the field resolves to nothing.
+func TestLayeredView_WeaknessEmojiFlatString(t *testing.T) {
+	emoji := &EmojiLookup{
+		custom: make(map[string]map[string]string),
+		defaults: map[string]string{
+			"poke_type_water":    "💧",
+			"poke_type_electric": "⚡",
+			"poke_type_rock":     "🪨",
+		},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.emoji = emoji
+		o.perLang = map[string]any{
+			"weaknessList": []map[string]any{
+				{
+					"value": 2.0,
+					"types": []map[string]any{
+						{"emojiKey": "poke_type_water"},
+						{"emojiKey": "poke_type_electric"},
+					},
+				},
+				{
+					"value": 4.0,
+					"types": []map[string]any{
+						{"emojiKey": "poke_type_rock"},
+					},
+				},
+			},
+		}
+	})
+	v, ok := lv.GetField("weaknessEmoji")
+	require.True(t, ok, "weaknessEmoji should resolve")
+	assert.Equal(t, "2x💧⚡ 4x🪨 ", v)
+}
+
+// TestLayeredView_WeaknessEmojiSkipEmpty confirms that categories with
+// no resolvable type emoji are excluded from the flat string — matches
+// PoracleJS's `if (info.types.length)` guard in raid.js.
+func TestLayeredView_WeaknessEmojiSkipEmpty(t *testing.T) {
+	emoji := &EmojiLookup{
+		custom:   make(map[string]map[string]string),
+		defaults: map[string]string{"poke_type_fire": "🔥"},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.emoji = emoji
+		o.perLang = map[string]any{
+			"weaknessList": []map[string]any{
+				{
+					"value": 0.5,
+					"types": []map[string]any{}, // empty — should be skipped
+				},
+				{
+					"value": 2.0,
+					"types": []map[string]any{
+						{"emojiKey": "poke_type_fire"},
+					},
+				},
+			},
+		}
+	})
+	v, ok := lv.GetField("weaknessEmoji")
+	require.True(t, ok)
+	assert.Equal(t, "2x🔥 ", v)
+}
+
 // TestLayeredView_GymUrlAliasFromWebhook covers the gym_details photo URL:
 // the gym webhook ships it as `url`, the gym alias table maps `gymUrl` →
 // `url`, and the value flows through the raw-webhook fallback layer.

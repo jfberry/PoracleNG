@@ -158,6 +158,7 @@ var monsterFields = []FieldDef{
 	{Name: "costume", Type: "int", Description: "Costume ID", Category: "other"},
 	{Name: "shinyPossible", Type: "bool", Description: "Can be shiny", Category: "other"},
 	{Name: "weaknessList", Type: "array", Description: "Type weakness list", Category: "other"},
+	{Name: "weaknessEmoji", Type: "string", Description: "Flat string of all weakness multipliers + type emoji (e.g. \"2x💧⚡ 4x🪨 \"). PoracleJS-compatible.", Category: "other"},
 	{Name: "evolutions", Type: "array", Description: "Evolution entries", Category: "other"},
 	{Name: "megaEvolutions", Type: "array", Description: "Mega evolution entries", Category: "other"},
 	{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions", Category: "other"},
@@ -213,6 +214,7 @@ var raidFields = []FieldDef{
 	{Name: "hasEvolutions", Type: "bool", Description: "Has evolutions", Category: "other"},
 	{Name: "hasMegaEvolutions", Type: "bool", Description: "Has mega evolutions", Category: "other"},
 	{Name: "weaknessList", Type: "array", Description: "Type weakness list", Category: "other"},
+	{Name: "weaknessEmoji", Type: "string", Description: "Flat string of all weakness multipliers + type emoji (e.g. \"2x💧⚡ 4x🪨 \"). PoracleJS-compatible.", Category: "other"},
 	{Name: "rsvps", Type: "array", Description: "RSVP timeslot entries", Category: "other"},
 }
 
@@ -650,19 +652,19 @@ type fieldEntry struct {
 }
 
 var fieldsByType = map[string]fieldEntry{
-	"monster":      {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
-	"monsterNoIv":  {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
-	"raid":         {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
-	"egg":          {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
-	"quest":        {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
-	"invasion":     {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
-	"lure":         {Fields: append(commonFields, lureFields...), Snippets: append(commonSnippets, lureSnippets...)},
-	"nest":         {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},
-	"gym":          {Fields: append(commonFields, gymFields...), Snippets: commonSnippets},
-	"fort-update":  {Fields: append(commonFields, fortUpdateFields...), Snippets: commonSnippets},
-	"maxbattle":    {Fields: append(commonFields, maxbattleFields...), Snippets: append(commonSnippets, maxbattleSnippets...)},
+	"monster":       {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"monsterNoIv":   {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"raid":          {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
+	"egg":           {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
+	"quest":         {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
+	"invasion":      {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
+	"lure":          {Fields: append(commonFields, lureFields...), Snippets: append(commonSnippets, lureSnippets...)},
+	"nest":          {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},
+	"gym":           {Fields: append(commonFields, gymFields...), Snippets: commonSnippets},
+	"fort-update":   {Fields: append(commonFields, fortUpdateFields...), Snippets: commonSnippets},
+	"maxbattle":     {Fields: append(commonFields, maxbattleFields...), Snippets: append(commonSnippets, maxbattleSnippets...)},
 	"weatherchange": {Fields: append(commonFields, weatherChangeFields...), Snippets: commonSnippets},
-	"greeting":     {Fields: append(commonFields, greetingFields...), Snippets: commonSnippets},
+	"greeting":      {Fields: append(commonFields, greetingFields...), Snippets: commonSnippets},
 }
 
 // HandleDTSFields returns available template fields for a DTS type.

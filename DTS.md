@@ -178,6 +178,7 @@ Template type `monster` is used for encountered pokemon (with IV data). Template
 | `emojiString` | string | Type emojis concatenated |
 | `typeEmoji` | string | Type emojis concatenated (resolved from emoji keys) |
 | `weaknessList` | array | Weakness categories: `{value, types: [{typeId, name, typeEmoji}]}` |
+| `weaknessEmoji` | string | Flat space-separated `"<value>x<typeEmoji>"` per category, e.g. `"2x💧⚡ 4x🪨 "`. PoracleJS-compatible shorthand for templates that don't iterate `weaknessList`. |
 
 ### Moves
 
@@ -370,6 +371,7 @@ Hatched raid with a boss pokemon.
 | `typeEmoji` | string | Type emojis concatenated |
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
 | `weaknessList` | array | Weakness categories |
+| `weaknessEmoji` | string | Flat `"<value>x<typeEmoji>"` per category (PoracleJS-compatible) |
 | `generation` | int | Generation number |
 | `generationRoman` | string | Roman numeral |
 | `generationName` | string | Translated generation name |
@@ -669,6 +671,7 @@ Map URLs (`googleMapUrl`, `appleMapUrl`, `wazeMapUrl`, etc.) are available for n
 | `genderData` | object | `{name, emoji}` |
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
 | `weaknessList` | array | Weakness categories |
+| `weaknessEmoji` | string | Flat `"<value>x<typeEmoji>"` per category (PoracleJS-compatible) |
 | `evolutions` | array | Evolution chain |
 | `megaEvolutions` | array | Mega evolutions |
 | `time` | string | Battle end time |
