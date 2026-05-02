@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -8,7 +9,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/gin-gonic/gin"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	gotgbot "github.com/go-telegram/bot"
 	"github.com/jellydator/ttlcache/v3"
 
 	"github.com/pokemon/poracleng/processor/internal/store"
@@ -25,7 +26,7 @@ type HumanLookup interface {
 // ResolveDeps holds dependencies for the resolve handler.
 type ResolveDeps struct {
 	DiscordSession *discordgo.Session          // nil if Discord not configured
-	TelegramAPI    *tgbotapi.BotAPI            // nil if Telegram not configured
+	TelegramAPI    *gotgbot.Bot                // nil if Telegram not configured
 	Humans         HumanLookup                 // nil if not wired (lookup is skipped)
 	Cache          *ttlcache.Cache[string, any]
 }
@@ -71,7 +72,7 @@ func HandleResolve(deps ResolveDeps) gin.HandlerFunc {
 		if len(req.Destinations) > 0 {
 			destinations := make(map[string]any)
 			for _, id := range req.Destinations {
-				if resolved := resolveAnyDestination(deps, id); resolved != nil {
+				if resolved := resolveAnyDestination(c.Request.Context(), deps, id); resolved != nil {
 					destinations[id] = resolved
 				}
 			}
@@ -132,7 +133,7 @@ func HandleResolve(deps ResolveDeps) gin.HandlerFunc {
 			if len(req.Telegram.Chats) > 0 {
 				chats := make(map[string]any)
 				for _, id := range req.Telegram.Chats {
-					if resolved := resolveTelegramChat(deps, id); resolved != nil {
+					if resolved := resolveTelegramChat(c.Request.Context(), deps, id); resolved != nil {
 						chats[id] = resolved
 					}
 				}
@@ -168,7 +169,7 @@ func HandleResolve(deps ResolveDeps) gin.HandlerFunc {
 //   - The match comes purely from a platform API (no humans entry)
 //   - The match is a webhook (no platform API to verify against)
 //   - No platform bot is configured for the destination type
-func resolveAnyDestination(deps ResolveDeps, id string) map[string]any {
+func resolveAnyDestination(ctx context.Context, deps ResolveDeps, id string) map[string]any {
 	var humansResult map[string]any
 	var humansType string
 
@@ -208,7 +209,7 @@ func resolveAnyDestination(deps ResolveDeps, id string) map[string]any {
 
 	// 3. Telegram — for chat IDs not in humans
 	if deps.TelegramAPI != nil {
-		if r := resolveTelegramChat(deps, id); r != nil {
+		if r := resolveTelegramChat(ctx, deps, id); r != nil {
 			return mergeResolved(humansResult, r, "telegram:chat")
 		}
 	}
@@ -352,14 +353,15 @@ func resolveDiscordGuild(deps ResolveDeps, id string) map[string]any {
 	})
 }
 
-func resolveTelegramChat(deps ResolveDeps, id string) map[string]any {
+func resolveTelegramChat(ctx context.Context, deps ResolveDeps, id string) map[string]any {
 	return cachedResolve(deps, "telegram:chat:"+id, func() map[string]any {
 		chatID, err := strconv.ParseInt(id, 10, 64)
 		if err != nil {
 			return nil
 		}
-		chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
-		chat, err := deps.TelegramAPI.GetChat(chatCfg)
+		reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		chat, err := deps.TelegramAPI.GetChat(reqCtx, &gotgbot.GetChatParams{ChatID: chatID})
+		cancel()
 		if err != nil {
 			return nil
 		}
@@ -371,7 +373,7 @@ func resolveTelegramChat(deps ResolveDeps, id string) map[string]any {
 			name = chat.Title
 		}
 		if name == "" {
-			name = chat.UserName
+			name = chat.Username
 		}
 		return map[string]any{"name": name, "type": string(chat.Type)}
 	})
