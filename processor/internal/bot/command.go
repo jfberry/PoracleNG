@@ -226,7 +226,12 @@ const (
 	TypeDiscordChannel = "discord:channel"
 	TypeTelegramUser   = "telegram:user"
 	TypeTelegramGroup  = "telegram:group"
-	TypeWebhook        = "webhook"
+	// TypeTelegramTopic identifies a forum-supergroup topic. The human
+	// row's ID is the composite "<chatID>:<topicID>" (e.g.
+	// "-1001234567890:42") so chat and topic can be recovered without
+	// a schema change.
+	TypeTelegramTopic = "telegram:topic"
+	TypeWebhook       = "webhook"
 )
 
 // WildcardID is the sentinel value meaning "any" for pokemon_id, move, evolution, etc.

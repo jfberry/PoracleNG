@@ -69,6 +69,26 @@ type telegramResponse struct {
 	} `json:"parameters"`
 }
 
+// splitTopicTarget separates a "<chatID>:<topicID>" composite into its
+// parts. Returns the bare chat string and the parsed topic ID. For
+// non-topic targets (no colon, or invalid topic part), returns the
+// input as chat and topicID = 0.
+//
+// Telegram supergroup chat IDs are negative ("-100…") and topic IDs are
+// small positive integers, so an unambiguous "lastIndex of ':'" split
+// is safe.
+func splitTopicTarget(target string) (chat string, topicID int) {
+	idx := strings.LastIndex(target, ":")
+	if idx <= 0 {
+		return target, 0
+	}
+	tid, err := strconv.Atoi(target[idx+1:])
+	if err != nil || tid <= 0 {
+		return target, 0
+	}
+	return target[:idx], tid
+}
+
 // Send delivers a message to Telegram following the configured send order.
 func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, error) {
 	var msg telegramMessage
@@ -83,7 +103,18 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 
 	parseMode := normalizeTelegramParseMode(msg.ParseMode)
 	sendOrder := parseSendOrder(msg.SendOrder)
-	chatID := job.Target
+
+	// For telegram:topic targets the Target is "<chatID>:<topicID>". The
+	// API call needs the chat as chat_id and the topic as
+	// message_thread_id; we split here once and pass topicID=0 for
+	// non-topic destinations so the body builder can omit the field.
+	var chatID string
+	var topicID int
+	if job.Type == "telegram:topic" {
+		chatID, topicID = splitTopicTarget(job.Target)
+	} else {
+		chatID = job.Target
+	}
 
 	var allMsgIDs []int
 	var sentSteps []string
@@ -98,25 +129,25 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 			if msg.Sticker == "" {
 				continue
 			}
-			msgID, err = ts.sendSticker(ctx, chatID, msg.Sticker)
+			msgID, err = ts.sendSticker(ctx, chatID, topicID, msg.Sticker)
 
 		case "photo":
 			if msg.Photo == "" {
 				continue
 			}
-			msgID, err = ts.sendPhoto(ctx, chatID, msg.Photo)
+			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo)
 
 		case "text":
 			if msg.Content == "" {
 				continue
 			}
-			msgID, err = ts.sendMessage(ctx, chatID, msg.Content, parseMode, msg.WebpagePreview)
+			msgID, err = ts.sendMessage(ctx, chatID, topicID, msg.Content, parseMode, msg.WebpagePreview)
 
 		case "location":
 			if !msg.Location || (job.Lat == 0 && job.Lon == 0) {
 				continue
 			}
-			msgID, err = ts.sendLocation(ctx, chatID, job.Lat, job.Lon)
+			msgID, err = ts.sendLocation(ctx, chatID, topicID, job.Lat, job.Lon)
 
 		case "venue":
 			if msg.Venue == nil || msg.Venue.Title == "" || msg.Venue.Address == "" {
@@ -124,7 +155,7 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 			}
 			// disable_notification if text follows later in the send order
 			hasTextFollowing := ts.hasStepAfter(sendOrder, i, "text") && msg.Content != ""
-			msgID, err = ts.sendVenue(ctx, chatID, job.Lat, job.Lon, msg.Venue.Title, msg.Venue.Address, hasTextFollowing)
+			msgID, err = ts.sendVenue(ctx, chatID, topicID, job.Lat, job.Lon, msg.Venue.Title, msg.Venue.Address, hasTextFollowing)
 
 		default:
 			continue
@@ -145,7 +176,14 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 	// Store all message IDs with their types so clean deletes everything and
 	// edit can update the right component (e.g. sticker, text).
 	// Format: chatID|type=msgID|type=msgID  (e.g. "12345|sticker=100|photo=101|text=102")
-	sentParts := []string{chatID}
+	// For topic targets we keep the composite chatID ("<chat>:<topic>")
+	// in the first segment so Edit/Delete can recover both pieces from
+	// the stored sentID alone.
+	storedChatID := chatID
+	if topicID > 0 {
+		storedChatID = chatID + ":" + strconv.Itoa(topicID)
+	}
+	sentParts := []string{storedChatID}
 	for i, id := range allMsgIDs {
 		if i < len(sentSteps) {
 			sentParts = append(sentParts, sentSteps[i]+"="+strconv.Itoa(id))
@@ -157,6 +195,8 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 
 // Delete deletes all messages associated with a sent ID.
 // Format: chatID|type=msgID|type=msgID  (e.g. "12345|sticker=100|text=102")
+// For topic targets the chatID segment is composite "<chat>:<topic>",
+// transparently handled by splitTopicTarget at API call time.
 // Also supports legacy format: chatID:msgID (single message).
 func (ts *TelegramSender) Delete(ctx context.Context, sentID string) error {
 	chatID, msgMap := parseTelegramSentIDMulti(sentID)
@@ -164,9 +204,12 @@ func (ts *TelegramSender) Delete(ctx context.Context, sentID string) error {
 		return fmt.Errorf("invalid telegram sentID: %s", sentID)
 	}
 
+	bareChat, _ := splitTopicTarget(chatID)
+	// deleteMessage doesn't take message_thread_id — Telegram derives
+	// the topic from the message_id alone.
 	var lastErr error
 	for _, messageID := range msgMap {
-		if err := ts.deleteMessage(ctx, chatID, messageID); err != nil {
+		if err := ts.deleteMessage(ctx, bareChat, messageID); err != nil {
 			lastErr = err
 		}
 	}
@@ -237,6 +280,11 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 		return fmt.Errorf("invalid telegram sentID: %s", sentID)
 	}
 
+	// editMessageText doesn't take message_thread_id (Telegram resolves
+	// the topic from the message_id), so strip the topic segment if
+	// the chatID is composite.
+	bareChat, _ := splitTopicTarget(chatID)
+
 	// Find the text message ID for editing
 	messageID, ok := msgMap["text"]
 	if !ok {
@@ -258,7 +306,7 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 	parseMode := normalizeTelegramParseMode(editMsg.ParseMode)
 
 	body := map[string]any{
-		"chat_id":                  chatID,
+		"chat_id":                  bareChat,
 		"message_id":               messageID,
 		"text":                     editMsg.Content,
 		"parse_mode":               parseMode,
@@ -277,50 +325,62 @@ func (ts *TelegramSender) Edit(ctx context.Context, sentID string, message json.
 	return fmt.Errorf("telegram editMessageText returned status %d", resp.StatusCode)
 }
 
+// applyTopic adds message_thread_id to a request body when the target
+// is a forum topic. No-op for topicID == 0.
+func applyTopic(body map[string]any, topicID int) {
+	if topicID > 0 {
+		body["message_thread_id"] = topicID
+	}
+}
+
 // sendMessage sends a text message.
-func (ts *TelegramSender) sendMessage(ctx context.Context, chatID, text, parseMode string, webpagePreview bool) (int, error) {
+func (ts *TelegramSender) sendMessage(ctx context.Context, chatID string, topicID int, text, parseMode string, webpagePreview bool) (int, error) {
 	body := map[string]any{
 		"chat_id":                  chatID,
 		"text":                     text,
 		"parse_mode":               parseMode,
 		"disable_web_page_preview": !webpagePreview,
 	}
+	applyTopic(body, topicID)
 	return ts.callWithRetry(ctx, "sendMessage", body)
 }
 
 // sendSticker sends a sticker.
-func (ts *TelegramSender) sendSticker(ctx context.Context, chatID, stickerID string) (int, error) {
+func (ts *TelegramSender) sendSticker(ctx context.Context, chatID string, topicID int, stickerID string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"sticker":              stickerID,
 		"disable_notification": true,
 	}
+	applyTopic(body, topicID)
 	return ts.callWithRetry(ctx, "sendSticker", body)
 }
 
 // sendPhoto sends a photo by URL.
-func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID, photoURL string) (int, error) {
+func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID int, photoURL string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"photo":                photoURL,
 		"disable_notification": true,
 	}
+	applyTopic(body, topicID)
 	return ts.callWithRetry(ctx, "sendPhoto", body)
 }
 
 // sendLocation sends a location.
-func (ts *TelegramSender) sendLocation(ctx context.Context, chatID string, lat, lon float64) (int, error) {
+func (ts *TelegramSender) sendLocation(ctx context.Context, chatID string, topicID int, lat, lon float64) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"latitude":             lat,
 		"longitude":            lon,
 		"disable_notification": true,
 	}
+	applyTopic(body, topicID)
 	return ts.callWithRetry(ctx, "sendLocation", body)
 }
 
 // sendVenue sends a venue.
-func (ts *TelegramSender) sendVenue(ctx context.Context, chatID string, lat, lon float64, title, address string, disableNotification bool) (int, error) {
+func (ts *TelegramSender) sendVenue(ctx context.Context, chatID string, topicID int, lat, lon float64, title, address string, disableNotification bool) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"latitude":             lat,
@@ -329,6 +389,7 @@ func (ts *TelegramSender) sendVenue(ctx context.Context, chatID string, lat, lon
 		"address":              address,
 		"disable_notification": disableNotification,
 	}
+	applyTopic(body, topicID)
 	return ts.callWithRetry(ctx, "sendVenue", body)
 }
 
