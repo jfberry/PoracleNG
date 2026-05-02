@@ -1,15 +1,17 @@
-// Package telegrambot runs a Telegram bot using go-telegram-bot-api for polling.
+// Package telegrambot runs a Telegram bot using go-telegram/bot for polling.
 // It receives messages, parses commands, executes them via the bot framework,
 // and sends replies back to the chat.
 package telegrambot
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	gotgbot "github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -21,9 +23,11 @@ import (
 // Bot is the Telegram bot polling handler.
 type Bot struct {
 	bot.BotDeps
-	api            *tgbotapi.BotAPI
+	api            *gotgbot.Bot
+	username       string // resolved at startup via getMe
 	nlpParser      *nlp.Parser
 	reconciliation *TelegramReconciliation
+	cancelStart    context.CancelFunc
 	stopCh         chan struct{}
 }
 
@@ -35,19 +39,25 @@ type Config struct {
 
 // New creates and starts a Telegram bot. Returns the bot (for shutdown) or an error.
 func New(cfg Config) (*Bot, error) {
-	api, err := tgbotapi.NewBotAPI(cfg.Token)
-	if err != nil {
-		return nil, err
-	}
-
 	b := &Bot{
 		BotDeps:   cfg.BotDeps,
-		api:       api,
 		nlpParser: cfg.NLPParser,
 		stopCh:    make(chan struct{}),
 	}
 
-	log.Infof("Telegram bot connected as @%s", api.Self.UserName)
+	api, err := gotgbot.New(cfg.Token, gotgbot.WithDefaultHandler(b.handleUpdate))
+	if err != nil {
+		return nil, fmt.Errorf("create telegram bot: %w", err)
+	}
+	b.api = api
+
+	// Resolve our own username for log lines and config validation echo.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if me, err := api.GetMe(ctx); err == nil && me != nil {
+		b.username = me.Username
+	}
+	log.Infof("Telegram bot connected as @%s", b.username)
 
 	// Validate configured Telegram IDs
 	b.validateConfig()
@@ -61,7 +71,11 @@ func New(cfg Config) (*Bot, error) {
 		}
 	}
 
-	go b.pollUpdates()
+	// Start polling in the background. Cancelling the context stops it.
+	startCtx, cancelStart := context.WithCancel(context.Background())
+	b.cancelStart = cancelStart
+	go api.Start(startCtx)
+
 	return b, nil
 }
 
@@ -185,12 +199,14 @@ func (b *Bot) validateConfig() {
 }
 
 // API returns the underlying Telegram bot API, or nil if the bot is not running.
-func (b *Bot) API() *tgbotapi.BotAPI { return b.api }
+func (b *Bot) API() *gotgbot.Bot { return b.api }
 
 // Close stops the polling loop.
 func (b *Bot) Close() {
+	if b.cancelStart != nil {
+		b.cancelStart()
+	}
 	close(b.stopCh)
-	b.api.StopReceivingUpdates()
 }
 
 func (b *Bot) pollUpdates() {
