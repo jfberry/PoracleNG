@@ -560,7 +560,7 @@ func (b *Bot) postRegisterHook() func(string) {
 
 // handleTelegramCommand dispatches Telegram-specific commands that require the
 // tgbotapi directly. Returns true if the command was handled.
-func (b *Bot) handleTelegramCommand(m *tgbotapi.Message, threadID int, cmdKey string, args []string) bool {
+func (b *Bot) handleTelegramCommand(m *models.Message, threadID int, cmdKey string, args []string) bool {
 	switch cmdKey {
 	case "cmd.channel":
 		b.handleChannel(m, threadID, args)
