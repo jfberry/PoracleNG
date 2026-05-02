@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	gotgbot "github.com/go-telegram/bot"
@@ -29,6 +30,7 @@ type Bot struct {
 	reconciliation *TelegramReconciliation
 	cancelStart    context.CancelFunc
 	stopCh         chan struct{}
+	closeOnce      sync.Once
 }
 
 // Config holds everything needed to create a Telegram bot.
@@ -203,18 +205,33 @@ func (b *Bot) validateConfig() {
 // API returns the underlying Telegram bot API, or nil if the bot is not running.
 func (b *Bot) API() *gotgbot.Bot { return b.api }
 
-// Close stops the polling loop.
+// Close stops the polling loop. Safe to call more than once.
 func (b *Bot) Close() {
-	if b.cancelStart != nil {
-		b.cancelStart()
-	}
-	close(b.stopCh)
+	b.closeOnce.Do(func() {
+		if b.cancelStart != nil {
+			b.cancelStart()
+		}
+		close(b.stopCh)
+	})
 }
 
 // handleUpdate is the default handler registered with the underlying
 // library. It dispatches the update kind we care about and discards
 // the rest. Runs in one of the library's worker goroutines.
+//
+// The library doesn't recover from handler panics, so we do it here:
+// a malformed update or unexpected nil downstream would otherwise kill
+// one of the polling workers and gradually starve the bot.
 func (b *Bot) handleUpdate(ctx context.Context, _ *gotgbot.Bot, u *models.Update) {
+	defer func() {
+		if r := recover(); r != nil {
+			var updateID int64
+			if u != nil {
+				updateID = u.ID
+			}
+			log.Errorf("telegram bot: handler panic on update %d: %v", updateID, r)
+		}
+	}()
 	if u == nil {
 		return
 	}
@@ -230,7 +247,7 @@ func (b *Bot) handleUpdate(ctx context.Context, _ *gotgbot.Bot, u *models.Update
 // handleChannelPost reacts to /identify in a channel — the only
 // channel-post case Poracle responds to.
 func (b *Bot) handleChannelPost(m *models.Message) {
-	if m.Text != "" && strings.HasPrefix(m.Text, "/identify") {
+	if strings.HasPrefix(m.Text, "/identify") {
 		reply := fmt.Sprintf("This channel is id: [ %d ] and your id is: unknown - this is a channel (and can't be used for bot registration)", m.Chat.ID)
 		_, _ = b.sendTopicMessage(m.Chat.ID, m.MessageThreadID, reply)
 	}
@@ -318,7 +335,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 			continue
 		}
 
-		// Handle Telegram-specific commands first (require tgbotapi directly).
+		// Handle Telegram-specific commands first (require the underlying API directly).
 		if b.handleTelegramCommand(m, threadID, cmd.CommandKey, cmd.Args) {
 			continue
 		}
@@ -559,7 +576,7 @@ func (b *Bot) postRegisterHook() func(string) {
 }
 
 // handleTelegramCommand dispatches Telegram-specific commands that require the
-// tgbotapi directly. Returns true if the command was handled.
+// underlying API directly. Returns true if the command was handled.
 func (b *Bot) handleTelegramCommand(m *models.Message, threadID int, cmdKey string, args []string) bool {
 	switch cmdKey {
 	case "cmd.channel":

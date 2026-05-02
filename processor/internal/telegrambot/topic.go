@@ -3,7 +3,6 @@ package telegrambot
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -98,5 +97,3 @@ func (b *Bot) sendDocumentBytesToTopic(chatID int64, threadID int, filename stri
 	return err
 }
 
-// sentinel — keeps fmt referenced when other helpers are added.
-var _ = fmt.Sprintf
