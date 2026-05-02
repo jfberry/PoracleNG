@@ -103,14 +103,7 @@ func (r *TelegramReconciliation) loadTelegramChannels(userID int64, channelList 
 		}
 
 		if u := chatMemberUser(member); u != nil && name == "" {
-			n := u.FirstName
-			if u.LastName != "" {
-				n += " " + u.LastName
-			}
-			if u.Username != "" {
-				n += " [" + u.Username + "]"
-			}
-			name = stripNonASCII(n)
+			name = bot.DisplayName(u.FirstName, u.LastName, u.Username, "")
 		}
 
 		if member.Type != models.ChatMemberTypeLeft && member.Type != models.ChatMemberTypeBanned {
@@ -554,18 +547,4 @@ func chatMemberUser(m *models.ChatMember) *models.User {
 		}
 	}
 	return nil
-}
-
-// stripNonASCII removes non-ASCII characters from a string.
-// Matches the JS emojiStrip(/[^\x00-\xFF]/g) used to prevent MySQL
-// utf8 charset issues with emoji and other multi-byte characters.
-func stripNonASCII(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		if r <= 0xFF {
-			b.WriteRune(r)
-		}
-	}
-	return strings.TrimSpace(b.String())
 }

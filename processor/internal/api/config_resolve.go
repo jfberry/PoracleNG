@@ -12,6 +12,7 @@ import (
 	gotgbot "github.com/go-telegram/bot"
 	"github.com/jellydator/ttlcache/v3"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -365,17 +366,10 @@ func resolveTelegramChat(ctx context.Context, deps ResolveDeps, id string) map[s
 		if err != nil {
 			return nil
 		}
-		name := chat.FirstName
-		if chat.LastName != "" {
-			name += " " + chat.LastName
+		return map[string]any{
+			"name": bot.DisplayName(chat.FirstName, chat.LastName, chat.Username, chat.Title),
+			"type": string(chat.Type),
 		}
-		if name == "" {
-			name = chat.Title
-		}
-		if name == "" {
-			name = chat.Username
-		}
-		return map[string]any{"name": name, "type": string(chat.Type)}
 	})
 }
 

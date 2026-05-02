@@ -101,14 +101,8 @@ func (b *Bot) validateConfig() {
 			log.Warnf("config: %s %s — NOT ACCESSIBLE (bot may not be a member): %v", label, chatIDStr, err)
 			return
 		}
-		name := chat.Title
-		if name == "" {
-			name = chat.Username
-		}
-		if name == "" {
-			name = chat.FirstName
-		}
-		log.Infof("config: %s %s → %s (%s) ✓", label, chatIDStr, name, chat.Type)
+		log.Infof("config: %s %s → %s (%s) ✓", label, chatIDStr,
+			bot.DisplayName(chat.FirstName, chat.LastName, chat.Username, chat.Title), chat.Type)
 	}
 
 	// Registration channels
@@ -133,16 +127,7 @@ func (b *Bot) validateConfig() {
 		if err != nil {
 			return idStr
 		}
-		name := chat.FirstName
-		if chat.LastName != "" {
-			name += " " + chat.LastName
-		}
-		if name == "" {
-			name = chat.Username
-		}
-		if name == "" {
-			name = chat.Title
-		}
+		name := bot.DisplayName(chat.FirstName, chat.LastName, chat.Username, chat.Title)
 		if name == "" {
 			return idStr
 		}
@@ -178,11 +163,9 @@ func (b *Bot) validateConfig() {
 		targetDesc := target
 		if chatID, err := strconv.ParseInt(target, 10, 64); err == nil {
 			if chat, err := getChat(chatID); err == nil {
-				name := chat.Title
-				if name == "" {
-					name = chat.Username
-				}
-				targetDesc = fmt.Sprintf("%s (%s, %s)", name, target, chat.Type)
+				targetDesc = fmt.Sprintf("%s (%s, %s)",
+					bot.DisplayName(chat.FirstName, chat.LastName, chat.Username, chat.Title),
+					target, chat.Type)
 			}
 		}
 		var adminDescs []string
