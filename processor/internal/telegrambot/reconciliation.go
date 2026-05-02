@@ -438,28 +438,14 @@ func (r *TelegramReconciliation) sendGreetings(id string) {
 }
 
 // sendSplitMessage sends a message, splitting on newlines if it exceeds
-// Telegram's 4096 character limit (matching alerter's 1024 split for embed fields).
+// Telegram's 4096 character limit. Delegates to bot.SplitMessage for
+// the chunking — same helper the polling reply path uses.
 func (r *TelegramReconciliation) sendSplitMessage(chatID int64, text string) {
-	const maxLen = 4096
-	for len(text) > maxLen {
-		// Find a newline to split on before the limit
-		splitAt := maxLen
-		if idx := strings.LastIndex(text[:maxLen], "\n"); idx > 0 {
-			splitAt = idx + 1
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	for _, chunk := range bot.SplitMessage(text, 4096) {
+		ctx, cancel := requestCtx()
 		_, _ = r.api.SendMessage(ctx, &gotgbot.SendMessageParams{
 			ChatID: chatID,
-			Text:   text[:splitAt],
-		})
-		cancel()
-		text = text[splitAt:]
-	}
-	if text != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		_, _ = r.api.SendMessage(ctx, &gotgbot.SendMessageParams{
-			ChatID: chatID,
-			Text:   text,
+			Text:   chunk,
 		})
 		cancel()
 	}
@@ -477,7 +463,7 @@ func (r *TelegramReconciliation) sendGoodbye(id string) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := requestCtx()
 	_, err := r.api.SendMessage(ctx, &gotgbot.SendMessageParams{
 		ChatID: chatID,
 		Text:   goodbyeMsg,

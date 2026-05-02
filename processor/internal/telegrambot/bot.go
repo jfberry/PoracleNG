@@ -215,13 +215,11 @@ func (b *Bot) Close() {
 	})
 }
 
-// handleUpdate is the default handler registered with the underlying
-// library. It dispatches the update kind we care about and discards
-// the rest. Runs in one of the library's worker goroutines.
-//
-// The library doesn't recover from handler panics, so we do it here:
-// a malformed update or unexpected nil downstream would otherwise kill
-// one of the polling workers and gradually starve the bot.
+// handleUpdate is the default handler the library calls per update.
+// The library invokes each handler in its own goroutine and does not
+// recover panics; an unrecovered panic in any handler crashes the
+// entire process. Recover here so a single bad update can't take the
+// bot down.
 func (b *Bot) handleUpdate(ctx context.Context, _ *gotgbot.Bot, u *models.Update) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -261,7 +259,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 	// /identify — always respond, no registration required
 	if strings.HasPrefix(m.Text, "/identify") {
 		var reply string
-		if m.Chat.Type == "private" {
+		if m.Chat.Type == models.ChatTypePrivate {
 			reply = fmt.Sprintf("This is a private message and your id is: [ %d ]", m.From.ID)
 		} else if m.MessageThreadID > 0 {
 			reply = fmt.Sprintf("This channel is id: [ %d ], topic id: [ %d ] and your id is: [ %d ]", m.Chat.ID, m.MessageThreadID, m.From.ID)
@@ -286,7 +284,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 	parsed := b.Parser.Parse(text)
 	if len(parsed) == 0 {
 		// No prefix match — try NLP suggestion for DMs
-		isDM := m.Chat.Type == "private"
+		isDM := m.Chat.Type == models.ChatTypePrivate
 		if isDM && b.nlpParser != nil && b.Cfg.AI.SuggestOnDM {
 			result := b.nlpParser.Parse(text)
 			suggestion := commands.FormatNLPSuggestion(result, "/")
@@ -298,7 +296,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 	}
 
 	userID := formatInt64(m.From.ID)
-	isDM := m.Chat.Type == "private"
+	isDM := m.Chat.Type == models.ChatTypePrivate
 	chatID := m.Chat.ID
 	threadID := m.MessageThreadID
 
@@ -511,7 +509,7 @@ func (b *Bot) sendReplies(chatID int64, threadID int, userID int64, replies []bo
 			for _, text := range messages {
 				if err := b.sendMarkdownToTopic(targetChat, replyThreadID, text); err != nil {
 					// Retry without parse mode in case the text has invalid Markdown
-					if err2 := b.sendPlainToTopic(targetChat, replyThreadID, text); err2 != nil {
+					if _, err2 := b.sendTopicMessage(targetChat, replyThreadID, text); err2 != nil {
 						log.Warnf("telegram bot: send message: %v", err2)
 					}
 				}

@@ -54,19 +54,6 @@ func (b *Bot) sendMarkdownToTopic(chatID int64, threadID int, text string) error
 	return err
 }
 
-// sendPlainToTopic sends an unparsed text message — used as a fallback
-// when Markdown parsing fails.
-func (b *Bot) sendPlainToTopic(chatID int64, threadID int, text string) error {
-	ctx, cancel := requestCtx()
-	defer cancel()
-	_, err := b.api.SendMessage(ctx, &gotgbot.SendMessageParams{
-		ChatID:          chatID,
-		MessageThreadID: threadID,
-		Text:            text,
-	})
-	return err
-}
-
 // sendPhotoURLToTopic sends a photo by URL. The new library accepts
 // URL-typed photos via *models.InputFileString{Data: url}.
 func (b *Bot) sendPhotoURLToTopic(chatID int64, threadID int, photoURL, caption string) error {
@@ -96,4 +83,3 @@ func (b *Bot) sendDocumentBytesToTopic(chatID int64, threadID int, filename stri
 	})
 	return err
 }
-

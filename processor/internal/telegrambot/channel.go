@@ -99,7 +99,7 @@ func (b *Bot) handleChannel(m *models.Message, threadID int, args []string) {
 	}
 
 	if !isNamedChannel {
-		if m.Chat.Type == "private" {
+		if m.Chat.Type == models.ChatTypePrivate {
 			_, _ = b.sendTopicMessage(chatID, 0, "To add a group, please send /channel add in the group")
 			return
 		}
