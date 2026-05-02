@@ -209,45 +209,32 @@ func (b *Bot) Close() {
 	close(b.stopCh)
 }
 
-func (b *Bot) pollUpdates() {
-	offset := 0
-	const timeoutSeconds = 30
-
-	for {
-		select {
-		case <-b.stopCh:
-			return
-		default:
-		}
-
-		updates, err := b.fetchUpdates(offset, timeoutSeconds)
-		if err != nil {
-			log.Warnf("telegram: getUpdates failed: %v", err)
-			continue
-		}
-		for _, u := range updates {
-			if u.UpdateID >= offset {
-				offset = u.UpdateID + 1
-			}
-			if u.ChannelPost != nil {
-				b.handleChannelPost(u.ChannelPost)
-			}
-			if u.Message != nil {
-				b.handleMessage(u.Message)
-			}
-		}
+// handleUpdate is the default handler registered with the underlying
+// library. It dispatches the update kind we care about and discards
+// the rest. Runs in one of the library's worker goroutines.
+func (b *Bot) handleUpdate(ctx context.Context, _ *gotgbot.Bot, u *models.Update) {
+	if u == nil {
+		return
+	}
+	if u.ChannelPost != nil {
+		b.handleChannelPost(u.ChannelPost)
+		return
+	}
+	if u.Message != nil {
+		b.handleMessage(u.Message)
 	}
 }
 
-func (b *Bot) handleChannelPost(m *topicMessage) {
+// handleChannelPost reacts to /identify in a channel — the only
+// channel-post case Poracle responds to.
+func (b *Bot) handleChannelPost(m *models.Message) {
 	if m.Text != "" && strings.HasPrefix(m.Text, "/identify") {
 		reply := fmt.Sprintf("This channel is id: [ %d ] and your id is: unknown - this is a channel (and can't be used for bot registration)", m.Chat.ID)
-		_, _ = b.sendTopicMessage(m.Chat.ID, m.ThreadID, reply)
+		_, _ = b.sendTopicMessage(m.Chat.ID, m.MessageThreadID, reply)
 	}
 }
 
-func (b *Bot) handleMessage(tm *topicMessage) {
-	m := tm.Message
+func (b *Bot) handleMessage(m *models.Message) {
 	if m.From == nil {
 		return
 	}
@@ -257,12 +244,12 @@ func (b *Bot) handleMessage(tm *topicMessage) {
 		var reply string
 		if m.Chat.Type == "private" {
 			reply = fmt.Sprintf("This is a private message and your id is: [ %d ]", m.From.ID)
-		} else if tm.ThreadID > 0 {
-			reply = fmt.Sprintf("This channel is id: [ %d ], topic id: [ %d ] and your id is: [ %d ]", m.Chat.ID, tm.ThreadID, m.From.ID)
+		} else if m.MessageThreadID > 0 {
+			reply = fmt.Sprintf("This channel is id: [ %d ], topic id: [ %d ] and your id is: [ %d ]", m.Chat.ID, m.MessageThreadID, m.From.ID)
 		} else {
 			reply = fmt.Sprintf("This channel is id: [ %d ] and your id is: [ %d ]", m.Chat.ID, m.From.ID)
 		}
-		_, _ = b.sendTopicMessage(m.Chat.ID, tm.ThreadID, reply)
+		_, _ = b.sendTopicMessage(m.Chat.ID, m.MessageThreadID, reply)
 		return
 	}
 
@@ -285,7 +272,7 @@ func (b *Bot) handleMessage(tm *topicMessage) {
 			result := b.nlpParser.Parse(text)
 			suggestion := commands.FormatNLPSuggestion(result, "/")
 			if suggestion != "" {
-				_, _ = b.sendTopicMessage(m.Chat.ID, tm.ThreadID, suggestion)
+				_, _ = b.sendTopicMessage(m.Chat.ID, m.MessageThreadID, suggestion)
 			}
 		}
 		return
@@ -294,7 +281,7 @@ func (b *Bot) handleMessage(tm *topicMessage) {
 	userID := formatInt64(m.From.ID)
 	isDM := m.Chat.Type == "private"
 	chatID := m.Chat.ID
-	threadID := tm.ThreadID
+	threadID := m.MessageThreadID
 
 	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserStateFromStore(b.Humans, userID, b.Cfg.General.Locale)
 	isAdmin := bot.IsAdmin(b.Cfg, "telegram", userID)
