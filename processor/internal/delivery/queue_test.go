@@ -14,9 +14,9 @@ import (
 
 // recordingHooks captures OnBreach/OnBan invocations for assertions.
 type recordingHooks struct {
-	mu      sync.Mutex
-	breach  []string // target
-	ban     []string // target
+	mu     sync.Mutex
+	breach []string // target
+	ban    []string // target
 }
 
 func (h *recordingHooks) OnBreach(target, _, _, _ string, _, _ int) {
@@ -474,6 +474,12 @@ func TestRateLimitAtDelivery(t *testing.T) {
 // TestRateLimitBypass proves jobs flagged BypassRateLimit are sent regardless
 // of the limit and do not consume budget that would otherwise apply to other
 // jobs to the same destination.
+//
+// Order-independence note: NewFairQueue spins one worker per platform
+// (Discord/Webhook/Telegram) by default, so three workers race to drain the
+// channel. Jobs to the same target serialize on a destLock but pop off the
+// channel in scheduler-dependent order — meaning the bypass send may land
+// before or after the non-bypass send. We assert on counts, not positions.
 func TestRateLimitBypass(t *testing.T) {
 	mock := &queueMockSender{platform: "discord"}
 	senders := map[string]Sender{"discord": mock}
@@ -493,15 +499,22 @@ func TestRateLimitBypass(t *testing.T) {
 	// Non-bypass job — must be dropped
 	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
 
-	time.Sleep(300 * time.Millisecond)
-	fq.Stop()
+	fq.Stop() // Stop closes the channel and waits for all queued jobs to drain.
 
 	calls := mock.getSendCalls()
 	if len(calls) != 2 {
 		t.Fatalf("expected 2 sends (1 normal + 1 bypass), got %d", len(calls))
 	}
-	if !calls[1].BypassRateLimit {
-		t.Fatal("second send should be the bypass job")
+	var bypass, normal int
+	for _, c := range calls {
+		if c.BypassRateLimit {
+			bypass++
+		} else {
+			normal++
+		}
+	}
+	if bypass != 1 || normal != 1 {
+		t.Fatalf("expected 1 bypass send + 1 normal send, got bypass=%d normal=%d", bypass, normal)
 	}
 }
 
