@@ -1,12 +1,15 @@
 package telegrambot
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	gotgbot "github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -26,7 +29,7 @@ type TelegramUserInfo struct {
 // TelegramReconciliation implements Telegram user reconciliation.
 // It checks membership in configured Telegram channels/groups via getChatMember API.
 type TelegramReconciliation struct {
-	api          *tgbotapi.BotAPI
+	api          *gotgbot.Bot
 	humanStore   store.HumanStore
 	cfg          *config.Config
 	translations *i18n.Bundle
@@ -36,7 +39,7 @@ type TelegramReconciliation struct {
 
 // NewTelegramReconciliation creates a new TelegramReconciliation instance.
 func NewTelegramReconciliation(
-	api *tgbotapi.BotAPI,
+	api *gotgbot.Bot,
 	humanStore store.HumanStore,
 	cfg *config.Config,
 	translations *i18n.Bundle,
@@ -84,12 +87,12 @@ func (r *TelegramReconciliation) loadTelegramChannels(userID int64, channelList 
 	var name string
 
 	for _, groupID := range channelList {
-		member, err := r.api.GetChatMember(tgbotapi.GetChatMemberConfig{
-			ChatConfigWithUser: tgbotapi.ChatConfigWithUser{
-				ChatID: groupID,
-				UserID: userID,
-			},
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		member, err := r.api.GetChatMember(ctx, &gotgbot.GetChatMemberParams{
+			ChatID: groupID,
+			UserID: userID,
 		})
+		cancel()
 		if err != nil {
 			// 400 typically means user not found in chat — skip silently.
 			if strings.Contains(err.Error(), "Bad Request") || strings.Contains(err.Error(), "user not found") {
@@ -99,18 +102,18 @@ func (r *TelegramReconciliation) loadTelegramChannels(userID int64, channelList 
 			continue
 		}
 
-		if member.User != nil && name == "" {
-			n := member.User.FirstName
-			if member.User.LastName != "" {
-				n += " " + member.User.LastName
+		if u := chatMemberUser(member); u != nil && name == "" {
+			n := u.FirstName
+			if u.LastName != "" {
+				n += " " + u.LastName
 			}
-			if member.User.UserName != "" {
-				n += " [" + member.User.UserName + "]"
+			if u.Username != "" {
+				n += " [" + u.Username + "]"
 			}
 			name = stripNonASCII(n)
 		}
 
-		if member.Status != "left" && member.Status != "kicked" {
+		if member.Type != models.ChatMemberTypeLeft && member.Type != models.ChatMemberTypeBanned {
 			validChannels = append(validChannels, formatInt64(groupID))
 		}
 	}
@@ -444,13 +447,21 @@ func (r *TelegramReconciliation) sendSplitMessage(chatID int64, text string) {
 		if idx := strings.LastIndex(text[:maxLen], "\n"); idx > 0 {
 			splitAt = idx + 1
 		}
-		msg := tgbotapi.NewMessage(chatID, text[:splitAt])
-		r.api.Send(msg)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		_, _ = r.api.SendMessage(ctx, &gotgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   text[:splitAt],
+		})
+		cancel()
 		text = text[splitAt:]
 	}
 	if text != "" {
-		msg := tgbotapi.NewMessage(chatID, text)
-		r.api.Send(msg)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		_, _ = r.api.SendMessage(ctx, &gotgbot.SendMessageParams{
+			ChatID: chatID,
+			Text:   text,
+		})
+		cancel()
 	}
 }
 
@@ -466,8 +477,13 @@ func (r *TelegramReconciliation) sendGoodbye(id string) {
 		return
 	}
 
-	msg := tgbotapi.NewMessage(chatID, goodbyeMsg)
-	if _, err := r.api.Send(msg); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, err := r.api.SendMessage(ctx, &gotgbot.SendMessageParams{
+		ChatID: chatID,
+		Text:   goodbyeMsg,
+	})
+	cancel()
+	if err != nil {
 		r.log.Warnf("Could not send goodbye to %s: %v", id, err)
 	}
 }
@@ -515,6 +531,43 @@ func hasAnyChannel(userChannels, configuredChannels []string) bool {
 		}
 	}
 	return false
+}
+
+// chatMemberUser extracts the *models.User from the discriminated-union
+// ChatMember regardless of which variant is populated. Returns nil if no
+// variant carries a user (shouldn't happen in practice for getChatMember
+// responses, but the structure is union-typed).
+func chatMemberUser(m *models.ChatMember) *models.User {
+	if m == nil {
+		return nil
+	}
+	switch m.Type {
+	case models.ChatMemberTypeOwner:
+		if m.Owner != nil {
+			return m.Owner.User
+		}
+	case models.ChatMemberTypeAdministrator:
+		if m.Administrator != nil {
+			return &m.Administrator.User
+		}
+	case models.ChatMemberTypeMember:
+		if m.Member != nil {
+			return m.Member.User
+		}
+	case models.ChatMemberTypeRestricted:
+		if m.Restricted != nil {
+			return m.Restricted.User
+		}
+	case models.ChatMemberTypeLeft:
+		if m.Left != nil {
+			return m.Left.User
+		}
+	case models.ChatMemberTypeBanned:
+		if m.Banned != nil {
+			return m.Banned.User
+		}
+	}
+	return nil
 }
 
 // stripNonASCII removes non-ASCII characters from a string.
