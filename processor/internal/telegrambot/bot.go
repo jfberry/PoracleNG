@@ -470,11 +470,7 @@ func (b *Bot) sendReplies(chatID int64, threadID int, userID int64, replies []bo
 
 		// Image URL — send as photo (e.g. area map tiles)
 		if reply.ImageURL != "" {
-			photo := tgbotapi.NewPhoto(targetChat, tgbotapi.FileURL(reply.ImageURL))
-			if reply.Text != "" {
-				photo.Caption = reply.Text
-			}
-			if err := b.sendPhotoToTopic(photo, replyThreadID); err != nil {
+			if err := b.sendPhotoURLToTopic(targetChat, replyThreadID, reply.ImageURL, reply.Text); err != nil {
 				log.Warnf("telegram bot: send photo failed, falling back to text: %v", err)
 				// Fall through to text handler below
 			} else {
@@ -484,14 +480,7 @@ func (b *Bot) sendReplies(chatID int64, threadID int, userID int64, replies []bo
 
 		// File attachment
 		if reply.Attachment != nil {
-			doc := tgbotapi.NewDocument(targetChat, tgbotapi.FileBytes{
-				Name:  reply.Attachment.Filename,
-				Bytes: reply.Attachment.Content,
-			})
-			if reply.Text != "" {
-				doc.Caption = reply.Text
-			}
-			if err := b.sendDocumentToTopic(doc, replyThreadID); err != nil {
+			if err := b.sendDocumentBytesToTopic(targetChat, replyThreadID, reply.Attachment.Filename, reply.Attachment.Content, reply.Text); err != nil {
 				log.Warnf("telegram bot: send document: %v", err)
 			}
 			continue
