@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strconv"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/go-telegram/bot/models"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -23,7 +23,7 @@ var (
 // Telegram groups use telegram:group type; forum topics use telegram:topic
 // with a composite "<chatID>:<threadID>" id; named channels use
 // telegram:channel (admin only).
-func (b *Bot) handleChannel(m *tgbotapi.Message, threadID int, args []string) {
+func (b *Bot) handleChannel(m *models.Message, threadID int, args []string) {
 	if m.From == nil {
 		return
 	}
