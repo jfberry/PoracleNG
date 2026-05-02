@@ -367,6 +367,7 @@
   "msg.info.sub.rarity": "レア度",
   "msg.info.sub.weather": "天気",
   "msg.info.sub.poracle": "poracle",
+  "msg.info.sub.config": "config",
   "msg.info.sub.translate": "翻訳",
   "msg.info.sub.dts": "dts",
   "msg.info.sub.templates": "テンプレート",

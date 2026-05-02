@@ -391,6 +391,7 @@
   "msg.info.sub.rarity": "rareza",
   "msg.info.sub.weather": "clima",
   "msg.info.sub.poracle": "poracle",
+  "msg.info.sub.config": "config",
   "msg.info.sub.translate": "translate",
   "msg.info.sub.dts": "dts",
   "msg.info.sub.templates": "plantillas",

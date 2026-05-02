@@ -367,6 +367,7 @@
   "msg.info.sub.rarity": "Seltenheit",
   "msg.info.sub.weather": "Wetter",
   "msg.info.sub.poracle": "poracle",
+  "msg.info.sub.config": "config",
   "msg.info.sub.translate": "Übersetzen",
   "msg.info.sub.dts": "dts",
   "msg.info.sub.templates": "templates",

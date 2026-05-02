@@ -367,6 +367,7 @@
   "msg.info.sub.rarity": "稀有度",
   "msg.info.sub.weather": "天气",
   "msg.info.sub.poracle": "poracle",
+  "msg.info.sub.config": "config",
   "msg.info.sub.translate": "翻译",
   "msg.info.sub.dts": "dts",
   "msg.info.sub.templates": "模板",

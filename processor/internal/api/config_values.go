@@ -30,7 +30,7 @@ func HandleConfigValues(deps ConfigDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filterSection := c.Query("section")
 
-		values := extractValues(deps.Cfg, filterSection)
+		values := ExtractValues(deps.Cfg, filterSection)
 
 		// List dotted paths of currently overridden fields (e.g. "discord.admins")
 		overrides, _, _ := config.LoadOverrides(deps.ConfigDir)
@@ -139,9 +139,10 @@ func HandleConfigSave(deps ConfigDeps) gin.HandlerFunc {
 	}
 }
 
-// extractValues reads config fields that are in the schema (web-editable only).
+// ExtractValues reads config fields that are in the schema (web-editable only).
 // Uses reflection to walk the config struct and match by TOML tag.
-func extractValues(cfg *config.Config, filterSection string) map[string]any {
+// Sensitive fields are returned as the masked placeholder "****".
+func ExtractValues(cfg *config.Config, filterSection string) map[string]any {
 	result := make(map[string]any)
 
 	for _, section := range configSchema {
