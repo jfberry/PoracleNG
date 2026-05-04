@@ -68,6 +68,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("fort_update").Inc()
 			metrics.MatchedUsers.WithLabelValues("fort_update").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Fort update %s (%s, %s) areas(%s) and %d humans cared",
 				fort.FortName(), fort.FortType(), fort.ChangeType, areaNames(matchedAreas), len(matched))

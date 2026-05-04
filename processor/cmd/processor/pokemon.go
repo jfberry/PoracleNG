@@ -105,6 +105,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
 			metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			// Register matched users as caring about weather in this cell
 			if ps.cfg.Weather.ChangeAlert {

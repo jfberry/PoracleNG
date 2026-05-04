@@ -67,6 +67,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("nest").Inc()
 			metrics.MatchedUsers.WithLabelValues("nest").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Nest %s (avg %.1f/hr) areas(%s) and %d humans cared",
 				ps.pokemonName(nest.PokemonID, nest.Form), nest.PokemonAvg, areaNames(matchedAreas), len(matched))

@@ -75,6 +75,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("quest").Inc()
 			metrics.MatchedUsers.WithLabelValues("quest").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))
 

@@ -101,6 +101,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("gym").Inc()
 			metrics.MatchedUsers.WithLabelValues("gym").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
 				gym.Name, ps.teamName(oldTeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))

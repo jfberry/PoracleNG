@@ -102,6 +102,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("invasion").Inc()
 			metrics.MatchedUsers.WithLabelValues("invasion").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Invasion grunt %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				gruntType, inv.Name, inv.Latitude, inv.Longitude, areaNames(matchedAreas), len(matched))

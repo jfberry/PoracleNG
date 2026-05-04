@@ -64,6 +64,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("lure").Inc()
 			metrics.MatchedUsers.WithLabelValues("lure").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("%s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				ps.lureName(lure.LureID), lure.Name, lure.Latitude, lure.Longitude, areaNames(matchedAreas), len(matched))
