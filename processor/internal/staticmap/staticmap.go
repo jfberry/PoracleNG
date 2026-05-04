@@ -875,10 +875,7 @@ func (r *Resolver) downloadTileBytes(fetchURL string) []byte {
 	// Diagnostic: log size, content-type, and the first 8 magic bytes so we
 	// can tell valid image responses from error-page bodies. A valid PNG
 	// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
-	prefixLen := 8
-	if len(b) < prefixLen {
-		prefixLen = len(b)
-	}
+	prefixLen := min(len(b), 8)
 	log.Debugf("staticmap: downloaded %d bytes from %s (ct=%s, first=%x)",
 		len(b), fetchURL, resp.Header.Get("Content-Type"), b[:prefixLen])
 	return b
@@ -968,10 +965,7 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		truncLen := len(respBody)
-		if truncLen > 200 {
-			truncLen = 200
-		}
+		truncLen := min(len(respBody), 200)
 		log.Warnf("staticmap: inline %s got status %d: %s", reqURL, resp.StatusCode, string(respBody[:truncLen]))
 		return nil
 	}
@@ -992,10 +986,7 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 	// Diagnostic: log size, content-type, and the first 8 magic bytes so we
 	// can tell valid image responses from error-page bodies. A valid PNG
 	// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
-	prefixLen := 8
-	if len(respBody) < prefixLen {
-		prefixLen = len(respBody)
-	}
+	prefixLen := min(len(respBody), 8)
 	log.Debugf("staticmap: inline %d bytes from %s (ct=%s, first=%x) in %dms",
 		len(respBody), reqURL, resp.Header.Get("Content-Type"), respBody[:prefixLen], duration.Milliseconds())
 
