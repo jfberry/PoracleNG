@@ -9,12 +9,12 @@ func TestCalculateWeaknesses(t *testing.T) {
 	gd := loadTestGameData(t)
 
 	tests := []struct {
-		name           string
-		pokemonID      int
-		form           int
-		wantExtraWeak  []int // 4x type IDs
-		wantWeak       []int // 2x type IDs
-		wantResist     []int // 0.5x type IDs
+		name          string
+		pokemonID     int
+		form          int
+		wantExtraWeak []int // 4x type IDs
+		wantWeak      []int // 2x type IDs
+		wantResist    []int // 0.5x type IDs
 	}{
 		{
 			name:      "Charizard (Fire/Flying)",
@@ -26,7 +26,7 @@ func TestCalculateWeaknesses(t *testing.T) {
 			// 0.5x resist: Fire(10), Fighting(2), Steel(9), Fairy(18)
 			// 0.25x resist: Grass(12), Bug(7)
 			// 0.25x immune: Ground(5) (Flying immunity in PoGo = 0.25x)
-			wantExtraWeak: []int{6}, // Rock
+			wantExtraWeak: []int{6},      // Rock
 			wantWeak:      []int{11, 13}, // Water, Electric
 		},
 		{

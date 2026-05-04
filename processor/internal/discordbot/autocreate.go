@@ -16,18 +16,18 @@ import (
 
 // channelTemplate represents one entry in config/channelTemplate.json.
 type channelTemplate struct {
-	Name       string             `json:"name"`
-	Definition channelDefinition  `json:"definition"`
+	Name       string            `json:"name"`
+	Definition channelDefinition `json:"definition"`
 }
 
 type channelDefinition struct {
-	Category *categoryDefinition  `json:"category"`
-	Channels []channelEntry       `json:"channels"`
+	Category *categoryDefinition `json:"category"`
+	Channels []channelEntry      `json:"channels"`
 }
 
 type categoryDefinition struct {
-	CategoryName string         `json:"categoryName"`
-	Roles        []roleEntry    `json:"roles"`
+	CategoryName string      `json:"categoryName"`
+	Roles        []roleEntry `json:"roles"`
 }
 
 type channelEntry struct {
@@ -307,35 +307,35 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 				}
 
 				ctx := &bot.CommandContext{
-					UserID:       m.Author.ID,
-					UserName:     m.Author.Username,
-					Platform:     "discord",
-					ChannelID:    m.ChannelID,
-					GuildID:      guildID,
-					IsDM:         false,
-					IsAdmin:      true,
-					Language:     b.Cfg.General.Locale,
-					ProfileNo:    1,
-					TargetID:     targetID,
-					TargetName:   targetName,
-					TargetType:   targetType,
-					DB:           b.DB,
-					Humans:       b.Humans,
-					Tracking:     b.Tracking,
-					Config:       b.Cfg,
-					StateMgr:     b.StateMgr,
-					GameData:     b.GameData,
-					Translations: b.Translations,
-					Dispatcher:   b.Dispatcher,
-					RowText:      b.RowText,
-					Resolver:     b.Resolver,
-					ArgMatcher:   b.ArgMatcher,
-					Geocoder:     b.Geocoder,
-					StaticMap:    b.StaticMap,
-					Weather:      b.Weather,
-					Stats:        b.Stats,
-					DTS:          b.DTS,
-					Emoji:        b.Emoji,
+					UserID:        m.Author.ID,
+					UserName:      m.Author.Username,
+					Platform:      "discord",
+					ChannelID:     m.ChannelID,
+					GuildID:       guildID,
+					IsDM:          false,
+					IsAdmin:       true,
+					Language:      b.Cfg.General.Locale,
+					ProfileNo:     1,
+					TargetID:      targetID,
+					TargetName:    targetName,
+					TargetType:    targetType,
+					DB:            b.DB,
+					Humans:        b.Humans,
+					Tracking:      b.Tracking,
+					Config:        b.Cfg,
+					StateMgr:      b.StateMgr,
+					GameData:      b.GameData,
+					Translations:  b.Translations,
+					Dispatcher:    b.Dispatcher,
+					RowText:       b.RowText,
+					Resolver:      b.Resolver,
+					ArgMatcher:    b.ArgMatcher,
+					Geocoder:      b.Geocoder,
+					StaticMap:     b.StaticMap,
+					Weather:       b.Weather,
+					Stats:         b.Stats,
+					DTS:           b.DTS,
+					Emoji:         b.Emoji,
 					NLP:           b.nlpParser,
 					TestProcessor: b.TestProcessor,
 					Registry:      b.Registry,

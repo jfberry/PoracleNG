@@ -41,11 +41,11 @@ func NewNominatim(baseURL string, timeout time.Duration, includeCountry bool) *N
 
 // nominatimReverseResult models the Nominatim reverse geocoding JSON response.
 type nominatimReverseResult struct {
-	Lat         string                `json:"lat"`
-	Lon         string                `json:"lon"`
-	DisplayName string                `json:"display_name"`
-	Error       string                `json:"error"`
-	Address     nominatimAddress      `json:"address"`
+	Lat         string           `json:"lat"`
+	Lon         string           `json:"lon"`
+	DisplayName string           `json:"display_name"`
+	Error       string           `json:"error"`
+	Address     nominatimAddress `json:"address"`
 }
 
 type nominatimAddress struct {

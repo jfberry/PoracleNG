@@ -552,4 +552,3 @@ func TestFallbackDtsSubdir(t *testing.T) {
 		t.Error("fallbacks/dts/help/track.json entry should load for telegram (platform wildcard)")
 	}
 }
-

@@ -24,8 +24,8 @@ type RenderJob struct {
 	MatchedUsers      []webhook.MatchedUser
 	MatchedAreas      []webhook.MatchedArea
 	TilePending       *staticmap.TilePending
-	IsEncountered     bool   // pokemon only
-	IsPokemon         bool   // true = RenderPokemon, false = RenderAlert
+	IsEncountered     bool // pokemon only
+	IsPokemon         bool // true = RenderPokemon, false = RenderAlert
 	LogReference      string
 	EditKey           string
 	TileImageData     []byte // inline tile bytes, set during tile resolution

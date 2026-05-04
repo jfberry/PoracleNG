@@ -194,7 +194,9 @@ func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot
 		tr := ctx.Tr()
 		return removeByUIDs(ctx, ctx.Tracking.Maxbattles, parsed.RemoveUIDs,
 			store.MaxbattleGetUID,
-			func(r *db.MaxbattleTrackingAPI) string { return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(r)) },
+			func(r *db.MaxbattleTrackingAPI) string {
+				return ctx.RowText.MaxbattleRowText(tr, maxbattleAPIToTracking(r))
+			},
 		)
 	}
 

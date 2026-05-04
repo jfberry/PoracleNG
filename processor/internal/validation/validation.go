@@ -89,10 +89,10 @@ func (Noop) Enabled() bool { return false }
 // HTTP is the production validator. One shared *http.Client is reused for
 // every call.
 type HTTP struct {
-	url            string
-	client         *http.Client
-	failClosed     bool
-	maxConcurrent  int
+	url           string
+	client        *http.Client
+	failClosed    bool
+	maxConcurrent int
 }
 
 // New constructs a Validator for the given config. If url is empty a Noop

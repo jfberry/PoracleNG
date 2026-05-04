@@ -77,9 +77,9 @@ var questParams = []bot.ParamDef{
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
 	{Type: bot.ParamKeyword, Key: "arg.shiny"},
-	{Type: bot.ParamKeyword, Key: "arg.stardust"},  // bare "stardust" keyword (any amount)
-	{Type: bot.ParamKeyword, Key: "arg.energy"},     // bare "energy" keyword (any pokemon)
-	{Type: bot.ParamKeyword, Key: "arg.candy"},      // bare "candy" keyword (any pokemon)
+	{Type: bot.ParamKeyword, Key: "arg.stardust"}, // bare "stardust" keyword (any amount)
+	{Type: bot.ParamKeyword, Key: "arg.energy"},   // bare "energy" keyword (any pokemon)
+	{Type: bot.ParamKeyword, Key: "arg.candy"},    // bare "candy" keyword (any pokemon)
 	{Type: bot.ParamPokemonName},
 }
 

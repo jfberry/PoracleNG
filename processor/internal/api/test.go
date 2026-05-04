@@ -21,7 +21,7 @@ type TestRequest struct {
 type testTargetJSON struct {
 	ID        string  `json:"id"`
 	Name      string  `json:"name"`
-	Type      string  `json:"type"`      // discord:user, telegram:user, etc.
+	Type      string  `json:"type"` // discord:user, telegram:user, etc.
 	Language  string  `json:"language"`
 	Template  string  `json:"template"`
 	Latitude  float64 `json:"latitude"`

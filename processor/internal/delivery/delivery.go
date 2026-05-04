@@ -24,15 +24,15 @@ func (t TTH) Duration() time.Duration {
 
 // Job is a platform-agnostic delivery job.
 type Job struct {
-	Target       string          `json:"target"`       // user/channel/thread/webhook ID or URL
-	Type         string          `json:"type"`         // "discord:user", "discord:channel", "discord:thread", "webhook",
-	                                                   // "telegram:user", "telegram:group", "telegram:channel"
-	Message      json.RawMessage `json:"message"`      // pre-rendered message JSON
-	TTH          TTH             `json:"tth"`
-	Clean        int             `json:"clean"`        // track for deletion on TTH expiry
-	EditKey      string          `json:"editKey"`      // non-empty = track for future edits
-	Name         string          `json:"name"`         // human-readable destination name
-	LogReference string          `json:"logReference"` // encounter/gym ID for tracing
+	Target string `json:"target"` // user/channel/thread/webhook ID or URL
+	Type   string `json:"type"`   // "discord:user", "discord:channel", "discord:thread", "webhook",
+	// "telegram:user", "telegram:group", "telegram:channel"
+	Message       json.RawMessage `json:"message"` // pre-rendered message JSON
+	TTH           TTH             `json:"tth"`
+	Clean         int             `json:"clean"`        // track for deletion on TTH expiry
+	EditKey       string          `json:"editKey"`      // non-empty = track for future edits
+	Name          string          `json:"name"`         // human-readable destination name
+	LogReference  string          `json:"logReference"` // encounter/gym ID for tracing
 	Lat           float64         `json:"lat"`
 	Lon           float64         `json:"lon"`
 	StaticMapData []byte          `json:"-"` // inline tile image bytes

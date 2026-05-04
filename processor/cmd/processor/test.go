@@ -38,14 +38,14 @@ func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage,
 	}
 
 	matchedUser := webhook.MatchedUser{
-		ID:       target.ID,
-		Name:     target.Name,
-		Type:     target.Type,
-		Language: target.Language,
-		Latitude: target.Latitude,
+		ID:        target.ID,
+		Name:      target.Name,
+		Type:      target.Type,
+		Language:  target.Language,
+		Latitude:  target.Latitude,
 		Longitude: target.Longitude,
-		Template: target.Template,
-		Clean:    0,
+		Template:  target.Template,
+		Clean:     0,
 	}
 
 	switch webhookType {

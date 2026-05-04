@@ -23,23 +23,23 @@ import (
 
 // CommandDeps holds all dependencies needed for command execution.
 type CommandDeps struct {
-	DB           *sqlx.DB
-	Humans       store.HumanStore
-	Tracking     *store.TrackingStores
-	Config       *config.Config
-	StateMgr     *state.Manager
-	GameData     *gamedata.GameData
-	Translations *i18n.Bundle
-	Dispatcher   *delivery.Dispatcher
-	RowText      *rowtext.Generator
-	Resolver     *bot.PokemonResolver
-	ArgMatcher   *bot.ArgMatcher
-	Parser       *bot.Parser
-	Registry     *bot.Registry
-	Weather      *tracker.WeatherTracker
-	Stats        *tracker.StatsTracker
-	DTS          *dts.TemplateStore
-	Emoji        *dts.EmojiLookup
+	DB            *sqlx.DB
+	Humans        store.HumanStore
+	Tracking      *store.TrackingStores
+	Config        *config.Config
+	StateMgr      *state.Manager
+	GameData      *gamedata.GameData
+	Translations  *i18n.Bundle
+	Dispatcher    *delivery.Dispatcher
+	RowText       *rowtext.Generator
+	Resolver      *bot.PokemonResolver
+	ArgMatcher    *bot.ArgMatcher
+	Parser        *bot.Parser
+	Registry      *bot.Registry
+	Weather       *tracker.WeatherTracker
+	Stats         *tracker.StatsTracker
+	DTS           *dts.TemplateStore
+	Emoji         *dts.EmojiLookup
 	NLPParser     *nlp.Parser
 	TestProcessor bot.TestProcessor
 	ReloadFunc    func()
@@ -127,38 +127,38 @@ func HandleCommand(deps *CommandDeps) gin.HandlerFunc {
 
 			// Build context
 			ctx := &bot.CommandContext{
-				UserID:       req.UserID,
-				UserName:     req.UserName,
-				Platform:     req.Platform,
-				ChannelID:    req.ChannelID,
-				GuildID:      req.GuildID,
-				IsDM:         req.IsDM,
-				IsAdmin:      isAdmin,
-				Language:     userLang,
-				ProfileNo:    profileNo,
-				HasLocation:  hasLocation,
-				HasArea:      hasArea,
-				TargetID:     req.UserID,
-				TargetName:   req.UserName,
-				TargetType:   req.Platform + ":user",
-				AreaLogic:    bot.NewAreaLogic(fences, deps.Config),
-				DB:           deps.DB,
-				Humans:       deps.Humans,
-				Tracking:     deps.Tracking,
-				Config:       deps.Config,
-				StateMgr:     deps.StateMgr,
-				GameData:     deps.GameData,
-				Translations: deps.Translations,
-				Geofence:     spatialIndex,
-				Fences:       fences,
-				Dispatcher:   deps.Dispatcher,
-				RowText:      deps.RowText,
-				Resolver:     deps.Resolver,
-				ArgMatcher:   deps.ArgMatcher,
-				Weather:      deps.Weather,
-				Stats:        deps.Stats,
-				DTS:          deps.DTS,
-				Emoji:        deps.Emoji,
+				UserID:        req.UserID,
+				UserName:      req.UserName,
+				Platform:      req.Platform,
+				ChannelID:     req.ChannelID,
+				GuildID:       req.GuildID,
+				IsDM:          req.IsDM,
+				IsAdmin:       isAdmin,
+				Language:      userLang,
+				ProfileNo:     profileNo,
+				HasLocation:   hasLocation,
+				HasArea:       hasArea,
+				TargetID:      req.UserID,
+				TargetName:    req.UserName,
+				TargetType:    req.Platform + ":user",
+				AreaLogic:     bot.NewAreaLogic(fences, deps.Config),
+				DB:            deps.DB,
+				Humans:        deps.Humans,
+				Tracking:      deps.Tracking,
+				Config:        deps.Config,
+				StateMgr:      deps.StateMgr,
+				GameData:      deps.GameData,
+				Translations:  deps.Translations,
+				Geofence:      spatialIndex,
+				Fences:        fences,
+				Dispatcher:    deps.Dispatcher,
+				RowText:       deps.RowText,
+				Resolver:      deps.Resolver,
+				ArgMatcher:    deps.ArgMatcher,
+				Weather:       deps.Weather,
+				Stats:         deps.Stats,
+				DTS:           deps.DTS,
+				Emoji:         deps.Emoji,
 				NLP:           deps.NLPParser,
 				TestProcessor: deps.TestProcessor,
 				Registry:      deps.Registry,

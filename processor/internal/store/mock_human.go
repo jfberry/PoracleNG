@@ -8,8 +8,8 @@ import (
 // MockHumanStore is an in-memory HumanStore for testing. It records calls
 // and returns configured responses.
 type MockHumanStore struct {
-	mu      sync.RWMutex
-	humans  map[string]*Human   // id -> Human
+	mu       sync.RWMutex
+	humans   map[string]*Human    // id -> Human
 	profiles map[string][]Profile // id -> profiles
 
 	// Calls records method names called (for assertion).

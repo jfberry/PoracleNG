@@ -296,7 +296,7 @@ func (r *Reconciliation) reconcileNonAreaSecurity(id string, user *store.Human, 
 
 			updates := map[string]any{
 				"admin_disable":  0,
-				"disabled_date": nil,
+				"disabled_date":  nil,
 				"blocked_alerts": nullableSqlArg(blocked),
 			}
 			if err := r.humanStore.Update(id, updates); err != nil {
@@ -379,11 +379,11 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *store.Human, nam
 			areaRestrictionJSON, _ := json.Marshal(areaRestriction)
 			communityJSON, _ := json.Marshal(communityList)
 			updates := map[string]any{
-				"admin_disable":         0,
-				"disabled_date":         nil,
-				"area_restriction":      string(areaRestrictionJSON),
-				"community_membership":  string(communityJSON),
-				"blocked_alerts":        nullableSqlArg(blocked),
+				"admin_disable":        0,
+				"disabled_date":        nil,
+				"area_restriction":     string(areaRestrictionJSON),
+				"community_membership": string(communityJSON),
+				"blocked_alerts":       nullableSqlArg(blocked),
 			}
 			if err := r.humanStore.Update(id, updates); err != nil {
 				r.log.Errorf("Reactivate user %s: %v", id, err)

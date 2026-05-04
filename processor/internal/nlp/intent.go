@@ -85,8 +85,8 @@ func DetectIntent(normalized string, invasionEvents map[string]bool) IntentResul
 		search := " " + kw + " "
 		if idx := strings.Index(padded, search); idx >= 0 {
 			result.IsRemove = true
-			start := idx                  // position in padded
-			end := idx + len(search) - 1  // keep one surrounding space on the right
+			start := idx                 // position in padded
+			end := idx + len(search) - 1 // keep one surrounding space on the right
 			joined = strings.TrimSpace(padded[:start] + " " + padded[end:])
 			joined = collapseSpaces(joined)
 			break

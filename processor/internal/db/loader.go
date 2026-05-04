@@ -25,18 +25,18 @@ func OpenDB(dsn string) (*sqlx.DB, error) {
 
 // AllData holds all loaded database data.
 type AllData struct {
-	Humans    map[string]*Human
-	Monsters  *MonsterIndex
-	Raids     []*RaidTracking
-	Eggs      []*EggTracking
-	Profiles  map[ProfileKey]*Profile
-	Invasions []*InvasionTracking
-	Quests    []*QuestTracking
-	Lures     []*LureTracking
-	Gyms      []*GymTracking
-	Nests     []*NestTracking
-	Forts       []*FortTracking
-	Maxbattles  []*MaxbattleTracking
+	Humans     map[string]*Human
+	Monsters   *MonsterIndex
+	Raids      []*RaidTracking
+	Eggs       []*EggTracking
+	Profiles   map[ProfileKey]*Profile
+	Invasions  []*InvasionTracking
+	Quests     []*QuestTracking
+	Lures      []*LureTracking
+	Gyms       []*GymTracking
+	Nests      []*NestTracking
+	Forts      []*FortTracking
+	Maxbattles []*MaxbattleTracking
 }
 
 // LoadAll loads all tracking data from the database.
@@ -110,16 +110,16 @@ func LoadAll(db *sqlx.DB) (*AllData, error) {
 	maxbattles = filterSlice(maxbattles, humans)
 
 	return &AllData{
-		Humans:    humans,
-		Monsters:  monsters,
-		Raids:     raids,
-		Eggs:      eggs,
-		Profiles:  profiles,
-		Invasions: invasions,
-		Quests:    quests,
-		Lures:     lures,
-		Gyms:      gyms,
-		Nests:     nests,
+		Humans:     humans,
+		Monsters:   monsters,
+		Raids:      raids,
+		Eggs:       eggs,
+		Profiles:   profiles,
+		Invasions:  invasions,
+		Quests:     quests,
+		Lures:      lures,
+		Gyms:       gyms,
+		Nests:      nests,
 		Forts:      forts,
 		Maxbattles: maxbattles,
 	}, nil

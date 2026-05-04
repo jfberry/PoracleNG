@@ -8,27 +8,27 @@ import (
 
 // ConfigFieldDef describes a single config field for the editor.
 type ConfigFieldDef struct {
-	Name        string               `json:"name"`
-	Type        string               `json:"type"` // string, int, float, bool, string[], color[], select, map
-	Default     any                  `json:"default,omitempty"`
-	Description string               `json:"description"`
-	HotReload   bool                 `json:"hotReload,omitempty"`
-	Sensitive   bool                 `json:"sensitive,omitempty"`
-	Deprecated  bool                 `json:"deprecated,omitempty"`  // editor should warn / hide unless already set
-	Advanced    bool                 `json:"advanced,omitempty"`    // editor hides behind "show advanced" toggle
-	HideDefault bool                 `json:"hideDefault,omitempty"` // editor should not pre-fill the default
+	Name        string `json:"name"`
+	Type        string `json:"type"` // string, int, float, bool, string[], color[], select, map
+	Default     any    `json:"default,omitempty"`
+	Description string `json:"description"`
+	HotReload   bool   `json:"hotReload,omitempty"`
+	Sensitive   bool   `json:"sensitive,omitempty"`
+	Deprecated  bool   `json:"deprecated,omitempty"`  // editor should warn / hide unless already set
+	Advanced    bool   `json:"advanced,omitempty"`    // editor hides behind "show advanced" toggle
+	HideDefault bool   `json:"hideDefault,omitempty"` // editor should not pre-fill the default
 	// Nullable marks a scalar field (typically bool) as tri-state: null is a
 	// meaningful third value distinct from the zero value, and the backend
 	// relies on the distinction — usually to layer per-row overrides on top
 	// of a base/default entry. The editor MUST render null as a distinct
 	// "inherit / unset" state and preserve null on save (not coerce to false
 	// or the type's zero value).
-	Nullable    bool                 `json:"nullable,omitempty"`
-	MinLength   int                  `json:"minLength,omitempty"`   // for arrays: minimum number of entries
-	MaxLength   int                  `json:"maxLength,omitempty"`   // for arrays: maximum number of entries
-	Resolve     string               `json:"resolve,omitempty"`
-	Options     []ConfigSelectOption `json:"options,omitempty"`
-	DependsOn   *ConfigDependency    `json:"dependsOn,omitempty"`
+	Nullable  bool                 `json:"nullable,omitempty"`
+	MinLength int                  `json:"minLength,omitempty"` // for arrays: minimum number of entries
+	MaxLength int                  `json:"maxLength,omitempty"` // for arrays: maximum number of entries
+	Resolve   string               `json:"resolve,omitempty"`
+	Options   []ConfigSelectOption `json:"options,omitempty"`
+	DependsOn *ConfigDependency    `json:"dependsOn,omitempty"`
 }
 
 // ConfigSelectOption is a constrained option for select-type fields.

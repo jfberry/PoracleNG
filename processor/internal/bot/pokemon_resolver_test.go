@@ -34,13 +34,13 @@ func newTestResolver() *PokemonResolver {
 	// Build minimal GameData with evolution chains
 	gd := &gamedata.GameData{
 		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
-			{ID: 1, Form: 0}:   {PokemonID: 1, Evolutions: []gamedata.Evolution{{PokemonID: 2, }}},
-			{ID: 2, Form: 0}:   {PokemonID: 2, Evolutions: []gamedata.Evolution{{PokemonID: 3, }}},
+			{ID: 1, Form: 0}:   {PokemonID: 1, Evolutions: []gamedata.Evolution{{PokemonID: 2}}},
+			{ID: 2, Form: 0}:   {PokemonID: 2, Evolutions: []gamedata.Evolution{{PokemonID: 3}}},
 			{ID: 3, Form: 0}:   {PokemonID: 3},
-			{ID: 4, Form: 0}:   {PokemonID: 4, Evolutions: []gamedata.Evolution{{PokemonID: 5, }}},
-			{ID: 5, Form: 0}:   {PokemonID: 5, Evolutions: []gamedata.Evolution{{PokemonID: 6, }}},
+			{ID: 4, Form: 0}:   {PokemonID: 4, Evolutions: []gamedata.Evolution{{PokemonID: 5}}},
+			{ID: 5, Form: 0}:   {PokemonID: 5, Evolutions: []gamedata.Evolution{{PokemonID: 6}}},
 			{ID: 6, Form: 0}:   {PokemonID: 6},
-			{ID: 25, Form: 0}:  {PokemonID: 25, Evolutions: []gamedata.Evolution{{PokemonID: 26, }}},
+			{ID: 25, Form: 0}:  {PokemonID: 25, Evolutions: []gamedata.Evolution{{PokemonID: 26}}},
 			{ID: 26, Form: 0}:  {PokemonID: 26},
 			{ID: 122, Form: 0}: {PokemonID: 122},
 			{ID: 133, Form: 0}: {PokemonID: 133, Evolutions: []gamedata.Evolution{
@@ -56,9 +56,9 @@ func newTestResolver() *PokemonResolver {
 	}
 
 	aliases := map[string][]int{
-		"mr. mime":  {122},
-		"mr mime":   {122},
-		"laketrio":  {480, 481, 482},
+		"mr. mime": {122},
+		"mr mime":  {122},
+		"laketrio": {480, 481, 482},
 	}
 
 	return NewPokemonResolver(gd, bundle, []string{"en", "de"}, aliases)

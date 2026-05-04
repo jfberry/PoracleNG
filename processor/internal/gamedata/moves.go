@@ -18,12 +18,12 @@ type Move struct {
 
 // rawMove is the raw masterfile format for moves.
 type rawMove struct {
-	MoveID   int  `json:"moveId"`
+	MoveID   int    `json:"moveId"`
 	MoveName string `json:"moveName"`
-	Type     int  `json:"type"`
-	Fast     bool `json:"fast"`
-	Power    int  `json:"power"`
-	PvPPower int  `json:"pvpPower"`
+	Type     int    `json:"type"`
+	Fast     bool   `json:"fast"`
+	Power    int    `json:"power"`
+	PvPPower int    `json:"pvpPower"`
 }
 
 // LoadMoves parses the raw masterfile moves.json file.

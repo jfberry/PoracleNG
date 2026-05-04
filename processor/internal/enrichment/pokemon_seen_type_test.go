@@ -40,11 +40,11 @@ func TestComputeSeenType(t *testing.T) {
 // locking in alongside the explicit case to prevent regression.
 func TestComputeSeenTypeRDMFallback(t *testing.T) {
 	cases := []struct {
-		name        string
-		pokestopID  string
-		spawnID     string
-		hasIVs      bool
-		want        string
+		name       string
+		pokestopID string
+		spawnID    string
+		hasIVs     bool
+		want       string
 	}{
 		{"both 'None' → cell", "None", "None", false, "cell"},
 		{"pokestop 'None' no IVs → wild", "None", "abc", false, "wild"},

@@ -256,11 +256,11 @@ func TestInvasionRealWorldData(t *testing.T) {
 func TestResolveGruntTypeName(t *testing.T) {
 	gd := &gamedata.GameData{
 		Grunts: map[int]*gamedata.Grunt{
-			4:  {TypeID: 0, Template: "CHARACTER_GRUNT_MALE"},          // Mixed
-			5:  {TypeID: 0, Template: "CHARACTER_GRUNT_FEMALE"},        // Mixed
-			8:  {TypeID: 0, Template: "CHARACTER_DARKNESS_GRUNT_FEMALE"}, // Darkness
-			23: {TypeID: 12, Template: "CHARACTER_GRASS_GRUNT_MALE"},   // Grass
-			28: {TypeID: 0, Template: "CHARACTER_METAL_GRUNT_FEMALE"},  // Metal
+			4:  {TypeID: 0, Template: "CHARACTER_GRUNT_MALE"},             // Mixed
+			5:  {TypeID: 0, Template: "CHARACTER_GRUNT_FEMALE"},           // Mixed
+			8:  {TypeID: 0, Template: "CHARACTER_DARKNESS_GRUNT_FEMALE"},  // Darkness
+			23: {TypeID: 12, Template: "CHARACTER_GRASS_GRUNT_MALE"},      // Grass
+			28: {TypeID: 0, Template: "CHARACTER_METAL_GRUNT_FEMALE"},     // Metal
 			49: {TypeID: 13, Template: "CHARACTER_ELECTRIC_GRUNT_FEMALE"}, // Electric
 			50: {TypeID: 13, Template: "CHARACTER_ELECTRIC_GRUNT_MALE"},   // Electric
 		},

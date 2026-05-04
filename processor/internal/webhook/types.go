@@ -173,28 +173,28 @@ type ActivePokemonEntry struct {
 
 // MatchedUser represents a user who matched an alert.
 type MatchedUser struct {
-	ID                string               `json:"id"`
-	Name              string               `json:"name"`
-	Type              string               `json:"type"`
-	Language          string               `json:"language"`
-	Latitude          float64              `json:"latitude"`
-	Longitude         float64              `json:"longitude"`
-	Template          string               `json:"template"`
-	Distance          int                  `json:"distance"`
-	Clean             int                  `json:"clean"`
-	Ping              string               `json:"ping"`
-	Bearing           int                  `json:"bearing"`
-	CardinalDirection string               `json:"cardinalDirection"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	Type              string  `json:"type"`
+	Language          string  `json:"language"`
+	Latitude          float64 `json:"latitude"`
+	Longitude         float64 `json:"longitude"`
+	Template          string  `json:"template"`
+	Distance          int     `json:"distance"`
+	Clean             int     `json:"clean"`
+	Ping              string  `json:"ping"`
+	Bearing           int     `json:"bearing"`
+	CardinalDirection string  `json:"cardinalDirection"`
 	// TrackDistance is the matched rule's distance threshold in metres (the
 	// `d:500` argument on track commands). Zero indicates an area-based rule.
 	// Used to set the userDistanceTrack per-user template flag.
-	TrackDistance     int                  `json:"track_distance,omitempty"`
-	PokemonID         int                  `json:"pokemon_id"`
-	PVPRankingCap     int                  `json:"pvp_ranking_cap"`
-	PVPRankingLeague  int                  `json:"pvp_ranking_league"`
-	PVPRankingWorst   int                  `json:"pvp_ranking_worst"`
-	RSVPChanges       int                  `json:"rsvp_changes"`
-	ActivePokemons    []ActivePokemonEntry `json:"active_pokemons,omitempty"`
+	TrackDistance    int                  `json:"track_distance,omitempty"`
+	PokemonID        int                  `json:"pokemon_id"`
+	PVPRankingCap    int                  `json:"pvp_ranking_cap"`
+	PVPRankingLeague int                  `json:"pvp_ranking_league"`
+	PVPRankingWorst  int                  `json:"pvp_ranking_worst"`
+	RSVPChanges      int                  `json:"rsvp_changes"`
+	ActivePokemons   []ActivePokemonEntry `json:"active_pokemons,omitempty"`
 	// CaresUntil is the unix timestamp of the latest matched pokemon's disappear
 	// time in the weather cell. Only populated for weather change alerts, where
 	// it drives the clean-alert TTH and the "too short to bother" drop.
@@ -208,19 +208,19 @@ type MatchedUser struct {
 // different from the quest envelope which uses `pokestop_url`).
 // Templates reach it via the `pokestopUrl` alias on the invasion type.
 type InvasionWebhook struct {
-	PokestopID              string  `json:"pokestop_id"`
-	Name                    string  `json:"pokestop_name"`
-	URL                     string  `json:"url"`
-	Latitude                float64 `json:"latitude"`
-	Longitude               float64 `json:"longitude"`
-	IncidentExpiration      int64   `json:"incident_expiration"`
-	IncidentExpireTimestamp int64   `json:"incident_expire_timestamp"`
-	IncidentGruntType       int     `json:"incident_grunt_type"`
-	GruntType               int     `json:"grunt_type"`
-	Gender                  int     `json:"gender"`
-	DisplayType             int     `json:"display_type"`
-	IncidentDisplayType     int     `json:"incident_display_type"`
-	Confirmed               bool    `json:"confirmed"`
+	PokestopID              string                `json:"pokestop_id"`
+	Name                    string                `json:"pokestop_name"`
+	URL                     string                `json:"url"`
+	Latitude                float64               `json:"latitude"`
+	Longitude               float64               `json:"longitude"`
+	IncidentExpiration      int64                 `json:"incident_expiration"`
+	IncidentExpireTimestamp int64                 `json:"incident_expire_timestamp"`
+	IncidentGruntType       int                   `json:"incident_grunt_type"`
+	GruntType               int                   `json:"grunt_type"`
+	Gender                  int                   `json:"gender"`
+	DisplayType             int                   `json:"display_type"`
+	IncidentDisplayType     int                   `json:"incident_display_type"`
+	Confirmed               bool                  `json:"confirmed"`
 	Lineup                  []InvasionLineupEntry `json:"lineup"`
 }
 
@@ -285,9 +285,9 @@ type LureWebhook struct {
 	LureExpiration int64   `json:"lure_expiration"`
 	LureID         int     `json:"lure_id"`
 	// Invasion fields — a pokestop can have both a lure and an invasion
-	IncidentGruntType  int `json:"incident_grunt_type"`
-	GruntType          int `json:"grunt_type"`
-	DisplayType        int `json:"display_type"`
+	IncidentGruntType   int `json:"incident_grunt_type"`
+	GruntType           int `json:"grunt_type"`
+	DisplayType         int `json:"display_type"`
 	IncidentDisplayType int `json:"incident_display_type"`
 }
 

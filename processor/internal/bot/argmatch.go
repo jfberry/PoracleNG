@@ -30,8 +30,8 @@ type ArgMatcher struct {
 	// into a single token before per-param matching runs, so users don't
 	// need to type underscores or quotes for known multi-word names.
 	// See collapseMultiWord.
-	bareMultiWord      map[string]bool            // items + pokemon names (multi-word entries only)
-	prefixedMultiWord  map[string]map[string]bool // "move" → multi-word move names, "form" → form names
+	bareMultiWord     map[string]bool            // items + pokemon names (multi-word entries only)
+	prefixedMultiWord map[string]map[string]bool // "move" → multi-word move names, "form" → form names
 }
 
 // NewArgMatcher builds the pre-computed lookup tables for argument matching.
@@ -109,12 +109,12 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 		// From translation keys
 		levelNames := map[string][]int{
 			strings.ToLower(tr.T("raid.level.legendary")):        {5},
-			strings.ToLower(tr.T("raid.level.mega")):              {6},
-			strings.ToLower(tr.T("raid.level.mega_legendary")):    {7},
-			strings.ToLower(tr.T("raid.level.ultra_beast")):       {8},
-			strings.ToLower(tr.T("raid.level.elite")):             {9},
-			strings.ToLower(tr.T("raid.level.primal")):            {10},
-			strings.ToLower(tr.T("raid.level.shadow_legendary")):  {15},
+			strings.ToLower(tr.T("raid.level.mega")):             {6},
+			strings.ToLower(tr.T("raid.level.mega_legendary")):   {7},
+			strings.ToLower(tr.T("raid.level.ultra_beast")):      {8},
+			strings.ToLower(tr.T("raid.level.elite")):            {9},
+			strings.ToLower(tr.T("raid.level.primal")):           {10},
+			strings.ToLower(tr.T("raid.level.shadow_legendary")): {15},
 		}
 		// "shadow" without qualifier matches all shadow levels
 		shadowLevels := []int{}

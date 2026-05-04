@@ -89,15 +89,15 @@ func InsertLure(db *sqlx.DB, lure *LureTrackingAPI) (int64, error) {
 
 // FortTrackingAPI represents a fort tracking row for API operations.
 type FortTrackingAPI struct {
-	UID          int64  `db:"uid"           json:"uid"           diff:"-"`
-	ID           string `db:"id"            json:"id"            diff:"-"`
-	ProfileNo    int    `db:"profile_no"    json:"profile_no"    diff:"-"`
-	Ping         string `db:"ping"          json:"ping"`
-	Distance     int    `db:"distance"      json:"distance"      diff:"update"`
-	Template     string `db:"template"      json:"template"      diff:"update"`
-	FortType     string `db:"fort_type"     json:"fort_type"     diff:"match"`
+	UID          int64   `db:"uid"           json:"uid"           diff:"-"`
+	ID           string  `db:"id"            json:"id"            diff:"-"`
+	ProfileNo    int     `db:"profile_no"    json:"profile_no"    diff:"-"`
+	Ping         string  `db:"ping"          json:"ping"`
+	Distance     int     `db:"distance"      json:"distance"      diff:"update"`
+	Template     string  `db:"template"      json:"template"      diff:"update"`
+	FortType     string  `db:"fort_type"     json:"fort_type"     diff:"match"`
 	IncludeEmpty IntBool `db:"include_empty" json:"include_empty"`
-	ChangeTypes  string `db:"change_types"  json:"change_types"`
+	ChangeTypes  string  `db:"change_types"  json:"change_types"`
 }
 
 // SelectFortsByIDProfile returns all fort trackings for a given human and profile.
@@ -223,18 +223,18 @@ func InsertNest(db *sqlx.DB, nest *NestTrackingAPI) (int64, error) {
 
 // QuestTrackingAPI represents a quest tracking row for API operations.
 type QuestTrackingAPI struct {
-	UID        int64  `db:"uid"         json:"uid"         diff:"-"`
-	ID         string `db:"id"          json:"id"          diff:"-"`
-	ProfileNo  int    `db:"profile_no"  json:"profile_no"  diff:"-"`
-	Ping       string `db:"ping"        json:"ping"`
-	Clean      int    `db:"clean"       json:"clean"       diff:"update"`
-	Distance   int    `db:"distance"    json:"distance"    diff:"update"`
-	Template   string `db:"template"    json:"template"    diff:"update"`
-	RewardType int    `db:"reward_type" json:"reward_type"  diff:"match"`
-	Reward     int    `db:"reward"      json:"reward"       diff:"match"`
-	Form       int    `db:"form"        json:"form"         diff:"match"`
+	UID        int64   `db:"uid"         json:"uid"         diff:"-"`
+	ID         string  `db:"id"          json:"id"          diff:"-"`
+	ProfileNo  int     `db:"profile_no"  json:"profile_no"  diff:"-"`
+	Ping       string  `db:"ping"        json:"ping"`
+	Clean      int     `db:"clean"       json:"clean"       diff:"update"`
+	Distance   int     `db:"distance"    json:"distance"    diff:"update"`
+	Template   string  `db:"template"    json:"template"    diff:"update"`
+	RewardType int     `db:"reward_type" json:"reward_type"  diff:"match"`
+	Reward     int     `db:"reward"      json:"reward"       diff:"match"`
+	Form       int     `db:"form"        json:"form"         diff:"match"`
 	Shiny      IntBool `db:"shiny"       json:"shiny"`
-	Amount     int    `db:"amount"      json:"amount"`
+	Amount     int     `db:"amount"      json:"amount"`
 }
 
 // SelectQuestsByIDProfile returns all quest trackings for a given human and profile.
@@ -272,40 +272,40 @@ func InsertQuest(db *sqlx.DB, quest *QuestTrackingAPI) (int64, error) {
 // MonsterTrackingAPI represents a monster tracking row for API operations.
 // Monster uses no diff:"match" — it compares against ALL existing rows.
 type MonsterTrackingAPI struct {
-	UID             int64  `db:"uid"               json:"uid"               diff:"-"`
-	ID              string `db:"id"                json:"id"                diff:"-"`
-	ProfileNo       int    `db:"profile_no"        json:"profile_no"        diff:"-"`
-	Ping            string `db:"ping"              json:"ping"`
-	Clean           int    `db:"clean"             json:"clean"             diff:"update"`
-	Distance        int    `db:"distance"          json:"distance"          diff:"update"`
-	Template        string `db:"template"          json:"template"          diff:"update"`
-	PokemonID       int    `db:"pokemon_id"        json:"pokemon_id"`
-	Form            int    `db:"form"              json:"form"`
-	MinIV           int    `db:"min_iv"            json:"min_iv"            diff:"update"`
-	MaxIV           int    `db:"max_iv"            json:"max_iv"`
-	MinCP           int    `db:"min_cp"            json:"min_cp"`
-	MaxCP           int    `db:"max_cp"            json:"max_cp"`
-	MinLevel        int    `db:"min_level"         json:"min_level"`
-	MaxLevel        int    `db:"max_level"         json:"max_level"`
-	ATK             int    `db:"atk"               json:"atk"`
-	DEF             int    `db:"def"               json:"def"`
-	STA             int    `db:"sta"               json:"sta"`
-	MaxATK          int    `db:"max_atk"           json:"max_atk"`
-	MaxDEF          int    `db:"max_def"           json:"max_def"`
-	MaxSTA          int    `db:"max_sta"           json:"max_sta"`
-	Gender          int    `db:"gender"            json:"gender"`
-	MinWeight       int    `db:"min_weight"        json:"min_weight"`
-	MaxWeight       int    `db:"max_weight"        json:"max_weight"`
-	MinTime         int    `db:"min_time"          json:"min_time"`
-	Rarity          int    `db:"rarity"            json:"rarity"`
-	MaxRarity       int    `db:"max_rarity"        json:"max_rarity"`
-	Size            int    `db:"size"              json:"size"`
-	MaxSize         int    `db:"max_size"          json:"max_size"`
-	PVPRankingLeague int   `db:"pvp_ranking_league" json:"pvp_ranking_league"`
-	PVPRankingBest   int   `db:"pvp_ranking_best"   json:"pvp_ranking_best"`
-	PVPRankingWorst  int   `db:"pvp_ranking_worst"  json:"pvp_ranking_worst"`
-	PVPRankingMinCP  int   `db:"pvp_ranking_min_cp" json:"pvp_ranking_min_cp"`
-	PVPRankingCap    int   `db:"pvp_ranking_cap"    json:"pvp_ranking_cap"`
+	UID              int64  `db:"uid"               json:"uid"               diff:"-"`
+	ID               string `db:"id"                json:"id"                diff:"-"`
+	ProfileNo        int    `db:"profile_no"        json:"profile_no"        diff:"-"`
+	Ping             string `db:"ping"              json:"ping"`
+	Clean            int    `db:"clean"             json:"clean"             diff:"update"`
+	Distance         int    `db:"distance"          json:"distance"          diff:"update"`
+	Template         string `db:"template"          json:"template"          diff:"update"`
+	PokemonID        int    `db:"pokemon_id"        json:"pokemon_id"`
+	Form             int    `db:"form"              json:"form"`
+	MinIV            int    `db:"min_iv"            json:"min_iv"            diff:"update"`
+	MaxIV            int    `db:"max_iv"            json:"max_iv"`
+	MinCP            int    `db:"min_cp"            json:"min_cp"`
+	MaxCP            int    `db:"max_cp"            json:"max_cp"`
+	MinLevel         int    `db:"min_level"         json:"min_level"`
+	MaxLevel         int    `db:"max_level"         json:"max_level"`
+	ATK              int    `db:"atk"               json:"atk"`
+	DEF              int    `db:"def"               json:"def"`
+	STA              int    `db:"sta"               json:"sta"`
+	MaxATK           int    `db:"max_atk"           json:"max_atk"`
+	MaxDEF           int    `db:"max_def"           json:"max_def"`
+	MaxSTA           int    `db:"max_sta"           json:"max_sta"`
+	Gender           int    `db:"gender"            json:"gender"`
+	MinWeight        int    `db:"min_weight"        json:"min_weight"`
+	MaxWeight        int    `db:"max_weight"        json:"max_weight"`
+	MinTime          int    `db:"min_time"          json:"min_time"`
+	Rarity           int    `db:"rarity"            json:"rarity"`
+	MaxRarity        int    `db:"max_rarity"        json:"max_rarity"`
+	Size             int    `db:"size"              json:"size"`
+	MaxSize          int    `db:"max_size"          json:"max_size"`
+	PVPRankingLeague int    `db:"pvp_ranking_league" json:"pvp_ranking_league"`
+	PVPRankingBest   int    `db:"pvp_ranking_best"   json:"pvp_ranking_best"`
+	PVPRankingWorst  int    `db:"pvp_ranking_worst"  json:"pvp_ranking_worst"`
+	PVPRankingMinCP  int    `db:"pvp_ranking_min_cp" json:"pvp_ranking_min_cp"`
+	PVPRankingCap    int    `db:"pvp_ranking_cap"    json:"pvp_ranking_cap"`
 }
 
 // SelectMonstersByIDProfile returns all monster trackings for a given human and profile.
@@ -382,20 +382,20 @@ func UpdateMonsterByUID(db *sqlx.DB, m *MonsterTrackingAPI) error {
 
 // RaidTrackingAPI represents a raid tracking row for API operations.
 type RaidTrackingAPI struct {
-	UID         int64          `db:"uid"          json:"uid"          diff:"-"`
-	ID          string         `db:"id"           json:"id"           diff:"-"`
-	ProfileNo   int            `db:"profile_no"   json:"profile_no"   diff:"-"`
-	Ping        string         `db:"ping"         json:"ping"`
-	Clean       int            `db:"clean"        json:"clean"        diff:"update"`
-	Distance    int            `db:"distance"     json:"distance"     diff:"update"`
-	Template    string         `db:"template"     json:"template"     diff:"update"`
-	Team        int            `db:"team"         json:"team"         diff:"match"`
-	PokemonID   int            `db:"pokemon_id"   json:"pokemon_id"`
-	Form        int            `db:"form"         json:"form"`
-	Level       int            `db:"level"        json:"level"`
-	Exclusive   IntBool        `db:"exclusive"    json:"exclusive"`
-	Move        int            `db:"move"         json:"move"`
-	Evolution   int            `db:"evolution"    json:"evolution"`
+	UID         int64       `db:"uid"          json:"uid"          diff:"-"`
+	ID          string      `db:"id"           json:"id"           diff:"-"`
+	ProfileNo   int         `db:"profile_no"   json:"profile_no"   diff:"-"`
+	Ping        string      `db:"ping"         json:"ping"`
+	Clean       int         `db:"clean"        json:"clean"        diff:"update"`
+	Distance    int         `db:"distance"     json:"distance"     diff:"update"`
+	Template    string      `db:"template"     json:"template"     diff:"update"`
+	Team        int         `db:"team"         json:"team"         diff:"match"`
+	PokemonID   int         `db:"pokemon_id"   json:"pokemon_id"`
+	Form        int         `db:"form"         json:"form"`
+	Level       int         `db:"level"        json:"level"`
+	Exclusive   IntBool     `db:"exclusive"    json:"exclusive"`
+	Move        int         `db:"move"         json:"move"`
+	Evolution   int         `db:"evolution"    json:"evolution"`
 	GymID       null.String `db:"gym_id"       json:"gym_id"`
 	RSVPChanges int         `db:"rsvp_changes" json:"rsvp_changes"`
 }
@@ -435,16 +435,16 @@ func InsertRaid(db *sqlx.DB, raid *RaidTrackingAPI) (int64, error) {
 
 // EggTrackingAPI represents an egg tracking row for API operations.
 type EggTrackingAPI struct {
-	UID         int64          `db:"uid"          json:"uid"          diff:"-"`
-	ID          string         `db:"id"           json:"id"           diff:"-"`
-	ProfileNo   int            `db:"profile_no"   json:"profile_no"   diff:"-"`
-	Ping        string         `db:"ping"         json:"ping"`
-	Clean       int            `db:"clean"        json:"clean"        diff:"update"`
-	Distance    int            `db:"distance"     json:"distance"     diff:"update"`
-	Template    string         `db:"template"     json:"template"     diff:"update"`
-	Team        int            `db:"team"         json:"team"         diff:"match"`
-	Level       int            `db:"level"        json:"level"`
-	Exclusive   IntBool        `db:"exclusive"    json:"exclusive"`
+	UID         int64       `db:"uid"          json:"uid"          diff:"-"`
+	ID          string      `db:"id"           json:"id"           diff:"-"`
+	ProfileNo   int         `db:"profile_no"   json:"profile_no"   diff:"-"`
+	Ping        string      `db:"ping"         json:"ping"`
+	Clean       int         `db:"clean"        json:"clean"        diff:"update"`
+	Distance    int         `db:"distance"     json:"distance"     diff:"update"`
+	Template    string      `db:"template"     json:"template"     diff:"update"`
+	Team        int         `db:"team"         json:"team"         diff:"match"`
+	Level       int         `db:"level"        json:"level"`
+	Exclusive   IntBool     `db:"exclusive"    json:"exclusive"`
 	GymID       null.String `db:"gym_id"       json:"gym_id"`
 	RSVPChanges int         `db:"rsvp_changes" json:"rsvp_changes"`
 }

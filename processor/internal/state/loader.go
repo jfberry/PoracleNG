@@ -33,20 +33,20 @@ func Load(manager *Manager, database *sqlx.DB) error {
 	}
 
 	s := &State{
-		Humans:    data.Humans,
-		Monsters:  data.Monsters,
-		Raids:     data.Raids,
-		Eggs:      data.Eggs,
-		Profiles:  data.Profiles,
-		Invasions: data.Invasions,
-		Quests:    data.Quests,
-		Lures:     data.Lures,
-		Gyms:      data.Gyms,
-		Nests:     data.Nests,
+		Humans:     data.Humans,
+		Monsters:   data.Monsters,
+		Raids:      data.Raids,
+		Eggs:       data.Eggs,
+		Profiles:   data.Profiles,
+		Invasions:  data.Invasions,
+		Quests:     data.Quests,
+		Lures:      data.Lures,
+		Gyms:       data.Gyms,
+		Nests:      data.Nests,
 		Forts:      data.Forts,
 		Maxbattles: data.Maxbattles,
 		Geofence:   spatial,
-		Fences:    fences,
+		Fences:     fences,
 	}
 
 	manager.Set(s)
@@ -94,20 +94,20 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 	}
 
 	s := &State{
-		Humans:    data.Humans,
-		Monsters:  data.Monsters,
-		Raids:     data.Raids,
-		Eggs:      data.Eggs,
-		Profiles:  data.Profiles,
-		Invasions: data.Invasions,
-		Quests:    data.Quests,
-		Lures:     data.Lures,
-		Gyms:      data.Gyms,
-		Nests:     data.Nests,
+		Humans:     data.Humans,
+		Monsters:   data.Monsters,
+		Raids:      data.Raids,
+		Eggs:       data.Eggs,
+		Profiles:   data.Profiles,
+		Invasions:  data.Invasions,
+		Quests:     data.Quests,
+		Lures:      data.Lures,
+		Gyms:       data.Gyms,
+		Nests:      data.Nests,
 		Forts:      data.Forts,
 		Maxbattles: data.Maxbattles,
 		Geofence:   spatial,
-		Fences:    fences,
+		Fences:     fences,
 	}
 
 	manager.Set(s)

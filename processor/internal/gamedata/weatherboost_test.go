@@ -9,9 +9,9 @@ func TestGetBoostingWeathers(t *testing.T) {
 	gd := loadTestGameData(t)
 
 	tests := []struct {
-		name     string
-		typeIDs  []int
-		wantAny  []int // at least one of these should be present
+		name    string
+		typeIDs []int
+		wantAny []int // at least one of these should be present
 	}{
 		{
 			name:    "Fire type (10) boosted by Clear (1)",

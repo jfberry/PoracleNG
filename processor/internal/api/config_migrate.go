@@ -20,9 +20,9 @@ import (
 
 // MigrateResponse describes the result of a config migration.
 type MigrateResponse struct {
-	Status     string   `json:"status"`
-	Backup     string   `json:"backup"`
-	FieldsKept []string `json:"fields_kept"`
+	Status      string   `json:"status"`
+	Backup      string   `json:"backup"`
+	FieldsKept  []string `json:"fields_kept"`
 	FieldsMoved []string `json:"fields_moved"`
 }
 
@@ -286,4 +286,3 @@ func collectFieldPaths(prefix string, m map[string]any, out *[]string) {
 		*out = append(*out, path)
 	}
 }
-

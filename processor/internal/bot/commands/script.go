@@ -445,4 +445,3 @@ func (c *ScriptCommand) commonSuffix(ctx *bot.CommandContext, template string, c
 	}
 	return parts
 }
-

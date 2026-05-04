@@ -214,4 +214,3 @@ func (c *EggCommand) removeEggs(ctx *bot.CommandContext, levelSet map[int]bool) 
 	}
 	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }
-

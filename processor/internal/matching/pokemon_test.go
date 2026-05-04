@@ -315,8 +315,8 @@ func TestPokemonUnencounteredStatFilters(t *testing.T) {
 	matcher := &PokemonMatcher{PVPQueryMaxRank: 100}
 
 	tests := []struct {
-		name    string
-		modify  func(m *db.MonsterTracking)
+		name   string
+		modify func(m *db.MonsterTracking)
 	}{
 		{"maxlevel10", func(m *db.MonsterTracking) { m.MaxLevel = 10 }},
 		{"minlevel20", func(m *db.MonsterTracking) { m.MinLevel = 20 }},

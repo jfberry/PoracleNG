@@ -112,7 +112,6 @@ func parseWebhookFields(raw json.RawMessage) map[string]any {
 	return fields
 }
 
-
 // toInt converts a JSON number (float64) to int.
 func toInt(v any) int {
 	switch val := v.(type) {
@@ -331,4 +330,3 @@ func (ps *ProcessorService) triggerReload() {
 		}
 	})
 }
-

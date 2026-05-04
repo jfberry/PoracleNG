@@ -67,8 +67,8 @@ func TestVocabularyPokemonLookup(t *testing.T) {
 		{"farfetch'd", "farfetch'd"},
 		{"farfetchd", "farfetch'd"},
 		{"ho-oh", "ho-oh"},
-		{"hooh", "ho-oh"},      // stripped: ho oh → spaces removed: hooh
-		{"ho oh", "ho-oh"},     // stripped variant
+		{"hooh", "ho-oh"},  // stripped: ho oh → spaces removed: hooh
+		{"ho oh", "ho-oh"}, // stripped variant
 		{"tapu koko", "tapu koko"},
 		{"tapukoko", "tapu koko"},
 		{"mime jr.", "mime jr."},
@@ -179,7 +179,7 @@ func TestVocabularyFormLookup(t *testing.T) {
 		{"Alolan", "form:alolan"},
 		{"galarian", "form:galarian"},
 		{"shadow", "form:shadow"},
-		{"normal", ""},  // "Normal" form is not in trackableForms
+		{"normal", ""}, // "Normal" form is not in trackableForms
 	}
 
 	for _, tt := range tests {

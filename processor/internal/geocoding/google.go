@@ -44,9 +44,9 @@ type googleResponse struct {
 }
 
 type googleResult struct {
-	FormattedAddress  string             `json:"formatted_address"`
-	AddressComponents []googleComponent  `json:"address_components"`
-	Geometry          googleGeometry     `json:"geometry"`
+	FormattedAddress  string            `json:"formatted_address"`
+	AddressComponents []googleComponent `json:"address_components"`
+	Geometry          googleGeometry    `json:"geometry"`
 }
 
 type googleComponent struct {

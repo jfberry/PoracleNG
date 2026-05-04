@@ -237,9 +237,9 @@ func TestQuestTranslateRewardString(t *testing.T) {
 
 	e := newQuestEnricher(t, gd, map[string]map[string]string{
 		"en": {
-			"poke_25":         "Pikachu",
-			"form_0":          "Normal",
-			"quest_reward_3":  "Stardust",
+			"poke_25":        "Pikachu",
+			"form_0":         "Normal",
+			"quest_reward_3": "Stardust",
 		},
 	})
 
@@ -370,10 +370,10 @@ func TestQuestTranslateConditionMultiple(t *testing.T) {
 	gd := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{}}
 	e := newQuestEnricher(t, gd, map[string]map[string]string{
 		"en": {
-			"quest_condition_8":            "Throw Type",
-			"quest_condition_8_formatted":  "%{throw_type} Throw",
-			"quest_condition_15":           "Curve Ball",
-			"throw_type_11":                "Great",
+			"quest_condition_8":           "Throw Type",
+			"quest_condition_8_formatted": "%{throw_type} Throw",
+			"quest_condition_15":          "Curve Ball",
+			"throw_type_11":               "Great",
 		},
 	})
 	quest := &webhook.QuestWebhook{

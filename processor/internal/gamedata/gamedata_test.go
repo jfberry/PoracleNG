@@ -224,44 +224,44 @@ func TestMonsterNameKeys(t *testing.T) {
 	gd := loadTestGameData(t)
 
 	tests := []struct {
-		name       string
-		pokemonID  int
-		form       int
-		evolution  int
+		name        string
+		pokemonID   int
+		form        int
+		evolution   int
 		wantPokeKey string
 		wantFormKey string
 		wantMega    string
 	}{
 		{
-			name: "Bulbasaur default form",
+			name:      "Bulbasaur default form",
 			pokemonID: 1, form: 0, evolution: 0,
 			wantPokeKey: "poke_1",
 			wantFormKey: "",
 			wantMega:    "{0}",
 		},
 		{
-			name: "Bulbasaur specific form",
+			name:      "Bulbasaur specific form",
 			pokemonID: 1, form: 163, evolution: 0,
 			wantPokeKey: "poke_1",
 			wantFormKey: "form_163",
 			wantMega:    "{0}",
 		},
 		{
-			name: "Venusaur mega",
+			name:      "Venusaur mega",
 			pokemonID: 3, form: 0, evolution: 1,
 			wantPokeKey: "poke_3",
 			wantFormKey: "",
 			wantMega:    "Mega {0}",
 		},
 		{
-			name: "Mega X evolution",
+			name:      "Mega X evolution",
 			pokemonID: 6, form: 0, evolution: 2,
 			wantPokeKey: "poke_6",
 			wantFormKey: "",
 			wantMega:    "Mega {0} X",
 		},
 		{
-			name: "Primal evolution",
+			name:      "Primal evolution",
 			pokemonID: 382, form: 0, evolution: 4,
 			wantPokeKey: "poke_382",
 			wantFormKey: "",

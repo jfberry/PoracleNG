@@ -102,9 +102,9 @@ func HandleConfigPoracleWeb(cfg *config.Config) gin.HandlerFunc {
 			"discord":  discordAdmins,
 			"telegram": telegramAdmins,
 		},
-		"maxDistance":                cfg.Tracking.MaxDistance,
-		"defaultDistance":            cfg.Tracking.DefaultDistance,
-		"everythingFlagPermissions":  cfg.Tracking.EverythingFlagPermissions,
+		"maxDistance":               cfg.Tracking.MaxDistance,
+		"defaultDistance":           cfg.Tracking.DefaultDistance,
+		"everythingFlagPermissions": cfg.Tracking.EverythingFlagPermissions,
 		"disabledHooks":             disabledHooks,
 		"gymBattles":                cfg.Tracking.EnableGymBattle,
 	}

@@ -8,14 +8,14 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"runtime/debug"
-	"path/filepath"
-	_ "time/tzdata" // embed IANA timezone database as fallback
 	"os/signal"
+	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+	_ "time/tzdata" // embed IANA timezone database as fallback
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/gin-gonic/gin"
@@ -29,11 +29,10 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/config"
-	"github.com/pokemon/poracleng/processor/internal/discordbot"
-	"github.com/pokemon/poracleng/processor/internal/telegrambot"
-	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/discordbot"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
@@ -41,19 +40,20 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
-	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
-	"github.com/pokemon/poracleng/processor/internal/validation"
-	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/resources"
+	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
-	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/store"
+	"github.com/pokemon/poracleng/processor/internal/telegrambot"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
+	"github.com/pokemon/poracleng/processor/internal/validation"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -307,10 +307,10 @@ func main() {
 		defaultTemplate = fmt.Sprintf("%v", cfg.General.DefaultTemplateName)
 	}
 	trackingDeps := &api.TrackingDeps{
-		DB:           database,
-		Humans:       humanStore,
-		Tracking:     trackingStores,
-		StateMgr:     stateMgr,
+		DB:       database,
+		Humans:   humanStore,
+		Tracking: trackingStores,
+		StateMgr: stateMgr,
 		RowText: &rowtext.Generator{
 			GD:                  proc.enricher.GameData,
 			Translations:        proc.enricher.Translations,
@@ -454,7 +454,7 @@ func main() {
 	configDeps := api.ConfigDeps{
 		Cfg:       cfg,
 		ConfigDir: filepath.Join(cfg.BaseDir, "config"),
-		ReloadFn:  func() {
+		ReloadFn: func() {
 			// Hot-reloadable config changes are already applied in-memory via ApplyOverrides.
 			// Trigger a state reload so matching rules pick up any changed config values.
 			proc.triggerReload()
@@ -485,11 +485,19 @@ func main() {
 		hasEn := false
 		hasLocale := false
 		for _, l := range cmdLanguages {
-			if l == "en" { hasEn = true }
-			if l == cfg.General.Locale { hasLocale = true }
+			if l == "en" {
+				hasEn = true
+			}
+			if l == cfg.General.Locale {
+				hasLocale = true
+			}
 		}
-		if !hasEn { cmdLanguages = append(cmdLanguages, "en") }
-		if cfg.General.Locale != "" && !hasLocale { cmdLanguages = append(cmdLanguages, cfg.General.Locale) }
+		if !hasEn {
+			cmdLanguages = append(cmdLanguages, "en")
+		}
+		if cfg.General.Locale != "" && !hasLocale {
+			cmdLanguages = append(cmdLanguages, cfg.General.Locale)
+		}
 	} else {
 		cmdLanguages = []string{"en"}
 		if cfg.General.Locale != "" && cfg.General.Locale != "en" {
@@ -564,23 +572,23 @@ func main() {
 		cmdEmoji = proc.dtsRenderer.Emoji()
 	}
 	cmdDeps := &api.CommandDeps{
-		DB:           database,
-		Humans:       humanStore,
-		Tracking:     trackingStores,
-		Config:       cfg,
-		StateMgr:     stateMgr,
-		GameData:     proc.enricher.GameData,
-		Translations: proc.enricher.Translations,
-		Dispatcher:   proc.dispatcher,
-		RowText:      trackingDeps.RowText,
-		Resolver:     cmdResolver,
-		ArgMatcher:   cmdArgMatcher,
-		Parser:       cmdParser,
-		Registry:     cmdRegistry,
-		Weather:      proc.weather,
-		Stats:        proc.stats,
-		DTS:          cmdDTS,
-		Emoji:        cmdEmoji,
+		DB:            database,
+		Humans:        humanStore,
+		Tracking:      trackingStores,
+		Config:        cfg,
+		StateMgr:      stateMgr,
+		GameData:      proc.enricher.GameData,
+		Translations:  proc.enricher.Translations,
+		Dispatcher:    proc.dispatcher,
+		RowText:       trackingDeps.RowText,
+		Resolver:      cmdResolver,
+		ArgMatcher:    cmdArgMatcher,
+		Parser:        cmdParser,
+		Registry:      cmdRegistry,
+		Weather:       proc.weather,
+		Stats:         proc.stats,
+		DTS:           cmdDTS,
+		Emoji:         cmdEmoji,
 		NLPParser:     nlpParser,
 		TestProcessor: proc,
 		ReloadFunc:    proc.triggerReload,
@@ -664,24 +672,24 @@ func main() {
 	var discordBot *discordbot.Bot
 	// Shared bot dependencies — constructed once, passed to both Discord and Telegram bots.
 	sharedBotDeps := bot.BotDeps{
-		DB:           database,
-		Humans:       humanStore,
-		Tracking:     trackingStores,
-		Cfg:          cfg,
-		StateMgr:     stateMgr,
-		GameData:     proc.enricher.GameData,
-		Translations: proc.enricher.Translations,
-		Dispatcher:   proc.dispatcher,
-		RowText:      trackingDeps.RowText,
-		Registry:     cmdRegistry,
-		ArgMatcher:   cmdArgMatcher,
-		Resolver:     cmdResolver,
-		Geocoder:     proc.enricher.Geocoder,
-		StaticMap:    proc.enricher.StaticMap,
-		Weather:      proc.weather,
-		Stats:        proc.stats,
-		DTS:          cmdDTS,
-		Emoji:        cmdEmoji,
+		DB:            database,
+		Humans:        humanStore,
+		Tracking:      trackingStores,
+		Cfg:           cfg,
+		StateMgr:      stateMgr,
+		GameData:      proc.enricher.GameData,
+		Translations:  proc.enricher.Translations,
+		Dispatcher:    proc.dispatcher,
+		RowText:       trackingDeps.RowText,
+		Registry:      cmdRegistry,
+		ArgMatcher:    cmdArgMatcher,
+		Resolver:      cmdResolver,
+		Geocoder:      proc.enricher.Geocoder,
+		StaticMap:     proc.enricher.StaticMap,
+		Weather:       proc.weather,
+		Stats:         proc.stats,
+		DTS:           cmdDTS,
+		Emoji:         cmdEmoji,
 		NLPParser:     nlpParser,
 		TestProcessor: proc,
 		ReloadFunc:    proc.triggerReload,
@@ -799,43 +807,43 @@ func readBuildInfo() (version, commit, date string) {
 
 // ProcessorService ties together all matching/tracking components.
 type ProcessorService struct {
-	cfg             *config.Config
-	stateMgr        *state.Manager
-	database        *sqlx.DB
-	weather         *tracker.WeatherTracker
-	weatherCares    *tracker.WeatherCareTracker
-	encounters      *tracker.EncounterTracker
-	duplicates      *tracker.DuplicateCache
-	stats           *tracker.StatsTracker
-	gymState        *tracker.GymStateTracker
-	pokemonMatcher  *matching.PokemonMatcher
-	raidMatcher     *matching.RaidMatcher
-	invasionMatcher *matching.InvasionMatcher
-	questMatcher    *matching.QuestMatcher
-	lureMatcher     *matching.LureMatcher
-	gymMatcher      *matching.GymMatcher
-	nestMatcher     *matching.NestMatcher
-	fortMatcher       *matching.FortMatcher
-	maxbattleMatcher  *matching.MaxbattleMatcher
-	pvpCfg          *pvp.Config
-	activePokemon   *tracker.ActivePokemonTracker
-	pokemonTypes    *gamedata.PokemonTypes
-	enricher        *enrichment.Enricher
-	dtsRenderer     *dts.Renderer
-	dispatcher      *delivery.Dispatcher
-	humans          store.HumanStore
-	scanner         scanner.Scanner
-	rateLimiter     *ratelimit.Limiter
-	validator       validation.Validator
-	translations    *i18n.Bundle
-	renderCh        chan RenderJob
-	renderWg        sync.WaitGroup
-	reloadMu        sync.Mutex
-	reloadTimer     *time.Timer
-	workerPool      chan struct{}
-	wg              sync.WaitGroup
-	ctx             context.Context
-	cancel          context.CancelFunc
+	cfg              *config.Config
+	stateMgr         *state.Manager
+	database         *sqlx.DB
+	weather          *tracker.WeatherTracker
+	weatherCares     *tracker.WeatherCareTracker
+	encounters       *tracker.EncounterTracker
+	duplicates       *tracker.DuplicateCache
+	stats            *tracker.StatsTracker
+	gymState         *tracker.GymStateTracker
+	pokemonMatcher   *matching.PokemonMatcher
+	raidMatcher      *matching.RaidMatcher
+	invasionMatcher  *matching.InvasionMatcher
+	questMatcher     *matching.QuestMatcher
+	lureMatcher      *matching.LureMatcher
+	gymMatcher       *matching.GymMatcher
+	nestMatcher      *matching.NestMatcher
+	fortMatcher      *matching.FortMatcher
+	maxbattleMatcher *matching.MaxbattleMatcher
+	pvpCfg           *pvp.Config
+	activePokemon    *tracker.ActivePokemonTracker
+	pokemonTypes     *gamedata.PokemonTypes
+	enricher         *enrichment.Enricher
+	dtsRenderer      *dts.Renderer
+	dispatcher       *delivery.Dispatcher
+	humans           store.HumanStore
+	scanner          scanner.Scanner
+	rateLimiter      *ratelimit.Limiter
+	validator        validation.Validator
+	translations     *i18n.Bundle
+	renderCh         chan RenderJob
+	renderWg         sync.WaitGroup
+	reloadMu         sync.Mutex
+	reloadTimer      *time.Timer
+	workerPool       chan struct{}
+	wg               sync.WaitGroup
+	ctx              context.Context
+	cancel           context.CancelFunc
 }
 
 func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *sqlx.DB) *ProcessorService {
@@ -1114,15 +1122,15 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ProcessorService{
-		cfg:      cfg,
-		stateMgr: stateMgr,
-		database: database,
-		ctx:      ctx,
-		cancel:   cancel,
-		renderCh: renderCh,
-		enricher:      enricher,
-		dtsRenderer:   dtsRenderer,
-		scanner:       scannerInstance,
+		cfg:          cfg,
+		stateMgr:     stateMgr,
+		database:     database,
+		ctx:          ctx,
+		cancel:       cancel,
+		renderCh:     renderCh,
+		enricher:     enricher,
+		dtsRenderer:  dtsRenderer,
+		scanner:      scannerInstance,
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),
 		encounters:   tracker.NewEncounterTracker(),
@@ -1135,26 +1143,26 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 			StrictLocations:            cfg.Area.StrictLocations,
 			AreaSecurityEnabled:        cfg.Area.Enabled,
 		},
-		raidMatcher:     &matching.RaidMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: cfg.Area.Enabled},
-		invasionMatcher: &matching.InvasionMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		questMatcher:    &matching.QuestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		lureMatcher:     &matching.LureMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		gymMatcher:      &matching.GymMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		nestMatcher:     &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		fortMatcher:       &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		maxbattleMatcher:  &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		pvpCfg:          pvpCfg,
-		activePokemon:   activePokemon,
-		pokemonTypes:    pokemonTypes,
-		rateLimiter:     rateLimiter,
+		raidMatcher:      &matching.RaidMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: cfg.Area.Enabled},
+		invasionMatcher:  &matching.InvasionMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		questMatcher:     &matching.QuestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		lureMatcher:      &matching.LureMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		gymMatcher:       &matching.GymMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		nestMatcher:      &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		fortMatcher:      &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		maxbattleMatcher: &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		pvpCfg:           pvpCfg,
+		activePokemon:    activePokemon,
+		pokemonTypes:     pokemonTypes,
+		rateLimiter:      rateLimiter,
 		validator: validation.New(
 			cfg.Validation.URL,
 			cfg.Validation.FailMode,
 			cfg.Tuning.ValidationTimeoutMs,
 			cfg.Tuning.ValidationMaxConcurrent,
 		),
-		translations:    enricher.Translations,
-		workerPool:      make(chan struct{}, cfg.Tuning.WorkerPoolSize),
+		translations: enricher.Translations,
+		workerPool:   make(chan struct{}, cfg.Tuning.WorkerPoolSize),
 	}
 }
 

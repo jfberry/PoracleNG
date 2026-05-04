@@ -23,9 +23,9 @@ type TrackingStore[T any] interface {
 // DiffResult holds the classified results of comparing insert candidates
 // against existing tracked rows.
 type DiffResult[T any] struct {
-	AlreadyPresent []T   // unchanged duplicates
-	Updates        []T   // rows that differ only in updatable fields (UID set)
-	Inserts        []T   // genuinely new rows
+	AlreadyPresent []T // unchanged duplicates
+	Updates        []T // rows that differ only in updatable fields (UID set)
+	Inserts        []T // genuinely new rows
 }
 
 // DiffAndClassify runs the standard diff loop: for each insert candidate,

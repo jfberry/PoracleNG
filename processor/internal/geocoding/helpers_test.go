@@ -28,7 +28,7 @@ func TestCoalesceOnlyApproaches(t *testing.T) {
 		{"nothing", Address{}, ""},
 		// These still diverge without eq or a FormattedAddress fallback:
 		{"suburb==city (DIVERGES)", Address{Suburb: "Berlin", City: "Berlin"}, "Berlin: Berlin"}, // Go: "Berlin:"
-		{"fall back (DIVERGES)", Address{FormattedAddress: "Somewhere"}, ""},                    // Go: "Somewhere"
+		{"fall back (DIVERGES)", Address{FormattedAddress: "Somewhere"}, ""},                     // Go: "Somewhere"
 	}
 
 	for _, c := range cases {

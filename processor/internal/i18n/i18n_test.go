@@ -30,9 +30,9 @@ func TestTranslator(t *testing.T) {
 	tr := &Translator{
 		lang: "de",
 		messages: map[string]string{
-			"greeting":     "Hallo",
-			"msg.count":    "Du hast {0} Nachrichten",
-			"pair":         "{0} von {1}",
+			"greeting":  "Hallo",
+			"msg.count": "Du hast {0} Nachrichten",
+			"pair":      "{0} von {1}",
 		},
 	}
 
@@ -193,10 +193,10 @@ func TestZhCNPokemonNames(t *testing.T) {
 	// characters (not Traditional, not English, not raw key).
 	cases := map[string]string{
 		"poke_1":   "妙蛙种子", // Bulbasaur — differs from zh-tw's 妙蛙種子
-		"poke_6":   "喷火龙",   // Charizard — differs from zh-tw's 噴火龍
-		"poke_25":  "皮卡丘",   // Pikachu — same in Simplified and Traditional
-		"poke_150": "超梦",    // Mewtwo — differs from zh-tw's 超夢
-		"poke_445": "烈咬陆鲨",  // Garchomp — differs from zh-tw's 烈咬陸鯊
+		"poke_6":   "喷火龙",  // Charizard — differs from zh-tw's 噴火龍
+		"poke_25":  "皮卡丘",  // Pikachu — same in Simplified and Traditional
+		"poke_150": "超梦",   // Mewtwo — differs from zh-tw's 超夢
+		"poke_445": "烈咬陆鲨", // Garchomp — differs from zh-tw's 烈咬陸鯊
 	}
 	for key, want := range cases {
 		got := tr.T(key)
