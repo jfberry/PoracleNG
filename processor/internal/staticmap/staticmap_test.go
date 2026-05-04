@@ -283,12 +283,12 @@ func TestRandomKey(t *testing.T) {
 
 func TestFilterFields(t *testing.T) {
 	data := map[string]any{
-		"pokemon_id": 25,
-		"latitude":   51.28,
-		"longitude":  1.08,
-		"form":       0,
-		"costume":    0,
-		"imgUrl":     "https://example.com/pokemon/25.png",
+		"pokemon_id":  25,
+		"latitude":    51.28,
+		"longitude":   1.08,
+		"form":        0,
+		"costume":     0,
+		"imgUrl":      "https://example.com/pokemon/25.png",
 		"extra_field": "should not appear",
 		"another":     42,
 	}
@@ -514,5 +514,63 @@ func TestStyleForSunTimes(t *testing.T) {
 	}
 	if got := bare.StyleForSunTimes(false, false, false); got != "" {
 		t.Errorf("unconfigured day should return empty, got %q", got)
+	}
+}
+
+func TestRewriteToPublicBase(t *testing.T) {
+	r := New(Config{
+		Provider:    "tileservercache",
+		ProviderURL: "https://tiles.example.com",
+		InternalURL: "http://tileserver.internal:8080",
+	})
+
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			"internal host rewritten to public",
+			"http://tileserver.internal:8080/staticmap/pregenerated/abc.png",
+			"https://tiles.example.com/staticmap/pregenerated/abc.png",
+		},
+		{
+			"trailing-slash insensitive on internal",
+			"http://tileserver.internal:8080/multistaticmap/pregenerated/x.png?ttl=86400",
+			"https://tiles.example.com/multistaticmap/pregenerated/x.png?ttl=86400",
+		},
+		{
+			"unrelated URL passes through",
+			"https://cdn.somewhere-else.com/tile.png",
+			"https://cdn.somewhere-else.com/tile.png",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := r.rewriteToPublicBase(tc.in); got != tc.want {
+				t.Errorf("rewriteToPublicBase(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+
+	// Equal bases: no rewrite (the user didn't configure a split).
+	rEqual := New(Config{
+		Provider:    "tileservercache",
+		ProviderURL: "https://tiles.example.com",
+	})
+	in := "https://tiles.example.com/staticmap/pregenerated/abc.png"
+	if got := rEqual.rewriteToPublicBase(in); got != in {
+		t.Errorf("equal bases should not rewrite, got %q", got)
+	}
+
+	// Trailing slashes on the configured bases are tolerated.
+	rTrim := New(Config{
+		Provider:    "tileservercache",
+		ProviderURL: "https://tiles.example.com/",
+		InternalURL: "http://tileserver.internal:8080/",
+	})
+	got := rTrim.rewriteToPublicBase("http://tileserver.internal:8080/staticmap/pregenerated/abc.png")
+	if got != "https://tiles.example.com/staticmap/pregenerated/abc.png" {
+		t.Errorf("trim-slash rewrite: got %q", got)
 	}
 }
