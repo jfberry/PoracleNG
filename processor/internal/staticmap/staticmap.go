@@ -87,7 +87,7 @@ type Config struct {
 	TileserverCooldownMs       int // ms to keep circuit open (default 30000)
 	TileQueueSize              int // async tile request queue depth (default 100)
 	TileDeadlineMs             int // max time a payload waits for its tile (default 5000)
-	PregenTTL                  int // seconds for pregenerated tile TTL (default 300 = 5 minutes, -1 = no TTL hint)
+	PregenTTL                  int // seconds for pregenerated tile TTL (default 86400 = 1 day, -1 = no TTL hint)
 
 	// Fallback URL if tile generation fails
 	FallbackURL string
@@ -249,7 +249,8 @@ func New(config Config) *Resolver {
 		config.TileDeadlineMs = 10000
 	}
 	if config.PregenTTL == 0 {
-		config.PregenTTL = 300 // 5 minutes
+		config.PregenTTL = 86400 // 1 day — Discord doesn't reliably cache tile bytes,
+		// so a longer tileserver-side TTL avoids regenerating the same tile every few minutes.
 	}
 	if config.InternalURL == "" {
 		config.InternalURL = config.ProviderURL
