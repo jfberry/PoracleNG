@@ -67,7 +67,12 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldS
 }
 
 // GymTranslate adds per-language translated fields.
-// lastOwnerID is the team ID of the last controller (from webhook last_owner_id).
+//
+// lastOwnerID is the cached LastOwnerID for this gym from BEFORE the current
+// event's update — i.e. the most recent non-zero controlling team observed
+// (preserved across Uncontested gaps). Use -1 when no prior value is known
+// (first sighting). Matches PoracleJS app.js semantics: previousControl* is
+// derived from the cache, never from the webhook (Golbat doesn't send it).
 func (e *Enricher) GymTranslate(base map[string]any, teamID, oldTeamID, lastOwnerID int, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
 		return nil

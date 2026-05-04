@@ -262,7 +262,8 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.GymTranslate(enrichmentData, teamID, 0, 0, target.Language),
+			// Test path has no team-change context, so suppress previousControl* fields.
+			target.Language: ps.enricher.GymTranslate(enrichmentData, teamID, -1, -1, target.Language),
 		}
 	}
 

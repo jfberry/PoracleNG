@@ -302,7 +302,8 @@ func (ps *ProcessorService) enrichGym(raw json.RawMessage, language string) (*en
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = ps.enricher.GymTranslate(base, teamID, 0, 0, language)
+		// Editor preview has no team-change context, so suppress previousControl* fields.
+		perLang = ps.enricher.GymTranslate(base, teamID, -1, -1, language)
 	}
 
 	return &enrichResult{

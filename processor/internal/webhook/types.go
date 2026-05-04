@@ -310,7 +310,8 @@ type GymWebhook struct {
 	SlotsAvailable int      `json:"slots_available"`
 	IsInBattle     FlexBool `json:"is_in_battle"`
 	InBattle       FlexBool `json:"in_battle"`
-	LastOwnerID    int      `json:"last_owner_id"`
+	// Note: Golbat does not ship a last_owner_id field. The processor's
+	// gym-state cache derives a last-controller value (see GymStateTracker.Update).
 }
 
 // NestWebhook mirrors a nest webhook message from the nest processor.
