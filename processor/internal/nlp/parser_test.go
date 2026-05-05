@@ -147,6 +147,15 @@ func TestParserEndToEnd(t *testing.T) {
 		{"track tapu koko", `!track "tapu koko"`},
 		{"track ho-oh", "!track ho-oh"},
 		{"perfect farfetchd", `!track "farfetch'd" iv100`},
+
+		// Individual IV stats — natural-language spelling, either side of the
+		// number, both spellings of "defence", and the slash-triple shorthand.
+		// Without these, "attack" / "defense" used to leak through to the
+		// form vocabulary as Deoxys forms.
+		{"track a pikachu with stats of 15 attack 13 stamina and 10 defence", "!track pikachu atk15 sta13 def10"},
+		{"track a pikachu 15/14/12", "!track pikachu atk15 def14 sta12"},
+		{"track pikachu attack 15 defense 14 stamina 13", "!track pikachu atk15 def14 sta13"},
+		{"track pikachu hp 12", "!track pikachu sta12"},
 	}
 
 	for _, tt := range tests {

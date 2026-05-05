@@ -175,16 +175,45 @@ var pvpLeagues = map[string]string{
 	"little":        "little",
 }
 
-// statWords are words that combine with a following number into a filter.
+// statWords are words that combine with an adjacent number into a filter.
 // "level 5" → "level5", "iv 95" → "iv95", etc.
 var statWords = map[string]bool{
 	"level": true, "iv": true, "cp": true,
 	"atk": true, "def": true, "sta": true,
 }
 
+// statAliases maps natural-language stat names to the canonical Poracle short
+// form. Used by the stat+number combiner so "15 attack" and "stamina 13"
+// behave the same as "atk 15" / "sta 13" — and so the words don't fall
+// through to form-vocab lookup (e.g. "attack" matching the Deoxys Attack
+// form).
+var statAliases = map[string]string{
+	"attack":  "atk",
+	"defense": "def",
+	"defence": "def", // British spelling
+	"stamina": "sta",
+	"hp":      "sta",
+}
+
+// canonicalStat returns the canonical short form ("atk"/"def"/"sta"/...) for
+// a stat keyword, or "" if the token isn't a stat word or alias.
+func canonicalStat(token string) string {
+	if statWords[token] {
+		return token
+	}
+	if alias, ok := statAliases[token]; ok {
+		return alias
+	}
+	return ""
+}
+
 // betweenPattern matches "between X Y stat" in token sequences
 // (note: "and" is a noise word and gets stripped by normalize).
 var betweenPattern = regexp.MustCompile(`between\s+(\d+)\s+(\d+)\s+(iv|cp|level|atk|def|sta)`)
+
+// slashTripleRe matches the "A/D/S" IV shorthand the Pokemon Go community
+// uses (e.g. "15/14/13" = atk 15, def 14, sta 13).
+var slashTripleRe = regexp.MustCompile(`^(\d+)/(\d+)/(\d+)$`)
 
 // FilterResult holds the outcome of applying filter matching to a token sequence.
 type FilterResult struct {
@@ -255,20 +284,33 @@ func matchFilters(tokens []string, intent string) *FilterResult {
 	// --- PVP matching (multi-token) ---
 	matchPVP(tokens, intent, result)
 
-	// --- Stat word + number combining: "level 5" → "level5" ---
+	// --- Stat word + number combining (either order; aliases supported) ---
+	// Handles "level 5" → "level5", "atk 15" → "atk15", "15 attack" → "atk15",
+	// "stamina 13" → "sta13", etc. Without the bidirectional + alias support,
+	// natural phrasings like "15 attack 13 stamina 10 defence" left the bare
+	// stat words behind and they got picked up as Deoxys form names.
 	for i := 0; i < len(tokens)-1; i++ {
 		if result.Consumed[i] || result.Consumed[i+1] {
 			continue
 		}
-		if statWords[tokens[i]] {
+		var stat, num string
+		if c := canonicalStat(tokens[i]); c != "" {
 			if _, err := strconv.Atoi(tokens[i+1]); err == nil {
-				combined := tokens[i] + tokens[i+1]
-				if poracleFilterRe.MatchString(combined) {
-					result.Filters = append(result.Filters, combined)
-					result.Consumed[i] = true
-					result.Consumed[i+1] = true
-				}
+				stat, num = c, tokens[i+1]
 			}
+		} else if c := canonicalStat(tokens[i+1]); c != "" {
+			if _, err := strconv.Atoi(tokens[i]); err == nil {
+				stat, num = c, tokens[i]
+			}
+		}
+		if stat == "" {
+			continue
+		}
+		combined := stat + num
+		if poracleFilterRe.MatchString(combined) {
+			result.Filters = append(result.Filters, combined)
+			result.Consumed[i] = true
+			result.Consumed[i+1] = true
 		}
 	}
 
@@ -289,6 +331,21 @@ func matchFilters(tokens []string, intent string) *FilterResult {
 	for i, t := range tokens {
 		if result.Consumed[i] {
 			continue
+		}
+
+		// IV triple "15/14/12" → atk15 def14 sta12 (PoGo convention: A/D/S).
+		if m := slashTripleRe.FindStringSubmatch(t); m != nil {
+			a, _ := strconv.Atoi(m[1])
+			d, _ := strconv.Atoi(m[2])
+			s, _ := strconv.Atoi(m[3])
+			if a >= 0 && a <= 15 && d >= 0 && d <= 15 && s >= 0 && s <= 15 {
+				result.Filters = append(result.Filters,
+					fmt.Sprintf("atk%d", a),
+					fmt.Sprintf("def%d", d),
+					fmt.Sprintf("sta%d", s))
+				result.Consumed[i] = true
+				continue
+			}
 		}
 
 		// Distance with unit attached: "1km", "500m"
