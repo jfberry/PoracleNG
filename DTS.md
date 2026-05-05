@@ -91,6 +91,7 @@ These fields are available in every template:
 | `wazeMapUrl` | string | Waze link |
 | `rdmUrl` | string | RDM map link |
 | `reactMapUrl` | string | ReactMap link |
+| `diademUrl` | string | Diadem map link |
 | `rocketMadUrl` | string | RocketMAD link |
 | `mapurl` | string | *Deprecated* — alias for `googleMapUrl` |
 | `applemap` | string | *Deprecated* — alias for `appleMapUrl` |

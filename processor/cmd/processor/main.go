@@ -902,6 +902,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		RdmURL:       cfg.General.RdmURL,
 		ReactMapURL:  cfg.General.ReactMapURL,
 		RocketMadURL: cfg.General.RocketMadURL,
+		DiademURL:    cfg.General.DiademURL,
 	}
 	enricher.IvColors = cfg.Discord.IvColors
 	enricher.PVPDisplay = &enrichment.PVPDisplayConfig{

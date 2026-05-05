@@ -80,6 +80,7 @@ var configSchema = []ConfigSection{
 			{Name: "disabled_commands", Type: "string[]", Default: []string{}, Description: "Commands to disable globally (e.g., [\"lure\", \"nest\"])", HotReload: true},
 			{Name: "rdm_url", Type: "string", Default: "", Description: "RDM map instance URL for {{rdmUrl}} in DTS templates", HotReload: true, Deprecated: true},
 			{Name: "react_map_url", Type: "string", Default: "", Description: "ReactMap instance URL for {{reactMapUrl}} in DTS templates", HotReload: true},
+			{Name: "diadem_url", Type: "string", Default: "", Description: "Diadem instance URL for {{diademUrl}} in DTS templates", HotReload: true},
 			{Name: "rocket_mad_url", Type: "string", Default: "", Description: "RocketMAD instance URL for {{rocketMadUrl}} in DTS templates", HotReload: true, Deprecated: true},
 			{Name: "img_url", Type: "string", Default: "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS", Description: "Base URL for pokemon icon images (uicons repository)", HotReload: false},
 			{Name: "img_url_alt", Type: "string", Default: "", Description: "Alternative icon URL for {{imgUrlAlt}} in DTS templates", HotReload: false},

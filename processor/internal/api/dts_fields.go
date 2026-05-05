@@ -60,6 +60,7 @@ var commonFields = []FieldDef{
 	{Name: "wazeMapUrl", Type: "string", Description: "Waze link", Category: "maps"},
 	{Name: "rdmUrl", Type: "string", Description: "RDM map link", Category: "maps"},
 	{Name: "reactMapUrl", Type: "string", Description: "ReactMap link", Category: "maps"},
+	{Name: "diademUrl", Type: "string", Description: "Diadem map link", Category: "maps"},
 	{Name: "rocketMadUrl", Type: "string", Description: "RocketMad link", Category: "maps"},
 	{Name: "mapurl", Type: "string", Description: "Deprecated alias for googleMapUrl", Category: "maps", Deprecated: true, PreferredAlternative: "googleMapUrl"},
 	{Name: "applemap", Type: "string", Description: "Deprecated alias for appleMapUrl", Category: "maps", Deprecated: true, PreferredAlternative: "appleMapUrl"},

@@ -190,9 +190,10 @@ shortlink_provider = "hideuri"
 shortlink_provider_url = ""
 shortlink_provider_key = ""
 shortlink_provider_domain = ""           # if supported, select domain to be used
-# additional shortlinks to Pogo Maps in DTS - supported: RDM, Reactmap, RocketMAD
+# additional shortlinks to Pogo Maps in DTS - supported: RDM, Reactmap, Diadem, RocketMAD
 rdm_url = ""                             # https://myRDM.com/
 react_map_url = ""                       # https://myReactMap.com/
+diadem_url = ""                          # https://myDiadem.com/
 rocket_mad_url = ""                      # https://myRocketMAD.com/
 
 

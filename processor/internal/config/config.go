@@ -96,6 +96,7 @@ type GeneralConfig struct {
 	RdmURL               string                   `toml:"rdm_url"`
 	ReactMapURL          string                   `toml:"react_map_url"`
 	RocketMadURL         string                   `toml:"rocket_mad_url"`
+	DiademURL            string                   `toml:"diadem_url"`
 	ImgURL               string                   `toml:"img_url"`
 	ImgURLAlt            string                   `toml:"img_url_alt"`
 	StickerURL           string                   `toml:"sticker_url"`
