@@ -435,6 +435,7 @@
   "msg.community.none": "未配置任何社群",
   "msg.community.valid": "有效的社群如下：",
   "msg.community.no_targets": "未列出目标",
+  "msg.community.no_targets_hint": "No targets listed. To act on yourself, run: `{0}`",
   "cmd.ask": "ask",
   "msg.ask.usage": "用自然语言告诉我您想追踪什么，例如 `{0}ask 完美急冻鸟`",
   "msg.unrecognized": "无法识别：{0}",
