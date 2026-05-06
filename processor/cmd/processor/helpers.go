@@ -309,10 +309,13 @@ func (ps *ProcessorService) disableUserForDeliveryFailure(target, name, jobType 
 
 	// Post shame message if configured. Only fires for Discord users —
 	// the message uses an @mention which is meaningless for channel /
-	// thread / webhook targets.
+	// thread / webhook targets. Use delivery.fail.shame (not the
+	// rate-limit copy) so the operational reason is correct: the user
+	// got disabled because we couldn't reach them, not because they
+	// were too noisy.
 	if ps.cfg.AlertLimits.ShameChannel != "" && jobType == bot.TypeDiscordUser {
 		tr := ps.translations.For(ps.cfg.General.Locale)
-		shameContent := tr.Tf("rate_limit.shame", target)
+		shameContent := tr.Tf("delivery.fail.shame", target)
 		ps.dispatchMessage(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "DeliveryFail")
 	}
 

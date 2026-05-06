@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "Has superado el límite de velocidad demasiadas veces en las últimas 24 horas. Tus mensajes han sido detenidos, usa {0}start para reanudarlos",
   "rate_limit.banned_hard": "Has superado el límite de velocidad demasiadas veces en las últimas 24 horas. Tus mensajes han sido detenidos, contacta a un administrador para reanudarlos",
   "rate_limit.shame": "<@{0}> ha sido desactivado en Poracle por superar el límite de velocidad demasiadas veces!",
+  "delivery.fail.shame": "<@{0}> has been disabled because Poracle messages keep failing to deliver to them.",
   "profile.switched": "He cambiado tu perfil a: {0}",
 
   "team_0": "Sin equipo",
