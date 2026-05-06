@@ -63,6 +63,38 @@ type threadEntry struct {
 	Commands    []string `json:"commands"`    // run as the thread's human at creation
 }
 
+// applyAutocreateOptions controls the per-fence application behaviour.
+type applyAutocreateOptions struct {
+	// ResetOnReuse, when true, wipes existing tracking on a reused
+	// channel/thread and re-runs the template's commands. The interactive
+	// !autocreate path sets this to true; the bulk sync path defaults to
+	// false (preserve admin-tweaked tracking) and only sets true when the
+	// `reset` keyword is on the trigger.
+	ResetOnReuse bool
+
+	// DryRun reports what would happen without touching Discord or the DB.
+	DryRun bool
+}
+
+// applyAutocreateResult captures what one invocation did, for the caller's
+// summary. Fields are populated regardless of DryRun.
+type applyAutocreateResult struct {
+	CategoryID  string                       // resolved or created category id (empty if template has no category)
+	ChannelIDs  map[string]string            // channelName -> id
+	ThreadIDs   map[string]map[string]string // channelName -> {label: thread_id}
+	Reused      bool                         // true if any master channel already existed
+	CommandsRan int                          // total template commands actually executed
+	Errors      []error
+}
+
+// reporter abstracts user feedback. The interactive path uses a Discord
+// channel writer; the bulk runner uses a structured collector.
+type reporter interface {
+	Info(msg string)
+	Warn(msg string)
+	Error(msg string)
+}
+
 type roleEntry struct {
 	Name string `json:"name"`
 
@@ -214,11 +246,65 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		return
 	}
 
-	// Build substitution args (restore underscores for names) — using
-	// rawSubArgs as the source so case is preserved through the round trip.
-	subArgsUnder := make([]string, len(rawSubArgs))
-	for i, arg := range rawSubArgs {
-		subArgsUnder[i] = strings.ReplaceAll(arg, " ", "_")
+	// Hand off the per-fence body to applyAutocreate. The interactive path
+	// always sets ResetOnReuse=true to preserve today's behaviour
+	// (re-running !autocreate area X wipes the channel's existing tracking
+	// and re-applies the template's commands).
+	subArgs := args[1:]
+	rep := newDiscordChannelReporter(s, m.ChannelID)
+	result := b.applyAutocreate(s, m, tmpl, subArgs, rawSubArgs, guildID, rep, applyAutocreateOptions{
+		ResetOnReuse: true,
+		DryRun:       false,
+	})
+
+	// Match the pre-refactor early-return on category-create failure: when the
+	// template defines a category and applyAutocreate didn't manage to produce
+	// one, treat that as a fatal abort — skip the reload trigger and the
+	// completion message so the user sees only the original failure message.
+	if tmpl.Definition.Category != nil && result.CategoryID == "" {
+		return
+	}
+
+	// Trigger reload after all creations.
+	if b.ReloadFunc != nil {
+		b.ReloadFunc()
+	}
+
+	s.ChannelMessageSend(m.ChannelID, "Autocreate complete!")
+}
+
+// applyAutocreate runs one channelTemplate entry against the supplied args
+// inside the given guild. Used by both the interactive !autocreate command
+// and the bulk sync runner. The caller controls reset semantics via
+// applyAutocreateOptions.
+//
+// args is the lower-cased arg slice (matching the bot parser's Args);
+// rawArgs preserves user-typed case (matching Parser.RawArgs). Both are
+// indexed positionally into the template's {0}, {1}, ... placeholders.
+//
+// m is required for synthesising the CommandContext used when sub-commands
+// (template's per-channel `commands`) are executed. The bulk runner can
+// pass the originating MessageCreate from the !autocreate sync trigger so
+// these contexts have a sensible UserID/UserName/ChannelID.
+func (b *Bot) applyAutocreate(
+	s *discordgo.Session,
+	m *discordgo.MessageCreate,
+	tmpl *channelTemplate,
+	args []string,
+	rawArgs []string,
+	guildID string,
+	rep reporter,
+	opts applyAutocreateOptions,
+) applyAutocreateResult {
+	// Underscore-restored args used by the existing per-channel target/webhook
+	// naming code paths.
+	subArgsUnder := make([]string, len(rawArgs))
+	for i, a := range rawArgs {
+		subArgsUnder[i] = strings.ReplaceAll(a, " ", "_")
+	}
+	result := applyAutocreateResult{
+		ChannelIDs: map[string]string{},
+		ThreadIDs:  map[string]map[string]string{},
 	}
 
 	// Create category if defined — reuse an existing one with the same
@@ -229,35 +315,41 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 	// made post-creation).
 	var categoryID string
 	if tmpl.Definition.Category != nil {
-		categoryName := formatTemplate(tmpl.Definition.Category.CategoryName, rawSubArgs)
+		categoryName := formatTemplate(tmpl.Definition.Category.CategoryName, rawArgs)
 
 		if existingID := b.findCategoryByName(s, guildID, categoryName); existingID != "" {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Reusing existing category %s", categoryName))
+			rep.Info(fmt.Sprintf(">> Reusing existing category %s", categoryName))
 			categoryID = existingID
 		} else {
-			createData := discordgo.GuildChannelCreateData{
-				Name: categoryName,
-				Type: discordgo.ChannelTypeGuildCategory,
-			}
+			if opts.DryRun {
+				rep.Info(fmt.Sprintf(">> [dry-run] Would create category %s", categoryName))
+			} else {
+				createData := discordgo.GuildChannelCreateData{
+					Name: categoryName,
+					Type: discordgo.ChannelTypeGuildCategory,
+				}
 
-			if len(tmpl.Definition.Category.Roles) > 0 {
-				overwrites := b.buildPermissionOverwrites(s, guildID, tmpl.Definition.Category.Roles, rawSubArgs)
-				createData.PermissionOverwrites = overwrites
-			}
+				if len(tmpl.Definition.Category.Roles) > 0 {
+					overwrites := b.buildPermissionOverwrites(s, guildID, tmpl.Definition.Category.Roles, rawArgs)
+					createData.PermissionOverwrites = overwrites
+				}
 
-			cat, err := s.GuildChannelCreateComplex(guildID, createData)
-			if err != nil {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to create category %s: %v", categoryName, err))
-				return
+				cat, err := s.GuildChannelCreateComplex(guildID, createData)
+				if err != nil {
+					rep.Error(fmt.Sprintf("Failed to create category %s: %v", categoryName, err))
+					result.Errors = append(result.Errors, err)
+					return result
+				}
+				rep.Info(fmt.Sprintf(">> Creating %s", categoryName))
+				categoryID = cat.ID
 			}
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Creating %s", categoryName))
-			categoryID = cat.ID
 		}
 	}
+	result.CategoryID = categoryID
 
 	// Create channels.
 	for _, chDef := range tmpl.Definition.Channels {
-		channelName := formatTemplate(chDef.ChannelName, rawSubArgs)
+		channelName := formatTemplate(chDef.ChannelName, rawArgs)
 
 		createData := discordgo.GuildChannelCreateData{
 			Name: channelName,
@@ -275,44 +367,82 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		}
 
 		if chDef.Topic != "" {
-			createData.Topic = formatTemplate(chDef.Topic, rawSubArgs)
+			createData.Topic = formatTemplate(chDef.Topic, rawArgs)
 		}
 
 		if len(chDef.Roles) > 0 {
-			createData.PermissionOverwrites = b.buildPermissionOverwrites(s, guildID, chDef.Roles, rawSubArgs)
+			createData.PermissionOverwrites = b.buildPermissionOverwrites(s, guildID, chDef.Roles, rawArgs)
 		}
 
 		// Reuse an existing channel with the same name under the same
 		// parent (or top-level if no category) so re-running !autocreate
-		// is idempotent. Tracking on the old human row is wiped first
-		// — the template's commands re-add it from scratch, so accumu-
-		// lated rules from prior runs don't pile up.
+		// is idempotent. When opts.ResetOnReuse is true (interactive
+		// path), tracking on the old human row is wiped first — the
+		// template's commands re-add it from scratch, so accumulated
+		// rules from prior runs don't pile up. When false (bulk sync
+		// path default), the existing channel is reused as-is so admin-
+		// tweaked tracking is preserved.
 		var channel *discordgo.Channel
+		var channelReused bool
 		if existingID := b.findChannelByName(s, guildID, categoryID, channelName); existingID != "" {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Reusing existing channel %s — resetting tracking", channelName))
-			b.resetChannelTracking(s, existingID)
+			if opts.ResetOnReuse {
+				rep.Info(fmt.Sprintf(">> Reusing existing channel %s — resetting tracking", channelName))
+				if !opts.DryRun {
+					b.resetChannelTracking(s, existingID)
+				}
+			} else {
+				rep.Info(fmt.Sprintf(">> Reusing existing channel %s — tracking left alone", channelName))
+			}
 			ch, err := s.Channel(existingID)
 			if err != nil {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to fetch existing channel %s: %v", channelName, err))
+				rep.Warn(fmt.Sprintf("Failed to fetch existing channel %s: %v", channelName, err))
+				result.Errors = append(result.Errors, err)
 				continue
 			}
 			channel = ch
+			channelReused = true
+			result.Reused = true
 		} else {
+			if opts.DryRun {
+				rep.Info(fmt.Sprintf(">> [dry-run] Would create channel %s", channelName))
+				continue
+			}
 			ch, err := s.GuildChannelCreateComplex(guildID, createData)
 			if err != nil {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to create channel %s: %v", channelName, err))
+				rep.Warn(fmt.Sprintf("Failed to create channel %s: %v", channelName, err))
+				result.Errors = append(result.Errors, err)
 				continue
 			}
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Creating %s", channelName))
+			rep.Info(fmt.Sprintf(">> Creating %s", channelName))
 			channel = ch
 		}
+
+		result.ChannelIDs[channelName] = channel.ID
 
 		// No control type — plain channel, skip registration.
 		if chDef.ControlType == "" {
 			continue
 		}
 
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Adding control type: %s", chDef.ControlType))
+		// Whether to (re-)run the template's per-channel command list. We
+		// always run on a fresh channel; on a reused channel only when the
+		// caller asked for reset semantics.
+		runCommands := !channelReused || opts.ResetOnReuse
+
+		if !runCommands {
+			// Skip registration AND commands for a reused channel that the
+			// caller explicitly opted out of resetting.
+			rep.Info(fmt.Sprintf(">> Skipping command re-run for reused channel %s", channelName))
+			continue
+		}
+
+		if opts.DryRun {
+			rep.Info(fmt.Sprintf(">> [dry-run] Would add control type: %s for %s", chDef.ControlType, channelName))
+			// Dry-run skips control-type registration and the threads block for this channel; PR 3's bulk-sync dry-run will preview threads separately.
+			continue
+		}
+
+		rep.Info(fmt.Sprintf(">> Adding control type: %s", chDef.ControlType))
 
 		var targetID, targetType, targetName string
 
@@ -329,7 +459,8 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 
 			wh, err := s.WebhookCreate(channel.ID, "Poracle", "")
 			if err != nil {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to create webhook for %s: %v", channelName, err))
+				rep.Warn(fmt.Sprintf("Failed to create webhook for %s: %v", channelName, err))
+				result.Errors = append(result.Errors, err)
 				continue
 			}
 
@@ -352,7 +483,8 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		}
 		if err := b.Humans.Create(h); err != nil {
 			log.Errorf("discord bot: autocreate register %s: %v", targetName, err)
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to register %s", targetName))
+			rep.Warn(fmt.Sprintf("Failed to register %s", targetName))
+			result.Errors = append(result.Errors, err)
 			continue
 		}
 
@@ -361,7 +493,7 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 			log.Warnf("discord bot: autocreate default profile %s: %v", targetName, err)
 		}
 
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Executing as %s / %s %s",
+		rep.Info(fmt.Sprintf(">> Executing as %s / %s %s",
 			targetType, targetName, func() string {
 				if targetType != bot.TypeWebhook {
 					return targetID
@@ -376,24 +508,30 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		quotedSubArgs := quoteForCommand(subArgsUnder)
 		for _, cmdText := range chDef.Commands {
 			expanded := formatTemplate(cmdText, quotedSubArgs)
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">>> Executing %s", expanded))
+			rep.Info(fmt.Sprintf(">>> Executing %s", expanded))
 			b.runOneAutocreateCommand(s, m, guildID, targetID, targetName, targetType, expanded)
+			result.CommandsRan++
 		}
 
 		// Create configured threads under this master channel and emit
 		// the picker if one is configured.
-		threadEntries := b.createThreadsForChannel(s, m, guildID, channel.ID, chDef, subArgsUnder)
-		if chDef.ThreadPicker != nil {
+		threadEntries := b.createThreadsForChannel(s, m, rep, guildID, channel.ID, chDef, subArgsUnder, opts, &result)
+		if chDef.ThreadPicker != nil && !opts.DryRun {
 			b.emitPickerPost(s, channel.ID, chDef.ThreadPicker, threadEntries, subArgsUnder)
+		}
+		if len(threadEntries) > 0 {
+			labelMap := result.ThreadIDs[channelName]
+			if labelMap == nil {
+				labelMap = map[string]string{}
+			}
+			for _, e := range threadEntries {
+				labelMap[e.Label] = e.ThreadID
+			}
+			result.ThreadIDs[channelName] = labelMap
 		}
 	}
 
-	// Trigger reload after all creations.
-	if b.ReloadFunc != nil {
-		b.ReloadFunc()
-	}
-
-	s.ChannelMessageSend(m.ChannelID, "Autocreate complete!")
+	return result
 }
 
 // runOneAutocreateCommand parses one !-prefixed command string and
@@ -473,7 +611,22 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, m *discordgo.Message
 // thread as a discord:thread Poracle human, and runs its commands list
 // against the shared execution path. Returns the cache entries for the
 // threads it owns so the caller can emit the picker.
-func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.MessageCreate, guildID, masterChannelID string, chDef channelEntry, subArgs []string) []threadCacheEntry {
+//
+// rep emits user-visible progress for the active path (interactive Discord
+// channel writer or bulk-runner collector). opts controls whether existing
+// thread tracking is reset on reuse and whether DB/Discord writes happen.
+// result, when non-nil, is incremented for each successfully executed
+// thread command (so the caller's summary reports an accurate total).
+func (b *Bot) createThreadsForChannel(
+	s *discordgo.Session,
+	m *discordgo.MessageCreate,
+	rep reporter,
+	guildID, masterChannelID string,
+	chDef channelEntry,
+	subArgs []string,
+	opts applyAutocreateOptions,
+	result *applyAutocreateResult,
+) []threadCacheEntry {
 	if len(chDef.Threads) == 0 {
 		return nil
 	}
@@ -497,17 +650,31 @@ func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.Message
 		}
 
 		var threadID string
+		threadReused := false
 		if existing, ok := cachedByLabel[label]; ok {
 			threadID = existing.ThreadID
-			// Wipe the existing thread's tracking so the commands below
-			// re-add from scratch — same idempotency guarantee as
-			// channel reuse. The Humans.Create call further down
-			// recreates the human row.
-			if err := db.DeleteHumanAndTracking(b.DB, threadID); err != nil {
-				log.Warnf("discord bot: autocreate reset thread %s tracking: %v", threadID, err)
+			threadReused = true
+			// Wipe the existing thread's tracking when the caller asked
+			// for reset semantics (interactive !autocreate path). Bulk
+			// sync defaults to leaving tracking alone so admin tweaks
+			// survive scheduled re-syncs. The Humans.Create call further
+			// down only fires when we wiped (otherwise we'd hit a noisy
+			// "already-registered" warning).
+			if opts.ResetOnReuse {
+				if !opts.DryRun {
+					if err := db.DeleteHumanAndTracking(b.DB, threadID); err != nil {
+						log.Warnf("discord bot: autocreate reset thread %s tracking: %v", threadID, err)
+					}
+				}
+				rep.Info(fmt.Sprintf(">> Reusing thread %s (%s) — resetting tracking", threadName, threadID))
+			} else {
+				rep.Info(fmt.Sprintf(">> Reusing thread %s (%s) — tracking left alone", threadName, threadID))
 			}
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Reusing thread %s (%s) — resetting tracking", threadName, threadID))
 		} else {
+			if opts.DryRun {
+				rep.Info(fmt.Sprintf(">> [dry-run] Would create private thread %s", threadName))
+				continue
+			}
 			created, err := s.ThreadStartComplex(masterChannelID, &discordgo.ThreadStart{
 				Name:                threadName,
 				Type:                discordgo.ChannelTypeGuildPrivateThread,
@@ -515,53 +682,68 @@ func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.Message
 				Invitable:           false,
 			})
 			if err != nil {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("❌ Failed to create thread %s: %v", threadName, err))
+				rep.Warn(fmt.Sprintf("❌ Failed to create thread %s: %v", threadName, err))
+				if result != nil {
+					result.Errors = append(result.Errors, err)
+				}
 				continue
 			}
 			threadID = created.ID
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("✅ Created private thread %s (%s)", threadName, threadID))
+			rep.Info(fmt.Sprintf("✅ Created private thread %s (%s)", threadName, threadID))
 		}
 
-		// Register a discord:thread human row. CurrentProfileNo: 1 must
-		// match the hardcoded ProfileNo used when the per-thread commands
-		// run below — otherwise inserts land at profile 1 but later
-		// !tracked target-resolution reads 0 from the DB, finding nothing.
-		h := &store.Human{
-			ID:               threadID,
-			Type:             bot.TypeDiscordThread,
-			Name:             threadName,
-			Enabled:          true,
-			CurrentProfileNo: 1,
-		}
-		if err := b.Humans.Create(h); err != nil {
-			// Already-registered is benign on re-runs; log and continue.
-			log.Warnf("discord bot: autocreate register thread %s: %v", threadName, err)
-		} else {
-			_ = b.Humans.CreateDefaultProfile(threadID, threadName, nil, 0, 0)
-		}
+		// Decide whether to (re-)run the thread's per-thread command
+		// list. Always for a freshly created thread; on a reused thread
+		// only when the caller asked for reset.
+		runThreadCommands := !threadReused || opts.ResetOnReuse
 
-		// Run the thread's commands against the thread's human. The
-		// thread name is appended to subArgs as an extra placeholder so
-		// commands can reference it (e.g. `!area add {0}` if the parent
-		// args put the area name first). Quote so the bot parser keeps
-		// the underscores intact — otherwise area names like
-		// "gent_centrum" turn into "gent centrum" and area lookup fails.
-		// (Caller passes subArgsUnder here, so subArgs locally is the
-		// underscore-restored form.)
-		threadArgs := append(append([]string{}, subArgs...), threadName)
-		quotedThreadArgs := quoteForCommand(threadArgs)
-		for _, cmdText := range th.Commands {
-			expanded := formatTemplate(cmdText, quotedThreadArgs)
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">>> [%s] %s", threadName, expanded))
-			b.runOneAutocreateCommand(s, m, guildID, threadID, threadName, bot.TypeDiscordThread, expanded)
+		if runThreadCommands && !opts.DryRun {
+			// Register a discord:thread human row. CurrentProfileNo: 1 must
+			// match the hardcoded ProfileNo used when the per-thread commands
+			// run below — otherwise inserts land at profile 1 but later
+			// !tracked target-resolution reads 0 from the DB, finding nothing.
+			h := &store.Human{
+				ID:               threadID,
+				Type:             bot.TypeDiscordThread,
+				Name:             threadName,
+				Enabled:          true,
+				CurrentProfileNo: 1,
+			}
+			if err := b.Humans.Create(h); err != nil {
+				// Already-registered is benign on re-runs; log and continue.
+				log.Warnf("discord bot: autocreate register thread %s: %v", threadName, err)
+			} else {
+				_ = b.Humans.CreateDefaultProfile(threadID, threadName, nil, 0, 0)
+			}
+
+			// Run the thread's commands against the thread's human. The
+			// thread name is appended to subArgs as an extra placeholder so
+			// commands can reference it (e.g. `!area add {0}` if the parent
+			// args put the area name first). Quote so the bot parser keeps
+			// the underscores intact — otherwise area names like
+			// "gent_centrum" turn into "gent centrum" and area lookup fails.
+			// (Caller passes subArgsUnder here, so subArgs locally is the
+			// underscore-restored form.)
+			threadArgs := append(append([]string{}, subArgs...), threadName)
+			quotedThreadArgs := quoteForCommand(threadArgs)
+			for _, cmdText := range th.Commands {
+				expanded := formatTemplate(cmdText, quotedThreadArgs)
+				rep.Info(fmt.Sprintf(">>> [%s] %s", threadName, expanded))
+				b.runOneAutocreateCommand(s, m, guildID, threadID, threadName, bot.TypeDiscordThread, expanded)
+				if result != nil {
+					result.CommandsRan++
+				}
+			}
 		}
 
 		entry := threadCacheEntry{ThreadID: threadID, Label: label, Style: th.ButtonStyle}
 		entries = append(entries, entry)
-		b.threadCache.ensureMaster(guildID, masterChannelID)
-		b.threadCache.upsertThread(masterChannelID, entry)
-		if err := b.threadCache.save(); err != nil {
-			log.Warnf("discord bot: persist thread cache: %v", err)
+		if !opts.DryRun {
+			b.threadCache.ensureMaster(guildID, masterChannelID)
+			b.threadCache.upsertThread(masterChannelID, entry)
+			if err := b.threadCache.save(); err != nil {
+				log.Warnf("discord bot: persist thread cache: %v", err)
+			}
 		}
 	}
 	return entries
@@ -836,3 +1018,19 @@ func quoteForCommand(args []string) []string {
 	}
 	return out
 }
+
+// discordChannelReporter implements reporter by sending each message to a
+// Discord channel via the active session. Used by the interactive
+// !autocreate path so the user sees live progress in the channel.
+type discordChannelReporter struct {
+	s         *discordgo.Session
+	channelID string
+}
+
+func newDiscordChannelReporter(s *discordgo.Session, channelID string) reporter {
+	return &discordChannelReporter{s: s, channelID: channelID}
+}
+
+func (r *discordChannelReporter) Info(msg string)  { r.s.ChannelMessageSend(r.channelID, msg) }
+func (r *discordChannelReporter) Warn(msg string)  { r.s.ChannelMessageSend(r.channelID, msg) }
+func (r *discordChannelReporter) Error(msg string) { r.s.ChannelMessageSend(r.channelID, msg) }
