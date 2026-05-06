@@ -507,10 +507,15 @@ func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.Message
 		// Run the thread's commands against the thread's human. The
 		// thread name is appended to subArgs as an extra placeholder so
 		// commands can reference it (e.g. `!area add {0}` if the parent
-		// args put the area name first).
+		// args put the area name first). Quote so the bot parser keeps
+		// the underscores intact — otherwise area names like
+		// "gent_centrum" turn into "gent centrum" and area lookup fails.
+		// (Caller passes subArgsUnder here, so subArgs locally is the
+		// underscore-restored form.)
 		threadArgs := append(append([]string{}, subArgs...), threadName)
+		quotedThreadArgs := quoteForCommand(threadArgs)
 		for _, cmdText := range th.Commands {
-			expanded := formatTemplate(cmdText, threadArgs)
+			expanded := formatTemplate(cmdText, quotedThreadArgs)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">>> [%s] %s", threadName, expanded))
 			b.runOneAutocreateCommand(s, m, guildID, threadID, threadName, bot.TypeDiscordThread, expanded)
 		}
