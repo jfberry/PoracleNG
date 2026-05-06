@@ -97,27 +97,57 @@ func (a *AreaLogic) AddAreas(currentAreas []string, communities []string, toAdd 
 	newList = append(newList, currentAreas...)
 
 	for _, name := range toAdd {
-		lower := strings.ToLower(name)
-		if displayName, ok := availableMap[lower]; ok {
-			if !currentSet[lower] {
-				newList = append(newList, lower)
-				currentSet[lower] = true
-				added = append(added, displayName)
-			}
-		} else {
+		canonical, displayName, ok := matchAvailableArea(availableMap, name)
+		if !ok {
 			notFound = append(notFound, name)
+			continue
+		}
+		if !currentSet[canonical] {
+			newList = append(newList, canonical)
+			currentSet[canonical] = true
+			added = append(added, displayName)
 		}
 	}
 
 	return added, notFound, newList
 }
 
+// matchAvailableArea looks up a user-supplied area name against the available
+// set, trying the underscore-restored form as a fallback. The bot parser
+// converts unquoted underscores to spaces, so an area genuinely named
+// "gent_centrum" arrives here as "gent centrum"; we try both so the user
+// doesn't have to know to wrap the name in quotes.
+//
+// Returns the canonical lowercase key (matches availableMap) and the
+// proper display name. ok=false when neither form matches.
+func matchAvailableArea(availableMap map[string]string, name string) (canonical, displayName string, ok bool) {
+	lower := strings.ToLower(name)
+	if dn, found := availableMap[lower]; found {
+		return lower, dn, true
+	}
+	underForm := strings.ReplaceAll(lower, " ", "_")
+	if underForm != lower {
+		if dn, found := availableMap[underForm]; found {
+			return underForm, dn, true
+		}
+	}
+	return "", "", false
+}
+
 // RemoveAreas removes named areas from the current list.
 // It returns the display names of areas that were actually removed and the remaining list.
+//
+// User input is matched against stored names tolerantly: an area stored as
+// "gent_centrum" matches when the user typed "gent_centrum" (parser strips
+// the underscore to a space) or quoted "\"gent_centrum\"" (preserved as-is).
 func (a *AreaLogic) RemoveAreas(currentAreas []string, toRemove []string) (removed []string, newList []string) {
 	removeSet := make(map[string]bool, len(toRemove))
 	for _, name := range toRemove {
-		removeSet[strings.ToLower(name)] = true
+		lower := strings.ToLower(name)
+		removeSet[lower] = true
+		// Add the underscore-restored form so a stored "gent_centrum"
+		// matches when the user typed it unquoted (parser → "gent centrum").
+		removeSet[strings.ReplaceAll(lower, " ", "_")] = true
 	}
 
 	for _, ca := range currentAreas {
@@ -151,11 +181,16 @@ func (a *AreaLogic) ResolveDisplayNames(areas []string) []string {
 	return displayNames
 }
 
-// FindFence looks up a fence by name (case-insensitive).
+// FindFence looks up a fence by name (case-insensitive). Tries the
+// underscore-restored form as a fallback so a fence named "gent_centrum"
+// matches when the user typed it unquoted (the parser strips the
+// underscore to a space).
 func (a *AreaLogic) FindFence(name string) *geofence.Fence {
 	lower := strings.ToLower(name)
+	underForm := strings.ReplaceAll(lower, " ", "_")
 	for i := range a.fences {
-		if strings.ToLower(a.fences[i].Name) == lower {
+		fenceLower := strings.ToLower(a.fences[i].Name)
+		if fenceLower == lower || fenceLower == underForm {
 			return &a.fences[i]
 		}
 	}

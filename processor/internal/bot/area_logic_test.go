@@ -184,6 +184,36 @@ func TestAreaAddAreas_WithSecurity(t *testing.T) {
 	}
 }
 
+// Areas whose names contain underscores must be findable via either form,
+// because the bot parser converts unquoted underscores to spaces. Mirrors
+// PoracleJS behaviour and lets `!area add gent_centrum` (typed manually,
+// unquoted) reach an area genuinely named "gent_centrum".
+func TestAreaAddAreas_UnderscoreInName(t *testing.T) {
+	fences := []geofence.Fence{
+		{Name: "Gent_centrum", Group: "City", UserSelectable: true},
+	}
+	al := NewAreaLogic(fences, noSecurityConfig())
+
+	// Unquoted user input: parser strips underscore → "gent centrum".
+	added, notFound, newList := al.AddAreas(nil, nil, []string{"gent centrum"})
+	if len(notFound) != 0 {
+		t.Fatalf("space-form lookup should find the area, got notFound=%v", notFound)
+	}
+	if len(added) != 1 || added[0] != "Gent_centrum" {
+		t.Fatalf("expected Gent_centrum added, got %v", added)
+	}
+	// Stored canonical lowercase form preserves the underscore.
+	if len(newList) != 1 || newList[0] != "gent_centrum" {
+		t.Errorf("expected stored as gent_centrum, got %v", newList)
+	}
+
+	// Quoted user input: parser keeps underscore → direct hit.
+	added, notFound, _ = al.AddAreas(nil, nil, []string{"gent_centrum"})
+	if len(notFound) != 0 || len(added) != 1 {
+		t.Errorf("underscore-form lookup should also work, got added=%v notFound=%v", added, notFound)
+	}
+}
+
 // --- RemoveAreas ---
 
 func TestAreaRemoveAreas_Basic(t *testing.T) {
@@ -210,6 +240,28 @@ func TestAreaRemoveAreas_NotInList(t *testing.T) {
 	}
 	if len(remaining) != 2 {
 		t.Fatalf("expected 2 remaining, got %d", len(remaining))
+	}
+}
+
+// Removing an area stored as "gent_centrum" should succeed whether the user
+// typed it unquoted (parser → "gent centrum") or quoted (preserved as
+// "gent_centrum").
+func TestAreaRemoveAreas_UnderscoreInName(t *testing.T) {
+	al := NewAreaLogic(nil, noSecurityConfig())
+
+	// Unquoted form
+	removed, remaining := al.RemoveAreas([]string{"gent_centrum", "downtown"}, []string{"gent centrum"})
+	if len(removed) != 1 || removed[0] != "gent_centrum" {
+		t.Errorf("space-form remove failed: removed=%v", removed)
+	}
+	if len(remaining) != 1 || remaining[0] != "downtown" {
+		t.Errorf("expected only downtown remaining, got %v", remaining)
+	}
+
+	// Quoted form
+	removed, _ = al.RemoveAreas([]string{"gent_centrum"}, []string{"gent_centrum"})
+	if len(removed) != 1 {
+		t.Errorf("underscore-form remove failed: removed=%v", removed)
 	}
 }
 
@@ -315,5 +367,21 @@ func TestAreaFindFence(t *testing.T) {
 	f = al.FindFence("nonexistent")
 	if f != nil {
 		t.Error("expected nil for nonexistent fence")
+	}
+}
+
+func TestAreaFindFence_UnderscoreInName(t *testing.T) {
+	fences := []geofence.Fence{
+		{Name: "Gent_centrum", Group: "City", UserSelectable: true},
+	}
+	al := NewAreaLogic(fences, noSecurityConfig())
+
+	// Space form (unquoted user input after parser)
+	if f := al.FindFence("gent centrum"); f == nil || f.Name != "Gent_centrum" {
+		t.Errorf("space-form FindFence failed: %+v", f)
+	}
+	// Underscore form (quoted, or fence config typed verbatim)
+	if f := al.FindFence("gent_centrum"); f == nil || f.Name != "Gent_centrum" {
+		t.Errorf("underscore-form FindFence failed: %+v", f)
 	}
 }
