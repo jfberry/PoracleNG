@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, nutze {0}start um diese wieder zu aktivieren",
   "rate_limit.banned_hard": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, kontaktiere einen Administrator um diese wieder zu aktivieren",
   "rate_limit.shame": "<@{0}> wurde wegen zu häufiger Überschreitung des Nachrichtenlimits deaktiviert!",
+  "delivery.fail.shame": "<@{0}> wurde deaktiviert, weil Poracle-Nachrichten wiederholt nicht zustellbar waren.",
   "profile.switched": "Profil gewechselt auf: {0}",
   "team_0": "unumkämpft",
   "team_1": "Weisheit",
