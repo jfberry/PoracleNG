@@ -34,8 +34,7 @@ func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		} else {
 			text = tr.T("status.no_areas")
 		}
-		text += fmt.Sprintf("\n\nValid commands are `%sarea list`, `%sarea add <areaname>`, `%sarea remove <areaname>`",
-			prefix, prefix, prefix)
+		text += "\n\n" + tr.Tf("msg.area.usage", prefix)
 		return []bot.Reply{{Text: text}}
 	}
 
