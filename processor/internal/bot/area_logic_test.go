@@ -45,7 +45,7 @@ func securityConfig() *config.Config {
 
 func TestAreaGetAvailableAreas_NoSecurity(t *testing.T) {
 	al := NewAreaLogic(testFences(), noSecurityConfig())
-	areas := al.GetAvailableAreas(nil)
+	areas := al.GetAvailableAreas(nil, false)
 
 	// Should return all user-selectable fences (4 of 5)
 	if len(areas) != 4 {
@@ -69,7 +69,7 @@ func TestAreaGetAvailableAreas_WithSecurity(t *testing.T) {
 	al := NewAreaLogic(testFences(), securityConfig())
 
 	// TeamCity community should only see Downtown and Uptown
-	areas := al.GetAvailableAreas([]string{"teamcity"})
+	areas := al.GetAvailableAreas([]string{"teamcity"}, false)
 	if len(areas) != 2 {
 		t.Fatalf("expected 2 areas for TeamCity, got %d", len(areas))
 	}
@@ -85,7 +85,7 @@ func TestAreaGetAvailableAreas_WithSecurity(t *testing.T) {
 func TestAreaGetAvailableAreas_WithSecurity_MultipleCommunities(t *testing.T) {
 	al := NewAreaLogic(testFences(), securityConfig())
 
-	areas := al.GetAvailableAreas([]string{"teamcity", "teamnature"})
+	areas := al.GetAvailableAreas([]string{"teamcity", "teamnature"}, false)
 	if len(areas) != 4 {
 		t.Fatalf("expected 4 areas for both communities, got %d", len(areas))
 	}
@@ -94,9 +94,51 @@ func TestAreaGetAvailableAreas_WithSecurity_MultipleCommunities(t *testing.T) {
 func TestAreaGetAvailableAreas_WithSecurity_NoCommunities(t *testing.T) {
 	al := NewAreaLogic(testFences(), securityConfig())
 
-	areas := al.GetAvailableAreas(nil)
+	areas := al.GetAvailableAreas(nil, false)
 	if len(areas) != 0 {
 		t.Fatalf("expected 0 areas with no communities, got %d", len(areas))
+	}
+}
+
+// Admins bypass area_security: even with no community membership and area
+// security enabled they see every fence — including the InternalZone fence
+// that has UserSelectable=false. Mirrors PoracleJS area.js where
+// isFromAdmin / targetIsAdmin skip both the userSelectable filter and the
+// community-allowed-areas filter.
+func TestAreaGetAvailableAreas_AdminBypass(t *testing.T) {
+	al := NewAreaLogic(testFences(), securityConfig())
+
+	areas := al.GetAvailableAreas(nil, true)
+	if len(areas) != 5 {
+		t.Fatalf("admin should see all 5 fences, got %d", len(areas))
+	}
+	// Confirm the non-user-selectable InternalZone is included for admin.
+	var found bool
+	for _, a := range areas {
+		if a.Name == "InternalZone" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("admin bypass should include UserSelectable=false fences")
+	}
+}
+
+// Admin can add an area that's not in any community's allowed set.
+func TestAreaAddAreas_AdminBypassesCommunity(t *testing.T) {
+	al := NewAreaLogic(testFences(), securityConfig())
+
+	// As a non-admin with no community: park is not allowed.
+	added, notFound, _ := al.AddAreas(nil, nil, []string{"park"}, false)
+	if len(added) != 0 || len(notFound) != 1 {
+		t.Fatalf("non-admin should be blocked: added=%v notFound=%v", added, notFound)
+	}
+
+	// As an admin with no community: park is allowed.
+	added, notFound, _ = al.AddAreas(nil, nil, []string{"park"}, true)
+	if len(added) != 1 || len(notFound) != 0 {
+		t.Fatalf("admin should bypass: added=%v notFound=%v", added, notFound)
 	}
 }
 
@@ -104,7 +146,7 @@ func TestAreaGetAvailableAreas_WithSecurity_NoCommunities(t *testing.T) {
 
 func TestAreaGetAvailableAreasMarked(t *testing.T) {
 	al := NewAreaLogic(testFences(), noSecurityConfig())
-	areas := al.GetAvailableAreasMarked(nil, []string{"downtown", "park"})
+	areas := al.GetAvailableAreasMarked(nil, []string{"downtown", "park"}, false)
 
 	activeCount := 0
 	for _, a := range areas {
@@ -124,7 +166,7 @@ func TestAreaGetAvailableAreasMarked(t *testing.T) {
 
 func TestAreaAddAreas_Basic(t *testing.T) {
 	al := NewAreaLogic(testFences(), noSecurityConfig())
-	added, notFound, newList := al.AddAreas(nil, nil, []string{"downtown", "park"})
+	added, notFound, newList := al.AddAreas(nil, nil, []string{"downtown", "park"}, false)
 
 	if len(added) != 2 {
 		t.Fatalf("expected 2 added, got %d", len(added))
@@ -139,7 +181,7 @@ func TestAreaAddAreas_Basic(t *testing.T) {
 
 func TestAreaAddAreas_DuplicatePrevention(t *testing.T) {
 	al := NewAreaLogic(testFences(), noSecurityConfig())
-	added, _, newList := al.AddAreas([]string{"downtown"}, nil, []string{"downtown", "park"})
+	added, _, newList := al.AddAreas([]string{"downtown"}, nil, []string{"downtown", "park"}, false)
 
 	// downtown already exists, only park should be added
 	if len(added) != 1 {
@@ -155,7 +197,7 @@ func TestAreaAddAreas_DuplicatePrevention(t *testing.T) {
 
 func TestAreaAddAreas_InvalidArea(t *testing.T) {
 	al := NewAreaLogic(testFences(), noSecurityConfig())
-	added, notFound, _ := al.AddAreas(nil, nil, []string{"nonexistent", "downtown"})
+	added, notFound, _ := al.AddAreas(nil, nil, []string{"nonexistent", "downtown"}, false)
 
 	if len(added) != 1 {
 		t.Fatalf("expected 1 added, got %d", len(added))
@@ -171,7 +213,7 @@ func TestAreaAddAreas_InvalidArea(t *testing.T) {
 func TestAreaAddAreas_WithSecurity(t *testing.T) {
 	al := NewAreaLogic(testFences(), securityConfig())
 	// TeamCity can only add Downtown and Uptown, not Park
-	added, notFound, _ := al.AddAreas(nil, []string{"teamcity"}, []string{"downtown", "park"})
+	added, notFound, _ := al.AddAreas(nil, []string{"teamcity"}, []string{"downtown", "park"}, false)
 
 	if len(added) != 1 {
 		t.Fatalf("expected 1 added, got %d: %v", len(added), added)
@@ -195,7 +237,7 @@ func TestAreaAddAreas_UnderscoreInName(t *testing.T) {
 	al := NewAreaLogic(fences, noSecurityConfig())
 
 	// Unquoted user input: parser strips underscore → "gent centrum".
-	added, notFound, newList := al.AddAreas(nil, nil, []string{"gent centrum"})
+	added, notFound, newList := al.AddAreas(nil, nil, []string{"gent centrum"}, false)
 	if len(notFound) != 0 {
 		t.Fatalf("space-form lookup should find the area, got notFound=%v", notFound)
 	}
@@ -208,7 +250,7 @@ func TestAreaAddAreas_UnderscoreInName(t *testing.T) {
 	}
 
 	// Quoted user input: parser keeps underscore → direct hit.
-	added, notFound, _ = al.AddAreas(nil, nil, []string{"gent_centrum"})
+	added, notFound, _ = al.AddAreas(nil, nil, []string{"gent_centrum"}, false)
 	if len(notFound) != 0 || len(added) != 1 {
 		t.Errorf("underscore-form lookup should also work, got added=%v notFound=%v", added, notFound)
 	}

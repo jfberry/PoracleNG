@@ -29,8 +29,26 @@ func NewAreaLogic(fences []geofence.Fence, cfg *config.Config) *AreaLogic {
 
 // GetAvailableAreas returns the list of areas available to a user.
 // When area security is disabled, all user-selectable fences are returned.
-// When enabled, only fences whose names appear in the community's allowed areas are returned.
-func (a *AreaLogic) GetAvailableAreas(communities []string) []AreaInfo {
+// When enabled, only fences whose names appear in the community's allowed
+// areas are returned.
+//
+// Admins bypass both filters (matching PoracleJS area.js semantics):
+// they see every fence regardless of UserSelectable, and area_security
+// community membership is ignored. This lets an admin who happens to
+// belong to no community still administer their own areas.
+func (a *AreaLogic) GetAvailableAreas(communities []string, isAdmin bool) []AreaInfo {
+	if isAdmin {
+		areas := make([]AreaInfo, 0, len(a.fences))
+		for _, f := range a.fences {
+			areas = append(areas, AreaInfo{
+				Name:           f.Name,
+				Group:          f.Group,
+				UserSelectable: f.UserSelectable,
+			})
+		}
+		return areas
+	}
+
 	if !a.cfg.Area.Enabled {
 		var areas []AreaInfo
 		for _, f := range a.fences {
@@ -63,8 +81,8 @@ func (a *AreaLogic) GetAvailableAreas(communities []string) []AreaInfo {
 
 // GetAvailableAreasMarked returns available areas with IsActive set for areas
 // present in the user's current area list.
-func (a *AreaLogic) GetAvailableAreasMarked(communities []string, currentAreas []string) []AreaInfo {
-	areas := a.GetAvailableAreas(communities)
+func (a *AreaLogic) GetAvailableAreasMarked(communities []string, currentAreas []string, isAdmin bool) []AreaInfo {
+	areas := a.GetAvailableAreas(communities, isAdmin)
 
 	currentSet := make(map[string]bool, len(currentAreas))
 	for _, ca := range currentAreas {
@@ -82,8 +100,8 @@ func (a *AreaLogic) GetAvailableAreasMarked(communities []string, currentAreas [
 // AddAreas validates and adds areas to the user's current list.
 // It returns the display names of areas that were added, names that were not found
 // in the available set, and the new full area list (lowercase).
-func (a *AreaLogic) AddAreas(currentAreas []string, communities []string, toAdd []string) (added []string, notFound []string, newList []string) {
-	available := a.GetAvailableAreas(communities)
+func (a *AreaLogic) AddAreas(currentAreas []string, communities []string, toAdd []string, isAdmin bool) (added []string, notFound []string, newList []string) {
+	available := a.GetAvailableAreas(communities, isAdmin)
 	availableMap := make(map[string]string, len(available)) // lowercase -> display name
 	for _, ai := range available {
 		availableMap[strings.ToLower(ai.Name)] = ai.Name
