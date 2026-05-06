@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -281,12 +282,30 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 			createData.PermissionOverwrites = b.buildPermissionOverwrites(s, guildID, chDef.Roles, rawSubArgs)
 		}
 
-		channel, err := s.GuildChannelCreateComplex(guildID, createData)
-		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to create channel %s: %v", channelName, err))
-			continue
+		// Reuse an existing channel with the same name under the same
+		// parent (or top-level if no category) so re-running !autocreate
+		// is idempotent. Tracking on the old human row is wiped first
+		// — the template's commands re-add it from scratch, so accumu-
+		// lated rules from prior runs don't pile up.
+		var channel *discordgo.Channel
+		if existingID := b.findChannelByName(s, guildID, categoryID, channelName); existingID != "" {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Reusing existing channel %s — resetting tracking", channelName))
+			b.resetChannelTracking(s, existingID)
+			ch, err := s.Channel(existingID)
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to fetch existing channel %s: %v", channelName, err))
+				continue
+			}
+			channel = ch
+		} else {
+			ch, err := s.GuildChannelCreateComplex(guildID, createData)
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to create channel %s: %v", channelName, err))
+				continue
+			}
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Creating %s", channelName))
+			channel = ch
 		}
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Creating %s", channelName))
 
 		// No control type — plain channel, skip registration.
 		if chDef.ControlType == "" {
@@ -480,7 +499,14 @@ func (b *Bot) createThreadsForChannel(s *discordgo.Session, m *discordgo.Message
 		var threadID string
 		if existing, ok := cachedByLabel[label]; ok {
 			threadID = existing.ThreadID
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Thread %s already cached (%s); skipping create", threadName, threadID))
+			// Wipe the existing thread's tracking so the commands below
+			// re-add from scratch — same idempotency guarantee as
+			// channel reuse. The Humans.Create call further down
+			// recreates the human row.
+			if err := db.DeleteHumanAndTracking(b.DB, threadID); err != nil {
+				log.Warnf("discord bot: autocreate reset thread %s tracking: %v", threadID, err)
+			}
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Reusing thread %s (%s) — resetting tracking", threadName, threadID))
 		} else {
 			created, err := s.ThreadStartComplex(masterChannelID, &discordgo.ThreadStart{
 				Name:                threadName,
@@ -730,6 +756,63 @@ func (b *Bot) findCategoryByName(s *discordgo.Session, guildID, name string) str
 		}
 	}
 	return ""
+}
+
+// findChannelByName searches the guild's text/voice channels for one whose
+// name matches and whose parent category matches. Discord forces channel
+// names to lowercase so the comparison is exact-lower. parentID may be
+// empty to look for top-level channels. Returns the channel ID, or empty
+// when no match (or on listing error).
+func (b *Bot) findChannelByName(s *discordgo.Session, guildID, parentID, name string) string {
+	channels, err := s.GuildChannels(guildID)
+	if err != nil {
+		log.Warnf("discord bot: autocreate list channels for channel lookup: %v", err)
+		return ""
+	}
+	wanted := strings.ToLower(name)
+	for _, ch := range channels {
+		if ch.Type == discordgo.ChannelTypeGuildCategory {
+			continue
+		}
+		if ch.ParentID != parentID {
+			continue
+		}
+		if strings.ToLower(ch.Name) == wanted {
+			return ch.ID
+		}
+	}
+	return ""
+}
+
+// resetChannelTracking wipes any Poracle tracking attached to an existing
+// channel — both bot-control (the human row keyed by channel ID) and
+// webhook-control (one human row per Poracle webhook on the channel,
+// keyed by the webhook URL) — and removes those webhooks. Used when
+// !autocreate reuses an existing channel so the template's commands
+// re-apply to a clean slate.
+func (b *Bot) resetChannelTracking(s *discordgo.Session, channelID string) {
+	if err := db.DeleteHumanAndTracking(b.DB, channelID); err != nil {
+		log.Warnf("discord bot: autocreate reset channel %s tracking: %v", channelID, err)
+	}
+	webhooks, err := s.ChannelWebhooks(channelID)
+	if err != nil {
+		log.Warnf("discord bot: autocreate list webhooks on %s: %v", channelID, err)
+		return
+	}
+	for _, wh := range webhooks {
+		// Only touch webhooks Poracle created (named "Poracle"). Leaves
+		// any third-party webhooks the operator may have added alone.
+		if wh.Name != "Poracle" {
+			continue
+		}
+		url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)
+		if err := db.DeleteHumanAndTracking(b.DB, url); err != nil {
+			log.Warnf("discord bot: autocreate reset webhook %s tracking: %v", wh.ID, err)
+		}
+		if err := s.WebhookDelete(wh.ID); err != nil {
+			log.Warnf("discord bot: autocreate delete webhook %s: %v", wh.ID, err)
+		}
+	}
 }
 
 // formatTemplate replaces {0}, {1}, etc. placeholders with the provided arguments.
