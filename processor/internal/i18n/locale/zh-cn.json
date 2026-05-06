@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "您在过去24小时内多次触发速率限制。消息已停止，使用{0}start恢复",
   "rate_limit.banned_hard": "您在过去24小时内多次触发速率限制。消息已停止，请联系管理员恢复",
   "rate_limit.shame": "<@{0}> 因多次超过速率限制，其 Poracle 追踪已被停用！",
+  "delivery.fail.shame": "<@{0}> has been disabled because Poracle messages keep failing to deliver to them.",
   "profile.switched": "已将您的配置设为：{0}",
   "team_0": "无归属",
   "team_1": "神秘",
