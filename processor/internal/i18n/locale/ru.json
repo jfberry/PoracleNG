@@ -435,6 +435,7 @@
   "msg.community.none": "No communities configured",
   "msg.community.valid": "Доступные сообщества:",
   "msg.community.no_targets": "Не указаны цели",
+  "msg.community.no_targets_hint": "No targets listed. To act on yourself, run: `{0}`",
   "cmd.ask": "ask",
   "msg.ask.usage": "Ask me in natural language what you want to track, e.g. `{0}ask perfect dragonite`",
   "msg.unrecognized": "Unrecognized: {0}",
