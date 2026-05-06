@@ -169,28 +169,28 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Enabled                    bool                    `toml:"enabled"` // false = disable bot even if token is set
-	Token                      any                     `toml:"token"`   // string or []string
-	Prefix                     string                  `toml:"prefix"`
-	Activity                   string                  `toml:"activity"` // bot activity/status text
-	Channels                   []string                `toml:"channels"` // registration channel IDs
-	Guilds                     []string                `toml:"guilds"`
-	UserRole                   []string                `toml:"user_role"`
-	CheckRole                  bool                    `toml:"check_role"`
-	CheckRoleInterval          int                     `toml:"check_role_interval"` // hours between periodic reconciliation
-	LostRoleMessage            string                  `toml:"lost_role_message"`
-	DisableAutoGreetings       bool                    `toml:"disable_auto_greetings"`
-	DmLogChannelID             string                  `toml:"dm_log_channel_id"`
-	DmLogChannelDeletionTime   int                     `toml:"dm_log_channel_deletion_time"` // minutes, 0 = don't delete
-	UnrecognisedCommandMessage string                  `toml:"unrecognised_command_message"` // custom reply, overrides i18n
-	UnregisteredUserMessage    string                  `toml:"unregistered_user_message"`    // custom reply, overrides i18n
-	IvColors                   []string                `toml:"iv_colors"`
-	Admins                     []string                `toml:"admins"`
-	UploadEmbedImages          bool                    `toml:"upload_embed_images"`
-	MessageDeleteDelay         int                     `toml:"message_delete_delay"` // extra ms for clean TTH on channels
-	ThreadKeepAliveIntervalHours int                   `toml:"thread_keep_alive_interval_hours"` // hours between unarchive sweeps; 0 = disabled; >168 clamped to 168
-	RoleSubscriptions          []RoleSubscriptionEntry `toml:"role_subscriptions"`
-	CommandSecurity            map[string][]string     `toml:"command_security"`
+	Enabled                      bool                    `toml:"enabled"` // false = disable bot even if token is set
+	Token                        any                     `toml:"token"`   // string or []string
+	Prefix                       string                  `toml:"prefix"`
+	Activity                     string                  `toml:"activity"` // bot activity/status text
+	Channels                     []string                `toml:"channels"` // registration channel IDs
+	Guilds                       []string                `toml:"guilds"`
+	UserRole                     []string                `toml:"user_role"`
+	CheckRole                    bool                    `toml:"check_role"`
+	CheckRoleInterval            int                     `toml:"check_role_interval"` // hours between periodic reconciliation
+	LostRoleMessage              string                  `toml:"lost_role_message"`
+	DisableAutoGreetings         bool                    `toml:"disable_auto_greetings"`
+	DmLogChannelID               string                  `toml:"dm_log_channel_id"`
+	DmLogChannelDeletionTime     int                     `toml:"dm_log_channel_deletion_time"` // minutes, 0 = don't delete
+	UnrecognisedCommandMessage   string                  `toml:"unrecognised_command_message"` // custom reply, overrides i18n
+	UnregisteredUserMessage      string                  `toml:"unregistered_user_message"`    // custom reply, overrides i18n
+	IvColors                     []string                `toml:"iv_colors"`
+	Admins                       []string                `toml:"admins"`
+	UploadEmbedImages            bool                    `toml:"upload_embed_images"`
+	MessageDeleteDelay           int                     `toml:"message_delete_delay"`             // extra ms for clean TTH on channels
+	ThreadKeepAliveIntervalHours int                     `toml:"thread_keep_alive_interval_hours"` // hours between unarchive sweeps; 0 = disabled; >168 clamped to 168
+	RoleSubscriptions            []RoleSubscriptionEntry `toml:"role_subscriptions"`
+	CommandSecurity              map[string][]string     `toml:"command_security"`
 
 	// Delegated administration — TOML array-of-tables format
 	DelegatedAdmins    []DelegatedAdminEntry `toml:"delegated_admins"` // [[discord.delegated_admins]]
