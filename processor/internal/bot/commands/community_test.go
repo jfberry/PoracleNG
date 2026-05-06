@@ -34,7 +34,8 @@ func TestCommunityCommand_BareShowsCurrentMembership(t *testing.T) {
 
 // TestCommunityCommand_AddRefusesUserFallback: `!community add areaname` with
 // no explicit targets and a user-type ctx target must NOT silently apply to
-// the sender. Mirrors PoracleJS app.js refusal of bare-user adds.
+// the sender. Mirrors PoracleJS app.js refusal of bare-user adds. The reply
+// also includes a copy-pasteable hint with the user's own ID.
 func TestCommunityCommand_AddRefusesUserFallback(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
@@ -44,6 +45,31 @@ func TestCommunityCommand_AddRefusesUserFallback(t *testing.T) {
 	replies := cmd.Run(ctx, []string{"add", "teamcity"})
 
 	assertReact(t, replies, "🙅")
+	wantHint := "!community add teamcity user1"
+	if !strings.Contains(replies[0].Text, wantHint) {
+		t.Errorf("expected reply to contain self-hint %q, got %q", wantHint, replies[0].Text)
+	}
+}
+
+// TestCommunityCommand_ClearHintIncludesUserID: clear has no community arg,
+// so the hint should be `!community clear <id>` only.
+func TestCommunityCommand_ClearHintIncludesUserID(t *testing.T) {
+	ctx, _ := testCtx(t)
+	ctx.IsAdmin = true
+
+	cmd := &CommunityCommand{}
+	replies := cmd.Run(ctx, []string{"clear"})
+
+	assertReact(t, replies, "🙅")
+	wantHint := "!community clear user1"
+	if !strings.Contains(replies[0].Text, wantHint) {
+		t.Errorf("expected reply to contain self-hint %q, got %q", wantHint, replies[0].Text)
+	}
+	// And it shouldn't have an extra trailing token from the empty
+	// community-name slot.
+	if strings.Contains(replies[0].Text, "  user1") {
+		t.Errorf("hint contains a stray double space: %q", replies[0].Text)
+	}
 }
 
 // TestCommunityCommand_AddFallsBackToChannelTarget: when target is a

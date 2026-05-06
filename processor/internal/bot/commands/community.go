@@ -111,7 +111,14 @@ func (c *CommunityCommand) runAddRemove(ctx *bot.CommandContext, args []string, 
 	// flagged.
 	targets := resolveTargets(ctx, targetArgs, false)
 	if len(targets) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.community.no_targets")}}
+		verb := "add"
+		if !isAdd {
+			verb = "remove"
+		}
+		return []bot.Reply{{
+			React: "🙅",
+			Text:  tr.Tf("msg.community.no_targets_hint", selfHint(ctx, verb, communityName)),
+		}}
 	}
 
 	var messages []string
@@ -190,7 +197,10 @@ func (c *CommunityCommand) runClear(ctx *bot.CommandContext, args []string) []bo
 	// Mutating: same refuse-on-self rule as add/remove.
 	targets := resolveTargets(ctx, args, false)
 	if len(targets) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.community.no_targets")}}
+		return []bot.Reply{{
+			React: "🙅",
+			Text:  tr.Tf("msg.community.no_targets_hint", selfHint(ctx, "clear", "")),
+		}}
 	}
 
 	var messages []string
@@ -209,6 +219,19 @@ func (c *CommunityCommand) runClear(ctx *bot.CommandContext, args []string) []bo
 		return []bot.Reply{{React: "👌"}}
 	}
 	return []bot.Reply{{React: "✅", Text: strings.Join(messages, "\n")}}
+}
+
+// selfHint builds the suggestion string used in msg.community.no_targets_hint
+// when an admin runs a mutating community subcommand from a DM with no
+// targets. verb is "add"/"remove"/"clear"; community is the community name
+// (empty for clear, which has no community arg). Returns something like
+// "!community add teamcity 12345" suitable for one-tap copy/paste.
+func selfHint(ctx *bot.CommandContext, verb, community string) string {
+	prefix := bot.CommandPrefix(ctx)
+	if community != "" {
+		return prefix + "community " + verb + " " + community + " " + ctx.UserID
+	}
+	return prefix + "community " + verb + " " + ctx.UserID
 }
 
 // extractTargetIDs extracts user IDs from mentions and plain numeric args.

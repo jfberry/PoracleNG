@@ -431,6 +431,7 @@
   "msg.community.none": "No communities configured",
   "msg.community.valid": "Dies sind die verfügbaren Communities:",
   "msg.community.no_targets": "Keine ChannelId oder UserId aufgelistet",
+  "msg.community.no_targets_hint": "Keine Ziele angegeben. Um auf dich selbst zu wirken: `{0}`",
   "cmd.ask": "ask",
   "msg.ask.usage": "Frag mich in natürlicher Sprache, was du verfolgen möchtest, z.B. `{0}ask perfekter Dragoran`",
   "msg.unrecognized": "Unbekannt: {0}",
