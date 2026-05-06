@@ -435,6 +435,7 @@
   "msg.community.none": "コミュニティが設定されていません",
   "msg.community.valid": "有効なコミュニティ:",
   "msg.community.no_targets": "対象が指定されていません",
+  "msg.community.no_targets_hint": "No targets listed. To act on yourself, run: `{0}`",
   "cmd.ask": "ask",
   "msg.ask.usage": "追跡したい内容を自然言語で教えてください。例: `{0}ask 完璧なカイリュー`",
   "msg.unrecognized": "認識できません: {0}",
