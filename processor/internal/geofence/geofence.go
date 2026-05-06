@@ -21,6 +21,11 @@ type Fence struct {
 	Description      string         `json:"description"`
 	UserSelectable   bool           `json:"userSelectable"`
 	DisplayInMatches bool           `json:"displayInMatches"`
+	// Properties holds user-defined keys from the source's properties block
+	// that aren't mapped to a named field above. Used by the bulk-autocreate
+	// runner's filter/params Handlebars expressions. Populated by
+	// parseGeoJSON; left nil for native-format files.
+	Properties map[string]any `json:"-"`
 }
 
 // fenceJSON is used for unmarshalling with *bool to detect absent vs explicit false.
@@ -61,9 +66,9 @@ type geoJSONCollection struct {
 }
 
 type geoJSONFeature struct {
-	Type       string            `json:"type"`
-	Geometry   geoJSONGeometry   `json:"geometry"`
-	Properties geoJSONProperties `json:"properties"`
+	Type       string          `json:"type"`
+	Geometry   geoJSONGeometry `json:"geometry"`
+	Properties json.RawMessage `json:"properties"`
 }
 
 type geoJSONGeometry struct {
@@ -119,12 +124,47 @@ func LoadGeofenceFile(path, defaultName string) ([]Fence, error) {
 }
 
 func parseGeoJSON(collection geoJSONCollection, defaultName string) []Fence {
+	// Set of property keys promoted to named struct fields. Anything else
+	// in the source's properties block ends up in Fence.Properties for use
+	// by bulk-autocreate filter/params expressions.
+	namedKeys := map[string]bool{
+		"name":             true,
+		"color":            true,
+		"group":            true,
+		"description":      true,
+		"userSelectable":   true,
+		"displayInMatches": true,
+	}
+
 	var fences []Fence
 	for i, feature := range collection.Features {
 		if feature.Type != "Feature" {
 			continue
 		}
-		props := feature.Properties
+
+		// Pass 1: decode the named-field subset.
+		var props geoJSONProperties
+		if len(feature.Properties) > 0 {
+			if err := json.Unmarshal(feature.Properties, &props); err != nil {
+				continue
+			}
+		}
+
+		// Pass 2: decode every property as a generic map, then strip the
+		// named keys so they don't shadow the struct fields.
+		var extras map[string]any
+		if len(feature.Properties) > 0 {
+			if err := json.Unmarshal(feature.Properties, &extras); err != nil {
+				extras = nil
+			}
+			for k := range namedKeys {
+				delete(extras, k)
+			}
+			if len(extras) == 0 {
+				extras = nil
+			}
+		}
+
 		name := props.Name
 		if name == "" {
 			prefix := defaultName
@@ -150,6 +190,7 @@ func parseGeoJSON(collection geoJSONCollection, defaultName string) []Fence {
 			Description:      props.Description,
 			UserSelectable:   userSel,
 			DisplayInMatches: dispMatch,
+			Properties:       extras,
 		}
 
 		switch feature.Geometry.Type {
