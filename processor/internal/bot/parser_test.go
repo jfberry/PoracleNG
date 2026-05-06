@@ -122,6 +122,20 @@ func TestParserUnderscoreToSpace(t *testing.T) {
 	}
 }
 
+// Quoted tokens preserve underscores — this is what lets autocreate templates
+// round-trip area names like "gent_centrum" through the bot parser without
+// the underscore→space conversion mangling them.
+func TestParserQuotedPreservesUnderscores(t *testing.T) {
+	p := newTestParser()
+	cmds := p.Parse(`!track "gent_centrum"`)
+	if len(cmds) != 1 {
+		t.Fatalf("expected 1, got %d", len(cmds))
+	}
+	if cmds[0].Args[0] != "gent_centrum" {
+		t.Errorf("arg = %q, want 'gent_centrum'", cmds[0].Args[0])
+	}
+}
+
 func TestParserUnknownCommand(t *testing.T) {
 	p := newTestParser()
 	cmds := p.Parse("!notacommand hello")

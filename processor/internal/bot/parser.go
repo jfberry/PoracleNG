@@ -110,14 +110,21 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 		}
 
 		// Look up command name (first token, already lowercased by tokenize)
-		cmdWord := tokens[0]
+		cmdWord := tokens[0].Value
 		cmdKey := p.commandMap[cmdWord]
 		langHint := p.langMap[cmdWord] // non-empty if from available_languages
 
-		// Remaining args: underscore→space
+		// Remaining args: underscore→space, but only for unquoted tokens.
+		// Users can wrap a value in double quotes to preserve its underscores
+		// (e.g. area names like "gent_centrum"). The autocreate template
+		// expander relies on this to round-trip names through the parser.
 		args := make([]string, 0, len(tokens)-1)
 		for _, tok := range tokens[1:] {
-			args = append(args, strings.ReplaceAll(tok, "_", " "))
+			val := tok.Value
+			if !tok.Quoted {
+				val = strings.ReplaceAll(val, "_", " ")
+			}
+			args = append(args, val)
 		}
 
 		// Pipe splitting: split args by "|" into groups sharing the same command
@@ -134,17 +141,27 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 	return results
 }
 
+// token is a single lex unit produced by tokenize. Quoted tracks whether
+// the source text used double quotes — callers that strip underscores or
+// otherwise normalise tokens use this to leave quoted values alone.
+type token struct {
+	Value  string
+	Quoted bool
+}
+
 // tokenize splits text into tokens, preserving quoted strings.
 // Quotes are stripped from the result. All tokens are lowercased.
-func tokenize(text string) []string {
+func tokenize(text string) []token {
 	matches := tokenRe.FindAllStringSubmatch(text, -1)
-	tokens := make([]string, 0, len(matches))
+	tokens := make([]token, 0, len(matches))
 	for _, m := range matches {
-		tok := m[0]
-		if m[1] != "" {
-			tok = m[1] // captured quoted content (without quotes)
+		// A quoted match starts and ends with " (handles empty "" too).
+		quoted := len(m[0]) >= 2 && m[0][0] == '"' && m[0][len(m[0])-1] == '"'
+		val := m[0]
+		if quoted {
+			val = m[1]
 		}
-		tokens = append(tokens, strings.ToLower(tok))
+		tokens = append(tokens, token{Value: strings.ToLower(val), Quoted: quoted})
 	}
 	return tokens
 }

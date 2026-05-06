@@ -293,8 +293,12 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 			}()))
 
 		// Execute configured commands for the channel.
+		// Substitute with quoted values so the bot parser doesn't strip
+		// underscores out of names like "gent_centrum" (its normal token
+		// underscore→space conversion only applies to unquoted tokens).
+		quotedSubArgs := quoteForCommand(subArgsUnder)
 		for _, cmdText := range chDef.Commands {
-			expanded := formatTemplate(cmdText, subArgsUnder)
+			expanded := formatTemplate(cmdText, quotedSubArgs)
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">>> Executing %s", expanded))
 
 			// Parse and execute the command through the shared registry.
@@ -467,4 +471,17 @@ func formatTemplate(s string, args []string) string {
 		result = strings.ReplaceAll(result, fmt.Sprintf("{%d}", i), args[i])
 	}
 	return result
+}
+
+// quoteForCommand wraps each value in double quotes so it survives the bot
+// parser's token-level underscore→space conversion. Embedded quotes in the
+// value are stripped (the parser's tokenRe doesn't handle escaped quotes,
+// and it's safer to drop them than emit malformed input). Used by autocreate
+// when expanding {N} placeholders into commands like `area add {1}`.
+func quoteForCommand(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = `"` + strings.ReplaceAll(a, `"`, "") + `"`
+	}
+	return out
 }
