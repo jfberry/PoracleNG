@@ -414,7 +414,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		}
 
 		// Try Discord-specific commands first (require discordgo session directly)
-		if b.handleDiscordCommand(s, m, cmd.CommandKey, cmd.Args, isDM) {
+		if b.handleDiscordCommand(s, m, cmd.CommandKey, cmd.Args, cmd.RawArgs, isDM) {
 			continue
 		}
 
@@ -552,7 +552,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 // handleDiscordCommand dispatches Discord-specific commands that require the
 // discordgo session directly. Returns true if the command was handled.
-func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCreate, cmdKey string, args []string, isDM bool) bool {
+func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCreate, cmdKey string, args, rawArgs []string, isDM bool) bool {
 	switch cmdKey {
 	case "cmd.channel":
 		b.handleChannel(s, m, args)
@@ -573,7 +573,7 @@ func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCre
 		b.handleEmoji(s, m, args)
 		return true
 	case "cmd.autocreate":
-		b.handleAutocreate(s, m, args)
+		b.handleAutocreate(s, m, args, rawArgs)
 		return true
 	default:
 		return false
