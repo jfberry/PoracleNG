@@ -220,28 +220,38 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		subArgsUnder[i] = strings.ReplaceAll(arg, " ", "_")
 	}
 
-	// Create category if defined.
+	// Create category if defined — reuse an existing one with the same
+	// name if present, so re-running !autocreate area X groups new
+	// channels under the existing "X" category instead of spawning a
+	// duplicate. Permission overwrites on a reused category are left
+	// alone (changing them retroactively could clobber tweaks the admin
+	// made post-creation).
 	var categoryID string
 	if tmpl.Definition.Category != nil {
 		categoryName := formatTemplate(tmpl.Definition.Category.CategoryName, rawSubArgs)
 
-		createData := discordgo.GuildChannelCreateData{
-			Name: categoryName,
-			Type: discordgo.ChannelTypeGuildCategory,
-		}
+		if existingID := b.findCategoryByName(s, guildID, categoryName); existingID != "" {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Reusing existing category %s", categoryName))
+			categoryID = existingID
+		} else {
+			createData := discordgo.GuildChannelCreateData{
+				Name: categoryName,
+				Type: discordgo.ChannelTypeGuildCategory,
+			}
 
-		if len(tmpl.Definition.Category.Roles) > 0 {
-			overwrites := b.buildPermissionOverwrites(s, guildID, tmpl.Definition.Category.Roles, rawSubArgs)
-			createData.PermissionOverwrites = overwrites
-		}
+			if len(tmpl.Definition.Category.Roles) > 0 {
+				overwrites := b.buildPermissionOverwrites(s, guildID, tmpl.Definition.Category.Roles, rawSubArgs)
+				createData.PermissionOverwrites = overwrites
+			}
 
-		cat, err := s.GuildChannelCreateComplex(guildID, createData)
-		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to create category %s: %v", categoryName, err))
-			return
+			cat, err := s.GuildChannelCreateComplex(guildID, createData)
+			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to create category %s: %v", categoryName, err))
+				return
+			}
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Creating %s", categoryName))
+			categoryID = cat.ID
 		}
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Creating %s", categoryName))
-		categoryID = cat.ID
 	}
 
 	// Create channels.
@@ -700,6 +710,26 @@ func (b *Bot) emitPickerPost(s *discordgo.Session, masterChannelID string, picke
 			log.Warnf("discord bot: pin picker %s/%s: %v", masterChannelID, newIDs[0], err)
 		}
 	}
+}
+
+// findCategoryByName searches the guild's existing channels for a category
+// matching the given name (case-insensitive — Discord categories preserve
+// case so a lower-cased compare is the safe form). Returns the channel ID
+// of the first match, or empty when no category exists. A failed listing
+// also returns empty so the caller falls back to creating fresh.
+func (b *Bot) findCategoryByName(s *discordgo.Session, guildID, name string) string {
+	channels, err := s.GuildChannels(guildID)
+	if err != nil {
+		log.Warnf("discord bot: autocreate list channels for category lookup: %v", err)
+		return ""
+	}
+	wanted := strings.ToLower(name)
+	for _, ch := range channels {
+		if ch.Type == discordgo.ChannelTypeGuildCategory && strings.ToLower(ch.Name) == wanted {
+			return ch.ID
+		}
+	}
+	return ""
 }
 
 // formatTemplate replaces {0}, {1}, etc. placeholders with the provided arguments.
