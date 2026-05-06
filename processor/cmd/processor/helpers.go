@@ -282,7 +282,10 @@ func (ps *ProcessorService) OnBan(target, typ, name, language string) {
 
 	ps.dispatchBypass(target, typ, name, msg, "RateLimit")
 
-	if ps.cfg.AlertLimits.ShameChannel != "" {
+	// Shame post is a Discord-user @mention; only meaningful for actual
+	// users. Channel/webhook bans don't get publicly shamed (the mention
+	// resolves to nothing useful and just clutters the shame channel).
+	if ps.cfg.AlertLimits.ShameChannel != "" && typ == bot.TypeDiscordUser {
 		shameContent := tr.Tf("rate_limit.shame", target)
 		ps.dispatchBypass(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "RateLimit")
 	}
@@ -304,10 +307,12 @@ func (ps *ProcessorService) disableUserForDeliveryFailure(target, name, jobType 
 		return
 	}
 
-	// Post shame message if configured (Discord users only — Telegram doesn't have channel pings the same way)
-	if ps.cfg.AlertLimits.ShameChannel != "" && strings.HasPrefix(jobType, "discord:") {
+	// Post shame message if configured. Only fires for Discord users —
+	// the message uses an @mention which is meaningless for channel /
+	// thread / webhook targets.
+	if ps.cfg.AlertLimits.ShameChannel != "" && jobType == bot.TypeDiscordUser {
 		tr := ps.translations.For(ps.cfg.General.Locale)
-		shameContent := tr.Tf("delivery.shame", target)
+		shameContent := tr.Tf("rate_limit.shame", target)
 		ps.dispatchMessage(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "DeliveryFail")
 	}
 
