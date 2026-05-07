@@ -2,6 +2,7 @@ package discordbot
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -165,6 +166,29 @@ var rolePermissionFlags = map[string]int64{
 	"move":                 0x0000000001000000, // MoveMembers
 }
 
+// autocreateActor identifies who is "running" the per-channel/per-thread
+// commands. For interactive !autocreate it's the user; for bulk sync it's
+// the bot's own identity.
+type autocreateActor struct {
+	UserID    string
+	UserName  string
+	ChannelID string // origin channel for replies; empty for bulk
+}
+
+// loadChannelTemplates reads and parses config/channelTemplate.json.
+func (b *Bot) loadChannelTemplates() ([]channelTemplate, error) {
+	path := filepath.Join(b.Cfg.BaseDir, "config", "channelTemplate.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read channel templates: %w", err)
+	}
+	var templates []channelTemplate
+	if err := json.Unmarshal(data, &templates); err != nil {
+		return nil, fmt.Errorf("parse channel templates: %w", err)
+	}
+	return templates, nil
+}
+
 // handleAutocreate handles the !autocreate command.
 // Loads a channel template, creates Discord categories and channels, and registers them.
 func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate, args, rawArgs []string) {
@@ -207,16 +231,13 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 
 	// Load channel template.
-	templatePath := filepath.Join(b.Cfg.BaseDir, "config", "channelTemplate.json")
-	data, err := os.ReadFile(templatePath)
+	templates, err := b.loadChannelTemplates()
 	if err != nil {
-		s.ChannelMessageSend(m.ChannelID, "No channel templates defined - create config/channelTemplate.json")
-		return
-	}
-
-	var templates []channelTemplate
-	if err := json.Unmarshal(data, &templates); err != nil {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to parse channel template: %v", err))
+		if errors.Is(err, os.ErrNotExist) {
+			s.ChannelMessageSend(m.ChannelID, "No channel templates defined - create config/channelTemplate.json")
+		} else {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to parse channel template: %v", err))
+		}
 		return
 	}
 
@@ -251,8 +272,13 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 	// (re-running !autocreate area X wipes the channel's existing tracking
 	// and re-applies the template's commands).
 	subArgs := args[1:]
+	actor := &autocreateActor{
+		UserID:    m.Author.ID,
+		UserName:  m.Author.Username,
+		ChannelID: m.ChannelID,
+	}
 	rep := newDiscordChannelReporter(s, m.ChannelID)
-	result := b.applyAutocreate(s, m, tmpl, subArgs, rawSubArgs, guildID, rep, applyAutocreateOptions{
+	result := b.applyAutocreate(s, actor, tmpl, subArgs, rawSubArgs, guildID, rep, applyAutocreateOptions{
 		ResetOnReuse: true,
 		DryRun:       false,
 	})
@@ -282,13 +308,11 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 // rawArgs preserves user-typed case (matching Parser.RawArgs). Both are
 // indexed positionally into the template's {0}, {1}, ... placeholders.
 //
-// m is required for synthesising the CommandContext used when sub-commands
-// (template's per-channel `commands`) are executed. The bulk runner can
-// pass the originating MessageCreate from the !autocreate sync trigger so
-// these contexts have a sensible UserID/UserName/ChannelID.
+// actor identifies who is "running" the commands — for interactive
+// !autocreate it's the user; for bulk sync it's the bot's own identity.
 func (b *Bot) applyAutocreate(
 	s *discordgo.Session,
-	m *discordgo.MessageCreate,
+	actor *autocreateActor,
 	tmpl *channelTemplate,
 	args []string,
 	rawArgs []string,
@@ -509,13 +533,13 @@ func (b *Bot) applyAutocreate(
 		for _, cmdText := range chDef.Commands {
 			expanded := formatTemplate(cmdText, quotedSubArgs)
 			rep.Info(fmt.Sprintf(">>> Executing %s", expanded))
-			b.runOneAutocreateCommand(s, m, guildID, targetID, targetName, targetType, expanded)
+			b.runOneAutocreateCommand(s, actor, rep, guildID, targetID, targetName, targetType, expanded)
 			result.CommandsRan++
 		}
 
 		// Create configured threads under this master channel and emit
 		// the picker if one is configured.
-		threadEntries := b.createThreadsForChannel(s, m, rep, guildID, channel.ID, chDef, subArgsUnder, opts, &result)
+		threadEntries := b.createThreadsForChannel(s, actor, rep, guildID, channel.ID, chDef, subArgsUnder, opts, &result)
 		if chDef.ThreadPicker != nil && !opts.DryRun {
 			b.emitPickerPost(s, channel.ID, chDef.ThreadPicker, threadEntries, subArgsUnder)
 		}
@@ -537,12 +561,14 @@ func (b *Bot) applyAutocreate(
 // runOneAutocreateCommand parses one !-prefixed command string and
 // executes it through the shared registry as the named target. Used by
 // both the per-channel and per-thread command-execution loops.
-func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, m *discordgo.MessageCreate, guildID, targetID, targetName, targetType, expanded string) {
+// rep is used to surface unknown-command warnings in both interactive and
+// bulk paths (the bulk path has no Discord channel to send to directly).
+func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, actor *autocreateActor, rep reporter, guildID, targetID, targetName, targetType, expanded string) {
 	parsed := b.Parser.Parse(b.Cfg.Discord.Prefix + expanded)
 	for _, pc := range parsed {
 		handler := b.Registry.Lookup(pc.CommandKey)
 		if handler == nil {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Unknown command: %s", pc.CommandKey))
+			rep.Warn(fmt.Sprintf("Unknown command: %s", pc.CommandKey))
 			continue
 		}
 
@@ -557,10 +583,10 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, m *discordgo.Message
 		}
 
 		ctx := &bot.CommandContext{
-			UserID:        m.Author.ID,
-			UserName:      m.Author.Username,
+			UserID:        actor.UserID,
+			UserName:      actor.UserName,
 			Platform:      "discord",
-			ChannelID:     m.ChannelID,
+			ChannelID:     actor.ChannelID,
 			GuildID:       guildID,
 			IsDM:          false,
 			IsAdmin:       true,
@@ -602,7 +628,17 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, m *discordgo.Message
 		}
 
 		replies := handler.Run(ctx, pc.Args)
-		b.sendReplies(s, m, replies)
+		// For the interactive path (actor has a ChannelID) send replies back
+		// to the originating channel. For the bulk path (no ChannelID) there
+		// is no Discord message to reference, so replies are discarded here —
+		// the reporter collects all user-visible output instead.
+		if actor.ChannelID != "" {
+			synth := &discordgo.MessageCreate{Message: &discordgo.Message{
+				ChannelID: actor.ChannelID,
+				Author:    &discordgo.User{ID: actor.UserID, Username: actor.UserName},
+			}}
+			b.sendReplies(s, synth, replies)
+		}
 	}
 }
 
@@ -619,7 +655,7 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, m *discordgo.Message
 // thread command (so the caller's summary reports an accurate total).
 func (b *Bot) createThreadsForChannel(
 	s *discordgo.Session,
-	m *discordgo.MessageCreate,
+	actor *autocreateActor,
 	rep reporter,
 	guildID, masterChannelID string,
 	chDef channelEntry,
@@ -673,23 +709,27 @@ func (b *Bot) createThreadsForChannel(
 		} else {
 			if opts.DryRun {
 				rep.Info(fmt.Sprintf(">> [dry-run] Would create private thread %s", threadName))
-				continue
-			}
-			created, err := s.ThreadStartComplex(masterChannelID, &discordgo.ThreadStart{
-				Name:                threadName,
-				Type:                discordgo.ChannelTypeGuildPrivateThread,
-				AutoArchiveDuration: 10080,
-				Invitable:           false,
-			})
-			if err != nil {
-				rep.Warn(fmt.Sprintf("❌ Failed to create thread %s: %v", threadName, err))
-				if result != nil {
-					result.Errors = append(result.Errors, err)
+				// Use a visibly synthetic ID so result.ThreadIDs shows what
+				// would be created without touching Discord or the DB.
+				threadID = "(dry-run)"
+				// Fall through to the entry-creation block below.
+			} else {
+				created, err := s.ThreadStartComplex(masterChannelID, &discordgo.ThreadStart{
+					Name:                threadName,
+					Type:                discordgo.ChannelTypeGuildPrivateThread,
+					AutoArchiveDuration: 10080,
+					Invitable:           false,
+				})
+				if err != nil {
+					rep.Warn(fmt.Sprintf("❌ Failed to create thread %s: %v", threadName, err))
+					if result != nil {
+						result.Errors = append(result.Errors, err)
+					}
+					continue
 				}
-				continue
+				threadID = created.ID
+				rep.Info(fmt.Sprintf("✅ Created private thread %s (%s)", threadName, threadID))
 			}
-			threadID = created.ID
-			rep.Info(fmt.Sprintf("✅ Created private thread %s (%s)", threadName, threadID))
 		}
 
 		// Decide whether to (re-)run the thread's per-thread command
@@ -729,7 +769,7 @@ func (b *Bot) createThreadsForChannel(
 			for _, cmdText := range th.Commands {
 				expanded := formatTemplate(cmdText, quotedThreadArgs)
 				rep.Info(fmt.Sprintf(">>> [%s] %s", threadName, expanded))
-				b.runOneAutocreateCommand(s, m, guildID, threadID, threadName, bot.TypeDiscordThread, expanded)
+				b.runOneAutocreateCommand(s, actor, rep, guildID, threadID, threadName, bot.TypeDiscordThread, expanded)
 				if result != nil {
 					result.CommandsRan++
 				}

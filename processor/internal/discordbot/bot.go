@@ -29,6 +29,7 @@ type Bot struct {
 	reconciliation *Reconciliation
 	stopCh         chan struct{}
 	threadCache    *threadCache
+	autocreateSync *autocreateSyncer
 }
 
 // Config holds everything needed to create a Discord bot.
@@ -55,6 +56,8 @@ func New(cfg Config) (*Bot, error) {
 	if err := b.threadCache.load(); err != nil {
 		log.Warnf("discord bot: load thread cache: %v", err)
 	}
+
+	b.autocreateSync = newAutocreateSyncer()
 
 	session.Identify.Intents = discordgo.IntentsGuildMessages |
 		discordgo.IntentsDirectMessages |
