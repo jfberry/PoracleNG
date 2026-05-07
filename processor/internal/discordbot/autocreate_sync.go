@@ -57,6 +57,26 @@ type classifyResult struct {
 func classifyFences(rule config.AutocreateRule, fences []geofence.Fence, state autocreateRuleState) classifyResult {
 	var res classifyResult
 
+	// Pre-compile filter and params once — expressions are invariant across
+	// the fence loop. A compile error on either is surfaced uniformly for
+	// every fence in res.skipped so operators can spot a bad rule at a glance.
+	cf, err := compileFilter(rule.Filter)
+	if err != nil {
+		log.Warnf("autocreate sync %q: compile filter: %v (skipping all fences)", rule.Name, err)
+		for _, f := range fences {
+			res.skipped = append(res.skipped, syncSkip{Fence: f.Name, Reason: fmt.Sprintf("filter compile error: %v", err)})
+		}
+		return res
+	}
+	cp, err := compileParams(rule.Params)
+	if err != nil {
+		log.Warnf("autocreate sync %q: compile params: %v (skipping all fences)", rule.Name, err)
+		for _, f := range fences {
+			res.skipped = append(res.skipped, syncSkip{Fence: f.Name, Reason: fmt.Sprintf("params compile error: %v", err)})
+		}
+		return res
+	}
+
 	// Build a set of fence names currently in state for orphan detection.
 	inState := make(map[string]bool, len(state.Fences))
 	for name := range state.Fences {
@@ -67,8 +87,8 @@ func classifyFences(rule config.AutocreateRule, fences []geofence.Fence, state a
 	matched := make(map[string]bool)
 
 	for _, f := range fences {
-		// Evaluate filter.
-		ok, err := renderFilter(rule.Filter, f)
+		// Evaluate filter using the pre-compiled template.
+		ok, err := cf.matches(f)
 		if err != nil {
 			log.Warnf("autocreate sync %q: filter error for fence %q: %v (skipping)", rule.Name, f.Name, err)
 			res.skipped = append(res.skipped, syncSkip{Fence: f.Name, Reason: fmt.Sprintf("filter render error: %v", err)})
@@ -79,11 +99,11 @@ func classifyFences(rule config.AutocreateRule, fences []geofence.Fence, state a
 			continue
 		}
 
-		// Render params, then tokenise each rendered element so a single
-		// param like "{{group}} {{name}}" expands to two args. Quoted
-		// segments stay as one token (`"Gent Centrum"` → one arg) to match
-		// the bot parser's behaviour.
-		rendered, err := renderParams(rule.Params, f)
+		// Render params using pre-compiled templates, then tokenise each
+		// rendered element so a single param like "{{group}} {{name}}"
+		// expands to two args. Quoted segments stay as one token
+		// (`"Gent Centrum"` → one arg) to match the bot parser's behaviour.
+		rendered, err := cp.render(f)
 		if err != nil {
 			log.Warnf("autocreate sync %q: params error for fence %q: %v (skipping)", rule.Name, f.Name, err)
 			res.skipped = append(res.skipped, syncSkip{Fence: f.Name, Reason: fmt.Sprintf("params render error: %v", err)})
