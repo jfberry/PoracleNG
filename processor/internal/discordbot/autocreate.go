@@ -476,99 +476,108 @@ func (b *Bot) applyAutocreate(
 			continue
 		}
 
-		// Whether to (re-)run the template's per-channel command list. We
-		// always run on a fresh channel; on a reused channel only when the
-		// caller asked for reset semantics.
+		// Whether to (re-)run the template's per-channel registration and
+		// command list. We always run on a fresh channel; on a reused channel
+		// only when the caller asked for reset semantics.
+		//
+		// Thread creation and picker emit are NOT gated here — they run
+		// unconditionally so that new threads added to a template after the
+		// initial sync materialise on re-sync, and so an out-of-band-deleted
+		// picker post gets re-emitted. Both createThreadsForChannel and
+		// emitPickerPost are idempotent: they reuse cached IDs and only
+		// create/edit as needed.
 		runCommands := !channelReused || opts.ResetOnReuse
 
-		if !runCommands {
-			// Skip registration AND commands for a reused channel that the
-			// caller explicitly opted out of resetting.
-			rep.Info(fmt.Sprintf(">> Skipping command re-run for reused channel %s", channelName))
-			continue
-		}
-
-		if opts.DryRun {
-			rep.Info(fmt.Sprintf(">> [dry-run] Would add control type: %s for %s", chDef.ControlType, channelName))
-			// Fall through to createThreadsForChannel so the dry-run summary
-			// shows what threads would be created. All Discord/DB writes inside
-			// that function remain guarded by !opts.DryRun.
-		} else {
-			rep.Info(fmt.Sprintf(">> Adding control type: %s", chDef.ControlType))
-
-			var targetID, targetType, targetName string
-
-			if chDef.ControlType == "bot" {
-				targetID = channel.ID
-				targetType = bot.TypeDiscordChannel
-				targetName = formatTemplate(chDef.ChannelName, subArgsUnder)
+		if runCommands {
+			if opts.DryRun {
+				rep.Info(fmt.Sprintf(">> [dry-run] Would add control type: %s for %s", chDef.ControlType, channelName))
+				// Fall through to createThreadsForChannel so the dry-run summary
+				// shows what threads would be created. All Discord/DB writes inside
+				// that function remain guarded by !opts.DryRun.
 			} else {
-				// Create webhook.
-				webhookName := formatTemplate(chDef.ChannelName, subArgsUnder)
-				if chDef.WebhookName != "" {
-					webhookName = formatTemplate(chDef.WebhookName, subArgsUnder)
+				rep.Info(fmt.Sprintf(">> Adding control type: %s", chDef.ControlType))
+
+				var targetID, targetType, targetName string
+
+				if chDef.ControlType == "bot" {
+					targetID = channel.ID
+					targetType = bot.TypeDiscordChannel
+					targetName = formatTemplate(chDef.ChannelName, subArgsUnder)
+				} else {
+					// Create webhook.
+					webhookName := formatTemplate(chDef.ChannelName, subArgsUnder)
+					if chDef.WebhookName != "" {
+						webhookName = formatTemplate(chDef.WebhookName, subArgsUnder)
+					}
+
+					wh, err := s.WebhookCreate(channel.ID, bot.PoracleWebhookName, "")
+					if err != nil {
+						rep.Warn(fmt.Sprintf("Failed to create webhook for %s: %v", channelName, err))
+						result.Errors = append(result.Errors, err)
+						continue
+					}
+
+					targetID = fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)
+					targetType = bot.TypeWebhook
+					targetName = webhookName
 				}
 
-				wh, err := s.WebhookCreate(channel.ID, bot.PoracleWebhookName, "")
-				if err != nil {
-					rep.Warn(fmt.Sprintf("Failed to create webhook for %s: %v", channelName, err))
+				// Register in DB.
+				// CurrentProfileNo: 1 must match the ProfileNo used when running
+				// the configured commands below — otherwise the autocreate-time
+				// inserts land on profile 1 but BuildTarget reads back 0 from
+				// humans.current_profile_no on a later !tracked, finding nothing.
+				h := &store.Human{
+					ID:               targetID,
+					Type:             targetType,
+					Name:             targetName,
+					Enabled:          true,
+					CurrentProfileNo: 1,
+				}
+				if err := b.Humans.Create(h); err != nil {
+					log.Errorf("discord bot: autocreate register %s: %v", targetName, err)
+					rep.Warn(fmt.Sprintf("Failed to register %s", targetName))
 					result.Errors = append(result.Errors, err)
 					continue
 				}
 
-				targetID = fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)
-				targetType = bot.TypeWebhook
-				targetName = webhookName
-			}
+				// Create default profile.
+				if err := b.Humans.CreateDefaultProfile(targetID, targetName, nil, 0, 0); err != nil {
+					log.Warnf("discord bot: autocreate default profile %s: %v", targetName, err)
+				}
 
-			// Register in DB.
-			// CurrentProfileNo: 1 must match the ProfileNo used when running
-			// the configured commands below — otherwise the autocreate-time
-			// inserts land on profile 1 but BuildTarget reads back 0 from
-			// humans.current_profile_no on a later !tracked, finding nothing.
-			h := &store.Human{
-				ID:               targetID,
-				Type:             targetType,
-				Name:             targetName,
-				Enabled:          true,
-				CurrentProfileNo: 1,
-			}
-			if err := b.Humans.Create(h); err != nil {
-				log.Errorf("discord bot: autocreate register %s: %v", targetName, err)
-				rep.Warn(fmt.Sprintf("Failed to register %s", targetName))
-				result.Errors = append(result.Errors, err)
-				continue
-			}
+				rep.Info(fmt.Sprintf(">> Executing as %s / %s %s",
+					targetType, targetName, func() string {
+						if targetType != bot.TypeWebhook {
+							return targetID
+						}
+						return ""
+					}()))
 
-			// Create default profile.
-			if err := b.Humans.CreateDefaultProfile(targetID, targetName, nil, 0, 0); err != nil {
-				log.Warnf("discord bot: autocreate default profile %s: %v", targetName, err)
+				// Execute configured commands for the channel.
+				// Substitute with quoted values so the bot parser doesn't strip
+				// underscores out of names like "gent_centrum" (its normal token
+				// underscore→space conversion only applies to unquoted tokens).
+				quotedSubArgs := quoteForCommand(subArgsUnder)
+				for _, cmdText := range chDef.Commands {
+					expanded := formatTemplate(cmdText, quotedSubArgs)
+					rep.Info(fmt.Sprintf(">>> Executing %s", expanded))
+					b.runOneAutocreateCommand(s, actor, rep, guildID, targetID, targetName, targetType, expanded)
+				}
 			}
-
-			rep.Info(fmt.Sprintf(">> Executing as %s / %s %s",
-				targetType, targetName, func() string {
-					if targetType != bot.TypeWebhook {
-						return targetID
-					}
-					return ""
-				}()))
-
-			// Execute configured commands for the channel.
-			// Substitute with quoted values so the bot parser doesn't strip
-			// underscores out of names like "gent_centrum" (its normal token
-			// underscore→space conversion only applies to unquoted tokens).
-			quotedSubArgs := quoteForCommand(subArgsUnder)
-			for _, cmdText := range chDef.Commands {
-				expanded := formatTemplate(cmdText, quotedSubArgs)
-				rep.Info(fmt.Sprintf(">>> Executing %s", expanded))
-				b.runOneAutocreateCommand(s, actor, rep, guildID, targetID, targetName, targetType, expanded)
-			}
+		} else {
+			// Registration and commands are skipped for a reused channel that
+			// the caller did not ask to reset. Threads and picker still run
+			// below so that template additions and deleted picker posts are
+			// caught on every sync.
+			rep.Info(fmt.Sprintf(">> Skipping command re-run for reused channel %s", channelName))
 		}
 
 		// Create configured threads under this master channel and emit
-		// the picker if one is configured. createThreadsForChannel handles
-		// dry-run internally: it logs what would happen and uses synthetic
-		// "(dry-run)" IDs without touching Discord or the DB.
+		// the picker if one is configured. Runs unconditionally regardless
+		// of runCommands — both functions are idempotent: createThreadsForChannel
+		// reuses cached thread IDs and only creates new ones; emitPickerPost
+		// edits the existing picker post or posts a fresh one as needed.
 		threadEntries := b.createThreadsForChannel(s, actor, rep, guildID, channel.ID, chDef, subArgsUnder, opts, &result)
 		if chDef.ThreadPicker != nil && !opts.DryRun {
 			b.emitPickerPost(s, channel.ID, chDef.ThreadPicker, threadEntries, subArgsUnder)
