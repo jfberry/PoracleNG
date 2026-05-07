@@ -8,7 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/backup"
 )
 
 // channelTemplatePath returns the on-disk location of channelTemplate.json
@@ -31,10 +32,11 @@ func LoadChannelTemplatesRaw(baseDir string) ([]byte, error) {
 	return data, nil
 }
 
-// SaveChannelTemplatesRaw validates raw, snapshots the existing file as
-// channelTemplate.json.bak.<timestamp>, and atomically replaces the live
-// file with raw. Returns the backup file's basename (empty if there was
-// no existing file to back up).
+// SaveChannelTemplatesRaw validates raw, snapshots the existing file
+// into config/backups/, and atomically replaces the live file with raw.
+// Returns the backup path relative to the config dir (e.g.
+// "backups/channelTemplate.json.bak.2026-05-07_113402"), or "" when
+// there was no existing file to back up.
 //
 // Pretty-prints the JSON before writing so hand-edits and editor diffs
 // stay friendly.
@@ -63,22 +65,11 @@ func SaveChannelTemplatesRaw(baseDir string, raw []byte) (string, error) {
 		return "", fmt.Errorf("create config dir: %w", err)
 	}
 
-	// Backup the existing file if any. Same naming scheme as
-	// config.toml.bak.<timestamp> from config_migrate.go.
-	var backupBase string
-	existing, err := os.ReadFile(path)
-	switch {
-	case err == nil:
-		ts := time.Now().Format("2006-01-02_150405")
-		backupBase = filepath.Base(path) + ".bak." + ts
-		backupPath := filepath.Join(dir, backupBase)
-		if err := os.WriteFile(backupPath, existing, 0o644); err != nil {
-			return "", fmt.Errorf("write backup %s: %w", backupBase, err)
-		}
-	case errors.Is(err, os.ErrNotExist):
-		// First save — no backup needed.
-	default:
-		return "", fmt.Errorf("read existing for backup: %w", err)
+	// Snapshot the existing file (if any) into config/backups/ so the
+	// operator can roll back. Returns "" when there's no live file yet.
+	backupRel, err := backup.Save(dir, "channelTemplate.json")
+	if err != nil {
+		return "", fmt.Errorf("backup existing: %w", err)
 	}
 
 	// Atomic write: unique tmp + rename.
@@ -100,7 +91,7 @@ func SaveChannelTemplatesRaw(baseDir string, raw []byte) (string, error) {
 		os.Remove(tmpPath)
 		return "", fmt.Errorf("rename tmp: %w", err)
 	}
-	return backupBase, nil
+	return backupRel, nil
 }
 
 // TemplateValidationError is one issue found during channel-template

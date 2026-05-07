@@ -26,6 +26,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor"
 	"github.com/pokemon/poracleng/processor/internal/api"
+	"github.com/pokemon/poracleng/processor/internal/backup"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/config"
@@ -747,6 +748,14 @@ func main() {
 	apiGroup.DELETE("/autocreate/templates/:name", handleDeleteChannelTemplate(cfg))
 	apiGroup.GET("/autocreate/templates/schema", handleGetChannelTemplatesSchema())
 
+	// Backup-cleanup sweeper: walks config/backups/ on startup and every
+	// 24h, removes files older than the retention window.
+	stopBackupSweeper := backup.StartCleanupSweeper(
+		context.Background(),
+		filepath.Join(cfg.BaseDir, "config"),
+		backup.Retention,
+	)
+
 	// Start server
 	go func() {
 		log.Infof("Processor starting on %s", cfg.Processor.ListenAddr())
@@ -770,6 +779,7 @@ func main() {
 
 	// 2. Stop bots (no more command processing)
 	close(periodicDone)
+	stopBackupSweeper()
 	if discordBot != nil {
 		discordBot.Close()
 		log.Infof("Discord bot disconnected")

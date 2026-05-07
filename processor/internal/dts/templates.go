@@ -13,6 +13,8 @@ import (
 
 	raymond "github.com/mailgun/raymond/v2"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/backup"
 )
 
 // DTSEntry represents a single DTS template entry from the dts.json file.
@@ -996,6 +998,14 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 		return fmt.Errorf("create dts dir: %w", err)
 	}
 
+	// Snapshot the current file (if any) into config/backups/ before
+	// overwriting. backupRelFromConfig is "" on first save.
+	if rel, err := filepath.Rel(configDir, savePath); err == nil {
+		if _, berr := backup.Save(configDir, rel); berr != nil {
+			log.Warnf("dts: backup failed for %s: %v (proceeding with write)", savePath, berr)
+		}
+	}
+
 	// Write the entry to its own file (single-element array)
 	if err := writeEntryFile(savePath, inc); err != nil {
 		return err
@@ -1116,6 +1126,13 @@ func removeEntryFromFile(filePath, targetKey, configDir string) error {
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(remaining); err != nil {
 		return fmt.Errorf("marshal remaining: %w", err)
+	}
+	// Snapshot the current file before overwriting so a botched delete
+	// can be reverted from config/backups/.
+	if rel, err := filepath.Rel(configDir, filePath); err == nil {
+		if _, berr := backup.Save(configDir, rel); berr != nil {
+			log.Warnf("dts: backup failed for %s: %v (proceeding with write)", filePath, berr)
+		}
 	}
 	return os.WriteFile(filePath, buf.Bytes(), 0644)
 }

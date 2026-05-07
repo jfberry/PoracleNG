@@ -34,8 +34,9 @@ func TestSaveChannelTemplatesRaw_RoundtripWithBackup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second save: %v", err)
 	}
-	if !strings.HasPrefix(backup, "channelTemplate.json.bak.") {
-		t.Errorf("backup name = %q, want prefix channelTemplate.json.bak.", backup)
+	wantPrefix := filepath.Join("backups", "channelTemplate.json.bak.")
+	if !strings.HasPrefix(backup, wantPrefix) {
+		t.Errorf("backup name = %q, want prefix %s", backup, wantPrefix)
 	}
 	backupBytes, err := os.ReadFile(filepath.Join(dir, "config", backup))
 	if err != nil {
