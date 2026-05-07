@@ -95,7 +95,7 @@ func classifyFences(rule config.AutocreateRule, fences []geofence.Fence, state a
 		}
 		args := make([]string, len(rawArgs))
 		for i, a := range rawArgs {
-			args[i] = lowerASCII(a)
+			args[i] = strings.ToLower(a)
 		}
 
 		candidate := syncFenceCandidate{fence: f, args: args, rawArgs: rawArgs}
@@ -212,11 +212,8 @@ func (as *autocreateSyncer) loadCache(baseDir string) error {
 //
 // The per-rule mutex prevents two concurrent triggers from racing on the
 // same rule. Fences in the toReuse set are applied with ResetOnReuse=false
-// so admin-tweaked tracking survives scheduled re-syncs. opts.ResetOnReuse
-// may override this for explicit "reset" triggers.
-//
-// Orphan removal is not yet implemented (PR 6). Orphans surface in the
-// returned result's Orphans slice with a log entry.
+// so admin-tweaked tracking survives scheduled re-syncs. Setting opts.Reset
+// flips that for explicit "reset" triggers.
 func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts SyncRuleOptions) SyncOneRuleResult {
 	res := SyncOneRuleResult{Rule: rule.Name, DryRun: opts.DryRun}
 

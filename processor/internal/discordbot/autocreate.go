@@ -81,12 +81,10 @@ type applyAutocreateOptions struct {
 // applyAutocreateResult captures what one invocation did, for the caller's
 // summary. Fields are populated regardless of DryRun.
 type applyAutocreateResult struct {
-	CategoryID  string                       // resolved or created category id (empty if template has no category)
-	ChannelIDs  map[string]string            // channelName -> id
-	ThreadIDs   map[string]map[string]string // channelName -> {label: thread_id}
-	Reused      bool                         // true if any master channel already existed
-	CommandsRan int                          // total template commands actually executed
-	Errors      []error
+	CategoryID string                       // resolved or created category id (empty if template has no category)
+	ChannelIDs map[string]string            // channelName -> id
+	ThreadIDs  map[string]map[string]string // channelName -> {label: thread_id}
+	Errors     []error
 }
 
 // reporter abstracts user feedback. The interactive path uses a Discord
@@ -435,7 +433,6 @@ func (b *Bot) applyAutocreate(
 			// re-fetch via s.Channel(existingID).
 			channel = snap.channels[existingID]
 			channelReused = true
-			result.Reused = true
 		} else {
 			if opts.DryRun {
 				rep.Info(fmt.Sprintf(">> [dry-run] Would create channel %s", channelName))
@@ -548,7 +545,6 @@ func (b *Bot) applyAutocreate(
 				expanded := formatTemplate(cmdText, quotedSubArgs)
 				rep.Info(fmt.Sprintf(">>> Executing %s", expanded))
 				b.runOneAutocreateCommand(s, actor, rep, guildID, targetID, targetName, targetType, expanded)
-				result.CommandsRan++
 			}
 		}
 
@@ -787,9 +783,6 @@ func (b *Bot) createThreadsForChannel(
 				expanded := formatTemplate(cmdText, quotedThreadArgs)
 				rep.Info(fmt.Sprintf(">>> [%s] %s", threadName, expanded))
 				b.runOneAutocreateCommand(s, actor, rep, guildID, threadID, threadName, bot.TypeDiscordThread, expanded)
-				if result != nil {
-					result.CommandsRan++
-				}
 			}
 		}
 

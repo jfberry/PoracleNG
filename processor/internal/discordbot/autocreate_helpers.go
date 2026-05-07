@@ -34,13 +34,6 @@ func tokenizeParamString(s string) []string {
 	return tokens
 }
 
-// lowerASCII returns s lowercased. A thin wrapper around strings.ToLower
-// kept as a named function so call-sites in the sync runner are
-// self-documenting about intent (match the bot parser's lower-case pass).
-func lowerASCII(s string) string {
-	return strings.ToLower(s)
-}
-
 // collectingReporter implements reporter by buffering all messages into
 // slices. Used by the bulk runner so progress is written to the log (and
 // eventually to a summary response) rather than spamming a Discord channel
