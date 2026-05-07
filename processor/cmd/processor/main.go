@@ -740,6 +740,7 @@ func main() {
 		resolveDeps.TelegramAPI = telegramBot.API()
 	}
 	apiGroup.POST("/resolve", api.HandleResolve(resolveDeps))
+	apiGroup.POST("/autocreate/run", handleAutocreateRun(cfg, discordBot))
 
 	// Start server
 	go func() {
