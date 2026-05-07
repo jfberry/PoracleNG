@@ -43,10 +43,12 @@ func RegisterHelpers() {
 
 // toFloat converts an interface{} to float64.
 // Handles int (all widths), uint (all widths), float32/64, string, bool, nil.
-// boolResult handles comparison helpers that work both as block helpers
-// ({{#eq a b}}X{{else}}Y{{/eq}}) and as subexpressions ({{#if (eq a b)}}).
-// In subexpression mode, returns a boolean for the outer helper to evaluate.
-// In block mode, renders Fn() or Inverse().
+// boolResult handles comparison helpers that work in three modes:
+//   - Block mode ({{#eq a b}}X{{else}}Y{{/eq}}): renders Fn() or Inverse().
+//   - Subexpression mode ({{#if (eq a b)}}): returns a boolean for the outer helper.
+//   - Inline mode ({{eq a b}}): returns the string "true" or "false" so that
+//     filter expressions like {{eq server "uk"}} produce a truthy/falsy string.
+//
 // looseEqual compares two values the way the JS templates expect: if both
 // values parse as numbers, compare numerically (so "100.00" == 100); otherwise
 // fall back to string comparison via %v. nil equals nil.
@@ -98,6 +100,14 @@ func tryFloat(v any) (float64, bool) {
 func boolResult(result bool, options *raymond.Options) any {
 	if options.IsSubExpression() {
 		return result
+	}
+	if !options.IsBlock() {
+		// Inline usage ({{eq a b}}): return a truthy/falsy string so the
+		// rendered output can be interpreted by callers like renderFilter.
+		if result {
+			return "true"
+		}
+		return "false"
 	}
 	if result {
 		return options.Fn()
