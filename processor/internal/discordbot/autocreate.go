@@ -81,10 +81,11 @@ type applyAutocreateOptions struct {
 // applyAutocreateResult captures what one invocation did, for the caller's
 // summary. Fields are populated regardless of DryRun.
 type applyAutocreateResult struct {
-	CategoryID string                       // resolved or created category id (empty if template has no category)
-	ChannelIDs map[string]string            // channelName -> id
-	ThreadIDs  map[string]map[string]string // channelName -> {label: thread_id}
-	Errors     []error
+	CategoryID      string                       // resolved or created category id (empty if template has no category)
+	ChannelIDs      map[string]string            // channelName -> id
+	MasterChannelID string                       // ID of the first channel in the template's Channels slice (stable master)
+	ThreadIDs       map[string]map[string]string // channelName -> {label: thread_id}
+	Errors          []error
 }
 
 // reporter abstracts user feedback. The interactive path uses a Discord
@@ -371,7 +372,7 @@ func (b *Bot) applyAutocreate(
 				}
 
 				if len(tmpl.Definition.Category.Roles) > 0 {
-					overwrites := b.buildPermissionOverwrites(s, guildID, tmpl.Definition.Category.Roles, rawArgs)
+					overwrites := b.buildPermissionOverwrites(s, guildID, tmpl.Definition.Category.Roles, rawArgs, opts)
 					createData.PermissionOverwrites = overwrites
 				}
 
@@ -416,7 +417,7 @@ func (b *Bot) applyAutocreate(
 		}
 
 		if len(chDef.Roles) > 0 {
-			createData.PermissionOverwrites = b.buildPermissionOverwrites(s, guildID, chDef.Roles, rawArgs)
+			createData.PermissionOverwrites = b.buildPermissionOverwrites(s, guildID, chDef.Roles, rawArgs, opts)
 		}
 
 		// Reuse an existing channel with the same name under the same
@@ -465,6 +466,10 @@ func (b *Bot) applyAutocreate(
 		}
 
 		result.ChannelIDs[channelName] = channel.ID
+		// The first channel processed is the canonical master channel.
+		if result.MasterChannelID == "" {
+			result.MasterChannelID = channel.ID
+		}
 
 		// No control type — plain channel, skip registration.
 		if chDef.ControlType == "" {
@@ -812,7 +817,7 @@ func (b *Bot) createThreadsForChannel(
 }
 
 // buildPermissionOverwrites resolves role names to IDs and builds permission overwrites.
-func (b *Bot) buildPermissionOverwrites(s *discordgo.Session, guildID string, roles []roleEntry, args []string) []*discordgo.PermissionOverwrite {
+func (b *Bot) buildPermissionOverwrites(s *discordgo.Session, guildID string, roles []roleEntry, args []string, opts applyAutocreateOptions) []*discordgo.PermissionOverwrite {
 	guild, err := s.Guild(guildID)
 	if err != nil {
 		log.Warnf("discord bot: autocreate fetch guild %s: %v", guildID, err)
@@ -835,6 +840,13 @@ func (b *Bot) buildPermissionOverwrites(s *discordgo.Session, guildID string, ro
 
 		// Create role if not found.
 		if roleID == "" {
+			if opts.DryRun {
+				// On dry-run, log that the role would be created and skip the
+				// permission overwrite — GuildRoleCreate must not fire on a
+				// dry-run path.
+				log.Infof("discord bot: autocreate [dry-run] would create role %s in guild %s", roleName, guildID)
+				continue
+			}
 			newRole, err := s.GuildRoleCreate(guildID, &discordgo.RoleParams{
 				Name: roleName,
 			})
@@ -985,17 +997,30 @@ func (b *Bot) emitPickerPost(s *discordgo.Session, masterChannelID string, picke
 // resetChannelTracking wipes any Poracle tracking attached to an existing
 // channel — both bot-control (the human row keyed by channel ID) and
 // webhook-control (one human row per Poracle webhook on the channel,
-// keyed by the webhook URL) — and removes those webhooks. Used when
-// !autocreate reuses an existing channel so the template's commands
-// re-apply to a clean slate.
+// keyed by the webhook URL) — and removes those webhooks. The channel
+// itself is left in Discord. Used when !autocreate reuses an existing
+// channel so the template's commands re-apply to a clean slate.
 func (b *Bot) resetChannelTracking(s *discordgo.Session, channelID string) {
-	if err := db.DeleteHumanAndTracking(b.DB, channelID); err != nil {
-		log.Warnf("discord bot: autocreate reset channel %s tracking: %v", channelID, err)
-	}
+	b.cascadeChannelDelete(s, channelID, false)
+}
+
+// cascadeChannelDelete removes Poracle's DB and Discord state for a single
+// channel. Per-thread deletion is the caller's responsibility (Discord
+// cascades thread channels when the parent is deleted, but DB rows do not).
+//
+// Steps:
+//   - List the channel's webhooks; for each named PoracleWebhookName,
+//     delete the human row keyed by the webhook URL and delete the
+//     webhook in Discord.
+//   - Delete the human row keyed by the channel ID.
+//   - If deleteChannel is true, delete the channel in Discord too.
+//
+// All Discord errors are logged and swallowed — partial cascades are
+// preferable to leaving corrupt state.
+func (b *Bot) cascadeChannelDelete(s *discordgo.Session, channelID string, deleteChannel bool) {
 	webhooks, err := s.ChannelWebhooks(channelID)
 	if err != nil {
 		log.Warnf("discord bot: autocreate list webhooks on %s: %v", channelID, err)
-		return
 	}
 	for _, wh := range webhooks {
 		// Only touch webhooks Poracle created (named "Poracle"). Leaves any
@@ -1005,10 +1030,18 @@ func (b *Bot) resetChannelTracking(s *discordgo.Session, channelID string) {
 		}
 		url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)
 		if err := db.DeleteHumanAndTracking(b.DB, url); err != nil {
-			log.Warnf("discord bot: autocreate reset webhook %s tracking: %v", wh.ID, err)
+			log.Warnf("discord bot: autocreate delete webhook %s tracking: %v", wh.ID, err)
 		}
 		if err := s.WebhookDelete(wh.ID); err != nil {
 			log.Warnf("discord bot: autocreate delete webhook %s: %v", wh.ID, err)
+		}
+	}
+	if err := db.DeleteHumanAndTracking(b.DB, channelID); err != nil {
+		log.Warnf("discord bot: autocreate delete channel %s tracking: %v", channelID, err)
+	}
+	if deleteChannel {
+		if _, err := s.ChannelDelete(channelID); err != nil {
+			log.Warnf("discord bot: autocreate delete Discord channel %s: %v", channelID, err)
 		}
 	}
 }

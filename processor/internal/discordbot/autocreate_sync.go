@@ -10,7 +10,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
@@ -343,12 +342,7 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			// Update cache state for this fence.
 			fs := &autocreateFenceState{
 				CategoryID: result.CategoryID,
-			}
-			// Find the channel ID from the result. The first channel in the
-			// template's channel list is the authoritative master.
-			for _, chID := range result.ChannelIDs {
-				fs.ChannelID = chID
-				break
+				ChannelID:  result.MasterChannelID,
 			}
 			// Collect thread IDs.
 			if len(result.ThreadIDs) > 0 {
@@ -692,40 +686,19 @@ func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, op
 	entry.Channel = fs.ChannelID
 
 	if !opts.DryRun {
-		// Remove thread humans + Discord channels.
+		// Remove thread humans. Discord cascades thread deletion when the
+		// parent channel is deleted below, so per-thread ChannelDelete calls
+		// are unnecessary — they would only burn rate-limit budget.
 		for label, tid := range fs.ThreadIDs {
 			if err := db.DeleteHumanAndTracking(b.DB, tid); err != nil {
 				log.Warnf("autocreate sync: remove orphan %q thread %s (%s): %v", fenceName, label, tid, err)
 			}
-			if _, err := b.session.ChannelDelete(tid); err != nil {
-				log.Warnf("autocreate sync: delete Discord thread %s for orphan %q: %v", tid, fenceName, err)
-			}
 		}
 
-		// Remove Poracle webhooks on the channel + the channel human row.
+		// Remove Poracle webhooks, the channel human row, and the Discord
+		// channel itself (which cascades thread deletion server-side).
 		if fs.ChannelID != "" {
-			webhooks, err := b.session.ChannelWebhooks(fs.ChannelID)
-			if err != nil {
-				log.Warnf("autocreate sync: list webhooks on %s for orphan %q: %v", fs.ChannelID, fenceName, err)
-			}
-			for _, wh := range webhooks {
-				if wh.Name != bot.PoracleWebhookName {
-					continue
-				}
-				url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)
-				if err := db.DeleteHumanAndTracking(b.DB, url); err != nil {
-					log.Warnf("autocreate sync: remove orphan %q webhook %s tracking: %v", fenceName, wh.ID, err)
-				}
-				if err := b.session.WebhookDelete(wh.ID); err != nil {
-					log.Warnf("autocreate sync: delete Discord webhook %s for orphan %q: %v", wh.ID, fenceName, err)
-				}
-			}
-			if err := db.DeleteHumanAndTracking(b.DB, fs.ChannelID); err != nil {
-				log.Warnf("autocreate sync: remove orphan %q channel %s tracking: %v", fenceName, fs.ChannelID, err)
-			}
-			if _, err := b.session.ChannelDelete(fs.ChannelID); err != nil {
-				log.Warnf("autocreate sync: delete Discord channel %s for orphan %q: %v", fs.ChannelID, fenceName, err)
-			}
+			b.cascadeChannelDelete(b.session, fs.ChannelID, true)
 		}
 
 		delete(state.Fences, fenceName)
