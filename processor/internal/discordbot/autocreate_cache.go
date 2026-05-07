@@ -61,22 +61,36 @@ func loadAutocreateCache(path string) (autocreateCache, error) {
 	return cache, nil
 }
 
-// saveAutocreateCache writes the cache atomically (temp file + rename)
-// so a crash mid-write doesn't leave a truncated JSON file behind.
+// saveAutocreateCache writes the cache atomically (unique temp file + rename)
+// so a crash mid-write doesn't leave a truncated JSON file behind, and two
+// concurrent saves of different rules can't clobber each other's tmp file
+// (the runner takes per-rule mutexes but writes the shared cache from each).
 // Creates the parent directory if it doesn't exist.
 func saveAutocreateCache(path string, cache autocreateCache) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create autocreate cache dir: %w", err)
 	}
 	data, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal autocreate cache: %w", err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("create autocreate cache tmp: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
 		return fmt.Errorf("write autocreate cache: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("close autocreate cache tmp: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
 		return fmt.Errorf("rename autocreate cache: %w", err)
 	}
 	return nil
