@@ -290,6 +290,14 @@ func (ps *ProcessorService) OnBan(target, typ, name, language string) {
 		ps.dispatchBypass(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "RateLimit")
 	}
 
+	// Operator-channel notice for every banned target type, not just
+	// users (the shame channel covers users; the admin channel covers
+	// channels/webhooks/threads that admins want to know about).
+	ps.adminNotice(fmt.Sprintf(
+		":no_entry: Rate-limit ban: auto-disabled %s `%s` (`%s`) after exceeding the per-target limit window.",
+		typ, name, target,
+	))
+
 	ps.triggerReload()
 }
 
@@ -319,6 +327,15 @@ func (ps *ProcessorService) disableUserForDeliveryFailure(target, name, jobType 
 		ps.dispatchMessage(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "DeliveryFail")
 	}
 
+	// Operator-channel notice for every disabled target type. The shame
+	// channel covers users only (the @mention is meaningless elsewhere),
+	// but admins want to know when channels/webhooks/threads they
+	// registered are getting auto-disabled.
+	ps.adminNotice(fmt.Sprintf(
+		":no_entry: Delivery failure: auto-disabled %s `%s` (`%s`) after repeated send failures.",
+		jobType, name, target,
+	))
+
 	ps.triggerReload()
 }
 
@@ -335,6 +352,11 @@ func (ps *ProcessorService) triggerReload() {
 	ps.reloadTimer = time.AfterFunc(500*time.Millisecond, func() {
 		if err := state.Load(ps.stateMgr, ps.database); err != nil {
 			log.Errorf("Debounced state reload failed: %s", err)
+			ps.adminNoticeThrottled(
+				"state.reload.fail",
+				fmt.Sprintf(":warning: Debounced state reload failed: %s — new tracking rules won't be picked up until this clears.", err),
+				5*time.Minute,
+			)
 		}
 	})
 }
