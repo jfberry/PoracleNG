@@ -254,6 +254,9 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 	}
 	as.mu.Unlock()
 
+	// Drop cache entries pointing at deleted Discord channels/categories/threads before the diff loop runs.
+	reconcileCacheAgainstLive(&ruleState, b.fetchLiveIDs(rule.Guild))
+
 	// Classify fences.
 	classified := classifyFences(rule, fences, ruleState)
 	res.Skipped = classified.skipped
@@ -399,4 +402,86 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 	}
 
 	return res
+}
+
+// liveDiscordIDs is the set of currently-existing channel/category/thread
+// IDs in a guild — used by reconcile to prune dead entries from the rule's
+// cache before the diff loop runs.
+type liveDiscordIDs struct {
+	channels map[string]bool // includes both regular channels and categories
+	threads  map[string]bool // active threads only (archived are handled by the keep-alive sweeper)
+}
+
+// fetchLiveIDs queries Discord for all current channel/category/thread IDs
+// in a guild. Returns empty sets on error so reconcile becomes a safe no-op
+// instead of nuking the cache on a transient API hiccup.
+func (b *Bot) fetchLiveIDs(guildID string) liveDiscordIDs {
+	out := liveDiscordIDs{
+		channels: map[string]bool{},
+		threads:  map[string]bool{},
+	}
+	chans, err := b.session.GuildChannels(guildID)
+	if err != nil {
+		log.Warnf("autocreate sync: GuildChannels(%s): %v", guildID, err)
+		return out
+	}
+	for _, c := range chans {
+		out.channels[c.ID] = true
+	}
+	threads, err := b.session.GuildThreadsActive(guildID)
+	if err != nil {
+		log.Warnf("autocreate sync: GuildThreadsActive(%s): %v", guildID, err)
+		return out
+	}
+	for _, t := range threads.Threads {
+		out.threads[t.ID] = true
+	}
+	return out
+}
+
+// reconcileCacheAgainstLive drops cache entries pointing at IDs that no
+// longer exist in Discord. Pure cache-pruning — never touches Discord.
+func reconcileCacheAgainstLive(state *autocreateRuleState, live liveDiscordIDs) {
+	if state == nil {
+		return
+	}
+
+	// Drop dead categories.
+	if len(state.Categories) > 0 {
+		kept := state.Categories[:0]
+		dead := map[string]bool{}
+		for _, cat := range state.Categories {
+			if live.channels[cat.ID] {
+				kept = append(kept, cat)
+			} else {
+				dead[cat.ID] = true
+			}
+		}
+		state.Categories = kept
+		// Wipe fence.category_id refs to dead categories.
+		for _, fs := range state.Fences {
+			if dead[fs.CategoryID] {
+				fs.CategoryID = ""
+			}
+		}
+	}
+
+	// Per-fence: drop missing channel + thread IDs.
+	for _, fs := range state.Fences {
+		if fs.ChannelID != "" && !live.channels[fs.ChannelID] {
+			fs.ChannelID = ""
+			fs.ThreadIDs = nil // a deleted parent channel deletes its threads
+			continue
+		}
+		if len(fs.ThreadIDs) > 0 {
+			for label, tid := range fs.ThreadIDs {
+				if !live.threads[tid] {
+					delete(fs.ThreadIDs, label)
+				}
+			}
+			if len(fs.ThreadIDs) == 0 {
+				fs.ThreadIDs = nil
+			}
+		}
+	}
 }

@@ -121,6 +121,65 @@ func namesOf(items []syncFenceCandidate) []string {
 	return out
 }
 
+func TestReconcile_DropsMissingChannel(t *testing.T) {
+	state := &autocreateRuleState{
+		GuildID: "g1",
+		Categories: []autocreateCategory{
+			{Name: "Belgium", ID: "cat-alive"},
+		},
+		Fences: map[string]*autocreateFenceState{
+			"Gent_centrum": {CategoryID: "cat-alive", ChannelID: "ch-deleted", ThreadIDs: map[string]string{"L": "th-alive"}},
+			"Antwerp":      {CategoryID: "cat-alive", ChannelID: "ch-alive", ThreadIDs: map[string]string{"L": "th-deleted"}},
+		},
+	}
+	live := liveDiscordIDs{
+		channels: map[string]bool{"cat-alive": true, "ch-alive": true},
+		threads:  map[string]bool{"th-alive": true},
+	}
+
+	reconcileCacheAgainstLive(state, live)
+
+	// Channel deleted → fence's channel_id wiped, threads dropped too.
+	if state.Fences["Gent_centrum"].ChannelID != "" {
+		t.Error("missing channel_id should be cleared")
+	}
+	if len(state.Fences["Gent_centrum"].ThreadIDs) != 0 {
+		t.Error("threads under a deleted channel should be cleared")
+	}
+
+	// Channel alive but thread deleted → only the missing thread dropped.
+	if state.Fences["Antwerp"].ChannelID != "ch-alive" {
+		t.Error("alive channel should remain")
+	}
+	if _, present := state.Fences["Antwerp"].ThreadIDs["L"]; present {
+		t.Error("deleted thread should be dropped")
+	}
+}
+
+func TestReconcile_DropsMissingCategory(t *testing.T) {
+	state := &autocreateRuleState{
+		Categories: []autocreateCategory{
+			{Name: "DeadCat", ID: "cat-deleted"},
+		},
+		Fences: map[string]*autocreateFenceState{
+			"Foo": {CategoryID: "cat-deleted", ChannelID: "ch-alive"},
+		},
+	}
+	live := liveDiscordIDs{
+		channels: map[string]bool{"ch-alive": true},
+	}
+
+	reconcileCacheAgainstLive(state, live)
+
+	if len(state.Categories) != 0 {
+		t.Error("dead category should be removed from state.Categories")
+	}
+	// Fence's category_id is wiped (channel can stay if it still exists).
+	if state.Fences["Foo"].CategoryID != "" {
+		t.Error("fence category_id should be cleared when category is gone")
+	}
+}
+
 func TestSyncCacheKey_PathFromBaseDir(t *testing.T) {
 	got := syncCachePath("/etc/poracle")
 	want := filepath.Join("/etc/poracle", "config", ".cache", "autocreate.json")
