@@ -150,6 +150,7 @@ var configSchema = []ConfigSection{
 			{Name: "upload_embed_images", Type: "bool", Default: false, Description: "Download and re-upload embed images directly to Discord CDN"},
 			{Name: "message_delete_delay", Type: "int", Default: 0, Description: "Extra milliseconds added to message clean TTH for channel messages"},
 			{Name: "thread_keep_alive_interval_hours", Type: "int", Default: 24, Description: "Hours between automatic unarchive sweeps for managed Discord threads (max 168 = 7 days; 0 = disabled)", HotReload: true},
+			{Name: "admin_channel_id", Type: "string", Default: "", Description: "Discord channel ID where operator-facing notices are posted — auto-disable events, thread keep-alive 404s, delivery-failure disables. Empty = disabled.", Resolve: "discord:channel", HotReload: true},
 			{Name: "user_tracking_admins", Type: "string[]", Default: []string{}, Description: "User or role IDs that can manage other users' tracking via user: override", Resolve: "discord:user|role", HotReload: true},
 			{Name: "command_security", Type: "map", Default: nil, Description: "Map of command name to array of Discord role or user IDs allowed to use that command", Resolve: "discord:user|role"},
 		},

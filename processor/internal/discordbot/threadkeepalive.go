@@ -2,6 +2,8 @@ package discordbot
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -144,13 +146,15 @@ func (k *threadKeepAlive) sweep(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		k.revivePrivateArchived(ctx, parentID, managed)
+		k.revivePrivateArchived(ctx, parentID, managed, parents)
 	}
 }
 
 // revivePrivateArchived pages through ThreadsPrivateArchived for one
 // parent channel, unarchiving any thread whose ID is in `managed`.
-func (k *threadKeepAlive) revivePrivateArchived(ctx context.Context, parentID string, managed map[string]bool) {
+// `parents` is threadID → parentID for managed threads (used to find
+// which threads to disable when the parent is detected as gone).
+func (k *threadKeepAlive) revivePrivateArchived(ctx context.Context, parentID string, managed map[string]bool, parents map[string]string) {
 	var before *time.Time
 	const pageLimit = 100
 	for {
@@ -159,6 +163,16 @@ func (k *threadKeepAlive) revivePrivateArchived(ctx context.Context, parentID st
 		}
 		page, err := k.bot.session.ThreadsPrivateArchived(parentID, before, pageLimit)
 		if err != nil {
+			// Parent gone? Discord returns 404 (Unknown Channel, code 10003).
+			// Disable every managed thread under this parent so we stop
+			// trying to deliver to them, and post an admin notice so the
+			// operator knows. Reconciliation will eventually clean up the
+			// rows; the immediate disable just stops alert delivery NOW.
+			if restErr, ok := err.(*discordgo.RESTError); ok && restErr.Response != nil && restErr.Response.StatusCode == 404 {
+				k.disableThreadsUnder(parentID, parents, managed)
+				log.Warnf("thread keep-alive: parent channel %s is gone (HTTP 404); disabled affected threads", parentID)
+				return
+			}
 			log.Warnf("thread keep-alive: ThreadsPrivateArchived(%s): %v", parentID, err)
 			return
 		}
@@ -183,5 +197,29 @@ func (k *threadKeepAlive) revivePrivateArchived(ctx context.Context, parentID st
 		}
 		t := oldest.ThreadMetadata.ArchiveTimestamp
 		before = &t
+	}
+}
+
+// disableThreadsUnder finds every managed thread whose recorded parent
+// is parentID, sets admin_disable on its humans row so the matcher /
+// dispatcher stop targeting it, and posts an admin notice listing the
+// affected threads.
+func (k *threadKeepAlive) disableThreadsUnder(parentID string, parents map[string]string, managed map[string]bool) {
+	var disabled []string
+	for tid, pid := range parents {
+		if pid != parentID || !managed[tid] {
+			continue
+		}
+		if err := k.bot.Humans.SetAdminDisable(tid, true); err != nil {
+			log.Warnf("thread keep-alive: SetAdminDisable(%s): %v", tid, err)
+			continue
+		}
+		disabled = append(disabled, tid)
+	}
+	if len(disabled) > 0 {
+		k.bot.PostAdminNotice(fmt.Sprintf(
+			":warning: Thread keep-alive: master channel `%s` is gone in Discord (HTTP 404). Disabled %d managed thread(s) under it: `%s`. Reconciliation will tidy up the rows next pass.",
+			parentID, len(disabled), strings.Join(disabled, "`, `"),
+		))
 	}
 }

@@ -189,6 +189,7 @@ type DiscordConfig struct {
 	UploadEmbedImages            bool                    `toml:"upload_embed_images"`
 	MessageDeleteDelay           int                     `toml:"message_delete_delay"`             // extra ms for clean TTH on channels
 	ThreadKeepAliveIntervalHours int                     `toml:"thread_keep_alive_interval_hours"` // hours between unarchive sweeps; 0 = disabled; >168 clamped to 168
+	AdminChannelID               string                  `toml:"admin_channel_id"`                 // channel for operator-facing notices (auto-disable events, keep-alive 404s, etc.); empty = disabled
 	RoleSubscriptions            []RoleSubscriptionEntry `toml:"role_subscriptions"`
 	CommandSecurity              map[string][]string     `toml:"command_security"`
 

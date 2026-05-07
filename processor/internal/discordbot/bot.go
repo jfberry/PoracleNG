@@ -309,6 +309,24 @@ func (b *Bot) Session() *discordgo.Session {
 	return b.session
 }
 
+// PostAdminNotice sends a short operational message to the channel
+// configured at [discord] admin_channel_id. No-op if the channel ID is
+// empty or the bot isn't running. Used for events the operator should
+// know about but doesn't need to be paged for: thread keep-alive 404s,
+// auto-disabled channels after delivery failure, etc.
+//
+// Errors are logged and swallowed — admin notices are best-effort
+// observability, not load-bearing.
+func (b *Bot) PostAdminNotice(msg string) {
+	chID := b.Cfg.Discord.AdminChannelID
+	if chID == "" || b.session == nil || msg == "" {
+		return
+	}
+	if _, err := b.session.ChannelMessageSend(chID, msg); err != nil {
+		log.Warnf("discord bot: post admin notice to %s: %v", chID, err)
+	}
+}
+
 // Close disconnects the Discord gateway and stops background goroutines.
 func (b *Bot) Close() {
 	if b.stopCh != nil {
