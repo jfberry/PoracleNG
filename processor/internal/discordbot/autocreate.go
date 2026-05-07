@@ -504,7 +504,7 @@ func (b *Bot) applyAutocreate(
 					webhookName = formatTemplate(chDef.WebhookName, subArgsUnder)
 				}
 
-				wh, err := s.WebhookCreate(channel.ID, "Poracle", "")
+				wh, err := s.WebhookCreate(channel.ID, bot.PoracleWebhookName, "")
 				if err != nil {
 					rep.Warn(fmt.Sprintf("Failed to create webhook for %s: %v", channelName, err))
 					result.Errors = append(result.Errors, err)
@@ -998,9 +998,9 @@ func (b *Bot) resetChannelTracking(s *discordgo.Session, channelID string) {
 		return
 	}
 	for _, wh := range webhooks {
-		// Only touch webhooks Poracle created (named "Poracle"). Leaves
-		// any third-party webhooks the operator may have added alone.
-		if wh.Name != "Poracle" {
+		// Only touch webhooks Poracle created (named "Poracle"). Leaves any
+		// third-party webhooks the operator may have added alone.
+		if wh.Name != bot.PoracleWebhookName {
 			continue
 		}
 		url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)

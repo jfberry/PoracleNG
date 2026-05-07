@@ -10,6 +10,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
@@ -133,15 +134,34 @@ type SyncRuleOptions struct {
 	Force    bool // bypass safety threshold (PR 6 wires this up)
 }
 
+// SyncStatus is the machine-readable outcome of a SyncOneRule call.
+// API consumers should branch on this rather than substring-matching Note.
+type SyncStatus string
+
+const (
+	// SyncStatusOK means the runner went through its normal path. May still
+	// have errors in Errors[] for individual fences — check those separately.
+	SyncStatusOK SyncStatus = "ok"
+	// SyncStatusBusy means another sync of the same rule was already running
+	// (TryLock failed). The caller can retry later.
+	SyncStatusBusy SyncStatus = "busy"
+	// SyncStatusSafetyBlocked means the removal phase was aborted because
+	// the orphan ratio exceeded autocreate.removal_safety_max_percent.
+	// Creates and reuses still ran. Re-trigger with `force` to override.
+	SyncStatusSafetyBlocked SyncStatus = "safety_blocked"
+)
+
 // SyncOneRuleResult captures what one SyncOneRule invocation did.
 type SyncOneRuleResult struct {
 	// Rule is the name of the rule that was (or would be) synced.
 	Rule string
+	// Status is the machine-readable outcome — see SyncStatus*. Default ok.
+	Status SyncStatus
 	// DryRun mirrors the input opts.DryRun so callers rendering the result
 	// (bot summary, API response) can label the run accordingly.
 	DryRun bool
-	// Note carries a short human-readable status when the call was short-circuited
-	// (e.g. "already syncing").
+	// Note is the human-readable status message that pairs with Status.
+	// Empty when Status==ok. Used by the bot summary and API debug output.
 	Note string
 	// Created is the set of fence names for which a new channel was created.
 	Created []string
@@ -215,13 +235,14 @@ func (as *autocreateSyncer) loadCache(baseDir string) error {
 // so admin-tweaked tracking survives scheduled re-syncs. Setting opts.Reset
 // flips that for explicit "reset" triggers.
 func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts SyncRuleOptions) SyncOneRuleResult {
-	res := SyncOneRuleResult{Rule: rule.Name, DryRun: opts.DryRun}
+	res := SyncOneRuleResult{Rule: rule.Name, Status: SyncStatusOK, DryRun: opts.DryRun}
 
 	// Serialize concurrent runs of the same rule. TryLock returns false
 	// immediately when another goroutine is already syncing this rule — the
 	// caller gets a "already syncing" note instead of blocking indefinitely.
 	lock := b.autocreateSync.ruleLock(rule.Name)
 	if !lock.TryLock() {
+		res.Status = SyncStatusBusy
 		res.Note = "already syncing"
 		return res
 	}
@@ -399,6 +420,7 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 		allowed, note := applyRemovalSafety(len(ruleState.Fences), len(classified.orphans),
 			b.Cfg.Autocreate.RemovalSafetyMaxPercent, opts)
 		if !allowed {
+			res.Status = SyncStatusSafetyBlocked
 			res.Note = note
 		} else {
 			for _, name := range classified.orphans {
@@ -687,7 +709,7 @@ func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, op
 				log.Warnf("autocreate sync: list webhooks on %s for orphan %q: %v", fs.ChannelID, fenceName, err)
 			}
 			for _, wh := range webhooks {
-				if wh.Name != "Poracle" {
+				if wh.Name != bot.PoracleWebhookName {
 					continue
 				}
 				url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)

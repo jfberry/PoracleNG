@@ -235,6 +235,13 @@ const (
 	TypeWebhook       = "webhook"
 )
 
+// PoracleWebhookName is the canonical name used when Poracle creates a
+// Discord webhook on a managed channel. Used as both the create-time name
+// and the filter when deleting Poracle-managed webhooks during channel
+// reset / orphan removal — the filter must NOT touch unrelated webhooks
+// the channel admin may have added.
+const PoracleWebhookName = "Poracle"
+
 // WildcardID is the sentinel value meaning "any" for pokemon_id, move, evolution, etc.
 const WildcardID = 9000
 
