@@ -149,6 +149,7 @@ var configSchema = []ConfigSection{
 			{Name: "iv_colors", Type: "color[]", Default: []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"}, Description: "Six hex color codes for pokemon IV ranking tiers (0-5 stars). Must contain exactly 6 entries.", MinLength: 6, MaxLength: 6},
 			{Name: "upload_embed_images", Type: "bool", Default: false, Description: "Download and re-upload embed images directly to Discord CDN"},
 			{Name: "message_delete_delay", Type: "int", Default: 0, Description: "Extra milliseconds added to message clean TTH for channel messages"},
+			{Name: "thread_keep_alive_interval_hours", Type: "int", Default: 24, Description: "Hours between automatic unarchive sweeps for managed Discord threads (max 168 = 7 days; 0 = disabled)", HotReload: true},
 			{Name: "user_tracking_admins", Type: "string[]", Default: []string{}, Description: "User or role IDs that can manage other users' tracking via user: override", Resolve: "discord:user|role", HotReload: true},
 			{Name: "command_security", Type: "map", Default: nil, Description: "Map of command name to array of Discord role or user IDs allowed to use that command", Resolve: "discord:user|role"},
 		},
@@ -544,6 +545,30 @@ var configSchema = []ConfigSection{
 		Fields: []ConfigFieldDef{
 			{Name: "enabled", Type: "bool", Default: false, Description: "Enable the AI command assistant (!ask command and NLP suggestions)"},
 			{Name: "suggest_on_dm", Type: "bool", Default: false, Description: "Suggest commands for unrecognised DM messages using NLP", DependsOn: &ConfigDependency{Field: "enabled", Value: true}},
+		},
+	},
+
+	// ---- autocreate ----
+	{
+		Name:  "autocreate",
+		Title: "Autocreate (bulk channel sync)",
+		Fields: []ConfigFieldDef{
+			{Name: "removal_safety_max_percent", Type: "int", Default: 20, Description: "Abort the removal phase when removing more than this % of cached fences (0 = disabled, only applies when cache has ≥10 entries)", HotReload: true},
+		},
+		Tables: []ConfigTableDef{
+			{
+				Name:        "rules",
+				Title:       "Rules",
+				Description: "Bulk-autocreate rules — apply a channel template across many geofences in one operation",
+				Fields: []ConfigFieldDef{
+					{Name: "name", Type: "string", Description: "Unique rule identifier"},
+					{Name: "guild", Type: "string", Description: "Discord guild ID", Resolve: "discord:guild"},
+					{Name: "template", Type: "string", Description: "channelTemplate.json entry name"},
+					{Name: "filter", Type: "string", Description: "Optional Handlebars expression evaluated against each fence; empty = match all"},
+					{Name: "params", Type: "string[]", Description: "Each element rendered per fence; positional template args"},
+					{Name: "remove_missing", Type: "bool", Default: false, Description: "Allow removal of orphan channels when the trigger requests it"},
+				},
+			},
 		},
 	},
 }
