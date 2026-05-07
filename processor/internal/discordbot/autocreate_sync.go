@@ -124,6 +124,9 @@ type SyncRuleOptions struct {
 type SyncOneRuleResult struct {
 	// Rule is the name of the rule that was (or would be) synced.
 	Rule string
+	// DryRun mirrors the input opts.DryRun so callers rendering the result
+	// (bot summary, API response) can label the run accordingly.
+	DryRun bool
 	// Note carries a short human-readable status when the call was short-circuited
 	// (e.g. "already syncing").
 	Note string
@@ -198,7 +201,7 @@ func (as *autocreateSyncer) loadCache(baseDir string) error {
 // Orphan removal is not yet implemented (PR 6). Orphans surface in the
 // returned result's Orphans slice with a log entry.
 func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts SyncRuleOptions) SyncOneRuleResult {
-	res := SyncOneRuleResult{Rule: rule.Name}
+	res := SyncOneRuleResult{Rule: rule.Name, DryRun: opts.DryRun}
 
 	// Serialize concurrent runs of the same rule. TryLock returns false
 	// immediately when another goroutine is already syncing this rule — the

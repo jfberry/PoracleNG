@@ -1154,7 +1154,8 @@ func (b *Bot) handleAutocreateSync(s *discordgo.Session, m *discordgo.MessageCre
 // channel after a sync run.
 func formatSyncSummary(r SyncOneRuleResult) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Sync %s\n", r.Rule)
+	matched := len(r.Created) + len(r.Reused)
+	fmt.Fprintf(&b, "Sync %s — %d fences matched\n", r.Rule, matched)
 	fmt.Fprintf(&b, "Created: %d\n", len(r.Created))
 	fmt.Fprintf(&b, "Reused:  %d\n", len(r.Reused))
 	fmt.Fprintf(&b, "Orphans: %d\n", len(r.Orphans))
@@ -1162,6 +1163,9 @@ func formatSyncSummary(r SyncOneRuleResult) string {
 	fmt.Fprintf(&b, "Errors:  %d\n", len(r.Errors))
 	if r.Note != "" {
 		fmt.Fprintf(&b, "Note: %s\n", r.Note)
+	}
+	if r.DryRun {
+		b.WriteString("(dry run — nothing was changed)\n")
 	}
 	return b.String()
 }
