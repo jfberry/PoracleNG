@@ -606,9 +606,12 @@ func (b *Bot) applyAutocreate(
 		// of runCommands — both functions are idempotent: createThreadsForChannel
 		// reuses cached thread IDs and only creates new ones; emitPickerPost
 		// edits the existing picker post or posts a fresh one as needed.
+		// Both functions respect opts.DryRun internally so a preview run
+		// surfaces would-create / would-refresh entries without touching
+		// Discord or the cache.
 		threadEntries := b.createThreadsForChannel(s, actor, rep, guildID, channel.ID, chDef, subArgsUnder, opts, &result)
-		if chDef.ThreadPicker != nil && !opts.DryRun {
-			b.emitPickerPost(s, channel.ID, chDef.ThreadPicker, threadEntries, subArgsUnder)
+		if chDef.ThreadPicker != nil {
+			b.emitPickerPost(s, rep, channel.ID, chDef.ThreadPicker, threadEntries, subArgsUnder, opts)
 		}
 		if len(threadEntries) > 0 {
 			labelMap := result.ThreadIDs[channelName]
@@ -956,7 +959,7 @@ func computePermissions(role roleEntry) (allow, deny int64) {
 // needed (because the thread count shrank) are deleted. Each step is
 // best-effort — a single failure logs and moves on so subsequent chunks
 // still get a chance.
-func (b *Bot) emitPickerPost(s *discordgo.Session, masterChannelID string, picker *threadPickerDef, entries []threadCacheEntry, args []string) {
+func (b *Bot) emitPickerPost(s *discordgo.Session, rep reporter, masterChannelID string, picker *threadPickerDef, entries []threadCacheEntry, args []string, opts applyAutocreateOptions) {
 	if picker == nil || len(entries) == 0 {
 		return
 	}
@@ -968,6 +971,42 @@ func (b *Bot) emitPickerPost(s *discordgo.Session, masterChannelID string, picke
 	if cached != nil {
 		existingIDs = cached.PickerMessageIDs
 		guildID = cached.GuildID
+	}
+
+	// Dry-run: report what would happen without touching Discord or the
+	// cache. We can't know whether the cached message IDs still resolve
+	// in Discord without an API round-trip, so we report "would refresh"
+	// and trust the real sync to fall back to "post fresh" if the edit
+	// fails.
+	if opts.DryRun {
+		fresh := 0
+		refresh := 0
+		for i := range messages {
+			if i < len(existingIDs) && existingIDs[i] != "" {
+				refresh++
+			} else {
+				fresh++
+			}
+		}
+		stale := 0
+		for i := len(messages); i < len(existingIDs); i++ {
+			if existingIDs[i] != "" {
+				stale++
+			}
+		}
+		if fresh > 0 {
+			rep.Info(fmt.Sprintf(">> [dry-run] Would post %d new picker message(s) in %s", fresh, masterChannelID))
+		}
+		if refresh > 0 {
+			rep.Info(fmt.Sprintf(">> [dry-run] Would refresh %d existing picker message(s) in %s", refresh, masterChannelID))
+		}
+		if stale > 0 {
+			rep.Info(fmt.Sprintf(">> [dry-run] Would delete %d stale picker message(s) in %s", stale, masterChannelID))
+		}
+		if picker.Pinned && (fresh > 0 || refresh > 0) {
+			rep.Info(fmt.Sprintf(">> [dry-run] Would pin first picker message in %s", masterChannelID))
+		}
+		return
 	}
 
 	newIDs := make([]string, 0, len(messages))

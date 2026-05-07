@@ -316,6 +316,9 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 
 	// Drop cache entries pointing at deleted Discord channels/categories/threads before the diff loop runs.
 	reconcileCacheAgainstLive(&ruleState, snap)
+	if pruned := b.threadCache.pruneMissingForGuild(rule.Guild, snap.threads); pruned > 0 {
+		log.Infof("autocreate sync %q: pruned %d stale thread cache entries", rule.Name, pruned)
+	}
 
 	// Classify fences.
 	classified := classifyFences(rule, fences, ruleState)

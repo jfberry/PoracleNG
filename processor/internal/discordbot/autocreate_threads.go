@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
+	log "github.com/sirupsen/logrus"
 )
 
 // Discord limits custom_id to 100 chars; this prefix scheme leaves
@@ -283,6 +284,41 @@ func (c *threadCache) parentByThread() map[string]string {
 		}
 	}
 	return out
+}
+
+// pruneMissingForGuild drops thread entries whose ThreadID is not in
+// liveThreadIDs from every master that belongs to guildID. Saves the
+// cache if anything changed and returns the count removed. Called by
+// the bulk runner after the autocreate-cache reconcile so both caches
+// stay in sync — without this, dry-run reads stale threadCache entries
+// and reports "Reusing thread" for threads that no longer exist in
+// Discord.
+func (c *threadCache) pruneMissingForGuild(guildID string, liveThreadIDs map[string]bool) int {
+	c.mu.Lock()
+	changed := false
+	removed := 0
+	for _, m := range c.masters {
+		if m == nil || m.GuildID != guildID {
+			continue
+		}
+		kept := m.Threads[:0]
+		for _, e := range m.Threads {
+			if liveThreadIDs[e.ThreadID] {
+				kept = append(kept, e)
+			} else {
+				removed++
+				changed = true
+			}
+		}
+		m.Threads = kept
+	}
+	c.mu.Unlock()
+	if changed {
+		if err := c.save(); err != nil {
+			log.Warnf("discord bot: persist threadCache after prune: %v", err)
+		}
+	}
+	return removed
 }
 
 // threadCachePath returns the on-disk location for the cache file,
