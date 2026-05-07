@@ -430,7 +430,35 @@ func (b *Bot) applyAutocreate(
 		// tweaked tracking is preserved.
 		var channel *discordgo.Channel
 		var channelReused bool
-		if existingID := snap.findChannel(categoryID, channelName); existingID != "" {
+		// Look in the chosen category first; if the channel exists somewhere
+		// else in the guild (stranded under a stale category from a previous
+		// run, or moved by an admin), adopt it and move it into the canonical
+		// category rather than creating a duplicate.
+		existingID := snap.findChannel(categoryID, channelName)
+		var movedFromParent string
+		if existingID == "" {
+			if anyID, otherParent := snap.findChannelAnyParent(channelName); anyID != "" && otherParent != categoryID {
+				existingID = anyID
+				movedFromParent = otherParent
+			}
+		}
+		if existingID != "" {
+			if movedFromParent != "" {
+				if opts.DryRun {
+					rep.Info(fmt.Sprintf(">> [dry-run] Would move existing channel %s into category %s", channelName, categoryID))
+					snap.removeChannel(existingID, movedFromParent, channelName)
+					snap.addChannel(existingID, categoryID, channelName)
+				} else {
+					if _, err := s.ChannelEditComplex(existingID, &discordgo.ChannelEdit{ParentID: categoryID}); err != nil {
+						rep.Warn(fmt.Sprintf("Failed to move channel %s into %s: %v", channelName, categoryID, err))
+						result.Errors = append(result.Errors, err)
+					} else {
+						rep.Info(fmt.Sprintf(">> Moved existing channel %s into %s", channelName, categoryID))
+						snap.removeChannel(existingID, movedFromParent, channelName)
+						snap.addChannel(existingID, categoryID, channelName)
+					}
+				}
+			}
 			if opts.ResetOnReuse {
 				rep.Info(fmt.Sprintf(">> Reusing existing channel %s — resetting tracking", channelName))
 				if !opts.DryRun {

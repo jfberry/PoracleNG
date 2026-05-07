@@ -578,6 +578,43 @@ func (s *guildSnapshot) findChannel(parentID, name string) string {
 	return byName[strings.ToLower(name)]
 }
 
+// findChannelAnyParent looks up a channel by name across every category
+// in the guild. Returns (channelID, currentParentID) for the first match,
+// or ("", "") if no channel with that name exists anywhere. Used by the
+// bulk runner to discover stranded channels left behind by a previous
+// failed run (e.g. cross-category duplicates from before the snapshot-
+// freshness fix) so they can be moved into the canonical category
+// instead of creating yet another copy.
+//
+// If the same name exists under multiple parents (already-buggy state),
+// the returned parent is whichever one Go iterates first — the caller
+// then moves it into the chosen category, leaving any further duplicates
+// to be cleaned up by orphan removal on a later sync.
+func (s *guildSnapshot) findChannelAnyParent(name string) (string, string) {
+	if s == nil {
+		return "", ""
+	}
+	lname := strings.ToLower(name)
+	for parent, byName := range s.channelsByParentLowerName {
+		if id, ok := byName[lname]; ok {
+			return id, parent
+		}
+	}
+	return "", ""
+}
+
+// removeChannel drops a channel from the by-parent index. Used after a
+// move so subsequent same-sync lookups under the old parent miss it.
+func (s *guildSnapshot) removeChannel(id, parentID, name string) {
+	if s == nil {
+		return
+	}
+	if byName, ok := s.channelsByParentLowerName[parentID]; ok {
+		delete(byName, strings.ToLower(name))
+	}
+	delete(s.channels, id)
+}
+
 // channelExists reports whether the given channel/category ID is in the
 // live guild snapshot.
 func (s *guildSnapshot) channelExists(id string) bool {
