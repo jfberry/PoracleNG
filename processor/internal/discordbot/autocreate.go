@@ -12,6 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
@@ -194,6 +195,12 @@ func (b *Bot) loadChannelTemplates() ([]channelTemplate, error) {
 func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate, args, rawArgs []string) {
 	if !bot.IsAdmin(b.Cfg, "discord", m.Author.ID) {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "🙅")
+		return
+	}
+
+	// Sync subcommand: bulk-run [[autocreate.rules]] entries.
+	if len(args) > 0 && strings.EqualFold(args[0], "sync") {
+		b.handleAutocreateSync(s, m, args[1:])
 		return
 	}
 
@@ -1081,3 +1088,80 @@ func newDiscordChannelReporter(s *discordgo.Session, channelID string) reporter 
 func (r *discordChannelReporter) Info(msg string)  { r.s.ChannelMessageSend(r.channelID, msg) }
 func (r *discordChannelReporter) Warn(msg string)  { r.s.ChannelMessageSend(r.channelID, msg) }
 func (r *discordChannelReporter) Error(msg string) { r.s.ChannelMessageSend(r.channelID, msg) }
+
+// handleAutocreateSync runs bulk syncs over [[autocreate.rules]]. Admin-
+// only (gated by handleAutocreate's preamble). Arg shape:
+//
+//	<rule-name>?  <flag>* (where flag ∈ {dryrun, reset, removals, force},
+//	                       translatable, order-independent)
+//
+// Empty rule name = run every rule in turn.
+func (b *Bot) handleAutocreateSync(s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
+	tr := b.Translations.For(b.Cfg.General.Locale)
+
+	var ruleName string
+	opts := SyncRuleOptions{}
+	for _, a := range args {
+		al := strings.ToLower(a)
+		switch {
+		case al == "dryrun" || al == strings.ToLower(tr.T("arg.dryrun")):
+			opts.DryRun = true
+		case al == "reset" || al == strings.ToLower(tr.T("arg.reset")):
+			opts.Reset = true
+		case al == "removals" || al == strings.ToLower(tr.T("arg.removals")):
+			opts.Removals = true
+		case al == "force" || al == strings.ToLower(tr.T("arg.force")):
+			opts.Force = true
+		default:
+			if ruleName != "" {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Unknown argument: %s", a))
+				return
+			}
+			ruleName = a
+		}
+	}
+
+	rules := b.Cfg.Autocreate.Rules
+	if ruleName != "" {
+		var match *config.AutocreateRule
+		for i := range rules {
+			if rules[i].Name == ruleName {
+				match = &rules[i]
+				break
+			}
+		}
+		if match == nil {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("No autocreate rule named %q", ruleName))
+			return
+		}
+		rules = []config.AutocreateRule{*match}
+	}
+
+	if len(rules) == 0 {
+		s.ChannelMessageSend(m.ChannelID, "No [[autocreate.rules]] configured")
+		return
+	}
+
+	for _, r := range rules {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(">> Sync %s (dry-run=%v reset=%v removals=%v force=%v)",
+			r.Name, opts.DryRun, opts.Reset, opts.Removals, opts.Force))
+		result := b.SyncOneRule(s, r, opts)
+		s.ChannelMessageSend(m.ChannelID, formatSyncSummary(result))
+	}
+}
+
+// formatSyncSummary produces the per-rule summary the user sees in the
+// channel after a sync run.
+func formatSyncSummary(r SyncOneRuleResult) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Sync %s\n", r.Rule)
+	fmt.Fprintf(&b, "Created: %d\n", len(r.Created))
+	fmt.Fprintf(&b, "Reused:  %d\n", len(r.Reused))
+	fmt.Fprintf(&b, "Orphans: %d\n", len(r.Orphans))
+	fmt.Fprintf(&b, "Skipped: %d\n", len(r.Skipped))
+	fmt.Fprintf(&b, "Errors:  %d\n", len(r.Errors))
+	if r.Note != "" {
+		fmt.Fprintf(&b, "Note: %s\n", r.Note)
+	}
+	return b.String()
+}
