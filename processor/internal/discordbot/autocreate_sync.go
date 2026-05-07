@@ -779,6 +779,18 @@ func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, op
 	}
 	entry.Channel = fs.ChannelID
 
+	// Bare orphan path: cache says fence is gone but reconcile already
+	// cleared its IDs (channel/threads weren't in the live snapshot when
+	// the sync started). The cache pruning still happens — but flag the
+	// reason so the operator knows the cascade had nothing to act on.
+	if fs.ChannelID == "" && len(fs.ThreadIDs) == 0 {
+		entry.Reason = "no live channel/thread IDs in cache (pruned by reconcile) — Discord side already gone, or bot lacks visibility"
+		if !opts.DryRun {
+			delete(state.Fences, fenceName)
+		}
+		return entry
+	}
+
 	if !opts.DryRun {
 		// Remove thread humans. Discord cascades thread deletion when the
 		// parent channel is deleted below, so per-thread ChannelDelete calls
@@ -791,8 +803,17 @@ func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, op
 
 		// Remove Poracle webhooks, the channel human row, and the Discord
 		// channel itself (which cascades thread deletion server-side).
+		// Surface any cascade error in the entry's Reason field so the
+		// summary tells the operator why the channel survived (most often
+		// missing Manage Channels permission).
 		if fs.ChannelID != "" {
-			b.cascadeChannelDelete(b.session, fs.ChannelID, true)
+			if errs := b.cascadeChannelDelete(b.session, fs.ChannelID, true); len(errs) > 0 {
+				msgs := make([]string, 0, len(errs))
+				for _, e := range errs {
+					msgs = append(msgs, e.Error())
+				}
+				entry.Reason = "cascade had errors: " + strings.Join(msgs, "; ")
+			}
 		}
 
 		delete(state.Fences, fenceName)

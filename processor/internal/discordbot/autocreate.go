@@ -1070,7 +1070,10 @@ func (b *Bot) emitPickerPost(s *discordgo.Session, rep reporter, masterChannelID
 // itself is left in Discord. Used when !autocreate reuses an existing
 // channel so the template's commands re-apply to a clean slate.
 func (b *Bot) resetChannelTracking(s *discordgo.Session, channelID string) {
-	b.cascadeChannelDelete(s, channelID, false)
+	// Errors are already logged by cascadeChannelDelete; reset is a
+	// best-effort path with no caller summary to populate, so we can
+	// safely discard the returned slice here.
+	_ = b.cascadeChannelDelete(s, channelID, false)
 }
 
 // cascadeChannelDelete removes Poracle's DB and Discord state for a single
@@ -1084,12 +1087,16 @@ func (b *Bot) resetChannelTracking(s *discordgo.Session, channelID string) {
 //   - Delete the human row keyed by the channel ID.
 //   - If deleteChannel is true, delete the channel in Discord too.
 //
-// All Discord errors are logged and swallowed — partial cascades are
-// preferable to leaving corrupt state.
-func (b *Bot) cascadeChannelDelete(s *discordgo.Session, channelID string, deleteChannel bool) {
+// Errors are accumulated and returned so callers can surface them in
+// per-fence results (the runner shows them in result.Errors). Each error
+// is also logged. Partial cascades are preferable to leaving corrupt
+// state, so each step continues past errors in earlier ones.
+func (b *Bot) cascadeChannelDelete(s *discordgo.Session, channelID string, deleteChannel bool) []error {
+	var errs []error
 	webhooks, err := s.ChannelWebhooks(channelID)
 	if err != nil {
 		log.Warnf("discord bot: autocreate list webhooks on %s: %v", channelID, err)
+		errs = append(errs, fmt.Errorf("list webhooks on %s: %w", channelID, err))
 	}
 	for _, wh := range webhooks {
 		// Only touch webhooks Poracle created (named "Poracle"). Leaves any
@@ -1100,19 +1107,24 @@ func (b *Bot) cascadeChannelDelete(s *discordgo.Session, channelID string, delet
 		url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)
 		if err := db.DeleteHumanAndTracking(b.DB, url); err != nil {
 			log.Warnf("discord bot: autocreate delete webhook %s tracking: %v", wh.ID, err)
+			errs = append(errs, fmt.Errorf("delete webhook %s tracking: %w", wh.ID, err))
 		}
 		if err := s.WebhookDelete(wh.ID); err != nil {
 			log.Warnf("discord bot: autocreate delete webhook %s: %v", wh.ID, err)
+			errs = append(errs, fmt.Errorf("delete webhook %s: %w", wh.ID, err))
 		}
 	}
 	if err := db.DeleteHumanAndTracking(b.DB, channelID); err != nil {
 		log.Warnf("discord bot: autocreate delete channel %s tracking: %v", channelID, err)
+		errs = append(errs, fmt.Errorf("delete channel %s tracking: %w", channelID, err))
 	}
 	if deleteChannel {
 		if _, err := s.ChannelDelete(channelID); err != nil {
 			log.Warnf("discord bot: autocreate delete Discord channel %s: %v", channelID, err)
+			errs = append(errs, fmt.Errorf("delete Discord channel %s: %w", channelID, err))
 		}
 	}
+	return errs
 }
 
 // formatTemplate replaces {0}, {1}, etc. placeholders with the provided arguments.
@@ -1226,6 +1238,15 @@ func formatSyncSummary(r SyncOneRuleResult) string {
 	fmt.Fprintf(&b, "Orphans:  %d\n", len(r.Orphans))
 	fmt.Fprintf(&b, "Skipped:  %d\n", len(r.Skipped))
 	fmt.Fprintf(&b, "Errors:   %d\n", len(r.Errors))
+	// Surface per-removal reasons when present — this is where "Removed: 1
+	// but Discord channel still alive" gets explained (cascade error,
+	// reconcile-cleared cache, remove_missing off, etc.).
+	for _, e := range r.Removed {
+		if e.Reason == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "  - %s: %s\n", e.Fence, e.Reason)
+	}
 	if r.Note != "" {
 		fmt.Fprintf(&b, "Note: %s\n", r.Note)
 	}
