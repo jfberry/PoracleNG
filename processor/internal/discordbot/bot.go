@@ -30,6 +30,7 @@ type Bot struct {
 	stopCh         chan struct{}
 	threadCache    *threadCache
 	autocreateSync *autocreateSyncer
+	stopKeepAlive  func()
 }
 
 // Config holds everything needed to create a Discord bot.
@@ -96,6 +97,8 @@ func New(cfg Config) (*Bot, error) {
 		b.reconciliation = NewReconciliation(session, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS)
 		go b.reconciliationLoop()
 	}
+
+	b.stopKeepAlive = startThreadKeepAlive(b, keepAliveTickerDuration(cfg.Cfg.Discord.ThreadKeepAliveIntervalHours))
 
 	return b, nil
 }
@@ -310,6 +313,9 @@ func (b *Bot) Session() *discordgo.Session {
 func (b *Bot) Close() {
 	if b.stopCh != nil {
 		close(b.stopCh)
+	}
+	if b.stopKeepAlive != nil {
+		b.stopKeepAlive()
 	}
 	if b.session != nil {
 		b.session.Close()
