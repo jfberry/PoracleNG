@@ -6,6 +6,7 @@ import (
 
 	raymond "github.com/mailgun/raymond/v2"
 
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 )
 
@@ -47,6 +48,7 @@ func renderFilter(expr string, f geofence.Fence) (bool, error) {
 	if strings.TrimSpace(expr) == "" {
 		return true, nil
 	}
+	dts.RegisterHelpers()
 	tmpl, err := raymond.Parse(expr)
 	if err != nil {
 		return false, fmt.Errorf("parse filter %q: %w", expr, err)
@@ -62,6 +64,7 @@ func renderFilter(expr string, f geofence.Fence) (bool, error) {
 // and returns the resulting strings, one per input. Used by the bulk
 // runner to derive the args passed to applyAutocreate.
 func renderParams(params []string, f geofence.Fence) ([]string, error) {
+	dts.RegisterHelpers()
 	out := make([]string, len(params))
 	ctx := fenceContext(f)
 	for i, p := range params {
