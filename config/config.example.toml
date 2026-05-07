@@ -291,6 +291,16 @@ unrecognised_command_message = ""        # reply to unrecognised commands in DM
 unregistered_user_message = ""           # reply to unregistered users (empty = shrug)
 lost_role_message = ""                   # message when user loses role-based access
 
+# admin_channel_id: discord channel ID for operator-facing notices —
+# auto-disable events (delivery failure, rate-limit ban), thread keep-alive
+# 404s, DTS render errors, state-reload failures. Empty = disabled.
+admin_channel_id = ""
+
+# thread_keep_alive_interval_hours: cadence (in hours) of the background
+# sweeper that unarchives Poracle-managed Discord threads so they stay
+# accessible. 0 disables. Max 168 (7 days, Discord's archive ceiling).
+thread_keep_alive_interval_hours = 24
+
 # ---- Telegram ----
 
 [telegram]
@@ -453,6 +463,30 @@ default_distance = 0                     # default distance for distance-only tr
 max_distance = 0                         # max tracking circle radius (0 = no limit)
 enable_gym_battle = false                # allow "battle_changes" option in !gym
 default_user_tracking_level_cap = 0      # default pvp tracking level cap (0 = all levels)
+
+# ---- Autocreate (bulk channel sync) ----
+# Apply a channelTemplate.json entry across many geofences in one operation.
+# Triggered with `!autocreate sync` or POST /api/autocreate/run. See AUTOCREATE.md
+# for the channel template format itself; the entries below configure WHICH
+# templates are applied and TO WHAT.
+
+[autocreate]
+# removal_safety_max_percent: when a sync requests orphan removal, abort the
+# removal phase if more than this percent of the cached fences would be removed
+# (only applies when the cache has ≥10 entries). 0 disables the check.
+# `force` keyword on the trigger bypasses.
+removal_safety_max_percent = 20
+
+# Each [[autocreate.rules]] entry maps one channel template across a filtered
+# set of geofences in one guild. Uncomment + customise per rule:
+#
+# [[autocreate.rules]]
+# name           = "uk-areas"                    # unique identifier (no spaces)
+# guild          = "12345678901234567"           # Discord guild ID
+# template       = "area"                        # channelTemplate.json entry name
+# filter         = "{{eq server \"uk\"}}"        # optional Handlebars; empty = match all
+# params         = ["{{group}}", "{{name}}"]     # rendered per fence → positional args
+# remove_missing = false                         # opt in to orphan removal cascade
 
 # ---- Reconciliation ----
 # User reconciliation/role check. Automated check is only enabled if check_role is
