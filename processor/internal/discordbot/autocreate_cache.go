@@ -21,7 +21,7 @@ type autocreateRuleState struct {
 	GuildID    string                           `json:"guild_id"`
 	Categories []autocreateCategory             `json:"categories"`
 	Fences     map[string]*autocreateFenceState `json:"fences"`
-	LastSync   time.Time                        `json:"last_sync,omitempty"`
+	LastSync   time.Time                        `json:"last_sync"`
 }
 
 // autocreateCategory tracks a category created (or reused) by this rule.

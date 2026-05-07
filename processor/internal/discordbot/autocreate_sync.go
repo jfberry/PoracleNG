@@ -2,6 +2,7 @@ package discordbot
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"sync"
 
@@ -328,9 +329,7 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			if len(result.ThreadIDs) > 0 {
 				fs.ThreadIDs = map[string]string{}
 				for _, labelMap := range result.ThreadIDs {
-					for label, id := range labelMap {
-						fs.ThreadIDs[label] = id
-					}
+					maps.Copy(fs.ThreadIDs, labelMap)
 				}
 			}
 			ruleState.Fences[c.fence.Name] = fs
@@ -562,9 +561,7 @@ func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, op
 	// Copy thread IDs so the log captures them even after deletion.
 	if len(fs.ThreadIDs) > 0 {
 		entry.Threads = make(map[string]string, len(fs.ThreadIDs))
-		for label, tid := range fs.ThreadIDs {
-			entry.Threads[label] = tid
-		}
+		maps.Copy(entry.Threads, fs.ThreadIDs)
 	}
 	entry.Channel = fs.ChannelID
 

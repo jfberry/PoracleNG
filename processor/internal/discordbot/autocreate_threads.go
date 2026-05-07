@@ -228,10 +228,7 @@ func buildPickerMessages(masterID string, picker *threadPickerDef, threads []thr
 
 	var messages []pickerMessage
 	for i := 0; i < len(threads); i += pickerButtonsPerMessage {
-		end := i + pickerButtonsPerMessage
-		if end > len(threads) {
-			end = len(threads)
-		}
+		end := min(i+pickerButtonsPerMessage, len(threads))
 		chunk := threads[i:end]
 
 		msg := pickerMessage{
@@ -253,10 +250,7 @@ func buildPickerMessages(masterID string, picker *threadPickerDef, threads []thr
 func chunkButtonsIntoRows(masterID string, threads []threadCacheEntry) []discordgo.MessageComponent {
 	var rows []discordgo.MessageComponent
 	for i := 0; i < len(threads); i += pickerButtonsPerRow {
-		end := i + pickerButtonsPerRow
-		if end > len(threads) {
-			end = len(threads)
-		}
+		end := min(i+pickerButtonsPerRow, len(threads))
 		rowChunk := threads[i:end]
 		buttons := make([]discordgo.MessageComponent, 0, len(rowChunk))
 		for _, th := range rowChunk {
