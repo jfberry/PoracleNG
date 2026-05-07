@@ -372,7 +372,7 @@ func (b *Bot) applyAutocreate(
 				}
 
 				if len(tmpl.Definition.Category.Roles) > 0 {
-					overwrites := b.buildPermissionOverwrites(s, guildID, tmpl.Definition.Category.Roles, rawArgs, opts)
+					overwrites := b.buildPermissionOverwrites(s, guildID, snap, tmpl.Definition.Category.Roles, rawArgs, opts)
 					createData.PermissionOverwrites = overwrites
 				}
 
@@ -417,7 +417,7 @@ func (b *Bot) applyAutocreate(
 		}
 
 		if len(chDef.Roles) > 0 {
-			createData.PermissionOverwrites = b.buildPermissionOverwrites(s, guildID, chDef.Roles, rawArgs, opts)
+			createData.PermissionOverwrites = b.buildPermissionOverwrites(s, guildID, snap, chDef.Roles, rawArgs, opts)
 		}
 
 		// Reuse an existing channel with the same name under the same
@@ -826,26 +826,16 @@ func (b *Bot) createThreadsForChannel(
 }
 
 // buildPermissionOverwrites resolves role names to IDs and builds permission overwrites.
-func (b *Bot) buildPermissionOverwrites(s *discordgo.Session, guildID string, roles []roleEntry, args []string, opts applyAutocreateOptions) []*discordgo.PermissionOverwrite {
-	guild, err := s.Guild(guildID)
-	if err != nil {
-		log.Warnf("discord bot: autocreate fetch guild %s: %v", guildID, err)
-		return nil
-	}
-
+// snap is used to avoid a per-call s.GuildRoles round-trip — the snapshot is built once
+// per sync in buildGuildSnapshot and passed down through applyAutocreate.
+func (b *Bot) buildPermissionOverwrites(s *discordgo.Session, guildID string, snap *guildSnapshot, roles []roleEntry, args []string, opts applyAutocreateOptions) []*discordgo.PermissionOverwrite {
 	var overwrites []*discordgo.PermissionOverwrite
 
 	for _, role := range roles {
 		roleName := formatTemplate(role.Name, args)
 
-		// Find existing role by name.
-		var roleID string
-		for _, r := range guild.Roles {
-			if r.Name == roleName {
-				roleID = r.ID
-				break
-			}
-		}
+		// Find existing role by name via snapshot (O(1), no Discord round-trip).
+		roleID := snap.findRole(roleName)
 
 		// Create role if not found.
 		if roleID == "" {
@@ -864,6 +854,9 @@ func (b *Bot) buildPermissionOverwrites(s *discordgo.Session, guildID string, ro
 				continue
 			}
 			roleID = newRole.ID
+			// Push the new role into the snapshot so subsequent fences in
+			// the same sync see it and don't attempt a duplicate create.
+			snap.addRole(roleID, roleName)
 		}
 
 		allow, deny := computePermissions(role)

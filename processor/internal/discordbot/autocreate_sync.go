@@ -497,6 +497,12 @@ type guildSnapshot struct {
 	// threads is the set of active thread IDs in the guild. Archived
 	// threads are out of scope (the keep-alive sweeper handles those).
 	threads map[string]bool
+
+	// rolesByLowerName maps a lowercased role name to its ID. Built from
+	// a single s.GuildRoles(guildID) call at sync start so per-fence
+	// permission-overwrite computation doesn't fan out into 2N more
+	// Discord round-trips.
+	rolesByLowerName map[string]string
 }
 
 // buildGuildSnapshot makes one GuildChannels + one GuildThreadsActive call
@@ -509,6 +515,7 @@ func (b *Bot) buildGuildSnapshot(guildID string) *guildSnapshot {
 		categoriesByLowerName:     map[string]string{},
 		channelsByParentLowerName: map[string]map[string]string{},
 		threads:                   map[string]bool{},
+		rolesByLowerName:          map[string]string{},
 	}
 	chans, err := b.session.GuildChannels(guildID)
 	if err != nil {
@@ -536,6 +543,14 @@ func (b *Bot) buildGuildSnapshot(guildID string) *guildSnapshot {
 	}
 	for _, t := range threads.Threads {
 		out.threads[t.ID] = true
+	}
+	roles, err := b.session.GuildRoles(guildID)
+	if err != nil {
+		log.Warnf("autocreate sync: GuildRoles(%s): %v", guildID, err)
+		return out
+	}
+	for _, r := range roles {
+		out.rolesByLowerName[strings.ToLower(r.Name)] = r.ID
 	}
 	return out
 }
@@ -608,6 +623,25 @@ func (s *guildSnapshot) addChannel(id, parentID, name string) {
 		s.channelsByParentLowerName[parentID] = byName
 	}
 	byName[strings.ToLower(name)] = id
+}
+
+// findRole returns the role ID matching the given name (case-insensitive),
+// or "" if no live role with that name exists in the guild snapshot.
+func (s *guildSnapshot) findRole(name string) string {
+	if s == nil {
+		return ""
+	}
+	return s.rolesByLowerName[strings.ToLower(name)]
+}
+
+// addRole registers a freshly-created role so subsequent findRole lookups
+// within the same sync return its ID instead of "" (which would cause each
+// fence to attempt its own GuildRoleCreate). Safe to call multiple times.
+func (s *guildSnapshot) addRole(id, name string) {
+	if s == nil {
+		return
+	}
+	s.rolesByLowerName[strings.ToLower(name)] = id
 }
 
 // reconcileCacheAgainstLive drops cache entries pointing at IDs that no
