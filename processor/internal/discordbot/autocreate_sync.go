@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 )
 
@@ -24,6 +25,16 @@ type syncFenceCandidate struct {
 type syncSkip struct {
 	Fence  string
 	Reason string
+}
+
+// syncFenceLog records what happened to one fence during the removal
+// phase: which Discord IDs were touched (or would be, in dry-run) and a
+// reason if the action was skipped.
+type syncFenceLog struct {
+	Fence   string            `json:"fence"`
+	Channel string            `json:"channel,omitempty"`
+	Threads map[string]string `json:"threads,omitempty"`
+	Reason  string            `json:"reason,omitempty"`
 }
 
 // classifyResult is the output of classifyFences.
@@ -135,9 +146,13 @@ type SyncOneRuleResult struct {
 	// Reused is the set of fence names whose channel was reused (no reset).
 	Reused []string
 	// Orphans lists fence names that were in the cache but not in the current
-	// fence set. In this PR removals are not yet implemented — they are
-	// surfaced here as "would-remove" log entries only.
+	// fence set. Raw classification output — populated regardless of whether
+	// removal ran.
 	Orphans []string
+	// Removed is the per-fence log of orphan removals (or "would-remove"
+	// entries when the rule does not opt in or the safety threshold blocked
+	// the phase). Populated by the removal cascade.
+	Removed []syncFenceLog
 	// Skipped lists fences that were excluded due to filter or params rendering
 	// errors, with the reason for each.
 	Skipped []syncSkip
@@ -260,13 +275,6 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 	// Classify fences.
 	classified := classifyFences(rule, fences, ruleState)
 	res.Skipped = classified.skipped
-	_ = opts.Removals // wired up in PR 6
-	_ = opts.Force    // wired up in PR 6
-
-	// Log orphans — removal is not yet implemented.
-	for _, name := range classified.orphans {
-		log.Infof("autocreate sync %q: orphan fence %q (would-remove, not yet implemented)", rule.Name, name)
-	}
 	res.Orphans = classified.orphans
 
 	// Build the actor from the bot's own identity. The bulk runner has no
@@ -381,6 +389,30 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 		res.Reused = append(res.Reused, c.fence.Name)
 	}
 
+	// Orphan removals (gated on rule.RemoveMissing AND opts.Removals AND
+	// the safety threshold). Runs after creates/reuses so a sync that
+	// fails the safety check still adds new fences.
+	if rule.RemoveMissing && opts.Removals && len(classified.orphans) > 0 {
+		allowed, note := applyRemovalSafety(len(ruleState.Fences), len(classified.orphans),
+			b.Cfg.Autocreate.RemovalSafetyMaxPercent, opts)
+		if !allowed {
+			res.Note = note
+		} else {
+			for _, name := range classified.orphans {
+				res.Removed = append(res.Removed, b.removeOrphanFence(&ruleState, name, opts))
+			}
+			res.Removed = append(res.Removed, b.removeEmptyManagedCategories(&ruleState, opts)...)
+		}
+	} else if len(classified.orphans) > 0 {
+		for _, name := range classified.orphans {
+			reason := "remove_missing=false"
+			if !opts.Removals {
+				reason = "trigger did not request removals"
+			}
+			res.Removed = append(res.Removed, syncFenceLog{Fence: name, Reason: reason})
+		}
+	}
+
 	// Persist updated cache (skip on dry run).
 	if !opts.DryRun {
 		as.mu.Lock()
@@ -484,4 +516,131 @@ func reconcileCacheAgainstLive(state *autocreateRuleState, live liveDiscordIDs) 
 			}
 		}
 	}
+}
+
+// applyRemovalSafety decides whether the removal phase is allowed to
+// proceed. Returns (true, "") when removal is permitted and
+// (false, note) when it is blocked.
+//
+// Rules:
+//   - DryRun never enforces — dry-run callers should always see what would
+//     happen regardless of the threshold.
+//   - Force bypasses the check.
+//   - maxPercent == 0 disables the check entirely.
+//   - The check only engages when the cache is large enough to make a
+//     percentage meaningful (≥10 entries).
+//   - Removal is blocked when orphanCount > (cacheSize * maxPercent / 100).
+func applyRemovalSafety(cacheSize, orphanCount, maxPercent int, opts SyncRuleOptions) (allowed bool, note string) {
+	if opts.DryRun || opts.Force {
+		return true, ""
+	}
+	if maxPercent <= 0 || cacheSize < 10 {
+		return true, ""
+	}
+	threshold := cacheSize * maxPercent / 100
+	if orphanCount > threshold {
+		return false, fmt.Sprintf(
+			"removal safety: would remove %d/%d fences (%.0f%%, threshold %d%%); use force to override",
+			orphanCount, cacheSize, float64(orphanCount)*100/float64(cacheSize), maxPercent,
+		)
+	}
+	return true, ""
+}
+
+// removeOrphanFence deletes all Poracle humans + Discord artefacts for one
+// orphaned fence and drops the fence from the rule's cache. Returns a
+// syncFenceLog describing what was done (or what would be done in dry-run).
+func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, opts SyncRuleOptions) syncFenceLog {
+	entry := syncFenceLog{Fence: fenceName}
+
+	fs, ok := state.Fences[fenceName]
+	if !ok || fs == nil {
+		entry.Reason = "not in cache"
+		return entry
+	}
+
+	// Copy thread IDs so the log captures them even after deletion.
+	if len(fs.ThreadIDs) > 0 {
+		entry.Threads = make(map[string]string, len(fs.ThreadIDs))
+		for label, tid := range fs.ThreadIDs {
+			entry.Threads[label] = tid
+		}
+	}
+	entry.Channel = fs.ChannelID
+
+	if !opts.DryRun {
+		// Remove thread humans + Discord channels.
+		for label, tid := range fs.ThreadIDs {
+			if err := db.DeleteHumanAndTracking(b.DB, tid); err != nil {
+				log.Warnf("autocreate sync: remove orphan %q thread %s (%s): %v", fenceName, label, tid, err)
+			}
+			if _, err := b.session.ChannelDelete(tid); err != nil {
+				log.Warnf("autocreate sync: delete Discord thread %s for orphan %q: %v", tid, fenceName, err)
+			}
+		}
+
+		// Remove Poracle webhooks on the channel + the channel human row.
+		if fs.ChannelID != "" {
+			webhooks, err := b.session.ChannelWebhooks(fs.ChannelID)
+			if err != nil {
+				log.Warnf("autocreate sync: list webhooks on %s for orphan %q: %v", fs.ChannelID, fenceName, err)
+			}
+			for _, wh := range webhooks {
+				if wh.Name != "Poracle" {
+					continue
+				}
+				url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", wh.ID, wh.Token)
+				if err := db.DeleteHumanAndTracking(b.DB, url); err != nil {
+					log.Warnf("autocreate sync: remove orphan %q webhook %s tracking: %v", fenceName, wh.ID, err)
+				}
+				if err := b.session.WebhookDelete(wh.ID); err != nil {
+					log.Warnf("autocreate sync: delete Discord webhook %s for orphan %q: %v", wh.ID, fenceName, err)
+				}
+			}
+			if err := db.DeleteHumanAndTracking(b.DB, fs.ChannelID); err != nil {
+				log.Warnf("autocreate sync: remove orphan %q channel %s tracking: %v", fenceName, fs.ChannelID, err)
+			}
+			if _, err := b.session.ChannelDelete(fs.ChannelID); err != nil {
+				log.Warnf("autocreate sync: delete Discord channel %s for orphan %q: %v", fs.ChannelID, fenceName, err)
+			}
+		}
+
+		delete(state.Fences, fenceName)
+	}
+
+	return entry
+}
+
+// removeEmptyManagedCategories deletes any category in state that no longer
+// has a live fence pointing at it. Returns one syncFenceLog per category
+// removed (using the category name as the Fence field and the category ID
+// as the Channel field for operator visibility). Skipped on dry-run.
+func (b *Bot) removeEmptyManagedCategories(state *autocreateRuleState, opts SyncRuleOptions) []syncFenceLog {
+	if opts.DryRun || len(state.Categories) == 0 {
+		return nil
+	}
+
+	// Build the set of category IDs still referenced by a surviving fence.
+	used := map[string]bool{}
+	for _, fs := range state.Fences {
+		if fs != nil && fs.CategoryID != "" {
+			used[fs.CategoryID] = true
+		}
+	}
+
+	var logs []syncFenceLog
+	kept := state.Categories[:0]
+	for _, cat := range state.Categories {
+		if used[cat.ID] {
+			kept = append(kept, cat)
+			continue
+		}
+		// Category has no surviving fences — delete it.
+		if _, err := b.session.ChannelDelete(cat.ID); err != nil {
+			log.Warnf("autocreate sync: delete empty category %s (%s): %v", cat.Name, cat.ID, err)
+		}
+		logs = append(logs, syncFenceLog{Fence: cat.Name, Channel: cat.ID, Reason: "empty category removed"})
+	}
+	state.Categories = kept
+	return logs
 }

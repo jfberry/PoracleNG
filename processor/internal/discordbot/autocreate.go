@@ -1156,11 +1156,12 @@ func formatSyncSummary(r SyncOneRuleResult) string {
 	var b strings.Builder
 	matched := len(r.Created) + len(r.Reused)
 	fmt.Fprintf(&b, "Sync %s — %d fences matched\n", r.Rule, matched)
-	fmt.Fprintf(&b, "Created: %d\n", len(r.Created))
-	fmt.Fprintf(&b, "Reused:  %d\n", len(r.Reused))
-	fmt.Fprintf(&b, "Orphans: %d\n", len(r.Orphans))
-	fmt.Fprintf(&b, "Skipped: %d\n", len(r.Skipped))
-	fmt.Fprintf(&b, "Errors:  %d\n", len(r.Errors))
+	fmt.Fprintf(&b, "Created:  %d\n", len(r.Created))
+	fmt.Fprintf(&b, "Reused:   %d\n", len(r.Reused))
+	fmt.Fprintf(&b, "Removed:  %d\n", len(r.Removed))
+	fmt.Fprintf(&b, "Orphans:  %d\n", len(r.Orphans))
+	fmt.Fprintf(&b, "Skipped:  %d\n", len(r.Skipped))
+	fmt.Fprintf(&b, "Errors:   %d\n", len(r.Errors))
 	if r.Note != "" {
 		fmt.Fprintf(&b, "Note: %s\n", r.Note)
 	}

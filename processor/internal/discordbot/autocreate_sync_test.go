@@ -180,6 +180,61 @@ func TestReconcile_DropsMissingCategory(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// applyRemovalSafety unit tests
+// ---------------------------------------------------------------------------
+
+func TestRemovalSafety_AllowedBelowThreshold(t *testing.T) {
+	// 2/20 = 10%, threshold 20% → allowed
+	allowed, note := applyRemovalSafety(20, 2, 20, SyncRuleOptions{})
+	if !allowed {
+		t.Errorf("expected allowed, got blocked: %s", note)
+	}
+}
+
+func TestRemovalSafety_BlockedAboveThreshold(t *testing.T) {
+	// 5/20 = 25%, threshold 20% → blocked
+	allowed, note := applyRemovalSafety(20, 5, 20, SyncRuleOptions{})
+	if allowed {
+		t.Error("expected blocked, got allowed")
+	}
+	if note == "" {
+		t.Error("note should explain why removal was blocked")
+	}
+}
+
+func TestRemovalSafety_ForceBypassesThreshold(t *testing.T) {
+	// 15/20 = 75%, threshold 20%, but force=true → allowed
+	allowed, _ := applyRemovalSafety(20, 15, 20, SyncRuleOptions{Force: true})
+	if !allowed {
+		t.Error("force=true should bypass safety threshold")
+	}
+}
+
+func TestRemovalSafety_DryRunBypassesThreshold(t *testing.T) {
+	// 15/20 = 75%, threshold 20%, but dry-run → allowed
+	allowed, _ := applyRemovalSafety(20, 15, 20, SyncRuleOptions{DryRun: true})
+	if !allowed {
+		t.Error("dry-run should bypass safety threshold")
+	}
+}
+
+func TestRemovalSafety_DisabledWhenMaxPercentZero(t *testing.T) {
+	// maxPercent=0 → check disabled → allowed regardless of ratio
+	allowed, _ := applyRemovalSafety(20, 20, 0, SyncRuleOptions{})
+	if !allowed {
+		t.Error("maxPercent=0 should disable the safety check")
+	}
+}
+
+func TestRemovalSafety_SkippedForSmallCache(t *testing.T) {
+	// cache < 10 entries → check doesn't engage
+	allowed, _ := applyRemovalSafety(9, 9, 20, SyncRuleOptions{})
+	if !allowed {
+		t.Error("cache < 10 entries should skip the safety check")
+	}
+}
+
 func TestSyncCacheKey_PathFromBaseDir(t *testing.T) {
 	got := syncCachePath("/etc/poracle")
 	want := filepath.Join("/etc/poracle", "config", ".cache", "autocreate.json")
