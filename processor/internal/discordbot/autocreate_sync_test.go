@@ -128,3 +128,35 @@ func TestSyncCacheKey_PathFromBaseDir(t *testing.T) {
 		t.Errorf("got %q want %q", got, want)
 	}
 }
+
+// A single rendered params element with internal whitespace expands to
+// multiple args; a quoted segment stays as one. Mirrors the bot parser so
+// fence names like "Gent Centrum" survive when an admin chooses to render
+// them as a single element.
+func TestSyncRule_ParamsTokenisedAfterRender(t *testing.T) {
+	fences := []geofence.Fence{
+		{Name: "Gent_centrum", Group: "Belgium"},
+	}
+	rule := config.AutocreateRule{
+		Name:     "uk-areas",
+		Guild:    "g1",
+		Template: "area",
+		Params:   []string{`{{group}} "{{name}}"`},
+	}
+
+	res := classifyFences(rule, fences, autocreateRuleState{})
+
+	if len(res.toCreate) != 1 {
+		t.Fatalf("expected 1 fence in toCreate, got %d", len(res.toCreate))
+	}
+	got := res.toCreate[0].rawArgs
+	want := []string{"Belgium", "Gent_centrum"}
+	if len(got) != len(want) {
+		t.Fatalf("rawArgs = %v, want %v (length differs)", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("rawArgs[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

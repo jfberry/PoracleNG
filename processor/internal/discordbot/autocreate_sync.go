@@ -66,12 +66,19 @@ func classifyFences(rule config.AutocreateRule, fences []geofence.Fence, state a
 			continue
 		}
 
-		// Render params.
-		rawArgs, err := renderParams(rule.Params, f)
+		// Render params, then tokenise each rendered element so a single
+		// param like "{{group}} {{name}}" expands to two args. Quoted
+		// segments stay as one token (`"Gent Centrum"` → one arg) to match
+		// the bot parser's behaviour.
+		rendered, err := renderParams(rule.Params, f)
 		if err != nil {
 			log.Warnf("autocreate sync %q: params error for fence %q: %v (skipping)", rule.Name, f.Name, err)
 			res.skipped = append(res.skipped, syncSkip{Fence: f.Name, Reason: fmt.Sprintf("params render error: %v", err)})
 			continue
+		}
+		var rawArgs []string
+		for _, p := range rendered {
+			rawArgs = append(rawArgs, tokenizeParamString(p)...)
 		}
 		args := make([]string, len(rawArgs))
 		for i, a := range rawArgs {
@@ -381,8 +388,10 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 		as.mu.Unlock()
 	}
 
-	// Trigger a state reload if anything was created.
-	if len(res.Created) > 0 && b.ReloadFunc != nil {
+	// Trigger a state reload if anything was created. Skipped on dry-run
+	// since no DB rows were touched and a reload would just be a wasteful
+	// round-trip.
+	if !opts.DryRun && len(res.Created) > 0 && b.ReloadFunc != nil {
 		b.ReloadFunc()
 	}
 
