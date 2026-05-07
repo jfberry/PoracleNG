@@ -80,7 +80,13 @@ func TestSyncRule_FilterErrorSkipsFence(t *testing.T) {
 		t.Errorf("broken filter should skip fence; got create=%d reuse=%d", len(res.toCreate), len(res.toReuse))
 	}
 	if len(res.skipped) != 1 {
-		t.Errorf("expected 1 skipped, got %d", len(res.skipped))
+		t.Fatalf("expected 1 skipped, got %d", len(res.skipped))
+	}
+	if res.skipped[0].Fence != "Gent_centrum" {
+		t.Errorf("skipped fence name: got %q want %q", res.skipped[0].Fence, "Gent_centrum")
+	}
+	if res.skipped[0].Reason == "" {
+		t.Errorf("skipped reason should not be empty")
 	}
 }
 
@@ -97,7 +103,13 @@ func TestSyncRule_ParamsErrorSkipsFence(t *testing.T) {
 		t.Errorf("expected 0 to-create when params render fails")
 	}
 	if len(res.skipped) != 1 {
-		t.Errorf("expected 1 skipped, got %d", len(res.skipped))
+		t.Fatalf("expected 1 skipped, got %d", len(res.skipped))
+	}
+	if res.skipped[0].Fence != "Gent_centrum" {
+		t.Errorf("skipped fence name: got %q want %q", res.skipped[0].Fence, "Gent_centrum")
+	}
+	if res.skipped[0].Reason == "" {
+		t.Errorf("skipped reason should not be empty")
 	}
 }
 

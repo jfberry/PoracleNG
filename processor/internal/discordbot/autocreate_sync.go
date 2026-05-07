@@ -20,12 +20,18 @@ type syncFenceCandidate struct {
 	rawArgs []string // original case, for channel/category names
 }
 
+// syncSkip records a fence that couldn't be processed and why.
+type syncSkip struct {
+	Fence  string
+	Reason string
+}
+
 // classifyResult is the output of classifyFences.
 type classifyResult struct {
 	toCreate []syncFenceCandidate // fences that need a new channel/category
 	toReuse  []syncFenceCandidate // fences already in state — reuse their channel
 	orphans  []string             // fence names in state no longer in the current fence list
-	skipped  []string             // fence names that failed filter or params rendering
+	skipped  []syncSkip           // fences that failed filter or params rendering, with reasons
 }
 
 // classifyFences diffs the current geofence list for a rule against the
@@ -52,7 +58,7 @@ func classifyFences(rule config.AutocreateRule, fences []geofence.Fence, state a
 		ok, err := renderFilter(rule.Filter, f)
 		if err != nil {
 			log.Warnf("autocreate sync %q: filter error for fence %q: %v (skipping)", rule.Name, f.Name, err)
-			res.skipped = append(res.skipped, f.Name)
+			res.skipped = append(res.skipped, syncSkip{Fence: f.Name, Reason: fmt.Sprintf("filter render error: %v", err)})
 			continue
 		}
 		if !ok {
@@ -64,7 +70,7 @@ func classifyFences(rule config.AutocreateRule, fences []geofence.Fence, state a
 		rawArgs, err := renderParams(rule.Params, f)
 		if err != nil {
 			log.Warnf("autocreate sync %q: params error for fence %q: %v (skipping)", rule.Name, f.Name, err)
-			res.skipped = append(res.skipped, f.Name)
+			res.skipped = append(res.skipped, syncSkip{Fence: f.Name, Reason: fmt.Sprintf("params render error: %v", err)})
 			continue
 		}
 		args := make([]string, len(rawArgs))
@@ -99,8 +105,21 @@ func syncCachePath(baseDir string) string {
 	return filepath.Join(baseDir, "config", ".cache", "autocreate.json")
 }
 
+// SyncRuleOptions controls a single sync invocation.
+type SyncRuleOptions struct {
+	DryRun   bool
+	Reset    bool // re-run template commands on reused channels
+	Removals bool // permit orphan removal (PR 6 wires this up)
+	Force    bool // bypass safety threshold (PR 6 wires this up)
+}
+
 // SyncOneRuleResult captures what one SyncOneRule invocation did.
 type SyncOneRuleResult struct {
+	// Rule is the name of the rule that was (or would be) synced.
+	Rule string
+	// Note carries a short human-readable status when the call was short-circuited
+	// (e.g. "already syncing").
+	Note string
 	// Created is the set of fence names for which a new channel was created.
 	Created []string
 	// Reused is the set of fence names whose channel was reused (no reset).
@@ -109,9 +128,9 @@ type SyncOneRuleResult struct {
 	// fence set. In this PR removals are not yet implemented — they are
 	// surfaced here as "would-remove" log entries only.
 	Orphans []string
-	// Skipped lists fence names that were excluded due to filter or params
-	// rendering errors.
-	Skipped []string
+	// Skipped lists fences that were excluded due to filter or params rendering
+	// errors, with the reason for each.
+	Skipped []syncSkip
 	// Errors contains non-fatal errors encountered during the run. The run
 	// continues past them so a single failing fence doesn't abort the batch.
 	Errors []error
@@ -171,12 +190,17 @@ func (as *autocreateSyncer) loadCache(baseDir string) error {
 //
 // Orphan removal is not yet implemented (PR 6). Orphans surface in the
 // returned result's Orphans slice with a log entry.
-func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts applyAutocreateOptions) SyncOneRuleResult {
-	var res SyncOneRuleResult
+func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts SyncRuleOptions) SyncOneRuleResult {
+	res := SyncOneRuleResult{Rule: rule.Name}
 
-	// Serialize concurrent runs of the same rule.
+	// Serialize concurrent runs of the same rule. TryLock returns false
+	// immediately when another goroutine is already syncing this rule — the
+	// caller gets a "already syncing" note instead of blocking indefinitely.
 	lock := b.autocreateSync.ruleLock(rule.Name)
-	lock.Lock()
+	if !lock.TryLock() {
+		res.Note = "already syncing"
+		return res
+	}
 	defer lock.Unlock()
 
 	// Load templates.
@@ -223,6 +247,8 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 	// Classify fences.
 	classified := classifyFences(rule, fences, ruleState)
 	res.Skipped = classified.skipped
+	_ = opts.Removals // wired up in PR 6
+	_ = opts.Force    // wired up in PR 6
 
 	// Log orphans — removal is not yet implemented.
 	for _, name := range classified.orphans {
@@ -322,7 +348,7 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 		applyOpts := applyAutocreateOptions{
 			// Bulk sync defaults to not resetting existing tracking;
 			// only override if the trigger explicitly requested reset.
-			ResetOnReuse: opts.ResetOnReuse,
+			ResetOnReuse: opts.Reset,
 			DryRun:       opts.DryRun,
 		}
 		result := b.applyAutocreate(s, actor, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
