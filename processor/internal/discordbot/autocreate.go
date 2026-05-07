@@ -359,6 +359,11 @@ func (b *Bot) applyAutocreate(
 		} else {
 			if opts.DryRun {
 				rep.Info(fmt.Sprintf(">> [dry-run] Would create category %s", categoryName))
+				// Synthetic ID so the next fence in the same sync sees this
+				// category as "already there" — without this, every fence in
+				// the same category prints "Would create" for the same name.
+				categoryID = "(dry-run-cat-" + strings.ToLower(categoryName) + ")"
+				snap.addCategory(categoryID, categoryName)
 			} else {
 				createData := discordgo.GuildChannelCreateData{
 					Name: categoryName,
@@ -378,6 +383,10 @@ func (b *Bot) applyAutocreate(
 				}
 				rep.Info(fmt.Sprintf(">> Creating %s", categoryName))
 				categoryID = cat.ID
+				// Make the new category visible to subsequent fences in this
+				// sync so they slot into the same category instead of each
+				// creating a duplicate "Aalst" / "Aalst" / "Aalst".
+				snap.addCategory(cat.ID, categoryName)
 			}
 		}
 	}
@@ -436,10 +445,12 @@ func (b *Bot) applyAutocreate(
 		} else {
 			if opts.DryRun {
 				rep.Info(fmt.Sprintf(">> [dry-run] Would create channel %s", channelName))
-				// Use a synthetic channel so the thread-preview path below can
-				// still run. DB and Discord writes remain guarded by !opts.DryRun
-				// throughout.
-				channel = &discordgo.Channel{ID: "(dry-run)", Name: channelName}
+				// Synthetic channel so the thread-preview path below can still
+				// run, and so subsequent fences see this channel under its
+				// parent category instead of "would-create"-ing a duplicate.
+				dryID := "(dry-run-ch-" + strings.ToLower(channelName) + ")"
+				channel = &discordgo.Channel{ID: dryID, Name: channelName, ParentID: categoryID, Type: discordgo.ChannelTypeGuildText}
+				snap.addChannel(dryID, categoryID, channelName)
 			} else {
 				ch, err := s.GuildChannelCreateComplex(guildID, createData)
 				if err != nil {
@@ -449,6 +460,7 @@ func (b *Bot) applyAutocreate(
 				}
 				rep.Info(fmt.Sprintf(">> Creating %s", channelName))
 				channel = ch
+				snap.addChannel(ch.ID, categoryID, channelName)
 			}
 		}
 

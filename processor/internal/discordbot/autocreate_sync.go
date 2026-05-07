@@ -546,6 +546,34 @@ func (s *guildSnapshot) threadExists(id string) bool {
 	return s.threads[id]
 }
 
+// addCategory registers a freshly-created category so subsequent
+// findCategory lookups within the same sync return its ID instead of ""
+// (which would cause every fence in the same category to create its own
+// duplicate). Safe to call multiple times.
+func (s *guildSnapshot) addCategory(id, name string) {
+	if s == nil {
+		return
+	}
+	s.channels[id] = &discordgo.Channel{ID: id, Name: name, Type: discordgo.ChannelTypeGuildCategory}
+	s.categoriesByLowerName[strings.ToLower(name)] = id
+}
+
+// addChannel registers a freshly-created channel under parentID so
+// subsequent findChannel lookups within the same sync find it. Safe to
+// call multiple times.
+func (s *guildSnapshot) addChannel(id, parentID, name string) {
+	if s == nil {
+		return
+	}
+	s.channels[id] = &discordgo.Channel{ID: id, Name: name, ParentID: parentID, Type: discordgo.ChannelTypeGuildText}
+	byName, ok := s.channelsByParentLowerName[parentID]
+	if !ok {
+		byName = map[string]string{}
+		s.channelsByParentLowerName[parentID] = byName
+	}
+	byName[strings.ToLower(name)] = id
+}
+
 // reconcileCacheAgainstLive drops cache entries pointing at IDs that no
 // longer exist in Discord. Pure cache-pruning — never touches Discord.
 func reconcileCacheAgainstLive(state *autocreateRuleState, snap *guildSnapshot) {
