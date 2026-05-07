@@ -741,6 +741,11 @@ func main() {
 	}
 	apiGroup.POST("/resolve", api.HandleResolve(resolveDeps))
 	apiGroup.POST("/autocreate/run", handleAutocreateRun(cfg, discordBot))
+	apiGroup.GET("/autocreate/templates", handleGetChannelTemplates(cfg))
+	apiGroup.POST("/autocreate/templates", handlePostChannelTemplates(cfg))
+	apiGroup.POST("/autocreate/templates/validate", handleValidateChannelTemplates())
+	apiGroup.DELETE("/autocreate/templates/:name", handleDeleteChannelTemplate(cfg))
+	apiGroup.GET("/autocreate/templates/schema", handleGetChannelTemplatesSchema())
 
 	// Start server
 	go func() {
