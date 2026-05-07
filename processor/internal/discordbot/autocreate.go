@@ -285,7 +285,8 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 		ChannelID: m.ChannelID,
 	}
 	rep := newDiscordChannelReporter(s, m.ChannelID)
-	result := b.applyAutocreate(s, actor, tmpl, subArgs, rawSubArgs, guildID, rep, applyAutocreateOptions{
+	snap := b.buildGuildSnapshot(guildID)
+	result := b.applyAutocreate(s, actor, snap, tmpl, subArgs, rawSubArgs, guildID, rep, applyAutocreateOptions{
 		ResetOnReuse: true,
 		DryRun:       false,
 	})
@@ -317,9 +318,15 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 //
 // actor identifies who is "running" the commands — for interactive
 // !autocreate it's the user; for bulk sync it's the bot's own identity.
+//
+// snap is the guild's channel/thread snapshot built once by the caller.
+// Replaces the per-fence GuildChannels round-trips that used to dominate
+// bulk-sync latency (146 fences × 2 lookups = 292 API calls → 1).
+// Callers must pass a non-nil snapshot — see Bot.buildGuildSnapshot.
 func (b *Bot) applyAutocreate(
 	s *discordgo.Session,
 	actor *autocreateActor,
+	snap *guildSnapshot,
 	tmpl *channelTemplate,
 	args []string,
 	rawArgs []string,
@@ -348,7 +355,7 @@ func (b *Bot) applyAutocreate(
 	if tmpl.Definition.Category != nil {
 		categoryName := formatTemplate(tmpl.Definition.Category.CategoryName, rawArgs)
 
-		if existingID := b.findCategoryByName(s, guildID, categoryName); existingID != "" {
+		if existingID := snap.findCategory(categoryName); existingID != "" {
 			rep.Info(fmt.Sprintf(">> Reusing existing category %s", categoryName))
 			categoryID = existingID
 		} else {
@@ -415,7 +422,7 @@ func (b *Bot) applyAutocreate(
 		// tweaked tracking is preserved.
 		var channel *discordgo.Channel
 		var channelReused bool
-		if existingID := b.findChannelByName(s, guildID, categoryID, channelName); existingID != "" {
+		if existingID := snap.findChannel(categoryID, channelName); existingID != "" {
 			if opts.ResetOnReuse {
 				rep.Info(fmt.Sprintf(">> Reusing existing channel %s — resetting tracking", channelName))
 				if !opts.DryRun {
@@ -424,13 +431,9 @@ func (b *Bot) applyAutocreate(
 			} else {
 				rep.Info(fmt.Sprintf(">> Reusing existing channel %s — tracking left alone", channelName))
 			}
-			ch, err := s.Channel(existingID)
-			if err != nil {
-				rep.Warn(fmt.Sprintf("Failed to fetch existing channel %s: %v", channelName, err))
-				result.Errors = append(result.Errors, err)
-				continue
-			}
-			channel = ch
+			// Snapshot already has the full channel metadata — no need to
+			// re-fetch via s.Channel(existingID).
+			channel = snap.channels[existingID]
 			channelReused = true
 			result.Reused = true
 		} else {
@@ -972,52 +975,6 @@ func (b *Bot) emitPickerPost(s *discordgo.Session, masterChannelID string, picke
 			log.Warnf("discord bot: pin picker %s/%s: %v", masterChannelID, newIDs[0], err)
 		}
 	}
-}
-
-// findCategoryByName searches the guild's existing channels for a category
-// matching the given name (case-insensitive — Discord categories preserve
-// case so a lower-cased compare is the safe form). Returns the channel ID
-// of the first match, or empty when no category exists. A failed listing
-// also returns empty so the caller falls back to creating fresh.
-func (b *Bot) findCategoryByName(s *discordgo.Session, guildID, name string) string {
-	channels, err := s.GuildChannels(guildID)
-	if err != nil {
-		log.Warnf("discord bot: autocreate list channels for category lookup: %v", err)
-		return ""
-	}
-	wanted := strings.ToLower(name)
-	for _, ch := range channels {
-		if ch.Type == discordgo.ChannelTypeGuildCategory && strings.ToLower(ch.Name) == wanted {
-			return ch.ID
-		}
-	}
-	return ""
-}
-
-// findChannelByName searches the guild's text/voice channels for one whose
-// name matches and whose parent category matches. Discord forces channel
-// names to lowercase so the comparison is exact-lower. parentID may be
-// empty to look for top-level channels. Returns the channel ID, or empty
-// when no match (or on listing error).
-func (b *Bot) findChannelByName(s *discordgo.Session, guildID, parentID, name string) string {
-	channels, err := s.GuildChannels(guildID)
-	if err != nil {
-		log.Warnf("discord bot: autocreate list channels for channel lookup: %v", err)
-		return ""
-	}
-	wanted := strings.ToLower(name)
-	for _, ch := range channels {
-		if ch.Type == discordgo.ChannelTypeGuildCategory {
-			continue
-		}
-		if ch.ParentID != parentID {
-			continue
-		}
-		if strings.ToLower(ch.Name) == wanted {
-			return ch.ID
-		}
-	}
-	return ""
 }
 
 // resetChannelTracking wipes any Poracle tracking attached to an existing

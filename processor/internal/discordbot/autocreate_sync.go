@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
@@ -270,8 +271,14 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 	}
 	as.mu.Unlock()
 
+	// Build the guild snapshot once. Drives both the reconcile pass below
+	// and the per-fence applyAutocreate calls — a single GuildChannels +
+	// GuildThreadsActive instead of per-fence round-trips that used to
+	// dominate dry-run latency.
+	snap := b.buildGuildSnapshot(rule.Guild)
+
 	// Drop cache entries pointing at deleted Discord channels/categories/threads before the diff loop runs.
-	reconcileCacheAgainstLive(&ruleState, b.fetchLiveIDs(rule.Guild))
+	reconcileCacheAgainstLive(&ruleState, snap)
 
 	// Classify fences.
 	classified := classifyFences(rule, fences, ruleState)
@@ -299,7 +306,7 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			ResetOnReuse: false, // new channels have nothing to reset
 			DryRun:       opts.DryRun,
 		}
-		result := b.applyAutocreate(s, actor, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
+		result := b.applyAutocreate(s, actor, snap, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
 		for _, msg := range rep.infos {
 			log.Infof("autocreate sync %q [%s]: %s", rule.Name, c.fence.Name, msg)
 		}
@@ -371,7 +378,7 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			ResetOnReuse: opts.Reset,
 			DryRun:       opts.DryRun,
 		}
-		result := b.applyAutocreate(s, actor, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
+		result := b.applyAutocreate(s, actor, snap, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
 		for _, msg := range rep.infos {
 			log.Infof("autocreate sync %q [%s]: %s", rule.Name, c.fence.Name, msg)
 		}
@@ -435,21 +442,40 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 	return res
 }
 
-// liveDiscordIDs is the set of currently-existing channel/category/thread
-// IDs in a guild — used by reconcile to prune dead entries from the rule's
-// cache before the diff loop runs.
-type liveDiscordIDs struct {
-	channels map[string]bool // includes both regular channels and categories
-	threads  map[string]bool // active threads only (archived are handled by the keep-alive sweeper)
+// guildSnapshot is one-shot guild state used by both the reconcile pass
+// (existence checks) and applyAutocreate (name lookups). Built once per
+// sync to replace the per-fence GuildChannels round-trips that used to
+// dominate dry-run latency.
+type guildSnapshot struct {
+	// channels indexes every channel/category/voice channel by its ID.
+	// Used for O(1) metadata lookup on the reuse path — saves a Channel(id)
+	// call per reused channel.
+	channels map[string]*discordgo.Channel
+
+	// categoriesByLowerName maps a lowercased category name to its ID.
+	// Mirrors the previous findCategoryByName behaviour (Discord category
+	// matches were already case-insensitive against ToLower(ch.Name)).
+	categoriesByLowerName map[string]string
+
+	// channelsByParentLowerName maps parent-ID → lowercased channel name → ID.
+	// "" parent ID covers top-level channels. Mirrors findChannelByName.
+	channelsByParentLowerName map[string]map[string]string
+
+	// threads is the set of active thread IDs in the guild. Archived
+	// threads are out of scope (the keep-alive sweeper handles those).
+	threads map[string]bool
 }
 
-// fetchLiveIDs queries Discord for all current channel/category/thread IDs
-// in a guild. Returns empty sets on error so reconcile becomes a safe no-op
-// instead of nuking the cache on a transient API hiccup.
-func (b *Bot) fetchLiveIDs(guildID string) liveDiscordIDs {
-	out := liveDiscordIDs{
-		channels: map[string]bool{},
-		threads:  map[string]bool{},
+// buildGuildSnapshot makes one GuildChannels + one GuildThreadsActive call
+// and returns the indexed view. Returns an empty (non-nil) snapshot on API
+// error so callers degrade to "not found" lookups instead of nil-deref or
+// cache nuking.
+func (b *Bot) buildGuildSnapshot(guildID string) *guildSnapshot {
+	out := &guildSnapshot{
+		channels:                  map[string]*discordgo.Channel{},
+		categoriesByLowerName:     map[string]string{},
+		channelsByParentLowerName: map[string]map[string]string{},
+		threads:                   map[string]bool{},
 	}
 	chans, err := b.session.GuildChannels(guildID)
 	if err != nil {
@@ -457,7 +483,18 @@ func (b *Bot) fetchLiveIDs(guildID string) liveDiscordIDs {
 		return out
 	}
 	for _, c := range chans {
-		out.channels[c.ID] = true
+		out.channels[c.ID] = c
+		lname := strings.ToLower(c.Name)
+		if c.Type == discordgo.ChannelTypeGuildCategory {
+			out.categoriesByLowerName[lname] = c.ID
+			continue
+		}
+		byName, ok := out.channelsByParentLowerName[c.ParentID]
+		if !ok {
+			byName = map[string]string{}
+			out.channelsByParentLowerName[c.ParentID] = byName
+		}
+		byName[lname] = c.ID
 	}
 	threads, err := b.session.GuildThreadsActive(guildID)
 	if err != nil {
@@ -470,10 +507,52 @@ func (b *Bot) fetchLiveIDs(guildID string) liveDiscordIDs {
 	return out
 }
 
+// findCategory returns the ID of the category whose name matches (case-
+// insensitive), or "" if none. Empty snapshot returns "".
+func (s *guildSnapshot) findCategory(name string) string {
+	if s == nil {
+		return ""
+	}
+	return s.categoriesByLowerName[strings.ToLower(name)]
+}
+
+// findChannel returns the ID of the channel under parentID whose name
+// matches (case-insensitive), or "" if none. parentID may be "" to look
+// for top-level channels. Empty snapshot returns "".
+func (s *guildSnapshot) findChannel(parentID, name string) string {
+	if s == nil {
+		return ""
+	}
+	byName, ok := s.channelsByParentLowerName[parentID]
+	if !ok {
+		return ""
+	}
+	return byName[strings.ToLower(name)]
+}
+
+// channelExists reports whether the given channel/category ID is in the
+// live guild snapshot.
+func (s *guildSnapshot) channelExists(id string) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.channels[id]
+	return ok
+}
+
+// threadExists reports whether the given thread ID is in the live active-
+// threads set.
+func (s *guildSnapshot) threadExists(id string) bool {
+	if s == nil {
+		return false
+	}
+	return s.threads[id]
+}
+
 // reconcileCacheAgainstLive drops cache entries pointing at IDs that no
 // longer exist in Discord. Pure cache-pruning — never touches Discord.
-func reconcileCacheAgainstLive(state *autocreateRuleState, live liveDiscordIDs) {
-	if state == nil {
+func reconcileCacheAgainstLive(state *autocreateRuleState, snap *guildSnapshot) {
+	if state == nil || snap == nil {
 		return
 	}
 
@@ -482,7 +561,7 @@ func reconcileCacheAgainstLive(state *autocreateRuleState, live liveDiscordIDs) 
 		kept := state.Categories[:0]
 		dead := map[string]bool{}
 		for _, cat := range state.Categories {
-			if live.channels[cat.ID] {
+			if snap.channelExists(cat.ID) {
 				kept = append(kept, cat)
 			} else {
 				dead[cat.ID] = true
@@ -499,14 +578,14 @@ func reconcileCacheAgainstLive(state *autocreateRuleState, live liveDiscordIDs) 
 
 	// Per-fence: drop missing channel + thread IDs.
 	for _, fs := range state.Fences {
-		if fs.ChannelID != "" && !live.channels[fs.ChannelID] {
+		if fs.ChannelID != "" && !snap.channelExists(fs.ChannelID) {
 			fs.ChannelID = ""
 			fs.ThreadIDs = nil // a deleted parent channel deletes its threads
 			continue
 		}
 		if len(fs.ThreadIDs) > 0 {
 			for label, tid := range fs.ThreadIDs {
-				if !live.threads[tid] {
+				if !snap.threadExists(tid) {
 					delete(fs.ThreadIDs, label)
 				}
 			}

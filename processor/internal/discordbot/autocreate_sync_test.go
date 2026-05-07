@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/bwmarrin/discordgo"
+
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 )
@@ -132,12 +134,15 @@ func TestReconcile_DropsMissingChannel(t *testing.T) {
 			"Antwerp":      {CategoryID: "cat-alive", ChannelID: "ch-alive", ThreadIDs: map[string]string{"L": "th-deleted"}},
 		},
 	}
-	live := liveDiscordIDs{
-		channels: map[string]bool{"cat-alive": true, "ch-alive": true},
-		threads:  map[string]bool{"th-alive": true},
+	snap := &guildSnapshot{
+		channels: map[string]*discordgo.Channel{
+			"cat-alive": {ID: "cat-alive"},
+			"ch-alive":  {ID: "ch-alive"},
+		},
+		threads: map[string]bool{"th-alive": true},
 	}
 
-	reconcileCacheAgainstLive(state, live)
+	reconcileCacheAgainstLive(state, snap)
 
 	// Channel deleted → fence's channel_id wiped, threads dropped too.
 	if state.Fences["Gent_centrum"].ChannelID != "" {
@@ -165,11 +170,13 @@ func TestReconcile_DropsMissingCategory(t *testing.T) {
 			"Foo": {CategoryID: "cat-deleted", ChannelID: "ch-alive"},
 		},
 	}
-	live := liveDiscordIDs{
-		channels: map[string]bool{"ch-alive": true},
+	snap := &guildSnapshot{
+		channels: map[string]*discordgo.Channel{
+			"ch-alive": {ID: "ch-alive"},
+		},
 	}
 
-	reconcileCacheAgainstLive(state, live)
+	reconcileCacheAgainstLive(state, snap)
 
 	if len(state.Categories) != 0 {
 		t.Error("dead category should be removed from state.Categories")
@@ -272,5 +279,49 @@ func TestSyncRule_ParamsTokenisedAfterRender(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("rawArgs[%d] = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+func TestGuildSnapshot_FindByName(t *testing.T) {
+	snap := &guildSnapshot{
+		channels: map[string]*discordgo.Channel{
+			"cat1": {ID: "cat1", Name: "Belgium", Type: discordgo.ChannelTypeGuildCategory},
+			"ch1":  {ID: "ch1", Name: "gent_centrum", Type: discordgo.ChannelTypeGuildText, ParentID: "cat1"},
+			"ch2":  {ID: "ch2", Name: "Antwerp", Type: discordgo.ChannelTypeGuildText, ParentID: "cat1"},
+			"ch3":  {ID: "ch3", Name: "top-level", Type: discordgo.ChannelTypeGuildText, ParentID: ""},
+		},
+		categoriesByLowerName: map[string]string{"belgium": "cat1"},
+		channelsByParentLowerName: map[string]map[string]string{
+			"cat1": {"gent_centrum": "ch1", "antwerp": "ch2"},
+			"":     {"top-level": "ch3"},
+		},
+	}
+
+	if got := snap.findCategory("Belgium"); got != "cat1" {
+		t.Errorf("findCategory case-insensitive: got %q want cat1", got)
+	}
+	if got := snap.findCategory("BELGIUM"); got != "cat1" {
+		t.Errorf("findCategory upper-case: got %q want cat1", got)
+	}
+	if got := snap.findCategory("Nope"); got != "" {
+		t.Errorf("findCategory miss: got %q want empty", got)
+	}
+	if got := snap.findChannel("cat1", "Antwerp"); got != "ch2" {
+		t.Errorf("findChannel under category: got %q want ch2", got)
+	}
+	if got := snap.findChannel("", "top-level"); got != "ch3" {
+		t.Errorf("findChannel top-level: got %q want ch3", got)
+	}
+	if got := snap.findChannel("cat1", "missing"); got != "" {
+		t.Errorf("findChannel miss: got %q want empty", got)
+	}
+	if !snap.channelExists("ch1") || snap.channelExists("nope") {
+		t.Errorf("channelExists wrong")
+	}
+
+	// Nil-safe.
+	var nilSnap *guildSnapshot
+	if nilSnap.findCategory("x") != "" || nilSnap.findChannel("p", "n") != "" || nilSnap.channelExists("x") || nilSnap.threadExists("x") {
+		t.Errorf("nil snapshot should return zero values")
 	}
 }
