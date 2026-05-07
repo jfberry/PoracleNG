@@ -87,10 +87,44 @@ func (k *threadKeepAlive) sweep(ctx context.Context) {
 		return
 	}
 
-	// Resolve parent channel for each managed thread (cached for this run).
-	parents := map[string]string{} // threadID → parentID
+	// Build a threadID → parentID map from the two in-process caches to avoid
+	// a REST round-trip per thread. We collect under each cache's mutex once,
+	// then release before doing per-thread work.
+
+	// 1. threadCache (picker-button / interactive !autocreate flow).
+	parents := k.bot.threadCache.parentByThread()
+
+	// 2. autocreateSync cache (bulk-sync / autocreate.json on disk).
+	// Take the global mu briefly to copy out the IDs, then release.
+	k.bot.autocreateSync.mu.Lock()
+	for _, ruleState := range k.bot.autocreateSync.cache {
+		if ruleState == nil {
+			continue
+		}
+		for _, fs := range ruleState.Fences {
+			if fs == nil || fs.ChannelID == "" {
+				continue
+			}
+			for _, tid := range fs.ThreadIDs {
+				if tid != "" {
+					if _, exists := parents[tid]; !exists {
+						parents[tid] = fs.ChannelID
+					}
+				}
+			}
+		}
+	}
+	k.bot.autocreateSync.mu.Unlock()
+
+	// Resolve parent channel for each managed thread.
+	// Use the cache where possible; fall back to s.Channel() only for threads
+	// neither cache knows about (e.g. those registered via legacy !channel add).
 	parentsToWalk := map[string]bool{}
 	for _, h := range threads {
+		if parentID, ok := parents[h.ID]; ok {
+			parentsToWalk[parentID] = true
+			continue
+		}
 		ch, err := k.bot.session.Channel(h.ID)
 		if err != nil {
 			log.Debugf("thread keep-alive: Channel(%s): %v (likely deleted, skipping)", h.ID, err)

@@ -265,6 +265,26 @@ func chunkButtonsIntoRows(masterID string, threads []threadCacheEntry) []discord
 	return rows
 }
 
+// parentByThread returns a snapshot map of threadID → masterChannelID for
+// every thread currently tracked in the cache. The returned map is a fresh
+// copy; callers may use it without holding any lock.
+func (c *threadCache) parentByThread() map[string]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]string)
+	for masterID, m := range c.masters {
+		if m == nil {
+			continue
+		}
+		for _, e := range m.Threads {
+			if e.ThreadID != "" {
+				out[e.ThreadID] = masterID
+			}
+		}
+	}
+	return out
+}
+
 // threadCachePath returns the on-disk location for the cache file,
 // rooted at the project's config directory. Mirrors the convention used
 // by other config/.cache files (e.g. gym-state.json).
