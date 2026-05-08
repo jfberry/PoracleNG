@@ -48,7 +48,16 @@ type autocreateFenceState struct {
 	// the runner copes by treating only ChannelID as authoritative until
 	// the next sync rebuilds ChannelIDs from result.ChannelIDs.
 	ChannelIDs map[string]string `json:"channel_ids,omitempty"`
-	ThreadIDs  map[string]string `json:"thread_ids,omitempty"`
+	// ThreadIDs maps each parent channel name to its thread label → ID
+	// map. Per-channel keying matters for multi-channel templates where
+	// sibling channels may declare a thread with the SAME label — the
+	// previous flat map[label]threadID silently dropped the duplicate.
+	// JSON tag is "threads" (not "thread_ids") so old caches written
+	// with the flat shape have their now-unknown "thread_ids" silently
+	// ignored on load; the next sync rebuilds ThreadIDs from
+	// applyAutocreate's result. Test-only deployments accept this
+	// loss-on-load.
+	ThreadIDs map[string]map[string]string `json:"threads,omitempty"`
 }
 
 // loadAutocreateCache reads the JSON file at the given path. A missing

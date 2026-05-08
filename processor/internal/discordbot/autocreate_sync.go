@@ -441,11 +441,16 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 				fs.ChannelIDs = map[string]string{}
 				maps.Copy(fs.ChannelIDs, result.ChannelIDs)
 			}
-			// Collect thread IDs.
+			// Collect thread IDs per parent channel. Keep the per-channel
+			// key so sibling channels with same-label threads don't
+			// collide on save (the flat shape used to silently drop
+			// the duplicate).
 			if len(result.ThreadIDs) > 0 {
-				fs.ThreadIDs = map[string]string{}
-				for _, labelMap := range result.ThreadIDs {
-					maps.Copy(fs.ThreadIDs, labelMap)
+				fs.ThreadIDs = map[string]map[string]string{}
+				for ch, labelMap := range result.ThreadIDs {
+					perCh := map[string]string{}
+					maps.Copy(perCh, labelMap)
+					fs.ThreadIDs[ch] = perCh
 				}
 			}
 			ruleState.Fences[c.fence.Name] = fs
@@ -559,9 +564,11 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 				maps.Copy(fs.ChannelIDs, result.ChannelIDs)
 			}
 			if len(result.ThreadIDs) > 0 {
-				fs.ThreadIDs = map[string]string{}
-				for _, labelMap := range result.ThreadIDs {
-					maps.Copy(fs.ThreadIDs, labelMap)
+				fs.ThreadIDs = map[string]map[string]string{}
+				for ch, labelMap := range result.ThreadIDs {
+					perCh := map[string]string{}
+					maps.Copy(perCh, labelMap)
+					fs.ThreadIDs[ch] = perCh
 				}
 			}
 			ruleState.Fences[c.fence.Name] = fs
@@ -888,10 +895,17 @@ func reconcileCacheAgainstLive(state *autocreateRuleState, snap *guildSnapshot) 
 			fs.ThreadIDs = nil // a deleted parent channel deletes its threads
 			continue
 		}
+		// Walk the per-channel thread map; drop dead threads, drop the
+		// channel entry entirely if all its threads went away.
 		if len(fs.ThreadIDs) > 0 {
-			for label, tid := range fs.ThreadIDs {
-				if !snap.threadExists(tid) {
-					delete(fs.ThreadIDs, label)
+			for chName, labelMap := range fs.ThreadIDs {
+				for label, tid := range labelMap {
+					if !snap.threadExists(tid) {
+						delete(labelMap, label)
+					}
+				}
+				if len(labelMap) == 0 {
+					delete(fs.ThreadIDs, chName)
 				}
 			}
 			if len(fs.ThreadIDs) == 0 {
@@ -942,10 +956,18 @@ func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, op
 		return entry
 	}
 
-	// Copy thread IDs so the log captures them even after deletion.
+	// Copy thread IDs (flat label→ID for the log) so the entry captures
+	// what we touched even after deletion. Cross-channel label collisions
+	// in a multi-channel template would clobber here, but the cache-side
+	// schema preserves them and the cascade deletes both regardless of
+	// which one shows up in the log.
 	if len(fs.ThreadIDs) > 0 {
-		entry.Threads = make(map[string]string, len(fs.ThreadIDs))
-		maps.Copy(entry.Threads, fs.ThreadIDs)
+		entry.Threads = map[string]string{}
+		for _, labelMap := range fs.ThreadIDs {
+			for label, tid := range labelMap {
+				entry.Threads[label] = tid
+			}
+		}
 	}
 	entry.Channel = fs.ChannelID
 
@@ -965,9 +987,11 @@ func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, op
 		// Remove thread humans. Discord cascades thread deletion when the
 		// parent channel is deleted below, so per-thread ChannelDelete calls
 		// are unnecessary — they would only burn rate-limit budget.
-		for label, tid := range fs.ThreadIDs {
-			if err := db.DeleteHumanAndTracking(b.DB, tid); err != nil {
-				log.Warnf("autocreate sync: remove orphan %q thread %s (%s): %v", fenceName, label, tid, err)
+		for _, labelMap := range fs.ThreadIDs {
+			for label, tid := range labelMap {
+				if err := db.DeleteHumanAndTracking(b.DB, tid); err != nil {
+					log.Warnf("autocreate sync: remove orphan %q thread %s (%s): %v", fenceName, label, tid, err)
+				}
 			}
 		}
 

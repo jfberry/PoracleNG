@@ -104,13 +104,26 @@ func (k *threadKeepAlive) sweep(ctx context.Context) {
 			continue
 		}
 		for _, fs := range ruleState.Fences {
-			if fs == nil || fs.ChannelID == "" {
+			if fs == nil {
 				continue
 			}
-			for _, tid := range fs.ThreadIDs {
-				if tid != "" {
-					if _, exists := parents[tid]; !exists {
-						parents[tid] = fs.ChannelID
+			// Each thread sits under a specific parent channel — look
+			// the parent up by name in fs.ChannelIDs, falling back to
+			// the master for single-channel templates / legacy caches
+			// where ChannelIDs may be empty.
+			for chName, labelMap := range fs.ThreadIDs {
+				parentID := fs.ChannelIDs[chName]
+				if parentID == "" {
+					parentID = fs.ChannelID
+				}
+				if parentID == "" {
+					continue
+				}
+				for _, tid := range labelMap {
+					if tid != "" {
+						if _, exists := parents[tid]; !exists {
+							parents[tid] = parentID
+						}
 					}
 				}
 			}

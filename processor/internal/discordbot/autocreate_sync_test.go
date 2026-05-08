@@ -130,8 +130,8 @@ func TestReconcile_DropsMissingChannel(t *testing.T) {
 			{Name: "Belgium", ID: "cat-alive"},
 		},
 		Fences: map[string]*autocreateFenceState{
-			"Gent_centrum": {CategoryID: "cat-alive", ChannelID: "ch-deleted", ThreadIDs: map[string]string{"L": "th-alive"}},
-			"Antwerp":      {CategoryID: "cat-alive", ChannelID: "ch-alive", ThreadIDs: map[string]string{"L": "th-deleted"}},
+			"Gent_centrum": {CategoryID: "cat-alive", ChannelID: "ch-deleted", ThreadIDs: map[string]map[string]string{"alerts-gent": {"L": "th-alive"}}},
+			"Antwerp":      {CategoryID: "cat-alive", ChannelID: "ch-alive", ThreadIDs: map[string]map[string]string{"alerts-antwerp": {"L": "th-deleted"}}},
 		},
 	}
 	snap := &guildSnapshot{
@@ -139,7 +139,8 @@ func TestReconcile_DropsMissingChannel(t *testing.T) {
 			"cat-alive": {ID: "cat-alive"},
 			"ch-alive":  {ID: "ch-alive"},
 		},
-		threads: map[string]bool{"th-alive": true},
+		threads:  map[string]bool{"th-alive": true},
+		complete: true,
 	}
 
 	reconcileCacheAgainstLive(state, snap)
@@ -156,7 +157,7 @@ func TestReconcile_DropsMissingChannel(t *testing.T) {
 	if state.Fences["Antwerp"].ChannelID != "ch-alive" {
 		t.Error("alive channel should remain")
 	}
-	if _, present := state.Fences["Antwerp"].ThreadIDs["L"]; present {
+	if labels := state.Fences["Antwerp"].ThreadIDs["alerts-antwerp"]; len(labels) > 0 {
 		t.Error("deleted thread should be dropped")
 	}
 }
@@ -220,6 +221,47 @@ func TestReconcile_PrunesDeadSiblingChannels(t *testing.T) {
 	}
 	if state.Fences["Aalst"].ChannelID != "ch-master" {
 		t.Errorf("master ChannelID should remain, got %q", state.Fences["Aalst"].ChannelID)
+	}
+}
+
+// Regression: when two sibling channels each declare a thread with the
+// SAME label (e.g. both have an "alerts" thread), the previous flat
+// fs.ThreadIDs map[label]threadID silently dropped one. The new shape
+// keys by parent channel name and preserves both. Reconcile should
+// independently prune dead threads under each parent.
+func TestReconcile_SameLabelAcrossSiblingChannels(t *testing.T) {
+	state := &autocreateRuleState{
+		Fences: map[string]*autocreateFenceState{
+			"Aalst": {
+				ChannelID: "ch-a",
+				ChannelIDs: map[string]string{
+					"alerts-a": "ch-a",
+					"alerts-b": "ch-b",
+				},
+				ThreadIDs: map[string]map[string]string{
+					"alerts-a": {"alerts": "th-under-a"},
+					"alerts-b": {"alerts": "th-under-b"},
+				},
+			},
+		},
+	}
+	snap := &guildSnapshot{
+		channels: map[string]*discordgo.Channel{
+			"ch-a": {ID: "ch-a"},
+			"ch-b": {ID: "ch-b"},
+		},
+		threads:  map[string]bool{"th-under-a": true}, // only one thread alive
+		complete: true,
+	}
+
+	reconcileCacheAgainstLive(state, snap)
+
+	got := state.Fences["Aalst"].ThreadIDs
+	if got["alerts-a"]["alerts"] != "th-under-a" {
+		t.Errorf("live thread under alerts-a should remain, got %+v", got["alerts-a"])
+	}
+	if _, present := got["alerts-b"]; present {
+		t.Errorf("dead thread under alerts-b should be pruned (channel entry empty), got %+v", got["alerts-b"])
 	}
 }
 

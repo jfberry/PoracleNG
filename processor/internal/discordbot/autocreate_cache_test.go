@@ -20,7 +20,7 @@ func TestAutocreateCacheRoundtrip(t *testing.T) {
 				"Gent_centrum": {
 					CategoryID: "cat1",
 					ChannelID:  "ch1",
-					ThreadIDs:  map[string]string{"Hundos": "th1"},
+					ThreadIDs:  map[string]map[string]string{"alerts-gent": {"Hundos": "th1"}},
 				},
 			},
 		},
@@ -40,8 +40,8 @@ func TestAutocreateCacheRoundtrip(t *testing.T) {
 	if got := loaded["uk-areas"].Fences["Gent_centrum"].ChannelID; got != "ch1" {
 		t.Errorf("ChannelID = %q, want %q", got, "ch1")
 	}
-	if got := loaded["uk-areas"].Fences["Gent_centrum"].ThreadIDs["Hundos"]; got != "th1" {
-		t.Errorf("ThreadIDs[Hundos] = %q, want %q", got, "th1")
+	if got := loaded["uk-areas"].Fences["Gent_centrum"].ThreadIDs["alerts-gent"]["Hundos"]; got != "th1" {
+		t.Errorf("ThreadIDs[alerts-gent][Hundos] = %q, want %q", got, "th1")
 	}
 }
 
