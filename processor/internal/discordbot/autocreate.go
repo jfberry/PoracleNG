@@ -79,13 +79,30 @@ type applyAutocreateOptions struct {
 }
 
 // applyAutocreateResult captures what one invocation did, for the caller's
-// summary. Fields are populated regardless of DryRun.
+// summary. Fields are populated regardless of DryRun. The counters
+// describe the granular work — without them the runner's fence-level
+// classification (Created vs Reused) hides the case where a "reused"
+// fence had a missing thread or picker silently materialised under it.
 type applyAutocreateResult struct {
 	CategoryID      string                       // resolved or created category id (empty if template has no category)
 	ChannelIDs      map[string]string            // channelName -> id
 	MasterChannelID string                       // ID of the first channel in the template's Channels slice (stable master)
 	ThreadIDs       map[string]map[string]string // channelName -> {label: thread_id}
 	Errors          []error
+
+	// Action counters. Sum across one applyAutocreate invocation; the
+	// runner accumulates them across all fences for the rule's summary.
+	CategoriesCreated  int // category had to be created (not reused)
+	ChannelsCreated    int // channel had to be created (not reused)
+	ChannelsReused     int // channel was found and reused as-is
+	ChannelsReset      int // channel was reused with tracking reset (interactive / reset keyword)
+	ChannelsMoved      int // channel adopted from another category and moved into the canonical one
+	ThreadsCreated     int // thread had to be created (or would-be in dry-run)
+	ThreadsReused      int // thread was found and reused as-is
+	ThreadsReset       int // thread was reused with tracking reset
+	PickerPostsCreated int // fresh picker chunk(s) would be / were posted
+	PickerPostsEdited  int // existing picker chunk(s) would be / were edited
+	PickerPostsDeleted int // stale picker chunk(s) would be / were dropped
 }
 
 // reporter abstracts user feedback. The interactive path uses a Discord
@@ -358,6 +375,7 @@ func (b *Bot) applyAutocreate(
 			rep.Info(fmt.Sprintf(">> Reusing existing category %s", categoryName))
 			categoryID = existingID
 		} else {
+			result.CategoriesCreated++
 			if opts.DryRun {
 				rep.Info(fmt.Sprintf(">> [dry-run] Would create category %s", categoryName))
 				// Synthetic ID so the next fence in the same sync sees this
@@ -444,6 +462,7 @@ func (b *Bot) applyAutocreate(
 		}
 		if existingID != "" {
 			if movedFromParent != "" {
+				result.ChannelsMoved++
 				if opts.DryRun {
 					rep.Info(fmt.Sprintf(">> [dry-run] Would move existing channel %s into category %s", channelName, categoryID))
 					snap.removeChannel(existingID, movedFromParent, channelName)
@@ -460,11 +479,13 @@ func (b *Bot) applyAutocreate(
 				}
 			}
 			if opts.ResetOnReuse {
+				result.ChannelsReset++
 				rep.Info(fmt.Sprintf(">> Reusing existing channel %s — resetting tracking", channelName))
 				if !opts.DryRun {
 					b.resetChannelTracking(s, existingID)
 				}
 			} else {
+				result.ChannelsReused++
 				rep.Info(fmt.Sprintf(">> Reusing existing channel %s — tracking left alone", channelName))
 			}
 			// Snapshot already has the full channel metadata — no need to
@@ -472,6 +493,7 @@ func (b *Bot) applyAutocreate(
 			channel = snap.channels[existingID]
 			channelReused = true
 		} else {
+			result.ChannelsCreated++
 			if opts.DryRun {
 				rep.Info(fmt.Sprintf(">> [dry-run] Would create channel %s", channelName))
 				// Synthetic channel so the thread-preview path below can still
@@ -611,7 +633,7 @@ func (b *Bot) applyAutocreate(
 		// Discord or the cache.
 		threadEntries := b.createThreadsForChannel(s, actor, rep, guildID, channel.ID, chDef, subArgsUnder, opts, &result)
 		if chDef.ThreadPicker != nil {
-			b.emitPickerPost(s, rep, channel.ID, chDef.ThreadPicker, threadEntries, subArgsUnder, opts)
+			b.emitPickerPost(s, rep, channel.ID, chDef.ThreadPicker, threadEntries, subArgsUnder, opts, &result)
 		}
 		if len(threadEntries) > 0 {
 			labelMap := result.ThreadIDs[channelName]
@@ -767,6 +789,9 @@ func (b *Bot) createThreadsForChannel(
 			// down only fires when we wiped (otherwise we'd hit a noisy
 			// "already-registered" warning).
 			if opts.ResetOnReuse {
+				if result != nil {
+					result.ThreadsReset++
+				}
 				if !opts.DryRun {
 					if err := db.DeleteHumanAndTracking(b.DB, threadID); err != nil {
 						log.Warnf("discord bot: autocreate reset thread %s tracking: %v", threadID, err)
@@ -774,9 +799,15 @@ func (b *Bot) createThreadsForChannel(
 				}
 				rep.Info(fmt.Sprintf(">> Reusing thread %s (%s) — resetting tracking", threadName, threadID))
 			} else {
+				if result != nil {
+					result.ThreadsReused++
+				}
 				rep.Info(fmt.Sprintf(">> Reusing thread %s (%s) — tracking left alone", threadName, threadID))
 			}
 		} else {
+			if result != nil {
+				result.ThreadsCreated++
+			}
 			if opts.DryRun {
 				rep.Info(fmt.Sprintf(">> [dry-run] Would create private thread %s", threadName))
 				// Use a visibly synthetic ID so result.ThreadIDs shows what
@@ -959,7 +990,7 @@ func computePermissions(role roleEntry) (allow, deny int64) {
 // needed (because the thread count shrank) are deleted. Each step is
 // best-effort — a single failure logs and moves on so subsequent chunks
 // still get a chance.
-func (b *Bot) emitPickerPost(s *discordgo.Session, rep reporter, masterChannelID string, picker *threadPickerDef, entries []threadCacheEntry, args []string, opts applyAutocreateOptions) {
+func (b *Bot) emitPickerPost(s *discordgo.Session, rep reporter, masterChannelID string, picker *threadPickerDef, entries []threadCacheEntry, args []string, opts applyAutocreateOptions, result *applyAutocreateResult) {
 	if picker == nil || len(entries) == 0 {
 		return
 	}
@@ -973,27 +1004,33 @@ func (b *Bot) emitPickerPost(s *discordgo.Session, rep reporter, masterChannelID
 		guildID = cached.GuildID
 	}
 
-	// Dry-run: report what would happen without touching Discord or the
-	// cache. We can't know whether the cached message IDs still resolve
-	// in Discord without an API round-trip, so we report "would refresh"
-	// and trust the real sync to fall back to "post fresh" if the edit
-	// fails.
+	// Count fresh / refresh / stale chunks once — same shape used for the
+	// dry-run report and the live-run counter accumulation. Dry-run still
+	// can't know whether the cached message IDs still resolve in Discord
+	// without an API round-trip, so it reports "would refresh" optimistic-
+	// ally and trusts the real sync to fall back if the edit fails.
+	fresh := 0
+	refresh := 0
+	for i := range messages {
+		if i < len(existingIDs) && existingIDs[i] != "" {
+			refresh++
+		} else {
+			fresh++
+		}
+	}
+	stale := 0
+	for i := len(messages); i < len(existingIDs); i++ {
+		if existingIDs[i] != "" {
+			stale++
+		}
+	}
+	if result != nil {
+		result.PickerPostsCreated += fresh
+		result.PickerPostsEdited += refresh
+		result.PickerPostsDeleted += stale
+	}
+
 	if opts.DryRun {
-		fresh := 0
-		refresh := 0
-		for i := range messages {
-			if i < len(existingIDs) && existingIDs[i] != "" {
-				refresh++
-			} else {
-				fresh++
-			}
-		}
-		stale := 0
-		for i := len(messages); i < len(existingIDs); i++ {
-			if existingIDs[i] != "" {
-				stale++
-			}
-		}
 		if fresh > 0 {
 			rep.Info(fmt.Sprintf(">> [dry-run] Would post %d new picker message(s) in %s", fresh, masterChannelID))
 		}
@@ -1232,8 +1269,28 @@ func formatSyncSummary(r SyncOneRuleResult) string {
 	var b strings.Builder
 	matched := len(r.Created) + len(r.Reused)
 	fmt.Fprintf(&b, "Sync %s — %d fences matched\n", r.Rule, matched)
-	fmt.Fprintf(&b, "Created:  %d\n", len(r.Created))
-	fmt.Fprintf(&b, "Reused:   %d\n", len(r.Reused))
+	fmt.Fprintf(&b, "Fences:   %d created, %d reused\n", len(r.Created), len(r.Reused))
+	// Granular action counters. Surface only the lines with non-zero
+	// numbers so an idempotent sync stays a one-liner. The fence-level
+	// Created/Reused split above is fence membership; the counters
+	// below are actual Discord work — a fence can be classified as
+	// Reused while still having a new thread or picker materialise
+	// under it.
+	if r.CategoriesCreated > 0 {
+		fmt.Fprintf(&b, "Categories: %d created\n", r.CategoriesCreated)
+	}
+	if r.ChannelsCreated+r.ChannelsMoved+r.ChannelsReset > 0 {
+		fmt.Fprintf(&b, "Channels: %d created, %d moved, %d reset, %d reused\n",
+			r.ChannelsCreated, r.ChannelsMoved, r.ChannelsReset, r.ChannelsReused)
+	}
+	if r.ThreadsCreated+r.ThreadsReset > 0 {
+		fmt.Fprintf(&b, "Threads:  %d created, %d reset, %d reused\n",
+			r.ThreadsCreated, r.ThreadsReset, r.ThreadsReused)
+	}
+	if r.PickerPostsCreated+r.PickerPostsEdited+r.PickerPostsDeleted > 0 {
+		fmt.Fprintf(&b, "Picker:   %d created, %d refreshed, %d deleted\n",
+			r.PickerPostsCreated, r.PickerPostsEdited, r.PickerPostsDeleted)
+	}
 	fmt.Fprintf(&b, "Removed:  %d\n", len(r.Removed))
 	fmt.Fprintf(&b, "Orphans:  %d\n", len(r.Orphans))
 	fmt.Fprintf(&b, "Skipped:  %d\n", len(r.Skipped))

@@ -200,6 +200,23 @@ type SyncOneRuleResult struct {
 	// Errors contains non-fatal errors encountered during the run. The run
 	// continues past them so a single failing fence doesn't abort the batch.
 	Errors []error
+
+	// Granular action counters accumulated across every applyAutocreate
+	// call for the rule. These exist because the fence-level Created /
+	// Reused split hides cases where a "reused" fence actually had a new
+	// thread or picker materialise under it. Sum >0 means "something
+	// changed in Discord" (or would change, on dry-run).
+	CategoriesCreated  int
+	ChannelsCreated    int
+	ChannelsReused     int
+	ChannelsReset      int
+	ChannelsMoved      int
+	ThreadsCreated     int
+	ThreadsReused      int
+	ThreadsReset       int
+	PickerPostsCreated int
+	PickerPostsEdited  int
+	PickerPostsDeleted int
 }
 
 // autocreateSyncer owns the per-rule mutexes and the shared on-disk cache
@@ -242,6 +259,23 @@ func (as *autocreateSyncer) loadCache(baseDir string) error {
 	}
 	as.cache = cache
 	return nil
+}
+
+// accumulateApplyCounters folds the per-fence applyAutocreate result
+// counters into the runner's rule-level summary. Same shape used by both
+// the create and reuse loops.
+func accumulateApplyCounters(res *SyncOneRuleResult, ar applyAutocreateResult) {
+	res.CategoriesCreated += ar.CategoriesCreated
+	res.ChannelsCreated += ar.ChannelsCreated
+	res.ChannelsReused += ar.ChannelsReused
+	res.ChannelsReset += ar.ChannelsReset
+	res.ChannelsMoved += ar.ChannelsMoved
+	res.ThreadsCreated += ar.ThreadsCreated
+	res.ThreadsReused += ar.ThreadsReused
+	res.ThreadsReset += ar.ThreadsReset
+	res.PickerPostsCreated += ar.PickerPostsCreated
+	res.PickerPostsEdited += ar.PickerPostsEdited
+	res.PickerPostsDeleted += ar.PickerPostsDeleted
 }
 
 // SyncOneRule runs one autocreate rule: loads the channel template, fetches
@@ -347,6 +381,7 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			DryRun:       opts.DryRun,
 		}
 		result := b.applyAutocreate(s, actor, snap, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
+		accumulateApplyCounters(&res, result)
 		for _, msg := range rep.infos {
 			log.Infof("autocreate sync %q [%s]: %s", rule.Name, c.fence.Name, msg)
 		}
@@ -414,6 +449,7 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			DryRun:       opts.DryRun,
 		}
 		result := b.applyAutocreate(s, actor, snap, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
+		accumulateApplyCounters(&res, result)
 		for _, msg := range rep.infos {
 			log.Infof("autocreate sync %q [%s]: %s", rule.Name, c.fence.Name, msg)
 		}
