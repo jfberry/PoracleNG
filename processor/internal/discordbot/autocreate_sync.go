@@ -168,6 +168,12 @@ const (
 	// the orphan ratio exceeded autocreate.removal_safety_max_percent.
 	// Creates and reuses still ran. Re-trigger with `force` to override.
 	SyncStatusSafetyBlocked SyncStatus = "safety_blocked"
+	// SyncStatusSnapshotFailed means buildGuildSnapshot couldn't fetch
+	// the full guild state (transient Discord API error). The runner
+	// aborts the sync rather than risk reconcile wiping the cache or
+	// applyAutocreate creating duplicates against incomplete data. The
+	// caller can retry — the next scheduled sync will likely succeed.
+	SyncStatusSnapshotFailed SyncStatus = "snapshot_failed"
 )
 
 // SyncOneRuleResult captures what one SyncOneRule invocation did.
@@ -354,6 +360,19 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 	// dominate dry-run latency.
 	snap := b.buildGuildSnapshot(rule.Guild)
 
+	// On a transient Discord API failure the snapshot is incomplete.
+	// Reconcile + pruneMissingForGuild interpret "absent from snapshot"
+	// as "dead in Discord" and would wipe the cache for every fence in
+	// the rule. Apply paths would also see live channels as missing and
+	// create duplicates. Abort the sync entirely; the caller (or the
+	// next scheduled run) can retry.
+	if !snap.complete {
+		res.Status = SyncStatusSnapshotFailed
+		res.Note = "guild snapshot fetch failed (transient Discord API error); cache preserved, retry"
+		log.Warnf("autocreate sync %q: %s", rule.Name, res.Note)
+		return res
+	}
+
 	// Drop cache entries pointing at deleted Discord channels/categories/threads before the diff loop runs.
 	reconcileCacheAgainstLive(&ruleState, snap)
 	if pruned := b.threadCache.pruneMissingForGuild(rule.Guild, snap.threads); pruned > 0 {
@@ -406,8 +425,11 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			continue
 		}
 
-		if !opts.DryRun {
-			// Update cache state for this fence.
+		if !opts.DryRun && result.MasterChannelID != "" {
+			// Update cache state for this fence. Skipped on partial-
+			// failure (no master) so the previous cache survives —
+			// otherwise a half-applied sync wipes IDs the next sync
+			// would need.
 			fs := &autocreateFenceState{
 				CategoryID: result.CategoryID,
 				ChannelID:  result.MasterChannelID,
@@ -476,6 +498,13 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 		var prevChannelIDs map[string]string
 		if prev := ruleState.Fences[c.fence.Name]; prev != nil {
 			prevChannelIDs = prev.ChannelIDs
+			// Legacy upgrade path: cache file was written before the
+			// per-name ChannelIDs map landed. Log once so the operator
+			// knows orphan detection won't fire for THIS sync — the
+			// next run will have ChannelIDs populated from result.
+			if prev.ChannelID != "" && len(prev.ChannelIDs) == 0 {
+				log.Infof("autocreate sync %q [%s]: cache pre-multi-channel; ChannelIDs will populate after this sync (template-orphan detection unavailable until then)", rule.Name, c.fence.Name)
+			}
 		}
 
 		result := b.applyAutocreate(s, actor, snap, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
@@ -518,8 +547,9 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 		// Update cache state from this run's result so a thread or
 		// channel created during a reuse pass actually lands in the
 		// cache (the previous code only persisted on the toCreate
-		// loop, leaving reuse paths drifting).
-		if !opts.DryRun {
+		// loop, leaving reuse paths drifting). Skipped on partial-
+		// failure (no master) so the previous cache survives.
+		if !opts.DryRun && result.MasterChannelID != "" {
 			fs := &autocreateFenceState{
 				CategoryID: result.CategoryID,
 				ChannelID:  result.MasterChannelID,
@@ -553,7 +583,6 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			for _, name := range classified.orphans {
 				res.Removed = append(res.Removed, b.removeOrphanFence(&ruleState, name, opts))
 			}
-			res.Removed = append(res.Removed, b.removeEmptyManagedCategories(&ruleState, opts)...)
 		}
 	} else if len(classified.orphans) > 0 {
 		for _, name := range classified.orphans {
@@ -563,6 +592,15 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			}
 			res.Removed = append(res.Removed, syncFenceLog{Fence: name, Reason: reason})
 		}
+	}
+
+	// Empty-category cleanup runs once at the end whenever any
+	// removal path could have emptied a category — that's the
+	// fence-level cascade above OR the template-orphan channel
+	// path in the toReuse loop. Same gate as the rest:
+	// rule.RemoveMissing && opts.Removals, AND not safety-blocked.
+	if rule.RemoveMissing && opts.Removals && res.Status != SyncStatusSafetyBlocked {
+		res.Removed = append(res.Removed, b.removeEmptyManagedCategories(&ruleState, opts)...)
 	}
 
 	// Persist updated cache (skip on dry run).
@@ -616,12 +654,22 @@ type guildSnapshot struct {
 	// permission-overwrite computation doesn't fan out into 2N more
 	// Discord round-trips.
 	rolesByLowerName map[string]string
+
+	// complete indicates every required Discord listing succeeded.
+	// reconcileCacheAgainstLive treats absence-from-snapshot as "dead in
+	// Discord" and prunes the cache accordingly — that's correct only
+	// when the snapshot is authoritative. On a transient API failure
+	// (incomplete snapshot) the runner skips reconcile to avoid wiping
+	// the cache for every fence in the rule.
+	complete bool
 }
 
-// buildGuildSnapshot makes one GuildChannels + one GuildThreadsActive call
-// and returns the indexed view. Returns an empty (non-nil) snapshot on API
-// error so callers degrade to "not found" lookups instead of nil-deref or
-// cache nuking.
+// buildGuildSnapshot makes one GuildChannels + GuildThreadsActive +
+// GuildRoles call set and returns the indexed view. On any API error the
+// returned snapshot has complete=false so reconcile / pruneMissingForGuild
+// can refuse to act on incomplete data. The map fields are still non-nil
+// so name/role/thread lookups against an incomplete snapshot return
+// "not found" without nil-deref.
 func (b *Bot) buildGuildSnapshot(guildID string) *guildSnapshot {
 	out := &guildSnapshot{
 		channels:                  map[string]*discordgo.Channel{},
@@ -665,6 +713,7 @@ func (b *Bot) buildGuildSnapshot(guildID string) *guildSnapshot {
 	for _, r := range roles {
 		out.rolesByLowerName[strings.ToLower(r.Name)] = r.ID
 	}
+	out.complete = true
 	return out
 }
 

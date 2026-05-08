@@ -533,8 +533,16 @@ func (b *Bot) applyAutocreate(
 			result.MasterChannelID = channel.ID
 		}
 
-		// No control type — plain channel, skip registration.
+		// No control type — plain channel, skip registration. The thread
+		// and picker blocks are also skipped: with no Poracle target on
+		// the parent there's no humans row to attach the threads to and
+		// no consistent way to clean up. Warn loudly so the operator
+		// notices a misconfigured template instead of debugging "where
+		// did my threads go".
 		if chDef.ControlType == "" {
+			if len(chDef.Threads) > 0 || chDef.ThreadPicker != nil {
+				rep.Warn(fmt.Sprintf(":warning: channel %q has controlType=\"\" but defines threads/threadPicker — these are skipped because plain channels can't host Poracle-managed threads. Set controlType to \"bot\" or \"webhook\" to enable them.", channelName))
+			}
 			continue
 		}
 
