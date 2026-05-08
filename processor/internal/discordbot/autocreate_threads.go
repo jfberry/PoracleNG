@@ -180,6 +180,28 @@ func (c *threadCache) upsertThread(masterID string, e threadCacheEntry) {
 	m.Threads = append(m.Threads, e)
 }
 
+// removeThreadByLabel drops the cached thread entry under masterID whose
+// label matches. No-op when the master or label isn't found. Returns
+// the thread ID that was removed (empty if nothing was removed) so the
+// caller can also do Discord/DB cleanup keyed off it.
+func (c *threadCache) removeThreadByLabel(masterID, label string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	m := c.masters[masterID]
+	if m == nil {
+		return ""
+	}
+	for i, e := range m.Threads {
+		if e.Label != label {
+			continue
+		}
+		removed := e.ThreadID
+		m.Threads = append(m.Threads[:i], m.Threads[i+1:]...)
+		return removed
+	}
+	return ""
+}
+
 func (c *threadCache) master(masterID string) (*threadCacheMaster, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

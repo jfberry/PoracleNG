@@ -74,6 +74,15 @@ type applyAutocreateOptions struct {
 	// `reset` keyword is on the trigger.
 	ResetOnReuse bool
 
+	// RemoveTemplateOrphans, when true, deletes cached threads under a
+	// reused channel whose label is no longer in the template (i.e. the
+	// admin removed the thread definition). Interactive !autocreate sets
+	// this to true; bulk sync sets it from rule.RemoveMissing &&
+	// opts.Removals — same gate as fence-level orphan removal. Without
+	// it the runner logs a "would-remove on next removals run" line so
+	// the operator sees the divergence without losing Discord state.
+	RemoveTemplateOrphans bool
+
 	// DryRun reports what would happen without touching Discord or the DB.
 	DryRun bool
 }
@@ -92,17 +101,19 @@ type applyAutocreateResult struct {
 
 	// Action counters. Sum across one applyAutocreate invocation; the
 	// runner accumulates them across all fences for the rule's summary.
-	CategoriesCreated  int // category had to be created (not reused)
-	ChannelsCreated    int // channel had to be created (not reused)
-	ChannelsReused     int // channel was found and reused as-is
-	ChannelsReset      int // channel was reused with tracking reset (interactive / reset keyword)
-	ChannelsMoved      int // channel adopted from another category and moved into the canonical one
-	ThreadsCreated     int // thread had to be created (or would-be in dry-run)
-	ThreadsReused      int // thread was found and reused as-is
-	ThreadsReset       int // thread was reused with tracking reset
-	PickerPostsCreated int // fresh picker chunk(s) would be / were posted
-	PickerPostsEdited  int // existing picker chunk(s) would be / were edited
-	PickerPostsDeleted int // stale picker chunk(s) would be / were dropped
+	CategoriesCreated     int // category had to be created (not reused)
+	ChannelsCreated       int // channel had to be created (not reused)
+	ChannelsReused        int // channel was found and reused as-is
+	ChannelsReset         int // channel was reused with tracking reset (interactive / reset keyword)
+	ChannelsMoved         int // channel adopted from another category and moved into the canonical one
+	ThreadsCreated        int // thread had to be created (or would-be in dry-run)
+	ThreadsReused         int // thread was found and reused as-is
+	ThreadsReset          int // thread was reused with tracking reset
+	ThreadsRemoved        int // cached thread no longer in template, deleted (reset only)
+	ThreadsTemplateOrphan int // cached thread no longer in template, NOT deleted (would-remove on reset)
+	PickerPostsCreated    int // fresh picker chunk(s) would be / were posted
+	PickerPostsEdited     int // existing picker chunk(s) would be / were edited
+	PickerPostsDeleted    int // stale picker chunk(s) would be / were dropped
 }
 
 // reporter abstracts user feedback. The interactive path uses a Discord
@@ -303,8 +314,9 @@ func (b *Bot) handleAutocreate(s *discordgo.Session, m *discordgo.MessageCreate,
 	rep := newDiscordChannelReporter(s, m.ChannelID)
 	snap := b.buildGuildSnapshot(guildID)
 	result := b.applyAutocreate(s, actor, snap, tmpl, subArgs, rawSubArgs, guildID, rep, applyAutocreateOptions{
-		ResetOnReuse: true,
-		DryRun:       false,
+		ResetOnReuse:          true,
+		RemoveTemplateOrphans: true,
+		DryRun:                false,
 	})
 
 	// Match the pre-refactor early-return on category-create failure: when the
@@ -884,6 +896,51 @@ func (b *Bot) createThreadsForChannel(
 			}
 		}
 	}
+
+	// Template-orphan threads: cached labels no longer in chDef.Threads.
+	// Either remove (when the caller asked for removals) or log a
+	// would-remove line so the operator sees the divergence.
+	templateLabels := map[string]bool{}
+	for _, th := range chDef.Threads {
+		label := th.ButtonLabel
+		if label == "" {
+			label = formatTemplate(th.Name, subArgs)
+		} else {
+			label = formatTemplate(label, subArgs)
+		}
+		templateLabels[label] = true
+	}
+	for _, e := range cachedByLabel {
+		if templateLabels[e.Label] {
+			continue
+		}
+		if !opts.RemoveTemplateOrphans {
+			rep.Info(fmt.Sprintf(">> Cached thread %q (%s) is no longer in the template — would remove with `removals` keyword (rule.remove_missing must also be true)", e.Label, e.ThreadID))
+			if result != nil {
+				result.ThreadsTemplateOrphan++
+			}
+			continue
+		}
+		if opts.DryRun {
+			rep.Info(fmt.Sprintf(">> [dry-run] Would remove thread %q (%s) — no longer in template", e.Label, e.ThreadID))
+		} else {
+			if err := db.DeleteHumanAndTracking(b.DB, e.ThreadID); err != nil {
+				log.Warnf("discord bot: autocreate remove template-orphan thread %s tracking: %v", e.ThreadID, err)
+			}
+			if _, err := s.ChannelDelete(e.ThreadID); err != nil {
+				log.Warnf("discord bot: autocreate remove template-orphan thread %s: %v", e.ThreadID, err)
+			}
+			b.threadCache.removeThreadByLabel(masterChannelID, e.Label)
+			if err := b.threadCache.save(); err != nil {
+				log.Warnf("discord bot: persist thread cache after remove: %v", err)
+			}
+			rep.Info(fmt.Sprintf(">> Removed thread %q (%s) — no longer in template", e.Label, e.ThreadID))
+		}
+		if result != nil {
+			result.ThreadsRemoved++
+		}
+	}
+
 	return entries
 }
 
@@ -1283,9 +1340,13 @@ func formatSyncSummary(r SyncOneRuleResult) string {
 		fmt.Fprintf(&b, "Channels: %d created, %d moved, %d reset, %d reused\n",
 			r.ChannelsCreated, r.ChannelsMoved, r.ChannelsReset, r.ChannelsReused)
 	}
-	if r.ThreadsCreated+r.ThreadsReset > 0 {
-		fmt.Fprintf(&b, "Threads:  %d created, %d reset, %d reused\n",
-			r.ThreadsCreated, r.ThreadsReset, r.ThreadsReused)
+	if r.ThreadsCreated+r.ThreadsReset+r.ThreadsRemoved+r.ThreadsTemplateOrphan > 0 {
+		fmt.Fprintf(&b, "Threads:  %d created, %d reset, %d removed, %d reused\n",
+			r.ThreadsCreated, r.ThreadsReset, r.ThreadsRemoved, r.ThreadsReused)
+		if r.ThreadsTemplateOrphan > 0 {
+			fmt.Fprintf(&b, "  (%d cached thread(s) no longer in template — re-run with `removals` to delete; rule.remove_missing must also be true)\n",
+				r.ThreadsTemplateOrphan)
+		}
 	}
 	if r.PickerPostsCreated+r.PickerPostsEdited+r.PickerPostsDeleted > 0 {
 		fmt.Fprintf(&b, "Picker:   %d created, %d refreshed, %d deleted\n",

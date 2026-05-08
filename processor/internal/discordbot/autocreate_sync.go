@@ -206,17 +206,19 @@ type SyncOneRuleResult struct {
 	// Reused split hides cases where a "reused" fence actually had a new
 	// thread or picker materialise under it. Sum >0 means "something
 	// changed in Discord" (or would change, on dry-run).
-	CategoriesCreated  int
-	ChannelsCreated    int
-	ChannelsReused     int
-	ChannelsReset      int
-	ChannelsMoved      int
-	ThreadsCreated     int
-	ThreadsReused      int
-	ThreadsReset       int
-	PickerPostsCreated int
-	PickerPostsEdited  int
-	PickerPostsDeleted int
+	CategoriesCreated     int
+	ChannelsCreated       int
+	ChannelsReused        int
+	ChannelsReset         int
+	ChannelsMoved         int
+	ThreadsCreated        int
+	ThreadsReused         int
+	ThreadsReset          int
+	ThreadsRemoved        int // template-orphan threads actually removed
+	ThreadsTemplateOrphan int // template-orphan threads logged as would-remove (no removals flag)
+	PickerPostsCreated    int
+	PickerPostsEdited     int
+	PickerPostsDeleted    int
 }
 
 // autocreateSyncer owns the per-rule mutexes and the shared on-disk cache
@@ -273,6 +275,8 @@ func accumulateApplyCounters(res *SyncOneRuleResult, ar applyAutocreateResult) {
 	res.ThreadsCreated += ar.ThreadsCreated
 	res.ThreadsReused += ar.ThreadsReused
 	res.ThreadsReset += ar.ThreadsReset
+	res.ThreadsRemoved += ar.ThreadsRemoved
+	res.ThreadsTemplateOrphan += ar.ThreadsTemplateOrphan
 	res.PickerPostsCreated += ar.PickerPostsCreated
 	res.PickerPostsEdited += ar.PickerPostsEdited
 	res.PickerPostsDeleted += ar.PickerPostsDeleted
@@ -378,7 +382,11 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 		rep := &collectingReporter{}
 		applyOpts := applyAutocreateOptions{
 			ResetOnReuse: false, // new channels have nothing to reset
-			DryRun:       opts.DryRun,
+			// Template-orphan thread removal uses the same gate as fence-
+			// level orphan removal: rule opts in via RemoveMissing, run
+			// opts in via the `removals` keyword.
+			RemoveTemplateOrphans: rule.RemoveMissing && opts.Removals,
+			DryRun:                opts.DryRun,
 		}
 		result := b.applyAutocreate(s, actor, snap, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
 		accumulateApplyCounters(&res, result)
@@ -446,7 +454,11 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			// Bulk sync defaults to not resetting existing tracking;
 			// only override if the trigger explicitly requested reset.
 			ResetOnReuse: opts.Reset,
-			DryRun:       opts.DryRun,
+			// Template-orphan thread removal uses the same gate as fence-
+			// level orphan removal: rule opts in via RemoveMissing, run
+			// opts in via the `removals` keyword.
+			RemoveTemplateOrphans: rule.RemoveMissing && opts.Removals,
+			DryRun:                opts.DryRun,
 		}
 		result := b.applyAutocreate(s, actor, snap, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
 		accumulateApplyCounters(&res, result)
