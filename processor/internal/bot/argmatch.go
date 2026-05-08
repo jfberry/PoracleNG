@@ -305,6 +305,7 @@ var knownPrefixKeys = []string{
 	"arg.prefix.size", "arg.prefix.maxsize",
 	"arg.prefix.d", "arg.prefix.t", "arg.prefix.gen", "arg.prefix.cap",
 	"arg.prefix.form", "arg.prefix.template", "arg.prefix.move", "arg.prefix.language",
+	"arg.prefix.gym",
 	"arg.prefix.stardust", "arg.prefix.energy", "arg.prefix.candy",
 	"arg.prefix.minspawn",
 	"arg.prefix.great", "arg.prefix.greathigh", "arg.prefix.greatcp",

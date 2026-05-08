@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 
@@ -100,6 +101,42 @@ func (s *RDMScanner) GetGymName(gymID string) (string, error) {
 		return "", nil
 	}
 	return name, err
+}
+
+// FindGymByID returns the gym whose ID matches exactly. ok=false on
+// no rows; err only on a DB-level failure.
+func (s *RDMScanner) FindGymByID(id string) (Gym, bool, error) {
+	var g Gym
+	err := s.db.Get(&g, "SELECT id, name, lat, lon FROM gym WHERE id = ? AND deleted = 0 AND enabled = 1", id)
+	if err == sql.ErrNoRows {
+		return Gym{}, false, nil
+	}
+	if err != nil {
+		return Gym{}, false, fmt.Errorf("scanner: find gym by id: %w", err)
+	}
+	return g, true, nil
+}
+
+// FindGymsByName returns up to `limit` gyms whose name matches the user
+// input (case-insensitive substring). Input is clamped to
+// MaxGymNameLength; query is parameterised so SQL injection is not
+// possible. SQL LIKE wildcards (% _) in the user input are honoured —
+// the row limit caps the worst-case work.
+func (s *RDMScanner) FindGymsByName(name string, limit int) ([]Gym, error) {
+	if len(name) > MaxGymNameLength {
+		name = name[:MaxGymNameLength]
+	}
+	if limit <= 0 {
+		return nil, nil
+	}
+	var rows []Gym
+	err := s.db.Select(&rows,
+		"SELECT id, name, lat, lon FROM gym WHERE LOWER(name) LIKE ? AND deleted = 0 AND enabled = 1 ORDER BY name LIMIT ?",
+		"%"+strings.ToLower(name)+"%", limit)
+	if err != nil {
+		return nil, fmt.Errorf("scanner: find gyms by name: %w", err)
+	}
+	return rows, nil
 }
 
 // GetStationName returns empty for RDM (no station table).

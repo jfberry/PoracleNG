@@ -699,6 +699,7 @@ func main() {
 		NLPParser:     nlpParser,
 		TestProcessor: proc,
 		ReloadFunc:    proc.triggerReload,
+		Scanner:       proc.scanner,
 	}
 
 	discordTokens := cfg.Discord.DiscordTokens()

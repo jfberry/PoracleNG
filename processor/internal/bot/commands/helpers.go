@@ -371,3 +371,60 @@ func filterByGenAndType(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon,
 	}
 	return monsters
 }
+
+// resolveGymRef looks up the gym referenced by a `gym:` argument value.
+// Two-step: try as exact gym ID first; on miss, search by name. The
+// result is one of:
+//
+//   - gymID populated, reply == nil: use this ID on the tracking row
+//   - gymID == "", reply != nil:     send this reply to the user and
+//     abort the command (no tracking)
+//
+// Multi-match always returns a list reply (caller must abort).
+// Empty input is treated as "no gym argument" — caller should not call
+// resolveGymRef in that case; gymID == "" with reply == nil never happens
+// for a non-empty raw.
+func resolveGymRef(ctx *bot.CommandContext, raw string) (string, *bot.Reply) {
+	tr := ctx.Tr()
+	if raw == "" {
+		return "", nil
+	}
+	if ctx.Scanner == nil {
+		return "", &bot.Reply{React: "🙅", Text: tr.T("msg.gym_lookup.no_scanner")}
+	}
+
+	if g, ok, err := ctx.Scanner.FindGymByID(raw); err != nil {
+		log.Errorf("resolveGymRef: FindGymByID(%q): %v", raw, err)
+		return "", &bot.Reply{React: "🙅", Text: tr.T("msg.gym_lookup.error")}
+	} else if ok {
+		return g.ID, nil
+	}
+
+	// 11 = limit + 1, so we can detect the "more than 10" case without
+	// fetching every match.
+	const showLimit = 10
+	matches, err := ctx.Scanner.FindGymsByName(raw, showLimit+1)
+	if err != nil {
+		log.Errorf("resolveGymRef: FindGymsByName(%q): %v", raw, err)
+		return "", &bot.Reply{React: "🙅", Text: tr.T("msg.gym_lookup.error")}
+	}
+	switch {
+	case len(matches) == 0:
+		return "", &bot.Reply{React: "🙅", Text: tr.Tf("msg.gym_lookup.none", raw)}
+	case len(matches) == 1:
+		return matches[0].ID, nil
+	case len(matches) > showLimit:
+		return "", &bot.Reply{React: "🙅", Text: tr.Tf("msg.gym_lookup.too_many", raw, showLimit)}
+	}
+	var b strings.Builder
+	b.WriteString(tr.Tf("msg.gym_lookup.multiple", raw, len(matches)))
+	b.WriteString("\n")
+	for _, g := range matches {
+		b.WriteString("  - ")
+		b.WriteString(g.Name)
+		b.WriteString(" (`")
+		b.WriteString(g.ID)
+		b.WriteString("`)\n")
+	}
+	return "", &bot.Reply{React: "🙅", Text: b.String()}
+}

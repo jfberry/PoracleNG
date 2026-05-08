@@ -578,6 +578,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			Registry:      b.Registry,
 			ReloadFunc:    b.ReloadFunc,
 			PostRegister:  b.postRegisterHook(),
+			Scanner:       b.Scanner,
 		}
 
 		// Populate delegated admin permissions

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
@@ -24,6 +25,7 @@ var raidParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.move"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
+	{Type: bot.ParamPrefixString, Key: "arg.prefix.gym"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.gen"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
@@ -91,6 +93,18 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return c.removeRaids(ctx, parsed)
 	}
 
+	// Optional `gym:<id-or-name>` argument pins the rule to a specific
+	// gym. Multi-word names need outer quotes (e.g. `"gym:Town Hall"`)
+	// so the bot parser keeps it as one token.
+	gymID := null.String{}
+	if raw := strings.TrimSpace(parsed.Strings["gym"]); raw != "" {
+		id, abort := resolveGymRef(ctx, raw)
+		if abort != nil {
+			return []bot.Reply{*abort}
+		}
+		gymID = null.StringFrom(id)
+	}
+
 	// Build insert list — either by pokemon name or by level
 	var insert []db.RaidTrackingAPI
 
@@ -108,7 +122,7 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				Exclusive:   db.IntBool(exclusive),
 				Move:        move,
 				Evolution:   bot.WildcardID,
-				GymID:       null.String{},
+				GymID:       gymID,
 				Distance:    common.Distance,
 				Template:    common.Template,
 				Clean:       common.Clean,
@@ -156,7 +170,7 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				Exclusive:   db.IntBool(exclusive),
 				Move:        move,
 				Evolution:   bot.WildcardID,
-				GymID:       null.String{},
+				GymID:       gymID,
 				Distance:    common.Distance,
 				Template:    common.Template,
 				Clean:       common.Clean,

@@ -234,6 +234,7 @@
   "arg.prefix.cap": "cap",
   "arg.prefix.form": "form",
   "arg.prefix.template": "vorlage",
+  "arg.prefix.gym": "arena",
   "arg.prefix.move": "attacke",
   "arg.prefix.minspawn": "minspawn",
   "arg.prefix.great": "super",

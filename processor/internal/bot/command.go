@@ -20,6 +20,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
+	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/store"
@@ -51,6 +52,11 @@ type BotDeps struct {
 	NLPParser     *nlp.Parser
 	TestProcessor TestProcessor
 	ReloadFunc    func()
+	// Scanner is the optional scanner-DB handle used by gym-aware
+	// commands (!raid, !gym, !egg with a `gym:` argument). nil when
+	// no scanner is configured — commands check and reject `gym:`
+	// usage with a clear error.
+	Scanner scanner.Scanner
 }
 
 // TestTarget specifies who to deliver a test alert to.
@@ -134,6 +140,9 @@ type CommandContext struct {
 	NLP           *nlp.Parser
 	TestProcessor TestProcessor
 	Registry      *Registry
+	// Scanner is the optional scanner-DB handle. nil when no scanner
+	// is configured.
+	Scanner scanner.Scanner
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
