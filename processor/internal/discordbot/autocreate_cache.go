@@ -35,8 +35,19 @@ type autocreateCategory struct {
 // the rule's Fences map by the original-case fence name (so the case-
 // preserving RawArgs work end-to-end).
 type autocreateFenceState struct {
-	CategoryID string            `json:"category_id"`
-	ChannelID  string            `json:"channel_id"`
+	CategoryID string `json:"category_id"`
+	// ChannelID is the canonical "master" channel — the first channel
+	// in the template's Channels slice. Used as the picker host and the
+	// stable identity for the fence. Always also present in ChannelIDs.
+	ChannelID string `json:"channel_id"`
+	// ChannelIDs maps every rendered channel name produced for this
+	// fence (master + siblings) to its Discord ID. Used by reconcile,
+	// template-orphan detection (channels whose name is no longer in
+	// the template), and the removal cascade. Older cache files written
+	// before multi-channel support was added will have this field empty;
+	// the runner copes by treating only ChannelID as authoritative until
+	// the next sync rebuilds ChannelIDs from result.ChannelIDs.
+	ChannelIDs map[string]string `json:"channel_ids,omitempty"`
 	ThreadIDs  map[string]string `json:"thread_ids,omitempty"`
 }
 

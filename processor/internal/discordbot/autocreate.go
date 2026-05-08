@@ -1336,9 +1336,13 @@ func formatSyncSummary(r SyncOneRuleResult) string {
 	if r.CategoriesCreated > 0 {
 		fmt.Fprintf(&b, "Categories: %d created\n", r.CategoriesCreated)
 	}
-	if r.ChannelsCreated+r.ChannelsMoved+r.ChannelsReset > 0 {
-		fmt.Fprintf(&b, "Channels: %d created, %d moved, %d reset, %d reused\n",
-			r.ChannelsCreated, r.ChannelsMoved, r.ChannelsReset, r.ChannelsReused)
+	if r.ChannelsCreated+r.ChannelsMoved+r.ChannelsReset+r.ChannelsRemoved+r.ChannelsTemplateOrphan > 0 {
+		fmt.Fprintf(&b, "Channels: %d created, %d moved, %d reset, %d removed, %d reused\n",
+			r.ChannelsCreated, r.ChannelsMoved, r.ChannelsReset, r.ChannelsRemoved, r.ChannelsReused)
+		if r.ChannelsTemplateOrphan > 0 {
+			fmt.Fprintf(&b, "  (%d cached channel(s) no longer in template — re-run with `removals` to delete; rule.remove_missing must also be true)\n",
+				r.ChannelsTemplateOrphan)
+		}
 	}
 	if r.ThreadsCreated+r.ThreadsReset+r.ThreadsRemoved+r.ThreadsTemplateOrphan > 0 {
 		fmt.Fprintf(&b, "Threads:  %d created, %d reset, %d removed, %d reused\n",

@@ -187,6 +187,42 @@ func TestReconcile_DropsMissingCategory(t *testing.T) {
 	}
 }
 
+// Reconcile must walk fs.ChannelIDs (multi-channel templates) and drop
+// only the dead siblings, leaving live ones in place.
+func TestReconcile_PrunesDeadSiblingChannels(t *testing.T) {
+	state := &autocreateRuleState{
+		Fences: map[string]*autocreateFenceState{
+			"Aalst": {
+				ChannelID: "ch-master",
+				ChannelIDs: map[string]string{
+					"alerts-aalst": "ch-master",
+					"raids-aalst":  "ch-sibling-alive",
+					"quests-aalst": "ch-sibling-dead",
+				},
+			},
+		},
+	}
+	snap := &guildSnapshot{
+		channels: map[string]*discordgo.Channel{
+			"ch-master":        {ID: "ch-master"},
+			"ch-sibling-alive": {ID: "ch-sibling-alive"},
+		},
+	}
+
+	reconcileCacheAgainstLive(state, snap)
+
+	got := state.Fences["Aalst"].ChannelIDs
+	if _, ok := got["raids-aalst"]; !ok {
+		t.Error("live sibling raids-aalst should remain")
+	}
+	if _, ok := got["quests-aalst"]; ok {
+		t.Error("dead sibling quests-aalst should be pruned")
+	}
+	if state.Fences["Aalst"].ChannelID != "ch-master" {
+		t.Errorf("master ChannelID should remain, got %q", state.Fences["Aalst"].ChannelID)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // applyRemovalSafety unit tests
 // ---------------------------------------------------------------------------

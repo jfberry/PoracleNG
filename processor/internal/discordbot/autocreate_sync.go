@@ -206,19 +206,21 @@ type SyncOneRuleResult struct {
 	// Reused split hides cases where a "reused" fence actually had a new
 	// thread or picker materialise under it. Sum >0 means "something
 	// changed in Discord" (or would change, on dry-run).
-	CategoriesCreated     int
-	ChannelsCreated       int
-	ChannelsReused        int
-	ChannelsReset         int
-	ChannelsMoved         int
-	ThreadsCreated        int
-	ThreadsReused         int
-	ThreadsReset          int
-	ThreadsRemoved        int // template-orphan threads actually removed
-	ThreadsTemplateOrphan int // template-orphan threads logged as would-remove (no removals flag)
-	PickerPostsCreated    int
-	PickerPostsEdited     int
-	PickerPostsDeleted    int
+	CategoriesCreated      int
+	ChannelsCreated        int
+	ChannelsReused         int
+	ChannelsReset          int
+	ChannelsMoved          int
+	ChannelsRemoved        int // template-orphan channels actually removed
+	ChannelsTemplateOrphan int // template-orphan channels logged as would-remove (no removals flag)
+	ThreadsCreated         int
+	ThreadsReused          int
+	ThreadsReset           int
+	ThreadsRemoved         int // template-orphan threads actually removed
+	ThreadsTemplateOrphan  int // template-orphan threads logged as would-remove (no removals flag)
+	PickerPostsCreated     int
+	PickerPostsEdited      int
+	PickerPostsDeleted     int
 }
 
 // autocreateSyncer owns the per-rule mutexes and the shared on-disk cache
@@ -410,6 +412,13 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 				CategoryID: result.CategoryID,
 				ChannelID:  result.MasterChannelID,
 			}
+			// Persist the full per-name channel map so reconcile, template-
+			// orphan detection, and the removal cascade can act on every
+			// channel — not just the master.
+			if len(result.ChannelIDs) > 0 {
+				fs.ChannelIDs = map[string]string{}
+				maps.Copy(fs.ChannelIDs, result.ChannelIDs)
+			}
 			// Collect thread IDs.
 			if len(result.ThreadIDs) > 0 {
 				fs.ThreadIDs = map[string]string{}
@@ -460,6 +469,15 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 			RemoveTemplateOrphans: rule.RemoveMissing && opts.Removals,
 			DryRun:                opts.DryRun,
 		}
+
+		// Snapshot the previous cache state before apply so we can detect
+		// template-orphan channels (cached channels whose name is no
+		// longer in the template) after apply returns.
+		var prevChannelIDs map[string]string
+		if prev := ruleState.Fences[c.fence.Name]; prev != nil {
+			prevChannelIDs = prev.ChannelIDs
+		}
+
 		result := b.applyAutocreate(s, actor, snap, tmpl, c.args, c.rawArgs, rule.Guild, rep, applyOpts)
 		accumulateApplyCounters(&res, result)
 		for _, msg := range rep.infos {
@@ -473,6 +491,50 @@ func (b *Bot) SyncOneRule(s *discordgo.Session, rule config.AutocreateRule, opts
 		}
 		if len(result.Errors) > 0 {
 			res.Errors = append(res.Errors, result.Errors...)
+		}
+
+		// Template-orphan channels: any cached channel name not in the
+		// new result.ChannelIDs. Same gate as the thread case.
+		for cachedName, cachedID := range prevChannelIDs {
+			if _, stillInTemplate := result.ChannelIDs[cachedName]; stillInTemplate {
+				continue
+			}
+			if rule.RemoveMissing && opts.Removals {
+				if opts.DryRun {
+					log.Infof("autocreate sync %q [%s]: [dry-run] would remove template-orphan channel %q (%s)", rule.Name, c.fence.Name, cachedName, cachedID)
+				} else {
+					if errs := b.cascadeChannelDelete(b.session, cachedID, true); len(errs) > 0 {
+						res.Errors = append(res.Errors, errs...)
+					}
+					log.Infof("autocreate sync %q [%s]: removed template-orphan channel %q (%s)", rule.Name, c.fence.Name, cachedName, cachedID)
+				}
+				res.ChannelsRemoved++
+			} else {
+				log.Infof("autocreate sync %q [%s]: cached channel %q (%s) is no longer in template — would remove with `removals` (rule.remove_missing must also be true)", rule.Name, c.fence.Name, cachedName, cachedID)
+				res.ChannelsTemplateOrphan++
+			}
+		}
+
+		// Update cache state from this run's result so a thread or
+		// channel created during a reuse pass actually lands in the
+		// cache (the previous code only persisted on the toCreate
+		// loop, leaving reuse paths drifting).
+		if !opts.DryRun {
+			fs := &autocreateFenceState{
+				CategoryID: result.CategoryID,
+				ChannelID:  result.MasterChannelID,
+			}
+			if len(result.ChannelIDs) > 0 {
+				fs.ChannelIDs = map[string]string{}
+				maps.Copy(fs.ChannelIDs, result.ChannelIDs)
+			}
+			if len(result.ThreadIDs) > 0 {
+				fs.ThreadIDs = map[string]string{}
+				for _, labelMap := range result.ThreadIDs {
+					maps.Copy(fs.ThreadIDs, labelMap)
+				}
+			}
+			ruleState.Fences[c.fence.Name] = fs
 		}
 
 		res.Reused = append(res.Reused, c.fence.Name)
@@ -761,6 +823,17 @@ func reconcileCacheAgainstLive(state *autocreateRuleState, snap *guildSnapshot) 
 
 	// Per-fence: drop missing channel + thread IDs.
 	for _, fs := range state.Fences {
+		// Drop dead siblings from the per-name channel map.
+		if len(fs.ChannelIDs) > 0 {
+			for name, id := range fs.ChannelIDs {
+				if !snap.channelExists(id) {
+					delete(fs.ChannelIDs, name)
+				}
+			}
+			if len(fs.ChannelIDs) == 0 {
+				fs.ChannelIDs = nil
+			}
+		}
 		if fs.ChannelID != "" && !snap.channelExists(fs.ChannelID) {
 			fs.ChannelID = ""
 			fs.ThreadIDs = nil // a deleted parent channel deletes its threads
@@ -850,18 +923,33 @@ func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, op
 		}
 
 		// Remove Poracle webhooks, the channel human row, and the Discord
-		// channel itself (which cascades thread deletion server-side).
-		// Surface any cascade error in the entry's Reason field so the
-		// summary tells the operator why the channel survived (most often
-		// missing Manage Channels permission).
+		// channel itself (which cascades thread deletion server-side) for
+		// every channel cached for this fence — master and any siblings
+		// from multi-channel templates. Surface any cascade error in the
+		// entry's Reason field so the summary tells the operator why a
+		// channel survived (most often missing Manage Channels
+		// permission).
+		toDelete := map[string]struct{}{}
 		if fs.ChannelID != "" {
-			if errs := b.cascadeChannelDelete(b.session, fs.ChannelID, true); len(errs) > 0 {
-				msgs := make([]string, 0, len(errs))
-				for _, e := range errs {
-					msgs = append(msgs, e.Error())
-				}
-				entry.Reason = "cascade had errors: " + strings.Join(msgs, "; ")
+			toDelete[fs.ChannelID] = struct{}{}
+		}
+		for _, id := range fs.ChannelIDs {
+			if id != "" {
+				toDelete[id] = struct{}{}
 			}
+		}
+		var allErrs []error
+		for chID := range toDelete {
+			if errs := b.cascadeChannelDelete(b.session, chID, true); len(errs) > 0 {
+				allErrs = append(allErrs, errs...)
+			}
+		}
+		if len(allErrs) > 0 {
+			msgs := make([]string, 0, len(allErrs))
+			for _, e := range allErrs {
+				msgs = append(msgs, e.Error())
+			}
+			entry.Reason = "cascade had errors: " + strings.Join(msgs, "; ")
 		}
 
 		delete(state.Fences, fenceName)
