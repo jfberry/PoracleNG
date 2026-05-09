@@ -1202,8 +1202,8 @@ panels.push(
 		unit: 's',
 		targets: [
 			{
-				expr: `go_gc_duration_seconds{job=~"$processor_job",instance=~"$processor_instance",quantile="0.99"}`,
-				legendFormat: 'gc p99 {{instance}}',
+				expr: `go_gc_duration_seconds{job=~"$processor_job",instance=~"$processor_instance",quantile="1"}`,
+				legendFormat: 'gc max {{instance}}',
 			},
 		],
 	}),
