@@ -13,6 +13,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
 const defaultTelegramBaseURL = "https://api.telegram.org"
@@ -451,6 +453,7 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 			if tgResp.Parameters != nil && tgResp.Parameters.RetryAfter > 0 {
 				retryAfter = tgResp.Parameters.RetryAfter
 			}
+			metrics.DeliveryRateLimited.WithLabelValues("telegram").Inc()
 			// Cap retry to 60 seconds — values like 23501s indicate a permanent block
 			if retryAfter > 60 {
 				log.Warnf("telegram: 429 rate limited for %s %s, retry_after=%ds is excessive — capping to 60s and giving up (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
