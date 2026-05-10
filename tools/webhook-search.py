@@ -391,9 +391,73 @@ def matches_filters(obj, msg, args, pokemon_id):
     return True, pvp, has_evo
 
 
+def quest_reward_summary(reward):
+    """Render one quest reward as a short string."""
+    if not isinstance(reward, dict):
+        return "?"
+    rtype = reward.get("type")
+    info = reward.get("info") or {}
+    amount = info.get("amount")
+    if rtype == 7:
+        # Pokemon encounter
+        pid = info.get("pokemon_id", 0)
+        form = info.get("form_id", 0)
+        name = pokemon_name(pid)
+        if form:
+            return f"{name} (form:{form})"
+        return name
+    if rtype == 2:
+        # Item — fall back to ID if name unknown
+        load_item_names()
+        iid = info.get("item_id", 0)
+        item_name = next((n for n, i in ITEM_NAMES.items() if i == iid), f"item#{iid}")
+        item_name = item_name.title()
+        return f"{amount}× {item_name}" if amount else item_name
+    if rtype == 3:
+        return f"{amount or '?'} stardust"
+    if rtype == 4:
+        pid = info.get("pokemon_id", 0)
+        return f"{amount or '?'}× {pokemon_name(pid)} candy"
+    if rtype == 12:
+        pid = info.get("pokemon_id", 0)
+        return f"{amount or '?'}× {pokemon_name(pid)} mega energy"
+    if rtype == 1:
+        return f"+{amount or '?'} XP"
+    return f"reward type {rtype}"
+
+
+def display_quest(idx, timestamp, msg, args):
+    """Quest webhooks have a different shape — no top-level pokemon_id."""
+    pokestop = msg.get("pokestop_name") or msg.get("pokestop_id", "?")
+    lat = msg.get("latitude", 0)
+    lon = msg.get("longitude", 0)
+    rewards = msg.get("rewards") or []
+    title = msg.get("title", "")
+    with_ar = msg.get("with_ar", False)
+
+    ts_str = f" [{timestamp}]" if timestamp else ""
+    print(f"\n{'='*60}")
+    print(f"[{idx}] Quest at {pokestop}{ts_str}")
+    if title:
+        print(f"  Title: {title}")
+    for r in rewards:
+        ar_marker = " 🔭" if with_ar else ""
+        print(f"  Reward: {quest_reward_summary(r)}{ar_marker}")
+    print(f"  Location: {lat:.6f}, {lon:.6f}")
+    if args.raw:
+        print(f"  RAW: {json.dumps(msg)}")
+
+
 def display_result(idx, timestamp, msg, pvp, has_evo, args):
     """Display a single search result."""
     load_pokemon_names()
+
+    # Quest webhooks have no top-level pokemon_id; route to a quest-aware
+    # printer rather than misrendering as "Pokemon#0".
+    if "rewards" in msg and "pokestop_id" in msg:
+        display_quest(idx, timestamp, msg, args)
+        return
+
     pid = msg.get("pokemon_id", 0)
     name = pokemon_name(pid)
     iv = calc_iv(
