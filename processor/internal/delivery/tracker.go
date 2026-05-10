@@ -16,18 +16,28 @@ import (
 
 // TrackedMessage represents a sent message being tracked for clean deletion or editing.
 type TrackedMessage struct {
-	SentID string `json:"sent_id"`
-	Target string `json:"target"`
-	Type   string `json:"type"` // "discord:user", "telegram:group", etc.
-	Clean  int    `json:"clean"`
+	SentID   string `json:"sent_id"`
+	Target   string `json:"target"`
+	Type     string `json:"type"` // "discord:user", "telegram:group", etc.
+	Clean    int    `json:"clean"`
+	ReplyKey string `json:"reply_key,omitempty"`
 }
 
 // MessageTracker manages sent messages with TTL-based expiry and clean deletion.
 type MessageTracker struct {
-	cache    *ttlcache.Cache[string, *TrackedMessage]
-	senders  map[string]Sender // "discord" → sender, "telegram" → sender
-	cacheDir string
-	mu       sync.Mutex
+	cache      *ttlcache.Cache[string, *TrackedMessage]
+	replyIndex *ttlcache.Cache[string, string] // (replyKey + "\x00" + target) → latest SentID
+	senders    map[string]Sender               // "discord" → sender, "telegram" → sender
+	cacheDir   string
+	mu         sync.Mutex
+}
+
+// replyIndexKey composes the reply-index lookup key from a reply key
+// and the target identifier. The NUL separator avoids collisions
+// between, e.g., target = "abc:def" / replyKey = "x" and
+// target = "x" / replyKey = "abc:def".
+func replyIndexKey(replyKey, target string) string {
+	return replyKey + "\x00" + target
 }
 
 // NewMessageTracker creates a new MessageTracker with TTL cache and eviction-based clean deletion.
@@ -70,12 +80,36 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 	go cache.Start()
 	mt.cache = cache
 
+	replyIndex := ttlcache.New[string, string](
+		ttlcache.WithDisableTouchOnHit[string, string](),
+	)
+	go replyIndex.Start()
+	mt.replyIndex = replyIndex
+
 	return mt
 }
 
 // Track inserts a message into the cache with the given TTL.
+// If msg.ReplyKey is non-empty, the (ReplyKey, Target) pair also indexes
+// msg.SentID in the reply index for O(1) reply lookup.
 func (mt *MessageTracker) Track(key string, msg *TrackedMessage, ttl time.Duration) {
 	mt.cache.Set(key, msg, ttl)
+	if msg.ReplyKey != "" {
+		mt.replyIndex.Set(replyIndexKey(msg.ReplyKey, msg.Target), msg.SentID, ttl)
+	}
+}
+
+// LookupReply returns the SentID of the latest message tracked for
+// this (replyKey, target) pair, or "" if none. O(1).
+func (mt *MessageTracker) LookupReply(replyKey, target string) string {
+	if replyKey == "" {
+		return ""
+	}
+	item := mt.replyIndex.Get(replyIndexKey(replyKey, target))
+	if item == nil {
+		return ""
+	}
+	return item.Value()
 }
 
 // LookupEdit returns the tracked message for the given edit key, or nil if not found/expired.
@@ -186,12 +220,17 @@ func (mt *MessageTracker) Load() error {
 
 		active++
 		remaining := entry.ExpiresAt.Sub(now)
-		mt.cache.Set(entry.Key, &TrackedMessage{
-			SentID: entry.Message.SentID,
-			Target: entry.Message.Target,
-			Type:   entry.Message.Type,
-			Clean:  entry.Message.Clean,
-		}, remaining)
+		msg := &TrackedMessage{
+			SentID:   entry.Message.SentID,
+			Target:   entry.Message.Target,
+			Type:     entry.Message.Type,
+			Clean:    entry.Message.Clean,
+			ReplyKey: entry.Message.ReplyKey,
+		}
+		mt.cache.Set(entry.Key, msg, remaining)
+		if msg.ReplyKey != "" {
+			mt.replyIndex.Set(replyIndexKey(msg.ReplyKey, msg.Target), msg.SentID, remaining)
+		}
 	}
 
 	log.Infof("delivery: tracker loaded %d entries (%d expired clean, %d active)", len(entries), expiredClean, active)
@@ -201,6 +240,7 @@ func (mt *MessageTracker) Load() error {
 // Stop stops the background eviction processor and persists state to disk.
 func (mt *MessageTracker) Stop() {
 	mt.cache.Stop()
+	mt.replyIndex.Stop()
 	if err := mt.Save(); err != nil {
 		log.Warnf("delivery: failed to save tracker on stop: %v", err)
 	}

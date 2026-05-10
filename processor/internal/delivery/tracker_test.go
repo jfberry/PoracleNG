@@ -46,7 +46,10 @@ func newTestTracker(t *testing.T) (*MessageTracker, *mockSender) {
 	mock := &mockSender{}
 	senders := map[string]Sender{"discord": mock}
 	mt := NewMessageTracker(t.TempDir(), senders)
-	t.Cleanup(func() { mt.cache.Stop() })
+	t.Cleanup(func() {
+		mt.cache.Stop()
+		mt.replyIndex.Stop()
+	})
 	return mt, mock
 }
 
@@ -229,6 +232,32 @@ func TestTrackerLoadExpiredClean(t *testing.T) {
 	// Should NOT be in the cache
 	if mt2.LookupEdit("clean:discord:user:u1:expired-msg") != nil {
 		t.Error("expired entry should not be in cache after load")
+	}
+}
+
+func TestLookupReplyReturnsLatest(t *testing.T) {
+	mt, _ := newTestTracker(t)
+
+	mt.Track("edit-1", &TrackedMessage{
+		SentID: "msg-1", Target: "targetA", Type: "discord:user",
+		ReplyKey: "rk1",
+	}, time.Hour)
+	mt.Track("edit-2", &TrackedMessage{
+		SentID: "msg-2", Target: "targetA", Type: "discord:user",
+		ReplyKey: "rk1",
+	}, time.Hour)
+	if got := mt.LookupReply("rk1", "targetA"); got != "msg-2" {
+		t.Fatalf("LookupReply = %q, want msg-2", got)
+	}
+	if got := mt.LookupReply("rk1", "targetB"); got != "" {
+		t.Errorf("LookupReply cross-target = %q, want empty", got)
+	}
+	if got := mt.LookupReply("rk-other", "targetA"); got != "" {
+		t.Errorf("LookupReply wrong key = %q, want empty", got)
+	}
+	// Empty replyKey — never matches, defensive against bugs.
+	if got := mt.LookupReply("", "targetA"); got != "" {
+		t.Errorf("LookupReply empty key = %q, want empty", got)
 	}
 }
 
