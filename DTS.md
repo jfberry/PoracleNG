@@ -314,6 +314,45 @@ RDM-style fallback can't infer one.
 
 ---
 
+## Pokemon Changed (`monsterChanged`)
+
+`monsterChanged` fires for **post-encounter** changes to an already-tracked
+pokemon — form, species, gender, or weather-boost shift. The non-IV → IV
+encounter event itself stays on the regular `monster` template (it's the
+fulfilment of the existing alert, not a "change"); both kinds of update are
+dispatched as a reply to the prior message via the implicit reply key on
+every pokemon render. See [API.md](API.md#pokemon-change-template-monsterchanged)
+for the operator-facing summary.
+
+The template receives every field listed under [Pokemon (`monster` /
+`monsterNoIv`)](#pokemon-monster--monsternoiv) — those describe the **new**
+state. Additionally, `{{original.X}}` exposes the same field set for the
+**prior** sighting (minus PVP, which is stripped at storage time): identity
+(`original.fullName`, `original.formName`, `original.pokemonId`, …), battle
+stats (`original.cp`, `original.iv`, `original.atk/def/sta`,
+`original.level`), weather (`original.weatherName`, `original.gameWeatherId`),
+images and map URLs (`original.imgUrl`, `original.staticMap`,
+`original.mapurl`), and so on.
+
+`{{original.X}}` is rendered per recipient: each user's language picks the
+appropriate translated names (`original.fullName` for a German user is
+"Glumanda", for an English user "Charmander"). PVP rankings are not
+available under `original.*`.
+
+Only set when fired by a true change event — the dispatcher also leaves
+`{{original.X}}` empty when:
+- The encounter event reuses the regular `monster` template (CP 0 → >0).
+- The matched user had no prior message for the encounter (a fresh
+  `monster` render is sent instead, no reply, no `original`).
+- Pokemon change tracking is disabled via `[tracking]
+  pokemon_change_tracking = false`.
+
+PoracleNG ships a default `monsterChanged` template per platform in
+`fallbacks/dts.json`; admins override via `config/dts.json` or
+`config/dts/` like any other type.
+
+---
+
 ## Raid (`raid`)
 
 Hatched raid with a boss pokemon.
