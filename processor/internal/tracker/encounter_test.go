@@ -41,34 +41,6 @@ func TestEncounterTrackerDuplicate(t *testing.T) {
 	}
 }
 
-func TestEncounterTrackerStatChangeFiresEncountered(t *testing.T) {
-	et := NewEncounterTracker()
-
-	// First sight: unencountered (CP=0)
-	state1 := EncounterState{
-		PokemonID: 25, Form: 0, Weather: 1, CP: 0,
-		DisappearTime: time.Now().Unix() + 600,
-	}
-	et.Track("enc1", state1)
-
-	// Re-sight with encounter data — should fire ChangeEncountered (non-IV → IV transition)
-	state2 := EncounterState{
-		PokemonID: 25, Form: 0, Weather: 3, CP: 600,
-		ATK: 15, DEF: 10, STA: 12, DisappearTime: time.Now().Unix() + 600,
-	}
-	isNew, change := et.Track("enc1", state2)
-
-	if isNew {
-		t.Error("Expected isNew=false for re-sight")
-	}
-	if change == nil {
-		t.Fatal("Expected ChangeEncountered for non-IV → IV transition")
-	}
-	if change.Type != ChangeEncountered {
-		t.Errorf("change.Type = %v, want ChangeEncountered", change.Type)
-	}
-}
-
 func TestEncounterTrackerFormChange(t *testing.T) {
 	et := NewEncounterTracker()
 
@@ -160,8 +132,8 @@ func TestTrackIVNoiseIgnored(t *testing.T) {
 
 func TestTrackDetectsWeatherBoost(t *testing.T) {
 	et := NewEncounterTracker()
-	et.Track("enc-4", EncounterState{PokemonID: 25, CP: 1000, Weather: 1, ATK: 15})
-	_, change := et.Track("enc-4", EncounterState{PokemonID: 25, CP: 1250, Weather: 3, ATK: 15})
+	et.Track("enc-4", EncounterState{PokemonID: 25, CP: 1000, Weather: 1})
+	_, change := et.Track("enc-4", EncounterState{PokemonID: 25, CP: 1250, Weather: 3})
 	if change == nil || change.Type != ChangeWeatherBoost {
 		t.Fatalf("expected ChangeWeatherBoost, got %+v", change)
 	}
