@@ -15,7 +15,7 @@
 1. **Schedule format = profile `active_hours` JSON** (`[{day,hours,mins}, …]`, ISO weekday, 24h time, 10-minute trigger window). Reuses `matchesTimeWindow` from `cmd/processor/profiles.go`. Translators / web editor already understand this shape.
 2. **Schedule scope** is per-user, per-alert-type. One row per `(humans.id, type='quest')` in `summary_schedules`. Future expansion to other alert types (raids, eggs) is just new rows; no schema change needed.
 3. **Per-rule opt-in** is a new `summary tinyint default 0` column on the `quest` tracking table. Distinct from the `clean` bitmask — `summary` changes the *delivery path* (buffer vs immediate), not the *message lifecycle*. Keeping it separate avoids muddling the bitmask further.
-4. **Buffer is persisted** in a `summary_buffer` table. Quests have TTH up to 12+ hours; processor restarts shouldn't lose buffered quests. Each row carries enough data to re-render the quest entry without re-running enrichment from scratch (we store the enriched-quest JSON, not the raw webhook).
+4. **Buffer is persisted** in a `summary_buffer` table. Quests have TTH up to 12+ hours; processor restarts shouldn't lose buffered quests. Each row stores **raw webhook bytes** — no per-user pre-enrichment. Two users with the same buffered quest don't share a payload anyway (quests are matched per rule, fanned out per recipient), so caching pre-enriched JSON wins nothing. Storing raw also frees us from "what language was this enriched in?" — re-enrichment at dispatch time uses the user's *current* language.
 5. **Grouping key** = `(reward_type, reward)`. Two quests both rewarding "100 stardust" group together. Two quests rewarding different pokemon (Spinda vs Charmander) are separate groups → separate messages.
 6. **One message per reward group**. So a user with quests for stardust + spinda + charmander gets three messages at trigger time — each with the reward's icon and an N-location list.
 7. **Trigger window**: same 10-minute matching as the profile scheduler. A schedule of `Mon 07:30` fires once between 07:30 and 07:40 each Monday. Subsequent ticks within the window don't re-fire (we mark as delivered when buffer is cleared).
@@ -25,6 +25,7 @@
 11. **Distance/sorting**: pokestops within a single group are listed in the order they were buffered (FIFO). Templates can re-sort via Handlebars helpers if needed.
 12. **No per-rule schedule**. The `summary` flag on the quest rule says "this quest goes into the buffer"; the user's single per-type schedule decides when buffer fires. Simpler than per-rule cron.
 13. **Quest tracking rules without `summary` set continue to fire immediately** as today. The summary path is strictly opt-in.
+14. **New static-map type `questSummary`** in `[geocoding.static_map_type]`. The view builder hands the tileserver a `points: [{latitude, longitude, name}, ...]` list. Tileserver-side template is admin's responsibility — typically a multi-pin map covering the bounding box of the points. Default config sets `questSummary = "multiStaticMap"` so out-of-the-box it falls through to the existing pokemon-nearby-stops template.
 
 ---
 
@@ -154,16 +155,16 @@ CREATE TABLE summary_buffer (
   reward_type int NOT NULL,
   reward int NOT NULL,
   pokestop_id varchar(64) NOT NULL,
-  payload mediumblob NOT NULL,            -- enriched-quest JSON for re-rendering
+  payload mediumblob NOT NULL,            -- raw quest webhook bytes; re-enriched at dispatch
   expires_at int unsigned NOT NULL,        -- unix; sweep past this
   created_at int unsigned NOT NULL,
-  PRIMARY KEY (id, alert_type, pokestop_id),
+  PRIMARY KEY (id, alert_type, reward_type, reward, pokestop_id),
   KEY idx_summary_buffer_expires (expires_at),
   CONSTRAINT fk_summary_buffer_human FOREIGN KEY (id) REFERENCES humans(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-The composite primary key dedupes: a user can't accumulate the same pokestop's quest twice. If the quest webhook fires again (rare), the row updates rather than inserts.
+The composite primary key dedupes: a user can't accumulate the same pokestop's quest twice for the same reward. Quest rotation (midnight) produces a new row with a different `reward_type/reward` instead of overwriting.
 
 - [ ] **Step 1-3**: TDD.
 
@@ -368,24 +369,22 @@ Existing behaviour: matched users → enrich → render → dispatch. New behavi
 ```go
 immediate, buffered, areas := ps.questMatcher.Match(processed, st)
 // existing path for immediate
-// new path for buffered
+// new path for buffered — store raw webhook for later re-enrichment
 for _, m := range buffered {
-    enrichedQuest := ps.enricher.QuestForLanguage(processed, m.Language) // produces a single map[string]any
-    payload, _ := json.Marshal(enrichedQuest)
     ps.summaryBuffer.Append(store.BufferedQuest{
         ID:         m.ID,
         AlertType:  "quest",
         RewardType: processed.RewardType,
         Reward:     processed.Reward,
         PokestopID: processed.PokestopID,
-        Payload:    payload,
-        ExpiresAt:  processed.QuestExpire, // unix
+        Payload:    raw, // the original webhook bytes
+        ExpiresAt:  processed.QuestExpire,
         CreatedAt:  time.Now().Unix(),
     })
 }
 ```
 
-The exact enricher call depends on what's available — adapt to the current quest enrichment helper. The payload should contain everything the `questSummary` template needs per pokestop entry (name, lat/lon, address-if-available, etc.) so the scheduler doesn't re-enrich.
+`raw` is the original `json.RawMessage` for this webhook. No per-user enrichment is performed at buffer time — the scheduler does that at dispatch time using the user's *current* language, so language changes between buffer and dispatch transparently work.
 
 - [ ] **Step 1**: Test — a buffered match results in one row in `summary_buffer`, no render-queue dispatch.
 
@@ -493,16 +492,53 @@ func (s *SummaryScheduler) deliver(humanID, alertType string) {
         s.buffer.Clear(humanID, alertType)
         return
     }
-    // Group by (reward_type, reward)
-    type key struct{ Type, Reward int }
-    groups := map[key][]store.BufferedQuest{}
+    // Look up the human once for language + location.
+    human, _ := s.humans.Get(humanID)
+    if human == nil {
+        s.buffer.Clear(humanID, alertType)
+        return
+    }
+    lang := human.Language
+    if lang == "" {
+        lang = s.cfg.General.Locale
+    }
+    // Re-enrich each buffered raw webhook for this user's current
+    // language. Dispatch is rare so the cost is bounded.
+    type enrichedEntry struct {
+        rewardType, reward int
+        view               map[string]any  // per-pokestop view fields
+    }
+    enriched := make([]enrichedEntry, 0, len(fresh))
     for _, r := range fresh {
-        k := key{r.RewardType, r.Reward}
-        groups[k] = append(groups[k], r)
+        var pokestopView map[string]any
+        // s.questEnrichOne reproduces the same per-quest enrichment
+        // ProcessQuest does for an immediate alert, scoped to one
+        // language. Implementation: parse r.Payload → run base + per-lang
+        // → return merged map for the per-pokestop entry.
+        pokestopView = s.questEnrichOne(r.Payload, lang)
+        if pokestopView == nil {
+            continue // malformed payload — skip silently
+        }
+        enriched = append(enriched, enrichedEntry{r.RewardType, r.Reward, pokestopView})
+    }
+    if len(enriched) == 0 {
+        s.buffer.Clear(humanID, alertType)
+        return
+    }
+    // Group by (reward_type, reward).
+    type key struct{ Type, Reward int }
+    groups := map[key][]map[string]any{}
+    rewards := []key{} // preserve first-seen order across groups
+    for _, e := range enriched {
+        k := key{e.rewardType, e.reward}
+        if _, exists := groups[k]; !exists {
+            rewards = append(rewards, k)
+        }
+        groups[k] = append(groups[k], e.view)
     }
     // For each group, render + dispatch one questSummary message.
-    for k, gs := range groups {
-        s.renderAndDispatchGroup(humanID, k.Type, k.Reward, gs)
+    for _, k := range rewards {
+        s.renderAndDispatchGroup(human, k.Type, k.Reward, groups[k])
     }
     // Clear after successful dispatch.
     s.buffer.Clear(humanID, alertType)
@@ -562,26 +598,57 @@ git commit -m "main: start + shutdown SummaryScheduler"
 ```go
 // BuildQuestSummaryView returns the template context for one
 // reward-group's questSummary message. The reward fields are shared
-// across the group; per-pokestop fields live in `quests`.
-func BuildQuestSummaryView(rewardType, rewardID int, group []store.BufferedQuest, gd *gamedata.GameData, tr *i18n.Translator) map[string]any {
-    quests := make([]map[string]any, 0, len(group))
-    for _, q := range group {
-        var perStop map[string]any
-        _ = json.Unmarshal(q.Payload, &perStop)  // already-enriched
-        quests = append(quests, perStop)
+// across the group; per-pokestop fields live in `quests`. The scheduler
+// has already re-enriched each per-pokestop view (one map per quest,
+// language-correct).
+func BuildQuestSummaryView(
+    rewardType, rewardID int,
+    perPokestopViews []map[string]any,
+    sm *staticmap.Resolver,
+    gd *gamedata.GameData,
+    tr *i18n.Translator,
+) map[string]any {
+    // Pull the shared reward icon. Each per-pokestop view already
+    // resolved imgUrl (same for every quest in this group), so we copy
+    // it from the first entry rather than re-deriving.
+    var sharedImg string
+    if len(perPokestopViews) > 0 {
+        if v, ok := perPokestopViews[0]["imgUrl"].(string); ok {
+            sharedImg = v
+        }
     }
+
+    // Generate the multi-pin static map URL via the configured tile type.
+    var staticMap string
+    if sm != nil {
+        points := make([]map[string]any, 0, len(perPokestopViews))
+        for _, q := range perPokestopViews {
+            points = append(points, map[string]any{
+                "latitude":  q["latitude"],
+                "longitude": q["longitude"],
+                "name":      q["name"],
+            })
+        }
+        staticMap = sm.GetPregeneratedTileURL("questSummary", map[string]any{
+            "points": points,
+        }, "staticMap")
+    }
+
     return map[string]any{
-        "rewardType":     rewardType,
-        "reward":         rewardID,
-        "rewardName":     ... resolve via gamedata.RewardName(rewardType, rewardID, tr) ...,
-        "imgUrl":         ... resolve via uicons / existing reward-icon helper ...,
-        "count":          len(quests),
-        "quests":         quests,  // {{#each quests}} ... {{/each}}
+        "rewardType":  rewardType,
+        "reward":      rewardID,
+        "rewardName":  rewardName(rewardType, rewardID, gd, tr),
+        "imgUrl":      sharedImg,
+        "staticMap":   staticMap,
+        "count":       len(perPokestopViews),
+        "quests":      perPokestopViews, // {{#each quests}} ... {{/each}}
     }
 }
 ```
 
-Tests assert: shared fields populated; `quests` slice carries per-pokestop fields; multiple pokestops same reward → one view with N entries.
+`rewardName` is a small helper that resolves a `(rewardType, reward)` pair into a translated name (stardust amount, item name, pokemon name, etc.) — likely already exists in `enrichment/quest.go`; reuse.
+
+Tests assert: shared fields populated; `quests` slice carries per-pokestop fields; multiple pokestops same reward → one view with N entries; `staticMap` URL contains a points list when the resolver is configured.
 
 - [ ] **Steps 1-6**: TDD.
 
@@ -606,7 +673,27 @@ The destination set for a summary is one user (the owner of the schedule). So th
 git commit -m "dts: RenderQuestSummary"
 ```
 
-### Task 6.3: Register questSummary in the API field registry
+### Task 6.3: questSummary tile mode + config wiring
+
+**Files:**
+- Modify: `processor/cmd/processor/tilemode.go` — recognise `"questSummary"` template type so tile-mode dispatch handles it (URL / Inline / URLWithBytes work the same as for other types).
+- Modify: `processor/internal/config/config.go` — `Geocoding.StaticMapType.QuestSummary string` (or matching field-name pattern with the existing entries).
+- Modify: `processor/internal/api/config_schema.go` — schema entry.
+- Modify: `config/config.example.toml` — add `questSummary = "multiStaticMap"` under `[geocoding.static_map_type]` with a doc comment that admins can swap to a dedicated tileserver template if they want.
+
+The view builder (Task 6.1) already passes `points: [...]` to the resolver; this task makes sure the named tile type resolves to a real config entry and the tile-mode logic doesn't trip on the new type.
+
+- [ ] **Step 1**: Test — render a questSummary view with the resolver mocked, assert the URL the resolver was asked to build was for tile type `"questSummary"` with a points list.
+
+- [ ] **Step 2-5**: Implement.
+
+- [ ] **Commit**:
+
+```
+git commit -m "tile/config: questSummary static-map type"
+```
+
+### Task 6.4: Register questSummary in the API field registry
 
 **Files:**
 - Modify: `processor/internal/api/dts_fields.go`
@@ -783,13 +870,14 @@ Coverage check against the spec:
 - ✅ Group by reward, one message per group (PR 5.2 + PR 6.1)
 - ✅ `!quest <pokemon> summary` adds the flag (PR 7.1)
 - ✅ `!summary quest now` forces immediate dispatch (PR 7.2)
-- ✅ `questSummary` DTS type with `imgUrl` + `quests` `{{#each}}` (PR 6, PR 9)
+- ✅ `questSummary` DTS type with `imgUrl` + `staticMap` + `quests` `{{#each}}` (PR 6, PR 9)
+- ✅ New `questSummary` static-map tile type (PR 6.3)
 - ✅ Fallback templates ship (PR 9)
 
 Open questions / risks:
-- **Reward-icon resolution**: `questSummary.imgUrl` requires a uicons lookup keyed on `(rewardType, reward)`. If the existing quest enrichment computes `imgUrl` already (it should — it's used in the regular `quest` template), reuse the same value from any of the buffered payloads. The renderer doesn't need to know how to build it.
-- **Buffer dedup semantics**: composite PK `(id, alert_type, pokestop_id)` means re-firing the same pokestop's quest updates the row. If the second fire has a *different* reward (rare — quests rotate at midnight), we'd silently overwrite. Either accept (rotation invalidates pre-rotation buffer anyway) or extend the PK to include `(reward_type, reward)`. Pick: extend PK to include reward_type+reward — quest rotation across the buffer window is unlikely but cheap to handle correctly.
-- **Multi-language buffering**: a single user has one language. The buffered payload was rendered for that user's language. If the user changes their language, the buffer carries pre-language-change names. Acceptable trade-off; alternative is to re-enrich at dispatch time (more expensive).
+- **Reward-icon resolution**: `questSummary.imgUrl` is the shared reward icon — the regular per-quest enrichment already populates `imgUrl` for the regular `quest` template, so the view builder copies it from the first per-pokestop view rather than re-deriving.
+- **Buffer dedup semantics**: composite PK `(id, alert_type, reward_type, reward, pokestop_id)` covers quest rotation: a pokestop changing reward across midnight produces a new row instead of silently overwriting.
+- **Multi-language**: not a concern — payload is raw webhook bytes, scheduler re-enriches at dispatch time using the user's *current* language. Free language-change support.
 - **Scheduler tick race**: if the user adds tracking, matches a quest, and the scheduler tick fires within the same minute, the buffer might be cleared empty before the match arrives. The 10-minute trigger window mitigates this; for first-set schedules we could fire at the next window rather than the current one. Not a blocker for v1.
 - **Manual `now` while a scheduled fire is mid-flight**: rare. The buffer is cleared atomically; a second trigger sees an empty buffer and replies "no buffered quests". Acceptable.
 - **Migration ordering**: PR 1's three migrations must use unique sequential numbers with no gap. Confirm by `ls processor/internal/db/migrations/` before each.
@@ -803,6 +891,7 @@ Open questions / risks:
 - [ ] Scheduler tick at the configured time fires identical dispatch
 - [ ] Mixed rules (one `summary` + one regular) on the same user: regular fires immediately, summary one buffers
 - [ ] Two pokestops with the same Spinda quest: one questSummary message with `count: 2` and a 2-element `quests` array
+- [ ] The summary message renders a multi-pin static-map covering both pokestops (verify the URL params or the embedded image in Discord)
 - [ ] Quest expires before dispatch: filtered out at delivery time, never sent
 - [ ] Restart processor with non-empty buffer + valid schedule: next scheduled fire delivers the buffer
 - [ ] `!summary quest cleartime` removes the schedule (subsequent ticks are no-ops)
