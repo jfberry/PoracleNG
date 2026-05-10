@@ -308,6 +308,7 @@
   "section.maxbattles": "**Max Battles:**",
   "section.maxbattles.none": "You're not tracking any max battles",
   "msg.no_pokemon": "Nie znaleziono Pokemona",
+  "msg.form_not_found": "Form `{0}` not recognised. Use `{1}info <pokemon>` to see available forms.",
   "msg.nothing_to_remove": "Nothing to remove",
   "msg.no_levels": "No levels specified",
   "msg.no_egg_levels": "No egg levels specified",
