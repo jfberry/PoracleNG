@@ -2,7 +2,6 @@ package commands
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -95,7 +94,7 @@ func (c *SummaryCommand) showStatus(ctx *bot.CommandContext, alertType string) [
 
 	var lines []string
 	if schedule != nil && len(schedule.ParsedActiveHours) > 0 {
-		lines = append(lines, tr.Tf("msg.summary.scheduled", alertType, formatActiveHours(tr, schedule.ParsedActiveHours)))
+		lines = append(lines, tr.Tf("msg.summary.scheduled", alertType, formatActiveHours(tr, schedule.ParsedActiveHours, ", ")))
 	} else {
 		lines = append(lines, tr.Tf("msg.summary.no_schedule", alertType))
 	}
@@ -167,12 +166,11 @@ func (c *SummaryCommand) setTime(ctx *bot.CommandContext, alertType string, args
 
 	ctx.TriggerReload()
 
-	// Build a friendly representation of what was just stored.
-	dbEntries := make([]ahForDisplay, 0, len(entries))
-	for _, e := range entries {
-		dbEntries = append(dbEntries, ahForDisplay{Day: e.Day, Hours: e.Hours, Mins: e.Mins})
-	}
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.summary.updated", alertType, formatActiveHoursDisplay(tr, dbEntries))}}
+	// Round-trip the JSON we just stored back through ParseActiveHours so
+	// the friendly display goes through the same flex-typed parser the
+	// store uses on read — one canonical decode path.
+	parsed, _ := db.ParseActiveHours(string(data))
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.summary.updated", alertType, formatActiveHours(tr, parsed, ", "))}}
 }
 
 // clearTime removes the schedule via SummaryScheduleStore.Delete.
@@ -206,48 +204,3 @@ func (c *SummaryCommand) now(ctx *bot.CommandContext, alertType string) []bot.Re
 	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.summary.delivered", alertType)}}
 }
 
-// ahForDisplay mirrors the lightweight {day,hours,mins} shape used for
-// rendering both freshly-set and DB-loaded schedules.
-type ahForDisplay struct {
-	Day   int
-	Hours string
-	Mins  string
-}
-
-// formatActiveHoursDisplay renders []ahForDisplay using day-name keys.
-func formatActiveHoursDisplay(tr interface {
-	T(key string) string
-}, entries []ahForDisplay) string {
-	dayKeys := []string{
-		"day.monday", "day.tuesday", "day.wednesday",
-		"day.thursday", "day.friday", "day.saturday", "day.sunday",
-	}
-	parts := make([]string, 0, len(entries))
-	for _, e := range entries {
-		var dayName string
-		if e.Day >= 1 && e.Day <= 7 {
-			dayName = tr.T(dayKeys[e.Day-1])
-		} else {
-			dayName = fmt.Sprintf("day%d", e.Day)
-		}
-		parts = append(parts, fmt.Sprintf("%s %s:%s", dayName, e.Hours, e.Mins))
-	}
-	return strings.Join(parts, ", ")
-}
-
-// formatActiveHours renders []db.ActiveHourEntry (the parsed shape used
-// by the schedule store). Mirrors formatActiveHoursDisplay but for the
-// integer-based parsed entries.
-func formatActiveHours(tr interface {
-	T(key string) string
-}, entries []db.ActiveHourEntry) string {
-	disp := make([]ahForDisplay, 0, len(entries))
-	for _, e := range entries {
-		disp = append(disp, ahForDisplay{
-			Day:   e.Day,
-			Hours: fmt.Sprintf("%02d", e.Hours),
-			Mins:  fmt.Sprintf("%02d", e.Mins),
-		})
-	}
-	return formatActiveHoursDisplay(tr, disp)
-}

@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 type ProfileCommand struct{}
@@ -62,11 +63,6 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		return []bot.Reply{{Text: tr.T("msg.profile.none")}}
 	}
 
-	dayKeys := []string{
-		"day.monday", "day.tuesday", "day.wednesday",
-		"day.thursday", "day.friday", "day.saturday", "day.sunday",
-	}
-
 	var sb strings.Builder
 	sb.WriteString(tr.T("msg.profile.list_header"))
 	sb.WriteByte('\n')
@@ -89,22 +85,10 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		}
 		sb.WriteByte('\n')
 
-		// Decode and display active hours
-		if p.ActiveHours != "" && p.ActiveHours != "[]" && p.ActiveHours != "{}" {
-			var hours []struct {
-				Day   int    `json:"day"`
-				Hours string `json:"hours"`
-				Mins  string `json:"mins"`
-			}
-			if err := json.Unmarshal([]byte(p.ActiveHours), &hours); err == nil {
-				for _, h := range hours {
-					dayName := ""
-					if h.Day >= 1 && h.Day <= 7 {
-						dayName = tr.T(dayKeys[h.Day-1])
-					}
-					sb.WriteString(fmt.Sprintf("    %s %s:%s\n", dayName, h.Hours, h.Mins))
-				}
-			}
+		entries, err := db.ParseActiveHours(p.ActiveHours)
+		if err == nil && len(entries) > 0 {
+			body := formatActiveHours(tr, entries, "\n")
+			sb.WriteString("    " + strings.ReplaceAll(body, "\n", "\n    ") + "\n")
 		}
 	}
 	return []bot.Reply{{Text: sb.String()}}

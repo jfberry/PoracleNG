@@ -1,7 +1,6 @@
 package store
 
 import (
-	"encoding/json"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -104,15 +103,11 @@ func (m *MockSummaryScheduleStore) ListByType(alertType string) ([]SummarySchedu
 	return out, nil
 }
 
-// parseMockActiveHours mirrors the SQL store's parsing behaviour for
-// mock callers that want a populated ParsedActiveHours field. Errors
-// are silently dropped so test fixtures can omit the field.
+// parseMockActiveHours wraps db.ParseActiveHours, dropping errors so
+// test fixtures can omit the field.
 func parseMockActiveHours(raw string) []db.ActiveHourEntry {
-	if len(raw) <= 5 {
-		return nil
-	}
-	var entries []db.ActiveHourEntry
-	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+	entries, err := db.ParseActiveHours(raw)
+	if err != nil {
 		log.Debugf("MockSummaryScheduleStore: failed to parse active_hours: %v", err)
 		return nil
 	}

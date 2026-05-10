@@ -2,7 +2,6 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -31,27 +30,16 @@ func NewSQLSummaryScheduleStore(db *sqlx.DB) *SQLSummaryScheduleStore {
 
 const summaryScheduleColumns = `id, alert_type, active_hours`
 
-// parseActiveHours decodes the JSON active_hours string. A short or
-// empty string is treated as "no entries" without raising an error,
-// matching db.LoadProfiles behaviour.
-func parseActiveHours(raw string, ctx string) []db.ActiveHourEntry {
-	if len(raw) <= 5 {
-		return nil
-	}
-	var entries []db.ActiveHourEntry
-	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
-		log.Warnf("summary_schedules %s: failed to parse active_hours: %s", ctx, err)
-		return nil
-	}
-	return entries
-}
-
 func rowToSummarySchedule(r *summaryScheduleRow) *SummarySchedule {
+	parsed, err := db.ParseActiveHours(r.ActiveHours)
+	if err != nil {
+		log.Warnf("summary_schedules %s/%s: failed to parse active_hours: %s", r.ID, r.AlertType, err)
+	}
 	return &SummarySchedule{
 		ID:                r.ID,
 		AlertType:         r.AlertType,
 		ActiveHours:       r.ActiveHours,
-		ParsedActiveHours: parseActiveHours(r.ActiveHours, fmt.Sprintf("%s/%s", r.ID, r.AlertType)),
+		ParsedActiveHours: parsed,
 	}
 }
 

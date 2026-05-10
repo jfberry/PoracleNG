@@ -42,6 +42,22 @@ func (e *ActiveHourEntry) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// ParseActiveHours decodes the on-disk active_hours JSON shape into
+// typed entries. Empty / placeholder strings (`""`, `"[]"`, `"{}"`)
+// return (nil, nil) — a missing schedule is not an error. Malformed
+// JSON returns the underlying error so callers can choose to log
+// vs. fail.
+func ParseActiveHours(raw string) ([]ActiveHourEntry, error) {
+	if len(raw) <= 5 {
+		return nil, nil
+	}
+	var entries []ActiveHourEntry
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
 // flexToInt converts a JSON value that may be a number (9), a string ("9"),
 // or a zero-padded string ("00") to an int.
 func flexToInt(v any) (int, error) {
@@ -88,13 +104,11 @@ func LoadProfiles(db *sqlx.DB) (map[ProfileKey]*Profile, error) {
 	profiles := make(map[ProfileKey]*Profile, len(rows))
 	for i := range rows {
 		p := &rows[i]
-		if len(p.ActiveHours) > 5 {
-			var entries []ActiveHourEntry
-			if err := json.Unmarshal([]byte(p.ActiveHours), &entries); err != nil {
-				log.Warnf("Profile %s/%d: failed to parse active_hours: %s", p.ID, p.ProfileNo, err)
-			} else {
-				p.ParsedActiveHours = entries
-			}
+		entries, err := ParseActiveHours(p.ActiveHours)
+		if err != nil {
+			log.Warnf("Profile %s/%d: failed to parse active_hours: %s", p.ID, p.ProfileNo, err)
+		} else {
+			p.ParsedActiveHours = entries
 		}
 		profiles[ProfileKey{ID: p.ID, ProfileNo: p.ProfileNo}] = p
 	}
