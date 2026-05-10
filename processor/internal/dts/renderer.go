@@ -235,6 +235,26 @@ func (r *Renderer) RenderPokemonChanged(
 	return r.renderForUsers("monsterChanged", enrichment, perLangEnrichment, perUserEnrichment, webhookFields, original, uniqueUsers, matchedAreas, logReference, editKeyBase)
 }
 
+// RenderQuestSummary renders a single grouped quest-summary message for a
+// reward bucket. Unlike RenderQuest, the view passed in is already fully
+// composed (base + per-language fields merged per pokestop, plus shared
+// reward fields and the autopositioned multi-pin static map URL) — see
+// BuildQuestSummaryView. The matched-users slice is the recipient(s) of
+// the summary, typically the single owner of the schedule.
+//
+// The summary template path doesn't run TTH gating; the caller has
+// already filtered expired buffered quests before composing the view.
+// The view is consumed as-is via the LayeredView's `base` layer.
+func (r *Renderer) RenderQuestSummary(
+	view map[string]any,
+	matchedUsers []webhook.MatchedUser,
+	matchedAreas []webhook.MatchedArea,
+	logReference string,
+	editKeyBase string,
+) []webhook.DeliveryJob {
+	return r.renderForUsers("questSummary", view, nil, nil, nil, nil, matchedUsers, matchedAreas, logReference, editKeyBase)
+}
+
 // RenderAlert renders alerts for any non-pokemon type and returns delivery jobs.
 // Unlike RenderPokemon, this does not deduplicate users or select template type
 // dynamically — the caller provides the template type directly.

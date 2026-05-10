@@ -1,0 +1,117 @@
+package dts
+
+import (
+	"testing"
+
+	"github.com/pokemon/poracleng/processor/internal/i18n"
+)
+
+func TestBuildQuestSummaryView_BasicShape(t *testing.T) {
+	bundle := i18n.NewBundle()
+	tr := bundle.For("en")
+
+	pokestops := []map[string]any{
+		{
+			"pokestopName": "Statue One",
+			"latitude":     50.0,
+			"longitude":    14.0,
+			"imgUrl":       "https://example.com/icon.png",
+		},
+		{
+			"pokestopName": "Statue Two",
+			"latitude":     50.1,
+			"longitude":    14.1,
+			"imgUrl":       "https://example.com/icon.png",
+		},
+	}
+
+	view := BuildQuestSummaryView(7, 327, pokestops, nil, nil, tr)
+
+	if got := view["rewardType"]; got != 7 {
+		t.Errorf("rewardType = %v, want 7", got)
+	}
+	if got := view["reward"]; got != 327 {
+		t.Errorf("reward = %v, want 327", got)
+	}
+	if got := view["count"]; got != 2 {
+		t.Errorf("count = %v, want 2", got)
+	}
+	if got, ok := view["imgUrl"].(string); !ok || got != "https://example.com/icon.png" {
+		t.Errorf("imgUrl = %v, want shared icon URL", got)
+	}
+	quests, ok := view["quests"].([]map[string]any)
+	if !ok {
+		t.Fatalf("quests is not []map[string]any: %T", view["quests"])
+	}
+	if len(quests) != 2 {
+		t.Errorf("len(quests) = %d, want 2", len(quests))
+	}
+	// staticMap is empty without a resolver — that's fine for this case.
+	if _, ok := view["staticMap"]; !ok {
+		t.Errorf("staticMap key missing")
+	}
+}
+
+func TestBuildQuestSummaryView_EmptyInputDoesNotPanic(t *testing.T) {
+	bundle := i18n.NewBundle()
+	tr := bundle.For("en")
+
+	view := BuildQuestSummaryView(3, 100, nil, nil, nil, tr)
+	if got := view["count"]; got != 0 {
+		t.Errorf("count = %v, want 0", got)
+	}
+	if got := view["imgUrl"]; got != "" {
+		t.Errorf("imgUrl = %v, want empty", got)
+	}
+	if got := view["staticMap"]; got != "" {
+		t.Errorf("staticMap = %v, want empty (nil resolver)", got)
+	}
+	if got, _ := view["quests"].([]map[string]any); len(got) != 0 {
+		t.Errorf("quests = %v, want empty", got)
+	}
+}
+
+func TestBuildQuestSummaryView_RewardName(t *testing.T) {
+	bundle := i18n.NewBundle()
+	en := bundle.For("en")
+
+	// Stardust: reward field is the dust amount; quest_reward_3 is the
+	// label. Our empty bundle returns the key verbatim, so we check that
+	// the amount is interpolated.
+	view := BuildQuestSummaryView(3, 1500, nil, nil, nil, en)
+	name, _ := view["rewardName"].(string)
+	if name == "" || name == "quest_reward_3" {
+		t.Errorf("expected stardust reward name to include amount, got %q", name)
+	}
+
+	// Item: rewardName comes from item_701 lookup. Empty bundle returns
+	// "item_701" verbatim; we just want it to be the translation key, not
+	// blank.
+	view = BuildQuestSummaryView(2, 701, nil, nil, nil, en)
+	if got, _ := view["rewardName"].(string); got != "item_701" {
+		t.Errorf("item rewardName = %q, want \"item_701\"", got)
+	}
+
+	// Pokemon: PokemonTranslationKey(327) → poke_327.
+	view = BuildQuestSummaryView(7, 327, nil, nil, nil, en)
+	if got, _ := view["rewardName"].(string); got != "poke_327" {
+		t.Errorf("pokemon rewardName = %q, want \"poke_327\"", got)
+	}
+}
+
+func TestBuildQuestSummaryView_ZeroCoordSkippedInStaticMap(t *testing.T) {
+	bundle := i18n.NewBundle()
+	tr := bundle.For("en")
+
+	// All-zero coords: even with a resolver we never call the autoposition
+	// helper because no markers survive filtering. We don't assert against
+	// an actual resolver here (would require fixtures); instead we ensure
+	// no panic and empty staticMap when resolver is nil.
+	pokestops := []map[string]any{
+		{"pokestopName": "Lost Stop", "latitude": 0.0, "longitude": 0.0},
+	}
+	view := BuildQuestSummaryView(7, 25, pokestops, nil, nil, tr)
+	if got := view["staticMap"]; got != "" {
+		t.Errorf("staticMap = %v, want empty when only zero coords", got)
+	}
+}
