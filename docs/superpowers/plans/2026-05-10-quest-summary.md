@@ -15,7 +15,7 @@
 1. **Schedule format = profile `active_hours` JSON** (`[{day,hours,mins}, …]`, ISO weekday, 24h time, 10-minute trigger window). Reuses `matchesTimeWindow` from `cmd/processor/profiles.go`. Translators / web editor already understand this shape.
 2. **Schedule scope** is per-user, per-alert-type. One row per `(humans.id, type='quest')` in `summary_schedules`. Future expansion to other alert types (raids, eggs) is just new rows; no schema change needed.
 3. **Per-rule opt-in** is a new `summary tinyint default 0` column on the `quest` tracking table. Distinct from the `clean` bitmask — `summary` changes the *delivery path* (buffer vs immediate), not the *message lifecycle*. Keeping it separate avoids muddling the bitmask further.
-4. **Buffer is persisted** in a `summary_buffer` table. Quests have TTH up to 12+ hours; processor restarts shouldn't lose buffered quests. Each row stores **raw webhook bytes** — no per-user pre-enrichment. Two users with the same buffered quest don't share a payload anyway (quests are matched per rule, fanned out per recipient), so caching pre-enriched JSON wins nothing. Storing raw also frees us from "what language was this enriched in?" — re-enrichment at dispatch time uses the user's *current* language.
+4. **Buffer is in-memory** (`map[id]map[alertType][]BufferedQuest`) with a JSON snapshot to `config/.cache/summary-buffer.json` on graceful shutdown, restored on startup. Same pattern as `delivery-tracker.json` and `gym-state.json`. No per-quest DB writes — the buffer hot path is `sync.Mutex` + map append. Crash recovery loses the in-flight buffer (acceptable: a user misses one cycle). Each entry stores **raw webhook bytes** — no per-user pre-enrichment. Two users' summaries don't share a payload anyway (quests are matched per rule, fanned out per recipient), so caching enrichment buys nothing. Storing raw also frees us from "what language was this enriched in?" — re-enrichment at dispatch time uses the user's *current* language.
 5. **Grouping key** = `(reward_type, reward)`. Two quests both rewarding "100 stardust" group together. Two quests rewarding different pokemon (Spinda vs Charmander) are separate groups → separate messages.
 6. **One message per reward group**. So a user with quests for stardust + spinda + charmander gets three messages at trigger time — each with the reward's icon and an N-location list.
 7. **Trigger window**: same 10-minute matching as the profile scheduler. A schedule of `Mon 07:30` fires once between 07:30 and 07:40 each Monday. Subsequent ticks within the window don't re-fire (we mark as delivered when buffer is cleared).
@@ -33,11 +33,12 @@
 
 **New files:**
 - `processor/internal/db/migrations/NNN_summary_schedules.up.sql` and `.down.sql`
-- `processor/internal/db/migrations/NNN_summary_buffer.up.sql` and `.down.sql`
 - `processor/internal/db/migrations/NNN_quest_summary_column.up.sql` and `.down.sql`
-- `processor/internal/store/summary.go` — `SummaryScheduleStore` + `SummaryBufferStore` interfaces
-- `processor/internal/store/summary_sql.go` — sqlx implementations
-- `processor/internal/store/mock_summary.go` — test double
+- `processor/internal/store/summary.go` — `SummaryScheduleStore` interface (DB-backed)
+- `processor/internal/store/summary_sql.go` — sqlx implementation of the schedule store
+- `processor/internal/store/mock_summary.go` — test double for the schedule store
+- `processor/internal/tracker/summary_buffer.go` — in-memory buffer + JSON snapshot/restore
+- `processor/internal/tracker/summary_buffer_test.go`
 - `processor/cmd/processor/summary_scheduler.go` — periodic goroutine + dispatch helper
 - `processor/internal/bot/commands/summary.go` — `!summary` command
 - `processor/internal/api/summary.go` — REST endpoints
@@ -142,38 +143,6 @@ CREATE TABLE summary_schedules (
 git commit -m "db: summary_schedules table"
 ```
 
-### Task 1.3: Create `summary_buffer` table
-
-**Files:**
-- Create: `processor/internal/db/migrations/NNN_summary_buffer.up.sql`
-- Create: `processor/internal/db/migrations/NNN_summary_buffer.down.sql`
-
-```sql
-CREATE TABLE summary_buffer (
-  id varchar(64) NOT NULL,
-  alert_type varchar(32) NOT NULL,
-  reward_type int NOT NULL,
-  reward int NOT NULL,
-  pokestop_id varchar(64) NOT NULL,
-  payload mediumblob NOT NULL,            -- raw quest webhook bytes; re-enriched at dispatch
-  expires_at int unsigned NOT NULL,        -- unix; sweep past this
-  created_at int unsigned NOT NULL,
-  PRIMARY KEY (id, alert_type, reward_type, reward, pokestop_id),
-  KEY idx_summary_buffer_expires (expires_at),
-  CONSTRAINT fk_summary_buffer_human FOREIGN KEY (id) REFERENCES humans(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-```
-
-The composite primary key dedupes: a user can't accumulate the same pokestop's quest twice for the same reward. Quest rotation (midnight) produces a new row with a different `reward_type/reward` instead of overwriting.
-
-- [ ] **Step 1-3**: TDD.
-
-- [ ] **Step 4**: Commit.
-
-```
-git commit -m "db: summary_buffer table"
-```
-
 ---
 
 ## PR 2 — Store layer
@@ -241,54 +210,120 @@ type SummaryScheduleStore interface {
 git commit -m "store: SummaryScheduleStore (typed CRUD)"
 ```
 
-### Task 2.2: SummaryBufferStore
+### Task 2.2: In-memory SummaryBuffer with snapshot persistence
 
 **Files:**
-- Append to: `processor/internal/store/summary.go`
-- Append to: `processor/internal/store/summary_sql.go`
-- Append to: `processor/internal/store/summary_sql_test.go`
+- Create: `processor/internal/tracker/summary_buffer.go`
+- Test: `processor/internal/tracker/summary_buffer_test.go`
+
+Lives in `tracker/` alongside the other in-memory trackers (`encounter.go`, `weather.go`, `gym.go`).
 
 ```go
+package tracker
+
 type BufferedQuest struct {
-	ID         string
-	AlertType  string
 	RewardType int
 	Reward     int
 	PokestopID string
-	Payload    []byte
+	Payload    []byte // raw webhook bytes
 	ExpiresAt  int64
 	CreatedAt  int64
 }
 
-type SummaryBufferStore interface {
-	Append(q BufferedQuest) error
-	List(id, alertType string) ([]BufferedQuest, error)  // all non-expired
-	Clear(id, alertType string) error
-	SweepExpired(asOf int64) (int, error)                // for periodic cleanup
+type bufferKey struct {
+	RewardType, Reward int
+	PokestopID         string
 }
+
+// SummaryBuffer holds matched-but-not-delivered quests in memory,
+// keyed by (humanID, alertType). Dedup PK = (rewardType, reward,
+// pokestopID) so quest rotation produces new entries rather than
+// overwriting.
+type SummaryBuffer struct {
+	mu   sync.Mutex
+	data map[string]map[string]map[bufferKey]BufferedQuest
+	path string // snapshot path; "" disables persistence
+}
+
+func NewSummaryBuffer(snapshotPath string) *SummaryBuffer {
+	return &SummaryBuffer{
+		data: make(map[string]map[string]map[bufferKey]BufferedQuest),
+		path: snapshotPath,
+	}
+}
+
+func (sb *SummaryBuffer) Append(humanID, alertType string, q BufferedQuest) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	byType := sb.data[humanID]
+	if byType == nil {
+		byType = make(map[string]map[bufferKey]BufferedQuest)
+		sb.data[humanID] = byType
+	}
+	bucket := byType[alertType]
+	if bucket == nil {
+		bucket = make(map[bufferKey]BufferedQuest)
+		byType[alertType] = bucket
+	}
+	bucket[bufferKey{q.RewardType, q.Reward, q.PokestopID}] = q
+}
+
+func (sb *SummaryBuffer) List(humanID, alertType string) []BufferedQuest {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	bucket := sb.data[humanID][alertType]
+	out := make([]BufferedQuest, 0, len(bucket))
+	for _, q := range bucket {
+		out = append(out, q)
+	}
+	return out
+}
+
+func (sb *SummaryBuffer) Clear(humanID, alertType string) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	if byType := sb.data[humanID]; byType != nil {
+		delete(byType, alertType)
+		if len(byType) == 0 {
+			delete(sb.data, humanID)
+		}
+	}
+}
+
+// SweepExpired drops entries whose ExpiresAt is past asOf. Returns
+// the count removed.
+func (sb *SummaryBuffer) SweepExpired(asOf int64) int { ... }
+
+// Save writes the current buffer to the snapshot path as JSON.
+// Called on graceful shutdown.
+func (sb *SummaryBuffer) Save() error { ... }
+
+// Load restores the buffer from the snapshot path. Missing file is
+// not an error. Called at startup.
+func (sb *SummaryBuffer) Load() error { ... }
 ```
 
-Tests cover: append+list, dedup-on-pokestop (re-append updates payload + expires_at), expired filter on List, sweep returns count and removes.
+Tests cover: append+list, dedup (re-append updates the entry), Clear scope, SweepExpired, Save → Load round-trip, missing-file Load is silent, malformed-file Load is silent (logged but doesn't fail startup).
 
-- [ ] **Steps 1-6** as above.
+- [ ] **Steps 1-6**: TDD.
 
 - [ ] **Commit**:
 
 ```
-git commit -m "store: SummaryBufferStore with dedup-on-pokestop"
+git commit -m "tracker: in-memory SummaryBuffer + JSON snapshot persistence"
 ```
 
-### Task 2.3: Mock store
+### Task 2.3: Mock SummaryScheduleStore
 
 **Files:**
 - Create: `processor/internal/store/mock_summary.go`
 
-In-memory map-backed implementations of both interfaces. Used by command tests + scheduler tests so they don't need a database.
+In-memory map-backed implementation of `SummaryScheduleStore`. Used by command tests + scheduler tests so they don't need a database. (`SummaryBuffer` is already in-memory; no separate mock needed.)
 
 - [ ] Commit:
 
 ```
-git commit -m "store: in-memory mock SummaryScheduleStore + SummaryBufferStore"
+git commit -m "store: in-memory mock SummaryScheduleStore"
 ```
 
 ---
@@ -371,9 +406,7 @@ immediate, buffered, areas := ps.questMatcher.Match(processed, st)
 // existing path for immediate
 // new path for buffered — store raw webhook for later re-enrichment
 for _, m := range buffered {
-    ps.summaryBuffer.Append(store.BufferedQuest{
-        ID:         m.ID,
-        AlertType:  "quest",
+    ps.summaryBuffer.Append(m.ID, "quest", tracker.BufferedQuest{
         RewardType: processed.RewardType,
         Reward:     processed.Reward,
         PokestopID: processed.PokestopID,
@@ -384,7 +417,7 @@ for _, m := range buffered {
 }
 ```
 
-`raw` is the original `json.RawMessage` for this webhook. No per-user enrichment is performed at buffer time — the scheduler does that at dispatch time using the user's *current* language, so language changes between buffer and dispatch transparently work.
+`raw` is the original `json.RawMessage` for this webhook. No per-user enrichment is performed at buffer time — the scheduler re-enriches at dispatch time using the user's *current* language, so language changes between buffer and dispatch transparently work.
 
 - [ ] **Step 1**: Test — a buffered match results in one row in `summary_buffer`, no render-queue dispatch.
 
@@ -476,8 +509,8 @@ The `dispatch` callback's body:
 
 ```go
 func (s *SummaryScheduler) deliver(humanID, alertType string) {
-    rows, err := s.buffer.List(humanID, alertType)
-    if err != nil || len(rows) == 0 {
+    rows := s.buffer.List(humanID, alertType)
+    if len(rows) == 0 {
         return
     }
     // Filter expired
@@ -570,17 +603,17 @@ A cheap addition — runs on the same goroutine, every 10th tick or so.
 git commit -m "processor: SummaryScheduler periodic SweepExpired"
 ```
 
-### Task 5.4: Wire scheduler in main.go
+### Task 5.4: Wire scheduler + buffer in main.go
 
 **Files:**
 - Modify: `processor/cmd/processor/main.go`
 
-Construct the scheduler, start it after dispatcher start, close it as part of shutdown sequence (between dispatcher.Stop and tracker.Save — same lifetime as profile scheduler).
+Construct `tracker.NewSummaryBuffer(filepath.Join(getConfigDir(), ".cache", "summary-buffer.json"))`. Call `Load()` at startup (right after the message tracker loads), pass to the matcher / scheduler. Wire `Save()` into the shutdown sequence between dispatcher.Stop and tracker save (same band as gym-state save). Construct the SummaryScheduler with the buffer, the schedule store, and the dispatch callback.
 
 - [ ] **Commit**:
 
 ```
-git commit -m "main: start + shutdown SummaryScheduler"
+git commit -m "main: wire SummaryBuffer (Load/Save) + SummaryScheduler"
 ```
 
 ---
@@ -863,9 +896,9 @@ git commit -m "docs: questSummary template + summary scheduling commands"
 ## Self-Review Notes
 
 Coverage check against the spec:
-- ✅ Schedule per user, per alert type with active_hours JSON (PR 1.2, 2.1)
+- ✅ Schedule per user, per alert type with active_hours JSON (PR 1.2, 2.1) — DB-backed
 - ✅ `summary` opt-in on quest tracking rules (PR 1.1, 3.1)
-- ✅ Buffer persistence (PR 1.3, 2.2) — survives restart
+- ✅ Buffer is in-memory with shutdown-snapshot (PR 2.2) — survives graceful restart, loses on crash (acceptable)
 - ✅ Scheduler ticks and dispatches at scheduled time (PR 5)
 - ✅ Group by reward, one message per group (PR 5.2 + PR 6.1)
 - ✅ `!quest <pokemon> summary` adds the flag (PR 7.1)
@@ -893,7 +926,8 @@ Open questions / risks:
 - [ ] Two pokestops with the same Spinda quest: one questSummary message with `count: 2` and a 2-element `quests` array
 - [ ] The summary message renders a multi-pin static-map covering both pokestops (verify the URL params or the embedded image in Discord)
 - [ ] Quest expires before dispatch: filtered out at delivery time, never sent
-- [ ] Restart processor with non-empty buffer + valid schedule: next scheduled fire delivers the buffer
+- [ ] Graceful restart with non-empty buffer + valid schedule: snapshot at `config/.cache/summary-buffer.json` exists; on restart it's reloaded and the next scheduled fire delivers it
+- [ ] Hard kill (SIGKILL) with non-empty buffer: snapshot wasn't written; buffer is empty after restart (acceptable, documented behaviour)
 - [ ] `!summary quest cleartime` removes the schedule (subsequent ticks are no-ops)
 - [ ] Buffer sweep removes long-stale rows past `quest_summary_buffer_ttl_hours`
 - [ ] API endpoints CRUD round-trip via curl
