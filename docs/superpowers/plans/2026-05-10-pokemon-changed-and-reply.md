@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fire a new `monsterChanged` DTS template when a tracked pokemon's data changes (encounter, species, form, gender), with the prior sighting accessible via `{{original.X}}`. Subsequent messages for the same encounter (per recipient) thread as Discord/Telegram replies to the prior message — implicit behaviour, not opt-in. Edit mode (existing) still takes priority when set.
+**Goal:** Fire a new `monsterChanged` DTS template when a tracked pokemon's *post-encounter* data changes (species, form, gender), with the prior sighting accessible via `{{original.X}}`. The encounter event itself (non-IV → IV) re-fires the regular `monster` template — that's the natural fulfilment of the non-IV alert, not a "change". Subsequent messages for the same encounter (per recipient) thread as Discord/Telegram replies to the prior message — implicit behaviour, not opt-in. Edit mode (existing) still takes priority when set. Ship a fallback `monsterChanged` template so admins get something out of the box.
 
-**Architecture:** The encounter tracker already detects species/form changes (`tracker/encounter.go`). Extend it to surface encounter-fill (non-IV → IV) and gender changes, and propagate the prior state into the render pipeline. The renderer constructs the new template from a `monsterChanged` type with an `original` sub-view bolted onto `LayeredView`. Delivery gains a `ReplyKey` field on `Job`; `MessageTracker` keeps a dedicated O(1) reply index `map[replyKey + ":" + target] → latestSentID` so the high-volume pokemon path doesn't pay an O(N) cache walk per send. Senders inject `message_reference` (Discord) / `reply_to_message_id` (Telegram) when the lookup hits. No bitmask change — reply is implicit for pokemon updates.
+**Architecture:** The encounter tracker already detects species/form changes (`tracker/encounter.go`). Extend it to surface encounter-fill (non-IV → IV) and gender changes, and propagate the prior state into the render pipeline. Per-user template dispatch at change time: users with a prior message tracked for this encounter and a non-encounter change get `monsterChanged`; everyone else (encounter event, or no prior) gets the regular `monster`. The renderer accepts an optional `original` sub-view that bolts into `LayeredView` and is available to any template that wants to reference `{{original.X}}` (templates that don't, ignore it). Delivery gains a `ReplyKey` field on `Job`; *every* pokemon render carries `ReplyKey = encounterID` so the chain is indexed from the very first send. `MessageTracker` keeps a dedicated O(1) reply index `map[replyKey + "\x00" + target] → latestSentID` so the high-volume pokemon path doesn't pay an O(N) cache walk per send. Senders inject `message_reference` (Discord) / `reply_to_message_id` (Telegram) when the lookup hits. No bitmask change — reply threading is implicit for pokemon updates.
 
 **Tech Stack:** Go monorepo (`processor/`). Webhook handler in `cmd/processor/pokemon.go`, encounter tracker in `internal/tracker/`, DTS in `internal/dts/`, delivery in `internal/delivery/`, bot commands in `internal/bot/commands/`.
 
@@ -19,14 +19,26 @@
    - Species change (existing behaviour)
    - Form change (existing)
    - Gender change (new)
-   - Encountered transition: CP was 0 and is now > 0 (new — this is the most common change)
-   - IV refinement after encounter is treated as noise (IVs don't change once encountered)
-   - Weather change is silently absorbed (environment, not pokemon)
+   - Encountered transition: CP was 0 and is now > 0 (new — most common change)
+   - **Weather boost shift**: `old.Weather != new.Weather AND old.CP != new.CP` (both encountered) — in-game weather changed and the pokemon's stats actually moved as a result. CP/level changes are real for the player. (new)
+   - IV (atk/def/sta) refinement after encounter is still treated as noise (IVs don't physically change post-encounter)
+   - Weather change *without* a CP change is still absorbed silently — the player wouldn't see anything different.
 5. **`original` view scope**: a fixed subset of fields — `pokemonId`, `formId`, `name`, `formName`, `fullName`, `cp`, `iv`, `atk`, `def`, `sta`, `level`, `gender`, `genderName`, `weatherId`, `weatherName`, `encountered` (bool), `weight`, `height`. Implemented as a `map[string]any` injected as a layer in `LayeredView` under key `"original"`. Handlebars recurses into the map naturally for `{{original.X}}` access.
-6. **No matched-user gate for monsterChanged.** Every user who matched the new state gets the change render; if they were also matched at the prior state, their message threads as a reply to that prior — otherwise it's a fresh message (still as `monsterChanged`, since it's still a "change" event semantically). This avoids silently dropping IV alerts for users whose rules match the encountered state but not the non-IV state.
-7. **Reply scope**: pokemon-tracking only for this feature. Other types are not wired (raids on RSVP changes are a follow-up candidate). The infrastructure (ReplyKey field, LookupReply, sender injection) is generic, so wiring more types later is local.
-8. **EditKey + ReplyKey for monsterChanged** = the encounter ID. The same string serves both: edit-this-encounter, reply-to-this-encounter's-latest-message.
-9. **Reply lookup is O(1).** Pokemon is the highest-volume alert type. The MessageTracker keeps a dedicated `replyIndex *ttlcache.Cache[string, string]` keyed by `replyKey + "\x00" + target` with values = `SentID`. The existing edit/clean cache is unchanged. Both indexes share TTL semantics — when a reply-tracked message is evicted from the edit cache, the matching reply-index entry is evicted too via the eviction callback.
+6. **Per-user template dispatch at a change event.** For each matched user:
+
+   | Prior message tracked? | Change type | Template | Wire effect |
+   |---|---|---|---|
+   | Yes | Encounter event (CP 0 → >0) | `monster` | reply |
+   | Yes | Post-encounter (form / species / gender / weather-boost) | `monsterChanged` | reply |
+   | No | Any | `monster` | fresh |
+
+   Rationale: a user who never saw the original would be confused by a "what changed" alert. The encounter event is the natural fulfilment of a non-IV alert (IVs revealed), so prior-users see `monster` threaded under their non-IV message — not a separate change template. Weather-boost shifts are post-encounter and `monsterChanged` shows the CP delta via `{{original.cp}}` vs `{{cp}}`.
+
+7. **Every pokemon render sets `ReplyKey = encounterID`** (initial sighting and changes alike). Without this on the initial render, the second sighting has nothing to look up.
+8. **Reply scope**: pokemon-tracking only for this feature. Other types are not wired (raids on RSVP changes are a follow-up candidate). The infrastructure (ReplyKey field, LookupReply, sender injection) is generic, so wiring more types later is local.
+9. **EditKey + ReplyKey for monsterChanged / monster reply** = the encounter ID. The same string serves both: edit-this-encounter, reply-to-this-encounter's-latest-message.
+10. **Reply lookup is O(1).** Pokemon is the highest-volume alert type. The MessageTracker keeps a dedicated `replyIndex *ttlcache.Cache[string, string]` keyed by `replyKey + "\x00" + target` with values = `SentID`. The existing edit/clean cache is unchanged. Both indexes share TTL semantics — when a reply-tracked message is evicted from the edit cache, the matching reply-index entry is evicted too via the eviction callback.
+11. **Fallback DTS entry for `monsterChanged`** ships in `fallbacks/dts.json`. Mirrors the default `monster` template body, with an "Originally seen as `{{original.fullName}}` (CP `{{original.cp}}`)" line prepended. Admin overrides via `config/dts/` work the same as for any other type.
 
 ---
 
@@ -121,6 +133,29 @@ func TestTrackIVNoiseIgnored(t *testing.T) {
 		t.Fatalf("post-encounter IV change should not fire, got %+v", change)
 	}
 }
+
+func TestTrackDetectsWeatherBoost(t *testing.T) {
+	et := NewEncounterTracker()
+	et.Track("enc-4", EncounterState{PokemonID: 25, CP: 1000, Weather: 1, ATK: 15})
+	// Weather changes AND CP actually moves — boost gained/lost.
+	_, change := et.Track("enc-4", EncounterState{PokemonID: 25, CP: 1250, Weather: 3, ATK: 15})
+	if change == nil || change.Type != ChangeWeatherBoost {
+		t.Fatalf("expected ChangeWeatherBoost, got %+v", change)
+	}
+	if change.Old.CP != 1000 || change.New.CP != 1250 {
+		t.Errorf("CP delta not propagated")
+	}
+}
+
+func TestTrackWeatherChangeWithoutCPChangeIgnored(t *testing.T) {
+	et := NewEncounterTracker()
+	et.Track("enc-5", EncounterState{PokemonID: 25, CP: 1000, Weather: 1})
+	// Weather changes but stats don't — pokemon isn't boosted by either weather.
+	_, change := et.Track("enc-5", EncounterState{PokemonID: 25, CP: 1000, Weather: 3})
+	if change != nil {
+		t.Fatalf("weather-only change with no stat impact should be silent, got %+v", change)
+	}
+}
 ```
 
 - [ ] **Step 2: Run tests, expect failure**
@@ -163,7 +198,8 @@ const (
 	ChangeSpecies
 	ChangeForm
 	ChangeGender
-	ChangeEncountered // non-IV sighting filled in with CP/IVs
+	ChangeEncountered  // non-IV sighting filled in with CP/IVs
+	ChangeWeatherBoost // post-encounter weather change that moved CP
 )
 
 func (c ChangeType) String() string {
@@ -176,6 +212,8 @@ func (c ChangeType) String() string {
 		return "gender"
 	case ChangeEncountered:
 		return "encountered"
+	case ChangeWeatherBoost:
+		return "weather_boost"
 	}
 	return "none"
 }
@@ -209,6 +247,10 @@ case old.Gender != newState.Gender && old.Gender != 0 && newState.Gender != 0:
 	changeType = ChangeGender
 case old.CP == 0 && newState.CP > 0:
 	changeType = ChangeEncountered
+case old.Weather != newState.Weather && old.CP > 0 && newState.CP > 0 && old.CP != newState.CP:
+	// In-game weather changed and actually moved this pokemon's stats —
+	// boost gained/lost. Worth telling the player.
+	changeType = ChangeWeatherBoost
 }
 
 if changeType != ChangeNone {
@@ -228,7 +270,10 @@ if changeType != ChangeNone {
 return false, nil
 ```
 
-Note: gender change only fires when both old and new are non-zero — initial gender resolution doesn't count as a change.
+Notes:
+- Gender change only fires when both old and new are non-zero — initial gender resolution doesn't count as a change.
+- Weather-boost shift only fires post-encounter (both CPs > 0). Weather changes on unencountered pokemon are absorbed silently — there's no CP to compare against.
+- IV (atk/def/sta) drift is still ignored — physical IVs don't change.
 
 - [ ] **Step 7: Run tests, expect pass**
 
@@ -897,68 +942,131 @@ go build ./... && go test -count=1 ./cmd/processor/... ./internal/dts/...
 git commit -am "render: RenderJob carries OriginalView + ReplyKey + IsChange"
 ```
 
-### Task 5.2: handlePokemonChange enqueues the job
+### Task 5.2: Initial pokemon render carries ReplyKey
 
 **Files:**
-- Modify: `processor/cmd/processor/pokemon.go` (replace TODO at line 223)
+- Modify: `processor/cmd/processor/pokemon.go` (regular pokemon handler, around line ~150 where the RenderJob is built)
 
-- [ ] **Step 1: Reuse the matching pipeline for the changed pokemon**
+- [ ] **Step 1: Failing test**
 
-The new state's matched-users list is what we need. Re-run the same matcher path the initial sighting takes:
+In `pokemon_test.go` (or wherever the regular handler is exercised), assert that the RenderJob produced for an initial sighting has `ReplyKey == pokemon.EncounterID`. Without this, the change handler in 5.3 has nothing to reply to.
+
+- [ ] **Step 2: Set ReplyKey on initial RenderJob**
 
 ```go
-func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessage, change *tracker.EncounterChange, st *state.State) {
-	// Build a fresh MatchData for the new state. Re-use the same code
-	// path as the normal pokemon handler from line 100 onward.
-	matched := matching.MatchPokemon(... newState ..., st)
-	matched = ps.filterBlocked(matched)
-	if len(matched) == 0 {
-		return
-	}
-
-	enr := ps.enrichPokemon(... newState ...)
-	original := dts.BuildOriginalView(change.Old, ps.gameData, ps.translator(""))
-
-	// Compute reply/edit key — encounter ID is stable across the chain.
-	editKey := pokemon.EncounterID
-	replyKey := pokemon.EncounterID
-
-	job := &RenderJob{
-		TemplateType:   "monsterChanged",
-		IsChange:       true,
-		ChangeType:     change.Type.String(),
-		EditKey:        editKey,
-		ReplyKey:       replyKey,
-		OriginalView:   original,
-		Enrichment:     enr.Base,
-		PerLangEnrichment: enr.PerLang,
-		PerUserEnrichment: enr.PerUser,
-		WebhookFields:  webhookFields,
-		MatchedUsers:   matched,
-		IsEncountered:  newState.CP > 0,
-		IsPokemon:      true,
-	}
-	ps.enqueueRender(job)
+job := &RenderJob{
+	TemplateType: chooseInitialTemplate(pokemon),
+	EditKey:      pokemon.EncounterID,  // existing for edit-mode users
+	ReplyKey:     pokemon.EncounterID,  // NEW — index every send so changes can find it
+	// ... rest unchanged ...
 }
 ```
 
-The exact field names depend on the existing handler — match them. Refactor the original handler to share the build-job helper if duplication grows.
+`chooseInitialTemplate` is the existing logic that picks `monster` vs `monsterNoIv` based on `pokemon.CP > 0`.
 
-- [ ] **Step 2: Per-user reply-key targeting**
-
-The render worker constructs one DeliveryJob per user. Each Job gets `ReplyKey = "<encounterID>"`. The MessageTracker `LookupReply(replyKey, target)` already partitions by target, so users don't cross-thread.
-
-- [ ] **Step 3: Smoke test**
-
-Add `processor/cmd/processor/pokemon_change_test.go` — exercise: matcher finds 1 user, `Track()` returns ChangeEncountered, `handlePokemonChange` enqueues 1 RenderJob with IsChange=true and ReplyKey set. Stub the render queue with a channel of size 1.
+- [ ] **Step 3: Run, expect pass**
 
 - [ ] **Step 4: Commit**
 
 ```
-git commit -am "processor: handlePokemonChange enqueues monsterChanged render job"
+git commit -am "processor: initial pokemon render indexes itself via ReplyKey for change chains"
 ```
 
-### Task 5.3: Edit takes priority over reply
+### Task 5.3: handlePokemonChange dispatches per-user
+
+**Files:**
+- Modify: `processor/cmd/processor/pokemon.go` (replace TODO at line 223)
+- Test: `processor/cmd/processor/pokemon_change_test.go` (new)
+
+- [ ] **Step 1: Failing test covering all four cases from the dispatch table**
+
+```go
+func TestHandlePokemonChange_Dispatch(t *testing.T) {
+	// (Stub the render queue, MessageTracker, matcher.)
+	// Case A: prior tracked, encounter event → monster + reply
+	// Case B: prior tracked, post-encounter change → monsterChanged + reply
+	// Case C: no prior, encounter event → monster + fresh
+	// Case D: no prior, post-encounter change → monster + fresh
+	// (Case D is interesting: still send monster, not monsterChanged,
+	// because the user has never seen this encounter before.)
+}
+```
+
+- [ ] **Step 2: Implement the handler**
+
+```go
+func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessage, change *tracker.EncounterChange, st *state.State) {
+	matched := ps.matchAndFilter(/* new state */, st) // same path as initial
+	if len(matched) == 0 {
+		return
+	}
+
+	encounterEvent := change.Old.CP == 0 && change.New.CP > 0
+	enr := ps.enrichPokemon(/* new state */)
+	original := dts.BuildOriginalView(change.Old, ps.gameData, ps.translator(""))
+
+	// Partition matched users by prior-message-existence.
+	var withPrior, withoutPrior []webhook.MatchedUser
+	for _, m := range matched {
+		if ps.dispatcher.MessageTracker().LookupReply(pokemon.EncounterID, m.ID) != "" {
+			withPrior = append(withPrior, m)
+		} else {
+			withoutPrior = append(withoutPrior, m)
+		}
+	}
+
+	// Users with a prior message: reply.
+	if len(withPrior) > 0 {
+		template := "monster"
+		if !encounterEvent {
+			template = "monsterChanged"
+		}
+		ps.enqueueRender(&RenderJob{
+			TemplateType:      template,
+			EditKey:           pokemon.EncounterID,
+			ReplyKey:          pokemon.EncounterID,
+			OriginalView:      original, // available even when template is "monster" — templates ignore unused fields
+			ChangeType:        change.Type.String(),
+			Enrichment:        enr.Base,
+			PerLangEnrichment: enr.PerLang,
+			PerUserEnrichment: enr.PerUser,
+			WebhookFields:     webhookFields,
+			MatchedUsers:      withPrior,
+			IsEncountered:     change.New.CP > 0,
+			IsPokemon:         true,
+		})
+	}
+
+	// Users without a prior: regular monster render, no reply target.
+	// They'll still get ReplyKey = encounterID indexed for any future change.
+	if len(withoutPrior) > 0 {
+		ps.enqueueRender(&RenderJob{
+			TemplateType:      "monster",
+			EditKey:           pokemon.EncounterID,
+			ReplyKey:          pokemon.EncounterID,
+			Enrichment:        enr.Base,
+			PerLangEnrichment: enr.PerLang,
+			PerUserEnrichment: enr.PerUser,
+			WebhookFields:     webhookFields,
+			MatchedUsers:      withoutPrior,
+			IsEncountered:     change.New.CP > 0,
+			IsPokemon:         true,
+		})
+	}
+}
+```
+
+The two enqueued jobs share most of their input; refactor to a build-job helper if duplication starts to bite.
+
+- [ ] **Step 3: Verify the dispatch in the test**
+
+- [ ] **Step 4: Commit**
+
+```
+git commit -am "processor: per-user template dispatch at pokemon change events"
+```
+
+### Task 5.4: Edit takes priority over reply
 
 **Files:**
 - Modify: `processor/internal/delivery/queue.go`
@@ -1001,7 +1109,57 @@ git commit -am "delivery/queue: edit takes priority over reply when both keys ar
 
 **Goal:** Admin-facing documentation, an end-to-end integration test, and a checklist for verifying in a live Discord/Telegram channel.
 
-### Task 6.1: API.md / template docs
+### Task 6.1: Fallback DTS entry for monsterChanged
+
+**Files:**
+- Modify: `fallbacks/dts.json`
+
+- [ ] **Step 1: Find an existing `monster` fallback entry to clone**
+
+```
+grep -n '"type": *"monster"' fallbacks/dts.json | head
+```
+
+There's at least one entry per platform (discord, telegram). Clone the highest-quality default.
+
+- [ ] **Step 2: Add a `monsterChanged` entry per platform**
+
+For each platform, add an entry with `"type": "monsterChanged"`, the same template body as the `monster` default, and an extra "originally seen" line near the top of the description:
+
+```
+Originally seen as **{{original.fullName}}** (CP {{original.cp}}, IV {{toFixed original.iv 0}}%)
+```
+
+(Adjust phrasing per platform — Discord can do `**bold**`, Telegram does `*bold*` after the Markdown→HTML converter.)
+
+For an encounter-event case (prior was non-IV), `{{original.cp}}` is 0 and `{{original.iv}}` is 0. The template can branch:
+
+```
+{{#if original.encountered}}
+Originally seen as **{{original.fullName}}** (CP {{original.cp}}, IV {{toFixed original.iv 0}}%)
+{{else}}
+Originally seen unencountered (form: {{original.formName}})
+{{/if}}
+```
+
+But practically `monsterChanged` only fires for *post-encounter* changes (per Decision 6), so `original.encountered` is always true at this template's render. Keep the body simple — single `Originally seen as ... (CP X, IV Y%)` line.
+
+- [ ] **Step 3: Verify by running the bundled DTS test**
+
+```
+go test -count=1 -run "TestLoadFallback|TestSelectTemplate" ./internal/dts/...
+```
+
+The template-selection tests should now find a `monsterChanged` fallback when no user override is present.
+
+- [ ] **Step 4: Commit**
+
+```
+git add fallbacks/dts.json
+git commit -m "fallbacks: ship a monsterChanged DTS template for both platforms"
+```
+
+### Task 6.2: API.md / template docs
 
 **Files:**
 - Modify: `API.md` (clean bitmask doc)
@@ -1017,14 +1175,18 @@ Document the `monsterChanged` template type, the `{{original.X}}` field set, and
 git commit -am "docs: monsterChanged template, original.* fields, implicit reply threading"
 ```
 
-### Task 6.2: Integration smoke test
+### Task 6.3: Integration smoke test
 
 **Files:**
 - Test: `processor/cmd/processor/integration_pokemon_change_test.go` (new)
 
 - [ ] **Step 1: Write the test**
 
-Stand up a fake `Sender` that records jobs. Drive a non-IV pokemon webhook → assert one job sent with template `monster`/`monsterNoIv`. Drive the same encounter with IVs filled → assert a second job sent with template `monsterChanged`, `ReplyKey == encounterID`, and the second job's body contains a reference to the first sent message ID.
+Stand up a fake `Sender` that records jobs. Cover three scenarios:
+
+  - **Encounter event for prior-tracked user**: drive a non-IV pokemon webhook → assert one job sent with template `monster`/`monsterNoIv`, `ReplyKey == encounterID`. Drive the same encounter with IVs → assert second job uses template `monster`, `ReplyKey == encounterID`, body contains reference to first sent message ID.
+  - **Post-encounter form change for prior-tracked user**: drive an IV pokemon webhook → first job is `monster`. Drive same encounter with form changed → assert second job uses template `monsterChanged`, `OriginalView` populated, body contains reference to first message.
+  - **New match at change time (no prior)**: matcher rule that only fires at IV. Drive non-IV (no match, no message). Drive IV → assert one job uses template `monster`, no reply target on the body.
 
 - [ ] **Step 2: Run, expect pass after PR 5 lands**
 
@@ -1034,7 +1196,7 @@ Stand up a fake `Sender` that records jobs. Drive a non-IV pokemon webhook → a
 git commit -am "test: end-to-end pokemon-change reply smoke"
 ```
 
-### Task 6.3: Manual verification checklist
+### Task 6.4: Manual verification checklist
 
 **Files:**
 - Modify: this plan file (append a checklist)
@@ -1044,13 +1206,15 @@ git commit -am "test: end-to-end pokemon-change reply smoke"
 ```markdown
 ## Manual verification (before merging)
 
-- [ ] Telegram: !track pikachu → non-IV sighting then encountered IV → see two messages in DM, second is a reply to first
-- [ ] Discord: same as above; `message_reference` arrow visible
+- [ ] Telegram: !track pikachu → non-IV sighting then encountered → see two messages, both render the regular `monster`/`monsterNoIv` template, second is a reply to first
+- [ ] Discord: same as above; `message_reference` arrow visible on the second message
+- [ ] Form/species change after encounter (use a rare form via test webhook) → second message renders `monsterChanged` with "Originally seen as ..." line, threaded as reply
+- [ ] Weather-boost shift after encounter (synthetic webhook flipping Weather + bumping CP) → second message renders `monsterChanged`, `{{original.cp}}` shows pre-shift CP, threaded as reply
 - [ ] Telegram: !track pikachu clean → both messages delete on TTH; reply chain still threaded
 - [ ] !track pikachu edit (existing edit mode) → second sighting *edits* the first message, no reply
-- [ ] User adds tracking *between* sighting 1 and sighting 2 → sees only sighting 2 as a fresh message (no prior to reply to)
-- [ ] User has two rules where rule A matches at non-IV and rule B matches at IV (different filters) → second message replies to first (same encounter, same target)
-- [ ] monsterChanged template can render `{{original.cp}}`, `{{original.fullName}}`, `{{original.encountered}}` with prior values
+- [ ] User adds tracking *between* sighting 1 and sighting 2 → sees only sighting 2 as a fresh `monster` message (no prior to reply to, no `monsterChanged` since they never saw the original)
+- [ ] User has two rules where rule A matches at non-IV and rule B matches at IV (different filters, same user) → second message replies to first (same encounter, same target), still uses `monster` template since this is the encounter event
+- [ ] Bundled `monsterChanged` template renders without error on a synthetic post-encounter form change
 - [ ] Restart processor mid-encounter: ReplyKey lookup still works after Tracker.Load (PR 3.3)
 - [ ] !info form list, !area, !profile, !poracle-clean still work (no regression from helper changes earlier on main)
 ```
@@ -1070,11 +1234,14 @@ Coverage check against the spec:
 - ✅ `{{original.X}}` access (PR 2.1, 2.2)
 - ✅ Reply via Discord + Telegram (PR 4)
 - ✅ Reply works through non-IV → IV → form/gender chain (PR 5 — change types covered in PR 1)
+- ✅ Non-IV → IV uses `monster` template (Decision 6, Task 5.3)
+- ✅ Per-user dispatch at change events: prior-tracked user gets reply (`monster` for encounter event, `monsterChanged` for post-encounter); new-match user gets fresh `monster` (Task 5.3)
+- ✅ Initial pokemon render indexes itself under ReplyKey (Task 5.2 — without this, no chain ever forms)
 - ✅ Reply combines with clean (PR 4 — both indexes share TTL semantics; the edit cache continues to fire clean-on-TTH evictions independently)
-- ✅ Edit takes priority over reply when both keys are present (PR 5.3)
-- ✅ Linkage even when rules match the encounter "anyway" (PR 5.2 — the gate-by-bit is removed; everyone matched at the new state gets the change render, replied if a prior message exists)
+- ✅ Edit takes priority over reply when both keys are present (Task 5.4)
 - ✅ Reply is implicit, not opt-in — no DB column change, no config knob
-- ✅ O(1) lookup via dedicated `replyIndex` ttlcache (PR 3.1)
+- ✅ O(1) lookup via dedicated `replyIndex` ttlcache (Task 3.1)
+- ✅ Fallback `monsterChanged` template ships with the binary (Task 6.1)
 - ✅ All in a branch (worktree at `../PoracleNG-pokemon-changed`, branch `pokemon-changed-reply`)
 
 Risks / open questions:
