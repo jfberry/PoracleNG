@@ -1,20 +1,20 @@
-# Pokemon Changed + Reply Mode Implementation Plan
+# Pokemon Changed + Reply Threading Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fire a new `monsterChanged` DTS template when a tracked pokemon's data changes (encounter, species, form, gender), with the prior sighting accessible via `{{original.X}}`. Add a `reply` bit to the clean/edit bitmask so subsequent updates send as Discord/Telegram replies to the previous message. Optional config to make `reply` the default for new pokemon tracking rules.
+**Goal:** Fire a new `monsterChanged` DTS template when a tracked pokemon's data changes (encounter, species, form, gender), with the prior sighting accessible via `{{original.X}}`. Subsequent messages for the same encounter (per recipient) thread as Discord/Telegram replies to the prior message — implicit behaviour, not opt-in. Edit mode (existing) still takes priority when set.
 
-**Architecture:** The encounter tracker already detects species/form changes (`tracker/encounter.go`). Extend it to surface encounter-fill (non-IV → IV) and gender changes, and propagate the prior state into the render pipeline. The renderer constructs the new template from a `monsterChanged` type with an `original` sub-view bolted onto `LayeredView`. Delivery gains a `ReplyKey` field on `Job` parallel to `EditKey`; `MessageTracker` exposes `LookupReply(key, target)` returning the latest message ID for that key, which the senders inject as `message_reference` (Discord) or `reply_to_message_id` (Telegram). Reply bit = 4 in the existing clean/edit bitmask. Reply and edit are mutually exclusive — validation rejects the combo. Reply + clean works (every send tracked for TTH delete; latest wins for reply target).
+**Architecture:** The encounter tracker already detects species/form changes (`tracker/encounter.go`). Extend it to surface encounter-fill (non-IV → IV) and gender changes, and propagate the prior state into the render pipeline. The renderer constructs the new template from a `monsterChanged` type with an `original` sub-view bolted onto `LayeredView`. Delivery gains a `ReplyKey` field on `Job`; `MessageTracker` keeps a dedicated O(1) reply index `map[replyKey + ":" + target] → latestSentID` so the high-volume pokemon path doesn't pay an O(N) cache walk per send. Senders inject `message_reference` (Discord) / `reply_to_message_id` (Telegram) when the lookup hits. No bitmask change — reply is implicit for pokemon updates.
 
-**Tech Stack:** Go monorepo (`processor/`). Webhook handler in `cmd/processor/pokemon.go`, encounter tracker in `internal/tracker/`, DTS in `internal/dts/`, delivery in `internal/delivery/`, bot commands in `internal/bot/commands/`, store + migrations in `internal/db/` and `internal/store/`.
+**Tech Stack:** Go monorepo (`processor/`). Webhook handler in `cmd/processor/pokemon.go`, encounter tracker in `internal/tracker/`, DTS in `internal/dts/`, delivery in `internal/delivery/`, bot commands in `internal/bot/commands/`.
 
 ---
 
 ## Decisions baked in (flag if you'd change any)
 
 1. **Template type ID** = `monsterChanged` (camelCase, matches existing `monster` / `monsterNoIv`). The user said "pokemon_changed" verbally; using `monsterChanged` for codebase consistency. The user-facing name in templates can still be "pokemon changed".
-2. **Bitmask layout**: bit 0 = clean, bit 1 = edit, bit 2 = reply. So 4 = reply only, 5 = clean+reply, 6 = edit+reply (REJECTED), 7 = REJECTED.
-3. **Edit + reply mutually exclusive**: validation in `track.go` and the API handler rejects the combo with a clear error. Rationale: edit means "update the existing message in place"; reply means "send a new message threaded under the previous". They can't both be the wire effect.
+2. **No bitmask change.** Reply isn't a bit, isn't stored on the row, isn't an opt-in. Every `monsterChanged` render carries a `ReplyKey = encounterID`; the sender threads as a reply iff a prior message for `(replyKey, target)` exists. Edit mode (existing bit 2) still wins — when set, the prior message is edited in place rather than replied to.
+3. **No `default_reply_pokemon` config.** Always-on for pokemon. Users who want a single message updated in place use `edit` (existing). Users who want clean-on-TTH still use `clean` (existing); clean and reply-threading combine naturally — every message tracked for TTH delete, the latest is the reply target.
 4. **What counts as a change**:
    - Species change (existing behaviour)
    - Form change (existing)
@@ -23,9 +23,10 @@
    - IV refinement after encounter is treated as noise (IVs don't change once encountered)
    - Weather change is silently absorbed (environment, not pokemon)
 5. **`original` view scope**: a fixed subset of fields — `pokemonId`, `formId`, `name`, `formName`, `fullName`, `cp`, `iv`, `atk`, `def`, `sta`, `level`, `gender`, `genderName`, `weatherId`, `weatherName`, `encountered` (bool), `weight`, `height`. Implemented as a `map[string]any` injected as a layer in `LayeredView` under key `"original"`. Handlebars recurses into the map naturally for `{{original.X}}` access.
-6. **Default reply via config**: `[tracking] default_reply_pokemon = false` (default). When `true`, `!track` calls without explicit `clean/edit/reply` keywords default to `reply` (bitmask = 4). API mutations are unaffected — this only changes what bot commands write.
-7. **Reply scope**: pokemon-tracking only for this feature. The bit could apply to any type but we only wire it for pokemon (and the change-fired `monsterChanged` rendering). Other types ignore the bit.
-8. **EditKey + ReplyKey for monsterChanged** = the encounter ID. One key value, two semantic uses (edit-this-encounter, reply-to-this-encounter's-latest-message).
+6. **No matched-user gate for monsterChanged.** Every user who matched the new state gets the change render; if they were also matched at the prior state, their message threads as a reply to that prior — otherwise it's a fresh message (still as `monsterChanged`, since it's still a "change" event semantically). This avoids silently dropping IV alerts for users whose rules match the encountered state but not the non-IV state.
+7. **Reply scope**: pokemon-tracking only for this feature. Other types are not wired (raids on RSVP changes are a follow-up candidate). The infrastructure (ReplyKey field, LookupReply, sender injection) is generic, so wiring more types later is local.
+8. **EditKey + ReplyKey for monsterChanged** = the encounter ID. The same string serves both: edit-this-encounter, reply-to-this-encounter's-latest-message.
+9. **Reply lookup is O(1).** Pokemon is the highest-volume alert type. The MessageTracker keeps a dedicated `replyIndex *ttlcache.Cache[string, string]` keyed by `replyKey + "\x00" + target` with values = `SentID`. The existing edit/clean cache is unchanged. Both indexes share TTL semantics — when a reply-tracked message is evicted from the edit cache, the matching reply-index entry is evicted too via the eviction callback.
 
 ---
 
@@ -51,18 +52,6 @@
 - `processor/internal/delivery/discord.go` — when reply target is set, inject `"message_reference": {"message_id": "..."}`
 - `processor/internal/delivery/telegram.go` — when reply target is set, inject `"reply_to_message_id": <id>`
 
-**Modified — bitmask + commands:**
-- `processor/internal/db/clean.go` — add `IsReply(clean int) bool`, bit 2
-- `processor/internal/bot/commands/track.go` — accept `reply` keyword, OR into bitmask, validate vs edit
-- `processor/internal/bot/commands/raid.go`, `egg.go`, `gym.go`, etc. — same keyword (only pokemon wires reply, but consistent parsing)
-- `processor/internal/i18n/locale/en.json` — `arg.reply` = `"reply"`, error message keys
-- `processor/internal/api/tracking.go` — accept `reply: true` shorthand if useful (or rely on `clean: 4`)
-
-**Modified — config:**
-- `processor/internal/config/config.go` — `Tracking.DefaultReplyPokemon bool`
-- `processor/internal/api/config_schema.go` — schema entry for the editor
-- `config/config.example.toml` — documented option
-
 **Modified — render pipeline:**
 - `processor/cmd/processor/render.go` — `RenderJob` gains `ReplyKey string` and `OriginalEnrichment map[string]any` (or `*tracker.EncounterState`); render dispatches to `RenderPokemonChanged` when set
 - `processor/cmd/processor/pokemon.go` — `handlePokemonChange` builds and enqueues the RenderJob
@@ -70,10 +59,8 @@
 **Tests:**
 - `processor/internal/tracker/encounter_test.go` — extend with new change types
 - `processor/internal/dts/original_view_test.go` — view shape
-- `processor/internal/delivery/tracker_test.go` — LookupReply behaviour
-- `processor/internal/delivery/queue_test.go` — reply-key flow, edit-vs-reply mutual exclusion
-- `processor/internal/db/clean_test.go` — `IsReply` semantics
-- `processor/internal/bot/commands/track_test.go` — `reply` keyword parsing + edit+reply rejection
+- `processor/internal/delivery/tracker_test.go` — LookupReply behaviour, eviction propagation
+- `processor/internal/delivery/queue_test.go` — reply-key flow, edit takes priority over reply
 
 ---
 
@@ -530,9 +517,9 @@ git commit -m "dts: RenderPokemonChanged threads original into LayeredView"
 
 ---
 
-## PR 3 — ReplyKey field and MessageTracker.LookupReply
+## PR 3 — ReplyKey field, dedicated O(1) reply index
 
-**Goal:** Delivery infrastructure can carry a reply key and look up the latest sent message for that key. No senders use it yet.
+**Goal:** Delivery infrastructure can carry a reply key and look up the latest sent message for that (key, target) in O(1). No senders use it yet.
 
 ### Task 3.1: Add ReplyKey to Job and TrackedMessage
 
@@ -546,26 +533,27 @@ git commit -m "dts: RenderPokemonChanged threads original into LayeredView"
 ```go
 func TestLookupReplyReturnsLatest(t *testing.T) {
 	tr := newTrackerForTest(t)
-	tr.Track("rk1:targetA", &TrackedMessage{
+	tr.Track("edit-1", &TrackedMessage{
 		SentID: "msg-1", Target: "targetA", Type: "discord:user",
 		ReplyKey: "rk1",
 	}, time.Hour)
-	tr.Track("rk1:targetA", &TrackedMessage{
+	tr.Track("edit-2", &TrackedMessage{
 		SentID: "msg-2", Target: "targetA", Type: "discord:user",
 		ReplyKey: "rk1",
 	}, time.Hour)
-	got := tr.LookupReply("rk1", "targetA")
-	if got == nil || got.SentID != "msg-2" {
-		t.Fatalf("LookupReply = %+v, want SentID=msg-2", got)
+	if got := tr.LookupReply("rk1", "targetA"); got != "msg-2" {
+		t.Fatalf("LookupReply = %q, want msg-2", got)
 	}
 	// Different target should not match.
-	if tr.LookupReply("rk1", "targetB") != nil {
-		t.Error("LookupReply matched wrong target")
+	if got := tr.LookupReply("rk1", "targetB"); got != "" {
+		t.Errorf("LookupReply cross-target = %q, want empty", got)
+	}
+	// Different key should not match.
+	if got := tr.LookupReply("rk-other", "targetA"); got != "" {
+		t.Errorf("LookupReply wrong key = %q, want empty", got)
 	}
 }
 ```
-
-`newTrackerForTest` likely exists; if not, instantiate `MessageTracker` with no senders.
 
 - [ ] **Step 2: Run, expect undefined ReplyKey / LookupReply**
 
@@ -575,7 +563,8 @@ func TestLookupReplyReturnsLatest(t *testing.T) {
 // delivery.go
 type Job struct {
 	// ... existing ...
-	ReplyKey string // when non-empty, latest message with this key+target is the reply target
+	ReplyKey string // when non-empty, the (ReplyKey, Target) pair indexes the
+	                // latest sent message in MessageTracker for reply chaining
 }
 
 // tracker.go
@@ -585,67 +574,120 @@ type TrackedMessage struct {
 }
 ```
 
-- [ ] **Step 4: Implement LookupReply**
+- [ ] **Step 4: Add the dedicated reply index to MessageTracker**
 
-The simplest correct implementation walks the cache. Performance is OK because the tracker is typically O(few thousand) entries.
+Pokemon is the highest-volume alert type. A per-send O(N) walk would be a real cost. Use a separate ttlcache keyed by `replyKey + "\x00" + target`, value = `SentID`.
 
 ```go
-// LookupReply returns the most recently tracked message with the given
-// ReplyKey targeted at target, or nil if none. Walks the cache; per-key
-// indexing can be added later if profiling shows it matters.
-func (mt *MessageTracker) LookupReply(replyKey, target string) *TrackedMessage {
+// tracker.go
+type MessageTracker struct {
+	// ... existing fields ...
+	cache       *ttlcache.Cache[string, *TrackedMessage] // existing — keyed by edit key
+	replyIndex  *ttlcache.Cache[string, string]          // new — keyed by replyKey \x00 target
+}
+
+func replyIndexKey(replyKey, target string) string {
+	return replyKey + "\x00" + target
+}
+
+// LookupReply returns the SentID of the latest message for this reply
+// key + target, or "" if none. O(1).
+func (mt *MessageTracker) LookupReply(replyKey, target string) string {
 	if replyKey == "" {
-		return nil
+		return ""
 	}
-	var latest *TrackedMessage
-	var latestAt time.Time
-	mt.cache.Range(func(_ string, item *ttlcache.Item[*TrackedMessage]) bool {
-		v := item.Value()
-		if v == nil || v.ReplyKey != replyKey || v.Target != target {
-			return true
-		}
-		// item.ExpiresAt() − TTL gives roughly when it was inserted.
-		// Track InsertedAt explicitly on TrackedMessage instead.
-		if latest == nil || v.InsertedAt.After(latestAt) {
-			latest = v
-			latestAt = v.InsertedAt
-		}
-		return true
-	})
-	return latest
+	item := mt.replyIndex.Get(replyIndexKey(replyKey, target))
+	if item == nil {
+		return ""
+	}
+	return item.Value()
 }
 ```
 
-Add `InsertedAt time.Time` to `TrackedMessage` and set it in `Track()`. (If the existing struct already has a timestamp, reuse it.)
+In the constructor, instantiate `replyIndex` with the same TTL behaviour as `cache`.
 
-- [ ] **Step 5: Run test, expect pass**
+- [ ] **Step 5: Track() also writes the reply index**
+
+When `Track(editKey, msg, ttl)` is called and `msg.ReplyKey != ""`, insert into the reply index too with the same TTL:
+
+```go
+func (mt *MessageTracker) Track(editKey string, msg *TrackedMessage, ttl time.Duration) {
+	mt.cache.Set(editKey, msg, ttl)
+	if msg.ReplyKey != "" {
+		mt.replyIndex.Set(replyIndexKey(msg.ReplyKey, msg.Target), msg.SentID, ttl)
+	}
+}
+```
+
+- [ ] **Step 6: Run, expect pass**
 
 ```
 go test -count=1 -run TestLookupReply ./internal/delivery/
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```
 git add processor/internal/delivery/delivery.go processor/internal/delivery/tracker.go processor/internal/delivery/tracker_test.go
-git commit -m "delivery: ReplyKey field + MessageTracker.LookupReply"
+git commit -m "delivery: ReplyKey field + O(1) reply index in MessageTracker"
 ```
 
-### Task 3.2: Tracker save/load preserves ReplyKey + InsertedAt
+### Task 3.2: Eviction of the edit-cache entry also evicts the reply index
+
+**Files:**
+- Modify: `processor/internal/delivery/tracker.go`
+- Test: `processor/internal/delivery/tracker_test.go`
+
+- [ ] **Step 1: Failing test**
+
+```go
+func TestEvictionPropagatesToReplyIndex(t *testing.T) {
+	tr := newTrackerForTest(t)
+	tr.Track("edit-1", &TrackedMessage{
+		SentID: "msg-1", Target: "u1", ReplyKey: "rk1",
+	}, 50*time.Millisecond)
+
+	if got := tr.LookupReply("rk1", "u1"); got != "msg-1" {
+		t.Fatalf("pre-eviction LookupReply = %q", got)
+	}
+	time.Sleep(150 * time.Millisecond) // > TTL
+	if got := tr.LookupReply("rk1", "u1"); got != "" {
+		t.Errorf("post-eviction LookupReply = %q, want empty", got)
+	}
+}
+```
+
+- [ ] **Step 2: Run, expect pass already (both caches share TTL)**
+
+If the test passes immediately, document the implicit guarantee in `tracker.go` and skip step 3.
+
+- [ ] **Step 3: If it fails, hook the eviction callback**
+
+ttlcache supports `OnEviction`. On eviction of an entry from `cache` whose `ReplyKey != ""`, also delete the corresponding `replyIndex` entry. (If both caches are running their own TTL clocks, alignment may drift; explicit propagation is more reliable than relying on parallel timing.)
+
+- [ ] **Step 4: Run, expect pass**
+
+- [ ] **Step 5: Commit**
+
+```
+git commit -am "delivery: align reply-index eviction with edit-cache eviction"
+```
+
+### Task 3.3: Save/Load preserves the reply index
 
 **Files:**
 - Modify: `processor/internal/delivery/tracker.go` (Save/Load JSON serialization)
 - Test: `processor/internal/delivery/tracker_test.go`
 
-- [ ] **Step 1: Add a round-trip test**
+- [ ] **Step 1: Round-trip test**
 
 ```go
-func TestTrackerSaveLoadPreservesReplyKey(t *testing.T) {
+func TestTrackerSaveLoadPreservesReplyIndex(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tracker.json")
 	tr1 := newTrackerForTest(t)
 	tr1.persistPath = path
-	tr1.Track("k", &TrackedMessage{SentID: "m1", Target: "u1", ReplyKey: "rk1"}, time.Hour)
+	tr1.Track("edit-1", &TrackedMessage{SentID: "m1", Target: "u1", ReplyKey: "rk1"}, time.Hour)
 	if err := tr1.Save(); err != nil {
 		t.Fatal(err)
 	}
@@ -654,25 +696,24 @@ func TestTrackerSaveLoadPreservesReplyKey(t *testing.T) {
 	if err := tr2.Load(); err != nil {
 		t.Fatal(err)
 	}
-	got := tr2.LookupReply("rk1", "u1")
-	if got == nil || got.SentID != "m1" {
-		t.Fatalf("LookupReply after load = %+v", got)
+	if got := tr2.LookupReply("rk1", "u1"); got != "m1" {
+		t.Fatalf("LookupReply after load = %q, want m1", got)
 	}
 }
 ```
 
-- [ ] **Step 2: Run, expect failure (field missing from serialized form)**
+- [ ] **Step 2: Run, expect failure**
 
-- [ ] **Step 3: Add ReplyKey + InsertedAt to the persisted struct**
+- [ ] **Step 3: Either persist the reply index directly, or rebuild from `cache` on Load**
 
-If serialization uses an explicit DTO, add the fields there. Otherwise the json tags on `TrackedMessage` already cover it.
+Cheapest: walk the loaded `cache` after Load and re-insert into `replyIndex` for entries with `ReplyKey != ""`. No new persisted format required.
 
 - [ ] **Step 4: Run, expect pass**
 
 - [ ] **Step 5: Commit**
 
 ```
-git commit -am "delivery: persist ReplyKey + InsertedAt across restarts"
+git commit -am "delivery: rebuild reply index from edit cache on tracker load"
 ```
 
 ---
@@ -818,180 +859,11 @@ git commit -am "delivery: track sent messages under ReplyKey for chain replies"
 
 ---
 
-## PR 5 — Reply bit on the bitmask, bot keyword, validation
-
-**Goal:** `clean = 4` is "reply mode". Bot accepts `reply` keyword. Edit + reply combo is rejected at the command and API layers.
-
-### Task 5.1: clean.go gains IsReply
-
-**Files:**
-- Modify: `processor/internal/db/clean.go`
-- Test: `processor/internal/db/clean_test.go`
-
-- [ ] **Step 1: Test**
-
-```go
-func TestIsReply(t *testing.T) {
-	cases := []struct {
-		clean        int
-		clean_, edit bool
-		reply        bool
-	}{
-		{0, false, false, false},
-		{1, true, false, false},
-		{2, false, true, false},
-		{3, true, true, false},
-		{4, false, false, true},
-		{5, true, false, true},
-	}
-	for _, c := range cases {
-		if IsClean(c.clean) != c.clean_ || IsEdit(c.clean) != c.edit || IsReply(c.clean) != c.reply {
-			t.Errorf("clean=%d: %v %v %v want %v %v %v",
-				c.clean, IsClean(c.clean), IsEdit(c.clean), IsReply(c.clean),
-				c.clean_, c.edit, c.reply)
-		}
-	}
-}
-```
-
-- [ ] **Step 2: Run, expect undefined**
-
-- [ ] **Step 3: Add IsReply**
-
-```go
-const (
-	cleanBitClean = 1
-	cleanBitEdit  = 2
-	cleanBitReply = 4
-)
-
-func IsReply(clean int) bool { return clean&cleanBitReply != 0 }
-```
-
-(Refactor the existing IsClean/IsEdit to use the constants; pure cleanup.)
-
-- [ ] **Step 4: Test passes**
-
-- [ ] **Step 5: Commit**
-
-```
-git commit -am "db: IsReply bit in clean bitmask"
-```
-
-### Task 5.2: track.go accepts `reply` keyword and validates
-
-**Files:**
-- Modify: `processor/internal/bot/commands/track.go`
-- Modify: `processor/internal/i18n/locale/en.json` (add `arg.reply`, `msg.track.edit_reply_conflict`)
-- Test: `processor/internal/bot/commands/track_test.go` (existing or new)
-
-- [ ] **Step 1: Failing test**
-
-Test parses `!track pikachu reply` and expects `clean & 4 != 0`. Test parses `!track pikachu edit reply` and expects an error reply.
-
-- [ ] **Step 2: Run, expect parse failure / no reply support**
-
-- [ ] **Step 3: Add the keyword and validation**
-
-In `trackParams`:
-
-```go
-{Type: bot.ParamKeyword, Key: "arg.reply"},
-```
-
-In the filter-parse block where `arg.clean` / `arg.edit` are handled:
-
-```go
-if parsed.HasKeyword("arg.reply") {
-	f.clean |= 4
-}
-if db.IsEdit(f.clean) && db.IsReply(f.clean) {
-	return []bot.Reply{{React: "🙅", Text: tr.T("msg.track.edit_reply_conflict")}}
-}
-```
-
-en.json:
-
-```json
-"arg.reply": "reply",
-"msg.track.edit_reply_conflict": "`edit` and `reply` are mutually exclusive — pick one.",
-```
-
-(Add the `arg.reply` key to every locale file with a value of `"reply"` — translators can localise later. The `msg.track.edit_reply_conflict` string only needs en; other locales fall back.)
-
-- [ ] **Step 4: Run, expect pass**
-
-- [ ] **Step 5: Commit**
-
-```
-git add processor/internal/bot/commands/track.go processor/internal/i18n/locale/
-git commit -m "bot: !track accepts reply keyword; reject edit+reply combo"
-```
-
-### Task 5.3: Add `reply` to other tracking commands' allowed keywords
-
-**Files:**
-- Modify: `processor/internal/bot/commands/raid.go`, `egg.go`, `gym.go`, `quest.go`, `nest.go`, `lure.go`, `fort.go`, `invasion.go`, `maxbattle.go`
-
-- [ ] **Step 1: Decide scope**
-
-Reply is only wired for pokemon (`monsterChanged`). Other types accept the keyword but it's effectively a no-op (no change events fire `monsterChanged`-style for them). Keep parsing consistent so `!raid level:5 reply` doesn't fail on unrecognised arg.
-
-- [ ] **Step 2: Add the keyword param to each command's `paramsX()` helper**
-
-```go
-{Type: bot.ParamKeyword, Key: "arg.reply"},
-```
-
-And the OR-into-bitmask block. No edit+reply validation here unless explicitly desired (skip for now — the validation only matters where reply is meaningful).
-
-- [ ] **Step 3: Test parses don't choke**
-
-```
-go test -count=1 ./internal/bot/commands/...
-```
-
-- [ ] **Step 4: Commit**
-
-```
-git commit -am "bot: accept reply keyword on all tracking commands (no-op outside pokemon)"
-```
-
-### Task 5.4: API tracking handler accepts `clean = 4..7` and validates
-
-**Files:**
-- Modify: `processor/internal/api/tracking.go` (or wherever monster tracking POST is handled)
-
-- [ ] **Step 1: Test**
-
-POST a tracking row with `clean: 6` (edit+reply), expect 400. POST `clean: 5` (clean+reply), expect 200.
-
-- [ ] **Step 2: Implement validation**
-
-In the handler that accepts monster tracking creates/updates:
-
-```go
-if db.IsEdit(row.Clean) && db.IsReply(row.Clean) {
-	c.AbortWithStatusJSON(400, gin.H{"error": "clean: edit (2) and reply (4) cannot be combined"})
-	return
-}
-```
-
-- [ ] **Step 3: Run, expect pass**
-
-- [ ] **Step 4: Commit**
-
-```
-git commit -am "api/tracking: reject edit+reply combo"
-```
-
----
-
-## PR 6 — Wire the change handler to fire monsterChanged
+## PR 5 — Wire the change handler to fire monsterChanged
 
 **Goal:** `handlePokemonChange` actually enqueues a render job. The matched users are the same set that originally tracked the encounter. Each user receives a `monsterChanged` render with `original.X` populated.
 
-### Task 6.1: RenderJob carries OriginalView and ChangeType
+### Task 5.1: RenderJob carries OriginalView and ChangeType
 
 **Files:**
 - Modify: `processor/cmd/processor/render.go`
@@ -1025,7 +897,7 @@ go build ./... && go test -count=1 ./cmd/processor/... ./internal/dts/...
 git commit -am "render: RenderJob carries OriginalView + ReplyKey + IsChange"
 ```
 
-### Task 6.2: handlePokemonChange enqueues the job
+### Task 5.2: handlePokemonChange enqueues the job
 
 **Files:**
 - Modify: `processor/cmd/processor/pokemon.go` (replace TODO at line 223)
@@ -1086,138 +958,66 @@ Add `processor/cmd/processor/pokemon_change_test.go` — exercise: matcher finds
 git commit -am "processor: handlePokemonChange enqueues monsterChanged render job"
 ```
 
-### Task 6.3: Filter monsterChanged matches by `reply` bit when no template exists
+### Task 5.3: Edit takes priority over reply
 
 **Files:**
-- Modify: `processor/cmd/processor/pokemon.go` (handlePokemonChange) or `processor/internal/dts/renderer.go`
+- Modify: `processor/internal/delivery/queue.go`
+- Test: `processor/internal/delivery/queue_test.go`
 
-- [ ] **Step 1: Decide policy**
+- [ ] **Step 1: Failing test**
 
-For users whose tracking rule has `clean & 4 == 0` (no reply bit), should we still send the change as a normal alert? This would be very noisy — every encounter fires twice (once at non-IV, once at IV). Better: only fire `monsterChanged` for users who opted into reply (or for whom an admin has set `default_reply_pokemon`).
+A queue-level test that schedules a Job with both `EditKey` and `ReplyKey` set, where the tracker has a prior message under the EditKey. Assert the sender's `Edit()` is called (not `Send()`), and `ReplyToID` is *not* stamped on the job.
 
-- [ ] **Step 2: Filter in handlePokemonChange**
-
-Before enqueuing, drop matched users where `MatchedUser.Clean & 4 == 0`:
+- [ ] **Step 2: Verify ordering in processJob**
 
 ```go
-filtered := make([]webhook.MatchedUser, 0, len(matched))
-for _, m := range matched {
-	if db.IsReply(m.Clean) {
-		filtered = append(filtered, m)
+if job.EditKey != "" {
+	if prior := fq.tracker.LookupEdit(job.EditKey); prior != nil {
+		// edit path — short-circuit before any reply-resolution
+		return fq.sender.Edit(prior, job)
 	}
 }
-if len(filtered) == 0 {
-	return
+if job.ReplyKey != "" && job.ReplyToID == "" {
+	if msgID := fq.tracker.LookupReply(job.ReplyKey, job.Target); msgID != "" {
+		job.ReplyToID = msgID
+	}
 }
-matched = filtered
+return fq.sender.Send(job)
 ```
 
-This gates: only users who asked for replies get the second-stage message.
+The point of this task is to make explicit (and test) that an existing edit-tracked message wins. Reply only kicks in when there's no prior edit-tracked message for the same key.
 
-- [ ] **Step 3: Test the gate**
+- [ ] **Step 3: Run, expect pass**
 
 - [ ] **Step 4: Commit**
 
 ```
-git commit -am "processor: only fire monsterChanged for users with reply bit set"
+git commit -am "delivery/queue: edit takes priority over reply when both keys are set"
 ```
 
 ---
 
-## PR 7 — Default reply config
-
-**Goal:** Admin can flip a switch so new pokemon tracking rules created via bot commands default to `reply` mode.
-
-### Task 7.1: Config field
-
-**Files:**
-- Modify: `processor/internal/config/config.go`
-- Modify: `processor/internal/api/config_schema.go`
-- Modify: `config/config.example.toml`
-
-- [ ] **Step 1: Add field to Tracking struct**
-
-```go
-type TrackingConfig struct {
-	// ... existing ...
-	DefaultReplyPokemon bool `toml:"default_reply_pokemon"`
-}
-```
-
-- [ ] **Step 2: Schema entry**
-
-In `config_schema.go`, in the tracking section, add:
-
-```go
-{Path: "tracking.default_reply_pokemon", Type: "bool", Default: false,
-	Description: "Default new !track rules to reply-mode (clean bit 4) so updates thread under the original alert"},
-```
-
-- [ ] **Step 3: Document in example.toml**
-
-```toml
-[tracking]
-# default_reply_pokemon = false
-# When true, !track creates new rules with clean=4 (reply) by default.
-# Users who want clean instead can explicitly type !track pikachu clean.
-```
-
-- [ ] **Step 4: Commit**
-
-```
-git commit -am "config: tracking.default_reply_pokemon"
-```
-
-### Task 7.2: track.go applies the default
-
-**Files:**
-- Modify: `processor/internal/bot/commands/track.go`
-
-- [ ] **Step 1: Apply default after parsing keywords**
-
-In the bitmask-build block:
-
-```go
-if !parsed.HasKeyword("arg.clean") && !parsed.HasKeyword("arg.edit") && !parsed.HasKeyword("arg.reply") {
-	if ctx.Config.Tracking.DefaultReplyPokemon {
-		f.clean |= 4
-	}
-}
-```
-
-This only kicks in when the user gave no explicit keyword — explicit `clean` or `edit` overrides the default.
-
-- [ ] **Step 2: Test default-on and default-off paths**
-
-- [ ] **Step 3: Commit**
-
-```
-git commit -am "bot: !track applies default_reply_pokemon when no keyword set"
-```
-
----
-
-## PR 8 — Docs + integration smoke + manual checklist
+## PR 6 — Docs + integration smoke + manual checklist
 
 **Goal:** Admin-facing documentation, an end-to-end integration test, and a checklist for verifying in a live Discord/Telegram channel.
 
-### Task 8.1: API.md / template docs
+### Task 6.1: API.md / template docs
 
 **Files:**
 - Modify: `API.md` (clean bitmask doc)
 - Modify: project README or a dedicated docs page if one exists for templates
 
-- [ ] **Step 1: Document the bitmask change**
+- [ ] **Step 1: Document the new behaviour**
 
-Update the clean field reference: 1 = clean, 2 = edit, 4 = reply, with a note that 6/7 are invalid. Mention `monsterChanged` template type and `{{original.X}}` access.
+Document the `monsterChanged` template type, the `{{original.X}}` field set, and that pokemon updates thread as replies on Discord/Telegram automatically when a prior message exists for the same encounter and recipient. Note that edit mode (existing) takes priority — when set, the prior message is updated in place rather than replied to.
 
 - [ ] **Step 2: Commit**
 
 ```
-git commit -am "docs: clean=4 (reply), monsterChanged template type, original.* fields"
+git commit -am "docs: monsterChanged template, original.* fields, implicit reply threading"
 ```
 
-### Task 8.2: Integration smoke test
+### Task 6.2: Integration smoke test
 
 **Files:**
 - Test: `processor/cmd/processor/integration_pokemon_change_test.go` (new)
@@ -1226,7 +1026,7 @@ git commit -am "docs: clean=4 (reply), monsterChanged template type, original.* 
 
 Stand up a fake `Sender` that records jobs. Drive a non-IV pokemon webhook → assert one job sent with template `monster`/`monsterNoIv`. Drive the same encounter with IVs filled → assert a second job sent with template `monsterChanged`, `ReplyKey == encounterID`, and the second job's body contains a reference to the first sent message ID.
 
-- [ ] **Step 2: Run, expect pass after PR 6 lands**
+- [ ] **Step 2: Run, expect pass after PR 5 lands**
 
 - [ ] **Step 3: Commit**
 
@@ -1234,7 +1034,7 @@ Stand up a fake `Sender` that records jobs. Drive a non-IV pokemon webhook → a
 git commit -am "test: end-to-end pokemon-change reply smoke"
 ```
 
-### Task 8.3: Manual verification checklist
+### Task 6.3: Manual verification checklist
 
 **Files:**
 - Modify: this plan file (append a checklist)
@@ -1244,15 +1044,15 @@ git commit -am "test: end-to-end pokemon-change reply smoke"
 ```markdown
 ## Manual verification (before merging)
 
-- [ ] Telegram: !track pikachu reply → see two messages in DM, second is a reply to first
+- [ ] Telegram: !track pikachu → non-IV sighting then encountered IV → see two messages in DM, second is a reply to first
 - [ ] Discord: same as above; `message_reference` arrow visible
-- [ ] Telegram: !track pikachu reply clean → both messages delete on TTH
-- [ ] Discord: !track pikachu edit reply → bot rejects with "mutually exclusive"
-- [ ] !info form list, !area, !profile, !poracle-clean still work (no regression from helper change in PR 2/3 wiring)
-- [ ] default_reply_pokemon = true: !track pikachu (no keyword) creates row with clean=4
-- [ ] default_reply_pokemon = true: !track pikachu clean (explicit) creates row with clean=1 (default suppressed)
+- [ ] Telegram: !track pikachu clean → both messages delete on TTH; reply chain still threaded
+- [ ] !track pikachu edit (existing edit mode) → second sighting *edits* the first message, no reply
+- [ ] User adds tracking *between* sighting 1 and sighting 2 → sees only sighting 2 as a fresh message (no prior to reply to)
+- [ ] User has two rules where rule A matches at non-IV and rule B matches at IV (different filters) → second message replies to first (same encounter, same target)
 - [ ] monsterChanged template can render `{{original.cp}}`, `{{original.fullName}}`, `{{original.encountered}}` with prior values
-- [ ] Restart processor mid-encounter: ReplyKey lookup still works after Tracker.Load (PR 3.2)
+- [ ] Restart processor mid-encounter: ReplyKey lookup still works after Tracker.Load (PR 3.3)
+- [ ] !info form list, !area, !profile, !poracle-clean still work (no regression from helper changes earlier on main)
 ```
 
 - [ ] **Step 2: Commit**
@@ -1268,18 +1068,20 @@ git commit -am "plan: manual verification checklist"
 Coverage check against the spec:
 - ✅ `monsterChanged` DTS template type (PR 2)
 - ✅ `{{original.X}}` access (PR 2.1, 2.2)
-- ✅ Reply bit in bitmask (PR 5.1)
 - ✅ Reply via Discord + Telegram (PR 4)
-- ✅ Reply works through non-IV → IV → form/gender chain (PR 6 — change types covered in PR 1)
-- ✅ Reply combines with clean (PR 4.4 — every send tracked under reply key with TTL; clean uses its own per-message TTL)
-- ✅ Reply default config (PR 7)
+- ✅ Reply works through non-IV → IV → form/gender chain (PR 5 — change types covered in PR 1)
+- ✅ Reply combines with clean (PR 4 — both indexes share TTL semantics; the edit cache continues to fire clean-on-TTH evictions independently)
+- ✅ Edit takes priority over reply when both keys are present (PR 5.3)
+- ✅ Linkage even when rules match the encounter "anyway" (PR 5.2 — the gate-by-bit is removed; everyone matched at the new state gets the change render, replied if a prior message exists)
+- ✅ Reply is implicit, not opt-in — no DB column change, no config knob
+- ✅ O(1) lookup via dedicated `replyIndex` ttlcache (PR 3.1)
 - ✅ All in a branch (worktree at `../PoracleNG-pokemon-changed`, branch `pokemon-changed-reply`)
 
 Risks / open questions:
-- LookupReply walks the full cache. If cache grows beyond ~10k entries this becomes a per-send hot-path cost. Mitigation: add a secondary index `map[replyKey]map[target]*TrackedMessage` if profiling shows it. Not in scope for v1.
-- Edit+reply rejection at API layer covers monster tracking; if the schema migration ever loads pre-existing rows with clean=6 from an older client, they pass through undetected. PR 5.4 should also add a one-shot scan at startup that logs (not deletes) any such rows.
-- `BuildOriginalView` constructs the original view from `EncounterState` only — it doesn't include geocoding/maps for the prior position (the position doesn't change between sightings of the same encounter). If a future change tracks position drift, the view builder needs extending.
-- The `arg.reply` keyword is added to non-pokemon commands as a parse-only no-op so users don't get "unrecognized arg" errors. If a tracking type later wants reply semantics (raids on RSVP changes are an obvious candidate), the wire-up is one more pair of code paths.
+- `BuildOriginalView` builds from `EncounterState` only — no geocoding/maps for the prior position (the position doesn't change between sightings of the same encounter). If a future change tracks position drift, the view builder needs extending.
+- Reply infrastructure is generic; only pokemon wires it. Raids on RSVP changes are an obvious next consumer (replace edit with reply for richer chains). One follow-up PR.
+- `replyIndex` is a second ttlcache instance — eviction is wired by the OnEviction callback (Task 3.2). Make sure the `cache` and `replyIndex` use the same TTL settings to avoid divergence; if the existing tracker uses per-entry TTL, the reply index must too.
+- The encounter tracker's existing in-memory state (no persistence) means a processor restart loses the "old" state. After restart, the next encounter sighting is treated as a fresh non-IV → no `monsterChanged` fires, and the IV sighting (if it comes after restart) fires as a fresh `monster` render. This is acceptable — change tracking is a best-effort enrichment, not a guarantee.
 
 ## Execution Handoff
 
