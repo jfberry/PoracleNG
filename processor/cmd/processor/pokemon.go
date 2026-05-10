@@ -92,12 +92,6 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			STA:           sta,
 			DisappearTime: pokemon.DisappearTime,
 		}
-		// Skip change tracking entirely when the config flag is off — saves
-		// the StripPVP allocation + tracker mutex on every pokemon webhook.
-		var change *tracker.EncounterChange
-		if ps.cfg.Tracking.PokemonChangeTracking {
-			_, change = ps.encounters.Track(pokemon.EncounterID, encounterState, tracker.StripPVP(raw))
-		}
 
 		// Get rarity group
 		rarityGroup := ps.stats.GetRarityGroup(pokemon.PokemonID)
@@ -128,6 +122,19 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
 		metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
 		metrics.IntervalMatched.Add(1)
+
+		// Encounter tracking (change detection). Gated on len(matched) > 0:
+		// pokemon nobody is tracking can't produce a `monsterChanged` event
+		// for anyone (that requires a prior per-user message), so we don't
+		// need their state or PVP-stripped bytes in the tracker. Skipping
+		// the unmatched path saves the StripPVP allocation + tracker mutex
+		// on the common "0 humans cared" case. Duplicate elimination is
+		// handled separately via ps.duplicates.CheckPokemon above and does
+		// not depend on the encounter tracker.
+		var change *tracker.EncounterChange
+		if ps.cfg.Tracking.PokemonChangeTracking {
+			_, change = ps.encounters.Track(pokemon.EncounterID, encounterState, tracker.StripPVP(raw))
+		}
 
 		// Register matched users as caring about weather in this cell
 		if ps.cfg.Weather.ChangeAlert {
