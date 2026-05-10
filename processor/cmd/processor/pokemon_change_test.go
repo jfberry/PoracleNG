@@ -367,6 +367,111 @@ func TestInitialPokemonRender_SetsReplyKey(t *testing.T) {
 	}
 }
 
+// stubWeatherProvider is a no-op WeatherProvider for tests that need the
+// regular pokemon enrichment path to run without a real weather tracker.
+type stubWeatherProvider struct{}
+
+func (stubWeatherProvider) GetCurrentWeatherInCell(_ string) int { return 0 }
+func (stubWeatherProvider) GetWeatherForecast(_ string) tracker.WeatherForecast {
+	return tracker.WeatherForecast{}
+}
+
+// TestDispatchPokemonChangeRender_PerLanguageOriginalFromBytes covers the
+// new "OldWebhook → original" path: when the EncounterChange carries prior
+// webhook bytes, the dispatcher re-runs base enrichment to populate
+// {{original.X}} with a richer field set than the BuildOriginalView fallback.
+// We validate that the dispatched RenderJob carries an OriginalView populated
+// from the prior bytes (rather than the small BuildOriginalView subset).
+func TestDispatchPokemonChangeRender_PerLanguageOriginalFromBytes(t *testing.T) {
+	ps, ch, d := minimalProcessor(t)
+	// Add a stub weather provider so the regular Pokemon enrichment path
+	// doesn't panic. GameData/Translations stay nil, which routes the helper
+	// to its "base only, replicated per language" branch.
+	ps.enricher.WeatherProvider = stubWeatherProvider{}
+
+	encounterID := "enc-prior-bytes"
+	user := webhook.MatchedUser{ID: "user-A", Type: "discord:user", Language: "en"}
+	trackPriorMessage(t, d, encounterID, user.ID, "msg-A")
+
+	priorRaw := json.RawMessage(`{"pokemon_id":25,"form":0,"cp":900,"individual_attack":10,"individual_defense":11,"individual_stamina":12,"weather":1,"latitude":52.5,"longitude":13.4,"disappear_time":9999999999}`)
+	change := &tracker.EncounterChange{
+		EncounterID: encounterID,
+		Type:        tracker.ChangeForm,
+		Old:         tracker.EncounterState{PokemonID: 25, Form: 0, CP: 900, ATK: 10, DEF: 11, STA: 12, Weather: 1},
+		New:         tracker.EncounterState{PokemonID: 25, Form: 65, CP: 950, ATK: 10, DEF: 11, STA: 12, Weather: 1},
+		OldWebhook:  priorRaw,
+	}
+
+	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
+		encounterID:   encounterID,
+		change:        change,
+		matched:       []webhook.MatchedUser{user},
+		isEncountered: true,
+	})
+
+	jobs := drainRenderJobs(ch)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 RenderJob, got %d", len(jobs))
+	}
+	j := jobs[0]
+	if !j.IsChange {
+		t.Errorf("post-encounter change should set IsChange=true, got false")
+	}
+	if j.OriginalView == nil {
+		t.Fatalf("OriginalView should be populated from prior webhook bytes, got nil")
+	}
+	// The richer view should expose fields that BuildOriginalView does not —
+	// e.g. seenType, level (when encountered) — confirming the regular
+	// pokemon enrichment path ran.
+	if _, ok := j.OriginalView["seenType"]; !ok {
+		t.Errorf("OriginalView from bytes should expose seenType (regular enrichment), got: %v", j.OriginalView)
+	}
+	if got := j.OriginalView["pokemon_id"]; got != 25 {
+		t.Errorf("OriginalView should reflect prior pokemon_id=25, got %v", got)
+	}
+}
+
+// TestDispatchPokemonChangeRender_FallbackWhenNoBytes confirms the safety
+// net: when OldWebhook is empty (older tracker entry, partial init) the
+// dispatcher falls back to dts.BuildOriginalView so {{original.X}} still
+// exposes the hand-picked subset.
+func TestDispatchPokemonChangeRender_FallbackWhenNoBytes(t *testing.T) {
+	ps, ch, d := minimalProcessor(t)
+
+	encounterID := "enc-no-bytes"
+	user := webhook.MatchedUser{ID: "user-B", Type: "discord:user"}
+	trackPriorMessage(t, d, encounterID, user.ID, "msg-B")
+
+	change := &tracker.EncounterChange{
+		EncounterID: encounterID,
+		Type:        tracker.ChangeForm,
+		Old:         tracker.EncounterState{PokemonID: 25, Form: 0, CP: 900},
+		New:         tracker.EncounterState{PokemonID: 25, Form: 65, CP: 950},
+		// OldWebhook intentionally nil
+	}
+
+	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
+		encounterID:   encounterID,
+		change:        change,
+		matched:       []webhook.MatchedUser{user},
+		isEncountered: true,
+	})
+
+	jobs := drainRenderJobs(ch)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 RenderJob, got %d", len(jobs))
+	}
+	j := jobs[0]
+	if j.OriginalView == nil {
+		t.Fatalf("OriginalView should fall back to BuildOriginalView, got nil")
+	}
+	// BuildOriginalView exposes pokemonId (camelCase), not pokemon_id —
+	// asserting that distinguishes the fallback path.
+	if got := j.OriginalView["pokemonId"]; got != 25 {
+		t.Errorf("BuildOriginalView fallback should expose pokemonId=25, got %v", got)
+	}
+}
+
 // TestProcessPokemon_RespectsChangeTrackingFlag is a source-level guard:
 // the pokemon webhook handler must consult ps.cfg.Tracking.PokemonChangeTracking
 // before invoking dispatchPokemonChangeRender. When the flag is false, change

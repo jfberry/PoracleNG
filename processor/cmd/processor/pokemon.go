@@ -8,9 +8,11 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
+	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -299,33 +301,79 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 
 	encounterEvent := in.change.Old.CP == 0 && in.change.New.CP > 0
 
-	var original map[string]any
-	if !encounterEvent && len(withPrior) > 0 {
-		// Build the {{original.X}} bag only when we'll use it.
-		original = dts.BuildOriginalView(in.change.Old, ps.enricher.GameData, ps.translatorFor(""))
-	}
-
 	tilePendingForFirst := in.tilePending
 	if len(withPrior) > 0 {
 		isChange := !encounterEvent
-		ps.renderCh <- RenderJob{
-			IsPokemon:         true,
-			IsChange:          isChange,
-			IsEncountered:     in.isEncountered,
-			Enrichment:        in.enrichment,
-			PerLangEnrichment: in.perLang,
-			PerUserEnrichment: in.perUser,
-			WebhookFields:     in.webhookFields,
-			MatchedUsers:      withPrior,
-			MatchedAreas:      in.matchedAreas,
-			TilePending:       tilePendingForFirst,
-			LogReference:      in.encounterID,
-			ReplyKey:          in.encounterID,
-			OriginalView:      original,
-			ChangeType:        in.change.Type.String(),
+		// Build a per-language `original` map by re-running base + per-language
+		// enrichment against the prior webhook bytes. Falls back to
+		// dts.BuildOriginalView when we don't have prior bytes (e.g. the
+		// tracker entry pre-dates the bytes-storage upgrade, or tests that
+		// don't supply a webhook). For encounter events (CP 0→>0) we leave
+		// original nil — the regular `monster` template fires there, not
+		// monsterChanged.
+		var perLangOriginal map[string]map[string]any
+		var fallbackOriginal map[string]any
+		if !encounterEvent {
+			if len(in.change.OldWebhook) > 0 {
+				perLangOriginal = ps.buildPerLanguageOriginal(in.change.OldWebhook, withPrior)
+			}
+			if perLangOriginal == nil {
+				// Older path or test path — use the hand-picked subset.
+				fallbackOriginal = dts.BuildOriginalView(in.change.Old, ps.enricher.GameData, ps.translatorFor(""))
+			}
 		}
-		// Tile result channels can only be consumed once.
-		tilePendingForFirst = nil
+
+		// Group withPrior users by language so we can dispatch one RenderJob
+		// per language, each carrying the language-specific original. Encounter
+		// events don't need grouping (no original to differentiate); a single
+		// RenderJob suffices.
+		if perLangOriginal != nil {
+			byLang := groupByLanguage(withPrior, ps.cfg.General.Locale)
+			first := true
+			for lang, users := range byLang {
+				orig := perLangOriginal[lang]
+				job := RenderJob{
+					IsPokemon:         true,
+					IsChange:          isChange,
+					IsEncountered:     in.isEncountered,
+					Enrichment:        in.enrichment,
+					PerLangEnrichment: in.perLang,
+					PerUserEnrichment: in.perUser,
+					WebhookFields:     in.webhookFields,
+					MatchedUsers:      users,
+					MatchedAreas:      in.matchedAreas,
+					LogReference:      in.encounterID,
+					ReplyKey:          in.encounterID,
+					OriginalView:      orig,
+					ChangeType:        in.change.Type.String(),
+				}
+				if first {
+					job.TilePending = tilePendingForFirst
+					tilePendingForFirst = nil
+					first = false
+				}
+				ps.renderCh <- job
+			}
+		} else {
+			ps.renderCh <- RenderJob{
+				IsPokemon:         true,
+				IsChange:          isChange,
+				IsEncountered:     in.isEncountered,
+				Enrichment:        in.enrichment,
+				PerLangEnrichment: in.perLang,
+				PerUserEnrichment: in.perUser,
+				WebhookFields:     in.webhookFields,
+				MatchedUsers:      withPrior,
+				MatchedAreas:      in.matchedAreas,
+				TilePending:       tilePendingForFirst,
+				LogReference:      in.encounterID,
+				ReplyKey:          in.encounterID,
+				OriginalView:      fallbackOriginal,
+				ChangeType:        in.change.Type.String(),
+			}
+			// Tile result channels can only be consumed once.
+			tilePendingForFirst = nil
+		}
 	}
 
 	if len(withoutPrior) > 0 {
@@ -343,6 +391,93 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 			ReplyKey:          in.encounterID,
 		}
 	}
+}
+
+// buildPerLanguageOriginal re-runs the regular pokemon enrichment pipeline
+// against the prior-sighting webhook bytes (PVP-stripped at storage time)
+// and returns one merged base+perLang map per distinct language among the
+// supplied users. The result becomes RenderJob.OriginalView; LayeredView
+// exposes it under {{original.X}}.
+//
+// Static-map tile generation is skipped (TileModeSkip) — the position
+// doesn't change between prior and current sightings, so the tile from the
+// new state's render is reused implicitly. Returns nil when the webhook
+// can't be parsed or the enricher isn't configured for translation; the
+// caller should fall back to dts.BuildOriginalView in that case.
+func (ps *ProcessorService) buildPerLanguageOriginal(priorRaw json.RawMessage, users []webhook.MatchedUser) map[string]map[string]any {
+	if ps.enricher == nil || len(priorRaw) == 0 {
+		return nil
+	}
+	// Without a WeatherProvider the regular Pokemon enrichment path panics
+	// (e.WeatherProvider.GetCurrentWeatherInCell). Treat partial-enricher
+	// setups (tests, early-init) as "no per-language original" so the caller
+	// falls back to the safer dts.BuildOriginalView path.
+	if ps.enricher.WeatherProvider == nil {
+		return nil
+	}
+	var prior webhook.PokemonWebhook
+	if err := json.Unmarshal(priorRaw, &prior); err != nil {
+		return nil
+	}
+	rarityGroup := 0
+	if ps.stats != nil {
+		rarityGroup = ps.stats.GetRarityGroup(prior.PokemonID)
+	}
+	pvpCfg := ps.pvpCfg
+	if pvpCfg == nil {
+		// pvp.Calculate dereferences cfg; supply a zero-value to keep the
+		// helper crash-safe in partial-init contexts (tests). The prior
+		// webhook is PVP-stripped anyway, so PVP fields will be empty either
+		// way — original.* doesn't expose PVP.
+		pvpCfg = &pvp.Config{}
+	}
+	processed := matching.ProcessPokemonWebhook(&prior, rarityGroup, pvpCfg)
+	base, _ := ps.enricher.Pokemon(&prior, processed, enrichment.TileModeSkip)
+	if base == nil {
+		return nil
+	}
+	if ps.enricher.GameData == nil || ps.enricher.Translations == nil {
+		// Without translations the per-language layer is empty, but the base
+		// view still carries identity / battle-stats / icon URLs etc. Return
+		// it under every distinct language so templates don't see nil.
+		out := make(map[string]map[string]any)
+		for _, lang := range distinctLanguages(users, ps.cfg.General.Locale) {
+			out[lang] = base
+		}
+		return out
+	}
+	out := make(map[string]map[string]any)
+	for _, lang := range distinctLanguages(users, ps.cfg.General.Locale) {
+		perLang := ps.enricher.PokemonTranslate(base, &prior, lang)
+		merged := make(map[string]any, len(base)+len(perLang))
+		for k, v := range base {
+			merged[k] = v
+		}
+		for k, v := range perLang {
+			merged[k] = v
+		}
+		out[lang] = merged
+	}
+	return out
+}
+
+// groupByLanguage buckets matched users by language code, defaulting blanks
+// to the supplied locale (or "en" if that's also blank). Used to dispatch
+// one RenderJob per language for change events so each gets its
+// language-specific {{original.X}} view.
+func groupByLanguage(matched []webhook.MatchedUser, defaultLocale string) map[string][]webhook.MatchedUser {
+	if defaultLocale == "" {
+		defaultLocale = "en"
+	}
+	out := make(map[string][]webhook.MatchedUser)
+	for _, m := range matched {
+		lang := m.Language
+		if lang == "" {
+			lang = defaultLocale
+		}
+		out[lang] = append(out[lang], m)
+	}
+	return out
 }
 
 // partitionByPriorMessage splits matched users into two slices: those that
