@@ -470,6 +470,18 @@ default_user_tracking_level_cap = 0      # default pvp tracking level cap (0 = a
 # change events still re-render as a regular `monster` send to matched users.
 pokemon_change_tracking = true
 
+# Quest summary — when on, quest tracking rules with the summary clean bit set
+# (clean & 4) defer matched quests into a per-user in-memory buffer instead of
+# delivering each immediately. The summary scheduler then groups buffered
+# quests by reward at user-defined times and sends one message per reward
+# group. Set to false to disable the feature entirely (the scheduler is not
+# started; the buffer is still loaded/saved across restarts).
+quest_summary_enabled = true
+# Advisory safety-net TTL for buffered quest entries (hours). Currently the
+# scheduler relies on each entry's reported expiry; this value is reserved
+# for a future created-at sweep for malformed payloads.
+quest_summary_buffer_ttl_hours = 24
+
 # ---- Autocreate (bulk channel sync) ----
 # Apply a channelTemplate.json entry across many geofences in one operation.
 # Triggered with `!autocreate sync` or POST /api/autocreate/run. See AUTOCREATE.md

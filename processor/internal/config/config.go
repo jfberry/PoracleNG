@@ -91,6 +91,17 @@ type TrackingConfig struct {
 	// change events fall through to the regular `monster` send path — no
 	// reply threading, no `monsterChanged` template.
 	PokemonChangeTracking bool `toml:"pokemon_change_tracking"`
+	// QuestSummaryEnabled toggles the per-user buffered quest summary
+	// pipeline (matcher routing, scheduler, render). Default true. When
+	// disabled the scheduler isn't started; the buffer is still loaded
+	// and saved so that toggling the flag back on does not lose entries
+	// captured before shutdown.
+	QuestSummaryEnabled bool `toml:"quest_summary_enabled"`
+	// QuestSummaryBufferTTLHours is currently advisory. The scheduler
+	// sweeps buffered entries based on each entry's reported ExpiresAt;
+	// this knob is reserved for a future safety-net sweep on CreatedAt
+	// for malformed payloads. Default 24.
+	QuestSummaryBufferTTLHours int `toml:"quest_summary_buffer_ttl_hours"`
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor
@@ -775,7 +786,9 @@ func Load(baseDir string) (*Config, error) {
 			PokestopURL:    "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png",
 		},
 		Tracking: TrackingConfig{
-			PokemonChangeTracking: true,
+			PokemonChangeTracking:      true,
+			QuestSummaryEnabled:        true,
+			QuestSummaryBufferTTLHours: 24,
 		},
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {

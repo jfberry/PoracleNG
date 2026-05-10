@@ -210,6 +210,33 @@ func main() {
 	go proc.runProfileScheduler()
 	log.Infof("Profile scheduler enabled (10-minute interval)")
 
+	// Quest summary scheduler — only constructed when the feature flag is on.
+	// The buffer is loaded/saved regardless so toggling the flag back on does
+	// not lose entries captured before the toggle. Tick cadence matches the
+	// profile scheduler's wall-clock minute marks; sweepEvery=6 is roughly
+	// hourly.
+	if cfg.Tracking.QuestSummaryEnabled {
+		proc.summaryScheduler = NewSummaryScheduler(
+			schedulerConfig{
+				Locale:                     cfg.General.Locale,
+				QuestSummaryBufferTTLHours: cfg.Tracking.QuestSummaryBufferTTLHours,
+			},
+			stateMgr,
+			humanStore,
+			summaryScheduleStore,
+			proc.summaryBuffer,
+			func(humanID, alertType string) {
+				// PR 6 wires this to the real render+dispatch path.
+				log.Infof("summary dispatch (todo, PR 6): id=%s type=%s", humanID, alertType)
+			},
+			6,
+		)
+		proc.summaryScheduler.Start()
+		log.Infof("Summary scheduler enabled")
+	} else {
+		log.Infof("Summary scheduler disabled (tracking.quest_summary_enabled=false)")
+	}
+
 	// HTTP server — Gin router.
 	// UseRawPath + UnescapePathValues lets :id capture percent-encoded
 	// path params that contain forward slashes (webhook URLs used as
@@ -881,6 +908,7 @@ type ProcessorService struct {
 	dispatcher       *delivery.Dispatcher
 	humans           store.HumanStore
 	summarySchedules store.SummaryScheduleStore
+	summaryScheduler *SummaryScheduler
 	scanner          scanner.Scanner
 	rateLimiter      *ratelimit.Limiter
 	validator        validation.Validator
@@ -1263,6 +1291,12 @@ func (ps *ProcessorService) Close() {
 		log.Info("Stopping delivery dispatcher...")
 		ps.dispatcher.Stop()
 		log.Info("Delivery dispatcher stopped")
+	}
+	// Stop summary scheduler before gym-state save so we don't race with
+	// any in-flight ticks that look up state.
+	if ps.summaryScheduler != nil {
+		ps.summaryScheduler.Close()
+		log.Info("Summary scheduler stopped")
 	}
 	if ps.enricher.StaticMap != nil {
 		ps.enricher.StaticMap.Close()
