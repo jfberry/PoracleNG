@@ -261,6 +261,46 @@ func TestLookupReplyReturnsLatest(t *testing.T) {
 	}
 }
 
+func TestLookupReplyEvictionAlignedWithEditCache(t *testing.T) {
+	mt, _ := newTestTracker(t)
+	mt.Track("edit-x", &TrackedMessage{
+		SentID: "msg-x", Target: "u1", ReplyKey: "rk-evict",
+	}, 50*time.Millisecond)
+
+	if got := mt.LookupReply("rk-evict", "u1"); got != "msg-x" {
+		t.Fatalf("pre-eviction LookupReply = %q, want msg-x", got)
+	}
+	time.Sleep(150 * time.Millisecond)
+	if got := mt.LookupReply("rk-evict", "u1"); got != "" {
+		t.Errorf("post-eviction LookupReply = %q, want empty", got)
+	}
+}
+
+func TestTrackerSaveLoadPreservesReplyIndex(t *testing.T) {
+	dir := t.TempDir()
+	mock := &mockSender{}
+	senders := map[string]Sender{"discord": mock}
+
+	mt1 := NewMessageTracker(dir, senders)
+	mt1.Track("edit-r", &TrackedMessage{
+		SentID: "msg-r", Target: "u1", Type: "discord:user", ReplyKey: "rk-save",
+	}, time.Hour)
+	if err := mt1.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	mt1.cache.Stop()
+
+	mt2 := NewMessageTracker(dir, senders)
+	if err := mt2.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	defer mt2.cache.Stop()
+
+	if got := mt2.LookupReply("rk-save", "u1"); got != "msg-r" {
+		t.Errorf("LookupReply after Load = %q, want msg-r", got)
+	}
+}
+
 func TestTrackerSize(t *testing.T) {
 	mt, _ := newTestTracker(t)
 
