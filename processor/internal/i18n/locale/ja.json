@@ -308,6 +308,7 @@
   "section.maxbattles": "**マックスバトル:**",
   "section.maxbattles.none": "マックスバトルを追跡していません",
   "msg.no_pokemon": "ポケモンが指定されていません",
+  "msg.form_not_found": "Form `{0}` not recognised. Use `{1}info <pokemon>` to see available forms.",
   "msg.nothing_to_remove": "削除する項目がありません",
   "msg.no_levels": "レベルが指定されていません",
   "msg.no_egg_levels": "タマゴのレベルが指定されていません",
