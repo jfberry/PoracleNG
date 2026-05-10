@@ -79,6 +79,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		encounterState := tracker.EncounterState{
 			PokemonID:     pokemon.PokemonID,
 			Form:          pokemon.Form,
+			Gender:        pokemon.Gender,
 			Weather:       weather,
 			CP:            pokemon.CP,
 			ATK:           atk,
