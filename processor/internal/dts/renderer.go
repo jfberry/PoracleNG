@@ -198,7 +198,34 @@ func (r *Renderer) RenderPokemon(
 		templateType = "monsterNoIv"
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, uniqueUsers, matchedAreas, logReference, editKeyBase)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, nil, uniqueUsers, matchedAreas, logReference, editKeyBase)
+}
+
+// RenderPokemonChanged renders the monsterChanged template for pokemon-change
+// events. The original parameter is the prior-sighting view (built by
+// BuildOriginalView) — exposed in templates as {{original.X}}. Like
+// RenderPokemon, matched users are deduplicated; unlike RenderPokemon the
+// template type is fixed to "monsterChanged" (there is no encounter/no-IV
+// distinction here — the change event always implies the new sighting was
+// encountered enough to detect the change).
+func (r *Renderer) RenderPokemonChanged(
+	enrichment map[string]any,
+	perLangEnrichment map[string]map[string]any,
+	perUserEnrichment map[string]map[string]any,
+	webhookFields map[string]any,
+	original map[string]any,
+	matchedUsers []webhook.MatchedUser,
+	matchedAreas []webhook.MatchedArea,
+	logReference string,
+	editKeyBase string,
+) []webhook.DeliveryJob {
+	if r.isBelowMinAlertTime(enrichment) {
+		return nil
+	}
+
+	uniqueUsers := deduplicateUsers(matchedUsers)
+
+	return r.renderForUsers("monsterChanged", enrichment, perLangEnrichment, perUserEnrichment, webhookFields, original, uniqueUsers, matchedAreas, logReference, editKeyBase)
 }
 
 // RenderAlert renders alerts for any non-pokemon type and returns delivery jobs.
@@ -218,7 +245,7 @@ func (r *Renderer) RenderAlert(
 		return nil
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, matchedUsers, matchedAreas, logReference, editKeyBase)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, nil, matchedUsers, matchedAreas, logReference, editKeyBase)
 }
 
 // isBelowMinAlertTime checks whether the TTH in enrichment is below the configured minimum.
@@ -228,12 +255,15 @@ func (r *Renderer) isBelowMinAlertTime(enrichment map[string]any) bool {
 }
 
 // renderForUsers is the shared rendering loop that produces DeliveryJobs for each user.
+// The original parameter (nil for non-change renders) is the prior-sighting snapshot
+// installed onto each LayeredView so templates can reference {{original.X}}.
 func (r *Renderer) renderForUsers(
 	templateType string,
 	enrichment map[string]any,
 	perLangEnrichment map[string]map[string]any,
 	perUserEnrichment map[string]map[string]any,
 	webhookFields map[string]any,
+	original map[string]any,
 	users []webhook.MatchedUser,
 	areas []webhook.MatchedArea,
 	logReference string,
@@ -254,7 +284,7 @@ func (r *Renderer) renderForUsers(
 	// enrichment, users with the same (template, platform, language) get identical
 	// rendered output. Render once per group and clone the result.
 	if perUserEnrichment == nil {
-		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, users, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)
+		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, original, users, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)
 	}
 
 	var jobs []webhook.DeliveryJob
@@ -275,8 +305,11 @@ func (r *Renderer) renderForUsers(
 		// d. Per-user enrichment
 		perUser := mapOrEmpty(perUserEnrichment, user.ID)
 
-		// e. Build layered view (zero-copy — no map merging)
+		// e. Build layered view (zero-copy — no map merging). Install the
+		// prior-sighting snapshot (nil for non-change renders) so templates
+		// can reference {{original.X}}.
 		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, perUser, webhookFields, platform, areas)
+		view.original = original
 
 		// f. Get template (with monsterNoIv -> monster fallback)
 		templateID := r.resolveTemplate(user.Template)
@@ -369,11 +402,14 @@ type renderGroupKey struct {
 // renderGrouped renders once per unique (template, platform, language) group and
 // creates DeliveryJobs for all users in that group. This avoids redundant template
 // execution and URL shortening when there is no per-user enrichment.
+// The original parameter (nil for non-change renders) is installed on each
+// LayeredView so templates can reference {{original.X}}.
 func (r *Renderer) renderGrouped(
 	templateType string,
 	enrichment map[string]any,
 	perLangEnrichment map[string]map[string]any,
 	webhookFields map[string]any,
+	original map[string]any,
 	users []webhook.MatchedUser,
 	areas []webhook.MatchedArea,
 	logReference string,
@@ -422,6 +458,7 @@ func (r *Renderer) renderGrouped(
 		perLang := mapOrEmpty(perLangEnrichment, key.language)
 		groupPerUser := map[string]any{"userDistanceTrack": key.distanceTrack}
 		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, groupPerUser, webhookFields, key.platform, areas)
+		view.original = original
 
 		tmpl := r.templates.Get(templateType, key.platform, key.templateID, key.language)
 
