@@ -16,8 +16,8 @@
 2. **Schedule scope** is per-user, per-alert-type. One row per `(humans.id, type='quest')` in `summary_schedules`. Future expansion to other alert types (raids, eggs) is just new rows; no schema change needed.
 3. **Per-rule opt-in** = bit 4 of the existing `clean` bitmask (so `clean & 4 != 0` means "buffer this rule's matches"). Same band as clean (bit 1) and edit (bit 2) — all are delivery-side decisions made per rule. Reply (bit 4 was reserved for it but ended up implicit) freed the slot. No new column, no migration on the tracking table, no API-shape change. Helper: `db.IsSummary(clean) bool`.
 4. **Buffer is in-memory** (`map[id]map[alertType][]BufferedQuest`) with a JSON snapshot to `config/.cache/summary-buffer.json` on graceful shutdown, restored on startup. Same pattern as `delivery-tracker.json` and `gym-state.json`. No per-quest DB writes — the buffer hot path is `sync.Mutex` + map append. Crash recovery loses the in-flight buffer (acceptable: a user misses one cycle). Each entry stores **raw webhook bytes** — no per-user pre-enrichment. Two users' summaries don't share a payload anyway (quests are matched per rule, fanned out per recipient), so caching enrichment buys nothing. Storing raw also frees us from "what language was this enriched in?" — re-enrichment at dispatch time uses the user's *current* language.
-5. **Grouping key** = `(reward_type, reward, with_ar)`. AR-quests and standard quests with the same reward render as separate groups so users can tell them apart at a glance.
-6. **One message per reward group**. So a user with quests for stardust + spinda + charmander gets three messages at trigger time — each with the reward's icon, a multi-pin map, and an N-location list.
+5. **Buffer dedup key** = `(reward_type, reward, pokestop_id, with_ar)`. The same pokestop can host one regular quest *and* one AR-required quest at the same time with different rewards; keeping `with_ar` in the dedup PK prevents one from silently overwriting the other.
+6. **Grouping key** for the summary message = `(reward_type, reward)`. AR and non-AR quests that happen to share a reward (rare) collapse into one message; each per-pokestop `quests` entry carries its own `withAR` flag so templates can label individual rows. So a user with quests for stardust + spinda + charmander gets three messages at trigger time — each with the reward's icon, a multi-pin map, and an N-location list.
 7. **Trigger window**: same 10-minute matching as the profile scheduler, on the same wall-clock minute marks (`[0,10,15,20,30,40,45,50]`). A schedule of `Mon 07:30` fires once at the next matching minute mark on/after 07:30 (so 07:30 itself, since :30 is in the list). Subsequent ticks within the 10-min window don't re-fire — clearing the buffer at delivery is the de-dup signal.
 8. **Buffer never delivers stale quests**. At dispatch time we filter out quests whose `expires_at` has passed.
 9. **Manual `!summary quest`** clears the buffer atomically — same dispatch path as the scheduled fire, just triggered by user. If buffer is empty, the bot replies "no buffered quests".
@@ -515,36 +515,34 @@ func (s *SummaryScheduler) deliver(humanID, alertType string) {
     // language. Dispatch is rare so the cost is bounded.
     type enrichedEntry struct {
         rewardType, reward int
-        withAR             bool
-        view               map[string]any  // per-pokestop view fields
+        view               map[string]any // per-pokestop view fields, withAR injected
     }
     enriched := make([]enrichedEntry, 0, len(fresh))
     for _, r := range fresh {
-        // s.questEnrichOne reproduces the same per-quest enrichment
+        // questEnrichOne reproduces the same per-quest enrichment
         // ProcessQuest does for an immediate alert, scoped to one
         // language. Implementation: parse r.Payload → run base + per-lang
-        // → return merged map for the per-pokestop entry.
+        // → return merged map for the per-pokestop entry. Inject
+        // withAR onto the view so templates can label this row.
         pokestopView := s.questEnrichOne(r.Payload, lang)
         if pokestopView == nil {
-            continue // malformed payload — skip silently
+            continue
         }
-        enriched = append(enriched, enrichedEntry{r.RewardType, r.Reward, r.WithAR, pokestopView})
+        pokestopView["withAR"] = r.WithAR
+        enriched = append(enriched, enrichedEntry{r.RewardType, r.Reward, pokestopView})
     }
     if len(enriched) == 0 {
         s.buffer.Clear(humanID, alertType)
         return
     }
-    // Group by (reward_type, reward, with_ar). AR-quests with the same
-    // reward as a regular quest render as a separate group so users
-    // can see which is which.
-    type key struct {
-        Type, Reward int
-        WithAR       bool
-    }
+    // Group by (reward_type, reward). AR-quests sharing a reward with
+    // a regular quest collapse into one message; the per-row withAR
+    // flag distinguishes individual entries.
+    type key struct{ Type, Reward int }
     groups := map[key][]map[string]any{}
     rewards := []key{} // preserve first-seen order across groups
     for _, e := range enriched {
-        k := key{e.rewardType, e.reward, e.withAR}
+        k := key{e.rewardType, e.reward}
         if _, exists := groups[k]; !exists {
             rewards = append(rewards, k)
         }
@@ -552,7 +550,7 @@ func (s *SummaryScheduler) deliver(humanID, alertType string) {
     }
     // For each group, render + dispatch one questSummary message.
     for _, k := range rewards {
-        s.renderAndDispatchGroup(human, k.Type, k.Reward, k.WithAR, groups[k])
+        s.renderAndDispatchGroup(human, k.Type, k.Reward, groups[k])
     }
     // Clear after successful dispatch.
     s.buffer.Clear(humanID, alertType)
@@ -612,10 +610,10 @@ git commit -m "main: wire SummaryBuffer (Load/Save) + SummaryScheduler"
 ```go
 // BuildQuestSummaryView returns the template context for one
 // reward-group's questSummary message. Reward fields are shared
-// across the group; per-pokestop fields live in `quests`.
+// across the group; per-pokestop fields (including each entry's own
+// withAR flag) live in `quests`.
 func BuildQuestSummaryView(
     rewardType, rewardID int,
-    withAR bool,
     perPokestopViews []map[string]any,
     sm *staticmap.Resolver,
     gd *gamedata.GameData,
@@ -662,11 +660,10 @@ func BuildQuestSummaryView(
         "rewardType": rewardType,
         "reward":     rewardID,
         "rewardName": rewardName(rewardType, rewardID, gd, tr),
-        "withAR":     withAR,
         "imgUrl":     sharedImg,
         "staticMap":  staticMap,
         "count":      len(perPokestopViews),
-        "quests":     perPokestopViews, // {{#each quests}} ... {{/each}}
+        "quests":     perPokestopViews, // each entry exposes its own withAR
     }
 }
 ```
@@ -916,7 +913,8 @@ Open questions / risks:
 - [ ] Scheduler tick at the configured time fires identical dispatch
 - [ ] Mixed rules (one `summary` + one regular) on the same user: regular fires immediately, summary one buffers
 - [ ] Two pokestops with the same Spinda quest: one questSummary message with `count: 2` and a 2-element `quests` array
-- [ ] An AR-required Spinda + a regular Spinda render as two separate questSummary messages (different `with_ar`)
+- [ ] An AR-required Spinda + a regular Spinda at the same pokestop both buffer (don't overwrite each other) and render in one questSummary message with two `quests` entries — one with `withAR=true`, one with `withAR=false`
+- [ ] AR + non-AR quests with *different* rewards at one pokestop render as two separate messages (different reward groups)
 - [ ] The summary message renders a multi-pin static-map autopositioned to fit the points (zoom/centre look right, pins visible)
 - [ ] Quest expires before dispatch: filtered out at delivery time, never sent
 - [ ] Graceful restart with non-empty buffer + valid schedule: snapshot at `config/.cache/summary-buffer.json` exists; on restart it's reloaded and the next scheduled fire delivers it
