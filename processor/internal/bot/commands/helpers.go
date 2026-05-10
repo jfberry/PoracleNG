@@ -408,23 +408,27 @@ func resolveGymRef(ctx *bot.CommandContext, raw string) (string, *bot.Reply) {
 		log.Errorf("resolveGymRef: FindGymsByName(%q): %v", raw, err)
 		return "", &bot.Reply{React: "🙅", Text: tr.T("msg.gym_lookup.error")}
 	}
+	// The msg.gym_lookup.{none,too_many,multiple} templates wrap {0} in
+	// backticks already, so use EscapeForCode (only ` and \ are special
+	// inside a code span) rather than full Markdown escaping.
+	rawEsc := ctx.EscapeForCode(raw)
 	switch {
 	case len(matches) == 0:
-		return "", &bot.Reply{React: "🙅", Text: tr.Tf("msg.gym_lookup.none", raw)}
+		return "", &bot.Reply{React: "🙅", Text: tr.Tf("msg.gym_lookup.none", rawEsc)}
 	case len(matches) == 1:
 		return matches[0].ID, nil
 	case len(matches) > showLimit:
-		return "", &bot.Reply{React: "🙅", Text: tr.Tf("msg.gym_lookup.too_many", raw, showLimit)}
+		return "", &bot.Reply{React: "🙅", Text: tr.Tf("msg.gym_lookup.too_many", rawEsc, showLimit)}
 	}
 	var b strings.Builder
-	b.WriteString(tr.Tf("msg.gym_lookup.multiple", raw, len(matches)))
+	b.WriteString(tr.Tf("msg.gym_lookup.multiple", rawEsc, len(matches)))
 	b.WriteString("\n")
 	for _, g := range matches {
 		b.WriteString("  - ")
-		b.WriteString(g.Name)
-		b.WriteString(" (`")
-		b.WriteString(g.ID)
-		b.WriteString("`)\n")
+		b.WriteString(ctx.EscapeForReply(g.Name))
+		b.WriteString(" (")
+		b.WriteString(ctx.Code(g.ID))
+		b.WriteString(")\n")
 	}
 	return "", &bot.Reply{React: "🙅", Text: b.String()}
 }

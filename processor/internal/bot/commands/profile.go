@@ -75,13 +75,13 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		if p.ProfileNo == ctx.ProfileNo {
 			activeMarker = "*"
 		}
-		sb.WriteString(fmt.Sprintf("%d%s. %s", p.ProfileNo, activeMarker, p.Name))
+		sb.WriteString(fmt.Sprintf("%d%s. %s", p.ProfileNo, activeMarker, ctx.EscapeForReply(p.Name)))
 
 		if len(p.Area) > 0 && ctx.AreaLogic != nil {
 			displayNames := ctx.AreaLogic.ResolveDisplayNames(p.Area)
-			sb.WriteString(fmt.Sprintf(" - areas: %s", strings.Join(displayNames, ", ")))
+			sb.WriteString(" - areas: " + ctx.EscapeJoin(displayNames, ", "))
 		} else if len(p.Area) > 0 {
-			sb.WriteString(fmt.Sprintf(" - areas: %s", strings.Join(p.Area, ", ")))
+			sb.WriteString(" - areas: " + ctx.EscapeJoin(p.Area, ", "))
 		}
 
 		if p.Latitude != 0 || p.Longitude != 0 {
@@ -132,7 +132,7 @@ func (c *ProfileCommand) addProfile(ctx *bot.CommandContext, args []string) []bo
 		}
 	}
 
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.created", newNo, name)}}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.created", newNo, ctx.EscapeForReply(name))}}
 }
 
 func (c *ProfileCommand) removeProfile(ctx *bot.CommandContext, args []string) []bot.Reply {

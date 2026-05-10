@@ -39,9 +39,13 @@ func (b *Bot) sendTopicMessage(chatID int64, threadID int, text string) (*models
 	})
 }
 
-// sendMarkdownToTopic sends a MarkdownV1-parsed text message, threaded
-// into a topic when threadID > 0. Used by the reply path which renders
-// existing PoracleJS Markdown.
+// sendMarkdownToTopic sends a MarkdownV2-parsed text message, threaded
+// into a topic when threadID > 0. Callers must have escaped any literal
+// Markdown special characters in the text — see bot.CommandContext
+// EscapeForReply / Bold / Italic / Code / CodeBlock helpers. The polling
+// bot's reply path falls back to a plain-text resend if V2 strict-parse
+// fails, so unescaped legacy text degrades gracefully rather than
+// dropping the message.
 func (b *Bot) sendMarkdownToTopic(chatID int64, threadID int, text string) error {
 	ctx, cancel := requestCtx()
 	defer cancel()
@@ -49,7 +53,7 @@ func (b *Bot) sendMarkdownToTopic(chatID int64, threadID int, text string) error
 		ChatID:          chatID,
 		MessageThreadID: threadID,
 		Text:            text,
-		ParseMode:       models.ParseModeMarkdownV1,
+		ParseMode:       models.ParseModeMarkdown,
 	})
 	return err
 }

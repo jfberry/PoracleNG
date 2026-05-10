@@ -106,7 +106,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	resolved := ctx.Resolver.Resolve(name, ctx.Language)
 	if len(resolved) == 0 {
 		tr := ctx.Tr()
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", name)}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", ctx.EscapeForReply(name))}}
 	}
 
 	pokemonID := resolved[0].PokemonID
@@ -148,7 +148,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	}
 	if mon == nil {
 		tr := ctx.Tr()
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", name)}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", ctx.EscapeForReply(name))}}
 	}
 
 	tr := ctx.Tr()
@@ -166,9 +166,9 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	enName := enTr.T(gamedata.PokemonTranslationKey(pokemonID))
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**%s**", pokeName))
+	sb.WriteString(ctx.Bold(pokeName))
 	if pokeName != enName {
-		sb.WriteString(fmt.Sprintf(" (%s)", enName))
+		sb.WriteString(" (" + ctx.EscapeForReply(enName) + ")")
 	}
 
 	// Form name
@@ -176,7 +176,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		formName := tr.T(gamedata.FormTranslationKey(form))
 		formKey := gamedata.FormTranslationKey(form)
 		if formName != formKey {
-			sb.WriteString(fmt.Sprintf(" [%s]", formName))
+			sb.WriteString(" [" + ctx.EscapeForReply(formName) + "]")
 		}
 	}
 	sb.WriteByte('\n')
@@ -204,7 +204,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		if i > 0 {
 			typeLabel = tr.T("msg.info.secondary_type")
 		}
-		sb.WriteString(fmt.Sprintf("**%s**\n", typeLabel))
+		sb.WriteString(ctx.Bold(typeLabel) + "\n")
 
 		typeName := tr.T(gamedata.TypeTranslationKey(tid))
 		typeEmoji := ""
@@ -329,7 +329,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		shinyStats := ctx.Stats.ExportShinyStats()
 		if s, ok := shinyStats[pokemonID]; ok {
 			sb.WriteByte('\n')
-			sb.WriteString(fmt.Sprintf("**%s**: %d/%d  (1:%.0f)\n", tr.T("msg.info.shiny_rate"), s.Seen, s.Total, s.Ratio))
+			sb.WriteString(fmt.Sprintf("%s: %d/%d  (1:%.0f)\n", ctx.Bold(tr.T("msg.info.shiny_rate")), s.Seen, s.Total, s.Ratio))
 		}
 	}
 
@@ -428,7 +428,7 @@ func (c *InfoCommand) availableForms(ctx *bot.CommandContext, pokemonID int) []s
 		if key.Form == 0 {
 			entries = append(entries, formEntry{
 				formID:   0,
-				display:  fmt.Sprintf("`%s`", pokeName),
+				display:  ctx.Code(pokeName),
 				sortName: "",
 			})
 			continue
@@ -443,13 +443,13 @@ func (c *InfoCommand) availableForms(ctx *bot.CommandContext, pokemonID int) []s
 			}
 		}
 		// For tracking, users type form names with underscores replacing spaces.
-		// Wrap in backticks so Telegram/Discord render as inline code — keeps the
-		// underscore literal (otherwise Telegram MarkdownV1 italicises it) and
-		// makes the line copy-pasteable as a tracking command.
+		// Wrap in inline code so the underscore renders literally on both
+		// platforms (Telegram MarkdownV2 italics it otherwise) and the line
+		// reads as a copy-pasteable tracking command.
 		trackingName := strings.ReplaceAll(strings.ToLower(formName), " ", "_")
 		entries = append(entries, formEntry{
 			formID:   key.Form,
-			display:  fmt.Sprintf("`%s form:%s`", pokeName, trackingName),
+			display:  ctx.Code(fmt.Sprintf("%s form:%s", pokeName, trackingName)),
 			sortName: formName,
 		})
 	}
@@ -634,11 +634,11 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].id < entries[j].id })
 
 	var sb strings.Builder
-	sb.WriteString("**" + tr.T("msg.info.shiny_header") + "**\n\n")
+	sb.WriteString(ctx.Bold(tr.T("msg.info.shiny_header")) + "\n\n")
 
 	for _, e := range entries {
 		pokeName := tr.T(gamedata.PokemonTranslationKey(e.id))
-		sb.WriteString(fmt.Sprintf("%s: %s %d - %s 1:%.0f\n", pokeName, tr.T("msg.info.shiny_seen"), e.stat.Total, tr.T("msg.info.shiny_ratio"), e.stat.Ratio))
+		sb.WriteString(fmt.Sprintf("%s: %s %d - %s 1:%.0f\n", ctx.EscapeForReply(pokeName), tr.T("msg.info.shiny_seen"), e.stat.Total, tr.T("msg.info.shiny_ratio"), e.stat.Ratio))
 	}
 
 	return bot.SplitTextReply(sb.String())
