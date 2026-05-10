@@ -1258,3 +1258,21 @@ Plan saved. Two execution paths:
 2. **Inline Execution** — execute in this session via superpowers:executing-plans, batch checkpoints.
 
 Pick one when you're ready to start.
+
+---
+
+## Manual verification (before merging)
+
+Walk these in a real Discord/Telegram channel against a live processor before merging. They verify behaviours that automated tests can't reach (gateway round-trips, real reply arrows, Tracker.Save/Load across restart).
+
+- [ ] Telegram: `!track pikachu` → non-IV sighting then encountered → see two messages, both render the regular `monster` / `monsterNoIv` template, second is a reply to first.
+- [ ] Discord: same as above; the `message_reference` arrow is visible on the second message.
+- [ ] Form / species change after encounter (use a rare form via test webhook) → second message renders `monsterChanged` with the "Originally seen as ..." line, threaded as reply.
+- [ ] Weather-boost shift after encounter (synthetic webhook flipping `weather` and bumping CP) → second message renders `monsterChanged`, `{{original.cp}}` shows the pre-shift CP, threaded as reply.
+- [ ] Telegram: `!track pikachu clean` → both messages delete on TTH; the reply chain still threaded while alive.
+- [ ] `!track pikachu edit` (existing edit mode, clean bit 2) → second sighting *edits* the first message, no reply (edit takes priority over reply when both keys are set).
+- [ ] User adds tracking *between* sighting 1 and sighting 2 → sees only sighting 2 as a fresh `monster` message (no prior to reply to, no `monsterChanged` since they never saw the original).
+- [ ] User has two rules where rule A matches at non-IV and rule B matches at IV (different filters, same user) → second message replies to first (same encounter, same target) and still uses `monster` (encounter event), not `monsterChanged`.
+- [ ] Bundled `monsterChanged` template renders without error on a synthetic post-encounter form change (the fallback ships in `fallbacks/dts.json` for both platforms).
+- [ ] Restart processor mid-encounter: `MessageTracker` save/load round-trip preserves the reply index, so the post-restart sighting still threads under the pre-restart message.
+- [ ] `!info form list`, `!area`, `!profile`, `!poracle-clean` still work (no regression from earlier helper-related changes on main).

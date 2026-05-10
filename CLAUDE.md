@@ -551,6 +551,10 @@ The `clean` field on tracking rules is a bitmask with two bits (`db/clean.go`):
 
 Helper functions `IsClean(clean)` and `IsEdit(clean)` test individual bits. When `IsEdit` is true, the renderer generates an `EditKey` (a stable identifier derived from the webhook event, e.g. gym ID + pokemon ID for raids). This EditKey flows through `RenderJob` into the `delivery.Job`. The `FairQueue` in delivery checks the `MessageTracker` for an existing message with the same EditKey; if found, it edits the existing message instead of sending a new one. First consumer: raids with RSVP updates (`rsvp_changes` tracking), where the same raid alert is edited in-place as RSVP counts change.
 
+### Pokemon change events
+
+The encounter tracker (`internal/tracker/encounter.go`) detects species, form, gender, encountered (non-IV → IV), and weather-boost shifts. The pokemon handler (`cmd/processor/pokemon.go`) partitions matched users by prior-message-existence and dispatches per-user: prior-tracked users get a `monster` (encounter event) or `monsterChanged` (post-encounter change) render with `OriginalView` populated; new-match users get a fresh `monster` render. Every pokemon `RenderJob` carries `ReplyKey = encounterID`; `delivery.MessageTracker` keeps an O(1) reply index, and senders inject `message_reference` / `reply_to_message_id` when a prior message exists for the (replyKey, target) pair. Edit mode (clean bit 2) takes priority when set. The `monsterChanged` template gains access to the prior sighting via `{{original.X}}` — see API.md for the field set.
+
 ## Template System (DTS)
 
 DTS (Data Template System) templates are Handlebars templates rendered by the Go processor using `jfberry/raymond` (fork of `mailgun/raymond/v2` with `FieldResolver` interface). Templates define per-platform message formats for each alert type.

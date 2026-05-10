@@ -217,6 +217,25 @@ Force a state reload (same as POST /api/reload).
 | `template` | string | config default | DTS template name |
 | `clean` | bool | false | Auto-delete message after TTH |
 
+#### Pokemon change template (`monsterChanged`)
+
+When a tracked pokemon's data changes after the initial sighting (form, species, gender, or weather-boost shift), users with a prior message for that encounter receive a `monsterChanged` template render threaded as a reply to the original. Templates have access to the prior sighting via `{{original.X}}`:
+
+| Field | Type | Notes |
+|---|---|---|
+| `original.pokemonId` | int | |
+| `original.formId` | int | |
+| `original.gender` | int | |
+| `original.cp`, `atk`, `def`, `sta` | int | 0 when not encountered |
+| `original.iv` | float | 0 when not encountered |
+| `original.weatherId` | int | Pre-shift in-game weather |
+| `original.encountered` | bool | true once CP > 0 |
+| `original.name`, `formName`, `weatherName`, `fullName` | string | translated to the recipient's language |
+
+The encounter event itself (non-IV → IV) deliberately re-fires the regular `monster` template threaded as a reply — it's the natural fulfilment of the non-IV alert, not a "change". Reply threading is implicit (every pokemon render carries a reply key keyed on the encounter ID) and applies to both Discord (`message_reference`) and Telegram (`reply_to_message_id`). Edit mode (clean bit 2) takes priority when set: the prior message is updated in place rather than replied to. Users matched at the change event with no prior message receive a fresh `monster` render (no reply target, no `monsterChanged` — they never saw the original).
+
+Ships a default `monsterChanged` template per platform in `fallbacks/dts.json`; admins can override via `config/dts.json` or `config/dts/` like any other type.
+
 ### Raid Tracking
 
 Raid tracking supports three input modes. Each request object uses **one** of these:
