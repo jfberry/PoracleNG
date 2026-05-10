@@ -116,13 +116,13 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, r
 		return false, change
 	}
 
-	// Update stored state with latest data (stats, weather, disappear time).
-	// Refresh stored webhook bytes too — successive non-change updates still
-	// represent the most recent observation, so the next change-comparison
-	// should reference the latest webhook fields (despawn time, etc.).
+	// Update stored state with latest data (stats, weather, disappear time)
+	// for accurate next-change comparison. The webhook bytes are *not*
+	// refreshed here: they represent "the prior change point" for
+	// {{original.X}}, so they must stick from the most recent change
+	// (or first sighting) until the next change fires.
 	prev.state = newState
 	prev.state.InsertedAt = old.InsertedAt
-	prev.webhook = raw
 
 	return false, nil
 }
