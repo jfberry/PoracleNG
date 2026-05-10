@@ -428,7 +428,7 @@ func (c *InfoCommand) availableForms(ctx *bot.CommandContext, pokemonID int) []s
 		if key.Form == 0 {
 			entries = append(entries, formEntry{
 				formID:   0,
-				display:  pokeName,
+				display:  fmt.Sprintf("`%s`", pokeName),
 				sortName: "",
 			})
 			continue
@@ -442,11 +442,14 @@ func (c *InfoCommand) availableForms(ctx *bot.CommandContext, pokemonID int) []s
 				continue // no translation at all, skip
 			}
 		}
-		// For tracking, users type form names with underscores replacing spaces
+		// For tracking, users type form names with underscores replacing spaces.
+		// Wrap in backticks so Telegram/Discord render as inline code — keeps the
+		// underscore literal (otherwise Telegram MarkdownV1 italicises it) and
+		// makes the line copy-pasteable as a tracking command.
 		trackingName := strings.ReplaceAll(strings.ToLower(formName), " ", "_")
 		entries = append(entries, formEntry{
 			formID:   key.Form,
-			display:  fmt.Sprintf("%s form:%s", pokeName, trackingName),
+			display:  fmt.Sprintf("`%s form:%s`", pokeName, trackingName),
 			sortName: formName,
 		})
 	}
