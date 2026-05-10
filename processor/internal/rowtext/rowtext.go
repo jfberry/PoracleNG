@@ -22,7 +22,7 @@ type Generator struct {
 	Scanner             scanner.Scanner
 }
 
-// standardText appends template, clean, and edit indicators.
+// standardText appends template, clean, edit, and summary indicators.
 func standardText(tr *i18n.Translator, template, defaultTemplate string, clean int) string {
 	var text string
 	if template != "" && template != defaultTemplate {
@@ -33,6 +33,9 @@ func standardText(tr *i18n.Translator, template, defaultTemplate string, clean i
 	}
 	if db.IsClean(clean) {
 		text += " " + tr.T("tracking.clean")
+	}
+	if db.IsSummary(clean) {
+		text += " " + tr.T("tracking.summary")
 	}
 	return text
 }
