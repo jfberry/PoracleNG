@@ -78,7 +78,10 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 
 	if len(parsed.Pokemon) > 0 {
 		// Track specific pokemon
-		monsterList := c.resolveMonsters(ctx, parsed)
+		monsterList, formReply := c.resolveMonsters(ctx, parsed)
+		if formReply != nil {
+			return []bot.Reply{*formReply}
+		}
 		for _, mon := range monsterList {
 			insert = append(insert, db.MaxbattleTrackingAPI{
 				ID:        ctx.TargetID,
@@ -181,12 +184,12 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	return []bot.Reply{{React: react, Text: message}}
 }
 
-func (c *MaxbattleCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
-	monsters := parsed.Pokemon
-	if formName, ok := parsed.Strings["form"]; ok {
-		monsters = filterByForm(ctx, monsters, formName)
+func (c *MaxbattleCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) ([]bot.ResolvedPokemon, *bot.Reply) {
+	monsters, reply := applyFormFilter(ctx, parsed.Pokemon, parsed)
+	if reply != nil {
+		return nil, reply
 	}
-	return filterByGenAndType(ctx, monsters, parsed)
+	return filterByGenAndType(ctx, monsters, parsed), nil
 }
 
 func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {

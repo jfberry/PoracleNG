@@ -61,7 +61,10 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	// Resolve pokemon list
-	monsterList := c.resolveMonsters(ctx, parsed)
+	monsterList, formReply := c.resolveMonsters(ctx, parsed)
+	if formReply != nil {
+		return []bot.Reply{*formReply}
+	}
 
 	if len(monsterList) == 0 {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_pokemon")}}
@@ -127,16 +130,16 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	return []bot.Reply{{React: react, Text: message}}
 }
 
-func (c *NestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
+func (c *NestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) ([]bot.ResolvedPokemon, *bot.Reply) {
 	if parsed.HasKeyword("arg.everything") {
-		return []bot.ResolvedPokemon{{PokemonID: 0, Form: 0}}
+		return []bot.ResolvedPokemon{{PokemonID: 0, Form: 0}}, nil
 	}
 
-	monsters := parsed.Pokemon
-	if formName, ok := parsed.Strings["form"]; ok {
-		monsters = filterByForm(ctx, monsters, formName)
+	monsters, reply := applyFormFilter(ctx, parsed.Pokemon, parsed)
+	if reply != nil {
+		return nil, reply
 	}
-	return filterByGenAndType(ctx, monsters, parsed)
+	return filterByGenAndType(ctx, monsters, parsed), nil
 }
 
 func (c *NestCommand) removeNests(ctx *bot.CommandContext, monsterList []bot.ResolvedPokemon) []bot.Reply {

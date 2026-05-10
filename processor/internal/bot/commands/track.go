@@ -59,7 +59,10 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	// Resolve pokemon list
-	monsterList := c.resolveMonsters(ctx, parsed)
+	monsterList, formReply := c.resolveMonsters(ctx, parsed)
+	if formReply != nil {
+		return []bot.Reply{*formReply}
+	}
 
 	// Reject bare "!track everything" with no meaningful filters for non-admins.
 	// Filters like IV, CP, level, PVP league, type, or gender meaningfully narrow results.
@@ -517,7 +520,7 @@ func (c *TrackCommand) parsePVP(ctx *bot.CommandContext, parsed *bot.ParsedArgs)
 	return entries
 }
 
-func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
+func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) ([]bot.ResolvedPokemon, *bot.Reply) {
 	// "everything" keyword
 	if parsed.HasKeyword("arg.everything") {
 		_, hasForm := parsed.Strings["form"]
@@ -535,20 +538,19 @@ func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 					monsters = append(monsters, bot.ResolvedPokemon{PokemonID: key.ID, Form: 0})
 				}
 			}
-			if formName, ok := parsed.Strings["form"]; ok {
-				monsters = filterByForm(ctx, monsters, formName)
+			monsters, reply := applyFormFilter(ctx, monsters, parsed)
+			if reply != nil {
+				return nil, reply
 			}
-			return filterByGenAndType(ctx, monsters, parsed)
+			return filterByGenAndType(ctx, monsters, parsed), nil
 		}
 		// Single catch-all entry
-		return []bot.ResolvedPokemon{{PokemonID: 0, Form: 0}}
+		return []bot.ResolvedPokemon{{PokemonID: 0, Form: 0}}, nil
 	}
 
-	monsters := parsed.Pokemon
-
-	if formName, ok := parsed.Strings["form"]; ok {
-		monsters = filterByForm(ctx, monsters, formName)
+	monsters, reply := applyFormFilter(ctx, parsed.Pokemon, parsed)
+	if reply != nil {
+		return nil, reply
 	}
-
-	return filterByGenAndType(ctx, monsters, parsed)
+	return filterByGenAndType(ctx, monsters, parsed), nil
 }

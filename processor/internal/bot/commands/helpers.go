@@ -289,6 +289,31 @@ func parseCommonTrackFields(ctx *bot.CommandContext, parsed *bot.ParsedArgs, dts
 	return f, nil
 }
 
+// applyFormFilter applies parsed["form"] to monsters. Returns a
+// helpful reply when the form filter rejects every input — e.g.
+// `!track sinistea form:incorrect` should not silently degrade into
+// "no pokemon specified". Returns (monsters, nil) when no form filter
+// is set or when the input list is already empty (caller will produce
+// the no-pokemon reply downstream).
+func applyFormFilter(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, parsed *bot.ParsedArgs) ([]bot.ResolvedPokemon, *bot.Reply) {
+	formName, ok := parsed.Strings["form"]
+	if !ok || formName == "" || len(monsters) == 0 {
+		return monsters, nil
+	}
+	filtered := filterByForm(ctx, monsters, formName)
+	if len(filtered) > 0 {
+		return filtered, nil
+	}
+	tr := ctx.Tr()
+	return nil, &bot.Reply{
+		React: "🙅",
+		Text: tr.Tf("msg.form_not_found",
+			ctx.EscapeForCode(formName),
+			bot.CommandPrefix(ctx),
+		),
+	}
+}
+
 // filterByForm narrows a pokemon list to only those matching the given form name.
 // Checks the user's language and English fallback via form_{id} translation keys.
 // Returns empty list if no matches found (form name not recognized).

@@ -177,7 +177,10 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 2, 0, 0, 0))
 	} else if len(parsed.Pokemon) > 0 {
 		// Pokemon quest tracking (reward_type = 7)
-		monsterList := c.resolveMonsters(ctx, parsed)
+		monsterList, formReply := c.resolveMonsters(ctx, parsed)
+		if formReply != nil {
+			return []bot.Reply{*formReply}
+		}
 		for _, mon := range monsterList {
 			insert = append(insert, db.QuestTrackingAPI{
 				ID:         ctx.TargetID,
@@ -279,12 +282,8 @@ func questParseInt(s string) int {
 	return n
 }
 
-func (c *QuestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
-	monsters := parsed.Pokemon
-	if formName, ok := parsed.Strings["form"]; ok {
-		monsters = filterByForm(ctx, monsters, formName)
-	}
-	return monsters
+func (c *QuestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) ([]bot.ResolvedPokemon, *bot.Reply) {
+	return applyFormFilter(ctx, parsed.Pokemon, parsed)
 }
 
 // handleRemove handles !quest remove variants. Must be called before reward type detection.
@@ -344,7 +343,10 @@ func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedA
 			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, 0))
 		}
 	} else if len(parsed.Pokemon) > 0 {
-		monsterList := c.resolveMonsters(ctx, parsed)
+		monsterList, formReply := c.resolveMonsters(ctx, parsed)
+		if formReply != nil {
+			return []bot.Reply{*formReply}
+		}
 		for _, mon := range monsterList {
 			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 7, mon.PokemonID, mon.Form, 0))
 		}
