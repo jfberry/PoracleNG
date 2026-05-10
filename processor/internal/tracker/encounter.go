@@ -9,6 +9,7 @@ import (
 type EncounterState struct {
 	PokemonID     int
 	Form          int
+	Gender        int
 	Weather       int
 	CP            int
 	ATK           int
@@ -21,6 +22,7 @@ type EncounterState struct {
 // EncounterChange holds old and new state when a change is detected.
 type EncounterChange struct {
 	EncounterID string
+	Type        ChangeType
 	Old         EncounterState
 	New         EncounterState
 }
@@ -55,20 +57,33 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState) (
 		return true, nil
 	}
 
-	// Only trigger a change event for meaningful changes (species or form),
-	// not for stats being filled in from an encounter (CP/ATK/DEF/STA going
-	// from 0 to a real value) or weather fluctuations.
-	changed := old.PokemonID != newState.PokemonID ||
-		old.Form != newState.Form
+	// Detect change type. Priority order: species > form > gender > encountered > weather_boost.
+	// Gender change only fires when both old and new are non-zero (initial gender resolution doesn't count).
+	// Weather-boost shift only fires post-encounter (both CPs > 0) AND when the CP actually moved.
+	// Raw IV (atk/def/sta) drift is ignored — physical IVs don't change post-encounter.
+	var changeType ChangeType
+	switch {
+	case old.PokemonID != newState.PokemonID:
+		changeType = ChangeSpecies
+	case old.Form != newState.Form:
+		changeType = ChangeForm
+	case old.Gender != newState.Gender && old.Gender != 0 && newState.Gender != 0:
+		changeType = ChangeGender
+	case old.CP == 0 && newState.CP > 0:
+		changeType = ChangeEncountered
+	case old.Weather != newState.Weather && old.CP > 0 && newState.CP > 0 && old.CP != newState.CP:
+		changeType = ChangeWeatherBoost
+	}
 
-	if changed {
+	if changeType != ChangeNone {
 		change := &EncounterChange{
 			EncounterID: encounterID,
+			Type:        changeType,
 			Old:         *old,
 			New:         newState,
 		}
-		// Update stored state
 		cp := newState
+		cp.InsertedAt = old.InsertedAt
 		et.entries[encounterID] = &cp
 		return false, change
 	}
