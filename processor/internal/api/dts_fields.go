@@ -655,20 +655,29 @@ type fieldEntry struct {
 	Snippets    []Snippet
 }
 
+// monsterChangedFields wraps the regular monster field set and adds the
+// `original` namespace, which exposes the prior sighting under
+// {{original.X}}. The same field shapes apply (minus PVP rankings, which
+// are stripped from stored prior bytes).
+var monsterChangedExtraFields = []FieldDef{
+	{Name: "original", Type: "object", Description: "Prior-sighting view: every monster field above is also accessible as original.X (e.g. original.fullName, original.cp, original.iv, original.weatherName, original.mapurl). PVP rankings are NOT included.", Category: "identity", Preferred: true},
+}
+
 var fieldsByType = map[string]fieldEntry{
-	"monster":       {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
-	"monsterNoIv":   {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
-	"raid":          {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
-	"egg":           {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
-	"quest":         {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
-	"invasion":      {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
-	"lure":          {Fields: append(commonFields, lureFields...), Snippets: append(commonSnippets, lureSnippets...)},
-	"nest":          {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},
-	"gym":           {Fields: append(commonFields, gymFields...), Snippets: commonSnippets},
-	"fort-update":   {Fields: append(commonFields, fortUpdateFields...), Snippets: commonSnippets},
-	"maxbattle":     {Fields: append(commonFields, maxbattleFields...), Snippets: append(commonSnippets, maxbattleSnippets...)},
-	"weatherchange": {Fields: append(commonFields, weatherChangeFields...), Snippets: commonSnippets},
-	"greeting":      {Fields: append(commonFields, greetingFields...), Snippets: commonSnippets},
+	"monster":        {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"monsterNoIv":    {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"monsterChanged": {Fields: append(append(commonFields, monsterFields...), monsterChangedExtraFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
+	"raid":           {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
+	"egg":            {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
+	"quest":          {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
+	"invasion":       {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
+	"lure":           {Fields: append(commonFields, lureFields...), Snippets: append(commonSnippets, lureSnippets...)},
+	"nest":           {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},
+	"gym":            {Fields: append(commonFields, gymFields...), Snippets: commonSnippets},
+	"fort-update":    {Fields: append(commonFields, fortUpdateFields...), Snippets: commonSnippets},
+	"maxbattle":      {Fields: append(commonFields, maxbattleFields...), Snippets: append(commonSnippets, maxbattleSnippets...)},
+	"weatherchange":  {Fields: append(commonFields, weatherChangeFields...), Snippets: commonSnippets},
+	"greeting":       {Fields: append(commonFields, greetingFields...), Snippets: commonSnippets},
 }
 
 // HandleDTSFields returns available template fields for a DTS type.
