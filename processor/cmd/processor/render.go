@@ -28,7 +28,23 @@ type RenderJob struct {
 	IsPokemon         bool // true = RenderPokemon, false = RenderAlert
 	LogReference      string
 	EditKey           string
-	TileImageData     []byte // inline tile bytes, set during tile resolution
+	// ReplyKey indexes the sent message for reply chaining. Copied verbatim
+	// onto every constructed delivery.Job. For pokemon, this is the encounter
+	// ID so subsequent change events can find prior messages via the
+	// MessageTracker reply index.
+	ReplyKey string
+	// IsChange routes the job through RenderPokemonChanged instead of
+	// RenderPokemon. Only meaningful when IsPokemon is true.
+	IsChange bool
+	// OriginalView is the {{original.X}} field bag (built via
+	// dts.BuildOriginalView). Threaded into the LayeredView for
+	// monsterChanged templates. Nil for non-change renders.
+	OriginalView map[string]any
+	// ChangeType is a human-readable label for the change dimension
+	// (species/form/gender/encountered/weather_boost). Currently used for
+	// logging only. Empty for non-change renders.
+	ChangeType    string
+	TileImageData []byte // inline tile bytes, set during tile resolution
 }
 
 // renderWorker processes render jobs from the shared channel until it is closed.
@@ -125,17 +141,31 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 	}
 
 	if job.IsPokemon {
-		jobs = ps.dtsRenderer.RenderPokemon(
-			job.Enrichment,
-			job.PerLangEnrichment,
-			job.PerUserEnrichment,
-			job.WebhookFields,
-			job.MatchedUsers,
-			job.MatchedAreas,
-			job.IsEncountered,
-			job.LogReference,
-			job.EditKey,
-		)
+		if job.IsChange {
+			jobs = ps.dtsRenderer.RenderPokemonChanged(
+				job.Enrichment,
+				job.PerLangEnrichment,
+				job.PerUserEnrichment,
+				job.WebhookFields,
+				job.OriginalView,
+				job.MatchedUsers,
+				job.MatchedAreas,
+				job.LogReference,
+				job.EditKey,
+			)
+		} else {
+			jobs = ps.dtsRenderer.RenderPokemon(
+				job.Enrichment,
+				job.PerLangEnrichment,
+				job.PerUserEnrichment,
+				job.WebhookFields,
+				job.MatchedUsers,
+				job.MatchedAreas,
+				job.IsEncountered,
+				job.LogReference,
+				job.EditKey,
+			)
+		}
 	} else {
 		jobs = ps.dtsRenderer.RenderAlert(
 			job.TemplateType,
@@ -168,6 +198,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				Lat:           parseCoordFloat(j.Lat),
 				Lon:           parseCoordFloat(j.Lon),
 				EditKey:       j.EditKey,
+				ReplyKey:      job.ReplyKey,
 				StaticMapData: job.TileImageData,
 				Language:      j.Language,
 			})
