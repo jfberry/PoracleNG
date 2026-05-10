@@ -368,7 +368,7 @@ func (ps *ProcessorService) triggerReload() {
 		ps.reloadTimer.Stop()
 	}
 	ps.reloadTimer = time.AfterFunc(500*time.Millisecond, func() {
-		if err := state.Load(ps.stateMgr, ps.database); err != nil {
+		if err := state.Load(ps.stateMgr, ps.database, ps.summarySchedules); err != nil {
 			log.Errorf("Debounced state reload failed: %s", err)
 			ps.adminNoticeThrottled(
 				"state.reload.fail",

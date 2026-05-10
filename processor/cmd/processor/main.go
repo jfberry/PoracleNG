@@ -103,6 +103,7 @@ func main() {
 
 	humanStore := store.NewSQLHumanStore(database)
 	trackingStores := store.NewTrackingStores(database)
+	summaryScheduleStore := store.NewSQLSummaryScheduleStore(database)
 
 	// Database migrations: adopt existing Knex DB if needed, drop FK constraints, run pending
 	if err := db.AdoptExistingDatabase(database.DB); err != nil {
@@ -116,7 +117,7 @@ func main() {
 	stateMgr := state.NewManager()
 
 	// Initial load (includes geofences)
-	if err := state.LoadWithGeofences(stateMgr, database, cfg.Geofence); err != nil {
+	if err := state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence); err != nil {
 		log.Fatalf("Failed to load initial state: %s", err)
 	}
 
@@ -131,6 +132,7 @@ func main() {
 	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
 	proc.humans = humanStore
+	proc.summarySchedules = summaryScheduleStore
 
 	// Restore gym state cache from previous run
 	if err := proc.gymState.Load(); err != nil {
@@ -265,16 +267,16 @@ func main() {
 
 	// Reload
 	apiGroup.POST("/reload", api.HandleReload(func() error {
-		return state.Load(stateMgr, database)
+		return state.Load(stateMgr, database, summaryScheduleStore)
 	}))
 	apiGroup.GET("/reload", api.HandleReload(func() error {
-		return state.Load(stateMgr, database)
+		return state.Load(stateMgr, database, summaryScheduleStore)
 	}))
 	apiGroup.POST("/geofence/reload", api.HandleReload(func() error {
-		return state.LoadWithGeofences(stateMgr, database, cfg.Geofence)
+		return state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence)
 	}))
 	apiGroup.GET("/geofence/reload", api.HandleReload(func() error {
-		return state.LoadWithGeofences(stateMgr, database, cfg.Geofence)
+		return state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence)
 	}))
 
 	// Weather, stats, geocode, test
@@ -330,7 +332,7 @@ func main() {
 	tracking.DELETE("/pokemon/:id/byUid/:uid", api.HandleDeleteMonster(trackingDeps))
 	tracking.POST("/pokemon/:id/delete", api.HandleBulkDeleteMonster(trackingDeps))
 	tracking.GET("/pokemon/refresh", api.HandleReload(func() error {
-		return state.Load(stateMgr, database)
+		return state.Load(stateMgr, database, summaryScheduleStore)
 	}))
 	// Raid tracking
 	tracking.GET("/raid/:id", api.HandleGetRaid(trackingDeps))
@@ -615,7 +617,7 @@ func main() {
 			}
 			log.Debugf("Periodic reload triggered")
 			start := time.Now()
-			if err := state.Load(stateMgr, database); err != nil {
+			if err := state.Load(stateMgr, database, summaryScheduleStore); err != nil {
 				log.Errorf("Periodic reload failed: %s", err)
 				metrics.StateReloads.WithLabelValues("error").Inc()
 				proc.adminNoticeThrottled(
@@ -871,6 +873,7 @@ type ProcessorService struct {
 	dtsRenderer      *dts.Renderer
 	dispatcher       *delivery.Dispatcher
 	humans           store.HumanStore
+	summarySchedules store.SummaryScheduleStore
 	scanner          scanner.Scanner
 	rateLimiter      *ratelimit.Limiter
 	validator        validation.Validator
