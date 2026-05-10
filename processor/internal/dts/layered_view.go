@@ -26,6 +26,7 @@ import (
 //  7. dtsDictionary (user-defined config overrides)
 type LayeredView struct {
 	base     map[string]any
+	original map[string]any // prior-sighting snapshot exposed as {{original.X}} (pokemon-changed)
 	perLang  map[string]any
 	perUser  map[string]any
 	emoji    map[string]string // resolved emoji key → string
@@ -108,6 +109,18 @@ func NewLayeredView(
 // GetField implements raymond.FieldResolver.
 // Checks layers in priority order, returns first match.
 func (lv *LayeredView) GetField(name string) (any, bool) {
+	// 0. Special-case: `original` exposes the prior-sighting snapshot as a
+	// nested map so templates can write {{original.fullName}}, {{original.cp}},
+	// etc. raymond recurses into the returned map. The short-circuit must
+	// come before the layer cascade so it can't be shadowed by an "original"
+	// key accidentally placed into base/perLang/etc.
+	if name == "original" {
+		if lv.original == nil {
+			return nil, false
+		}
+		return lv.original, true
+	}
+
 	// 1. Per-user enrichment (PVP, distance)
 	if lv.perUser != nil {
 		if v, ok := lv.perUser[name]; ok {
