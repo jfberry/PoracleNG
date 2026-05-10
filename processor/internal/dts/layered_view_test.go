@@ -673,6 +673,43 @@ func TestLayeredView_WeaknessEmojiSkipEmpty(t *testing.T) {
 	assert.Equal(t, "2x🔥 ", v)
 }
 
+// TestLayeredView_Original verifies the {{original.X}} sub-resolver: the
+// `original` field returns the prior-sighting map verbatim so templates
+// can dereference into it (e.g. {{original.fullName}}, {{original.cp}}).
+// The map must not be shadowed by any other layer that happens to hold an
+// "original" key.
+func TestLayeredView_Original(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.base = map[string]any{"name": "Sinistea"}
+	})
+	lv.original = map[string]any{"name": "Polteageist", "cp": 1500}
+
+	// Direct field outside `original` resolves through the normal cascade.
+	v, ok := lv.GetField("name")
+	require.True(t, ok)
+	assert.Equal(t, "Sinistea", v)
+
+	// `original` returns the nested map verbatim for raymond to recurse into.
+	v, ok = lv.GetField("original")
+	require.True(t, ok)
+	m, ok := v.(map[string]any)
+	require.True(t, ok, "original = %T, want map[string]any", v)
+	assert.Equal(t, "Polteageist", m["name"])
+	assert.Equal(t, 1500, m["cp"])
+}
+
+// TestLayeredView_OriginalNilWhenAbsent confirms that an unset `original`
+// is reported as not-found so templates can guard with {{#if original}}.
+func TestLayeredView_OriginalNilWhenAbsent(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.base = map[string]any{"name": "Sinistea"}
+	})
+
+	v, ok := lv.GetField("original")
+	assert.False(t, ok, "original should not resolve when unset")
+	assert.Nil(t, v)
+}
+
 // TestLayeredView_GymUrlAliasFromWebhook covers the gym_details photo URL:
 // the gym webhook ships it as `url`, the gym alias table maps `gymUrl` →
 // `url`, and the value flows through the raw-webhook fallback layer.
