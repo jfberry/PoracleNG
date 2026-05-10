@@ -182,6 +182,12 @@ func (fq *FairQueue) processJob(job *Job) {
 	// Edits are mutations of an already-counted send — they do NOT consume
 	// rate-limit budget. Only fall through to the new-send path (which does
 	// count) if no tracked message exists or the edit attempt fails.
+	//
+	// EDIT TAKES PRIORITY OVER REPLY: when both EditKey and ReplyKey are set
+	// and the tracker has a prior under EditKey, the existing message is
+	// updated in place — we do not fall through to the reply-stamping path
+	// below, because the message reuses the prior rather than replying to
+	// it.
 	if job.EditKey != "" {
 		existing := fq.tracker.LookupEdit(job.EditKey)
 		if existing != nil {
@@ -196,6 +202,21 @@ func (fq *FairQueue) processJob(job *Job) {
 			}
 		} else {
 			log.Debugf("%s: edit: no tracked message for key=%s, will send new and track", job.LogReference, job.EditKey)
+		}
+	}
+
+	// Reply target stamping: when ReplyKey is set and the tracker has a
+	// known prior message for (ReplyKey, Target), stamp the prior's SentID
+	// onto the job so the platform sender can inject a Discord
+	// message_reference / Telegram reply_to_message_id.
+	//
+	// Only runs after the edit path falls through (either no EditKey, no
+	// prior under EditKey, or the edit attempt failed and we're sending a
+	// fresh message). Caller is not expected to set ReplyToID — it's an
+	// ephemeral queue→sender field.
+	if job.ReplyKey != "" && job.ReplyToID == "" {
+		if msgID := fq.tracker.LookupReply(job.ReplyKey, job.Target); msgID != "" {
+			job.ReplyToID = msgID
 		}
 	}
 
@@ -290,16 +311,19 @@ func (fq *FairQueue) processJob(job *Job) {
 	metrics.DeliveryTotal.WithLabelValues(platform, "ok").Inc()
 	metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 
-	// 4. Track for clean/edit if needed
-	wantsTracking := db.IsClean(job.Clean) || db.IsEdit(job.Clean) || job.EditKey != ""
+	// 4. Track for clean/edit/reply if needed.
+	// ReplyKey on its own (without clean/edit) is enough to want tracking —
+	// otherwise reply chains can't form because the tracker has no entry
+	// to find on the next change event.
+	wantsTracking := db.IsClean(job.Clean) || db.IsEdit(job.Clean) || job.EditKey != "" || job.ReplyKey != ""
 	if wantsTracking && sent == nil {
-		log.Warnf("%s: clean/edit tracking skipped — sender returned no SentMessage (clean=%d editKey=%q)", job.LogReference, job.Clean, job.EditKey)
+		log.Warnf("%s: clean/edit/reply tracking skipped — sender returned no SentMessage (clean=%d editKey=%q replyKey=%q)", job.LogReference, job.Clean, job.EditKey, job.ReplyKey)
 		return
 	}
 	if sent != nil && wantsTracking {
 		ttl := job.TTH.Duration()
 		if ttl <= 0 {
-			log.Warnf("%s: clean/edit tracking skipped — TTL already expired (clean=%d)", job.LogReference, job.Clean)
+			log.Warnf("%s: clean/edit/reply tracking skipped — TTL already expired (clean=%d)", job.LogReference, job.Clean)
 			return
 		}
 
@@ -308,13 +332,17 @@ func (fq *FairQueue) processJob(job *Job) {
 			key = fmt.Sprintf("clean:%s:%s:%s", job.Type, job.Target, sent.ID)
 		}
 
+		// Pass ReplyKey through so MessageTracker.Track populates the
+		// dedicated reply index for O(1) (replyKey, target) lookups on
+		// the next change event.
 		fq.tracker.Track(key, &TrackedMessage{
-			SentID: sent.ID,
-			Target: job.Target,
-			Type:   job.Type,
-			Clean:  job.Clean,
+			SentID:   sent.ID,
+			Target:   job.Target,
+			Type:     job.Type,
+			Clean:    job.Clean,
+			ReplyKey: job.ReplyKey,
 		}, ttl)
-		log.Debugf("%s: tracked message key=%s sentID=%s ttl=%v clean=%d", job.LogReference, key, sent.ID, ttl, job.Clean)
+		log.Debugf("%s: tracked message key=%s sentID=%s ttl=%v clean=%d replyKey=%q", job.LogReference, key, sent.ID, ttl, job.Clean, job.ReplyKey)
 	}
 }
 
