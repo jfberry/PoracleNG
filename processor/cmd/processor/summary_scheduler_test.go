@@ -7,7 +7,6 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/state"
-	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
@@ -39,41 +38,18 @@ func (r *dispatchRecorder) snapshot() []dispatchCall {
 	return out
 }
 
-// minimalHumanStore is a tiny in-memory HumanStore for the scheduler tests.
-// We don't need most of the interface; only Get is exercised by tick().
-type minimalHumanStore struct {
-	store.HumanStore
-	humans map[string]*store.Human
-	getErr error
-}
-
-func (m *minimalHumanStore) Get(id string) (*store.Human, error) {
-	if m.getErr != nil {
-		return nil, m.getErr
-	}
-	h, ok := m.humans[id]
-	if !ok {
-		return nil, nil
-	}
-	return h, nil
-}
-
 func newScheduler(
 	t *testing.T,
 	mgr *state.Manager,
-	humans store.HumanStore,
 	dispatch SummaryDispatch,
 	now time.Time,
 ) *SummaryScheduler {
 	t.Helper()
 	s := NewSummaryScheduler(
-		schedulerConfig{Locale: "en", QuestSummaryBufferTTLHours: 24},
+		schedulerConfig{Locale: "en"},
 		mgr,
-		humans,
-		store.NewMockSummaryScheduleStore(),
 		tracker.NewSummaryBuffer(""),
 		dispatch,
-		0,
 	)
 	s.nowFunc = func() time.Time { return now }
 	return s
@@ -96,14 +72,13 @@ func TestSummaryScheduler_Tick_FiresWhenScheduleMatches(t *testing.T) {
 			},
 		},
 	})
-	humans := &minimalHumanStore{
-		humans: map[string]*store.Human{
-			"discord:user:42": {ID: "discord:user:42", Type: "discord:user", Latitude: 0, Longitude: 0},
-		},
+	state := mgr.Get()
+	state.Humans = map[string]*db.Human{
+		"discord:user:42": {ID: "discord:user:42", Type: "discord:user"},
 	}
 	rec := &dispatchRecorder{}
 
-	s := newScheduler(t, mgr, humans, rec.fn(), now)
+	s := newScheduler(t, mgr, rec.fn(), now)
 	s.tick()
 
 	calls := rec.snapshot()
@@ -127,14 +102,13 @@ func TestSummaryScheduler_Tick_SkipsWhenScheduleEmpty(t *testing.T) {
 			},
 		},
 	})
-	humans := &minimalHumanStore{
-		humans: map[string]*store.Human{
-			"discord:user:42": {ID: "discord:user:42", Type: "discord:user"},
-		},
+	state := mgr.Get()
+	state.Humans = map[string]*db.Human{
+		"discord:user:42": {ID: "discord:user:42", Type: "discord:user"},
 	}
 	rec := &dispatchRecorder{}
 
-	s := newScheduler(t, mgr, humans, rec.fn(), now)
+	s := newScheduler(t, mgr, rec.fn(), now)
 	s.tick()
 
 	if calls := rec.snapshot(); len(calls) != 0 {
@@ -155,10 +129,9 @@ func TestSummaryScheduler_Tick_SkipsWhenHumanMissing(t *testing.T) {
 			},
 		},
 	})
-	humans := &minimalHumanStore{humans: map[string]*store.Human{}}
 	rec := &dispatchRecorder{}
 
-	s := newScheduler(t, mgr, humans, rec.fn(), now)
+	s := newScheduler(t, mgr, rec.fn(), now)
 	s.tick()
 
 	if calls := rec.snapshot(); len(calls) != 0 {
@@ -179,10 +152,9 @@ func TestSummaryScheduler_Tick_RespectsScheduleWindow(t *testing.T) {
 			humanID: {"quest": {scheduleEntry}},
 		},
 	})
-	humans := &minimalHumanStore{
-		humans: map[string]*store.Human{
-			humanID: {ID: humanID, Type: "discord:user"},
-		},
+	state := mgr.Get()
+	state.Humans = map[string]*db.Human{
+		humanID: {ID: humanID, Type: "discord:user"},
 	}
 
 	cases := []struct {
@@ -205,7 +177,7 @@ func TestSummaryScheduler_Tick_RespectsScheduleWindow(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := &dispatchRecorder{}
-			s := newScheduler(t, mgr, humans, rec.fn(), tc.now)
+			s := newScheduler(t, mgr, rec.fn(), tc.now)
 			s.tick()
 			got := len(rec.snapshot()) > 0
 			if got != tc.want {
@@ -219,9 +191,8 @@ func TestSummaryScheduler_Tick_RespectsScheduleWindow(t *testing.T) {
 // does not panic.
 func TestSummaryScheduler_Tick_NilStateNoOp(t *testing.T) {
 	mgr := state.NewManager() // no Set; Get returns nil
-	humans := &minimalHumanStore{humans: map[string]*store.Human{}}
 	rec := &dispatchRecorder{}
-	s := newScheduler(t, mgr, humans, rec.fn(), time.Now())
+	s := newScheduler(t, mgr, rec.fn(), time.Now())
 	s.tick()
 	if calls := rec.snapshot(); len(calls) != 0 {
 		t.Errorf("expected no dispatch on nil state, got %+v", calls)

@@ -21,7 +21,6 @@ func BuildQuestSummaryView(
 	rewardType, rewardID int,
 	perPokestopViews []map[string]any,
 	sm *staticmap.Resolver,
-	gd *gamedata.GameData,
 	tr *i18n.Translator,
 ) map[string]any {
 	// Shared reward icon — copied from the first per-pokestop view (every
@@ -79,7 +78,7 @@ func BuildQuestSummaryView(
 	return map[string]any{
 		"rewardType": rewardType,
 		"reward":     rewardID,
-		"rewardName": questSummaryRewardName(rewardType, rewardID, gd, tr),
+		"rewardName": questSummaryRewardName(rewardType, rewardID, tr),
 		"imgUrl":     sharedImg,
 		"staticMap":  staticMapURL,
 		"count":      len(perPokestopViews),
@@ -88,12 +87,11 @@ func BuildQuestSummaryView(
 }
 
 // questSummaryRewardName resolves a (rewardType, rewardID) pair to a
-// translated display name for the summary header. We deliberately avoid
-// pulling in the regular quest enrichment helpers here because the
-// enrichment package would introduce an import cycle (enrichment → dts
-// is the existing direction). The lookups are simple identifier-key
-// translations through the i18n bundle.
-func questSummaryRewardName(rewardType, rewardID int, gd *gamedata.GameData, tr *i18n.Translator) string {
+// translated display name for the summary header. The lookups are
+// simple identifier-key translations through the i18n bundle —
+// pulling in the regular quest enrichment helpers would create an
+// enrichment → dts import cycle.
+func questSummaryRewardName(rewardType, rewardID int, tr *i18n.Translator) string {
 	if tr == nil {
 		return ""
 	}
@@ -108,20 +106,11 @@ func questSummaryRewardName(rewardType, rewardID int, gd *gamedata.GameData, tr 
 			return fmt.Sprintf("%d %s", rewardID, label)
 		}
 		return label
-	case 4: // Candy — rewardID is the pokemon ID
-		if rewardID > 0 {
-			return tr.T(gamedata.PokemonTranslationKey(rewardID))
-		}
-	case 7: // Pokemon encounter — rewardID is the pokemon ID
-		if rewardID > 0 {
-			return tr.T(gamedata.PokemonTranslationKey(rewardID))
-		}
-	case 12: // Mega energy — rewardID is the pokemon ID
+	case 4, 7, 12: // Candy / Pokemon encounter / Mega energy — rewardID is pokemon ID
 		if rewardID > 0 {
 			return tr.T(gamedata.PokemonTranslationKey(rewardID))
 		}
 	}
-	_ = gd
 	return ""
 }
 

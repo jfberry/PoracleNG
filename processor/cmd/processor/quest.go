@@ -216,7 +216,7 @@ func (ps *ProcessorService) bufferQuestMatches(
 	payload := append([]byte(nil), raw...) // detach from caller's buffer
 
 	for _, u := range users {
-		ps.summaryBuffer.Append(u.ID, "quest", tracker.BufferedQuest{
+		ps.summaryBuffer.Append(u.ID, AlertTypeQuest, tracker.BufferedQuest{
 			RewardType: rewardType,
 			Reward:     reward,
 			PokestopID: quest.PokestopID,

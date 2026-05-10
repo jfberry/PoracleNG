@@ -24,9 +24,7 @@ import (
 // must not strand the scheduler. The buffer is cleared on every exit
 // path so empty/expired buckets don't pile up.
 func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
-	if alertType != "quest" {
-		// PR 6 only ships the quest renderer; future alert types extend
-		// here. Returning silently keeps the scheduler safe to call.
+	if alertType != AlertTypeQuest {
 		return
 	}
 	if ps.summaryBuffer == nil {
@@ -38,6 +36,11 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		return
 	}
 
+	// From here on, we always end the bucket — either successfully
+	// dispatched or because we couldn't (expired, missing human, no
+	// groups, no renderer). Defer clears the buffer once.
+	defer ps.summaryBuffer.Clear(humanID, alertType)
+
 	// Drop expired entries up-front so we never render or deliver a
 	// quest the player can no longer collect.
 	now := time.Now().Unix()
@@ -48,18 +51,15 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		}
 	}
 	if len(fresh) == 0 {
-		ps.summaryBuffer.Clear(humanID, alertType)
 		return
 	}
 
 	human, err := ps.humans.Get(humanID)
 	if err != nil {
 		log.Warnf("summary dispatch: humans.Get(%s): %v — clearing buffer", humanID, err)
-		ps.summaryBuffer.Clear(humanID, alertType)
 		return
 	}
 	if human == nil {
-		ps.summaryBuffer.Clear(humanID, alertType)
 		return
 	}
 
@@ -88,7 +88,6 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 	}
 
 	if len(groups) == 0 {
-		ps.summaryBuffer.Clear(humanID, alertType)
 		return
 	}
 
@@ -108,17 +107,13 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 	}}
 
 	if ps.dtsRenderer == nil {
-		// Should never happen post-startup; defensive.
 		log.Warnf("summary dispatch: DTS renderer not configured — dropping %d groups for %s", len(groups), humanID)
-		ps.summaryBuffer.Clear(humanID, alertType)
 		return
 	}
 
+	tr := ps.translations.For(lang)
 	for _, k := range order {
-		var sm = ps.enricher.StaticMap
-		var gd = ps.enricher.GameData
-		var tr = ps.translations.For(lang)
-		view := dts.BuildQuestSummaryView(k.Type, k.Reward, groups[k], sm, gd, tr)
+		view := dts.BuildQuestSummaryView(k.Type, k.Reward, groups[k], ps.enricher.StaticMap, tr)
 
 		jobs := ps.dtsRenderer.RenderQuestSummary(
 			view,
@@ -151,8 +146,6 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 			})
 		}
 	}
-
-	ps.summaryBuffer.Clear(humanID, alertType)
 }
 
 // questEnrichOne re-runs the quest enrichment pipeline (base +

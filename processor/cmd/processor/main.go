@@ -212,21 +212,13 @@ func main() {
 
 	// Quest summary scheduler — only constructed when the feature flag is on.
 	// The buffer is loaded/saved regardless so toggling the flag back on does
-	// not lose entries captured before the toggle. Tick cadence matches the
-	// profile scheduler's wall-clock minute marks; sweepEvery=6 is roughly
-	// hourly.
+	// not lose entries captured before the toggle.
 	if cfg.Tracking.QuestSummaryEnabled {
 		proc.summaryScheduler = NewSummaryScheduler(
-			schedulerConfig{
-				Locale:                     cfg.General.Locale,
-				QuestSummaryBufferTTLHours: cfg.Tracking.QuestSummaryBufferTTLHours,
-			},
+			schedulerConfig{Locale: cfg.General.Locale},
 			stateMgr,
-			humanStore,
-			summaryScheduleStore,
 			proc.summaryBuffer,
 			proc.DispatchQuestSummary,
-			6,
 		)
 		proc.summaryScheduler.Start()
 		log.Infof("Summary scheduler enabled")
@@ -947,16 +939,6 @@ type ProcessorService struct {
 	// main can post an admin notice once the Discord bot is up. nil
 	// when DTS init succeeded.
 	dtsInitErr error
-}
-
-// SummaryBuffer returns the in-memory summary buffer. Callers
-// (e.g. the !summary bot command) use this for buffer-count display.
-// May be nil before the processor has finished initialising.
-func (ps *ProcessorService) SummaryBuffer() *tracker.SummaryBuffer {
-	if ps == nil {
-		return nil
-	}
-	return ps.summaryBuffer
 }
 
 // SummaryBufferCount returns the number of buffered entries in the

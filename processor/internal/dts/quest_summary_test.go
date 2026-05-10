@@ -25,7 +25,7 @@ func TestBuildQuestSummaryView_BasicShape(t *testing.T) {
 		},
 	}
 
-	view := BuildQuestSummaryView(7, 327, pokestops, nil, nil, tr)
+	view := BuildQuestSummaryView(7, 327, pokestops, nil, tr)
 
 	if got := view["rewardType"]; got != 7 {
 		t.Errorf("rewardType = %v, want 7", got)
@@ -56,7 +56,7 @@ func TestBuildQuestSummaryView_EmptyInputDoesNotPanic(t *testing.T) {
 	bundle := i18n.NewBundle()
 	tr := bundle.For("en")
 
-	view := BuildQuestSummaryView(3, 100, nil, nil, nil, tr)
+	view := BuildQuestSummaryView(3, 100, nil, nil, tr)
 	if got := view["count"]; got != 0 {
 		t.Errorf("count = %v, want 0", got)
 	}
@@ -78,7 +78,7 @@ func TestBuildQuestSummaryView_RewardName(t *testing.T) {
 	// Stardust: reward field is the dust amount; quest_reward_3 is the
 	// label. Our empty bundle returns the key verbatim, so we check that
 	// the amount is interpolated.
-	view := BuildQuestSummaryView(3, 1500, nil, nil, nil, en)
+	view := BuildQuestSummaryView(3, 1500, nil, nil, en)
 	name, _ := view["rewardName"].(string)
 	if name == "" || name == "quest_reward_3" {
 		t.Errorf("expected stardust reward name to include amount, got %q", name)
@@ -87,13 +87,13 @@ func TestBuildQuestSummaryView_RewardName(t *testing.T) {
 	// Item: rewardName comes from item_701 lookup. Empty bundle returns
 	// "item_701" verbatim; we just want it to be the translation key, not
 	// blank.
-	view = BuildQuestSummaryView(2, 701, nil, nil, nil, en)
+	view = BuildQuestSummaryView(2, 701, nil, nil, en)
 	if got, _ := view["rewardName"].(string); got != "item_701" {
 		t.Errorf("item rewardName = %q, want \"item_701\"", got)
 	}
 
 	// Pokemon: PokemonTranslationKey(327) → poke_327.
-	view = BuildQuestSummaryView(7, 327, nil, nil, nil, en)
+	view = BuildQuestSummaryView(7, 327, nil, nil, en)
 	if got, _ := view["rewardName"].(string); got != "poke_327" {
 		t.Errorf("pokemon rewardName = %q, want \"poke_327\"", got)
 	}
@@ -110,7 +110,7 @@ func TestBuildQuestSummaryView_ZeroCoordSkippedInStaticMap(t *testing.T) {
 	pokestops := []map[string]any{
 		{"pokestopName": "Lost Stop", "latitude": 0.0, "longitude": 0.0},
 	}
-	view := BuildQuestSummaryView(7, 25, pokestops, nil, nil, tr)
+	view := BuildQuestSummaryView(7, 25, pokestops, nil, tr)
 	if got := view["staticMap"]; got != "" {
 		t.Errorf("staticMap = %v, want empty when only zero coords", got)
 	}
