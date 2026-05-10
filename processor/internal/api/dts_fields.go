@@ -674,8 +674,10 @@ var questSummaryFields = []FieldDef{
 	{Name: "rewardName", Type: "string", Description: "Translated display name for the shared reward", Category: "quest", Preferred: true},
 	{Name: "imgUrl", Type: "string", Description: "Shared icon URL for the reward (copied from the first pokestop's enrichment)", Category: "maps", Preferred: true},
 	{Name: "staticMap", Type: "string", Description: "Multi-pin static map URL autopositioned over every pokestop in the group", Category: "maps", Preferred: true},
-	{Name: "count", Type: "int", Description: "Number of pokestops in this reward group (= len(quests))", Category: "quest", Preferred: true},
-	{Name: "quests", Type: "array", Description: "Per-pokestop entries — iterate via {{#each quests}}; each entry exposes the regular quest field set plus a withAR boolean for that row", Category: "quest", Preferred: true},
+	{Name: "count", Type: "int", Description: "Total number of pokestops in this reward group (across all chunks, not just this message)", Category: "quest", Preferred: true},
+	{Name: "chunk", Type: "int", Description: "1-based index of this message when a large group is split across multiple messages. Always 1 when chunks == 1.", Category: "quest"},
+	{Name: "chunks", Type: "int", Description: "Total number of chunks the group was split into. Wrap chunk-suffix output in {{#if (gt chunks 1)}}...{{/if}} so single-message groups stay clean.", Category: "quest"},
+	{Name: "quests", Type: "array", Description: "Per-pokestop entries for this chunk — iterate via {{#each quests}}; each entry exposes the regular quest field set plus a withAR boolean for that row", Category: "quest", Preferred: true},
 }
 
 // questSummaryBlockScopes describes the scope inside the

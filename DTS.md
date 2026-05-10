@@ -567,12 +567,18 @@ The view passed to `questSummary` is shaped differently from a regular `quest` t
 | `reward` | int | Reward ID (item ID for type 2, dust amount for type 3, pokemon ID for types 4/7/12) |
 | `rewardName` | string | Translated reward name for the group header |
 | `imgUrl` | string | Reward icon URL (shared across all rows in the group) |
-| `staticMap` | string | Multi-pin static map URL with all pokestops in the group autopositioned |
-| `count` | int | Number of pokestops in the group |
-| `quests` | array | Per-pokestop entries — each carries the same fields as a regular `quest` template view (see [Quest](#quest-quest)) plus `withAR` |
+| `staticMap` | string | Multi-pin static map URL — autopositioned over the pokestops in **this chunk** only |
+| `count` | int | Total number of pokestops in the reward group (across every chunk, not just this message) |
+| `chunk` | int | 1-based index of this message when an oversized group is split across multiple messages. Always `1` when `chunks == 1`. |
+| `chunks` | int | Total number of chunks the group was split into. Wrap chunk-suffix output in `{{#if (gt chunks 1)}}…{{/if}}` so single-message groups stay clean. |
+| `quests` | array | Per-pokestop entries for **this chunk** — each carries the same fields as a regular `quest` template view (see [Quest](#quest-quest)) plus `withAR` |
 | `quests[i].withAR` | bool | True if this pokestop's quest requires the AR scanner |
 
-The static map is built via the `questSummary` tile type — set `[geocoding.static_map_type] questSummary = "multiStaticMap"` (the default) to use the existing multi-pin tileserver template, or supply a custom name for an admin-defined template.
+The static map is built via the `questSummary` tile type. Like every other tile type, the URL pattern is `/staticmap/poracle-questsummary`; map mode is configurable via `[geocoding.static_map_type] questSummary = "..."` if you want anything other than the default `staticMap`. Each chunk's map shows only the pokestops in that chunk so the bullet list and pins always match.
+
+### Chunking
+
+When a single reward group would render to a Discord embed bigger than the platform allows (description length, field count, or total embed size), the dispatcher splits the group into multiple messages. Each message gets its own `chunk`/`chunks`/`quests`/`staticMap`; `count` stays at the full group total so the header can read e.g. "60× Rare Candy (1/3)". A single-chunk group has `chunks == 1` — guard chunk-suffix output with `{{#if (gt chunks 1)}}…{{/if}}`.
 
 `questSummary` messages are always fresh sends — edit-mode and reply-threading don't apply, but the source rule's `clean` bit propagates so TTH-based deletion still works.
 
