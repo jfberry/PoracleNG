@@ -39,21 +39,20 @@ func (b *Bot) sendTopicMessage(chatID int64, threadID int, text string) (*models
 	})
 }
 
-// sendMarkdownToTopic sends a MarkdownV2-parsed text message, threaded
-// into a topic when threadID > 0. Callers must have escaped any literal
-// Markdown special characters in the text — see bot.CommandContext
-// EscapeForReply / Bold / Italic / Code / CodeBlock helpers. The polling
-// bot's reply path falls back to a plain-text resend if V2 strict-parse
-// fails, so unescaped legacy text degrades gracefully rather than
-// dropping the message.
+// sendMarkdownToTopic accepts text in our canonical Markdown format
+// (the same syntax callers use for Discord), converts it to
+// Telegram-flavored HTML, and sends with parse_mode=HTML. HTML's
+// reserved-char surface is just <>&, so most messages parse on the
+// first try; the polling bot's plain-text fallback covers any edge
+// case that slips through.
 func (b *Bot) sendMarkdownToTopic(chatID int64, threadID int, text string) error {
 	ctx, cancel := requestCtx()
 	defer cancel()
 	_, err := b.api.SendMessage(ctx, &gotgbot.SendMessageParams{
 		ChatID:          chatID,
 		MessageThreadID: threadID,
-		Text:            text,
-		ParseMode:       models.ParseModeMarkdown,
+		Text:            markdownToHTML(text),
+		ParseMode:       models.ParseModeHTML,
 	})
 	return err
 }

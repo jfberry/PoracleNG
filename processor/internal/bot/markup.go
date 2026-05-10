@@ -7,35 +7,34 @@ const (
 	PlatformTelegram = "telegram"
 )
 
-// EscapeForReply escapes user-derived text so any Markdown special
-// characters render literally on the active platform. Use for strings
-// from user input (form names, geofence names, usernames, etc.) when
-// interpolating into a reply.
+// Reply markup is authored in Markdown on both platforms. Discord
+// receives the Markdown directly. The Telegram polling bot's send
+// path converts to Telegram-flavored HTML at the wire boundary.
 //
-// Discord:           escapes _ * ~ | ` \
-// Telegram MarkdownV2: escapes _ * [ ] ( ) ~ ` > # + - = | { } . ! \
-// Other platforms:   passes through unchanged.
+// Helpers below escape user-derived content so it round-trips through
+// either renderer literally — \X for Markdown special chars on the way
+// out, then HTML-escaped on the Telegram converter side.
+
+// EscapeForReply escapes user-derived text so any Markdown special
+// characters render literally. Use for strings from user input (form
+// names, geofence names, usernames, etc.) when interpolating into a
+// reply.
+//
+// Escapes _ * ~ | ` \ — i.e. the Markdown markers callers' content
+// must not accidentally trigger.
 func (c *CommandContext) EscapeForReply(s string) string {
 	return EscapeForPlatform(c.Platform, s)
 }
 
-// EscapeForCode escapes only the characters special inside a backtick
-// code span. Use when interpolating user input into an existing
-// backtick-wrapped i18n template — escaping the full Markdown set would
-// inject literal backslashes into the rendered code span.
-//
-// Telegram MarkdownV2: escapes ` and \
-// Discord:             pass-through (Discord renders code spans literally)
+// EscapeForCode escapes only the characters that are special inside a
+// backtick code span. Use when interpolating user input into an
+// existing backtick-wrapped i18n template. Inside Markdown code spans
+// only the closing backtick and the backslash itself need escaping.
 func (c *CommandContext) EscapeForCode(s string) string {
-	if c.Platform == PlatformTelegram {
-		return escapeTelegramV2Code(s)
-	}
-	return s
+	return escapeMarkdownCode(s)
 }
 
-// EscapeJoin escapes each item in items via EscapeForReply and joins
-// them with sep. Convenience for the common "Foo: a, b, c" pattern
-// where a/b/c are user-derived names.
+// EscapeJoin escapes each item via EscapeForReply and joins with sep.
 func (c *CommandContext) EscapeJoin(items []string, sep string) string {
 	if len(items) == 0 {
 		return ""
@@ -47,49 +46,30 @@ func (c *CommandContext) EscapeJoin(items []string, sep string) string {
 	return strings.Join(out, sep)
 }
 
-// Bold wraps text in platform-correct bold syntax. Inner text is
-// escaped so its own Markdown special characters render literally.
+// Bold wraps text in Markdown bold markers. Inner text is escaped so
+// its own Markdown specials render literally.
 func (c *CommandContext) Bold(s string) string {
 	if s == "" {
 		return ""
 	}
-	switch c.Platform {
-	case PlatformDiscord:
-		return "**" + escapeDiscord(s) + "**"
-	case PlatformTelegram:
-		return "*" + escapeTelegramV2(s) + "*"
-	}
-	return s
+	return "**" + escapeMarkdown(s) + "**"
 }
 
-// Italic wraps text in platform-correct italic syntax.
+// Italic wraps text in Markdown italic markers.
 func (c *CommandContext) Italic(s string) string {
 	if s == "" {
 		return ""
 	}
-	switch c.Platform {
-	case PlatformDiscord:
-		return "_" + escapeDiscord(s) + "_"
-	case PlatformTelegram:
-		return "_" + escapeTelegramV2(s) + "_"
-	}
-	return s
+	return "_" + escapeMarkdown(s) + "_"
 }
 
-// Code wraps text in inline-code backticks. Inside a code span only the
-// backtick and backslash need escaping on Telegram MarkdownV2; Discord
-// treats everything inside backticks as literal.
+// Code wraps text in inline-code backticks. Inside a code span only
+// the closing backtick and the backslash itself need escaping.
 func (c *CommandContext) Code(s string) string {
 	if s == "" {
 		return ""
 	}
-	switch c.Platform {
-	case PlatformDiscord:
-		return "`" + s + "`"
-	case PlatformTelegram:
-		return "`" + escapeTelegramV2Code(s) + "`"
-	}
-	return s
+	return "`" + escapeMarkdownCode(s) + "`"
 }
 
 // CodeBlock wraps text in fenced-code backticks with newline padding.
@@ -97,34 +77,27 @@ func (c *CommandContext) CodeBlock(s string) string {
 	if s == "" {
 		return ""
 	}
-	switch c.Platform {
-	case PlatformDiscord:
-		return "```\n" + s + "\n```"
-	case PlatformTelegram:
-		return "```\n" + escapeTelegramV2Code(s) + "\n```"
-	}
-	return s
+	return "```\n" + escapeMarkdownCode(s) + "\n```"
 }
 
-// EscapeForPlatform escapes Markdown special characters for the given
-// platform string. Exposed for callers that have a platform string but
-// no CommandContext.
+// EscapeForPlatform escapes Markdown special characters. Exposed for
+// callers that have a platform string but no CommandContext. The
+// platform argument is kept for forward-compatibility but currently
+// unused — both supported platforms speak Markdown end-to-end.
 func EscapeForPlatform(platform, s string) string {
-	switch platform {
-	case PlatformDiscord:
-		return escapeDiscord(s)
-	case PlatformTelegram:
-		return escapeTelegramV2(s)
-	}
-	return s
+	_ = platform
+	return escapeMarkdown(s)
 }
 
-func escapeDiscord(s string) string {
+// escapeMarkdown escapes the Markdown formatting characters with a
+// leading backslash. The Telegram-side converter and Discord both
+// honor \X as a literal-X escape.
+func escapeMarkdown(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
 		switch r {
-		case '_', '*', '~', '|', '`', '\\':
+		case '_', '*', '~', '|', '`', '\\', '[', ']':
 			b.WriteByte('\\')
 		}
 		b.WriteRune(r)
@@ -132,26 +105,9 @@ func escapeDiscord(s string) string {
 	return b.String()
 }
 
-// escapeTelegramV2 escapes the Telegram Bot API MarkdownV2 reserved
-// characters: _ * [ ] ( ) ~ ` > # + - = | { } . ! \
-func escapeTelegramV2(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for _, r := range s {
-		switch r {
-		case '_', '*', '[', ']', '(', ')', '~', '`',
-			'>', '#', '+', '-', '=', '|',
-			'{', '}', '.', '!', '\\':
-			b.WriteByte('\\')
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
-}
-
-// escapeTelegramV2Code escapes the only characters special inside a
-// MarkdownV2 code or pre-code span: backtick and backslash.
-func escapeTelegramV2Code(s string) string {
+// escapeMarkdownCode escapes only the characters special inside a
+// backtick code span: the backtick itself and the backslash.
+func escapeMarkdownCode(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
