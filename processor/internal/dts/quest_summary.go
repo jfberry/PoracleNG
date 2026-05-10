@@ -60,12 +60,18 @@ func BuildQuestSummaryView(
 				Markers: markers,
 			}, 500, 250, 1.25, 17.5)
 			if pos != nil {
+				// staticMapType is sourced from the resolver config —
+				// admins map "questSummary" → e.g. "multiStaticMap" via
+				// [geocoding.static_map_type]. Default falls back to
+				// "staticMap" inside getConfigForTileType when no entry
+				// is set.
+				staticMapType := sm.GetStaticMapType("questSummary")
 				staticMapURL = sm.GetPregeneratedTileURL("questSummary", map[string]any{
 					"points":    points,
 					"zoom":      pos.Zoom,
 					"latitude":  pos.Latitude,
 					"longitude": pos.Longitude,
-				}, "staticMap")
+				}, staticMapType)
 			}
 		}
 	}

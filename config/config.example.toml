@@ -395,6 +395,14 @@ include_stops = false
 # type = "staticMap"
 # include_stops = true
 
+# Per-alert-type static-map template — used by the renderer to choose
+# between single-pin (`staticMap`) and multi-pin (`multiStaticMap`)
+# tileserver templates. The keys here are the renderer's tile maptypes
+# (monster, raid, quest, questSummary, …); admins can swap a tileserver
+# template without touching DTS templates.
+[geocoding.static_map_type]
+questSummary = "multiStaticMap"          # multi-pin tile fits the autopositioned points
+
 # ---- Tuning ----
 # Do not change these settings without talking to us in discord.
 # For outbound, a lower number of concurrent senders will reduce the chance

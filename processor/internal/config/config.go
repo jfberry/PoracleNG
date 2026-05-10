@@ -761,6 +761,13 @@ func Load(baseDir string) (*Config, error) {
 			Height:      200,
 			Zoom:        15,
 			MapType:     "klokantech-basic",
+			// Default static-map types per renderer maptype. questSummary
+			// renders a multi-pin tile (autopositioned over the buffered
+			// pokestops) so it defaults to multiStaticMap; admins can
+			// override per their tileserver template set.
+			StaticMapType: map[string]string{
+				"questSummary": "multiStaticMap",
+			},
 		},
 		General: GeneralConfig{
 			ImgURL:              "https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS",
@@ -793,6 +800,17 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
 		return nil, err
+	}
+
+	// Restore baked-in static_map_type defaults that the user's TOML
+	// didn't explicitly override. BurntSushi/toml replaces the entire
+	// map when the user provides any [geocoding.static_map_type] table,
+	// so we re-apply any default keys absent from the merged map.
+	if cfg.Geocoding.StaticMapType == nil {
+		cfg.Geocoding.StaticMapType = map[string]string{}
+	}
+	if _, ok := cfg.Geocoding.StaticMapType["questSummary"]; !ok {
+		cfg.Geocoding.StaticMapType["questSummary"] = "multiStaticMap"
 	}
 
 	// Copy api_secret from [alerter] section for backward compatibility

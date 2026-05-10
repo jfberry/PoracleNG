@@ -11,6 +11,14 @@ import (
 
 // tileMode determines whether we need a tile and in what form.
 // Called after matching, before enrichment.
+//
+// templateType is whatever DTS type the renderer will look up — the
+// function is type-agnostic (e.g. "monster", "quest", "questSummary"),
+// so newly added types automatically work here as long as the per-user
+// templates exist. The questSummary path doesn't currently route
+// through this helper because BuildQuestSummaryView builds the URL
+// synchronously, but tileMode handles "questSummary" correctly if a
+// future caller does pre-resolve summary tiles.
 func (ps *ProcessorService) tileMode(templateType string, matched []webhook.MatchedUser) int {
 	if ps.dtsRenderer == nil {
 		return enrichment.TileModeSkip

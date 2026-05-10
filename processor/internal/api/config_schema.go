@@ -343,6 +343,18 @@ var configSchema = []ConfigSection{
 		},
 		Tables: []ConfigTableDef{
 			{
+				Name:        "static_map_type",
+				Title:       "Static Map Type Per Alert",
+				Description: "Choose between staticMap (single-pin) and multiStaticMap (multi-pin) tileserver templates per renderer maptype. Known maptypes include monster, raid, quest, questSummary. The questSummary entry defaults to multiStaticMap because the summary tile autopositions over multiple pokestops.",
+				Fields: []ConfigFieldDef{
+					{Name: "maptype", Type: "string", Description: "Renderer maptype this entry applies to (e.g. monster, raid, questSummary)"},
+					{Name: "type", Type: "select", Default: "staticMap", Description: "TileserverCache template to use for this maptype", Options: []ConfigSelectOption{
+						{Value: "staticMap", Label: "staticMap", Description: "Single-pin tile"},
+						{Value: "multiStaticMap", Label: "multiStaticMap", Description: "Multi-pin tile (used by autopositioned multi-marker maps like questSummary)"},
+					}},
+				},
+			},
+			{
 				Name:        "tileserver_settings",
 				Title:       "Tileserver Settings",
 				Description: "Per-alert-type tile overrides. \"default\" applies to any alert type without its own entry. Known maptypes: default, monster, raid, pokestop, quest, weather, location, nest, gym.",

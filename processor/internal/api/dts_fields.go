@@ -663,6 +663,35 @@ var monsterChangedExtraFields = []FieldDef{
 	{Name: "original", Type: "object", Description: "Prior-sighting view: every monster field above is also accessible as original.X (e.g. original.fullName, original.cp, original.iv, original.weatherName, original.mapurl). PVP rankings are NOT included.", Category: "identity", Preferred: true},
 }
 
+// questSummaryFields are the shared (group-scoped) fields available
+// inside a questSummary template. The per-pokestop quest fields live
+// under the `quests` array — each entry exposes the same field set as
+// a regular quest template (questString, rewardString, pokestopName,
+// imgUrl, latitude, longitude, etc.) plus the per-row withAR boolean.
+var questSummaryFields = []FieldDef{
+	{Name: "rewardType", Type: "int", Description: "Reward type code (2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy)", Category: "quest", Preferred: true},
+	{Name: "reward", Type: "int", Description: "Reward identifier — pokemon ID for type 4/7/12, item ID for type 2, dust amount for type 3", Category: "quest", Preferred: true},
+	{Name: "rewardName", Type: "string", Description: "Translated display name for the shared reward", Category: "quest", Preferred: true},
+	{Name: "imgUrl", Type: "string", Description: "Shared icon URL for the reward (copied from the first pokestop's enrichment)", Category: "maps", Preferred: true},
+	{Name: "staticMap", Type: "string", Description: "Multi-pin static map URL autopositioned over every pokestop in the group", Category: "maps", Preferred: true},
+	{Name: "count", Type: "int", Description: "Number of pokestops in this reward group (= len(quests))", Category: "quest", Preferred: true},
+	{Name: "quests", Type: "array", Description: "Per-pokestop entries — iterate via {{#each quests}}; each entry exposes the regular quest field set plus a withAR boolean for that row", Category: "quest", Preferred: true},
+}
+
+// questSummaryBlockScopes describes the scope inside the
+// {{#each quests}} block — every entry behaves like a regular quest
+// view with an extra withAR boolean.
+var questSummaryBlockScopes = []BlockScope{
+	{
+		Helper:      "each",
+		Args:        []string{"quests"},
+		Description: "Iterate over each pokestop's quest entry (same fields as a regular quest template, plus withAR).",
+		Fields: append([]FieldDef{
+			{Name: "withAR", Type: "bool", Description: "True when the entry came from an AR-required quest", Category: "quest"},
+		}, questFields...),
+	},
+}
+
 var fieldsByType = map[string]fieldEntry{
 	"monster":        {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
 	"monsterNoIv":    {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
@@ -670,6 +699,7 @@ var fieldsByType = map[string]fieldEntry{
 	"raid":           {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
 	"egg":            {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
 	"quest":          {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
+	"questSummary":   {Fields: append(commonFields, questSummaryFields...), BlockScopes: questSummaryBlockScopes, Snippets: append(commonSnippets, questSnippets...)},
 	"invasion":       {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
 	"lure":           {Fields: append(commonFields, lureFields...), Snippets: append(commonSnippets, lureSnippets...)},
 	"nest":           {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},
