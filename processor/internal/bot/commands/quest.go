@@ -360,6 +360,12 @@ func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedA
 		for _, mon := range monsterList {
 			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 7, mon.PokemonID, mon.Form, 0))
 		}
+	} else if itemID := c.matchItemName(ctx, parsed); itemID > 0 {
+		// Item reward (e.g. !quest remove pinap) — match a single item.
+		// Consume matched tokens so the unrecognized-arg checker doesn't
+		// also flag them downstream.
+		parsed.Unrecognized = nil
+		targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 2, itemID, 0, 0))
 	} else {
 		// No specific type — remove everything
 		for _, rt := range []int{7, 3, 12, 4, 2} {
