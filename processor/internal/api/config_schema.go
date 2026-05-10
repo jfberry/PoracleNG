@@ -447,6 +447,7 @@ var configSchema = []ConfigSection{
 			{Name: "max_distance", Type: "int", Default: 0, Description: "Maximum allowed tracking circle radius in meters (0 = no limit)", HotReload: true},
 			{Name: "enable_gym_battle", Type: "bool", Default: false, Description: "Allow the battle_changes option in !gym tracking command", HotReload: true},
 			{Name: "default_user_tracking_level_cap", Type: "int", Default: 0, Description: "Default PVP tracking level cap for new users (0 = use all configured caps)", HotReload: true},
+			{Name: "pokemon_change_tracking", Type: "bool", Default: true, Description: "Detect post-encounter pokemon changes (form/species/gender/weather-boost) and reply-thread monsterChanged alerts to users with prior messages. When disabled, change events fall through to the regular monster send path.", HotReload: true},
 		},
 	},
 

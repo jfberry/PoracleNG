@@ -463,6 +463,12 @@ default_distance = 0                     # default distance for distance-only tr
 max_distance = 0                         # max tracking circle radius (0 = no limit)
 enable_gym_battle = false                # allow "battle_changes" option in !gym
 default_user_tracking_level_cap = 0      # default pvp tracking level cap (0 = all levels)
+# Pokemon change tracking — when on, post-encounter changes (form, species,
+# gender, weather-boost shift) and the non-IV → IV transition for users with
+# a prior message fire a reply-threaded `monsterChanged` (or threaded
+# `monster` for the encounter event). Set to false to suppress all of this:
+# change events still re-render as a regular `monster` send to matched users.
+pokemon_change_tracking = true
 
 # ---- Autocreate (bulk channel sync) ----
 # Apply a channelTemplate.json entry across many geofences in one operation.

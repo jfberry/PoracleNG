@@ -366,3 +366,21 @@ func TestInitialPokemonRender_SetsReplyKey(t *testing.T) {
 		t.Fatalf("pokemon.go must set ReplyKey: pokemon.EncounterID on the initial-sighting RenderJob (PR 5.2). Without this, change-event handlers cannot find prior messages.")
 	}
 }
+
+// TestProcessPokemon_RespectsChangeTrackingFlag is a source-level guard:
+// the pokemon webhook handler must consult ps.cfg.Tracking.PokemonChangeTracking
+// before invoking dispatchPokemonChangeRender. When the flag is false, change
+// events fall through to the regular initial-render path (sending a plain
+// `monster` to any matched users with no reply threading). Source-grep on
+// purpose — ProcessPokemon needs a fully-constructed ProcessorService
+// (matcher, enricher, state) which is impractical to assemble here.
+func TestProcessPokemon_RespectsChangeTrackingFlag(t *testing.T) {
+	src, err := os.ReadFile("pokemon.go")
+	if err != nil {
+		t.Fatalf("read pokemon.go: %v", err)
+	}
+	s := string(src)
+	if !strings.Contains(s, "ps.cfg.Tracking.PokemonChangeTracking") {
+		t.Fatalf("pokemon.go must gate dispatchPokemonChangeRender on ps.cfg.Tracking.PokemonChangeTracking. Without this, the [tracking] pokemon_change_tracking flag has no effect.")
+	}
+}

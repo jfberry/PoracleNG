@@ -201,19 +201,25 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				ps.pokemonName(change.Old.PokemonID, change.Old.Form),
 				ps.pokemonName(change.New.PokemonID, change.New.Form))
 
-			ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
-				encounterID:   pokemon.EncounterID,
-				change:        change,
-				matched:       matched,
-				matchedAreas:  matchedAreas,
-				enrichment:    baseEnrichment,
-				perLang:       perLang,
-				perUser:       perUser,
-				webhookFields: webhookFields,
-				tilePending:   tilePending,
-				isEncountered: processed.Encountered,
-			})
-			return
+			// Config gate: when pokemon change tracking is disabled, fall
+			// through to the regular initial-render path. Matched users (if
+			// any) still get a regular `monster` send — just no reply
+			// threading and no `monsterChanged` template.
+			if ps.cfg.Tracking.PokemonChangeTracking {
+				ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
+					encounterID:   pokemon.EncounterID,
+					change:        change,
+					matched:       matched,
+					matchedAreas:  matchedAreas,
+					enrichment:    baseEnrichment,
+					perLang:       perLang,
+					perUser:       perUser,
+					webhookFields: webhookFields,
+					tilePending:   tilePending,
+					isEncountered: processed.Encountered,
+				})
+				return
+			}
 		}
 
 		ps.renderCh <- RenderJob{
