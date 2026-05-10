@@ -119,8 +119,21 @@ func (ps *ProcessorService) checkProfileSwitches() {
 }
 
 // isProfileActive checks whether any active_hours entry matches the current
-// local time at the given coordinates.
+// local time at the given coordinates. This is a thin wrapper kept for
+// readability at the call site; isScheduleActive carries the actual logic
+// and is shared with the summary scheduler.
 func isProfileActive(entries []db.ActiveHourEntry, lat, lon float64) bool {
+	return isScheduleActive(entries, lat, lon, time.Now)
+}
+
+// isScheduleActive checks whether any active_hours entry matches the current
+// local time at the given coordinates. The nowFunc parameter is for test
+// injection; production callers pass time.Now. Used by both the profile
+// scheduler and the summary scheduler.
+func isScheduleActive(entries []db.ActiveHourEntry, lat, lon float64, nowFunc func() time.Time) bool {
+	if nowFunc == nil {
+		nowFunc = time.Now
+	}
 	var now time.Time
 	if lat != 0 || lon != 0 {
 		tz := geo.GetTimezone(lat, lon)
@@ -128,9 +141,9 @@ func isProfileActive(entries []db.ActiveHourEntry, lat, lon float64) bool {
 		if err != nil {
 			loc = time.UTC
 		}
-		now = time.Now().In(loc)
+		now = nowFunc().In(loc)
 	} else {
-		now = time.Now().UTC()
+		now = nowFunc().UTC()
 	}
 
 	nowHour := now.Hour()
