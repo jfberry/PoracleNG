@@ -282,6 +282,8 @@
   "arg.prefix.sun": "sun",
   "arg.prefix.weekday": "weekday",
   "arg.prefix.weekend": "weekend",
+  "arg.prefix.every": "every",
+  "arg.prefix.everyday": "everyday",
 
   "raid.level.legendary": "legendary",
   "raid.level.mega": "mega",

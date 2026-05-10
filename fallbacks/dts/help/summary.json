@@ -1,0 +1,38 @@
+[{
+  "id": "summary",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!summary",
+      "description": "Buffered, scheduled delivery of alerts grouped by reward. Currently supports `quest` only. Opt a tracking rule in by adding `summary` (e.g. `{{prefix}}quest pikachu summary`); matched quests are held in memory and dispatched as grouped messages at the times you set here.",
+      "fields": [
+        {
+          "name": "Status",
+          "value": "`{{prefix}}summary quest` — show your current schedule and how many quests are currently buffered."
+        },
+        {
+          "name": "Set the schedule",
+          "value": "`{{prefix}}summary quest settime mon07:30 weekday07:30 weekend10:00`\n`{{prefix}}summary quest settime every08:00` — fire every day at 08:00\n\nDay prefixes:\n• `mon`/`tue`/`wed`/`thu`/`fri`/`sat`/`sun` — a single day\n• `weekday` — Mon–Fri\n• `weekend` — Sat–Sun\n• `every` (or `everyday`) — all seven days\n\nFormat: `<prefix><HH>:<MM>` (e.g. `mon07:30`, `every08:00`). The colon and minutes are optional — `mon7` is treated as `mon07:00`. List as many times as you like in one command; they replace any existing schedule."
+        },
+        {
+          "name": "Clear the schedule",
+          "value": "`{{prefix}}summary quest cleartime` — remove the schedule. Quests still buffer; you can flush them on demand with `{{prefix}}summary quest now`."
+        },
+        {
+          "name": "Dispatch now",
+          "value": "`{{prefix}}summary quest now` — dispatch everything currently in your buffer right away (does not affect the schedule)."
+        },
+        {
+          "name": "Opting a rule in",
+          "value": "Add `summary` when you create the rule:\n`{{prefix}}quest pikachu summary`\n`{{prefix}}quest rare_candy summary`\n\n`{{prefix}}tracked` shows `summary` on each rule that uses it."
+        },
+        {
+          "name": "Full manual",
+          "value": "https://jfberry.github.io/PoracleNG-docs/userguide/"
+        }
+      ]
+    }
+  }
+}]

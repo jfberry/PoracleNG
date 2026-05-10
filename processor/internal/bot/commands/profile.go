@@ -191,6 +191,8 @@ func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
 		"fri": {5}, "sat": {6}, "sun": {7},
 		"weekday": {1, 2, 3, 4, 5},
 		"weekend": {6, 7},
+		"every":    {1, 2, 3, 4, 5, 6, 7},
+		"everyday": {1, 2, 3, 4, 5, 6, 7},
 	}
 
 	// Add translated day abbreviations from i18n
@@ -208,6 +210,8 @@ func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
 		{"arg.prefix.sun", []int{7}},
 		{"arg.prefix.weekday", []int{1, 2, 3, 4, 5}},
 		{"arg.prefix.weekend", []int{6, 7}},
+		{"arg.prefix.every", []int{1, 2, 3, 4, 5, 6, 7}},
+		{"arg.prefix.everyday", []int{1, 2, 3, 4, 5, 6, 7}},
 	}
 
 	tr := ctx.Tr()
