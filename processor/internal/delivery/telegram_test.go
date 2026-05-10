@@ -525,3 +525,71 @@ func TestTelegramSentIDFormat(t *testing.T) {
 		t.Errorf("expected messageID 12345, got %d", msgID)
 	}
 }
+
+// TestTelegramPayloadIncludesReplyToID proves the Telegram sender injects
+// reply_to_message_id (as a JSON number) and allow_sending_without_reply
+// when Job.ReplyToID is set. The ID is parsed out of the SentID's "text="
+// segment so replies attach to the chain's text message.
+func TestTelegramPayloadIncludesReplyToID(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(99)
+	})
+	defer server.Close()
+
+	job := &Job{
+		Target:    "12345",
+		Type:      "telegram:user",
+		Message:   json.RawMessage(`{"content":"reply"}`),
+		ReplyToID: "12345|text=42",
+	}
+
+	if _, err := sender.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c := *calls
+	if len(c) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(c))
+	}
+	body := c[0].Body
+	// JSON unmarshal yields float64 for numbers — assert numerically.
+	got, ok := body["reply_to_message_id"]
+	if !ok {
+		t.Fatalf("expected reply_to_message_id in body, got: %v", body)
+	}
+	if f, isFloat := got.(float64); !isFloat || int(f) != 42 {
+		t.Errorf("expected reply_to_message_id=42 (number), got %v (%T)", got, got)
+	}
+	if body["allow_sending_without_reply"] != true {
+		t.Errorf("expected allow_sending_without_reply=true, got %v", body["allow_sending_without_reply"])
+	}
+}
+
+// TestTelegramSendWithoutReplyToID proves the reply fields stay absent for
+// jobs that don't carry a ReplyToID — we don't want every send to declare a
+// reply target.
+func TestTelegramSendWithoutReplyToID(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(7)
+	})
+	defer server.Close()
+
+	job := &Job{
+		Target:  "12345",
+		Type:    "telegram:user",
+		Message: json.RawMessage(`{"content":"plain"}`),
+	}
+	if _, err := sender.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c := *calls
+	if len(c) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(c))
+	}
+	if _, ok := c[0].Body["reply_to_message_id"]; ok {
+		t.Errorf("expected no reply_to_message_id when ReplyToID empty, got body: %v", c[0].Body)
+	}
+	if _, ok := c[0].Body["allow_sending_without_reply"]; ok {
+		t.Errorf("expected no allow_sending_without_reply when ReplyToID empty, got body: %v", c[0].Body)
+	}
+}
