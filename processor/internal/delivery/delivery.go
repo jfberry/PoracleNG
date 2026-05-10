@@ -31,6 +31,7 @@ type Job struct {
 	TTH           TTH             `json:"tth"`
 	Clean         int             `json:"clean"`        // track for deletion on TTH expiry
 	EditKey       string          `json:"editKey"`      // non-empty = track for future edits
+	ReplyKey      string          `json:"replyKey"`     // non-empty = (ReplyKey,Target) indexes the latest sent message in MessageTracker for reply chaining
 	Name          string          `json:"name"`         // human-readable destination name
 	LogReference  string          `json:"logReference"` // encounter/gym ID for tracing
 	Lat           float64         `json:"lat"`
