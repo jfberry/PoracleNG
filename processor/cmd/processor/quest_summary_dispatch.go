@@ -112,46 +112,92 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 	}
 
 	tr := ps.translations.For(lang)
+	maxPerMessage := ps.cfg.Summariser.MaxPerMessage
 	for _, k := range order {
-		view := dts.BuildQuestSummaryView(k.Type, k.Reward, groups[k], ps.enricher.StaticMap, tr)
+		all := groups[k]
+		for _, chunk := range chunkPerMessage(all, maxPerMessage) {
+			view := dts.BuildQuestSummaryView(dts.QuestSummaryGroup{
+				RewardType: k.Type,
+				RewardID:   k.Reward,
+				Quests:     chunk.entries,
+				TotalCount: len(all),
+				Chunk:      chunk.index,
+				Chunks:     chunk.total,
+			}, ps.enricher.StaticMap, tr)
 
-		jobs := ps.dtsRenderer.RenderQuestSummary(
-			view,
-			matched,
-			nil, // no matched-areas for the summary header
-			"summary:"+humanID+":"+alertType,
-			"", // no edit-key base; summary messages are not edit-tracked
-		)
-		if len(jobs) == 0 {
-			continue
-		}
+			jobs := ps.dtsRenderer.RenderQuestSummary(
+				view,
+				matched,
+				nil, // no matched-areas for the summary header
+				"summary:"+humanID+":"+alertType,
+				"", // no edit-key base; summary messages are not edit-tracked
+			)
+			if len(jobs) == 0 {
+				continue
+			}
 
-		if ps.dispatcher == nil {
-			log.Warnf("summary dispatch: dispatcher not configured — dropping %d jobs for %s", len(jobs), humanID)
-			continue
-		}
-		for _, j := range jobs {
-			// DispatchBypass: summary delivery is the user's chosen
-			// alternative to N immediate quest alerts (which would
-			// have hit the rate limit MORE quickly). The user opted
-			// into summary mode explicitly and the buffer is naturally
-			// bounded by their tracked quests, so don't count summary
-			// messages against the per-destination quota.
-			ps.dispatcher.DispatchBypass(&delivery.Job{
-				Target:       j.Target,
-				Type:         j.Type,
-				Message:      j.Message,
-				TTH:          tthFromMap(j.TTH),
-				Clean:        j.Clean,
-				Name:         j.Name,
-				LogReference: j.LogReference,
-				Lat:          parseCoordFloat(j.Lat),
-				Lon:          parseCoordFloat(j.Lon),
-				EditKey:      j.EditKey,
-				Language:     j.Language,
-			})
+			if ps.dispatcher == nil {
+				log.Warnf("summary dispatch: dispatcher not configured — dropping %d jobs for %s", len(jobs), humanID)
+				continue
+			}
+			for _, j := range jobs {
+				// DispatchBypass: summary delivery is the user's chosen
+				// alternative to N immediate quest alerts (which would
+				// have hit the rate limit MORE quickly). The user opted
+				// into summary mode explicitly and the buffer is naturally
+				// bounded by their tracked quests, so don't count summary
+				// messages against the per-destination quota.
+				ps.dispatcher.DispatchBypass(&delivery.Job{
+					Target:       j.Target,
+					Type:         j.Type,
+					Message:      j.Message,
+					TTH:          tthFromMap(j.TTH),
+					Clean:        j.Clean,
+					Name:         j.Name,
+					LogReference: j.LogReference,
+					Lat:          parseCoordFloat(j.Lat),
+					Lon:          parseCoordFloat(j.Lon),
+					EditKey:      j.EditKey,
+					Language:     j.Language,
+				})
+			}
 		}
 	}
+}
+
+// summaryChunk is one slice of a reward group plus its 1-indexed
+// position. For unsplit groups the result is a single chunk with
+// index=1, total=1.
+type summaryChunk struct {
+	entries []map[string]any
+	index   int
+	total   int
+}
+
+// chunkPerMessage splits entries into chunks of at most size each. A
+// non-positive size disables splitting (returns one chunk containing
+// everything). Empty input returns no chunks.
+func chunkPerMessage(entries []map[string]any, size int) []summaryChunk {
+	if len(entries) == 0 {
+		return nil
+	}
+	if size <= 0 || len(entries) <= size {
+		return []summaryChunk{{entries: entries, index: 1, total: 1}}
+	}
+	total := (len(entries) + size - 1) / size
+	out := make([]summaryChunk, 0, total)
+	for i := 0; i < len(entries); i += size {
+		end := i + size
+		if end > len(entries) {
+			end = len(entries)
+		}
+		out = append(out, summaryChunk{
+			entries: entries[i:end],
+			index:   len(out) + 1,
+			total:   total,
+		})
+	}
+	return out
 }
 
 // questEnrichOne re-runs the quest enrichment pipeline (base +

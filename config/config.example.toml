@@ -492,6 +492,18 @@ quest_summary_enabled = true
 # for a future created-at sweep for malformed payloads.
 quest_summary_buffer_ttl_hours = 24
 
+# ---- Summariser ----
+# Settings shared across all summariser pipelines (currently quest summary;
+# future raid/gym/etc. summaries will reuse these knobs).
+[summariser]
+# Chunk reward groups containing more than N entries into ceil(total/N)
+# consecutive messages so each fits Discord's 4096-char embed-description
+# cap. Each chunk's static map shows just that chunk's pins so the bullet
+# list and the map line up. Default 25 leaves headroom even when shlink
+# is not configured. Set 0 to disable splitting (oversize groups will
+# fail at the Discord API).
+max_per_message = 25
+
 # ---- Autocreate (bulk channel sync) ----
 # Apply a channelTemplate.json entry across many geofences in one operation.
 # Triggered with `!autocreate sync` or POST /api/autocreate/run. See AUTOCREATE.md

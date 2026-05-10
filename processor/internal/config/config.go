@@ -30,6 +30,7 @@ type Config struct {
 	Geocoding      GeocodingConfig      `toml:"geocoding"`
 	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 	Tracking       TrackingConfig       `toml:"tracking"`
+	Summariser     SummariserConfig     `toml:"summariser"`
 	AI             AIConfig             `toml:"ai"`
 	Validation     ValidationConfig     `toml:"validation"`
 	Autocreate     AutocreateConfig     `toml:"autocreate"`
@@ -102,6 +103,19 @@ type TrackingConfig struct {
 	// this knob is reserved for a future safety-net sweep on CreatedAt
 	// for malformed payloads. Default 24.
 	QuestSummaryBufferTTLHours int `toml:"quest_summary_buffer_ttl_hours"`
+}
+
+// SummariserConfig holds settings shared by all summariser pipelines
+// (currently quest summary; future raid/gym/etc. summaries will reuse).
+type SummariserConfig struct {
+	// MaxPerMessage chunks any reward group with more than N entries
+	// into ceil(total/N) consecutive messages so they fit Discord's
+	// 4096-char embed-description cap. Each chunk references the same
+	// shared static map (the tileserver caches by URL → one render,
+	// served N times). Default 25 — comfortably under the ~40-stop
+	// limit when shlink is not configured. Set 0 to disable splitting
+	// (oversize groups will fail at the Discord API).
+	MaxPerMessage int `toml:"max_per_message"`
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor
@@ -789,6 +803,9 @@ func Load(baseDir string) (*Config, error) {
 			PokemonChangeTracking:      true,
 			QuestSummaryEnabled:        true,
 			QuestSummaryBufferTTLHours: 24,
+		},
+		Summariser: SummariserConfig{
+			MaxPerMessage: 25,
 		},
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {

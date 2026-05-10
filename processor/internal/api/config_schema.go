@@ -465,6 +465,15 @@ var configSchema = []ConfigSection{
 		},
 	},
 
+	// ---- summariser ----
+	{
+		Name:  "summariser",
+		Title: "Summariser",
+		Fields: []ConfigFieldDef{
+			{Name: "max_per_message", Type: "int", Default: 25, Description: "Chunk reward groups containing more than N entries into ceil(total/N) consecutive messages. Each chunk's static map shows just that chunk's pins. Default 25 leaves headroom under Discord's 4096-char embed-description cap. Set 0 to disable splitting.", HotReload: true},
+		},
+	},
+
 	// ---- reconciliation.discord ----
 	{
 		Name:  "reconciliation.discord",

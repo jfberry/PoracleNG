@@ -8,40 +8,50 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 )
 
-// BuildQuestSummaryView returns the template context for a single
-// reward-group's questSummary message. Reward fields are shared across
-// the group (name, icon URL, count); per-pokestop fields (including
-// each entry's own withAR flag) live under the `quests` slice.
+// QuestSummaryGroup carries the inputs BuildQuestSummaryView needs for
+// one render. `Quests` is both the per-line loop content AND the set
+// of pins on this message's static map — viewer can correlate bullets
+// to pins directly. `TotalCount` is the size of the whole reward group
+// (carried separately so a chunked split still shows the full count
+// in the header).
 //
-// When a static map resolver is configured and at least one pokestop
-// carries valid coordinates, this also builds a multi-pin static map
-// URL using the same Autoposition arguments `!area` uses for distance
-// circles.
-func BuildQuestSummaryView(
-	rewardType, rewardID int,
-	perPokestopViews []map[string]any,
-	sm *staticmap.Resolver,
-	tr *i18n.Translator,
-) map[string]any {
-	// Shared reward icon — copied from the first per-pokestop view (every
-	// per-pokestop entry within a single (rewardType, reward) group has
-	// the same imgUrl since the icon is reward-derived).
+// Chunk / Chunks are 1-indexed pagination counters; for unsplit groups
+// both are 1. Templates can opt into "(1/3)"-style headers via
+// {{#if (gt chunks 1)}}…{{/if}}.
+type QuestSummaryGroup struct {
+	RewardType int
+	RewardID   int
+	Quests     []map[string]any // bullets AND pins for THIS message
+	TotalCount int              // total stops across all chunks of the group
+	Chunk      int              // 1-indexed
+	Chunks     int              // total chunks for this reward group
+}
+
+// BuildQuestSummaryView returns the template context for one
+// questSummary message. Reward fields are shared across the group
+// (name, icon, total count); per-pokestop fields live under `quests`;
+// the static map shows just this chunk's pins so the bullet list and
+// map line up.
+func BuildQuestSummaryView(g QuestSummaryGroup, sm *staticmap.Resolver, tr *i18n.Translator) map[string]any {
+	views := g.Quests
+
+	// Shared reward icon — every per-pokestop view in a single
+	// (rewardType, reward) group has the same imgUrl since the icon is
+	// reward-derived.
 	var sharedImg string
-	if len(perPokestopViews) > 0 {
-		if v, ok := perPokestopViews[0]["imgUrl"].(string); ok {
+	if len(views) > 0 {
+		if v, ok := views[0]["imgUrl"].(string); ok {
 			sharedImg = v
 		}
 	}
 
-	// Multi-pin static map URL. Autoposition over the points to compute
-	// centre + zoom so the rendered tile fits all pins. We only build a
-	// URL when we have a resolver and at least one pokestop with a
-	// non-zero coordinate — pokestops without coords are silently skipped.
+	// Multi-pin static map URL — autoposition over THIS chunk's stops
+	// so the bullet list and the pins on the map are the same set.
 	var staticMapURL string
-	if sm != nil && len(perPokestopViews) > 0 {
-		markers := make([]staticmap.LatLon, 0, len(perPokestopViews))
-		points := make([]map[string]any, 0, len(perPokestopViews))
-		for _, q := range perPokestopViews {
+	if sm != nil && len(views) > 0 {
+		markers := make([]staticmap.LatLon, 0, len(views))
+		points := make([]map[string]any, 0, len(views))
+		for _, q := range views {
 			lat := numericFloat(q["latitude"])
 			lon := numericFloat(q["longitude"])
 			if lat == 0 && lon == 0 {
@@ -61,10 +71,6 @@ func BuildQuestSummaryView(
 				Markers: markers,
 			}, 500, 250, 1.25, 17.5)
 			if pos != nil {
-				// Tile maptype is lowercase to match the tileserver template
-				// filename convention (poracle-{maptype}). Other tiles
-				// (poracle-monster, poracle-quest, …) all live in lowercase;
-				// "questSummary" → "questsummary" keeps the URL conventional.
 				const tileMaptype = "questsummary"
 				staticMapURL = sm.GetPregeneratedTileURL(tileMaptype, map[string]any{
 					"points":    points,
@@ -76,14 +82,29 @@ func BuildQuestSummaryView(
 		}
 	}
 
+	chunk := g.Chunk
+	if chunk <= 0 {
+		chunk = 1
+	}
+	chunks := g.Chunks
+	if chunks <= 0 {
+		chunks = 1
+	}
+	total := g.TotalCount
+	if total <= 0 {
+		total = len(views)
+	}
+
 	return map[string]any{
-		"rewardType": rewardType,
-		"reward":     rewardID,
-		"rewardName": questSummaryRewardName(rewardType, rewardID, tr),
+		"rewardType": g.RewardType,
+		"reward":     g.RewardID,
+		"rewardName": questSummaryRewardName(g.RewardType, g.RewardID, tr),
 		"imgUrl":     sharedImg,
 		"staticMap":  staticMapURL,
-		"count":      len(perPokestopViews),
-		"quests":     perPokestopViews,
+		"count":      total, // total for the reward group, not just this chunk
+		"chunk":      chunk,
+		"chunks":     chunks,
+		"quests":     views,
 	}
 }
 
