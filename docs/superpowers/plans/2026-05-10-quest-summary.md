@@ -903,7 +903,7 @@ Open questions / risks:
 - **Multi-language**: not a concern — payload is raw webhook bytes, scheduler re-enriches at dispatch time using the user's *current* language. Free language-change support.
 - **Scheduler tick race**: if the user adds tracking, matches a quest, and the scheduler tick fires within the same minute, the buffer might be cleared empty before the match arrives. The 10-minute trigger window mitigates this; for first-set schedules we could fire at the next window rather than the current one. Not a blocker for v1.
 - **Manual `now` while a scheduled fire is mid-flight**: rare. The buffer is cleared atomically; a second trigger sees an empty buffer and replies "no buffered quests". Acceptable.
-- **Migration ordering**: PR 1's three migrations must use unique sequential numbers with no gap. Confirm by `ls processor/internal/db/migrations/` before each.
+- **Migration ordering**: PR 1.2 ships the only migration (`summary_schedules`). Pick `last+1` from `ls processor/internal/db/migrations/`.
 
 ## Manual verification (before merging)
 
