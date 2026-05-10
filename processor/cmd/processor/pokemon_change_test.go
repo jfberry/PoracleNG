@@ -346,24 +346,20 @@ func TestDispatchPokemonChangeRender_MixedPriorAndFresh(t *testing.T) {
 	}
 }
 
-// TestInitialPokemonRender_SetsReplyKey pins PR 5.2's guarantee: the
+// TestInitialPokemonRender_SetsReplyKey pins the invariant that the
 // initial-sighting RenderJob enqueued by ProcessPokemon carries
-// ReplyKey = pokemon.EncounterID. Without that, the (encounterID, target)
-// pair never makes it into MessageTracker.replyIndex, and a subsequent
-// change-event handler has no prior message to look up.
-//
-// ProcessPokemon is not directly callable here (it requires a full
-// ProcessorService — matcher, enricher, state). Instead the test reads
-// pokemon.go and verifies the regular RenderJob constructor sets
-// `ReplyKey: pokemon.EncounterID`. This is brittle on purpose — if anyone
-// removes that line the test breaks, which is the whole point.
+// ReplyKey = pokemon.EncounterID. Without that, (encounterID, target)
+// never enters MessageTracker.replyIndex and the next change-event has
+// no prior message to thread under. ProcessPokemon needs a full
+// ProcessorService to invoke directly, so the assertion grep-checks
+// pokemon.go for the literal field assignment.
 func TestInitialPokemonRender_SetsReplyKey(t *testing.T) {
 	src, err := os.ReadFile("pokemon.go")
 	if err != nil {
 		t.Fatalf("read pokemon.go: %v", err)
 	}
 	if !strings.Contains(string(src), "ReplyKey: pokemon.EncounterID") {
-		t.Fatalf("pokemon.go must set ReplyKey: pokemon.EncounterID on the initial-sighting RenderJob (PR 5.2). Without this, change-event handlers cannot find prior messages.")
+		t.Fatalf("pokemon.go must set ReplyKey: pokemon.EncounterID on the initial-sighting RenderJob")
 	}
 }
 

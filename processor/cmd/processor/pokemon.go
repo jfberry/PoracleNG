@@ -92,10 +92,12 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			STA:           sta,
 			DisappearTime: pokemon.DisappearTime,
 		}
-		// Pass PVP-stripped raw bytes so the encounter tracker can store them
-		// per-encounter for later reuse in {{original.X}}. PVP is large and
-		// irrelevant for "what changed" templates — strip at storage time.
-		_, change := ps.encounters.Track(pokemon.EncounterID, encounterState, tracker.StripPVP(raw))
+		// Skip change tracking entirely when the config flag is off — saves
+		// the StripPVP allocation + tracker mutex on every pokemon webhook.
+		var change *tracker.EncounterChange
+		if ps.cfg.Tracking.PokemonChangeTracking {
+			_, change = ps.encounters.Track(pokemon.EncounterID, encounterState, tracker.StripPVP(raw))
+		}
 
 		// Get rarity group
 		rarityGroup := ps.stats.GetRarityGroup(pokemon.PokemonID)
@@ -457,25 +459,6 @@ func (ps *ProcessorService) buildPerLanguageOriginal(priorRaw json.RawMessage, u
 			merged[k] = v
 		}
 		out[lang] = merged
-	}
-	return out
-}
-
-// groupByLanguage buckets matched users by language code, defaulting blanks
-// to the supplied locale (or "en" if that's also blank). Used to dispatch
-// one RenderJob per language for change events so each gets its
-// language-specific {{original.X}} view.
-func groupByLanguage(matched []webhook.MatchedUser, defaultLocale string) map[string][]webhook.MatchedUser {
-	if defaultLocale == "" {
-		defaultLocale = "en"
-	}
-	out := make(map[string][]webhook.MatchedUser)
-	for _, m := range matched {
-		lang := m.Language
-		if lang == "" {
-			lang = defaultLocale
-		}
-		out[lang] = append(out[lang], m)
 	}
 	return out
 }
