@@ -692,9 +692,8 @@ func (b *Bot) buildGuildSnapshot(guildID string) *guildSnapshot {
 	}
 	for _, c := range chans {
 		out.channels[c.ID] = c
-		lname := strings.ToLower(c.Name)
 		if c.Type == discordgo.ChannelTypeGuildCategory {
-			out.categoriesByLowerName[lname] = c.ID
+			out.categoriesByLowerName[strings.ToLower(c.Name)] = c.ID
 			continue
 		}
 		byName, ok := out.channelsByParentLowerName[c.ParentID]
@@ -702,7 +701,10 @@ func (b *Bot) buildGuildSnapshot(guildID string) *guildSnapshot {
 			byName = map[string]string{}
 			out.channelsByParentLowerName[c.ParentID] = byName
 		}
-		byName[lname] = c.ID
+		// Index by Discord's stored normalized form so template-rendered
+		// pretty names (e.g. "Canterbury_(Wincheap)") match the slug
+		// Discord actually stores (e.g. "canterbury_wincheap").
+		byName[normalizeDiscordChannelName(c.Name)] = c.ID
 	}
 	threads, err := b.session.GuildThreadsActive(guildID)
 	if err != nil {
@@ -734,8 +736,10 @@ func (s *guildSnapshot) findCategory(name string) string {
 }
 
 // findChannel returns the ID of the channel under parentID whose name
-// matches (case-insensitive), or "" if none. parentID may be "" to look
-// for top-level channels. Empty snapshot returns "".
+// matches (case-insensitive, with Discord's slug normalization applied
+// — parens and other disallowed chars stripped, spaces → hyphens), or
+// "" if none. parentID may be "" to look for top-level channels. Empty
+// snapshot returns "".
 func (s *guildSnapshot) findChannel(parentID, name string) string {
 	if s == nil {
 		return ""
@@ -744,7 +748,7 @@ func (s *guildSnapshot) findChannel(parentID, name string) string {
 	if !ok {
 		return ""
 	}
-	return byName[strings.ToLower(name)]
+	return byName[normalizeDiscordChannelName(name)]
 }
 
 // findChannelAnyParent looks up a channel by name across every category
@@ -763,7 +767,7 @@ func (s *guildSnapshot) findChannelAnyParent(name string) (string, string) {
 	if s == nil {
 		return "", ""
 	}
-	lname := strings.ToLower(name)
+	lname := normalizeDiscordChannelName(name)
 	for parent, byName := range s.channelsByParentLowerName {
 		if id, ok := byName[lname]; ok {
 			return id, parent
@@ -779,7 +783,7 @@ func (s *guildSnapshot) removeChannel(id, parentID, name string) {
 		return
 	}
 	if byName, ok := s.channelsByParentLowerName[parentID]; ok {
-		delete(byName, strings.ToLower(name))
+		delete(byName, normalizeDiscordChannelName(name))
 	}
 	delete(s.channels, id)
 }
@@ -828,7 +832,7 @@ func (s *guildSnapshot) addChannel(id, parentID, name string) {
 		byName = map[string]string{}
 		s.channelsByParentLowerName[parentID] = byName
 	}
-	byName[strings.ToLower(name)] = id
+	byName[normalizeDiscordChannelName(name)] = id
 }
 
 // findRole returns the role ID matching the given name (case-insensitive),

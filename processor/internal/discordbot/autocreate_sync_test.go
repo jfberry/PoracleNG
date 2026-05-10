@@ -403,3 +403,55 @@ func TestGuildSnapshot_FindByName(t *testing.T) {
 		t.Errorf("nil snapshot should return zero values")
 	}
 }
+
+// TestFindChannel_DiscordNameNormalization covers the regression where
+// templates render fence names with characters Discord strips from
+// channel slugs (parens, spaces, etc), causing findChannel to miss the
+// existing channel and the runner to create a duplicate every sync.
+func TestFindChannel_DiscordNameNormalization(t *testing.T) {
+	snap := &guildSnapshot{
+		channels: map[string]*discordgo.Channel{
+			"ch1": {ID: "ch1", Name: "canterbury_wincheap", ParentID: "cat1"},
+			"ch2": {ID: "ch2", Name: "gent-centrum", ParentID: "cat1"},
+		},
+		channelsByParentLowerName: map[string]map[string]string{
+			"cat1": {
+				"canterbury_wincheap": "ch1",
+				"gent-centrum":        "ch2",
+			},
+		},
+	}
+
+	// Pretty (template-rendered) name with parens — Discord stored it
+	// stripped, the lookup must mirror that.
+	if got := snap.findChannel("cat1", "Canterbury_(Wincheap)"); got != "ch1" {
+		t.Errorf("findChannel with parens: got %q want ch1", got)
+	}
+	// Mixed case + space → Discord lowercases and replaces space with -.
+	if got := snap.findChannel("cat1", "Gent Centrum"); got != "ch2" {
+		t.Errorf("findChannel with space: got %q want ch2", got)
+	}
+	// findChannelAnyParent picks up the same normalization.
+	if got, parent := snap.findChannelAnyParent("Canterbury_(Wincheap)"); got != "ch1" || parent != "cat1" {
+		t.Errorf("findChannelAnyParent with parens: got (%q,%q) want (ch1,cat1)", got, parent)
+	}
+}
+
+func TestNormalizeDiscordChannelName(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"Canterbury_(Wincheap)", "canterbury_wincheap"},
+		{"Gent Centrum", "gent-centrum"},
+		{"already-fine_42", "already-fine_42"},
+		{"  trim me  ", "--trim-me--"},
+		{"Antwerp!", "antwerp"},
+		{"", ""},
+		{"日本語", ""}, // non-ASCII letters: stripped (we don't claim Unicode parity)
+	}
+	for _, tc := range cases {
+		if got := normalizeDiscordChannelName(tc.in); got != tc.want {
+			t.Errorf("normalizeDiscordChannelName(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
