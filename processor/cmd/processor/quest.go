@@ -8,8 +8,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -69,7 +71,13 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		matched, buffered, matchedAreas := ps.questMatcher.Match(data, st)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("quest", raw, matchedAreas, matched)
-		_ = buffered // PR 4.2 wires this into the summary buffer
+
+		// Append buffered (summary-bit) matches to the summary buffer.
+		// These users get a grouped delivery later from the summary
+		// scheduler (PR 5); we don't enrich or render now.
+		if len(buffered) > 0 {
+			ps.bufferQuestMatches(buffered, &quest, rewards, raw)
+		}
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("quest").Inc()
@@ -164,4 +172,58 @@ func parseQuestReward(r webhook.QuestReward) matching.QuestRewardData {
 	}
 
 	return result
+}
+
+// bufferQuestMatches appends one entry per matched user to the summary
+// buffer. The full webhook bytes are stored verbatim in the BufferedQuest
+// payload so the summary scheduler can re-enrich at delivery time
+// (picking up any language change since the buffer was written).
+//
+// The bufferKey on each entry is (RewardType, Reward, PokestopID,
+// WithAR), so we pick the first reward as the keying pair — multiple
+// rewards on the same stop+AR-flag still collapse to one entry per user
+// because the same quest can't simultaneously be tracked under
+// different reward primary keys (the matcher already routed once for
+// THIS webhook).
+func (ps *ProcessorService) bufferQuestMatches(
+	users []webhook.MatchedUser,
+	quest *webhook.QuestWebhook,
+	rewards []matching.QuestRewardData,
+	raw []byte,
+) {
+	if ps.summaryBuffer == nil || len(users) == 0 {
+		return
+	}
+
+	// Pick a representative (RewardType, Reward) for the bufferKey.
+	// Quests almost always carry a single reward; when they don't, the
+	// first reward is enough to dedup repeat firings of the same stop.
+	var rewardType, reward int
+	if len(rewards) > 0 {
+		rewardType = rewards[0].Type
+		switch rewardType {
+		case 7, 4, 12: // pokemon / candy / mega energy → pokemon ID
+			reward = rewards[0].PokemonID
+		case 2: // item
+			reward = rewards[0].ItemID
+		case 3: // stardust → amount
+			reward = rewards[0].Amount
+		}
+	}
+
+	expiresAt := geo.EndOfDay(quest.Latitude, quest.Longitude)
+	now := time.Now().Unix()
+	payload := append([]byte(nil), raw...) // detach from caller's buffer
+
+	for _, u := range users {
+		ps.summaryBuffer.Append(u.ID, "quest", tracker.BufferedQuest{
+			RewardType: rewardType,
+			Reward:     reward,
+			PokestopID: quest.PokestopID,
+			WithAR:     quest.WithAR,
+			Payload:    payload,
+			ExpiresAt:  expiresAt,
+			CreatedAt:  now,
+		})
+	}
 }

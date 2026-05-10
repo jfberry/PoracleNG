@@ -139,6 +139,12 @@ func main() {
 		log.Warnf("Failed to load gym state cache: %v", err)
 	}
 
+	// Restore summary buffer from previous run. A missing or malformed
+	// snapshot is silent inside Load — startup must never block on it.
+	if err := proc.summaryBuffer.Load(); err != nil {
+		log.Warnf("Failed to load summary buffer: %v", err)
+	}
+
 	// Start render pool workers
 	poolSize := cfg.Tuning.RenderPoolSize
 	if poolSize < 1 {
@@ -857,6 +863,7 @@ type ProcessorService struct {
 	duplicates       *tracker.DuplicateCache
 	stats            *tracker.StatsTracker
 	gymState         *tracker.GymStateTracker
+	summaryBuffer    *tracker.SummaryBuffer
 	pokemonMatcher   *matching.PokemonMatcher
 	raidMatcher      *matching.RaidMatcher
 	invasionMatcher  *matching.InvasionMatcher
@@ -1208,6 +1215,9 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		duplicates:   tracker.NewDuplicateCache(),
 		stats:        statsTracker,
 		gymState:     tracker.NewGymStateTracker(filepath.Join(cfg.BaseDir, "config", ".cache")),
+		summaryBuffer: tracker.NewSummaryBuffer(
+			filepath.Join(cfg.BaseDir, "config", ".cache", "summary-buffer.json"),
+		),
 		pokemonMatcher: &matching.PokemonMatcher{
 			PVPQueryMaxRank:            cfg.PVP.PVPQueryMaxRank,
 			PVPEvolutionDirectTracking: cfg.PVP.PVPEvolutionDirectTracking,
@@ -1264,6 +1274,15 @@ func (ps *ProcessorService) Close() {
 		log.Warnf("Failed to save gym state cache: %v", err)
 	} else {
 		log.Info("Gym state cache saved")
+	}
+	// Persist summary buffer for restart so users don't lose buffered
+	// quests across a graceful shutdown.
+	if ps.summaryBuffer != nil {
+		if err := ps.summaryBuffer.Save(); err != nil {
+			log.Warnf("Failed to save summary buffer: %v", err)
+		} else {
+			log.Info("Summary buffer saved")
+		}
 	}
 	if ps.enricher.Geocoder != nil {
 		ps.enricher.Geocoder.Close()
