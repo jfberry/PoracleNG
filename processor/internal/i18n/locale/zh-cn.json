@@ -308,6 +308,7 @@
   "section.maxbattles": "**极巨战：**",
   "section.maxbattles.none": "您未追踪任何极巨战",
   "msg.no_pokemon": "未指定宝可梦",
+  "msg.form_not_found": "Form `{0}` not recognised. Use `{1}info <pokemon>` to see available forms.",
   "msg.nothing_to_remove": "没有可移除的内容",
   "msg.no_levels": "未指定等级",
   "msg.no_egg_levels": "未指定蛋等级",
