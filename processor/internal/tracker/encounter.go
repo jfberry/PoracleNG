@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"encoding/json"
 	"sync"
 	"time"
 )
@@ -20,23 +21,41 @@ type EncounterState struct {
 }
 
 // EncounterChange holds old and new state when a change is detected.
+//
+// OldWebhook carries the prior sighting's PVP-stripped webhook bytes (as
+// previously passed to Track). The pokemon change handler re-runs the
+// regular base + per-language enrichment pipeline against these bytes to
+// build the {{original.X}} template namespace, so monsterChanged templates
+// can reference the same field set as `monster` (minus PVP) for the prior
+// state. Empty when the prior sighting was tracked without webhook bytes
+// (older callers, tests).
 type EncounterChange struct {
 	EncounterID string
 	Type        ChangeType
 	Old         EncounterState
 	New         EncounterState
+	OldWebhook  json.RawMessage
+}
+
+// encounterEntry pairs the diff-detection state snapshot with the prior
+// webhook bytes used to rebuild a full {{original.X}} view at change time.
+// Bytes are stored already PVP-stripped — Track does NOT strip; the caller
+// is expected to pass StripPVP(raw) to keep entries small.
+type encounterEntry struct {
+	state   EncounterState
+	webhook json.RawMessage
 }
 
 // EncounterTracker tracks pokemon by encounter_id to detect changes.
 type EncounterTracker struct {
 	mu      sync.RWMutex
-	entries map[string]*EncounterState
+	entries map[string]*encounterEntry
 }
 
 // NewEncounterTracker creates a new encounter tracker.
 func NewEncounterTracker() *EncounterTracker {
 	et := &EncounterTracker{
-		entries: make(map[string]*EncounterState),
+		entries: make(map[string]*encounterEntry),
 	}
 	go et.evictionLoop()
 	return et
@@ -44,18 +63,25 @@ func NewEncounterTracker() *EncounterTracker {
 
 // Track records an encounter and returns a change if one was detected.
 // Returns (isNew, change) where isNew is true for first-time sightings.
-func (et *EncounterTracker) Track(encounterID string, newState EncounterState) (bool, *EncounterChange) {
+//
+// The raw bytes are stored verbatim alongside the state snapshot — the
+// caller is responsible for stripping PVP (see StripPVP) before calling so
+// the tracker's resident memory stays bounded. Pass nil for raw if no
+// prior-webhook view is needed (e.g. in tests).
+func (et *EncounterTracker) Track(encounterID string, newState EncounterState, raw json.RawMessage) (bool, *EncounterChange) {
 	et.mu.Lock()
 	defer et.mu.Unlock()
 
-	old, exists := et.entries[encounterID]
+	prev, exists := et.entries[encounterID]
 	if !exists {
 		// First sighting
 		cp := newState
 		cp.InsertedAt = time.Now().Unix()
-		et.entries[encounterID] = &cp
+		et.entries[encounterID] = &encounterEntry{state: cp, webhook: raw}
 		return true, nil
 	}
+
+	old := prev.state
 
 	// Detect change type. Priority order: species > form > gender > encountered > weather_boost.
 	// Gender change only fires when both old and new are non-zero (initial gender resolution doesn't count).
@@ -79,17 +105,24 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState) (
 		change := &EncounterChange{
 			EncounterID: encounterID,
 			Type:        changeType,
-			Old:         *old,
+			Old:         old,
 			New:         newState,
+			OldWebhook:  prev.webhook,
 		}
 		cp := newState
 		cp.InsertedAt = old.InsertedAt
-		et.entries[encounterID] = &cp
+		prev.state = cp
+		prev.webhook = raw
 		return false, change
 	}
 
-	// Update stored state with latest data (stats, weather, disappear time)
-	*old = newState
+	// Update stored state with latest data (stats, weather, disappear time).
+	// Refresh stored webhook bytes too — successive non-change updates still
+	// represent the most recent observation, so the next change-comparison
+	// should reference the latest webhook fields (despawn time, etc.).
+	prev.state = newState
+	prev.state.InsertedAt = old.InsertedAt
+	prev.webhook = raw
 
 	return false, nil
 }
@@ -109,7 +142,8 @@ func (et *EncounterTracker) evict() {
 	defer et.mu.Unlock()
 
 	now := time.Now().Unix()
-	for id, state := range et.entries {
+	for id, entry := range et.entries {
+		state := entry.state
 		if (state.DisappearTime > 0 && now > state.DisappearTime+300) ||
 			(state.InsertedAt > 0 && now-state.InsertedAt > maxEncounterAge) {
 			delete(et.entries, id)

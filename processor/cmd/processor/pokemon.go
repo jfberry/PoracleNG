@@ -90,7 +90,10 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			STA:           sta,
 			DisappearTime: pokemon.DisappearTime,
 		}
-		_, change := ps.encounters.Track(pokemon.EncounterID, encounterState)
+		// Pass PVP-stripped raw bytes so the encounter tracker can store them
+		// per-encounter for later reuse in {{original.X}}. PVP is large and
+		// irrelevant for "what changed" templates — strip at storage time.
+		_, change := ps.encounters.Track(pokemon.EncounterID, encounterState, tracker.StripPVP(raw))
 
 		// Get rarity group
 		rarityGroup := ps.stats.GetRarityGroup(pokemon.PokemonID)
