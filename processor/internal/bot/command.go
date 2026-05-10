@@ -52,6 +52,17 @@ type BotDeps struct {
 	NLPParser     *nlp.Parser
 	TestProcessor TestProcessor
 	ReloadFunc    func()
+	// SummarySchedules backs the !summary command's CRUD operations.
+	// nil disables the command (e.g. when quest_summary_enabled=false).
+	SummarySchedules store.SummaryScheduleStore
+	// SummaryBufferCount returns how many entries are currently buffered
+	// for (humanID, alertType). Used by !summary to show status.
+	// nil treated as zero by the command.
+	SummaryBufferCount func(humanID, alertType string) int
+	// SummaryDispatch forces immediate dispatch of the buffer for
+	// (humanID, alertType). Bound to ProcessorService.DispatchQuestSummary
+	// in main. nil treated as a no-op by the command.
+	SummaryDispatch func(humanID, alertType string)
 	// Scanner is the optional scanner-DB handle used by gym-aware
 	// commands (!raid, !gym, !egg with a `gym:` argument). nil when
 	// no scanner is configured — commands check and reject `gym:`
@@ -140,6 +151,15 @@ type CommandContext struct {
 	NLP           *nlp.Parser
 	TestProcessor TestProcessor
 	Registry      *Registry
+	// SummarySchedules backs the !summary command's CRUD ops. nil disables
+	// the !summary command when the feature flag is off.
+	SummarySchedules store.SummaryScheduleStore
+	// SummaryBufferCount returns buffered entry count for status display.
+	// nil treated as zero by the command.
+	SummaryBufferCount func(humanID, alertType string) int
+	// SummaryDispatch fires immediate buffer dispatch on `!summary <type> now`.
+	// nil treated as a no-op by the command.
+	SummaryDispatch func(humanID, alertType string)
 	// Scanner is the optional scanner-DB handle. nil when no scanner
 	// is configured.
 	Scanner scanner.Scanner

@@ -564,6 +564,7 @@ func main() {
 	cmdRegistry.Register(&commands.WeatherCommand{})
 	cmdRegistry.Register(&commands.LanguageCommand{})
 	cmdRegistry.Register(&commands.ProfileCommand{})
+	cmdRegistry.Register(&commands.SummaryCommand{})
 	cmdRegistry.Register(&commands.LocationCommand{})
 	cmdRegistry.Register(&commands.AreaCommand{})
 	cmdRegistry.Register(&commands.ScriptCommand{})
@@ -710,28 +711,31 @@ func main() {
 	var discordBot *discordbot.Bot
 	// Shared bot dependencies — constructed once, passed to both Discord and Telegram bots.
 	sharedBotDeps := bot.BotDeps{
-		DB:            database,
-		Humans:        humanStore,
-		Tracking:      trackingStores,
-		Cfg:           cfg,
-		StateMgr:      stateMgr,
-		GameData:      proc.enricher.GameData,
-		Translations:  proc.enricher.Translations,
-		Dispatcher:    proc.dispatcher,
-		RowText:       trackingDeps.RowText,
-		Registry:      cmdRegistry,
-		ArgMatcher:    cmdArgMatcher,
-		Resolver:      cmdResolver,
-		Geocoder:      proc.enricher.Geocoder,
-		StaticMap:     proc.enricher.StaticMap,
-		Weather:       proc.weather,
-		Stats:         proc.stats,
-		DTS:           cmdDTS,
-		Emoji:         cmdEmoji,
-		NLPParser:     nlpParser,
-		TestProcessor: proc,
-		ReloadFunc:    proc.triggerReload,
-		Scanner:       proc.scanner,
+		DB:                 database,
+		Humans:             humanStore,
+		Tracking:           trackingStores,
+		Cfg:                cfg,
+		StateMgr:           stateMgr,
+		GameData:           proc.enricher.GameData,
+		Translations:       proc.enricher.Translations,
+		Dispatcher:         proc.dispatcher,
+		RowText:            trackingDeps.RowText,
+		Registry:           cmdRegistry,
+		ArgMatcher:         cmdArgMatcher,
+		Resolver:           cmdResolver,
+		Geocoder:           proc.enricher.Geocoder,
+		StaticMap:          proc.enricher.StaticMap,
+		Weather:            proc.weather,
+		Stats:              proc.stats,
+		DTS:                cmdDTS,
+		Emoji:              cmdEmoji,
+		NLPParser:          nlpParser,
+		TestProcessor:      proc,
+		ReloadFunc:         proc.triggerReload,
+		SummarySchedules:   proc.SummarySchedules(),
+		SummaryBufferCount: proc.SummaryBufferCount,
+		SummaryDispatch:    proc.DispatchQuestSummary,
+		Scanner:            proc.scanner,
 	}
 
 	discordTokens := cfg.Discord.DiscordTokens()
@@ -927,6 +931,34 @@ type ProcessorService struct {
 	// main can post an admin notice once the Discord bot is up. nil
 	// when DTS init succeeded.
 	dtsInitErr error
+}
+
+// SummaryBuffer returns the in-memory summary buffer. Callers
+// (e.g. the !summary bot command) use this for buffer-count display.
+// May be nil before the processor has finished initialising.
+func (ps *ProcessorService) SummaryBuffer() *tracker.SummaryBuffer {
+	if ps == nil {
+		return nil
+	}
+	return ps.summaryBuffer
+}
+
+// SummaryBufferCount returns the number of buffered entries in the
+// (humanID, alertType) bucket. Returns 0 when the buffer is nil.
+func (ps *ProcessorService) SummaryBufferCount(humanID, alertType string) int {
+	if ps == nil || ps.summaryBuffer == nil {
+		return 0
+	}
+	return len(ps.summaryBuffer.List(humanID, alertType))
+}
+
+// SummarySchedules returns the typed CRUD store backing
+// summary_schedules. nil before init completes.
+func (ps *ProcessorService) SummarySchedules() store.SummaryScheduleStore {
+	if ps == nil {
+		return nil
+	}
+	return ps.summarySchedules
 }
 
 // adminNotice posts to the admin channel if the bot is up. No-op when

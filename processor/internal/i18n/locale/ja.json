@@ -329,7 +329,6 @@
   "msg.location.set": "位置を {0},{1} に設定しました",
   "msg.location.current": "Your current location is {0},{1}",
   "msg.area.usage": "Valid commands are `{0}area list`, `{0}area add <areaname>`, `{0}area remove <areaname>`",
-
   "msg.area.none_available": "利用可能なエリアがありません",
   "msg.area.available": "**利用可能なエリア:**",
   "msg.area.specify_add": "追加するエリア名を指定してください",
@@ -494,5 +493,18 @@
   "language.sv": "スウェーデン語",
   "language.zh-cn": "中国語（簡体字）",
   "language.ja": "日本語",
-  "msg.help.text": "**利用可能なコマンド:**\n{0}track <ポケモン> [iv:N] [cp:N] [level:N] [d:N] — ポケモンを追跡\n{0}untrack <ポケモン> — ポケモンの追跡を解除\n{0}raid <ポケモン|level:N|legendary> [d:N] — レイドを追跡\n{0}egg <level:N|legendary|mega> [d:N] — タマゴを追跡\n{0}quest <ポケモン|stardust|energy:ポケモン|candy:ポケモン> — タスクを追跡\n{0}invasion [everything|<タイプ>] — 襲撃を追跡\n{0}lure <タイプ|everything> — ルアーを追跡\n{0}gym <チーム|everything> [slot_changes] — ジムを追跡\n{0}nest <ポケモン|everything> — 巣を追跡\n{0}maxbattle <ポケモン|level:N> — マックスバトルを追跡\n{0}fort <pokestop|gym|everything> — フォート更新を追跡\n{0}tracked — 追跡を表示\n{0}script — 追跡をコマンドとしてエクスポート\n{0}area [list|add|remove] — エリアを管理\n{0}location <緯度,経度> — 位置を設定\n{0}profile [list|add|remove|switch] — プロファイルを管理\n{0}language <コード> — 言語を設定\n{0}start / {0}stop — アラートの有効化/無効化\n{0}version — バージョン表示"
+  "msg.help.text": "**利用可能なコマンド:**\n{0}track <ポケモン> [iv:N] [cp:N] [level:N] [d:N] — ポケモンを追跡\n{0}untrack <ポケモン> — ポケモンの追跡を解除\n{0}raid <ポケモン|level:N|legendary> [d:N] — レイドを追跡\n{0}egg <level:N|legendary|mega> [d:N] — タマゴを追跡\n{0}quest <ポケモン|stardust|energy:ポケモン|candy:ポケモン> — タスクを追跡\n{0}invasion [everything|<タイプ>] — 襲撃を追跡\n{0}lure <タイプ|everything> — ルアーを追跡\n{0}gym <チーム|everything> [slot_changes] — ジムを追跡\n{0}nest <ポケモン|everything> — 巣を追跡\n{0}maxbattle <ポケモン|level:N> — マックスバトルを追跡\n{0}fort <pokestop|gym|everything> — フォート更新を追跡\n{0}tracked — 追跡を表示\n{0}script — 追跡をコマンドとしてエクスポート\n{0}area [list|add|remove] — エリアを管理\n{0}location <緯度,経度> — 位置を設定\n{0}profile [list|add|remove|switch] — プロファイルを管理\n{0}language <コード> — 言語を設定\n{0}start / {0}stop — アラートの有効化/無効化\n{0}version — バージョン表示",
+  "arg.cleartime": "cleartime",
+  "arg.now": "now",
+  "arg.summary": "summary",
+  "cmd.summary": "summary",
+  "msg.quest.edit_summary_conflict": "`edit` and `summary` are mutually exclusive — pick one.",
+  "msg.summary.usage": "Usage: `{0}summary quest [settime <times>|cleartime|now]`",
+  "msg.summary.no_schedule": "No schedule set for {0} summaries.",
+  "msg.summary.scheduled": "Schedule for {0} summaries: {1}",
+  "msg.summary.cleared": "Cleared schedule for {0} summaries.",
+  "msg.summary.updated": "Updated schedule for {0} summaries: {1}",
+  "msg.summary.no_buffered": "No buffered {0} entries.",
+  "msg.summary.buffer_count": "{0} buffered {1} entries — fires at scheduled time, or use `{2}summary {1} now` to deliver immediately.",
+  "msg.summary.delivered": "Triggered delivery of buffered {0} entries."
 }

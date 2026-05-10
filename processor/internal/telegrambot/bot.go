@@ -410,11 +410,14 @@ func (b *Bot) handleMessage(m *models.Message) {
 			DTS:           b.DTS,
 			Emoji:         b.Emoji,
 			NLP:           b.nlpParser,
-			TestProcessor: b.TestProcessor,
-			Registry:      b.Registry,
-			ReloadFunc:    b.ReloadFunc,
-			PostRegister:  b.postRegisterHook(),
-			Scanner:       b.Scanner,
+			TestProcessor:      b.TestProcessor,
+			Registry:           b.Registry,
+			ReloadFunc:         b.ReloadFunc,
+			PostRegister:       b.postRegisterHook(),
+			SummarySchedules:   b.SummarySchedules,
+			SummaryBufferCount: b.SummaryBufferCount,
+			SummaryDispatch:    b.SummaryDispatch,
+			Scanner:            b.Scanner,
 		}
 
 		// Populate delegated admin permissions

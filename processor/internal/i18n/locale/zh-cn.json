@@ -329,7 +329,6 @@
   "msg.location.set": "位置已设为 {0},{1}",
   "msg.location.current": "Your current location is {0},{1}",
   "msg.area.usage": "Valid commands are `{0}area list`, `{0}area add <areaname>`, `{0}area remove <areaname>`",
-
   "msg.area.none_available": "没有可用的区域",
   "msg.area.available": "**可用区域：**",
   "msg.area.specify_add": "请指定要添加的区域名称",
@@ -494,5 +493,18 @@
   "language.sv": "瑞典语",
   "language.zh-cn": "简体中文",
   "language.ja": "日语",
-  "msg.help.text": "**可用命令：**\n{0}track <宝可梦> [iv:N] [cp:N] [level:N] [d:N] — 追踪宝可梦\n{0}untrack <宝可梦> — 移除宝可梦追踪\n{0}raid <宝可梦|level:N|legendary> [d:N] — 追踪团战\n{0}egg <level:N|legendary|mega> [d:N] — 追踪蛋\n{0}quest <宝可梦|stardust|energy:宝可梦|candy:宝可梦> — 追踪任务\n{0}invasion [everything|<类型>] — 追踪入侵\n{0}lure <类型|everything> — 追踪诱饵\n{0}gym <队伍|everything> [slot_changes] — 追踪道馆\n{0}nest <宝可梦|everything> — 追踪巢穴\n{0}maxbattle <宝可梦|level:N> — 追踪极巨战\n{0}fort <pokestop|gym|everything> — 追踪据点更新\n{0}tracked — 显示所有追踪\n{0}script — 将追踪导出为命令\n{0}area [list|add|remove] — 管理区域\n{0}location <纬度,经度> — 设置位置\n{0}profile [list|add|remove|switch] — 管理配置\n{0}language <代码> — 设置语言\n{0}start / {0}stop — 启用/停用提醒\n{0}version — 显示版本"
+  "msg.help.text": "**可用命令：**\n{0}track <宝可梦> [iv:N] [cp:N] [level:N] [d:N] — 追踪宝可梦\n{0}untrack <宝可梦> — 移除宝可梦追踪\n{0}raid <宝可梦|level:N|legendary> [d:N] — 追踪团战\n{0}egg <level:N|legendary|mega> [d:N] — 追踪蛋\n{0}quest <宝可梦|stardust|energy:宝可梦|candy:宝可梦> — 追踪任务\n{0}invasion [everything|<类型>] — 追踪入侵\n{0}lure <类型|everything> — 追踪诱饵\n{0}gym <队伍|everything> [slot_changes] — 追踪道馆\n{0}nest <宝可梦|everything> — 追踪巢穴\n{0}maxbattle <宝可梦|level:N> — 追踪极巨战\n{0}fort <pokestop|gym|everything> — 追踪据点更新\n{0}tracked — 显示所有追踪\n{0}script — 将追踪导出为命令\n{0}area [list|add|remove] — 管理区域\n{0}location <纬度,经度> — 设置位置\n{0}profile [list|add|remove|switch] — 管理配置\n{0}language <代码> — 设置语言\n{0}start / {0}stop — 启用/停用提醒\n{0}version — 显示版本",
+  "arg.cleartime": "cleartime",
+  "arg.now": "now",
+  "arg.summary": "summary",
+  "cmd.summary": "summary",
+  "msg.quest.edit_summary_conflict": "`edit` and `summary` are mutually exclusive — pick one.",
+  "msg.summary.usage": "Usage: `{0}summary quest [settime <times>|cleartime|now]`",
+  "msg.summary.no_schedule": "No schedule set for {0} summaries.",
+  "msg.summary.scheduled": "Schedule for {0} summaries: {1}",
+  "msg.summary.cleared": "Cleared schedule for {0} summaries.",
+  "msg.summary.updated": "Updated schedule for {0} summaries: {1}",
+  "msg.summary.no_buffered": "No buffered {0} entries.",
+  "msg.summary.buffer_count": "{0} buffered {1} entries — fires at scheduled time, or use `{2}summary {1} now` to deliver immediately.",
+  "msg.summary.delivered": "Triggered delivery of buffered {0} entries."
 }

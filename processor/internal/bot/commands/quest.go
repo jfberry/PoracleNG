@@ -76,6 +76,7 @@ var questParams = []bot.ParamDef{
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
+	{Type: bot.ParamKeyword, Key: "arg.summary"},
 	{Type: bot.ParamKeyword, Key: "arg.shiny"},
 	{Type: bot.ParamKeyword, Key: "arg.stardust"}, // bare "stardust" keyword (any amount)
 	{Type: bot.ParamKeyword, Key: "arg.energy"},   // bare "energy" keyword (any pokemon)
@@ -105,6 +106,15 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	common, block := parseCommonTrackFields(ctx, parsed, "quest")
 	if block != nil {
 		return []bot.Reply{*block}
+	}
+	if parsed.HasKeyword("arg.summary") {
+		// edit and summary are mutually exclusive: edit means update one
+		// in-place message; summary buffers and groups. Reject up-front
+		// so users get a clear error rather than surprising behaviour.
+		if parsed.HasKeyword("arg.edit") {
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.edit_summary_conflict")}}
+		}
+		common.Clean |= 4
 	}
 	shiny := parsed.HasKeyword("arg.shiny")
 
