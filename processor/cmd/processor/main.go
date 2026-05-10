@@ -449,6 +449,22 @@ func main() {
 	profiles.POST("/:id/update", api.HandleUpdateProfile(trackingDeps))
 	profiles.POST("/:id/copy/:from/:to", api.HandleCopyProfile(trackingDeps))
 
+	// Summary schedule endpoints (CRUD over summary_schedules + trigger).
+	// All five sit behind the same x-poracle-secret middleware as the rest
+	// of /api. When quest_summary_enabled is false the deps fields stay
+	// nil and handlers return 503.
+	summaryDeps := &api.SummaryDeps{
+		Schedules:  proc.SummarySchedules(),
+		Dispatch:   proc.DispatchQuestSummary,
+		ReloadFunc: proc.triggerReload,
+	}
+	summaries := apiGroup.Group("/summaries")
+	summaries.GET("/:id", api.HandleSummaryListForUser(summaryDeps))
+	summaries.GET("/:id/:alertType", api.HandleSummaryGet(summaryDeps))
+	summaries.POST("/:id/:alertType", api.HandleSummarySet(summaryDeps))
+	summaries.DELETE("/:id/:alertType", api.HandleSummaryDelete(summaryDeps))
+	summaries.POST("/:id/:alertType/trigger", api.HandleSummaryTrigger(summaryDeps))
+
 	// DTS template endpoints
 	if proc.dtsRenderer != nil {
 		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
