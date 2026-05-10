@@ -555,6 +555,29 @@ These are flat top-level strings, not nested under a `rewardData` object:
 
 ---
 
+## Quest Summary (`questSummary`)
+
+`questSummary` templates render a *grouped* quest message rather than a per-quest one. Quest tracking rules with bit 4 set on `clean` (use the `summary` keyword) skip immediate delivery; their matches are buffered until the user's `[summary_schedules]` active hours fire (or `!summary quest now` is invoked). At dispatch the buffered quests are grouped by `(rewardType, reward)` and rendered once per group.
+
+The view passed to `questSummary` is shaped differently from a regular `quest` template: the reward fields (icon, translated name, count) live at the top level, and the per-pokestop entries live under the `quests` array. Per-entry fields mirror the regular `quest` view (see above), so `{{#each quests}}` rows can use `{{pokestopName}}`, `{{googleMapUrl}}`, `{{addr}}`, etc. just like a single-pokestop quest template. The only `questSummary`-specific per-entry field is `withAR`, which lets a row label AR-required quests separately.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rewardType` | int | Reward type ID (2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy) |
+| `reward` | int | Reward ID (item ID for type 2, dust amount for type 3, pokemon ID for types 4/7/12) |
+| `rewardName` | string | Translated reward name for the group header |
+| `imgUrl` | string | Reward icon URL (shared across all rows in the group) |
+| `staticMap` | string | Multi-pin static map URL with all pokestops in the group autopositioned |
+| `count` | int | Number of pokestops in the group |
+| `quests` | array | Per-pokestop entries — each carries the same fields as a regular `quest` template view (see [Quest](#quest-quest)) plus `withAR` |
+| `quests[i].withAR` | bool | True if this pokestop's quest requires the AR scanner |
+
+The static map is built via the `questSummary` tile type — set `[geocoding.static_map_type] questSummary = "multiStaticMap"` (the default) to use the existing multi-pin tileserver template, or supply a custom name for an admin-defined template.
+
+`questSummary` messages are always fresh sends — edit-mode and reply-threading don't apply, but the source rule's `clean` bit propagates so TTH-based deletion still works.
+
+---
+
 ## Invasion (`invasion`)
 
 | Field | Type | Description |

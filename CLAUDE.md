@@ -274,6 +274,10 @@ Rate limiting is handled by the processor (`internal/ratelimit/`) using a two-ph
 - **`blocked_alerts`**: Per-user JSON array in `humans` table (e.g., `["pokemon","raid"]`). Parsed into a `BlockedAlertsSet` map at state load for O(1) lookup. Blocks specific alert types without disabling the user entirely.
 - **Limit overrides**: `[alert_limits.overrides]` allows per-user or per-role custom limits (array-of-tables format in TOML).
 
+## Quest Summary Scheduling
+
+Quest tracking rules can opt into *buffered* delivery instead of firing immediately. The `summary` keyword on `!quest` (and the `clean & 4` bit on the `monsters`/`quest` row in the API) routes matched quests into an in-memory `tracker.SummaryBuffer`. A per-user, per-alert-type `summary_schedules` row (active_hours JSON, identical shape to profile schedules) decides when the buffer fires; `SummaryScheduler` wakes on the same wall-clock minute marks as the profile scheduler and dispatches via `ProcessorService.DispatchQuestSummary`, which groups buffered entries by `(rewardType, reward)` and renders one `questSummary` template per group with a multi-pin static map. The buffer is snapshotted to `config/.cache/summary-buffer.json` on shutdown and restored on startup. Users manage schedules via `!summary quest [settime <times>|cleartime|now]` or the `/api/summaries/{id}/{alertType}` endpoints; `!summary quest now` calls the same dispatch path on demand. Edit-mode and reply-threading don't apply to summary messages — each is a fresh send — but the source rule's `clean` bit propagates so TTH-based deletion still works.
+
 ## Discord Reconciliation
 
 Reconciliation syncs Discord role membership with Poracle user registration. Runs in-process via discordgo in `internal/discordbot/reconciliation.go`. Configured via `[reconciliation.discord]` and triggered by `[discord] check_role = true`.
