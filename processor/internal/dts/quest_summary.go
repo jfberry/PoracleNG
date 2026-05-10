@@ -52,6 +52,8 @@ func BuildQuestSummaryView(
 				"latitude":  lat,
 				"longitude": lon,
 				"name":      q["pokestopName"],
+				"imgUrl":    q["imgUrl"],
+				"url":       q["pokestopUrl"],
 			})
 		}
 		if len(markers) > 0 {
@@ -59,18 +61,17 @@ func BuildQuestSummaryView(
 				Markers: markers,
 			}, 500, 250, 1.25, 17.5)
 			if pos != nil {
-				// staticMapType is sourced from the resolver config —
-				// admins map "questSummary" → e.g. "multiStaticMap" via
-				// [geocoding.static_map_type]. Default falls back to
-				// "staticMap" inside getConfigForTileType when no entry
-				// is set.
-				staticMapType := sm.GetStaticMapType("questSummary")
-				staticMapURL = sm.GetPregeneratedTileURL("questSummary", map[string]any{
+				// Tile maptype is lowercase to match the tileserver template
+				// filename convention (poracle-{maptype}). Other tiles
+				// (poracle-monster, poracle-quest, …) all live in lowercase;
+				// "questSummary" → "questsummary" keeps the URL conventional.
+				const tileMaptype = "questsummary"
+				staticMapURL = sm.GetPregeneratedTileURL(tileMaptype, map[string]any{
 					"points":    points,
 					"zoom":      pos.Zoom,
 					"latitude":  pos.Latitude,
 					"longitude": pos.Longitude,
-				}, staticMapType)
+				}, sm.GetStaticMapType(tileMaptype))
 			}
 		}
 	}

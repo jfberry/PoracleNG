@@ -131,7 +131,13 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 			continue
 		}
 		for _, j := range jobs {
-			ps.dispatcher.Dispatch(&delivery.Job{
+			// DispatchBypass: summary delivery is the user's chosen
+			// alternative to N immediate quest alerts (which would
+			// have hit the rate limit MORE quickly). The user opted
+			// into summary mode explicitly and the buffer is naturally
+			// bounded by their tracked quests, so don't count summary
+			// messages against the per-destination quota.
+			ps.dispatcher.DispatchBypass(&delivery.Job{
 				Target:       j.Target,
 				Type:         j.Type,
 				Message:      j.Message,
