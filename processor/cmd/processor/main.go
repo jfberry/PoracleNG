@@ -225,10 +225,7 @@ func main() {
 			humanStore,
 			summaryScheduleStore,
 			proc.summaryBuffer,
-			func(humanID, alertType string) {
-				// PR 6 wires this to the real render+dispatch path.
-				log.Infof("summary dispatch (todo, PR 6): id=%s type=%s", humanID, alertType)
-			},
+			proc.DispatchQuestSummary,
 			6,
 		)
 		proc.summaryScheduler.Start()
