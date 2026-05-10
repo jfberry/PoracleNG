@@ -84,10 +84,14 @@ func (ds *DiscordSender) Send(ctx context.Context, job *Job) (*SentMessage, erro
 		if err != nil {
 			return nil, err
 		}
-		return ds.postMessage(ctx, channelID, job.Message, job.StaticMapData)
+		return ds.postMessage(ctx, channelID, job.Message, job.StaticMapData, job.ReplyToID)
 	case "discord:channel", "discord:thread":
-		return ds.postMessage(ctx, job.Target, job.Message, job.StaticMapData)
+		return ds.postMessage(ctx, job.Target, job.Message, job.StaticMapData, job.ReplyToID)
 	case "webhook":
+		// Discord webhooks cannot post replies — message_reference is
+		// rejected by the webhook endpoint. Drop ReplyToID silently for
+		// webhook deliveries; a missing reply chain is strictly
+		// preferable to a refused alert.
 		return ds.postWebhook(ctx, job.Target, job.Message, job.StaticMapData)
 	default:
 		return nil, fmt.Errorf("unsupported discord job type: %s", job.Type)
@@ -243,10 +247,19 @@ func (ds *DiscordSender) WaitForRateLimit(target string) {
 }
 
 // postMessage sends a message to a Discord channel via the bot API.
-func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage, staticMapData []byte) (*SentMessage, error) {
+func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage, staticMapData []byte, replyToID string) (*SentMessage, error) {
 	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
+	}
+
+	// Inject message_reference for reply chaining BEFORE the multipart
+	// builder consumes the body, so the reference rides through both the
+	// JSON-body and multipart-payload paths below.
+	if replyToID != "" {
+		if msgID := splitSentID(replyToID); msgID != "" {
+			normalized = injectMessageReference(normalized, msgID)
+		}
 	}
 
 	var reqBody io.Reader
@@ -424,6 +437,36 @@ func (ds *DiscordSender) doRequest(ctx context.Context, method, url string, body
 		req.Header.Set("Authorization", "Bot "+ds.token)
 	}
 	return ds.client.Do(req)
+}
+
+// injectMessageReference adds a Discord message_reference field to a JSON
+// message body so the post is rendered as a reply. Operates on the raw JSON
+// because the surrounding code paths pass json.RawMessage through to the
+// HTTP request body and multipart builder.
+//
+// fail_if_not_exists=false makes Discord gracefully degrade to a plain
+// message if the prior was deleted between tracking and send, rather than
+// returning HTTP 400.
+//
+// Returns the input unchanged on parse/encode failure — a missing reply is
+// strictly preferable to dropping the alert.
+func injectMessageReference(raw json.RawMessage, msgID string) json.RawMessage {
+	if msgID == "" || len(raw) == 0 {
+		return raw
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return raw
+	}
+	body["message_reference"] = map[string]any{
+		"message_id":         msgID,
+		"fail_if_not_exists": false,
+	}
+	out, err := marshalNoEscape(body)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 // extractErrorCode reads the "code" field from a Discord error response body.

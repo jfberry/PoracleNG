@@ -131,19 +131,19 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 			if msg.Sticker == "" {
 				continue
 			}
-			msgID, err = ts.sendSticker(ctx, chatID, topicID, msg.Sticker)
+			msgID, err = ts.sendSticker(ctx, chatID, topicID, msg.Sticker, job.ReplyToID)
 
 		case "photo":
 			if msg.Photo == "" {
 				continue
 			}
-			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo)
+			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo, job.ReplyToID)
 
 		case "text":
 			if msg.Content == "" {
 				continue
 			}
-			msgID, err = ts.sendMessage(ctx, chatID, topicID, msg.Content, parseMode, msg.WebpagePreview)
+			msgID, err = ts.sendMessage(ctx, chatID, topicID, msg.Content, parseMode, msg.WebpagePreview, job.ReplyToID)
 
 		case "location":
 			if !msg.Location || (job.Lat == 0 && job.Lon == 0) {
@@ -335,8 +335,47 @@ func applyTopic(body map[string]any, topicID int) {
 	}
 }
 
+// applyReplyTo adds reply_to_message_id and allow_sending_without_reply to
+// a request body when replyToID points to a known prior message.
+//
+// replyToID is a Telegram SentID stored as either the new multi-message
+// format ("<chat>|text=42|sticker=43") or the legacy "<chat>:<msgID>"
+// shape. We pull the "text=" id when present (replies attach to text), and
+// otherwise fall back to the first id we find.
+//
+// Telegram's Bot API expects reply_to_message_id as a JSON number;
+// allow_sending_without_reply=true gracefully degrades if the parent is
+// gone instead of returning 400.
+//
+// Silently no-op for venue/location senders that wouldn't carry replies, on
+// invalid/empty SentIDs, and for telegram chats whose stored id doesn't
+// resolve to an integer.
+func applyReplyTo(body map[string]any, replyToID string) {
+	if replyToID == "" {
+		return
+	}
+	_, msgMap := parseTelegramSentIDMulti(replyToID)
+	if len(msgMap) == 0 {
+		return
+	}
+	msgID, ok := msgMap["text"]
+	if !ok {
+		// Fallback: any message ID — covers legacy single-message sentIDs
+		// and pure photo/sticker chains where text wasn't sent.
+		for _, id := range msgMap {
+			msgID = id
+			break
+		}
+	}
+	if msgID <= 0 {
+		return
+	}
+	body["reply_to_message_id"] = msgID
+	body["allow_sending_without_reply"] = true
+}
+
 // sendMessage sends a text message.
-func (ts *TelegramSender) sendMessage(ctx context.Context, chatID string, topicID int, text, parseMode string, webpagePreview bool) (int, error) {
+func (ts *TelegramSender) sendMessage(ctx context.Context, chatID string, topicID int, text, parseMode string, webpagePreview bool, replyToID string) (int, error) {
 	body := map[string]any{
 		"chat_id":                  chatID,
 		"text":                     text,
@@ -344,28 +383,31 @@ func (ts *TelegramSender) sendMessage(ctx context.Context, chatID string, topicI
 		"disable_web_page_preview": !webpagePreview,
 	}
 	applyTopic(body, topicID)
+	applyReplyTo(body, replyToID)
 	return ts.callWithRetry(ctx, "sendMessage", body)
 }
 
 // sendSticker sends a sticker.
-func (ts *TelegramSender) sendSticker(ctx context.Context, chatID string, topicID int, stickerID string) (int, error) {
+func (ts *TelegramSender) sendSticker(ctx context.Context, chatID string, topicID int, stickerID, replyToID string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"sticker":              stickerID,
 		"disable_notification": true,
 	}
 	applyTopic(body, topicID)
+	applyReplyTo(body, replyToID)
 	return ts.callWithRetry(ctx, "sendSticker", body)
 }
 
 // sendPhoto sends a photo by URL.
-func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID int, photoURL string) (int, error) {
+func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID int, photoURL, replyToID string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"photo":                photoURL,
 		"disable_notification": true,
 	}
 	applyTopic(body, topicID)
+	applyReplyTo(body, replyToID)
 	return ts.callWithRetry(ctx, "sendPhoto", body)
 }
 
