@@ -395,13 +395,15 @@ include_stops = false
 # type = "staticMap"
 # include_stops = true
 
-# Per-alert-type static-map template — used by the renderer to choose
-# between single-pin (`staticMap`) and multi-pin (`multiStaticMap`)
-# tileserver templates. The keys here are the renderer's tile maptypes
-# (monster, raid, quest, questSummary, …); admins can swap a tileserver
-# template without touching DTS templates.
-[geocoding.static_map_type]
-questSummary = "multiStaticMap"          # multi-pin tile fits the autopositioned points
+# Per-alert-type static-map mode override. Default for every maptype
+# is `staticMap` (single tile, fetched from /staticmap/poracle-{maptype}
+# on the tileserver). Set `multiStaticMap` only if you want the
+# /multistaticmap/poracle-multi-{maptype} multi-image variant — that
+# requires a `poracle-multi-{maptype}.json` template in your tileserver
+# template set, which is a different render shape from a multi-pin
+# single tile.
+# [geocoding.static_map_type]
+# questSummary = "staticMap"
 
 # ---- Tuning ----
 # Do not change these settings without talking to us in discord.
