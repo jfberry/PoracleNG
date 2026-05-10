@@ -85,6 +85,12 @@ type TrackingConfig struct {
 	MaxDistance                 int    `toml:"max_distance"`
 	EnableGymBattle             bool   `toml:"enable_gym_battle"`
 	DefaultUserTrackingLevelCap int    `toml:"default_user_tracking_level_cap"`
+	// PokemonChangeTracking controls whether the encounter tracker fires
+	// reply-threaded change-events (encounter, form, species, gender,
+	// weather-boost) to users with prior messages. Default true. When false,
+	// change events fall through to the regular `monster` send path — no
+	// reply threading, no `monsterChanged` template.
+	PokemonChangeTracking bool `toml:"pokemon_change_tracking"`
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor
@@ -767,6 +773,9 @@ func Load(baseDir string) (*Config, error) {
 			ImgURLGym:      "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/gym.png",
 			ImgURLPokestop: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png",
 			PokestopURL:    "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png",
+		},
+		Tracking: TrackingConfig{
+			PokemonChangeTracking: true,
 		},
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
