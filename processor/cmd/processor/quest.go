@@ -66,9 +66,10 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matched, matchedAreas := ps.questMatcher.Match(data, st)
+		matched, buffered, matchedAreas := ps.questMatcher.Match(data, st)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("quest", raw, matchedAreas, matched)
+		_ = buffered // PR 4.2 wires this into the summary buffer
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("quest").Inc()
