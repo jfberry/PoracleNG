@@ -389,13 +389,25 @@ func TestDispatchPokemonChangeRender_PerLanguageOriginalFromBytes(t *testing.T) 
 	user := webhook.MatchedUser{ID: "user-A", Type: "discord:user", Language: "en"}
 	trackPriorMessage(t, d, encounterID, user.ID, "msg-A")
 
-	priorRaw := json.RawMessage(`{"pokemon_id":25,"form":0,"cp":900,"individual_attack":10,"individual_defense":11,"individual_stamina":12,"weather":1,"latitude":52.5,"longitude":13.4,"disappear_time":9999999999}`)
+	atk, def, sta := 10, 11, 12
+	prior := &webhook.PokemonWebhook{
+		PokemonID:         25,
+		Form:              0,
+		CP:                900,
+		IndividualAttack:  &atk,
+		IndividualDefense: &def,
+		IndividualStamina: &sta,
+		Weather:           1,
+		Latitude:          52.5,
+		Longitude:         13.4,
+		DisappearTime:     9999999999,
+	}
 	change := &tracker.EncounterChange{
 		EncounterID: encounterID,
 		Type:        tracker.ChangeForm,
 		Old:         tracker.EncounterState{PokemonID: 25, Form: 0, CP: 900, ATK: 10, DEF: 11, STA: 12, Weather: 1},
 		New:         tracker.EncounterState{PokemonID: 25, Form: 65, CP: 950, ATK: 10, DEF: 11, STA: 12, Weather: 1},
-		OldWebhook:  priorRaw,
+		OldWebhook:  prior,
 	}
 
 	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{

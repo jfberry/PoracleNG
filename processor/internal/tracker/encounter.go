@@ -1,9 +1,10 @@
 package tracker
 
 import (
-	"encoding/json"
 	"sync"
 	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // EncounterState holds the state of a pokemon encounter for change detection.
@@ -22,28 +23,28 @@ type EncounterState struct {
 
 // EncounterChange holds old and new state when a change is detected.
 //
-// OldWebhook carries the prior sighting's PVP-stripped webhook bytes (as
-// previously passed to Track). The pokemon change handler re-runs the
-// regular base + per-language enrichment pipeline against these bytes to
-// build the {{original.X}} template namespace, so monsterChanged templates
-// can reference the same field set as `monster` (minus PVP) for the prior
-// state. Empty when the prior sighting was tracked without webhook bytes
-// (older callers, tests).
+// OldWebhook carries the prior sighting's already-parsed PokemonWebhook
+// (with PVP fields cleared at storage time). The pokemon change handler
+// re-runs the regular base + per-language enrichment pipeline against this
+// struct to build the {{original.X}} template namespace, so monsterChanged
+// templates can reference the same field set as `monster` (minus PVP) for
+// the prior state. Nil when the prior sighting was tracked without a
+// webhook (older callers, tests).
 type EncounterChange struct {
 	EncounterID string
 	Type        ChangeType
 	Old         EncounterState
 	New         EncounterState
-	OldWebhook  json.RawMessage
+	OldWebhook  *webhook.PokemonWebhook
 }
 
 // encounterEntry pairs the diff-detection state snapshot with the prior
-// webhook bytes used to rebuild a full {{original.X}} view at change time.
-// Bytes are stored already PVP-stripped — Track does NOT strip; the caller
-// is expected to pass StripPVP(raw) to keep entries small.
+// webhook struct used to rebuild a full {{original.X}} view at change time.
+// The caller is expected to clear PVP fields on the stored struct (see
+// ProcessPokemon) so map memory for large rankings doesn't pin in the tracker.
 type encounterEntry struct {
 	state   EncounterState
-	webhook json.RawMessage
+	webhook *webhook.PokemonWebhook
 }
 
 // EncounterTracker tracks pokemon by encounter_id to detect changes.
@@ -64,11 +65,11 @@ func NewEncounterTracker() *EncounterTracker {
 // Track records an encounter and returns a change if one was detected.
 // Returns (isNew, change) where isNew is true for first-time sightings.
 //
-// The raw bytes are stored verbatim alongside the state snapshot — the
-// caller is responsible for stripping PVP (see StripPVP) before calling so
-// the tracker's resident memory stays bounded. Pass nil for raw if no
-// prior-webhook view is needed (e.g. in tests).
-func (et *EncounterTracker) Track(encounterID string, newState EncounterState, raw json.RawMessage) (bool, *EncounterChange) {
+// The pokemon struct is stored by pointer alongside the state snapshot —
+// the caller is responsible for clearing PVP fields (PVP, PVPRankings*)
+// before calling so the tracker's resident memory stays bounded. Pass nil
+// if no prior-webhook view is needed (e.g. in tests).
+func (et *EncounterTracker) Track(encounterID string, newState EncounterState, pokemon *webhook.PokemonWebhook) (bool, *EncounterChange) {
 	et.mu.Lock()
 	defer et.mu.Unlock()
 
@@ -77,7 +78,7 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, r
 		// First sighting
 		cp := newState
 		cp.InsertedAt = time.Now().Unix()
-		et.entries[encounterID] = &encounterEntry{state: cp, webhook: raw}
+		et.entries[encounterID] = &encounterEntry{state: cp, webhook: pokemon}
 		return true, nil
 	}
 
@@ -112,14 +113,14 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, r
 		cp := newState
 		cp.InsertedAt = old.InsertedAt
 		prev.state = cp
-		prev.webhook = raw
+		prev.webhook = pokemon
 		return false, change
 	}
 
 	// Update stored state with latest data (stats, weather, disappear time)
-	// for accurate next-change comparison. The webhook bytes are *not*
-	// refreshed here: they represent "the prior change point" for
-	// {{original.X}}, so they must stick from the most recent change
+	// for accurate next-change comparison. The webhook struct is *not*
+	// refreshed here: it represents "the prior change point" for
+	// {{original.X}}, so it must stick from the most recent change
 	// (or first sighting) until the next change fires.
 	prev.state = newState
 	prev.state.InsertedAt = old.InsertedAt
