@@ -12,26 +12,54 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
-// tileGate coordinates tile resolution across sibling RenderJobs that share
-// the same Enrichment map. The dispatcher spawns one goroutine to resolve
-// the tile; that goroutine mutates the shared Enrichment map via Apply,
-// stores the resulting bytes in `bytes`, and closes `ready`. Each render
-// worker for a job in the batch waits on ready before rendering, then
-// copies bytes into its own job.TileImageData.
+// tileGate decouples tile resolution from the render worker. Every webhook
+// handler that has a *staticmap.TilePending wraps it in a gate via
+// ProcessorService.newTileGate; that helper spawns one goroutine which
+// mutates the Enrichment map via TilePending.Apply, stores the resulting
+// bytes in `bytes`, and closes `ready`. The render worker waits on ready
+// before rendering, then copies bytes into its own job.TileImageData.
 //
-// Without this barrier, multi-job dispatches (e.g. dispatchPokemonChangeRender)
-// would race: one render worker calls TilePending.Apply (writes to the shared
-// map) while a sibling worker concurrently reads it via LayeredView. Channel
-// close establishes happens-before for the map writes, so readers after
-// <-ready see a consistent map.
+// Two reasons this lives between dispatch and render:
+//
+//   - Multi-job dispatches (dispatchPokemonChangeRender) emit several
+//     RenderJobs that share the same Enrichment map. If the tile work
+//     ran in one render worker via TilePending.Apply, a sibling worker
+//     rendering another job would race on the map. With a single
+//     goroutine writing before close(ready), chan-close happens-before
+//     makes the map writes visible to every reader after <-ready.
+//   - Single-job dispatches use the same pattern for uniformity — the
+//     extra goroutine is bounded by the tile Deadline and adds ~negligible
+//     overhead, but keeps every render worker on a single code path.
 type tileGate struct {
 	ready chan struct{}
 	bytes []byte
 }
 
-// RenderJob holds everything needed to resolve a tile, render DTS templates,
-// and deliver the resulting messages. Webhook handlers enqueue these into
-// ps.renderCh so the I/O-heavy work happens off the worker goroutine.
+// newTileGate spawns a goroutine that resolves the supplied TilePending and
+// returns the gate to attach to a RenderJob. Returns nil if pending is nil,
+// so call sites can write `TileGate: ps.newTileGate(tilePending)` without a
+// nil check around the assignment.
+//
+// Queue-pressure backoff samples len(renderCh)/cap(renderCh) at gate-start
+// time rather than at render time; the heuristic is approximate either way.
+func (ps *ProcessorService) newTileGate(pending *staticmap.TilePending) *tileGate {
+	if pending == nil {
+		return nil
+	}
+	gate := &tileGate{ready: make(chan struct{})}
+	queueLen, queueCap := len(ps.renderCh), cap(ps.renderCh)
+	go func() {
+		defer close(gate.ready)
+		gate.bytes = ps.resolveTilePending(pending, queueLen, queueCap)
+	}()
+	return gate
+}
+
+// RenderJob holds everything needed to render DTS templates and deliver the
+// resulting messages. Webhook handlers enqueue these into ps.renderCh so the
+// I/O-heavy work happens off the worker goroutine. Tile resolution is
+// handled by a TileGate (see newTileGate) so a single goroutine writes the
+// staticMap field of Enrichment, never the render worker itself.
 type RenderJob struct {
 	TemplateType      string
 	Enrichment        map[string]any
@@ -40,16 +68,11 @@ type RenderJob struct {
 	WebhookFields     map[string]any
 	MatchedUsers      []webhook.MatchedUser
 	MatchedAreas      []webhook.MatchedArea
-	TilePending       *staticmap.TilePending
-	// TileGate, when set, replaces TilePending for batched multi-job dispatch
-	// (see dispatchPokemonChangeRender). The render worker waits on the gate
-	// instead of resolving the tile itself. TileGate and TilePending are
-	// mutually exclusive — set one or the other, never both.
-	TileGate      *tileGate
-	IsEncountered bool // pokemon only
-	IsPokemon     bool // true = RenderPokemon, false = RenderAlert
-	LogReference  string
-	EditKey       string
+	TileGate          *tileGate
+	IsEncountered    bool // pokemon only
+	IsPokemon        bool // true = RenderPokemon, false = RenderAlert
+	LogReference     string
+	EditKey          string
 	// ReplyKey indexes the sent message for reply chaining. Copied verbatim
 	// onto every constructed delivery.Job. For pokemon, this is the encounter
 	// ID so subsequent change events can find prior messages via the
@@ -79,23 +102,15 @@ func (ps *ProcessorService) renderWorker() {
 	}
 }
 
-// processRenderJob resolves the pending tile (if any), renders DTS templates,
+// processRenderJob waits on the tile gate (if any), renders DTS templates,
 // and delivers the resulting messages via the dispatcher.
 func (ps *ProcessorService) processRenderJob(job RenderJob) {
-	// 1. Resolve tile.
-	switch {
-	case job.TileGate != nil:
-		// Batched dispatch: one goroutine is resolving the tile and will close
-		// ready when the shared Enrichment map has been updated. Wait, then
-		// pick up the bytes for our local TileImageData.
+	// 1. Wait for tile resolution. The gate's goroutine has already
+	//    mutated job.Enrichment via Apply and stored the inline bytes;
+	//    chan-close happens-before makes both visible after <-ready.
+	if job.TileGate != nil {
 		<-job.TileGate.ready
 		job.TileImageData = job.TileGate.bytes
-	case job.TilePending != nil:
-		// Single-job path: resolve inline.
-		bytes := ps.resolveTilePending(job.TilePending, len(ps.renderCh), cap(ps.renderCh))
-		if bytes != nil {
-			job.TileImageData = bytes
-		}
 	}
 
 	// 2. Render templates.
