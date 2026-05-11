@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -147,6 +148,13 @@ func recordStateMetrics(s *State) {
 	metrics.StateHumans.Set(float64(len(s.Humans)))
 	if s.Monsters != nil {
 		metrics.StateTrackingRules.WithLabelValues(metrics.TypePokemon).Set(float64(s.Monsters.Total))
+		metrics.StateMonsterEverythingBucket.Set(float64(len(s.Monsters.ByPokemonID[0])))
+		for league, slice := range s.Monsters.PVPSpecific {
+			metrics.StateMonsterPVPSpecific.WithLabelValues(strconv.Itoa(league)).Set(float64(len(slice)))
+		}
+		for league, slice := range s.Monsters.PVPEverything {
+			metrics.StateMonsterPVPEverything.WithLabelValues(strconv.Itoa(league)).Set(float64(len(slice)))
+		}
 	}
 	metrics.StateTrackingRules.WithLabelValues(metrics.TypeRaid).Set(float64(len(s.Raids)))
 	metrics.StateTrackingRules.WithLabelValues(metrics.TypeEgg).Set(float64(len(s.Eggs)))

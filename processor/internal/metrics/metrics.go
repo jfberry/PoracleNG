@@ -162,6 +162,22 @@ var (
 		Help: "Number of geofences loaded in state",
 	})
 
+	// Monster bucket-size gauges — break down the pokemon rule index for operators.
+	StateMonsterEverythingBucket = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_monster_everything_bucket",
+		Help: "Number of pokemon tracking rules in the 'everything' bucket (pokemon_id=0). These are scanned for every pokemon webhook in the per-bucket path.",
+	})
+
+	StateMonsterPVPSpecific = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_monster_pvp_specific",
+		Help: "Number of PVP tracking rules with a specific pokemon_id, per league.",
+	}, []string{"league"})
+
+	StateMonsterPVPEverything = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_monster_pvp_everything",
+		Help: "Number of PVP tracking rules with pokemon_id=0 (catch-all PVP), per league.",
+	}, []string{"league"})
+
 	// Webhook batch size
 	WebhookBatchSize = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "poracle_processor_webhook_batch_size",
