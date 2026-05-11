@@ -273,6 +273,187 @@ func BenchmarkPokemonMatch_AcrossScales(b *testing.B) {
 	}
 }
 
+// buildBenchEeveePokemon returns a fully-encountered Eevee (133) with 100 IV,
+// rich PVP evolution data across all 8 Eeveelutions (Vaporeon/Jolteon/Flareon/
+// Espeon/Umbreon/Leafeon/Glaceon/Sylveon) in great-league, ultra-league, and
+// little-league, landing in the centre of "area 50" (lat 50.5, lon 0.5).
+//
+// This is the workload that triggered the production regression: Eevee-family
+// spawns where PVPEvoData carries 8 evolved species × 3 leagues. Without the
+// gather-then-batch fix, the per-human dispatch loop multiplied this by
+// ~45 applicable humans, producing ~1000 matchMonsters calls per spawn vs ~30
+// in the per-bucket path. The fix collapses the call count back to per-bucket
+// levels by batching per-human rules into a single pass.
+func buildBenchEeveePokemon() *ProcessedPokemon {
+	return &ProcessedPokemon{
+		PokemonID:   133, // Eevee
+		Form:        0,
+		IV:          100,
+		CP:          500,
+		Level:       25,
+		ATK:         15,
+		DEF:         15,
+		STA:         15,
+		Weight:      6.5,
+		Size:        2,
+		RarityGroup: 1,
+		TTHSeconds:  1200,
+		Latitude:    50.5,
+		Longitude:   0.5,
+		Encountered: true,
+		// Eevee's own PVP rank across three leagues (rank ≤ 100 so PVP rules fire)
+		PVPBestRank: map[int][]pvp.LeagueRank{
+			1500: {{Rank: 50, CP: 1490, Caps: []int{50}}},
+			2500: {{Rank: 40, CP: 2490, Caps: []int{50}}},
+			500:  {{Rank: 30, CP: 490, Caps: []int{50}}},
+		},
+		// Full Eeveelution PVP data: 8 evolutions × 3 leagues.
+		// Ranks are deliberately varied (some high, some low) to exercise filter
+		// logic realistically — same pattern seen in production Eevee webhooks.
+		PVPEvoData: map[int]map[int][]pvp.LeagueRank{
+			134: { // Vaporeon
+				1500: {{Rank: 120, CP: 1480, Caps: []int{50}}},
+				2500: {{Rank: 80, CP: 2480, Caps: []int{50}}},
+				500:  {{Rank: 60, CP: 490, Caps: []int{50}}},
+			},
+			135: { // Jolteon
+				1500: {{Rank: 200, CP: 1470, Caps: []int{50}}},
+				2500: {{Rank: 150, CP: 2470, Caps: []int{50}}},
+				500:  {{Rank: 90, CP: 485, Caps: []int{50}}},
+			},
+			136: { // Flareon
+				1500: {{Rank: 75, CP: 1485, Caps: []int{50}}},
+				2500: {{Rank: 60, CP: 2485, Caps: []int{50}}},
+				500:  {{Rank: 45, CP: 492, Caps: []int{50}}},
+			},
+			196: { // Espeon
+				1500: {{Rank: 300, CP: 1460, Caps: []int{50}}},
+				2500: {{Rank: 100, CP: 2460, Caps: []int{50}}},
+				500:  {{Rank: 70, CP: 488, Caps: []int{50}}},
+			},
+			197: { // Umbreon
+				1500: {{Rank: 50, CP: 1490, Caps: []int{50}}},
+				2500: {{Rank: 35, CP: 2490, Caps: []int{50}}},
+				500:  {{Rank: 25, CP: 495, Caps: []int{50}}},
+			},
+			470: { // Leafeon
+				1500: {{Rank: 180, CP: 1475, Caps: []int{50}}},
+				2500: {{Rank: 140, CP: 2475, Caps: []int{50}}},
+				500:  {{Rank: 80, CP: 487, Caps: []int{50}}},
+			},
+			471: { // Glaceon
+				1500: {{Rank: 90, CP: 1488, Caps: []int{50}}},
+				2500: {{Rank: 70, CP: 2488, Caps: []int{50}}},
+				500:  {{Rank: 55, CP: 491, Caps: []int{50}}},
+			},
+			700: { // Sylveon
+				1500: {{Rank: 512, CP: 1496, Caps: []int{50}}},
+				2500: {{Rank: 400, CP: 2496, Caps: []int{50}}},
+				500:  {{Rank: 200, CP: 498, Caps: []int{50}}},
+			},
+		},
+	}
+}
+
+// BenchmarkPokemonMatch_AcrossScales_EeveeFamily mirrors BenchmarkPokemonMatch_AcrossScales
+// but uses an Eevee spawn with full PVP evolution data (8 Eeveelutions × 3 leagues)
+// instead of a simple Pikachu. This is the workload that triggered the production
+// regression with geographic_prefilter=true.
+//
+// With the gather-then-batch fix (commits ab82a82, a546e49), prefilter-on should
+// be at parity or faster than prefilter-off at every scale. If tiny/small show
+// prefilter SLOWER, the fix is not sufficient for this workload.
+//
+// Run with:
+//
+//	cd processor && go test -bench BenchmarkPokemonMatch_AcrossScales_EeveeFamily -benchmem -count=1 -run=^$ ./internal/matching/...
+func BenchmarkPokemonMatch_AcrossScales_EeveeFamily(b *testing.B) {
+	scales := []struct {
+		name          string
+		humans        int
+		rulesPerHuman int
+	}{
+		{"tiny", 10, 10},
+		{"small", 100, 10},
+		{"medium", 100, 100},
+		{"large", 500, 200},
+		{"extreme", 1000, 500},
+	}
+
+	for _, sc := range scales {
+		sc := sc
+		b.Run(sc.name, func(b *testing.B) {
+			humans, monsters := buildBenchState(b, sc.humans, sc.rulesPerHuman)
+			spatial := buildBenchGeofences()
+			geoIdx := state.BuildHumanGeoIndex(humans, nil)
+			pokemon := buildBenchEeveePokemon()
+
+			// Parity sanity check: both flag values MUST produce the same number of
+			// matched users. A divergence here means the gather-then-batch refactor
+			// has a PVP-evo correctness issue — exactly the bug this benchmark exists
+			// to catch. b.Fatalf stops the benchmark immediately.
+			{
+				stOff := &state.State{
+					Humans:   humans,
+					Monsters: monsters,
+					Geofence: spatial,
+					GeoIndex: geoIdx,
+				}
+				stOn := &state.State{
+					Humans:   humans,
+					Monsters: monsters,
+					Geofence: spatial,
+					GeoIndex: geoIdx,
+				}
+				mOff := &PokemonMatcher{
+					GeographicPrefilter:        false,
+					PVPEvolutionDirectTracking: true,
+					PVPQueryMaxRank:            4096,
+				}
+				mOn := &PokemonMatcher{
+					GeographicPrefilter:        true,
+					PVPEvolutionDirectTracking: true,
+					PVPQueryMaxRank:            4096,
+				}
+
+				off, _ := mOff.Match(pokemon, stOff)
+				on, _ := mOn.Match(pokemon, stOn)
+
+				if len(off) != len(on) {
+					b.Fatalf("parity violation at scale %s (Eevee/PVP-evo): off=%d on=%d — gather-then-batch fix may have a correctness issue",
+						sc.name, len(off), len(on))
+				}
+
+				b.Logf("scale=%s humans=%d rules=%d matched=%d (Eevee PVP-evo)",
+					sc.name, sc.humans, sc.humans*sc.rulesPerHuman, len(off))
+			}
+
+			for _, flag := range []bool{false, true} {
+				flag := flag
+				st := &state.State{
+					Humans:   humans,
+					Monsters: monsters,
+					Geofence: spatial,
+					GeoIndex: geoIdx,
+				}
+				matcher := &PokemonMatcher{
+					GeographicPrefilter:        flag,
+					PVPEvolutionDirectTracking: true,
+					PVPQueryMaxRank:            4096,
+				}
+
+				b.Run(fmt.Sprintf("prefilter=%v", flag), func(b *testing.B) {
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						_, _ = matcher.Match(pokemon, st)
+					}
+				})
+			}
+		})
+	}
+}
+
 // BenchmarkPokemonMatch_LargeRuleSet measures PokemonMatcher.Match against a
 // ~500 k-rule workload with and without the geographic pre-filter.
 //
