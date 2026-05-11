@@ -256,7 +256,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			WebhookFields:     webhookFields,
 			MatchedUsers:      matched,
 			MatchedAreas:      matchedAreas,
-			TilePending:       tilePending,
+			TileGate:          ps.newTileGate(tilePending),
 			LogReference:      pokemon.EncounterID,
 			// Index this initial sighting under the encounter ID so a
 			// subsequent change-event handler can find it via
@@ -313,7 +313,7 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 			WebhookFields:     in.webhookFields,
 			MatchedUsers:      in.matched,
 			MatchedAreas:      in.matchedAreas,
-			TilePending:       in.tilePending,
+			TileGate:          ps.newTileGate(in.tilePending),
 			LogReference:      in.encounterID,
 			ReplyKey:          in.encounterID,
 		}
@@ -325,28 +325,11 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 	encounterEvent := in.change.Old.CP == 0 && in.change.New.CP > 0
 
 	// Multi-job dispatch: every RenderJob below shares the same in.enrichment
-	// map. If we passed TilePending to one job and let its render worker
-	// resolve the tile (which mutates the map via Apply), a sibling worker
-	// rendering another job would race with that write. Hoist the tile
-	// resolution into a single goroutine and have every render worker wait
-	// on the gate before reading the map. The single writer + chan-close
-	// happens-before makes the map safe for concurrent readers afterwards.
-	//
-	// Also fixes a per-job-bytes bug: previously only the TilePending-holding
-	// job received the inline tile bytes; sibling jobs in the same dispatch
-	// got nil even though they're for the same tile. With the gate, every
-	// job in the batch picks up the shared bytes.
-	var gate *tileGate
-	if in.tilePending != nil {
-		gate = &tileGate{ready: make(chan struct{})}
-		queueLen, queueCap := len(ps.renderCh), cap(ps.renderCh)
-		pending := in.tilePending
-		in.tilePending = nil
-		go func() {
-			defer close(gate.ready)
-			gate.bytes = ps.resolveTilePending(pending, queueLen, queueCap)
-		}()
-	}
+	// map. One gate (one goroutine) writes the staticMap field once; every
+	// render worker waits on the gate before reading. Sharing one gate
+	// across the batch also means every job picks up the same inline tile
+	// bytes — previously only the TilePending-holding job got them.
+	gate := ps.newTileGate(in.tilePending)
 	if len(withPrior) > 0 {
 		isChange := !encounterEvent
 		// Build a per-language `original` map by re-running base + per-language

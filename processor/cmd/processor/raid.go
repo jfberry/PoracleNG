@@ -185,7 +185,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,
 				MatchedAreas:      matchedAreas,
-				TilePending:       tilePending,
+				TileGate:          ps.newTileGate(tilePending),
 				LogReference:      raid.GymID,
 				EditKey:           fmt.Sprintf("raid:%s:%d", raid.GymID, raid.End),
 			}

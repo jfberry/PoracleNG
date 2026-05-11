@@ -94,7 +94,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,
 				MatchedAreas:      matchedAreas,
-				TilePending:       tilePending,
+				TileGate:          ps.newTileGate(tilePending),
 				LogReference:      fmt.Sprintf("%d", nest.NestID),
 			}
 		} else {

@@ -91,7 +91,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,
 				MatchedAreas:      matchedAreas,
-				TilePending:       tilePending,
+				TileGate:          ps.newTileGate(tilePending),
 				LogReference:      lure.PokestopID,
 			}
 		} else {

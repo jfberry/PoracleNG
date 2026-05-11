@@ -535,9 +535,10 @@ func TestTileGate_ConcurrentReadAfterCloseNoRace(t *testing.T) {
 // TestDispatchPokemonChangeRender_TileGateOnEveryJob is a structural guard:
 // when the dispatch input carries a TilePending and emits multiple
 // RenderJobs (withPrior + withoutPrior), every emitted job must reference
-// the same tileGate and none may carry a raw TilePending. If a future
-// change reintroduces a per-job TilePending, sibling render workers would
-// race on the shared Enrichment map.
+// the same tileGate. The gate ensures one goroutine writes the shared
+// Enrichment map's staticMap field before any render worker reads it; if
+// jobs in a batch ever reference different gates, sibling render workers
+// would race on that map.
 func TestDispatchPokemonChangeRender_TileGateOnEveryJob(t *testing.T) {
 	ps, ch, d := minimalProcessor(t)
 
@@ -578,9 +579,6 @@ func TestDispatchPokemonChangeRender_TileGateOnEveryJob(t *testing.T) {
 
 	var sharedGate *tileGate
 	for i, j := range jobs {
-		if j.TilePending != nil {
-			t.Errorf("job[%d] has TilePending set; multi-job dispatch must use TileGate to avoid map race", i)
-		}
 		if j.TileGate == nil {
 			t.Errorf("job[%d] has TileGate=nil; every job in a TilePending-bearing dispatch must reference the gate", i)
 			continue

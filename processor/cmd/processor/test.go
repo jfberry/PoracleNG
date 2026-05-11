@@ -110,7 +110,7 @@ func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webho
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -152,7 +152,7 @@ func (ps *ProcessorService) processTestRaid(raw json.RawMessage, target webhook.
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -198,7 +198,7 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -234,7 +234,7 @@ func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook
 		WebhookFields:     webhookFields,
 		MatchedUsers:      []webhook.MatchedUser{target},
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -278,7 +278,7 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -311,7 +311,7 @@ func (ps *ProcessorService) processTestNest(raw json.RawMessage, target webhook.
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -335,7 +335,7 @@ func (ps *ProcessorService) processTestFort(raw json.RawMessage, target webhook.
 		WebhookFields: webhookFields,
 		MatchedUsers:  []webhook.MatchedUser{target},
 		MatchedAreas:  []webhook.MatchedArea{},
-		TilePending:   tilePending,
+		TileGate:      ps.newTileGate(tilePending),
 		LogReference:  "test",
 	}
 	return nil
@@ -368,7 +368,7 @@ func (ps *ProcessorService) processTestMaxbattle(raw json.RawMessage, target web
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -408,7 +408,7 @@ func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webh
 			WebhookFields:     webhookFields,
 			MatchedUsers:      matched,
 			MatchedAreas:      []webhook.MatchedArea{},
-			TilePending:       tilePending,
+			TileGate:          ps.newTileGate(tilePending),
 			LogReference:      "test",
 		}
 		return nil

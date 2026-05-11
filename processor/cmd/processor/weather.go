@@ -198,7 +198,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				WebhookFields:     webhookFields,
 				MatchedUsers:      []webhook.MatchedUser{user},
 				MatchedAreas:      matchedAreas,
-				TilePending:       tp,
+				TileGate:          ps.newTileGate(tp),
 				LogReference:      change.S2CellID,
 			}
 		}
