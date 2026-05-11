@@ -56,9 +56,9 @@ type MonsterIndex struct {
 	Total int // total number of monster tracking rules
 }
 
-// buildMonsterIndexFromRules builds a MonsterIndex from a slice of MonsterTracking values.
+// BuildMonsterIndexFromRules builds a MonsterIndex from a slice of MonsterTracking values.
 // Pointer identity is preserved: entries in the index point into the monsters slice.
-func buildMonsterIndexFromRules(monsters []MonsterTracking) *MonsterIndex {
+func BuildMonsterIndexFromRules(monsters []MonsterTracking) *MonsterIndex {
 	idx := &MonsterIndex{
 		ByPokemonID:   make(map[int][]*MonsterTracking),
 		PVPSpecific:   make(map[int][]*MonsterTracking),
@@ -114,5 +114,5 @@ func LoadMonsters(db *sqlx.DB) (*MonsterIndex, error) {
 		return nil, err
 	}
 
-	return buildMonsterIndexFromRules(monsters), nil
+	return BuildMonsterIndexFromRules(monsters), nil
 }

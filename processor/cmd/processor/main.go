@@ -1210,6 +1210,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 			PVPEvolutionDirectTracking: cfg.PVP.PVPEvolutionDirectTracking,
 			StrictLocations:            cfg.Area.StrictLocations,
 			AreaSecurityEnabled:        cfg.Area.Enabled,
+			GeographicPrefilter:        cfg.Tuning.GeographicPrefilter,
 		},
 		raidMatcher:      &matching.RaidMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: cfg.Area.Enabled},
 		invasionMatcher:  &matching.InvasionMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},

@@ -11,6 +11,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func makeTestState(monsters []*db.MonsterTracking, humans map[string]*db.Human) *state.State {
@@ -866,6 +867,140 @@ func TestPokemonMatch_RecordsCandidateCount(t *testing.T) {
 	}
 	if got := out.GetHistogram().GetSampleSum(); got != 2 {
 		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
+	}
+}
+
+// TestPokemonMatch_GeoPrefilterParity is the safety net for the
+// flagged code path. Same inputs, both flag values, identical outputs.
+// If this test ever fails, the flag-on path is dropping (or producing)
+// rules that the flag-off path didn't.
+func TestPokemonMatch_GeoPrefilterParity(t *testing.T) {
+	humans := map[string]*db.Human{
+		"u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+		"u2": {ID: "u2", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+	}
+	monsterRules := []db.MonsterTracking{
+		{ID: "u1", ProfileNo: 1, PokemonID: 25, MinIV: -1, MaxIV: 100, MaxCP: defaultMaxCP, MaxLevel: defaultMaxLevel,
+			MaxATK: 15, MaxDEF: 15, MaxSTA: 15, MaxWeight: defaultMaxWeight, Rarity: -1, MaxRarity: 6, Size: -1, MaxSize: 5,
+			PVPRankingWorst: 4096},
+		{ID: "u1", ProfileNo: 1, PokemonID: 0, MinIV: -1, MaxIV: 100, MaxCP: defaultMaxCP, MaxLevel: defaultMaxLevel,
+			MaxATK: 15, MaxDEF: 15, MaxSTA: 15, MaxWeight: defaultMaxWeight, Rarity: -1, MaxRarity: 6, Size: -1, MaxSize: 5,
+			PVPRankingWorst: 4096}, // everything
+		{ID: "u2", ProfileNo: 1, PokemonID: 25, MinIV: -1, MaxIV: 100, MaxCP: defaultMaxCP, MaxLevel: defaultMaxLevel,
+			MaxATK: 15, MaxDEF: 15, MaxSTA: 15, MaxWeight: defaultMaxWeight, Rarity: -1, MaxRarity: 6, Size: -1, MaxSize: 5,
+			PVPRankingWorst: 4096},
+	}
+	// BuildMonsterIndexFromRules populates both ByPokemonID (fallback path) and
+	// ByHumanAndLeague (per-human path) from the same backing slice.
+	monsters := db.BuildMonsterIndexFromRules(monsterRules)
+
+	spatial := geofence.NewSpatialIndex([]geofence.Fence{
+		{Name: "Belgium", DisplayInMatches: true, Path: [][2]float64{{50, 3}, {50, 6}, {51, 6}, {51, 3}, {50, 3}}},
+	})
+
+	pokemon := &ProcessedPokemon{
+		PokemonID:   25,
+		IV:          100,
+		CP:          1000,
+		Level:       20,
+		ATK:         15,
+		DEF:         15,
+		STA:         15,
+		Weight:      6.0,
+		Size:        1,
+		RarityGroup: 1,
+		TTHSeconds:  600,
+		Latitude:    50.5,
+		Longitude:   4.5,
+		Encountered: true,
+		PVPBestRank: make(map[int][]pvp.LeagueRank),
+		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
+	}
+
+	var off, on []webhook.MatchedUser
+	for _, flag := range []bool{false, true} {
+		st := &state.State{
+			Humans:   humans,
+			Monsters: monsters,
+			Geofence: spatial,
+			GeoIndex: state.BuildHumanGeoIndex(humans, nil),
+		}
+		matcher := &PokemonMatcher{GeographicPrefilter: flag, PVPQueryMaxRank: 100}
+		users, _ := matcher.Match(pokemon, st)
+		if flag {
+			on = users
+		} else {
+			off = users
+		}
+	}
+
+	if len(off) != len(on) {
+		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
+	}
+	// Compare by user ID (order may differ).
+	seenOff := map[string]int{}
+	for _, u := range off {
+		seenOff[u.ID]++
+	}
+	seenOn := map[string]int{}
+	for _, u := range on {
+		seenOn[u.ID]++
+	}
+	for id, n := range seenOff {
+		if seenOn[id] != n {
+			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
+		}
+	}
+}
+
+// TestPokemonMatch_GeoPrefilterDropsOutOfAreaHuman confirms the expected
+// speedup property: when no humans cover the spawn's geography, the
+// flag-on path doesn't even enter matchMonsters on the per-pokemon
+// bucket — the applicable set is empty.
+func TestPokemonMatch_GeoPrefilterDropsOutOfAreaHuman(t *testing.T) {
+	humans := map[string]*db.Human{
+		"u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+	}
+	monsterRules := []db.MonsterTracking{
+		{ID: "u1", ProfileNo: 1, PokemonID: 25, MinIV: -1, MaxIV: 100, MaxCP: defaultMaxCP, MaxLevel: defaultMaxLevel,
+			MaxATK: 15, MaxDEF: 15, MaxSTA: 15, MaxWeight: defaultMaxWeight, Rarity: -1, MaxRarity: 6, Size: -1, MaxSize: 5,
+			PVPRankingWorst: 4096},
+		{ID: "u1", ProfileNo: 1, PokemonID: 0, MinIV: -1, MaxIV: 100, MaxCP: defaultMaxCP, MaxLevel: defaultMaxLevel,
+			MaxATK: 15, MaxDEF: 15, MaxSTA: 15, MaxWeight: defaultMaxWeight, Rarity: -1, MaxRarity: 6, Size: -1, MaxSize: 5,
+			PVPRankingWorst: 4096}, // everything
+	}
+	monsters := db.BuildMonsterIndexFromRules(monsterRules)
+
+	st := &state.State{
+		Humans:   humans,
+		Monsters: monsters,
+		Geofence: geofence.NewSpatialIndex([]geofence.Fence{
+			{Name: "Japan", DisplayInMatches: true, Path: [][2]float64{{35, 139}, {35, 140}, {36, 140}, {36, 139}, {35, 139}}},
+		}),
+		GeoIndex: state.BuildHumanGeoIndex(humans, nil),
+	}
+	matcher := &PokemonMatcher{GeographicPrefilter: true, PVPQueryMaxRank: 100}
+	pokemon := &ProcessedPokemon{
+		PokemonID:   25,
+		IV:          100,
+		CP:          1000,
+		Level:       20,
+		ATK:         15,
+		DEF:         15,
+		STA:         15,
+		Weight:      6.0,
+		Size:        1,
+		RarityGroup: 1,
+		TTHSeconds:  600,
+		Latitude:    35.5,
+		Longitude:   139.5,
+		Encountered: true,
+		PVPBestRank: make(map[int][]pvp.LeagueRank),
+		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
+	}
+	users, _ := matcher.Match(pokemon, st)
+	if len(users) != 0 {
+		t.Errorf("japan spawn, belgium-only human: expected 0 matches, got %d", len(users))
 	}
 }
 

@@ -9,7 +9,7 @@ func TestMonsterIndex_ByHumanAndLeague_PartitionsCorrectly(t *testing.T) {
 		{ID: "u1", PokemonID: 6, PVPRankingLeague: 1500},  // PVP per-species (great)
 		{ID: "u2", PokemonID: 0, PVPRankingLeague: 1500},  // PVP everything (great)
 	}
-	idx := buildMonsterIndexFromRules(rules)
+	idx := BuildMonsterIndexFromRules(rules)
 
 	u1NonPVP := idx.ByHumanAndLeague["u1"][0]
 	if len(u1NonPVP) != 2 {

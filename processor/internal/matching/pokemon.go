@@ -98,6 +98,7 @@ type PokemonMatcher struct {
 	PVPEvolutionDirectTracking bool
 	StrictLocations            bool
 	AreaSecurityEnabled        bool
+	GeographicPrefilter        bool
 }
 
 // Match returns all matched users for a pokemon along with the geofence
@@ -111,43 +112,22 @@ func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) ([]we
 		return nil, nil
 	}
 
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(pokemon.Latitude, pokemon.Longitude)
+
 	var matched []*db.MonsterTracking
-
-	// Basic Pokemon - everything (pokemon_id=0 catch-all)
-	matched = append(matched, m.matchMonsters(pokemon, st.Monsters.ByPokemonID[0], pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
-
-	// Basic Pokemon - by pokemon_id
-	matched = append(matched, m.matchMonsters(pokemon, st.Monsters.ByPokemonID[pokemon.PokemonID], pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
-
-	// PVP Pokemon
-	for league, leagueDataArr := range pokemon.PVPBestRank {
-		for _, leagueData := range leagueDataArr {
-			if leagueData.Rank <= m.PVPQueryMaxRank {
-				matched = append(matched, m.matchMonsters(pokemon, st.Monsters.PVPEverything[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
-				matched = append(matched, m.matchMonsters(pokemon, st.Monsters.PVPSpecific[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
-			}
-		}
+	if m.GeographicPrefilter && st.GeoIndex != nil && st.Monsters.ByHumanAndLeague != nil {
+		applicable := st.GeoIndex.ApplicableHumans(
+			pokemon.Latitude, pokemon.Longitude,
+			matchedAreaNames,
+			m.AreaSecurityEnabled && m.StrictLocations,
+		)
+		metrics.MatchingApplicable.WithLabelValues("pokemon").Observe(float64(len(applicable)))
+		matched = m.assembleCandidatesPerHuman(pokemon, st, applicable)
+	} else {
+		matched = m.assembleCandidatesPerBucket(pokemon, st)
 	}
-
-	// PVP Evolution mon
-	if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
-		for pokemonID, pvpMon := range pokemon.PVPEvoData {
-			for league, leagueDataArr := range pvpMon {
-				candidates := st.Monsters.PVPSpecific[league]
-				for _, leagueData := range leagueDataArr {
-					if leagueData.Rank <= m.PVPQueryMaxRank {
-						evoMatched := m.matchMonsters(pokemon, candidates, pokemonID, leagueData.Form, false, league, leagueData)
-						matched = append(matched, evoMatched...)
-					}
-				}
-			}
-		}
-	}
-
 	metrics.MatchingCandidates.WithLabelValues("pokemon").Observe(float64(len(matched)))
 
-	// Validate humans
-	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(pokemon.Latitude, pokemon.Longitude)
 	users := ValidateHumans(
 		matched,
 		pokemon.Latitude, pokemon.Longitude,
@@ -156,6 +136,82 @@ func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) ([]we
 		st.Humans,
 	)
 	return users, ConvertAreas(areas)
+}
+
+// assembleCandidatesPerBucket is the existing iteration path: walk every
+// rule in ByPokemonID[0] / ByPokemonID[N] / PVP buckets and run
+// matchMonsters per bucket. Used when GeographicPrefilter is off.
+func (m *PokemonMatcher) assembleCandidatesPerBucket(pokemon *ProcessedPokemon, st *state.State) []*db.MonsterTracking {
+	var matched []*db.MonsterTracking
+	matched = append(matched, m.matchMonsters(pokemon, st.Monsters.ByPokemonID[0], pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
+	matched = append(matched, m.matchMonsters(pokemon, st.Monsters.ByPokemonID[pokemon.PokemonID], pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
+	for league, leagueDataArr := range pokemon.PVPBestRank {
+		for _, leagueData := range leagueDataArr {
+			if leagueData.Rank <= m.PVPQueryMaxRank {
+				matched = append(matched, m.matchMonsters(pokemon, st.Monsters.PVPEverything[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
+				matched = append(matched, m.matchMonsters(pokemon, st.Monsters.PVPSpecific[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
+			}
+		}
+	}
+	if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
+		for pokemonID, pvpMon := range pokemon.PVPEvoData {
+			for league, leagueDataArr := range pvpMon {
+				candidates := st.Monsters.PVPSpecific[league]
+				for _, leagueData := range leagueDataArr {
+					if leagueData.Rank <= m.PVPQueryMaxRank {
+						matched = append(matched, m.matchMonsters(pokemon, candidates, pokemonID, leagueData.Form, false, league, leagueData)...)
+					}
+				}
+			}
+		}
+	}
+	return matched
+}
+
+// assembleCandidatesPerHuman iterates only applicable humans and walks
+// each human's rule partitions. matchMonsters does the same per-rule
+// filtering as in the per-bucket path. Used when GeographicPrefilter is on.
+//
+// ByHumanAndLeague[humanID][0]    — non-PVP rules (mix of "everything"
+//                                    and per-species; matchMonsters
+//                                    filters via the pokemon_id check)
+// ByHumanAndLeague[humanID][N]    — PVP rules for league N
+//
+// For PVP evolution: same league bucket, different targetPokemonID/form
+// pair passed to matchMonsters.
+func (m *PokemonMatcher) assembleCandidatesPerHuman(pokemon *ProcessedPokemon, st *state.State, applicable map[string]bool) []*db.MonsterTracking {
+	var matched []*db.MonsterTracking
+	for humanID := range applicable {
+		perHuman := st.Monsters.ByHumanAndLeague[humanID]
+		if perHuman == nil {
+			continue
+		}
+		// Non-PVP path
+		matched = append(matched, m.matchMonsters(pokemon, perHuman[0], pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
+
+		// PVP path: one matchMonsters call per league the spawn ranks in.
+		for league, leagueDataArr := range pokemon.PVPBestRank {
+			for _, leagueData := range leagueDataArr {
+				if leagueData.Rank <= m.PVPQueryMaxRank {
+					matched = append(matched, m.matchMonsters(pokemon, perHuman[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
+				}
+			}
+		}
+		// PVP evolution path: same league bucket, different target.
+		if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
+			for pokemonID, pvpMon := range pokemon.PVPEvoData {
+				for league, leagueDataArr := range pvpMon {
+					candidates := perHuman[league]
+					for _, leagueData := range leagueDataArr {
+						if leagueData.Rank <= m.PVPQueryMaxRank {
+							matched = append(matched, m.matchMonsters(pokemon, candidates, pokemonID, leagueData.Form, false, league, leagueData)...)
+						}
+					}
+				}
+			}
+		}
+	}
+	return matched
 }
 
 // matchMonsters filters monster trackings against pokemon data.
