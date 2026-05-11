@@ -156,6 +156,28 @@ func TestHumanGeoIndex_DistanceWithStrictAreaRestriction(t *testing.T) {
 	}
 }
 
+// TestHumanGeoIndex_HighLatitudeDistanceBboxCoversFullCircle covers
+// the cos(lat) longitude-span scaling. At lat 70, one degree of
+// longitude is ~38 km; a human there with d=10000m should be findable
+// for a spawn 5km east of them (well inside the d=10km circle but
+// outside a naive non-cos-scaled bbox). Without the cos(lat) scaling
+// the rtree would emit a false negative and the human would be dropped
+// from the applicable set.
+func TestHumanGeoIndex_HighLatitudeDistanceBboxCoversFullCircle(t *testing.T) {
+	humans := map[string]*db.Human{
+		"u1": mkHuman("u1", nil, nil, 70.0, 20.0),
+	}
+	perHumanMaxDist := map[string]int{"u1": 10000}
+	idx := BuildHumanGeoIndex(humans, perHumanMaxDist)
+
+	// Spawn 5km east at lat 70: 5000m / (111320 * cos(70°)) ≈ 0.131 degrees longitude.
+	spawnLat, spawnLon := 70.0, 20.131
+	out := idx.ApplicableHumans(spawnLat, spawnLon, map[string]bool{}, false)
+	if !out["u1"] {
+		t.Errorf("high-lat human at (70, 20) with d=10km should be applicable for spawn 5km east at (70, 20.131), got %v", keysOf(out))
+	}
+}
+
 func keysOf(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

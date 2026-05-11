@@ -1,6 +1,8 @@
 package state
 
 import (
+	"math"
+
 	"github.com/tidwall/rtree"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -35,6 +37,17 @@ type HumanGeoIndex struct {
 //
 // Disabled or admin-disabled humans are excluded; their rules can't fire
 // regardless.
+//
+// Distance-based rules are inserted into the rtree as a circumscribing
+// bounding box around the human's location. Latitude span uses the
+// straight 111320 m/deg approximation; longitude span is scaled by
+// 1/cos(lat) so the box correctly covers d metres east-west at any
+// latitude. The bbox is a (slight) superset of the true d-radius
+// circle — points outside the circle but inside the bbox produce
+// "applicable" candidates whose exact distance is then re-checked in
+// ValidateHumans* via haversine. False negatives (true matches outside
+// the bbox) would be a correctness bug; the cos(lat) scaling prevents
+// those.
 func BuildHumanGeoIndex(humans map[string]*db.Human, perHumanMaxDist map[string]int) *HumanGeoIndex {
 	idx := &HumanGeoIndex{
 		byArea:             map[string]map[string]bool{},
@@ -68,16 +81,27 @@ func BuildHumanGeoIndex(humans map[string]*db.Human, perHumanMaxDist map[string]
 			idx.humansWithRestriction[id] = true
 		}
 		if d, ok := perHumanMaxDist[id]; ok && d > 0 {
-			// Convert metres to degrees using a uniform approximation:
-			// 1 degree ≈ 111320m.  This produces false positives at high
-			// latitudes (longitude degrees are shorter), but false positives
-			// are acceptable here — the exact haversine check in
-			// ValidateHumans* is the authoritative gate.
-			dDeg := float64(d) / 111320.0
-			minLat := h.Latitude - dDeg
-			maxLat := h.Latitude + dDeg
-			minLon := h.Longitude - dDeg
-			maxLon := h.Longitude + dDeg
+			const mPerDegLat = 111320.0
+			dDegLat := float64(d) / mPerDegLat
+
+			// Longitude degrees per metre depends on latitude — meridians converge
+			// toward the poles. Scale the bbox so it correctly circumscribes a
+			// circle of radius d at the human's latitude.
+			latRad := h.Latitude * math.Pi / 180
+			mPerDegLon := mPerDegLat * math.Cos(latRad)
+			var dDegLon float64
+			if mPerDegLon < 1 {
+				// Near a pole — clamp to the entire longitude range. ValidateHumans
+				// does the exact per-rule haversine check after this shortlist.
+				dDegLon = 180
+			} else {
+				dDegLon = float64(d) / mPerDegLon
+			}
+
+			minLat := h.Latitude - dDegLat
+			maxLat := h.Latitude + dDegLat
+			minLon := h.Longitude - dDegLon
+			maxLon := h.Longitude + dDegLon
 			idx.distanceTree.Insert([2]float64{minLon, minLat}, [2]float64{maxLon, maxLat}, id)
 			idx.humansWithDistance[id] = true
 		}
