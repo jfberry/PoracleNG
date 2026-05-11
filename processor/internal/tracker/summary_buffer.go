@@ -16,9 +16,16 @@ import (
 // a summary delivery window. The raw webhook bytes are kept verbatim so
 // the renderer can re-enrich the entry at delivery time without depending
 // on internal types whose shape may evolve.
+//
+// Form is only meaningful for pokemon-encounter rewards (type 7) where
+// different forms of the same species (Spinda 01 vs 08, Unown, costumes)
+// must NOT collapse into one group — they have distinct icons and
+// distinct rewardName labels. For item/stardust/candy/mega-energy
+// rewards Form is always 0.
 type BufferedQuest struct {
 	RewardType int    `json:"reward_type"`
 	Reward     int    `json:"reward"`
+	Form       int    `json:"form,omitempty"`
 	PokestopID string `json:"pokestop_id"`
 	WithAR     bool   `json:"with_ar"`
 	Payload    []byte `json:"payload"`
@@ -32,6 +39,7 @@ type BufferedQuest struct {
 type bufferKey struct {
 	RewardType int
 	Reward     int
+	Form       int
 	PokestopID string
 	WithAR     bool
 }
@@ -80,6 +88,7 @@ func (sb *SummaryBuffer) Append(humanID, alertType string, q BufferedQuest) {
 	bucket[bufferKey{
 		RewardType: q.RewardType,
 		Reward:     q.Reward,
+		Form:       q.Form,
 		PokestopID: q.PokestopID,
 		WithAR:     q.WithAR,
 	}] = q

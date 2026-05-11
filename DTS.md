@@ -565,8 +565,10 @@ The view passed to `questSummary` is shaped differently from a regular `quest` t
 |-------|------|-------------|
 | `rewardType` | int | Reward type ID (2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy) |
 | `reward` | int | Reward ID (item ID for type 2, dust amount for type 3, pokemon ID for types 4/7/12) |
-| `rewardName` | string | Translated reward name for the group header |
-| `imgUrl` | string | Reward icon URL (shared across all rows in the group) |
+| `rewardForm` | int | Pokemon form ID for `rewardType == 7` (so e.g. two different Spinda forms group separately). `0` for all other reward types. |
+| `rewardName` | string | Translated reward name for the group header. For `rewardType == 7` with a non-zero `rewardForm`, the form name is appended in parentheses (e.g. "Spinda (Spinda 01)"). |
+| `imgUrl` | string | Reward icon URL — best used as a Discord thumbnail/image. Telegram's `/sendSticker` is stricter; use `stickerUrl` there. |
+| `stickerUrl` | string | Reward sticker URL — sized and formatted for Telegram's sticker constraints. Use this for the Telegram `sticker` field. |
 | `staticMap` | string | Multi-pin static map URL — autopositioned over the pokestops in **this chunk** only |
 | `count` | int | Total number of pokestops in the reward group (across every chunk, not just this message) |
 | `chunk` | int | 1-based index of this message when an oversized group is split across multiple messages. Always `1` when `chunks == 1`. |

@@ -97,6 +97,41 @@ func TestBuildQuestSummaryView_RewardName(t *testing.T) {
 	if got, _ := view["rewardName"].(string); got != "poke_327" {
 		t.Errorf("pokemon rewardName = %q, want \"poke_327\"", got)
 	}
+
+	// Pokemon with form: empty bundle returns the raw form translation
+	// key, which questSummaryRewardName treats as "no form name available"
+	// and falls back to the bare species name — i.e. we don't end up with
+	// the cosmetically broken "poke_327 (form_1)" output.
+	view = BuildQuestSummaryView(QuestSummaryGroup{RewardType: 7, RewardID: 327, RewardForm: 1, Quests: nil}, nil, en)
+	if got, _ := view["rewardName"].(string); got != "poke_327" {
+		t.Errorf("pokemon rewardName with missing form translation = %q, want \"poke_327\"", got)
+	}
+
+	// rewardForm round-trips into the view either way so a template can
+	// branch on it.
+	if got := view["rewardForm"]; got != 1 {
+		t.Errorf("rewardForm = %v, want 1", got)
+	}
+
+	// Pokemon with form, translation present: form name is appended in
+	// parens. Inject a translation manually so we don't depend on bundle
+	// loading.
+	bundle2 := i18n.NewBundle()
+	bundle2.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"poke_327": "Spinda",
+		"form_553": "Spinda 01",
+	}))
+	tr2 := bundle2.For("en")
+	view = BuildQuestSummaryView(QuestSummaryGroup{RewardType: 7, RewardID: 327, RewardForm: 553, Quests: nil}, nil, tr2)
+	if got, _ := view["rewardName"].(string); got != "Spinda (Spinda 01)" {
+		t.Errorf("pokemon rewardName with form = %q, want %q", got, "Spinda (Spinda 01)")
+	}
+
+	// Candy (type 4) ignores form even when supplied — candy is per-species.
+	view = BuildQuestSummaryView(QuestSummaryGroup{RewardType: 4, RewardID: 327, RewardForm: 553, Quests: nil}, nil, tr2)
+	if got, _ := view["rewardName"].(string); got != "Spinda" {
+		t.Errorf("candy rewardName with form should ignore form: got %q, want \"Spinda\"", got)
+	}
 }
 
 func TestBuildQuestSummaryView_ZeroCoordSkippedInStaticMap(t *testing.T) {

@@ -69,8 +69,10 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 	}
 
 	// Group buffered entries by reward, preserving first-seen order so
-	// users see groups in the order their quests arrived.
-	type groupKey struct{ Type, Reward int }
+	// users see groups in the order their quests arrived. Form is part
+	// of the key for pokemon-encounter rewards so different Spinda
+	// forms (etc.) don't share an icon / rewardName / map.
+	type groupKey struct{ Type, Reward, Form int }
 	groups := map[groupKey][]map[string]any{}
 	order := []groupKey{}
 
@@ -80,7 +82,7 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 			continue
 		}
 		view["withAR"] = r.WithAR
-		k := groupKey{r.RewardType, r.Reward}
+		k := groupKey{r.RewardType, r.Reward, r.Form}
 		if _, exists := groups[k]; !exists {
 			order = append(order, k)
 		}
@@ -119,6 +121,7 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 			view := dts.BuildQuestSummaryView(dts.QuestSummaryGroup{
 				RewardType: k.Type,
 				RewardID:   k.Reward,
+				RewardForm: k.Form,
 				Quests:     chunk.entries,
 				TotalCount: len(all),
 				Chunk:      chunk.index,

@@ -21,6 +21,7 @@ import (
 type QuestSummaryGroup struct {
 	RewardType int
 	RewardID   int
+	RewardForm int              // pokemon form for type==7 rewards; 0 otherwise
 	Quests     []map[string]any // bullets AND pins for THIS message
 	TotalCount int              // total stops across all chunks of the group
 	Chunk      int              // 1-indexed
@@ -35,13 +36,19 @@ type QuestSummaryGroup struct {
 func BuildQuestSummaryView(g QuestSummaryGroup, sm *staticmap.Resolver, tr *i18n.Translator) map[string]any {
 	views := g.Quests
 
-	// Shared reward icon — every per-pokestop view in a single
-	// (rewardType, reward) group has the same imgUrl since the icon is
-	// reward-derived.
-	var sharedImg string
+	// Shared reward icon and sticker — every per-pokestop view in a
+	// single (rewardType, reward, form) group has the same icon/sticker
+	// since both are reward-derived. The Discord template uses imgUrl
+	// for the thumbnail; the Telegram template uses stickerUrl which is
+	// resolved against the sticker iconset (typically webp, sized for
+	// Telegram's sticker constraints) rather than the regular icon URL.
+	var sharedImg, sharedSticker string
 	if len(views) > 0 {
 		if v, ok := views[0]["imgUrl"].(string); ok {
 			sharedImg = v
+		}
+		if v, ok := views[0]["stickerUrl"].(string); ok {
+			sharedSticker = v
 		}
 	}
 
@@ -98,8 +105,10 @@ func BuildQuestSummaryView(g QuestSummaryGroup, sm *staticmap.Resolver, tr *i18n
 	return map[string]any{
 		"rewardType": g.RewardType,
 		"reward":     g.RewardID,
-		"rewardName": questSummaryRewardName(g.RewardType, g.RewardID, tr),
+		"rewardForm": g.RewardForm,
+		"rewardName": questSummaryRewardName(g.RewardType, g.RewardID, g.RewardForm, tr),
 		"imgUrl":     sharedImg,
+		"stickerUrl": sharedSticker,
 		"staticMap":  staticMapURL,
 		"count":      total, // total for the reward group, not just this chunk
 		"chunk":      chunk,
@@ -108,12 +117,17 @@ func BuildQuestSummaryView(g QuestSummaryGroup, sm *staticmap.Resolver, tr *i18n
 	}
 }
 
-// questSummaryRewardName resolves a (rewardType, rewardID) pair to a
-// translated display name for the summary header. The lookups are
+// questSummaryRewardName resolves a (rewardType, rewardID, formID) tuple
+// to a translated display name for the summary header. The lookups are
 // simple identifier-key translations through the i18n bundle —
 // pulling in the regular quest enrichment helpers would create an
 // enrichment → dts import cycle.
-func questSummaryRewardName(rewardType, rewardID int, tr *i18n.Translator) string {
+//
+// formID is only honoured for pokemon-encounter rewards (type 7); when
+// it is non-zero the form name is appended in parentheses so two
+// different forms of the same species (e.g. Spinda 01 vs Spinda 08)
+// produce distinct headers.
+func questSummaryRewardName(rewardType, rewardID, formID int, tr *i18n.Translator) string {
 	if tr == nil {
 		return ""
 	}
@@ -128,9 +142,19 @@ func questSummaryRewardName(rewardType, rewardID int, tr *i18n.Translator) strin
 			return fmt.Sprintf("%d %s", rewardID, label)
 		}
 		return label
-	case 4, 7, 12: // Candy / Pokemon encounter / Mega energy — rewardID is pokemon ID
+	case 4, 12: // Candy / Mega energy — per-species, no form
 		if rewardID > 0 {
 			return tr.T(gamedata.PokemonTranslationKey(rewardID))
+		}
+	case 7: // Pokemon encounter — include form when present
+		if rewardID > 0 {
+			name := tr.T(gamedata.PokemonTranslationKey(rewardID))
+			if formID > 0 {
+				if formName := tr.T(gamedata.FormTranslationKey(formID)); formName != "" && formName != gamedata.FormTranslationKey(formID) {
+					return fmt.Sprintf("%s (%s)", name, formName)
+				}
+			}
+			return name
 		}
 	}
 	return ""

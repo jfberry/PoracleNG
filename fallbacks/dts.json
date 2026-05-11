@@ -237,7 +237,8 @@
   "platform": "telegram",
   "template": {
     "content": "*{{count}}× {{{rewardName}}}*{{#if (gt chunks 1)}} ({{chunk}}/{{chunks}}){{/if}}\n{{#each quests}}• [{{{pokestopName}}}]({{{googleMapUrl}}}){{#if withAR}} 🔭{{/if}}\n{{/each}}",
-    "sticker": "{{{imgUrl}}}",
+    "sticker": "{{{stickerUrl}}}",
+    "photo": "{{{staticMap}}}",
     "parse_mode": "Markdown",
     "webpage_preview": false
   }
