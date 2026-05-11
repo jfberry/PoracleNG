@@ -126,14 +126,25 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		// Encounter tracking (change detection). Gated on len(matched) > 0:
 		// pokemon nobody is tracking can't produce a `monsterChanged` event
 		// for anyone (that requires a prior per-user message), so we don't
-		// need their state or PVP-stripped bytes in the tracker. Skipping
-		// the unmatched path saves the StripPVP allocation + tracker mutex
-		// on the common "0 humans cared" case. Duplicate elimination is
-		// handled separately via ps.duplicates.CheckPokemon above and does
-		// not depend on the encounter tracker.
+		// need their state or webhook in the tracker. Skipping the unmatched
+		// path saves the value copy + tracker mutex on the common "0 humans
+		// cared" case. Duplicate elimination is handled separately via
+		// ps.duplicates.CheckPokemon above and does not depend on the
+		// encounter tracker.
+		//
+		// We store a value copy with the PVP maps/slices nilled — PVP
+		// rankings are the only heavy field on PokemonWebhook and aren't
+		// used by the {{original.X}} render. Reference-type fields cleared
+		// on the copy don't affect the original `pokemon` value used by
+		// matching / enrichment downstream.
 		var change *tracker.EncounterChange
 		if ps.cfg.Tracking.PokemonChangeTracking {
-			_, change = ps.encounters.Track(pokemon.EncounterID, encounterState, tracker.StripPVP(raw))
+			stored := pokemon
+			stored.PVP = nil
+			stored.PVPRankingsGreatLeague = nil
+			stored.PVPRankingsUltraLeague = nil
+			stored.PVPRankingsLittleLeague = nil
+			_, change = ps.encounters.Track(pokemon.EncounterID, encounterState, &stored)
 		}
 
 		// Register matched users as caring about weather in this cell
@@ -323,7 +334,7 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 		var perLangOriginal map[string]map[string]any
 		var fallbackOriginal map[string]any
 		if !encounterEvent {
-			if len(in.change.OldWebhook) > 0 {
+			if in.change.OldWebhook != nil {
 				perLangOriginal = ps.buildPerLanguageOriginal(in.change.OldWebhook, withPrior)
 			}
 			if perLangOriginal == nil {
@@ -403,18 +414,18 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 }
 
 // buildPerLanguageOriginal re-runs the regular pokemon enrichment pipeline
-// against the prior-sighting webhook bytes (PVP-stripped at storage time)
+// against the prior-sighting webhook (PVP fields cleared at storage time)
 // and returns one merged base+perLang map per distinct language among the
 // supplied users. The result becomes RenderJob.OriginalView; LayeredView
 // exposes it under {{original.X}}.
 //
 // Static-map tile generation is skipped (TileModeSkip) — the position
 // doesn't change between prior and current sightings, so the tile from the
-// new state's render is reused implicitly. Returns nil when the webhook
-// can't be parsed or the enricher isn't configured for translation; the
-// caller should fall back to dts.BuildOriginalView in that case.
-func (ps *ProcessorService) buildPerLanguageOriginal(priorRaw json.RawMessage, users []webhook.MatchedUser) map[string]map[string]any {
-	if ps.enricher == nil || len(priorRaw) == 0 {
+// new state's render is reused implicitly. Returns nil when the enricher
+// isn't configured for translation; the caller should fall back to
+// dts.BuildOriginalView in that case.
+func (ps *ProcessorService) buildPerLanguageOriginal(prior *webhook.PokemonWebhook, users []webhook.MatchedUser) map[string]map[string]any {
+	if ps.enricher == nil || prior == nil {
 		return nil
 	}
 	// Without a WeatherProvider the regular Pokemon enrichment path panics
@@ -422,10 +433,6 @@ func (ps *ProcessorService) buildPerLanguageOriginal(priorRaw json.RawMessage, u
 	// setups (tests, early-init) as "no per-language original" so the caller
 	// falls back to the safer dts.BuildOriginalView path.
 	if ps.enricher.WeatherProvider == nil {
-		return nil
-	}
-	var prior webhook.PokemonWebhook
-	if err := json.Unmarshal(priorRaw, &prior); err != nil {
 		return nil
 	}
 	rarityGroup := 0
@@ -440,8 +447,8 @@ func (ps *ProcessorService) buildPerLanguageOriginal(priorRaw json.RawMessage, u
 		// way — original.* doesn't expose PVP.
 		pvpCfg = &pvp.Config{}
 	}
-	processed := matching.ProcessPokemonWebhook(&prior, rarityGroup, pvpCfg)
-	base, _ := ps.enricher.Pokemon(&prior, processed, enrichment.TileModeSkip)
+	processed := matching.ProcessPokemonWebhook(prior, rarityGroup, pvpCfg)
+	base, _ := ps.enricher.Pokemon(prior, processed, enrichment.TileModeSkip)
 	if base == nil {
 		return nil
 	}
@@ -457,7 +464,7 @@ func (ps *ProcessorService) buildPerLanguageOriginal(priorRaw json.RawMessage, u
 	}
 	out := make(map[string]map[string]any)
 	for _, lang := range distinctLanguages(users, ps.cfg.General.Locale) {
-		perLang := ps.enricher.PokemonTranslate(base, &prior, lang)
+		perLang := ps.enricher.PokemonTranslate(base, prior, lang)
 		merged := make(map[string]any, len(base)+len(perLang))
 		for k, v := range base {
 			merged[k] = v

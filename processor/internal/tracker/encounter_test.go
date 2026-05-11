@@ -3,6 +3,8 @@ package tracker
 import (
 	"testing"
 	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func TestEncounterTrackerFirstSight(t *testing.T) {
@@ -151,28 +153,31 @@ func TestTrackWeatherChangeWithoutCPChangeIgnored(t *testing.T) {
 	}
 }
 
-// TestTrackPersistsPriorWebhook covers the new bytes-storage path: a Track
-// call with raw webhook bytes followed by a change-firing Track call must
-// surface those bytes on the returned EncounterChange so the change handler
-// can rebuild a full {{original.X}} view.
+// TestTrackPersistsPriorWebhook covers the struct-storage path: a Track
+// call with a parsed PokemonWebhook followed by a change-firing Track call
+// must surface that struct on the returned EncounterChange so the change
+// handler can rebuild a full {{original.X}} view without re-parsing JSON.
 func TestTrackPersistsPriorWebhook(t *testing.T) {
 	et := NewEncounterTracker()
-	priorBytes := []byte(`{"pokemon_id":25,"cp":1000,"weather":1}`)
+	prior := &webhook.PokemonWebhook{PokemonID: 25, CP: 1000, Weather: 1}
 
-	et.Track("enc-prior", EncounterState{PokemonID: 25, CP: 1000, Weather: 1}, priorBytes)
-	_, change := et.Track("enc-prior", EncounterState{PokemonID: 25, CP: 1250, Weather: 3}, []byte(`{"pokemon_id":25,"cp":1250,"weather":3}`))
+	et.Track("enc-prior", EncounterState{PokemonID: 25, CP: 1000, Weather: 1}, prior)
+	_, change := et.Track("enc-prior", EncounterState{PokemonID: 25, CP: 1250, Weather: 3}, &webhook.PokemonWebhook{PokemonID: 25, CP: 1250, Weather: 3})
 	if change == nil {
 		t.Fatal("expected ChangeWeatherBoost, got nil")
 	}
-	if string(change.OldWebhook) != string(priorBytes) {
-		t.Errorf("OldWebhook: got %s, want %s", change.OldWebhook, priorBytes)
+	if change.OldWebhook != prior {
+		t.Errorf("OldWebhook should point to the originally-stored struct")
+	}
+	if change.OldWebhook.CP != 1000 || change.OldWebhook.Weather != 1 {
+		t.Errorf("OldWebhook fields wrong: got CP=%d Weather=%d", change.OldWebhook.CP, change.OldWebhook.Weather)
 	}
 }
 
-// TestTrackHandlesNilRawGracefully ensures legacy callers (and tests) that
-// don't supply webhook bytes still get a working tracker with an empty
+// TestTrackHandlesNilWebhookGracefully ensures legacy callers (and tests) that
+// don't supply a webhook struct still get a working tracker with a nil
 // OldWebhook on the change struct.
-func TestTrackHandlesNilRawGracefully(t *testing.T) {
+func TestTrackHandlesNilWebhookGracefully(t *testing.T) {
 	et := NewEncounterTracker()
 	et.Track("enc-nil", EncounterState{PokemonID: 25, Form: 0, CP: 1000}, nil)
 	_, change := et.Track("enc-nil", EncounterState{PokemonID: 25, Form: 65, CP: 1000}, nil)
@@ -180,6 +185,6 @@ func TestTrackHandlesNilRawGracefully(t *testing.T) {
 		t.Fatalf("expected ChangeForm, got %v", change)
 	}
 	if change.OldWebhook != nil {
-		t.Errorf("OldWebhook should be nil when nil bytes were stored, got %v", change.OldWebhook)
+		t.Errorf("OldWebhook should be nil when nil was stored, got %v", change.OldWebhook)
 	}
 }
