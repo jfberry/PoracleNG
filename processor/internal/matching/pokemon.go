@@ -168,49 +168,96 @@ func (m *PokemonMatcher) assembleCandidatesPerBucket(pokemon *ProcessedPokemon, 
 	return matched
 }
 
-// assembleCandidatesPerHuman iterates only applicable humans and walks
-// each human's rule partitions. matchMonsters does the same per-rule
-// filtering as in the per-bucket path. Used when GeographicPrefilter is on.
+// assembleCandidatesPerHuman gathers all applicable humans' rule slices into
+// per-combo accumulators, then calls matchMonsters once per combo. This drops
+// the call count from O(applicable × combos) to O(combos) — matching the
+// per-bucket path — while preserving the rule-iteration savings that come
+// from only visiting applicable humans' rules.
 //
-// ByHumanAndLeague[humanID][0]    — non-PVP rules (mix of "everything"
-//                                    and per-species; matchMonsters
-//                                    filters via the pokemon_id check)
-// ByHumanAndLeague[humanID][N]    — PVP rules for league N
+// A "combo" is a (non-PVP, or PVP-per-league) dispatch slot:
 //
-// For PVP evolution: same league bucket, different targetPokemonID/form
-// pair passed to matchMonsters.
+//	league == 0  — non-PVP rules (ByHumanAndLeague[humanID][0])
+//	league == N  — PVP rules for league N
+//
+// The PVP-evolution path reuses the same per-league accumulator as the
+// regular PVP path, so each league bucket is gathered exactly once
+// regardless of how many evolved forms are checked.
 func (m *PokemonMatcher) assembleCandidatesPerHuman(pokemon *ProcessedPokemon, st *state.State, applicable map[string]bool) []*db.MonsterTracking {
-	var matched []*db.MonsterTracking
-	for humanID := range applicable {
-		perHuman := st.Monsters.ByHumanAndLeague[humanID]
-		if perHuman == nil {
-			continue
-		}
-		// Non-PVP path
-		matched = append(matched, m.matchMonsters(pokemon, perHuman[0], pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
-
-		// PVP path: one matchMonsters call per league the spawn ranks in.
-		for league, leagueDataArr := range pokemon.PVPBestRank {
-			for _, leagueData := range leagueDataArr {
-				if leagueData.Rank <= m.PVPQueryMaxRank {
-					matched = append(matched, m.matchMonsters(pokemon, perHuman[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
-				}
+	// Determine which PVP leagues are needed (those with at least one rank
+	// entry that passes the max-rank filter). Build the set once so we only
+	// allocate accumulator slices for leagues we will actually dispatch.
+	leaguesNeeded := map[int]bool{}
+	for league, leagueDataArr := range pokemon.PVPBestRank {
+		for _, leagueData := range leagueDataArr {
+			if leagueData.Rank <= m.PVPQueryMaxRank {
+				leaguesNeeded[league] = true
+				break
 			}
 		}
-		// PVP evolution path: same league bucket, different target.
-		if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
-			for pokemonID, pvpMon := range pokemon.PVPEvoData {
-				for league, leagueDataArr := range pvpMon {
-					candidates := perHuman[league]
-					for _, leagueData := range leagueDataArr {
-						if leagueData.Rank <= m.PVPQueryMaxRank {
-							matched = append(matched, m.matchMonsters(pokemon, candidates, pokemonID, leagueData.Form, false, league, leagueData)...)
-						}
+	}
+	if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
+		for _, pvpMon := range pokemon.PVPEvoData {
+			for league, leagueDataArr := range pvpMon {
+				for _, leagueData := range leagueDataArr {
+					if leagueData.Rank <= m.PVPQueryMaxRank {
+						leaguesNeeded[league] = true
+						break
 					}
 				}
 			}
 		}
 	}
+
+	// Capacity hint: a typical applicable human contributes a handful of
+	// rules per league. 4× applicable is generous enough to avoid early
+	// slice grows for most workloads.
+	capHint := 4 * len(applicable)
+	nonPVP := make([]*db.MonsterTracking, 0, capHint)
+	pvpByLeague := make(map[int][]*db.MonsterTracking, len(leaguesNeeded))
+	for league := range leaguesNeeded {
+		pvpByLeague[league] = make([]*db.MonsterTracking, 0, capHint)
+	}
+
+	// Gather: concatenate each applicable human's rule slices into the
+	// per-combo accumulators. No matchMonsters calls here — just appends.
+	for humanID := range applicable {
+		perHuman := st.Monsters.ByHumanAndLeague[humanID]
+		if perHuman == nil {
+			continue
+		}
+		nonPVP = append(nonPVP, perHuman[0]...)
+		for league := range leaguesNeeded {
+			pvpByLeague[league] = append(pvpByLeague[league], perHuman[league]...)
+		}
+	}
+
+	// Dispatch: one matchMonsters call per combo — same call count as the
+	// per-bucket path. matchMonsters' per-rule filter handles pokemon_id /
+	// form / IV / PVP-rank checks as before.
+	var matched []*db.MonsterTracking
+	matched = append(matched, m.matchMonsters(pokemon, nonPVP, pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
+
+	for league, leagueDataArr := range pokemon.PVPBestRank {
+		for _, leagueData := range leagueDataArr {
+			if leagueData.Rank <= m.PVPQueryMaxRank {
+				matched = append(matched, m.matchMonsters(pokemon, pvpByLeague[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
+			}
+		}
+	}
+
+	if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
+		for pokemonID, pvpMon := range pokemon.PVPEvoData {
+			for league, leagueDataArr := range pvpMon {
+				candidates := pvpByLeague[league]
+				for _, leagueData := range leagueDataArr {
+					if leagueData.Rank <= m.PVPQueryMaxRank {
+						matched = append(matched, m.matchMonsters(pokemon, candidates, pokemonID, leagueData.Form, false, league, leagueData)...)
+					}
+				}
+			}
+		}
+	}
+
 	return matched
 }
 
