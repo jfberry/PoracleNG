@@ -24,8 +24,6 @@ type HumanGeoIndex struct {
 	byArea             map[string]map[string]bool
 	byAreaRestriction  map[string]map[string]bool
 	distanceTree       rtree.RTreeG[string]
-	humansWithDistance map[string]bool
-	humansWithArea     map[string]bool
 	humansWithRestriction map[string]bool
 }
 
@@ -52,8 +50,6 @@ func BuildHumanGeoIndex(humans map[string]*db.Human, perHumanMaxDist map[string]
 	idx := &HumanGeoIndex{
 		byArea:             map[string]map[string]bool{},
 		byAreaRestriction:  map[string]map[string]bool{},
-		humansWithDistance: map[string]bool{},
-		humansWithArea:     map[string]bool{},
 		humansWithRestriction: map[string]bool{},
 	}
 	for id, h := range humans {
@@ -68,7 +64,6 @@ func BuildHumanGeoIndex(humans map[string]*db.Human, perHumanMaxDist map[string]
 				idx.byArea[a] = map[string]bool{}
 			}
 			idx.byArea[a][id] = true
-			idx.humansWithArea[id] = true
 		}
 		for _, a := range h.AreaRestriction {
 			if a == "" {
@@ -103,7 +98,6 @@ func BuildHumanGeoIndex(humans map[string]*db.Human, perHumanMaxDist map[string]
 			minLon := h.Longitude - dDegLon
 			maxLon := h.Longitude + dDegLon
 			idx.distanceTree.Insert([2]float64{minLon, minLat}, [2]float64{maxLon, maxLat}, id)
-			idx.humansWithDistance[id] = true
 		}
 	}
 	return idx
