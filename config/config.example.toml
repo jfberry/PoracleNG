@@ -429,6 +429,12 @@ matched_max_queue_size = 5000            # max items buffered before backpressur
 concurrent_discord_destinations = 10     # concurrent discord DM/channel sends per bot
 concurrent_telegram_destinations = 10    # concurrent telegram sends per bot
 concurrent_discord_webhooks = 10         # concurrent discord webhook sends
+# Geographic pre-filtering
+# When true, the matcher pre-filters out humans whose geography (selected
+# areas + tracking distance) cannot possibly cover the spawn before running
+# the per-rule IV/CP/etc filter loop. Major speedup for installations with
+# very large rule counts; safe to leave off if you have few rules.
+geographic_prefilter = false
 
 # ---- Alert Limits ----
 # Limit messages sent to a user/channel to avoid individual users hogging the

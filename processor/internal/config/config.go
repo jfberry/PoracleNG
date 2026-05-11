@@ -438,6 +438,9 @@ type TuningConfig struct {
 	// Validation hook tuning (see [validation])
 	ValidationTimeoutMs     int `toml:"validation_timeout_ms"`     // per-call HTTP timeout (default 1500)
 	ValidationMaxConcurrent int `toml:"validation_max_concurrent"` // cap on parallel validator calls per event (default 16)
+
+	// Geographic pre-filtering
+	GeographicPrefilter bool `toml:"geographic_prefilter"` // pre-filter by area before per-rule checks (default false)
 }
 
 // ValidationConfig describes an external HTTP hook called once per matched
