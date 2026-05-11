@@ -11,6 +11,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func makeRaidTestState(raids []*db.RaidTracking, eggs []*db.EggTracking, humans map[string]*db.Human) *state.State {
@@ -704,5 +705,122 @@ func TestEggMatch_RecordsCandidateCount(t *testing.T) {
 	_ = h.(prometheus.Histogram).Write(&out)
 	if got := out.GetHistogram().GetSampleSum(); got != 2 {
 		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
+	}
+}
+
+// TestRaidMatch_GeoPrefilterParity asserts flag-on and flag-off produce identical
+// MatchRaid results.
+func TestRaidMatch_GeoPrefilterParity(t *testing.T) {
+	humans := map[string]*db.Human{
+		"u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+	}
+	rules := []db.RaidTracking{
+		{ID: "u1", ProfileNo: 1, PokemonID: 150, Level: 5, Team: 4, Exclusive: false, Form: 0, Evolution: 9000, Move: 9000},
+	}
+	rulesPointers := make([]*db.RaidTracking, len(rules))
+	for i := range rules {
+		rulesPointers[i] = &rules[i]
+	}
+	perHuman := db.PartitionByHuman(rulesPointers, db.RaidHumanID)
+
+	spatial := geofence.NewSpatialIndex([]geofence.Fence{
+		{Name: "Belgium", DisplayInMatches: true, Path: [][2]float64{{50, 3}, {50, 6}, {51, 6}, {51, 3}, {50, 3}}},
+	})
+	event := &RaidData{
+		GymID: "gym1", PokemonID: 150, Form: 0, Level: 5,
+		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 50.5, Longitude: 4.5,
+	}
+
+	var off, on []webhook.MatchedUser
+	for _, flag := range []bool{false, true} {
+		st := &state.State{
+			Humans:       humans,
+			Raids:        rulesPointers,
+			RaidsByHuman: perHuman,
+			Geofence:     spatial,
+			GeoIndex:     state.BuildHumanGeoIndex(humans, nil),
+		}
+		matcher := &RaidMatcher{GeographicPrefilter: flag}
+		users, _ := matcher.MatchRaid(event, st)
+		if flag {
+			on = users
+		} else {
+			off = users
+		}
+	}
+	if len(off) != len(on) {
+		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
+	}
+	seenOff := map[string]int{}
+	for _, u := range off {
+		seenOff[u.ID]++
+	}
+	seenOn := map[string]int{}
+	for _, u := range on {
+		seenOn[u.ID]++
+	}
+	for id, n := range seenOff {
+		if seenOn[id] != n {
+			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
+		}
+	}
+}
+
+// TestEggMatch_GeoPrefilterParity asserts flag-on and flag-off produce identical
+// MatchEgg results.
+func TestEggMatch_GeoPrefilterParity(t *testing.T) {
+	humans := map[string]*db.Human{
+		"u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+	}
+	rules := []db.EggTracking{
+		{ID: "u1", ProfileNo: 1, Level: 5, Team: 4, Exclusive: false},
+	}
+	rulesPointers := make([]*db.EggTracking, len(rules))
+	for i := range rules {
+		rulesPointers[i] = &rules[i]
+	}
+	perHuman := db.PartitionByHuman(rulesPointers, db.EggHumanID)
+
+	spatial := geofence.NewSpatialIndex([]geofence.Fence{
+		{Name: "Belgium", DisplayInMatches: true, Path: [][2]float64{{50, 3}, {50, 6}, {51, 6}, {51, 3}, {50, 3}}},
+	})
+	event := &EggData{
+		GymID: "gym1", Level: 5, TeamID: 1, Ex: false,
+		Latitude: 50.5, Longitude: 4.5,
+	}
+
+	var off, on []webhook.MatchedUser
+	for _, flag := range []bool{false, true} {
+		st := &state.State{
+			Humans:      humans,
+			Eggs:        rulesPointers,
+			EggsByHuman: perHuman,
+			Geofence:    spatial,
+			GeoIndex:    state.BuildHumanGeoIndex(humans, nil),
+		}
+		matcher := &RaidMatcher{GeographicPrefilter: flag}
+		users, _ := matcher.MatchEgg(event, st)
+		if flag {
+			on = users
+		} else {
+			off = users
+		}
+	}
+	if len(off) != len(on) {
+		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
+	}
+	seenOff := map[string]int{}
+	for _, u := range off {
+		seenOff[u.ID]++
+	}
+	seenOn := map[string]int{}
+	for _, u := range on {
+		seenOn[u.ID]++
+	}
+	for id, n := range seenOff {
+		if seenOn[id] != n {
+			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
+		}
 	}
 }

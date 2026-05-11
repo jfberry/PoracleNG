@@ -3,6 +3,7 @@ package matching
 import (
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -38,29 +39,19 @@ type EggData struct {
 type RaidMatcher struct {
 	StrictLocations     bool
 	AreaSecurityEnabled bool
+	GeographicPrefilter bool
 }
 
-// MatchRaid returns all matched users for a raid along with the geofence
-// areas that contain the gym.
-func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
-	start := time.Now()
-	defer func() {
-		metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(start).Seconds())
-	}()
-
-	if st == nil {
-		return nil, nil
-	}
-
-	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(raid.Latitude, raid.Longitude)
-	var trackingData []raidUserData
-
+// matchRaids filters the given raid rule slice and returns the surviving
+// raidUserData entries applying the per-rule raid filter logic.
+func (m *RaidMatcher) matchRaids(raid *RaidData, rules []*db.RaidTracking) []raidUserData {
 	exVal := 0
 	if raid.Ex {
 		exVal = 1
 	}
 
-	for _, r := range st.Raids {
+	var out []raidUserData
+	for _, r := range rules {
 		// pokemon_id match OR (pokemon_id==9000 AND (level matches OR level==90))
 		if !(r.PokemonID == raid.PokemonID || (r.PokemonID == 9000 && (r.Level == raid.Level || r.Level == 90))) {
 			continue
@@ -98,7 +89,7 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 			continue
 		}
 
-		trackingData = append(trackingData, raidUserData{
+		out = append(out, raidUserData{
 			HumanID:       r.ID,
 			ProfileNo:     r.ProfileNo,
 			Distance:      r.Distance,
@@ -108,6 +99,37 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 			RSVPChanges:   r.RSVPChanges,
 			IsSpecificGym: isSpecificGym,
 		})
+	}
+	return out
+}
+
+// MatchRaid returns all matched users for a raid along with the geofence
+// areas that contain the gym.
+func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(start).Seconds())
+	}()
+
+	if st == nil {
+		return nil, nil
+	}
+
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(raid.Latitude, raid.Longitude)
+
+	var trackingData []raidUserData
+	if m.GeographicPrefilter && st.GeoIndex != nil && st.RaidsByHuman != nil {
+		applicable := st.GeoIndex.ApplicableHumans(
+			raid.Latitude, raid.Longitude,
+			matchedAreaNames,
+			m.AreaSecurityEnabled && m.StrictLocations,
+		)
+		metrics.MatchingApplicable.WithLabelValues("raid").Observe(float64(len(applicable)))
+		for humanID := range applicable {
+			trackingData = append(trackingData, m.matchRaids(raid, st.RaidsByHuman[humanID])...)
+		}
+	} else {
+		trackingData = m.matchRaids(raid, st.Raids)
 	}
 
 	metrics.MatchingCandidates.WithLabelValues("raid").Observe(float64(len(trackingData)))
@@ -123,28 +145,16 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 	return users, ConvertAreas(areas)
 }
 
-// MatchEgg returns all matched users for an egg along with the geofence
-// areas that contain the gym.
-// Port of raid.js:71-131 (eggWhoCares).
-func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
-	start := time.Now()
-	defer func() {
-		metrics.MatchingDuration.WithLabelValues("egg").Observe(time.Since(start).Seconds())
-	}()
-
-	if st == nil {
-		return nil, nil
-	}
-
-	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(egg.Latitude, egg.Longitude)
-	var trackingData []raidUserData
-
+// matchEggs filters the given egg rule slice and returns the surviving
+// raidUserData entries applying the per-rule egg filter logic.
+func (m *RaidMatcher) matchEggs(egg *EggData, rules []*db.EggTracking) []raidUserData {
 	exVal := 0
 	if egg.Ex {
 		exVal = 1
 	}
 
-	for _, e := range st.Eggs {
+	var out []raidUserData
+	for _, e := range rules {
 		// level match OR level==90 (any)
 		if !(e.Level == egg.Level || e.Level == 90) {
 			continue
@@ -169,7 +179,7 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 			continue
 		}
 
-		trackingData = append(trackingData, raidUserData{
+		out = append(out, raidUserData{
 			HumanID:       e.ID,
 			ProfileNo:     e.ProfileNo,
 			Distance:      e.Distance,
@@ -179,6 +189,38 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 			RSVPChanges:   e.RSVPChanges,
 			IsSpecificGym: isSpecificGym,
 		})
+	}
+	return out
+}
+
+// MatchEgg returns all matched users for an egg along with the geofence
+// areas that contain the gym.
+// Port of raid.js:71-131 (eggWhoCares).
+func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("egg").Observe(time.Since(start).Seconds())
+	}()
+
+	if st == nil {
+		return nil, nil
+	}
+
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(egg.Latitude, egg.Longitude)
+
+	var trackingData []raidUserData
+	if m.GeographicPrefilter && st.GeoIndex != nil && st.EggsByHuman != nil {
+		applicable := st.GeoIndex.ApplicableHumans(
+			egg.Latitude, egg.Longitude,
+			matchedAreaNames,
+			m.AreaSecurityEnabled && m.StrictLocations,
+		)
+		metrics.MatchingApplicable.WithLabelValues("egg").Observe(float64(len(applicable)))
+		for humanID := range applicable {
+			trackingData = append(trackingData, m.matchEggs(egg, st.EggsByHuman[humanID])...)
+		}
+	} else {
+		trackingData = m.matchEggs(egg, st.Eggs)
 	}
 
 	metrics.MatchingCandidates.WithLabelValues("egg").Observe(float64(len(trackingData)))
