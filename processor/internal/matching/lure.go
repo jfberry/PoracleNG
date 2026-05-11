@@ -1,6 +1,9 @@
 package matching
 
 import (
+	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -22,6 +25,11 @@ type LureMatcher struct {
 // Match returns all matched users for a lure along with the geofence areas
 // that contain the pokestop.
 func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("lure").Observe(time.Since(start).Seconds())
+	}()
+
 	if st == nil {
 		return nil, nil
 	}
@@ -44,6 +52,8 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedU
 			Ping:      l.Ping,
 		})
 	}
+
+	metrics.MatchingCandidates.WithLabelValues("lure").Observe(float64(len(trackings)))
 
 	users := ValidateHumansGeneric(
 		trackings,

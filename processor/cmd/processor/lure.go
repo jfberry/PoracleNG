@@ -55,9 +55,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
 		matched, matchedAreas := ps.lureMatcher.Match(data, st)
-		metrics.MatchingDuration.WithLabelValues("lure").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokestop", raw, matchedAreas, matched)
 
