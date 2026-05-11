@@ -10,6 +10,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 func makeFortTestState(forts []*db.FortTracking, humans map[string]*db.Human) *state.State {
@@ -344,5 +345,63 @@ func TestFortMatch_RecordsCandidateCount(t *testing.T) {
 	_ = h.(prometheus.Histogram).Write(&out)
 	if got := out.GetHistogram().GetSampleSum(); got != 2 {
 		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
+	}
+}
+
+// TestFortMatch_GeoPrefilterParity asserts flag-on and flag-off produce identical results.
+func TestFortMatch_GeoPrefilterParity(t *testing.T) {
+	humans := map[string]*db.Human{
+		"u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+	}
+	rules := []db.FortTracking{
+		{ID: "u1", ProfileNo: 1, FortType: "pokestop", IncludeEmpty: false, ChangeTypes: "[]"},
+	}
+	rulesPointers := make([]*db.FortTracking, len(rules))
+	for i := range rules {
+		rulesPointers[i] = &rules[i]
+	}
+	perHuman := db.PartitionByHuman(rulesPointers, db.FortHumanID)
+
+	spatial := geofence.NewSpatialIndex([]geofence.Fence{
+		{Name: "Belgium", DisplayInMatches: true, Path: [][2]float64{{50, 3}, {50, 6}, {51, 6}, {51, 3}, {50, 3}}},
+	})
+	event := &FortData{
+		ID: "stop1", FortType: "pokestop", IsEmpty: false,
+		ChangeTypes: []string{"name"},
+		Latitude:    50.5, Longitude: 4.5,
+	}
+
+	var off, on []webhook.MatchedUser
+	for _, flag := range []bool{false, true} {
+		st := &state.State{
+			Humans:       humans,
+			Forts:        rulesPointers,
+			FortsByHuman: perHuman,
+			Geofence:     spatial,
+			GeoIndex:     state.BuildHumanGeoIndex(humans, nil),
+		}
+		matcher := &FortMatcher{GeographicPrefilter: flag}
+		users, _ := matcher.Match(event, st)
+		if flag {
+			on = users
+		} else {
+			off = users
+		}
+	}
+	if len(off) != len(on) {
+		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
+	}
+	seenOff := map[string]int{}
+	for _, u := range off {
+		seenOff[u.ID]++
+	}
+	seenOn := map[string]int{}
+	for _, u := range on {
+		seenOn[u.ID]++
+	}
+	for id, n := range seenOff {
+		if seenOn[id] != n {
+			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
+		}
 	}
 }
