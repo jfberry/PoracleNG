@@ -3,8 +3,12 @@ package matching
 import (
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 )
 
@@ -283,5 +287,74 @@ func TestMaxbattleEvolution(t *testing.T) {
 	matched, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong evolution, got %d", len(matched))
+	}
+}
+
+func TestMaxbattleMatch_RecordsMatchingDuration(t *testing.T) {
+	metrics.MatchingDuration.Reset()
+	matcher := &MaxbattleMatcher{}
+	fences := []geofence.Fence{
+		{
+			Name:             "TestArea",
+			DisplayInMatches: true,
+			Path: [][2]float64{
+				{50.0, -1.0},
+				{52.0, -1.0},
+				{52.0, 1.0},
+				{50.0, 1.0},
+			},
+		},
+	}
+	si := geofence.NewSpatialIndex(fences)
+	st := &state.State{
+		Humans:     map[string]*db.Human{},
+		Maxbattles: nil,
+		Geofence:   si,
+	}
+
+	data := &MaxbattleData{
+		StationID: "station1", PokemonID: 143, Form: 0, Level: 3,
+		Gmax: 1, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.Match(data, st)
+
+	h, err := metrics.MatchingDuration.GetMetricWithLabelValues("maxbattle")
+	if err != nil {
+		t.Fatalf("get metric: %v", err)
+	}
+	var out dto.Metric
+	if err := h.(prometheus.Histogram).Write(&out); err != nil {
+		t.Fatalf("write metric: %v", err)
+	}
+	if got := out.GetHistogram().GetSampleCount(); got != 1 {
+		t.Errorf("MatchingDuration{type=maxbattle} sample count = %d, want 1", got)
+	}
+}
+
+func TestMaxbattleMatch_RecordsCandidateCount(t *testing.T) {
+	metrics.MatchingCandidates.Reset()
+	human := makeHuman("u1")
+	mb1 := makeMaxbattle("u1", 143, 3)
+	mb2 := makeMaxbattle("u2", 9000, 3) // level-based: any pokemon at level 3
+	humans := map[string]*db.Human{
+		"u1": human,
+		"u2": makeHuman("u2"),
+	}
+	st := makeMaxbattleState([]*db.MaxbattleTracking{mb1, mb2}, humans)
+	matcher := &MaxbattleMatcher{}
+
+	data := &MaxbattleData{
+		StationID: "station1", PokemonID: 143, Form: 0, Level: 3,
+		Gmax: 1, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.Match(data, st)
+
+	h, _ := metrics.MatchingCandidates.GetMetricWithLabelValues("maxbattle")
+	var out dto.Metric
+	_ = h.(prometheus.Histogram).Write(&out)
+	if got := out.GetHistogram().GetSampleSum(); got != 2 {
+		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
 	}
 }
