@@ -112,7 +112,7 @@ func (idx *HumanGeoIndex) ApplicableHumans(
 	matchedAreas map[string]bool,
 	strictMode bool,
 ) map[string]bool {
-	out := map[string]bool{}
+	out := make(map[string]bool, 64)
 	if idx == nil {
 		return out
 	}
