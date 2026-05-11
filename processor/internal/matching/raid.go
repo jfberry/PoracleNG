@@ -118,7 +118,7 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(raid.Latitude, raid.Longitude)
 
 	var trackingData []raidUserData
-	if m.GeographicPrefilter && st.GeoIndex != nil && st.RaidsByHuman != nil {
+	if m.GeographicPrefilter && st.GeoIndex != nil {
 		applicable := st.GeoIndex.ApplicableHumans(
 			raid.Latitude, raid.Longitude,
 			matchedAreaNames,
@@ -209,7 +209,7 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(egg.Latitude, egg.Longitude)
 
 	var trackingData []raidUserData
-	if m.GeographicPrefilter && st.GeoIndex != nil && st.EggsByHuman != nil {
+	if m.GeographicPrefilter && st.GeoIndex != nil {
 		applicable := st.GeoIndex.ApplicableHumans(
 			egg.Latitude, egg.Longitude,
 			matchedAreaNames,

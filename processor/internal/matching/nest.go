@@ -70,7 +70,7 @@ func (m *NestMatcher) Match(data *NestData, st *state.State) ([]webhook.MatchedU
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 
 	var trackings []trackingUserData
-	if m.GeographicPrefilter && st.GeoIndex != nil && st.NestsByHuman != nil {
+	if m.GeographicPrefilter && st.GeoIndex != nil {
 		applicable := st.GeoIndex.ApplicableHumans(
 			data.Latitude, data.Longitude,
 			matchedAreaNames,

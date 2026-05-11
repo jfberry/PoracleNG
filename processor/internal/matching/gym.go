@@ -95,7 +95,7 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 
 	var trackings []trackingUserData
-	if m.GeographicPrefilter && st.GeoIndex != nil && st.GymsByHuman != nil {
+	if m.GeographicPrefilter && st.GeoIndex != nil {
 		applicable := st.GeoIndex.ApplicableHumans(
 			data.Latitude, data.Longitude,
 			matchedAreaNames,

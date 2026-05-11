@@ -75,7 +75,7 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 
 	var trackings []trackingUserData
-	if m.GeographicPrefilter && st.GeoIndex != nil && st.InvasionsByHuman != nil {
+	if m.GeographicPrefilter && st.GeoIndex != nil {
 		applicable := st.GeoIndex.ApplicableHumans(
 			data.Latitude, data.Longitude,
 			matchedAreaNames,

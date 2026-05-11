@@ -77,7 +77,7 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) ([]webhook.MatchedU
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 
 	var trackings []trackingUserData
-	if m.GeographicPrefilter && st.GeoIndex != nil && st.FortsByHuman != nil {
+	if m.GeographicPrefilter && st.GeoIndex != nil {
 		applicable := st.GeoIndex.ApplicableHumans(
 			data.Latitude, data.Longitude,
 			matchedAreaNames,
