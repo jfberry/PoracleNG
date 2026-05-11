@@ -2,8 +2,10 @@ package matching
 
 import (
 	"math"
+	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -30,6 +32,11 @@ type GymMatcher struct {
 // Match returns all matched users for a gym change along with the geofence
 // areas that contain the gym.
 func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(start).Seconds())
+	}()
+
 	if st == nil {
 		return nil, nil
 	}
@@ -80,6 +87,8 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 			Ping:      g.Ping,
 		})
 	}
+
+	metrics.MatchingCandidates.WithLabelValues("gym").Observe(float64(len(trackings)))
 
 	users := validateHumansForGym(
 		trackings,
