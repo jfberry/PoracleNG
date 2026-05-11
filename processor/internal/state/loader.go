@@ -57,6 +57,7 @@ func Load(manager *Manager, database *sqlx.DB) error {
 		len(data.Humans), data.Monsters.Total, len(data.Raids), len(data.Eggs),
 		len(data.Invasions), len(data.Quests), len(data.Lures),
 		len(data.Gyms), len(data.Nests), len(data.Forts), len(data.Maxbattles), len(fences))
+	log.Infof("State buckets: %s", summarizeMonsterBuckets(data.Monsters))
 
 	return nil
 }
@@ -118,6 +119,7 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 		len(data.Humans), data.Monsters.Total, len(data.Raids), len(data.Eggs),
 		len(data.Invasions), len(data.Quests), len(data.Lures),
 		len(data.Gyms), len(data.Nests), len(data.Forts), len(data.Maxbattles), len(fences))
+	log.Infof("State buckets: %s", summarizeMonsterBuckets(data.Monsters))
 
 	return nil
 }
