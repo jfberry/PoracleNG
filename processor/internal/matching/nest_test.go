@@ -3,8 +3,12 @@ package matching
 import (
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 )
 
@@ -194,5 +198,78 @@ func TestNestBlockedAlerts(t *testing.T) {
 	matched, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
+	}
+}
+
+func TestNestMatch_RecordsMatchingDuration(t *testing.T) {
+	metrics.MatchingDuration.Reset()
+	matcher := &NestMatcher{}
+	fences := []geofence.Fence{
+		{
+			Name:             "TestArea",
+			DisplayInMatches: true,
+			Path: [][2]float64{
+				{50.0, -1.0},
+				{52.0, -1.0},
+				{52.0, 1.0},
+				{50.0, 1.0},
+			},
+		},
+	}
+	si := geofence.NewSpatialIndex(fences)
+	st := &state.State{
+		Humans:   map[string]*db.Human{},
+		Nests:    nil,
+		Geofence: si,
+	}
+
+	data := &NestData{
+		NestID: 1, PokemonID: 25, Form: 0, PokemonAvg: 5.0,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.Match(data, st)
+
+	h, err := metrics.MatchingDuration.GetMetricWithLabelValues("nest")
+	if err != nil {
+		t.Fatalf("get metric: %v", err)
+	}
+	var out dto.Metric
+	if err := h.(prometheus.Histogram).Write(&out); err != nil {
+		t.Fatalf("write metric: %v", err)
+	}
+	if got := out.GetHistogram().GetSampleCount(); got != 1 {
+		t.Errorf("MatchingDuration{type=nest} sample count = %d, want 1", got)
+	}
+}
+
+func TestNestMatch_RecordsCandidateCount(t *testing.T) {
+	metrics.MatchingCandidates.Reset()
+	human := makeHuman("u1")
+	nest1 := &db.NestTracking{
+		ID: "u1", ProfileNo: 1, PokemonID: 25, Form: 0,
+		MinSpawnAvg: 0, Distance: 0, Template: "1",
+	}
+	nest2 := &db.NestTracking{
+		ID: "u2", ProfileNo: 1, PokemonID: 0, Form: 0, // any pokemon
+		MinSpawnAvg: 0, Distance: 0, Template: "1",
+	}
+	humans := map[string]*db.Human{
+		"u1": human,
+		"u2": makeHuman("u2"),
+	}
+	st := makeNestTestState([]*db.NestTracking{nest1, nest2}, humans)
+	matcher := &NestMatcher{}
+
+	data := &NestData{
+		NestID: 1, PokemonID: 25, Form: 0, PokemonAvg: 5.0,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.Match(data, st)
+
+	h, _ := metrics.MatchingCandidates.GetMetricWithLabelValues("nest")
+	var out dto.Metric
+	_ = h.(prometheus.Histogram).Write(&out)
+	if got := out.GetHistogram().GetSampleSum(); got != 2 {
+		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
 	}
 }
