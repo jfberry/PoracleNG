@@ -132,6 +132,14 @@ func main() {
 	proc := NewProcessorService(cfg, stateMgr, database)
 	proc.humans = humanStore
 
+	if cfg.Tuning.GeographicPrefilter {
+		metrics.GeographicPrefilterEnabled.Set(1)
+		log.Infof("Geographic pre-filter: ENABLED — matchers iterate per applicable human")
+	} else {
+		metrics.GeographicPrefilterEnabled.Set(0)
+		log.Infof("Geographic pre-filter: disabled — matchers walk per-pokemon buckets (set [tuning] geographic_prefilter = true to enable)")
+	}
+
 	// Restore gym state cache from previous run
 	if err := proc.gymState.Load(); err != nil {
 		log.Warnf("Failed to load gym state cache: %v", err)
