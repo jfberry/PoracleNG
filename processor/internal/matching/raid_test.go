@@ -749,22 +749,7 @@ func TestRaidMatch_GeoPrefilterParity(t *testing.T) {
 			off = users
 		}
 	}
-	if len(off) != len(on) {
-		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
-	}
-	seenOff := map[string]int{}
-	for _, u := range off {
-		seenOff[u.ID]++
-	}
-	seenOn := map[string]int{}
-	for _, u := range on {
-		seenOn[u.ID]++
-	}
-	for id, n := range seenOff {
-		if seenOn[id] != n {
-			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
-		}
-	}
+	assertMatchedUserParity(t, off, on)
 }
 
 // TestEggMatch_GeoPrefilterParity asserts flag-on and flag-off produce identical
@@ -807,20 +792,5 @@ func TestEggMatch_GeoPrefilterParity(t *testing.T) {
 			off = users
 		}
 	}
-	if len(off) != len(on) {
-		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
-	}
-	seenOff := map[string]int{}
-	for _, u := range off {
-		seenOff[u.ID]++
-	}
-	seenOn := map[string]int{}
-	for _, u := range on {
-		seenOn[u.ID]++
-	}
-	for id, n := range seenOff {
-		if seenOn[id] != n {
-			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
-		}
-	}
+	assertMatchedUserParity(t, off, on)
 }

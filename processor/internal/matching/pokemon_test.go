@@ -919,23 +919,7 @@ func TestPokemonMatch_GeoPrefilterParity(t *testing.T) {
 		}
 	}
 
-	if len(off) != len(on) {
-		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
-	}
-	// Compare by user ID (order may differ).
-	seenOff := map[string]int{}
-	for _, u := range off {
-		seenOff[u.ID]++
-	}
-	seenOn := map[string]int{}
-	for _, u := range on {
-		seenOn[u.ID]++
-	}
-	for id, n := range seenOff {
-		if seenOn[id] != n {
-			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
-		}
-	}
+	assertMatchedUserParity(t, off, on)
 }
 
 // TestPokemonMatch_GeoPrefilterParityWithPVPEvo extends the basic parity
@@ -1020,24 +1004,13 @@ func TestPokemonMatch_GeoPrefilterParityWithPVPEvo(t *testing.T) {
 		}
 	}
 
-	if len(off) != len(on) {
-		t.Fatalf("PVP-evo parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
-	}
+	assertMatchedUserParity(t, off, on)
+	// Sanity: both u1 (PVP evo match for Sylveon) and u2 (direct Eevee match)
+	// must appear exactly once.
 	seenOff := map[string]int{}
 	for _, u := range off {
 		seenOff[u.ID]++
 	}
-	seenOn := map[string]int{}
-	for _, u := range on {
-		seenOn[u.ID]++
-	}
-	for id, n := range seenOff {
-		if seenOn[id] != n {
-			t.Errorf("PVP-evo parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
-		}
-	}
-	// Sanity: both u1 (PVP evo match for Sylveon) and u2 (direct Eevee match)
-	// must appear exactly once.
 	for _, id := range []string{"u1", "u2"} {
 		if seenOff[id] != 1 {
 			t.Errorf("expected user %q matched once (flag-off), got %d", id, seenOff[id])
@@ -1271,25 +1244,10 @@ func TestPokemonMatch_GeoPrefilterParityWithDistanceOnly(t *testing.T) {
 		}
 	}
 
-	if len(off) != len(on) {
-		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
-	}
 	if len(off) == 0 {
 		t.Fatalf("expected at least 1 matched user (distance-only spawn within 10km), got 0 on both paths — test setup is wrong")
 	}
-	seenOff := map[string]int{}
-	for _, u := range off {
-		seenOff[u.ID]++
-	}
-	seenOn := map[string]int{}
-	for _, u := range on {
-		seenOn[u.ID]++
-	}
-	for id, n := range seenOff {
-		if seenOn[id] != n {
-			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
-		}
-	}
+	assertMatchedUserParity(t, off, on)
 }
 
 // TestPokemonMatch_GeoPrefilterDistanceOutOfRange confirms the rtree

@@ -5,7 +5,33 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
+
+// assertMatchedUserParity verifies that two slices of MatchedUser
+// (typically flag-off and flag-on outputs from the same matcher
+// invocation) match by ID, with the same per-ID count. Order-
+// insensitive. Used by the *_GeoPrefilterParity tests across all
+// matcher types.
+func assertMatchedUserParity(t *testing.T, off, on []webhook.MatchedUser) {
+	t.Helper()
+	if len(off) != len(on) {
+		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
+	}
+	seenOff := map[string]int{}
+	for _, u := range off {
+		seenOff[u.ID]++
+	}
+	seenOn := map[string]int{}
+	for _, u := range on {
+		seenOn[u.ID]++
+	}
+	for id, n := range seenOff {
+		if seenOn[id] != n {
+			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
+		}
+	}
+}
 
 func TestValidateHumansGenericBasic(t *testing.T) {
 	human := makeHuman("user1")
