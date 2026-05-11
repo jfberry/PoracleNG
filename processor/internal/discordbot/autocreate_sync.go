@@ -99,20 +99,22 @@ func classifyFences(rule config.AutocreateRule, fences []geofence.Fence, state a
 			continue
 		}
 
-		// Render params using pre-compiled templates, then tokenise each
-		// rendered element so a single param like "{{group}} {{name}}"
-		// expands to two args. Quoted segments stay as one token
-		// (`"Gent Centrum"` → one arg) to match the bot parser's behaviour.
+		// Render params using pre-compiled templates. Each element of the
+		// `params` array is exactly one positional arg — multi-word values
+		// like a Group of "New York" stay as a single arg ("New York"),
+		// they are NOT split on whitespace. quoteForCommand re-quotes the
+		// arg later when it's substituted into a bot command, so the bot
+		// parser sees one token.
+		//
+		// Operators who want multiple args render multiple `params`
+		// elements (e.g. `params = ["{{group}}", "{{name}}"]`).
 		rendered, err := cp.render(f)
 		if err != nil {
 			log.Warnf("autocreate sync %q: params error for fence %q: %v (skipping)", rule.Name, f.Name, err)
 			res.skipped = append(res.skipped, syncSkip{Fence: f.Name, Reason: fmt.Sprintf("params render error: %v", err)})
 			continue
 		}
-		var rawArgs []string
-		for _, p := range rendered {
-			rawArgs = append(rawArgs, tokenizeParamString(p)...)
-		}
+		rawArgs := append([]string(nil), rendered...)
 		args := make([]string, len(rawArgs))
 		for i, a := range rawArgs {
 			args[i] = strings.ToLower(a)

@@ -37,6 +37,51 @@ func TestSyncRule_FilterSelectsFences(t *testing.T) {
 	}
 }
 
+// TestSyncRule_PreservesMultiWordParam covers the bug where a group
+// like "New York" was being split into two positional args ("New",
+// "York") at the bulk-render step, so the category template rendered
+// to "New" and the channel template to "York" — collapsing every
+// US-state fence with a multi-word state name onto the same channel.
+// Each `params` element must produce exactly one positional arg.
+func TestSyncRule_PreservesMultiWordParam(t *testing.T) {
+	fences := []geofence.Fence{
+		{Name: "Altamont_NY", Group: "New York"},
+		{Name: "AlbanyDowntown_NY", Group: "New York"},
+	}
+	rule := config.AutocreateRule{
+		Name:     "us3",
+		Guild:    "g1",
+		Template: "area",
+		Params:   []string{"{{group}}", "{{name}}"},
+	}
+
+	res := classifyFences(rule, fences, autocreateRuleState{})
+
+	if len(res.toCreate) != 2 {
+		t.Fatalf("expected 2 fences to create, got %d", len(res.toCreate))
+	}
+	wantArgs := map[string][]string{
+		"Altamont_NY":        {"New York", "Altamont_NY"},
+		"AlbanyDowntown_NY":  {"New York", "AlbanyDowntown_NY"},
+	}
+	for _, c := range res.toCreate {
+		want, ok := wantArgs[c.fence.Name]
+		if !ok {
+			t.Errorf("unexpected fence %q in create set", c.fence.Name)
+			continue
+		}
+		if len(c.rawArgs) != len(want) {
+			t.Errorf("fence %q: rawArgs = %v, want %v", c.fence.Name, c.rawArgs, want)
+			continue
+		}
+		for i := range want {
+			if c.rawArgs[i] != want[i] {
+				t.Errorf("fence %q: rawArgs[%d] = %q, want %q", c.fence.Name, i, c.rawArgs[i], want[i])
+			}
+		}
+	}
+}
+
 func TestSyncRule_ClassifiesReusedAndOrphan(t *testing.T) {
 	fences := []geofence.Fence{
 		{Name: "Gent_centrum", Group: "Belgium"},
@@ -328,11 +373,12 @@ func TestSyncCacheKey_PathFromBaseDir(t *testing.T) {
 	}
 }
 
-// A single rendered params element with internal whitespace expands to
-// multiple args; a quoted segment stays as one. Mirrors the bot parser so
-// fence names like "Gent Centrum" survive when an admin chooses to render
-// them as a single element.
-func TestSyncRule_ParamsTokenisedAfterRender(t *testing.T) {
+// Each `params` element is exactly one positional arg — the rendered
+// string is NOT re-split on whitespace. Operators who want multiple
+// args render multiple `params` elements. This is the inverse of the
+// pre-fix behaviour which split on whitespace and broke multi-word
+// values like a US state Group of "New York".
+func TestSyncRule_ParamsAreOneArgPerElement(t *testing.T) {
 	fences := []geofence.Fence{
 		{Name: "Gent_centrum", Group: "Belgium"},
 	}
@@ -340,7 +386,7 @@ func TestSyncRule_ParamsTokenisedAfterRender(t *testing.T) {
 		Name:     "uk-areas",
 		Guild:    "g1",
 		Template: "area",
-		Params:   []string{`{{group}} "{{name}}"`},
+		Params:   []string{`{{group}} {{name}}`}, // single element, multiple refs
 	}
 
 	res := classifyFences(rule, fences, autocreateRuleState{})
@@ -349,7 +395,7 @@ func TestSyncRule_ParamsTokenisedAfterRender(t *testing.T) {
 		t.Fatalf("expected 1 fence in toCreate, got %d", len(res.toCreate))
 	}
 	got := res.toCreate[0].rawArgs
-	want := []string{"Belgium", "Gent_centrum"}
+	want := []string{"Belgium Gent_centrum"}
 	if len(got) != len(want) {
 		t.Fatalf("rawArgs = %v, want %v (length differs)", got, want)
 	}
