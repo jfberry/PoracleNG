@@ -571,15 +571,18 @@ Templates are loaded from `config/dts.json` (or `fallbacks/dts.json` as fallback
 
 ### Template Selection Chain
 
-Template selection uses a two-pass mechanism. The first pass considers only user entries (non-readonly, from `config/dts.json` or `config/dts/`). If nothing matches, the second pass considers only fallback entries (readonly, from `fallbacks/dts.json`). Within each pass, 5 priority levels are tried in order:
+Template selection uses a two-pass mechanism. The first pass considers only user entries (non-readonly, from `config/dts.json` or `config/dts/`). If nothing matches, the second pass considers only fallback entries (readonly, from `fallbacks/dts.json`). Within each pass, 6 priority levels are tried in order:
 
 1. Exact match: type + template ID + platform + language
 2. Template + platform: type + template ID + platform (entry has empty language)
 3. Default + language: type + default template + platform + language
 4. Default: type + default template + platform (entry has empty language)
-5. Default + any language: type + default template + platform (last resort, any language)
+5. Default + configured locale: type + default template + platform + `[general] locale` (only when the user's language differs from the configured locale)
+6. Default + any language: type + default template + platform (last resort, any language)
 
 Within each level, the **last match wins** so that `config/dts/` overrides `config/dts.json` (later-loaded files are appended). Levels 3 and 4 share a return check: a level 4 match supersedes a level 3 match.
+
+Step 5 protects against a real-world failure mode: a user with a legacy language setting (e.g. `language="nl"`) that no longer ships templates would otherwise drop to step 6, where "last match wins" picks whichever default entry was loaded last — often a language unrelated to the operator's chosen `[general] locale`. Preferring the configured locale before step 6 keeps these users on the operator's default language rather than an arbitrary one.
 
 ### LayeredView (zero-copy template context)
 

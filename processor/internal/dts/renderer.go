@@ -106,6 +106,13 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 		altLang = "en"
 	}
 
+	// Tell the template store which locale to prefer when a user's
+	// language isn't shipped (step 5 of the selection chain). Without
+	// this, legacy users with an untranslated language (e.g. lang="nl"
+	// with no NL templates) silently fall to whichever default entry
+	// loaded last — often DE rather than the operator's chosen EN.
+	ts.SetDefaultLocale(locale)
+
 	return &Renderer{
 		templates:       ts,
 		viewBuilder:     vb,
