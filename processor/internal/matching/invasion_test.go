@@ -402,7 +402,7 @@ func TestInvasionMatch_GeoPrefilterParity(t *testing.T) {
 	for i := range rules {
 		rulesPointers[i] = &rules[i]
 	}
-	perHuman := db.PartitionByHuman(rulesPointers, db.InvasionHumanID)
+	perHuman := db.PartitionByHuman[db.InvasionTracking](rulesPointers)
 
 	spatial := geofence.NewSpatialIndex([]geofence.Fence{
 		{Name: "Belgium", DisplayInMatches: true, Path: [][2]float64{{50, 3}, {50, 6}, {51, 6}, {51, 3}, {50, 3}}},

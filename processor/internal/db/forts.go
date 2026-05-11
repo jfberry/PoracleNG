@@ -34,6 +34,3 @@ func LoadForts(db *sqlx.DB) ([]*FortTracking, error) {
 	}
 	return result, nil
 }
-
-// FortHumanID returns the human ID for a FortTracking row.
-func FortHumanID(r *FortTracking) string { return r.ID }

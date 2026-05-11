@@ -9,7 +9,7 @@ func TestPartitionByHuman_GroupsByExtractor(t *testing.T) {
 		{ID: "u1", Level: 3},
 	}
 	rows := []*RaidTracking{&raids[0], &raids[1], &raids[2]}
-	got := PartitionByHuman(rows, RaidHumanID)
+	got := PartitionByHuman[RaidTracking](rows)
 	if len(got["u1"]) != 2 {
 		t.Errorf("u1 = %d rules, want 2", len(got["u1"]))
 	}
@@ -24,7 +24,7 @@ func TestPartitionByHuman_GroupsByExtractor(t *testing.T) {
 func TestPartitionByHuman_EmptyIDSkipped(t *testing.T) {
 	raids := []RaidTracking{{ID: ""}, {ID: "u1"}}
 	rows := []*RaidTracking{&raids[0], &raids[1]}
-	got := PartitionByHuman(rows, RaidHumanID)
+	got := PartitionByHuman[RaidTracking](rows)
 	if _, ok := got[""]; ok {
 		t.Errorf("empty ID should not appear")
 	}

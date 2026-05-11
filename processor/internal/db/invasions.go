@@ -31,6 +31,3 @@ func LoadInvasions(db *sqlx.DB) ([]*InvasionTracking, error) {
 	}
 	return result, nil
 }
-
-// InvasionHumanID returns the human ID for an InvasionTracking row.
-func InvasionHumanID(r *InvasionTracking) string { return r.ID }

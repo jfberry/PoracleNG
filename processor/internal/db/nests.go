@@ -33,6 +33,3 @@ func LoadNests(db *sqlx.DB) ([]*NestTracking, error) {
 	}
 	return result, nil
 }
-
-// NestHumanID returns the human ID for a NestTracking row.
-func NestHumanID(r *NestTracking) string { return r.ID }

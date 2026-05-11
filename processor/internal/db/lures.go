@@ -30,6 +30,3 @@ func LoadLures(db *sqlx.DB) ([]*LureTracking, error) {
 	}
 	return result, nil
 }
-
-// LureHumanID returns the human ID for a LureTracking row.
-func LureHumanID(r *LureTracking) string { return r.ID }

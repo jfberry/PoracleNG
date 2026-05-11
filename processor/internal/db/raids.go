@@ -75,9 +75,3 @@ func LoadEggs(db *sqlx.DB) ([]*EggTracking, error) {
 	}
 	return result, nil
 }
-
-// RaidHumanID returns the human ID for a RaidTracking row.
-func RaidHumanID(r *RaidTracking) string { return r.ID }
-
-// EggHumanID returns the human ID for an EggTracking row.
-func EggHumanID(e *EggTracking) string { return e.ID }

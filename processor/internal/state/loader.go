@@ -19,15 +19,15 @@ import (
 // touching one place.
 func buildPerHumanIndexes(s *State, data *db.AllData) {
 	s.GeoIndex = BuildHumanGeoIndex(data.Humans, PerHumanMaxDistance(data))
-	s.RaidsByHuman = db.PartitionByHuman(data.Raids, db.RaidHumanID)
-	s.EggsByHuman = db.PartitionByHuman(data.Eggs, db.EggHumanID)
-	s.QuestsByHuman = db.PartitionByHuman(data.Quests, db.QuestHumanID)
-	s.InvasionsByHuman = db.PartitionByHuman(data.Invasions, db.InvasionHumanID)
-	s.LuresByHuman = db.PartitionByHuman(data.Lures, db.LureHumanID)
-	s.NestsByHuman = db.PartitionByHuman(data.Nests, db.NestHumanID)
-	s.GymsByHuman = db.PartitionByHuman(data.Gyms, db.GymHumanID)
-	s.FortsByHuman = db.PartitionByHuman(data.Forts, db.FortHumanID)
-	s.MaxbattlesByHuman = db.PartitionByHuman(data.Maxbattles, db.MaxbattleHumanID)
+	s.RaidsByHuman = db.PartitionByHuman[db.RaidTracking](data.Raids)
+	s.EggsByHuman = db.PartitionByHuman[db.EggTracking](data.Eggs)
+	s.QuestsByHuman = db.PartitionByHuman[db.QuestTracking](data.Quests)
+	s.InvasionsByHuman = db.PartitionByHuman[db.InvasionTracking](data.Invasions)
+	s.LuresByHuman = db.PartitionByHuman[db.LureTracking](data.Lures)
+	s.NestsByHuman = db.PartitionByHuman[db.NestTracking](data.Nests)
+	s.GymsByHuman = db.PartitionByHuman[db.GymTracking](data.Gyms)
+	s.FortsByHuman = db.PartitionByHuman[db.FortTracking](data.Forts)
+	s.MaxbattlesByHuman = db.PartitionByHuman[db.MaxbattleTracking](data.Maxbattles)
 }
 
 // Load reloads tracking data from the database while preserving the existing
