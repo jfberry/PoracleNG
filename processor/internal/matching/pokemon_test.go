@@ -868,3 +868,98 @@ func TestPokemonMatch_RecordsCandidateCount(t *testing.T) {
 		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
 	}
 }
+
+// Combinatorial check: a user with rules across multiple profiles, an
+// area selection AND a strict AreaRestriction, all interacting at once.
+// This is exactly the combination a geographic pre-filter could silently
+// drop rules from if it's implemented wrong; locking in expected
+// behaviour here means Phase 2 changes that misbehave fail loudly.
+func TestPokemonMatch_MultiProfileWithStrictArea(t *testing.T) {
+	// Set up human with multiple areas and a strict restriction
+	human := &db.Human{
+		ID:               "u1",
+		Enabled:          true,
+		Area:             []string{"belgium", "antwerp"},
+		AreaRestriction:  []string{"belgium"},
+		Latitude:         0.5,
+		Longitude:        0.5,
+		CurrentProfileNo: 2,
+	}
+	humans := map[string]*db.Human{"u1": human}
+
+	// Create two rules: one for profile 1, one for profile 2
+	rule1 := makeMonster("u1", 25)
+	rule1.ProfileNo = 1 // Profile 1 — should NOT match (wrong profile)
+
+	rule2 := makeMonster("u1", 25)
+	rule2.ProfileNo = 2 // Profile 2 — should match (correct profile)
+
+	rules := []*db.MonsterTracking{rule1, rule2}
+
+	// Create geofence with two areas: "belgium" and "antwerp"
+	// Both contain (0, 0) where the pokemon spawns
+	fences := []geofence.Fence{
+		{
+			Name:             "Belgium",
+			DisplayInMatches: true,
+			Path:             [][2]float64{{-1, -1}, {-1, 1}, {1, 1}, {1, -1}, {-1, -1}},
+		},
+		{
+			Name:             "Antwerp",
+			DisplayInMatches: true,
+			Path:             [][2]float64{{-0.5, -0.5}, {-0.5, 0.5}, {0.5, 0.5}, {0.5, -0.5}, {-0.5, -0.5}},
+		},
+	}
+	geoIndex := geofence.NewSpatialIndex(fences)
+
+	// Initialize MonsterIndex with both rules
+	idx := &db.MonsterIndex{
+		ByPokemonID:   map[int][]*db.MonsterTracking{25: rules},
+		PVPSpecific:   make(map[int][]*db.MonsterTracking),
+		PVPEverything: make(map[int][]*db.MonsterTracking),
+	}
+	for _, league := range []int{500, 1500, 2500} {
+		idx.PVPSpecific[league] = nil
+		idx.PVPEverything[league] = nil
+	}
+
+	st := &state.State{
+		Humans:   humans,
+		Monsters: idx,
+		Geofence: geoIndex,
+		Fences:   fences,
+	}
+
+	// Pokemon at (0, 0) — in both Belgium and Antwerp geofences
+	pokemon := &ProcessedPokemon{
+		PokemonID:   25,
+		Form:        0,
+		IV:          100,
+		CP:          1000,
+		Level:       20,
+		ATK:         15,
+		DEF:         15,
+		STA:         15,
+		Weight:      6.0,
+		Size:        1,
+		RarityGroup: 1,
+		TTHSeconds:  600,
+		Latitude:    0,
+		Longitude:   0,
+		Encountered: true,
+		PVPBestRank: make(map[int][]pvp.LeagueRank),
+		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
+	}
+
+	matcher := &PokemonMatcher{StrictLocations: true, AreaSecurityEnabled: true}
+	users, _ := matcher.Match(pokemon, st)
+
+	// Expected: exactly 1 matched user (profile 2 only)
+	// Profile 1 rule should be filtered by CurrentProfileNo check
+	if len(users) != 1 {
+		t.Fatalf("expected exactly 1 matched user (profile 2 only), got %d", len(users))
+	}
+	if users[0].ID != "u1" {
+		t.Errorf("matched ID = %q, want u1", users[0].ID)
+	}
+}
