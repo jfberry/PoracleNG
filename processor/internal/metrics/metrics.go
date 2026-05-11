@@ -160,6 +160,18 @@ var (
 		Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25},
 	}, []string{"type"})
 
+	MatchingCandidates = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_processor_matching_candidates",
+		Help:    "Number of tracking rules scanned per webhook (before any filtering)",
+		Buckets: []float64{1, 10, 100, 1000, 10000, 100000, 1000000},
+	}, []string{"type"})
+
+	MatchingApplicable = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_processor_matching_applicable_humans",
+		Help:    "Number of humans geographically applicable to this spawn (geographic_prefilter on; not observed when flag is off)",
+		Buckets: []float64{1, 10, 100, 1000, 10000, 100000},
+	}, []string{"type"})
+
 	// Build info
 	BuildInfo = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "poracle_processor_build_info",
