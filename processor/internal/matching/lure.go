@@ -3,6 +3,7 @@ package matching
 import (
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -20,6 +21,28 @@ type LureData struct {
 type LureMatcher struct {
 	StrictLocations     bool
 	AreaSecurityEnabled bool
+	GeographicPrefilter bool
+}
+
+// matchLures filters the given lure rule slice and returns the surviving
+// trackingUserData entries applying the per-rule lure filter logic.
+func (m *LureMatcher) matchLures(data *LureData, rules []*db.LureTracking) []trackingUserData {
+	var out []trackingUserData
+	for _, l := range rules {
+		// lure_id match OR lure_id==0 (any)
+		if !(l.LureID == data.LureID || l.LureID == 0) {
+			continue
+		}
+		out = append(out, trackingUserData{
+			HumanID:   l.ID,
+			ProfileNo: l.ProfileNo,
+			Distance:  l.Distance,
+			Template:  l.Template,
+			Clean:     l.Clean,
+			Ping:      l.Ping,
+		})
+	}
+	return out
 }
 
 // Match returns all matched users for a lure along with the geofence areas
@@ -35,22 +58,20 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedU
 	}
 
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
+
 	var trackings []trackingUserData
-
-	for _, l := range st.Lures {
-		// lure_id match OR lure_id==0 (any)
-		if !(l.LureID == data.LureID || l.LureID == 0) {
-			continue
+	if m.GeographicPrefilter && st.GeoIndex != nil && st.LuresByHuman != nil {
+		applicable := st.GeoIndex.ApplicableHumans(
+			data.Latitude, data.Longitude,
+			matchedAreaNames,
+			m.AreaSecurityEnabled && m.StrictLocations,
+		)
+		metrics.MatchingApplicable.WithLabelValues("lure").Observe(float64(len(applicable)))
+		for humanID := range applicable {
+			trackings = append(trackings, m.matchLures(data, st.LuresByHuman[humanID])...)
 		}
-
-		trackings = append(trackings, trackingUserData{
-			HumanID:   l.ID,
-			ProfileNo: l.ProfileNo,
-			Distance:  l.Distance,
-			Template:  l.Template,
-			Clean:     l.Clean,
-			Ping:      l.Ping,
-		})
+	} else {
+		trackings = m.matchLures(data, st.Lures)
 	}
 
 	metrics.MatchingCandidates.WithLabelValues("lure").Observe(float64(len(trackings)))
