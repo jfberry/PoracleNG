@@ -1,7 +1,10 @@
 package matching
 
 import (
+	"time"
+
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -33,6 +36,11 @@ type QuestMatcher struct {
 // Match returns all matched users for a quest along with the geofence areas
 // that contain the pokestop.
 func (m *QuestMatcher) Match(data *QuestData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("quest").Observe(time.Since(start).Seconds())
+	}()
+
 	if st == nil {
 		return nil, nil
 	}
@@ -54,6 +62,8 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) ([]webhook.Matche
 			Ping:      q.Ping,
 		})
 	}
+
+	metrics.MatchingCandidates.WithLabelValues("quest").Observe(float64(len(trackings)))
 
 	users := ValidateHumansGeneric(
 		trackings,
