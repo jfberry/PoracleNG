@@ -60,8 +60,10 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 		}
 
 		// Specific gym or area/distance
+		isSpecificGym := false
 		if g.GymID != nil && *g.GymID == data.GymID {
 			// Specific gym match — skip area/distance check
+			isSpecificGym = true
 		} else if g.GymID != nil {
 			// Tracking a specific gym but it's not this one
 			continue
@@ -69,12 +71,13 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 		// If g.GymID is nil, area/distance is checked by validateHumansForGym
 
 		out = append(out, trackingUserData{
-			HumanID:   g.ID,
-			ProfileNo: g.ProfileNo,
-			Distance:  g.Distance,
-			Template:  g.Template,
-			Clean:     g.Clean,
-			Ping:      g.Ping,
+			HumanID:       g.ID,
+			ProfileNo:     g.ProfileNo,
+			Distance:      g.Distance,
+			Template:      g.Template,
+			Clean:         g.Clean,
+			Ping:          g.Ping,
+			IsSpecificGym: isSpecificGym,
 		})
 	}
 	return out
@@ -117,32 +120,22 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 		matchedAreaNames,
 		m.AreaSecurityEnabled && m.StrictLocations,
 		st.Humans,
-		st.Gyms,
-		data.GymID,
 	)
 	return users, ConvertAreas(areas)
 }
 
 // validateHumansForGym is like ValidateHumansGeneric but handles specific gym tracking.
+// The IsSpecificGym flag on each trackingUserData is set by matchGyms, so no full
+// gym-tracking scan is needed here.
 func validateHumansForGym(
 	trackings []trackingUserData,
 	lat, lon float64,
 	matchedAreaNames map[string]bool,
 	strictAreasEnabled bool,
 	humans map[string]*db.Human,
-	gymTrackings []*db.GymTracking,
-	gymID string,
 ) []webhook.MatchedUser {
 	if len(trackings) == 0 {
 		return nil
-	}
-
-	// Build a quick lookup for specific gym trackings
-	specificGymUsers := make(map[string]bool)
-	for _, g := range gymTrackings {
-		if g.GymID != nil && *g.GymID == gymID {
-			specificGymUsers[g.ID] = true
-		}
 	}
 
 	seen := make(map[string]bool)
@@ -171,8 +164,7 @@ func validateHumansForGym(
 			return dist
 		}
 
-		isSpecificGym := specificGymUsers[td.HumanID]
-		if isSpecificGym {
+		if td.IsSpecificGym {
 			if human.BlockedAlertsSet["specificgym"] {
 				continue
 			}

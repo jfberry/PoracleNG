@@ -44,6 +44,7 @@ type trackingUserData struct {
 	Clean             int
 	Ping              string
 	IsSpecificStation bool // maxbattle: station-specific tracking (for specificstation blocked check)
+	IsSpecificGym     bool // gym: specific-gym tracking (skip area/distance check, use specificgym blocked check)
 }
 
 // ValidateHumansGeneric filters matched trackings against human criteria.
