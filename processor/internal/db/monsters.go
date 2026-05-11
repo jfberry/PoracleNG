@@ -60,9 +60,10 @@ type MonsterIndex struct {
 // Pointer identity is preserved: entries in the index point into the monsters slice.
 func BuildMonsterIndexFromRules(monsters []MonsterTracking) *MonsterIndex {
 	idx := &MonsterIndex{
-		ByPokemonID:   make(map[int][]*MonsterTracking),
-		PVPSpecific:   make(map[int][]*MonsterTracking),
-		PVPEverything: make(map[int][]*MonsterTracking),
+		ByPokemonID:      make(map[int][]*MonsterTracking),
+		PVPSpecific:      make(map[int][]*MonsterTracking),
+		PVPEverything:    make(map[int][]*MonsterTracking),
+		ByHumanAndLeague: make(map[string]map[int][]*MonsterTracking),
 	}
 	for _, league := range []int{500, 1500, 2500} {
 		idx.PVPSpecific[league] = nil
@@ -80,12 +81,6 @@ func BuildMonsterIndexFromRules(monsters []MonsterTracking) *MonsterIndex {
 		} else {
 			idx.ByPokemonID[m.PokemonID] = append(idx.ByPokemonID[m.PokemonID], m)
 		}
-	}
-	idx.Total = len(monsters)
-
-	idx.ByHumanAndLeague = map[string]map[int][]*MonsterTracking{}
-	for i := range monsters {
-		m := &monsters[i]
 		perH, ok := idx.ByHumanAndLeague[m.ID]
 		if !ok {
 			perH = map[int][]*MonsterTracking{}
@@ -93,6 +88,7 @@ func BuildMonsterIndexFromRules(monsters []MonsterTracking) *MonsterIndex {
 		}
 		perH[m.PVPRankingLeague] = append(perH[m.PVPRankingLeague], m)
 	}
+	idx.Total = len(monsters)
 
 	return idx
 }
