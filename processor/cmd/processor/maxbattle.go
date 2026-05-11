@@ -26,7 +26,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 	go func() {
 		start := time.Now()
 		defer func() {
-			metrics.WebhookProcessingDuration.WithLabelValues("maxbattle").Observe(time.Since(start).Seconds())
+			metrics.WebhookProcessingDuration.WithLabelValues(metrics.TypeMaxbattle).Observe(time.Since(start).Seconds())
 			metrics.WorkerPoolInUse.Dec()
 			<-ps.workerPool
 		}()
@@ -43,7 +43,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 		// Duplicate check
 		if ps.duplicates.CheckMaxbattle(mb.ID, mb.BattleEnd, mb.BattlePokemonID) {
 			l.Debug("Maxbattle duplicate, ignoring")
-			metrics.DuplicatesSkipped.WithLabelValues("maxbattle").Inc()
+			metrics.DuplicatesSkipped.WithLabelValues(metrics.TypeMaxbattle).Inc()
 			return
 		}
 
@@ -75,8 +75,8 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 		matched = ps.filterValidation("max_battle", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("maxbattle").Inc()
-			metrics.MatchedUsers.WithLabelValues("maxbattle").Add(float64(len(matched)))
+			metrics.MatchedEvents.WithLabelValues(metrics.TypeMaxbattle).Inc()
+			metrics.MatchedUsers.WithLabelValues(metrics.TypeMaxbattle).Add(float64(len(matched)))
 			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Maxbattle L%d %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",

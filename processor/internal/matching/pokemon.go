@@ -106,7 +106,7 @@ type PokemonMatcher struct {
 func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("pokemon").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypePokemon).Observe(time.Since(start).Seconds())
 	}()
 	if st == nil || st.Monsters == nil {
 		return nil, nil
@@ -121,12 +121,12 @@ func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) ([]we
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("pokemon").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypePokemon).Observe(float64(len(applicable)))
 		matched = m.assembleCandidatesPerHuman(pokemon, st, applicable)
 	} else {
 		matched = m.assembleCandidatesPerBucket(pokemon, st)
 	}
-	metrics.MatchingCandidates.WithLabelValues("pokemon").Observe(float64(len(matched)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypePokemon).Observe(float64(len(matched)))
 
 	users := ValidateHumans(
 		matched,

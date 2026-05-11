@@ -27,7 +27,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 	go func() {
 		start := time.Now()
 		defer func() {
-			metrics.WebhookProcessingDuration.WithLabelValues("nest").Observe(time.Since(start).Seconds())
+			metrics.WebhookProcessingDuration.WithLabelValues(metrics.TypeNest).Observe(time.Since(start).Seconds())
 			metrics.WorkerPoolInUse.Dec()
 			<-ps.workerPool
 		}()
@@ -44,7 +44,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 		// Duplicate check
 		if ps.duplicates.CheckNest(nest.NestID, nest.PokemonID, nest.ResetTime) {
 			l.Debug("Nest duplicate, ignoring")
-			metrics.DuplicatesSkipped.WithLabelValues("nest").Inc()
+			metrics.DuplicatesSkipped.WithLabelValues(metrics.TypeNest).Inc()
 			return
 		}
 
@@ -63,8 +63,8 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 		matched = ps.filterValidation("nest", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("nest").Inc()
-			metrics.MatchedUsers.WithLabelValues("nest").Add(float64(len(matched)))
+			metrics.MatchedEvents.WithLabelValues(metrics.TypeNest).Inc()
+			metrics.MatchedUsers.WithLabelValues(metrics.TypeNest).Add(float64(len(matched)))
 			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Nest %s (avg %.1f/hr) areas(%s) and %d humans cared",

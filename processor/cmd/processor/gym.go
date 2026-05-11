@@ -26,7 +26,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 	go func() {
 		start := time.Now()
 		defer func() {
-			metrics.WebhookProcessingDuration.WithLabelValues("gym").Observe(time.Since(start).Seconds())
+			metrics.WebhookProcessingDuration.WithLabelValues(metrics.TypeGym).Observe(time.Since(start).Seconds())
 			metrics.WorkerPoolInUse.Dec()
 			<-ps.workerPool
 		}()
@@ -99,8 +99,8 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		matched = ps.filterValidation("gym", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("gym").Inc()
-			metrics.MatchedUsers.WithLabelValues("gym").Add(float64(len(matched)))
+			metrics.MatchedEvents.WithLabelValues(metrics.TypeGym).Inc()
+			metrics.MatchedUsers.WithLabelValues(metrics.TypeGym).Add(float64(len(matched)))
 			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",

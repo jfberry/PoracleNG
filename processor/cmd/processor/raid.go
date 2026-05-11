@@ -28,7 +28,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 	go func() {
 		start := time.Now()
 		defer func() {
-			metrics.WebhookProcessingDuration.WithLabelValues("raid").Observe(time.Since(start).Seconds())
+			metrics.WebhookProcessingDuration.WithLabelValues(metrics.TypeRaid).Observe(time.Since(start).Seconds())
 			metrics.WorkerPoolInUse.Dec()
 			<-ps.workerPool
 		}()
@@ -53,7 +53,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		}
 		isDuplicate, isFirstNotification := ps.duplicates.CheckRaid(raid.GymID, raid.End, raid.PokemonID, rsvps)
 		if isDuplicate {
-			metrics.DuplicatesSkipped.WithLabelValues("raid").Inc()
+			metrics.DuplicatesSkipped.WithLabelValues(metrics.TypeRaid).Inc()
 			l.Debugf("Raid/egg level %d on gym %s is a duplicate, skipping", raid.Level, raid.GymID)
 			return
 		}
@@ -142,8 +142,8 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		matched = ps.filterValidation(raidType, raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("raid").Inc()
-			metrics.MatchedUsers.WithLabelValues("raid").Add(float64(len(matched)))
+			metrics.MatchedEvents.WithLabelValues(metrics.TypeRaid).Inc()
+			metrics.MatchedUsers.WithLabelValues(metrics.TypeRaid).Add(float64(len(matched)))
 			metrics.IntervalMatched.Add(1)
 
 			msgType := "raid"

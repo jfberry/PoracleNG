@@ -60,7 +60,7 @@ func (m *QuestMatcher) matchQuests(data *QuestData, rules []*db.QuestTracking) [
 func (m *QuestMatcher) Match(data *QuestData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("quest").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeQuest).Observe(time.Since(start).Seconds())
 	}()
 
 	if st == nil {
@@ -76,7 +76,7 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) ([]webhook.Matche
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("quest").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypeQuest).Observe(float64(len(applicable)))
 		for humanID := range applicable {
 			trackings = append(trackings, m.matchQuests(data, st.QuestsByHuman[humanID])...)
 		}
@@ -84,7 +84,7 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) ([]webhook.Matche
 		trackings = m.matchQuests(data, st.Quests)
 	}
 
-	metrics.MatchingCandidates.WithLabelValues("quest").Observe(float64(len(trackings)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeQuest).Observe(float64(len(trackings)))
 
 	users := ValidateHumansGeneric(
 		trackings,

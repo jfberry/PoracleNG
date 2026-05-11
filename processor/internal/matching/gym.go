@@ -85,7 +85,7 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeGym).Observe(time.Since(start).Seconds())
 	}()
 
 	if st == nil {
@@ -101,7 +101,7 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("gym").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypeGym).Observe(float64(len(applicable)))
 		for humanID := range applicable {
 			trackings = append(trackings, m.matchGyms(data, st.GymsByHuman[humanID])...)
 		}
@@ -109,7 +109,7 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 		trackings = m.matchGyms(data, st.Gyms)
 	}
 
-	metrics.MatchingCandidates.WithLabelValues("gym").Observe(float64(len(trackings)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeGym).Observe(float64(len(trackings)))
 
 	users := validateHumansForGym(
 		trackings,

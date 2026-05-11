@@ -92,7 +92,7 @@ func (m *MaxbattleMatcher) matchMaxbattles(data *MaxbattleData, rules []*db.Maxb
 func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("maxbattle").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeMaxbattle).Observe(time.Since(start).Seconds())
 	}()
 
 	if st == nil {
@@ -108,7 +108,7 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("maxbattle").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypeMaxbattle).Observe(float64(len(applicable)))
 		for humanID := range applicable {
 			trackings = append(trackings, m.matchMaxbattles(data, st.MaxbattlesByHuman[humanID])...)
 		}
@@ -128,7 +128,7 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 		filtered = append(filtered, td)
 	}
 
-	metrics.MatchingCandidates.WithLabelValues("maxbattle").Observe(float64(len(filtered)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeMaxbattle).Observe(float64(len(filtered)))
 
 	users := ValidateHumansGeneric(
 		filtered,

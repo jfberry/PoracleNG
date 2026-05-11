@@ -26,7 +26,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 	go func() {
 		start := time.Now()
 		defer func() {
-			metrics.WebhookProcessingDuration.WithLabelValues("fort_update").Observe(time.Since(start).Seconds())
+			metrics.WebhookProcessingDuration.WithLabelValues(metrics.TypeFortUpdate).Observe(time.Since(start).Seconds())
 			metrics.WorkerPoolInUse.Dec()
 			<-ps.workerPool
 		}()
@@ -64,8 +64,8 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 		matched = ps.filterValidation("fort_update", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("fort_update").Inc()
-			metrics.MatchedUsers.WithLabelValues("fort_update").Add(float64(len(matched)))
+			metrics.MatchedEvents.WithLabelValues(metrics.TypeFortUpdate).Inc()
+			metrics.MatchedUsers.WithLabelValues(metrics.TypeFortUpdate).Add(float64(len(matched)))
 			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Fort update %s (%s, %s) areas(%s) and %d humans cared",

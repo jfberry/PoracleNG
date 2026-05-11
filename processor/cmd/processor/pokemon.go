@@ -28,7 +28,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 	go func() {
 		start := time.Now()
 		defer func() {
-			metrics.WebhookProcessingDuration.WithLabelValues("pokemon").Observe(time.Since(start).Seconds())
+			metrics.WebhookProcessingDuration.WithLabelValues(metrics.TypePokemon).Observe(time.Since(start).Seconds())
 			metrics.WorkerPoolInUse.Dec()
 			<-ps.workerPool
 		}()
@@ -51,7 +51,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		verified := pokemon.Verified || pokemon.DisappearTimeVerified
 		if ps.duplicates.CheckPokemon(pokemon.EncounterID, verified, pokemon.CP, pokemon.DisappearTime) {
 			l.Debug("Wild encounter was sent again too soon, ignoring")
-			metrics.DuplicatesSkipped.WithLabelValues("pokemon").Inc()
+			metrics.DuplicatesSkipped.WithLabelValues(metrics.TypePokemon).Inc()
 			return
 		}
 
@@ -101,8 +101,8 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
-			metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
+			metrics.MatchedEvents.WithLabelValues(metrics.TypePokemon).Inc()
+			metrics.MatchedUsers.WithLabelValues(metrics.TypePokemon).Add(float64(len(matched)))
 			metrics.IntervalMatched.Add(1)
 
 			// Register matched users as caring about weather in this cell
@@ -171,7 +171,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			if ps.enricher.PVPDisplay != nil && perLang != nil {
 				perUser = ps.enricher.PokemonPerUser(perLang, matched)
 			}
-			metrics.EnrichmentDuration.WithLabelValues("pokemon").Observe(time.Since(enrichStart).Seconds())
+			metrics.EnrichmentDuration.WithLabelValues(metrics.TypePokemon).Observe(time.Since(enrichStart).Seconds())
 
 			if ps.renderCh == nil {
 				return

@@ -28,7 +28,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 	go func() {
 		start := time.Now()
 		defer func() {
-			metrics.WebhookProcessingDuration.WithLabelValues("quest").Observe(time.Since(start).Seconds())
+			metrics.WebhookProcessingDuration.WithLabelValues(metrics.TypeQuest).Observe(time.Since(start).Seconds())
 			metrics.WorkerPoolInUse.Dec()
 			<-ps.workerPool
 		}()
@@ -48,7 +48,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		rewardsKey := buildQuestRewardsKey(quest.WithAR, quest.Rewards)
 		if ps.duplicates.CheckQuest(quest.PokestopID, rewardsKey) {
 			l.Debug("Quest duplicate, ignoring")
-			metrics.DuplicatesSkipped.WithLabelValues("quest").Inc()
+			metrics.DuplicatesSkipped.WithLabelValues(metrics.TypeQuest).Inc()
 			return
 		}
 
@@ -71,8 +71,8 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		matched = ps.filterValidation("quest", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("quest").Inc()
-			metrics.MatchedUsers.WithLabelValues("quest").Add(float64(len(matched)))
+			metrics.MatchedEvents.WithLabelValues(metrics.TypeQuest).Inc()
+			metrics.MatchedUsers.WithLabelValues(metrics.TypeQuest).Add(float64(len(matched)))
 			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))

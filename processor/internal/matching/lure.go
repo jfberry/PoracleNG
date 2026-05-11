@@ -50,7 +50,7 @@ func (m *LureMatcher) matchLures(data *LureData, rules []*db.LureTracking) []tra
 func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("lure").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeLure).Observe(time.Since(start).Seconds())
 	}()
 
 	if st == nil {
@@ -66,7 +66,7 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedU
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("lure").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypeLure).Observe(float64(len(applicable)))
 		for humanID := range applicable {
 			trackings = append(trackings, m.matchLures(data, st.LuresByHuman[humanID])...)
 		}
@@ -74,7 +74,7 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedU
 		trackings = m.matchLures(data, st.Lures)
 	}
 
-	metrics.MatchingCandidates.WithLabelValues("lure").Observe(float64(len(trackings)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeLure).Observe(float64(len(trackings)))
 
 	users := ValidateHumansGeneric(
 		trackings,

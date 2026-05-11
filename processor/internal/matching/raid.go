@@ -108,7 +108,7 @@ func (m *RaidMatcher) matchRaids(raid *RaidData, rules []*db.RaidTracking) []rai
 func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeRaid).Observe(time.Since(start).Seconds())
 	}()
 
 	if st == nil {
@@ -124,7 +124,7 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("raid").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypeRaid).Observe(float64(len(applicable)))
 		for humanID := range applicable {
 			trackingData = append(trackingData, m.matchRaids(raid, st.RaidsByHuman[humanID])...)
 		}
@@ -132,7 +132,7 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 		trackingData = m.matchRaids(raid, st.Raids)
 	}
 
-	metrics.MatchingCandidates.WithLabelValues("raid").Observe(float64(len(trackingData)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeRaid).Observe(float64(len(trackingData)))
 
 	users := ValidateHumansForRaid(
 		trackingData,
@@ -199,7 +199,7 @@ func (m *RaidMatcher) matchEggs(egg *EggData, rules []*db.EggTracking) []raidUse
 func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("egg").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeEgg).Observe(time.Since(start).Seconds())
 	}()
 
 	if st == nil {
@@ -215,7 +215,7 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("egg").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypeEgg).Observe(float64(len(applicable)))
 		for humanID := range applicable {
 			trackingData = append(trackingData, m.matchEggs(egg, st.EggsByHuman[humanID])...)
 		}
@@ -223,7 +223,7 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 		trackingData = m.matchEggs(egg, st.Eggs)
 	}
 
-	metrics.MatchingCandidates.WithLabelValues("egg").Observe(float64(len(trackingData)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeEgg).Observe(float64(len(trackingData)))
 
 	users := ValidateHumansForRaid(
 		trackingData,

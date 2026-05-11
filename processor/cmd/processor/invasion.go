@@ -26,7 +26,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 	go func() {
 		start := time.Now()
 		defer func() {
-			metrics.WebhookProcessingDuration.WithLabelValues("invasion").Observe(time.Since(start).Seconds())
+			metrics.WebhookProcessingDuration.WithLabelValues(metrics.TypeInvasion).Observe(time.Since(start).Seconds())
 			metrics.WorkerPoolInUse.Dec()
 			<-ps.workerPool
 		}()
@@ -49,7 +49,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		// Duplicate check
 		if expiration > 0 && ps.duplicates.CheckInvasion(inv.PokestopID, expiration) {
 			l.Debug("Invasion duplicate, ignoring")
-			metrics.DuplicatesSkipped.WithLabelValues("invasion").Inc()
+			metrics.DuplicatesSkipped.WithLabelValues(metrics.TypeInvasion).Inc()
 			return
 		}
 
@@ -98,8 +98,8 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		matched = ps.filterValidation("invasion", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("invasion").Inc()
-			metrics.MatchedUsers.WithLabelValues("invasion").Add(float64(len(matched)))
+			metrics.MatchedEvents.WithLabelValues(metrics.TypeInvasion).Inc()
+			metrics.MatchedUsers.WithLabelValues(metrics.TypeInvasion).Add(float64(len(matched)))
 			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Invasion grunt %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",

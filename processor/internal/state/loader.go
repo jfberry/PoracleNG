@@ -146,16 +146,16 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 func recordStateMetrics(s *State) {
 	metrics.StateHumans.Set(float64(len(s.Humans)))
 	if s.Monsters != nil {
-		metrics.StateTrackingRules.WithLabelValues("pokemon").Set(float64(s.Monsters.Total))
+		metrics.StateTrackingRules.WithLabelValues(metrics.TypePokemon).Set(float64(s.Monsters.Total))
 	}
-	metrics.StateTrackingRules.WithLabelValues("raid").Set(float64(len(s.Raids)))
-	metrics.StateTrackingRules.WithLabelValues("egg").Set(float64(len(s.Eggs)))
-	metrics.StateTrackingRules.WithLabelValues("invasion").Set(float64(len(s.Invasions)))
-	metrics.StateTrackingRules.WithLabelValues("quest").Set(float64(len(s.Quests)))
-	metrics.StateTrackingRules.WithLabelValues("lure").Set(float64(len(s.Lures)))
-	metrics.StateTrackingRules.WithLabelValues("gym").Set(float64(len(s.Gyms)))
-	metrics.StateTrackingRules.WithLabelValues("nest").Set(float64(len(s.Nests)))
+	metrics.StateTrackingRules.WithLabelValues(metrics.TypeRaid).Set(float64(len(s.Raids)))
+	metrics.StateTrackingRules.WithLabelValues(metrics.TypeEgg).Set(float64(len(s.Eggs)))
+	metrics.StateTrackingRules.WithLabelValues(metrics.TypeInvasion).Set(float64(len(s.Invasions)))
+	metrics.StateTrackingRules.WithLabelValues(metrics.TypeQuest).Set(float64(len(s.Quests)))
+	metrics.StateTrackingRules.WithLabelValues(metrics.TypeLure).Set(float64(len(s.Lures)))
+	metrics.StateTrackingRules.WithLabelValues(metrics.TypeGym).Set(float64(len(s.Gyms)))
+	metrics.StateTrackingRules.WithLabelValues(metrics.TypeNest).Set(float64(len(s.Nests)))
 	metrics.StateTrackingRules.WithLabelValues("fort").Set(float64(len(s.Forts)))
-	metrics.StateTrackingRules.WithLabelValues("maxbattle").Set(float64(len(s.Maxbattles)))
+	metrics.StateTrackingRules.WithLabelValues(metrics.TypeMaxbattle).Set(float64(len(s.Maxbattles)))
 	metrics.StateGeofences.Set(float64(len(s.Fences)))
 }

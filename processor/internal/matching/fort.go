@@ -67,7 +67,7 @@ func (m *FortMatcher) matchForts(data *FortData, rules []*db.FortTracking) []tra
 func (m *FortMatcher) Match(data *FortData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("fort_update").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeFortUpdate).Observe(time.Since(start).Seconds())
 	}()
 
 	if st == nil {
@@ -83,7 +83,7 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) ([]webhook.MatchedU
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("fort_update").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypeFortUpdate).Observe(float64(len(applicable)))
 		for humanID := range applicable {
 			trackings = append(trackings, m.matchForts(data, st.FortsByHuman[humanID])...)
 		}
@@ -91,7 +91,7 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) ([]webhook.MatchedU
 		trackings = m.matchForts(data, st.Forts)
 	}
 
-	metrics.MatchingCandidates.WithLabelValues("fort_update").Observe(float64(len(trackings)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeFortUpdate).Observe(float64(len(trackings)))
 
 	users := ValidateHumansGeneric(
 		trackings,

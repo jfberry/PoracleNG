@@ -65,7 +65,7 @@ func (m *InvasionMatcher) matchInvasions(data *InvasionData, rules []*db.Invasio
 func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("invasion").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeInvasion).Observe(time.Since(start).Seconds())
 	}()
 
 	if st == nil {
@@ -81,7 +81,7 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("invasion").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypeInvasion).Observe(float64(len(applicable)))
 		for humanID := range applicable {
 			trackings = append(trackings, m.matchInvasions(data, st.InvasionsByHuman[humanID])...)
 		}
@@ -89,7 +89,7 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.
 		trackings = m.matchInvasions(data, st.Invasions)
 	}
 
-	metrics.MatchingCandidates.WithLabelValues("invasion").Observe(float64(len(trackings)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeInvasion).Observe(float64(len(trackings)))
 
 	users := ValidateHumansGeneric(
 		trackings,

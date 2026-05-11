@@ -60,7 +60,7 @@ func (m *NestMatcher) matchNests(data *NestData, rules []*db.NestTracking) []tra
 func (m *NestMatcher) Match(data *NestData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
-		metrics.MatchingDuration.WithLabelValues("nest").Observe(time.Since(start).Seconds())
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeNest).Observe(time.Since(start).Seconds())
 	}()
 
 	if st == nil {
@@ -76,7 +76,7 @@ func (m *NestMatcher) Match(data *NestData, st *state.State) ([]webhook.MatchedU
 			matchedAreaNames,
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
-		metrics.MatchingApplicable.WithLabelValues("nest").Observe(float64(len(applicable)))
+		metrics.MatchingApplicable.WithLabelValues(metrics.TypeNest).Observe(float64(len(applicable)))
 		for humanID := range applicable {
 			trackings = append(trackings, m.matchNests(data, st.NestsByHuman[humanID])...)
 		}
@@ -84,7 +84,7 @@ func (m *NestMatcher) Match(data *NestData, st *state.State) ([]webhook.MatchedU
 		trackings = m.matchNests(data, st.Nests)
 	}
 
-	metrics.MatchingCandidates.WithLabelValues("nest").Observe(float64(len(trackings)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeNest).Observe(float64(len(trackings)))
 
 	users := ValidateHumansGeneric(
 		trackings,

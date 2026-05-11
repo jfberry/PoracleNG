@@ -26,7 +26,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 	go func() {
 		start := time.Now()
 		defer func() {
-			metrics.WebhookProcessingDuration.WithLabelValues("lure").Observe(time.Since(start).Seconds())
+			metrics.WebhookProcessingDuration.WithLabelValues(metrics.TypeLure).Observe(time.Since(start).Seconds())
 			metrics.WorkerPoolInUse.Dec()
 			<-ps.workerPool
 		}()
@@ -43,7 +43,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 		// Duplicate check
 		if lure.LureExpiration > 0 && ps.duplicates.CheckLure(lure.PokestopID, lure.LureExpiration) {
 			l.Debug("Lure duplicate, ignoring")
-			metrics.DuplicatesSkipped.WithLabelValues("lure").Inc()
+			metrics.DuplicatesSkipped.WithLabelValues(metrics.TypeLure).Inc()
 			return
 		}
 
@@ -60,8 +60,8 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 		matched = ps.filterValidation("pokestop", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("lure").Inc()
-			metrics.MatchedUsers.WithLabelValues("lure").Add(float64(len(matched)))
+			metrics.MatchedEvents.WithLabelValues(metrics.TypeLure).Inc()
+			metrics.MatchedUsers.WithLabelValues(metrics.TypeLure).Add(float64(len(matched)))
 			metrics.IntervalMatched.Add(1)
 
 			l.Infof("%s at %s [%.3f,%.3f] areas(%s) and %d humans cared",

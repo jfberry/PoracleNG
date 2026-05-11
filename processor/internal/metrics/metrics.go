@@ -7,6 +7,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// Type label values for the metrics that distinguish by webhook type.
+// These match the type strings Golbat uses for the corresponding
+// webhook payloads (e.g. "fort_update" for fort updates).
+const (
+	TypePokemon    = "pokemon"
+	TypeRaid       = "raid"
+	TypeEgg        = "egg"
+	TypeQuest      = "quest"
+	TypeInvasion   = "invasion"
+	TypeLure       = "lure"
+	TypeNest       = "nest"
+	TypeGym        = "gym"
+	TypeFortUpdate = "fort_update"
+	TypeMaxbattle  = "maxbattle"
+)
+
 // IntervalCounters tracks counts between periodic log resets.
 var (
 	IntervalWebhooks atomic.Int64
