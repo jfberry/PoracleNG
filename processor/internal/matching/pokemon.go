@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -102,6 +103,10 @@ type PokemonMatcher struct {
 // Match returns all matched users for a pokemon along with the geofence
 // areas that contain the encounter.
 func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("pokemon").Observe(time.Since(start).Seconds())
+	}()
 	if st == nil || st.Monsters == nil {
 		return nil, nil
 	}

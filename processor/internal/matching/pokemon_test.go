@@ -3,8 +3,12 @@ package matching
 import (
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/state"
 )
@@ -768,5 +772,48 @@ func TestPokemonMatchProfileFilter(t *testing.T) {
 	matched, _ := matcher.Match(pokemon, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong profile, got %d", len(matched))
+	}
+}
+
+func TestPokemonMatch_RecordsMatchingDuration(t *testing.T) {
+	// Reset metric for deterministic read
+	metrics.MatchingDuration.Reset()
+	matcher := &PokemonMatcher{}
+	pokemon := &ProcessedPokemon{PokemonID: 25, IV: 100, Latitude: 51.0, Longitude: 0.0, Encountered: true}
+
+	// Create state with empty geofence to avoid panic
+	fences := []geofence.Fence{
+		{
+			Name:             "TestArea",
+			DisplayInMatches: true,
+			Path: [][2]float64{
+				{50.0, -1.0},
+				{52.0, -1.0},
+				{52.0, 1.0},
+				{50.0, 1.0},
+			},
+		},
+	}
+	si := geofence.NewSpatialIndex(fences)
+
+	st := &state.State{
+		Humans:   map[string]*db.Human{},
+		Monsters: &db.MonsterIndex{ByPokemonID: map[int][]*db.MonsterTracking{}, PVPSpecific: make(map[int][]*db.MonsterTracking), PVPEverything: make(map[int][]*db.MonsterTracking)},
+		Geofence: si,
+		Fences:   fences,
+	}
+
+	matcher.Match(pokemon, st)
+
+	h, err := metrics.MatchingDuration.GetMetricWithLabelValues("pokemon")
+	if err != nil {
+		t.Fatalf("get metric: %v", err)
+	}
+	var out dto.Metric
+	if err := h.(prometheus.Histogram).Write(&out); err != nil {
+		t.Fatalf("write metric: %v", err)
+	}
+	if got := out.GetHistogram().GetSampleCount(); got != 1 {
+		t.Errorf("MatchingDuration{type=pokemon} sample count = %d, want 1", got)
 	}
 }

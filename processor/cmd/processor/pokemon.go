@@ -96,9 +96,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		// Match
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
 		matched, matchedAreas := ps.pokemonMatcher.Match(processed, st)
-		metrics.MatchingDuration.WithLabelValues("pokemon").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
 
