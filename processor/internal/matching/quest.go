@@ -9,6 +9,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
+
 // QuestRewardData holds a single parsed quest reward for matching.
 type QuestRewardData struct {
 	Type      int // 2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy
@@ -31,6 +32,27 @@ type QuestData struct {
 type QuestMatcher struct {
 	StrictLocations     bool
 	AreaSecurityEnabled bool
+	GeographicPrefilter bool
+}
+
+// matchQuests filters the given quest rule slice and returns the surviving
+// trackingUserData entries applying the per-rule quest filter logic.
+func (m *QuestMatcher) matchQuests(data *QuestData, rules []*db.QuestTracking) []trackingUserData {
+	var out []trackingUserData
+	for _, q := range rules {
+		if !questRewardMatches(q, data.Rewards) {
+			continue
+		}
+		out = append(out, trackingUserData{
+			HumanID:   q.ID,
+			ProfileNo: q.ProfileNo,
+			Distance:  q.Distance,
+			Template:  q.Template,
+			Clean:     q.Clean,
+			Ping:      q.Ping,
+		})
+	}
+	return out
 }
 
 // Match returns all matched users for a quest along with the geofence areas
@@ -46,21 +68,20 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) ([]webhook.Matche
 	}
 
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
+
 	var trackings []trackingUserData
-
-	for _, q := range st.Quests {
-		if !questRewardMatches(q, data.Rewards) {
-			continue
+	if m.GeographicPrefilter && st.GeoIndex != nil && st.QuestsByHuman != nil {
+		applicable := st.GeoIndex.ApplicableHumans(
+			data.Latitude, data.Longitude,
+			matchedAreaNames,
+			m.AreaSecurityEnabled && m.StrictLocations,
+		)
+		metrics.MatchingApplicable.WithLabelValues("quest").Observe(float64(len(applicable)))
+		for humanID := range applicable {
+			trackings = append(trackings, m.matchQuests(data, st.QuestsByHuman[humanID])...)
 		}
-
-		trackings = append(trackings, trackingUserData{
-			HumanID:   q.ID,
-			ProfileNo: q.ProfileNo,
-			Distance:  q.Distance,
-			Template:  q.Template,
-			Clean:     q.Clean,
-			Ping:      q.Ping,
-		})
+	} else {
+		trackings = m.matchQuests(data, st.Quests)
 	}
 
 	metrics.MatchingCandidates.WithLabelValues("quest").Observe(float64(len(trackings)))
