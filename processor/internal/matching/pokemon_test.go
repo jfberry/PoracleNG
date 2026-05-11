@@ -953,6 +953,113 @@ func TestPokemonMatch_GeoPrefilterParity(t *testing.T) {
 	}
 }
 
+// TestPokemonMatch_GeoPrefilterParityWithPVPEvo extends the basic parity
+// check to the PVP-evolution sub-path inside assembleCandidatesPerHuman.
+// An Eevee spawn carries PVP evo data for Sylveon (700) in great league;
+// the user tracks Sylveon 700 with PVP great league rules. Both the
+// per-bucket path (flag off) and the per-human path (flag on) must produce
+// the same matched user set.
+func TestPokemonMatch_GeoPrefilterParityWithPVPEvo(t *testing.T) {
+	humans := map[string]*db.Human{
+		"u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+		"u2": {ID: "u2", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+	}
+
+	// u1 tracks Sylveon (700) via great-league PVP — this exercises the
+	// PVP evolution branch because the spawn is Eevee (133), not Sylveon.
+	// u2 tracks Eevee (133) directly (non-PVP) as a sanity control.
+	monsterRules := []db.MonsterTracking{
+		{
+			ID: "u1", ProfileNo: 1, PokemonID: 700, Form: 0,
+			MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9999,
+			MinLevel: 0, MaxLevel: 55, ATK: 0, DEF: 0, STA: 0,
+			MaxATK: 15, MaxDEF: 15, MaxSTA: 15, Gender: 0,
+			MinWeight: 0, MaxWeight: 99999999, Rarity: -1, MaxRarity: 6,
+			Size: -1, MaxSize: 5, Template: "1",
+			PVPRankingLeague: 1500, PVPRankingBest: 1, PVPRankingWorst: 1000,
+			PVPRankingMinCP: 0, PVPRankingCap: 0,
+		},
+		{
+			ID: "u2", ProfileNo: 1, PokemonID: 133, Form: 0,
+			MinIV: -1, MaxIV: 100, MaxCP: defaultMaxCP, MaxLevel: defaultMaxLevel,
+			MaxATK: 15, MaxDEF: 15, MaxSTA: 15, MaxWeight: defaultMaxWeight,
+			Rarity: -1, MaxRarity: 6, Size: -1, MaxSize: 5, Template: "1",
+			PVPRankingWorst: 4096,
+		},
+	}
+	monsters := db.BuildMonsterIndexFromRules(monsterRules)
+
+	spatial := geofence.NewSpatialIndex([]geofence.Fence{
+		{Name: "Belgium", DisplayInMatches: true, Path: [][2]float64{{50, 3}, {50, 6}, {51, 6}, {51, 3}, {50, 3}}},
+	})
+
+	// Eevee (133, form 1092) with PVP evo data for Sylveon (700) rank 512
+	// great league — mirrors the real webhook from TestPokemonMatchPVPEvolutionDirectEevee.
+	pokemon := &ProcessedPokemon{
+		PokemonID: 133, Form: 1092, IV: 44.4, CP: 125, Level: 5,
+		ATK: 5, DEF: 9, STA: 6, Weight: 9.308, Size: 3, RarityGroup: 1,
+		TTHSeconds: 1580, Latitude: 50.5, Longitude: 4.5, Encountered: true,
+		PVPBestRank: map[int][]pvp.LeagueRank{
+			1500: {{Rank: 2538, CP: 1052, Caps: []int{50}}},
+		},
+		PVPEvoData: map[int]map[int][]pvp.LeagueRank{
+			134: {1500: {{Rank: 1498, CP: 1479, Caps: []int{50}}}},
+			135: {1500: {{Rank: 1780, CP: 1481, Caps: []int{50}}}},
+			136: {1500: {{Rank: 1602, CP: 1477, Caps: []int{50}}}},
+			196: {1500: {{Rank: 2891, CP: 1464, Caps: []int{50}}}},
+			197: {1500: {{Rank: 1474, CP: 1484, Caps: []int{50}}}},
+			470: {1500: {{Rank: 2447, CP: 1470, Caps: []int{50}}}},
+			471: {1500: {{Rank: 1541, CP: 1484, Caps: []int{50}}}},
+			700: {1500: {{Rank: 512, CP: 1496, Caps: []int{50}}}},
+		},
+	}
+
+	var off, on []webhook.MatchedUser
+	for _, flag := range []bool{false, true} {
+		st := &state.State{
+			Humans:   humans,
+			Monsters: monsters,
+			Geofence: spatial,
+			GeoIndex: state.BuildHumanGeoIndex(humans, nil),
+		}
+		matcher := &PokemonMatcher{
+			GeographicPrefilter:        flag,
+			PVPEvolutionDirectTracking: true,
+			PVPQueryMaxRank:            4096,
+		}
+		users, _ := matcher.Match(pokemon, st)
+		if flag {
+			on = users
+		} else {
+			off = users
+		}
+	}
+
+	if len(off) != len(on) {
+		t.Fatalf("PVP-evo parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
+	}
+	seenOff := map[string]int{}
+	for _, u := range off {
+		seenOff[u.ID]++
+	}
+	seenOn := map[string]int{}
+	for _, u := range on {
+		seenOn[u.ID]++
+	}
+	for id, n := range seenOff {
+		if seenOn[id] != n {
+			t.Errorf("PVP-evo parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
+		}
+	}
+	// Sanity: both u1 (PVP evo match for Sylveon) and u2 (direct Eevee match)
+	// must appear exactly once.
+	for _, id := range []string{"u1", "u2"} {
+		if seenOff[id] != 1 {
+			t.Errorf("expected user %q matched once (flag-off), got %d", id, seenOff[id])
+		}
+	}
+}
+
 // TestPokemonMatch_GeoPrefilterDropsOutOfAreaHuman confirms the expected
 // speedup property: when no humans cover the spawn's geography, the
 // flag-on path doesn't even enter matchMonsters on the per-pokemon
@@ -1009,6 +1116,10 @@ func TestPokemonMatch_GeoPrefilterDropsOutOfAreaHuman(t *testing.T) {
 // This is exactly the combination a geographic pre-filter could silently
 // drop rules from if it's implemented wrong; locking in expected
 // behaviour here means Phase 2 changes that misbehave fail loudly.
+//
+// The test runs for both GeographicPrefilter=false and =true to confirm
+// parity across the flag. db.BuildMonsterIndexFromRules populates both
+// ByPokemonID (flag-off path) and ByHumanAndLeague (flag-on path).
 func TestPokemonMatch_MultiProfileWithStrictArea(t *testing.T) {
 	// Set up human with multiple areas and a strict restriction
 	human := &db.Human{
@@ -1022,14 +1133,18 @@ func TestPokemonMatch_MultiProfileWithStrictArea(t *testing.T) {
 	}
 	humans := map[string]*db.Human{"u1": human}
 
-	// Create two rules: one for profile 1, one for profile 2
-	rule1 := makeMonster("u1", 25)
-	rule1.ProfileNo = 1 // Profile 1 — should NOT match (wrong profile)
+	// Create two rules: one for profile 1, one for profile 2.
+	// makeMonster returns *MonsterTracking; we need values for BuildMonsterIndexFromRules.
+	r1 := *makeMonster("u1", 25)
+	r1.ProfileNo = 1 // Profile 1 — should NOT match (wrong profile)
 
-	rule2 := makeMonster("u1", 25)
-	rule2.ProfileNo = 2 // Profile 2 — should match (correct profile)
+	r2 := *makeMonster("u1", 25)
+	r2.ProfileNo = 2 // Profile 2 — should match (correct profile)
 
-	rules := []*db.MonsterTracking{rule1, rule2}
+	monsterRules := []db.MonsterTracking{r1, r2}
+	// BuildMonsterIndexFromRules populates both ByPokemonID (flag-off path) and
+	// ByHumanAndLeague (flag-on path) from the same backing slice.
+	monsters := db.BuildMonsterIndexFromRules(monsterRules)
 
 	// Create geofence with two areas: "belgium" and "antwerp"
 	// Both contain (0, 0) where the pokemon spawns
@@ -1046,24 +1161,6 @@ func TestPokemonMatch_MultiProfileWithStrictArea(t *testing.T) {
 		},
 	}
 	geoIndex := geofence.NewSpatialIndex(fences)
-
-	// Initialize MonsterIndex with both rules
-	idx := &db.MonsterIndex{
-		ByPokemonID:   map[int][]*db.MonsterTracking{25: rules},
-		PVPSpecific:   make(map[int][]*db.MonsterTracking),
-		PVPEverything: make(map[int][]*db.MonsterTracking),
-	}
-	for _, league := range []int{500, 1500, 2500} {
-		idx.PVPSpecific[league] = nil
-		idx.PVPEverything[league] = nil
-	}
-
-	st := &state.State{
-		Humans:   humans,
-		Monsters: idx,
-		Geofence: geoIndex,
-		Fences:   fences,
-	}
 
 	// Pokemon at (0, 0) — in both Belgium and Antwerp geofences
 	pokemon := &ProcessedPokemon{
@@ -1086,15 +1183,30 @@ func TestPokemonMatch_MultiProfileWithStrictArea(t *testing.T) {
 		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
 	}
 
-	matcher := &PokemonMatcher{StrictLocations: true, AreaSecurityEnabled: true}
-	users, _ := matcher.Match(pokemon, st)
+	for _, flag := range []bool{false, true} {
+		st := &state.State{
+			Humans:   humans,
+			Monsters: monsters,
+			Geofence: geoIndex,
+			Fences:   fences,
+			GeoIndex: state.BuildHumanGeoIndex(humans, nil),
+		}
 
-	// Expected: exactly 1 matched user (profile 2 only)
-	// Profile 1 rule should be filtered by CurrentProfileNo check
-	if len(users) != 1 {
-		t.Fatalf("expected exactly 1 matched user (profile 2 only), got %d", len(users))
-	}
-	if users[0].ID != "u1" {
-		t.Errorf("matched ID = %q, want u1", users[0].ID)
+		matcher := &PokemonMatcher{
+			StrictLocations:     true,
+			AreaSecurityEnabled: true,
+			GeographicPrefilter: flag,
+		}
+		users, _ := matcher.Match(pokemon, st)
+
+		// Expected: exactly 1 matched user (profile 2 only)
+		// Profile 1 rule should be filtered by CurrentProfileNo check
+		if len(users) != 1 {
+			t.Errorf("GeographicPrefilter=%v: expected exactly 1 matched user (profile 2 only), got %d", flag, len(users))
+			continue
+		}
+		if users[0].ID != "u1" {
+			t.Errorf("GeographicPrefilter=%v: matched ID = %q, want u1", flag, users[0].ID)
+		}
 	}
 }
