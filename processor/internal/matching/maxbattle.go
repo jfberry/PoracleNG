@@ -3,6 +3,7 @@ package matching
 import (
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -26,24 +27,14 @@ type MaxbattleData struct {
 type MaxbattleMatcher struct {
 	StrictLocations     bool
 	AreaSecurityEnabled bool
+	GeographicPrefilter bool
 }
 
-// Match returns all matched users for a maxbattle along with the geofence
-// areas that contain the station.
-func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
-	start := time.Now()
-	defer func() {
-		metrics.MatchingDuration.WithLabelValues("maxbattle").Observe(time.Since(start).Seconds())
-	}()
-
-	if st == nil {
-		return nil, nil
-	}
-
-	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
-	var trackings []trackingUserData
-
-	for _, mb := range st.Maxbattles {
+// matchMaxbattles filters the given maxbattle rule slice and returns the surviving
+// trackingUserData entries applying the per-rule maxbattle filter logic.
+func (m *MaxbattleMatcher) matchMaxbattles(data *MaxbattleData, rules []*db.MaxbattleTracking) []trackingUserData {
+	var out []trackingUserData
+	for _, mb := range rules {
 		// Pokemon match: exact pokemon_id, or 9000 (level-based) with level match
 		if mb.PokemonID == 9000 {
 			// Level-based tracking: level must match or be 90 (all levels)
@@ -83,7 +74,7 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 			continue
 		}
 
-		trackings = append(trackings, trackingUserData{
+		out = append(out, trackingUserData{
 			HumanID:           mb.ID,
 			ProfileNo:         mb.ProfileNo,
 			Distance:          mb.Distance,
@@ -92,6 +83,37 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 			Ping:              mb.Ping,
 			IsSpecificStation: isSpecificStation,
 		})
+	}
+	return out
+}
+
+// Match returns all matched users for a maxbattle along with the geofence
+// areas that contain the station.
+func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("maxbattle").Observe(time.Since(start).Seconds())
+	}()
+
+	if st == nil {
+		return nil, nil
+	}
+
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
+
+	var trackings []trackingUserData
+	if m.GeographicPrefilter && st.GeoIndex != nil && st.MaxbattlesByHuman != nil {
+		applicable := st.GeoIndex.ApplicableHumans(
+			data.Latitude, data.Longitude,
+			matchedAreaNames,
+			m.AreaSecurityEnabled && m.StrictLocations,
+		)
+		metrics.MatchingApplicable.WithLabelValues("maxbattle").Observe(float64(len(applicable)))
+		for humanID := range applicable {
+			trackings = append(trackings, m.matchMaxbattles(data, st.MaxbattlesByHuman[humanID])...)
+		}
+	} else {
+		trackings = m.matchMaxbattles(data, st.Maxbattles)
 	}
 
 	// Filter out users with blocked "specificstation" alerts for station-specific trackings
