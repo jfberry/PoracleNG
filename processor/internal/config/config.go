@@ -698,6 +698,7 @@ func Load(baseDir string) (*Config, error) {
 			// need a specific shape override in config.toml.
 		},
 		Weather: WeatherConfig{
+			EnableInference:            true,
 			ShowAlteredPokemonMaxCount: 10,
 			AccuWeatherDayQuota:        500,
 			ForecastRefreshInterval:    8,

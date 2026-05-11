@@ -268,7 +268,7 @@ var configSchema = []ConfigSection{
 		Name:  "weather",
 		Title: "Weather",
 		Fields: []ConfigFieldDef{
-			{Name: "enable_inference", Type: "bool", Default: false, Description: "Infer weather conditions from pokemon boost patterns"},
+			{Name: "enable_inference", Type: "bool", Default: true, Description: "Infer weather conditions from pokemon boost patterns"},
 			{Name: "change_alert", Type: "bool", Default: false, Description: "Enable weather change alert notifications"},
 			{Name: "show_altered_pokemon", Type: "bool", Default: false, Description: "Track weather-changed pokemon to show in DTS weather alerts"},
 			{Name: "show_altered_pokemon_max_count", Type: "int", Default: 10, Description: "Maximum number of changed pokemon per weather alert", DependsOn: &ConfigDependency{Field: "show_altered_pokemon", Value: true}},
