@@ -15,27 +15,12 @@ import (
 )
 
 func makeTestState(monsters []*db.MonsterTracking, humans map[string]*db.Human) *state.State {
-	idx := &db.MonsterIndex{
-		ByPokemonID:   make(map[int][]*db.MonsterTracking),
-		PVPSpecific:   make(map[int][]*db.MonsterTracking),
-		PVPEverything: make(map[int][]*db.MonsterTracking),
+	// Dereference pointer slice into value slice for BuildMonsterIndexFromRules.
+	values := make([]db.MonsterTracking, len(monsters))
+	for i, m := range monsters {
+		values[i] = *m
 	}
-	for _, league := range []int{500, 1500, 2500} {
-		idx.PVPSpecific[league] = nil
-		idx.PVPEverything[league] = nil
-	}
-
-	for _, m := range monsters {
-		if m.PVPRankingLeague != 0 {
-			if m.PokemonID != 0 {
-				idx.PVPSpecific[m.PVPRankingLeague] = append(idx.PVPSpecific[m.PVPRankingLeague], m)
-			} else {
-				idx.PVPEverything[m.PVPRankingLeague] = append(idx.PVPEverything[m.PVPRankingLeague], m)
-			}
-		} else {
-			idx.ByPokemonID[m.PokemonID] = append(idx.ByPokemonID[m.PokemonID], m)
-		}
-	}
+	idx := db.BuildMonsterIndexFromRules(values)
 
 	// Simple geofence covering a large area
 	fences := []geofence.Fence{
