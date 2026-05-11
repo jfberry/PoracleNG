@@ -84,9 +84,11 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) ([]webhook.MatchedU
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
 		metrics.MatchingApplicable.WithLabelValues(metrics.TypeFortUpdate).Observe(float64(len(applicable)))
+		rules := make([]*db.FortTracking, 0, 4*len(applicable))
 		for humanID := range applicable {
-			trackings = append(trackings, m.matchForts(data, st.FortsByHuman[humanID])...)
+			rules = append(rules, st.FortsByHuman[humanID]...)
 		}
+		trackings = m.matchForts(data, rules)
 	} else {
 		trackings = m.matchForts(data, st.Forts)
 	}

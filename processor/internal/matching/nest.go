@@ -77,9 +77,11 @@ func (m *NestMatcher) Match(data *NestData, st *state.State) ([]webhook.MatchedU
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
 		metrics.MatchingApplicable.WithLabelValues(metrics.TypeNest).Observe(float64(len(applicable)))
+		rules := make([]*db.NestTracking, 0, 4*len(applicable))
 		for humanID := range applicable {
-			trackings = append(trackings, m.matchNests(data, st.NestsByHuman[humanID])...)
+			rules = append(rules, st.NestsByHuman[humanID]...)
 		}
+		trackings = m.matchNests(data, rules)
 	} else {
 		trackings = m.matchNests(data, st.Nests)
 	}

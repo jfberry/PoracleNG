@@ -105,9 +105,11 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
 		metrics.MatchingApplicable.WithLabelValues(metrics.TypeGym).Observe(float64(len(applicable)))
+		rules := make([]*db.GymTracking, 0, 4*len(applicable))
 		for humanID := range applicable {
-			trackings = append(trackings, m.matchGyms(data, st.GymsByHuman[humanID])...)
+			rules = append(rules, st.GymsByHuman[humanID]...)
 		}
+		trackings = m.matchGyms(data, rules)
 	} else {
 		trackings = m.matchGyms(data, st.Gyms)
 	}

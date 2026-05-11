@@ -67,9 +67,11 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedU
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
 		metrics.MatchingApplicable.WithLabelValues(metrics.TypeLure).Observe(float64(len(applicable)))
+		rules := make([]*db.LureTracking, 0, 4*len(applicable))
 		for humanID := range applicable {
-			trackings = append(trackings, m.matchLures(data, st.LuresByHuman[humanID])...)
+			rules = append(rules, st.LuresByHuman[humanID]...)
 		}
+		trackings = m.matchLures(data, rules)
 	} else {
 		trackings = m.matchLures(data, st.Lures)
 	}

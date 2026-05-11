@@ -125,9 +125,11 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
 		metrics.MatchingApplicable.WithLabelValues(metrics.TypeRaid).Observe(float64(len(applicable)))
+		rules := make([]*db.RaidTracking, 0, 4*len(applicable))
 		for humanID := range applicable {
-			trackingData = append(trackingData, m.matchRaids(raid, st.RaidsByHuman[humanID])...)
+			rules = append(rules, st.RaidsByHuman[humanID]...)
 		}
+		trackingData = m.matchRaids(raid, rules)
 	} else {
 		trackingData = m.matchRaids(raid, st.Raids)
 	}
@@ -216,9 +218,11 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
 		metrics.MatchingApplicable.WithLabelValues(metrics.TypeEgg).Observe(float64(len(applicable)))
+		rules := make([]*db.EggTracking, 0, 4*len(applicable))
 		for humanID := range applicable {
-			trackingData = append(trackingData, m.matchEggs(egg, st.EggsByHuman[humanID])...)
+			rules = append(rules, st.EggsByHuman[humanID]...)
 		}
+		trackingData = m.matchEggs(egg, rules)
 	} else {
 		trackingData = m.matchEggs(egg, st.Eggs)
 	}

@@ -77,9 +77,11 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) ([]webhook.Matche
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
 		metrics.MatchingApplicable.WithLabelValues(metrics.TypeQuest).Observe(float64(len(applicable)))
+		rules := make([]*db.QuestTracking, 0, 4*len(applicable))
 		for humanID := range applicable {
-			trackings = append(trackings, m.matchQuests(data, st.QuestsByHuman[humanID])...)
+			rules = append(rules, st.QuestsByHuman[humanID]...)
 		}
+		trackings = m.matchQuests(data, rules)
 	} else {
 		trackings = m.matchQuests(data, st.Quests)
 	}

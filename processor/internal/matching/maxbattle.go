@@ -109,9 +109,11 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
 		metrics.MatchingApplicable.WithLabelValues(metrics.TypeMaxbattle).Observe(float64(len(applicable)))
+		rules := make([]*db.MaxbattleTracking, 0, 4*len(applicable))
 		for humanID := range applicable {
-			trackings = append(trackings, m.matchMaxbattles(data, st.MaxbattlesByHuman[humanID])...)
+			rules = append(rules, st.MaxbattlesByHuman[humanID]...)
 		}
+		trackings = m.matchMaxbattles(data, rules)
 	} else {
 		trackings = m.matchMaxbattles(data, st.Maxbattles)
 	}

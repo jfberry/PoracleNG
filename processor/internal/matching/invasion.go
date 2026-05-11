@@ -82,9 +82,11 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.
 			m.AreaSecurityEnabled && m.StrictLocations,
 		)
 		metrics.MatchingApplicable.WithLabelValues(metrics.TypeInvasion).Observe(float64(len(applicable)))
+		rules := make([]*db.InvasionTracking, 0, 4*len(applicable))
 		for humanID := range applicable {
-			trackings = append(trackings, m.matchInvasions(data, st.InvasionsByHuman[humanID])...)
+			rules = append(rules, st.InvasionsByHuman[humanID]...)
 		}
+		trackings = m.matchInvasions(data, rules)
 	} else {
 		trackings = m.matchInvasions(data, st.Invasions)
 	}
