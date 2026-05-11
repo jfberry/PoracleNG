@@ -27,6 +27,12 @@ func (idx *MonsterIndex) FilterOrphans(humans map[string]*Human) {
 	for league, entries := range idx.PVPEverything {
 		idx.PVPEverything[league] = filterMonsters(entries, humans)
 	}
+	// Clean ByHumanAndLeague
+	for humanID := range idx.ByHumanAndLeague {
+		if _, ok := humans[humanID]; !ok {
+			delete(idx.ByHumanAndLeague, humanID)
+		}
+	}
 	// Recount total
 	total := 0
 	for _, entries := range idx.ByPokemonID {

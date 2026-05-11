@@ -29,3 +29,32 @@ func TestMonsterIndex_ByHumanAndLeague_PartitionsCorrectly(t *testing.T) {
 		t.Errorf("u1's non-PVP rule should share pointer identity with ByPokemonID entry")
 	}
 }
+
+func TestMonsterIndex_FilterOrphans_CleansByHumanAndLeague(t *testing.T) {
+	rules := []MonsterTracking{
+		{ID: "active", PokemonID: 25, PVPRankingLeague: 0},
+		{ID: "active", PokemonID: 0, PVPRankingLeague: 1500},
+		{ID: "orphan", PokemonID: 25, PVPRankingLeague: 0},
+		{ID: "orphan", PokemonID: 0, PVPRankingLeague: 1500},
+	}
+	idx := BuildMonsterIndexFromRules(rules)
+
+	// Before FilterOrphans, ByHumanAndLeague has both active and orphan
+	if _, ok := idx.ByHumanAndLeague["orphan"]; !ok {
+		t.Fatalf("test setup: expected orphan entry to be present before FilterOrphans")
+	}
+
+	humans := map[string]*Human{"active": {ID: "active"}}
+	idx.FilterOrphans(humans)
+
+	if _, ok := idx.ByHumanAndLeague["orphan"]; ok {
+		t.Errorf("orphan entry still present in ByHumanAndLeague after FilterOrphans")
+	}
+	if _, ok := idx.ByHumanAndLeague["active"]; !ok {
+		t.Errorf("active entry was incorrectly removed from ByHumanAndLeague")
+	}
+	// Total should reflect post-filter count (2 active rules)
+	if idx.Total != 2 {
+		t.Errorf("Total = %d, want 2", idx.Total)
+	}
+}
