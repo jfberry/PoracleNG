@@ -566,7 +566,7 @@ The view passed to `questSummary` is shaped differently from a regular `quest` t
 | `rewardType` | int | Reward type ID (2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy) |
 | `reward` | int | Reward ID (item ID for type 2, dust amount for type 3, pokemon ID for types 4/7/12) |
 | `rewardForm` | int | Pokemon form ID for `rewardType == 7` (so e.g. two different Spinda forms group separately). `0` for all other reward types. |
-| `rewardName` | string | Translated reward name for the group header. Formatted to match the per-row reward strings from regular `quest` enrichment: `"Spinda Spinda 01"` for an encounter with a form (no parens), `"Spinda Candy"` / `"Spinda Mega Energy"` for type 4/12, the bare item name for type 2 (amount varies per stop so it's omitted), and `"1500 Stardust"` for type 3. |
+| `rewardName` | string | Translated reward name for the group header. Formatted to match the per-row reward strings from regular `quest` enrichment, **with amounts stripped** for types 2/4/12 because amounts vary across stops within a group. Examples: `"Spinda 01"` (type 7 + form, matches per-row `fullName`), `"Lapras Candy"` (type 4), `"Charizard Mega Energy"` (type 12), `"Razz Berry"` (type 2), `"1500 Stardust"` (type 3 — amount is included because it's part of the group key). |
 | `imgUrl` | string | Reward icon URL — best used as a Discord thumbnail/image. Telegram's `/sendSticker` is stricter; use `stickerUrl` there. |
 | `stickerUrl` | string | Reward sticker URL — sized and formatted for Telegram's sticker constraints. Use this for the Telegram `sticker` field. |
 | `staticMap` | string | Multi-pin static map URL — autopositioned over the pokestops in **this chunk** only |

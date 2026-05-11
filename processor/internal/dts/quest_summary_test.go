@@ -106,17 +106,20 @@ func TestBuildQuestSummaryView_RewardName(t *testing.T) {
 
 	// Pokemon with form, translations present: enrichment-style concat —
 	// "<pokemon> <form>" with no parens, matching the per-row fullName.
+	// Uses real gamelocale shape: Spinda form 37 translates to bare "01"
+	// (pogo-translations doesn't embed the species name in form values),
+	// so the joined result is "Spinda 01", not "Spinda Spinda 01".
 	bundle2 := i18n.NewBundle()
 	bundle2.AddTranslator(i18n.NewTranslator("en", map[string]string{
 		"poke_327":        "Spinda",
-		"form_553":        "Spinda 01",
+		"form_37":         "01",
 		"quest_reward_4":  "Candy",
 		"quest_reward_12": "Mega Energy",
 	}))
 	tr2 := bundle2.For("en")
-	view = BuildQuestSummaryView(QuestSummaryGroup{RewardType: 7, RewardID: 327, RewardForm: 553, Quests: nil}, nil, tr2)
-	if got, _ := view["rewardName"].(string); got != "Spinda Spinda 01" {
-		t.Errorf("pokemon rewardName with form = %q, want %q", got, "Spinda Spinda 01")
+	view = BuildQuestSummaryView(QuestSummaryGroup{RewardType: 7, RewardID: 327, RewardForm: 37, Quests: nil}, nil, tr2)
+	if got, _ := view["rewardName"].(string); got != "Spinda 01" {
+		t.Errorf("pokemon rewardName with form = %q, want %q", got, "Spinda 01")
 	}
 
 	// Pokemon with "Normal" form name: the normal-form filter strips it so
@@ -133,7 +136,7 @@ func TestBuildQuestSummaryView_RewardName(t *testing.T) {
 
 	// Candy (type 4) appends the translated Candy label and ignores form
 	// even when supplied — candy is per-species.
-	view = BuildQuestSummaryView(QuestSummaryGroup{RewardType: 4, RewardID: 327, RewardForm: 553, Quests: nil}, nil, tr2)
+	view = BuildQuestSummaryView(QuestSummaryGroup{RewardType: 4, RewardID: 327, RewardForm: 37, Quests: nil}, nil, tr2)
 	if got, _ := view["rewardName"].(string); got != "Spinda Candy" {
 		t.Errorf("candy rewardName = %q, want \"Spinda Candy\"", got)
 	}
