@@ -78,32 +78,43 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				CaresUntil: u.CaresUntil,
 			}
 
-			// Attach active pokemon affected by this weather change.
-			// show_altered_pokemon is a display-content flag (see
-			// config.example.toml: "track weather changed pokemon to show
-			// in DTS"), NOT a filter. An empty affected list must not
-			// suppress the alert — the weather change itself is the news.
+			// Attach active pokemon affected by this weather change. When
+			// show_altered_pokemon is enabled (and the tracker is therefore
+			// non-nil), the alert is also gated on at least one of the
+			// user's tracked pokemon actually flipping boost status —
+			// matches the original PoracleJS behaviour. Weather transitions
+			// where every tracked pokemon either keeps or stays-without
+			// boost (e.g. a Normal/Flying pokemon under Windy → Partly
+			// Cloudy: boosted under both) produce no useful information.
+			//
+			// When show_altered_pokemon is off, we have no active-pokemon
+			// data to filter on, so the cell-cares set is the only signal
+			// and the alert fires for everyone who registered weather care
+			// for this cell.
 			if ps.activePokemon != nil {
 				affected := ps.activePokemon.GetAffectedPokemon(
 					change.S2CellID, u.ID,
 					change.OldGameplayCondition, change.GameplayCondition,
 					ps.cfg.Weather.ShowAlteredPokemonMaxCount,
 				)
-				if len(affected) > 0 {
-					entries := make([]webhook.ActivePokemonEntry, len(affected))
-					for j, ap := range affected {
-						entries[j] = webhook.ActivePokemonEntry{
-							PokemonID:     ap.PokemonID,
-							Form:          ap.Form,
-							IV:            ap.IV,
-							CP:            ap.CP,
-							Latitude:      ap.Latitude,
-							Longitude:     ap.Longitude,
-							DisappearTime: ap.DisappearTime,
-						}
-					}
-					mu.ActivePokemons = entries
+				if len(affected) == 0 {
+					l.Debugf("Weather alert skipped for %s (%s) — no tracked pokemon affected by %d→%d transition",
+						u.Name, u.ID, change.OldGameplayCondition, change.GameplayCondition)
+					continue
 				}
+				entries := make([]webhook.ActivePokemonEntry, len(affected))
+				for j, ap := range affected {
+					entries[j] = webhook.ActivePokemonEntry{
+						PokemonID:     ap.PokemonID,
+						Form:          ap.Form,
+						IV:            ap.IV,
+						CP:            ap.CP,
+						Latitude:      ap.Latitude,
+						Longitude:     ap.Longitude,
+						DisappearTime: ap.DisappearTime,
+					}
+				}
+				mu.ActivePokemons = entries
 			}
 
 			matched = append(matched, mu)
