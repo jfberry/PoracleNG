@@ -1217,7 +1217,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		questMatcher:     &matching.QuestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas, GeographicPrefilter: cfg.Tuning.GeographicPrefilter},
 		lureMatcher:      &matching.LureMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas, GeographicPrefilter: cfg.Tuning.GeographicPrefilter},
 		gymMatcher:       &matching.GymMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		nestMatcher:      &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		nestMatcher:      &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas, GeographicPrefilter: cfg.Tuning.GeographicPrefilter},
 		fortMatcher:      &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		maxbattleMatcher: &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		pvpCfg:           pvpCfg,
