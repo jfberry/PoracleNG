@@ -55,10 +55,21 @@ func ValidateHumans(
 		if monster.ProfileNo != human.CurrentProfileNo {
 			continue
 		}
+
+		// Lazy haversine: compute once when first needed, cache for reuse.
+		var dist int
+		distComputed := false
+		haversine := func() int {
+			if !distComputed {
+				dist = HaversineDistance(human.Latitude, human.Longitude, monsterLat, monsterLon)
+				distComputed = true
+			}
+			return dist
+		}
+
 		// Distance/area check
 		if monster.Distance > 0 {
-			dist := HaversineDistance(human.Latitude, human.Longitude, monsterLat, monsterLon)
-			if dist > monster.Distance {
+			if haversine() > monster.Distance {
 				continue
 			}
 		} else {
@@ -73,8 +84,8 @@ func ValidateHumans(
 			}
 		}
 
-		// Compute actual distance and bearing from user to event
-		actualDist := HaversineDistance(human.Latitude, human.Longitude, monsterLat, monsterLon)
+		// Reuse cached haversine (or compute now for area-based users).
+		actualDist := haversine()
 		bearing := Bearing(human.Latitude, human.Longitude, monsterLat, monsterLon)
 
 		result = append(result, webhook.MatchedUser{
@@ -130,6 +141,17 @@ func ValidateHumansForRaid(
 			continue
 		}
 
+		// Lazy haversine: compute once when first needed, cache for reuse.
+		var dist int
+		distComputed := false
+		haversine := func() int {
+			if !distComputed {
+				dist = HaversineDistance(human.Latitude, human.Longitude, raidLat, raidLon)
+				distComputed = true
+			}
+			return dist
+		}
+
 		// Specific gym tracking - check specificgym block
 		if td.IsSpecificGym {
 			if human.BlockedAlertsSet["specificgym"] {
@@ -138,8 +160,7 @@ func ValidateHumansForRaid(
 		} else {
 			// Distance/area check
 			if td.Distance > 0 {
-				dist := HaversineDistance(human.Latitude, human.Longitude, raidLat, raidLon)
-				if dist > td.Distance {
+				if haversine() > td.Distance {
 					continue
 				}
 			} else {
@@ -162,8 +183,8 @@ func ValidateHumansForRaid(
 		}
 		seen[human.ID] = true
 
-		// Compute actual distance and bearing from user to event
-		actualDist := HaversineDistance(human.Latitude, human.Longitude, raidLat, raidLon)
+		// Reuse cached haversine (or compute now for area-based users).
+		actualDist := haversine()
 		bearing := Bearing(human.Latitude, human.Longitude, raidLat, raidLon)
 
 		result = append(result, webhook.MatchedUser{

@@ -160,6 +160,17 @@ func validateHumansForGym(
 			continue
 		}
 
+		// Lazy haversine: compute once when first needed, cache for reuse.
+		var dist int
+		distComputed := false
+		haversine := func() int {
+			if !distComputed {
+				dist = HaversineDistance(human.Latitude, human.Longitude, lat, lon)
+				distComputed = true
+			}
+			return dist
+		}
+
 		isSpecificGym := specificGymUsers[td.HumanID]
 		if isSpecificGym {
 			if human.BlockedAlertsSet["specificgym"] {
@@ -168,8 +179,7 @@ func validateHumansForGym(
 		} else {
 			// Distance/area check
 			if td.Distance > 0 {
-				dist := HaversineDistance(human.Latitude, human.Longitude, lat, lon)
-				if dist > td.Distance {
+				if haversine() > td.Distance {
 					continue
 				}
 			} else {
@@ -190,8 +200,8 @@ func validateHumansForGym(
 		}
 		seen[human.ID] = true
 
-		// Compute actual distance and bearing from user to event
-		actualDist := HaversineDistance(human.Latitude, human.Longitude, lat, lon)
+		// Reuse cached haversine (or compute now for area-based / specific-gym users).
+		actualDist := haversine()
 		bearing := Bearing(human.Latitude, human.Longitude, lat, lon)
 
 		result = append(result, webhook.MatchedUser{
