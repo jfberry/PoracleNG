@@ -162,7 +162,7 @@ var (
 
 	MatchingCandidates = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "poracle_processor_matching_candidates",
-		Help:    "Number of tracking rules scanned per webhook (before any filtering)",
+		Help:    "Number of tracking rules surviving rule-type filters per webhook, before human-level validation (distance/area/profile)",
 		Buckets: []float64{1, 10, 100, 1000, 10000, 100000, 1000000},
 	}, []string{"type"})
 
