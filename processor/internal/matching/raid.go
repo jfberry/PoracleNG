@@ -1,6 +1,9 @@
 package matching
 
 import (
+	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -40,6 +43,11 @@ type RaidMatcher struct {
 // MatchRaid returns all matched users for a raid along with the geofence
 // areas that contain the gym.
 func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(start).Seconds())
+	}()
+
 	if st == nil {
 		return nil, nil
 	}
@@ -102,6 +110,8 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 		})
 	}
 
+	metrics.MatchingCandidates.WithLabelValues("raid").Observe(float64(len(trackingData)))
+
 	users := ValidateHumansForRaid(
 		trackingData,
 		raid.Latitude, raid.Longitude,
@@ -117,6 +127,11 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 // areas that contain the gym.
 // Port of raid.js:71-131 (eggWhoCares).
 func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("egg").Observe(time.Since(start).Seconds())
+	}()
+
 	if st == nil {
 		return nil, nil
 	}
@@ -165,6 +180,8 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 			IsSpecificGym: isSpecificGym,
 		})
 	}
+
+	metrics.MatchingCandidates.WithLabelValues("egg").Observe(float64(len(trackingData)))
 
 	users := ValidateHumansForRaid(
 		trackingData,

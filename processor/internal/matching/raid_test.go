@@ -4,8 +4,12 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 )
 
@@ -550,5 +554,155 @@ func TestRaidMatchDedup(t *testing.T) {
 	matched, _ := matcher.MatchRaid(raidData, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match (deduped), got %d", len(matched))
+	}
+}
+
+func TestRaidMatch_RecordsMatchingDuration(t *testing.T) {
+	metrics.MatchingDuration.Reset()
+	matcher := &RaidMatcher{}
+	fences := []geofence.Fence{
+		{
+			Name:             "TestArea",
+			DisplayInMatches: true,
+			Path: [][2]float64{
+				{50.0, -1.0},
+				{52.0, -1.0},
+				{52.0, 1.0},
+				{50.0, 1.0},
+			},
+		},
+	}
+	si := geofence.NewSpatialIndex(fences)
+	st := &state.State{
+		Humans:   map[string]*db.Human{},
+		Raids:    nil,
+		Geofence: si,
+	}
+
+	raidData := &RaidData{
+		GymID: "gym1", PokemonID: 150, Form: 0, Level: 5,
+		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.MatchRaid(raidData, st)
+
+	h, err := metrics.MatchingDuration.GetMetricWithLabelValues("raid")
+	if err != nil {
+		t.Fatalf("get metric: %v", err)
+	}
+	var out dto.Metric
+	if err := h.(prometheus.Histogram).Write(&out); err != nil {
+		t.Fatalf("write metric: %v", err)
+	}
+	if got := out.GetHistogram().GetSampleCount(); got != 1 {
+		t.Errorf("MatchingDuration{type=raid} sample count = %d, want 1", got)
+	}
+}
+
+func TestRaidMatch_RecordsCandidateCount(t *testing.T) {
+	metrics.MatchingCandidates.Reset()
+	human := makeHuman("u1")
+	raid1 := &db.RaidTracking{
+		ID: "u1", ProfileNo: 1, PokemonID: 150, Level: 5,
+		Team: 4, Exclusive: false, Form: 0, Evolution: 9000,
+		Move: 9000, Distance: 0, Template: "1",
+	}
+	raid2 := &db.RaidTracking{
+		ID: "u2", ProfileNo: 1, PokemonID: 9000, Level: 5,
+		Team: 4, Exclusive: false, Form: 0, Evolution: 9000,
+		Move: 9000, Distance: 0, Template: "1",
+	}
+	humans := map[string]*db.Human{
+		"u1": human,
+		"u2": makeHuman("u2"),
+	}
+	st := makeRaidTestState([]*db.RaidTracking{raid1, raid2}, nil, humans)
+	matcher := &RaidMatcher{}
+
+	raidData := &RaidData{
+		GymID: "gym1", PokemonID: 150, Form: 0, Level: 5,
+		TeamID: 1, Ex: false, Evolution: 0, Move1: 100, Move2: 200,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.MatchRaid(raidData, st)
+
+	h, _ := metrics.MatchingCandidates.GetMetricWithLabelValues("raid")
+	var out dto.Metric
+	_ = h.(prometheus.Histogram).Write(&out)
+	if got := out.GetHistogram().GetSampleSum(); got != 2 {
+		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
+	}
+}
+
+func TestEggMatch_RecordsMatchingDuration(t *testing.T) {
+	metrics.MatchingDuration.Reset()
+	matcher := &RaidMatcher{}
+	fences := []geofence.Fence{
+		{
+			Name:             "TestArea",
+			DisplayInMatches: true,
+			Path: [][2]float64{
+				{50.0, -1.0},
+				{52.0, -1.0},
+				{52.0, 1.0},
+				{50.0, 1.0},
+			},
+		},
+	}
+	si := geofence.NewSpatialIndex(fences)
+	st := &state.State{
+		Humans:   map[string]*db.Human{},
+		Eggs:     nil,
+		Geofence: si,
+	}
+
+	eggData := &EggData{
+		GymID: "gym1", Level: 5, TeamID: 1, Ex: false,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.MatchEgg(eggData, st)
+
+	h, err := metrics.MatchingDuration.GetMetricWithLabelValues("egg")
+	if err != nil {
+		t.Fatalf("get metric: %v", err)
+	}
+	var out dto.Metric
+	if err := h.(prometheus.Histogram).Write(&out); err != nil {
+		t.Fatalf("write metric: %v", err)
+	}
+	if got := out.GetHistogram().GetSampleCount(); got != 1 {
+		t.Errorf("MatchingDuration{type=egg} sample count = %d, want 1", got)
+	}
+}
+
+func TestEggMatch_RecordsCandidateCount(t *testing.T) {
+	metrics.MatchingCandidates.Reset()
+	human := makeHuman("u1")
+	egg1 := &db.EggTracking{
+		ID: "u1", ProfileNo: 1, Level: 5,
+		Team: 4, Exclusive: false, Distance: 0, Template: "1",
+	}
+	egg2 := &db.EggTracking{
+		ID: "u2", ProfileNo: 1, Level: 90,
+		Team: 4, Exclusive: false, Distance: 0, Template: "1",
+	}
+	humans := map[string]*db.Human{
+		"u1": human,
+		"u2": makeHuman("u2"),
+	}
+	st := makeRaidTestState(nil, []*db.EggTracking{egg1, egg2}, humans)
+	matcher := &RaidMatcher{}
+
+	eggData := &EggData{
+		GymID: "gym1", Level: 5, TeamID: 1, Ex: false,
+		Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.MatchEgg(eggData, st)
+
+	h, _ := metrics.MatchingCandidates.GetMetricWithLabelValues("egg")
+	var out dto.Metric
+	_ = h.(prometheus.Histogram).Write(&out)
+	if got := out.GetHistogram().GetSampleSum(); got != 2 {
+		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
 	}
 }
