@@ -1213,7 +1213,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 			GeographicPrefilter:        cfg.Tuning.GeographicPrefilter,
 		},
 		raidMatcher:      &matching.RaidMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: cfg.Area.Enabled, GeographicPrefilter: cfg.Tuning.GeographicPrefilter},
-		invasionMatcher:  &matching.InvasionMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		invasionMatcher:  &matching.InvasionMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas, GeographicPrefilter: cfg.Tuning.GeographicPrefilter},
 		questMatcher:     &matching.QuestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas, GeographicPrefilter: cfg.Tuning.GeographicPrefilter},
 		lureMatcher:      &matching.LureMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		gymMatcher:       &matching.GymMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
@@ -25,6 +26,37 @@ type InvasionData struct {
 type InvasionMatcher struct {
 	StrictLocations     bool
 	AreaSecurityEnabled bool
+	GeographicPrefilter bool
+}
+
+// matchInvasions filters the given invasion rule slice and returns the surviving
+// trackingUserData entries applying the per-rule invasion filter logic.
+func (m *InvasionMatcher) matchInvasions(data *InvasionData, rules []*db.InvasionTracking) []trackingUserData {
+	gruntType := strings.ToLower(data.GruntType)
+	var out []trackingUserData
+	for _, inv := range rules {
+		// grunt_type match OR 'everything' OR 'boss' (when this invasion is a
+		// boss encounter; see Grunt.Boss in grunts.go).
+		invGrunt := strings.ToLower(inv.GruntType)
+		if !(invGrunt == gruntType ||
+			invGrunt == "everything" ||
+			(invGrunt == "boss" && data.Boss)) {
+			continue
+		}
+		// gender match OR 0 (any)
+		if !(inv.Gender == data.Gender || inv.Gender == 0) {
+			continue
+		}
+		out = append(out, trackingUserData{
+			HumanID:   inv.ID,
+			ProfileNo: inv.ProfileNo,
+			Distance:  inv.Distance,
+			Template:  inv.Template,
+			Clean:     inv.Clean,
+			Ping:      inv.Ping,
+		})
+	}
+	return out
 }
 
 // Match returns all matched users for an invasion plus the geofence areas
@@ -41,32 +73,20 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.
 	}
 
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
+
 	var trackings []trackingUserData
-
-	gruntType := strings.ToLower(data.GruntType)
-
-	for _, inv := range st.Invasions {
-		// grunt_type match OR 'everything' OR 'boss' (when this invasion is a
-		// boss encounter; see Grunt.Boss in grunts.go).
-		invGrunt := strings.ToLower(inv.GruntType)
-		if !(invGrunt == gruntType ||
-			invGrunt == "everything" ||
-			(invGrunt == "boss" && data.Boss)) {
-			continue
+	if m.GeographicPrefilter && st.GeoIndex != nil && st.InvasionsByHuman != nil {
+		applicable := st.GeoIndex.ApplicableHumans(
+			data.Latitude, data.Longitude,
+			matchedAreaNames,
+			m.AreaSecurityEnabled && m.StrictLocations,
+		)
+		metrics.MatchingApplicable.WithLabelValues("invasion").Observe(float64(len(applicable)))
+		for humanID := range applicable {
+			trackings = append(trackings, m.matchInvasions(data, st.InvasionsByHuman[humanID])...)
 		}
-		// gender match OR 0 (any)
-		if !(inv.Gender == data.Gender || inv.Gender == 0) {
-			continue
-		}
-
-		trackings = append(trackings, trackingUserData{
-			HumanID:   inv.ID,
-			ProfileNo: inv.ProfileNo,
-			Distance:  inv.Distance,
-			Template:  inv.Template,
-			Clean:     inv.Clean,
-			Ping:      inv.Ping,
-		})
+	} else {
+		trackings = m.matchInvasions(data, st.Invasions)
 	}
 
 	metrics.MatchingCandidates.WithLabelValues("invasion").Observe(float64(len(trackings)))
