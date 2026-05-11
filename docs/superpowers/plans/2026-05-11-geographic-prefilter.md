@@ -4,11 +4,13 @@
 
 **Goal:** Drastically reduce per-spawn matching work for installations with very large rule counts (we've observed 100k and 500k single-user rule sets) by pre-filtering out humans whose geography can't possibly cover the spawn — before the per-rule IV/CP/etc filter loop pays for them.
 
-**Architecture:** At state load, build an immutable `HumanGeoIndex` keyed by `(area name → set of human IDs)` plus an R-tree of `(human location, max-distance-across-their-rules)` circles. Per webhook, compute the *applicable humans* set once (union of area-bucket lookups across the spawn's matched geofence areas, plus an R-tree radius query). In each matcher's per-rule loop, skip rules whose owner (`m.ID`) isn't in the applicable set. The pre-filter is a **strict superset** check — every rule that fires today must still fire — and the existing `ValidateHumans*` functions are unchanged; they remain the authoritative final filter.
+**Architecture:** At state load, build (1) an immutable `HumanGeoIndex` keyed by `(area name → set of human IDs)` plus an R-tree of `(human location, max-distance-across-their-rules)` circles, AND (2) per-human rule indexes (`MonsterIndex.ByHumanAndLeague`, `RaidsByHuman`, `QuestsByHuman`, …) that partition each existing rule slice by owner. Per webhook, compute the small *applicable humans* set first (cheap: area map lookup + R-tree query), then drive the candidate-rule iteration **from** that set — walk each applicable human's rules in their per-human partition rather than walking the global per-pokemon buckets. The existing per-pokemon buckets stay as the fallback path when the flag is off. `matchMonsters` (and equivalents per type) still does the per-rule IV/CP/PVP/etc filter logic, just on a much smaller input slice. `ValidateHumans*` remains the authoritative final filter; no observable behaviour change.
 
 **Tech Stack:** Go, existing `tidwall/rtree` (already used for geofences), Prometheus client_golang. No new dependencies.
 
-**Pokemon-spawn-multi-area and user-multi-area:** Both already exist today. `matchedAreaNames map[string]bool` is the *set* of overlapping geofences containing the spawn; `human.Area []string` is the set of areas the user tracks. The pre-filter operates on these as sets — applicable humans = union of `HumansByArea[a]` over `a ∈ matchedAreaNames`, deduplicated. A rule has one owner, so `m.ID ∈ applicableHumans` naturally dedups across rules.
+**Pokemon-spawn-multi-area and user-multi-area:** Both already exist today. `matchedAreaNames map[string]bool` is the *set* of overlapping geofences containing the spawn; `human.Area []string` is the set of areas the user tracks. The geo index operates on these as sets — applicable humans = union of `HumansByArea[a]` over `a ∈ matchedAreaNames`, deduplicated. A rule has one owner, so iterating per applicable human naturally dedups across rules.
+
+**Why per-human iteration (not post-filter on the assembled candidate slice):** A naive "compute applicable, then drop rules from the assembled `matched` slice whose `m.ID` isn't applicable" still iterates the full bucket inside `matchMonsters`. For a 500k-rule install with a fat `ByPokemonID[0]` bucket, that's 500k iterations of the IV/CP/PVP filter loop body per spawn — almost no savings. Driving iteration from the per-human partition cuts iterations to `applicable_humans × avg_rules_per_human` (~25k for a 500-applicable, 50-rule-per-user case), a 20× reduction. The per-rule filter logic inside `matchMonsters` is unchanged; only the input slice shrinks.
 
 **Out of scope** (deliberate, do not pull into this plan):
 - Per-track areas (future-compat: `HumansByArea` population source would change but matcher path is unaffected)
@@ -27,6 +29,9 @@
 | `processor/internal/state/geo_index_test.go` | (new) boundary tests for the index across area-only / distance-only / mixed / strict-area / multi-area scenarios |
 | `processor/internal/state/state.go` | (modify) add `GeoIndex *HumanGeoIndex` field |
 | `processor/internal/state/loader.go` | (modify) build `GeoIndex` after data load in both `Load` and `LoadWithGeofences` |
+| `processor/internal/db/monsters.go` | (modify) add `MonsterIndex.ByHumanAndLeague map[string]map[int][]*MonsterTracking`; populate during `LoadMonsters` |
+| `processor/internal/db/by_human.go` | (new) `BuildByHumanIndex[T any]` generic helper used by raid/egg/quest/invasion/lure/nest/gym/fort/maxbattle to partition flat rule slices by `humanID` |
+| `processor/internal/state/state.go` | (modify) add per-type `*ByHuman` indexes referenced from `State` (e.g. `RaidsByHuman map[string][]*db.RaidTracking`) |
 | `processor/internal/config/config.go` | (modify) `[tuning] geographic_prefilter bool` flag |
 | `processor/internal/matching/pokemon.go` | (modify) apply pre-filter when flag set; instrument duration + candidate count |
 | `processor/internal/matching/raid.go` (and `quest.go`, `invasion.go`, `lure.go`, `nest.go`, `gym.go`, `fort.go`, `maxbattle.go`) | (modify, one per task) same pre-filter pattern |
@@ -1051,6 +1056,235 @@ git add processor/internal/state/state.go processor/internal/state/loader.go pro
 git commit -m "state: build HumanGeoIndex in Load and LoadWithGeofences"
 ```
 
+### Task 9b: Build per-human rule partitions for every tracking type
+
+The geo index tells us *which* humans matter; this task builds an index that lets us *iterate only their rules*. Each tracking type gets its own per-human partition. The existing per-pokemon / flat-slice indexes stay; the per-human indexes are additive (~6-10MB extra for 500k rules — same pointers, organised differently).
+
+**Files:**
+- Modify: `processor/internal/db/monsters.go` (add `ByHumanAndLeague` to `MonsterIndex`)
+- Create: `processor/internal/db/by_human.go` + `_test.go` (generic partitioner for the other 9 types)
+- Modify: `processor/internal/state/state.go` (add fields)
+- Modify: `processor/internal/state/loader.go` (populate after `db.LoadAll`)
+
+- [ ] **Step 1: Failing test for the pokemon per-human partition**
+
+Add to `processor/internal/db/monsters_test.go` (create the file if missing):
+
+```go
+package db
+
+import "testing"
+
+func TestMonsterIndex_ByHumanAndLeague_PartitionsCorrectly(t *testing.T) {
+    // The per-human index is the same rule pointers organised by
+    // (humanID, pvp_ranking_league). league=0 = non-PVP. Per spawn we
+    // walk a single applicable human's bucket per league, instead of
+    // walking ByPokemonID[0] / ByPokemonID[N] / PVPSpecific[league] / etc.
+    rules := []MonsterTracking{
+        {ID: "u1", PokemonID: 25, PVPRankingLeague: 0},     // non-PVP per-species
+        {ID: "u1", PokemonID: 0, PVPRankingLeague: 0},      // non-PVP everything
+        {ID: "u1", PokemonID: 6, PVPRankingLeague: 1500},   // PVP per-species (great)
+        {ID: "u2", PokemonID: 0, PVPRankingLeague: 1500},   // PVP everything (great)
+    }
+    idx := buildMonsterIndexFromRules(rules)
+
+    u1NonPVP := idx.ByHumanAndLeague["u1"][0]
+    if len(u1NonPVP) != 2 {
+        t.Errorf("u1 non-PVP rules = %d, want 2", len(u1NonPVP))
+    }
+    u1Great := idx.ByHumanAndLeague["u1"][1500]
+    if len(u1Great) != 1 {
+        t.Errorf("u1 great-league rules = %d, want 1", len(u1Great))
+    }
+    u2Great := idx.ByHumanAndLeague["u2"][1500]
+    if len(u2Great) != 1 {
+        t.Errorf("u2 great-league rules = %d, want 1", len(u2Great))
+    }
+    // Pointer identity: per-human entries point at the same MonsterTracking
+    // backing array elements as ByPokemonID. (We don't store new structs.)
+    if u1NonPVP[0] != idx.ByPokemonID[25][0] && u1NonPVP[0] != idx.ByPokemonID[0][0] {
+        t.Errorf("u1's non-PVP rule should share pointer identity with ByPokemonID entry")
+    }
+}
+```
+
+- [ ] **Step 2: Verify fails**
+
+Run: `cd processor && go test ./internal/db/... -run TestMonsterIndex_ByHumanAndLeague -v`
+Expected: FAIL — `ByHumanAndLeague` and `buildMonsterIndexFromRules` undefined.
+
+- [ ] **Step 3: Add the field and populate it**
+
+Edit `processor/internal/db/monsters.go`:
+
+```go
+type MonsterIndex struct {
+    ByPokemonID   map[int][]*MonsterTracking
+    PVPSpecific   map[int][]*MonsterTracking
+    PVPEverything map[int][]*MonsterTracking
+
+    // ByHumanAndLeague partitions every rule by (humanID, pvp_ranking_league).
+    // league==0 means "non-PVP" — non-PVP rules from ByPokemonID[0]
+    // (everything) and ByPokemonID[N] (per-species) both land in
+    // ByHumanAndLeague[humanID][0]. Used by matchers when
+    // geographic_prefilter is enabled to iterate per applicable human
+    // instead of per pokemon bucket.
+    ByHumanAndLeague map[string]map[int][]*MonsterTracking
+
+    Total int
+}
+```
+
+Extract the index-build logic from `LoadMonsters` into a `buildMonsterIndexFromRules(rules []MonsterTracking) *MonsterIndex` helper so the test can hit it directly. Update `LoadMonsters` to call this helper. Inside the helper, after the existing per-pokemon and PVP loops, add:
+
+```go
+idx.ByHumanAndLeague = map[string]map[int][]*MonsterTracking{}
+for i := range monsters {
+    m := &monsters[i]
+    perH, ok := idx.ByHumanAndLeague[m.ID]
+    if !ok {
+        perH = map[int][]*MonsterTracking{}
+        idx.ByHumanAndLeague[m.ID] = perH
+    }
+    perH[m.PVPRankingLeague] = append(perH[m.PVPRankingLeague], m)
+}
+```
+
+- [ ] **Step 4: Verify pass**
+
+Run: `cd processor && go test ./internal/db/... -run TestMonsterIndex_ByHumanAndLeague -v`
+Expected: PASS.
+
+- [ ] **Step 5: Generic per-human partitioner for non-pokemon types**
+
+Create `processor/internal/db/by_human.go`:
+
+```go
+package db
+
+// HumanIDExtractor returns the human ID for a tracking row. Implemented
+// by each tracking type below.
+type HumanIDExtractor[T any] func(*T) string
+
+// PartitionByHuman groups any flat tracking slice by the human ID
+// returned from extract. Returns a map[humanID][]*T — pointers refer
+// into the original slice so this is cheap (no copies).
+func PartitionByHuman[T any](rows []T, extract HumanIDExtractor[T]) map[string][]*T {
+    out := map[string][]*T{}
+    for i := range rows {
+        id := extract(&rows[i])
+        if id == "" {
+            continue
+        }
+        out[id] = append(out[id], &rows[i])
+    }
+    return out
+}
+```
+
+Add ID extractors next to each tracking type definition (one per type, all in their existing files):
+
+```go
+// in raid.go:
+func RaidHumanID(r *RaidTracking) string { return r.ID }
+// in egg.go: func EggHumanID(e *EggTracking) string { return e.ID }
+// ... etc for invasion, quest, lure, nest, gym, fort, maxbattle
+```
+
+- [ ] **Step 6: Test the generic partitioner**
+
+Create `processor/internal/db/by_human_test.go`:
+
+```go
+package db
+
+import "testing"
+
+func TestPartitionByHuman_GroupsByExtractor(t *testing.T) {
+    rows := []RaidTracking{
+        {ID: "u1", Level: 5},
+        {ID: "u2", Level: 1},
+        {ID: "u1", Level: 3},
+    }
+    got := PartitionByHuman(rows, RaidHumanID)
+    if len(got["u1"]) != 2 {
+        t.Errorf("u1 = %d rules, want 2", len(got["u1"]))
+    }
+    if len(got["u2"]) != 1 {
+        t.Errorf("u2 = %d rules, want 1", len(got["u2"]))
+    }
+    if got["u1"][0] != &rows[0] {
+        t.Errorf("pointer identity broken")
+    }
+}
+
+func TestPartitionByHuman_EmptyIDSkipped(t *testing.T) {
+    rows := []RaidTracking{{ID: ""}, {ID: "u1"}}
+    got := PartitionByHuman(rows, RaidHumanID)
+    if _, ok := got[""]; ok {
+        t.Errorf("empty ID should not appear")
+    }
+    if len(got["u1"]) != 1 {
+        t.Errorf("u1 = %d, want 1", len(got["u1"]))
+    }
+}
+```
+
+Run: `cd processor && go test ./internal/db/... -run TestPartitionByHuman -v`
+Expected: PASS.
+
+- [ ] **Step 7: Add per-type ByHuman fields to State and populate in loader**
+
+Edit `processor/internal/state/state.go`:
+
+```go
+type State struct {
+    // ... existing fields ...
+    GeoIndex *HumanGeoIndex
+
+    // Per-human partitions for the geographic_prefilter path. Same
+    // pointers as the existing flat slices (Raids, Eggs, etc.), just
+    // organised by owner.
+    RaidsByHuman      map[string][]*db.RaidTracking
+    EggsByHuman       map[string][]*db.EggTracking
+    QuestsByHuman     map[string][]*db.QuestTracking
+    InvasionsByHuman  map[string][]*db.InvasionTracking
+    LuresByHuman      map[string][]*db.LureTracking
+    NestsByHuman      map[string][]*db.NestTracking
+    GymsByHuman       map[string][]*db.GymTracking
+    FortsByHuman      map[string][]*db.FortTracking
+    MaxbattlesByHuman map[string][]*db.MaxbattleTracking
+}
+```
+
+Edit `processor/internal/state/loader.go`, in BOTH `Load` and `LoadWithGeofences`, after the existing `&State{…}` literal and the `GeoIndex` assignment:
+
+```go
+s.RaidsByHuman = db.PartitionByHuman(data.Raids, db.RaidHumanID)
+s.EggsByHuman = db.PartitionByHuman(data.Eggs, db.EggHumanID)
+s.QuestsByHuman = db.PartitionByHuman(data.Quests, db.QuestHumanID)
+s.InvasionsByHuman = db.PartitionByHuman(data.Invasions, db.InvasionHumanID)
+s.LuresByHuman = db.PartitionByHuman(data.Lures, db.LureHumanID)
+s.NestsByHuman = db.PartitionByHuman(data.Nests, db.NestHumanID)
+s.GymsByHuman = db.PartitionByHuman(data.Gyms, db.GymHumanID)
+s.FortsByHuman = db.PartitionByHuman(data.Forts, db.FortHumanID)
+s.MaxbattlesByHuman = db.PartitionByHuman(data.Maxbattles, db.MaxbattleHumanID)
+```
+
+NB: the `data` variable name and `data.Raids` etc. field names must match what `db.LoadAll` returns. Inspect first.
+
+- [ ] **Step 8: Build sweep**
+
+Run: `cd processor && go build ./... && go test ./... -count=1`
+Expected: green.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add processor/internal/db/monsters.go processor/internal/db/by_human.go processor/internal/db/by_human_test.go processor/internal/db/monsters_test.go processor/internal/db/*.go processor/internal/state/state.go processor/internal/state/loader.go
+git commit -m "state: per-human rule partitions for all tracking types"
+```
+
 ### Task 10: Add multi-profile × area-restriction × strict mode combinatorial test (pre-existing gap)
 
 **Files:**
@@ -1128,12 +1362,14 @@ git add processor/internal/matching/pokemon_test.go
 git commit -m "test: combinatorial multi-profile + strict-area regression guard"
 ```
 
-### Task 11: Apply pre-filter in pokemon matcher (flagged)
+### Task 11: Drive pokemon matcher iteration from applicable humans (flagged)
+
+**The core change.** With the flag off, the matcher walks the existing per-pokemon buckets exactly as today — zero performance or behavioural delta. With the flag on, the matcher walks only the per-human partitions for applicable humans, calling `matchMonsters` with the same parameters as today's call sites but a much smaller slice.
 
 **Files:**
 - Modify: `processor/internal/matching/pokemon.go`
 - Modify: `processor/cmd/processor/main.go` (set `GeographicPrefilter` field on `PokemonMatcher`)
-- Modify: `processor/internal/matching/pokemon_test.go` (positive + negative tests for the new code path)
+- Modify: `processor/internal/matching/pokemon_test.go` (parity tests: flag-off and flag-on produce identical results on shared inputs)
 
 - [ ] **Step 1: Add field to PokemonMatcher**
 
@@ -1149,30 +1385,89 @@ type PokemonMatcher struct {
 }
 ```
 
-- [ ] **Step 2: Write tests for the prefilter ON path**
+- [ ] **Step 2: Write the parity test FIRST**
 
-Add to `processor/internal/matching/pokemon_test.go`:
+Add to `processor/internal/matching/pokemon_test.go`. This is the safety net: every existing pokemon matcher test scenario should produce identical results with the flag on as it does with the flag off. We pick a representative test case and run it both ways.
 
 ```go
-func TestPokemonMatch_GeoPrefilterDropsOutOfAreaHuman(t *testing.T) {
-    // u1 tracks belgium only; spawn is in japan; with prefilter on we should
-    // never reach ValidateHumans. Result: zero matched users — same as
-    // existing behaviour, but the candidate-count metric should be lower.
-    metrics.MatchingCandidates.Reset()
-    metrics.MatchingApplicable.Reset()
+// TestPokemonMatch_GeoPrefilterParity is the safety net for the
+// flagged code path. Same inputs, both flag values, identical outputs.
+// If this test ever fails, the flag-on path is dropping (or producing)
+// rules that the flag-off path didn't.
+func TestPokemonMatch_GeoPrefilterParity(t *testing.T) {
     humans := map[string]*db.Human{
-        "u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50, Longitude: 4, CurrentProfileNo: 1},
+        "u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+        "u2": {ID: "u2", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
     }
-    rules := []*db.MonsterTracking{
-        {ID: "u1", ProfileNo: 1, PokemonID: 25, MaxIV: 100, MaxCP: 9000, MaxLevel: 55, Distance: 0},
-        {ID: "u1", ProfileNo: 1, PokemonID: 0, MaxIV: 100, MaxCP: 9000, MaxLevel: 55, Distance: 0}, // everything
+    monsterRules := []MonsterTracking{
+        {ID: "u1", ProfileNo: 1, PokemonID: 25, MaxIV: 100, MaxCP: 9000, MaxLevel: 55},
+        {ID: "u1", ProfileNo: 1, PokemonID: 0, MaxIV: 100, MaxCP: 9000, MaxLevel: 55}, // everything
+        {ID: "u2", ProfileNo: 1, PokemonID: 25, MaxIV: 100, MaxCP: 9000, MaxLevel: 55},
     }
-    geoIdx := BuildHumanGeoIndex(humans, nil) // no distance rules — but wait, this is matching package
-    _ = geoIdx                                 // remove this line once you've moved the helper or used an in-package builder
-    // ... use state.BuildHumanGeoIndex via the state package import
+    // buildMonsterIndexFromRules is the helper introduced in Task 9b — it
+    // populates both ByPokemonID (fallback path) and ByHumanAndLeague
+    // (per-human path) from the same backing slice.
+    monsters := buildMonsterIndexFromRules(monsterRules)
+
+    spatial := geofence.NewSpatialIndex([]geofence.Fence{
+        {Name: "Belgium", Path: [][2]float64{{3, 50}, {3, 51}, {6, 51}, {6, 50}, {3, 50}}},
+    })
+
+    pokemon := &ProcessedPokemon{PokemonID: 25, IV: 100, Latitude: 50.5, Longitude: 4.5}
+
+    var off, on []webhook.MatchedUser
+    for _, flag := range []bool{false, true} {
+        st := &state.State{
+            Humans:   humans,
+            Monsters: monsters,
+            Geofence: spatial,
+            GeoIndex: state.BuildHumanGeoIndex(humans, nil),
+        }
+        matcher := &PokemonMatcher{GeographicPrefilter: flag}
+        users, _ := matcher.Match(pokemon, st)
+        if flag {
+            on = users
+        } else {
+            off = users
+        }
+    }
+
+    if len(off) != len(on) {
+        t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
+    }
+    // Compare by user ID (order may differ).
+    seenOff := map[string]int{}
+    for _, u := range off {
+        seenOff[u.ID]++
+    }
+    seenOn := map[string]int{}
+    for _, u := range on {
+        seenOn[u.ID]++
+    }
+    for id, n := range seenOff {
+        if seenOn[id] != n {
+            t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
+        }
+    }
+}
+
+// TestPokemonMatch_GeoPrefilterDropsOutOfAreaHuman confirms the
+// expected speedup property: when no humans cover the spawn's
+// geography, the flag-on path doesn't even enter matchMonsters on
+// the per-pokemon bucket — the applicable set is empty.
+func TestPokemonMatch_GeoPrefilterDropsOutOfAreaHuman(t *testing.T) {
+    humans := map[string]*db.Human{
+        "u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+    }
+    monsterRules := []MonsterTracking{
+        {ID: "u1", ProfileNo: 1, PokemonID: 25, MaxIV: 100, MaxCP: 9000, MaxLevel: 55},
+        {ID: "u1", ProfileNo: 1, PokemonID: 0, MaxIV: 100, MaxCP: 9000, MaxLevel: 55}, // everything
+    }
+    monsters := buildMonsterIndexFromRules(monsterRules)
+
     st := &state.State{
         Humans:   humans,
-        Monsters: &db.MonsterIndex{ByPokemonID: map[int][]*db.MonsterTracking{25: rules[:1], 0: rules[1:]}},
+        Monsters: monsters,
         Geofence: geofence.NewSpatialIndex([]geofence.Fence{
             {Name: "Japan", Path: [][2]float64{{139, 35}, {139, 36}, {140, 36}, {140, 35}, {139, 35}}},
         }),
@@ -1182,85 +1477,149 @@ func TestPokemonMatch_GeoPrefilterDropsOutOfAreaHuman(t *testing.T) {
     pokemon := &ProcessedPokemon{PokemonID: 25, IV: 100, Latitude: 35.5, Longitude: 139.5}
     users, _ := matcher.Match(pokemon, st)
     if len(users) != 0 {
-        t.Errorf("u1 tracks only belgium, japan spawn must not match, got %d users", len(users))
-    }
-}
-
-func TestPokemonMatch_GeoPrefilterPassesInAreaHuman(t *testing.T) {
-    // u1 tracks belgium; spawn IS in belgium; result identical with flag on/off.
-    humans := map[string]*db.Human{
-        "u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50, Longitude: 4, CurrentProfileNo: 1},
-    }
-    rules := []*db.MonsterTracking{
-        {ID: "u1", ProfileNo: 1, PokemonID: 25, MaxIV: 100, MaxCP: 9000, MaxLevel: 55, Distance: 0},
-    }
-    spatial := geofence.NewSpatialIndex([]geofence.Fence{
-        {Name: "Belgium", Path: [][2]float64{{3, 50}, {3, 51}, {5, 51}, {5, 50}, {3, 50}}},
-    })
-    pokemon := &ProcessedPokemon{PokemonID: 25, IV: 100, Latitude: 50.5, Longitude: 4}
-
-    for _, flagOn := range []bool{false, true} {
-        st := &state.State{
-            Humans:   humans,
-            Monsters: &db.MonsterIndex{ByPokemonID: map[int][]*db.MonsterTracking{25: rules}},
-            Geofence: spatial,
-            GeoIndex: state.BuildHumanGeoIndex(humans, nil),
-        }
-        matcher := &PokemonMatcher{GeographicPrefilter: flagOn}
-        users, _ := matcher.Match(pokemon, st)
-        if len(users) != 1 {
-            t.Errorf("flag=%v: expected 1 user, got %d", flagOn, len(users))
-        }
+        t.Errorf("japan spawn, belgium-only human: expected 0 matches, got %d", len(users))
     }
 }
 ```
-
-(Drop the awkward `_ = geoIdx` placeholder above — the live tests should use `state.BuildHumanGeoIndex` directly from the imported `state` package.)
 
 - [ ] **Step 3: Verify tests fail**
 
 Run: `cd processor && go test ./internal/matching/... -run TestPokemonMatch_GeoPrefilter -v`
-Expected: FAIL — `GeographicPrefilter` field is unused so the prefilter doesn't actually filter anything yet.
+Expected: FAIL — `GeographicPrefilter` is set but the matcher doesn't yet read it, so the parity test may pass coincidentally but the second test will fail (no path differs yet).
 
-- [ ] **Step 4: Wire prefilter into Match**
+- [ ] **Step 4: Refactor Match to support both iteration paths**
 
-Edit `processor/internal/matching/pokemon.go`. After the matched-slice assembly (where `metrics.MatchingCandidates.Observe(float64(len(matched)))` is), before `ValidateHumans`:
+Edit `processor/internal/matching/pokemon.go`. The current `Match` body assembles a candidate slice from per-pokemon buckets, then validates. We're going to split candidate-assembly into two paths.
+
+Replace the body of `Match`:
 
 ```go
-metrics.MatchingCandidates.WithLabelValues("pokemon").Observe(float64(len(matched)))
+func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+    start := time.Now()
+    defer func() {
+        metrics.MatchingDuration.WithLabelValues("pokemon").Observe(time.Since(start).Seconds())
+    }()
+    if st == nil || st.Monsters == nil {
+        return nil, nil
+    }
 
-areas, matchedAreaNames := st.Geofence.PointAreasAndNames(pokemon.Latitude, pokemon.Longitude)
+    areas, matchedAreaNames := st.Geofence.PointAreasAndNames(pokemon.Latitude, pokemon.Longitude)
 
-if m.GeographicPrefilter && st.GeoIndex != nil {
-    applicable := st.GeoIndex.ApplicableHumans(
+    var matched []*db.MonsterTracking
+    if m.GeographicPrefilter && st.GeoIndex != nil && st.Monsters.ByHumanAndLeague != nil {
+        applicable := st.GeoIndex.ApplicableHumans(
+            pokemon.Latitude, pokemon.Longitude,
+            matchedAreaNames,
+            m.AreaSecurityEnabled && m.StrictLocations,
+        )
+        metrics.MatchingApplicable.WithLabelValues("pokemon").Observe(float64(len(applicable)))
+        matched = m.assembleCandidatesPerHuman(pokemon, st, applicable)
+    } else {
+        matched = m.assembleCandidatesPerBucket(pokemon, st)
+    }
+    metrics.MatchingCandidates.WithLabelValues("pokemon").Observe(float64(len(matched)))
+
+    users := ValidateHumans(
+        matched,
         pokemon.Latitude, pokemon.Longitude,
         matchedAreaNames,
         m.AreaSecurityEnabled && m.StrictLocations,
+        st.Humans,
     )
-    metrics.MatchingApplicable.WithLabelValues("pokemon").Observe(float64(len(applicable)))
+    return users, ConvertAreas(areas)
+}
+```
 
-    filtered := matched[:0]
-    for _, mt := range matched {
-        if applicable[mt.ID] {
-            filtered = append(filtered, mt)
+Then add the two new private helpers below:
+
+```go
+// assembleCandidatesPerBucket is the existing iteration path: walk every
+// rule in ByPokemonID[0] / ByPokemonID[N] / PVP buckets and run
+// matchMonsters per bucket. Used when GeographicPrefilter is off.
+func (m *PokemonMatcher) assembleCandidatesPerBucket(pokemon *ProcessedPokemon, st *state.State) []*db.MonsterTracking {
+    var matched []*db.MonsterTracking
+    matched = append(matched, m.matchMonsters(pokemon, st.Monsters.ByPokemonID[0], pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
+    matched = append(matched, m.matchMonsters(pokemon, st.Monsters.ByPokemonID[pokemon.PokemonID], pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
+    for league, leagueDataArr := range pokemon.PVPBestRank {
+        for _, leagueData := range leagueDataArr {
+            if leagueData.Rank <= m.PVPQueryMaxRank {
+                matched = append(matched, m.matchMonsters(pokemon, st.Monsters.PVPEverything[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
+                matched = append(matched, m.matchMonsters(pokemon, st.Monsters.PVPSpecific[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
+            }
         }
     }
-    matched = filtered
+    if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
+        for pokemonID, pvpMon := range pokemon.PVPEvoData {
+            for league, leagueDataArr := range pvpMon {
+                candidates := st.Monsters.PVPSpecific[league]
+                for _, leagueData := range leagueDataArr {
+                    if leagueData.Rank <= m.PVPQueryMaxRank {
+                        matched = append(matched, m.matchMonsters(pokemon, candidates, pokemonID, leagueData.Form, false, league, leagueData)...)
+                    }
+                }
+            }
+        }
+    }
+    return matched
 }
 
-users := ValidateHumans(
-    matched,
-    pokemon.Latitude, pokemon.Longitude,
-    matchedAreaNames,
-    m.AreaSecurityEnabled && m.StrictLocations,
-    st.Humans,
-)
+// assembleCandidatesPerHuman iterates only applicable humans and walks
+// each human's rule partitions. matchMonsters does the same per-rule
+// filtering as in the per-bucket path. Used when GeographicPrefilter is on.
+//
+// ByHumanAndLeague[humanID][0]    — non-PVP rules (mix of "everything"
+//                                    and per-species; matchMonsters
+//                                    filters via the pokemon_id check)
+// ByHumanAndLeague[humanID][N]    — PVP rules for league N
+//
+// For PVP evolution: same league bucket, different targetPokemonID/form
+// pair passed to matchMonsters.
+func (m *PokemonMatcher) assembleCandidatesPerHuman(pokemon *ProcessedPokemon, st *state.State, applicable map[string]bool) []*db.MonsterTracking {
+    var matched []*db.MonsterTracking
+    for humanID := range applicable {
+        perHuman := st.Monsters.ByHumanAndLeague[humanID]
+        if perHuman == nil {
+            continue
+        }
+        // Non-PVP path: a single matchMonsters call covers both "everything"
+        // and per-species — the pokemon_id check inside matchMonsters accepts
+        // m.PokemonID == 0 (everything) OR m.PokemonID == targetPokemonID.
+        matched = append(matched, m.matchMonsters(pokemon, perHuman[0], pokemon.PokemonID, pokemon.Form, true, 0, pvp.LeagueRank{})...)
+
+        // PVP path: one matchMonsters call per league the spawn ranks in.
+        for league, leagueDataArr := range pokemon.PVPBestRank {
+            for _, leagueData := range leagueDataArr {
+                if leagueData.Rank <= m.PVPQueryMaxRank {
+                    matched = append(matched, m.matchMonsters(pokemon, perHuman[league], pokemon.PokemonID, pokemon.Form, true, league, leagueData)...)
+                }
+            }
+        }
+        // PVP evolution path: same league bucket, different target.
+        if m.PVPEvolutionDirectTracking && len(pokemon.PVPEvoData) > 0 {
+            for pokemonID, pvpMon := range pokemon.PVPEvoData {
+                for league, leagueDataArr := range pvpMon {
+                    candidates := perHuman[league]
+                    for _, leagueData := range leagueDataArr {
+                        if leagueData.Rank <= m.PVPQueryMaxRank {
+                            matched = append(matched, m.matchMonsters(pokemon, candidates, pokemonID, leagueData.Form, false, league, leagueData)...)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return matched
+}
 ```
+
+Add imports as needed: `"time"`, `"github.com/pokemon/poracleng/processor/internal/metrics"`.
+
+**Note:** existing `Match` already contains the metric `Observe` for `MatchingCandidates`. After this refactor, the `Observe` lives in `Match` after candidate assembly (see Step 4's `Match` body) — the earlier instrumentation tasks (2 & 3) already produced this; you're now moving the call to the rewritten function. Verify the move when you remove the original.
 
 - [ ] **Step 5: Verify tests pass**
 
 Run: `cd processor && go test ./internal/matching/... -count=1`
-Expected: ALL pass — including the existing tests (prefilter is OFF by default in those tests since they don't set the flag) and the new flagged ones.
+Expected: ALL pass — existing pokemon tests still pass (they don't set the flag, so the per-bucket path is taken), the new parity test passes (both paths produce identical outputs for the same inputs), and the out-of-area test passes (flag-on, no applicable humans → no matches).
 
 - [ ] **Step 6: Plumb the flag from config**
 
@@ -1276,7 +1635,7 @@ matcher: &matching.PokemonMatcher{
 },
 ```
 
-(field names may differ — locate the matching block by context.)
+(Field names may differ — locate the matching block by context.)
 
 - [ ] **Step 7: Build + full test sweep**
 
@@ -1287,39 +1646,36 @@ Expected: clean build, all tests pass.
 
 ```bash
 git add processor/internal/matching/pokemon.go processor/internal/matching/pokemon_test.go processor/cmd/processor/main.go
-git commit -m "matching: geographic pre-filter for pokemon matcher (flagged)"
+git commit -m "matching: pokemon matcher iterates per applicable human (flagged)"
 ```
 
 ---
 
-## Phase 3: Roll out pre-filter to other matchers
+## Phase 3: Roll out per-human iteration to other matchers
 
-Each task in this phase is structurally identical to Task 11 — one matcher type, one commit. The pattern is:
+Each task follows the same shape as Task 11 — one matcher type, one commit. The pattern:
 
 1. Add `GeographicPrefilter bool` field to the matcher struct.
-2. In the matcher's `Match()`, after the candidate slice is assembled (`metrics.MatchingCandidates.Observe(...)`), but before the `ValidateHumans*` call:
+2. In the matcher's `Match()`, split candidate assembly into two paths exactly like Task 11's `assembleCandidatesPerBucket` / `assembleCandidatesPerHuman` helpers. The per-bucket path is the current code, lifted into a helper unchanged. The per-human path walks `st.<Type>ByHuman[humanID]` for each applicable human (built in Task 9b).
+3. The non-pokemon types have no PVP league axis, so per-human assembly is one loop:
 
 ```go
-if m.GeographicPrefilter && st.GeoIndex != nil {
-    matchedAreaNames := <...obtain the matched area set, same call the matcher already makes...>
-    applicable := st.GeoIndex.ApplicableHumans(
-        <eventLat>, <eventLon>,
-        matchedAreaNames,
-        m.AreaSecurityEnabled && m.StrictLocations,
-    )
-    metrics.MatchingApplicable.WithLabelValues("<type>").Observe(float64(len(applicable)))
-    filtered := candidateList[:0]
-    for _, item := range candidateList {
-        if applicable[item.ID /* or HumanID */] {
-            filtered = append(filtered, item)
-        }
+func (m *RaidMatcher) assembleCandidatesPerHuman(raid *RaidWebhook, st *state.State, applicable map[string]bool) []raidCandidate {
+    var matched []raidCandidate
+    for humanID := range applicable {
+        rules := st.RaidsByHuman[humanID]
+        // matchRaids (or whatever the matcher's per-rule function is)
+        // applies the existing pokemon_id/level/team/etc filters per
+        // rule. Same logic as today; just a smaller input slice.
+        matched = append(matched, m.matchRaids(raid, rules)...)
     }
-    candidateList = filtered
+    return matched
 }
 ```
 
-3. In `processor/cmd/processor/main.go`, add `GeographicPrefilter: cfg.Tuning.GeographicPrefilter` to that matcher's literal.
-4. Add a parallel pair of tests (in/out of geography) using the Task 11 templates.
+4. The `Match` function chooses path based on `m.GeographicPrefilter && st.GeoIndex != nil && st.<Type>ByHuman != nil`. When the flag is off, the per-bucket helper path runs and behaviour is identical to today.
+5. Add a parity test for this type using the Task 11 template (one matcher type, two configurations, identical outputs).
+6. Plumb the flag in `cmd/processor/main.go` matcher constructor.
 
 ### Task 12: Raid + Egg matchers
 
@@ -1328,52 +1684,131 @@ if m.GeographicPrefilter && st.GeoIndex != nil {
 - Modify: `processor/cmd/processor/main.go`
 - Modify: `processor/internal/matching/raid_test.go`
 
-- [ ] **Step 1: Apply the Task 11 pattern to `RaidMatcher.Match`. The candidate slice is the `trackingData` list; the `ID` field on each is `HumanID`. The `matchedAreaNames` is obtained via the same `st.Geofence.PointAreasAndNames(...)` call already present in the matcher.**
+- [ ] **Step 1: Add `GeographicPrefilter bool` field to `RaidMatcher` and `EggMatcher` in `processor/internal/matching/raid.go`.**
 
-- [ ] **Step 2: Apply same to `EggMatcher.Match` (same file).**
+- [ ] **Step 2: Refactor `RaidMatcher.Match` to two helpers — `assembleCandidatesPerBucket` (lift existing iteration into a helper unchanged) and `assembleCandidatesPerHuman` (walks `st.RaidsByHuman[humanID]` for each applicable human, calling the same `matchRaids` per-rule function on the smaller slice). `Match` selects by `m.GeographicPrefilter && st.GeoIndex != nil && st.RaidsByHuman != nil`. Sample skeleton:**
 
-- [ ] **Step 3: Run tests, confirm green.**
+```go
+func (m *RaidMatcher) Match(raid *RaidWebhook, st *state.State) (...) {
+    start := time.Now()
+    defer func() { metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(start).Seconds()) }()
+    if st == nil { return nil, nil }
+    areas, matchedAreaNames := st.Geofence.PointAreasAndNames(raid.Latitude, raid.Longitude)
+
+    var matched []raidCandidate
+    if m.GeographicPrefilter && st.GeoIndex != nil && st.RaidsByHuman != nil {
+        applicable := st.GeoIndex.ApplicableHumans(raid.Latitude, raid.Longitude, matchedAreaNames, m.AreaSecurityEnabled && m.StrictLocations)
+        metrics.MatchingApplicable.WithLabelValues("raid").Observe(float64(len(applicable)))
+        for humanID := range applicable {
+            matched = append(matched, m.matchRaids(raid, st.RaidsByHuman[humanID])...)
+        }
+    } else {
+        matched = m.matchRaids(raid, st.Raids)
+    }
+    metrics.MatchingCandidates.WithLabelValues("raid").Observe(float64(len(matched)))
+    users := ValidateHumansForRaid(matched, raid.Latitude, raid.Longitude, matchedAreaNames, m.AreaSecurityEnabled && m.StrictLocations, st.Humans, "raid")
+    return users, ConvertAreas(areas)
+}
+```
+
+- [ ] **Step 3: Same refactor for `EggMatcher.Match`, walking `st.EggsByHuman[humanID]`.**
+
+- [ ] **Step 4: Add the parity test (Task 11's template, adapted to raid):**
+
+```go
+func TestRaidMatch_GeoPrefilterParity(t *testing.T) {
+    humans := map[string]*db.Human{
+        "u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+    }
+    raids := []db.RaidTracking{
+        {ID: "u1", ProfileNo: 1, Level: 5},
+    }
+    // The state must contain BOTH the flat Raids slice (per-bucket path)
+    // AND the RaidsByHuman partition (per-human path).
+    raidsByHuman := db.PartitionByHuman(raids, db.RaidHumanID)
+
+    spatial := geofence.NewSpatialIndex([]geofence.Fence{
+        {Name: "Belgium", Path: [][2]float64{{3, 50}, {3, 51}, {6, 51}, {6, 50}, {3, 50}}},
+    })
+    raid := &webhook.RaidWebhook{Latitude: 50.5, Longitude: 4.5, Level: 5}
+
+    var off, on []webhook.MatchedUser
+    for _, flag := range []bool{false, true} {
+        // Build slice of pointers for the flat-state Raids field
+        flatRaids := make([]*db.RaidTracking, 0, len(raids))
+        for i := range raids {
+            flatRaids = append(flatRaids, &raids[i])
+        }
+        st := &state.State{
+            Humans:       humans,
+            Raids:        flatRaids,
+            RaidsByHuman: raidsByHuman,
+            Geofence:     spatial,
+            GeoIndex:     state.BuildHumanGeoIndex(humans, nil),
+        }
+        matcher := &RaidMatcher{GeographicPrefilter: flag}
+        users, _ := matcher.Match(raid, st)
+        if flag {
+            on = users
+        } else {
+            off = users
+        }
+    }
+    if len(off) != len(on) {
+        t.Fatalf("parity: off=%d on=%d", len(off), len(on))
+    }
+}
+```
+
+Adjust `RaidWebhook` field names and the flat-Raids slice shape to whatever `RaidMatcher` actually consumes today.
+
+- [ ] **Step 5: Run tests**
 
 Run: `cd processor && go test ./internal/matching/... -count=1`
+Expected: all green.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Plumb the flag in `main.go`**
+
+Edit the `raidMatcher: &matching.RaidMatcher{...}` literal — add `GeographicPrefilter: cfg.Tuning.GeographicPrefilter`. Repeat for `eggMatcher` if it's a separate construction; if it's a shared struct, one line suffices.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add processor/internal/matching/raid.go processor/internal/matching/raid_test.go processor/cmd/processor/main.go
-git commit -m "matching: geographic pre-filter for raid + egg matchers (flagged)"
+git commit -m "matching: raid + egg matchers iterate per applicable human (flagged)"
 ```
 
 ### Task 13: Quest matcher
 
-- [ ] **Step 1**: Apply Task 11 pattern to `QuestMatcher.Match` in `processor/internal/matching/quest.go`. Label `"quest"`.
-- [ ] **Step 2**: Add the flag to `questMatcher: &matching.QuestMatcher{...}` literal in `main.go`.
-- [ ] **Step 3**: Add in/out-of-area tests to `quest_test.go`.
-- [ ] **Step 4**: Run tests.
-- [ ] **Step 5**: `git add` + commit `"matching: geographic pre-filter for quest matcher (flagged)"`.
+- [ ] **Step 1**: Add `GeographicPrefilter` field to `QuestMatcher` in `processor/internal/matching/quest.go`.
+- [ ] **Step 2**: Refactor `QuestMatcher.Match` into the same two-helpers shape as Task 12. Per-human path walks `st.QuestsByHuman[humanID]`. Label `"quest"`.
+- [ ] **Step 3**: Plumb the flag on `questMatcher: &matching.QuestMatcher{...}` in `main.go`.
+- [ ] **Step 4**: Add a quest parity test (adapt Task 12's template).
+- [ ] **Step 5**: Run tests + commit `"matching: quest matcher iterates per applicable human (flagged)"`.
 
 ### Task 14: Invasion matcher
 
-Same pattern, file `invasion.go`, label `"invasion"`. Commit `"matching: geographic pre-filter for invasion matcher (flagged)"`.
+Apply Task 12's two-helpers + parity-test pattern to `processor/internal/matching/invasion.go`. Per-human path walks `st.InvasionsByHuman[humanID]`. Metric label `"invasion"`. Commit `"matching: invasion matcher iterates per applicable human (flagged)"`.
 
 ### Task 15: Lure matcher
 
-Same pattern, file `lure.go`, label `"lure"`. Commit `"matching: geographic pre-filter for lure matcher (flagged)"`.
+Same pattern, file `lure.go`, walks `st.LuresByHuman[humanID]`. Label `"lure"`. Commit `"matching: lure matcher iterates per applicable human (flagged)"`.
 
 ### Task 16: Nest matcher
 
-Same pattern, file `nest.go`, label `"nest"`. Commit `"matching: geographic pre-filter for nest matcher (flagged)"`.
+Same pattern, file `nest.go`, walks `st.NestsByHuman[humanID]`. Label `"nest"`. Commit `"matching: nest matcher iterates per applicable human (flagged)"`.
 
 ### Task 17: Gym matcher
 
-Same pattern, file `gym.go`, label `"gym"`. Commit `"matching: geographic pre-filter for gym matcher (flagged)"`.
+Same pattern, file `gym.go`, walks `st.GymsByHuman[humanID]`. Label `"gym"`. Commit `"matching: gym matcher iterates per applicable human (flagged)"`.
 
 ### Task 18: Fort matcher
 
-Same pattern, file `fort.go`, label `"fort_update"`. Commit `"matching: geographic pre-filter for fort matcher (flagged)"`.
+Same pattern, file `fort.go`, walks `st.FortsByHuman[humanID]`. Label `"fort_update"`. Commit `"matching: fort matcher iterates per applicable human (flagged)"`.
 
 ### Task 19: Maxbattle matcher
 
-Same pattern, file `maxbattle.go`, label `"maxbattle"`. Commit `"matching: geographic pre-filter for maxbattle matcher (flagged)"`.
+Same pattern, file `maxbattle.go`, walks `st.MaxbattlesByHuman[humanID]`. Label `"maxbattle"`. Commit `"matching: maxbattle matcher iterates per applicable human (flagged)"`.
 
 ---
 
@@ -1433,16 +1868,18 @@ Walked back through the spec and the plan:
 - ✅ Multi-spawn-area handled (matchedAreas is already a set; tests in Task 7 + Task 11)
 - ✅ Multi-user-area handled (byArea population in Task 7)
 - ✅ Distance is per-human max across all their rules (Task 8)
-- ✅ Pokemon's `everything` / PVP buckets benefit (the pre-filter runs after their assembly in Task 11)
-- ✅ Rebuilds with `Load()` and `LoadWithGeofences()` (Task 9)
+- ✅ **Per-human rule partitions** so iteration can be driven from the applicable set, not just post-filtered on it (Task 9b + Task 11 `assembleCandidatesPerHuman`). This is the change that delivers the actual speedup.
+- ✅ Pokemon's `everything` / PVP buckets benefit — `ByHumanAndLeague[humanID][0]` merges everything + per-species; PVP buckets are per-league per-human (Task 9b)
+- ✅ Rebuilds with `Load()` and `LoadWithGeofences()` (Task 9 + Task 9b)
 - ✅ Future-compatible with per-track areas (population source change only — documented in Architecture section)
-- ✅ Strict superset behaviour — never drops rules `ValidateHumans*` would have kept (the algorithm operates on humans; `ValidateHumans*` still does the final filter)
+- ✅ Strict superset behaviour — `matchMonsters` is unchanged; the per-human path passes the same parameters from the same call sites, just on smaller slices. Parity tests in Task 11 + Task 12 confirm identical outputs flag-on vs flag-off.
 - ✅ Profile handling unchanged (Task 7 builder ignores `CurrentProfileNo`; profile filter still in `ValidateHumans*`)
-- ✅ Flag-gated rollout (Tasks 6, 11)
+- ✅ Flag-gated rollout (Tasks 6, 11 — flag off keeps existing per-bucket path verbatim, lifted into a helper)
 - ✅ Per-matcher rollout (Tasks 12–19)
 - ✅ Instrumentation deployed first (Phase 1)
 - ✅ Combinatorial gap test (Task 10)
 - ✅ Index boundary tests (Task 7)
+- ✅ Per-human partition correctness tests (Task 9b)
 
 **Placeholder scan:** searched the document for "TBD", "TODO", "implement later", "fill in details", "etc." in test code, "add appropriate error handling", "similar to Task N". Two soft spots that I'm leaving in deliberately:
 - Task 4 ("repeat for 9 matcher types") — the pattern is captured fully in Tasks 2+3; repetition is mechanical. Keeping the plan readable by not duplicating 30 nearly-identical task blocks.
