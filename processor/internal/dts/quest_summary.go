@@ -2,6 +2,7 @@ package dts
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -118,15 +119,23 @@ func BuildQuestSummaryView(g QuestSummaryGroup, sm *staticmap.Resolver, tr *i18n
 }
 
 // questSummaryRewardName resolves a (rewardType, rewardID, formID) tuple
-// to a translated display name for the summary header. The lookups are
-// simple identifier-key translations through the i18n bundle —
-// pulling in the regular quest enrichment helpers would create an
-// enrichment → dts import cycle.
+// to a translated display name for the summary header, formatted to
+// match the per-row reward strings produced by quest enrichment:
 //
-// formID is only honoured for pokemon-encounter rewards (type 7); when
-// it is non-zero the form name is appended in parentheses so two
-// different forms of the same species (e.g. Spinda 01 vs Spinda 08)
-// produce distinct headers.
+//   - Type 7 (encounter): "<pokemon> <form>" — same concat shape as
+//     enrichment's `fullName` (no parens). Form is skipped when it
+//     resolves to a normal/empty form name, matching enrichment.IsNormalForm.
+//   - Type 4 (candy): "<pokemon> <Candy>" using `quest_reward_4`.
+//   - Type 12 (mega energy): "<pokemon> <Mega Energy>" using `quest_reward_12`.
+//   - Type 2 (item): bare translated item name (amount varies per stop, so
+//     it's deliberately omitted from the group header).
+//   - Type 3 (stardust): "<amount> <Stardust>" — amount IS the group key
+//     so it's stable across the group.
+//
+// The lookups stay simple identifier-key translations because pulling
+// in `enrichment` directly would create an enrichment → dts import
+// cycle. The normal-form helper is duplicated locally for the same
+// reason.
 func questSummaryRewardName(rewardType, rewardID, formID int, tr *i18n.Translator) string {
 	if tr == nil {
 		return ""
@@ -142,22 +151,38 @@ func questSummaryRewardName(rewardType, rewardID, formID int, tr *i18n.Translato
 			return fmt.Sprintf("%d %s", rewardID, label)
 		}
 		return label
-	case 4, 12: // Candy / Mega energy — per-species, no form
+	case 4: // Candy — "<pokemon> <Candy>"
 		if rewardID > 0 {
-			return tr.T(gamedata.PokemonTranslationKey(rewardID))
+			pokeName := tr.T(gamedata.PokemonTranslationKey(rewardID))
+			label := tr.T("quest_reward_4")
+			return strings.TrimSpace(pokeName + " " + label)
 		}
-	case 7: // Pokemon encounter — include form when present
+	case 12: // Mega energy — "<pokemon> <Mega Energy>"
+		if rewardID > 0 {
+			pokeName := tr.T(gamedata.PokemonTranslationKey(rewardID))
+			label := tr.T("quest_reward_12")
+			return strings.TrimSpace(pokeName + " " + label)
+		}
+	case 7: // Pokemon encounter — concat with form, matching enrichment.fullName
 		if rewardID > 0 {
 			name := tr.T(gamedata.PokemonTranslationKey(rewardID))
 			if formID > 0 {
-				if formName := tr.T(gamedata.FormTranslationKey(formID)); formName != "" && formName != gamedata.FormTranslationKey(formID) {
-					return fmt.Sprintf("%s (%s)", name, formName)
+				formName := tr.T(gamedata.FormTranslationKey(formID))
+				if formName != "" && !isNormalForm(formName) {
+					return name + " " + formName
 				}
 			}
 			return name
 		}
 	}
 	return ""
+}
+
+// isNormalForm mirrors enrichment.IsNormalForm. Duplicated to avoid an
+// enrichment → dts import cycle.
+func isNormalForm(name string) bool {
+	lower := strings.ToLower(name)
+	return lower == "normal" || lower == "unset" || lower == ""
 }
 
 // numericFloat coerces an arbitrary value (typically from a webhook /
