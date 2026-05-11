@@ -12,6 +12,23 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
+// tileGate coordinates tile resolution across sibling RenderJobs that share
+// the same Enrichment map. The dispatcher spawns one goroutine to resolve
+// the tile; that goroutine mutates the shared Enrichment map via Apply,
+// stores the resulting bytes in `bytes`, and closes `ready`. Each render
+// worker for a job in the batch waits on ready before rendering, then
+// copies bytes into its own job.TileImageData.
+//
+// Without this barrier, multi-job dispatches (e.g. dispatchPokemonChangeRender)
+// would race: one render worker calls TilePending.Apply (writes to the shared
+// map) while a sibling worker concurrently reads it via LayeredView. Channel
+// close establishes happens-before for the map writes, so readers after
+// <-ready see a consistent map.
+type tileGate struct {
+	ready chan struct{}
+	bytes []byte
+}
+
 // RenderJob holds everything needed to resolve a tile, render DTS templates,
 // and deliver the resulting messages. Webhook handlers enqueue these into
 // ps.renderCh so the I/O-heavy work happens off the worker goroutine.
@@ -24,10 +41,15 @@ type RenderJob struct {
 	MatchedUsers      []webhook.MatchedUser
 	MatchedAreas      []webhook.MatchedArea
 	TilePending       *staticmap.TilePending
-	IsEncountered     bool // pokemon only
-	IsPokemon         bool // true = RenderPokemon, false = RenderAlert
-	LogReference      string
-	EditKey           string
+	// TileGate, when set, replaces TilePending for batched multi-job dispatch
+	// (see dispatchPokemonChangeRender). The render worker waits on the gate
+	// instead of resolving the tile itself. TileGate and TilePending are
+	// mutually exclusive — set one or the other, never both.
+	TileGate      *tileGate
+	IsEncountered bool // pokemon only
+	IsPokemon     bool // true = RenderPokemon, false = RenderAlert
+	LogReference  string
+	EditKey       string
 	// ReplyKey indexes the sent message for reply chaining. Copied verbatim
 	// onto every constructed delivery.Job. For pokemon, this is the encounter
 	// ID so subsequent change events can find prior messages via the
@@ -60,75 +82,19 @@ func (ps *ProcessorService) renderWorker() {
 // processRenderJob resolves the pending tile (if any), renders DTS templates,
 // and delivers the resulting messages via the dispatcher.
 func (ps *ProcessorService) processRenderJob(job RenderJob) {
-	// 1. Resolve tile with queue-pressure awareness.
-	if job.TilePending != nil {
-		queueLen := len(ps.renderCh)
-		queueCap := cap(ps.renderCh)
-		if queueCap > 0 && float64(queueLen)/float64(queueCap) > 0.8 {
-			// Queue is under pressure — skip waiting for tile.
-			switch {
-			case job.TilePending.Both:
-				// Drain both channels so the tile worker doesn't block; apply fallback URL.
-				go func() { <-job.TilePending.ResultImg }()
-				job.TilePending.Apply(job.TilePending.Fallback)
-			case job.TilePending.Inline:
-				// Don't set "inline" marker without image bytes — the template
-				// would render "inline" as the image URL. Drain the channel in
-				// the background so the tile worker doesn't block.
-				go func() { <-job.TilePending.ResultImg }()
-			default:
-				job.TilePending.Apply(job.TilePending.Fallback)
-			}
-			metrics.RenderTileSkipped.Inc()
-		} else {
-			switch {
-			case job.TilePending.Both:
-				// Wait for the public URL first (embedded in the message).
-				select {
-				case url := <-job.TilePending.Result:
-					if url != "" {
-						job.TilePending.Apply(url)
-					} else {
-						job.TilePending.Apply(job.TilePending.Fallback)
-					}
-				case <-time.After(time.Until(job.TilePending.Deadline)):
-					job.TilePending.Apply(job.TilePending.Fallback)
-					// Drain bytes channel in the background.
-					go func() { <-job.TilePending.ResultImg }()
-				}
-				// Then wait for the bytes (independent deadline). Nil bytes
-				// are fine — Discord-upload destinations fall back to URL fetch.
-				select {
-				case imgData := <-job.TilePending.ResultImg:
-					if imgData != nil {
-						job.TileImageData = imgData
-					}
-				case <-time.After(time.Until(job.TilePending.Deadline)):
-					// bytes timed out — Discord-upload destinations fall back to URL fetch
-				}
-			case job.TilePending.Inline:
-				select {
-				case imgData := <-job.TilePending.ResultImg:
-					if imgData != nil {
-						job.TilePending.ApplyInline()
-						job.TileImageData = imgData
-					}
-				case <-time.After(time.Until(job.TilePending.Deadline)):
-					// no image, proceed without
-				}
-			default:
-				// Wait for tile to resolve or deadline to expire.
-				select {
-				case url := <-job.TilePending.Result:
-					if url != "" {
-						job.TilePending.Apply(url)
-					} else {
-						job.TilePending.Apply(job.TilePending.Fallback)
-					}
-				case <-time.After(time.Until(job.TilePending.Deadline)):
-					job.TilePending.Apply(job.TilePending.Fallback)
-				}
-			}
+	// 1. Resolve tile.
+	switch {
+	case job.TileGate != nil:
+		// Batched dispatch: one goroutine is resolving the tile and will close
+		// ready when the shared Enrichment map has been updated. Wait, then
+		// pick up the bytes for our local TileImageData.
+		<-job.TileGate.ready
+		job.TileImageData = job.TileGate.bytes
+	case job.TilePending != nil:
+		// Single-job path: resolve inline.
+		bytes := ps.resolveTilePending(job.TilePending, len(ps.renderCh), cap(ps.renderCh))
+		if bytes != nil {
+			job.TileImageData = bytes
 		}
 	}
 
@@ -206,6 +172,88 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 	}
 
 	metrics.RenderTotal.WithLabelValues("ok").Inc()
+}
+
+// resolveTilePending performs the synchronous tile wait that processRenderJob
+// previously did inline. It mutates pending.target (the shared Enrichment map)
+// via Apply / ApplyInline and returns the resulting tile bytes (nil if the
+// mode doesn't produce bytes, the bytes channel timed out, or the result was
+// nil). queueLen/queueCap are passed in so the function can apply the same
+// queue-pressure back-off as before — the caller samples them at the point
+// of dispatch (which is close enough to render time for the heuristic).
+//
+// Safe to call from a goroutine spawned by the dispatcher (see tileGate).
+func (ps *ProcessorService) resolveTilePending(pending *staticmap.TilePending, queueLen, queueCap int) []byte {
+	if queueCap > 0 && float64(queueLen)/float64(queueCap) > 0.8 {
+		// Queue is under pressure — skip waiting for tile.
+		switch {
+		case pending.Both:
+			// Drain both channels so the tile worker doesn't block; apply fallback URL.
+			go func() { <-pending.ResultImg }()
+			pending.Apply(pending.Fallback)
+		case pending.Inline:
+			// Don't set "inline" marker without image bytes — the template
+			// would render "inline" as the image URL. Drain the channel in
+			// the background so the tile worker doesn't block.
+			go func() { <-pending.ResultImg }()
+		default:
+			pending.Apply(pending.Fallback)
+		}
+		metrics.RenderTileSkipped.Inc()
+		return nil
+	}
+
+	switch {
+	case pending.Both:
+		// Wait for the public URL first (embedded in the message).
+		select {
+		case url := <-pending.Result:
+			if url != "" {
+				pending.Apply(url)
+			} else {
+				pending.Apply(pending.Fallback)
+			}
+		case <-time.After(time.Until(pending.Deadline)):
+			pending.Apply(pending.Fallback)
+			// Drain bytes channel in the background.
+			go func() { <-pending.ResultImg }()
+			return nil
+		}
+		// Then wait for the bytes (independent deadline). Nil bytes
+		// are fine — Discord-upload destinations fall back to URL fetch.
+		select {
+		case imgData := <-pending.ResultImg:
+			return imgData
+		case <-time.After(time.Until(pending.Deadline)):
+			// bytes timed out — Discord-upload destinations fall back to URL fetch
+			return nil
+		}
+	case pending.Inline:
+		select {
+		case imgData := <-pending.ResultImg:
+			if imgData != nil {
+				pending.ApplyInline()
+				return imgData
+			}
+			return nil
+		case <-time.After(time.Until(pending.Deadline)):
+			// no image, proceed without
+			return nil
+		}
+	default:
+		// Wait for tile to resolve or deadline to expire.
+		select {
+		case url := <-pending.Result:
+			if url != "" {
+				pending.Apply(url)
+			} else {
+				pending.Apply(pending.Fallback)
+			}
+		case <-time.After(time.Until(pending.Deadline)):
+			pending.Apply(pending.Fallback)
+		}
+		return nil
+	}
 }
 
 func tthFromMap(m map[string]any) delivery.TTH {

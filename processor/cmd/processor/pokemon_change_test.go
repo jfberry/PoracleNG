@@ -1,16 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -477,6 +480,125 @@ func TestDispatchPokemonChangeRender_FallbackWhenNoBytes(t *testing.T) {
 	// asserting that distinguishes the fallback path.
 	if got := j.OriginalView["pokemonId"]; got != 25 {
 		t.Errorf("BuildOriginalView fallback should expose pokemonId=25, got %v", got)
+	}
+}
+
+// TestTileGate_ConcurrentReadAfterCloseNoRace exercises the chan-close
+// happens-before that makes the shared-Enrichment-map pattern safe under
+// `go test -race`. A single goroutine writes "staticMap" into the shared
+// map and sets gate.bytes, then closes ready. Multiple readers wait on
+// ready and then read the map and the bytes. If the gate's chan-close
+// barrier is ever removed, -race will fail this test.
+func TestTileGate_ConcurrentReadAfterCloseNoRace(t *testing.T) {
+	enrichmentMap := map[string]any{"name": "Pikachu"}
+	gate := &tileGate{ready: make(chan struct{})}
+
+	go func() {
+		// Small delay simulates the tile wait. The map write must be
+		// sequenced-before close(gate.ready) for the readers' post-receive
+		// reads to be race-free.
+		time.Sleep(5 * time.Millisecond)
+		enrichmentMap["staticMap"] = "test-url"
+		gate.bytes = []byte{1, 2, 3}
+		close(gate.ready)
+	}()
+
+	const readers = 4
+	var wg sync.WaitGroup
+	urls := make(chan string, readers)
+	imgs := make(chan []byte, readers)
+	for i := 0; i < readers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-gate.ready
+			urls <- enrichmentMap["staticMap"].(string)
+			imgs <- gate.bytes
+		}()
+	}
+	wg.Wait()
+	close(urls)
+	close(imgs)
+
+	for u := range urls {
+		if u != "test-url" {
+			t.Errorf("reader saw %q, want test-url", u)
+		}
+	}
+	for b := range imgs {
+		if !bytes.Equal(b, []byte{1, 2, 3}) {
+			t.Errorf("reader saw bytes %v, want [1 2 3]", b)
+		}
+	}
+}
+
+// TestDispatchPokemonChangeRender_TileGateOnEveryJob is a structural guard:
+// when the dispatch input carries a TilePending and emits multiple
+// RenderJobs (withPrior + withoutPrior), every emitted job must reference
+// the same tileGate and none may carry a raw TilePending. If a future
+// change reintroduces a per-job TilePending, sibling render workers would
+// race on the shared Enrichment map.
+func TestDispatchPokemonChangeRender_TileGateOnEveryJob(t *testing.T) {
+	ps, ch, d := minimalProcessor(t)
+
+	encounterID := "enc-gate-wiring"
+	withPriorUser := webhook.MatchedUser{ID: "user-A", Type: "discord:user"}
+	withoutPriorUser := webhook.MatchedUser{ID: "user-B", Type: "discord:user"}
+	trackPriorMessage(t, d, encounterID, withPriorUser.ID, "msg-A")
+
+	// Real TilePending in default (URL) mode with no target — Apply is a
+	// no-op so we don't need a full enrichment/staticmap wiring. We send a
+	// URL on Result so the gate goroutine returns promptly.
+	pending := &staticmap.TilePending{
+		Result:   make(chan string, 1),
+		Deadline: time.Now().Add(2 * time.Second),
+		Fallback: "fallback",
+	}
+	pending.Result <- "resolved"
+
+	change := &tracker.EncounterChange{
+		EncounterID: encounterID,
+		Type:        tracker.ChangeForm,
+		Old:         tracker.EncounterState{PokemonID: 25, Form: 0, CP: 900},
+		New:         tracker.EncounterState{PokemonID: 25, Form: 65, CP: 950},
+	}
+
+	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
+		encounterID: encounterID,
+		change:      change,
+		matched:     []webhook.MatchedUser{withPriorUser, withoutPriorUser},
+		enrichment:  map[string]any{"name": "Pikachu"},
+		tilePending: pending,
+	})
+
+	jobs := drainRenderJobs(ch)
+	if len(jobs) != 2 {
+		t.Fatalf("expected 2 RenderJobs (one withPrior, one withoutPrior), got %d", len(jobs))
+	}
+
+	var sharedGate *tileGate
+	for i, j := range jobs {
+		if j.TilePending != nil {
+			t.Errorf("job[%d] has TilePending set; multi-job dispatch must use TileGate to avoid map race", i)
+		}
+		if j.TileGate == nil {
+			t.Errorf("job[%d] has TileGate=nil; every job in a TilePending-bearing dispatch must reference the gate", i)
+			continue
+		}
+		if sharedGate == nil {
+			sharedGate = j.TileGate
+		} else if j.TileGate != sharedGate {
+			t.Errorf("job[%d] references a different *tileGate than its sibling; all jobs in a dispatch must share the same gate so they observe one writer's map mutations", i)
+		}
+	}
+
+	// Wait for the gate goroutine to complete so the test doesn't leak it.
+	if sharedGate != nil {
+		select {
+		case <-sharedGate.ready:
+		case <-time.After(2 * time.Second):
+			t.Fatal("gate goroutine did not close ready within 2s")
+		}
 	}
 }
 

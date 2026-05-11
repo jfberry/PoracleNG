@@ -293,9 +293,12 @@ type pokemonChangeRenderInput struct {
 //   - users with no prior message receive a fresh `monster` render. Their
 //     ReplyKey is still indexed so any subsequent change can chain.
 //
-// The TilePending is consumed by the first (with-prior) job when present and
-// not by the second; only one render worker can consume the result channels.
-// Both jobs share enrichment and per-language data.
+// Tile resolution for the batch is hoisted into a single goroutine via
+// tileGate — every RenderJob below shares the same Enrichment map, so we
+// can't let one render worker mutate it via TilePending.Apply while sibling
+// workers read from it. The gate uses chan-close happens-before to make the
+// map writes visible to every worker before it renders. All jobs share
+// enrichment, per-language data, and the resolved tile bytes.
 func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderInput) {
 	if ps.dispatcher == nil {
 		// Without a dispatcher there's no MessageTracker to consult — fall
@@ -321,7 +324,29 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 
 	encounterEvent := in.change.Old.CP == 0 && in.change.New.CP > 0
 
-	tilePendingForFirst := in.tilePending
+	// Multi-job dispatch: every RenderJob below shares the same in.enrichment
+	// map. If we passed TilePending to one job and let its render worker
+	// resolve the tile (which mutates the map via Apply), a sibling worker
+	// rendering another job would race with that write. Hoist the tile
+	// resolution into a single goroutine and have every render worker wait
+	// on the gate before reading the map. The single writer + chan-close
+	// happens-before makes the map safe for concurrent readers afterwards.
+	//
+	// Also fixes a per-job-bytes bug: previously only the TilePending-holding
+	// job received the inline tile bytes; sibling jobs in the same dispatch
+	// got nil even though they're for the same tile. With the gate, every
+	// job in the batch picks up the shared bytes.
+	var gate *tileGate
+	if in.tilePending != nil {
+		gate = &tileGate{ready: make(chan struct{})}
+		queueLen, queueCap := len(ps.renderCh), cap(ps.renderCh)
+		pending := in.tilePending
+		in.tilePending = nil
+		go func() {
+			defer close(gate.ready)
+			gate.bytes = ps.resolveTilePending(pending, queueLen, queueCap)
+		}()
+	}
 	if len(withPrior) > 0 {
 		isChange := !encounterEvent
 		// Build a per-language `original` map by re-running base + per-language
@@ -349,10 +374,9 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 		// RenderJob suffices.
 		if perLangOriginal != nil {
 			byLang := groupByLanguage(withPrior, ps.cfg.General.Locale)
-			first := true
 			for lang, users := range byLang {
 				orig := perLangOriginal[lang]
-				job := RenderJob{
+				ps.renderCh <- RenderJob{
 					IsPokemon:         true,
 					IsChange:          isChange,
 					IsEncountered:     in.isEncountered,
@@ -362,17 +386,12 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 					WebhookFields:     in.webhookFields,
 					MatchedUsers:      users,
 					MatchedAreas:      in.matchedAreas,
+					TileGate:          gate,
 					LogReference:      in.encounterID,
 					ReplyKey:          in.encounterID,
 					OriginalView:      orig,
 					ChangeType:        in.change.Type.String(),
 				}
-				if first {
-					job.TilePending = tilePendingForFirst
-					tilePendingForFirst = nil
-					first = false
-				}
-				ps.renderCh <- job
 			}
 		} else {
 			ps.renderCh <- RenderJob{
@@ -385,14 +404,12 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 				WebhookFields:     in.webhookFields,
 				MatchedUsers:      withPrior,
 				MatchedAreas:      in.matchedAreas,
-				TilePending:       tilePendingForFirst,
+				TileGate:          gate,
 				LogReference:      in.encounterID,
 				ReplyKey:          in.encounterID,
 				OriginalView:      fallbackOriginal,
 				ChangeType:        in.change.Type.String(),
 			}
-			// Tile result channels can only be consumed once.
-			tilePendingForFirst = nil
 		}
 	}
 
@@ -406,7 +423,7 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 			WebhookFields:     in.webhookFields,
 			MatchedUsers:      withoutPrior,
 			MatchedAreas:      in.matchedAreas,
-			TilePending:       tilePendingForFirst,
+			TileGate:          gate,
 			LogReference:      in.encounterID,
 			ReplyKey:          in.encounterID,
 		}
