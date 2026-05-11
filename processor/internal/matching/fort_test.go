@@ -3,8 +3,12 @@ package matching
 import (
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 )
 
@@ -267,5 +271,78 @@ func TestChangeTypesMatch(t *testing.T) {
 					tt.trackedJSON, tt.actualChanges, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestFortMatch_RecordsMatchingDuration(t *testing.T) {
+	metrics.MatchingDuration.Reset()
+	matcher := &FortMatcher{}
+	fences := []geofence.Fence{
+		{
+			Name:             "TestArea",
+			DisplayInMatches: true,
+			Path: [][2]float64{
+				{50.0, -1.0},
+				{52.0, -1.0},
+				{52.0, 1.0},
+				{50.0, 1.0},
+			},
+		},
+	}
+	si := geofence.NewSpatialIndex(fences)
+	st := &state.State{
+		Humans:   map[string]*db.Human{},
+		Forts:    nil,
+		Geofence: si,
+	}
+
+	data := &FortData{
+		ID: "stop1", FortType: "pokestop", IsEmpty: false,
+		ChangeTypes: []string{"name"}, Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.Match(data, st)
+
+	h, err := metrics.MatchingDuration.GetMetricWithLabelValues("fort_update")
+	if err != nil {
+		t.Fatalf("get metric: %v", err)
+	}
+	var out dto.Metric
+	if err := h.(prometheus.Histogram).Write(&out); err != nil {
+		t.Fatalf("write metric: %v", err)
+	}
+	if got := out.GetHistogram().GetSampleCount(); got != 1 {
+		t.Errorf("MatchingDuration{type=fort_update} sample count = %d, want 1", got)
+	}
+}
+
+func TestFortMatch_RecordsCandidateCount(t *testing.T) {
+	metrics.MatchingCandidates.Reset()
+	human := makeHuman("u1")
+	fort1 := &db.FortTracking{
+		ID: "u1", ProfileNo: 1, FortType: "pokestop",
+		IncludeEmpty: true, ChangeTypes: "[]", Distance: 0, Template: "1",
+	}
+	fort2 := &db.FortTracking{
+		ID: "u2", ProfileNo: 1, FortType: "everything",
+		IncludeEmpty: true, ChangeTypes: "[]", Distance: 0, Template: "1",
+	}
+	humans := map[string]*db.Human{
+		"u1": human,
+		"u2": makeHuman("u2"),
+	}
+	st := makeFortTestState([]*db.FortTracking{fort1, fort2}, humans)
+	matcher := &FortMatcher{}
+
+	data := &FortData{
+		ID: "stop1", FortType: "pokestop", IsEmpty: false,
+		ChangeTypes: []string{"name"}, Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher.Match(data, st)
+
+	h, _ := metrics.MatchingCandidates.GetMetricWithLabelValues("fort_update")
+	var out dto.Metric
+	_ = h.(prometheus.Histogram).Write(&out)
+	if got := out.GetHistogram().GetSampleSum(); got != 2 {
+		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
 	}
 }

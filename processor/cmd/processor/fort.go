@@ -59,9 +59,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
 		matched, matchedAreas := ps.fortMatcher.Match(data, st)
-		metrics.MatchingDuration.WithLabelValues("fort_update").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("fort_update", raw, matchedAreas, matched)
 
