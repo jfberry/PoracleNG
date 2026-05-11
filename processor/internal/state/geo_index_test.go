@@ -122,6 +122,40 @@ func TestHumanGeoIndex_DisabledHumansExcluded(t *testing.T) {
 	}
 }
 
+// TestHumanGeoIndex_DistanceWithStrictAreaRestriction covers the rtree
+// path's strict-mode check. A human discovered via the distance r-tree
+// must ALSO have their AreaRestriction overlap matchedAreas in strict
+// mode — same semantics as area-discovered humans.
+func TestHumanGeoIndex_DistanceWithStrictAreaRestriction(t *testing.T) {
+	humans := map[string]*db.Human{
+		// u1: distance-based rules, restricted to "belgium" only
+		"u1": mkHuman("u1", nil, []string{"belgium"}, 1.0, 1.0),
+	}
+	perHumanMaxDist := map[string]int{"u1": 5000}
+	idx := BuildHumanGeoIndex(humans, perHumanMaxDist)
+
+	// Spawn near (1,1), in matchedAreas={belgium} — strict-mode passes
+	// (restriction covers belgium), and the rtree finds u1.
+	out := idx.ApplicableHumans(1.0001, 1.0001, map[string]bool{"belgium": true}, true)
+	if !out["u1"] {
+		t.Errorf("strict on, belgium spawn near u1: u1 should be applicable")
+	}
+
+	// Spawn near (1,1) but matchedAreas={japan} — strict-mode rejects
+	// even though the rtree would otherwise find u1.
+	out = idx.ApplicableHumans(1.0001, 1.0001, map[string]bool{"japan": true}, true)
+	if out["u1"] {
+		t.Errorf("strict on, japan spawn (restriction=belgium): u1 should NOT be applicable")
+	}
+
+	// Same as above but strict OFF — u1 IS applicable via distance,
+	// restriction is ignored.
+	out = idx.ApplicableHumans(1.0001, 1.0001, map[string]bool{"japan": true}, false)
+	if !out["u1"] {
+		t.Errorf("strict off, japan spawn (any area): u1 should be applicable via distance")
+	}
+}
+
 func keysOf(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

@@ -1210,3 +1210,156 @@ func TestPokemonMatch_MultiProfileWithStrictArea(t *testing.T) {
 		}
 	}
 }
+
+// TestPokemonMatch_GeoPrefilterParityWithDistanceOnly exercises the rtree
+// distance path in HumanGeoIndex.ApplicableHumans. The existing parity
+// tests all seed humans with non-empty Area lists, so they hit the
+// byArea bucket path and never reach the rtree. This test sets a human
+// with NO Area selection but a non-zero rule Distance, forcing
+// applicability to be resolved by the rtree-based distance check.
+//
+// Flag-off and flag-on must produce the same matched users.
+func TestPokemonMatch_GeoPrefilterParityWithDistanceOnly(t *testing.T) {
+	// Human lives at (50.5, 4.5), tracks NO areas (Area is empty),
+	// but has a distance-based rule with d=10000m.
+	humans := map[string]*db.Human{
+		"u1": {
+			ID:               "u1",
+			Enabled:          true,
+			Area:             nil,
+			Latitude:         50.5,
+			Longitude:        4.5,
+			CurrentProfileNo: 1,
+		},
+	}
+	monsterRules := []db.MonsterTracking{
+		{ID: "u1", ProfileNo: 1, PokemonID: 25, MinIV: -1, MaxIV: 100, MaxCP: defaultMaxCP, MaxLevel: defaultMaxLevel,
+			MaxATK: 15, MaxDEF: 15, MaxSTA: 15, MaxWeight: defaultMaxWeight, Rarity: -1, MaxRarity: 6, Size: -1, MaxSize: 5,
+			PVPRankingWorst: 4096, Distance: 10000},
+	}
+	monsters := db.BuildMonsterIndexFromRules(monsterRules)
+
+	spatial := geofence.NewSpatialIndex([]geofence.Fence{
+		// Geofence is unused by this human (no Area selection), but
+		// ValidateHumans's distance check uses the spawn coords directly.
+		{Name: "Belgium", Path: [][2]float64{{3, 50}, {3, 51}, {6, 51}, {6, 50}, {3, 50}}},
+	})
+
+	// PerHumanMaxDistance returns u1→10000, so the geo index builds
+	// an rtree entry for u1 at (50.5, 4.5) with a ~10km bbox.
+	perHumanMaxDist := map[string]int{"u1": 10000}
+
+	// Spawn at (50.5005, 4.5005) — ~70m from the human, well inside d=10km.
+	pokemon := &ProcessedPokemon{
+		PokemonID:   25,
+		IV:          100,
+		CP:          1000,
+		Level:       20,
+		ATK:         15,
+		DEF:         15,
+		STA:         15,
+		Weight:      6.0,
+		Size:        1,
+		RarityGroup: 1,
+		TTHSeconds:  600,
+		Latitude:    50.5005,
+		Longitude:   4.5005,
+		Encountered: true,
+		PVPBestRank: make(map[int][]pvp.LeagueRank),
+		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
+	}
+
+	var off, on []webhook.MatchedUser
+	for _, flag := range []bool{false, true} {
+		st := &state.State{
+			Humans:   humans,
+			Monsters: monsters,
+			Geofence: spatial,
+			GeoIndex: state.BuildHumanGeoIndex(humans, perHumanMaxDist),
+		}
+		matcher := &PokemonMatcher{GeographicPrefilter: flag, PVPQueryMaxRank: 100}
+		users, _ := matcher.Match(pokemon, st)
+		if flag {
+			on = users
+		} else {
+			off = users
+		}
+	}
+
+	if len(off) != len(on) {
+		t.Fatalf("parity violation: flag-off matched %d users, flag-on matched %d", len(off), len(on))
+	}
+	if len(off) == 0 {
+		t.Fatalf("expected at least 1 matched user (distance-only spawn within 10km), got 0 on both paths — test setup is wrong")
+	}
+	seenOff := map[string]int{}
+	for _, u := range off {
+		seenOff[u.ID]++
+	}
+	seenOn := map[string]int{}
+	for _, u := range on {
+		seenOn[u.ID]++
+	}
+	for id, n := range seenOff {
+		if seenOn[id] != n {
+			t.Errorf("parity violation: user %q matched %d times flag-off, %d times flag-on", id, n, seenOn[id])
+		}
+	}
+}
+
+// TestPokemonMatch_GeoPrefilterDistanceOutOfRange confirms the rtree
+// correctly excludes a distance-tracking human whose bbox does not
+// contain the spawn. With flag on, the empty applicable-set means
+// matchMonsters is never called for the rule, and no users match.
+func TestPokemonMatch_GeoPrefilterDistanceOutOfRange(t *testing.T) {
+	humans := map[string]*db.Human{
+		"u1": {
+			ID:               "u1",
+			Enabled:          true,
+			Area:             nil,
+			Latitude:         50.5,
+			Longitude:        4.5,
+			CurrentProfileNo: 1,
+		},
+	}
+	monsterRules := []db.MonsterTracking{
+		{ID: "u1", ProfileNo: 1, PokemonID: 25, MinIV: -1, MaxIV: 100, MaxCP: defaultMaxCP, MaxLevel: defaultMaxLevel,
+			MaxATK: 15, MaxDEF: 15, MaxSTA: 15, MaxWeight: defaultMaxWeight, Rarity: -1, MaxRarity: 6, Size: -1, MaxSize: 5,
+			PVPRankingWorst: 4096, Distance: 1000},
+	}
+	monsters := db.BuildMonsterIndexFromRules(monsterRules)
+	perHumanMaxDist := map[string]int{"u1": 1000}
+
+	// Spawn at (10, 10) — thousands of km from the human. Way outside
+	// the rtree bbox.
+	pokemon := &ProcessedPokemon{
+		PokemonID:   25,
+		IV:          100,
+		CP:          1000,
+		Level:       20,
+		ATK:         15,
+		DEF:         15,
+		STA:         15,
+		Weight:      6.0,
+		Size:        1,
+		RarityGroup: 1,
+		TTHSeconds:  600,
+		Latitude:    10,
+		Longitude:   10,
+		Encountered: true,
+		PVPBestRank: make(map[int][]pvp.LeagueRank),
+		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
+	}
+
+	st := &state.State{
+		Humans:   humans,
+		Monsters: monsters,
+		Geofence: geofence.NewSpatialIndex([]geofence.Fence{}),
+		GeoIndex: state.BuildHumanGeoIndex(humans, perHumanMaxDist),
+	}
+	matcher := &PokemonMatcher{GeographicPrefilter: true, PVPQueryMaxRank: 100}
+	users, _ := matcher.Match(pokemon, st)
+	if len(users) != 0 {
+		t.Errorf("expected 0 matches (spawn far outside u1's 1km circle), got %d", len(users))
+	}
+}
