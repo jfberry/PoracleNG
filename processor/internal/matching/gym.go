@@ -27,28 +27,14 @@ type GymData struct {
 type GymMatcher struct {
 	StrictLocations     bool
 	AreaSecurityEnabled bool
+	GeographicPrefilter bool
 }
 
-// Match returns all matched users for a gym change along with the geofence
-// areas that contain the gym.
-func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
-	start := time.Now()
-	defer func() {
-		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(start).Seconds())
-	}()
-
-	if st == nil {
-		return nil, nil
-	}
-
-	teamChanged := data.OldTeamID != data.TeamID
-	slotsChanged := data.OldSlotsAvailable != data.SlotsAvailable
-	battleChanged := data.InBattle && !data.OldInBattle
-
-	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
-	var trackings []trackingUserData
-
-	for _, g := range st.Gyms {
+// matchGyms filters the given gym rule slice and returns the surviving
+// trackingUserData entries applying the per-rule gym filter logic.
+func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking, teamChanged, slotsChanged, battleChanged bool) []trackingUserData {
+	var out []trackingUserData
+	for _, g := range rules {
 		// team match OR team==4 (any)
 		if !(g.Team == data.TeamID || g.Team == 4) {
 			continue
@@ -76,9 +62,9 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 			// Tracking a specific gym but it's not this one
 			continue
 		}
-		// If g.GymID is nil, area/distance is checked by ValidateHumansGeneric
+		// If g.GymID is nil, area/distance is checked by validateHumansForGym
 
-		trackings = append(trackings, trackingUserData{
+		out = append(out, trackingUserData{
 			HumanID:   g.ID,
 			ProfileNo: g.ProfileNo,
 			Distance:  g.Distance,
@@ -86,6 +72,41 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 			Clean:     g.Clean,
 			Ping:      g.Ping,
 		})
+	}
+	return out
+}
+
+// Match returns all matched users for a gym change along with the geofence
+// areas that contain the gym.
+func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(start).Seconds())
+	}()
+
+	if st == nil {
+		return nil, nil
+	}
+
+	teamChanged := data.OldTeamID != data.TeamID
+	slotsChanged := data.OldSlotsAvailable != data.SlotsAvailable
+	battleChanged := data.InBattle && !data.OldInBattle
+
+	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
+
+	var trackings []trackingUserData
+	if m.GeographicPrefilter && st.GeoIndex != nil && st.GymsByHuman != nil {
+		applicable := st.GeoIndex.ApplicableHumans(
+			data.Latitude, data.Longitude,
+			matchedAreaNames,
+			m.AreaSecurityEnabled && m.StrictLocations,
+		)
+		metrics.MatchingApplicable.WithLabelValues("gym").Observe(float64(len(applicable)))
+		for humanID := range applicable {
+			trackings = append(trackings, m.matchGyms(data, st.GymsByHuman[humanID], teamChanged, slotsChanged, battleChanged)...)
+		}
+	} else {
+		trackings = m.matchGyms(data, st.Gyms, teamChanged, slotsChanged, battleChanged)
 	}
 
 	metrics.MatchingCandidates.WithLabelValues("gym").Observe(float64(len(trackings)))
