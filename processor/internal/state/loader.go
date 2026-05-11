@@ -49,6 +49,8 @@ func Load(manager *Manager, database *sqlx.DB) error {
 		Fences:     fences,
 	}
 
+	s.GeoIndex = BuildHumanGeoIndex(data.Humans, PerHumanMaxDistance(data))
+
 	manager.Set(s)
 	recordStateMetrics(s)
 	metrics.StateLastReloadSuccess.SetToCurrentTime()
@@ -110,6 +112,8 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 		Geofence:   spatial,
 		Fences:     fences,
 	}
+
+	s.GeoIndex = BuildHumanGeoIndex(data.Humans, PerHumanMaxDistance(data))
 
 	manager.Set(s)
 	recordStateMetrics(s)

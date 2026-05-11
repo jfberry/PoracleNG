@@ -23,6 +23,7 @@ type State struct {
 	Maxbattles []*db.MaxbattleTracking
 	Geofence   *geofence.SpatialIndex
 	Fences     []geofence.Fence
+	GeoIndex   *HumanGeoIndex
 }
 
 // Manager manages the current state with atomic swaps.
