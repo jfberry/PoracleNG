@@ -11,49 +11,11 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/state"
 )
 
-// Benchmark workload parameters — tweak to simulate different install sizes.
-const (
-	benchHumans        = 1000
-	benchRulesPerHuman = 500 // 1000 × 500 ≈ 500 k rules total
-)
-
-// buildBenchFences builds a 10×10 grid of 100 rectangular fences covering
-// lat 45–55, lon 0–10. Fence i occupies:
+// buildBenchState synthesises a workload of numHumans users × rulesPerHuman
+// tracking rules and returns the humans map plus monster index ready for use
+// in a benchmark.
 //
-//	row := i/10,  col := i%10
-//	lat [45+row … 46+row],  lon [col … col+1]
-//
-// Fence names are "area 0" … "area 99" with spaces, matching the normalised
-// form that NewSpatialIndex produces (strings.ReplaceAll(name, "_", " ")).
-func buildBenchFences() []geofence.Fence {
-	fences := make([]geofence.Fence, 100)
-	for i := 0; i < 100; i++ {
-		row := i / 10
-		col := i % 10
-		minLat := 45.0 + float64(row)
-		maxLat := 46.0 + float64(row)
-		minLon := float64(col)
-		maxLon := 1.0 + float64(col)
-		fences[i] = geofence.Fence{
-			Name:             "area " + strconv.Itoa(i),
-			DisplayInMatches: true,
-			// Path is [lat, lon] pairs; close the ring by repeating the first vertex.
-			Path: [][2]float64{
-				{minLat, minLon},
-				{maxLat, minLon},
-				{maxLat, maxLon},
-				{minLat, maxLon},
-				{minLat, minLon},
-			},
-		}
-	}
-	return fences
-}
-
-// buildLargeBenchState synthesises a realistic "large install" workload and
-// returns the humans map plus monster index ready for use in a benchmark.
-//
-// Rule distribution per human (500 rules, 4 buckets × 125):
+// Rule distribution per human (4 buckets of equal size):
 //
 //	25 % — everything, IV 0+ (catch-all, no stat filter)
 //	25 % — everything, IV 90+ (encounter-only stat filter)
@@ -62,13 +24,13 @@ func buildBenchFences() []geofence.Fence {
 //
 // Each human subscribes to three area_N fences drawn from the 100-fence grid,
 // so every area name maps to a real geofence in the spatial index.
-func buildLargeBenchState(b *testing.B) (map[string]*db.Human, *db.MonsterIndex) {
+func buildBenchState(b testing.TB, numHumans, rulesPerHuman int) (map[string]*db.Human, *db.MonsterIndex) {
 	b.Helper()
 
-	humans := make(map[string]*db.Human, benchHumans)
-	rules := make([]db.MonsterTracking, 0, benchHumans*benchRulesPerHuman)
+	humans := make(map[string]*db.Human, numHumans)
+	rules := make([]db.MonsterTracking, 0, numHumans*rulesPerHuman)
 
-	for i := 0; i < benchHumans; i++ {
+	for i := 0; i < numHumans; i++ {
 		id := fmt.Sprintf("u%d", i)
 
 		// Each human covers three consecutive area buckets (mod 100).
@@ -89,9 +51,9 @@ func buildLargeBenchState(b *testing.B) (map[string]*db.Human, *db.MonsterIndex)
 			CurrentProfileNo: 1,
 		}
 
-		bucketSize := benchRulesPerHuman / 4
+		bucketSize := rulesPerHuman / 4
 
-		for j := 0; j < benchRulesPerHuman; j++ {
+		for j := 0; j < rulesPerHuman; j++ {
 			var r db.MonsterTracking
 			r.ID = id
 			r.ProfileNo = 1
@@ -141,6 +103,176 @@ func buildLargeBenchState(b *testing.B) (map[string]*db.Human, *db.MonsterIndex)
 	return humans, monsters
 }
 
+// buildBenchGeofences builds a 10×10 grid of 100 rectangular fences covering
+// lat 45–55, lon 0–10. Fence i occupies:
+//
+//	row := i/10,  col := i%10
+//	lat [45+row … 46+row],  lon [col … col+1]
+//
+// Fence names are "area 0" … "area 99" with spaces, matching the normalised
+// form that NewSpatialIndex produces (strings.ReplaceAll(name, "_", " ")).
+func buildBenchGeofences() *geofence.SpatialIndex {
+	fences := make([]geofence.Fence, 100)
+	for i := 0; i < 100; i++ {
+		row := i / 10
+		col := i % 10
+		minLat := 45.0 + float64(row)
+		maxLat := 46.0 + float64(row)
+		minLon := float64(col)
+		maxLon := 1.0 + float64(col)
+		fences[i] = geofence.Fence{
+			Name:             "area " + strconv.Itoa(i),
+			DisplayInMatches: true,
+			// Path is [lat, lon] pairs; close the ring by repeating the first vertex.
+			Path: [][2]float64{
+				{minLat, minLon},
+				{maxLat, minLon},
+				{maxLat, maxLon},
+				{minLat, maxLon},
+				{minLat, minLon},
+			},
+		}
+	}
+	return geofence.NewSpatialIndex(fences)
+}
+
+// buildBenchPokemon returns a fully-encountered Pikachu with 100 IV landing in
+// the centre of "area 50" (lat 50.5, lon 0.5 — row 5, col 0).
+func buildBenchPokemon() *ProcessedPokemon {
+	return &ProcessedPokemon{
+		PokemonID:   25,
+		IV:          100,
+		CP:          1000,
+		Level:       30,
+		ATK:         15,
+		DEF:         15,
+		STA:         15,
+		Weight:      6.0,
+		Size:        1,
+		RarityGroup: 1,
+		TTHSeconds:  600,
+		Latitude:    50.5,
+		Longitude:   0.5,
+		Encountered: true,
+		PVPBestRank: map[int][]pvp.LeagueRank{
+			1500: {{Rank: 50, CP: 1490, Caps: []int{50}}},
+		},
+		PVPEvoData: make(map[int]map[int][]pvp.LeagueRank),
+	}
+}
+
+// buildBenchFences is kept for backward-compatibility with existing callers; it
+// returns the raw fence slice rather than a SpatialIndex.
+func buildBenchFences() []geofence.Fence {
+	fences := make([]geofence.Fence, 100)
+	for i := 0; i < 100; i++ {
+		row := i / 10
+		col := i % 10
+		minLat := 45.0 + float64(row)
+		maxLat := 46.0 + float64(row)
+		minLon := float64(col)
+		maxLon := 1.0 + float64(col)
+		fences[i] = geofence.Fence{
+			Name:             "area " + strconv.Itoa(i),
+			DisplayInMatches: true,
+			Path: [][2]float64{
+				{minLat, minLon},
+				{maxLat, minLon},
+				{maxLat, maxLon},
+				{minLat, maxLon},
+				{minLat, minLon},
+			},
+		}
+	}
+	return fences
+}
+
+// BenchmarkPokemonMatch_AcrossScales runs the prefilter-off vs prefilter-on
+// comparison at five install sizes to characterise the crossover point.
+//
+// | Scale   | Humans | Rules/human | Total rules |
+// |---------|-------:|------------:|------------:|
+// | tiny    |     10 |          10 |         100 |
+// | small   |    100 |          10 |       1,000 |
+// | medium  |    100 |         100 |      10,000 |
+// | large   |    500 |         200 |     100,000 |
+// | extreme |  1,000 |         500 |     500,000 |
+//
+// Run with:
+//
+//	cd processor && go test -bench BenchmarkPokemonMatch_AcrossScales -benchmem -count=1 -run=^$ ./internal/matching/...
+func BenchmarkPokemonMatch_AcrossScales(b *testing.B) {
+	scales := []struct {
+		name          string
+		humans        int
+		rulesPerHuman int
+	}{
+		{"tiny", 10, 10},
+		{"small", 100, 10},
+		{"medium", 100, 100},
+		{"large", 500, 200},
+		{"extreme", 1000, 500},
+	}
+
+	for _, sc := range scales {
+		sc := sc
+		b.Run(sc.name, func(b *testing.B) {
+			humans, monsters := buildBenchState(b, sc.humans, sc.rulesPerHuman)
+			spatial := buildBenchGeofences()
+			geoIdx := state.BuildHumanGeoIndex(humans, nil)
+			pokemon := buildBenchPokemon()
+
+			// Sanity: both flag values must produce the same number of matched
+			// users. A discrepancy here means the workload exposes a parity bug.
+			{
+				stOff := &state.State{
+					Humans:   humans,
+					Monsters: monsters,
+					Geofence: spatial,
+					GeoIndex: geoIdx,
+				}
+				stOn := &state.State{
+					Humans:   humans,
+					Monsters: monsters,
+					Geofence: spatial,
+					GeoIndex: geoIdx,
+				}
+				mOff := &PokemonMatcher{GeographicPrefilter: false, PVPQueryMaxRank: 4096}
+				mOn := &PokemonMatcher{GeographicPrefilter: true, PVPQueryMaxRank: 4096}
+
+				off, _ := mOff.Match(pokemon, stOff)
+				on, _ := mOn.Match(pokemon, stOn)
+
+				if len(off) != len(on) {
+					b.Fatalf("parity violation at scale %s: off=%d on=%d", sc.name, len(off), len(on))
+				}
+
+				b.Logf("scale=%s humans=%d rules=%d matched=%d",
+					sc.name, sc.humans, sc.humans*sc.rulesPerHuman, len(off))
+			}
+
+			for _, flag := range []bool{false, true} {
+				flag := flag
+				st := &state.State{
+					Humans:   humans,
+					Monsters: monsters,
+					Geofence: spatial,
+					GeoIndex: geoIdx,
+				}
+				matcher := &PokemonMatcher{GeographicPrefilter: flag, PVPQueryMaxRank: 4096}
+
+				b.Run(fmt.Sprintf("prefilter=%v", flag), func(b *testing.B) {
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						_, _ = matcher.Match(pokemon, st)
+					}
+				})
+			}
+		})
+	}
+}
+
 // BenchmarkPokemonMatch_LargeRuleSet measures PokemonMatcher.Match against a
 // ~500 k-rule workload with and without the geographic pre-filter.
 //
@@ -153,12 +285,12 @@ func buildLargeBenchState(b *testing.B) (map[string]*db.Human, *db.MonsterIndex)
 //
 //	cd processor && go test -bench BenchmarkPokemonMatch -benchmem -count=1 -run=^$ ./internal/matching/...
 func BenchmarkPokemonMatch_LargeRuleSet(b *testing.B) {
-	humans, monsters := buildLargeBenchState(b)
+	humans, monsters := buildBenchState(b, 1000, 500)
 
 	// 10×10 grid of 100 real fences. The spawn (50.5, 0.5) lands in the centre
 	// of "area 50" (row 5, col 0 → lat 50–51, lon 0–1). The R-tree query
 	// returns exactly one matching fence, matching real-world geofence sparsity.
-	spatial := geofence.NewSpatialIndex(buildBenchFences())
+	spatial := buildBenchGeofences()
 
 	// Humans with i%100 ∈ {50, 49, 48} subscribe to "area 50".
 	// That gives ≈30 humans out of 1000 as the applicable set.
@@ -167,26 +299,7 @@ func BenchmarkPokemonMatch_LargeRuleSet(b *testing.B) {
 	// Spawn at the centre of "area 50": lat 50.5, lon 0.5.
 	spawnLat, spawnLon := 50.5, 0.5
 
-	pokemon := &ProcessedPokemon{
-		PokemonID:   25,
-		IV:          100,
-		CP:          1000,
-		Level:       30,
-		ATK:         15,
-		DEF:         15,
-		STA:         15,
-		Weight:      6.0,
-		Size:        1,
-		RarityGroup: 1,
-		TTHSeconds:  600,
-		Latitude:    spawnLat,
-		Longitude:   spawnLon,
-		Encountered: true,
-		PVPBestRank: map[int][]pvp.LeagueRank{
-			1500: {{Rank: 50, CP: 1490, Caps: []int{50}}},
-		},
-		PVPEvoData: make(map[int]map[int][]pvp.LeagueRank),
-	}
+	pokemon := buildBenchPokemon()
 
 	// Sanity: both flag values must produce the same number of matched users.
 	// A discrepancy here means the workload exposes a parity bug.
