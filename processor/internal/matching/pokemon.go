@@ -144,6 +144,8 @@ func (m *PokemonMatcher) Match(pokemon *ProcessedPokemon, st *state.State) ([]we
 		}
 	}
 
+	metrics.MatchingCandidates.WithLabelValues("pokemon").Observe(float64(len(matched)))
+
 	// Validate humans
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(pokemon.Latitude, pokemon.Longitude)
 	users := ValidateHumans(

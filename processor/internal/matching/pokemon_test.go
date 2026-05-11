@@ -817,3 +817,54 @@ func TestPokemonMatch_RecordsMatchingDuration(t *testing.T) {
 		t.Errorf("MatchingDuration{type=pokemon} sample count = %d, want 1", got)
 	}
 }
+
+func TestPokemonMatch_RecordsCandidateCount(t *testing.T) {
+	metrics.MatchingCandidates.Reset()
+	matcher := &PokemonMatcher{PVPQueryMaxRank: 100}
+	// Pre-seed two rules under pokemon_id=25 so candidate count > 0
+	human := makeHuman("u1")
+	rules := []*db.MonsterTracking{
+		makeMonster("u1", 25),
+		makeMonster("u2", 25),
+	}
+	// Add human for second user
+	humans := map[string]*db.Human{
+		"u1": human,
+		"u2": makeHuman("u2"),
+	}
+	st := makeTestState(rules, humans)
+
+	pokemon := &ProcessedPokemon{
+		PokemonID:   25,
+		Form:        0,
+		IV:          100,
+		CP:          1000,
+		Level:       20,
+		ATK:         15,
+		DEF:         15,
+		STA:         15,
+		Gender:      1,
+		Weight:      6.0,
+		Size:        1,
+		RarityGroup: 1,
+		TTHSeconds:  600,
+		Latitude:    51.0,
+		Longitude:   0.0,
+		Encountered: true,
+		PVPBestRank: make(map[int][]pvp.LeagueRank),
+		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
+	}
+	matcher.Match(pokemon, st)
+
+	h, err := metrics.MatchingCandidates.GetMetricWithLabelValues("pokemon")
+	if err != nil {
+		t.Fatalf("get metric: %v", err)
+	}
+	var out dto.Metric
+	if err := h.(prometheus.Histogram).Write(&out); err != nil {
+		t.Fatalf("write metric: %v", err)
+	}
+	if got := out.GetHistogram().GetSampleSum(); got != 2 {
+		t.Errorf("MatchingCandidates sample sum = %v, want 2", got)
+	}
+}
