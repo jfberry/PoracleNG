@@ -32,7 +32,11 @@ type GymMatcher struct {
 
 // matchGyms filters the given gym rule slice and returns the surviving
 // trackingUserData entries applying the per-rule gym filter logic.
-func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking, teamChanged, slotsChanged, battleChanged bool) []trackingUserData {
+func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackingUserData {
+	teamChanged := data.OldTeamID != data.TeamID
+	slotsChanged := data.OldSlotsAvailable != data.SlotsAvailable
+	battleChanged := data.InBattle && !data.OldInBattle
+
 	var out []trackingUserData
 	for _, g := range rules {
 		// team match OR team==4 (any)
@@ -88,10 +92,6 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 		return nil, nil
 	}
 
-	teamChanged := data.OldTeamID != data.TeamID
-	slotsChanged := data.OldSlotsAvailable != data.SlotsAvailable
-	battleChanged := data.InBattle && !data.OldInBattle
-
 	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
 
 	var trackings []trackingUserData
@@ -103,10 +103,10 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 		)
 		metrics.MatchingApplicable.WithLabelValues("gym").Observe(float64(len(applicable)))
 		for humanID := range applicable {
-			trackings = append(trackings, m.matchGyms(data, st.GymsByHuman[humanID], teamChanged, slotsChanged, battleChanged)...)
+			trackings = append(trackings, m.matchGyms(data, st.GymsByHuman[humanID])...)
 		}
 	} else {
-		trackings = m.matchGyms(data, st.Gyms, teamChanged, slotsChanged, battleChanged)
+		trackings = m.matchGyms(data, st.Gyms)
 	}
 
 	metrics.MatchingCandidates.WithLabelValues("gym").Observe(float64(len(trackings)))
