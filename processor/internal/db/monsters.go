@@ -44,26 +44,21 @@ type MonsterIndex struct {
 	ByPokemonID   map[int][]*MonsterTracking // keyed by pokemon_id (0 = catch-all)
 	PVPSpecific   map[int][]*MonsterTracking // keyed by pvp_ranking_league, pokemon_id != 0
 	PVPEverything map[int][]*MonsterTracking // keyed by pvp_ranking_league, pokemon_id == 0
-	Total         int                        // total number of monster tracking rules
+
+	// ByHumanAndLeague partitions every rule by (humanID, pvp_ranking_league).
+	// league==0 means "non-PVP" — non-PVP rules from ByPokemonID[0]
+	// (everything) and ByPokemonID[N] (per-species) both land in
+	// ByHumanAndLeague[humanID][0]. Used by matchers when
+	// geographic_prefilter is enabled to iterate per applicable human
+	// instead of per pokemon bucket.
+	ByHumanAndLeague map[string]map[int][]*MonsterTracking
+
+	Total int // total number of monster tracking rules
 }
 
-// LoadMonsters loads all monster trackings and builds indexed structures.
-func LoadMonsters(db *sqlx.DB) (*MonsterIndex, error) {
-	var monsters []MonsterTracking
-	err := db.Select(&monsters,
-		`SELECT id, profile_no, pokemon_id, form, distance,
-		        min_iv, max_iv, min_cp, max_cp, min_level, max_level,
-		        atk, def, sta, max_atk, max_def, max_sta,
-		        gender, min_weight, max_weight, min_time,
-		        rarity, max_rarity, size, max_size,
-		        COALESCE(template, '') AS template, clean, ping,
-		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
-		        pvp_ranking_min_cp, pvp_ranking_cap
-		 FROM monsters`)
-	if err != nil {
-		return nil, err
-	}
-
+// buildMonsterIndexFromRules builds a MonsterIndex from a slice of MonsterTracking values.
+// Pointer identity is preserved: entries in the index point into the monsters slice.
+func buildMonsterIndexFromRules(monsters []MonsterTracking) *MonsterIndex {
 	idx := &MonsterIndex{
 		ByPokemonID:   make(map[int][]*MonsterTracking),
 		PVPSpecific:   make(map[int][]*MonsterTracking),
@@ -87,5 +82,37 @@ func LoadMonsters(db *sqlx.DB) (*MonsterIndex, error) {
 		}
 	}
 	idx.Total = len(monsters)
-	return idx, nil
+
+	idx.ByHumanAndLeague = map[string]map[int][]*MonsterTracking{}
+	for i := range monsters {
+		m := &monsters[i]
+		perH, ok := idx.ByHumanAndLeague[m.ID]
+		if !ok {
+			perH = map[int][]*MonsterTracking{}
+			idx.ByHumanAndLeague[m.ID] = perH
+		}
+		perH[m.PVPRankingLeague] = append(perH[m.PVPRankingLeague], m)
+	}
+
+	return idx
+}
+
+// LoadMonsters loads all monster trackings and builds indexed structures.
+func LoadMonsters(db *sqlx.DB) (*MonsterIndex, error) {
+	var monsters []MonsterTracking
+	err := db.Select(&monsters,
+		`SELECT id, profile_no, pokemon_id, form, distance,
+		        min_iv, max_iv, min_cp, max_cp, min_level, max_level,
+		        atk, def, sta, max_atk, max_def, max_sta,
+		        gender, min_weight, max_weight, min_time,
+		        rarity, max_rarity, size, max_size,
+		        COALESCE(template, '') AS template, clean, ping,
+		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
+		        pvp_ranking_min_cp, pvp_ranking_cap
+		 FROM monsters`)
+	if err != nil {
+		return nil, err
+	}
+
+	return buildMonsterIndexFromRules(monsters), nil
 }

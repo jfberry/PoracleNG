@@ -36,3 +36,6 @@ func LoadQuests(db *sqlx.DB) ([]*QuestTracking, error) {
 	}
 	return result, nil
 }
+
+// QuestHumanID returns the human ID for a QuestTracking row.
+func QuestHumanID(r *QuestTracking) string { return r.ID }

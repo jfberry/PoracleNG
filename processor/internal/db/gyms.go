@@ -34,3 +34,6 @@ func LoadGyms(db *sqlx.DB) ([]*GymTracking, error) {
 	}
 	return result, nil
 }
+
+// GymHumanID returns the human ID for a GymTracking row.
+func GymHumanID(r *GymTracking) string { return r.ID }

@@ -24,6 +24,19 @@ type State struct {
 	Geofence   *geofence.SpatialIndex
 	Fences     []geofence.Fence
 	GeoIndex   *HumanGeoIndex
+
+	// Per-human partitions for the geographic_prefilter path. Same
+	// pointers as the existing flat slices (Raids, Eggs, etc.), just
+	// organised by owner.
+	RaidsByHuman      map[string][]*db.RaidTracking
+	EggsByHuman       map[string][]*db.EggTracking
+	QuestsByHuman     map[string][]*db.QuestTracking
+	InvasionsByHuman  map[string][]*db.InvasionTracking
+	LuresByHuman      map[string][]*db.LureTracking
+	NestsByHuman      map[string][]*db.NestTracking
+	GymsByHuman       map[string][]*db.GymTracking
+	FortsByHuman      map[string][]*db.FortTracking
+	MaxbattlesByHuman map[string][]*db.MaxbattleTracking
 }
 
 // Manager manages the current state with atomic swaps.

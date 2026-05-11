@@ -50,6 +50,15 @@ func Load(manager *Manager, database *sqlx.DB) error {
 	}
 
 	s.GeoIndex = BuildHumanGeoIndex(data.Humans, PerHumanMaxDistance(data))
+	s.RaidsByHuman = db.PartitionByHuman(data.Raids, db.RaidHumanID)
+	s.EggsByHuman = db.PartitionByHuman(data.Eggs, db.EggHumanID)
+	s.QuestsByHuman = db.PartitionByHuman(data.Quests, db.QuestHumanID)
+	s.InvasionsByHuman = db.PartitionByHuman(data.Invasions, db.InvasionHumanID)
+	s.LuresByHuman = db.PartitionByHuman(data.Lures, db.LureHumanID)
+	s.NestsByHuman = db.PartitionByHuman(data.Nests, db.NestHumanID)
+	s.GymsByHuman = db.PartitionByHuman(data.Gyms, db.GymHumanID)
+	s.FortsByHuman = db.PartitionByHuman(data.Forts, db.FortHumanID)
+	s.MaxbattlesByHuman = db.PartitionByHuman(data.Maxbattles, db.MaxbattleHumanID)
 
 	manager.Set(s)
 	recordStateMetrics(s)
@@ -114,6 +123,15 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, geofenceCfg config.G
 	}
 
 	s.GeoIndex = BuildHumanGeoIndex(data.Humans, PerHumanMaxDistance(data))
+	s.RaidsByHuman = db.PartitionByHuman(data.Raids, db.RaidHumanID)
+	s.EggsByHuman = db.PartitionByHuman(data.Eggs, db.EggHumanID)
+	s.QuestsByHuman = db.PartitionByHuman(data.Quests, db.QuestHumanID)
+	s.InvasionsByHuman = db.PartitionByHuman(data.Invasions, db.InvasionHumanID)
+	s.LuresByHuman = db.PartitionByHuman(data.Lures, db.LureHumanID)
+	s.NestsByHuman = db.PartitionByHuman(data.Nests, db.NestHumanID)
+	s.GymsByHuman = db.PartitionByHuman(data.Gyms, db.GymHumanID)
+	s.FortsByHuman = db.PartitionByHuman(data.Forts, db.FortHumanID)
+	s.MaxbattlesByHuman = db.PartitionByHuman(data.Maxbattles, db.MaxbattleHumanID)
 
 	manager.Set(s)
 	recordStateMetrics(s)

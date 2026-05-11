@@ -36,3 +36,6 @@ func LoadMaxbattles(db *sqlx.DB) ([]*MaxbattleTracking, error) {
 	}
 	return result, nil
 }
+
+// MaxbattleHumanID returns the human ID for a MaxbattleTracking row.
+func MaxbattleHumanID(r *MaxbattleTracking) string { return r.ID }
