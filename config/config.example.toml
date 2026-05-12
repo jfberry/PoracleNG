@@ -403,7 +403,7 @@ include_stops = false
 # template set, which is a different render shape from a multi-pin
 # single tile.
 # [geocoding.static_map_type]
-# questSummary = "staticMap"
+# questsummary = "staticMap"
 
 # ---- Tuning ----
 # Do not change these settings without talking to us in discord.

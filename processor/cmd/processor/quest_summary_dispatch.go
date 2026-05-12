@@ -108,6 +108,21 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		// the summary message (the summary itself is a fresh send).
 	}}
 
+	// External-validator gate at delivery time. Immediate quests run
+	// filterValidation in ProcessQuest; the buffered path defers it to
+	// here so the validator's "is this destination valid right now?"
+	// answer reflects current state rather than state from hours ago.
+	// We send the first buffered quest's raw payload as a representative
+	// webhook (the validator's user-level checks dominate; per-quest
+	// fidelity isn't preserved here — operators with per-quest validator
+	// logic should validate at match time instead). matchedAreas is nil:
+	// the summary aggregates quests from many pokestops, so there's no
+	// single area set to validate against.
+	matched = ps.filterValidation("quest", fresh[0].Payload, nil, matched)
+	if len(matched) == 0 {
+		return
+	}
+
 	if ps.dtsRenderer == nil {
 		log.Warnf("summary dispatch: DTS renderer not configured — dropping %d groups for %s", len(groups), humanID)
 		return
@@ -144,12 +159,14 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 				continue
 			}
 			for _, j := range jobs {
-				// DispatchBypass: summary delivery is the user's chosen
-				// alternative to N immediate quest alerts (which would
-				// have hit the rate limit MORE quickly). The user opted
-				// into summary mode explicitly and the buffer is naturally
-				// bounded by their tracked quests, so don't count summary
-				// messages against the per-destination quota.
+				// DispatchBypass: the user opted into summary mode
+				// explicitly (via the `summary` keyword on `!quest`) and
+				// is expecting a scheduled digest message. Silently
+				// dropping it at the limiter would be more confusing
+				// than letting it through, and the buffer is naturally
+				// bounded by the user's tracked-quest count so the
+				// throughput risk is small. See the BypassRateLimit
+				// section in CLAUDE.md for the documented exemption.
 				ps.dispatcher.DispatchBypass(&delivery.Job{
 					Target:       j.Target,
 					Type:         j.Type,

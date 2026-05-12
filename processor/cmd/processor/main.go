@@ -1317,16 +1317,20 @@ func (ps *ProcessorService) Close() {
 		ps.renderWg.Wait()
 		log.Info("Render pool stopped")
 	}
+	// Stop summary scheduler BEFORE the dispatcher. The scheduler's tick
+	// calls DispatchQuestSummary → dispatcher.DispatchBypass which sends
+	// on the dispatcher's job channel; stopping the dispatcher first
+	// closes that channel, so a tick that fires mid-shutdown would panic
+	// on send-to-closed-channel. Close() blocks until the loop goroutine
+	// exits, after which it's safe to tear down the dispatcher.
+	if ps.summaryScheduler != nil {
+		ps.summaryScheduler.Close()
+		log.Info("Summary scheduler stopped")
+	}
 	if ps.dispatcher != nil {
 		log.Info("Stopping delivery dispatcher...")
 		ps.dispatcher.Stop()
 		log.Info("Delivery dispatcher stopped")
-	}
-	// Stop summary scheduler before gym-state save so we don't race with
-	// any in-flight ticks that look up state.
-	if ps.summaryScheduler != nil {
-		ps.summaryScheduler.Close()
-		log.Info("Summary scheduler stopped")
 	}
 	if ps.enricher.StaticMap != nil {
 		ps.enricher.StaticMap.Close()
