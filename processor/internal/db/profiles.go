@@ -15,13 +15,30 @@ type ProfileKey struct {
 	ProfileNo int
 }
 
-// ActiveHourEntry represents a time-of-day rule for auto-switching profiles.
-// Fields may be stored as numbers or strings in the DB JSON (including
-// zero-padded strings like "00"), so we decode into interface{} and coerce.
+// ActiveHourEntry represents a time-of-day rule for auto-switching
+// profiles or firing summaries. Fields may be stored as numbers or
+// strings in the DB JSON (including zero-padded strings like "00"),
+// so we decode into interface{} and coerce.
+//
+// Two shapes are supported on disk:
+//
+//   - **Single fire**: Day, Hours, Mins set; EndHours/EndMins/Step
+//     absent (or zero). Fires once that day at HH:MM.
+//   - **Range with step**: Day, Hours, Mins set, plus EndHours/EndMins
+//     and Step (hours). Fires at HH:MM, HH:MM+Step*h, HH:MM+2*Step*h,
+//     …, up to and including EndHours:EndMins. Cross-midnight is
+//     rejected by the parser; here we trust the on-disk shape.
+//
+// Range entries are marked by Step > 0. The omitempty tags on the
+// new fields preserve the existing on-disk shape for single-fire
+// entries — older readers see no change.
 type ActiveHourEntry struct {
-	Day   int
-	Hours int
-	Mins  int
+	Day      int `json:"day"`
+	Hours    int `json:"hours"`
+	Mins     int `json:"mins"`
+	EndHours int `json:"end_hours,omitempty"`
+	EndMins  int `json:"end_mins,omitempty"`
+	Step     int `json:"step,omitempty"`
 }
 
 func (e *ActiveHourEntry) UnmarshalJSON(b []byte) error {
@@ -39,7 +56,52 @@ func (e *ActiveHourEntry) UnmarshalJSON(b []byte) error {
 	if e.Mins, err = flexToInt(raw["mins"]); err != nil {
 		return fmt.Errorf("mins: %w", err)
 	}
+	// Range fields are optional — absent in the JSON is fine (single-fire entry).
+	if v, ok := raw["end_hours"]; ok {
+		if e.EndHours, err = flexToInt(v); err != nil {
+			return fmt.Errorf("end_hours: %w", err)
+		}
+	}
+	if v, ok := raw["end_mins"]; ok {
+		if e.EndMins, err = flexToInt(v); err != nil {
+			return fmt.Errorf("end_mins: %w", err)
+		}
+	}
+	if v, ok := raw["step"]; ok {
+		if e.Step, err = flexToInt(v); err != nil {
+			return fmt.Errorf("step: %w", err)
+		}
+	}
 	return nil
+}
+
+// IsRange reports whether this entry is the range+step shape (true)
+// or a single-fire entry (false). Driven by Step > 0 so existing data
+// without the new fields is treated as single-fire automatically.
+func (e ActiveHourEntry) IsRange() bool { return e.Step > 0 }
+
+// Fires returns every (hour, minute) fire-point this entry produces
+// in a given day, in chronological order. Single-fire entries return
+// one pair; range entries return start, start+step*h, … up to and
+// including end-inclusive. Always returns at least one entry.
+func (e ActiveHourEntry) Fires() [][2]int {
+	if !e.IsRange() {
+		return [][2]int{{e.Hours, e.Mins}}
+	}
+	startMin := e.Hours*60 + e.Mins
+	endMin := e.EndHours*60 + e.EndMins
+	stepMin := e.Step * 60
+	if stepMin <= 0 || endMin < startMin {
+		// Defensive: shape we should have rejected at parse. Fall
+		// back to single-fire so the scheduler still produces *some*
+		// reasonable behaviour.
+		return [][2]int{{e.Hours, e.Mins}}
+	}
+	out := make([][2]int, 0, (endMin-startMin)/stepMin+1)
+	for m := startMin; m <= endMin; m += stepMin {
+		out = append(out, [2]int{m / 60, m % 60})
+	}
+	return out
 }
 
 // ParseActiveHours decodes the on-disk active_hours JSON shape into

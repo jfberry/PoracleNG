@@ -162,22 +162,33 @@ func isScheduleActive(entries []db.ActiveHourEntry, lat, lon float64, nowFunc fu
 	return false
 }
 
-// matchesTimeWindow implements the same 10-minute window logic as the original implementation:
-//   - Same day, same hour, within 10 minutes of scheduled minute
+// matchesTimeWindow implements the same 10-minute window logic as the
+// original implementation, walked across every fire-point the entry
+// produces:
+//   - Same day, same hour, within 10 minutes of a scheduled minute
 //   - First 10 minutes of new hour matching last 10 minutes of previous hour
 //   - Midnight boundary (hour 0, minute <10, yesterday at hour 23, minute >50)
+//
+// For single-fire entries Fires() returns one pair, so this is the
+// same as the original direct check. For range entries each step
+// is evaluated independently — a 9-17/2 entry matches at 9:00, 11:00,
+// 13:00, 15:00, and 17:00 (with the same 10-minute grace as a
+// hand-written single fire).
 func matchesTimeWindow(e db.ActiveHourEntry, nowDow, yesterdayDow, nowHour, nowMin int) bool {
-	// Within 10 minutes in same hour
-	if e.Day == nowDow && e.Hours == nowHour && nowMin >= e.Mins && (nowMin-e.Mins) < 10 {
-		return true
-	}
-	// First 10 minutes of new hour, schedule was in last 10 minutes of previous hour
-	if nowMin < 10 && e.Day == nowDow && e.Hours == nowHour-1 && e.Mins > 50 {
-		return true
-	}
-	// Midnight boundary
-	if nowHour == 0 && nowMin < 10 && e.Day == yesterdayDow && e.Hours == 23 && e.Mins > 50 {
-		return true
+	for _, fire := range e.Fires() {
+		fireHour, fireMin := fire[0], fire[1]
+		// Within 10 minutes in same hour
+		if e.Day == nowDow && fireHour == nowHour && nowMin >= fireMin && (nowMin-fireMin) < 10 {
+			return true
+		}
+		// First 10 minutes of new hour, schedule was in last 10 minutes of previous hour
+		if nowMin < 10 && e.Day == nowDow && fireHour == nowHour-1 && fireMin > 50 {
+			return true
+		}
+		// Midnight boundary
+		if nowHour == 0 && nowMin < 10 && e.Day == yesterdayDow && fireHour == 23 && fireMin > 50 {
+			return true
+		}
 	}
 	return false
 }

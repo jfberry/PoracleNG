@@ -114,12 +114,15 @@ func TestSummaryCommand_SetTime_StoresJSON(t *testing.T) {
 	if len(entries) != 2 {
 		t.Errorf("expected 2 entries, got %d: %s", len(entries), got.ActiveHours)
 	}
-	// Verify mon → day 1 and fri → day 5
+	// Verify mon → day 1 and fri → day 5. Hours/Mins are now written
+	// as JSON numbers (matching the on-disk ActiveHourEntry int
+	// fields); ParseActiveHours's flexToInt still accepts the legacy
+	// string-encoded form for back-compat on read.
 	if entries[0]["day"] != float64(1) {
 		t.Errorf("first entry day=%v, want 1", entries[0]["day"])
 	}
-	if entries[0]["hours"] != "07" {
-		t.Errorf("first entry hours=%v, want 07", entries[0]["hours"])
+	if entries[0]["hours"] != float64(7) {
+		t.Errorf("first entry hours=%v, want 7", entries[0]["hours"])
 	}
 	if entries[1]["day"] != float64(5) {
 		t.Errorf("second entry day=%v, want 5", entries[1]["day"])

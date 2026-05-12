@@ -122,31 +122,14 @@ func (c *SummaryCommand) setTime(ctx *bot.CommandContext, alertType string, args
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.summary.usage", prefix)}}
 	}
 
-	type entry struct {
-		Day   int    `json:"day"`
-		Hours string `json:"hours"`
-		Mins  string `json:"mins"`
-	}
-	var entries []entry
-
 	dayPrefixes := buildDayPrefixMap(ctx)
-
+	var entries []db.ActiveHourEntry
 	for _, arg := range args {
-		m := settimeRe.FindStringSubmatch(strings.ToLower(arg))
-		if m == nil {
-			continue
+		parsed, err := ParseSettimeArg(arg, dayPrefixes)
+		if err != nil {
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.summary.settime_invalid", arg, err.Error())}}
 		}
-		dayKey, hours, mins := m[1], m[2], m[3]
-		if mins == "" {
-			mins = "00"
-		}
-		days, ok := dayPrefixes[dayKey]
-		if !ok {
-			continue
-		}
-		for _, d := range days {
-			entries = append(entries, entry{Day: d, Hours: hours, Mins: mins})
-		}
+		entries = append(entries, parsed...)
 	}
 
 	if len(entries) == 0 {

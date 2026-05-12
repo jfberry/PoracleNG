@@ -3,7 +3,6 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -181,10 +180,6 @@ func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) [
 	return []bot.Reply{{React: "✅", Text: tr.Tf("profile.switched", profileLabel)}}
 }
 
-// settimeRe matches day-prefix + hours:mins in multiple formats:
-// mon09:00, mon:09:00, mon09, mon:09
-var settimeRe = regexp.MustCompile(`^([a-zA-Z]+?):?(\d{1,2}):?(\d{2})?$`)
-
 // buildDayPrefixMap creates a map from translated + English day prefixes to ISO day numbers.
 func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
 	m := map[string][]int{
@@ -233,35 +228,16 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.settime_usage")}}
 	}
 
-	// Parse day:time patterns from all args.
-	type entry struct {
-		Day   int    `json:"day"`
-		Hours string `json:"hours"`
-		Mins  string `json:"mins"`
-	}
-	var entries []entry
-
 	dayPrefixes := buildDayPrefixMap(ctx)
-
+	var entries []db.ActiveHourEntry
 	for _, arg := range args {
-		m := settimeRe.FindStringSubmatch(strings.ToLower(arg))
-		if m == nil {
-			continue
+		parsed, err := ParseSettimeArg(arg, dayPrefixes)
+		if err != nil {
+			// Matched a known form (range) but failed validation
+			// — surface the reason instead of silently dropping.
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", arg, err.Error())}}
 		}
-		prefix := m[1]
-		hours := m[2]
-		mins := m[3]
-		if mins == "" {
-			mins = "00"
-		}
-
-		days, ok := dayPrefixes[prefix]
-		if !ok {
-			continue
-		}
-		for _, d := range days {
-			entries = append(entries, entry{Day: d, Hours: hours, Mins: mins})
-		}
+		entries = append(entries, parsed...)
 	}
 
 	if len(entries) == 0 {

@@ -14,7 +14,7 @@
         },
         {
           "name": "Set the schedule",
-          "value": "`{{prefix}}summary quest settime mon07:30 weekday07:30 weekend10:00`\n`{{prefix}}summary quest settime every08:00` — fire every day at 08:00\n\nDay prefixes:\n• `mon`/`tue`/`wed`/`thu`/`fri`/`sat`/`sun` — a single day\n• `weekday` — Mon–Fri\n• `weekend` — Sat–Sun\n• `every` (or `everyday`) — all seven days\n\nFormat: `<prefix><HH>:<MM>` (e.g. `mon07:30`, `every08:00`). The colon and minutes are optional — `mon7` is treated as `mon07:00`. List as many times as you like in one command; they replace any existing schedule."
+          "value": "`{{prefix}}summary quest settime mon07:30 weekday07:30 weekend10:00`\n`{{prefix}}summary quest settime every08:00` — fire every day at 08:00\n`{{prefix}}summary quest settime weekday:9-17/2` — every 2 hours, 9am–5pm, Mon–Fri\n\nDay prefixes:\n• `mon`/`tue`/`wed`/`thu`/`fri`/`sat`/`sun` — a single day\n• `weekday` — Mon–Fri\n• `weekend` — Sat–Sun\n• `every` (or `everyday`) — all seven days\n\nFormats:\n• `<prefix><HH>:<MM>` (e.g. `mon07:30`) — fire once at HH:MM\n• `<prefix>:HH-HH[/N]` (e.g. `weekday:9-17/2`) — fire every N hours from start to end inclusive; N defaults to 1 (hourly). End must be after start; cross-midnight is not supported.\n\nThe colon between prefix and time is optional; without a prefix the schedule applies every day. List as many entries as you like in one command; they replace any existing schedule."
         },
         {
           "name": "Clear the schedule",
