@@ -770,3 +770,62 @@ func TestPokemonMatchProfileFilter(t *testing.T) {
 		t.Errorf("Expected 0 matches for wrong profile, got %d", len(matched))
 	}
 }
+
+// TestPokemonMatch_MultiProfileWithStrictArea guards the combination of
+// multiple profiles, strict-area mode, and area restriction. With two rules
+// for the same user on different profiles, only the rule whose profile
+// matches the user's active profile should fire. AreaRestriction must be
+// satisfied as well when strict-area mode is enabled.
+func TestPokemonMatch_MultiProfileWithStrictArea(t *testing.T) {
+	human := &db.Human{
+		ID:               "u1",
+		Enabled:          true,
+		Area:             []string{"belgium", "antwerp"},
+		AreaRestriction:  []string{"belgium"},
+		Latitude:         0.5,
+		Longitude:        0.5,
+		CurrentProfileNo: 2,
+	}
+	humans := map[string]*db.Human{"u1": human}
+
+	// Use makeMonster so all stat defaults are set correctly (MaxATK/DEF/STA etc.).
+	r1 := *makeMonster("u1", 25)
+	r1.ProfileNo = 1 // wrong profile — should NOT match
+	r2 := *makeMonster("u1", 25)
+	r2.ProfileNo = 2 // correct profile — should match
+
+	rules := []*db.MonsterTracking{&r1, &r2}
+	st := &state.State{
+		Humans:   humans,
+		Monsters: &db.MonsterIndex{ByPokemonID: map[int][]*db.MonsterTracking{25: rules}},
+	}
+	matcher := &PokemonMatcher{StrictLocations: true, AreaSecurityEnabled: true}
+	pokemon := &ProcessedPokemon{
+		PokemonID:   25,
+		IV:          100,
+		CP:          1000,
+		Level:       20,
+		ATK:         15,
+		DEF:         15,
+		STA:         15,
+		Weight:      5.0,
+		Size:        1,
+		Encountered: true,
+		TTHSeconds:  600,
+		Latitude:    0.5,
+		Longitude:   0.5,
+		PVPBestRank: make(map[int][]pvp.LeagueRank),
+		PVPEvoData:  make(map[int]map[int][]pvp.LeagueRank),
+	}
+	st.Geofence = geofence.NewSpatialIndex([]geofence.Fence{
+		{Name: "Belgium", Path: [][2]float64{{-1, -1}, {-1, 1}, {1, 1}, {1, -1}}},
+	})
+
+	users, _ := matcher.Match(pokemon, st)
+	if len(users) != 1 {
+		t.Fatalf("expected exactly 1 matched user (profile 2 only), got %d", len(users))
+	}
+	if users[0].ID != "u1" {
+		t.Errorf("matched ID = %q, want u1", users[0].ID)
+	}
+}
