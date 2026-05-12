@@ -448,7 +448,8 @@ concurrent_discord_webhooks = 10         # concurrent discord webhook sends
 timing_period = 240                      # seconds over which limits are calculated
 dm_limit = 20                            # max messages a user can receive in the period
 channel_limit = 40                       # max messages a channel/group can receive in the period
-summary_limit = 5                        # max questSummary dispatches per destination in the period (separate bucket from dm/channel; 1 fire = 1 against the bucket, regardless of how many chunks the digest produces)
+dm_summary_limit = 10                    # max summary dispatches a user can receive in the period (separate bucket from dm_limit; 1 fire = 1 against the bucket, regardless of how many chunks the digest produces)
+channel_summary_limit = 40               # max summary dispatches a channel/group can receive in the period (separate bucket from channel_limit)
 max_limits_before_stop = 10              # times user can hit rate limit (within 24hrs) before being stopped
 disable_on_stop = false                  # admin disable rather than just stop (requires admin to restart)
 shame_channel = ""                       # name and shame stopped/disabled users to this discord channel

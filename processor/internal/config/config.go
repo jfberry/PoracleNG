@@ -512,12 +512,14 @@ type AlertLimitsConfig struct {
 	TimingPeriod        int                  `toml:"timing_period"`
 	DMLimit             int                  `toml:"dm_limit"`
 	ChannelLimit        int                  `toml:"channel_limit"`
-	// SummaryLimit caps `questSummary` dispatches per destination per
-	// timing_period independently of DMLimit/ChannelLimit. One fire
-	// counts as one (chunked summaries do not multiply the cost). Lets
-	// operators bound digest volume from `!quest everything summary`
-	// users without affecting their regular alert quota. Default 5.
-	SummaryLimit        int                  `toml:"summary_limit"`
+	// DM/Channel summary limits cap summary-mode dispatches per
+	// destination per timing_period independently of DMLimit /
+	// ChannelLimit. One fire counts as one (chunked summaries do
+	// not multiply the cost). The DM/Channel split mirrors the
+	// alert bucket — channels generally tolerate more throughput
+	// than individual users. Defaults 10 / 40.
+	DMSummaryLimit      int                  `toml:"dm_summary_limit"`
+	ChannelSummaryLimit int                  `toml:"channel_summary_limit"`
 	MaxLimitsBeforeStop int                  `toml:"max_limits_before_stop"`
 	DisableOnStop       bool                 `toml:"disable_on_stop"`
 	ShameChannel        string               `toml:"shame_channel"`
@@ -771,7 +773,8 @@ func Load(baseDir string) (*Config, error) {
 			TimingPeriod:        240,
 			DMLimit:             20,
 			ChannelLimit:        40,
-			SummaryLimit:        5,
+			DMSummaryLimit:      10,
+			ChannelSummaryLimit: 40,
 			MaxLimitsBeforeStop: 10,
 		},
 		Database: DatabaseConfig{
