@@ -30,6 +30,12 @@ type schedulerConfig struct {
 	// Locale is the fallback locale used when a human has no language set
 	// (mirrors the rest of the processor's language fallback).
 	Locale string
+	// BufferMaxAgeSecs is the safety-net upper bound on how long any
+	// buffered entry can live before SweepExpired drops it on the
+	// CreatedAt axis. Catches malformed payloads whose ExpiresAt is
+	// zero, in the far future, or otherwise unreliable. 0 disables.
+	// Sourced from [tracking] quest_summary_buffer_ttl_hours × 3600.
+	BufferMaxAgeSecs int64
 }
 
 // SummaryScheduler wakes at fixed wall-clock minute marks (the same marks
@@ -105,7 +111,7 @@ func (s *SummaryScheduler) loop() {
 			s.tick()
 			tickN++
 			if tickN%schedulerSweepEvery == 0 {
-				removed := s.buffer.SweepExpired(s.nowFunc().Unix())
+				removed := s.buffer.SweepExpired(s.nowFunc().Unix(), s.cfg.BufferMaxAgeSecs)
 				if removed > 0 {
 					log.Infof("summary scheduler: swept %d expired buffered entries", removed)
 				}

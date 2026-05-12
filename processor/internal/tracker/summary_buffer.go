@@ -127,10 +127,19 @@ func (sb *SummaryBuffer) Clear(humanID, alertType string) {
 	}
 }
 
-// SweepExpired drops every entry whose ExpiresAt is strictly less than
-// asOf. Empty buckets/users are removed. Returns the number of entries
-// removed.
-func (sb *SummaryBuffer) SweepExpired(asOf int64) int {
+// SweepExpired drops every entry that has aged out. Two independent
+// conditions trigger eviction:
+//
+//   - q.ExpiresAt < asOf — the normal per-entry expiry the caller sets
+//     at append time (e.g. quests expire at end-of-day local to the
+//     pokestop).
+//   - maxAgeSecs > 0 && q.CreatedAt > 0 && asOf - q.CreatedAt > maxAgeSecs
+//     — a safety-net upper bound on how long any entry can live, used
+//     to evict malformed payloads whose ExpiresAt is zero, far-future,
+//     or otherwise unreliable. Pass 0 to disable this leg.
+//
+// Empty buckets/users are removed. Returns the number of entries removed.
+func (sb *SummaryBuffer) SweepExpired(asOf int64, maxAgeSecs int64) int {
 	sb.mu.Lock()
 	defer sb.mu.Unlock()
 
@@ -138,7 +147,9 @@ func (sb *SummaryBuffer) SweepExpired(asOf int64) int {
 	for humanID, byType := range sb.data {
 		for alertType, bucket := range byType {
 			for key, q := range bucket {
-				if q.ExpiresAt < asOf {
+				expired := q.ExpiresAt < asOf
+				stale := maxAgeSecs > 0 && q.CreatedAt > 0 && asOf-q.CreatedAt > maxAgeSecs
+				if expired || stale {
 					delete(bucket, key)
 					removed++
 				}

@@ -215,7 +215,10 @@ func main() {
 	// not lose entries captured before the toggle.
 	if cfg.Tracking.QuestSummaryEnabled {
 		proc.summaryScheduler = NewSummaryScheduler(
-			schedulerConfig{Locale: cfg.General.Locale},
+			schedulerConfig{
+				Locale:           cfg.General.Locale,
+				BufferMaxAgeSecs: int64(cfg.Tracking.QuestSummaryBufferTTLHours) * 3600,
+			},
 			stateMgr,
 			proc.summaryBuffer,
 			proc.DispatchQuestSummary,

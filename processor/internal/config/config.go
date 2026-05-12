@@ -98,10 +98,13 @@ type TrackingConfig struct {
 	// and saved so that toggling the flag back on does not lose entries
 	// captured before shutdown.
 	QuestSummaryEnabled bool `toml:"quest_summary_enabled"`
-	// QuestSummaryBufferTTLHours is currently advisory. The scheduler
-	// sweeps buffered entries based on each entry's reported ExpiresAt;
-	// this knob is reserved for a future safety-net sweep on CreatedAt
-	// for malformed payloads. Default 24.
+	// QuestSummaryBufferTTLHours caps how long any buffered entry can
+	// live in memory. The scheduler's sweep evicts entries whose
+	// per-entry ExpiresAt has passed (the primary expiry signal); this
+	// TTL is the safety-net axis that also drops entries whose
+	// CreatedAt is older than the configured age, in case the ExpiresAt
+	// is zero/garbage/far-future from a malformed payload. Set 0 to
+	// disable the CreatedAt-axis sweep entirely. Default 24.
 	QuestSummaryBufferTTLHours int `toml:"quest_summary_buffer_ttl_hours"`
 }
 

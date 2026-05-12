@@ -461,7 +461,7 @@ var configSchema = []ConfigSection{
 			{Name: "default_user_tracking_level_cap", Type: "int", Default: 0, Description: "Default PVP tracking level cap for new users (0 = use all configured caps)", HotReload: true},
 			{Name: "pokemon_change_tracking", Type: "bool", Default: true, Description: "Detect post-encounter pokemon changes (form/species/gender/weather-boost) and reply-thread monsterChanged alerts to users with prior messages. When disabled, change events fall through to the regular monster send path.", HotReload: true},
 			{Name: "quest_summary_enabled", Type: "bool", Default: true, Description: "Enable per-user buffered quest summaries (matcher routing, scheduler, grouped render). When disabled, all matched quests dispatch immediately and the summary scheduler is not started.", HotReload: false},
-			{Name: "quest_summary_buffer_ttl_hours", Type: "int", Default: 24, Description: "Advisory safety-net TTL for buffered quest entries. Currently the scheduler sweeps based on each entry's reported expiry; this value is reserved for a future created-at sweep for malformed payloads.", HotReload: true},
+			{Name: "quest_summary_buffer_ttl_hours", Type: "int", Default: 24, Description: "Safety-net upper bound on how long any buffered quest entry can live. The scheduler primarily expires entries on each entry's reported ExpiresAt; this TTL drops entries whose CreatedAt is older than the configured age, catching malformed payloads where ExpiresAt is zero or unreliable. Set 0 to disable the CreatedAt-axis sweep.", HotReload: true},
 		},
 	},
 

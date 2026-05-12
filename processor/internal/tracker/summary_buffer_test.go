@@ -109,7 +109,7 @@ func TestSummaryBuffer_SweepExpired(t *testing.T) {
 	sb.Append("user-1", "quest", BufferedQuest{PokestopID: "fresh", ExpiresAt: 200})
 	sb.Append("user-2", "quest", BufferedQuest{PokestopID: "old3", ExpiresAt: 10})
 
-	removed := sb.SweepExpired(100)
+	removed := sb.SweepExpired(100, 0)
 	if removed != 3 {
 		t.Errorf("SweepExpired returned %d, want 3", removed)
 	}
@@ -126,11 +126,48 @@ func TestSummaryBuffer_SweepExpired(t *testing.T) {
 	// Boundary: ExpiresAt == asOf is NOT removed (strict less-than).
 	boundary := NewSummaryBuffer("")
 	boundary.Append("user-3", "quest", BufferedQuest{PokestopID: "edge", ExpiresAt: 500})
-	if removed := boundary.SweepExpired(500); removed != 0 {
+	if removed := boundary.SweepExpired(500, 0); removed != 0 {
 		t.Errorf("boundary sweep removed %d, want 0", removed)
 	}
 	if got := boundary.List("user-3", "quest"); len(got) != 1 {
 		t.Errorf("boundary entry should remain, got %v", got)
+	}
+}
+
+// TestSummaryBuffer_SweepExpired_MaxAgeSafetyNet covers the CreatedAt
+// axis that catches malformed payloads whose ExpiresAt is zero, in the
+// far future, or otherwise unreliable. Without this, a single bad entry
+// could pin in the buffer forever.
+func TestSummaryBuffer_SweepExpired_MaxAgeSafetyNet(t *testing.T) {
+	sb := NewSummaryBuffer("")
+
+	// Entry whose ExpiresAt is bogus (zero) — the ExpiresAt-axis sweep
+	// would still drop it (0 < asOf for any positive asOf), so make
+	// ExpiresAt far in the future to isolate the CreatedAt axis.
+	sb.Append("user-1", "quest", BufferedQuest{PokestopID: "old-bad", ExpiresAt: 1 << 40, CreatedAt: 1000})
+	sb.Append("user-1", "quest", BufferedQuest{PokestopID: "young-bad", ExpiresAt: 1 << 40, CreatedAt: 9_000})
+	// Entry without a CreatedAt — must never be evicted via the
+	// CreatedAt axis (we don't trust CreatedAt==0 as "very old").
+	sb.Append("user-1", "quest", BufferedQuest{PokestopID: "missing-created", ExpiresAt: 1 << 40, CreatedAt: 0})
+
+	// asOf = 10_000, maxAge = 3600. "old-bad" is 9000s old → evicted.
+	// "young-bad" is 1000s old → kept. "missing-created" has CreatedAt=0,
+	// not evicted on the CreatedAt axis.
+	removed := sb.SweepExpired(10_000, 3_600)
+	if removed != 1 {
+		t.Errorf("max-age sweep removed %d, want 1 (old-bad only)", removed)
+	}
+	got := sb.List("user-1", "quest")
+	if len(got) != 2 {
+		t.Fatalf("after max-age sweep: expected 2 entries, got %d: %+v", len(got), got)
+	}
+
+	// maxAge=0 disables the CreatedAt axis: nothing should be evicted
+	// even though both surviving entries are arbitrarily old.
+	sb2 := NewSummaryBuffer("")
+	sb2.Append("user-1", "quest", BufferedQuest{PokestopID: "ancient", ExpiresAt: 1 << 40, CreatedAt: 1})
+	if removed := sb2.SweepExpired(1 << 30, 0); removed != 0 {
+		t.Errorf("maxAge=0 should disable CreatedAt sweep, got %d removed", removed)
 	}
 }
 

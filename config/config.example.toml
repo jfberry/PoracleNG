@@ -487,9 +487,11 @@ pokemon_change_tracking = true
 # group. Set to false to disable the feature entirely (the scheduler is not
 # started; the buffer is still loaded/saved across restarts).
 quest_summary_enabled = true
-# Advisory safety-net TTL for buffered quest entries (hours). Currently the
-# scheduler relies on each entry's reported expiry; this value is reserved
-# for a future created-at sweep for malformed payloads.
+# Safety-net upper bound on how long any buffered quest entry can live
+# (hours). The scheduler primarily expires entries on each entry's reported
+# ExpiresAt; this TTL drops entries whose CreatedAt is older than the
+# configured age, catching malformed payloads where ExpiresAt is zero or
+# unreliable. Set 0 to disable the CreatedAt-axis sweep.
 quest_summary_buffer_ttl_hours = 24
 
 # ---- Summariser ----
