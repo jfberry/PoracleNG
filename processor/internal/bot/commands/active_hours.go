@@ -31,10 +31,10 @@ import (
 // Single-fire forms (no dash) are parsed by settimeRe instead.
 var rangeRe = regexp.MustCompile(`^([a-zA-Z]+)?:?(\d{1,2})(?::?(\d{2}))?-(\d{1,2})(?::?(\d{2}))?(?:/(\d{1,2}))?$`)
 
-// settimeRe matches the single-fire settime form: <dayPrefix>[:]HH[:MM].
-// Prefix is required; without a dash the regex falls through with no match
-// and the caller reports a usage error.
-var settimeRe = regexp.MustCompile(`^([a-zA-Z]+?):?(\d{1,2}):?(\d{2})?$`)
+// settimeRe matches the single-fire settime form: [<dayPrefix>[:]]HH[:MM].
+// Day prefix is optional — without it the parser defaults to "every"
+// (all seven days), matching the range form's behaviour.
+var settimeRe = regexp.MustCompile(`^([a-zA-Z]+)?:?(\d{1,2}):?(\d{2})?$`)
 
 // ParseSettimeArg parses one settime token (e.g. "mon7:30",
 // "weekday:9-17/2", "9-17") into the discrete-per-day ActiveHourEntry
@@ -104,6 +104,9 @@ func ParseSettimeArg(arg string, dayPrefixes map[string][]int) ([]db.ActiveHourE
 	// Fall through to single-fire form.
 	if m := settimeRe.FindStringSubmatch(arg); m != nil {
 		prefix := m[1]
+		if prefix == "" {
+			prefix = "every"
+		}
 		days, ok := dayPrefixes[prefix]
 		if !ok {
 			return nil, fmt.Errorf("unknown day prefix %q", prefix)

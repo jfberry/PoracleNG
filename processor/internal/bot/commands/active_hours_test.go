@@ -39,6 +39,18 @@ func TestParseSettime_SingleFire(t *testing.T) {
 			in:   "every8",
 			want: []db.ActiveHourEntry{{Day: 1, Hours: 8}, {Day: 2, Hours: 8}, {Day: 3, Hours: 8}, {Day: 4, Hours: 8}, {Day: 5, Hours: 8}, {Day: 6, Hours: 8}, {Day: 7, Hours: 8}},
 		},
+		{
+			// Prefixless single-fire: parser substitutes "every" so
+			// "8:00" is equivalent to "every8:00". Symmetric with the
+			// range form's prefixless behaviour ("9-17/2" ≡ "every:9-17/2").
+			in:   "8:00",
+			want: []db.ActiveHourEntry{{Day: 1, Hours: 8}, {Day: 2, Hours: 8}, {Day: 3, Hours: 8}, {Day: 4, Hours: 8}, {Day: 5, Hours: 8}, {Day: 6, Hours: 8}, {Day: 7, Hours: 8}},
+		},
+		{
+			// Bare digit also valid — same as "every8".
+			in:   "8",
+			want: []db.ActiveHourEntry{{Day: 1, Hours: 8}, {Day: 2, Hours: 8}, {Day: 3, Hours: 8}, {Day: 4, Hours: 8}, {Day: 5, Hours: 8}, {Day: 6, Hours: 8}, {Day: 7, Hours: 8}},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {
