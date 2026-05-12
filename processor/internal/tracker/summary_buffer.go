@@ -31,6 +31,13 @@ type BufferedQuest struct {
 	Payload    []byte `json:"payload"`
 	ExpiresAt  int64  `json:"expires_at"`
 	CreatedAt  int64  `json:"created_at"`
+	// Clean is the source tracking rule's clean-flag bitmask, carried
+	// through so the summary dispatch can OR these together and set the
+	// resulting summary message's clean bit accordingly. The TTH used
+	// for clean-deletion is derived from the LATEST ExpiresAt across the
+	// dispatched chunk so the message lives at least as long as the
+	// longest constituent quest.
+	Clean int `json:"clean,omitempty"`
 }
 
 // bufferKey deduplicates entries within a (humanID, alertType) bucket.

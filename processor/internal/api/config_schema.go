@@ -427,6 +427,7 @@ var configSchema = []ConfigSection{
 			{Name: "timing_period", Type: "int", Default: 240, Description: "Seconds over which alert rate limits are calculated", HotReload: true},
 			{Name: "dm_limit", Type: "int", Default: 20, Description: "Maximum messages a user can receive in one timing period", HotReload: true},
 			{Name: "channel_limit", Type: "int", Default: 40, Description: "Maximum messages a channel/group can receive in one timing period", HotReload: true},
+			{Name: "summary_limit", Type: "int", Default: 5, Description: "Maximum questSummary dispatches per destination in one timing period. Separate bucket from dm_limit/channel_limit — a user near their alert limit can still receive scheduled summaries, and a !quest everything summary user can't blow past the alert cap with digest messages. 1 fire = 1 against the bucket regardless of chunking.", HotReload: true},
 			{Name: "max_limits_before_stop", Type: "int", Default: 10, Description: "Times a user can hit the rate limit within 24 hours before being stopped", HotReload: true},
 			{Name: "disable_on_stop", Type: "bool", Default: false, Description: "Admin-disable stopped users (requires admin to restart) instead of soft stop", HotReload: true},
 			{Name: "shame_channel", Type: "string", Default: "", Description: "Discord channel ID to publicly log stopped/disabled users", Resolve: "discord:channel", HotReload: true},

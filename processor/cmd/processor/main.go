@@ -1199,6 +1199,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		TimingPeriod:        cfg.AlertLimits.TimingPeriod,
 		DMLimit:             cfg.AlertLimits.DMLimit,
 		ChannelLimit:        cfg.AlertLimits.ChannelLimit,
+		SummaryLimit:        cfg.AlertLimits.SummaryLimit,
 		MaxLimitsBeforeStop: cfg.AlertLimits.MaxLimitsBeforeStop,
 		Overrides:           overrides,
 	})

@@ -582,7 +582,7 @@ The static map is built via the `questSummary` tile type. Like every other tile 
 
 When a single reward group would render to a Discord embed bigger than the platform allows (description length, field count, or total embed size), the dispatcher splits the group into multiple messages. Each message gets its own `chunk`/`chunks`/`quests`/`staticMap`; `count` stays at the full group total so the header can read e.g. "60× Rare Candy (1/3)". A single-chunk group has `chunks == 1` — guard chunk-suffix output with `{{#if (gt chunks 1)}}…{{/if}}`.
 
-`questSummary` messages are always fresh sends — edit-mode and reply-threading don't apply, but the source rule's `clean` bit propagates so TTH-based deletion still works.
+`questSummary` messages are always fresh sends — edit-mode and reply-threading don't apply. The source rule's `clean` bit is OR'd across the constituent rules contributing to each dispatched chunk, so the summary message inherits clean-deletion if any rule had it enabled. The TTH used for clean-deletion is the latest `ExpiresAt` across the chunk, so the message lives at least as long as the longest constituent quest.
 
 ---
 

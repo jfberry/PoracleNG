@@ -310,6 +310,73 @@ func TestIsBlockedRespectsWindowExpiry(t *testing.T) {
 	}
 }
 
+// TestSummaryBucket_SeparateFromAlertBucket pins the design intent:
+// the summary bucket and the alert bucket count independently, so a
+// user near (or past) their alert cap can still receive summaries up
+// to summary_limit, and vice versa.
+func TestSummaryBucket_SeparateFromAlertBucket(t *testing.T) {
+	l := New(Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5, SummaryLimit: 3})
+	defer l.Close()
+
+	// Burn the alert bucket past its limit.
+	for range 3 {
+		_ = l.Check("user1", "discord:user")
+	}
+	if !l.IsBlocked("user1", "discord:user") {
+		t.Fatal("alert bucket should be over limit after 3 Check calls (DM limit 2)")
+	}
+
+	// Summary bucket should still allow up to summary_limit (3) — the
+	// alert bucket's saturation must not bleed into it.
+	for i := range 3 {
+		r := l.CheckSummary("user1", "discord:user")
+		if !r.Allowed {
+			t.Fatalf("summary dispatch %d should be allowed despite alert bucket being saturated", i+1)
+		}
+	}
+
+	// 4th summary dispatch is the first over-limit one — JustBreached
+	// fires exactly once per window so the dispatch path can notify.
+	r := l.CheckSummary("user1", "discord:user")
+	if r.Allowed {
+		t.Fatal("4th summary dispatch should not be allowed (over limit 3)")
+	}
+	if !r.JustBreached {
+		t.Fatal("4th summary dispatch should set JustBreached for the one-time notification")
+	}
+	if r.Banned {
+		t.Fatal("summary bucket should never set Banned — no ban path for opt-in digests")
+	}
+
+	// 5th over-limit dispatch must NOT set JustBreached again (one
+	// notification per window).
+	r = l.CheckSummary("user1", "discord:user")
+	if r.JustBreached {
+		t.Fatal("subsequent over-limit calls in the same window should not re-trigger JustBreached")
+	}
+}
+
+// TestSummaryBucket_DefaultLimit confirms the New() default is 5 when
+// the operator leaves the field at zero.
+func TestSummaryBucket_DefaultLimit(t *testing.T) {
+	l := New(Config{TimingPeriod: 60}) // SummaryLimit not set
+	defer l.Close()
+
+	for i := range 5 {
+		r := l.CheckSummary("user1", "discord:user")
+		if !r.Allowed {
+			t.Fatalf("dispatch %d should be allowed under default summary_limit=5", i+1)
+		}
+		if r.Limit != 5 {
+			t.Errorf("result.Limit = %d, want 5 (default)", r.Limit)
+		}
+	}
+	r := l.CheckSummary("user1", "discord:user")
+	if r.Allowed {
+		t.Fatal("6th dispatch should be over default limit 5")
+	}
+}
+
 func TestTelegramGroupGetsChannelLimit(t *testing.T) {
 	l := New(Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5})
 	defer l.Close()

@@ -233,6 +233,10 @@ func (ps *ProcessorService) bufferQuestMatches(
 			Payload:    payload,
 			ExpiresAt:  expiresAt,
 			CreatedAt:  now,
+			// Capture the matching rule's clean bitmask so DispatchQuestSummary
+			// can OR these across the chunk and propagate clean-deletion to
+			// the summary message.
+			Clean: u.Clean,
 		})
 	}
 }

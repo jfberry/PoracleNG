@@ -93,6 +93,21 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		return
 	}
 
+	// Aggregate clean-flag bitmask + latest expiry across the fresh
+	// entries. The summary message inherits clean-deletion semantics
+	// from any constituent rule that set the bit (OR), and lives until
+	// the longest-running quest in the digest expires (max). Without
+	// this, summary messages either never auto-deleted or deleted too
+	// early relative to the quests they describe.
+	aggregatedClean := 0
+	latestExpiresAt := int64(0)
+	for _, r := range fresh {
+		aggregatedClean |= r.Clean
+		if r.ExpiresAt > latestExpiresAt {
+			latestExpiresAt = r.ExpiresAt
+		}
+	}
+
 	// Synthesise the recipient set for the renderer. The summary
 	// schedule belongs to the human, so the only destination is the
 	// human's own row.
@@ -103,9 +118,7 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		Language:  lang,
 		Latitude:  human.Latitude,
 		Longitude: human.Longitude,
-		// Template/Clean/Ping default to zero values; the user's
-		// summary-bucket clean bit is intentionally not propagated to
-		// the summary message (the summary itself is a fresh send).
+		Clean:     aggregatedClean,
 	}}
 
 	// External-validator gate at delivery time. Immediate quests run
@@ -121,6 +134,24 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 	matched = ps.filterValidation("quest", fresh[0].Payload, nil, matched)
 	if len(matched) == 0 {
 		return
+	}
+
+	// Summary rate-limit check — separate bucket from the alert limiter
+	// (see CLAUDE.md "Rate Limiting"). One fire = one against the bucket,
+	// regardless of how many chunks the digest produces. If over the cap,
+	// drop the whole dispatch (the buffer is already cleared by the
+	// defer, so the quests are gone from the user's view either way) and
+	// fire a one-time breach notification so they know.
+	if ps.rateLimiter != nil {
+		result := ps.rateLimiter.CheckSummary(human.ID, human.Type)
+		if !result.Allowed {
+			if result.JustBreached {
+				ps.notifySummaryRateBreach(human.ID, human.Type, human.Name, lang, result.Limit)
+			}
+			log.Infof("summary dispatch: %s over summary limit (%d/window=%ds) — dropping digest of %d entries",
+				human.ID, result.Limit, ps.cfg.AlertLimits.TimingPeriod, len(fresh))
+			return
+		}
 	}
 
 	if ps.dtsRenderer == nil {
@@ -159,6 +190,16 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 				continue
 			}
 			for _, j := range jobs {
+				// TTH on a summary message tracks the LATEST ExpiresAt
+				// across the dispatched chunk, so clean-deletion fires
+				// when the longest-running constituent quest expires.
+				// Per-job TTH from the renderer is ignored — the summary
+				// has no single "until" of its own; it inherits from the
+				// quests it describes.
+				ttlSecs := latestExpiresAt - time.Now().Unix()
+				if ttlSecs < 0 {
+					ttlSecs = 0
+				}
 				// DispatchBypass: the user opted into summary mode
 				// explicitly (via the `summary` keyword on `!quest`) and
 				// is expecting a scheduled digest message. Silently
@@ -171,7 +212,7 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 					Target:       j.Target,
 					Type:         j.Type,
 					Message:      j.Message,
-					TTH:          tthFromMap(j.TTH),
+					TTH:          delivery.TTH{Seconds: int(ttlSecs)},
 					Clean:        j.Clean,
 					Name:         j.Name,
 					LogReference: j.LogReference,
