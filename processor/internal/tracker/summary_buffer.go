@@ -101,6 +101,22 @@ func (sb *SummaryBuffer) Append(humanID, alertType string, q BufferedQuest) {
 	}] = q
 }
 
+// Size returns the total number of entries across every (humanID,
+// alertType) bucket. Used by the status line so operators can see at
+// a glance how many summary deliveries are queued for the next fire
+// window.
+func (sb *SummaryBuffer) Size() int {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	n := 0
+	for _, byType := range sb.data {
+		for _, bucket := range byType {
+			n += len(bucket)
+		}
+	}
+	return n
+}
+
 // List returns a snapshot copy of every entry in the (humanID,
 // alertType) bucket. Order is unspecified.
 func (sb *SummaryBuffer) List(humanID, alertType string) []BufferedQuest {

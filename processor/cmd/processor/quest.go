@@ -238,5 +238,6 @@ func (ps *ProcessorService) bufferQuestMatches(
 			// the summary message.
 			Clean: u.Clean,
 		})
+		metrics.IntervalSummaryBuffered.Add(1)
 	}
 }
