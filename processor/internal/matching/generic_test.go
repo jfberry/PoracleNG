@@ -3,8 +3,12 @@ package matching
 import (
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
 func TestValidateHumansGenericBasic(t *testing.T) {
@@ -297,5 +301,34 @@ func TestValidateHumansGenericMultipleAreas(t *testing.T) {
 	)
 	if len(result) != 1 {
 		t.Errorf("Expected 1 for matching area, got %d", len(result))
+	}
+}
+
+func TestValidateHumansGeneric_RecordsHaversineCount(t *testing.T) {
+	metrics.MatchingHaversines.Reset()
+	humans := map[string]*db.Human{
+		"u1": {ID: "u1", Enabled: true, Area: []string{"belgium"}, Latitude: 50.5, Longitude: 4.5, CurrentProfileNo: 1},
+		"u2": {ID: "u2", Enabled: true, Area: []string{"belgium"}, Latitude: 50.6, Longitude: 4.6, CurrentProfileNo: 1},
+	}
+	trackings := []trackingUserData{
+		{HumanID: "u1", ProfileNo: 1, Distance: 0},     // area-based — haversine for output Distance
+		{HumanID: "u2", ProfileNo: 1, Distance: 10000}, // distance-based — haversine for filter AND output (cached)
+	}
+	matchedAreas := map[string]bool{"belgium": true}
+
+	ValidateHumansGeneric(trackings, 50.5, 4.5, matchedAreas, false, humans, "lure")
+
+	// Expect 2 haversines: one per matched user (area path computes for
+	// output; distance path computes for filter, cached for output).
+	h, err := metrics.MatchingHaversines.GetMetricWithLabelValues("lure")
+	if err != nil {
+		t.Fatalf("get metric: %v", err)
+	}
+	var out dto.Metric
+	if err := h.(prometheus.Histogram).Write(&out); err != nil {
+		t.Fatalf("write metric: %v", err)
+	}
+	if got := out.GetHistogram().GetSampleSum(); got != 2 {
+		t.Errorf("haversine sample sum = %v, want 2", got)
 	}
 }
