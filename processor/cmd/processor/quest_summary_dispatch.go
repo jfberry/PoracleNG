@@ -73,8 +73,22 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 	// users see groups in the order their quests arrived. Form is part
 	// of the key for pokemon-encounter rewards so different Spinda
 	// forms (etc.) don't share an icon / rewardName / map.
+	//
+	// groupMeta tracks per-group clean-flag bitmask + latest expiry so
+	// each summary message gets a TTH and clean-deletion semantics
+	// derived from JUST its own constituent quests (not the whole
+	// dispatch). A "summarised block" — the single message, or the
+	// chunked set of messages from one reward group delivered together
+	// — is the right scope for these values: a Stardust digest must
+	// not inherit a Rare Candy digest's later expiry just because they
+	// happened to fire in the same dispatch.
 	type groupKey struct{ Type, Reward, Form int }
+	type groupSummary struct {
+		clean           int
+		latestExpiresAt int64
+	}
 	groups := map[groupKey][]map[string]any{}
+	groupMeta := map[groupKey]groupSummary{}
 	order := []groupKey{}
 
 	for _, r := range fresh {
@@ -88,39 +102,22 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 			order = append(order, k)
 		}
 		groups[k] = append(groups[k], view)
+
+		// Fold the entry's clean bit + ExpiresAt into the group's
+		// running summary. The summary message will OR these bits
+		// (any constituent rule with clean=1 makes the digest
+		// auto-deletable) and use the max ExpiresAt for its TTH.
+		m := groupMeta[k]
+		m.clean |= r.Clean
+		if r.ExpiresAt > m.latestExpiresAt {
+			m.latestExpiresAt = r.ExpiresAt
+		}
+		groupMeta[k] = m
 	}
 
 	if len(groups) == 0 {
 		return
 	}
-
-	// Aggregate clean-flag bitmask + latest expiry across the fresh
-	// entries. The summary message inherits clean-deletion semantics
-	// from any constituent rule that set the bit (OR), and lives until
-	// the longest-running quest in the digest expires (max). Without
-	// this, summary messages either never auto-deleted or deleted too
-	// early relative to the quests they describe.
-	aggregatedClean := 0
-	latestExpiresAt := int64(0)
-	for _, r := range fresh {
-		aggregatedClean |= r.Clean
-		if r.ExpiresAt > latestExpiresAt {
-			latestExpiresAt = r.ExpiresAt
-		}
-	}
-
-	// Synthesise the recipient set for the renderer. The summary
-	// schedule belongs to the human, so the only destination is the
-	// human's own row.
-	matched := []webhook.MatchedUser{{
-		ID:        human.ID,
-		Type:      human.Type,
-		Name:      human.Name,
-		Language:  lang,
-		Latitude:  human.Latitude,
-		Longitude: human.Longitude,
-		Clean:     aggregatedClean,
-	}}
 
 	// External-validator gate at delivery time. Immediate quests run
 	// filterValidation in ProcessQuest; the buffered path defers it to
@@ -131,9 +128,18 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 	// fidelity isn't preserved here — operators with per-quest validator
 	// logic should validate at match time instead). matchedAreas is nil:
 	// the summary aggregates quests from many pokestops, so there's no
-	// single area set to validate against.
-	matched = ps.filterValidation("quest", fresh[0].Payload, nil, matched)
-	if len(matched) == 0 {
+	// single area set to validate against. Clean is irrelevant at the
+	// validation step; the per-group recipient with the real Clean bit
+	// is built inside the dispatch loop below.
+	validateUsers := []webhook.MatchedUser{{
+		ID:        human.ID,
+		Type:      human.Type,
+		Name:      human.Name,
+		Language:  lang,
+		Latitude:  human.Latitude,
+		Longitude: human.Longitude,
+	}}
+	if allowed := ps.filterValidation("quest", fresh[0].Payload, nil, validateUsers); len(allowed) == 0 {
 		return
 	}
 
@@ -164,6 +170,28 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 	maxPerMessage := ps.cfg.Summariser.MaxPerMessage
 	for _, k := range order {
 		all := groups[k]
+		meta := groupMeta[k]
+
+		// Recipient is rebuilt per group so each summary message
+		// inherits clean-deletion semantics from its OWN
+		// constituent rules, not from rules in other groups.
+		// Chunks of a single group share the same Clean (they're
+		// a single logical message split for size).
+		matched := []webhook.MatchedUser{{
+			ID:        human.ID,
+			Type:      human.Type,
+			Name:      human.Name,
+			Language:  lang,
+			Latitude:  human.Latitude,
+			Longitude: human.Longitude,
+			Clean:     meta.clean,
+		}}
+
+		// TTH = (max ExpiresAt across this group) - now. Chunks
+		// of the group share the same TTH since they describe the
+		// same set of quests, just split across messages for size.
+		ttlSecs := max(meta.latestExpiresAt-time.Now().Unix(), 0)
+
 		for _, chunk := range chunkPerMessage(all, maxPerMessage) {
 			view := dts.BuildQuestSummaryView(dts.QuestSummaryGroup{
 				RewardType: k.Type,
@@ -191,13 +219,10 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 				continue
 			}
 			for _, j := range jobs {
-				// TTH on a summary message tracks the LATEST ExpiresAt
-				// across the dispatched chunk, so clean-deletion fires
-				// when the longest-running constituent quest expires.
-				// Per-job TTH from the renderer is ignored — the summary
-				// has no single "until" of its own; it inherits from the
-				// quests it describes.
-				ttlSecs := max(latestExpiresAt-time.Now().Unix(), 0)
+				// Per-job TTH from the renderer is ignored — the
+				// summary has no single "until" of its own; it
+				// inherits the latest expiry from the quests in
+				// THIS group (computed above as ttlSecs).
 				// DispatchBypass: the alert bucket is skipped because
 				// the user opted into summary mode explicitly (via the
 				// `summary` keyword on `!quest`) and is expecting a
