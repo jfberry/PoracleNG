@@ -198,14 +198,14 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 				// has no single "until" of its own; it inherits from the
 				// quests it describes.
 				ttlSecs := max(latestExpiresAt-time.Now().Unix(), 0)
-				// DispatchBypass: the user opted into summary mode
-				// explicitly (via the `summary` keyword on `!quest`) and
-				// is expecting a scheduled digest message. Silently
-				// dropping it at the limiter would be more confusing
-				// than letting it through, and the buffer is naturally
-				// bounded by the user's tracked-quest count so the
-				// throughput risk is small. See the BypassRateLimit
-				// section in CLAUDE.md for the documented exemption.
+				// DispatchBypass: the alert bucket is skipped because
+				// the user opted into summary mode explicitly (via the
+				// `summary` keyword on `!quest`) and is expecting a
+				// scheduled digest message. The separate `CheckSummary`
+				// call above already gated this dispatch against the
+				// summary bucket. See the "Rate Limiting" section in
+				// CLAUDE.md for the documented exemption (the
+				// `BypassRateLimit=true` and "Summary bucket" bullets).
 				ps.dispatcher.DispatchBypass(&delivery.Job{
 					Target:       j.Target,
 					Type:         j.Type,

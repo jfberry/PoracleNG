@@ -19,9 +19,10 @@ import (
 //   - `!summary quest cleartime`    — remove the schedule
 //   - `!summary quest now`          — force-dispatch the buffer immediately
 //
-// The settime parser reuses `buildDayPrefixMap` + `settimeRe` from the
-// profile command so users learn one syntax (`mon07:30`, `weekday07:30`,
-// `weekend10:00`).
+// The settime parser is the shared `ParseSettimeArg` helper (alongside
+// `buildDayPrefixMap`) so users learn one syntax across the bot —
+// single-fire (`mon07:30`, `weekday07:30`, `weekend10:00`) and the
+// range+step form (`weekday:9-17/2`) both work here.
 type SummaryCommand struct{}
 
 func (c *SummaryCommand) Name() string      { return "cmd.summary" }
@@ -127,7 +128,7 @@ func (c *SummaryCommand) setTime(ctx *bot.CommandContext, alertType string, args
 	for _, arg := range args {
 		parsed, err := ParseSettimeArg(arg, dayPrefixes)
 		if err != nil {
-			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.summary.settime_invalid", arg, err.Error())}}
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.summary.settime_invalid", arg, SettimeErrorMessage(tr, err))}}
 		}
 		entries = append(entries, parsed...)
 	}

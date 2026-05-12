@@ -235,7 +235,7 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 		if err != nil {
 			// Matched a known form (range) but failed validation
 			// — surface the reason instead of silently dropping.
-			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", arg, err.Error())}}
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", arg, SettimeErrorMessage(tr, err))}}
 		}
 		entries = append(entries, parsed...)
 	}
