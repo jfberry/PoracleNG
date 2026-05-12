@@ -122,9 +122,7 @@ func Cleanup(baseDir string, retention time.Duration) (int, error) {
 func StartCleanupSweeper(ctx context.Context, baseDir string, retention time.Duration) func() {
 	derived, cancel := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		runOnce := func() {
 			n, err := Cleanup(baseDir, retention)
 			if err != nil {
@@ -145,7 +143,7 @@ func StartCleanupSweeper(ctx context.Context, baseDir string, retention time.Dur
 				runOnce()
 			}
 		}
-	}()
+	})
 	return func() {
 		cancel()
 		wg.Wait()

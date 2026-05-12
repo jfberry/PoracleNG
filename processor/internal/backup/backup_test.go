@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,8 +123,7 @@ func TestCleanup_PreservesNestedTree(t *testing.T) {
 
 func TestStartCleanupSweeper_StopsCleanly(t *testing.T) {
 	dir := t.TempDir()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	stop := StartCleanupSweeper(ctx, dir, 7*24*time.Hour)
 
 	// stop is supposed to cancel + wait. Run it in a goroutine and assert

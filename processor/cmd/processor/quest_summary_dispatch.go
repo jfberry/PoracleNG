@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -196,10 +197,7 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 				// Per-job TTH from the renderer is ignored — the summary
 				// has no single "until" of its own; it inherits from the
 				// quests it describes.
-				ttlSecs := latestExpiresAt - time.Now().Unix()
-				if ttlSecs < 0 {
-					ttlSecs = 0
-				}
+				ttlSecs := max(latestExpiresAt-time.Now().Unix(), 0)
 				// DispatchBypass: the user opted into summary mode
 				// explicitly (via the `summary` keyword on `!quest`) and
 				// is expecting a scheduled digest message. Silently
@@ -248,10 +246,7 @@ func chunkPerMessage(entries []map[string]any, size int) []summaryChunk {
 	total := (len(entries) + size - 1) / size
 	out := make([]summaryChunk, 0, total)
 	for i := 0; i < len(entries); i += size {
-		end := i + size
-		if end > len(entries) {
-			end = len(entries)
-		}
+		end := min(i+size, len(entries))
 		out = append(out, summaryChunk{
 			entries: entries[i:end],
 			index:   len(out) + 1,
@@ -298,12 +293,8 @@ func (ps *ProcessorService) questEnrichOne(raw []byte, lang string) map[string]a
 	// entries win on conflict (mirrors the LayeredView priority for
 	// regular quest rendering).
 	out := make(map[string]any, len(base)+len(perLang)+4)
-	for k, v := range base {
-		out[k] = v
-	}
-	for k, v := range perLang {
-		out[k] = v
-	}
+	maps.Copy(out, base)
+	maps.Copy(out, perLang)
 
 	// Preserve original webhook fields the regular quest renderer would
 	// expose via the LayeredView's webhook layer — pokestopName /

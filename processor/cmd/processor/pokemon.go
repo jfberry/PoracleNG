@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -466,12 +467,8 @@ func (ps *ProcessorService) buildPerLanguageOriginal(prior *webhook.PokemonWebho
 	for _, lang := range distinctLanguages(users, ps.cfg.General.Locale) {
 		perLang := ps.enricher.PokemonTranslate(base, prior, lang)
 		merged := make(map[string]any, len(base)+len(perLang))
-		for k, v := range base {
-			merged[k] = v
-		}
-		for k, v := range perLang {
-			merged[k] = v
-		}
+		maps.Copy(merged, base)
+		maps.Copy(merged, perLang)
 		out[lang] = merged
 	}
 	return out

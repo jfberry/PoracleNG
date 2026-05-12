@@ -507,14 +507,12 @@ func TestTileGate_ConcurrentReadAfterCloseNoRace(t *testing.T) {
 	var wg sync.WaitGroup
 	urls := make(chan string, readers)
 	imgs := make(chan []byte, readers)
-	for i := 0; i < readers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range readers {
+		wg.Go(func() {
 			<-gate.ready
 			urls <- enrichmentMap["staticMap"].(string)
 			imgs <- gate.bytes
-		}()
+		})
 	}
 	wg.Wait()
 	close(urls)
