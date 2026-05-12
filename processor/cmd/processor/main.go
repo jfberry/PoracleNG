@@ -699,9 +699,13 @@ func main() {
 				metrics.RenderQueueDepth.Set(float64(depth))
 			}
 			// Summary buffer state: how many entries are currently
-			// held awaiting the next scheduled dispatch.
+			// held awaiting the next scheduled dispatch. The same value
+			// is exposed as the SummaryBufferedTotal Prometheus gauge so
+			// it can be charted/alerted on without scraping log lines.
 			if proc.summaryBuffer != nil {
-				statusParts = append(statusParts, fmt.Sprintf("Summary: %d buffered", proc.summaryBuffer.Size()))
+				bufSize := proc.summaryBuffer.Size()
+				statusParts = append(statusParts, fmt.Sprintf("Summary: %d buffered", bufSize))
+				metrics.SummaryBufferedTotal.Set(float64(bufSize))
 			}
 			if proc.dispatcher != nil {
 				statusParts = append(statusParts, fmt.Sprintf("Delivery: Discord:%d+%d Telegram:%d Tracked:%d RateLimited:%d",
