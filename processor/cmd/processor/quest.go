@@ -66,9 +66,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
 		matched, matchedAreas := ps.questMatcher.Match(data, st)
-		metrics.MatchingDuration.WithLabelValues("quest").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("quest", raw, matchedAreas, matched)
 

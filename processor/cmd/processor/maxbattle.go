@@ -70,9 +70,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
 		matched, matchedAreas := ps.maxbattleMatcher.Match(data, st)
-		metrics.MatchingDuration.WithLabelValues("maxbattle").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("max_battle", raw, matchedAreas, matched)
 

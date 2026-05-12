@@ -73,7 +73,6 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		var matched []webhook.MatchedUser
 		var matchedAreas []webhook.MatchedArea
 
-		matchStart := time.Now()
 		if raid.PokemonID > 0 {
 			// Raid with boss
 			raidData := &matching.RaidData{
@@ -102,7 +101,6 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			}
 			matched, matchedAreas = ps.raidMatcher.MatchEgg(eggData, st)
 		}
-		metrics.MatchingDuration.WithLabelValues("raid").Observe(time.Since(matchStart).Seconds())
 
 		// Filter by rate limit
 		matched = ps.filterBlocked(matched)
