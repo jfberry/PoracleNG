@@ -310,6 +310,20 @@ Reconciliation syncs Discord role membership with Poracle user registration. Run
 - `[general] role_check_mode = "disable-user"` for actual removal (default `"ignore"` does nothing)
 - Discord bot must have "Server Members Intent" enabled in Developer Portal
 
+### Split-bot operation (`command_token`)
+
+By default a single Discord bot token (the first entry in `[discord] token`) drives both halves of the system: outbound message delivery (REST) AND the gateway side (commands, reconciliation, role management). Setting `[discord] command_token = "..."` splits these onto separate bots — `token` handles delivery, `command_token` handles the gateway.
+
+Token selection lives in `DiscordConfig.DiscordGatewayToken()` (`internal/config/config.go`): returns `command_token` when set, otherwise falls back to `token[0]`. The REST delivery side (`internal/delivery/discord.go`) keeps using the `token` array — it doesn't know about `command_token`.
+
+Startup failures are asymmetric on purpose:
+- Single-bot mode (`command_token` empty): bad delivery token → log-and-continue (existing behaviour; alerts side may still work via a later token in the array, commands may recover at next reload).
+- Split-bot mode (`command_token` non-empty): bad gateway bot → `log.Fatalf`. The operator explicitly asked for a split, so silently falling back to single-bot mode would hide the misconfiguration (typo, revoked token, missing intents).
+
+The `onMessageCreate` filter in `internal/discordbot/bot.go` ignores any message whose author is a bot, which keeps the command parser from re-processing the alerts bot's own outbound messages. Operators should NOT add the alerts bot's user ID to `[discord] admins` — the bot-author filter has an "unless admin" carve-out that would let it through.
+
+Operator-facing setup notes (Developer Portal, intents, permissions, invite flow) live in `README.md`.
+
 ### Picker-managed threads
 
 `!autocreate` can create private threads under a master text channel and post a button-driven picker. Each thread is registered as its own `discord:thread` Poracle human and runs its configured `commands` block at creation time, so it has tracking rules from the moment it exists. Button `custom_id`s are stateless (`poracle:thread:<masterID>:<threadID>:join`), so click handling survives bot restarts. The master→threads map is cached at `config/.cache/autocreate-threads.json`. End-user reference for the JSON format: [AUTOCREATE.md](AUTOCREATE.md).

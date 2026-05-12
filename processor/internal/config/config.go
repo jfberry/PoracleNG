@@ -203,8 +203,21 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Enabled                      bool                    `toml:"enabled"` // false = disable bot even if token is set
-	Token                        any                     `toml:"token"`   // string or []string
+	Enabled bool `toml:"enabled"` // false = disable bot even if token is set
+	// Token is the bot token (or list of tokens) used by the REST
+	// delivery path: DM creation, channel sends, thread sends, edits,
+	// TTH-deletes. When CommandToken is empty this token also drives
+	// the gateway side (discordgo connection + command handling +
+	// reconciliation), preserving single-bot operation.
+	Token any `toml:"token"` // string or []string
+	// CommandToken, when set, splits the bot in two: this token runs
+	// the gateway side (commands, reconciliation, role management)
+	// while Token continues to handle all outbound message delivery.
+	// The two bots can run side by side in the same guilds — each
+	// needs its own invite + permission grants. Empty by default
+	// (single-bot operation). See CLAUDE.md "Discord Reconciliation"
+	// for the rationale + operator setup notes.
+	CommandToken                 string                  `toml:"command_token"`
 	Prefix                       string                  `toml:"prefix"`
 	Activity                     string                  `toml:"activity"` // bot activity/status text
 	Channels                     []string                `toml:"channels"` // registration channel IDs
@@ -264,8 +277,26 @@ func buildDelegatedAdmin(entries []DelegatedAdminEntry) map[string][]string {
 }
 
 // DiscordTokens returns the discord tokens as a string slice.
+// These drive the REST delivery path (DM/channel/thread sends, edits,
+// TTH-deletes) and the gateway side too when CommandToken is empty.
 func (c DiscordConfig) DiscordTokens() []string {
 	return tomlTokens(c.Token)
+}
+
+// DiscordGatewayToken returns the bot token used for the discordgo
+// gateway connection: command handling, reconciliation, role
+// management. Falls back to the first delivery token when
+// CommandToken is empty (single-bot operation, the historic
+// default). Returns "" when no token at all is configured — callers
+// should treat that as "Discord disabled".
+func (c DiscordConfig) DiscordGatewayToken() string {
+	if c.CommandToken != "" {
+		return c.CommandToken
+	}
+	if t := tomlTokens(c.Token); len(t) > 0 {
+		return t[0]
+	}
+	return ""
 }
 
 // RoleSubscriptionMap converts the [[discord.role_subscriptions]] TOML array

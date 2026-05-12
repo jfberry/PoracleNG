@@ -758,15 +758,35 @@ func main() {
 		Scanner:            proc.scanner,
 	}
 
-	discordTokens := cfg.Discord.DiscordTokens()
-	if cfg.Discord.Enabled && len(discordTokens) > 0 && discordTokens[0] != "" {
+	gatewayToken := cfg.Discord.DiscordGatewayToken()
+	if cfg.Discord.Enabled && gatewayToken != "" {
 		deps := sharedBotDeps
 		deps.Parser = cmdParser
+		// Log which side of the split we're on so operators can
+		// confirm their command_token is being picked up. Mask the
+		// token itself (first 8 chars + ellipsis is enough to
+		// distinguish, no full secret in logs).
+		mode := "single-bot"
+		if cfg.Discord.CommandToken != "" {
+			mode = "split (using [discord] command_token)"
+		}
+		log.Infof("Discord bot starting in %s mode", mode)
 		dbot, err := discordbot.New(discordbot.Config{
-			Token:   discordTokens[0],
+			Token:   gatewayToken,
 			BotDeps: deps,
 		})
 		if err != nil {
+			// When command_token is set, treat a gateway failure as
+			// fatal: the operator explicitly configured a split-bot
+			// setup, and silently falling back to "warn and continue"
+			// would hide a real misconfiguration (typo, revoked
+			// token) behind seemingly-working alerts. The historic
+			// behaviour (warn-and-continue) is preserved for the
+			// single-bot case where the delivery side can still work
+			// even with a broken gateway.
+			if cfg.Discord.CommandToken != "" {
+				log.Fatalf("Discord command_token failed to start the gateway bot: %v — fix the token or unset [discord] command_token to fall back to single-bot operation", err)
+			}
 			log.Warnf("Discord bot failed to start: %v", err)
 		} else {
 			discordBot = dbot

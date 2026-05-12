@@ -233,8 +233,20 @@ upload_embed_images = false              # retrieve and upload images direct to 
 check_role = false
 check_role_interval = 6
 # token - array of discord tokens; poracle can support multiple bots for sending
-#   messages but the first will be used as the command controller
+#   messages. When command_token is empty, the first entry also drives the
+#   gateway side (commands, reconciliation, role management).
 token = [""]
+# command_token (optional) - separate bot token for command processing,
+#   reconciliation, and role management. When set, splits poracle into two
+#   bots: the `token` bots handle outbound delivery (DMs, channel sends,
+#   thread sends, edits, TTH-deletes) and `command_token` handles the
+#   gateway side. Both bots must be invited to every guild where they
+#   operate, each with its own permission grants — the command bot needs
+#   Server Members + Message Content intents and Manage Roles for
+#   reconciliation; the alerts bot only needs send permissions. Users
+#   will see two separate DM threads (one for alerts, one for commands).
+#   Empty by default = single-bot operation (historic behaviour).
+#command_token = ""
 # guilds - the guild (server) IDs that poracle will be on
 guilds = [""]
 # channels - channel IDs that can be used for !poracle registration
