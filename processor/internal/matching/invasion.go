@@ -3,8 +3,10 @@ package matching
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -29,6 +31,11 @@ type InvasionMatcher struct {
 // that contain the invasion's pokestop. Handlers reuse the area slice for
 // rendering / validation so the geofence rtree is walked once per event.
 func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeInvasion).Observe(time.Since(start).Seconds())
+	}()
+
 	if st == nil {
 		return nil, nil
 	}
@@ -61,6 +68,8 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.
 			Ping:      inv.Ping,
 		})
 	}
+
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeInvasion).Observe(float64(len(trackings)))
 
 	users := ValidateHumansGeneric(
 		trackings,

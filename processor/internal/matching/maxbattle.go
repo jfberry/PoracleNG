@@ -1,6 +1,9 @@
 package matching
 
 import (
+	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -28,6 +31,11 @@ type MaxbattleMatcher struct {
 // Match returns all matched users for a maxbattle along with the geofence
 // areas that contain the station.
 func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeMaxbattle).Observe(time.Since(start).Seconds())
+	}()
+
 	if st == nil {
 		return nil, nil
 	}
@@ -97,6 +105,8 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 		}
 		filtered = append(filtered, td)
 	}
+
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeMaxbattle).Observe(float64(len(filtered)))
 
 	users := ValidateHumansGeneric(
 		filtered,
