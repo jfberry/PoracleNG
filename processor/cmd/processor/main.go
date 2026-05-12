@@ -698,13 +698,10 @@ func main() {
 				statusParts = append(statusParts, fmt.Sprintf("RenderQ: %d/%d", depth, cap(proc.renderCh)))
 				metrics.RenderQueueDepth.Set(float64(depth))
 			}
-			// Summary buffer state: how many summary-mode matches were
-			// appended in this interval, and what the buffer currently
-			// holds awaiting the next scheduled dispatch.
+			// Summary buffer state: how many entries are currently
+			// held awaiting the next scheduled dispatch.
 			if proc.summaryBuffer != nil {
-				buffered := metrics.IntervalSummaryBuffered.Swap(0)
-				bufferedPerMin := float64(buffered) / intervalSecs * 60
-				statusParts = append(statusParts, fmt.Sprintf("Summary: %d buffered, %.0f/min", proc.summaryBuffer.Size(), bufferedPerMin))
+				statusParts = append(statusParts, fmt.Sprintf("Summary: %d buffered", proc.summaryBuffer.Size()))
 			}
 			if proc.dispatcher != nil {
 				statusParts = append(statusParts, fmt.Sprintf("Delivery: Discord:%d+%d Telegram:%d Tracked:%d RateLimited:%d",

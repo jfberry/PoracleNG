@@ -23,9 +23,8 @@ const (
 
 // IntervalCounters tracks counts between periodic log resets.
 var (
-	IntervalWebhooks         atomic.Int64
-	IntervalMatched          atomic.Int64
-	IntervalSummaryBuffered  atomic.Int64
+	IntervalWebhooks atomic.Int64
+	IntervalMatched  atomic.Int64
 )
 
 var (
