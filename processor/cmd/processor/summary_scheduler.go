@@ -98,16 +98,26 @@ func (s *SummaryScheduler) Close() {
 // loop is the main scheduler loop. It aligns wakeups to the same fixed
 // wall-clock minute marks the profile scheduler uses so that the
 // 10-minute matchesTimeWindow lines up with user-configured schedules.
+//
+// Uses time.NewTimer (not time.After) so the timer can be Stop()'d when
+// Close fires — time.After's underlying goroutine would otherwise live
+// on for up to ~10 minutes (the longest gap between scheduling marks)
+// after every Close. Single goroutine per Close so it self-heals, but
+// the discipline is worth keeping.
 func (s *SummaryScheduler) loop() {
 	defer close(s.done)
 	tickN := 0
 	for {
 		now := s.nowFunc()
 		next := nextScheduleTime(now, profileScheduleMinutes)
+		timer := time.NewTimer(next.Sub(now))
 		select {
 		case <-s.stop:
+			if !timer.Stop() {
+				<-timer.C
+			}
 			return
-		case <-time.After(next.Sub(now)):
+		case <-timer.C:
 			s.tick()
 			tickN++
 			if tickN%schedulerSweepEvery == 0 {

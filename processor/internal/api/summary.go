@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -107,6 +108,10 @@ func HandleSummaryGet(deps *SummaryDeps) gin.HandlerFunc {
 			trackingJSONError(c, http.StatusBadRequest, "missing path parameter")
 			return
 		}
+		if !isKnownSummaryAlertType(alertType) {
+			trackingJSONError(c, http.StatusBadRequest, "unknown alert type (currently only \"quest\" is supported for summary scheduling)")
+			return
+		}
 
 		s, err := deps.Schedules.Get(id, alertType)
 		if err != nil {
@@ -139,6 +144,10 @@ func HandleSummarySet(deps *SummaryDeps) gin.HandlerFunc {
 			trackingJSONError(c, http.StatusBadRequest, "missing path parameter")
 			return
 		}
+		if !isKnownSummaryAlertType(alertType) {
+			trackingJSONError(c, http.StatusBadRequest, "unknown alert type (currently only \"quest\" is supported for summary scheduling)")
+			return
+		}
 
 		rawBody, err := readBody(c)
 		if err != nil {
@@ -169,6 +178,19 @@ func HandleSummarySet(deps *SummaryDeps) gin.HandlerFunc {
 			hoursJSON = string(b)
 		}
 
+		// Validate the JSON shape end-to-end through the same parser the
+		// scheduler uses. Without this gate a client could PUT
+		// `"active_hours": "not-json"` (the string branch above just
+		// stores the value verbatim), then ParseActiveHours on the next
+		// state reload would fail and the user's schedule would be
+		// silently dropped. ParseActiveHours treats `""` / `"[]"` / `"{}"`
+		// as "no schedule" (returns nil, nil) — allow those through so
+		// clients can clear a schedule by writing an empty array.
+		if _, perr := db.ParseActiveHours(hoursJSON); perr != nil {
+			trackingJSONError(c, http.StatusBadRequest, "active_hours is not valid JSON for an ActiveHourEntry array")
+			return
+		}
+
 		if err := deps.Schedules.Set(id, alertType, hoursJSON); err != nil {
 			log.Errorf("Summary API: set %s/%s: %v", id, alertType, err)
 			trackingJSONError(c, http.StatusInternalServerError, "database error")
@@ -194,6 +216,10 @@ func HandleSummaryDelete(deps *SummaryDeps) gin.HandlerFunc {
 		alertType := c.Param("alertType")
 		if id == "" || alertType == "" {
 			trackingJSONError(c, http.StatusBadRequest, "missing path parameter")
+			return
+		}
+		if !isKnownSummaryAlertType(alertType) {
+			trackingJSONError(c, http.StatusBadRequest, "unknown alert type (currently only \"quest\" is supported for summary scheduling)")
 			return
 		}
 
@@ -224,6 +250,10 @@ func HandleSummaryTrigger(deps *SummaryDeps) gin.HandlerFunc {
 			trackingJSONError(c, http.StatusBadRequest, "missing path parameter")
 			return
 		}
+		if !isKnownSummaryAlertType(alertType) {
+			trackingJSONError(c, http.StatusBadRequest, "unknown alert type (currently only \"quest\" is supported for summary scheduling)")
+			return
+		}
 
 		deps.Dispatch(id, alertType)
 		trackingJSONOK(c, nil)
@@ -244,3 +274,17 @@ func summaryFeatureDisabled(c *gin.Context) {
 // renderer wired in DispatchQuestSummary. The list-for-user endpoint
 // iterates these so we don't need a new "list by id" store method.
 var knownSummaryAlertTypes = []string{"quest"}
+
+// isKnownSummaryAlertType is the membership test used by every handler
+// that accepts an alertType path parameter. Returning a 400 for unknown
+// values lets clients building tooling get a clear signal instead of a
+// silent 200-with-no-effect (DispatchQuestSummary itself no-ops on
+// unknown alert types).
+func isKnownSummaryAlertType(t string) bool {
+	for _, k := range knownSummaryAlertTypes {
+		if k == t {
+			return true
+		}
+	}
+	return false
+}

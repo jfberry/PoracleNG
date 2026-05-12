@@ -92,13 +92,25 @@ func (sb *SummaryBuffer) Append(humanID, alertType string, q BufferedQuest) {
 		bucket = make(map[bufferKey]BufferedQuest)
 		byType[alertType] = bucket
 	}
-	bucket[bufferKey{
+	key := bufferKey{
 		RewardType: q.RewardType,
 		Reward:     q.Reward,
 		Form:       q.Form,
 		PokestopID: q.PokestopID,
 		WithAR:     q.WithAR,
-	}] = q
+	}
+	// On upsert, OR the Clean bitmask with any existing entry's value
+	// so a user with two summary rules for the same reward+stop that
+	// differ in clean/edit bits (exotic but possible) keeps the union
+	// of those bits. Without this, the last writer's Clean wins and
+	// the clean-deletion bit can be silently lost depending on the
+	// order in which the matcher emits rules. Other fields (Payload,
+	// ExpiresAt, CreatedAt) take the new value — they describe the
+	// quest itself, not the rule that matched it.
+	if existing, ok := bucket[key]; ok {
+		q.Clean |= existing.Clean
+	}
+	bucket[key] = q
 }
 
 // Size returns the total number of entries across every (humanID,

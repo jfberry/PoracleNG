@@ -1,16 +1,14 @@
 package state
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 func TestLoadSummarySchedules_NilStore(t *testing.T) {
-	got, err := loadSummarySchedules(nil)
-	if err != nil {
-		t.Fatalf("nil store should not error: %v", err)
-	}
+	got := loadSummarySchedules(nil)
 	if got == nil {
 		t.Fatalf("expected non-nil empty map")
 	}
@@ -21,10 +19,7 @@ func TestLoadSummarySchedules_NilStore(t *testing.T) {
 
 func TestLoadSummarySchedules_EmptyStore(t *testing.T) {
 	mock := store.NewMockSummaryScheduleStore()
-	got, err := loadSummarySchedules(mock)
-	if err != nil {
-		t.Fatalf("empty store should not error: %v", err)
-	}
+	got := loadSummarySchedules(mock)
 	if len(got) != 0 {
 		t.Fatalf("expected empty map, got %d entries", len(got))
 	}
@@ -46,10 +41,7 @@ func TestLoadSummarySchedules_PopulatesMap(t *testing.T) {
 		t.Fatalf("seed Set: %v", err)
 	}
 
-	got, err := loadSummarySchedules(mock)
-	if err != nil {
-		t.Fatalf("loadSummarySchedules: %v", err)
-	}
+	got := loadSummarySchedules(mock)
 	if len(got) != 2 {
 		t.Fatalf("expected 2 users with quest schedules, got %d (entries: %v)", len(got), got)
 	}
@@ -78,14 +70,42 @@ func TestLoadSummarySchedules_EmptyParsedHoursStillStored(t *testing.T) {
 		t.Fatalf("seed Set: %v", err)
 	}
 
-	got, err := loadSummarySchedules(mock)
-	if err != nil {
-		t.Fatalf("loadSummarySchedules: %v", err)
-	}
+	got := loadSummarySchedules(mock)
 	if _, ok := got["user-empty"]; !ok {
 		t.Fatalf("expected user-empty to be present even with empty active_hours")
 	}
 	if _, ok := got["user-empty"]["quest"]; !ok {
 		t.Fatalf("expected quest key to be present (entries may be nil)")
+	}
+}
+
+// TestLoadSummarySchedules_StoreErrorIsTolerated pins the resilience
+// contract: a transient DB error on ListByType must not abort the
+// state reload (which would also kill the alert-side tracking refresh).
+// The loader logs and continues with an empty map for the affected
+// alert type, the same convention as the humans / profiles loaders.
+func TestLoadSummarySchedules_StoreErrorIsTolerated(t *testing.T) {
+	mock := store.NewMockSummaryScheduleStore()
+	mock.InjectListError(errors.New("simulated db hiccup"))
+
+	got := loadSummarySchedules(mock)
+	if got == nil {
+		t.Fatal("expected non-nil empty map even on store error")
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty map on store error, got %d entries", len(got))
+	}
+}
+
+// TestCountSummaryScheduleEntries pins the user-vs-entry-count
+// distinction in the state log line: one user with two alert types
+// should report as 2 entries.
+func TestCountSummaryScheduleEntries(t *testing.T) {
+	mock := store.NewMockSummaryScheduleStore()
+	_ = mock.Set("user-a", "quest", `[{"day":1,"hours":9,"mins":0}]`)
+	_ = mock.Set("user-b", "quest", `[{"day":2,"hours":10,"mins":0}]`)
+	schedules := loadSummarySchedules(mock)
+	if got := countSummaryScheduleEntries(schedules); got != 2 {
+		t.Errorf("countSummaryScheduleEntries = %d, want 2", got)
 	}
 }

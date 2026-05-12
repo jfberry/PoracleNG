@@ -143,6 +143,18 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		return
 	}
 
+	// Infrastructure guard BEFORE the rate-limit check: if the renderer
+	// isn't wired (early-init failure / config typo), the dispatch can't
+	// produce any output. Charging the summary rate-limit bucket for a
+	// dispatch we know can't deliver would burn the user's budget on a
+	// permanent config error. The defer Clear still fires — buffered
+	// quests are lost regardless — but at least the rate-limit window
+	// isn't consumed by something the user has no agency over.
+	if ps.dtsRenderer == nil {
+		log.Warnf("summary dispatch: DTS renderer not configured — dropping %d groups for %s", len(groups), humanID)
+		return
+	}
+
 	// Summary rate-limit check — separate bucket from the alert limiter
 	// (see CLAUDE.md "Rate Limiting"). One fire = one against the bucket,
 	// regardless of how many chunks the digest produces. If over the cap,
@@ -159,11 +171,6 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 				human.ID, result.Limit, ps.cfg.AlertLimits.TimingPeriod, len(fresh))
 			return
 		}
-	}
-
-	if ps.dtsRenderer == nil {
-		log.Warnf("summary dispatch: DTS renderer not configured — dropping %d groups for %s", len(groups), humanID)
-		return
 	}
 
 	tr := ps.translations.For(lang)
@@ -327,6 +334,14 @@ func (ps *ProcessorService) questEnrichOne(raw []byte, lang string) map[string]a
 	// BuildQuestSummaryView to build the multi-pin map.
 	if _, ok := out["pokestopName"]; !ok {
 		out["pokestopName"] = qw.Name
+	}
+	// pokestopUrl is the per-stop sprite/icon URL used as the static-map
+	// pin image in BuildQuestSummaryView. Enrichment emits the field as
+	// `pokestop_url` (snake_case); we expose the camelCase alias here so
+	// the multi-pin map gets a populated pin image. Without this the
+	// view's `points[i].url` falls back to a generic pokestop icon.
+	if _, ok := out["pokestopUrl"]; !ok {
+		out["pokestopUrl"] = qw.URL
 	}
 	if _, ok := out["latitude"]; !ok {
 		out["latitude"] = qw.Latitude

@@ -77,6 +77,43 @@ func TestSummaryBuffer_Dedup(t *testing.T) {
 	}
 }
 
+// TestSummaryBuffer_Append_ORsCleanOnUpsert pins the design: when a
+// user has two rules matching the same (rewardType, reward, form,
+// pokestop, withAR) with different clean bits, the buffer keeps the
+// union via OR rather than letting the last writer overwrite the
+// previous entry's bits. Critical for the case where rule A sets
+// clean=5 (summary+clean-delete) and rule B sets clean=4 (summary
+// only) — without OR, the order of matcher iteration silently
+// determines whether the digest auto-deletes.
+func TestSummaryBuffer_Append_ORsCleanOnUpsert(t *testing.T) {
+	sb := NewSummaryBuffer("")
+
+	// First write: summary + clean-delete bit (1+4=5).
+	sb.Append("user-1", "quest", BufferedQuest{
+		RewardType: 7, Reward: 25, PokestopID: "stop-A",
+		Payload: []byte("first"), ExpiresAt: 100, Clean: 5,
+	})
+
+	// Second write: summary only (4). Without OR, this would overwrite
+	// the clean bit and the digest would never auto-delete.
+	sb.Append("user-1", "quest", BufferedQuest{
+		RewardType: 7, Reward: 25, PokestopID: "stop-A",
+		Payload: []byte("second"), ExpiresAt: 200, Clean: 4,
+	})
+
+	got := sb.List("user-1", "quest")
+	if len(got) != 1 {
+		t.Fatalf("expected 1 entry after upsert, got %d", len(got))
+	}
+	if got[0].Clean != 5 {
+		t.Errorf("Clean should be OR'd: got %d, want 5 (4|5=5)", got[0].Clean)
+	}
+	// Non-Clean fields (payload, expiresAt) take the newer value.
+	if string(got[0].Payload) != "second" || got[0].ExpiresAt != 200 {
+		t.Errorf("payload + expiresAt should reflect latest write, got %+v", got[0])
+	}
+}
+
 func TestSummaryBuffer_Clear(t *testing.T) {
 	sb := NewSummaryBuffer("")
 

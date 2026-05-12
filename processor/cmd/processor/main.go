@@ -446,8 +446,12 @@ func main() {
 
 	// Summary schedule endpoints (CRUD over summary_schedules + trigger).
 	// All five sit behind the same x-poracle-secret middleware as the rest
-	// of /api. When quest_summary_enabled is false the deps fields stay
-	// nil and handlers return 503.
+	// of /api. The endpoints are always live — `quest_summary_enabled` only
+	// gates the scheduler tick / matcher routing, not the schedule storage,
+	// so operators can prepare schedules in advance and flip the feature
+	// flag without losing data. Handlers return 503 only when the
+	// underlying store wasn't constructed (an early-init failure), not
+	// when the feature flag is off.
 	summaryDeps := &api.SummaryDeps{
 		Schedules:  proc.SummarySchedules(),
 		Dispatch:   proc.DispatchQuestSummary,

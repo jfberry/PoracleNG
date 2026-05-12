@@ -211,3 +211,53 @@ func TestQuest_SummaryRejectsEdit(t *testing.T) {
 	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
 	assert.Empty(t, rows, "rejected combo should not insert a tracking rule")
 }
+
+// TestQuest_RemoveSummary_OnlyTargetsSummaryRules pins the selective
+// removal behaviour: when the user types `!quest remove pikachu summary`
+// only the summary-bit rules should be deleted, leaving any
+// non-summary rule intact. Defensive against DB-direct inserts or
+// future API paths that can create both variants — the !quest command
+// itself dedups via diff:"match" on (RewardType, Reward, Form) so a
+// user can't normally have two parallel rules for the same reward
+// through the bot. We seed directly to exercise the predicate.
+func TestQuest_RemoveSummary_OnlyTargetsSummaryRules(t *testing.T) {
+	ctx := questCtx(t)
+
+	// Seed two rules for Pikachu with different forms (so the diff:"match"
+	// keys don't collapse them). Both are summary-bit rules — we then
+	// add a non-summary rule for a DIFFERENT reward to confirm the
+	// summary filter doesn't sweep it up.
+	mock := ctx.Tracking.Quests.(*store.MockTrackingStore[db.QuestTrackingAPI])
+	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 0, Clean: 4})  // summary Pikachu
+	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 65, Clean: 4}) // summary Alolan Pikachu
+	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 1290, Clean: 0}) // immediate cosplay Pikachu
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 3, "seed should produce 3 rules across distinct forms")
+
+	// Remove only the summary variants.
+	replies := runQuest(t, ctx, "remove 25 summary")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ = ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1, "only the immediate rule should remain")
+	assert.False(t, db.IsSummary(rows[0].Clean), "remaining rule must be the immediate one (clean=0)")
+}
+
+// TestQuest_RemoveWithoutSummary_RemovesBoth confirms back-compat: a
+// bare `!quest remove pikachu` removes both summary and immediate rules
+// (matches the historic "remove regardless of clean/edit bits" behaviour).
+func TestQuest_RemoveWithoutSummary_RemovesBoth(t *testing.T) {
+	ctx := questCtx(t)
+
+	mock := ctx.Tracking.Quests.(*store.MockTrackingStore[db.QuestTrackingAPI])
+	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 0, Clean: 0})  // immediate
+	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 65, Clean: 4}) // summary
+
+	replies := runQuest(t, ctx, "remove 25")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	assert.Empty(t, rows, "remove without summary keyword should remove both rules")
+}

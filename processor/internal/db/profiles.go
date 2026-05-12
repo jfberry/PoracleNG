@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
@@ -109,8 +110,16 @@ func (e ActiveHourEntry) Fires() [][2]int {
 // return (nil, nil) — a missing schedule is not an error. Malformed
 // JSON returns the underlying error so callers can choose to log
 // vs. fail.
+//
+// We explicitly enumerate the placeholder forms rather than using a
+// short-length heuristic: a `len(raw) <= 5` cutoff would silently
+// accept `"[null]"` (6 chars) which json.Unmarshal happily decodes
+// into a single zero-value ActiveHourEntry (Day=0, 00:00 — fires
+// every Sunday at midnight). Better to short-circuit on the actual
+// placeholders and let everything else go through the parser.
 func ParseActiveHours(raw string) ([]ActiveHourEntry, error) {
-	if len(raw) <= 5 {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "[]" || trimmed == "{}" {
 		return nil, nil
 	}
 	var entries []ActiveHourEntry

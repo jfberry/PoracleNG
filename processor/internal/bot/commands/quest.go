@@ -383,9 +383,25 @@ func (c *QuestCommand) removeQuests(ctx *bot.CommandContext, targets []db.QuestT
 		return []bot.Reply{{React: "🙅"}}
 	}
 
+	// Summary-bit filtering: if the user typed `summary` on the remove
+	// command, the target's Clean carries bit 4 (db.IsSummary). Only
+	// remove rules whose existing Clean also has bit 4 set, so
+	// `!quest remove pikachu summary` removes ONLY the summary-mode
+	// Pikachu rule and leaves a parallel immediate-mode Pikachu rule
+	// untouched. When the user did NOT type `summary` we don't filter
+	// on Clean (the historic behaviour — removes regardless of clean /
+	// edit / ping bits).
+	requireSummary := false
+	if len(targets) > 0 && db.IsSummary(targets[0].Clean) {
+		requireSummary = true
+	}
+
 	var uids []int64
 	var removed []db.QuestTrackingAPI
 	for _, existing := range tracked {
+		if requireSummary && !db.IsSummary(existing.Clean) {
+			continue
+		}
 		for _, target := range targets {
 			if existing.RewardType == target.RewardType &&
 				(target.Reward == 0 || existing.Reward == target.Reward) {
