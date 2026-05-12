@@ -17,6 +17,11 @@ func DeleteHumanAndTracking(dbx *sqlx.DB, id string) error {
 	if _, err := dbx.Exec("DELETE FROM `profiles` WHERE id = ?", id); err != nil {
 		return fmt.Errorf("delete profiles for human %s: %w", id, err)
 	}
+	// summary_schedules is per-(human, alert_type), not per-profile,
+	// so it's outside trackingTables. Clear here too or rows orphan.
+	if _, err := dbx.Exec("DELETE FROM `summary_schedules` WHERE id = ?", id); err != nil {
+		return fmt.Errorf("delete summary_schedules for human %s: %w", id, err)
+	}
 	if _, err := dbx.Exec("DELETE FROM `humans` WHERE id = ?", id); err != nil {
 		return fmt.Errorf("delete human %s: %w", id, err)
 	}
