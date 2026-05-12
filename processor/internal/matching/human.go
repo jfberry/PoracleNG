@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -19,6 +20,11 @@ func ValidateHumans(
 	if len(monsterList) == 0 {
 		return nil
 	}
+
+	haversineCount := 0
+	defer func() {
+		metrics.MatchingHaversines.WithLabelValues(metrics.TypePokemon).Observe(float64(haversineCount))
+	}()
 
 	// Find unique human IDs
 	humanIDs := make(map[string]bool)
@@ -63,6 +69,7 @@ func ValidateHumans(
 			if !distComputed {
 				dist = HaversineDistance(human.Latitude, human.Longitude, monsterLat, monsterLon)
 				distComputed = true
+				haversineCount++
 			}
 			return dist
 		}
@@ -124,6 +131,11 @@ func ValidateHumansForRaid(
 		return nil
 	}
 
+	haversineCount := 0
+	defer func() {
+		metrics.MatchingHaversines.WithLabelValues(blockedAlertType).Observe(float64(haversineCount))
+	}()
+
 	areas := matchedAreaNames
 
 	seen := make(map[string]bool)
@@ -148,6 +160,7 @@ func ValidateHumansForRaid(
 			if !distComputed {
 				dist = HaversineDistance(human.Latitude, human.Longitude, raidLat, raidLon)
 				distComputed = true
+				haversineCount++
 			}
 			return dist
 		}

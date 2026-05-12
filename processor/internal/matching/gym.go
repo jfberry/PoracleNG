@@ -140,6 +140,11 @@ func validateHumansForGym(
 		return nil
 	}
 
+	haversineCount := 0
+	defer func() {
+		metrics.MatchingHaversines.WithLabelValues(metrics.TypeGym).Observe(float64(haversineCount))
+	}()
+
 	seen := make(map[string]bool)
 	var result []webhook.MatchedUser
 
@@ -162,6 +167,7 @@ func validateHumansForGym(
 			if !distComputed {
 				dist = HaversineDistance(human.Latitude, human.Longitude, lat, lon)
 				distComputed = true
+				haversineCount++
 			}
 			return dist
 		}

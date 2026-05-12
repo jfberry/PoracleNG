@@ -204,6 +204,12 @@ var (
 		Buckets: []float64{1, 10, 100, 1000, 10000, 100000},
 	}, []string{"type"})
 
+	MatchingHaversines = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_processor_matching_haversines",
+		Help:    "Number of HaversineDistance computations per webhook inside ValidateHumans* (one per matched rule that reaches the distance filter or the output distance field — area-only rules that fail the area check do not increment).",
+		Buckets: []float64{1, 10, 100, 1000, 10000, 100000},
+	}, []string{"type"})
+
 	GeographicPrefilterEnabled = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "poracle_processor_geographic_prefilter_enabled",
 		Help: "1 if [tuning] geographic_prefilter is enabled in config, 0 otherwise",

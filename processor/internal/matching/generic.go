@@ -5,6 +5,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -61,6 +62,11 @@ func ValidateHumansGeneric(
 		return nil
 	}
 
+	haversineCount := 0
+	defer func() {
+		metrics.MatchingHaversines.WithLabelValues(blockedAlertType).Observe(float64(haversineCount))
+	}()
+
 	seen := make(map[string]bool)
 	var result []webhook.MatchedUser
 
@@ -83,6 +89,7 @@ func ValidateHumansGeneric(
 			if !distComputed {
 				dist = HaversineDistance(human.Latitude, human.Longitude, lat, lon)
 				distComputed = true
+				haversineCount++
 			}
 			return dist
 		}
