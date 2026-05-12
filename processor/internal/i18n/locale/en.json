@@ -393,6 +393,7 @@
   "msg.profile.hours_usage": "Usage: profile hours <profileNo> <json>",
   "msg.profile.hours_invalid_json": "Invalid JSON for active hours",
   "msg.profile.hours_set": "Active hours updated for profile {0}",
+  "msg.profile.hours_cleared": "Active hours cleared for profile {0}",
   "msg.profile.settime_usage": "Usage: profile settime mon09:00 tue18:30 weekday09:00 weekend10:00",
   "msg.profile.copied": "Current profile copied to: {0}",
   "msg.profile.copyto_usage": "Usage: profile copyto <name|all>",

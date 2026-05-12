@@ -43,6 +43,8 @@ func (c *ProfileCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		return c.listProfiles(ctx)
 	case matchSub("arg.settime") || subcommand == "hours":
 		return c.setTime(ctx, rest)
+	case matchSub("arg.cleartime"):
+		return c.clearTime(ctx)
 	case matchSub("arg.copyto"):
 		return c.copyTo(ctx, rest)
 	default:
@@ -275,6 +277,21 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 
 	ctx.TriggerReload()
 	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.hours_set", ctx.ProfileNo)}}
+}
+
+// clearTime removes the profile's auto-switch schedule by writing an
+// empty active_hours value. ParseActiveHours treats `""` (and `"[]"` /
+// `"{}"`) as "no schedule", so the profile scheduler simply stops
+// auto-switching to this profile — the profile itself is untouched.
+// Mirrors `!summary cleartime` for symmetry.
+func (c *ProfileCommand) clearTime(ctx *bot.CommandContext) []bot.Reply {
+	tr := ctx.Tr()
+	if err := ctx.Humans.UpdateProfileHours(ctx.TargetID, ctx.ProfileNo, ""); err != nil {
+		log.Errorf("profile: cleartime: %v", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+	ctx.TriggerReload()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.hours_cleared", ctx.ProfileNo)}}
 }
 
 func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Reply {
