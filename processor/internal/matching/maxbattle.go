@@ -78,26 +78,26 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 		}
 
 		// Station ID filter: nil matches any
-		isSpecificStation := mb.StationID != nil
-		if isSpecificStation && *mb.StationID != data.StationID {
+		isSpecificMatch := mb.StationID != nil
+		if isSpecificMatch && *mb.StationID != data.StationID {
 			continue
 		}
 
 		trackings = append(trackings, trackingUserData{
-			HumanID:           mb.ID,
-			ProfileNo:         mb.ProfileNo,
-			Distance:          mb.Distance,
-			Template:          mb.Template,
-			Clean:             mb.Clean,
-			Ping:              mb.Ping,
-			IsSpecificStation: isSpecificStation,
+			HumanID:         mb.ID,
+			ProfileNo:       mb.ProfileNo,
+			Distance:        mb.Distance,
+			Template:        mb.Template,
+			Clean:           mb.Clean,
+			Ping:            mb.Ping,
+			IsSpecificMatch: isSpecificMatch,
 		})
 	}
 
 	// Filter out users with blocked "specificstation" alerts for station-specific trackings
 	var filtered []trackingUserData
 	for _, td := range trackings {
-		if td.IsSpecificStation {
+		if td.IsSpecificMatch {
 			human := st.Humans[td.HumanID]
 			if human != nil && human.BlockedAlertsSet["specificstation"] {
 				continue

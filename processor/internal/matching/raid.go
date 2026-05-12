@@ -90,23 +90,23 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 			continue
 		}
 
-		isSpecificGym := false
+		isSpecificMatch := false
 		if r.GymID.Valid && r.GymID.String == raid.GymID {
-			isSpecificGym = true
+			isSpecificMatch = true
 		} else if r.GymID.Valid {
 			// Specific gym tracking but doesn't match this gym
 			continue
 		}
 
 		trackingData = append(trackingData, raidUserData{
-			HumanID:       r.ID,
-			ProfileNo:     r.ProfileNo,
-			Distance:      r.Distance,
-			Template:      r.Template,
-			Clean:         r.Clean,
-			Ping:          r.Ping,
-			RSVPChanges:   r.RSVPChanges,
-			IsSpecificGym: isSpecificGym,
+			HumanID:         r.ID,
+			ProfileNo:       r.ProfileNo,
+			Distance:        r.Distance,
+			Template:        r.Template,
+			Clean:           r.Clean,
+			Ping:            r.Ping,
+			RSVPChanges:     r.RSVPChanges,
+			IsSpecificMatch: isSpecificMatch,
 		})
 	}
 
@@ -162,22 +162,22 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 			continue
 		}
 
-		isSpecificGym := false
+		isSpecificMatch := false
 		if e.GymID.Valid && e.GymID.String == egg.GymID {
-			isSpecificGym = true
+			isSpecificMatch = true
 		} else if e.GymID.Valid {
 			continue
 		}
 
 		trackingData = append(trackingData, raidUserData{
-			HumanID:       e.ID,
-			ProfileNo:     e.ProfileNo,
-			Distance:      e.Distance,
-			Template:      e.Template,
-			Clean:         e.Clean,
-			Ping:          e.Ping,
-			RSVPChanges:   e.RSVPChanges,
-			IsSpecificGym: isSpecificGym,
+			HumanID:         e.ID,
+			ProfileNo:       e.ProfileNo,
+			Distance:        e.Distance,
+			Template:        e.Template,
+			Clean:           e.Clean,
+			Ping:            e.Ping,
+			RSVPChanges:     e.RSVPChanges,
+			IsSpecificMatch: isSpecificMatch,
 		})
 	}
 
