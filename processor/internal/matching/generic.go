@@ -38,14 +38,13 @@ func boolToInt(b bool) int {
 
 // trackingUserData holds common tracking fields for human validation.
 type trackingUserData struct {
-	HumanID           string
-	ProfileNo         int
-	Distance          int
-	Template          string
-	Clean             int
-	Ping              string
-	IsSpecificStation bool // maxbattle: station-specific tracking (for specificstation blocked check)
-	IsSpecificGym     bool // gym: specific-gym tracking (skip area/distance check, use specificgym blocked check)
+	HumanID         string
+	ProfileNo       int
+	Distance        int
+	Template        string
+	Clean           int
+	Ping            string
+	IsSpecificMatch bool // set when the rule is pinned to a specific entity (gym_id, station_id, etc.) — meaning area/distance check is bypassed and a type-specific blocked-alert key is checked instead (e.g. "specificgym" or "specificstation")
 }
 
 // ValidateHumansGeneric filters matched trackings against human criteria.

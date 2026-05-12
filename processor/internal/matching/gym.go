@@ -31,7 +31,7 @@ type GymMatcher struct {
 
 // matchGyms filters the given gym rule slice and returns the surviving
 // trackingUserData entries applying the per-rule gym filter logic.
-// IsSpecificGym is set on each entry so validateHumansForGym does not
+// IsSpecificMatch is set on each entry so validateHumansForGym does not
 // need to re-scan the gym tracking slice.
 func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackingUserData {
 	teamChanged := data.OldTeamID != data.TeamID
@@ -61,10 +61,10 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 		}
 
 		// Specific gym or area/distance
-		isSpecificGym := false
+		isSpecificMatch := false
 		if g.GymID != nil && *g.GymID == data.GymID {
 			// Specific gym match — skip area/distance check
-			isSpecificGym = true
+			isSpecificMatch = true
 		} else if g.GymID != nil {
 			// Tracking a specific gym but it's not this one
 			continue
@@ -72,13 +72,13 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 		// If g.GymID is nil, area/distance is checked by validateHumansForGym
 
 		out = append(out, trackingUserData{
-			HumanID:       g.ID,
-			ProfileNo:     g.ProfileNo,
-			Distance:      g.Distance,
-			Template:      g.Template,
-			Clean:         g.Clean,
-			Ping:          g.Ping,
-			IsSpecificGym: isSpecificGym,
+			HumanID:         g.ID,
+			ProfileNo:       g.ProfileNo,
+			Distance:        g.Distance,
+			Template:        g.Template,
+			Clean:           g.Clean,
+			Ping:            g.Ping,
+			IsSpecificMatch: isSpecificMatch,
 		})
 	}
 	return out
@@ -113,7 +113,7 @@ func (m *GymMatcher) Match(data *GymData, st *state.State) ([]webhook.MatchedUse
 }
 
 // validateHumansForGym is like ValidateHumansGeneric but handles specific gym tracking.
-// The IsSpecificGym flag on each trackingUserData is set by matchGyms, so no full
+// The IsSpecificMatch flag on each trackingUserData is set by matchGyms, so no full
 // gym-tracking scan is needed here.
 func validateHumansForGym(
 	trackings []trackingUserData,
@@ -158,7 +158,7 @@ func validateHumansForGym(
 			return dist
 		}
 
-		if td.IsSpecificGym {
+		if td.IsSpecificMatch {
 			if human.BlockedAlertsSet["specificgym"] {
 				continue
 			}

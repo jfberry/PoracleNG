@@ -166,7 +166,7 @@ func ValidateHumansForRaid(
 		}
 
 		// Specific gym tracking - check specificgym block
-		if td.IsSpecificGym {
+		if td.IsSpecificMatch {
 			if human.BlockedAlertsSet["specificgym"] {
 				continue
 			}
@@ -221,14 +221,14 @@ func ValidateHumansForRaid(
 }
 
 type raidUserData struct {
-	HumanID       string
-	ProfileNo     int
-	Distance      int
-	Template      string
-	Clean         int
-	Ping          string
-	RSVPChanges   int
-	IsSpecificGym bool
+	HumanID         string
+	ProfileNo       int
+	Distance        int
+	Template        string
+	Clean           int
+	Ping            string
+	RSVPChanges     int
+	IsSpecificMatch bool
 }
 
 func areaOverlap(humanAreas []string, matchedAreas map[string]bool) bool {
