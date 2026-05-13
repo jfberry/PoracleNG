@@ -107,7 +107,41 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
 
-		if len(matched) == 0 {
+		// Encounter tracking (change detection) gates:
+		//
+		//   1. tracking feature is on, AND
+		//   2. either someone matches THIS state (we'll need to remember
+		//      the encounter for future changes), OR an entry already
+		//      exists in the tracker (someone matched a previous state
+		//      and is owed a monsterChanged notification when the
+		//      species/form/gender/etc. shifts).
+		//
+		// The Has() check is the load-bearing one for the
+		// "T1 user X matched, T2 species changed and X no longer
+		// matches" case — without it the matcher returns no users and
+		// we'd never reach the change-dispatch path. With it, the
+		// tracker runs, detects the diff, and the dispatcher fans the
+		// change out to prior recipients via LookupReplyTargets.
+		//
+		// We store a value copy with the PVP maps/slices nilled — PVP
+		// rankings are the only heavy field on PokemonWebhook and
+		// aren't used by the {{original.X}} render.
+		trackingEnabled := ps.cfg.Tracking.PokemonChangeTracking
+		shouldTrack := trackingEnabled && (len(matched) > 0 || ps.encounters.Has(pokemon.EncounterID))
+		var change *tracker.EncounterChange
+		if shouldTrack {
+			stored := pokemon
+			stored.PVP = nil
+			stored.PVPRankingsGreatLeague = nil
+			stored.PVPRankingsUltraLeague = nil
+			stored.PVPRankingsLittleLeague = nil
+			_, change = ps.encounters.Track(pokemon.EncounterID, encounterState, &stored)
+		}
+
+		// Nothing to deliver when nobody currently matches AND no
+		// change was detected. (When change != nil there are prior
+		// recipients to notify via LookupReplyTargets below.)
+		if len(matched) == 0 && change == nil {
 			if processed.Encountered {
 				l.Debugf("%s{CP%d/IV%.0f%%} appeared at [%.3f,%.3f] and 0 humans cared",
 					ps.pokemonName(pokemon.PokemonID, pokemon.Form), processed.CP, processed.IV,
@@ -120,32 +154,10 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			return
 		}
 
-		metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
-		metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
-		metrics.IntervalMatched.Add(1)
-
-		// Encounter tracking (change detection). Gated on len(matched) > 0:
-		// pokemon nobody is tracking can't produce a `monsterChanged` event
-		// for anyone (that requires a prior per-user message), so we don't
-		// need their state or webhook in the tracker. Skipping the unmatched
-		// path saves the value copy + tracker mutex on the common "0 humans
-		// cared" case. Duplicate elimination is handled separately via
-		// ps.duplicates.CheckPokemon above and does not depend on the
-		// encounter tracker.
-		//
-		// We store a value copy with the PVP maps/slices nilled — PVP
-		// rankings are the only heavy field on PokemonWebhook and aren't
-		// used by the {{original.X}} render. Reference-type fields cleared
-		// on the copy don't affect the original `pokemon` value used by
-		// matching / enrichment downstream.
-		var change *tracker.EncounterChange
-		if ps.cfg.Tracking.PokemonChangeTracking {
-			stored := pokemon
-			stored.PVP = nil
-			stored.PVPRankingsGreatLeague = nil
-			stored.PVPRankingsUltraLeague = nil
-			stored.PVPRankingsLittleLeague = nil
-			_, change = ps.encounters.Track(pokemon.EncounterID, encounterState, &stored)
+		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
+			metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 		}
 
 		// Register matched users as caring about weather in this cell
@@ -197,21 +209,58 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
 		}
 
+		// When a change has been detected AND tracking is on, gather
+		// the prior-recipients list so monsterChanged ("bad news")
+		// users get reconstructed alongside the matched ones. This
+		// must happen BEFORE the per-language enrichment loop so we
+		// pick up languages of prior-only users too.
+		var priorOnlyUsers []webhook.MatchedUser
+		if change != nil && trackingEnabled && ps.dispatcher != nil {
+			matchedIDs := make(map[string]struct{}, len(matched))
+			for _, u := range matched {
+				matchedIDs[u.ID] = struct{}{}
+			}
+			for _, targetID := range ps.dispatcher.MessageTracker().LookupReplyTargets(pokemon.EncounterID) {
+				if _, ok := matchedIDs[targetID]; ok {
+					continue // already covered by `matched`
+				}
+				if u := ps.rebuildMatchedUserForChange(targetID); u != nil {
+					priorOnlyUsers = append(priorOnlyUsers, *u)
+				}
+			}
+		}
+
 		enrichStart := time.Now()
-		mode := ps.tileMode("monster", matched)
+		// Tile mode is computed over the union of matched + prior-only
+		// users so the same tile decision (inline vs URL vs URLWithBytes)
+		// covers everyone we'll dispatch to.
+		allRecipients := matched
+		if len(priorOnlyUsers) > 0 {
+			allRecipients = make([]webhook.MatchedUser, 0, len(matched)+len(priorOnlyUsers))
+			allRecipients = append(allRecipients, matched...)
+			allRecipients = append(allRecipients, priorOnlyUsers...)
+		}
+		mode := ps.tileMode("monster", allRecipients)
 		baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed, mode)
 
-		// Compute per-language translated enrichment
+		// Compute per-language translated enrichment across the union
+		// — prior-only users may speak a different language than any
+		// currently-matched user, and their monsterChanged render needs
+		// its own perLang entry.
 		var perLang map[string]map[string]any
 		if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 			perLang = make(map[string]map[string]any)
-			for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
+			for _, lang := range distinctLanguages(allRecipients, ps.cfg.General.Locale) {
 				perLang[lang] = ps.enricher.PokemonTranslate(baseEnrichment, &pokemon, lang)
 			}
 		}
 
+		// Per-user enrichment is only computed for matched users —
+		// PVP rank display depends on the user's tracking filter, and
+		// prior-only users (by definition, no longer matching) have
+		// none. The monsterChanged template doesn't render PVP either.
 		var perUser map[string]map[string]any
-		if ps.enricher.PVPDisplay != nil && perLang != nil {
+		if ps.enricher.PVPDisplay != nil && perLang != nil && len(matched) > 0 {
 			perUser = ps.enricher.PokemonPerUser(perLang, matched)
 		}
 		metrics.EnrichmentDuration.WithLabelValues("pokemon").Observe(time.Since(enrichStart).Seconds())
@@ -226,28 +275,32 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				change.Type.String(),
 				ps.pokemonName(change.Old.PokemonID, change.Old.Form),
 				ps.pokemonName(change.New.PokemonID, change.New.Form))
-
-			// Config gate: when pokemon change tracking is disabled, fall
-			// through to the regular initial-render path. Matched users (if
-			// any) still get a regular `monster` send — just no reply
-			// threading and no `monsterChanged` template.
-			if ps.cfg.Tracking.PokemonChangeTracking {
-				ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
-					encounterID:   pokemon.EncounterID,
-					change:        change,
-					matched:       matched,
-					matchedAreas:  matchedAreas,
-					enrichment:    baseEnrichment,
-					perLang:       perLang,
-					perUser:       perUser,
-					webhookFields: webhookFields,
-					tilePending:   tilePending,
-					isEncountered: processed.Encountered,
-				})
-				return
-			}
 		}
 
+		// Tracking-enabled path: per-user template selection (monster
+		// for users who match the new state, monsterChanged for prior
+		// recipients who no longer match), always replying when a
+		// prior exists.
+		if trackingEnabled {
+			ps.dispatchPokemonAlert(pokemonDispatchInput{
+				encounterID:     pokemon.EncounterID,
+				change:          change,
+				matched:         matched,
+				priorOnlyUsers:  priorOnlyUsers,
+				matchedAreas:    matchedAreas,
+				enrichment:      baseEnrichment,
+				perLang:         perLang,
+				perUser:         perUser,
+				webhookFields:   webhookFields,
+				tilePending:     tilePending,
+				isEncountered:   processed.Encountered,
+			})
+			return
+		}
+
+		// Tracking disabled: legacy single-send path. All matched users
+		// get a regular monster (with ReplyKey set so re-enabling the
+		// flag picks back up from this send).
 		ps.renderCh <- RenderJob{
 			IsPokemon:         true,
 			IsEncountered:     processed.Encountered,
@@ -259,52 +312,60 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			MatchedAreas:      matchedAreas,
 			TileGate:          ps.newTileGate(tilePending),
 			LogReference:      pokemon.EncounterID,
-			// Index this initial sighting under the encounter ID so a
-			// subsequent change-event handler can find it via
-			// MessageTracker.LookupReply and thread the change alert as
-			// a reply to this message.
-			ReplyKey: pokemon.EncounterID,
+			ReplyKey:          pokemon.EncounterID,
 		}
 	}()
 	return nil
 }
 
-// pokemonChangeRenderInput bundles the inputs to dispatchPokemonChangeRender so
-// the call site doesn't drag a long argument list. All fields refer to the
-// NEW state of the encounter (the just-arrived webhook).
-type pokemonChangeRenderInput struct {
-	encounterID   string
-	change        *tracker.EncounterChange
-	matched       []webhook.MatchedUser
-	matchedAreas  []webhook.MatchedArea
-	enrichment    map[string]any
-	perLang       map[string]map[string]any
-	perUser       map[string]map[string]any
-	webhookFields map[string]any
-	tilePending   *staticmap.TilePending
-	isEncountered bool
+// pokemonDispatchInput bundles inputs to dispatchPokemonAlert. All
+// fields refer to the NEW state of the encounter (the just-arrived
+// webhook) except priorOnlyUsers, which is the synthetic recipient
+// list reconstructed from MessageTracker.LookupReplyTargets for users
+// who had a prior alert for this encounter but no longer match.
+type pokemonDispatchInput struct {
+	encounterID    string
+	change         *tracker.EncounterChange
+	matched        []webhook.MatchedUser
+	priorOnlyUsers []webhook.MatchedUser
+	matchedAreas   []webhook.MatchedArea
+	enrichment     map[string]any
+	perLang        map[string]map[string]any
+	perUser        map[string]map[string]any
+	webhookFields  map[string]any
+	tilePending    *staticmap.TilePending
+	isEncountered  bool
 }
 
-// dispatchPokemonChangeRender enqueues 0–2 RenderJobs for a pokemon change
-// event:
-//   - users with a prior tracked message for this encounter receive a reply
-//     using the regular `monster` template for an encounter event (CP 0→>0)
-//     or `monsterChanged` for a post-encounter change (form/species/gender/
-//     weather-boost). The {{original.X}} bag is threaded in for monsterChanged.
-//   - users with no prior message receive a fresh `monster` render. Their
-//     ReplyKey is still indexed so any subsequent change can chain.
+// dispatchPokemonAlert emits RenderJobs that implement the unified
+// change-aware delivery rule:
 //
-// Tile resolution for the batch is hoisted into a single goroutine via
-// tileGate — every RenderJob below shares the same Enrichment map, so we
-// can't let one render worker mutate it via TilePending.Apply while sibling
-// workers read from it. The gate uses chan-close happens-before to make the
-// map writes visible to every worker before it renders. All jobs share
-// enrichment, per-language data, and the resolved tile bytes.
-func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderInput) {
+//   - User who matches the new state → `monster` template (the
+//     existing monsterNoIv → monster fallback in the renderer kicks
+//     in based on processed.Encountered). ReplyKey is set on every
+//     job, so the delivery queue attaches reply metadata when a
+//     prior message exists; if no prior, the fresh send seeds the
+//     reply-index for future changes.
+//
+//   - User who had a prior alert for this encounter but no longer
+//     matches → `monsterChanged` template, replying to the prior
+//     message. {{original.X}} is populated from the stored prior
+//     webhook so templates can show "was Magmar / IV 100, now
+//     Slugma" comparisons.
+//
+// Per-language grouping batches users with the same language onto
+// one RenderJob (so the renderer only enriches each language once);
+// the tileGate ensures the shared enrichment map is written once
+// before any render worker reads it.
+//
+// When ps.dispatcher is nil (test / partial-init paths) we fall back
+// to a single fresh-send to all matched users — the reply-index
+// isn't reachable without a MessageTracker.
+func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	if ps.dispatcher == nil {
-		// Without a dispatcher there's no MessageTracker to consult — fall
-		// back to a single regular render so we don't silently drop the alert
-		// in tests or partial-init scenarios.
+		if len(in.matched) == 0 {
+			return
+		}
 		ps.renderCh <- RenderJob{
 			IsPokemon:         true,
 			IsEncountered:     in.isEncountered,
@@ -321,96 +382,101 @@ func (ps *ProcessorService) dispatchPokemonChangeRender(in pokemonChangeRenderIn
 		return
 	}
 
-	withPrior, withoutPrior := partitionByPriorMessage(in.matched, in.encounterID, ps.dispatcher.MessageTracker())
-
-	encounterEvent := in.change.Old.CP == 0 && in.change.New.CP > 0
-
-	// Multi-job dispatch: every RenderJob below shares the same in.enrichment
-	// map. One gate (one goroutine) writes the staticMap field once; every
-	// render worker waits on the gate before reading. Sharing one gate
-	// across the batch also means every job picks up the same inline tile
-	// bytes — previously only the TilePending-holding job got them.
 	gate := ps.newTileGate(in.tilePending)
-	if len(withPrior) > 0 {
-		isChange := !encounterEvent
-		// Build a per-language `original` map by re-running base + per-language
-		// enrichment against the prior webhook bytes. Falls back to
-		// dts.BuildOriginalView when we don't have prior bytes (e.g. the
-		// tracker entry pre-dates the bytes-storage upgrade, or tests that
-		// don't supply a webhook). For encounter events (CP 0→>0) we leave
-		// original nil — the regular `monster` template fires there, not
-		// monsterChanged.
-		var perLangOriginal map[string]map[string]any
-		var fallbackOriginal map[string]any
-		if !encounterEvent {
-			if in.change.OldWebhook != nil {
-				perLangOriginal = ps.buildPerLanguageOriginal(in.change.OldWebhook, withPrior)
-			}
-			if perLangOriginal == nil {
-				// Older path or test path — use the hand-picked subset.
-				fallbackOriginal = dts.BuildOriginalView(in.change.Old, ps.enricher.GameData, ps.translatorFor(""))
-			}
-		}
 
-		// Group withPrior users by language so we can dispatch one RenderJob
-		// per language, each carrying the language-specific original. Encounter
-		// events don't need grouping (no original to differentiate); a single
-		// RenderJob suffices.
-		if perLangOriginal != nil {
-			byLang := groupByLanguage(withPrior, ps.cfg.General.Locale)
-			for lang, users := range byLang {
-				orig := perLangOriginal[lang]
-				ps.renderCh <- RenderJob{
-					IsPokemon:         true,
-					IsChange:          isChange,
-					IsEncountered:     in.isEncountered,
-					Enrichment:        in.enrichment,
-					PerLangEnrichment: in.perLang,
-					PerUserEnrichment: in.perUser,
-					WebhookFields:     in.webhookFields,
-					MatchedUsers:      users,
-					MatchedAreas:      in.matchedAreas,
-					TileGate:          gate,
-					LogReference:      in.encounterID,
-					ReplyKey:          in.encounterID,
-					OriginalView:      orig,
-					ChangeType:        in.change.Type.String(),
-				}
-			}
-		} else {
+	// Bucket 1: matched users → `monster`, grouped by language.
+	if len(in.matched) > 0 {
+		for _, users := range groupByLanguage(in.matched, ps.cfg.General.Locale) {
 			ps.renderCh <- RenderJob{
 				IsPokemon:         true,
-				IsChange:          isChange,
 				IsEncountered:     in.isEncountered,
 				Enrichment:        in.enrichment,
 				PerLangEnrichment: in.perLang,
 				PerUserEnrichment: in.perUser,
 				WebhookFields:     in.webhookFields,
-				MatchedUsers:      withPrior,
+				MatchedUsers:      users,
 				MatchedAreas:      in.matchedAreas,
 				TileGate:          gate,
 				LogReference:      in.encounterID,
 				ReplyKey:          in.encounterID,
-				OriginalView:      fallbackOriginal,
-				ChangeType:        in.change.Type.String(),
 			}
 		}
 	}
 
-	if len(withoutPrior) > 0 {
-		ps.renderCh <- RenderJob{
-			IsPokemon:         true,
-			IsEncountered:     in.isEncountered,
-			Enrichment:        in.enrichment,
-			PerLangEnrichment: in.perLang,
-			PerUserEnrichment: in.perUser,
-			WebhookFields:     in.webhookFields,
-			MatchedUsers:      withoutPrior,
-			MatchedAreas:      in.matchedAreas,
-			TileGate:          gate,
-			LogReference:      in.encounterID,
-			ReplyKey:          in.encounterID,
+	// Bucket 2: prior-only users → `monsterChanged`, grouped by language.
+	// Build a per-language `original` view from the stored prior
+	// webhook so {{original.fullName}} etc. reflect what each user
+	// originally got alerted about, in their own language.
+	if len(in.priorOnlyUsers) > 0 && in.change != nil {
+		var perLangOriginal map[string]map[string]any
+		var fallbackOriginal map[string]any
+		if in.change.OldWebhook != nil {
+			perLangOriginal = ps.buildPerLanguageOriginal(in.change.OldWebhook, in.priorOnlyUsers)
 		}
+		if perLangOriginal == nil {
+			// Older tracker entries (pre-bytes-storage) or tests that
+			// don't supply a prior webhook — fall back to the
+			// hand-picked subset from the stored EncounterState.
+			fallbackOriginal = dts.BuildOriginalView(in.change.Old, ps.enricher.GameData, ps.translatorFor(""))
+		}
+
+		byLang := groupByLanguage(in.priorOnlyUsers, ps.cfg.General.Locale)
+		for lang, users := range byLang {
+			orig := fallbackOriginal
+			if perLangOriginal != nil {
+				orig = perLangOriginal[lang]
+			}
+			ps.renderCh <- RenderJob{
+				IsPokemon:         true,
+				IsChange:          true,
+				IsEncountered:     in.isEncountered,
+				Enrichment:        in.enrichment,
+				PerLangEnrichment: in.perLang,
+				PerUserEnrichment: in.perUser,
+				WebhookFields:     in.webhookFields,
+				MatchedUsers:      users,
+				MatchedAreas:      in.matchedAreas,
+				TileGate:          gate,
+				LogReference:      in.encounterID,
+				ReplyKey:          in.encounterID,
+				OriginalView:      orig,
+				ChangeType:        in.change.Type.String(),
+			}
+		}
+	}
+}
+
+// rebuildMatchedUserForChange synthesises a MatchedUser for a target
+// that had a prior alert for this encounter but doesn't match the
+// new state. We pull identity + language from the humans store; the
+// rule-specific fields (Template, Clean, Ping, Distance) get default
+// values because we don't know which T1 tracking rule originally
+// matched — that rule may have been deleted, edited, or matched on
+// a now-stale filter. Returns nil when the human is no longer
+// registered or has been admin-disabled — their reply-index entry
+// will expire on its own.
+func (ps *ProcessorService) rebuildMatchedUserForChange(targetID string) *webhook.MatchedUser {
+	if ps.humans == nil {
+		return nil
+	}
+	human, err := ps.humans.Get(targetID)
+	if err != nil || human == nil {
+		return nil
+	}
+	if !human.Enabled || human.AdminDisable {
+		return nil
+	}
+	lang := human.Language
+	if lang == "" {
+		lang = ps.cfg.General.Locale
+	}
+	return &webhook.MatchedUser{
+		ID:       human.ID,
+		Type:     human.Type,
+		Name:     human.Name,
+		Language: lang,
+		// Template / Clean / Ping / Distance left at zero values
+		// (defaults).
 	}
 }
 

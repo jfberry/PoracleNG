@@ -144,24 +144,25 @@ func minimalProcessor(t *testing.T) (*ProcessorService, chan RenderJob, *deliver
 	return ps, ch, d
 }
 
-// TestDispatchPokemonChangeRender_PriorEncountered covers Case A:
-// prior tracked + encounter event (CP 0 → >0) → one RenderJob with regular
-// `monster` template (IsChange=false), ReplyKey set, OriginalView nil.
-func TestDispatchPokemonChangeRender_PriorEncountered(t *testing.T) {
-	ps, ch, d := minimalProcessor(t)
+// TestDispatchPokemonAlert_MatchedUserStillMatches: user matched at
+// T1 (prior exists), still matches at T2 — receives `monster` (NOT
+// monsterChanged) with ReplyKey set so the delivery queue attaches
+// the reply metadata. This is the "match → monster, regardless of
+// whether they also had a prior" rule.
+func TestDispatchPokemonAlert_MatchedUserStillMatches(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
 
-	encounterID := "enc-encountered"
+	encounterID := "enc-still-matches"
 	user := webhook.MatchedUser{ID: "user-A", Type: "discord:user"}
-	trackPriorMessage(t, d, encounterID, user.ID, "msg-A")
 
 	change := &tracker.EncounterChange{
 		EncounterID: encounterID,
-		Type:        tracker.ChangeEncountered,
-		Old:         tracker.EncounterState{PokemonID: 25, CP: 0},
-		New:         tracker.EncounterState{PokemonID: 25, CP: 800, ATK: 10, DEF: 10, STA: 10},
+		Type:        tracker.ChangeForm,
+		Old:         tracker.EncounterState{PokemonID: 25, Form: 0, CP: 800, ATK: 10, DEF: 10, STA: 10},
+		New:         tracker.EncounterState{PokemonID: 25, Form: 65, CP: 850, ATK: 10, DEF: 10, STA: 10},
 	}
 
-	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
 		encounterID:   encounterID,
 		change:        change,
 		matched:       []webhook.MatchedUser{user},
@@ -174,133 +175,89 @@ func TestDispatchPokemonChangeRender_PriorEncountered(t *testing.T) {
 	}
 	j := jobs[0]
 	if j.IsChange {
-		t.Errorf("encounter event should NOT use IsChange (monsterChanged template), got IsChange=true")
-	}
-	if !j.IsPokemon {
-		t.Errorf("RenderJob.IsPokemon should be true, got false")
-	}
-	if !j.IsEncountered {
-		t.Errorf("RenderJob.IsEncountered should be true, got false")
+		t.Errorf("matched-still-matches user must receive `monster` (IsChange=false), got IsChange=true")
 	}
 	if j.ReplyKey != encounterID {
-		t.Errorf("ReplyKey: got %q, want %q", j.ReplyKey, encounterID)
+		t.Errorf("ReplyKey must always be set so reply linking happens at delivery time: got %q, want %q", j.ReplyKey, encounterID)
 	}
 	if j.OriginalView != nil {
-		t.Errorf("OriginalView should be nil for encounter event (CP 0→>0), got %v", j.OriginalView)
-	}
-	if j.ChangeType != "encountered" {
-		t.Errorf("ChangeType: got %q, want \"encountered\"", j.ChangeType)
+		t.Errorf("OriginalView should NOT be populated for the monster-template branch, got %v", j.OriginalView)
 	}
 	if len(j.MatchedUsers) != 1 || j.MatchedUsers[0].ID != "user-A" {
 		t.Errorf("MatchedUsers should be [user-A], got %v", j.MatchedUsers)
 	}
 }
 
-// TestDispatchPokemonChangeRender_PriorFormChange covers Case B:
-// prior tracked + post-encounter form change → one RenderJob with
-// IsChange=true (monsterChanged template), OriginalView populated.
-func TestDispatchPokemonChangeRender_PriorFormChange(t *testing.T) {
-	ps, ch, d := minimalProcessor(t)
+// TestDispatchPokemonAlert_PriorOnlyNoLongerMatches is the regression
+// guard for the originally-reported bug: at T1 the user matched and
+// got a `monster` alert; at T2 the species changed and the new
+// species matches NO ONE — including the original user. Previously
+// ProcessPokemon early-returned and the user never heard the bad
+// news. Under the unified rule the prior-only user receives
+// `monsterChanged` as a reply with OriginalView populated.
+func TestDispatchPokemonAlert_PriorOnlyNoLongerMatches(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
 
-	encounterID := "enc-form-change"
-	user := webhook.MatchedUser{ID: "user-B", Type: "discord:user"}
-	trackPriorMessage(t, d, encounterID, user.ID, "msg-B")
+	encounterID := "enc-bad-news"
+	priorOnly := webhook.MatchedUser{ID: "user-bad-news", Type: "discord:user"}
 
 	change := &tracker.EncounterChange{
 		EncounterID: encounterID,
-		Type:        tracker.ChangeForm,
-		Old:         tracker.EncounterState{PokemonID: 25, Form: 0, CP: 800, ATK: 10, DEF: 10, STA: 10},
-		New:         tracker.EncounterState{PokemonID: 25, Form: 65, CP: 850, ATK: 10, DEF: 10, STA: 10},
+		Type:        tracker.ChangeSpecies,
+		Old:         tracker.EncounterState{PokemonID: 240, CP: 240, ATK: 15, DEF: 15, STA: 15}, // 100% Magmar
+		New:         tracker.EncounterState{PokemonID: 218, CP: 100, ATK: 5, DEF: 5, STA: 5},    // Slugma the user doesn't track
 	}
 
-	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
-		encounterID:   encounterID,
-		change:        change,
-		matched:       []webhook.MatchedUser{user},
-		isEncountered: true,
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:    encounterID,
+		change:         change,
+		matched:        nil, // nobody currently matches
+		priorOnlyUsers: []webhook.MatchedUser{priorOnly},
+		isEncountered:  true,
 	})
 
 	jobs := drainRenderJobs(ch)
 	if len(jobs) != 1 {
-		t.Fatalf("expected 1 RenderJob, got %d", len(jobs))
+		t.Fatalf("expected 1 RenderJob (monsterChanged for prior-only user), got %d", len(jobs))
 	}
 	j := jobs[0]
 	if !j.IsChange {
-		t.Errorf("post-encounter change should set IsChange=true, got false")
+		t.Errorf("prior-only no-longer-matching user must receive monsterChanged (IsChange=true), got false")
 	}
 	if j.ReplyKey != encounterID {
-		t.Errorf("ReplyKey: got %q, want %q", j.ReplyKey, encounterID)
+		t.Errorf("ReplyKey must be set so the bad-news message threads under the original: got %q, want %q", j.ReplyKey, encounterID)
 	}
 	if j.OriginalView == nil {
-		t.Fatalf("OriginalView should be populated for post-encounter change, got nil")
+		t.Fatalf("OriginalView must be populated so {{original.X}} can show the previous identity")
 	}
-	// The original view should reflect the prior state's identity (form 0,
-	// not 65).
-	if got := j.OriginalView["formId"]; got != 0 {
-		t.Errorf("OriginalView.formId: got %v, want 0", got)
+	if got := j.OriginalView["pokemonId"]; got != 240 {
+		t.Errorf("OriginalView should reflect the prior species (Magmar=240), got %v", got)
 	}
-	if got := j.OriginalView["pokemonId"]; got != 25 {
-		t.Errorf("OriginalView.pokemonId: got %v, want 25", got)
+	if j.ChangeType != "species" {
+		t.Errorf("ChangeType: got %q, want \"species\"", j.ChangeType)
 	}
-	if j.ChangeType != "form" {
-		t.Errorf("ChangeType: got %q, want \"form\"", j.ChangeType)
+	if len(j.MatchedUsers) != 1 || j.MatchedUsers[0].ID != "user-bad-news" {
+		t.Errorf("MatchedUsers should be [user-bad-news], got %v", j.MatchedUsers)
 	}
 }
 
-// TestDispatchPokemonChangeRender_NoPriorChange covers Cases C/D:
-// no prior + change → one RenderJob with IsChange=false (regular monster),
-// no OriginalView, no ChangeType. The user still gets ReplyKey set so a
-// future change can chain off this send.
-func TestDispatchPokemonChangeRender_NoPriorChange(t *testing.T) {
+// TestDispatchPokemonAlert_MixedMatchedAndPriorOnly: at T1 user A
+// matched (still matches at T2 → monster reply). User B also
+// matched at T1 (no longer matches at T2 → monsterChanged reply).
+// User C joins at T2 with a new tracking rule that matches the new
+// state (no prior → fresh monster, ReplyKey seeded for future
+// changes).
+//
+// Expect three distinct outputs: two monster jobs (A still-matches,
+// C new-match — they share language so they batch into ONE
+// RenderJob) and one monsterChanged job (B).
+func TestDispatchPokemonAlert_MixedMatchedAndPriorOnly(t *testing.T) {
 	ps, ch, _ := minimalProcessor(t)
 
-	encounterID := "enc-no-prior"
-	user := webhook.MatchedUser{ID: "user-C", Type: "discord:user"}
-
-	change := &tracker.EncounterChange{
-		EncounterID: encounterID,
-		Type:        tracker.ChangeForm,
-		Old:         tracker.EncounterState{PokemonID: 25, Form: 0, CP: 800, ATK: 10, DEF: 10, STA: 10},
-		New:         tracker.EncounterState{PokemonID: 25, Form: 65, CP: 850, ATK: 10, DEF: 10, STA: 10},
-	}
-
-	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
-		encounterID:   encounterID,
-		change:        change,
-		matched:       []webhook.MatchedUser{user},
-		isEncountered: true,
-	})
-
-	jobs := drainRenderJobs(ch)
-	if len(jobs) != 1 {
-		t.Fatalf("expected 1 RenderJob, got %d", len(jobs))
-	}
-	j := jobs[0]
-	if j.IsChange {
-		t.Errorf("no-prior user should NOT receive monsterChanged (IsChange=true), got IsChange=true")
-	}
-	if j.ReplyKey != encounterID {
-		t.Errorf("ReplyKey: got %q, want %q (must be set so future changes can chain)", j.ReplyKey, encounterID)
-	}
-	if j.OriginalView != nil {
-		t.Errorf("OriginalView should NOT be set when sending fresh, got %v", j.OriginalView)
-	}
-	if j.ChangeType != "" {
-		t.Errorf("ChangeType should be empty for fresh-send branch, got %q", j.ChangeType)
-	}
-}
-
-// TestDispatchPokemonChangeRender_MixedPriorAndFresh covers a mixed batch:
-// some users tracked (form change → reply with monsterChanged) and others not
-// (no prior → fresh monster). Should emit two RenderJobs partitioned
-// accordingly, both carrying ReplyKey=encounterID for chain continuity.
-func TestDispatchPokemonChangeRender_MixedPriorAndFresh(t *testing.T) {
-	ps, ch, d := minimalProcessor(t)
-
 	encounterID := "enc-mixed"
-	priorUser := webhook.MatchedUser{ID: "user-prior", Type: "discord:user"}
-	freshUser := webhook.MatchedUser{ID: "user-fresh", Type: "discord:user"}
-	trackPriorMessage(t, d, encounterID, priorUser.ID, "msg-prior")
+	userA := webhook.MatchedUser{ID: "user-A", Type: "discord:user", Language: "en"}
+	userB := webhook.MatchedUser{ID: "user-B", Type: "discord:user", Language: "en"}
+	userC := webhook.MatchedUser{ID: "user-C", Type: "discord:user", Language: "en"}
 
 	change := &tracker.EncounterChange{
 		EncounterID: encounterID,
@@ -309,43 +266,70 @@ func TestDispatchPokemonChangeRender_MixedPriorAndFresh(t *testing.T) {
 		New:         tracker.EncounterState{PokemonID: 25, Form: 65, CP: 850, ATK: 10, DEF: 10, STA: 10},
 	}
 
-	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
-		encounterID:   encounterID,
-		change:        change,
-		matched:       []webhook.MatchedUser{priorUser, freshUser},
-		isEncountered: true,
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:    encounterID,
+		change:         change,
+		matched:        []webhook.MatchedUser{userA, userC}, // A still matches; C is new
+		priorOnlyUsers: []webhook.MatchedUser{userB},        // B no longer matches
+		isEncountered:  true,
 	})
 
 	jobs := drainRenderJobs(ch)
 	if len(jobs) != 2 {
-		t.Fatalf("expected 2 RenderJobs (one per partition), got %d", len(jobs))
+		t.Fatalf("expected 2 RenderJobs (one monster batch + one monsterChanged), got %d", len(jobs))
 	}
 
-	var changeJob, freshJob *RenderJob
+	var monsterJob, changedJob *RenderJob
 	for i := range jobs {
 		if jobs[i].IsChange {
-			changeJob = &jobs[i]
+			changedJob = &jobs[i]
 		} else {
-			freshJob = &jobs[i]
+			monsterJob = &jobs[i]
 		}
 	}
-	if changeJob == nil {
-		t.Fatalf("expected one job with IsChange=true (monsterChanged), got none")
+	if monsterJob == nil || changedJob == nil {
+		t.Fatalf("expected one monster job and one monsterChanged job, got: monsterJob=%v changedJob=%v", monsterJob, changedJob)
 	}
-	if freshJob == nil {
-		t.Fatalf("expected one job with IsChange=false (fresh monster), got none")
+	if len(monsterJob.MatchedUsers) != 2 {
+		t.Errorf("monster job should batch userA + userC (same language), got %d users: %v", len(monsterJob.MatchedUsers), monsterJob.MatchedUsers)
 	}
-	if len(changeJob.MatchedUsers) != 1 || changeJob.MatchedUsers[0].ID != priorUser.ID {
-		t.Errorf("change job should target only the prior user, got %v", changeJob.MatchedUsers)
+	if len(changedJob.MatchedUsers) != 1 || changedJob.MatchedUsers[0].ID != "user-B" {
+		t.Errorf("monsterChanged job should target only user-B, got %v", changedJob.MatchedUsers)
 	}
-	if len(freshJob.MatchedUsers) != 1 || freshJob.MatchedUsers[0].ID != freshUser.ID {
-		t.Errorf("fresh job should target only the new user, got %v", freshJob.MatchedUsers)
+	if changedJob.OriginalView == nil {
+		t.Errorf("monsterChanged job should have OriginalView populated")
 	}
-	if changeJob.OriginalView == nil {
-		t.Errorf("change job should have OriginalView populated")
+	if monsterJob.OriginalView != nil {
+		t.Errorf("monster job should NOT have OriginalView populated, got %v", monsterJob.OriginalView)
 	}
-	if freshJob.OriginalView != nil {
-		t.Errorf("fresh job should NOT have OriginalView populated, got %v", freshJob.OriginalView)
+	// Both jobs must set ReplyKey — monster so the delivery queue
+	// attaches reply metadata for A (who has a prior), monsterChanged
+	// for B's reply, and the fresh-send for C will seed the
+	// reply-index for future changes.
+	if monsterJob.ReplyKey != encounterID || changedJob.ReplyKey != encounterID {
+		t.Errorf("both jobs must carry ReplyKey=encounterID, got monster=%q changed=%q", monsterJob.ReplyKey, changedJob.ReplyKey)
+	}
+}
+
+// TestDispatchPokemonAlert_NoMatchedNoPrior_NoOp: defensive guard.
+// When both lists are empty the dispatcher should emit nothing —
+// even though `change` is non-nil, there's no one to notify.
+func TestDispatchPokemonAlert_NoMatchedNoPrior_NoOp(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
+
+	change := &tracker.EncounterChange{
+		EncounterID: "enc-empty",
+		Type:        tracker.ChangeForm,
+	}
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID: "enc-empty",
+		change:      change,
+		// matched and priorOnlyUsers both nil
+	})
+
+	jobs := drainRenderJobs(ch)
+	if len(jobs) != 0 {
+		t.Fatalf("expected 0 RenderJobs (nobody to notify), got %d", len(jobs))
 	}
 }
 
@@ -361,7 +345,10 @@ func TestInitialPokemonRender_SetsReplyKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read pokemon.go: %v", err)
 	}
-	if !strings.Contains(string(src), "ReplyKey: pokemon.EncounterID") {
+	// gofmt may insert alignment whitespace between `ReplyKey:` and the
+	// value, so collapse runs of whitespace before substring-matching.
+	normalized := strings.Join(strings.Fields(string(src)), " ")
+	if !strings.Contains(normalized, "ReplyKey: pokemon.EncounterID") {
 		t.Fatalf("pokemon.go must set ReplyKey: pokemon.EncounterID on the initial-sighting RenderJob")
 	}
 }
@@ -375,22 +362,19 @@ func (stubWeatherProvider) GetWeatherForecast(_ string) tracker.WeatherForecast 
 	return tracker.WeatherForecast{}
 }
 
-// TestDispatchPokemonChangeRender_PerLanguageOriginalFromBytes covers the
-// new "OldWebhook → original" path: when the EncounterChange carries prior
-// webhook bytes, the dispatcher re-runs base enrichment to populate
-// {{original.X}} with a richer field set than the BuildOriginalView fallback.
-// We validate that the dispatched RenderJob carries an OriginalView populated
-// from the prior bytes (rather than the small BuildOriginalView subset).
-func TestDispatchPokemonChangeRender_PerLanguageOriginalFromBytes(t *testing.T) {
-	ps, ch, d := minimalProcessor(t)
-	// Add a stub weather provider so the regular Pokemon enrichment path
-	// doesn't panic. GameData/Translations stay nil, which routes the helper
-	// to its "base only, replicated per language" branch.
+// TestDispatchPokemonAlert_PerLanguageOriginalFromBytes covers the
+// rich-OriginalView path for the monsterChanged branch: when the
+// EncounterChange carries the prior webhook bytes, the dispatcher
+// re-runs base enrichment to populate {{original.X}} with the same
+// field set as a regular monster render (not just the hand-picked
+// subset). Verified on a prior-only recipient since that's the
+// only path that emits a monsterChanged job under the unified rule.
+func TestDispatchPokemonAlert_PerLanguageOriginalFromBytes(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
 	ps.enricher.WeatherProvider = stubWeatherProvider{}
 
 	encounterID := "enc-prior-bytes"
-	user := webhook.MatchedUser{ID: "user-A", Type: "discord:user", Language: "en"}
-	trackPriorMessage(t, d, encounterID, user.ID, "msg-A")
+	priorOnly := webhook.MatchedUser{ID: "user-A", Type: "discord:user", Language: "en"}
 
 	atk, def, sta := 10, 11, 12
 	prior := &webhook.PokemonWebhook{
@@ -413,27 +397,24 @@ func TestDispatchPokemonChangeRender_PerLanguageOriginalFromBytes(t *testing.T) 
 		OldWebhook:  prior,
 	}
 
-	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
-		encounterID:   encounterID,
-		change:        change,
-		matched:       []webhook.MatchedUser{user},
-		isEncountered: true,
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:    encounterID,
+		change:         change,
+		priorOnlyUsers: []webhook.MatchedUser{priorOnly},
+		isEncountered:  true,
 	})
 
 	jobs := drainRenderJobs(ch)
 	if len(jobs) != 1 {
-		t.Fatalf("expected 1 RenderJob, got %d", len(jobs))
+		t.Fatalf("expected 1 RenderJob (monsterChanged), got %d", len(jobs))
 	}
 	j := jobs[0]
 	if !j.IsChange {
-		t.Errorf("post-encounter change should set IsChange=true, got false")
+		t.Errorf("prior-only path must set IsChange=true (monsterChanged), got false")
 	}
 	if j.OriginalView == nil {
 		t.Fatalf("OriginalView should be populated from prior webhook bytes, got nil")
 	}
-	// The richer view should expose fields that BuildOriginalView does not —
-	// e.g. seenType, level (when encountered) — confirming the regular
-	// pokemon enrichment path ran.
 	if _, ok := j.OriginalView["seenType"]; !ok {
 		t.Errorf("OriginalView from bytes should expose seenType (regular enrichment), got: %v", j.OriginalView)
 	}
@@ -442,16 +423,16 @@ func TestDispatchPokemonChangeRender_PerLanguageOriginalFromBytes(t *testing.T) 
 	}
 }
 
-// TestDispatchPokemonChangeRender_FallbackWhenNoBytes confirms the safety
-// net: when OldWebhook is empty (older tracker entry, partial init) the
-// dispatcher falls back to dts.BuildOriginalView so {{original.X}} still
-// exposes the hand-picked subset.
-func TestDispatchPokemonChangeRender_FallbackWhenNoBytes(t *testing.T) {
-	ps, ch, d := minimalProcessor(t)
+// TestDispatchPokemonAlert_FallbackWhenNoBytes confirms the
+// pre-bytes-storage fallback path still works: a change with no
+// OldWebhook (older tracker entry or test that didn't supply one)
+// still produces a usable OriginalView via dts.BuildOriginalView's
+// hand-picked subset.
+func TestDispatchPokemonAlert_FallbackWhenNoBytes(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
 
 	encounterID := "enc-no-bytes"
-	user := webhook.MatchedUser{ID: "user-B", Type: "discord:user"}
-	trackPriorMessage(t, d, encounterID, user.ID, "msg-B")
+	priorOnly := webhook.MatchedUser{ID: "user-B", Type: "discord:user"}
 
 	change := &tracker.EncounterChange{
 		EncounterID: encounterID,
@@ -461,11 +442,11 @@ func TestDispatchPokemonChangeRender_FallbackWhenNoBytes(t *testing.T) {
 		// OldWebhook intentionally nil
 	}
 
-	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
-		encounterID:   encounterID,
-		change:        change,
-		matched:       []webhook.MatchedUser{user},
-		isEncountered: true,
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:    encounterID,
+		change:         change,
+		priorOnlyUsers: []webhook.MatchedUser{priorOnly},
+		isEncountered:  true,
 	})
 
 	jobs := drainRenderJobs(ch)
@@ -530,20 +511,19 @@ func TestTileGate_ConcurrentReadAfterCloseNoRace(t *testing.T) {
 	}
 }
 
-// TestDispatchPokemonChangeRender_TileGateOnEveryJob is a structural guard:
+// TestDispatchPokemonAlert_TileGateOnEveryJob is a structural guard:
 // when the dispatch input carries a TilePending and emits multiple
-// RenderJobs (withPrior + withoutPrior), every emitted job must reference
-// the same tileGate. The gate ensures one goroutine writes the shared
-// Enrichment map's staticMap field before any render worker reads it; if
-// jobs in a batch ever reference different gates, sibling render workers
-// would race on that map.
-func TestDispatchPokemonChangeRender_TileGateOnEveryJob(t *testing.T) {
-	ps, ch, d := minimalProcessor(t)
+// RenderJobs (matched + priorOnly batch), every emitted job must
+// reference the same tileGate. The gate ensures one goroutine writes
+// the shared Enrichment map's staticMap field before any render
+// worker reads it; if jobs in a batch ever reference different
+// gates, sibling render workers would race on that map.
+func TestDispatchPokemonAlert_TileGateOnEveryJob(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
 
 	encounterID := "enc-gate-wiring"
-	withPriorUser := webhook.MatchedUser{ID: "user-A", Type: "discord:user"}
-	withoutPriorUser := webhook.MatchedUser{ID: "user-B", Type: "discord:user"}
-	trackPriorMessage(t, d, encounterID, withPriorUser.ID, "msg-A")
+	matchedUser := webhook.MatchedUser{ID: "user-A", Type: "discord:user"}
+	priorOnlyUser := webhook.MatchedUser{ID: "user-B", Type: "discord:user"}
 
 	// Real TilePending in default (URL) mode with no target — Apply is a
 	// no-op so we don't need a full enrichment/staticmap wiring. We send a
@@ -562,17 +542,18 @@ func TestDispatchPokemonChangeRender_TileGateOnEveryJob(t *testing.T) {
 		New:         tracker.EncounterState{PokemonID: 25, Form: 65, CP: 950},
 	}
 
-	ps.dispatchPokemonChangeRender(pokemonChangeRenderInput{
-		encounterID: encounterID,
-		change:      change,
-		matched:     []webhook.MatchedUser{withPriorUser, withoutPriorUser},
-		enrichment:  map[string]any{"name": "Pikachu"},
-		tilePending: pending,
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:    encounterID,
+		change:         change,
+		matched:        []webhook.MatchedUser{matchedUser},
+		priorOnlyUsers: []webhook.MatchedUser{priorOnlyUser},
+		enrichment:     map[string]any{"name": "Pikachu"},
+		tilePending:    pending,
 	})
 
 	jobs := drainRenderJobs(ch)
 	if len(jobs) != 2 {
-		t.Fatalf("expected 2 RenderJobs (one withPrior, one withoutPrior), got %d", len(jobs))
+		t.Fatalf("expected 2 RenderJobs (matched + monsterChanged), got %d", len(jobs))
 	}
 
 	var sharedGate *tileGate
@@ -600,11 +581,10 @@ func TestDispatchPokemonChangeRender_TileGateOnEveryJob(t *testing.T) {
 
 // TestProcessPokemon_RespectsChangeTrackingFlag is a source-level guard:
 // the pokemon webhook handler must consult ps.cfg.Tracking.PokemonChangeTracking
-// before invoking dispatchPokemonChangeRender. When the flag is false, change
-// events fall through to the regular initial-render path (sending a plain
-// `monster` to any matched users with no reply threading). Source-grep on
-// purpose — ProcessPokemon needs a fully-constructed ProcessorService
-// (matcher, enricher, state) which is impractical to assemble here.
+// before routing into the per-user dispatch path. When the flag is false,
+// the legacy single-RenderJob path runs instead. Source-grep on purpose —
+// ProcessPokemon needs a fully-constructed ProcessorService (matcher,
+// enricher, state) which is impractical to assemble here.
 func TestProcessPokemon_RespectsChangeTrackingFlag(t *testing.T) {
 	src, err := os.ReadFile("pokemon.go")
 	if err != nil {
@@ -612,6 +592,6 @@ func TestProcessPokemon_RespectsChangeTrackingFlag(t *testing.T) {
 	}
 	s := string(src)
 	if !strings.Contains(s, "ps.cfg.Tracking.PokemonChangeTracking") {
-		t.Fatalf("pokemon.go must gate dispatchPokemonChangeRender on ps.cfg.Tracking.PokemonChangeTracking. Without this, the [tracking] pokemon_change_tracking flag has no effect.")
+		t.Fatalf("pokemon.go must reference ps.cfg.Tracking.PokemonChangeTracking. Without this, the [tracking] pokemon_change_tracking flag has no effect.")
 	}
 }
