@@ -32,31 +32,20 @@ type MessageTracker struct {
 	cacheDir   string
 	mu         sync.Mutex
 
-	// replyTargets is a reverse index of the replyIndex: replyKey → set of
-	// targets that have a live reply entry for that key. Maintained
-	// alongside replyIndex (added on Track, removed on replyIndex
-	// OnEviction). Used by LookupReplyTargets to enumerate all
-	// recipients for a given encounter ID at change-event time
-	// without scanning the entire replyIndex.
-	//
-	// O(targets-for-this-replyKey) lookup vs O(replyIndex-size) for a
-	// prefix scan. Matters on busy servers where the replyIndex can
-	// hold thousands of entries and change events fire several times
-	// per second.
-	//
-	// Guarded by replyTargetsMu, NOT cache.mu — kept on a separate
-	// mutex so reads (LookupReplyTargets) can't contend with the
-	// cache's clean-deletion path.
+	// replyTargets is the replyKey → set-of-targets reverse index of
+	// replyIndex, maintained on Track and replyIndex OnEviction.
+	// Lets LookupReplyTargets enumerate recipients in O(targets) so
+	// change-event fanout doesn't scan the full replyIndex.
 	replyTargetsMu sync.RWMutex
 	replyTargets   map[string]map[string]struct{}
 }
 
-// replyIndexKey composes the reply-index lookup key from a reply key
-// and the target identifier. The NUL separator avoids collisions
-// between, e.g., target = "abc:def" / replyKey = "x" and
-// target = "x" / replyKey = "abc:def".
+// replyIndexKeySep separates replyKey and target in replyIndex keys.
+// NUL avoids collisions with any printable substring (e.g. "abc:def").
+const replyIndexKeySep = "\x00"
+
 func replyIndexKey(replyKey, target string) string {
-	return replyKey + "\x00" + target
+	return replyKey + replyIndexKeySep + target
 }
 
 // NewMessageTracker creates a new MessageTracker with TTL cache and eviction-based clean deletion.
@@ -109,15 +98,13 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 	// through here — we don't differentiate, the reverse index should
 	// reflect the cache's live set regardless of why an entry left.
 	replyIndex.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[string, string]) {
-		// The replyIndex key is `replyKey + "\x00" + target`. Split it
-		// so we can update the reverse index.
 		key := item.Key()
-		sep := strings.IndexByte(key, 0)
+		sep := strings.Index(key, replyIndexKeySep)
 		if sep < 0 {
 			return // malformed key; should never happen given Track is the only writer
 		}
 		replyKey := key[:sep]
-		target := key[sep+1:]
+		target := key[sep+len(replyIndexKeySep):]
 		mt.replyTargetsMu.Lock()
 		if set := mt.replyTargets[replyKey]; set != nil {
 			delete(set, target)
@@ -308,15 +295,17 @@ func (mt *MessageTracker) Load() error {
 		mt.cache.Set(entry.Key, msg, remaining)
 		if msg.ReplyKey != "" {
 			mt.replyIndex.Set(replyIndexKey(msg.ReplyKey, msg.Target), msg.SentID, remaining)
-			// Populate the reverse index the same way Track() does so
-			// LookupReplyTargets works immediately after a restart
-			// (without waiting for new alerts to repopulate it).
+			// replyIndex.OnEviction is already live (replyIndex.Start
+			// ran in the constructor), so the reverse-index write
+			// must be guarded against a concurrent eviction.
+			mt.replyTargetsMu.Lock()
 			set := mt.replyTargets[msg.ReplyKey]
 			if set == nil {
 				set = make(map[string]struct{})
 				mt.replyTargets[msg.ReplyKey] = set
 			}
 			set[msg.Target] = struct{}{}
+			mt.replyTargetsMu.Unlock()
 		}
 	}
 

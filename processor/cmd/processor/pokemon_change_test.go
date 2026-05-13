@@ -46,71 +46,6 @@ func newTestDispatcher(t *testing.T) *delivery.Dispatcher {
 	return delivery.NewDispatcherWithSenders(senders, mt, 16, delivery.QueueConfig{})
 }
 
-// trackPriorMessage seeds the MessageTracker with a tracked message indexed
-// under (replyKey, target) so partitionByPriorMessage / LookupReply find it.
-// The tracker only populates the reply index when the TrackedMessage carries a
-// non-empty ReplyKey, so we set it here.
-func trackPriorMessage(t *testing.T, d *delivery.Dispatcher, replyKey, target, sentID string) {
-	t.Helper()
-	d.MessageTracker().Track(
-		"prior:"+replyKey+":"+target,
-		&delivery.TrackedMessage{
-			SentID:   sentID,
-			Target:   target,
-			Type:     "discord:user",
-			ReplyKey: replyKey,
-		},
-		5*time.Minute,
-	)
-}
-
-// TestPartitionByPriorMessage covers the pure helper.
-func TestPartitionByPriorMessage(t *testing.T) {
-	d := newTestDispatcher(t)
-	tr := d.MessageTracker()
-
-	encounterID := "enc-1"
-	matched := []webhook.MatchedUser{
-		{ID: "user-A", Type: "discord:user"},
-		{ID: "user-B", Type: "discord:user"},
-		{ID: "user-C", Type: "discord:user"},
-	}
-
-	// Seed prior messages for A and C only.
-	trackPriorMessage(t, d, encounterID, "user-A", "msg-A")
-	trackPriorMessage(t, d, encounterID, "user-C", "msg-C")
-
-	withPrior, withoutPrior := partitionByPriorMessage(matched, encounterID, tr)
-
-	if len(withPrior) != 2 {
-		t.Fatalf("withPrior length: got %d, want 2 (%v)", len(withPrior), withPrior)
-	}
-	got := map[string]bool{withPrior[0].ID: true, withPrior[1].ID: true}
-	if !got["user-A"] || !got["user-C"] {
-		t.Errorf("withPrior should contain user-A and user-C, got %v", withPrior)
-	}
-	if len(withoutPrior) != 1 || withoutPrior[0].ID != "user-B" {
-		t.Errorf("withoutPrior should contain only user-B, got %v", withoutPrior)
-	}
-}
-
-// TestPartitionByPriorMessage_NilTracker — when no tracker is provided (e.g.
-// dispatcher not initialised), every user is treated as "no prior" so the
-// fresh-message path covers them all.
-func TestPartitionByPriorMessage_NilTracker(t *testing.T) {
-	matched := []webhook.MatchedUser{
-		{ID: "user-A", Type: "discord:user"},
-		{ID: "user-B", Type: "discord:user"},
-	}
-	withPrior, withoutPrior := partitionByPriorMessage(matched, "enc-x", nil)
-	if len(withPrior) != 0 {
-		t.Errorf("withPrior should be empty when tracker is nil, got %v", withPrior)
-	}
-	if len(withoutPrior) != 2 {
-		t.Errorf("withoutPrior should contain all matched users, got %v", withoutPrior)
-	}
-}
-
 // drainRenderJobs reads every RenderJob currently buffered in the channel into
 // a slice and returns it. Closes nothing; intended for tests that send jobs
 // onto a buffered channel and then assert their shape.
@@ -144,11 +79,8 @@ func minimalProcessor(t *testing.T) (*ProcessorService, chan RenderJob, *deliver
 	return ps, ch, d
 }
 
-// TestDispatchPokemonAlert_MatchedUserStillMatches: user matched at
-// T1 (prior exists), still matches at T2 — receives `monster` (NOT
-// monsterChanged) with ReplyKey set so the delivery queue attaches
-// the reply metadata. This is the "match → monster, regardless of
-// whether they also had a prior" rule.
+// Matched user receives `monster` (never monsterChanged) with
+// ReplyKey set so the delivery queue links to any prior message.
 func TestDispatchPokemonAlert_MatchedUserStillMatches(t *testing.T) {
 	ps, ch, _ := minimalProcessor(t)
 
@@ -188,12 +120,7 @@ func TestDispatchPokemonAlert_MatchedUserStillMatches(t *testing.T) {
 	}
 }
 
-// TestDispatchPokemonAlert_PriorOnlyNoLongerMatches is the regression
-// guard for the originally-reported bug: at T1 the user matched and
-// got a `monster` alert; at T2 the species changed and the new
-// species matches NO ONE — including the original user. Previously
-// ProcessPokemon early-returned and the user never heard the bad
-// news. Under the unified rule the prior-only user receives
+// Prior-only user (matched at T1, no longer matches at T2) receives
 // `monsterChanged` as a reply with OriginalView populated.
 func TestDispatchPokemonAlert_PriorOnlyNoLongerMatches(t *testing.T) {
 	ps, ch, _ := minimalProcessor(t)
@@ -241,16 +168,8 @@ func TestDispatchPokemonAlert_PriorOnlyNoLongerMatches(t *testing.T) {
 	}
 }
 
-// TestDispatchPokemonAlert_MixedMatchedAndPriorOnly: at T1 user A
-// matched (still matches at T2 → monster reply). User B also
-// matched at T1 (no longer matches at T2 → monsterChanged reply).
-// User C joins at T2 with a new tracking rule that matches the new
-// state (no prior → fresh monster, ReplyKey seeded for future
-// changes).
-//
-// Expect three distinct outputs: two monster jobs (A still-matches,
-// C new-match — they share language so they batch into ONE
-// RenderJob) and one monsterChanged job (B).
+// Mixed: matched (A, C) share a language and batch into one
+// `monster` RenderJob; prior-only B gets a separate monsterChanged.
 func TestDispatchPokemonAlert_MixedMatchedAndPriorOnly(t *testing.T) {
 	ps, ch, _ := minimalProcessor(t)
 

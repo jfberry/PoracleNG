@@ -75,7 +75,6 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, p
 
 	prev, exists := et.entries[encounterID]
 	if !exists {
-		// First sighting
 		cp := newState
 		cp.InsertedAt = time.Now().Unix()
 		et.entries[encounterID] = &encounterEntry{state: cp, webhook: pokemon}
@@ -117,11 +116,10 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, p
 		return false, change
 	}
 
-	// Update stored state with latest data (stats, weather, disappear time)
-	// for accurate next-change comparison. The webhook struct is *not*
-	// refreshed here: it represents "the prior change point" for
-	// {{original.X}}, so it must stick from the most recent change
-	// (or first sighting) until the next change fires.
+	// Refresh state for accurate next-change comparison. The webhook
+	// struct is NOT refreshed: it must stick from the most recent
+	// change (or first sighting) so {{original.X}} renders against
+	// the right prior point.
 	prev.state = newState
 	prev.state.InsertedAt = old.InsertedAt
 

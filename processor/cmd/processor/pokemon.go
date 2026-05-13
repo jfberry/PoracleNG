@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"maps"
+	"slices"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -107,25 +107,10 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
 
-		// Encounter tracking (change detection) gates:
-		//
-		//   1. tracking feature is on, AND
-		//   2. either someone matches THIS state (we'll need to remember
-		//      the encounter for future changes), OR an entry already
-		//      exists in the tracker (someone matched a previous state
-		//      and is owed a monsterChanged notification when the
-		//      species/form/gender/etc. shifts).
-		//
-		// The Has() check is the load-bearing one for the
-		// "T1 user X matched, T2 species changed and X no longer
-		// matches" case — without it the matcher returns no users and
-		// we'd never reach the change-dispatch path. With it, the
-		// tracker runs, detects the diff, and the dispatcher fans the
-		// change out to prior recipients via LookupReplyTargets.
-		//
-		// We store a value copy with the PVP maps/slices nilled — PVP
-		// rankings are the only heavy field on PokemonWebhook and
-		// aren't used by the {{original.X}} render.
+		// Track when someone matches the new state OR an entry already
+		// exists (post-match changes still need diffing so prior
+		// recipients can be notified). Store a PVP-stripped copy —
+		// rankings are heavy and unused by {{original.X}}.
 		trackingEnabled := ps.cfg.Tracking.PokemonChangeTracking
 		shouldTrack := trackingEnabled && (len(matched) > 0 || ps.encounters.Has(pokemon.EncounterID))
 		var change *tracker.EncounterChange
@@ -138,9 +123,6 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			_, change = ps.encounters.Track(pokemon.EncounterID, encounterState, &stored)
 		}
 
-		// Nothing to deliver when nobody currently matches AND no
-		// change was detected. (When change != nil there are prior
-		// recipients to notify via LookupReplyTargets below.)
 		if len(matched) == 0 && change == nil {
 			if processed.Encountered {
 				l.Debugf("%s{CP%d/IV%.0f%%} appeared at [%.3f,%.3f] and 0 humans cared",
@@ -209,11 +191,8 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
 		}
 
-		// When a change has been detected AND tracking is on, gather
-		// the prior-recipients list so monsterChanged ("bad news")
-		// users get reconstructed alongside the matched ones. This
-		// must happen BEFORE the per-language enrichment loop so we
-		// pick up languages of prior-only users too.
+		// Reconstruct prior-only recipients before enrichment so their
+		// languages are included in the perLang map.
 		var priorOnlyUsers []webhook.MatchedUser
 		if change != nil && trackingEnabled && ps.dispatcher != nil {
 			matchedIDs := make(map[string]struct{}, len(matched))
@@ -222,7 +201,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			}
 			for _, targetID := range ps.dispatcher.MessageTracker().LookupReplyTargets(pokemon.EncounterID) {
 				if _, ok := matchedIDs[targetID]; ok {
-					continue // already covered by `matched`
+					continue
 				}
 				if u := ps.rebuildMatchedUserForChange(targetID); u != nil {
 					priorOnlyUsers = append(priorOnlyUsers, *u)
@@ -231,22 +210,10 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		}
 
 		enrichStart := time.Now()
-		// Tile mode is computed over the union of matched + prior-only
-		// users so the same tile decision (inline vs URL vs URLWithBytes)
-		// covers everyone we'll dispatch to.
-		allRecipients := matched
-		if len(priorOnlyUsers) > 0 {
-			allRecipients = make([]webhook.MatchedUser, 0, len(matched)+len(priorOnlyUsers))
-			allRecipients = append(allRecipients, matched...)
-			allRecipients = append(allRecipients, priorOnlyUsers...)
-		}
+		allRecipients := slices.Concat(matched, priorOnlyUsers)
 		mode := ps.tileMode("monster", allRecipients)
 		baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed, mode)
 
-		// Compute per-language translated enrichment across the union
-		// — prior-only users may speak a different language than any
-		// currently-matched user, and their monsterChanged render needs
-		// its own perLang entry.
 		var perLang map[string]map[string]any
 		if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 			perLang = make(map[string]map[string]any)
@@ -255,10 +222,9 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			}
 		}
 
-		// Per-user enrichment is only computed for matched users —
-		// PVP rank display depends on the user's tracking filter, and
-		// prior-only users (by definition, no longer matching) have
-		// none. The monsterChanged template doesn't render PVP either.
+		// PerUser PVP display only applies to currently-matched users;
+		// prior-only users (no longer matching) have no rule-specific
+		// rank to render, and monsterChanged doesn't show PVP anyway.
 		var perUser map[string]map[string]any
 		if ps.enricher.PVPDisplay != nil && perLang != nil && len(matched) > 0 {
 			perUser = ps.enricher.PokemonPerUser(perLang, matched)
@@ -277,30 +243,24 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				ps.pokemonName(change.New.PokemonID, change.New.Form))
 		}
 
-		// Tracking-enabled path: per-user template selection (monster
-		// for users who match the new state, monsterChanged for prior
-		// recipients who no longer match), always replying when a
-		// prior exists.
 		if trackingEnabled {
 			ps.dispatchPokemonAlert(pokemonDispatchInput{
-				encounterID:     pokemon.EncounterID,
-				change:          change,
-				matched:         matched,
-				priorOnlyUsers:  priorOnlyUsers,
-				matchedAreas:    matchedAreas,
-				enrichment:      baseEnrichment,
-				perLang:         perLang,
-				perUser:         perUser,
-				webhookFields:   webhookFields,
-				tilePending:     tilePending,
-				isEncountered:   processed.Encountered,
+				encounterID:    pokemon.EncounterID,
+				change:         change,
+				matched:        matched,
+				priorOnlyUsers: priorOnlyUsers,
+				matchedAreas:   matchedAreas,
+				enrichment:     baseEnrichment,
+				perLang:        perLang,
+				perUser:        perUser,
+				webhookFields:  webhookFields,
+				tilePending:    tilePending,
+				isEncountered:  processed.Encountered,
 			})
 			return
 		}
 
-		// Tracking disabled: legacy single-send path. All matched users
-		// get a regular monster (with ReplyKey set so re-enabling the
-		// flag picks back up from this send).
+		// ReplyKey is set so enabling the flag later threads onto this send.
 		ps.renderCh <- RenderJob{
 			IsPokemon:         true,
 			IsEncountered:     processed.Encountered,
@@ -319,10 +279,8 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 }
 
 // pokemonDispatchInput bundles inputs to dispatchPokemonAlert. All
-// fields refer to the NEW state of the encounter (the just-arrived
-// webhook) except priorOnlyUsers, which is the synthetic recipient
-// list reconstructed from MessageTracker.LookupReplyTargets for users
-// who had a prior alert for this encounter but no longer match.
+// fields describe the new state; priorOnlyUsers carries recipients
+// reconstructed from the reply index who no longer match.
 type pokemonDispatchInput struct {
 	encounterID    string
 	change         *tracker.EncounterChange
@@ -337,30 +295,13 @@ type pokemonDispatchInput struct {
 	isEncountered  bool
 }
 
-// dispatchPokemonAlert emits RenderJobs that implement the unified
-// change-aware delivery rule:
-//
-//   - User who matches the new state → `monster` template (the
-//     existing monsterNoIv → monster fallback in the renderer kicks
-//     in based on processed.Encountered). ReplyKey is set on every
-//     job, so the delivery queue attaches reply metadata when a
-//     prior message exists; if no prior, the fresh send seeds the
-//     reply-index for future changes.
-//
-//   - User who had a prior alert for this encounter but no longer
-//     matches → `monsterChanged` template, replying to the prior
-//     message. {{original.X}} is populated from the stored prior
-//     webhook so templates can show "was Magmar / IV 100, now
-//     Slugma" comparisons.
-//
-// Per-language grouping batches users with the same language onto
-// one RenderJob (so the renderer only enriches each language once);
-// the tileGate ensures the shared enrichment map is written once
+// dispatchPokemonAlert emits one RenderJob per language per bucket:
+// matched users get `monster`; prior-only users get `monsterChanged`
+// with a per-language {{original.X}} view. ReplyKey is set on every
+// job so the delivery queue attaches reply metadata when a prior
+// exists. Fresh sends seed the reply-index for future changes. A
+// single tileGate ensures the shared enrichment map is written once
 // before any render worker reads it.
-//
-// When ps.dispatcher is nil (test / partial-init paths) we fall back
-// to a single fresh-send to all matched users — the reply-index
-// isn't reachable without a MessageTracker.
 func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	if ps.dispatcher == nil {
 		if len(in.matched) == 0 {
@@ -414,9 +355,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 			perLangOriginal = ps.buildPerLanguageOriginal(in.change.OldWebhook, in.priorOnlyUsers)
 		}
 		if perLangOriginal == nil {
-			// Older tracker entries (pre-bytes-storage) or tests that
-			// don't supply a prior webhook — fall back to the
-			// hand-picked subset from the stored EncounterState.
+			// Fallback when prior webhook bytes aren't available.
 			fallbackOriginal = dts.BuildOriginalView(in.change.Old, ps.enricher.GameData, ps.translatorFor(""))
 		}
 
@@ -447,36 +386,27 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 }
 
 // rebuildMatchedUserForChange synthesises a MatchedUser for a target
-// that had a prior alert for this encounter but doesn't match the
-// new state. We pull identity + language from the humans store; the
-// rule-specific fields (Template, Clean, Ping, Distance) get default
-// values because we don't know which T1 tracking rule originally
-// matched — that rule may have been deleted, edited, or matched on
-// a now-stale filter. Returns nil when the human is no longer
-// registered or has been admin-disabled — their reply-index entry
-// will expire on its own.
+// that had a prior alert for this encounter but no longer matches.
+// Rule-specific fields (Template, Clean, Ping, Distance) stay at
+// zero values — the T1 tracking rule isn't known here and may have
+// been deleted or edited since. Returns nil for unknown or disabled
+// humans; their reply-index entry expires on its own.
 func (ps *ProcessorService) rebuildMatchedUserForChange(targetID string) *webhook.MatchedUser {
 	if ps.humans == nil {
 		return nil
 	}
-	human, err := ps.humans.Get(targetID)
+	human, err := ps.humans.GetLite(targetID)
 	if err != nil || human == nil {
 		return nil
 	}
 	if !human.Enabled || human.AdminDisable {
 		return nil
 	}
-	lang := human.Language
-	if lang == "" {
-		lang = ps.cfg.General.Locale
-	}
 	return &webhook.MatchedUser{
 		ID:       human.ID,
 		Type:     human.Type,
 		Name:     human.Name,
-		Language: lang,
-		// Template / Clean / Ping / Distance left at zero values
-		// (defaults).
+		Language: effectiveLanguage(webhook.MatchedUser{Language: human.Language}, ps.cfg.General.Locale),
 	}
 }
 
@@ -538,27 +468,6 @@ func (ps *ProcessorService) buildPerLanguageOriginal(prior *webhook.PokemonWebho
 		out[lang] = merged
 	}
 	return out
-}
-
-// partitionByPriorMessage splits matched users into two slices: those that
-// already have a tracked message under (encounterID, user.ID) in the message
-// tracker, and those that don't. Used by the change-event dispatch to decide
-// which template to apply per-user.
-//
-// The tracker may be nil — in that case all users are treated as having no
-// prior (i.e. they all get the fresh-message path).
-func partitionByPriorMessage(matched []webhook.MatchedUser, encounterID string, tr *delivery.MessageTracker) (withPrior, withoutPrior []webhook.MatchedUser) {
-	if tr == nil {
-		return nil, append([]webhook.MatchedUser(nil), matched...)
-	}
-	for _, m := range matched {
-		if tr.LookupReply(encounterID, m.ID) != "" {
-			withPrior = append(withPrior, m)
-		} else {
-			withoutPrior = append(withoutPrior, m)
-		}
-	}
-	return
 }
 
 // translatorFor returns an i18n translator for the given language. Empty
