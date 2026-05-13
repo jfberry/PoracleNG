@@ -255,7 +255,7 @@ func TestDispatchPokemonAlert_NoMatchedNoPrior_NoOp(t *testing.T) {
 // TestInitialPokemonRender_SetsReplyKey pins the invariant that the
 // initial-sighting RenderJob enqueued by ProcessPokemon carries
 // ReplyKey = pokemon.EncounterID. Without that, (encounterID, target)
-// never enters MessageTracker.replyIndex and the next change-event has
+// never enters MessageTracker.replies and the next change-event has
 // no prior message to thread under. ProcessPokemon needs a full
 // ProcessorService to invoke directly, so the assertion grep-checks
 // pokemon.go for the literal field assignment.

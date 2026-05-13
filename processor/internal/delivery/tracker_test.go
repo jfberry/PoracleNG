@@ -48,7 +48,6 @@ func newTestTracker(t *testing.T) (*MessageTracker, *mockSender) {
 	mt := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() {
 		mt.cache.Stop()
-		mt.replyIndex.Stop()
 	})
 	return mt, mock
 }
