@@ -125,6 +125,17 @@ type SummariserConfig struct {
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
 	Locale               string                   `toml:"locale"`                // default language code (e.g. "en", "pl")
+	// DefaultTimezone is the IANA timezone name used by the profile and
+	// summary schedulers when a human has lat/lon = 0/0 (no location
+	// set). Empty string means "fall back to the server's local time
+	// zone" (Go's time.Local). Set to a specific IANA name (e.g.
+	// "Europe/London", "America/Los_Angeles") to override.
+	//
+	// Examples of the fallback chain at schedule-tick time:
+	//   - human has lat/lon set → resolve via tzf
+	//   - human has lat/lon = 0/0 AND default_timezone is set → use it
+	//   - human has lat/lon = 0/0 AND default_timezone is empty → server's time.Local
+	DefaultTimezone      string                   `toml:"default_timezone"`
 	RoleCheckMode        string                   `toml:"role_check_mode"`       // "ignore", "disable-user", "delete"
 	DefaultTemplateName  any                      `toml:"default_template_name"` // default DTS template (typically 1 or "1")
 	DisabledCommands     []string                 `toml:"disabled_commands"`     // list of command names to disable (e.g. ["lure", "nest"])

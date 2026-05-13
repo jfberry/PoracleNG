@@ -36,6 +36,10 @@ type schedulerConfig struct {
 	// zero, in the far future, or otherwise unreliable. 0 disables.
 	// Sourced from [tracking] quest_summary_buffer_ttl_hours × 3600.
 	BufferMaxAgeSecs int64
+	// DefaultTimezone is the IANA timezone name used by the schedule
+	// matcher when a human has lat/lon = 0/0. Empty falls back to
+	// the server's time.Local. Sourced from [general] default_timezone.
+	DefaultTimezone string
 }
 
 // SummaryScheduler wakes at fixed wall-clock minute marks (the same marks
@@ -147,7 +151,7 @@ func (s *SummaryScheduler) tick() {
 			if human == nil {
 				continue
 			}
-			if !isScheduleActive(entries, human.Latitude, human.Longitude, s.nowFunc) {
+			if !isScheduleActive(entries, human.Latitude, human.Longitude, s.cfg.DefaultTimezone, s.nowFunc) {
 				continue
 			}
 			s.dispatch(humanID, alertType)

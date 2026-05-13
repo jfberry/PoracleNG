@@ -92,6 +92,16 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 			sb.WriteString("    " + strings.ReplaceAll(body, "\n", "\n    ") + "\n")
 		}
 	}
+	// Append a single timezone-annotation line covering all profiles
+	// (they share the human's location). Skip if neither the target
+	// nor any profile carries a location — the scheduler will fall
+	// back to the operator's default_timezone or the server's local
+	// time and FormatScheduleTimezone reports that honestly.
+	if ctx.Humans != nil && ctx.Config != nil {
+		if human, err := ctx.Humans.Get(ctx.TargetID); err == nil && human != nil {
+			sb.WriteString("\n" + FormatScheduleTimezone(tr, human.Latitude, human.Longitude, ctx.Config.General.DefaultTimezone))
+		}
+	}
 	return []bot.Reply{{Text: sb.String()}}
 }
 

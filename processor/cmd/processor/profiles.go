@@ -83,7 +83,7 @@ func (ps *ProcessorService) checkProfileSwitches() {
 			continue
 		}
 
-		if !isProfileActive(p.ParsedActiveHours, human.Latitude, human.Longitude) {
+		if !ps.isProfileActive(p.ParsedActiveHours, human.Latitude, human.Longitude) {
 			continue
 		}
 
@@ -122,29 +122,24 @@ func (ps *ProcessorService) checkProfileSwitches() {
 // local time at the given coordinates. This is a thin wrapper kept for
 // readability at the call site; isScheduleActive carries the actual logic
 // and is shared with the summary scheduler.
-func isProfileActive(entries []db.ActiveHourEntry, lat, lon float64) bool {
-	return isScheduleActive(entries, lat, lon, time.Now)
+func (ps *ProcessorService) isProfileActive(entries []db.ActiveHourEntry, lat, lon float64) bool {
+	return isScheduleActive(entries, lat, lon, ps.cfg.General.DefaultTimezone, time.Now)
 }
 
 // isScheduleActive checks whether any active_hours entry matches the current
 // local time at the given coordinates. The nowFunc parameter is for test
 // injection; production callers pass time.Now. Used by both the profile
 // scheduler and the summary scheduler.
-func isScheduleActive(entries []db.ActiveHourEntry, lat, lon float64, nowFunc func() time.Time) bool {
+//
+// defaultTZ is the operator's configured [general] default_timezone —
+// the fallback when the human has lat/lon = 0/0. Empty means "use
+// server local".
+func isScheduleActive(entries []db.ActiveHourEntry, lat, lon float64, defaultTZ string, nowFunc func() time.Time) bool {
 	if nowFunc == nil {
 		nowFunc = time.Now
 	}
-	var now time.Time
-	if lat != 0 || lon != 0 {
-		tz := geo.GetTimezone(lat, lon)
-		loc, err := time.LoadLocation(tz)
-		if err != nil {
-			loc = time.UTC
-		}
-		now = nowFunc().In(loc)
-	} else {
-		now = nowFunc().UTC()
-	}
+	loc, _, _ := geo.ResolveTimezone(lat, lon, defaultTZ)
+	now := nowFunc().In(loc)
 
 	nowHour := now.Hour()
 	nowMin := now.Minute()

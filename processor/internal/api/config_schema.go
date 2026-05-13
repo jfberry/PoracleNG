@@ -71,6 +71,7 @@ var configSchema = []ConfigSection{
 		Title: "General Settings",
 		Fields: []ConfigFieldDef{
 			{Name: "locale", Type: "string", Default: "en", Description: "Default language for new users and system messages (e.g., en, fr, de, it, ru)", HotReload: true},
+			{Name: "default_timezone", Type: "string", Default: "", Description: "IANA timezone name used by profile and summary schedulers when a human has no location set (lat/lon = 0/0). Empty = use the server's local timezone. Examples: Europe/London, America/Los_Angeles, Asia/Tokyo. Users with a !location are unaffected — their timezone is always derived from lat/lon.", HotReload: false},
 			{Name: "role_check_mode", Type: "select", Default: "ignore", Description: "Action when a user loses their required Discord/Telegram role", HotReload: true, Options: []ConfigSelectOption{
 				{Value: "ignore", Label: "Ignore", Description: "Log the event but take no action — user keeps their registration"},
 				{Value: "disable-user", Label: "Disable User", Description: "Set admin_disable flag, remove subscription roles, send goodbye message — user must re-register"},

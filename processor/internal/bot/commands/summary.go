@@ -96,6 +96,14 @@ func (c *SummaryCommand) showStatus(ctx *bot.CommandContext, alertType string) [
 	var lines []string
 	if schedule != nil && len(schedule.ParsedActiveHours) > 0 {
 		lines = append(lines, tr.Tf("msg.summary.scheduled", alertType, formatActiveHours(tr, schedule.ParsedActiveHours, ", ")))
+		// Append a one-liner explaining which timezone the schedule
+		// is being evaluated in, with the current local time. The
+		// target's lat/lon is fetched from the humans store so the
+		// annotation matches what the scheduler actually does — there
+		// is no canned "user timezone" cached anywhere.
+		if tzLine := timezoneAnnotation(ctx, alertType); tzLine != "" {
+			lines = append(lines, tzLine)
+		}
 	} else {
 		lines = append(lines, tr.Tf("msg.summary.no_schedule", alertType))
 	}
@@ -110,6 +118,22 @@ func (c *SummaryCommand) showStatus(ctx *bot.CommandContext, alertType string) [
 		lines = append(lines, tr.Tf("msg.summary.buffer_count", count, alertType, prefix))
 	}
 	return []bot.Reply{{Text: strings.Join(lines, "\n")}}
+}
+
+// timezoneAnnotation looks up the target's lat/lon from the humans
+// store and builds the localized "Times are in <tz>; currently HH:MM"
+// suffix. Returns "" on any error (the schedule display is still
+// useful without the annotation). _alertType is reserved for future
+// per-alert-type timezone overrides.
+func timezoneAnnotation(ctx *bot.CommandContext, _alertType string) string {
+	if ctx.Humans == nil || ctx.Config == nil {
+		return ""
+	}
+	human, err := ctx.Humans.Get(ctx.TargetID)
+	if err != nil || human == nil {
+		return ""
+	}
+	return FormatScheduleTimezone(ctx.Tr(), human.Latitude, human.Longitude, ctx.Config.General.DefaultTimezone)
 }
 
 // setTime parses day/time tokens and stores them as a JSON-encoded

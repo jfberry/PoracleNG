@@ -218,6 +218,7 @@ func main() {
 			schedulerConfig{
 				Locale:           cfg.General.Locale,
 				BufferMaxAgeSecs: int64(cfg.Tracking.QuestSummaryBufferTTLHours) * 3600,
+				DefaultTimezone:  cfg.General.DefaultTimezone,
 			},
 			stateMgr,
 			proc.summaryBuffer,

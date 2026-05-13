@@ -6,8 +6,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
 
@@ -215,6 +217,28 @@ var activeHoursDayKeys = []string{
 	"day.friday",
 	"day.saturday",
 	"day.sunday",
+}
+
+// FormatScheduleTimezone returns a translated one-liner that
+// explains which timezone the schedule is being evaluated in, plus
+// the current local time in that zone. Intended to be appended to
+// `!profile` / `!summary` show responses so users can sanity-check
+// whether their schedule will fire when they expect.
+//
+// The three i18n keys (msg.schedule.tz.from_location /
+// .from_default / .from_server) each take two args: timezone name
+// and current local time formatted HH:MM.
+func FormatScheduleTimezone(tr *i18n.Translator, lat, lon float64, defaultTZ string) string {
+	loc, name, source := geo.ResolveTimezone(lat, lon, defaultTZ)
+	nowLocal := time.Now().In(loc).Format("15:04")
+	switch source {
+	case geo.TimezoneFromLocation:
+		return tr.Tf("msg.schedule.tz.from_location", name, nowLocal)
+	case geo.TimezoneFromDefault:
+		return tr.Tf("msg.schedule.tz.from_default", name, nowLocal)
+	default:
+		return tr.Tf("msg.schedule.tz.from_server", name, nowLocal)
+	}
 }
 
 // formatActiveHours renders parsed active_hours entries as one
