@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,24 @@ type MessageTracker struct {
 	senders    map[string]Sender               // "discord" → sender, "telegram" → sender
 	cacheDir   string
 	mu         sync.Mutex
+
+	// replyTargets is a reverse index of the replyIndex: replyKey → set of
+	// targets that have a live reply entry for that key. Maintained
+	// alongside replyIndex (added on Track, removed on replyIndex
+	// OnEviction). Used by LookupReplyTargets to enumerate all
+	// recipients for a given encounter ID at change-event time
+	// without scanning the entire replyIndex.
+	//
+	// O(targets-for-this-replyKey) lookup vs O(replyIndex-size) for a
+	// prefix scan. Matters on busy servers where the replyIndex can
+	// hold thousands of entries and change events fire several times
+	// per second.
+	//
+	// Guarded by replyTargetsMu, NOT cache.mu — kept on a separate
+	// mutex so reads (LookupReplyTargets) can't contend with the
+	// cache's clean-deletion path.
+	replyTargetsMu sync.RWMutex
+	replyTargets   map[string]map[string]struct{}
 }
 
 // replyIndexKey composes the reply-index lookup key from a reply key
@@ -43,8 +62,9 @@ func replyIndexKey(replyKey, target string) string {
 // NewMessageTracker creates a new MessageTracker with TTL cache and eviction-based clean deletion.
 func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTracker {
 	mt := &MessageTracker{
-		senders:  senders,
-		cacheDir: cacheDir,
+		senders:      senders,
+		cacheDir:     cacheDir,
+		replyTargets: make(map[string]map[string]struct{}),
 	}
 
 	cache := ttlcache.New[string, *TrackedMessage](
@@ -83,6 +103,30 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 	replyIndex := ttlcache.New[string, string](
 		ttlcache.WithDisableTouchOnHit[string, string](),
 	)
+	// Maintain the reverse index alongside the replyIndex cache: when
+	// a (replyKey, target) entry expires, drop it from replyTargets too.
+	// Manual deletes (cache.Delete) and capacity evictions also flow
+	// through here — we don't differentiate, the reverse index should
+	// reflect the cache's live set regardless of why an entry left.
+	replyIndex.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[string, string]) {
+		// The replyIndex key is `replyKey + "\x00" + target`. Split it
+		// so we can update the reverse index.
+		key := item.Key()
+		sep := strings.IndexByte(key, 0)
+		if sep < 0 {
+			return // malformed key; should never happen given Track is the only writer
+		}
+		replyKey := key[:sep]
+		target := key[sep+1:]
+		mt.replyTargetsMu.Lock()
+		if set := mt.replyTargets[replyKey]; set != nil {
+			delete(set, target)
+			if len(set) == 0 {
+				delete(mt.replyTargets, replyKey)
+			}
+		}
+		mt.replyTargetsMu.Unlock()
+	})
 	go replyIndex.Start()
 	mt.replyIndex = replyIndex
 
@@ -91,12 +135,46 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 
 // Track inserts a message into the cache with the given TTL.
 // If msg.ReplyKey is non-empty, the (ReplyKey, Target) pair also indexes
-// msg.SentID in the reply index for O(1) reply lookup.
+// msg.SentID in the reply index for O(1) reply lookup, and the reverse
+// index `replyTargets` is updated so LookupReplyTargets can enumerate
+// all recipients for an encounter ID in O(targets).
 func (mt *MessageTracker) Track(key string, msg *TrackedMessage, ttl time.Duration) {
 	mt.cache.Set(key, msg, ttl)
 	if msg.ReplyKey != "" {
 		mt.replyIndex.Set(replyIndexKey(msg.ReplyKey, msg.Target), msg.SentID, ttl)
+		mt.replyTargetsMu.Lock()
+		set := mt.replyTargets[msg.ReplyKey]
+		if set == nil {
+			set = make(map[string]struct{})
+			mt.replyTargets[msg.ReplyKey] = set
+		}
+		set[msg.Target] = struct{}{}
+		mt.replyTargetsMu.Unlock()
 	}
+}
+
+// LookupReplyTargets returns the list of targets that have a live
+// reply-index entry for the given replyKey. Used by the pokemon
+// change-event dispatcher to find recipients who should be notified
+// even when they don't match the new state (the "your tracked
+// pokemon has changed" case). Order is unspecified.
+//
+// O(targets) under RLock — safe to call on every change event.
+func (mt *MessageTracker) LookupReplyTargets(replyKey string) []string {
+	if replyKey == "" {
+		return nil
+	}
+	mt.replyTargetsMu.RLock()
+	defer mt.replyTargetsMu.RUnlock()
+	set := mt.replyTargets[replyKey]
+	if len(set) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(set))
+	for t := range set {
+		out = append(out, t)
+	}
+	return out
 }
 
 // LookupReply returns the SentID of the latest message tracked for
@@ -230,6 +308,15 @@ func (mt *MessageTracker) Load() error {
 		mt.cache.Set(entry.Key, msg, remaining)
 		if msg.ReplyKey != "" {
 			mt.replyIndex.Set(replyIndexKey(msg.ReplyKey, msg.Target), msg.SentID, remaining)
+			// Populate the reverse index the same way Track() does so
+			// LookupReplyTargets works immediately after a restart
+			// (without waiting for new alerts to repopulate it).
+			set := mt.replyTargets[msg.ReplyKey]
+			if set == nil {
+				set = make(map[string]struct{})
+				mt.replyTargets[msg.ReplyKey] = set
+			}
+			set[msg.Target] = struct{}{}
 		}
 	}
 

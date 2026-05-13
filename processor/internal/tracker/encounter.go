@@ -128,6 +128,20 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, p
 	return false, nil
 }
 
+// Has reports whether the tracker currently holds an entry for the
+// encounter. Used by the pokemon handler to decide whether to keep
+// tracking on a subsequent webhook even when nobody currently matches:
+// if someone matched at T1 (the entry exists), changes at T2 still
+// need to be detected so prior recipients can be notified.
+//
+// O(1) read under RLock — safe to call on every pokemon webhook.
+func (et *EncounterTracker) Has(encounterID string) bool {
+	et.mu.RLock()
+	defer et.mu.RUnlock()
+	_, ok := et.entries[encounterID]
+	return ok
+}
+
 func (et *EncounterTracker) evictionLoop() {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
