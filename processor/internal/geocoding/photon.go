@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -186,9 +187,7 @@ func photonComponents(props photonProperties) map[string]string {
 			aliases[alias] = v
 		}
 	}
-	for k, v := range aliases {
-		components[k] = v
-	}
+	maps.Copy(components, aliases)
 
 	if propsType, name := components["type"], components["name"]; propsType != "" && name != "" && propsType != "house" {
 		components[propsType] = name

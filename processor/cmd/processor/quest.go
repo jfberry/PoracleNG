@@ -8,8 +8,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -42,8 +44,10 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 
 		l := log.WithField("ref", quest.PokestopID)
 
-		// Build rewards key for dedup
-		rewardsKey := buildQuestRewardsKey(quest.Rewards)
+		// Build rewards key for dedup. AR / non-AR are separate quests on
+		// the same stop with independent objectives — keying on rewards
+		// alone collapsed colliding-reward pairs into one alert.
+		rewardsKey := buildQuestRewardsKey(quest.WithAR, quest.Rewards)
 		if ps.duplicates.CheckQuest(quest.PokestopID, rewardsKey) {
 			l.Debug("Quest duplicate, ignoring")
 			metrics.DuplicatesSkipped.WithLabelValues("quest").Inc()
@@ -64,20 +68,26 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
-		matched, matchedAreas := ps.questMatcher.Match(data, st)
-		metrics.MatchingDuration.WithLabelValues("quest").Observe(time.Since(matchStart).Seconds())
+		matched, buffered, matchedAreas := ps.questMatcher.Match(data, st)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("quest", raw, matchedAreas, matched)
+
+		// Append buffered (summary-bit) matches to the summary buffer.
+		// These users get a grouped delivery later from the summary
+		// scheduler (PR 5); we don't enrich or render now.
+		if len(buffered) > 0 {
+			ps.bufferQuestMatches(buffered, &quest, rewards, raw)
+		}
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("quest").Inc()
 			metrics.MatchedUsers.WithLabelValues("quest").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Quest at %s areas(%s) and %d humans cared", quest.Name, areaNames(matchedAreas), len(matched))
 
 			mode := ps.tileMode("quest", matched)
-			enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards, mode)
+			enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, quest.URL, rewards, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
@@ -100,7 +110,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,
 				MatchedAreas:      matchedAreas,
-				TilePending:       tilePending,
+				TileGate:          ps.newTileGate(tilePending),
 				LogReference:      quest.PokestopID,
 			}
 		} else {
@@ -110,9 +120,17 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 	return nil
 }
 
-// buildQuestRewardsKey creates a dedup key from quest rewards.
-func buildQuestRewardsKey(rewards []webhook.QuestReward) string {
+// buildQuestRewardsKey creates a dedup key from quest rewards plus the
+// AR flag. The AR prefix segregates the two quests Niantic can attach to
+// a single pokestop (regular vs AR-required) so they don't collapse on
+// each other when their rewards happen to match.
+func buildQuestRewardsKey(withAR bool, rewards []webhook.QuestReward) string {
 	var key strings.Builder
+	if withAR {
+		key.WriteString("ar:")
+	} else {
+		key.WriteString("std:")
+	}
 	for _, r := range rewards {
 		key.WriteString(fmt.Sprintf("%d:", r.Type))
 		if info, ok := r.Info["pokemon_id"]; ok {
@@ -154,4 +172,71 @@ func parseQuestReward(r webhook.QuestReward) matching.QuestRewardData {
 	}
 
 	return result
+}
+
+// bufferQuestMatches appends one entry per matched user to the summary
+// buffer. The full webhook bytes are stored verbatim in the BufferedQuest
+// payload so the summary scheduler can re-enrich at delivery time
+// (picking up any language change since the buffer was written).
+//
+// The bufferKey on each entry is (RewardType, Reward, PokestopID,
+// WithAR), so we pick the first reward as the keying pair — multiple
+// rewards on the same stop+AR-flag still collapse to one entry per user
+// because the same quest can't simultaneously be tracked under
+// different reward primary keys (the matcher already routed once for
+// THIS webhook).
+func (ps *ProcessorService) bufferQuestMatches(
+	users []webhook.MatchedUser,
+	quest *webhook.QuestWebhook,
+	rewards []matching.QuestRewardData,
+	raw []byte,
+) {
+	if ps.summaryBuffer == nil || len(users) == 0 {
+		return
+	}
+
+	// Pick a representative (RewardType, Reward) for the bufferKey.
+	// Quests almost always carry a single reward; when they don't, the
+	// first reward is enough to dedup repeat firings of the same stop.
+	// Form is only carried for pokemon-encounter rewards (type 7) so
+	// different Spinda forms (or any forme/costume variant) don't
+	// collapse into one summary group — they have distinct icons and
+	// distinct rewardName labels. Candy/mega-energy are per-species,
+	// not per-form, so we deliberately ignore FormID for those.
+	var rewardType, reward, form int
+	if len(rewards) > 0 {
+		rewardType = rewards[0].Type
+		switch rewardType {
+		case 7: // pokemon encounter → pokemon ID + form
+			reward = rewards[0].PokemonID
+			form = rewards[0].FormID
+		case 4, 12: // candy / mega energy → pokemon ID (per-species, no form)
+			reward = rewards[0].PokemonID
+		case 2: // item
+			reward = rewards[0].ItemID
+		case 3: // stardust → amount
+			reward = rewards[0].Amount
+		}
+	}
+
+	expiresAt := geo.EndOfDay(quest.Latitude, quest.Longitude)
+	now := time.Now().Unix()
+	payload := append([]byte(nil), raw...) // detach from caller's buffer
+
+	for _, u := range users {
+		ps.summaryBuffer.Append(u.ID, AlertTypeQuest, tracker.BufferedQuest{
+			RewardType: rewardType,
+			Reward:     reward,
+			Form:       form,
+			PokestopID: quest.PokestopID,
+			WithAR:     quest.WithAR,
+			Payload:    payload,
+			ExpiresAt:  expiresAt,
+			CreatedAt:  now,
+			// Capture the matching rule's clean bitmask so DispatchQuestSummary
+			// can OR these across the chunk and propagate clean-deletion to
+			// the summary message.
+			Clean: u.Clean,
+		})
+	}
 }

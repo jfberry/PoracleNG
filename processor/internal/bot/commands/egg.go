@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"strings"
+
 	"github.com/guregu/null/v6"
 	log "github.com/sirupsen/logrus"
 
@@ -21,6 +23,7 @@ var eggParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixRange, Key: "arg.prefix.level"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
+	{Type: bot.ParamPrefixString, Key: "arg.prefix.gym"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -122,6 +125,18 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return c.removeEggs(ctx, levelSet)
 	}
 
+	// Optional `gym:<id-or-name>` argument pins the rule to a specific
+	// gym. Multi-word names need outer quotes (e.g. `"gym:Town Hall"`)
+	// so the bot parser keeps it as one token.
+	gymID := null.String{}
+	if raw := strings.TrimSpace(parsed.Strings["gym"]); raw != "" {
+		id, abort := resolveGymRef(ctx, raw)
+		if abort != nil {
+			return []bot.Reply{*abort}
+		}
+		gymID = null.StringFrom(id)
+	}
+
 	// Build insert structs
 	levels := make([]int, 0, len(levelSet))
 	for lvl := range levelSet {
@@ -139,7 +154,7 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			Team:        team,
 			Clean:       common.Clean,
 			Exclusive:   db.IntBool(exclusive),
-			GymID:       null.String{},
+			GymID:       gymID,
 			RSVPChanges: rsvpChanges,
 			Level:       lvl,
 		})
@@ -214,4 +229,3 @@ func (c *EggCommand) removeEggs(ctx *bot.CommandContext, levelSet map[int]bool) 
 	}
 	return []bot.Reply{{React: "✅", Text: formatRemovedRows(tr, descriptions)}}
 }
-

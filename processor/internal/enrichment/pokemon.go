@@ -678,6 +678,12 @@ func computeSeenType(pokemon *webhook.PokemonWebhook) string {
 			return "lure"
 		case "lure_encounter", "encounter", "wild":
 			return pokemon.SeenType
+		case "tappable_encounter", "tappable_lure_encounter":
+			// Tappable overworld objects (PROCESS_TAPPABLE — see Golbat
+			// webhooks-reference). Bucket both regular and lure-spawned
+			// tappables under "tappable" so DTS templates can switch on
+			// a single value.
+			return "tappable"
 		}
 		return ""
 	}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -37,13 +38,13 @@ func boolToInt(b bool) int {
 
 // trackingUserData holds common tracking fields for human validation.
 type trackingUserData struct {
-	HumanID           string
-	ProfileNo         int
-	Distance          int
-	Template          string
-	Clean             int
-	Ping              string
-	IsSpecificStation bool // maxbattle: station-specific tracking (for specificstation blocked check)
+	HumanID         string
+	ProfileNo       int
+	Distance        int
+	Template        string
+	Clean           int
+	Ping            string
+	IsSpecificMatch bool // set when the rule is pinned to a specific entity (gym_id, station_id, etc.) — meaning area/distance check is bypassed and a type-specific blocked-alert key is checked instead (e.g. "specificgym" or "specificstation")
 }
 
 // ValidateHumansGeneric filters matched trackings against human criteria.
@@ -60,6 +61,11 @@ func ValidateHumansGeneric(
 		return nil
 	}
 
+	haversineCount := 0
+	defer func() {
+		metrics.MatchingHaversines.WithLabelValues(blockedAlertType).Observe(float64(haversineCount))
+	}()
+
 	seen := make(map[string]bool)
 	var result []webhook.MatchedUser
 
@@ -75,10 +81,21 @@ func ValidateHumansGeneric(
 			continue
 		}
 
+		// Lazy haversine: compute once when first needed, cache for reuse.
+		var dist int
+		distComputed := false
+		haversine := func() int {
+			if !distComputed {
+				dist = HaversineDistance(human.Latitude, human.Longitude, lat, lon)
+				distComputed = true
+				haversineCount++
+			}
+			return dist
+		}
+
 		// Distance/area check
 		if td.Distance > 0 {
-			dist := HaversineDistance(human.Latitude, human.Longitude, lat, lon)
-			if dist > td.Distance {
+			if haversine() > td.Distance {
 				continue
 			}
 		} else {
@@ -100,8 +117,8 @@ func ValidateHumansGeneric(
 		}
 		seen[human.ID] = true
 
-		// Compute actual distance and bearing from user to event
-		actualDist := HaversineDistance(human.Latitude, human.Longitude, lat, lon)
+		// Reuse cached haversine (or compute now for area-based users).
+		actualDist := haversine()
 		bearing := Bearing(human.Latitude, human.Longitude, lat, lon)
 
 		result = append(result, webhook.MatchedUser{

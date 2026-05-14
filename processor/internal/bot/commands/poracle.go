@@ -117,14 +117,21 @@ func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd s
 		userType = bot.TypeTelegramUser
 	}
 
-	// Build community membership
-	var communities []string
-	var restrictions []string
+	// Build community membership.
+	// New users get an explicit empty restriction list (not nil) so
+	// area_security applies to them: the API's NULL-vs-[]-vs-set
+	// distinction means nil = "no restriction / full access" — that's
+	// the path channels and webhooks (created via !channel add /
+	// !webhook add) use, and we must not put regular users on it. An
+	// empty non-nil slice round-trips to DB '[]', which means
+	// "restriction set, no areas yet" — the right starting state for a
+	// user who hasn't been reconciled into a community yet.
+	communities := []string{}
+	restrictions := []string{}
 	if communityToAdd != "" {
 		communities = []string{communityToAdd}
 		restrictions = bot.CalculateLocationRestrictions(ctx.Config, communities)
 	}
-
 	human := &store.Human{
 		ID:                  ctx.UserID,
 		Name:                ctx.UserName,
@@ -148,6 +155,17 @@ func (c *PoracleCommand) handleNewUser(ctx *bot.CommandContext, communityToAdd s
 
 	ctx.TriggerReload()
 	log.Infof("poracle: %s registered as %s", ctx.UserName, userType)
+
+	// Kick off single-user reconciliation so the new human's
+	// community_membership / area_restriction get populated from their
+	// current roles or channel memberships immediately. The platform
+	// sets PostRegister to its async reconciliation hook; if
+	// reconciliation isn't configured it's nil and we skip — the user
+	// keeps the registration-channel community granted above (or the
+	// "[]" placeholder when no community context exists).
+	if ctx.PostRegister != nil {
+		ctx.PostRegister(ctx.UserID)
+	}
 
 	replies := []bot.Reply{{React: "✅"}}
 

@@ -3,12 +3,15 @@ package tracker
 import (
 	"sync"
 	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // EncounterState holds the state of a pokemon encounter for change detection.
 type EncounterState struct {
 	PokemonID     int
 	Form          int
+	Gender        int
 	Weather       int
 	CP            int
 	ATK           int
@@ -19,22 +22,41 @@ type EncounterState struct {
 }
 
 // EncounterChange holds old and new state when a change is detected.
+//
+// OldWebhook carries the prior sighting's already-parsed PokemonWebhook
+// (with PVP fields cleared at storage time). The pokemon change handler
+// re-runs the regular base + per-language enrichment pipeline against this
+// struct to build the {{original.X}} template namespace, so monsterChanged
+// templates can reference the same field set as `monster` (minus PVP) for
+// the prior state. Nil when the prior sighting was tracked without a
+// webhook (older callers, tests).
 type EncounterChange struct {
 	EncounterID string
+	Type        ChangeType
 	Old         EncounterState
 	New         EncounterState
+	OldWebhook  *webhook.PokemonWebhook
+}
+
+// encounterEntry pairs the diff-detection state snapshot with the prior
+// webhook struct used to rebuild a full {{original.X}} view at change time.
+// The caller is expected to clear PVP fields on the stored struct (see
+// ProcessPokemon) so map memory for large rankings doesn't pin in the tracker.
+type encounterEntry struct {
+	state   EncounterState
+	webhook *webhook.PokemonWebhook
 }
 
 // EncounterTracker tracks pokemon by encounter_id to detect changes.
 type EncounterTracker struct {
 	mu      sync.RWMutex
-	entries map[string]*EncounterState
+	entries map[string]*encounterEntry
 }
 
 // NewEncounterTracker creates a new encounter tracker.
 func NewEncounterTracker() *EncounterTracker {
 	et := &EncounterTracker{
-		entries: make(map[string]*EncounterState),
+		entries: make(map[string]*encounterEntry),
 	}
 	go et.evictionLoop()
 	return et
@@ -42,41 +64,80 @@ func NewEncounterTracker() *EncounterTracker {
 
 // Track records an encounter and returns a change if one was detected.
 // Returns (isNew, change) where isNew is true for first-time sightings.
-func (et *EncounterTracker) Track(encounterID string, newState EncounterState) (bool, *EncounterChange) {
+//
+// The pokemon struct is stored by pointer alongside the state snapshot —
+// the caller is responsible for clearing PVP fields (PVP, PVPRankings*)
+// before calling so the tracker's resident memory stays bounded. Pass nil
+// if no prior-webhook view is needed (e.g. in tests).
+func (et *EncounterTracker) Track(encounterID string, newState EncounterState, pokemon *webhook.PokemonWebhook) (bool, *EncounterChange) {
 	et.mu.Lock()
 	defer et.mu.Unlock()
 
-	old, exists := et.entries[encounterID]
+	prev, exists := et.entries[encounterID]
 	if !exists {
-		// First sighting
 		cp := newState
 		cp.InsertedAt = time.Now().Unix()
-		et.entries[encounterID] = &cp
+		et.entries[encounterID] = &encounterEntry{state: cp, webhook: pokemon}
 		return true, nil
 	}
 
-	// Only trigger a change event for meaningful changes (species or form),
-	// not for stats being filled in from an encounter (CP/ATK/DEF/STA going
-	// from 0 to a real value) or weather fluctuations.
-	changed := old.PokemonID != newState.PokemonID ||
-		old.Form != newState.Form
+	old := prev.state
 
-	if changed {
+	// Detect change type. Priority order: species > form > gender > encountered > weather_boost.
+	// Gender change only fires when both old and new are non-zero (initial gender resolution doesn't count).
+	// Weather-boost shift only fires post-encounter (both CPs > 0) AND when the CP actually moved.
+	// Raw IV (atk/def/sta) drift is ignored — physical IVs don't change post-encounter.
+	var changeType ChangeType
+	switch {
+	case old.PokemonID != newState.PokemonID:
+		changeType = ChangeSpecies
+	case old.Form != newState.Form:
+		changeType = ChangeForm
+	case old.Gender != newState.Gender && old.Gender != 0 && newState.Gender != 0:
+		changeType = ChangeGender
+	case old.CP == 0 && newState.CP > 0:
+		changeType = ChangeEncountered
+	case old.Weather != newState.Weather && old.CP > 0 && newState.CP > 0 && old.CP != newState.CP:
+		changeType = ChangeWeatherBoost
+	}
+
+	if changeType != ChangeNone {
 		change := &EncounterChange{
 			EncounterID: encounterID,
-			Old:         *old,
+			Type:        changeType,
+			Old:         old,
 			New:         newState,
+			OldWebhook:  prev.webhook,
 		}
-		// Update stored state
 		cp := newState
-		et.entries[encounterID] = &cp
+		cp.InsertedAt = old.InsertedAt
+		prev.state = cp
+		prev.webhook = pokemon
 		return false, change
 	}
 
-	// Update stored state with latest data (stats, weather, disappear time)
-	*old = newState
+	// Refresh state for accurate next-change comparison. The webhook
+	// struct is NOT refreshed: it must stick from the most recent
+	// change (or first sighting) so {{original.X}} renders against
+	// the right prior point.
+	prev.state = newState
+	prev.state.InsertedAt = old.InsertedAt
 
 	return false, nil
+}
+
+// Has reports whether the tracker currently holds an entry for the
+// encounter. Used by the pokemon handler to decide whether to keep
+// tracking on a subsequent webhook even when nobody currently matches:
+// if someone matched at T1 (the entry exists), changes at T2 still
+// need to be detected so prior recipients can be notified.
+//
+// O(1) read under RLock — safe to call on every pokemon webhook.
+func (et *EncounterTracker) Has(encounterID string) bool {
+	et.mu.RLock()
+	defer et.mu.RUnlock()
+	_, ok := et.entries[encounterID]
+	return ok
 }
 
 func (et *EncounterTracker) evictionLoop() {
@@ -94,7 +155,8 @@ func (et *EncounterTracker) evict() {
 	defer et.mu.Unlock()
 
 	now := time.Now().Unix()
-	for id, state := range et.entries {
+	for id, entry := range et.entries {
+		state := entry.state
 		if (state.DisappearTime > 0 && now > state.DisappearTime+300) ||
 			(state.InsertedAt > 0 && now-state.InsertedAt > maxEncounterAge) {
 			delete(et.entries, id)

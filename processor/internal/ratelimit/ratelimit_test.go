@@ -310,6 +310,91 @@ func TestIsBlockedRespectsWindowExpiry(t *testing.T) {
 	}
 }
 
+// TestSummaryBucket_SeparateFromAlertBucket pins the design intent:
+// the summary bucket and the alert bucket count independently, so a
+// destination near (or past) its alert cap can still receive
+// summaries up to the summary limit, and vice versa.
+func TestSummaryBucket_SeparateFromAlertBucket(t *testing.T) {
+	l := New(Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5, DMSummaryLimit: 3, ChannelSummaryLimit: 6})
+	defer l.Close()
+
+	// Burn the alert bucket past its limit.
+	for range 3 {
+		_ = l.Check("user1", "discord:user")
+	}
+	if !l.IsBlocked("user1", "discord:user") {
+		t.Fatal("alert bucket should be over limit after 3 Check calls (DM limit 2)")
+	}
+
+	// Summary bucket should still allow up to DMSummaryLimit (3) — the
+	// alert bucket's saturation must not bleed into it.
+	for i := range 3 {
+		r := l.CheckSummary("user1", "discord:user")
+		if !r.Allowed {
+			t.Fatalf("summary dispatch %d should be allowed despite alert bucket being saturated", i+1)
+		}
+	}
+
+	// 4th summary dispatch is the first over-limit one — JustBreached
+	// fires exactly once per window so the dispatch path can notify.
+	r := l.CheckSummary("user1", "discord:user")
+	if r.Allowed {
+		t.Fatal("4th summary dispatch should not be allowed (over DM summary limit 3)")
+	}
+	if !r.JustBreached {
+		t.Fatal("4th summary dispatch should set JustBreached for the one-time notification")
+	}
+	if r.Banned {
+		t.Fatal("summary bucket should never set Banned — no ban path for opt-in digests")
+	}
+
+	// 5th over-limit dispatch must NOT set JustBreached again (one
+	// notification per window).
+	r = l.CheckSummary("user1", "discord:user")
+	if r.JustBreached {
+		t.Fatal("subsequent over-limit calls in the same window should not re-trigger JustBreached")
+	}
+}
+
+// TestSummaryBucket_ChannelLimit pins that channel destinations get
+// their own (higher by default) summary limit, distinct from the DM
+// limit, matching the alert-bucket DM/Channel split.
+func TestSummaryBucket_ChannelLimit(t *testing.T) {
+	l := New(Config{TimingPeriod: 60, DMSummaryLimit: 2, ChannelSummaryLimit: 5})
+	defer l.Close()
+
+	// A discord channel destination should be allowed 5 dispatches,
+	// not 2 — the DM limit must not apply.
+	for i := range 5 {
+		r := l.CheckSummary("chan1", "discord:channel")
+		if !r.Allowed {
+			t.Fatalf("channel summary dispatch %d should be allowed under channel limit 5", i+1)
+		}
+		if r.Limit != 5 {
+			t.Errorf("result.Limit = %d, want 5 (channel)", r.Limit)
+		}
+	}
+	if r := l.CheckSummary("chan1", "discord:channel"); r.Allowed {
+		t.Fatal("6th channel summary dispatch should be over the channel limit")
+	}
+}
+
+// TestSummaryBucket_DefaultLimits confirms the New() defaults when the
+// operator leaves both fields at zero: DM=10, Channel=40.
+func TestSummaryBucket_DefaultLimits(t *testing.T) {
+	l := New(Config{TimingPeriod: 60}) // both summary limits unset
+	defer l.Close()
+
+	r := l.CheckSummary("user1", "discord:user")
+	if r.Limit != 10 {
+		t.Errorf("DM default: result.Limit = %d, want 10", r.Limit)
+	}
+	r = l.CheckSummary("chan1", "discord:channel")
+	if r.Limit != 40 {
+		t.Errorf("Channel default: result.Limit = %d, want 40", r.Limit)
+	}
+}
+
 func TestTelegramGroupGetsChannelLimit(t *testing.T) {
 	l := New(Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5})
 	defer l.Close()

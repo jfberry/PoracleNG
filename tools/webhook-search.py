@@ -59,6 +59,7 @@ import urllib.request
 
 POKEMON_NAMES = {}
 POKEMON_ID_TO_NAME = {}
+ITEM_NAMES = {}
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -137,6 +138,91 @@ def resolve_pokemon_id(name_or_id):
         return POKEMON_NAMES.get(name_or_id.lower())
 
 
+def load_item_names():
+    """Load item names from resources/rawdata/items.json."""
+    global ITEM_NAMES
+    if ITEM_NAMES:
+        return
+    rawdata = os.path.join(BASE_DIR, "resources", "rawdata", "items.json")
+    if not os.path.exists(rawdata):
+        return
+    try:
+        with open(rawdata) as f:
+            data = json.load(f)
+        for iid_str, info in data.items():
+            if isinstance(info, dict):
+                name = info.get("itemName") or ""
+                if name:
+                    ITEM_NAMES[name.lower()] = int(iid_str)
+    except Exception:
+        pass
+
+
+def resolve_item_id(name_or_id):
+    """Resolve an item name or ID string to an integer ID."""
+    try:
+        return int(name_or_id)
+    except ValueError:
+        load_item_names()
+        # Match exact lowercase first; then prefix match (e.g. "razz" → "Razz Berry").
+        lower = name_or_id.lower()
+        if lower in ITEM_NAMES:
+            return ITEM_NAMES[lower]
+        for full_name, iid in ITEM_NAMES.items():
+            if full_name.startswith(lower):
+                return iid
+        return None
+
+
+def quest_reward_matches(msg, search_term):
+    """Match a quest webhook against a reward search term.
+
+    Quest webhooks store IDs (pokemon_id, item_id), not names — a raw
+    substring match against the JSON misses any pokemon-or-item search.
+    Try (in order): exact pokemon-name resolution, exact-or-prefix
+    item-name resolution, the literal "stardust" keyword for type-3
+    rewards, and finally a substring fallback for direct ID/percentage
+    searches.
+    """
+    rewards = msg.get("rewards") or []
+    if not isinstance(rewards, list):
+        return False
+
+    lower = search_term.lower()
+
+    # Pokemon name → match reward types 4 (candy), 7 (encounter), 12 (mega energy).
+    pid = resolve_pokemon_id(search_term)
+    if pid is not None:
+        for r in rewards:
+            if not isinstance(r, dict):
+                continue
+            info = r.get("info") or {}
+            if isinstance(info, dict) and info.get("pokemon_id") == pid:
+                return True
+
+    # Item name → match reward type 2 (item).
+    iid = resolve_item_id(search_term)
+    if iid is not None:
+        for r in rewards:
+            if not isinstance(r, dict):
+                continue
+            info = r.get("info") or {}
+            if isinstance(info, dict) and info.get("item_id") == iid:
+                return True
+
+    # Stardust keyword.
+    if lower == "stardust":
+        for r in rewards:
+            if isinstance(r, dict) and r.get("type") == 3:
+                return True
+
+    # Substring fallback — useful for direct ID searches or partial JSON
+    # field matches the resolvers don't cover.
+    if lower in json.dumps(rewards).lower():
+        return True
+    return False
+
+
 def calc_iv(atk, def_, sta):
     if atk is None or def_ is None or sta is None:
         return -1
@@ -204,10 +290,7 @@ def matches_filters(obj, msg, args, pokemon_id):
 
     if webhook_type == "quest":
         if args.reward is not None:
-            # Search across reward fields
-            reward_str = json.dumps(msg.get("rewards", [])).lower()
-            quest_str = json.dumps(msg).lower()
-            if args.reward.lower() not in reward_str and args.reward.lower() not in quest_str:
+            if not quest_reward_matches(msg, args.reward):
                 return False, None, False
         return True, None, False
 
@@ -308,9 +391,73 @@ def matches_filters(obj, msg, args, pokemon_id):
     return True, pvp, has_evo
 
 
+def quest_reward_summary(reward):
+    """Render one quest reward as a short string."""
+    if not isinstance(reward, dict):
+        return "?"
+    rtype = reward.get("type")
+    info = reward.get("info") or {}
+    amount = info.get("amount")
+    if rtype == 7:
+        # Pokemon encounter
+        pid = info.get("pokemon_id", 0)
+        form = info.get("form_id", 0)
+        name = pokemon_name(pid)
+        if form:
+            return f"{name} (form:{form})"
+        return name
+    if rtype == 2:
+        # Item — fall back to ID if name unknown
+        load_item_names()
+        iid = info.get("item_id", 0)
+        item_name = next((n for n, i in ITEM_NAMES.items() if i == iid), f"item#{iid}")
+        item_name = item_name.title()
+        return f"{amount}× {item_name}" if amount else item_name
+    if rtype == 3:
+        return f"{amount or '?'} stardust"
+    if rtype == 4:
+        pid = info.get("pokemon_id", 0)
+        return f"{amount or '?'}× {pokemon_name(pid)} candy"
+    if rtype == 12:
+        pid = info.get("pokemon_id", 0)
+        return f"{amount or '?'}× {pokemon_name(pid)} mega energy"
+    if rtype == 1:
+        return f"+{amount or '?'} XP"
+    return f"reward type {rtype}"
+
+
+def display_quest(idx, timestamp, msg, args):
+    """Quest webhooks have a different shape — no top-level pokemon_id."""
+    pokestop = msg.get("pokestop_name") or msg.get("pokestop_id", "?")
+    lat = msg.get("latitude", 0)
+    lon = msg.get("longitude", 0)
+    rewards = msg.get("rewards") or []
+    title = msg.get("title", "")
+    with_ar = msg.get("with_ar", False)
+
+    ts_str = f" [{timestamp}]" if timestamp else ""
+    print(f"\n{'='*60}")
+    print(f"[{idx}] Quest at {pokestop}{ts_str}")
+    if title:
+        print(f"  Title: {title}")
+    for r in rewards:
+        ar_marker = " 🔭" if with_ar else ""
+        print(f"  Reward: {quest_reward_summary(r)}{ar_marker}")
+    print(f"  Location: {lat:.6f}, {lon:.6f}")
+    if args.raw:
+        print(f"  RAW: {json.dumps(msg)}")
+
+
 def display_result(idx, timestamp, msg, pvp, has_evo, args):
     """Display a single search result."""
     load_pokemon_names()
+
+    # Quest webhooks have no top-level pokemon_id; route to a quest-aware
+    # printer rather than misrendering as "Pokemon#0".
+    if "rewards" in msg and "pokestop_id" in msg:
+        display_quest(idx, timestamp, msg, args)
+        return
+
     pid = msg.get("pokemon_id", 0)
     name = pokemon_name(pid)
     iv = calc_iv(

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/backup"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 )
 
@@ -56,6 +57,14 @@ func HandleDTSTemplateFileWrite(ts *dts.TemplateStore, configDir string) gin.Han
 			return
 		}
 
+		// Snapshot the existing file (if any) into config/backups/<entry.TemplateFile>.bak.<ts>
+		// before overwriting. New writes (no existing file) skip cleanly.
+		backupRel, err := backup.Save(configDir, entry.TemplateFile)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "backup existing: " + err.Error()})
+			return
+		}
+
 		if err := os.WriteFile(path, []byte(req.Content), 0644); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "write file: " + err.Error()})
 			return
@@ -64,6 +73,6 @@ func HandleDTSTemplateFileWrite(ts *dts.TemplateStore, configDir string) gin.Han
 		ts.ClearCache()
 
 		log.Infof("dts: updated template file %s via API", entry.TemplateFile)
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "templateFile": entry.TemplateFile})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "templateFile": entry.TemplateFile, "backup": backupRel})
 	}
 }

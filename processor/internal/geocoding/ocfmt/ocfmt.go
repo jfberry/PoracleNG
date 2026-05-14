@@ -8,6 +8,7 @@ package ocfmt
 
 import (
 	"embed"
+	"maps"
 	"regexp"
 	"strings"
 	"sync"
@@ -34,7 +35,7 @@ type countryEntry struct {
 	PostformatReplace [][]string `yaml:"postformat_replace"`
 
 	// Pre-compiled regex rules (built at init time)
-	compiledReplace          []compiledRule
+	compiledReplace           []compiledRule
 	compiledPostformatReplace []compiledRule
 }
 
@@ -72,7 +73,7 @@ func newFormatter() (*Formatter, error) {
 
 	// Parse YAML as generic map — the file mixes strings (generic templates
 	// with anchors) and objects (country entries). We must handle both.
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
@@ -83,16 +84,16 @@ func newFormatter() (*Formatter, error) {
 
 	for key, val := range raw {
 		// Skip string entries (generic template anchors like generic1, fallback1)
-		m, ok := val.(map[string]interface{})
+		m, ok := val.(map[string]any)
 		if !ok {
 			continue
 		}
 
 		entry := &countryEntry{
-			AddressTemplate:  mapStr(m, "address_template"),
-			FallbackTemplate: mapStr(m, "fallback_template"),
-			UseCountry:       mapStr(m, "use_country"),
-			Replace:          mapStrSlices(m, "replace"),
+			AddressTemplate:   mapStr(m, "address_template"),
+			FallbackTemplate:  mapStr(m, "fallback_template"),
+			UseCountry:        mapStr(m, "use_country"),
+			Replace:           mapStrSlices(m, "replace"),
 			PostformatReplace: mapStrSlices(m, "postformat_replace"),
 		}
 
@@ -117,7 +118,7 @@ func newFormatter() (*Formatter, error) {
 }
 
 // mapStr extracts a string value from a map.
-func mapStr(m map[string]interface{}, key string) string {
+func mapStr(m map[string]any, key string) string {
 	v, ok := m[key]
 	if !ok {
 		return ""
@@ -130,18 +131,18 @@ func mapStr(m map[string]interface{}, key string) string {
 }
 
 // mapStrSlices extracts a [][]string from a map (for replace/postformat_replace rules).
-func mapStrSlices(m map[string]interface{}, key string) [][]string {
+func mapStrSlices(m map[string]any, key string) [][]string {
 	v, ok := m[key]
 	if !ok {
 		return nil
 	}
-	arr, ok := v.([]interface{})
+	arr, ok := v.([]any)
 	if !ok {
 		return nil
 	}
 	var result [][]string
 	for _, item := range arr {
-		inner, ok := item.([]interface{})
+		inner, ok := item.([]any)
 		if !ok {
 			continue
 		}
@@ -209,7 +210,7 @@ func (f *Formatter) Format(components map[string]string) string {
 // hops (e.g. GG → UK).
 func (f *Formatter) resolve(cc string) *countryEntry {
 	cc = strings.ToUpper(cc)
-	for depth := 0; depth < 4; depth++ {
+	for range 4 {
 		entry, ok := f.countries[cc]
 		if !ok {
 			return f.defaultEntry
@@ -256,8 +257,8 @@ var (
 // resolveFirst handles {{#first}} A || B || C {{/first}} — returns the first
 // non-empty alternative.
 func resolveFirst(inner string, components map[string]string) string {
-	alternatives := strings.Split(inner, "||")
-	for _, alt := range alternatives {
+	alternatives := strings.SplitSeq(inner, "||")
+	for alt := range alternatives {
 		rendered := strings.TrimSpace(alt)
 		// Substitute fields within this alternative
 		rendered = tripleBraceRe.ReplaceAllStringFunc(rendered, func(match string) string {
@@ -295,9 +296,7 @@ func compileRules(rules [][]string) []compiledRule {
 // applyReplace applies pre-compiled input replacement rules to component values.
 func applyReplace(components map[string]string, rules []compiledRule) map[string]string {
 	out := make(map[string]string, len(components))
-	for k, v := range components {
-		out[k] = v
-	}
+	maps.Copy(out, components)
 	for _, rule := range rules {
 		for k, v := range out {
 			if rule.re.MatchString(v) {

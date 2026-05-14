@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"strings"
+	"encoding/json"
 
 	log "github.com/sirupsen/logrus"
 
@@ -24,10 +24,13 @@ var fortParams = []bot.ParamDef{
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.pokestop"},
 	{Type: bot.ParamKeyword, Key: "arg.gym"},
+	{Type: bot.ParamKeyword, Key: "arg.station"},
 	{Type: bot.ParamKeyword, Key: "arg.location"},
 	{Type: bot.ParamKeyword, Key: "arg.new"},
 	{Type: bot.ParamKeyword, Key: "arg.removal"},
 	{Type: bot.ParamKeyword, Key: "arg.photo"},
+	{Type: bot.ParamKeyword, Key: "arg.name"},
+	{Type: bot.ParamKeyword, Key: "arg.description"},
 	{Type: bot.ParamKeyword, Key: "arg.include_empty"},
 }
 
@@ -60,7 +63,10 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 	includeEmpty := parsed.HasKeyword("arg.include_empty")
 
-	// Determine fort_type
+	// Determine fort_type. Per Golbat webhooks-reference, fort_update
+	// can carry "pokestop", "gym", or "station". The matcher compares
+	// case-insensitively, so storing the lowercase string here matches
+	// whatever Golbat emits.
 	fortType := ""
 	if parsed.HasKeyword("arg.everything") {
 		fortType = "everything"
@@ -68,11 +74,17 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		fortType = "pokestop"
 	} else if parsed.HasKeyword("arg.gym") {
 		fortType = "gym"
+	} else if parsed.HasKeyword("arg.station") {
+		fortType = "station"
 	} else {
 		fortType = "everything"
 	}
 
-	// Collect change types from keywords
+	// Collect change types from keywords. Stored values must match what
+	// Golbat emits in `change_type` and `edit_types[]` so the matcher's
+	// changeTypesMatch lookup succeeds — most keywords map 1:1, but
+	// `photo` maps to `image_url` (the Golbat field name) since that's
+	// what arrives in edit_types when a Niantic photo URL changes.
 	var changeTypes []string
 	if parsed.HasKeyword("arg.location") {
 		changeTypes = append(changeTypes, "location")
@@ -84,10 +96,24 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		changeTypes = append(changeTypes, "removal")
 	}
 	if parsed.HasKeyword("arg.photo") {
-		changeTypes = append(changeTypes, "photo")
+		changeTypes = append(changeTypes, "image_url")
+	}
+	if parsed.HasKeyword("arg.name") {
+		changeTypes = append(changeTypes, "name")
+	}
+	if parsed.HasKeyword("arg.description") {
+		changeTypes = append(changeTypes, "description")
 	}
 
-	changeTypesStr := strings.Join(changeTypes, ",")
+	// JSON-encode for the DB column. The matcher (matching/fort.go
+	// changeTypesMatch) parses this as JSON; storing a comma-separated
+	// string here would silently fail to match. The API endpoint and
+	// PoracleJS both use JSON — this brings !fort into line with both.
+	changeTypesStr := "[]"
+	if len(changeTypes) > 0 {
+		b, _ := json.Marshal(changeTypes)
+		changeTypesStr = string(b)
+	}
 
 	if parsed.HasKeyword("arg.remove") {
 		if len(parsed.RemoveUIDs) > 0 {

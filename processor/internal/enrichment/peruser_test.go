@@ -192,8 +192,8 @@ func TestCreatePvpDisplay(t *testing.T) {
 	entries := []map[string]any{
 		{"rank": 1, "cp": 1498, "pokemon": 101, "form": 0, "fullName": "Electrode", "cap": 50, "capped": true},
 		{"rank": 5, "cp": 1495, "pokemon": 100, "form": 0, "fullName": "Voltorb", "cap": 50, "capped": true},
-		{"rank": 15, "cp": 1490, "pokemon": 26, "form": 0, "fullName": "Raichu", "cap": 50, "capped": true},   // exceeds maxRank
-		{"rank": 3, "cp": 1300, "pokemon": 25, "form": 0, "fullName": "Pikachu", "cap": 50, "capped": true},    // below minCP
+		{"rank": 15, "cp": 1490, "pokemon": 26, "form": 0, "fullName": "Raichu", "cap": 50, "capped": true}, // exceeds maxRank
+		{"rank": 3, "cp": 1300, "pokemon": 25, "form": 0, "fullName": "Pikachu", "cap": 50, "capped": true}, // below minCP
 	}
 
 	// No filters — all entries with rank <= 10 and cp >= 1400 should pass

@@ -424,6 +424,66 @@ func TestLoadAllGeofencesFileNotFound(t *testing.T) {
 	}
 }
 
+func TestParseGeoJSONCapturesExtraProperties(t *testing.T) {
+	geoJSON := `{
+		"type":"FeatureCollection",
+		"features":[
+			{
+				"type":"Feature",
+				"properties":{
+					"name":"Gent_centrum",
+					"group":"Belgium",
+					"server":"uk",
+					"beserver":true,
+					"priority":3
+				},
+				"geometry":{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,1],[0,0]]]}
+			}
+		]
+	}`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fences.json")
+	if err := os.WriteFile(path, []byte(geoJSON), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	fences, err := LoadGeofenceFile(path, "default")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(fences) != 1 {
+		t.Fatalf("expected 1 fence, got %d", len(fences))
+	}
+	f := fences[0]
+
+	// Named fields stay populated.
+	if f.Name != "Gent_centrum" || f.Group != "Belgium" {
+		t.Errorf("named fields lost: name=%q group=%q", f.Name, f.Group)
+	}
+
+	// Properties should carry the extras.
+	if got := f.Properties["server"]; got != "uk" {
+		t.Errorf("Properties[server] = %v, want \"uk\"", got)
+	}
+	if got := f.Properties["beserver"]; got != true {
+		t.Errorf("Properties[beserver] = %v, want true", got)
+	}
+	if got := f.Properties["priority"]; got != float64(3) {
+		// JSON numbers decode as float64
+		t.Errorf("Properties[priority] = %v (%T), want 3", got, got)
+	}
+
+	// Properties must NOT shadow named fields — name / group belong only to
+	// the named slots.
+	if _, present := f.Properties["name"]; present {
+		t.Errorf("Properties should not contain 'name' (it's a named field)")
+	}
+	if _, present := f.Properties["group"]; present {
+		t.Errorf("Properties should not contain 'group' (it's a named field)")
+	}
+}
+
 func writeTempFile(t *testing.T, content, pattern string) string {
 	t.Helper()
 	dir := t.TempDir()

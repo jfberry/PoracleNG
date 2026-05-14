@@ -5,6 +5,7 @@
   "rate_limit.banned_soft": "Has superado el límite de velocidad demasiadas veces en las últimas 24 horas. Tus mensajes han sido detenidos, usa {0}start para reanudarlos",
   "rate_limit.banned_hard": "Has superado el límite de velocidad demasiadas veces en las últimas 24 horas. Tus mensajes han sido detenidos, contacta a un administrador para reanudarlos",
   "rate_limit.shame": "<@{0}> ha sido desactivado en Poracle por superar el límite de velocidad demasiadas veces!",
+  "delivery.fail.shame": "<@{0}> has been disabled because Poracle messages keep failing to deliver to them.",
   "profile.switched": "He cambiado tu perfil a: {0}",
 
   "team_0": "Sin equipo",
@@ -169,6 +170,10 @@
   "arg.add": "agregar",
   "arg.show": "mostrar",
   "arg.overview": "resumen",
+  "arg.dryrun": "dryrun",
+  "arg.reset": "reset",
+  "arg.removals": "removals",
+  "arg.force": "force",
   "arg.clear": "limpiar",
   "arg.switch": "cambiar",
   "arg.allprofiles": "todosperfiles",
@@ -239,6 +244,7 @@
   "arg.prefix.cap": "tope",
   "arg.prefix.form": "forma",
   "arg.prefix.template": "plantilla",
+  "arg.prefix.gym": "gym",
   "arg.prefix.move": "movimiento",
   "arg.prefix.minspawn": "minaparicion",
   "arg.prefix.great": "great",
@@ -339,6 +345,7 @@
   "msg.location.specify": "Por favor especifica coordenadas o una dirección",
   "msg.location.set": "Ubicación establecida en {0},{1}",
   "msg.location.current": "Your current location is {0},{1}",
+  "msg.area.usage": "Valid commands are `{0}area list`, `{0}area add <areaname>`, `{0}area remove <areaname>`",
 
   "msg.area.none_available": "No hay áreas disponibles",
   "msg.area.available": "**Áreas disponibles:**",
@@ -391,6 +398,7 @@
   "msg.info.sub.rarity": "rareza",
   "msg.info.sub.weather": "clima",
   "msg.info.sub.poracle": "poracle",
+  "msg.info.sub.config": "config",
   "msg.info.sub.translate": "translate",
   "msg.info.sub.dts": "dts",
   "msg.info.sub.templates": "plantillas",
@@ -514,5 +522,19 @@
   "language.zh-cn": "Chino (simplificado)",
   "language.ja": "Japonés",
 
-  "msg.help.text": "**Comandos disponibles:**\n{0}track <pokemon> [iv:N] [pc:N] [nivel:N] [d:N] — Rastrear pokemon\n{0}untrack <pokemon> — Dejar de rastrear pokemon\n{0}raid <pokemon|nivel:N|legendario> [d:N] — Rastrear incursiones\n{0}egg <nivel:N|legendario|mega> [d:N] — Rastrear huevos\n{0}quest <pokemon|polvo|energía:pokemon|caramelo:pokemon> — Rastrear misiones\n{0}invasion [todo|<tipo>] — Rastrear invasiones\n{0}lure <tipo|todo> — Rastrear cebos\n{0}gym <equipo|todo> [cambios de espacio] — Rastrear gimnasios\n{0}nest <pokemon|todo> — Rastrear nidos\n{0}maxbattle <pokemon|nivel:N> — Rastrear maxibatallas\n{0}fort <pokeparada|gimnasio|todo> — Rastrear actualizaciones de fort\n{0}tracked — Mostrar seguimiento\n{0}script — Exportar seguimiento como comandos\n{0}area [lista|agregar|eliminar] — Gestionar áreas\n{0}ubicación <lat,lon> — Configurar ubicación\n{0}profile [lista|agregar|eliminar|cambiar] — Gestionar perfiles\n{0}idioma <código> — Configurar idioma\n{0}start / {0}stop — Activar/desactivar alertas\n{0}version — Mostrar versión"
+  "msg.help.text": "**Comandos disponibles:**\n{0}track <pokemon> [iv:N] [pc:N] [nivel:N] [d:N] — Rastrear pokemon\n{0}untrack <pokemon> — Dejar de rastrear pokemon\n{0}raid <pokemon|nivel:N|legendario> [d:N] — Rastrear incursiones\n{0}egg <nivel:N|legendario|mega> [d:N] — Rastrear huevos\n{0}quest <pokemon|polvo|energía:pokemon|caramelo:pokemon> — Rastrear misiones\n{0}invasion [todo|<tipo>] — Rastrear invasiones\n{0}lure <tipo|todo> — Rastrear cebos\n{0}gym <equipo|todo> [cambios de espacio] — Rastrear gimnasios\n{0}nest <pokemon|todo> — Rastrear nidos\n{0}maxbattle <pokemon|nivel:N> — Rastrear maxibatallas\n{0}fort <pokeparada|gimnasio|todo> — Rastrear actualizaciones de fort\n{0}tracked — Mostrar seguimiento\n{0}script — Exportar seguimiento como comandos\n{0}area [lista|agregar|eliminar] — Gestionar áreas\n{0}ubicación <lat,lon> — Configurar ubicación\n{0}profile [lista|agregar|eliminar|cambiar] — Gestionar perfiles\n{0}idioma <código> — Configurar idioma\n{0}start / {0}stop — Activar/desactivar alertas\n{0}version — Mostrar versión",
+
+  "arg.cleartime": "cleartime",
+  "arg.now": "now",
+  "arg.summary": "summary",
+  "cmd.summary": "summary",
+  "msg.quest.edit_summary_conflict": "`edit` and `summary` are mutually exclusive — pick one.",
+  "msg.summary.usage": "Usage: `{0}summary quest [settime <times>|cleartime|now]`",
+  "msg.summary.no_schedule": "No schedule set for {0} summaries.",
+  "msg.summary.scheduled": "Schedule for {0} summaries: {1}",
+  "msg.summary.cleared": "Cleared schedule for {0} summaries.",
+  "msg.summary.updated": "Updated schedule for {0} summaries: {1}",
+  "msg.summary.no_buffered": "No buffered {0} entries.",
+  "msg.summary.buffer_count": "{0} buffered {1} entries — fires at scheduled time, or use `{2}summary {1} now` to deliver immediately.",
+  "msg.summary.delivered": "Triggered delivery of buffered {0} entries."
 }

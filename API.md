@@ -11,6 +11,7 @@ All API endpoints are available through the processor (default port 3030). The p
 - [Type-Specific POST Fields](#type-specific-post-fields)
 - [Human Management](#human-management)
 - [Profile Management](#profile-management)
+- [Summary Schedules](#summary-schedules)
 - [Geofence Data & Tiles](#geofence-data--tiles)
 - [State Management](#state-management)
 - [Statistics](#statistics)
@@ -18,6 +19,7 @@ All API endpoints are available through the processor (default port 3030). The p
 - [Configuration](#configuration)
 - [DTS Editor](#dts-editor) — includes [`/api/dts/reload`](#getpost-apidtsreload)
 - [Config Editor](#config-editor)
+- [Autocreate](#autocreate) — bulk sync trigger + channel-template editor
 - [Game Data](#game-data)
 - [Geocoding](#geocoding)
 - [Confirmation Messages](#confirmation-messages)
@@ -215,6 +217,25 @@ Force a state reload (same as POST /api/reload).
 | `distance` | int | 0 | Distance in metres (0 = use area) |
 | `template` | string | config default | DTS template name |
 | `clean` | bool | false | Auto-delete message after TTH |
+
+#### Pokemon change template (`monsterChanged`)
+
+When a tracked pokemon's data changes after the initial sighting (form, species, gender, or weather-boost shift), users with a prior message for that encounter receive a `monsterChanged` template render threaded as a reply to the original. Templates have access to the prior sighting via `{{original.X}}`:
+
+| Field | Type | Notes |
+|---|---|---|
+| `original.pokemonId` | int | |
+| `original.formId` | int | |
+| `original.gender` | int | |
+| `original.cp`, `atk`, `def`, `sta` | int | 0 when not encountered |
+| `original.iv` | float | 0 when not encountered |
+| `original.weatherId` | int | Pre-shift in-game weather |
+| `original.encountered` | bool | true once CP > 0 |
+| `original.name`, `formName`, `weatherName`, `fullName` | string | translated to the recipient's language |
+
+The encounter event itself (non-IV → IV) deliberately re-fires the regular `monster` template threaded as a reply — it's the natural fulfilment of the non-IV alert, not a "change". Reply threading is implicit (every pokemon render carries a reply key keyed on the encounter ID) and applies to both Discord (`message_reference`) and Telegram (`reply_to_message_id`). Edit mode (clean bit 2) takes priority when set: the prior message is updated in place rather than replied to. Users matched at the change event with no prior message receive a fresh `monster` render (no reply target, no `monsterChanged` — they never saw the original).
+
+Ships a default `monsterChanged` template per platform in `fallbacks/dts.json`; admins can override via `config/dts.json` or `config/dts/` like any other type.
 
 ### Raid Tracking
 
@@ -515,6 +536,56 @@ Copy all tracking rules from one profile to another.
 ### DELETE /api/profiles/{id}/byProfileNo/{profile_no}
 
 Delete a profile and all its tracking rules.
+
+---
+
+## Summary Schedules
+
+Summary schedules buffer matched events (currently `quest`) until a per-user, per-alert-type schedule fires. Each row in `summary_schedules` holds an `active_hours` JSON array shaped exactly like a profile's `active_hours` (`[{day, hours, mins}, …]`). Tracking rules opt into buffered delivery by setting bit 4 of the rule's `clean` bitmask (the `summary` keyword in `!quest`).
+
+When `[tracking] quest_summary_enabled = false` all five endpoints return `503 Service Unavailable` with a status payload — clients can distinguish "feature off" from "endpoint missing" without parsing strings.
+
+### GET /api/summaries/{id}
+
+List every summary schedule for the user across all alert types.
+
+```json
+{
+  "status": "ok",
+  "schedules": [
+    {"id": "123", "alert_type": "quest", "active_hours": [{"day": 1, "hours": 7, "mins": 30}]}
+  ]
+}
+```
+
+### GET /api/summaries/{id}/{alertType}
+
+Return one schedule. `alertType` is `quest` today (the only renderer wired). Missing schedules return `404` with `{"status":"error","message":"schedule not found"}`.
+
+```json
+{
+  "status": "ok",
+  "schedule": {"id": "123", "alert_type": "quest", "active_hours": [{"day": 1, "hours": 7, "mins": 30}]}
+}
+```
+
+### POST /api/summaries/{id}/{alertType}
+
+Create or replace a schedule. Body must contain `active_hours` either as a JSON array or a stringified JSON value:
+
+```json
+{"active_hours": [{"day": 1, "hours": 7, "mins": 30}]}
+```
+
+Either form is canonicalised before storage. The processor triggers a debounced state reload after a successful set, so an in-flight scheduler tick picks up the change without waiting for the periodic reload.
+
+### DELETE /api/summaries/{id}/{alertType}
+
+Remove a schedule. Deleting a missing schedule is a no-op (`200 ok`) so idempotent clean-up scripts don't have to special-case 404.
+
+### POST /api/summaries/{id}/{alertType}/trigger
+
+Force-flush the buffered events for `(id, alertType)` immediately. Equivalent to `!summary <alertType> now`. Returns `200 ok` regardless of whether the buffer was empty. The handler invokes the dispatch callback synchronously, so the response only returns after the dispatcher has enqueued (not delivered) the rendered messages.
 
 ---
 
@@ -1150,6 +1221,198 @@ The `destinations` array is for IDs of unknown type — used when a schema field
 The `kind` field tells the editor what type was matched: `webhook`, `discord:channel`, `discord:user`, `discord:role`, `discord:guild`, `telegram:user`, `telegram:channel`, `telegram:group`, etc.
 
 For `geofence:area` resolve hints, the editor uses the existing `GET /api/geofence/all` endpoint to populate autocomplete.
+
+---
+
+## Autocreate
+
+Endpoints for the bulk-autocreate feature. Two surfaces:
+
+- **Sync trigger** (`POST /api/autocreate/run`) — applies `[[autocreate.rules]]` from `config.toml` against the live geofence list. Mirrors the `!autocreate sync` Discord command.
+- **Template editor** (`/api/autocreate/templates*`) — read, write, validate, delete `config/channelTemplate.json` entries. Backs up the previous version of the file under `config/backups/` on every write.
+
+See [AUTOCREATE.md](AUTOCREATE.md) for the channel-template format itself.
+
+### POST /api/autocreate/run
+
+Trigger a bulk-autocreate sync. Empty `rule` runs every configured `[[autocreate.rules]]` entry; a named `rule` runs just that one.
+
+**Request:**
+```json
+{
+  "rule":     "uk-areas",
+  "dry_run":  false,
+  "removals": false,
+  "force":    false,
+  "reset":    false
+}
+```
+
+| Field | Type | Default | What it does |
+|-------|------|---------|--------------|
+| `rule` | string | `""` | Rule name to run, or empty for all rules. |
+| `dry_run` | bool | `false` | Preview only — no Discord or DB writes. |
+| `removals` | bool | `false` | Permit orphan removal (rule must also have `remove_missing = true`). |
+| `force` | bool | `false` | Bypass `removal_safety_max_percent` threshold. |
+| `reset` | bool | `false` | Re-run the template's `commands` on reused channels (default behaviour preserves admin-tweaked tracking). |
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "rules": [
+    {
+      "Rule":    "uk-areas",
+      "Status":  "ok",
+      "DryRun":  false,
+      "Note":    "",
+      "Created": ["Aalst", "Antwerp"],
+      "Reused":  ["Brussels"],
+      "Orphans": [],
+      "Removed": [],
+      "Skipped": [],
+      "Errors":  []
+    }
+  ]
+}
+```
+
+`Status` values:
+- `"ok"` — runner went through its normal path. May still have per-fence errors in `Errors[]` — check those separately.
+- `"busy"` — another sync of the same rule was already running (TryLock failed). Retry later.
+- `"safety_blocked"` — the removal phase was aborted because the orphan ratio exceeded `autocreate.removal_safety_max_percent`. Creates and reuses still ran. Retry with `"force": true` to override.
+
+`404` returned when `"rule"` names a rule that doesn't exist. `503` returned when the Discord bot isn't running.
+
+```bash
+curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
+  -d '{"rule":"uk-areas","dry_run":true}' \
+  http://localhost:3030/api/autocreate/run
+```
+
+### GET /api/autocreate/templates
+
+Read the live `config/channelTemplate.json` array. Returns an empty array when the file doesn't exist (first-time install).
+
+```bash
+curl -H "X-Poracle-Secret: secret" http://localhost:3030/api/autocreate/templates
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "templates": [
+    {
+      "name": "area",
+      "definition": {
+        "category": { "categoryName": "{0}", "roles": [...] },
+        "channels": [...]
+      }
+    }
+  ]
+}
+```
+
+### POST /api/autocreate/templates
+
+Replace the full template array (validate + write). The previous version of the file is snapshotted into `config/backups/channelTemplate.json.bak.<timestamp>` before the write so the operator can roll back.
+
+**Request:**
+```json
+{
+  "templates": [
+    { "name": "area", "definition": { ... } },
+    { "name": "raid-feed", "definition": { ... } }
+  ]
+}
+```
+
+The full array replaces what's on disk — to delete a template, omit it from the POST. Or use `DELETE /api/autocreate/templates/:name` if you only want to remove one entry without re-sending the rest.
+
+**Success response:**
+```json
+{
+  "status": "ok",
+  "backup": "backups/channelTemplate.json.bak.2026-05-07_113402",
+  "warnings": []
+}
+```
+
+`backup` is the path of the snapshot relative to `config/`. Empty when there was no existing file. `warnings[]` carries non-blocking validation issues (e.g. voice channel with text-only fields, a `threadPicker` set on a channel with no `threads`).
+
+**Validation failure (400):**
+```json
+{
+  "status": "error",
+  "errors": [
+    { "path": "templates[0].definition.channels", "severity": "error", "message": "at least one channel is required" },
+    { "path": "templates[1].name", "severity": "error", "message": "duplicate name \"area\" (must be unique within the array)" }
+  ]
+}
+```
+
+The bulk runner's `loadChannelTemplates()` reads the file on every `SyncOneRule`, so changes pick up immediately — no reload trigger needed.
+
+### POST /api/autocreate/templates/validate
+
+Same body as `POST /api/autocreate/templates` but never writes. Useful for "lint as you type" in an editor.
+
+```json
+{ "templates": [ ... ] }
+```
+
+**Response:** `{ "status": "ok", "warnings": [...] }` on success, or `400` with `errors[]` on validation failure (same shape as POST).
+
+### DELETE /api/autocreate/templates/:name
+
+Remove one template by name. Snapshots the previous file to `config/backups/` before writing.
+
+```bash
+curl -X DELETE -H "X-Poracle-Secret: secret" \
+  http://localhost:3030/api/autocreate/templates/area
+```
+
+**Response:**
+```json
+{ "status": "ok", "backup": "backups/channelTemplate.json.bak.2026-05-07_113402" }
+```
+
+`404` returned when `:name` doesn't match any template in the array.
+
+### GET /api/autocreate/templates/schema
+
+Static metadata for editors to render dropdowns, permission-flag pickers, and placeholder hints.
+
+```bash
+curl -H "X-Poracle-Secret: secret" http://localhost:3030/api/autocreate/templates/schema
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "schema": {
+    "channelTypes":   ["text", "voice"],
+    "controlTypes":   ["", "bot", "webhook"],
+    "buttonStyles":   ["primary", "secondary", "success", "danger"],
+    "permissionFlags": [
+      { "name": "view",        "label": "View Channel",        "group": "general" },
+      { "name": "viewHistory", "label": "Read Message History", "group": "general" },
+      { "name": "send",        "label": "Send Messages",        "group": "general" },
+      { "name": "connect",     "label": "Connect",              "group": "voice" },
+      { "name": "channels",    "label": "Manage Channels",      "group": "admin" }
+    ],
+    "placeholderHelp": {
+      "interactive": "{N} indexes args[N+1] from !autocreate <template> <args...> — note the off-by-one (args[0] is the template name itself).",
+      "bulk":        "[[autocreate.rules]] params[] elements render per-fence then become positional args in order. Whitespace inside a rendered element splits it into multiple args; \"quoted segments\" stay as one."
+    },
+    "backupNamePrefix": "channelTemplate.json.bak."
+  }
+}
+```
+
+`group` is one of `"general"` / `"voice"` / `"admin"` / `"other"`, sorted in that order. The full permission-flag list is derived from the bot's authoritative bit-mask map — every flag the bot understands appears here.
 
 ---
 

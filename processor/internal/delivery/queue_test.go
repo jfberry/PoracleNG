@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,9 +15,9 @@ import (
 
 // recordingHooks captures OnBreach/OnBan invocations for assertions.
 type recordingHooks struct {
-	mu      sync.Mutex
-	breach  []string // target
-	ban     []string // target
+	mu     sync.Mutex
+	breach []string // target
+	ban    []string // target
 }
 
 func (h *recordingHooks) OnBreach(target, _, _, _ string, _, _ int) {
@@ -474,6 +475,12 @@ func TestRateLimitAtDelivery(t *testing.T) {
 // TestRateLimitBypass proves jobs flagged BypassRateLimit are sent regardless
 // of the limit and do not consume budget that would otherwise apply to other
 // jobs to the same destination.
+//
+// Order-independence note: NewFairQueue spins one worker per platform
+// (Discord/Webhook/Telegram) by default, so three workers race to drain the
+// channel. Jobs to the same target serialize on a destLock but pop off the
+// channel in scheduler-dependent order — meaning the bypass send may land
+// before or after the non-bypass send. We assert on counts, not positions.
 func TestRateLimitBypass(t *testing.T) {
 	mock := &queueMockSender{platform: "discord"}
 	senders := map[string]Sender{"discord": mock}
@@ -493,15 +500,22 @@ func TestRateLimitBypass(t *testing.T) {
 	// Non-bypass job — must be dropped
 	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
 
-	time.Sleep(300 * time.Millisecond)
-	fq.Stop()
+	fq.Stop() // Stop closes the channel and waits for all queued jobs to drain.
 
 	calls := mock.getSendCalls()
 	if len(calls) != 2 {
 		t.Fatalf("expected 2 sends (1 normal + 1 bypass), got %d", len(calls))
 	}
-	if !calls[1].BypassRateLimit {
-		t.Fatal("second send should be the bypass job")
+	var bypass, normal int
+	for _, c := range calls {
+		if c.BypassRateLimit {
+			bypass++
+		} else {
+			normal++
+		}
+	}
+	if bypass != 1 || normal != 1 {
+		t.Fatalf("expected 1 bypass send + 1 normal send, got bypass=%d normal=%d", bypass, normal)
 	}
 }
 
@@ -654,6 +668,202 @@ func (d dispatchingHooks) OnBreach(_, _, _, _ string, _, _ int) {
 	}
 }
 func (d dispatchingHooks) OnBan(_, _, _, _ string) {}
+
+// TestQueueStampsReplyToID proves that when a Job carries a ReplyKey and the
+// tracker has a known prior message under (ReplyKey, Target), the queue
+// stamps Job.ReplyToID with that prior SentID before handing the job to the
+// sender.
+func TestQueueStampsReplyToID(t *testing.T) {
+	discordMock := &queueMockSender{platform: "discord", sentID: "chan1:msg-new"}
+	senders := map[string]Sender{"discord": discordMock}
+
+	ch := make(chan *Job, 10)
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+
+	// Pre-populate the tracker with a prior under (replyKey="rk1", target="chan1")
+	tracker.Track("clean:discord:channel:chan1:chan1:msg-prior", &TrackedMessage{
+		SentID:   "chan1:msg-prior",
+		Target:   "chan1",
+		Type:     "discord:channel",
+		ReplyKey: "rk1",
+	}, 5*time.Minute)
+
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	})
+	fq.Start()
+
+	ch <- &Job{
+		Target:   "chan1",
+		Type:     "discord:channel",
+		Message:  json.RawMessage(`{"content":"changed"}`),
+		ReplyKey: "rk1",
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	calls := discordMock.getSendCalls()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 send call, got %d", len(calls))
+	}
+	if calls[0].ReplyToID != "chan1:msg-prior" {
+		t.Errorf("expected ReplyToID=chan1:msg-prior on sent job, got %q", calls[0].ReplyToID)
+	}
+}
+
+// TestQueueDoesNotStampWhenEditKeyMatches proves that when both EditKey and
+// ReplyKey are set on a job and the tracker has a prior under EditKey, the
+// edit path runs and ReplyToID is NOT stamped (the message reuses the prior
+// rather than replying to it).
+func TestQueueDoesNotStampWhenEditKeyMatches(t *testing.T) {
+	discordMock := &queueMockSender{platform: "discord"}
+	senders := map[string]Sender{"discord": discordMock}
+
+	ch := make(chan *Job, 10)
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+
+	// Prior tracked under EditKey
+	tracker.Track("edit:raid:1", &TrackedMessage{
+		SentID: "chan1:msg-original",
+		Target: "user1",
+		Type:   "discord:user",
+		Clean:  0,
+	}, 5*time.Minute)
+	// And ALSO a prior under (replyKey, target) — would be stamped if reply
+	// path ran, but it shouldn't because edit takes priority.
+	tracker.Track("clean:discord:user:user1:other-prior", &TrackedMessage{
+		SentID:   "user1-dm:other-prior",
+		Target:   "user1",
+		Type:     "discord:user",
+		ReplyKey: "rk-x",
+	}, 5*time.Minute)
+
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	})
+	fq.Start()
+
+	ch <- &Job{
+		Target:   "user1",
+		Type:     "discord:user",
+		Message:  json.RawMessage(`{"content":"updated"}`),
+		EditKey:  "edit:raid:1",
+		ReplyKey: "rk-x",
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	// Edit ran, no Send.
+	if got := len(discordMock.getEditCalls()); got != 1 {
+		t.Fatalf("expected 1 edit call, got %d", got)
+	}
+	if got := len(discordMock.getSendCalls()); got != 0 {
+		t.Fatalf("expected 0 send calls (edit path used), got %d", got)
+	}
+}
+
+// TestQueueTracksReplyKeyAfterSend proves that successful sends propagate the
+// ReplyKey into the tracker so a follow-up job with the same (ReplyKey, Target)
+// gets stamped with the most recent SentID.
+func TestQueueTracksReplyKeyAfterSend(t *testing.T) {
+	// Sender returns deterministic incrementing sentIDs so we can verify the
+	// second job picks up the first job's id.
+	var counter int32
+	mock := &counterSender{
+		platform: "discord",
+		next: func() string {
+			n := atomic.AddInt32(&counter, 1)
+			return "chan1:msg-" + strconv.Itoa(int(n))
+		},
+	}
+	senders := map[string]Sender{"discord": mock}
+
+	ch := make(chan *Job, 10)
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	})
+	fq.Start()
+
+	// First job: no prior, but carries ReplyKey so the send is tracked under it.
+	ch <- &Job{
+		Target:   "chan1",
+		Type:     "discord:channel",
+		Message:  json.RawMessage(`{"content":"first"}`),
+		ReplyKey: "rk-chain",
+		// Need TTH > 0 so post-send tracking inserts into cache.
+		TTH: TTH{Hours: 1},
+	}
+	time.Sleep(80 * time.Millisecond)
+
+	// Second job with same ReplyKey/Target — must get ReplyToID stamped to
+	// the first job's SentID.
+	ch <- &Job{
+		Target:   "chan1",
+		Type:     "discord:channel",
+		Message:  json.RawMessage(`{"content":"second"}`),
+		ReplyKey: "rk-chain",
+		TTH:      TTH{Hours: 1},
+	}
+	time.Sleep(80 * time.Millisecond)
+	fq.Stop()
+
+	calls := mock.getSendCalls()
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 sends, got %d", len(calls))
+	}
+	if calls[0].ReplyToID != "" {
+		t.Errorf("first send should not have ReplyToID stamped, got %q", calls[0].ReplyToID)
+	}
+	if calls[1].ReplyToID != "chan1:msg-1" {
+		t.Errorf("second send should have ReplyToID=chan1:msg-1 (first job's sentID), got %q", calls[1].ReplyToID)
+	}
+
+	// Sanity: tracker.LookupReply now returns the second's SentID.
+	if got := tracker.LookupReply("rk-chain", "chan1"); got != "chan1:msg-2" {
+		t.Errorf("LookupReply after both sends = %q, want chan1:msg-2", got)
+	}
+}
+
+// counterSender returns incrementing SentIDs for each Send.
+type counterSender struct {
+	platform  string
+	mu        sync.Mutex
+	sendCalls []*Job
+	next      func() string
+}
+
+func (c *counterSender) Send(_ context.Context, job *Job) (*SentMessage, error) {
+	c.mu.Lock()
+	c.sendCalls = append(c.sendCalls, job)
+	c.mu.Unlock()
+	return &SentMessage{ID: c.next()}, nil
+}
+func (c *counterSender) Delete(_ context.Context, _ string) error { return nil }
+func (c *counterSender) Edit(_ context.Context, _ string, _ json.RawMessage, _ []byte) error {
+	return nil
+}
+func (c *counterSender) Platform() string             { return c.platform }
+func (c *counterSender) WaitForRateLimit(_ string)    {}
+func (c *counterSender) getSendCalls() []*Job {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]*Job, len(c.sendCalls))
+	copy(out, c.sendCalls)
+	return out
+}
 
 func TestFairQueueStop(t *testing.T) {
 	discordMock := &queueMockSender{platform: "discord"}

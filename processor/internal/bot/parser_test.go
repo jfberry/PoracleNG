@@ -122,6 +122,41 @@ func TestParserUnderscoreToSpace(t *testing.T) {
 	}
 }
 
+// Quoted tokens preserve underscores — this is what lets autocreate templates
+// round-trip area names like "gent_centrum" through the bot parser without
+// the underscore→space conversion mangling them.
+func TestParserQuotedPreservesUnderscores(t *testing.T) {
+	p := newTestParser()
+	cmds := p.Parse(`!track "gent_centrum"`)
+	if len(cmds) != 1 {
+		t.Fatalf("expected 1, got %d", len(cmds))
+	}
+	if cmds[0].Args[0] != "gent_centrum" {
+		t.Errorf("arg = %q, want 'gent_centrum'", cmds[0].Args[0])
+	}
+}
+
+// RawArgs preserves the original case the user typed so callers that echo
+// arguments back (autocreate channel/category names) don't collapse
+// "GentCentrum" to "gentcentrum". Args stays lowercase for matching paths.
+func TestParserRawArgsPreservesCase(t *testing.T) {
+	p := newTestParser()
+	cmds := p.Parse("!track Gent GentCentrum")
+	if len(cmds) != 1 {
+		t.Fatalf("expected 1, got %d", len(cmds))
+	}
+	wantArgs := []string{"gent", "gentcentrum"}
+	wantRaw := []string{"Gent", "GentCentrum"}
+	for i, w := range wantArgs {
+		if cmds[0].Args[i] != w {
+			t.Errorf("Args[%d] = %q, want %q", i, cmds[0].Args[i], w)
+		}
+		if cmds[0].RawArgs[i] != wantRaw[i] {
+			t.Errorf("RawArgs[%d] = %q, want %q", i, cmds[0].RawArgs[i], wantRaw[i])
+		}
+	}
+}
+
 func TestParserUnknownCommand(t *testing.T) {
 	p := newTestParser()
 	cmds := p.Parse("!notacommand hello")

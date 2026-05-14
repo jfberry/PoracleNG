@@ -270,9 +270,14 @@ Rate limiting is handled by the processor (`internal/ratelimit/`) using a two-ph
 - **What does NOT count**:
   - **Edits** of an already-tracked message (`EditKey` matched in `MessageTracker`) — these are mutations of a send we already counted.
   - Jobs marked `BypassRateLimit=true` — used for the rate-limit notification itself and the ban farewell, so the limiter cannot swallow the message reporting on itself. Use `Dispatcher.DispatchBypass(job)` to enqueue these.
+  - **Summary bucket**: summary deliveries (currently quest, future raid/etc.) use `DispatchBypass` to skip the alert bucket but the dispatch path runs its own `Limiter.CheckSummary(target, type)` call up-front against a separate bucket with its own DM/Channel split — `[alert_limits] dm_summary_limit` (default 10) and `channel_summary_limit` (default 40). 1 fire = 1 against the bucket regardless of how many chunks the digest produces. Over-cap dispatches are dropped whole (the buffer is cleared either way) and the first over-cap fire in a window triggers a one-time breach notification via `notifySummaryRateBreach`. No ban path — opt-in digests shouldn't escalate to auto-disable.
 - **`max_limits_before_stop`**: After N consecutive rate-limit breaches in 24h (default 10), the user is auto-disabled to prevent permanent flood. `disable_on_stop=true` sets `admin_disable=1` (user must re-register with `!poracle`); `false` sets `enabled=0` (user can `!start` again). A debounced state reload follows so the user is removed from matching.
 - **`blocked_alerts`**: Per-user JSON array in `humans` table (e.g., `["pokemon","raid"]`). Parsed into a `BlockedAlertsSet` map at state load for O(1) lookup. Blocks specific alert types without disabling the user entirely.
 - **Limit overrides**: `[alert_limits.overrides]` allows per-user or per-role custom limits (array-of-tables format in TOML).
+
+## Quest Summary Scheduling
+
+Quest tracking rules can opt into *buffered* delivery instead of firing immediately. The `summary` keyword on `!quest` (and the `clean & 4` bit on the `monsters`/`quest` row in the API) routes matched quests into an in-memory `tracker.SummaryBuffer`. A per-user, per-alert-type `summary_schedules` row (active_hours JSON, identical shape to profile schedules) decides when the buffer fires; `SummaryScheduler` wakes on the same wall-clock minute marks as the profile scheduler and dispatches via `ProcessorService.DispatchQuestSummary`, which groups buffered entries by `(rewardType, reward)` and renders one `questSummary` template per group with a multi-pin static map. The buffer is snapshotted to `config/.cache/summary-buffer.json` on shutdown and restored on startup. Users manage schedules via `!summary quest [settime <times>|cleartime|now]` or the `/api/summaries/{id}/{alertType}` endpoints; `!summary quest now` calls the same dispatch path on demand. Edit-mode and reply-threading don't apply to summary messages — each is a fresh send — but each source rule's `clean` bit is captured in the buffered entry, then OR'd across the rules contributing to a single reward group so the summary message for that group inherits clean-deletion if any constituent rule had it enabled. The TTH used for clean-deletion is the LATEST `ExpiresAt` within the same reward group (a "summarised block" — the one logical message, or the chunks it splits into when oversized). Different reward groups in the same dispatch compute their own clean + TTH independently, so a Stardust digest doesn't inherit a Rare Candy digest's later expiry just because they fired together.
 
 ## Discord Reconciliation
 
@@ -304,6 +309,26 @@ Reconciliation syncs Discord role membership with Poracle user registration. Run
 - `[discord] check_role = true` and `guilds` must be set
 - `[general] role_check_mode = "disable-user"` for actual removal (default `"ignore"` does nothing)
 - Discord bot must have "Server Members Intent" enabled in Developer Portal
+
+### Split-bot operation (`command_token`)
+
+By default a single Discord bot token (the first entry in `[discord] token`) drives both halves of the system: outbound message delivery (REST) AND the gateway side (commands, reconciliation, role management). Setting `[discord] command_token = "..."` splits these onto separate bots — `token` handles delivery, `command_token` handles the gateway.
+
+Token selection lives in `DiscordConfig.DiscordGatewayToken()` (`internal/config/config.go`): returns `command_token` when set, otherwise falls back to `token[0]`. The REST delivery side (`internal/delivery/discord.go`) keeps using the `token` array — it doesn't know about `command_token`.
+
+Startup failures are asymmetric on purpose:
+- Single-bot mode (`command_token` empty): bad delivery token → log-and-continue (existing behaviour; alerts side may still work via a later token in the array, commands may recover at next reload).
+- Split-bot mode (`command_token` non-empty): bad gateway bot → `log.Fatalf`. The operator explicitly asked for a split, so silently falling back to single-bot mode would hide the misconfiguration (typo, revoked token, missing intents).
+
+The `onMessageCreate` filter in `internal/discordbot/bot.go` ignores any message whose author is a bot, which keeps the command parser from re-processing the alerts bot's own outbound messages. Operators should NOT add the alerts bot's user ID to `[discord] admins` — the bot-author filter has an "unless admin" carve-out that would let it through.
+
+Operator-facing setup notes (Developer Portal, intents, permissions, invite flow) live in `README.md`.
+
+### Picker-managed threads
+
+`!autocreate` can create private threads under a master text channel and post a button-driven picker. Each thread is registered as its own `discord:thread` Poracle human and runs its configured `commands` block at creation time, so it has tracking rules from the moment it exists. Button `custom_id`s are stateless (`poracle:thread:<masterID>:<threadID>:join`), so click handling survives bot restarts. The master→threads map is cached at `config/.cache/autocreate-threads.json`. End-user reference for the JSON format: [AUTOCREATE.md](AUTOCREATE.md).
+
+Role-loss handling is left to Discord: private-thread visibility inherits View Channel permission on the parent text channel, so a user who loses the master-channel role automatically loses access to the threads under it without any reconciler involvement.
 
 ## API Security
 
@@ -545,6 +570,10 @@ The `clean` field on tracking rules is a bitmask with two bits (`db/clean.go`):
 
 Helper functions `IsClean(clean)` and `IsEdit(clean)` test individual bits. When `IsEdit` is true, the renderer generates an `EditKey` (a stable identifier derived from the webhook event, e.g. gym ID + pokemon ID for raids). This EditKey flows through `RenderJob` into the `delivery.Job`. The `FairQueue` in delivery checks the `MessageTracker` for an existing message with the same EditKey; if found, it edits the existing message instead of sending a new one. First consumer: raids with RSVP updates (`rsvp_changes` tracking), where the same raid alert is edited in-place as RSVP counts change.
 
+### Pokemon change events
+
+The encounter tracker (`internal/tracker/encounter.go`) detects species, form, gender, encountered (non-IV → IV), and weather-boost shifts. The pokemon handler (`cmd/processor/pokemon.go`) partitions matched users by prior-message-existence and dispatches per-user: prior-tracked users get a `monster` (encounter event) or `monsterChanged` (post-encounter change) render with `OriginalView` populated; new-match users get a fresh `monster` render. Every pokemon `RenderJob` carries `ReplyKey = encounterID`; `delivery.MessageTracker` keeps an O(1) reply index, and senders inject `message_reference` / `reply_to_message_id` when a prior message exists for the (replyKey, target) pair. Edit mode (clean bit 2) takes priority when set. The `monsterChanged` template gains access to the prior sighting via `{{original.X}}` — see API.md for the field set.
+
 ## Template System (DTS)
 
 DTS (Data Template System) templates are Handlebars templates rendered by the Go processor using `jfberry/raymond` (fork of `mailgun/raymond/v2` with `FieldResolver` interface). Templates define per-platform message formats for each alert type.
@@ -561,15 +590,18 @@ Templates are loaded from `config/dts.json` (or `fallbacks/dts.json` as fallback
 
 ### Template Selection Chain
 
-Template selection uses a two-pass mechanism. The first pass considers only user entries (non-readonly, from `config/dts.json` or `config/dts/`). If nothing matches, the second pass considers only fallback entries (readonly, from `fallbacks/dts.json`). Within each pass, 5 priority levels are tried in order:
+Template selection uses a two-pass mechanism. The first pass considers only user entries (non-readonly, from `config/dts.json` or `config/dts/`). If nothing matches, the second pass considers only fallback entries (readonly, from `fallbacks/dts.json`). Within each pass, 6 priority levels are tried in order:
 
 1. Exact match: type + template ID + platform + language
 2. Template + platform: type + template ID + platform (entry has empty language)
 3. Default + language: type + default template + platform + language
 4. Default: type + default template + platform (entry has empty language)
-5. Default + any language: type + default template + platform (last resort, any language)
+5. Default + configured locale: type + default template + platform + `[general] locale` (only when the user's language differs from the configured locale)
+6. Default + any language: type + default template + platform (last resort, any language)
 
 Within each level, the **last match wins** so that `config/dts/` overrides `config/dts.json` (later-loaded files are appended). Levels 3 and 4 share a return check: a level 4 match supersedes a level 3 match.
+
+Step 5 protects against a real-world failure mode: a user with a legacy language setting (e.g. `language="nl"`) that no longer ships templates would otherwise drop to step 6, where "last match wins" picks whichever default entry was loaded last — often a language unrelated to the operator's chosen `[general] locale`. Preferring the configured locale before step 6 keeps these users on the operator's default language rather than an arbitrary one.
 
 ### LayeredView (zero-copy template context)
 

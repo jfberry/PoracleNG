@@ -1,6 +1,9 @@
 package matching
 
 import (
+	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -40,6 +43,11 @@ type RaidMatcher struct {
 // MatchRaid returns all matched users for a raid along with the geofence
 // areas that contain the gym.
 func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeRaid).Observe(time.Since(start).Seconds())
+	}()
+
 	if st == nil {
 		return nil, nil
 	}
@@ -82,25 +90,27 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 			continue
 		}
 
-		isSpecificGym := false
+		isSpecificMatch := false
 		if r.GymID.Valid && r.GymID.String == raid.GymID {
-			isSpecificGym = true
+			isSpecificMatch = true
 		} else if r.GymID.Valid {
 			// Specific gym tracking but doesn't match this gym
 			continue
 		}
 
 		trackingData = append(trackingData, raidUserData{
-			HumanID:       r.ID,
-			ProfileNo:     r.ProfileNo,
-			Distance:      r.Distance,
-			Template:      r.Template,
-			Clean:         r.Clean,
-			Ping:          r.Ping,
-			RSVPChanges:   r.RSVPChanges,
-			IsSpecificGym: isSpecificGym,
+			HumanID:         r.ID,
+			ProfileNo:       r.ProfileNo,
+			Distance:        r.Distance,
+			Template:        r.Template,
+			Clean:           r.Clean,
+			Ping:            r.Ping,
+			RSVPChanges:     r.RSVPChanges,
+			IsSpecificMatch: isSpecificMatch,
 		})
 	}
+
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeRaid).Observe(float64(len(trackingData)))
 
 	users := ValidateHumansForRaid(
 		trackingData,
@@ -117,6 +127,11 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 // areas that contain the gym.
 // Port of raid.js:71-131 (eggWhoCares).
 func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+	start := time.Now()
+	defer func() {
+		metrics.MatchingDuration.WithLabelValues(metrics.TypeEgg).Observe(time.Since(start).Seconds())
+	}()
+
 	if st == nil {
 		return nil, nil
 	}
@@ -147,24 +162,26 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 			continue
 		}
 
-		isSpecificGym := false
+		isSpecificMatch := false
 		if e.GymID.Valid && e.GymID.String == egg.GymID {
-			isSpecificGym = true
+			isSpecificMatch = true
 		} else if e.GymID.Valid {
 			continue
 		}
 
 		trackingData = append(trackingData, raidUserData{
-			HumanID:       e.ID,
-			ProfileNo:     e.ProfileNo,
-			Distance:      e.Distance,
-			Template:      e.Template,
-			Clean:         e.Clean,
-			Ping:          e.Ping,
-			RSVPChanges:   e.RSVPChanges,
-			IsSpecificGym: isSpecificGym,
+			HumanID:         e.ID,
+			ProfileNo:       e.ProfileNo,
+			Distance:        e.Distance,
+			Template:        e.Template,
+			Clean:           e.Clean,
+			Ping:            e.Ping,
+			RSVPChanges:     e.RSVPChanges,
+			IsSpecificMatch: isSpecificMatch,
 		})
 	}
+
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeEgg).Observe(float64(len(trackingData)))
 
 	users := ValidateHumansForRaid(
 		trackingData,

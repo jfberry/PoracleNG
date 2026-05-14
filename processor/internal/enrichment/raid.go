@@ -56,8 +56,8 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 	// DTS templates use these for Discord timestamps: <t:{{start}}:R>
 	m["start"] = raid.Start
 	m["end"] = raid.End
-	m["endTimestamp"] = raid.End       // unix int for Discord <t:N:R>
-	m["hatchTimestamp"] = raid.Start   // unix int for Discord <t:N:R>
+	m["endTimestamp"] = raid.End     // unix int for Discord <t:N:R>
+	m["hatchTimestamp"] = raid.Start // unix int for Discord <t:N:R>
 
 	if raid.PokemonID > 0 {
 		// Hatched raid: disappearTime from end, tth from now to end
@@ -99,7 +99,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 			tsSec := (r.Timeslot + 999) / 1000 // ceil to seconds (matching alerter Math.ceil)
 			rsvpTimes = append(rsvpTimes, map[string]any{
 				"timeslot":    tsSec,
-				"timeSlot":    tsSec,        // camelCase for DTS templates
+				"timeSlot":    tsSec, // camelCase for DTS templates
 				"going_count": r.GoingCount,
 				"goingCount":  r.GoingCount, // camelCase for DTS templates
 				"maybe_count": r.MaybeCount,

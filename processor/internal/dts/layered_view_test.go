@@ -496,6 +496,37 @@ func TestLayeredView_EscapeFromWebhook(t *testing.T) {
 	assert.Equal(t, "Gym ''With'' Quotes", v)
 }
 
+// TestLayeredView_EscapeAllScannerNameFields locks the full set of
+// scanner-derived text fields that produce JSON inside templates and
+// must therefore be escaped. Mirrors PoracleJS's escapeJsonString
+// coverage so a regression here would re-introduce broken-JSON bugs.
+func TestLayeredView_EscapeAllScannerNameFields(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.base = map[string]any{
+			"nest_name":      "Park \"East\"",
+			"description":    "Has a \"plaque\" on it",
+			"oldName":        "Old \"Stop\"",
+			"newName":        "New \"Stop\"",
+			"oldDescription": "Old \"plaque\"",
+			"newDescription": "New \"plaque\"",
+		}
+	})
+
+	cases := map[string]string{
+		"nest_name":      "Park ''East''",
+		"description":    "Has a ''plaque'' on it",
+		"oldName":        "Old ''Stop''",
+		"newName":        "New ''Stop''",
+		"oldDescription": "Old ''plaque''",
+		"newDescription": "New ''plaque''",
+	}
+	for field, want := range cases {
+		got, ok := lv.GetField(field)
+		require.True(t, ok, "field %s missing", field)
+		assert.Equal(t, want, got, "field %s", field)
+	}
+}
+
 // --- Nil layer handling ---
 
 func TestLayeredView_AllNilLayers(t *testing.T) {
@@ -549,4 +580,150 @@ func TestLayeredView_WeatherChangeAliases(t *testing.T) {
 		require.Truef(t, ok, "alias %q should resolve", tc.alias)
 		assert.Equalf(t, tc.want, v, "alias %q", tc.alias)
 	}
+}
+
+// TestLayeredView_BoostingWeathersEmoji locks {{boostingWeathersEmoji}}
+// — the field every long-running pokemon / raid template references.
+// resolveEmojiMap joins the per-platform emoji for every weather that
+// boosts the pokemon's types into one string.
+func TestLayeredView_BoostingWeathersEmoji(t *testing.T) {
+	emoji := &EmojiLookup{
+		custom: make(map[string]map[string]string),
+		defaults: map[string]string{
+			"weather_3": "☀️",
+			"weather_5": "💨",
+		},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.emoji = emoji
+		o.base = map[string]any{
+			"boostingWeatherEmojiKeys": []string{"weather_3", "weather_5"},
+		}
+	})
+
+	v, ok := lv.GetField("boostingWeathersEmoji")
+	require.True(t, ok)
+	assert.Equal(t, "☀️💨", v)
+}
+
+// TestLayeredView_WeaknessEmojiFlatString locks the {{weaknessEmoji}}
+// flat string. Templates that don't iterate the structured weaknessList
+// (e.g. NPlumb's dts_all.json) reference {{weaknessEmoji}} directly.
+func TestLayeredView_WeaknessEmojiFlatString(t *testing.T) {
+	emoji := &EmojiLookup{
+		custom: make(map[string]map[string]string),
+		defaults: map[string]string{
+			"poke_type_water":    "💧",
+			"poke_type_electric": "⚡",
+			"poke_type_rock":     "🪨",
+		},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.emoji = emoji
+		o.perLang = map[string]any{
+			"weaknessList": []map[string]any{
+				{
+					"value": 2.0,
+					"types": []map[string]any{
+						{"emojiKey": "poke_type_water"},
+						{"emojiKey": "poke_type_electric"},
+					},
+				},
+				{
+					"value": 4.0,
+					"types": []map[string]any{
+						{"emojiKey": "poke_type_rock"},
+					},
+				},
+			},
+		}
+	})
+	v, ok := lv.GetField("weaknessEmoji")
+	require.True(t, ok, "weaknessEmoji should resolve")
+	assert.Equal(t, "2x💧⚡ 4x🪨 ", v)
+}
+
+// TestLayeredView_WeaknessEmojiSkipEmpty confirms that categories with
+// no resolvable type emoji are excluded from the flat string — matches
+// PoracleJS's `if (info.types.length)` guard in raid.js.
+func TestLayeredView_WeaknessEmojiSkipEmpty(t *testing.T) {
+	emoji := &EmojiLookup{
+		custom:   make(map[string]map[string]string),
+		defaults: map[string]string{"poke_type_fire": "🔥"},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.emoji = emoji
+		o.perLang = map[string]any{
+			"weaknessList": []map[string]any{
+				{
+					"value": 0.5,
+					"types": []map[string]any{}, // empty — should be skipped
+				},
+				{
+					"value": 2.0,
+					"types": []map[string]any{
+						{"emojiKey": "poke_type_fire"},
+					},
+				},
+			},
+		}
+	})
+	v, ok := lv.GetField("weaknessEmoji")
+	require.True(t, ok)
+	assert.Equal(t, "2x🔥 ", v)
+}
+
+// TestLayeredView_Original verifies the {{original.X}} sub-resolver: the
+// `original` field returns the prior-sighting map verbatim so templates
+// can dereference into it (e.g. {{original.fullName}}, {{original.cp}}).
+// The map must not be shadowed by any other layer that happens to hold an
+// "original" key.
+func TestLayeredView_Original(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.base = map[string]any{"name": "Sinistea"}
+	})
+	lv.original = map[string]any{"name": "Polteageist", "cp": 1500}
+
+	// Direct field outside `original` resolves through the normal cascade.
+	v, ok := lv.GetField("name")
+	require.True(t, ok)
+	assert.Equal(t, "Sinistea", v)
+
+	// `original` returns the nested map verbatim for raymond to recurse into.
+	v, ok = lv.GetField("original")
+	require.True(t, ok)
+	m, ok := v.(map[string]any)
+	require.True(t, ok, "original = %T, want map[string]any", v)
+	assert.Equal(t, "Polteageist", m["name"])
+	assert.Equal(t, 1500, m["cp"])
+}
+
+// TestLayeredView_OriginalNilWhenAbsent confirms that an unset `original`
+// is reported as not-found so templates can guard with {{#if original}}.
+func TestLayeredView_OriginalNilWhenAbsent(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.base = map[string]any{"name": "Sinistea"}
+	})
+
+	v, ok := lv.GetField("original")
+	assert.False(t, ok, "original should not resolve when unset")
+	assert.Nil(t, v)
+}
+
+// TestLayeredView_GymUrlAliasFromWebhook covers the gym_details photo URL:
+// the gym webhook ships it as `url`, the gym alias table maps `gymUrl` →
+// `url`, and the value flows through the raw-webhook fallback layer.
+// Regression guard for the GymWebhook.URL field that was missing from
+// the struct until the webhook's `url` field was wired up.
+func TestLayeredView_GymUrlAliasFromWebhook(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.templateType = "gym"
+		o.base = map[string]any{}
+		o.webhook = map[string]any{
+			"url": "https://lh3.googleusercontent.com/abc123",
+		}
+	})
+	v, ok := lv.GetField("gymUrl")
+	require.True(t, ok)
+	assert.Equal(t, "https://lh3.googleusercontent.com/abc123", v)
 }

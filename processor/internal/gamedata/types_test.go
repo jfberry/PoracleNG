@@ -39,35 +39,35 @@ func TestIsAffectedByWeatherChange(t *testing.T) {
 		{
 			name:         "grass pokemon loses boost: clear -> rainy",
 			types:        []int{12}, // grass
-			currentBoost: true,         // currently boosted by clear
+			currentBoost: true,      // currently boosted by clear
 			newWeather:   2,         // rainy doesn't boost grass
 			want:         true,
 		},
 		{
 			name:         "grass pokemon stays boosted: clear -> clear",
 			types:        []int{12}, // grass
-			currentBoost: true,         // currently boosted by clear
+			currentBoost: true,      // currently boosted by clear
 			newWeather:   1,         // clear still boosts grass
 			want:         false,
 		},
 		{
 			name:         "water pokemon gains boost: clear -> rainy",
 			types:        []int{11}, // water
-			currentBoost: false,         // not boosted
+			currentBoost: false,     // not boosted
 			newWeather:   2,         // rainy boosts water
 			want:         true,
 		},
 		{
 			name:         "water pokemon not affected: clear -> windy",
 			types:        []int{11}, // water
-			currentBoost: false,         // not boosted
+			currentBoost: false,     // not boosted
 			newWeather:   5,         // windy doesn't boost water
 			want:         false,
 		},
 		{
 			name:         "dual type fire/flying loses fire boost: clear -> windy",
 			types:        []int{10, 3}, // fire, flying
-			currentBoost: true,            // boosted by clear (fire)
+			currentBoost: true,         // boosted by clear (fire)
 			newWeather:   5,            // windy boosts flying
 			want:         false,        // still boosted via flying type
 		},

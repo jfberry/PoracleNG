@@ -8,14 +8,14 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"runtime/debug"
-	"path/filepath"
-	_ "time/tzdata" // embed IANA timezone database as fallback
 	"os/signal"
+	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+	_ "time/tzdata" // embed IANA timezone database as fallback
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/gin-gonic/gin"
@@ -26,14 +26,14 @@ import (
 
 	"github.com/pokemon/poracleng/processor"
 	"github.com/pokemon/poracleng/processor/internal/api"
+	"github.com/pokemon/poracleng/processor/internal/backup"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/config"
-	"github.com/pokemon/poracleng/processor/internal/discordbot"
-	"github.com/pokemon/poracleng/processor/internal/telegrambot"
-	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/discordbot"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
@@ -41,19 +41,20 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
-	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
-	"github.com/pokemon/poracleng/processor/internal/validation"
-	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/resources"
+	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
-	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/store"
+	"github.com/pokemon/poracleng/processor/internal/telegrambot"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
+	"github.com/pokemon/poracleng/processor/internal/validation"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -102,6 +103,7 @@ func main() {
 
 	humanStore := store.NewSQLHumanStore(database)
 	trackingStores := store.NewTrackingStores(database)
+	summaryScheduleStore := store.NewSQLSummaryScheduleStore(database)
 
 	// Database migrations: adopt existing Knex DB if needed, drop FK constraints, run pending
 	if err := db.AdoptExistingDatabase(database.DB); err != nil {
@@ -115,7 +117,7 @@ func main() {
 	stateMgr := state.NewManager()
 
 	// Initial load (includes geofences)
-	if err := state.LoadWithGeofences(stateMgr, database, cfg.Geofence); err != nil {
+	if err := state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence); err != nil {
 		log.Fatalf("Failed to load initial state: %s", err)
 	}
 
@@ -130,10 +132,17 @@ func main() {
 	metrics.WorkerPoolCapacity.Set(float64(cfg.Tuning.WorkerPoolSize))
 	proc := NewProcessorService(cfg, stateMgr, database)
 	proc.humans = humanStore
+	proc.summarySchedules = summaryScheduleStore
 
 	// Restore gym state cache from previous run
 	if err := proc.gymState.Load(); err != nil {
 		log.Warnf("Failed to load gym state cache: %v", err)
+	}
+
+	// Restore summary buffer from previous run. A missing or malformed
+	// snapshot is silent inside Load — startup must never block on it.
+	if err := proc.summaryBuffer.Load(); err != nil {
+		log.Warnf("Failed to load summary buffer: %v", err)
 	}
 
 	// Start render pool workers
@@ -201,6 +210,26 @@ func main() {
 	go proc.runProfileScheduler()
 	log.Infof("Profile scheduler enabled (10-minute interval)")
 
+	// Quest summary scheduler — only constructed when the feature flag is on.
+	// The buffer is loaded/saved regardless so toggling the flag back on does
+	// not lose entries captured before the toggle.
+	if cfg.Tracking.QuestSummaryEnabled {
+		proc.summaryScheduler = NewSummaryScheduler(
+			schedulerConfig{
+				Locale:           cfg.General.Locale,
+				BufferMaxAgeSecs: int64(cfg.Tracking.QuestSummaryBufferTTLHours) * 3600,
+				DefaultTimezone:  cfg.General.DefaultTimezone,
+			},
+			stateMgr,
+			proc.summaryBuffer,
+			proc.DispatchQuestSummary,
+		)
+		proc.summaryScheduler.Start()
+		log.Infof("Summary scheduler enabled")
+	} else {
+		log.Infof("Summary scheduler disabled (tracking.quest_summary_enabled=false)")
+	}
+
 	// HTTP server — Gin router.
 	// UseRawPath + UnescapePathValues lets :id capture percent-encoded
 	// path params that contain forward slashes (webhook URLs used as
@@ -264,16 +293,16 @@ func main() {
 
 	// Reload
 	apiGroup.POST("/reload", api.HandleReload(func() error {
-		return state.Load(stateMgr, database)
+		return state.Load(stateMgr, database, summaryScheduleStore)
 	}))
 	apiGroup.GET("/reload", api.HandleReload(func() error {
-		return state.Load(stateMgr, database)
+		return state.Load(stateMgr, database, summaryScheduleStore)
 	}))
 	apiGroup.POST("/geofence/reload", api.HandleReload(func() error {
-		return state.LoadWithGeofences(stateMgr, database, cfg.Geofence)
+		return state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence)
 	}))
 	apiGroup.GET("/geofence/reload", api.HandleReload(func() error {
-		return state.LoadWithGeofences(stateMgr, database, cfg.Geofence)
+		return state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence)
 	}))
 
 	// Weather, stats, geocode, test
@@ -307,10 +336,10 @@ func main() {
 		defaultTemplate = fmt.Sprintf("%v", cfg.General.DefaultTemplateName)
 	}
 	trackingDeps := &api.TrackingDeps{
-		DB:           database,
-		Humans:       humanStore,
-		Tracking:     trackingStores,
-		StateMgr:     stateMgr,
+		DB:       database,
+		Humans:   humanStore,
+		Tracking: trackingStores,
+		StateMgr: stateMgr,
 		RowText: &rowtext.Generator{
 			GD:                  proc.enricher.GameData,
 			Translations:        proc.enricher.Translations,
@@ -329,7 +358,7 @@ func main() {
 	tracking.DELETE("/pokemon/:id/byUid/:uid", api.HandleDeleteMonster(trackingDeps))
 	tracking.POST("/pokemon/:id/delete", api.HandleBulkDeleteMonster(trackingDeps))
 	tracking.GET("/pokemon/refresh", api.HandleReload(func() error {
-		return state.Load(stateMgr, database)
+		return state.Load(stateMgr, database, summaryScheduleStore)
 	}))
 	// Raid tracking
 	tracking.GET("/raid/:id", api.HandleGetRaid(trackingDeps))
@@ -416,6 +445,26 @@ func main() {
 	profiles.POST("/:id/update", api.HandleUpdateProfile(trackingDeps))
 	profiles.POST("/:id/copy/:from/:to", api.HandleCopyProfile(trackingDeps))
 
+	// Summary schedule endpoints (CRUD over summary_schedules + trigger).
+	// All five sit behind the same x-poracle-secret middleware as the rest
+	// of /api. The endpoints are always live — `quest_summary_enabled` only
+	// gates the scheduler tick / matcher routing, not the schedule storage,
+	// so operators can prepare schedules in advance and flip the feature
+	// flag without losing data. Handlers return 503 only when the
+	// underlying store wasn't constructed (an early-init failure), not
+	// when the feature flag is off.
+	summaryDeps := &api.SummaryDeps{
+		Schedules:  proc.SummarySchedules(),
+		Dispatch:   proc.DispatchQuestSummary,
+		ReloadFunc: proc.triggerReload,
+	}
+	summaries := apiGroup.Group("/summaries")
+	summaries.GET("/:id", api.HandleSummaryListForUser(summaryDeps))
+	summaries.GET("/:id/:alertType", api.HandleSummaryGet(summaryDeps))
+	summaries.POST("/:id/:alertType", api.HandleSummarySet(summaryDeps))
+	summaries.DELETE("/:id/:alertType", api.HandleSummaryDelete(summaryDeps))
+	summaries.POST("/:id/:alertType/trigger", api.HandleSummaryTrigger(summaryDeps))
+
 	// DTS template endpoints
 	if proc.dtsRenderer != nil {
 		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
@@ -454,7 +503,7 @@ func main() {
 	configDeps := api.ConfigDeps{
 		Cfg:       cfg,
 		ConfigDir: filepath.Join(cfg.BaseDir, "config"),
-		ReloadFn:  func() {
+		ReloadFn: func() {
 			// Hot-reloadable config changes are already applied in-memory via ApplyOverrides.
 			// Trigger a state reload so matching rules pick up any changed config values.
 			proc.triggerReload()
@@ -485,11 +534,19 @@ func main() {
 		hasEn := false
 		hasLocale := false
 		for _, l := range cmdLanguages {
-			if l == "en" { hasEn = true }
-			if l == cfg.General.Locale { hasLocale = true }
+			if l == "en" {
+				hasEn = true
+			}
+			if l == cfg.General.Locale {
+				hasLocale = true
+			}
 		}
-		if !hasEn { cmdLanguages = append(cmdLanguages, "en") }
-		if cfg.General.Locale != "" && !hasLocale { cmdLanguages = append(cmdLanguages, cfg.General.Locale) }
+		if !hasEn {
+			cmdLanguages = append(cmdLanguages, "en")
+		}
+		if cfg.General.Locale != "" && !hasLocale {
+			cmdLanguages = append(cmdLanguages, cfg.General.Locale)
+		}
 	} else {
 		cmdLanguages = []string{"en"}
 		if cfg.General.Locale != "" && cfg.General.Locale != "en" {
@@ -523,6 +580,7 @@ func main() {
 	cmdRegistry.Register(&commands.WeatherCommand{})
 	cmdRegistry.Register(&commands.LanguageCommand{})
 	cmdRegistry.Register(&commands.ProfileCommand{})
+	cmdRegistry.Register(&commands.SummaryCommand{})
 	cmdRegistry.Register(&commands.LocationCommand{})
 	cmdRegistry.Register(&commands.AreaCommand{})
 	cmdRegistry.Register(&commands.ScriptCommand{})
@@ -564,23 +622,23 @@ func main() {
 		cmdEmoji = proc.dtsRenderer.Emoji()
 	}
 	cmdDeps := &api.CommandDeps{
-		DB:           database,
-		Humans:       humanStore,
-		Tracking:     trackingStores,
-		Config:       cfg,
-		StateMgr:     stateMgr,
-		GameData:     proc.enricher.GameData,
-		Translations: proc.enricher.Translations,
-		Dispatcher:   proc.dispatcher,
-		RowText:      trackingDeps.RowText,
-		Resolver:     cmdResolver,
-		ArgMatcher:   cmdArgMatcher,
-		Parser:       cmdParser,
-		Registry:     cmdRegistry,
-		Weather:      proc.weather,
-		Stats:        proc.stats,
-		DTS:          cmdDTS,
-		Emoji:        cmdEmoji,
+		DB:            database,
+		Humans:        humanStore,
+		Tracking:      trackingStores,
+		Config:        cfg,
+		StateMgr:      stateMgr,
+		GameData:      proc.enricher.GameData,
+		Translations:  proc.enricher.Translations,
+		Dispatcher:    proc.dispatcher,
+		RowText:       trackingDeps.RowText,
+		Resolver:      cmdResolver,
+		ArgMatcher:    cmdArgMatcher,
+		Parser:        cmdParser,
+		Registry:      cmdRegistry,
+		Weather:       proc.weather,
+		Stats:         proc.stats,
+		DTS:           cmdDTS,
+		Emoji:         cmdEmoji,
 		NLPParser:     nlpParser,
 		TestProcessor: proc,
 		ReloadFunc:    proc.triggerReload,
@@ -606,9 +664,14 @@ func main() {
 			}
 			log.Debugf("Periodic reload triggered")
 			start := time.Now()
-			if err := state.Load(stateMgr, database); err != nil {
+			if err := state.Load(stateMgr, database, summaryScheduleStore); err != nil {
 				log.Errorf("Periodic reload failed: %s", err)
 				metrics.StateReloads.WithLabelValues("error").Inc()
+				proc.adminNoticeThrottled(
+					"state.reload.fail",
+					fmt.Sprintf(":warning: Periodic state reload failed: %s — tracking rule updates from the DB will pause until this clears.", err),
+					5*time.Minute,
+				)
 			} else {
 				metrics.StateReloads.WithLabelValues("success").Inc()
 			}
@@ -640,6 +703,15 @@ func main() {
 				statusParts = append(statusParts, fmt.Sprintf("RenderQ: %d/%d", depth, cap(proc.renderCh)))
 				metrics.RenderQueueDepth.Set(float64(depth))
 			}
+			// Summary buffer state: how many entries are currently
+			// held awaiting the next scheduled dispatch. The same value
+			// is exposed as the SummaryBufferedTotal Prometheus gauge so
+			// it can be charted/alerted on without scraping log lines.
+			if proc.summaryBuffer != nil {
+				bufSize := proc.summaryBuffer.Size()
+				statusParts = append(statusParts, fmt.Sprintf("Summary: %d buffered", bufSize))
+				metrics.SummaryBufferedTotal.Set(float64(bufSize))
+			}
 			if proc.dispatcher != nil {
 				statusParts = append(statusParts, fmt.Sprintf("Delivery: Discord:%d+%d Telegram:%d Tracked:%d RateLimited:%d",
 					proc.dispatcher.DiscordDepth(),
@@ -664,42 +736,83 @@ func main() {
 	var discordBot *discordbot.Bot
 	// Shared bot dependencies — constructed once, passed to both Discord and Telegram bots.
 	sharedBotDeps := bot.BotDeps{
-		DB:           database,
-		Humans:       humanStore,
-		Tracking:     trackingStores,
-		Cfg:          cfg,
-		StateMgr:     stateMgr,
-		GameData:     proc.enricher.GameData,
-		Translations: proc.enricher.Translations,
-		Dispatcher:   proc.dispatcher,
-		RowText:      trackingDeps.RowText,
-		Registry:     cmdRegistry,
-		ArgMatcher:   cmdArgMatcher,
-		Resolver:     cmdResolver,
-		Geocoder:     proc.enricher.Geocoder,
-		StaticMap:    proc.enricher.StaticMap,
-		Weather:      proc.weather,
-		Stats:        proc.stats,
-		DTS:          cmdDTS,
-		Emoji:        cmdEmoji,
-		NLPParser:     nlpParser,
-		TestProcessor: proc,
-		ReloadFunc:    proc.triggerReload,
+		DB:                 database,
+		Humans:             humanStore,
+		Tracking:           trackingStores,
+		Cfg:                cfg,
+		StateMgr:           stateMgr,
+		GameData:           proc.enricher.GameData,
+		Translations:       proc.enricher.Translations,
+		Dispatcher:         proc.dispatcher,
+		RowText:            trackingDeps.RowText,
+		Registry:           cmdRegistry,
+		ArgMatcher:         cmdArgMatcher,
+		Resolver:           cmdResolver,
+		Geocoder:           proc.enricher.Geocoder,
+		StaticMap:          proc.enricher.StaticMap,
+		Weather:            proc.weather,
+		Stats:              proc.stats,
+		DTS:                cmdDTS,
+		Emoji:              cmdEmoji,
+		NLPParser:          nlpParser,
+		TestProcessor:      proc,
+		ReloadFunc:         proc.triggerReload,
+		SummarySchedules:   proc.SummarySchedules(),
+		SummaryBufferCount: proc.SummaryBufferCount,
+		SummaryDispatch:    proc.DispatchQuestSummary,
+		Scanner:            proc.scanner,
 	}
 
-	discordTokens := cfg.Discord.DiscordTokens()
-	if cfg.Discord.Enabled && len(discordTokens) > 0 && discordTokens[0] != "" {
+	gatewayToken := cfg.Discord.DiscordGatewayToken()
+	if cfg.Discord.Enabled && gatewayToken != "" {
 		deps := sharedBotDeps
 		deps.Parser = cmdParser
+		// Log which side of the split we're on so operators can
+		// confirm their command_token is being picked up. Mask the
+		// token itself (first 8 chars + ellipsis is enough to
+		// distinguish, no full secret in logs).
+		mode := "single-bot"
+		if cfg.Discord.CommandToken != "" {
+			mode = "split (using [discord] command_token)"
+		}
+		log.Infof("Discord bot starting in %s mode", mode)
 		dbot, err := discordbot.New(discordbot.Config{
-			Token:   discordTokens[0],
+			Token:   gatewayToken,
 			BotDeps: deps,
 		})
 		if err != nil {
+			// When command_token is set, treat a gateway failure as
+			// fatal: the operator explicitly configured a split-bot
+			// setup, and silently falling back to "warn and continue"
+			// would hide a real misconfiguration (typo, revoked
+			// token) behind seemingly-working alerts. The historic
+			// behaviour (warn-and-continue) is preserved for the
+			// single-bot case where the delivery side can still work
+			// even with a broken gateway.
+			if cfg.Discord.CommandToken != "" {
+				log.Fatalf("Discord command_token failed to start the gateway bot: %v — fix the token or unset [discord] command_token to fall back to single-bot operation", err)
+			}
 			log.Warnf("Discord bot failed to start: %v", err)
 		} else {
 			discordBot = dbot
 			discordBotRef = dbot
+			proc.discordBot = dbot
+			// Replay any startup-time issues that happened before the bot
+			// was up so the operator sees them in the admin channel.
+			if proc.dtsInitErr != nil {
+				proc.adminNotice(fmt.Sprintf(
+					":rotating_light: DTS renderer initialization failed at startup — alerts will not be sent! Error: %s",
+					proc.dtsInitErr,
+				))
+			}
+			// Route DTS render errors to the admin channel, throttled per
+			// type|platform|language|template so a broken template doesn't
+			// flood the channel on every webhook event.
+			if proc.dtsRenderer != nil {
+				proc.dtsRenderer.SetErrorNoticer(func(key, msg string) {
+					proc.adminNoticeThrottled(key, msg, time.Hour)
+				})
+			}
 		}
 	}
 
@@ -732,6 +845,20 @@ func main() {
 		resolveDeps.TelegramAPI = telegramBot.API()
 	}
 	apiGroup.POST("/resolve", api.HandleResolve(resolveDeps))
+	apiGroup.POST("/autocreate/run", handleAutocreateRun(cfg, discordBot))
+	apiGroup.GET("/autocreate/templates", handleGetChannelTemplates(cfg))
+	apiGroup.POST("/autocreate/templates", handlePostChannelTemplates(cfg))
+	apiGroup.POST("/autocreate/templates/validate", handleValidateChannelTemplates())
+	apiGroup.DELETE("/autocreate/templates/:name", handleDeleteChannelTemplate(cfg))
+	apiGroup.GET("/autocreate/templates/schema", handleGetChannelTemplatesSchema())
+
+	// Backup-cleanup sweeper: walks config/backups/ on startup and every
+	// 24h, removes files older than the retention window.
+	stopBackupSweeper := backup.StartCleanupSweeper(
+		context.Background(),
+		filepath.Join(cfg.BaseDir, "config"),
+		backup.Retention,
+	)
 
 	// Start server
 	go func() {
@@ -756,6 +883,7 @@ func main() {
 
 	// 2. Stop bots (no more command processing)
 	close(periodicDone)
+	stopBackupSweeper()
 	if discordBot != nil {
 		discordBot.Close()
 		log.Infof("Discord bot disconnected")
@@ -799,43 +927,89 @@ func readBuildInfo() (version, commit, date string) {
 
 // ProcessorService ties together all matching/tracking components.
 type ProcessorService struct {
-	cfg             *config.Config
-	stateMgr        *state.Manager
-	database        *sqlx.DB
-	weather         *tracker.WeatherTracker
-	weatherCares    *tracker.WeatherCareTracker
-	encounters      *tracker.EncounterTracker
-	duplicates      *tracker.DuplicateCache
-	stats           *tracker.StatsTracker
-	gymState        *tracker.GymStateTracker
-	pokemonMatcher  *matching.PokemonMatcher
-	raidMatcher     *matching.RaidMatcher
-	invasionMatcher *matching.InvasionMatcher
-	questMatcher    *matching.QuestMatcher
-	lureMatcher     *matching.LureMatcher
-	gymMatcher      *matching.GymMatcher
-	nestMatcher     *matching.NestMatcher
-	fortMatcher       *matching.FortMatcher
-	maxbattleMatcher  *matching.MaxbattleMatcher
-	pvpCfg          *pvp.Config
-	activePokemon   *tracker.ActivePokemonTracker
-	pokemonTypes    *gamedata.PokemonTypes
-	enricher        *enrichment.Enricher
-	dtsRenderer     *dts.Renderer
-	dispatcher      *delivery.Dispatcher
-	humans          store.HumanStore
-	scanner         scanner.Scanner
-	rateLimiter     *ratelimit.Limiter
-	validator       validation.Validator
-	translations    *i18n.Bundle
-	renderCh        chan RenderJob
-	renderWg        sync.WaitGroup
-	reloadMu        sync.Mutex
-	reloadTimer     *time.Timer
-	workerPool      chan struct{}
-	wg              sync.WaitGroup
-	ctx             context.Context
-	cancel          context.CancelFunc
+	cfg              *config.Config
+	stateMgr         *state.Manager
+	database         *sqlx.DB
+	weather          *tracker.WeatherTracker
+	weatherCares     *tracker.WeatherCareTracker
+	encounters       *tracker.EncounterTracker
+	duplicates       *tracker.DuplicateCache
+	stats            *tracker.StatsTracker
+	gymState         *tracker.GymStateTracker
+	summaryBuffer    *tracker.SummaryBuffer
+	pokemonMatcher   *matching.PokemonMatcher
+	raidMatcher      *matching.RaidMatcher
+	invasionMatcher  *matching.InvasionMatcher
+	questMatcher     *matching.QuestMatcher
+	lureMatcher      *matching.LureMatcher
+	gymMatcher       *matching.GymMatcher
+	nestMatcher      *matching.NestMatcher
+	fortMatcher      *matching.FortMatcher
+	maxbattleMatcher *matching.MaxbattleMatcher
+	pvpCfg           *pvp.Config
+	activePokemon    *tracker.ActivePokemonTracker
+	pokemonTypes     *gamedata.PokemonTypes
+	enricher         *enrichment.Enricher
+	dtsRenderer      *dts.Renderer
+	dispatcher       *delivery.Dispatcher
+	humans           store.HumanStore
+	summarySchedules store.SummaryScheduleStore
+	summaryScheduler *SummaryScheduler
+	scanner          scanner.Scanner
+	rateLimiter      *ratelimit.Limiter
+	validator        validation.Validator
+	translations     *i18n.Bundle
+	renderCh         chan RenderJob
+	renderWg         sync.WaitGroup
+	reloadMu         sync.Mutex
+	reloadTimer      *time.Timer
+	workerPool       chan struct{}
+	wg               sync.WaitGroup
+	ctx              context.Context
+	cancel           context.CancelFunc
+
+	// discordBot is set by main after the bot starts so helpers can post
+	// to the admin channel. May be nil if Discord is disabled.
+	discordBot *discordbot.Bot
+
+	// dtsInitErr remembers a startup-time DTS-renderer init failure so
+	// main can post an admin notice once the Discord bot is up. nil
+	// when DTS init succeeded.
+	dtsInitErr error
+}
+
+// SummaryBufferCount returns the number of buffered entries in the
+// (humanID, alertType) bucket. Returns 0 when the buffer is nil.
+func (ps *ProcessorService) SummaryBufferCount(humanID, alertType string) int {
+	if ps == nil || ps.summaryBuffer == nil {
+		return 0
+	}
+	return len(ps.summaryBuffer.List(humanID, alertType))
+}
+
+// SummarySchedules returns the typed CRUD store backing
+// summary_schedules. nil before init completes.
+func (ps *ProcessorService) SummarySchedules() store.SummaryScheduleStore {
+	if ps == nil {
+		return nil
+	}
+	return ps.summarySchedules
+}
+
+// adminNotice posts to the admin channel if the bot is up. No-op when
+// Discord is disabled or the admin_channel_id config is empty.
+func (ps *ProcessorService) adminNotice(msg string) {
+	if ps.discordBot != nil {
+		ps.discordBot.PostAdminNotice(msg)
+	}
+}
+
+// adminNoticeThrottled posts to the admin channel with throttling. See
+// (*discordbot.Bot).PostAdminNoticeThrottled for semantics.
+func (ps *ProcessorService) adminNoticeThrottled(key, msg string, ttl time.Duration) {
+	if ps.discordBot != nil {
+		ps.discordBot.PostAdminNoticeThrottled(key, msg, ttl)
+	}
 }
 
 func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *sqlx.DB) *ProcessorService {
@@ -894,6 +1068,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		RdmURL:       cfg.General.RdmURL,
 		ReactMapURL:  cfg.General.ReactMapURL,
 		RocketMadURL: cfg.General.RocketMadURL,
+		DiademURL:    cfg.General.DiademURL,
 	}
 	enricher.IvColors = cfg.Discord.IvColors
 	enricher.PVPDisplay = &enrichment.PVPDisplayConfig{
@@ -1058,6 +1233,8 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		TimingPeriod:        cfg.AlertLimits.TimingPeriod,
 		DMLimit:             cfg.AlertLimits.DMLimit,
 		ChannelLimit:        cfg.AlertLimits.ChannelLimit,
+		DMSummaryLimit:      cfg.AlertLimits.DMSummaryLimit,
+		ChannelSummaryLimit: cfg.AlertLimits.ChannelSummaryLimit,
 		MaxLimitsBeforeStop: cfg.AlertLimits.MaxLimitsBeforeStop,
 		Overrides:           overrides,
 	})
@@ -1096,9 +1273,11 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		ShlinkDomain:        shlinkDomain,
 		DTSDictionary:       cfg.General.DTSDictionary,
 	})
+	var dtsInitErr error
 	if err != nil {
 		log.Errorf("DTS renderer initialization failed (alerts will not be sent!): %s", err)
 		dtsRenderer = nil
+		dtsInitErr = err
 	} else {
 		dtsRenderer.Templates().LogSummary()
 	}
@@ -1114,47 +1293,51 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &ProcessorService{
-		cfg:      cfg,
-		stateMgr: stateMgr,
-		database: database,
-		ctx:      ctx,
-		cancel:   cancel,
-		renderCh: renderCh,
-		enricher:      enricher,
-		dtsRenderer:   dtsRenderer,
-		scanner:       scannerInstance,
+		cfg:          cfg,
+		stateMgr:     stateMgr,
+		database:     database,
+		ctx:          ctx,
+		cancel:       cancel,
+		renderCh:     renderCh,
+		enricher:     enricher,
+		dtsRenderer:  dtsRenderer,
+		dtsInitErr:   dtsInitErr,
+		scanner:      scannerInstance,
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),
 		encounters:   tracker.NewEncounterTracker(),
 		duplicates:   tracker.NewDuplicateCache(),
 		stats:        statsTracker,
 		gymState:     tracker.NewGymStateTracker(filepath.Join(cfg.BaseDir, "config", ".cache")),
+		summaryBuffer: tracker.NewSummaryBuffer(
+			filepath.Join(cfg.BaseDir, "config", ".cache", "summary-buffer.json"),
+		),
 		pokemonMatcher: &matching.PokemonMatcher{
 			PVPQueryMaxRank:            cfg.PVP.PVPQueryMaxRank,
 			PVPEvolutionDirectTracking: cfg.PVP.PVPEvolutionDirectTracking,
 			StrictLocations:            cfg.Area.StrictLocations,
 			AreaSecurityEnabled:        cfg.Area.Enabled,
 		},
-		raidMatcher:     &matching.RaidMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: cfg.Area.Enabled},
-		invasionMatcher: &matching.InvasionMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		questMatcher:    &matching.QuestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		lureMatcher:     &matching.LureMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		gymMatcher:      &matching.GymMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		nestMatcher:     &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		fortMatcher:       &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		maxbattleMatcher:  &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
-		pvpCfg:          pvpCfg,
-		activePokemon:   activePokemon,
-		pokemonTypes:    pokemonTypes,
-		rateLimiter:     rateLimiter,
+		raidMatcher:      &matching.RaidMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: cfg.Area.Enabled},
+		invasionMatcher:  &matching.InvasionMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		questMatcher:     &matching.QuestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		lureMatcher:      &matching.LureMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		gymMatcher:       &matching.GymMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		nestMatcher:      &matching.NestMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		fortMatcher:      &matching.FortMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		maxbattleMatcher: &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
+		pvpCfg:           pvpCfg,
+		activePokemon:    activePokemon,
+		pokemonTypes:     pokemonTypes,
+		rateLimiter:      rateLimiter,
 		validator: validation.New(
 			cfg.Validation.URL,
 			cfg.Validation.FailMode,
 			cfg.Tuning.ValidationTimeoutMs,
 			cfg.Tuning.ValidationMaxConcurrent,
 		),
-		translations:    enricher.Translations,
-		workerPool:      make(chan struct{}, cfg.Tuning.WorkerPoolSize),
+		translations: enricher.Translations,
+		workerPool:   make(chan struct{}, cfg.Tuning.WorkerPoolSize),
 	}
 }
 
@@ -1169,6 +1352,16 @@ func (ps *ProcessorService) Close() {
 		close(ps.renderCh)
 		ps.renderWg.Wait()
 		log.Info("Render pool stopped")
+	}
+	// Stop summary scheduler BEFORE the dispatcher. The scheduler's tick
+	// calls DispatchQuestSummary → dispatcher.DispatchBypass which sends
+	// on the dispatcher's job channel; stopping the dispatcher first
+	// closes that channel, so a tick that fires mid-shutdown would panic
+	// on send-to-closed-channel. Close() blocks until the loop goroutine
+	// exits, after which it's safe to tear down the dispatcher.
+	if ps.summaryScheduler != nil {
+		ps.summaryScheduler.Close()
+		log.Info("Summary scheduler stopped")
 	}
 	if ps.dispatcher != nil {
 		log.Info("Stopping delivery dispatcher...")
@@ -1185,6 +1378,15 @@ func (ps *ProcessorService) Close() {
 		log.Warnf("Failed to save gym state cache: %v", err)
 	} else {
 		log.Info("Gym state cache saved")
+	}
+	// Persist summary buffer for restart so users don't lose buffered
+	// quests across a graceful shutdown.
+	if ps.summaryBuffer != nil {
+		if err := ps.summaryBuffer.Save(); err != nil {
+			log.Warnf("Failed to save summary buffer: %v", err)
+		} else {
+			log.Info("Summary buffer saved")
+		}
 	}
 	if ps.enricher.Geocoder != nil {
 		ps.enricher.Geocoder.Close()

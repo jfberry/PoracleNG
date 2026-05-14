@@ -30,8 +30,10 @@ type Config struct {
 	Geocoding      GeocodingConfig      `toml:"geocoding"`
 	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 	Tracking       TrackingConfig       `toml:"tracking"`
+	Summariser     SummariserConfig     `toml:"summariser"`
 	AI             AIConfig             `toml:"ai"`
 	Validation     ValidationConfig     `toml:"validation"`
+	Autocreate     AutocreateConfig     `toml:"autocreate"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
@@ -79,49 +81,94 @@ type RoleSubscriptionEntry struct {
 
 // TrackingConfig holds settings from the [tracking] section.
 type TrackingConfig struct {
-	EverythingFlagPermissions      string `toml:"everything_flag_permissions"` // "deny", "allow-any", "allow-and-always-individually", "allow-and-ignore-individually"
-	DefaultDistance                int    `toml:"default_distance"`
-	MaxDistance                    int    `toml:"max_distance"`
-	EnableGymBattle                bool   `toml:"enable_gym_battle"`
-	DefaultUserTrackingLevelCap    int    `toml:"default_user_tracking_level_cap"`
+	EverythingFlagPermissions   string `toml:"everything_flag_permissions"` // "deny", "allow-any", "allow-and-always-individually", "allow-and-ignore-individually"
+	DefaultDistance             int    `toml:"default_distance"`
+	MaxDistance                 int    `toml:"max_distance"`
+	EnableGymBattle             bool   `toml:"enable_gym_battle"`
+	DefaultUserTrackingLevelCap int    `toml:"default_user_tracking_level_cap"`
+	// PokemonChangeTracking controls whether the encounter tracker fires
+	// reply-threaded change-events (encounter, form, species, gender,
+	// weather-boost) to users with prior messages. Default true. When false,
+	// change events fall through to the regular `monster` send path — no
+	// reply threading, no `monsterChanged` template.
+	PokemonChangeTracking bool `toml:"pokemon_change_tracking"`
+	// QuestSummaryEnabled toggles the per-user buffered quest summary
+	// pipeline (matcher routing, scheduler, render). Default true. When
+	// disabled the scheduler isn't started; the buffer is still loaded
+	// and saved so that toggling the flag back on does not lose entries
+	// captured before shutdown.
+	QuestSummaryEnabled bool `toml:"quest_summary_enabled"`
+	// QuestSummaryBufferTTLHours caps how long any buffered entry can
+	// live in memory. The scheduler's sweep evicts entries whose
+	// per-entry ExpiresAt has passed (the primary expiry signal); this
+	// TTL is the safety-net axis that also drops entries whose
+	// CreatedAt is older than the configured age, in case the ExpiresAt
+	// is zero/garbage/far-future from a malformed payload. Set 0 to
+	// disable the CreatedAt-axis sweep entirely. Default 24.
+	QuestSummaryBufferTTLHours int `toml:"quest_summary_buffer_ttl_hours"`
+}
+
+// SummariserConfig holds settings shared by all summariser pipelines
+// (currently quest summary; future raid/gym/etc. summaries will reuse).
+type SummariserConfig struct {
+	// MaxPerMessage chunks any reward group with more than N entries
+	// into ceil(total/N) consecutive messages so they fit Discord's
+	// 4096-char embed-description cap. Each chunk references the same
+	// shared static map (the tileserver caches by URL → one render,
+	// served N times). Default 25 — comfortably under the ~40-stop
+	// limit when shlink is not configured. Set 0 to disable splitting
+	// (oversize groups will fail at the Discord API).
+	MaxPerMessage int `toml:"max_per_message"`
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
-	Locale               string   `toml:"locale"`                // default language code (e.g. "en", "pl")
-	RoleCheckMode        string   `toml:"role_check_mode"`       // "ignore", "disable-user", "delete"
-	DefaultTemplateName  any      `toml:"default_template_name"` // default DTS template (typically 1 or "1")
-	DisabledCommands     []string `toml:"disabled_commands"`     // list of command names to disable (e.g. ["lure", "nest"])
-	RdmURL               string   `toml:"rdm_url"`
-	ReactMapURL          string   `toml:"react_map_url"`
-	RocketMadURL         string   `toml:"rocket_mad_url"`
-	ImgURL               string   `toml:"img_url"`
-	ImgURLAlt            string   `toml:"img_url_alt"`
-	StickerURL           string   `toml:"sticker_url"`
-	RequestShinyImages   bool     `toml:"request_shiny_images"`
-	PopulatePokestopName bool     `toml:"populate_pokestop_name"`
-	AlertMinimumTime     int            `toml:"alert_minimum_time"`        // seconds before expiry inside which alerts are dropped
-	IgnoreLongRaids      bool           `toml:"ignore_long_raids"`         // skip raids/eggs with TTH > 47 minutes
-	ShortlinkProvider    string         `toml:"shortlink_provider"`        // "shlink" or empty
-	ShortlinkProviderURL string         `toml:"shortlink_provider_url"`    // Shlink instance URL
-	ShortlinkProviderKey string         `toml:"shortlink_provider_key"`    // Shlink API key
-	ShortlinkDomain      string         `toml:"shortlink_provider_domain"` // Shlink domain override
-	DTSDictionary        map[string]any `toml:"dts_dictionary"`            // custom key-value pairs for DTS templates
-	AvailableLanguages   map[string]LanguageEntry `toml:"available_languages"` // lang code → {poracle, help}
+	Locale               string                   `toml:"locale"`                // default language code (e.g. "en", "pl")
+	// DefaultTimezone is the IANA timezone name used by the profile and
+	// summary schedulers when a human has lat/lon = 0/0 (no location
+	// set). Empty string means "fall back to the server's local time
+	// zone" (Go's time.Local). Set to a specific IANA name (e.g.
+	// "Europe/London", "America/Los_Angeles") to override.
+	//
+	// Examples of the fallback chain at schedule-tick time:
+	//   - human has lat/lon set → resolve via tzf
+	//   - human has lat/lon = 0/0 AND default_timezone is set → use it
+	//   - human has lat/lon = 0/0 AND default_timezone is empty → server's time.Local
+	DefaultTimezone      string                   `toml:"default_timezone"`
+	RoleCheckMode        string                   `toml:"role_check_mode"`       // "ignore", "disable-user", "delete"
+	DefaultTemplateName  any                      `toml:"default_template_name"` // default DTS template (typically 1 or "1")
+	DisabledCommands     []string                 `toml:"disabled_commands"`     // list of command names to disable (e.g. ["lure", "nest"])
+	RdmURL               string                   `toml:"rdm_url"`
+	ReactMapURL          string                   `toml:"react_map_url"`
+	RocketMadURL         string                   `toml:"rocket_mad_url"`
+	DiademURL            string                   `toml:"diadem_url"`
+	ImgURL               string                   `toml:"img_url"`
+	ImgURLAlt            string                   `toml:"img_url_alt"`
+	StickerURL           string                   `toml:"sticker_url"`
+	RequestShinyImages   bool                     `toml:"request_shiny_images"`
+	PopulatePokestopName bool                     `toml:"populate_pokestop_name"`
+	AlertMinimumTime     int                      `toml:"alert_minimum_time"`        // seconds before expiry inside which alerts are dropped
+	IgnoreLongRaids      bool                     `toml:"ignore_long_raids"`         // skip raids/eggs with TTH > 47 minutes
+	ShortlinkProvider    string                   `toml:"shortlink_provider"`        // "shlink" or empty
+	ShortlinkProviderURL string                   `toml:"shortlink_provider_url"`    // Shlink instance URL
+	ShortlinkProviderKey string                   `toml:"shortlink_provider_key"`    // Shlink API key
+	ShortlinkDomain      string                   `toml:"shortlink_provider_domain"` // Shlink domain override
+	DTSDictionary        map[string]any           `toml:"dts_dictionary"`            // custom key-value pairs for DTS templates
+	AvailableLanguages   map[string]LanguageEntry `toml:"available_languages"`       // lang code → {poracle, help}
 
 	// Webhook type disable flags — used by /api/config/poracleWeb to report disabledHooks.
-	DisablePokemon   bool `toml:"disable_pokemon"`
-	DisableRaid      bool `toml:"disable_raid"`
-	DisablePokestop  bool `toml:"disable_pokestop"`
-	DisableInvasion  bool `toml:"disable_invasion"`
-	DisableLure      bool `toml:"disable_lure"`
-	DisableQuest     bool `toml:"disable_quest"`
-	DisableWeather   bool `toml:"disable_weather"`
-	DisableNest      bool `toml:"disable_nest"`
-	DisableGym       bool `toml:"disable_gym"`
-	DisableMaxBattle    bool `toml:"disable_max_battle"`
-	DisableFortUpdate  bool `toml:"disable_fort_update"`
+	DisablePokemon    bool `toml:"disable_pokemon"`
+	DisableRaid       bool `toml:"disable_raid"`
+	DisablePokestop   bool `toml:"disable_pokestop"`
+	DisableInvasion   bool `toml:"disable_invasion"`
+	DisableLure       bool `toml:"disable_lure"`
+	DisableQuest      bool `toml:"disable_quest"`
+	DisableWeather    bool `toml:"disable_weather"`
+	DisableNest       bool `toml:"disable_nest"`
+	DisableGym        bool `toml:"disable_gym"`
+	DisableMaxBattle  bool `toml:"disable_max_battle"`
+	DisableFortUpdate bool `toml:"disable_fort_update"`
 }
 
 // LanguageEntry defines the command aliases for a language variant.
@@ -132,9 +179,9 @@ type LanguageEntry struct {
 }
 
 type LocaleConfig struct {
-	TimeFormat    string `toml:"timeformat"`
-	Time          string `toml:"time"`
-	Date          string `toml:"date"`
+	TimeFormat            string `toml:"timeformat"`
+	Time                  string `toml:"time"`
+	Date                  string `toml:"date"`
 	AddressFormat         string `toml:"address_format"`
 	AddressIncludeCountry bool   `toml:"address_include_country"` // see config.example.toml for defaults/rationale
 	Language              string `toml:"language"`                // alt language for DTS helpers — default "en"
@@ -167,31 +214,46 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Enabled                 bool                 `toml:"enabled"` // false = disable bot even if token is set
-	Token                   any                  `toml:"token"`   // string or []string
-	Prefix                  string               `toml:"prefix"`
-	Activity                string               `toml:"activity"` // bot activity/status text
-	Channels                []string             `toml:"channels"` // registration channel IDs
-	Guilds                  []string             `toml:"guilds"`
-	UserRole                []string             `toml:"user_role"`
-	CheckRole               bool                 `toml:"check_role"`
-	CheckRoleInterval       int                  `toml:"check_role_interval"` // hours between periodic reconciliation
-	LostRoleMessage         string               `toml:"lost_role_message"`
-	DisableAutoGreetings    bool                 `toml:"disable_auto_greetings"`
-	DmLogChannelID              string `toml:"dm_log_channel_id"`
-	DmLogChannelDeletionTime    int    `toml:"dm_log_channel_deletion_time"` // minutes, 0 = don't delete
-	UnrecognisedCommandMessage  string `toml:"unrecognised_command_message"` // custom reply, overrides i18n
-	UnregisteredUserMessage     string `toml:"unregistered_user_message"`    // custom reply, overrides i18n
-	IvColors                []string             `toml:"iv_colors"`
-	Admins                  []string             `toml:"admins"`
-	UploadEmbedImages       bool                 `toml:"upload_embed_images"`
-	MessageDeleteDelay      int                  `toml:"message_delete_delay"` // extra ms for clean TTH on channels
-	RoleSubscriptions       []RoleSubscriptionEntry `toml:"role_subscriptions"`
-	CommandSecurity    map[string][]string `toml:"command_security"`
+	Enabled bool `toml:"enabled"` // false = disable bot even if token is set
+	// Token is the bot token (or list of tokens) used by the REST
+	// delivery path: DM creation, channel sends, thread sends, edits,
+	// TTH-deletes. When CommandToken is empty this token also drives
+	// the gateway side (discordgo connection + command handling +
+	// reconciliation), preserving single-bot operation.
+	Token any `toml:"token"` // string or []string
+	// CommandToken, when set, splits the bot in two: this token runs
+	// the gateway side (commands, reconciliation, role management)
+	// while Token continues to handle all outbound message delivery.
+	// The two bots can run side by side in the same guilds — each
+	// needs its own invite + permission grants. Empty by default
+	// (single-bot operation). See CLAUDE.md "Discord Reconciliation"
+	// for the rationale + operator setup notes.
+	CommandToken                 string                  `toml:"command_token"`
+	Prefix                       string                  `toml:"prefix"`
+	Activity                     string                  `toml:"activity"` // bot activity/status text
+	Channels                     []string                `toml:"channels"` // registration channel IDs
+	Guilds                       []string                `toml:"guilds"`
+	UserRole                     []string                `toml:"user_role"`
+	CheckRole                    bool                    `toml:"check_role"`
+	CheckRoleInterval            int                     `toml:"check_role_interval"` // hours between periodic reconciliation
+	LostRoleMessage              string                  `toml:"lost_role_message"`
+	DisableAutoGreetings         bool                    `toml:"disable_auto_greetings"`
+	DmLogChannelID               string                  `toml:"dm_log_channel_id"`
+	DmLogChannelDeletionTime     int                     `toml:"dm_log_channel_deletion_time"` // minutes, 0 = don't delete
+	UnrecognisedCommandMessage   string                  `toml:"unrecognised_command_message"` // custom reply, overrides i18n
+	UnregisteredUserMessage      string                  `toml:"unregistered_user_message"`    // custom reply, overrides i18n
+	IvColors                     []string                `toml:"iv_colors"`
+	Admins                       []string                `toml:"admins"`
+	UploadEmbedImages            bool                    `toml:"upload_embed_images"`
+	MessageDeleteDelay           int                     `toml:"message_delete_delay"`             // extra ms for clean TTH on channels
+	ThreadKeepAliveIntervalHours int                     `toml:"thread_keep_alive_interval_hours"` // hours between unarchive sweeps; 0 = disabled; >168 clamped to 168
+	AdminChannelID               string                  `toml:"admin_channel_id"`                 // channel for operator-facing notices (auto-disable events, keep-alive 404s, etc.); empty = disabled
+	RoleSubscriptions            []RoleSubscriptionEntry `toml:"role_subscriptions"`
+	CommandSecurity              map[string][]string     `toml:"command_security"`
 
 	// Delegated administration — TOML array-of-tables format
-	DelegatedAdmins    []DelegatedAdminEntry `toml:"delegated_admins"`    // [[discord.delegated_admins]]
-	WebhookAdmins      []DelegatedAdminEntry `toml:"webhook_admins"`     // [[discord.webhook_admins]]
+	DelegatedAdmins    []DelegatedAdminEntry `toml:"delegated_admins"` // [[discord.delegated_admins]]
+	WebhookAdmins      []DelegatedAdminEntry `toml:"webhook_admins"`   // [[discord.webhook_admins]]
 	UserTrackingAdmins []string              `toml:"user_tracking_admins"`
 
 	// Internal computed maps (populated from TOML entries after load)
@@ -226,8 +288,26 @@ func buildDelegatedAdmin(entries []DelegatedAdminEntry) map[string][]string {
 }
 
 // DiscordTokens returns the discord tokens as a string slice.
+// These drive the REST delivery path (DM/channel/thread sends, edits,
+// TTH-deletes) and the gateway side too when CommandToken is empty.
 func (c DiscordConfig) DiscordTokens() []string {
 	return tomlTokens(c.Token)
+}
+
+// DiscordGatewayToken returns the bot token used for the discordgo
+// gateway connection: command handling, reconciliation, role
+// management. Falls back to the first delivery token when
+// CommandToken is empty (single-bot operation, the historic
+// default). Returns "" when no token at all is configured — callers
+// should treat that as "Discord disabled".
+func (c DiscordConfig) DiscordGatewayToken() string {
+	if c.CommandToken != "" {
+		return c.CommandToken
+	}
+	if t := tomlTokens(c.Token); len(t) > 0 {
+		return t[0]
+	}
+	return ""
 }
 
 // RoleSubscriptionMap converts the [[discord.role_subscriptions]] TOML array
@@ -244,21 +324,21 @@ func (c DiscordConfig) RoleSubscriptionMap() map[string]RoleSubscriptionEntry {
 
 // TelegramConfig reads the [telegram] section for fields the processor needs.
 type TelegramConfig struct {
-	Enabled                 bool                      `toml:"enabled"` // false = disable bot even if token is set
-	Token                   any                       `toml:"token"`   // string or []string
-	Channels                []string                  `toml:"channels"` // registration channel/group IDs
-	Admins                  []string                  `toml:"admins"`
-	CheckRole               bool                      `toml:"check_role"`
-	CheckRoleInterval       int                       `toml:"check_role_interval"` // hours between periodic reconciliation
-	BotWelcomeText              string `toml:"bot_welcome_text"`              // DM sent on registration
-	BotGoodbyeMessage          string `toml:"bot_goodbye_message"`           // DM sent when user loses access
-	GroupWelcomeText           string `toml:"group_welcome_text"`            // sent to group on registration, {user} replaced
-	UnregisteredUserMessage    string `toml:"unregistered_user_message"`     // custom reply, overrides i18n
-	UnrecognisedCommandMessage string `toml:"unrecognised_command_message"`  // custom reply, overrides i18n
-	RegisterOnStart            bool   `toml:"register_on_start"`            // auto-register users on /start
-	DisableAutoGreetings       bool   `toml:"disable_auto_greetings"`
+	Enabled                    bool     `toml:"enabled"`  // false = disable bot even if token is set
+	Token                      any      `toml:"token"`    // string or []string
+	Channels                   []string `toml:"channels"` // registration channel/group IDs
+	Admins                     []string `toml:"admins"`
+	CheckRole                  bool     `toml:"check_role"`
+	CheckRoleInterval          int      `toml:"check_role_interval"`          // hours between periodic reconciliation
+	BotWelcomeText             string   `toml:"bot_welcome_text"`             // DM sent on registration
+	BotGoodbyeMessage          string   `toml:"bot_goodbye_message"`          // DM sent when user loses access
+	GroupWelcomeText           string   `toml:"group_welcome_text"`           // sent to group on registration, {user} replaced
+	UnregisteredUserMessage    string   `toml:"unregistered_user_message"`    // custom reply, overrides i18n
+	UnrecognisedCommandMessage string   `toml:"unrecognised_command_message"` // custom reply, overrides i18n
+	RegisterOnStart            bool     `toml:"register_on_start"`            // auto-register users on /start
+	DisableAutoGreetings       bool     `toml:"disable_auto_greetings"`
 	// Delegated administration — TOML array-of-tables format
-	DelegatedAdmins    []DelegatedAdminEntry `toml:"delegated_admins"`    // [[telegram.delegated_admins]]
+	DelegatedAdmins    []DelegatedAdminEntry `toml:"delegated_admins"` // [[telegram.delegated_admins]]
 	UserTrackingAdmins []string              `toml:"user_tracking_admins"`
 
 	// Internal computed maps (populated from TOML entries after load)
@@ -362,36 +442,36 @@ type KojiOptions struct {
 }
 
 type PVPConfig struct {
-	PVPQueryMaxRank            int   `toml:"pvp_query_max_rank"`
-	PVPFilterMaxRank           int   `toml:"filter_max_rank"`
-	PVPEvolutionDirectTracking bool  `toml:"evolution_direct_tracking"`
-	LevelCaps                  []int `toml:"level_caps"`
-	PVPFilterGreatMinCP        int   `toml:"filter_great_min_cp"`
-	PVPFilterUltraMinCP        int   `toml:"filter_ultra_min_cp"`
-	PVPFilterLittleMinCP       int   `toml:"filter_little_min_cp"`
-	IncludeMegaEvolution       bool  `toml:"include_mega_evolution"`
-	DisplayMaxRank             int   `toml:"display_max_rank"`
-	DisplayGreatMinCP          int   `toml:"display_great_min_cp"`
-	DisplayUltraMinCP          int   `toml:"display_ultra_min_cp"`
-	DisplayLittleMinCP         int   `toml:"display_little_min_cp"`
+	PVPQueryMaxRank            int    `toml:"pvp_query_max_rank"`
+	PVPFilterMaxRank           int    `toml:"filter_max_rank"`
+	PVPEvolutionDirectTracking bool   `toml:"evolution_direct_tracking"`
+	LevelCaps                  []int  `toml:"level_caps"`
+	PVPFilterGreatMinCP        int    `toml:"filter_great_min_cp"`
+	PVPFilterUltraMinCP        int    `toml:"filter_ultra_min_cp"`
+	PVPFilterLittleMinCP       int    `toml:"filter_little_min_cp"`
+	IncludeMegaEvolution       bool   `toml:"include_mega_evolution"`
+	DisplayMaxRank             int    `toml:"display_max_rank"`
+	DisplayGreatMinCP          int    `toml:"display_great_min_cp"`
+	DisplayUltraMinCP          int    `toml:"display_ultra_min_cp"`
+	DisplayLittleMinCP         int    `toml:"display_little_min_cp"`
 	FilterByTrack              bool   `toml:"filter_by_track"`
 	ForceMinCP                 bool   `toml:"force_min_cp"`
 	DataSource                 string `toml:"data_source"` // "webhook" (default) or "ohbem"
 }
 
 type WeatherConfig struct {
-	EnableInference            bool   `toml:"enable_inference"`
-	ChangeAlert                bool   `toml:"change_alert"`
-	ShowAlteredPokemon              bool `toml:"show_altered_pokemon"`
-	ShowAlteredPokemonMaxCount      int  `toml:"show_altered_pokemon_max_count"`
-	ShowAlteredPokemonStaticMap     bool `toml:"show_altered_pokemon_static_map"`
+	EnableInference             bool `toml:"enable_inference"`
+	ChangeAlert                 bool `toml:"change_alert"`
+	ShowAlteredPokemon          bool `toml:"show_altered_pokemon"`
+	ShowAlteredPokemonMaxCount  int  `toml:"show_altered_pokemon_max_count"`
+	ShowAlteredPokemonStaticMap bool `toml:"show_altered_pokemon_static_map"`
 
 	// AccuWeather forecast
 	EnableForecast          bool     `toml:"enable_forecast"`
 	AccuWeatherAPIKeys      []string `toml:"accuweather_api_keys"`
 	AccuWeatherDayQuota     int      `toml:"accuweather_day_quota"`
 	ForecastRefreshInterval int      `toml:"forecast_refresh_interval"` // hours between API calls
-	LocalFirstFetchHOD      int      `toml:"local_first_fetch_hod"`    // first fetch hour of day
+	LocalFirstFetchHOD      int      `toml:"local_first_fetch_hod"`     // first fetch hour of day
 	SmartForecast           bool     `toml:"smart_forecast"`            // pull on demand if no data
 }
 
@@ -414,12 +494,12 @@ type TuningConfig struct {
 	TileserverConcurrency      int `toml:"tileserver_concurrency"`       // tile worker goroutines (default 2)
 	TileserverTimeout          int `toml:"tileserver_timeout"`           // HTTP POST timeout ms (default 10000)
 	TileserverFailureThreshold int `toml:"tileserver_failure_threshold"` // circuit breaker threshold (default 5)
-	TileserverCooldownMs       int `toml:"tileserver_cooldown_ms"`      // circuit breaker cooldown ms (default 30000)
-	TileserverQueueSize        int `toml:"tileserver_queue_size"`       // async tile queue depth (default 100)
-	TileserverDeadlineMs       int `toml:"tileserver_deadline"`         // max wait for tile before fallback ms (default 5000)
-	TileserverPregenTTL        int `toml:"tileserver_pregen_ttl"`       // seconds for pregenerated tile TTL (default 300 = 5 min, -1 = no TTL)
+	TileserverCooldownMs       int `toml:"tileserver_cooldown_ms"`       // circuit breaker cooldown ms (default 30000)
+	TileserverQueueSize        int `toml:"tileserver_queue_size"`        // async tile queue depth (default 100)
+	TileserverDeadlineMs       int `toml:"tileserver_deadline"`          // max wait for tile before fallback ms (default 5000)
+	TileserverPregenTTL        int `toml:"tileserver_pregen_ttl"`        // seconds for pregenerated tile TTL (default 86400 = 1 day, -1 = no TTL)
 	GeocodingConcurrency       int `toml:"geocoding_concurrency"`
-	GeocodingTimeout           int `toml:"geocoding_timeout"`            // ms
+	GeocodingTimeout           int `toml:"geocoding_timeout"` // ms
 	GeocodingFailureThreshold  int `toml:"geocoding_failure_threshold"`
 	GeocodingCooldownMs        int `toml:"geocoding_cooldown_ms"`
 	RenderPoolSize             int `toml:"render_pool_size"`
@@ -457,8 +537,8 @@ type AreaConfig struct {
 
 // CommunityConfig represents a community entry under [[area_security.communities]].
 type CommunityConfig struct {
-	Name          string   `toml:"name" json:"name"`
-	AllowedAreas  []string `toml:"allowed_areas" json:"allowed_areas"`
+	Name          string      `toml:"name" json:"name"`
+	AllowedAreas  []string    `toml:"allowed_areas" json:"allowed_areas"`
 	LocationFence FlexStrings `toml:"location_fence" json:"location_fence"`
 	Discord       struct {
 		Channels []string `toml:"channels" json:"channels"`
@@ -474,6 +554,14 @@ type AlertLimitsConfig struct {
 	TimingPeriod        int                  `toml:"timing_period"`
 	DMLimit             int                  `toml:"dm_limit"`
 	ChannelLimit        int                  `toml:"channel_limit"`
+	// DM/Channel summary limits cap summary-mode dispatches per
+	// destination per timing_period independently of DMLimit /
+	// ChannelLimit. One fire counts as one (chunked summaries do
+	// not multiply the cost). The DM/Channel split mirrors the
+	// alert bucket — channels generally tolerate more throughput
+	// than individual users. Defaults 10 / 40.
+	DMSummaryLimit      int                  `toml:"dm_summary_limit"`
+	ChannelSummaryLimit int                  `toml:"channel_summary_limit"`
 	MaxLimitsBeforeStop int                  `toml:"max_limits_before_stop"`
 	DisableOnStop       bool                 `toml:"disable_on_stop"`
 	ShameChannel        string               `toml:"shame_channel"`
@@ -506,26 +594,26 @@ type GeocodingConfig struct {
 	ForwardOnly  bool     `toml:"forward_only"`  // if true, skip reverse geocoding
 
 	// Static map tile provider
-	StaticProvider    string                       `toml:"static_provider"`
-	StaticProviderURL string                       `toml:"static_provider_url"`
+	StaticProvider    string `toml:"static_provider"`
+	StaticProviderURL string `toml:"static_provider_url"`
 	// Optional private URL the processor uses for its own tileserver HTTP
 	// (render, pregenerate POST, upload-images prefetch). If unset,
 	// StaticProviderURL is used for everything. Useful when
 	// StaticProviderURL is a public HTTPS endpoint (e.g. Cloudflare-fronted)
 	// and the processor can reach the tileserver directly on a private
 	// network — avoids proxy buffering / timeout on the hot path.
-	StaticInternalURL string                       `toml:"static_internal_url"`
-	StaticKey         []string                     `toml:"static_key"`
-	Width             int                          `toml:"width"`
-	Height            int                          `toml:"height"`
-	Zoom              int                          `toml:"zoom"`
-	MapType           string                       `toml:"type"`
-	DayStyle          string                       `toml:"day_style"`
-	DawnStyle         string                       `toml:"dawn_style"`
-	DuskStyle         string                       `toml:"dusk_style"`
-	NightStyle        string                       `toml:"night_style"`
+	StaticInternalURL  string                      `toml:"static_internal_url"`
+	StaticKey          []string                    `toml:"static_key"`
+	Width              int                         `toml:"width"`
+	Height             int                         `toml:"height"`
+	Zoom               int                         `toml:"zoom"`
+	MapType            string                      `toml:"type"`
+	DayStyle           string                      `toml:"day_style"`
+	DawnStyle          string                      `toml:"dawn_style"`
+	DuskStyle          string                      `toml:"dusk_style"`
+	NightStyle         string                      `toml:"night_style"`
 	TileserverSettings map[string]TileserverConfig `toml:"tileserver_settings"`
-	StaticMapType     map[string]string            `toml:"static_map_type"`
+	StaticMapType      map[string]string           `toml:"static_map_type"`
 }
 
 // TileserverConfig holds per-tile-type settings under [geocoding.tileserver_settings.*].
@@ -544,13 +632,35 @@ type TileserverConfig struct {
 
 // FallbacksConfig holds fallback URLs from the [fallbacks] section.
 type FallbacksConfig struct {
-	StaticMap    string `toml:"static_map"`
-	ImgURL       string `toml:"img_url"`        // fallback pokemon icon
-	ImgURLWeather string `toml:"img_url_weather"` // fallback weather icon
-	ImgURLEgg    string `toml:"img_url_egg"`     // fallback egg icon
-	ImgURLGym    string `toml:"img_url_gym"`     // fallback gym icon
+	StaticMap      string `toml:"static_map"`
+	ImgURL         string `toml:"img_url"`          // fallback pokemon icon
+	ImgURLWeather  string `toml:"img_url_weather"`  // fallback weather icon
+	ImgURLEgg      string `toml:"img_url_egg"`      // fallback egg icon
+	ImgURLGym      string `toml:"img_url_gym"`      // fallback gym icon
 	ImgURLPokestop string `toml:"img_url_pokestop"` // fallback pokestop icon
-	PokestopURL  string `toml:"pokestop_url"`    // fallback pokestop URL (for pokestop_url field)
+	PokestopURL    string `toml:"pokestop_url"`     // fallback pokestop URL (for pokestop_url field)
+}
+
+// AutocreateConfig holds the bulk-autocreate runner configuration.
+type AutocreateConfig struct {
+	// RemovalSafetyMaxPercent: abort the removal phase if removing more
+	// than this percent of cached fences (cache must be ≥10 entries for
+	// the check to engage). 0 disables the safety check.
+	RemovalSafetyMaxPercent int `toml:"removal_safety_max_percent"`
+
+	// Rules is the per-rule list. Each rule produces channels under one
+	// guild from one channelTemplate.json entry.
+	Rules []AutocreateRule `toml:"rules"`
+}
+
+// AutocreateRule is one [[autocreate.rules]] entry.
+type AutocreateRule struct {
+	Name          string   `toml:"name"`           // unique rule identifier
+	Guild         string   `toml:"guild"`          // Discord guild ID
+	Template      string   `toml:"template"`       // channelTemplate.json entry name
+	Filter        string   `toml:"filter"`         // optional Handlebars expression; empty = match all
+	Params        []string `toml:"params"`         // each element rendered per fence; positional template args
+	RemoveMissing bool     `toml:"remove_missing"` // permits orphan removal when the trigger requests it
 }
 
 // ResolvePath resolves a path relative to the config file's directory.
@@ -560,6 +670,31 @@ func (c *Config) ResolvePath(p string) string {
 		return p
 	}
 	return filepath.Join(c.BaseDir, p)
+}
+
+// validateAutocreateRules surfaces obvious config mistakes early. Errors
+// here abort startup.
+func validateAutocreateRules(cfg *Config) error {
+	seen := map[string]bool{}
+	for i, r := range cfg.Autocreate.Rules {
+		if r.Name == "" {
+			return fmt.Errorf("[[autocreate.rules]] entry %d: name is required", i)
+		}
+		if seen[r.Name] {
+			return fmt.Errorf("[[autocreate.rules]] entry %d: duplicate name %q", i, r.Name)
+		}
+		seen[r.Name] = true
+		if r.Guild == "" {
+			return fmt.Errorf("[[autocreate.rules]] %s: guild is required", r.Name)
+		}
+		if r.Template == "" {
+			return fmt.Errorf("[[autocreate.rules]] %s: template is required", r.Name)
+		}
+		if len(r.Params) == 0 {
+			return fmt.Errorf("[[autocreate.rules]] %s: params must contain at least one element", r.Name)
+		}
+	}
+	return nil
 }
 
 func Load(baseDir string) (*Config, error) {
@@ -647,6 +782,7 @@ func Load(baseDir string) (*Config, error) {
 			// need a specific shape override in config.toml.
 		},
 		Weather: WeatherConfig{
+			EnableInference:            true,
 			ShowAlteredPokemonMaxCount: 10,
 			AccuWeatherDayQuota:        500,
 			ForecastRefreshInterval:    8,
@@ -679,6 +815,8 @@ func Load(baseDir string) (*Config, error) {
 			TimingPeriod:        240,
 			DMLimit:             20,
 			ChannelLimit:        40,
+			DMSummaryLimit:      10,
+			ChannelSummaryLimit: 40,
 			MaxLimitsBeforeStop: 10,
 		},
 		Database: DatabaseConfig{
@@ -715,6 +853,14 @@ func Load(baseDir string) (*Config, error) {
 			ImgURLGym:      "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/gym.png",
 			ImgURLPokestop: "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png",
 			PokestopURL:    "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png",
+		},
+		Tracking: TrackingConfig{
+			PokemonChangeTracking:      true,
+			QuestSummaryEnabled:        true,
+			QuestSummaryBufferTTLHours: 24,
+		},
+		Summariser: SummariserConfig{
+			MaxPerMessage: 25,
 		},
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {
@@ -801,6 +947,26 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if cfg.WebhookLogging.Filename != "" && !filepath.IsAbs(cfg.WebhookLogging.Filename) {
 		cfg.WebhookLogging.Filename = filepath.Join(cfg.BaseDir, cfg.WebhookLogging.Filename)
+	}
+
+	// Autocreate defaults.
+	if cfg.Autocreate.RemovalSafetyMaxPercent < 0 {
+		cfg.Autocreate.RemovalSafetyMaxPercent = 0
+	}
+	// 0 = disabled (no upper-bound check); otherwise leave whatever the
+	// user set, including the implicit default of 0.
+
+	// Thread keep-alive defaults: clamp to 0..168.
+	if cfg.Discord.ThreadKeepAliveIntervalHours < 0 {
+		cfg.Discord.ThreadKeepAliveIntervalHours = 0
+	}
+	if cfg.Discord.ThreadKeepAliveIntervalHours > 168 {
+		cfg.Discord.ThreadKeepAliveIntervalHours = 168
+	}
+
+	// Validate autocreate config.
+	if err := validateAutocreateRules(cfg); err != nil {
+		return nil, err
 	}
 
 	return cfg, nil

@@ -43,26 +43,42 @@ func NewGymStateTracker(cacheDir string) *GymStateTracker {
 
 // Update stores current gym state and returns old state.
 // Returns nil if this is the first time seeing the gym.
-func (gst *GymStateTracker) Update(gymID string, teamID, slotsAvailable int, inBattle bool, lastOwnerID int) *GymState {
+//
+// LastOwnerID is computed here (Golbat doesn't ship a last_owner_id field).
+// Matches PoracleJS app.js: `last_owner_id = team || cached.last_owner_id`,
+// i.e. the most recent non-zero controlling team, preserved across
+// Uncontested gaps. -1 means "we've never seen this gym controlled".
+func (gst *GymStateTracker) Update(gymID string, teamID, slotsAvailable int, inBattle bool) *GymState {
 	gst.mu.Lock()
 	defer gst.mu.Unlock()
 
 	old := gst.gyms[gymID]
 	var oldCopy *GymState
+
+	var newLastOwner int
+	switch {
+	case teamID > 0:
+		newLastOwner = teamID
+	case old != nil && old.LastOwnerID > 0:
+		newLastOwner = old.LastOwnerID
+	default:
+		newLastOwner = -1
+	}
+
 	if old != nil {
 		c := *old
 		oldCopy = &c
 		old.TeamID = teamID
 		old.SlotsAvailable = slotsAvailable
 		old.InBattle = inBattle
-		old.LastOwnerID = lastOwnerID
+		old.LastOwnerID = newLastOwner
 		old.LastSeen = time.Now()
 	} else {
 		gst.gyms[gymID] = &GymState{
 			TeamID:         teamID,
 			SlotsAvailable: slotsAvailable,
 			InBattle:       inBattle,
-			LastOwnerID:    lastOwnerID,
+			LastOwnerID:    newLastOwner,
 			LastSeen:       time.Now(),
 		}
 	}

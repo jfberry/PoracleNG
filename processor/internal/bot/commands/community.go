@@ -24,8 +24,11 @@ func (c *CommunityCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
 	}
 
+	// Bare !community shows the current target's membership — useful as a
+	// quick "what am I in?" check for an admin in DM, and a "what's this
+	// channel in?" check when run in a registered channel.
 	if len(args) == 0 {
-		return c.usageReply(ctx)
+		return c.runShow(ctx, nil)
 	}
 
 	subcommand := args[0]
@@ -45,6 +48,27 @@ func (c *CommunityCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	default:
 		return c.usageReply(ctx)
 	}
+}
+
+// resolveTargets pulls explicit IDs from the args, then falls back to
+// ctx.TargetID when none are given. Mutating subcommands (add/remove/
+// clear) only honour the fallback for non-user targets — auto-acting on
+// the sender is too easy to do accidentally. Read-only show is happy
+// with any target.
+//
+// Mirrors PoracleJS community.js: explicit targets win, otherwise
+// channel/webhook target is used and bare-user is refused.
+func resolveTargets(ctx *bot.CommandContext, args []string, allowUserFallback bool) []string {
+	if t := extractTargetIDs(args); len(t) > 0 {
+		return t
+	}
+	if ctx.TargetID == "" {
+		return nil
+	}
+	if !allowUserFallback && (ctx.TargetType == bot.TypeDiscordUser || ctx.TargetType == bot.TypeTelegramUser) {
+		return nil
+	}
+	return []string{ctx.TargetID}
 }
 
 func (c *CommunityCommand) usageReply(ctx *bot.CommandContext) []bot.Reply {
@@ -74,16 +98,27 @@ func (c *CommunityCommand) runList(ctx *bot.CommandContext) []bot.Reply {
 
 func (c *CommunityCommand) runAddRemove(ctx *bot.CommandContext, args []string, isAdd bool) []bot.Reply {
 	tr := ctx.Tr()
-	if len(args) < 2 {
+	if len(args) < 1 {
 		return c.usageReply(ctx)
 	}
 
 	communityName := strings.ToLower(args[0])
 	targetArgs := args[1:]
 
-	targets := extractTargetIDs(targetArgs)
+	// Mutating subcommand: refuse to fall back to a user target. Bare
+	// `!community add areaname` in DM should NOT silently add the
+	// community to the sender — that's the PoracleJS behaviour the user
+	// flagged.
+	targets := resolveTargets(ctx, targetArgs, false)
 	if len(targets) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.community.no_targets")}}
+		verb := "add"
+		if !isAdd {
+			verb = "remove"
+		}
+		return []bot.Reply{{
+			React: "🙅",
+			Text:  tr.Tf("msg.community.no_targets_hint", selfHint(ctx, verb, communityName)),
+		}}
 	}
 
 	var messages []string
@@ -121,8 +156,10 @@ func (c *CommunityCommand) runAddRemove(ctx *bot.CommandContext, args []string, 
 }
 
 func (c *CommunityCommand) runShow(ctx *bot.CommandContext, args []string) []bot.Reply {
-	targets := extractTargetIDs(args)
 	tr := ctx.Tr()
+	// Read-only: show on yourself / current channel is harmless and useful
+	// (lets bare `!community` answer "what am I in?").
+	targets := resolveTargets(ctx, args, true)
 	if len(targets) == 0 {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.community.no_targets")}}
 	}
@@ -156,10 +193,14 @@ func (c *CommunityCommand) runShow(ctx *bot.CommandContext, args []string) []bot
 }
 
 func (c *CommunityCommand) runClear(ctx *bot.CommandContext, args []string) []bot.Reply {
-	targets := extractTargetIDs(args)
 	tr := ctx.Tr()
+	// Mutating: same refuse-on-self rule as add/remove.
+	targets := resolveTargets(ctx, args, false)
 	if len(targets) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.community.no_targets")}}
+		return []bot.Reply{{
+			React: "🙅",
+			Text:  tr.Tf("msg.community.no_targets_hint", selfHint(ctx, "clear", "")),
+		}}
 	}
 
 	var messages []string
@@ -178,6 +219,19 @@ func (c *CommunityCommand) runClear(ctx *bot.CommandContext, args []string) []bo
 		return []bot.Reply{{React: "👌"}}
 	}
 	return []bot.Reply{{React: "✅", Text: strings.Join(messages, "\n")}}
+}
+
+// selfHint builds the suggestion string used in msg.community.no_targets_hint
+// when an admin runs a mutating community subcommand from a DM with no
+// targets. verb is "add"/"remove"/"clear"; community is the community name
+// (empty for clear, which has no community arg). Returns something like
+// "!community add teamcity 12345" suitable for one-tap copy/paste.
+func selfHint(ctx *bot.CommandContext, verb, community string) string {
+	prefix := bot.CommandPrefix(ctx)
+	if community != "" {
+		return prefix + "community " + verb + " " + community + " " + ctx.UserID
+	}
+	return prefix + "community " + verb + " " + ctx.UserID
 }
 
 // extractTargetIDs extracts user IDs from mentions and plain numeric args.

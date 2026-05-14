@@ -8,7 +8,7 @@ require (
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+	github.com/go-telegram/bot v1.20.0
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/golang/geo v0.0.0-20260302211937-87f5a40ea07a
 	github.com/google/uuid v1.6.0

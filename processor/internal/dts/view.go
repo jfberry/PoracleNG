@@ -50,12 +50,15 @@ var singleEmojiKeys = []struct {
 }
 
 // arrayEmojiKeys lists enrichment fields that contain arrays of emoji key strings.
+// outputField is where the resolved per-platform emoji land — as a joined
+// string in the emoji layer (resolveEmojiMap), as a []string in the
+// computed layer (the latter is currently shadowed by the former).
 var arrayEmojiKeys = []struct {
 	keyField    string
 	outputField string
 }{
 	{"typeEmojiKeys", "typeEmoji"},
-	{"boostingWeatherEmojiKeys", "boostingWeatherEmojis"},
+	{"boostingWeatherEmojiKeys", "boostingWeathersEmoji"},
 }
 
 // resolveEmojiArray resolves an array of emoji keys to emoji strings.
@@ -172,7 +175,6 @@ var typeAliases = map[string][]aliasPair{
 		{"pokestopId", "pokestop_id"},
 		{"name", "pokestop_name"},
 		{"url", "pokestop_url"},
-		{"gruntType", "gruntTypeName"},
 		{"gender", "gruntGender"},
 	},
 	"quest": {
@@ -234,8 +236,26 @@ func escapeJSONString(s string) string {
 
 // escapeUserContentLayered sanitizes user-generated text fields across all layers.
 // Called during LayeredView construction to ensure escaped values are in the computed layer.
+//
+// The list mirrors what the legacy alerter (PoracleJS) escaped: any field
+// that originates from the scanner's free-form text columns (pokestop /
+// gym / nest names, fort descriptions, fort old/new state) and ends up
+// inside a JSON-emitting Handlebars template. An unescaped " or newline
+// in any of these would break the rendered JSON; \\ would consume the
+// next character. CamelCase variants are listed explicitly because a
+// few enrichment paths (fort old/new) produce them directly rather than
+// going through the snake_case → camelCase alias map.
 func escapeUserContentLayered(computed map[string]any, layers ...map[string]any) {
-	for _, field := range []string{"pokestop_name", "pokestop_url", "gym_name", "name"} {
+	fields := []string{
+		"pokestop_name", "pokestop_url",
+		"gym_name",
+		"nest_name",
+		"name",
+		"description",
+		"oldName", "newName",
+		"oldDescription", "newDescription",
+	}
+	for _, field := range fields {
 		for _, layer := range layers {
 			if layer == nil {
 				continue

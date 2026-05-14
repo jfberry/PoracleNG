@@ -107,19 +107,19 @@ func HandleDeleteRaid(deps *TrackingDeps) gin.HandlerFunc {
 // raidInsertRequest represents a single raid tracking row from the POST body.
 // Supports pokemon_form array expansion and level array expansion.
 type raidInsertRequest struct {
-	PokemonID   flexInt          `json:"pokemon_id"`
+	PokemonID   flexInt           `json:"pokemon_id"`
 	PokemonForm []pokemonFormPair `json:"pokemon_form"`
-	Level       json.RawMessage  `json:"level"`
-	Distance    flexInt          `json:"distance"`
-	Template    any              `json:"template"`
-	Clean       flexBool         `json:"clean"`
-	Team        flexInt          `json:"team"`
-	Exclusive   flexBool         `json:"exclusive"`
-	Form        flexInt          `json:"form"`
-	Move        flexInt          `json:"move"`
-	Evolution   flexInt          `json:"evolution"`
-	GymID       *string          `json:"gym_id"`
-	RSVPChanges flexInt          `json:"rsvp_changes"`
+	Level       json.RawMessage   `json:"level"`
+	Distance    flexInt           `json:"distance"`
+	Template    any               `json:"template"`
+	Clean       flexBool          `json:"clean"`
+	Team        flexInt           `json:"team"`
+	Exclusive   flexBool          `json:"exclusive"`
+	Form        flexInt           `json:"form"`
+	Move        flexInt           `json:"move"`
+	Evolution   flexInt           `json:"evolution"`
+	GymID       *string           `json:"gym_id"`
+	RSVPChanges flexInt           `json:"rsvp_changes"`
 }
 
 type pokemonFormPair struct {

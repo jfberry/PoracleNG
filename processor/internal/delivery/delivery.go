@@ -24,19 +24,28 @@ func (t TTH) Duration() time.Duration {
 
 // Job is a platform-agnostic delivery job.
 type Job struct {
-	Target       string          `json:"target"`       // user/channel/thread/webhook ID or URL
-	Type         string          `json:"type"`         // "discord:user", "discord:channel", "discord:thread", "webhook",
-	                                                   // "telegram:user", "telegram:group", "telegram:channel"
-	Message      json.RawMessage `json:"message"`      // pre-rendered message JSON
-	TTH          TTH             `json:"tth"`
-	Clean        int             `json:"clean"`        // track for deletion on TTH expiry
-	EditKey      string          `json:"editKey"`      // non-empty = track for future edits
-	Name         string          `json:"name"`         // human-readable destination name
-	LogReference string          `json:"logReference"` // encounter/gym ID for tracing
+	Target string `json:"target"` // user/channel/thread/webhook ID or URL
+	Type   string `json:"type"`   // "discord:user", "discord:channel", "discord:thread", "webhook",
+	// "telegram:user", "telegram:group", "telegram:channel"
+	Message       json.RawMessage `json:"message"` // pre-rendered message JSON
+	TTH           TTH             `json:"tth"`
+	Clean         int             `json:"clean"`        // track for deletion on TTH expiry
+	EditKey       string          `json:"editKey"`      // non-empty = track for future edits
+	ReplyKey      string          `json:"replyKey"`     // non-empty = (ReplyKey,Target) indexes the latest sent message in MessageTracker for reply chaining
+	Name          string          `json:"name"`         // human-readable destination name
+	LogReference  string          `json:"logReference"` // encounter/gym ID for tracing
 	Lat           float64         `json:"lat"`
 	Lon           float64         `json:"lon"`
 	StaticMapData []byte          `json:"-"` // inline tile image bytes
 	Language      string          `json:"-"` // matched user's language (for hooks notifications)
+
+	// ReplyToID is an *ephemeral* field stamped on the Job by the delivery
+	// queue immediately before send when ReplyKey is set and the
+	// MessageTracker has a known prior message for (ReplyKey, Target). The
+	// platform sender uses it to inject a Discord message_reference or
+	// Telegram reply_to_message_id. It is never persisted to disk and never
+	// set by callers — queue → sender only.
+	ReplyToID string `json:"-"`
 
 	// BypassRateLimit tells the delivery queue not to count this job against
 	// the per-destination rate limit and not to drop it if the destination is
@@ -93,4 +102,19 @@ func PlatformFromType(typ string) string {
 		return parts[0]
 	}
 	return ""
+}
+
+// splitSentID extracts the trailing message-ID half of a Discord SentID
+// formatted as "channelID:messageID" (or "webhookURL:messageID" — webhook
+// URLs themselves contain colons, so we split on the last ':').
+//
+// Returns "" if no colon is present. This helper is intentionally limited to
+// the Discord SentID shape; Telegram SentIDs use a different multi-message
+// format and are parsed via parseTelegramSentIDMulti.
+func splitSentID(s string) string {
+	idx := strings.LastIndex(s, ":")
+	if idx < 0 {
+		return ""
+	}
+	return s[idx+1:]
 }

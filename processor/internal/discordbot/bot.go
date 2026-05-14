@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -28,6 +29,14 @@ type Bot struct {
 	nlpParser      *nlp.Parser
 	reconciliation *Reconciliation
 	stopCh         chan struct{}
+	threadCache    *threadCache
+	autocreateSync *autocreateSyncer
+	stopKeepAlive  func()
+
+	// Throttle for PostAdminNoticeThrottled. Map of key → last-posted
+	// time. Lazily initialised; guarded by adminThrottleMu.
+	adminThrottleMu sync.Mutex
+	adminThrottle   map[string]time.Time
 }
 
 // Config holds everything needed to create a Discord bot.
@@ -50,6 +59,13 @@ func New(cfg Config) (*Bot, error) {
 		stopCh:    make(chan struct{}),
 	}
 
+	b.threadCache = newThreadCache(threadCachePath(cfg.Cfg.BaseDir))
+	if err := b.threadCache.load(); err != nil {
+		log.Warnf("discord bot: load thread cache: %v", err)
+	}
+
+	b.autocreateSync = newAutocreateSyncer()
+
 	session.Identify.Intents = discordgo.IntentsGuildMessages |
 		discordgo.IntentsDirectMessages |
 		discordgo.IntentsGuildMembers |
@@ -62,6 +78,10 @@ func New(cfg Config) (*Bot, error) {
 	session.AddHandler(b.onGuildMemberUpdate)
 	session.AddHandler(b.onGuildMemberRemove)
 	session.AddHandler(b.onChannelDelete)
+	session.AddHandler(b.onThreadDelete)
+
+	// Thread-join button interactions.
+	session.AddHandler(b.onInteractionCreate)
 
 	if err := session.Open(); err != nil {
 		return nil, err
@@ -84,6 +104,8 @@ func New(cfg Config) (*Bot, error) {
 		b.reconciliation = NewReconciliation(session, cfg.Humans, cfg.Cfg, cfg.Translations, cfg.DTS)
 		go b.reconciliationLoop()
 	}
+
+	b.stopKeepAlive = startThreadKeepAlive(b, keepAliveTickerDuration(cfg.Cfg.Discord.ThreadKeepAliveIntervalHours))
 
 	return b, nil
 }
@@ -294,10 +316,62 @@ func (b *Bot) Session() *discordgo.Session {
 	return b.session
 }
 
+// PostAdminNotice sends a short operational message to the channel
+// configured at [discord] admin_channel_id. No-op if the channel ID is
+// empty or the bot isn't running. Used for events the operator should
+// know about but doesn't need to be paged for: thread keep-alive 404s,
+// auto-disabled channels after delivery failure, etc.
+//
+// Errors are logged and swallowed — admin notices are best-effort
+// observability, not load-bearing.
+func (b *Bot) PostAdminNotice(msg string) {
+	chID := b.Cfg.Discord.AdminChannelID
+	if chID == "" || b.session == nil || msg == "" {
+		return
+	}
+	if _, err := b.session.ChannelMessageSend(chID, msg); err != nil {
+		log.Warnf("discord bot: post admin notice to %s: %v", chID, err)
+	}
+}
+
+// PostAdminNoticeThrottled posts msg only if no notice with the same key
+// was posted in the last ttl. Used for events that fire on a hot path
+// (DTS render errors fire per webhook event) — the throttle keeps the
+// admin channel readable without losing the first occurrence of a new
+// problem. An empty key short-circuits to PostAdminNotice (no throttle).
+//
+// Throttle keys are kept in memory for the life of the process; the map
+// is bounded by the cardinality of distinct keys (e.g. one per
+// type|platform|language|template combination) so it stays small.
+func (b *Bot) PostAdminNoticeThrottled(key, msg string, ttl time.Duration) {
+	if key == "" {
+		b.PostAdminNotice(msg)
+		return
+	}
+	if b.Cfg.Discord.AdminChannelID == "" || b.session == nil || msg == "" {
+		return
+	}
+	b.adminThrottleMu.Lock()
+	if b.adminThrottle == nil {
+		b.adminThrottle = make(map[string]time.Time)
+	}
+	now := time.Now()
+	if last, ok := b.adminThrottle[key]; ok && now.Sub(last) < ttl {
+		b.adminThrottleMu.Unlock()
+		return
+	}
+	b.adminThrottle[key] = now
+	b.adminThrottleMu.Unlock()
+	b.PostAdminNotice(msg)
+}
+
 // Close disconnects the Discord gateway and stops background goroutines.
 func (b *Bot) Close() {
 	if b.stopCh != nil {
 		close(b.stopCh)
+	}
+	if b.stopKeepAlive != nil {
+		b.stopKeepAlive()
 	}
 	if b.session != nil {
 		b.session.Close()
@@ -414,12 +488,17 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		}
 
 		// Try Discord-specific commands first (require discordgo session directly)
-		if b.handleDiscordCommand(s, m, cmd.CommandKey, cmd.Args, isDM) {
+		if b.handleDiscordCommand(s, m, cmd.CommandKey, cmd.Args, cmd.RawArgs, isDM) {
 			continue
 		}
 
-		// Registration check — skip for poracle (registration), poracle_test, and version commands
-		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
+		// Registration check — DM only. In a group/channel context, BuildTarget
+		// runs the channel-level registration check and routes through that
+		// path's "channel admins only" / "not registered, add with !channel add"
+		// replies; firing this user-registration short-circuit in groups
+		// would falsely tell every non-admin member "you are not registered."
+		// Skipped for poracle (registration), poracle_test, and version commands.
+		if isDM && !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
 			if msg := b.Cfg.Discord.UnregisteredUserMessage; msg != "" {
 				reply(msg)
 			} else {
@@ -460,44 +539,49 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		}
 
 		ctx := &bot.CommandContext{
-			UserID:       m.Author.ID,
-			UserName:     m.Author.Username,
-			Platform:     "discord",
-			ChannelID:    channelID,
-			GuildID:      guildID,
-			IsDM:         isDM,
-			IsAdmin:      isAdmin,
-			Language:     userLang,
-			ProfileNo:    profileNo,
-			HasLocation:  hasLocation,
-			HasArea:      hasArea,
-			TargetID:     m.Author.ID,
-			TargetName:   m.Author.Username,
-			TargetType:   targetType,
-			AreaLogic:    bot.NewAreaLogic(fences, b.Cfg),
-			DB:           b.DB,
-			Humans:       b.Humans,
-			Tracking:     b.Tracking,
-			Config:       b.Cfg,
-			StateMgr:     b.StateMgr,
-			GameData:     b.GameData,
-			Translations: b.Translations,
-			Geofence:     spatialIndex,
-			Fences:       fences,
-			Dispatcher:   b.Dispatcher,
-			RowText:      b.RowText,
-			Resolver:     b.Resolver,
-			ArgMatcher:   b.ArgMatcher,
-			Geocoder:     b.Geocoder,
-			StaticMap:    b.StaticMap,
-			Weather:      b.Weather,
-			Stats:        b.Stats,
-			DTS:          b.DTS,
-			Emoji:        b.Emoji,
+			UserID:        m.Author.ID,
+			UserName:      m.Author.Username,
+			Platform:      "discord",
+			ChannelID:     channelID,
+			GuildID:       guildID,
+			IsDM:          isDM,
+			IsAdmin:       isAdmin,
+			Language:      userLang,
+			ProfileNo:     profileNo,
+			HasLocation:   hasLocation,
+			HasArea:       hasArea,
+			TargetID:      m.Author.ID,
+			TargetName:    m.Author.Username,
+			TargetType:    targetType,
+			AreaLogic:     bot.NewAreaLogic(fences, b.Cfg),
+			DB:            b.DB,
+			Humans:        b.Humans,
+			Tracking:      b.Tracking,
+			Config:        b.Cfg,
+			StateMgr:      b.StateMgr,
+			GameData:      b.GameData,
+			Translations:  b.Translations,
+			Geofence:      spatialIndex,
+			Fences:        fences,
+			Dispatcher:    b.Dispatcher,
+			RowText:       b.RowText,
+			Resolver:      b.Resolver,
+			ArgMatcher:    b.ArgMatcher,
+			Geocoder:      b.Geocoder,
+			StaticMap:     b.StaticMap,
+			Weather:       b.Weather,
+			Stats:         b.Stats,
+			DTS:           b.DTS,
+			Emoji:         b.Emoji,
 			NLP:           b.nlpParser,
-			TestProcessor: b.TestProcessor,
-			Registry:      b.Registry,
-			ReloadFunc:    b.ReloadFunc,
+			TestProcessor:      b.TestProcessor,
+			Registry:           b.Registry,
+			ReloadFunc:         b.ReloadFunc,
+			PostRegister:       b.postRegisterHook(),
+			SummarySchedules:   b.SummarySchedules,
+			SummaryBufferCount: b.SummaryBufferCount,
+			SummaryDispatch:    b.SummaryDispatch,
+			Scanner:            b.Scanner,
 		}
 
 		// Populate delegated admin permissions
@@ -546,7 +630,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 // handleDiscordCommand dispatches Discord-specific commands that require the
 // discordgo session directly. Returns true if the command was handled.
-func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCreate, cmdKey string, args []string, isDM bool) bool {
+func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCreate, cmdKey string, args, rawArgs []string, isDM bool) bool {
 	switch cmdKey {
 	case "cmd.channel":
 		b.handleChannel(s, m, args)
@@ -567,7 +651,7 @@ func (b *Bot) handleDiscordCommand(s *discordgo.Session, m *discordgo.MessageCre
 		b.handleEmoji(s, m, args)
 		return true
 	case "cmd.autocreate":
-		b.handleAutocreate(s, m, args)
+		b.handleAutocreate(s, m, args, rawArgs)
 		return true
 	default:
 		return false
@@ -734,17 +818,49 @@ func (b *Bot) onGuildMemberRemove(s *discordgo.Session, m *discordgo.GuildMember
 	go b.reconciliation.ReconcileSingleUser(m.User.ID, b.Cfg.Reconciliation.Discord.RemoveInvalidUsers)
 }
 
+// onThreadDelete is called when a Discord thread is deleted (separate
+// gateway event from CHANNEL_DELETE). If the thread was registered as a
+// Poracle target, mark its humans row admin-disabled so the matcher /
+// dispatcher stop targeting it, and post an admin notice.
+func (b *Bot) onThreadDelete(s *discordgo.Session, ev *discordgo.ThreadDelete) {
+	if ev == nil || ev.Channel == nil {
+		return
+	}
+	res, err := b.DB.Exec(
+		`UPDATE humans SET admin_disable = 1, disabled_date = NOW() WHERE id = ? AND type = 'discord:thread'`,
+		ev.Channel.ID)
+	if err != nil {
+		log.Warnf("discord bot: disable deleted thread %s: %v", ev.Channel.ID, err)
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows > 0 {
+		b.PostAdminNotice(fmt.Sprintf(
+			":wastebasket: Discord thread `%s` (`%s`) was deleted — auto-disabled the registered tracking row.",
+			ev.Channel.Name, ev.Channel.ID,
+		))
+	}
+}
+
 // onChannelDelete is called when a Discord channel is deleted.
-// If the channel was registered as a tracking target, disable it.
+// If the channel was registered as a tracking target, disable it. Posts
+// an admin notice so the operator knows a registered channel just
+// vanished and needs cleanup attention.
 func (b *Bot) onChannelDelete(s *discordgo.Session, ch *discordgo.ChannelDelete) {
 	if ch == nil {
 		return
 	}
-	_, err := b.DB.Exec(
+	res, err := b.DB.Exec(
 		`UPDATE humans SET admin_disable = 1, disabled_date = NOW() WHERE id = ? AND type = 'discord:channel'`,
 		ch.ID)
 	if err != nil {
 		log.Warnf("discord bot: disable deleted channel %s: %v", ch.ID, err)
+		return
+	}
+	if rows, _ := res.RowsAffected(); rows > 0 {
+		b.PostAdminNotice(fmt.Sprintf(
+			":wastebasket: Discord channel `%s` (`%s`) was deleted — auto-disabled the registered tracking row.",
+			ch.Name, ch.ID,
+		))
 	}
 }
 
@@ -780,4 +896,20 @@ func (b *Bot) runReconciliation() {
 	rcfg := b.Cfg.Reconciliation.Discord
 	b.reconciliation.SyncDiscordRole(rcfg.RegisterNewUsers, rcfg.UpdateUserNames, rcfg.RemoveInvalidUsers)
 	b.reconciliation.SyncDiscordChannels(rcfg.UpdateChannelNames, rcfg.UpdateChannelNotes, rcfg.UnregisterMissingChannels)
+}
+
+// postRegisterHook returns the bot.CommandContext.PostRegister callback,
+// or nil if reconciliation isn't configured. Invoked by !poracle after a
+// successful registration so the new user's community_membership /
+// area_restriction get populated from current Discord roles immediately.
+// removeInvalidUsers is forced to false: the user we just created can't
+// be missing a role we haven't checked yet.
+func (b *Bot) postRegisterHook() func(string) {
+	if b.reconciliation == nil {
+		return nil
+	}
+	r := b.reconciliation
+	return func(userID string) {
+		go r.ReconcileSingleUser(userID, false)
+	}
 }

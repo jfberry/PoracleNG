@@ -173,28 +173,28 @@ type ActivePokemonEntry struct {
 
 // MatchedUser represents a user who matched an alert.
 type MatchedUser struct {
-	ID                string               `json:"id"`
-	Name              string               `json:"name"`
-	Type              string               `json:"type"`
-	Language          string               `json:"language"`
-	Latitude          float64              `json:"latitude"`
-	Longitude         float64              `json:"longitude"`
-	Template          string               `json:"template"`
-	Distance          int                  `json:"distance"`
-	Clean             int                  `json:"clean"`
-	Ping              string               `json:"ping"`
-	Bearing           int                  `json:"bearing"`
-	CardinalDirection string               `json:"cardinalDirection"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	Type              string  `json:"type"`
+	Language          string  `json:"language"`
+	Latitude          float64 `json:"latitude"`
+	Longitude         float64 `json:"longitude"`
+	Template          string  `json:"template"`
+	Distance          int     `json:"distance"`
+	Clean             int     `json:"clean"`
+	Ping              string  `json:"ping"`
+	Bearing           int     `json:"bearing"`
+	CardinalDirection string  `json:"cardinalDirection"`
 	// TrackDistance is the matched rule's distance threshold in metres (the
 	// `d:500` argument on track commands). Zero indicates an area-based rule.
 	// Used to set the userDistanceTrack per-user template flag.
-	TrackDistance     int                  `json:"track_distance,omitempty"`
-	PokemonID         int                  `json:"pokemon_id"`
-	PVPRankingCap     int                  `json:"pvp_ranking_cap"`
-	PVPRankingLeague  int                  `json:"pvp_ranking_league"`
-	PVPRankingWorst   int                  `json:"pvp_ranking_worst"`
-	RSVPChanges       int                  `json:"rsvp_changes"`
-	ActivePokemons    []ActivePokemonEntry `json:"active_pokemons,omitempty"`
+	TrackDistance    int                  `json:"track_distance,omitempty"`
+	PokemonID        int                  `json:"pokemon_id"`
+	PVPRankingCap    int                  `json:"pvp_ranking_cap"`
+	PVPRankingLeague int                  `json:"pvp_ranking_league"`
+	PVPRankingWorst  int                  `json:"pvp_ranking_worst"`
+	RSVPChanges      int                  `json:"rsvp_changes"`
+	ActivePokemons   []ActivePokemonEntry `json:"active_pokemons,omitempty"`
 	// CaresUntil is the unix timestamp of the latest matched pokemon's disappear
 	// time in the weather cell. Only populated for weather change alerts, where
 	// it drives the clean-alert TTH and the "too short to bother" drop.
@@ -202,19 +202,25 @@ type MatchedUser struct {
 }
 
 // InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.
+//
+// URL is the pokestop photo URL — Golbat emits this as `url` on the
+// invasion envelope (same field name as the pokestop/lure envelope, but
+// different from the quest envelope which uses `pokestop_url`).
+// Templates reach it via the `pokestopUrl` alias on the invasion type.
 type InvasionWebhook struct {
-	PokestopID              string  `json:"pokestop_id"`
-	Name                    string  `json:"pokestop_name"`
-	Latitude                float64 `json:"latitude"`
-	Longitude               float64 `json:"longitude"`
-	IncidentExpiration      int64   `json:"incident_expiration"`
-	IncidentExpireTimestamp int64   `json:"incident_expire_timestamp"`
-	IncidentGruntType       int     `json:"incident_grunt_type"`
-	GruntType               int     `json:"grunt_type"`
-	Gender                  int     `json:"gender"`
-	DisplayType             int     `json:"display_type"`
-	IncidentDisplayType     int     `json:"incident_display_type"`
-	Confirmed               bool    `json:"confirmed"`
+	PokestopID              string                `json:"pokestop_id"`
+	Name                    string                `json:"pokestop_name"`
+	URL                     string                `json:"url"`
+	Latitude                float64               `json:"latitude"`
+	Longitude               float64               `json:"longitude"`
+	IncidentExpiration      int64                 `json:"incident_expiration"`
+	IncidentExpireTimestamp int64                 `json:"incident_expire_timestamp"`
+	IncidentGruntType       int                   `json:"incident_grunt_type"`
+	GruntType               int                   `json:"grunt_type"`
+	Gender                  int                   `json:"gender"`
+	DisplayType             int                   `json:"display_type"`
+	IncidentDisplayType     int                   `json:"incident_display_type"`
+	Confirmed               bool                  `json:"confirmed"`
 	Lineup                  []InvasionLineupEntry `json:"lineup"`
 }
 
@@ -225,16 +231,28 @@ type InvasionLineupEntry struct {
 }
 
 // QuestWebhook mirrors Golbat's quest webhook message.
+//
+// URL is the pokestop photo URL — Golbat emits this as `pokestop_url`
+// on the quest envelope (a different field name to the invasion / lure
+// envelopes which use `url`). Templates reach it via the `pokestopUrl`
+// alias on the quest type.
 type QuestWebhook struct {
-	PokestopID string        `json:"pokestop_id"`
-	Name       string        `json:"pokestop_name"`
-	Latitude   float64       `json:"latitude"`
-	Longitude  float64       `json:"longitude"`
-	Title      string        `json:"title"`
-	Target     int           `json:"target"`
-	QuestType  int           `json:"type"`
-	Template   string        `json:"template"`
-	Rewards    []QuestReward `json:"rewards"`
+	PokestopID string           `json:"pokestop_id"`
+	Name       string           `json:"pokestop_name"`
+	URL        string           `json:"pokestop_url"`
+	Latitude   float64          `json:"latitude"`
+	Longitude  float64          `json:"longitude"`
+	Title      string           `json:"title"`
+	Target     int              `json:"target"`
+	QuestType  int              `json:"type"`
+	Template   string           `json:"template"`
+	Rewards    []QuestReward    `json:"rewards"`
+	Conditions []QuestCondition `json:"conditions"`
+	// WithAR distinguishes a single stop's regular quest from its
+	// AR-required quest. The same stop can host both at the same time
+	// (separate objectives, separate rewards), so AR / non-AR firings
+	// must dedup independently — see buildQuestDedupKey.
+	WithAR bool `json:"with_ar"`
 }
 
 // QuestReward represents a single quest reward.
@@ -243,26 +261,48 @@ type QuestReward struct {
 	Info map[string]any `json:"info"`
 }
 
+// QuestCondition represents a single quest completion requirement
+// (e.g. "throw a curveball", "catch a fire-type pokemon"). Type maps
+// to a `quest_condition_{type}` translation key; Info carries the
+// payload referenced by the matching `quest_condition_{type}_formatted`
+// placeholder (e.g. throw_type_id, pokemon_type_ids).
+type QuestCondition struct {
+	Type int            `json:"type"`
+	Info map[string]any `json:"info"`
+}
+
 // LureWebhook mirrors a pokestop webhook with lure data.
+//
+// URL is the pokestop photo URL — Golbat emits this as `url` on the
+// pokestop envelope. Templates reach it via the `pokestopUrl` alias on
+// the lure type.
 type LureWebhook struct {
 	PokestopID     string  `json:"pokestop_id"`
 	Name           string  `json:"name"`
+	URL            string  `json:"url"`
 	Latitude       float64 `json:"latitude"`
 	Longitude      float64 `json:"longitude"`
 	LureExpiration int64   `json:"lure_expiration"`
 	LureID         int     `json:"lure_id"`
 	// Invasion fields — a pokestop can have both a lure and an invasion
-	IncidentGruntType  int `json:"incident_grunt_type"`
-	GruntType          int `json:"grunt_type"`
-	DisplayType        int `json:"display_type"`
+	IncidentGruntType   int `json:"incident_grunt_type"`
+	GruntType           int `json:"grunt_type"`
+	DisplayType         int `json:"display_type"`
 	IncidentDisplayType int `json:"incident_display_type"`
 }
 
 // GymWebhook mirrors Golbat's gym/gym_details webhook message.
+//
+// The URL field is the gym photo URL (Niantic CDN). Per the Golbat
+// webhooks-reference, gym_details emits this as `url` (not `gym_url`,
+// which is the field name on the raid envelope). Templates reach it via
+// the `gymUrl` alias on the gym template type — see internal/dts/view.go
+// typeAliases["gym"].
 type GymWebhook struct {
 	GymID          string   `json:"gym_id"`
 	ID             string   `json:"id"`
 	Name           string   `json:"name"`
+	URL            string   `json:"url"`
 	Latitude       float64  `json:"latitude"`
 	Longitude      float64  `json:"longitude"`
 	TeamID         int      `json:"team_id"`
@@ -270,7 +310,8 @@ type GymWebhook struct {
 	SlotsAvailable int      `json:"slots_available"`
 	IsInBattle     FlexBool `json:"is_in_battle"`
 	InBattle       FlexBool `json:"in_battle"`
-	LastOwnerID    int      `json:"last_owner_id"`
+	// Note: Golbat does not ship a last_owner_id field. The processor's
+	// gym-state cache derives a last-controller value (see GymStateTracker.Update).
 }
 
 // NestWebhook mirrors a nest webhook message from the nest processor.

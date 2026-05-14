@@ -46,20 +46,20 @@ func humanToResponse(h *store.Human) *HumanResponse {
 		return nil
 	}
 	resp := &HumanResponse{
-		ID:               h.ID,
-		Type:             h.Type,
-		Name:             h.Name,
-		Enabled:          boolToAPIInt(h.Enabled),
-		Area:             stringSliceToJSON(h.Area),
-		Latitude:         h.Latitude,
-		Longitude:        h.Longitude,
-		Fails:            h.Fails,
-		LastChecked:      h.LastChecked,
-		AdminDisable:     boolToAPIInt(h.AdminDisable),
-		DisabledDate:     h.DisabledDate,
-		CurrentProfileNo: h.CurrentProfileNo,
+		ID:                  h.ID,
+		Type:                h.Type,
+		Name:                h.Name,
+		Enabled:             boolToAPIInt(h.Enabled),
+		Area:                stringSliceToJSON(h.Area),
+		Latitude:            h.Latitude,
+		Longitude:           h.Longitude,
+		Fails:               h.Fails,
+		LastChecked:         h.LastChecked,
+		AdminDisable:        boolToAPIInt(h.AdminDisable),
+		DisabledDate:        h.DisabledDate,
+		CurrentProfileNo:    h.CurrentProfileNo,
 		CommunityMembership: stringSliceToJSON(h.CommunityMembership),
-		Notes:            h.Notes,
+		Notes:               h.Notes,
 	}
 	if h.Language != "" {
 		resp.Language = null.StringFrom(h.Language)

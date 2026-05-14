@@ -7,6 +7,20 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// Type label values for the metrics that distinguish by webhook type.
+const (
+	TypePokemon    = "pokemon"
+	TypeRaid       = "raid"
+	TypeEgg        = "egg"
+	TypeQuest      = "quest"
+	TypeInvasion   = "invasion"
+	TypeLure       = "lure"
+	TypeNest       = "nest"
+	TypeGym        = "gym"
+	TypeFortUpdate = "fort_update"
+	TypeMaxbattle  = "maxbattle"
+)
+
 // IntervalCounters tracks counts between periodic log resets.
 var (
 	IntervalWebhooks atomic.Int64
@@ -146,6 +160,22 @@ var (
 		Help: "Number of geofences loaded in state",
 	})
 
+	// Monster bucket-size gauges — break down the pokemon rule index for operators.
+	StateMonsterEverythingBucket = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_monster_everything_bucket",
+		Help: "Number of pokemon tracking rules in the 'everything' bucket (pokemon_id=0). These are scanned for every pokemon webhook in the per-bucket path.",
+	})
+
+	StateMonsterPVPSpecific = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_monster_pvp_specific",
+		Help: "Number of PVP tracking rules with a specific pokemon_id, per league.",
+	}, []string{"league"})
+
+	StateMonsterPVPEverything = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "poracle_processor_state_monster_pvp_everything",
+		Help: "Number of PVP tracking rules with pokemon_id=0 (catch-all PVP), per league.",
+	}, []string{"league"})
+
 	// Webhook batch size
 	WebhookBatchSize = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "poracle_processor_webhook_batch_size",
@@ -158,6 +188,22 @@ var (
 		Name:    "poracle_processor_matching_seconds",
 		Help:    "Time to match a webhook against tracking rules",
 		Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25},
+	}, []string{"type"})
+
+	// MatchingCandidates: tracking rules surviving per-rule filters per webhook,
+	// before human-level validation (distance/area/profile).
+	MatchingCandidates = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_processor_matching_candidates",
+		Help:    "Number of tracking rules surviving rule-type filters per webhook, before human-level validation (distance/area/profile)",
+		Buckets: []float64{1, 10, 100, 1000, 10000, 100000, 1000000},
+	}, []string{"type"})
+
+	// MatchingHaversines: number of HaversineDistance computations per webhook
+	// inside ValidateHumans* (one per matched rule reaching distance filter or output field).
+	MatchingHaversines = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "poracle_processor_matching_haversines",
+		Help:    "Number of HaversineDistance computations per webhook inside ValidateHumans* (one per matched rule that reaches the distance filter or the output distance field — area-only rules that fail the area check do not increment).",
+		Buckets: []float64{1, 10, 100, 1000, 10000, 100000},
 	}, []string{"type"})
 
 	// Build info
@@ -176,6 +222,12 @@ var (
 		Name: "poracle_processor_api_requests_total",
 		Help: "API requests by method, endpoint, and status",
 	}, []string{"method", "endpoint", "status"})
+
+	// Summary buffer metrics
+	SummaryBufferedTotal = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_summary_buffered_total",
+		Help: "Pending summary-mode messages currently held in the in-memory buffer awaiting the next scheduled dispatch (sum across every humanID + alertType bucket)",
+	})
 
 	// Render queue metrics
 	RenderQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{

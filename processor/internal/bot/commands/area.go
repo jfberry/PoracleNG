@@ -34,8 +34,7 @@ func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		} else {
 			text = tr.T("status.no_areas")
 		}
-		text += fmt.Sprintf("\n\nValid commands are `%sarea list`, `%sarea add <areaname>`, `%sarea remove <areaname>`",
-			prefix, prefix, prefix)
+		text += "\n\n" + tr.Tf("msg.area.usage", prefix)
 		return []bot.Reply{{Text: text}}
 	}
 
@@ -70,7 +69,7 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 	h := getUserHuman(ctx)
 	currentAreas := humanAreas(h)
 	communities := humanCommunities(ctx, h)
-	available := ctx.AreaLogic.GetAvailableAreasMarked(communities, currentAreas)
+	available := ctx.AreaLogic.GetAvailableAreasMarked(communities, currentAreas, ctx.IsAdmin)
 	if len(available) == 0 {
 		return []bot.Reply{{Text: tr.T("msg.area.none_available")}}
 	}
@@ -83,11 +82,11 @@ func (c *AreaCommand) listAreas(ctx *bot.CommandContext) []bot.Reply {
 	var sb strings.Builder
 	sb.WriteString(tr.T("msg.area.current") + "\n\n")
 	for _, a := range available {
+		marker := "◽"
 		if a.IsActive {
-			sb.WriteString(fmt.Sprintf("🟢 %s\n", a.Name))
-		} else {
-			sb.WriteString(fmt.Sprintf("◽ %s\n", a.Name))
+			marker = "🟢"
 		}
+		sb.WriteString(marker + " " + ctx.EscapeForReply(a.Name) + "\n")
 	}
 	return []bot.Reply{{Text: sb.String()}}
 }
@@ -101,7 +100,7 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 	h := getUserHuman(ctx)
 	currentAreas := humanAreas(h)
 	communities := humanCommunities(ctx, h)
-	added, notFound, newList := ctx.AreaLogic.AddAreas(currentAreas, communities, args)
+	added, notFound, newList := ctx.AreaLogic.AddAreas(currentAreas, communities, args, ctx.IsAdmin)
 
 	if len(added) > 0 {
 		setUserAreas(ctx, newList)
@@ -109,16 +108,16 @@ func (c *AreaCommand) addAreas(ctx *bot.CommandContext, args []string) []bot.Rep
 
 	var parts []string
 	if len(added) > 0 {
-		parts = append(parts, tr.Tf("msg.area.added", strings.Join(added, ", ")))
+		parts = append(parts, tr.Tf("msg.area.added", ctx.EscapeJoin(added, ", ")))
 	}
 	if len(notFound) > 0 {
-		parts = append(parts, tr.Tf("msg.area.not_found", strings.Join(notFound, ", ")))
+		parts = append(parts, tr.Tf("msg.area.not_found", ctx.EscapeJoin(notFound, ", ")))
 	}
 
 	// Show current areas after change
 	allDisplay := ctx.AreaLogic.ResolveDisplayNames(humanAreas(getUserHuman(ctx)))
 	if len(allDisplay) > 0 {
-		parts = append(parts, tr.Tf("status.areas_set", strings.Join(allDisplay, ", ")))
+		parts = append(parts, tr.Tf("status.areas_set", ctx.EscapeJoin(allDisplay, ", ")))
 	}
 
 	react := "✅"
@@ -144,7 +143,7 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 	var parts []string
 	if len(removed) > 0 {
 		removedDisplay := ctx.AreaLogic.ResolveDisplayNames(removed)
-		parts = append(parts, tr.Tf("msg.area.removed", strings.Join(removedDisplay, ", ")))
+		parts = append(parts, tr.Tf("msg.area.removed", ctx.EscapeJoin(removedDisplay, ", ")))
 	}
 
 	// Show current areas after change
@@ -217,11 +216,11 @@ func (c *AreaCommand) showAreas(ctx *bot.CommandContext, args []string) []bot.Re
 
 		fence := ctx.AreaLogic.FindFence(area)
 		if fence == nil {
-			replies = append(replies, bot.Reply{Text: tr.Tf("msg.area.not_found", area)})
+			replies = append(replies, bot.Reply{Text: tr.Tf("msg.area.not_found", ctx.EscapeForReply(area))})
 			continue
 		}
 
-		reply := bot.Reply{Text: tr.Tf("msg.area.display", fence.Name)}
+		reply := bot.Reply{Text: tr.Tf("msg.area.display", ctx.EscapeForReply(fence.Name))}
 
 		// Generate tile if static map is available
 		if ctx.StaticMap != nil {
@@ -263,7 +262,7 @@ func (c *AreaCommand) overviewAreas(ctx *bot.CommandContext, args []string) []bo
 	}
 	displayNames := ctx.AreaLogic.ResolveDisplayNames(areas)
 
-	reply := bot.Reply{Text: tr.Tf("msg.area.your_areas", strings.Join(displayNames, ", "))}
+	reply := bot.Reply{Text: tr.Tf("msg.area.your_areas", ctx.EscapeJoin(displayNames, ", "))}
 
 	// Generate overview tile if static map is available
 	if ctx.StaticMap != nil {

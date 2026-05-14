@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -56,10 +57,8 @@ func NewPokemonResolver(gd *gamedata.GameData, bundle *i18n.Bundle, languages []
 			}
 			// Avoid duplicate entries for the same ID on repeat variants.
 			existing := langMap[key]
-			for _, e := range existing {
-				if e == id {
-					return
-				}
+			if slices.Contains(existing, id) {
+				return
 			}
 			langMap[key] = append(existing, id)
 		}

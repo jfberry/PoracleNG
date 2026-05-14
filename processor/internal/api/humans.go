@@ -256,8 +256,17 @@ func HandleGetHumanAreas(deps *TrackingDeps) gin.HandlerFunc {
 			allAreas[i] = strings.ToLower(f.Name)
 		}
 
+		// area_restriction is the gatekeeper, NOT community_membership:
+		//   nil  → no restriction (full access). Channels and webhooks get
+		//          this on creation since they aren't role-managed and
+		//          never have reconciliation populate the restriction list.
+		//   set  → community_membership-driven filter applies (empty
+		//          membership ⇒ empty allowed list ⇒ no access).
+		// Mirrors PoracleJS's commands/area.js logic. Treating
+		// community_membership as the gatekeeper would silently lock out
+		// every webhook the moment area_security is enabled.
 		allowedAreas := allAreas
-		if deps.Config.Area.Enabled && !isAdmin(deps, id) {
+		if deps.Config.Area.Enabled && !isAdmin(deps, id) && human.AreaRestriction != nil {
 			allowedAreas = community.FilterAreas(
 				deps.Config.Area.Communities, human.CommunityMembership, allAreas)
 		}
@@ -447,8 +456,11 @@ func HandleSetAreas(deps *TrackingDeps) gin.HandlerFunc {
 			allowedAreas = append(allowedAreas, strings.ToLower(f.Name))
 		}
 
-		// If area security is enabled and user is not admin, filter by community.
-		if deps.Config.Area.Enabled && !admin {
+		// Same area_restriction == nil semantics as the GET endpoint
+		// above — see the comment there. Without this guard the GET
+		// would offer all areas (correct) but the POST would silently
+		// reject every choice (filter against an empty community).
+		if deps.Config.Area.Enabled && !admin && human.AreaRestriction != nil {
 			allowedAreas = community.FilterAreas(
 				deps.Config.Area.Communities, human.CommunityMembership, allowedAreas)
 		}

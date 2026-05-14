@@ -12,6 +12,7 @@ import (
 type ParsedCommand struct {
 	CommandKey   string   // identifier key (e.g. "cmd.track"), empty if unrecognised
 	Args         []string // remaining arguments (lowercased, underscores→spaces)
+	RawArgs      []string // remaining arguments preserving original case (underscores→spaces still applied to unquoted tokens). Use for output that should keep what the user typed — e.g. autocreate channel/category names.
 	LanguageHint string   // language code from available_languages (e.g. "de" from "!dasporacle")
 }
 
@@ -110,23 +111,41 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 		}
 
 		// Look up command name (first token, already lowercased by tokenize)
-		cmdWord := tokens[0]
+		cmdWord := tokens[0].Value
 		cmdKey := p.commandMap[cmdWord]
 		langHint := p.langMap[cmdWord] // non-empty if from available_languages
 
-		// Remaining args: underscore→space
+		// Remaining args: underscore→space, but only for unquoted tokens.
+		// Users can wrap a value in double quotes to preserve its underscores
+		// (e.g. area names like "gent_centrum"). The autocreate template
+		// expander relies on this to round-trip names through the parser.
+		// rawArgs preserves the original case so output paths that echo the
+		// user's input (autocreate channel names, etc.) don't collapse it.
 		args := make([]string, 0, len(tokens)-1)
+		rawArgs := make([]string, 0, len(tokens)-1)
 		for _, tok := range tokens[1:] {
-			args = append(args, strings.ReplaceAll(tok, "_", " "))
+			val := tok.Value
+			raw := tok.Raw
+			if !tok.Quoted {
+				val = strings.ReplaceAll(val, "_", " ")
+				raw = strings.ReplaceAll(raw, "_", " ")
+			}
+			args = append(args, val)
+			rawArgs = append(rawArgs, raw)
 		}
 
 		// Pipe splitting: split args by "|" into groups sharing the same command
-		groups := splitByPipe(args)
+		groups, rawGroups := splitByPipePaired(args, rawArgs)
 		if len(groups) == 0 {
 			results = append(results, ParsedCommand{CommandKey: cmdKey, Args: nil, LanguageHint: langHint})
 		} else {
-			for _, group := range groups {
-				results = append(results, ParsedCommand{CommandKey: cmdKey, Args: group, LanguageHint: langHint})
+			for i := range groups {
+				results = append(results, ParsedCommand{
+					CommandKey:   cmdKey,
+					Args:         groups[i],
+					RawArgs:      rawGroups[i],
+					LanguageHint: langHint,
+				})
 			}
 		}
 	}
@@ -134,17 +153,36 @@ func (p *Parser) Parse(text string) []ParsedCommand {
 	return results
 }
 
+// token is a single lex unit produced by tokenize. Quoted tracks whether
+// the source text used double quotes — callers that strip underscores or
+// otherwise normalise tokens use this to leave quoted values alone. Raw
+// preserves the original case (Value is lowercased) for callers that need
+// to echo the user's input verbatim, e.g. autocreate channel/category
+// names that should keep "GentCentrum" not collapse to "gentcentrum".
+type token struct {
+	Value  string
+	Raw    string
+	Quoted bool
+}
+
 // tokenize splits text into tokens, preserving quoted strings.
-// Quotes are stripped from the result. All tokens are lowercased.
-func tokenize(text string) []string {
+// Quotes are stripped from the result. Value is lowercased; Raw retains
+// the original case.
+func tokenize(text string) []token {
 	matches := tokenRe.FindAllStringSubmatch(text, -1)
-	tokens := make([]string, 0, len(matches))
+	tokens := make([]token, 0, len(matches))
 	for _, m := range matches {
-		tok := m[0]
-		if m[1] != "" {
-			tok = m[1] // captured quoted content (without quotes)
+		// A quoted match starts and ends with " (handles empty "" too).
+		quoted := len(m[0]) >= 2 && m[0][0] == '"' && m[0][len(m[0])-1] == '"'
+		val := m[0]
+		if quoted {
+			val = m[1]
 		}
-		tokens = append(tokens, strings.ToLower(tok))
+		tokens = append(tokens, token{
+			Value:  strings.ToLower(val),
+			Raw:    val,
+			Quoted: quoted,
+		})
 	}
 	return tokens
 }
@@ -203,4 +241,34 @@ func splitByPipe(args []string) [][]string {
 		groups = append(groups, current)
 	}
 	return groups
+}
+
+// splitByPipePaired splits args + rawArgs in lockstep so the index of each
+// group in the lowercased slice matches the corresponding group in the
+// raw-case slice. Pipe positions are detected on the lowercased side
+// (matches the existing splitByPipe behaviour).
+func splitByPipePaired(args, rawArgs []string) (groups, rawGroups [][]string) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+	current := make([]string, 0)
+	currentRaw := make([]string, 0)
+	for i, a := range args {
+		if a == "|" {
+			if len(current) > 0 {
+				groups = append(groups, current)
+				rawGroups = append(rawGroups, currentRaw)
+			}
+			current = make([]string, 0)
+			currentRaw = make([]string, 0)
+		} else {
+			current = append(current, a)
+			currentRaw = append(currentRaw, rawArgs[i])
+		}
+	}
+	if len(current) > 0 {
+		groups = append(groups, current)
+		rawGroups = append(rawGroups, currentRaw)
+	}
+	return groups, rawGroups
 }

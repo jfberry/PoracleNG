@@ -47,6 +47,35 @@ type Renderer struct {
 	defaultTemplate string // config default_template_name, used when tracking has no explicit template
 	altLanguage     string
 	minAlertSec     int
+
+	// errorNoticer is an optional callback the renderer fires when a
+	// template render fails (per-user, per-group, or by template panic).
+	// Set by the host (cmd/processor) to route errors to the admin
+	// channel; nil means errors are only logged. The callback receives a
+	// stable key (suitable for throttling) and the human-readable
+	// message.
+	errorNoticer ErrorNoticer
+}
+
+// ErrorNoticer routes renderer errors to a host-side notification sink
+// (typically PostAdminNoticeThrottled on the discord bot). Non-blocking;
+// errors are logged regardless of whether the noticer is set.
+type ErrorNoticer func(key, msg string)
+
+// SetErrorNoticer wires a host-side callback to receive per-render-error
+// notifications. Pass nil to disable. Safe to call before or after the
+// bot is up; the renderer just stores the callback.
+func (r *Renderer) SetErrorNoticer(fn ErrorNoticer) {
+	r.errorNoticer = fn
+}
+
+// notice fires the host-side noticer if one is set. Always returns
+// quickly; the host is expected to throttle internally. No-op when
+// errorNoticer is nil.
+func (r *Renderer) notice(key, msg string) {
+	if r.errorNoticer != nil {
+		r.errorNoticer(key, msg)
+	}
 }
 
 // NewRenderer creates a Renderer from the given configuration.
@@ -76,6 +105,13 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 	if altLang == "" {
 		altLang = "en"
 	}
+
+	// Tell the template store which locale to prefer when a user's
+	// language isn't shipped (step 5 of the selection chain). Without
+	// this, legacy users with an untranslated language (e.g. lang="nl"
+	// with no NL templates) silently fall to whichever default entry
+	// loaded last — often DE rather than the operator's chosen EN.
+	ts.SetDefaultLocale(locale)
 
 	return &Renderer{
 		templates:       ts,
@@ -169,7 +205,54 @@ func (r *Renderer) RenderPokemon(
 		templateType = "monsterNoIv"
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, uniqueUsers, matchedAreas, logReference, editKeyBase)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, nil, uniqueUsers, matchedAreas, logReference, editKeyBase)
+}
+
+// RenderPokemonChanged renders the monsterChanged template for pokemon-change
+// events. The original parameter is the prior-sighting view (built by
+// BuildOriginalView) — exposed in templates as {{original.X}}. Like
+// RenderPokemon, matched users are deduplicated; unlike RenderPokemon the
+// template type is fixed to "monsterChanged" (there is no encounter/no-IV
+// distinction here — the change event always implies the new sighting was
+// encountered enough to detect the change).
+func (r *Renderer) RenderPokemonChanged(
+	enrichment map[string]any,
+	perLangEnrichment map[string]map[string]any,
+	perUserEnrichment map[string]map[string]any,
+	webhookFields map[string]any,
+	original map[string]any,
+	matchedUsers []webhook.MatchedUser,
+	matchedAreas []webhook.MatchedArea,
+	logReference string,
+	editKeyBase string,
+) []webhook.DeliveryJob {
+	if r.isBelowMinAlertTime(enrichment) {
+		return nil
+	}
+
+	uniqueUsers := deduplicateUsers(matchedUsers)
+
+	return r.renderForUsers("monsterChanged", enrichment, perLangEnrichment, perUserEnrichment, webhookFields, original, uniqueUsers, matchedAreas, logReference, editKeyBase)
+}
+
+// RenderQuestSummary renders a single grouped quest-summary message for a
+// reward bucket. Unlike RenderQuest, the view passed in is already fully
+// composed (base + per-language fields merged per pokestop, plus shared
+// reward fields and the autopositioned multi-pin static map URL) — see
+// BuildQuestSummaryView. The matched-users slice is the recipient(s) of
+// the summary, typically the single owner of the schedule.
+//
+// The summary template path doesn't run TTH gating; the caller has
+// already filtered expired buffered quests before composing the view.
+// The view is consumed as-is via the LayeredView's `base` layer.
+func (r *Renderer) RenderQuestSummary(
+	view map[string]any,
+	matchedUsers []webhook.MatchedUser,
+	matchedAreas []webhook.MatchedArea,
+	logReference string,
+	editKeyBase string,
+) []webhook.DeliveryJob {
+	return r.renderForUsers("questSummary", view, nil, nil, nil, nil, matchedUsers, matchedAreas, logReference, editKeyBase)
 }
 
 // RenderAlert renders alerts for any non-pokemon type and returns delivery jobs.
@@ -189,7 +272,7 @@ func (r *Renderer) RenderAlert(
 		return nil
 	}
 
-	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, matchedUsers, matchedAreas, logReference, editKeyBase)
+	return r.renderForUsers(templateType, enrichment, perLangEnrichment, nil, webhookFields, nil, matchedUsers, matchedAreas, logReference, editKeyBase)
 }
 
 // isBelowMinAlertTime checks whether the TTH in enrichment is below the configured minimum.
@@ -199,12 +282,15 @@ func (r *Renderer) isBelowMinAlertTime(enrichment map[string]any) bool {
 }
 
 // renderForUsers is the shared rendering loop that produces DeliveryJobs for each user.
+// The original parameter (nil for non-change renders) is the prior-sighting snapshot
+// installed onto each LayeredView so templates can reference {{original.X}}.
 func (r *Renderer) renderForUsers(
 	templateType string,
 	enrichment map[string]any,
 	perLangEnrichment map[string]map[string]any,
 	perUserEnrichment map[string]map[string]any,
 	webhookFields map[string]any,
+	original map[string]any,
 	users []webhook.MatchedUser,
 	areas []webhook.MatchedArea,
 	logReference string,
@@ -225,7 +311,7 @@ func (r *Renderer) renderForUsers(
 	// enrichment, users with the same (template, platform, language) get identical
 	// rendered output. Render once per group and clone the result.
 	if perUserEnrichment == nil {
-		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, users, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)
+		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, original, users, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)
 	}
 
 	var jobs []webhook.DeliveryJob
@@ -246,8 +332,11 @@ func (r *Renderer) renderForUsers(
 		// d. Per-user enrichment
 		perUser := mapOrEmpty(perUserEnrichment, user.ID)
 
-		// e. Build layered view (zero-copy — no map merging)
+		// e. Build layered view (zero-copy — no map merging). Install the
+		// prior-sighting snapshot (nil for non-change renders) so templates
+		// can reference {{original.X}}.
 		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, perUser, webhookFields, platform, areas)
+		view.original = original
 
 		// f. Get template (with monsterNoIv -> monster fallback)
 		templateID := r.resolveTemplate(user.Template)
@@ -270,6 +359,10 @@ func (r *Renderer) renderForUsers(
 			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
 				log.Errorf("dts: render %s for user %s: %v", templateType, user.ID, err)
+				r.notice(
+					fmt.Sprintf("dts.render:%s:%s:%s:%s", templateType, platform, language, templateID),
+					fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` render error: %v — falling back to default message.", templateType, platform, language, templateID, err),
+				)
 				rendered = fallbackMessage(templateType, platform, templateID, language)
 				metrics.TemplateTotal.WithLabelValues(templateType, "error").Inc()
 			} else {
@@ -285,6 +378,10 @@ func (r *Renderer) renderForUsers(
 		rawMessage := json.RawMessage(rendered)
 		if !json.Valid(rawMessage) {
 			log.Errorf("dts: invalid rendered JSON for user %s (raw: %.200s)", user.ID, rendered)
+			r.notice(
+				fmt.Sprintf("dts.invalid:%s:%s:%s:%s", templateType, platform, language, templateID),
+				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` produced invalid JSON — falling back to default message.", templateType, platform, language, templateID),
+			)
 			rawMessage = fallbackMessageRaw(templateType, platform, templateID, language)
 		}
 
@@ -332,11 +429,14 @@ type renderGroupKey struct {
 // renderGrouped renders once per unique (template, platform, language) group and
 // creates DeliveryJobs for all users in that group. This avoids redundant template
 // execution and URL shortening when there is no per-user enrichment.
+// The original parameter (nil for non-change renders) is installed on each
+// LayeredView so templates can reference {{original.X}}.
 func (r *Renderer) renderGrouped(
 	templateType string,
 	enrichment map[string]any,
 	perLangEnrichment map[string]map[string]any,
 	webhookFields map[string]any,
+	original map[string]any,
 	users []webhook.MatchedUser,
 	areas []webhook.MatchedArea,
 	logReference string,
@@ -385,6 +485,7 @@ func (r *Renderer) renderGrouped(
 		perLang := mapOrEmpty(perLangEnrichment, key.language)
 		groupPerUser := map[string]any{"userDistanceTrack": key.distanceTrack}
 		view := NewLayeredView(r.viewBuilder, templateType, enrichment, perLang, groupPerUser, webhookFields, key.platform, areas)
+		view.original = original
 
 		tmpl := r.templates.Get(templateType, key.platform, key.templateID, key.language)
 
@@ -402,6 +503,10 @@ func (r *Renderer) renderGrouped(
 			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
 				log.Errorf("dts: render %s for group (%s/%s/%s): %v", templateType, key.platform, key.templateID, key.language, err)
+				r.notice(
+					fmt.Sprintf("dts.render:%s:%s:%s:%s", templateType, key.platform, key.language, key.templateID),
+					fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` render error: %v — falling back to default message.", templateType, key.platform, key.language, key.templateID, err),
+				)
 				rendered = fallbackMessage(templateType, key.platform, key.templateID, key.language)
 				metrics.TemplateTotal.WithLabelValues(templateType, "error").Inc()
 			} else {
@@ -415,6 +520,10 @@ func (r *Renderer) renderGrouped(
 		rawMessage := json.RawMessage(rendered)
 		if !json.Valid(rawMessage) {
 			log.Errorf("dts: invalid rendered JSON for group (%s/%s/%s) (raw: %.200s)", key.platform, key.templateID, key.language, rendered)
+			r.notice(
+				fmt.Sprintf("dts.invalid:%s:%s:%s:%s", templateType, key.platform, key.language, key.templateID),
+				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` produced invalid JSON — falling back to default message.", templateType, key.platform, key.language, key.templateID),
+			)
 			rawMessage = fallbackMessageRaw(templateType, key.platform, key.templateID, key.language)
 		}
 

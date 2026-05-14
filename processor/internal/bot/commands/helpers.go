@@ -289,6 +289,31 @@ func parseCommonTrackFields(ctx *bot.CommandContext, parsed *bot.ParsedArgs, dts
 	return f, nil
 }
 
+// applyFormFilter applies parsed["form"] to monsters. Returns a
+// helpful reply when the form filter rejects every input — e.g.
+// `!track sinistea form:incorrect` should not silently degrade into
+// "no pokemon specified". Returns (monsters, nil) when no form filter
+// is set or when the input list is already empty (caller will produce
+// the no-pokemon reply downstream).
+func applyFormFilter(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon, parsed *bot.ParsedArgs) ([]bot.ResolvedPokemon, *bot.Reply) {
+	formName, ok := parsed.Strings["form"]
+	if !ok || formName == "" || len(monsters) == 0 {
+		return monsters, nil
+	}
+	filtered := filterByForm(ctx, monsters, formName)
+	if len(filtered) > 0 {
+		return filtered, nil
+	}
+	tr := ctx.Tr()
+	return nil, &bot.Reply{
+		React: "🙅",
+		Text: tr.Tf("msg.form_not_found",
+			ctx.EscapeForCode(formName),
+			bot.CommandPrefix(ctx),
+		),
+	}
+}
+
 // filterByForm narrows a pokemon list to only those matching the given form name.
 // Checks the user's language and English fallback via form_{id} translation keys.
 // Returns empty list if no matches found (form name not recognized).
@@ -370,4 +395,65 @@ func filterByGenAndType(ctx *bot.CommandContext, monsters []bot.ResolvedPokemon,
 		monsters = filterByTypes(ctx, monsters, parsed.Types)
 	}
 	return monsters
+}
+
+// resolveGymRef looks up the gym referenced by a `gym:` argument value.
+// Two-step: try as exact gym ID first; on miss, search by name. The
+// result is one of:
+//
+//   - gymID populated, reply == nil: use this ID on the tracking row
+//   - gymID == "", reply != nil:     send this reply to the user and
+//     abort the command (no tracking)
+//
+// Multi-match always returns a list reply (caller must abort).
+// Empty input is treated as "no gym argument" — caller should not call
+// resolveGymRef in that case; gymID == "" with reply == nil never happens
+// for a non-empty raw.
+func resolveGymRef(ctx *bot.CommandContext, raw string) (string, *bot.Reply) {
+	tr := ctx.Tr()
+	if raw == "" {
+		return "", nil
+	}
+	if ctx.Scanner == nil {
+		return "", &bot.Reply{React: "🙅", Text: tr.T("msg.gym_lookup.no_scanner")}
+	}
+
+	if g, ok, err := ctx.Scanner.FindGymByID(raw); err != nil {
+		log.Errorf("resolveGymRef: FindGymByID(%q): %v", raw, err)
+		return "", &bot.Reply{React: "🙅", Text: tr.T("msg.gym_lookup.error")}
+	} else if ok {
+		return g.ID, nil
+	}
+
+	// 11 = limit + 1, so we can detect the "more than 10" case without
+	// fetching every match.
+	const showLimit = 10
+	matches, err := ctx.Scanner.FindGymsByName(raw, showLimit+1)
+	if err != nil {
+		log.Errorf("resolveGymRef: FindGymsByName(%q): %v", raw, err)
+		return "", &bot.Reply{React: "🙅", Text: tr.T("msg.gym_lookup.error")}
+	}
+	// The msg.gym_lookup.{none,too_many,multiple} templates wrap {0} in
+	// backticks already, so use EscapeForCode (only ` and \ are special
+	// inside a code span) rather than full Markdown escaping.
+	rawEsc := ctx.EscapeForCode(raw)
+	switch {
+	case len(matches) == 0:
+		return "", &bot.Reply{React: "🙅", Text: tr.Tf("msg.gym_lookup.none", rawEsc)}
+	case len(matches) == 1:
+		return matches[0].ID, nil
+	case len(matches) > showLimit:
+		return "", &bot.Reply{React: "🙅", Text: tr.Tf("msg.gym_lookup.too_many", rawEsc, showLimit)}
+	}
+	var b strings.Builder
+	b.WriteString(tr.Tf("msg.gym_lookup.multiple", rawEsc, len(matches)))
+	b.WriteString("\n")
+	for _, g := range matches {
+		b.WriteString("  - ")
+		b.WriteString(ctx.EscapeForReply(g.Name))
+		b.WriteString(" (")
+		b.WriteString(ctx.Code(g.ID))
+		b.WriteString(")\n")
+	}
+	return "", &bot.Reply{React: "🙅", Text: b.String()}
 }

@@ -183,7 +183,7 @@ func (ps *ProcessorService) enrichQuest(raw json.RawMessage, language string) (*
 	for _, r := range quest.Rewards {
 		rewards = append(rewards, parseQuestReward(r))
 	}
-	base, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards, enrichment.TileModeURL)
+	base, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, quest.URL, rewards, enrichment.TileModeURL)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -222,7 +222,7 @@ func (ps *ProcessorService) enrichInvasion(raw json.RawMessage, language string)
 		displayType = inv.IncidentDisplayType
 	}
 
-	base, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0, enrichment.TileModeURL)
+	base, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, inv.URL, gruntTypeID, displayType, 0, enrichment.TileModeURL)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -302,7 +302,8 @@ func (ps *ProcessorService) enrichGym(raw json.RawMessage, language string) (*en
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = ps.enricher.GymTranslate(base, teamID, 0, 0, language)
+		// Editor preview has no team-change context, so suppress previousControl* fields.
+		perLang = ps.enricher.GymTranslate(base, teamID, -1, -1, language)
 	}
 
 	return &enrichResult{

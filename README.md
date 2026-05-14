@@ -141,6 +141,34 @@ port = 3030
 
 See `config/config.example.toml` for the full list of settings (database, PVP, weather, geofence, discord, telegram, geocoding, tuning, etc.).
 
+### Discord split-bot mode (optional)
+
+By default PoracleNG runs a single Discord bot — the same token sends alerts and processes commands. Setting `[discord] command_token` splits this into two bots:
+
+- **Alerts bot** (`[discord] token`): handles outbound delivery only — DMs, channel sends, thread sends, edits, TTH-deletes. The token can still be a list if you want multiple delivery bots for rate-limit isolation.
+- **Command bot** (`[discord] command_token`): handles the gateway side — receives commands, runs reconciliation, manages roles, creates threads.
+
+Why split: cleaner branding (alerts and support can have different bot identities), narrower permission scopes (the alerts bot doesn't need the Server Members / Message Content intents), separate audit-log entries for role changes vs message edits, and resilience to one token being revoked.
+
+**Setup steps**:
+
+1. Create a second bot application in the [Discord Developer Portal](https://discord.com/developers/applications). Copy its token.
+2. Enable **Server Members Intent** and **Message Content Intent** on the *command* bot's "Bot" page.
+3. Invite **both** bots to every guild PoracleNG operates in. Grant:
+   - Command bot: `View Channel`, `Send Messages`, `Read Message History`, `Manage Roles` (its highest role must outrank any role it manages).
+   - Alerts bot: `Send Messages`, `Embed Links`, `Attach Files`, `Send Messages In Threads`, `Read Message History` on each channel it posts to.
+4. Add to `config/config.toml`:
+   ```toml
+   [discord]
+   token = ["alerts-bot-token-here"]
+   command_token = "command-bot-token-here"
+   ```
+5. Restart PoracleNG. Logs will show `Discord bot starting in split (using [discord] command_token) mode`.
+
+**What users will see**: two separate DM threads in Discord — alerts arrive from one bot, commands go to the other. Mentioning the command bot in a server channel (`@PoracleCommands !poracle`) is the way to invoke commands; the alerts bot stays silent except when posting alerts.
+
+**Failure modes**: if `command_token` is set but the gateway bot fails to connect (bad token, missing intents), PoracleNG exits at startup rather than silently falling back to single-bot mode. To downgrade back to single-bot operation, remove the `command_token` line and restart.
+
 ### Config Data Files
 
 Some features use JSON data files (DTS templates, pokemon aliases, etc.). These are loaded from `config/` with automatic fallback to bundled defaults:
@@ -154,7 +182,7 @@ Some features use JSON data files (DTS templates, pokemon aliases, etc.). These 
 | `geofences/*.json` | Geofence definitions | Yes (`fallbacks/geofence.json`) |
 | `dts/` | Additional DTS files (merged with dts.json) | No |
 | `broadcast.json` | Broadcast message templates | No |
-| `channelTemplate.json` | Discord channel auto-creation templates | No |
+| `channelTemplate.json` | Discord channel auto-creation templates ([AUTOCREATE.md](AUTOCREATE.md)) | No |
 | `customMaps/` | Custom static map definitions | No |
 | `emoji.json` | Custom emoji mappings | No |
 | `custom.<lang>.json` | Custom locale translations | No |

@@ -46,7 +46,9 @@ func newTestTracker(t *testing.T) (*MessageTracker, *mockSender) {
 	mock := &mockSender{}
 	senders := map[string]Sender{"discord": mock}
 	mt := NewMessageTracker(t.TempDir(), senders)
-	t.Cleanup(func() { mt.cache.Stop() })
+	t.Cleanup(func() {
+		mt.cache.Stop()
+	})
 	return mt, mock
 }
 
@@ -229,6 +231,138 @@ func TestTrackerLoadExpiredClean(t *testing.T) {
 	// Should NOT be in the cache
 	if mt2.LookupEdit("clean:discord:user:u1:expired-msg") != nil {
 		t.Error("expired entry should not be in cache after load")
+	}
+}
+
+func TestLookupReplyReturnsLatest(t *testing.T) {
+	mt, _ := newTestTracker(t)
+
+	mt.Track("edit-1", &TrackedMessage{
+		SentID: "msg-1", Target: "targetA", Type: "discord:user",
+		ReplyKey: "rk1",
+	}, time.Hour)
+	mt.Track("edit-2", &TrackedMessage{
+		SentID: "msg-2", Target: "targetA", Type: "discord:user",
+		ReplyKey: "rk1",
+	}, time.Hour)
+	if got := mt.LookupReply("rk1", "targetA"); got != "msg-2" {
+		t.Fatalf("LookupReply = %q, want msg-2", got)
+	}
+	if got := mt.LookupReply("rk1", "targetB"); got != "" {
+		t.Errorf("LookupReply cross-target = %q, want empty", got)
+	}
+	if got := mt.LookupReply("rk-other", "targetA"); got != "" {
+		t.Errorf("LookupReply wrong key = %q, want empty", got)
+	}
+	// Empty replyKey — never matches, defensive against bugs.
+	if got := mt.LookupReply("", "targetA"); got != "" {
+		t.Errorf("LookupReply empty key = %q, want empty", got)
+	}
+}
+
+func TestLookupReplyTargets_EnumeratesAllAndEvicts(t *testing.T) {
+	mt, _ := newTestTracker(t)
+
+	mt.Track("edit-1", &TrackedMessage{
+		SentID: "msg-1", Target: "userA", Type: "discord:user", ReplyKey: "enc-1",
+	}, time.Hour)
+	mt.Track("edit-2", &TrackedMessage{
+		SentID: "msg-2", Target: "userB", Type: "discord:user", ReplyKey: "enc-1",
+	}, time.Hour)
+	mt.Track("edit-3", &TrackedMessage{
+		SentID: "msg-3", Target: "userC", Type: "discord:user", ReplyKey: "enc-other",
+	}, time.Hour)
+
+	got := mt.LookupReplyTargets("enc-1")
+	if len(got) != 2 {
+		t.Fatalf("LookupReplyTargets = %v, want 2 targets (userA + userB)", got)
+	}
+	gotSet := map[string]bool{got[0]: true, got[1]: true}
+	if !gotSet["userA"] || !gotSet["userB"] {
+		t.Errorf("LookupReplyTargets missing expected targets, got %v", got)
+	}
+
+	// Cross-key: enc-other should only return userC.
+	if got := mt.LookupReplyTargets("enc-other"); len(got) != 1 || got[0] != "userC" {
+		t.Errorf("LookupReplyTargets(enc-other) = %v, want [userC]", got)
+	}
+
+	// Empty key returns nil (defensive).
+	if got := mt.LookupReplyTargets(""); got != nil {
+		t.Errorf("LookupReplyTargets(\"\") = %v, want nil", got)
+	}
+
+	// Unknown key returns nil.
+	if got := mt.LookupReplyTargets("does-not-exist"); got != nil {
+		t.Errorf("LookupReplyTargets unknown = %v, want nil", got)
+	}
+}
+
+// TestLookupReplyTargets_EvictedEntriesDropFromReverseIndex pins the
+// reverse-index maintenance: when a replyIndex entry expires, its
+// reverse-index slot must be removed too, otherwise LookupReplyTargets
+// would return stale targets pointing at SentIDs whose underlying
+// messages have already been clean-deleted.
+func TestLookupReplyTargets_EvictedEntriesDropFromReverseIndex(t *testing.T) {
+	mt, _ := newTestTracker(t)
+
+	mt.Track("edit-short", &TrackedMessage{
+		SentID: "msg-short", Target: "userA", Type: "discord:user", ReplyKey: "enc-evict",
+	}, 50*time.Millisecond)
+	mt.Track("edit-long", &TrackedMessage{
+		SentID: "msg-long", Target: "userB", Type: "discord:user", ReplyKey: "enc-evict",
+	}, time.Hour)
+
+	if got := mt.LookupReplyTargets("enc-evict"); len(got) != 2 {
+		t.Fatalf("pre-eviction LookupReplyTargets = %v, want 2", got)
+	}
+
+	time.Sleep(150 * time.Millisecond)
+
+	// userA's entry should have expired; userB should remain.
+	got := mt.LookupReplyTargets("enc-evict")
+	if len(got) != 1 || got[0] != "userB" {
+		t.Errorf("post-eviction LookupReplyTargets = %v, want [userB] only", got)
+	}
+}
+
+func TestLookupReplyEvictionAlignedWithEditCache(t *testing.T) {
+	mt, _ := newTestTracker(t)
+	mt.Track("edit-x", &TrackedMessage{
+		SentID: "msg-x", Target: "u1", ReplyKey: "rk-evict",
+	}, 50*time.Millisecond)
+
+	if got := mt.LookupReply("rk-evict", "u1"); got != "msg-x" {
+		t.Fatalf("pre-eviction LookupReply = %q, want msg-x", got)
+	}
+	time.Sleep(150 * time.Millisecond)
+	if got := mt.LookupReply("rk-evict", "u1"); got != "" {
+		t.Errorf("post-eviction LookupReply = %q, want empty", got)
+	}
+}
+
+func TestTrackerSaveLoadPreservesReplyIndex(t *testing.T) {
+	dir := t.TempDir()
+	mock := &mockSender{}
+	senders := map[string]Sender{"discord": mock}
+
+	mt1 := NewMessageTracker(dir, senders)
+	mt1.Track("edit-r", &TrackedMessage{
+		SentID: "msg-r", Target: "u1", Type: "discord:user", ReplyKey: "rk-save",
+	}, time.Hour)
+	if err := mt1.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	mt1.cache.Stop()
+
+	mt2 := NewMessageTracker(dir, senders)
+	if err := mt2.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	defer mt2.cache.Stop()
+
+	if got := mt2.LookupReply("rk-save", "u1"); got != "msg-r" {
+		t.Errorf("LookupReply after Load = %q, want msg-r", got)
 	}
 }
 

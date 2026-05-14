@@ -59,7 +59,10 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	// Resolve pokemon list
-	monsterList := c.resolveMonsters(ctx, parsed)
+	monsterList, formReply := c.resolveMonsters(ctx, parsed)
+	if formReply != nil {
+		return []bot.Reply{*formReply}
+	}
 
 	// Reject bare "!track everything" with no meaningful filters for non-admins.
 	// Filters like IV, CP, level, PVP league, type, or gender meaningfully narrow results.
@@ -130,27 +133,34 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	for _, mon := range monsterList {
 		for _, pe := range pvpList {
 			insert = append(insert, db.MonsterTrackingAPI{
-				ID:               ctx.TargetID,
-				ProfileNo:        ctx.ProfileNo,
-				PokemonID:        mon.PokemonID,
-				Form:             mon.Form,
-				Ping:             pings,
-				Distance:         filters.distance,
-				MinIV:            filters.minIV,
-				MaxIV:            filters.maxIV,
-				MinCP:            filters.minCP,
-				MaxCP:            filters.maxCP,
-				MinLevel:         filters.minLevel,
-				MaxLevel:         filters.maxLevel,
-				ATK:              filters.atk,
-				DEF:              filters.def,
-				STA:              filters.sta,
-				MaxATK:           filters.maxAtk,
-				MaxDEF:           filters.maxDef,
-				MaxSTA:           filters.maxSta,
-				Gender:           filters.gender,
-				MinWeight:        filters.minWeight,
-				MaxWeight:        filters.maxWeight,
+				ID:        ctx.TargetID,
+				ProfileNo: ctx.ProfileNo,
+				PokemonID: mon.PokemonID,
+				Form:      mon.Form,
+				Ping:      pings,
+				Distance:  filters.distance,
+				MinIV:     filters.minIV,
+				MaxIV:     filters.maxIV,
+				MinCP:     filters.minCP,
+				MaxCP:     filters.maxCP,
+				MinLevel:  filters.minLevel,
+				MaxLevel:  filters.maxLevel,
+				ATK:       filters.atk,
+				DEF:       filters.def,
+				STA:       filters.sta,
+				MaxATK:    filters.maxAtk,
+				MaxDEF:    filters.maxDef,
+				MaxSTA:    filters.maxSta,
+				Gender:    filters.gender,
+				// !track no longer accepts weight constraints, but
+				// existing rows with non-default values still filter at
+				// match time so old rules don't fire spuriously when
+				// Golbat's unreliable weight goes missing. To keep new
+				// rules matching every pokemon regardless of weight,
+				// insert the matcher-no-op range explicitly: MaxWeight 0
+				// would otherwise reject every encountered pokemon.
+				MinWeight:        0,
+				MaxWeight:        9000000,
 				MinTime:          filters.minTime,
 				Rarity:           filters.rarity,
 				MaxRarity:        filters.maxRarity,
@@ -224,8 +234,12 @@ func trackParams(ctx *bot.CommandContext) []bot.ParamDef {
 		{Type: bot.ParamPrefixSingle, Key: "arg.prefix.maxdef"},
 		{Type: bot.ParamPrefixRange, Key: "arg.prefix.sta"},
 		{Type: bot.ParamPrefixSingle, Key: "arg.prefix.maxsta"},
-		{Type: bot.ParamPrefixRange, Key: "arg.prefix.weight"},
-		{Type: bot.ParamPrefixSingle, Key: "arg.prefix.maxweight"},
+		// weight / maxweight removed — Golbat's weight field is
+		// observer-specific and reset to null on display change, so
+		// tracking by weight produced unreliable results. Existing rows
+		// with min_weight still filter at match time (see
+		// matching/pokemon.go) so previously-added rules don't fire
+		// spuriously when weight is missing.
 		{Type: bot.ParamPrefixRange, Key: "arg.prefix.rarity"},
 		{Type: bot.ParamPrefixSingle, Key: "arg.prefix.maxrarity"},
 		{Type: bot.ParamPrefixRange, Key: "arg.prefix.size"},
@@ -281,8 +295,6 @@ type trackFilters struct {
 	maxDef    int
 	maxSta    int
 	gender    int
-	minWeight int
-	maxWeight int
 	minTime   int
 	rarity    int
 	maxRarity int
@@ -301,7 +313,6 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 		maxAtk:    15,
 		maxDef:    15,
 		maxSta:    15,
-		maxWeight: 9000000,
 		rarity:    -1,
 		maxRarity: 6,
 		size:      -1,
@@ -404,16 +415,7 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 		f.maxSta = v
 	}
 
-	// Weight
-	if r, ok := parsed.Ranges["weight"]; ok {
-		f.minWeight = r.Min
-		if r.HasMax {
-			f.maxWeight = r.Max
-		}
-	}
-	if v, ok := parsed.Singles["maxweight"]; ok {
-		f.maxWeight = v
-	}
+	// Weight: parsing removed — see parameterDefinitions comment above.
 
 	// Rarity
 	if r, ok := parsed.Ranges["rarity"]; ok {
@@ -518,7 +520,7 @@ func (c *TrackCommand) parsePVP(ctx *bot.CommandContext, parsed *bot.ParsedArgs)
 	return entries
 }
 
-func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.ResolvedPokemon {
+func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.ParsedArgs) ([]bot.ResolvedPokemon, *bot.Reply) {
 	// "everything" keyword
 	if parsed.HasKeyword("arg.everything") {
 		_, hasForm := parsed.Strings["form"]
@@ -536,20 +538,19 @@ func (c *TrackCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 					monsters = append(monsters, bot.ResolvedPokemon{PokemonID: key.ID, Form: 0})
 				}
 			}
-			if formName, ok := parsed.Strings["form"]; ok {
-				monsters = filterByForm(ctx, monsters, formName)
+			monsters, reply := applyFormFilter(ctx, monsters, parsed)
+			if reply != nil {
+				return nil, reply
 			}
-			return filterByGenAndType(ctx, monsters, parsed)
+			return filterByGenAndType(ctx, monsters, parsed), nil
 		}
 		// Single catch-all entry
-		return []bot.ResolvedPokemon{{PokemonID: 0, Form: 0}}
+		return []bot.ResolvedPokemon{{PokemonID: 0, Form: 0}}, nil
 	}
 
-	monsters := parsed.Pokemon
-
-	if formName, ok := parsed.Strings["form"]; ok {
-		monsters = filterByForm(ctx, monsters, formName)
+	monsters, reply := applyFormFilter(ctx, parsed.Pokemon, parsed)
+	if reply != nil {
+		return nil, reply
 	}
-
-	return filterByGenAndType(ctx, monsters, parsed)
+	return filterByGenAndType(ctx, monsters, parsed), nil
 }

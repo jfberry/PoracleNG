@@ -477,3 +477,76 @@ func TestDiscordImageUpload(t *testing.T) {
 		t.Errorf("expected sent ID 'channel_img:msg_img', got %q", sent.ID)
 	}
 }
+
+// TestDiscordPayloadIncludesMessageReference proves the Discord sender
+// injects message_reference into the JSON body when Job.ReplyToID is set.
+// fail_if_not_exists must be false so a deleted parent gracefully degrades
+// to a normal post rather than 400'ing.
+func TestDiscordPayloadIncludesMessageReference(t *testing.T) {
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"id":"msg-new"}`)) //nolint:errcheck
+	}))
+	defer server.Close()
+
+	ds := newTestDiscordSender(server.URL)
+	job := &Job{
+		Target:    "channel456",
+		Type:      "discord:channel",
+		Message:   json.RawMessage(`{"content":"reply"}`),
+		ReplyToID: "channel456:msg-prior", // Discord sentID format
+	}
+
+	if _, err := ds.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(gotBody, &body); err != nil {
+		t.Fatalf("body is not JSON: %v (body=%s)", err, gotBody)
+	}
+	ref, ok := body["message_reference"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected message_reference in body, got: %s", gotBody)
+	}
+	if ref["message_id"] != "msg-prior" {
+		t.Errorf("expected message_id 'msg-prior', got %v", ref["message_id"])
+	}
+	if ref["fail_if_not_exists"] != false {
+		t.Errorf("expected fail_if_not_exists false, got %v", ref["fail_if_not_exists"])
+	}
+}
+
+// TestDiscordWebhookSkipsMessageReference proves webhooks do NOT inject
+// message_reference — Discord webhook endpoints reject reply chains, so
+// silently dropping the field is correct.
+func TestDiscordWebhookSkipsMessageReference(t *testing.T) {
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"id":"msg-wh"}`)) //nolint:errcheck
+	}))
+	defer server.Close()
+
+	webhookURL := server.URL + "/api/webhooks/123/abc"
+	ds := newTestDiscordSender(server.URL)
+	job := &Job{
+		Target:    webhookURL,
+		Type:      "webhook",
+		Message:   json.RawMessage(`{"content":"hi"}`),
+		ReplyToID: webhookURL + ":msg-prior",
+	}
+
+	if _, err := ds.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(string(gotBody), "message_reference") {
+		t.Errorf("webhook body should NOT contain message_reference, got: %s", gotBody)
+	}
+}

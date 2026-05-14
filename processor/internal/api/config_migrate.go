@@ -9,20 +9,20 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/backup"
 	"github.com/pokemon/poracleng/processor/internal/config"
 )
 
 // MigrateResponse describes the result of a config migration.
 type MigrateResponse struct {
-	Status     string   `json:"status"`
-	Backup     string   `json:"backup"`
-	FieldsKept []string `json:"fields_kept"`
+	Status      string   `json:"status"`
+	Backup      string   `json:"backup"`
+	FieldsKept  []string `json:"fields_kept"`
 	FieldsMoved []string `json:"fields_moved"`
 }
 
@@ -52,10 +52,9 @@ func HandleConfigMigrate(deps ConfigDeps) gin.HandlerFunc {
 			return
 		}
 
-		// 2. Backup the original
-		timestamp := time.Now().Format("2006-01-02_150405")
-		backupPath := filepath.Join(deps.ConfigDir, "config.toml.bak."+timestamp)
-		if err := os.WriteFile(backupPath, rawTOML, 0644); err != nil {
+		// 2. Backup the original under config/backups/.
+		backupRel, err := backup.Save(deps.ConfigDir, "config.toml")
+		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "write backup: " + err.Error()})
 			return
 		}
@@ -130,7 +129,7 @@ func HandleConfigMigrate(deps ConfigDeps) gin.HandlerFunc {
 
 		var slimBuf bytes.Buffer
 		slimBuf.WriteString("# PoracleNG config — slimmed by /api/config/migrate\n")
-		slimBuf.WriteString("# Original backed up to: " + filepath.Base(backupPath) + "\n")
+		slimBuf.WriteString("# Original backed up to: " + backupRel + "\n")
 		slimBuf.WriteString("# Web-editable settings live in config/overrides.json — view and edit them via the DTS Editor.\n")
 		slimBuf.WriteString("# This file should now contain only database/connection/token settings.\n\n")
 		if err := toml.NewEncoder(&slimBuf).Encode(slim); err != nil {
@@ -152,11 +151,11 @@ func HandleConfigMigrate(deps ConfigDeps) gin.HandlerFunc {
 		sort.Strings(movedPaths)
 		sort.Strings(keptPaths)
 		log.Infof("config: migrated %d field(s) to overrides.json, kept %d in config.toml (backup: %s)",
-			len(movedPaths), len(keptPaths), filepath.Base(backupPath))
+			len(movedPaths), len(keptPaths), backupRel)
 
 		c.JSON(http.StatusOK, MigrateResponse{
 			Status:      "ok",
-			Backup:      filepath.Base(backupPath),
+			Backup:      backupRel,
 			FieldsKept:  keptPaths,
 			FieldsMoved: movedPaths,
 		})
@@ -286,4 +285,3 @@ func collectFieldPaths(prefix string, m map[string]any, out *[]string) {
 		*out = append(*out, path)
 	}
 }
-

@@ -59,15 +59,14 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
 		matched, matchedAreas := ps.fortMatcher.Match(data, st)
-		metrics.MatchingDuration.WithLabelValues("fort_update").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("fort_update", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("fort_update").Inc()
 			metrics.MatchedUsers.WithLabelValues("fort_update").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Fort update %s (%s, %s) areas(%s) and %d humans cared",
 				fort.FortName(), fort.FortType(), fort.ChangeType, areaNames(matchedAreas), len(matched))
@@ -86,7 +85,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 				WebhookFields: webhookFields,
 				MatchedUsers:  matched,
 				MatchedAreas:  matchedAreas,
-				TilePending:   tilePending,
+				TileGate:      ps.newTileGate(tilePending),
 				LogReference:  fortID,
 			}
 		} else {

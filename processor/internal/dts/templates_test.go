@@ -3,6 +3,7 @@ package dts
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -139,6 +140,73 @@ func TestTemplateSelectionChain(t *testing.T) {
 	tmpl = ts2.Get("raid", "discord", "1", "en")
 	if tmpl == nil {
 		// This is expected to be nil since there's no discord entry
+	}
+}
+
+// TestTemplateSelection_PrefersDefaultLocaleOverAnyLanguage pins the
+// regression behind a real-world incident: a user had language="nl" in
+// the humans table, no NL templates are shipped, and the operator's
+// [general] locale was "en" — but the user kept receiving DE messages.
+//
+// Root cause: when steps 1–4 of the selection chain miss, step 6 ("any
+// language — last resort") iterates defaults and the LAST one wins.
+// With both EN and DE default entries loaded, DE landed last, so DE
+// won. Step 5 (introduced for this fix) prefers the operator's chosen
+// defaultLocale over arbitrary-last when both are available.
+func TestTemplateSelection_PrefersDefaultLocaleOverAnyLanguage(t *testing.T) {
+	configDir := t.TempDir()
+	// Two default entries — EN and DE — for the same type/platform/id.
+	// DE is intentionally listed last so the pre-fix step-5 ("any
+	// language") would pick it.
+	writeDTS(t, configDir, `[
+		{"type":"monster","id":"1","platform":"discord","language":"en","default":true,"template":{"content":"default-en"}},
+		{"type":"monster","id":"1","platform":"discord","language":"de","default":true,"template":{"content":"default-de"}}
+	]`)
+
+	ts, err := LoadTemplates(configDir, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts.SetDefaultLocale("en")
+
+	// User has lang="nl" — no NL templates shipped. With the fix, step
+	// 5 prefers EN (the default locale) over the last-loaded DE.
+	tmpl := ts.Get("monster", "discord", "1", "nl")
+	if tmpl == nil {
+		t.Fatal("expected a template via default-locale fallback, got nil")
+	}
+	src := ts.sourceCache[cacheKey("monster", "discord", "1", "nl")]
+	if src == "" {
+		t.Fatal("expected source cache to be populated after Get")
+	}
+	if !strings.Contains(src, "default-en") {
+		t.Errorf("expected EN template (default-en), got: %s", src)
+	}
+}
+
+// TestTemplateSelection_AnyLanguageFallbackWhenDefaultLocaleAbsent
+// covers the case where the operator's defaultLocale isn't shipped
+// either: the chain must still find a template via step 6 rather than
+// returning nil.
+func TestTemplateSelection_AnyLanguageFallbackWhenDefaultLocaleAbsent(t *testing.T) {
+	configDir := t.TempDir()
+	writeDTS(t, configDir, `[
+		{"type":"monster","id":"1","platform":"discord","language":"de","default":true,"template":{"content":"default-de"}}
+	]`)
+
+	ts, err := LoadTemplates(configDir, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts.SetDefaultLocale("en") // EN not shipped
+
+	tmpl := ts.Get("monster", "discord", "1", "nl")
+	if tmpl == nil {
+		t.Fatal("expected fallback to DE via step-6 any-language path, got nil")
+	}
+	src := ts.sourceCache[cacheKey("monster", "discord", "1", "nl")]
+	if !strings.Contains(src, "default-de") {
+		t.Errorf("expected DE template (only one shipped), got: %s", src)
 	}
 }
 
@@ -552,4 +620,3 @@ func TestFallbackDtsSubdir(t *testing.T) {
 		t.Error("fallbacks/dts/help/track.json entry should load for telegram (platform wildcard)")
 	}
 }
-

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strconv"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/go-telegram/bot/models"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -20,8 +20,10 @@ var (
 )
 
 // handleChannel handles the /channel command in Telegram.
-// Telegram groups use telegram:group type; named channels use telegram:channel (admin only).
-func (b *Bot) handleChannel(m *tgbotapi.Message, args []string) {
+// Telegram groups use telegram:group type; forum topics use telegram:topic
+// with a composite "<chatID>:<threadID>" id; named channels use
+// telegram:channel (admin only).
+func (b *Bot) handleChannel(m *models.Message, threadID int, args []string) {
 	if m.From == nil {
 		return
 	}
@@ -81,15 +83,13 @@ func (b *Bot) handleChannel(m *tgbotapi.Message, args []string) {
 	isNamedChannel := false
 
 	if channelName != "" && channelIDStr == "" || channelName == "" && channelIDStr != "" {
-		msg := tgbotapi.NewMessage(chatID, "To add a channel, provide both a name and a channel id")
-		b.api.Send(msg)
+		_, _ = b.sendTopicMessage(chatID, threadID, "To add a channel, provide both a name and a channel id")
 		return
 	}
 
 	if channelName != "" && channelIDStr != "" {
 		if !fullAdmin {
-			msg := tgbotapi.NewMessage(chatID, "You are not a full poracle administrator")
-			b.api.Send(msg)
+			_, _ = b.sendTopicMessage(chatID, threadID, "You are not a full poracle administrator")
 			return
 		}
 		targetID = channelIDStr
@@ -99,29 +99,39 @@ func (b *Bot) handleChannel(m *tgbotapi.Message, args []string) {
 	}
 
 	if !isNamedChannel {
-		if m.Chat.Type == "private" {
-			msg := tgbotapi.NewMessage(chatID, "To add a group, please send /channel add in the group")
-			b.api.Send(msg)
+		if m.Chat.Type == models.ChatTypePrivate {
+			_, _ = b.sendTopicMessage(chatID, 0, "To add a group, please send /channel add in the group")
 			return
 		}
-		targetID = formatInt64(m.Chat.ID)
-		targetName = m.Chat.Title
-		targetType = bot.TypeTelegramGroup
+		if threadID > 0 {
+			// Run inside a forum topic — register the topic itself
+			// rather than the parent supergroup.
+			targetID = composeTopicChannelID(m.Chat.ID, threadID)
+			topicName := m.Chat.Title
+			if topicName == "" {
+				topicName = "topic"
+			}
+			targetName = fmt.Sprintf("%s [topic %d]", topicName, threadID)
+			targetType = bot.TypeTelegramTopic
+		} else {
+			targetID = formatInt64(m.Chat.ID)
+			targetName = m.Chat.Title
+			targetType = bot.TypeTelegramGroup
+		}
 	}
 
 	if hasAdd {
-		b.handleChannelAdd(chatID, targetID, targetName, targetType, communityList, areaRestriction)
+		b.handleChannelAdd(chatID, threadID, targetID, targetName, targetType, communityList, areaRestriction)
 	} else if hasRemove {
-		b.handleChannelRemove(chatID, targetID, targetName, targetType)
+		b.handleChannelRemove(chatID, threadID, targetID, targetName, targetType)
 	}
 }
 
-func (b *Bot) handleChannelAdd(chatID int64, targetID, targetName, targetType string, communityList, areaRestriction []string) {
+func (b *Bot) handleChannelAdd(chatID int64, threadID int, targetID, targetName, targetType string, communityList, areaRestriction []string) {
 	// Check if already registered.
 	existing, _ := b.Humans.Get(targetID)
 	if existing != nil {
-		msg := tgbotapi.NewMessage(chatID, "👌")
-		b.api.Send(msg)
+		_, _ = b.sendTopicMessage(chatID, threadID, "👌")
 		return
 	}
 
@@ -136,8 +146,7 @@ func (b *Bot) handleChannelAdd(chatID int64, targetID, targetName, targetType st
 
 	if err := b.Humans.Create(h); err != nil {
 		log.Errorf("telegram bot: create human for %s %s: %v", targetType, targetID, err)
-		msg := tgbotapi.NewMessage(chatID, "Failed to register, check logs")
-		b.api.Send(msg)
+		_, _ = b.sendTopicMessage(chatID, threadID, "Failed to register, check logs")
 		return
 	}
 
@@ -146,32 +155,27 @@ func (b *Bot) handleChannelAdd(chatID int64, targetID, targetName, targetType st
 		log.Warnf("telegram bot: create default profile for %s: %v", targetID, err)
 	}
 
-	msg := tgbotapi.NewMessage(chatID, "✅")
-	b.api.Send(msg)
+	_, _ = b.sendTopicMessage(chatID, threadID, "✅")
 
 	if b.ReloadFunc != nil {
 		b.ReloadFunc()
 	}
 }
 
-func (b *Bot) handleChannelRemove(chatID int64, targetID, targetName, targetType string) {
+func (b *Bot) handleChannelRemove(chatID int64, threadID int, targetID, targetName, targetType string) {
 	existing, _ := b.Humans.Get(targetID)
 	if existing == nil {
-		msg := tgbotapi.NewMessage(chatID,
-			fmt.Sprintf("%s does not seem to be registered. Add it with /channel add", targetID))
-		b.api.Send(msg)
+		_, _ = b.sendTopicMessage(chatID, threadID, fmt.Sprintf("%s does not seem to be registered. Add it with /channel add", targetID))
 		return
 	}
 
 	if err := db.DeleteHumanAndTracking(b.DB, targetID); err != nil {
 		log.Errorf("telegram bot: delete %s %s: %v", targetType, targetID, err)
-		msg := tgbotapi.NewMessage(chatID, "Failed to remove, check logs")
-		b.api.Send(msg)
+		_, _ = b.sendTopicMessage(chatID, threadID, "Failed to remove, check logs")
 		return
 	}
 
-	msg := tgbotapi.NewMessage(chatID, "✅")
-	b.api.Send(msg)
+	_, _ = b.sendTopicMessage(chatID, threadID, "✅")
 
 	if b.ReloadFunc != nil {
 		b.ReloadFunc()

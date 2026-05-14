@@ -146,6 +146,52 @@ func TestMonsterRowText_WithGenderAndTime(t *testing.T) {
 	}
 }
 
+// TestMonsterRowText_LegacyWeightShown verifies that a tracking row carrying
+// a non-default weight range — !track no longer accepts these, but rows from
+// older PoracleJS or pre-removal !track invocations may still have them — is
+// surfaced in the row text so users can see the legacy filter is still
+// suppressing matches and remove the rule via !untrack id:N.
+func TestMonsterRowText_LegacyWeightShown(t *testing.T) {
+	g := testGenerator(t)
+	tr := g.Translations.For("en")
+
+	// Default-shape row with an explicit weight constraint added.
+	m := &db.MonsterTracking{
+		PokemonID: 1, Form: 0, Template: "1",
+		MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9000,
+		MinLevel: 0, MaxLevel: 55,
+		MaxATK: 15, MaxDEF: 15, MaxSTA: 15,
+		MinWeight: 5000, MaxWeight: 9000000,
+		MaxSize: 5, MaxRarity: 6,
+	}
+	result := g.MonsterRowText(tr, m)
+	// Stored values render verbatim (DB stores webhook-kg × 1000, i.e. grams,
+	// matching what the user typed at !track weight:N-M).
+	if !strings.Contains(result, "weight: 5000-9000000g") {
+		t.Errorf("expected weight range to be rendered, got: %s", result)
+	}
+	if !strings.Contains(result, "legacy filter") {
+		t.Errorf("expected legacy-filter warning marker, got: %s", result)
+	}
+
+	// A row with the no-op range (0..9000000) must not render the weight line.
+	m.MinWeight = 0
+	m.MaxWeight = 9000000
+	result = g.MonsterRowText(tr, m)
+	if strings.Contains(result, "weight:") {
+		t.Errorf("no-op weight range must not render, got: %s", result)
+	}
+
+	// A row left at zero defaults (newly inserted by post-removal !track)
+	// also must not render the weight line.
+	m.MinWeight = 0
+	m.MaxWeight = 0
+	result = g.MonsterRowText(tr, m)
+	if strings.Contains(result, "weight:") {
+		t.Errorf("zero-default weight range must not render, got: %s", result)
+	}
+}
+
 func TestRaidRowText_GenericLevel(t *testing.T) {
 	g := testGenerator(t)
 	tr := g.Translations.For("en")

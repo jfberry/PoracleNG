@@ -14,7 +14,7 @@
         },
         {
           "name": "Review and remove tracking",
-          "value": "`{{prefix}}help tracked` — list everything you're tracking\n`{{prefix}}help untrack` — remove tracking entries\n`{{prefix}}help script` — export your tracking as commands"
+          "value": "`{{prefix}}help tracked` — list everything you're tracking\n`{{prefix}}help untrack` — remove tracking entries\n`{{prefix}}help summary` — buffer alerts and deliver grouped on a schedule\n`{{prefix}}help script` — export your tracking as commands"
         },
         {
           "name": "Your account and alerts",

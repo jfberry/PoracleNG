@@ -10,10 +10,10 @@ import (
 // It delegates to type-specific select/insert functions since each type has
 // different columns and COALESCE defaults.
 type sqlTrackingStore[T any] struct {
-	database  *sqlx.DB
-	table     string
-	selectFn  func(*sqlx.DB, string, int) ([]T, error)
-	insertFn  func(*sqlx.DB, *T) (int64, error)
+	database *sqlx.DB
+	table    string
+	selectFn func(*sqlx.DB, string, int) ([]T, error)
+	insertFn func(*sqlx.DB, *T) (int64, error)
 }
 
 func (s *sqlTrackingStore[T]) SelectByIDProfile(id string, profileNo int) ([]T, error) {
@@ -157,24 +157,23 @@ func NewTrackingStores(database *sqlx.DB) *TrackingStores {
 // UID accessor functions for each tracking type.
 // These are needed by DiffAndClassify/ApplyDiff since generics can't access struct fields.
 
-func EggGetUID(e *db.EggTrackingAPI) int64         { return e.UID }
-func EggSetUID(e *db.EggTrackingAPI, uid int64)     { e.UID = uid }
-func RaidGetUID(r *db.RaidTrackingAPI) int64        { return r.UID }
-func RaidSetUID(r *db.RaidTrackingAPI, uid int64)   { r.UID = uid }
-func MonsterGetUID(m *db.MonsterTrackingAPI) int64   { return m.UID }
-func MonsterSetUID(m *db.MonsterTrackingAPI, uid int64) { m.UID = uid }
-func QuestGetUID(q *db.QuestTrackingAPI) int64      { return q.UID }
-func QuestSetUID(q *db.QuestTrackingAPI, uid int64)  { q.UID = uid }
-func InvasionGetUID(i *db.InvasionTrackingAPI) int64 { return i.UID }
-func InvasionSetUID(i *db.InvasionTrackingAPI, uid int64) { i.UID = uid }
-func LureGetUID(l *db.LureTrackingAPI) int64        { return l.UID }
-func LureSetUID(l *db.LureTrackingAPI, uid int64)   { l.UID = uid }
-func NestGetUID(n *db.NestTrackingAPI) int64        { return n.UID }
-func NestSetUID(n *db.NestTrackingAPI, uid int64)   { n.UID = uid }
-func GymGetUID(g *db.GymTrackingAPI) int64          { return g.UID }
-func GymSetUID(g *db.GymTrackingAPI, uid int64)     { g.UID = uid }
-func FortGetUID(f *db.FortTrackingAPI) int64        { return f.UID }
-func FortSetUID(f *db.FortTrackingAPI, uid int64)   { f.UID = uid }
-func MaxbattleGetUID(m *db.MaxbattleTrackingAPI) int64  { return m.UID }
+func EggGetUID(e *db.EggTrackingAPI) int64                  { return e.UID }
+func EggSetUID(e *db.EggTrackingAPI, uid int64)             { e.UID = uid }
+func RaidGetUID(r *db.RaidTrackingAPI) int64                { return r.UID }
+func RaidSetUID(r *db.RaidTrackingAPI, uid int64)           { r.UID = uid }
+func MonsterGetUID(m *db.MonsterTrackingAPI) int64          { return m.UID }
+func MonsterSetUID(m *db.MonsterTrackingAPI, uid int64)     { m.UID = uid }
+func QuestGetUID(q *db.QuestTrackingAPI) int64              { return q.UID }
+func QuestSetUID(q *db.QuestTrackingAPI, uid int64)         { q.UID = uid }
+func InvasionGetUID(i *db.InvasionTrackingAPI) int64        { return i.UID }
+func InvasionSetUID(i *db.InvasionTrackingAPI, uid int64)   { i.UID = uid }
+func LureGetUID(l *db.LureTrackingAPI) int64                { return l.UID }
+func LureSetUID(l *db.LureTrackingAPI, uid int64)           { l.UID = uid }
+func NestGetUID(n *db.NestTrackingAPI) int64                { return n.UID }
+func NestSetUID(n *db.NestTrackingAPI, uid int64)           { n.UID = uid }
+func GymGetUID(g *db.GymTrackingAPI) int64                  { return g.UID }
+func GymSetUID(g *db.GymTrackingAPI, uid int64)             { g.UID = uid }
+func FortGetUID(f *db.FortTrackingAPI) int64                { return f.UID }
+func FortSetUID(f *db.FortTrackingAPI, uid int64)           { f.UID = uid }
+func MaxbattleGetUID(m *db.MaxbattleTrackingAPI) int64      { return m.UID }
 func MaxbattleSetUID(m *db.MaxbattleTrackingAPI, uid int64) { m.UID = uid }
-

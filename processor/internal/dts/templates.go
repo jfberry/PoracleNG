@@ -13,6 +13,8 @@ import (
 
 	raymond "github.com/mailgun/raymond/v2"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/backup"
 )
 
 // DTSEntry represents a single DTS template entry from the dts.json file.
@@ -68,6 +70,13 @@ type TemplateStore struct {
 	partials    map[string]string
 	configDir   string
 	fallbackDir string
+	// defaultLocale is the configured [general] locale, used as a last
+	// resort before "any language" in selectEntry. Without it, a user
+	// whose language has no template (e.g. legacy lang="nl" with no NL
+	// templates shipped) would silently get whichever default entry was
+	// loaded last — sometimes a non-default language like DE instead of
+	// the operator's chosen EN. Set via SetDefaultLocale after load.
+	defaultLocale string
 }
 
 // LoadTemplates reads dts.json from configDir (preferred) or fallbackDir.
@@ -88,6 +97,15 @@ func LoadTemplates(configDir, fallbackDir string) (*TemplateStore, error) {
 	}
 	ts.entries = entries
 	return ts, nil
+}
+
+// SetDefaultLocale records the operator's configured [general] locale so
+// selectEntry can prefer it over a random "any language" match when the
+// user's own language isn't shipped. Pass "" to disable that preference.
+func (ts *TemplateStore) SetDefaultLocale(locale string) {
+	ts.mu.Lock()
+	ts.defaultLocale = locale
+	ts.mu.Unlock()
 }
 
 // loadPartials loads Handlebars partials from partials.json.
@@ -371,11 +389,22 @@ func cacheKey(templateType, platform, templateID, language string) string {
 // first over user entries only, then — if nothing matched — over readonly
 // entries. Within each pass, the priority order is:
 //
-//  1. type + id + platform + language  (exact)
-//  2. type + id + platform              (entry has empty language)
+//  1. type + id + platform + language    (exact)
+//  2. type + id + platform                (entry has empty language)
 //  3. default + type + platform + language
-//  4. default + type + platform         (entry has empty language)
-//  5. default + type + platform         (any language — last resort)
+//  4. default + type + platform           (entry has empty language)
+//  5. default + type + platform + defaultLocale  (operator's configured
+//     [general] locale — only used when the user's language isn't shipped
+//     and is different from defaultLocale)
+//  6. default + type + platform           (any language — last resort)
+//
+// Step 5 exists because step 6's "last match wins" iteration can pick an
+// arbitrary language when several default entries exist (e.g. EN and DE
+// in fallbacks/dts.json). Preferring the operator's chosen locale before
+// falling through to "any language" stops legacy users with an
+// untranslated language (e.g. lang="nl" with no NL templates) from
+// silently getting messages in whatever language happens to be loaded
+// last.
 //
 // Within each level the LAST match wins, so config/dts/ overrides
 // config/dts.json since later-loaded files are appended to the entries slice.
@@ -384,10 +413,10 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 	defer ts.mu.RUnlock()
 
 	idLower := strings.ToLower(templateID)
-	if e := selectEntryPass(ts.entries, templateType, platform, idLower, language, false); e != nil {
+	if e := selectEntryPass(ts.entries, templateType, platform, idLower, language, ts.defaultLocale, false); e != nil {
 		return e
 	}
-	return selectEntryPass(ts.entries, templateType, platform, idLower, language, true)
+	return selectEntryPass(ts.entries, templateType, platform, idLower, language, ts.defaultLocale, true)
 }
 
 // selectEntryPass walks the priority chain over a subset of entries
@@ -400,21 +429,21 @@ func (ts *TemplateStore) selectEntry(templateType, platform, templateID, languag
 // chain. Lets authors ship one entry that serves both Discord and
 // Telegram for simple text content (help pages, info dumps) while
 // still honouring platform-specific templates where they exist.
-func selectEntryPass(entries []DTSEntry, templateType, platform, idLower, language string, readonly bool) *DTSEntry {
-	if m := selectEntryPassForPlatform(entries, templateType, platform, idLower, language, readonly); m != nil {
+func selectEntryPass(entries []DTSEntry, templateType, platform, idLower, language, defaultLocale string, readonly bool) *DTSEntry {
+	if m := selectEntryPassForPlatform(entries, templateType, platform, idLower, language, defaultLocale, readonly); m != nil {
 		return m
 	}
 	if platform != "" {
-		return selectEntryPassForPlatform(entries, templateType, "", idLower, language, readonly)
+		return selectEntryPassForPlatform(entries, templateType, "", idLower, language, defaultLocale, readonly)
 	}
 	return nil
 }
 
-// selectEntryPassForPlatform walks the 5-level priority chain for a
+// selectEntryPassForPlatform walks the 6-level priority chain for a
 // specific platform value (possibly "" to target platform-agnostic
 // entries). Extracted from selectEntryPass so the caller can retry with
 // platform: "" when no platform-specific match exists.
-func selectEntryPassForPlatform(entries []DTSEntry, templateType, platform, idLower, language string, readonly bool) *DTSEntry {
+func selectEntryPassForPlatform(entries []DTSEntry, templateType, platform, idLower, language, defaultLocale string, readonly bool) *DTSEntry {
 	var match *DTSEntry
 
 	// 1. type + id + platform + language (exact)
@@ -482,7 +511,29 @@ func selectEntryPassForPlatform(entries []DTSEntry, templateType, platform, idLo
 		return match
 	}
 
-	// 5. default + type + platform (any language — last resort)
+	// 5. default + type + platform + defaultLocale (operator's chosen
+	// [general] locale, used when the user's language isn't shipped).
+	// Skipped when defaultLocale is empty or equals the user's language
+	// (the latter was already tried at step 3 and missed).
+	if defaultLocale != "" && defaultLocale != language {
+		for i := range entries {
+			e := &entries[i]
+			if e.Readonly != readonly {
+				continue
+			}
+			if e.Default &&
+				e.Type == templateType &&
+				e.Platform == platform &&
+				e.Language == defaultLocale {
+				match = e
+			}
+		}
+		if match != nil {
+			return match
+		}
+	}
+
+	// 6. default + type + platform (any language — last resort)
 	for i := range entries {
 		e := &entries[i]
 		if e.Readonly != readonly {
@@ -996,6 +1047,14 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 		return fmt.Errorf("create dts dir: %w", err)
 	}
 
+	// Snapshot the current file (if any) into config/backups/ before
+	// overwriting. backupRelFromConfig is "" on first save.
+	if rel, err := filepath.Rel(configDir, savePath); err == nil {
+		if _, berr := backup.Save(configDir, rel); berr != nil {
+			log.Warnf("dts: backup failed for %s: %v (proceeding with write)", savePath, berr)
+		}
+	}
+
 	// Write the entry to its own file (single-element array)
 	if err := writeEntryFile(savePath, inc); err != nil {
 		return err
@@ -1116,6 +1175,13 @@ func removeEntryFromFile(filePath, targetKey, configDir string) error {
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(remaining); err != nil {
 		return fmt.Errorf("marshal remaining: %w", err)
+	}
+	// Snapshot the current file before overwriting so a botched delete
+	// can be reverted from config/backups/.
+	if rel, err := filepath.Rel(configDir, filePath); err == nil {
+		if _, berr := backup.Save(configDir, rel); berr != nil {
+			log.Warnf("dts: backup failed for %s: %v (proceeding with write)", filePath, berr)
+		}
 	}
 	return os.WriteFile(filePath, buf.Bytes(), 0644)
 }

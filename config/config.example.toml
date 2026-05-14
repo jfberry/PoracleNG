@@ -174,6 +174,13 @@ sticker_url = "https://raw.githubusercontent.com/bbdoc/tgUICONS/main/Shuffle"
 request_shiny_images = false
 populate_pokestop_name = false           # [RDM] lookup nearby pokestop names in scanner db
 locale = "en"                            # default locale - eg en, fr, de, it, ru
+# default_timezone - IANA timezone name used by the profile and summary
+# schedulers for humans that have no location set (lat/lon = 0/0). Leave
+# empty to fall back to the server's local timezone (whatever Go's
+# time.Local resolves to). Examples: "Europe/London", "America/Los_Angeles",
+# "Asia/Tokyo". Users with a location via !location are unaffected — their
+# timezone is always derived from the lat/lon.
+#default_timezone = "Europe/London"
 # disabled_commands - array of commands which will be disabled from use
 # disabled_commands = ["track", "Pokemon"]
 default_template_name = "1"              # default template name/number for new trackings
@@ -190,9 +197,10 @@ shortlink_provider = "hideuri"
 shortlink_provider_url = ""
 shortlink_provider_key = ""
 shortlink_provider_domain = ""           # if supported, select domain to be used
-# additional shortlinks to Pogo Maps in DTS - supported: RDM, Reactmap, RocketMAD
+# additional shortlinks to Pogo Maps in DTS - supported: RDM, Reactmap, Diadem, RocketMAD
 rdm_url = ""                             # https://myRDM.com/
 react_map_url = ""                       # https://myReactMap.com/
+diadem_url = ""                          # https://myDiadem.com/
 rocket_mad_url = ""                      # https://myRocketMAD.com/
 
 
@@ -232,8 +240,20 @@ upload_embed_images = false              # retrieve and upload images direct to 
 check_role = false
 check_role_interval = 6
 # token - array of discord tokens; poracle can support multiple bots for sending
-#   messages but the first will be used as the command controller
+#   messages. When command_token is empty, the first entry also drives the
+#   gateway side (commands, reconciliation, role management).
 token = [""]
+# command_token (optional) - separate bot token for command processing,
+#   reconciliation, and role management. When set, splits poracle into two
+#   bots: the `token` bots handle outbound delivery (DMs, channel sends,
+#   thread sends, edits, TTH-deletes) and `command_token` handles the
+#   gateway side. Both bots must be invited to every guild where they
+#   operate, each with its own permission grants — the command bot needs
+#   Server Members + Message Content intents and Manage Roles for
+#   reconciliation; the alerts bot only needs send permissions. Users
+#   will see two separate DM threads (one for alerts, one for commands).
+#   Empty by default = single-bot operation (historic behaviour).
+#command_token = ""
 # guilds - the guild (server) IDs that poracle will be on
 guilds = [""]
 # channels - channel IDs that can be used for !poracle registration
@@ -289,6 +309,16 @@ message_delete_delay = 0                 # extra time (ms) to add to a message '
 unrecognised_command_message = ""        # reply to unrecognised commands in DM
 unregistered_user_message = ""           # reply to unregistered users (empty = shrug)
 lost_role_message = ""                   # message when user loses role-based access
+
+# admin_channel_id: discord channel ID for operator-facing notices —
+# auto-disable events (delivery failure, rate-limit ban), thread keep-alive
+# 404s, DTS render errors, state-reload failures. Empty = disabled.
+admin_channel_id = ""
+
+# thread_keep_alive_interval_hours: cadence (in hours) of the background
+# sweeper that unarchives Poracle-managed Discord threads so they stay
+# accessible. 0 disables. Max 168 (7 days, Discord's archive ceiling).
+thread_keep_alive_interval_hours = 24
 
 # ---- Telegram ----
 
@@ -384,6 +414,16 @@ include_stops = false
 # type = "staticMap"
 # include_stops = true
 
+# Per-alert-type static-map mode override. Default for every maptype
+# is `staticMap` (single tile, fetched from /staticmap/poracle-{maptype}
+# on the tileserver). Set `multiStaticMap` only if you want the
+# /multistaticmap/poracle-multi-{maptype} multi-image variant — that
+# requires a `poracle-multi-{maptype}.json` template in your tileserver
+# template set, which is a different render shape from a multi-pin
+# single tile.
+# [geocoding.static_map_type]
+# questsummary = "staticMap"
+
 # ---- Tuning ----
 # Do not change these settings without talking to us in discord.
 # For outbound, a lower number of concurrent senders will reduce the chance
@@ -427,6 +467,8 @@ concurrent_discord_webhooks = 10         # concurrent discord webhook sends
 timing_period = 240                      # seconds over which limits are calculated
 dm_limit = 20                            # max messages a user can receive in the period
 channel_limit = 40                       # max messages a channel/group can receive in the period
+dm_summary_limit = 10                    # max summary dispatches a user can receive in the period (separate bucket from dm_limit; 1 fire = 1 against the bucket, regardless of how many chunks the digest produces)
+channel_summary_limit = 40               # max summary dispatches a channel/group can receive in the period (separate bucket from channel_limit)
 max_limits_before_stop = 10              # times user can hit rate limit (within 24hrs) before being stopped
 disable_on_stop = false                  # admin disable rather than just stop (requires admin to restart)
 shame_channel = ""                       # name and shame stopped/disabled users to this discord channel
@@ -452,6 +494,62 @@ default_distance = 0                     # default distance for distance-only tr
 max_distance = 0                         # max tracking circle radius (0 = no limit)
 enable_gym_battle = false                # allow "battle_changes" option in !gym
 default_user_tracking_level_cap = 0      # default pvp tracking level cap (0 = all levels)
+# Pokemon change tracking — when on, post-encounter changes (form, species,
+# gender, weather-boost shift) and the non-IV → IV transition for users with
+# a prior message fire a reply-threaded `monsterChanged` (or threaded
+# `monster` for the encounter event). Set to false to suppress all of this:
+# change events still re-render as a regular `monster` send to matched users.
+pokemon_change_tracking = true
+
+# Quest summary — when on, quest tracking rules with the summary clean bit set
+# (clean & 4) defer matched quests into a per-user in-memory buffer instead of
+# delivering each immediately. The summary scheduler then groups buffered
+# quests by reward at user-defined times and sends one message per reward
+# group. Set to false to disable the feature entirely (the scheduler is not
+# started; the buffer is still loaded/saved across restarts).
+quest_summary_enabled = true
+# Safety-net upper bound on how long any buffered quest entry can live
+# (hours). The scheduler primarily expires entries on each entry's reported
+# ExpiresAt; this TTL drops entries whose CreatedAt is older than the
+# configured age, catching malformed payloads where ExpiresAt is zero or
+# unreliable. Set 0 to disable the CreatedAt-axis sweep.
+quest_summary_buffer_ttl_hours = 24
+
+# ---- Summariser ----
+# Settings shared across all summariser pipelines (currently quest summary;
+# future raid/gym/etc. summaries will reuse these knobs).
+[summariser]
+# Chunk reward groups containing more than N entries into ceil(total/N)
+# consecutive messages so each fits Discord's 4096-char embed-description
+# cap. Each chunk's static map shows just that chunk's pins so the bullet
+# list and the map line up. Default 25 leaves headroom even when shlink
+# is not configured. Set 0 to disable splitting (oversize groups will
+# fail at the Discord API).
+max_per_message = 25
+
+# ---- Autocreate (bulk channel sync) ----
+# Apply a channelTemplate.json entry across many geofences in one operation.
+# Triggered with `!autocreate sync` or POST /api/autocreate/run. See AUTOCREATE.md
+# for the channel template format itself; the entries below configure WHICH
+# templates are applied and TO WHAT.
+
+[autocreate]
+# removal_safety_max_percent: when a sync requests orphan removal, abort the
+# removal phase if more than this percent of the cached fences would be removed
+# (only applies when the cache has ≥10 entries). 0 disables the check.
+# `force` keyword on the trigger bypasses.
+removal_safety_max_percent = 20
+
+# Each [[autocreate.rules]] entry maps one channel template across a filtered
+# set of geofences in one guild. Uncomment + customise per rule:
+#
+# [[autocreate.rules]]
+# name           = "uk-areas"                    # unique identifier (no spaces)
+# guild          = "12345678901234567"           # Discord guild ID
+# template       = "area"                        # channelTemplate.json entry name
+# filter         = "{{eq server \"uk\"}}"        # optional Handlebars; empty = match all
+# params         = ["{{group}}", "{{name}}"]     # rendered per fence → positional args
+# remove_missing = false                         # opt in to orphan removal cascade
 
 # ---- Reconciliation ----
 # User reconciliation/role check. Automated check is only enabled if check_role is

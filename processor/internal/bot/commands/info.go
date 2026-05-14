@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"slices"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -50,6 +52,11 @@ func (c *InfoCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			return []bot.Reply{{React: "🙅"}}
 		}
 		return c.poracleInfo(ctx)
+	case matchSub("msg.info.sub.config"):
+		if !ctx.IsAdmin {
+			return []bot.Reply{{React: "🙅"}}
+		}
+		return c.configInfo(ctx, args[1:])
 	case matchSub("msg.info.sub.translate"):
 		if !ctx.IsAdmin {
 			return []bot.Reply{{React: "🙅"}}
@@ -72,6 +79,9 @@ func (c *InfoCommand) usage(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 	prefix := bot.CommandPrefix(ctx)
 	text := tr.Tf("msg.info.usage", prefix)
+	if ctx.IsAdmin {
+		text += "\n" + tr.Tf("msg.info.usage_admin", prefix)
+	}
 	return []bot.Reply{{Text: text}}
 }
 
@@ -96,7 +106,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	resolved := ctx.Resolver.Resolve(name, ctx.Language)
 	if len(resolved) == 0 {
 		tr := ctx.Tr()
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", name)}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", ctx.EscapeForReply(name))}}
 	}
 
 	pokemonID := resolved[0].PokemonID
@@ -138,7 +148,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	}
 	if mon == nil {
 		tr := ctx.Tr()
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", name)}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.info.pokemon_not_found", ctx.EscapeForReply(name))}}
 	}
 
 	tr := ctx.Tr()
@@ -156,9 +166,9 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	enName := enTr.T(gamedata.PokemonTranslationKey(pokemonID))
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**%s**", pokeName))
+	sb.WriteString(ctx.Bold(pokeName))
 	if pokeName != enName {
-		sb.WriteString(fmt.Sprintf(" (%s)", enName))
+		sb.WriteString(" (" + ctx.EscapeForReply(enName) + ")")
 	}
 
 	// Form name
@@ -166,7 +176,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		formName := tr.T(gamedata.FormTranslationKey(form))
 		formKey := gamedata.FormTranslationKey(form)
 		if formName != formKey {
-			sb.WriteString(fmt.Sprintf(" [%s]", formName))
+			sb.WriteString(" [" + ctx.EscapeForReply(formName) + "]")
 		}
 	}
 	sb.WriteByte('\n')
@@ -194,7 +204,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		if i > 0 {
 			typeLabel = tr.T("msg.info.secondary_type")
 		}
-		sb.WriteString(fmt.Sprintf("**%s**\n", typeLabel))
+		sb.WriteString(ctx.Bold(typeLabel) + "\n")
 
 		typeName := tr.T(gamedata.TypeTranslationKey(tid))
 		typeEmoji := ""
@@ -319,7 +329,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		shinyStats := ctx.Stats.ExportShinyStats()
 		if s, ok := shinyStats[pokemonID]; ok {
 			sb.WriteByte('\n')
-			sb.WriteString(fmt.Sprintf("**%s**: %d/%d  (1:%.0f)\n", tr.T("msg.info.shiny_rate"), s.Seen, s.Total, s.Ratio))
+			sb.WriteString(fmt.Sprintf("%s: %d/%d  (1:%.0f)\n", ctx.Bold(tr.T("msg.info.shiny_rate")), s.Seen, s.Total, s.Ratio))
 		}
 	}
 
@@ -418,7 +428,7 @@ func (c *InfoCommand) availableForms(ctx *bot.CommandContext, pokemonID int) []s
 		if key.Form == 0 {
 			entries = append(entries, formEntry{
 				formID:   0,
-				display:  pokeName,
+				display:  ctx.Code(pokeName),
 				sortName: "",
 			})
 			continue
@@ -432,11 +442,14 @@ func (c *InfoCommand) availableForms(ctx *bot.CommandContext, pokemonID int) []s
 				continue // no translation at all, skip
 			}
 		}
-		// For tracking, users type form names with underscores replacing spaces
+		// For tracking, users type form names with underscores replacing spaces.
+		// Wrap in inline code so the underscore renders literally on both
+		// platforms (Telegram MarkdownV2 italics it otherwise) and the line
+		// reads as a copy-pasteable tracking command.
 		trackingName := strings.ReplaceAll(strings.ToLower(formName), " ", "_")
 		entries = append(entries, formEntry{
 			formID:   key.Form,
-			display:  fmt.Sprintf("%s form:%s", pokeName, trackingName),
+			display:  ctx.Code(fmt.Sprintf("%s form:%s", pokeName, trackingName)),
 			sortName: formName,
 		})
 	}
@@ -621,11 +634,11 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].id < entries[j].id })
 
 	var sb strings.Builder
-	sb.WriteString("**" + tr.T("msg.info.shiny_header") + "**\n\n")
+	sb.WriteString(ctx.Bold(tr.T("msg.info.shiny_header")) + "\n\n")
 
 	for _, e := range entries {
 		pokeName := tr.T(gamedata.PokemonTranslationKey(e.id))
-		sb.WriteString(fmt.Sprintf("%s: %s %d - %s 1:%.0f\n", pokeName, tr.T("msg.info.shiny_seen"), e.stat.Total, tr.T("msg.info.shiny_ratio"), e.stat.Ratio))
+		sb.WriteString(fmt.Sprintf("%s: %s %d - %s 1:%.0f\n", ctx.EscapeForReply(pokeName), tr.T("msg.info.shiny_seen"), e.stat.Total, tr.T("msg.info.shiny_ratio"), e.stat.Ratio))
 	}
 
 	return bot.SplitTextReply(sb.String())
@@ -956,4 +969,96 @@ func (c *InfoCommand) templateList(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	return bot.SplitTextReply(strings.TrimSpace(sb.String()))
+}
+
+// configInfo dumps the web-editable subset of the config (with secrets masked
+// as "****") for diagnosis. With no arg, returns the whole thing as a file
+// attachment. With a search arg, filters to lines whose key or value matches
+// the substring (case-insensitive).
+func (c *InfoCommand) configInfo(ctx *bot.CommandContext, args []string) []bot.Reply {
+	if ctx.Config == nil {
+		return []bot.Reply{{Text: "Config not loaded"}}
+	}
+
+	values := api.ExtractValues(ctx.Config, "")
+	var lines []string
+	flattenConfigValues("", values, &lines)
+	sort.Strings(lines)
+
+	search := strings.ToLower(strings.TrimSpace(strings.Join(args, " ")))
+	if search != "" {
+		filtered := lines[:0:0]
+		for _, line := range lines {
+			if strings.Contains(strings.ToLower(line), search) {
+				filtered = append(filtered, line)
+			}
+		}
+		if len(filtered) == 0 {
+			return []bot.Reply{{Text: fmt.Sprintf("No config entries match `%s`", search)}}
+		}
+		text := strings.Join(filtered, "\n")
+		// Inline if it fits comfortably in a Discord message; otherwise attach.
+		if len(text)+20 < 1900 {
+			return []bot.Reply{{Text: fmt.Sprintf("```toml\n%s\n```", text)}}
+		}
+		return []bot.Reply{{
+			Text: fmt.Sprintf("**Config search: `%s`** (%d entries)", search, len(filtered)),
+			Attachment: &bot.Attachment{
+				Filename: "config-search.txt",
+				Content:  []byte(text + "\n"),
+			},
+		}}
+	}
+
+	text := strings.Join(lines, "\n")
+	return []bot.Reply{{
+		Text: fmt.Sprintf("**Poracle config** (web-editable fields, secrets masked) — %d entries", len(lines)),
+		Attachment: &bot.Attachment{
+			Filename: "config.txt",
+			Content:  []byte(text + "\n"),
+		},
+	}}
+}
+
+// flattenConfigValues walks the nested map produced by api.ExtractValues and
+// emits "dotted.path = value" lines. Tables (slices of maps) and other complex
+// structures are JSON-encoded so the output stays one line per leaf.
+func flattenConfigValues(prefix string, v any, out *[]string) {
+	switch val := v.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(val))
+		for k := range val {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			path := k
+			if prefix != "" {
+				path = prefix + "." + k
+			}
+			flattenConfigValues(path, val[k], out)
+		}
+	default:
+		*out = append(*out, fmt.Sprintf("%s = %s", prefix, formatConfigValue(v)))
+	}
+}
+
+// formatConfigValue renders a config leaf value for display. Strings are
+// quoted, primitives are printed natively, and slices/maps are JSON-encoded
+// (compact) so they don't sprawl across multiple lines.
+func formatConfigValue(v any) string {
+	switch val := v.(type) {
+	case nil:
+		return "null"
+	case string:
+		return fmt.Sprintf("%q", val)
+	case bool, int, int32, int64, uint, uint32, uint64, float32, float64:
+		return fmt.Sprintf("%v", val)
+	default:
+		b, err := json.Marshal(val)
+		if err != nil {
+			return fmt.Sprintf("%v", val)
+		}
+		return string(b)
+	}
 }

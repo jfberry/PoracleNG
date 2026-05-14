@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"strings"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -18,6 +20,7 @@ var gymParams = []bot.ParamDef{
 	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
+	{Type: bot.ParamPrefixString, Key: "arg.prefix.gym"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -87,6 +90,19 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return c.removeGyms(ctx, teams)
 	}
 
+	// Optional `gym:<id-or-name>` argument pins the rule to a specific
+	// gym. Caller must wrap multi-word names in quotes, e.g.
+	// `!gym mystic "gym:Town Hall"` so the bot parser keeps it as one
+	// token before splitParamPrefix sees it.
+	var gymIDPtr *string
+	if raw := strings.TrimSpace(parsed.Strings["gym"]); raw != "" {
+		id, abort := resolveGymRef(ctx, raw)
+		if abort != nil {
+			return []bot.Reply{*abort}
+		}
+		gymIDPtr = &id
+	}
+
 	insert := make([]db.GymTrackingAPI, 0, len(teams))
 	for _, team := range teams {
 		insert = append(insert, db.GymTrackingAPI{
@@ -99,7 +115,7 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			Clean:         common.Clean,
 			SlotChanges:   db.IntBool(slotChanges),
 			BattleChanges: db.IntBool(battleChanges),
-			GymID:         nil,
+			GymID:         gymIDPtr,
 		})
 	}
 

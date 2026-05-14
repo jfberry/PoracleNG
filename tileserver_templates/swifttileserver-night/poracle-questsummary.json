@@ -1,0 +1,23 @@
+{
+    "style": #if(nightTime == true): "dark-night" #else: "klokantech-basic" #endif,
+    "latitude": #(latitude),
+    "longitude": #(longitude),
+    "zoom": #(zoom),
+    "width": 500,
+    "height": 250,
+    "scale": 1,
+    "markers": [
+        #for(point in points):
+            #if(index != 0):,#endif
+            {
+                "url": "#if(point.imgUrl):#(point.imgUrl)#else:https://raw.githubusercontent.com/nileplumb/PkmnShuffleMap/master/UICONS/pokestop/0.png#endif",
+                "fallback_url": "https://raw.githubusercontent.com/KartulUdus/PoracleJS/images/fallback/pokestop.png",
+                "latitude": #(point.latitude),
+                "longitude": #(point.longitude),
+                "width": 24,
+                "height": 24,
+                "y_offset": -12
+            }
+        #endfor
+    ]
+}

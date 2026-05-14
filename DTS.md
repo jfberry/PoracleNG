@@ -91,6 +91,7 @@ These fields are available in every template:
 | `wazeMapUrl` | string | Waze link |
 | `rdmUrl` | string | RDM map link |
 | `reactMapUrl` | string | ReactMap link |
+| `diademUrl` | string | Diadem map link |
 | `rocketMadUrl` | string | RocketMAD link |
 | `mapurl` | string | *Deprecated* — alias for `googleMapUrl` |
 | `applemap` | string | *Deprecated* — alias for `appleMapUrl` |
@@ -126,6 +127,7 @@ These fields are available in every template:
 | `boostWeatherId` | int/string | Boosting weather ID (empty string if not boosted) |
 | `boostWeatherName` | string | Translated boost weather name |
 | `boostWeatherEmoji` | string | Boost weather emoji |
+| `boostingWeathersEmoji` | string | Concatenated emoji string for every weather that boosts this pokemon's types (e.g. `"☀️💨"`) |
 | `boost` | string | *Deprecated* — alias for `boostWeatherName` |
 | `boostemoji` | string | *Deprecated* — alias for `boostWeatherEmoji` |
 
@@ -178,6 +180,7 @@ Template type `monster` is used for encountered pokemon (with IV data). Template
 | `emojiString` | string | Type emojis concatenated |
 | `typeEmoji` | string | Type emojis concatenated (resolved from emoji keys) |
 | `weaknessList` | array | Weakness categories: `{value, types: [{typeId, name, typeEmoji}]}` |
+| `weaknessEmoji` | string | Flat space-separated `"<value>x<typeEmoji>"` per category, e.g. `"2x💧⚡ 4x🪨 "` — for templates that don't iterate `weaknessList`. |
 
 ### Moves
 
@@ -259,7 +262,7 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | Field | Type | Description |
 |-------|------|-------------|
 | `encountered` | bool | Whether pokemon was encountered (has IV data) |
-| `seenType` | string | Encounter type from scanner (e.g. "wild", "pokestop", "encounter") |
+| `seenType` | string | Normalised encounter source. See [seenType values](#seentype-values). |
 | `cell_coords` | array | S2 cell vertices for cell spawns |
 | `generation` | int | Generation number |
 | `generationRoman` | string | Generation as Roman numeral (I, II, etc.) |
@@ -288,6 +291,85 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `pokestopName` | string | Nearby pokestop name (if applicable) |
 
 `distance`, `bearing`, `bearingEmoji`, `userDistanceTrack`, `userTrackDistance` are documented in Common Fields.
+
+### seenType values
+
+`{{seenType}}` is normalised from Golbat's raw `seen_type` (see Golbat's
+webhooks reference). Use it in templates to switch on how the pokemon was
+discovered — wild encounters carry IVs / weight / height, nearby spawns
+do not.
+
+| `seenType` | Source `seen_type` | Meaning |
+|---|---|---|
+| `cell` | `nearby_cell` | Seen on a cell's nearby list — location is the S2 cell centre, imprecise. Also returned for RDM-style scanners that report no spawn id and no fort id. |
+| `pokestop` | `nearby_stop` | Seen on a fort's nearby list — location is the fort's coordinates, imprecise. |
+| `wild` | `wild` | Seen in the wild feed — real spawn-point location, no IVs yet. |
+| `encounter` | `encounter` | Full encounter decoded — IVs, moves, weight, height, size, PVP all known. |
+| `lure` | `lure_wild` | Seen on a lure's map list (pre-encounter). No IVs yet. |
+| `lure_encounter` | `lure_encounter` | Full disk encounter decoded for a lure-spawned pokemon. |
+| `tappable` | `tappable_encounter`, `tappable_lure_encounter` | Full encounter decoded via `PROCESS_TAPPABLE` — overworld tappable objects (and their lured variant). Both Golbat sub-types collapse to a single value here so templates only need one switch arm. |
+
+Empty string is returned when no `seen_type` is supplied and the legacy
+RDM-style fallback can't infer one.
+
+---
+
+## Pokemon Changed (`monsterChanged`)
+
+`monsterChanged` fires for **post-encounter** changes to an already-tracked
+pokemon — form, species, gender, or weather-boost shift. The non-IV → IV
+encounter event itself stays on the regular `monster` template (it's the
+fulfilment of the existing alert, not a "change"); both kinds of update are
+dispatched as a reply to the prior message via the implicit reply key on
+every pokemon render. See [API.md](API.md#pokemon-change-template-monsterchanged)
+for the operator-facing summary.
+
+The template receives every field listed under [Pokemon (`monster` /
+`monsterNoIv`)](#pokemon-monster--monsternoiv) — those describe the **new**
+state. Additionally, `{{original.X}}` exposes the same field set for the
+**prior** sighting (minus PVP, which is stripped at storage time): identity
+(`original.fullName`, `original.formName`, `original.pokemonId`, …), battle
+stats (`original.cp`, `original.iv`, `original.atk/def/sta`,
+`original.level`), weather (`original.weatherName`, `original.gameWeatherId`),
+images and map URLs (`original.imgUrl`, `original.staticMap`,
+`original.mapurl`), and so on.
+
+`{{original.X}}` is rendered per recipient: each user's language picks the
+appropriate translated names (`original.fullName` for a German user is
+"Glumanda", for an English user "Charmander"). PVP rankings are not
+available under `original.*`.
+
+Only set when fired by a true change event — the dispatcher also leaves
+`{{original.X}}` empty when:
+- The encounter event reuses the regular `monster` template (CP 0 → >0).
+- The matched user had no prior message for the encounter (a fresh
+  `monster` render is sent instead, no reply, no `original`).
+- Pokemon change tracking is disabled via `[tracking]
+  pokemon_change_tracking = false`.
+
+### Change dimension fields
+
+`monsterChanged` also exposes two fields describing the kind of change that
+fired the alert. Use these in templates to switch wording or styling:
+
+| Field | Type | Description |
+|---|---|---|
+| `changeType` | string | One of `species` or `stats`. See table below. |
+| `changeTypeText` | string | Localised label (e.g. "species change", "stats change"). |
+
+| `changeType` | Fires for | Meaning |
+|---|---|---|
+| `species` | `ChangeSpecies`, `ChangeForm`, `ChangeGender` | Identity change. Most commonly community-day re-classifications, or the known "A/B pokemon" server bug where Golbat reports a different species ID for the same encounter. |
+| `stats` | `ChangeWeatherBoost` | Same pokemon, weather boost shifted. Post-boost IVs and CP differ from the originally-alerted state. This is the most common cause in practice. |
+
+The `ChangeEncountered` dimension (CP 0 → >0, "IVs just arrived") does **not**
+fire `monsterChanged`. Users who were tracking IV-insensitive ("any pokemon of
+species X") get a regular `monster` reply to their `monsterNoIv` alert; users
+whose IV filter excluded the post-encounter stats get no follow-up at all.
+
+PoracleNG ships a default `monsterChanged` template per platform in
+`fallbacks/dts.json`; admins override via `config/dts.json` or
+`config/dts/` like any other type.
 
 ---
 
@@ -350,6 +432,7 @@ Hatched raid with a boss pokemon.
 | `typeEmoji` | string | Type emojis concatenated |
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
 | `weaknessList` | array | Weakness categories |
+| `weaknessEmoji` | string | Flat `"<value>x<typeEmoji>"` per category |
 | `generation` | int | Generation number |
 | `generationRoman` | string | Roman numeral |
 | `generationName` | string | Translated generation name |
@@ -444,6 +527,10 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are computed from hatch t
 | `questStringEng` | string | English quest objective |
 | `rewardString` | string | All rewards as text (translated) |
 | `rewardStringEng` | string | English rewards text |
+| `conditionString` | string | Comma-joined completion conditions, translated, e.g. "Excellent Throw, Curve Ball" |
+| `conditionStringEng` | string | English copy of `conditionString` |
+| `conditionList` | array | Per-condition objects: `{type, name, formatted}` where `name` is the bare label ("Throw Type") and `formatted` includes the payload ("Excellent Throw"). Falls back to bare name when the webhook payload doesn't carry the data needed for the formatted variant. |
+| `conditionListEng` | array | English copy of `conditionList` |
 | `dustAmount` | int | Stardust reward amount |
 | `itemAmount` | int | Item reward amount |
 | `energyAmount` | int | Mega energy amount (first reward) |
@@ -488,6 +575,37 @@ These are flat top-level strings, not nested under a `rewardData` object:
 
 ---
 
+## Quest Summary (`questSummary`)
+
+`questSummary` templates render a *grouped* quest message rather than a per-quest one. Quest tracking rules with bit 4 set on `clean` (use the `summary` keyword) skip immediate delivery; their matches are buffered until the user's `[summary_schedules]` active hours fire (or `!summary quest now` is invoked). At dispatch the buffered quests are grouped by `(rewardType, reward)` and rendered once per group.
+
+The view passed to `questSummary` is shaped differently from a regular `quest` template: the reward fields (icon, translated name, count) live at the top level, and the per-pokestop entries live under the `quests` array. Per-entry fields mirror the regular `quest` view (see above), so `{{#each quests}}` rows can use `{{pokestopName}}`, `{{googleMapUrl}}`, `{{addr}}`, etc. just like a single-pokestop quest template. The only `questSummary`-specific per-entry field is `withAR`, which lets a row label AR-required quests separately.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rewardType` | int | Reward type ID (2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy) |
+| `reward` | int | Reward ID (item ID for type 2, dust amount for type 3, pokemon ID for types 4/7/12) |
+| `rewardForm` | int | Pokemon form ID for `rewardType == 7` (so e.g. two different Spinda forms group separately). `0` for all other reward types. |
+| `rewardName` | string | Translated reward name for the group header. Formatted to match the per-row reward strings from regular `quest` enrichment, **with amounts stripped** for types 2/4/12 because amounts vary across stops within a group. Examples: `"Spinda 01"` (type 7 + form, matches per-row `fullName`), `"Lapras Candy"` (type 4), `"Charizard Mega Energy"` (type 12), `"Razz Berry"` (type 2), `"1500 Stardust"` (type 3 — amount is included because it's part of the group key). |
+| `imgUrl` | string | Reward icon URL — best used as a Discord thumbnail/image. Telegram's `/sendSticker` is stricter; use `stickerUrl` there. |
+| `stickerUrl` | string | Reward sticker URL — sized and formatted for Telegram's sticker constraints. Use this for the Telegram `sticker` field. |
+| `staticMap` | string | Multi-pin static map URL — autopositioned over the pokestops in **this chunk** only |
+| `count` | int | Total number of pokestops in the reward group (across every chunk, not just this message) |
+| `chunk` | int | 1-based index of this message when an oversized group is split across multiple messages. Always `1` when `chunks == 1`. |
+| `chunks` | int | Total number of chunks the group was split into. Wrap chunk-suffix output in `{{#if (gt chunks 1)}}…{{/if}}` so single-message groups stay clean. |
+| `quests` | array | Per-pokestop entries for **this chunk** — each carries the same fields as a regular `quest` template view (see [Quest](#quest-quest)) plus `withAR` |
+| `quests[i].withAR` | bool | True if this pokestop's quest requires the AR scanner |
+
+The static map is built via the `questSummary` tile type. Like every other tile type, the URL pattern is `/staticmap/poracle-questsummary`; map mode is configurable via `[geocoding.static_map_type] questSummary = "..."` if you want anything other than the default `staticMap`. Each chunk's map shows only the pokestops in that chunk so the bullet list and pins always match.
+
+### Chunking
+
+When a single reward group would render to a Discord embed bigger than the platform allows (description length, field count, or total embed size), the dispatcher splits the group into multiple messages. Each message gets its own `chunk`/`chunks`/`quests`/`staticMap`; `count` stays at the full group total so the header can read e.g. "60× Rare Candy (1/3)". A single-chunk group has `chunks == 1` — guard chunk-suffix output with `{{#if (gt chunks 1)}}…{{/if}}`.
+
+`questSummary` messages are always fresh sends — edit-mode and reply-threading don't apply. The source rule's `clean` bit is OR'd across the constituent rules contributing to a single reward group, so the summary message for that group inherits clean-deletion if any rule had it enabled. The TTH used for clean-deletion is the latest `ExpiresAt` within the same reward group (the "summarised block" — the one logical message, or the chunks it splits into when oversized), so the message lives at least as long as the longest constituent quest. Different reward groups in the same dispatch compute their own clean + TTH independently.
+
+---
+
 ## Invasion (`invasion`)
 
 | Field | Type | Description |
@@ -496,7 +614,7 @@ These are flat top-level strings, not nested under a `rewardData` object:
 | `pokestopUrl` | string | Pokestop image URL (alias for `pokestop_url`) |
 | `gruntTypeId` | int | Grunt type ID |
 | `gruntName` | string | Translated grunt name |
-| `gruntType` | string | Translated grunt type, e.g. "Water" (alias for `gruntTypeName`) |
+| `gruntType` | string | English title-case grunt type for regular grunts (e.g. "Water"). Lowercase event name for events (e.g. "kecleon", "showcase", "gold-stop"). Use this for `{{#if (eq gruntType 'kecleon')}}` template dispatch — for displaying the localised name use `gruntTypeName`. |
 | `gruntTypeName` | string | Translated grunt type name |
 | `gruntTypeColor` | string | Type color hex |
 | `gruntTypeEmoji` | string | Type emoji |
@@ -645,6 +763,7 @@ Map URLs (`googleMapUrl`, `appleMapUrl`, `wazeMapUrl`, etc.) are available for n
 | `genderData` | object | `{name, emoji}` |
 | `baseStats` | object | `{baseAttack, baseDefense, baseStamina}` |
 | `weaknessList` | array | Weakness categories |
+| `weaknessEmoji` | string | Flat `"<value>x<typeEmoji>"` per category |
 | `evolutions` | array | Evolution chain |
 | `megaEvolutions` | array | Mega evolutions |
 | `time` | string | Battle end time |

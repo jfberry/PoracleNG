@@ -8,8 +8,10 @@ import (
 // Config holds rate limiting configuration.
 type Config struct {
 	TimingPeriod        int            // window seconds (default 240)
-	DMLimit             int            // messages per window for DM users (default 20)
-	ChannelLimit        int            // messages per window for channels (default 40)
+	DMLimit             int            // alert messages per window for DM users (default 20)
+	ChannelLimit        int            // alert messages per window for channels (default 40)
+	DMSummaryLimit      int            // summary dispatches per window for DM users (default 10)
+	ChannelSummaryLimit int            // summary dispatches per window for channels (default 40)
 	MaxLimitsBeforeStop int            // violations in 24h before disable (default 10)
 	Overrides           map[string]int // per-destination limit overrides
 }
@@ -34,12 +36,16 @@ type violation struct {
 }
 
 // Limiter tracks per-destination message counts and violations.
+// summaryCounters is a separate bucket so the summary cap (one
+// dispatch per call) doesn't compete with the alert cap (one message
+// per call).
 type Limiter struct {
-	mu         sync.Mutex
-	counters   map[string]*counter
-	violations map[string]*violation
-	cfg        Config
-	done       chan struct{}
+	mu              sync.Mutex
+	counters        map[string]*counter
+	summaryCounters map[string]*counter
+	violations      map[string]*violation
+	cfg             Config
+	done            chan struct{}
 }
 
 // New creates a new rate limiter. Pass a zero Config for defaults.
@@ -53,6 +59,16 @@ func New(cfg Config) *Limiter {
 	if cfg.ChannelLimit <= 0 {
 		cfg.ChannelLimit = 40
 	}
+	// Summary buckets mirror the alert-bucket DM/Channel split. The
+	// caps exist as a backstop against pathological cases like a user
+	// opting all their tracked rewards into summary mode on a frequent
+	// schedule; in normal use a few digests a window is plenty.
+	if cfg.DMSummaryLimit <= 0 {
+		cfg.DMSummaryLimit = 10
+	}
+	if cfg.ChannelSummaryLimit <= 0 {
+		cfg.ChannelSummaryLimit = 40
+	}
 	if cfg.MaxLimitsBeforeStop <= 0 {
 		cfg.MaxLimitsBeforeStop = 10
 	}
@@ -61,10 +77,11 @@ func New(cfg Config) *Limiter {
 	}
 
 	l := &Limiter{
-		counters:   make(map[string]*counter),
-		violations: make(map[string]*violation),
-		cfg:        cfg,
-		done:       make(chan struct{}),
+		counters:        make(map[string]*counter),
+		summaryCounters: make(map[string]*counter),
+		violations:      make(map[string]*violation),
+		cfg:             cfg,
+		done:            make(chan struct{}),
 	}
 	go l.cleanupLoop()
 	return l
@@ -140,6 +157,64 @@ func (l *Limiter) Check(destinationID, destinationType string) RateResult {
 	return result
 }
 
+// CheckSummary increments the summary-dispatch counter for the given
+// destination (1 per fire — chunking doesn't multiply the cost). The
+// summary bucket is separate from the alert bucket so the two cap
+// independently: a destination near its alert limit can still receive
+// scheduled summaries, and a user opting many rules into summary mode
+// can't blow past the alert cap with digest messages. DM and channel
+// destinations have separate summary limits, mirroring the alert
+// bucket's DM/Channel split (channels generally tolerate more
+// throughput than individual users).
+//
+// Banned is intentionally not set here — opting into summary mode
+// shouldn't escalate to auto-disable. The breach hook fires once per
+// window to tell the destination their digest was dropped.
+func (l *Limiter) CheckSummary(destinationID, destinationType string) RateResult {
+	limit := l.summaryLimitFor(destinationType)
+	windowDuration := time.Duration(l.cfg.TimingPeriod) * time.Second
+	now := time.Now()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	c := l.summaryCounters[destinationID]
+	if c == nil || now.Sub(c.windowAt) >= windowDuration {
+		c = &counter{count: 0, windowAt: now}
+		l.summaryCounters[destinationID] = c
+	}
+
+	c.count++
+	resetSeconds := max(int(windowDuration.Seconds()-now.Sub(c.windowAt).Seconds()), 1)
+
+	result := RateResult{
+		Limit:        limit,
+		ResetSeconds: resetSeconds,
+	}
+
+	if c.count <= limit {
+		result.Allowed = true
+		return result
+	}
+
+	if c.count == limit+1 {
+		result.JustBreached = true
+	}
+	return result
+}
+
+// summaryLimitFor returns the applicable summary limit for a
+// destination type. Mirrors limitFor but for the summary bucket;
+// note that per-destination Overrides apply only to the alert bucket
+// (operators wanting per-user summary overrides can request a
+// follow-up — no current use case).
+func (l *Limiter) summaryLimitFor(destinationType string) int {
+	if isUserType(destinationType) {
+		return l.cfg.DMSummaryLimit
+	}
+	return l.cfg.ChannelSummaryLimit
+}
+
 // limitFor returns the applicable message limit for a destination.
 func (l *Limiter) limitFor(destinationID, destinationType string) int {
 	if override, ok := l.cfg.Overrides[destinationID]; ok {
@@ -195,6 +270,11 @@ func (l *Limiter) cleanup() {
 	for id, c := range l.counters {
 		if now.Sub(c.windowAt) >= windowDuration {
 			delete(l.counters, id)
+		}
+	}
+	for id, c := range l.summaryCounters {
+		if now.Sub(c.windowAt) >= windowDuration {
+			delete(l.summaryCounters, id)
 		}
 	}
 	for id, v := range l.violations {

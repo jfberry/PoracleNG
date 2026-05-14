@@ -33,13 +33,13 @@ type MonsterKey struct {
 
 // GameData holds all loaded game master data for enrichment.
 type GameData struct {
-	Monsters       map[MonsterKey]*Monster    // {ID, Form} → Monster
-	Moves          map[int]*Move              // moveId → Move
-	Types          map[int]*TypeInfo          // typeId → TypeInfo
-	Items          map[int]*Item              // itemId → Item
-	Grunts         map[int]*Grunt             // gruntTypeId → Grunt
-	Weather        map[int]*WeatherData       // weatherId → WeatherData (boosted types)
-	Util           *UtilData                  // static game constants
+	Monsters       map[MonsterKey]*Monster     // {ID, Form} → Monster
+	Moves          map[int]*Move               // moveId → Move
+	Types          map[int]*TypeInfo           // typeId → TypeInfo
+	Items          map[int]*Item               // itemId → Item
+	Grunts         map[int]*Grunt              // gruntTypeId → Grunt
+	Weather        map[int]*WeatherData        // weatherId → WeatherData (boosted types)
+	Util           *UtilData                   // static game constants
 	PrevEvolutions map[int][]PreviousEvolution // pokemonID → what evolves into it
 }
 

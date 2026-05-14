@@ -18,7 +18,7 @@ func TestActivePokemonTracker_RegisterAndGet(t *testing.T) {
 		Latitude:      40.0,
 		Longitude:     -74.0,
 		DisappearTime: future,
-		Boosted:       true,            // boosted by clear
+		Boosted:       true,         // boosted by clear
 		Types:         []int{4, 12}, // poison, grass — grass boosted by clear (1)
 	})
 
@@ -30,7 +30,7 @@ func TestActivePokemonTracker_RegisterAndGet(t *testing.T) {
 		Latitude:      40.1,
 		Longitude:     -74.1,
 		DisappearTime: future,
-		Boosted:       false,        // not boosted
+		Boosted:       false,    // not boosted
 		Types:         []int{7}, // water — boosted by rainy (2)
 	})
 

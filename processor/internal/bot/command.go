@@ -20,6 +20,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
+	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/store"
@@ -51,6 +52,22 @@ type BotDeps struct {
 	NLPParser     *nlp.Parser
 	TestProcessor TestProcessor
 	ReloadFunc    func()
+	// SummarySchedules backs the !summary command's CRUD operations.
+	// nil disables the command (e.g. when quest_summary_enabled=false).
+	SummarySchedules store.SummaryScheduleStore
+	// SummaryBufferCount returns how many entries are currently buffered
+	// for (humanID, alertType). Used by !summary to show status.
+	// nil treated as zero by the command.
+	SummaryBufferCount func(humanID, alertType string) int
+	// SummaryDispatch forces immediate dispatch of the buffer for
+	// (humanID, alertType). Bound to ProcessorService.DispatchQuestSummary
+	// in main. nil treated as a no-op by the command.
+	SummaryDispatch func(humanID, alertType string)
+	// Scanner is the optional scanner-DB handle used by gym-aware
+	// commands (!raid, !gym, !egg with a `gym:` argument). nil when
+	// no scanner is configured — commands check and reject `gym:`
+	// usage with a clear error.
+	Scanner scanner.Scanner
 }
 
 // TestTarget specifies who to deliver a test alert to.
@@ -134,9 +151,29 @@ type CommandContext struct {
 	NLP           *nlp.Parser
 	TestProcessor TestProcessor
 	Registry      *Registry
+	// SummarySchedules backs the !summary command's CRUD ops. nil disables
+	// the !summary command when the feature flag is off.
+	SummarySchedules store.SummaryScheduleStore
+	// SummaryBufferCount returns buffered entry count for status display.
+	// nil treated as zero by the command.
+	SummaryBufferCount func(humanID, alertType string) int
+	// SummaryDispatch fires immediate buffer dispatch on `!summary <type> now`.
+	// nil treated as a no-op by the command.
+	SummaryDispatch func(humanID, alertType string)
+	// Scanner is the optional scanner-DB handle. nil when no scanner
+	// is configured.
+	Scanner scanner.Scanner
 
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
+
+	// PostRegister, when set, is invoked after !poracle creates a new
+	// human row. The platform sets this to its single-user reconciliation
+	// hook so a freshly-registered user has their community_membership /
+	// area_restriction populated from current Discord roles or Telegram
+	// channel memberships immediately, rather than waiting for the next
+	// periodic sweep. nil when reconciliation isn't configured.
+	PostRegister func(userID string)
 
 	// languageHint from available_languages (set by bot when command uses a language variant)
 	languageHint string
@@ -216,10 +253,23 @@ type Attachment struct {
 const (
 	TypeDiscordUser    = "discord:user"
 	TypeDiscordChannel = "discord:channel"
+	TypeDiscordThread  = "discord:thread"
 	TypeTelegramUser   = "telegram:user"
 	TypeTelegramGroup  = "telegram:group"
-	TypeWebhook        = "webhook"
+	// TypeTelegramTopic identifies a forum-supergroup topic. The human
+	// row's ID is the composite "<chatID>:<topicID>" (e.g.
+	// "-1001234567890:42") so chat and topic can be recovered without
+	// a schema change.
+	TypeTelegramTopic = "telegram:topic"
+	TypeWebhook       = "webhook"
 )
+
+// PoracleWebhookName is the canonical name used when Poracle creates a
+// Discord webhook on a managed channel. Used as both the create-time name
+// and the filter when deleting Poracle-managed webhooks during channel
+// reset / orphan removal — the filter must NOT touch unrelated webhooks
+// the channel admin may have added.
+const PoracleWebhookName = "Poracle"
 
 // WildcardID is the sentinel value meaning "any" for pokemon_id, move, evolution, etc.
 const WildcardID = 9000

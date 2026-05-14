@@ -87,7 +87,7 @@ type Config struct {
 	TileserverCooldownMs       int // ms to keep circuit open (default 30000)
 	TileQueueSize              int // async tile request queue depth (default 100)
 	TileDeadlineMs             int // max time a payload waits for its tile (default 5000)
-	PregenTTL                  int // seconds for pregenerated tile TTL (default 300 = 5 minutes, -1 = no TTL hint)
+	PregenTTL                  int // seconds for pregenerated tile TTL (default 86400 = 1 day, -1 = no TTL hint)
 
 	// Fallback URL if tile generation fails
 	FallbackURL string
@@ -113,17 +113,17 @@ func (s Stats) AvgMs() int64 {
 type TilePending struct {
 	Result    chan string // URL mode and Both mode: receives public tile URL when done (buffered, size 1)
 	ResultImg chan []byte // Inline mode and Both mode: receives PNG bytes (buffered, size 1)
-	Inline    bool       // true in inline-only mode (bytes via ResultImg; Result unused)
+	Inline    bool        // true in inline-only mode (bytes via ResultImg; Result unused)
 	// Both is true when the pipeline needs BOTH the public URL (embedded in the
 	// rendered message for Telegram / upload-off Discord) AND the tile bytes
 	// (attached to the render batch so Discord-upload destinations can skip
 	// their own fetch). Both channels receive a value; ResultImg may be nil
 	// if the internal download failed, in which case Discord-upload
 	// destinations fall back to per-destination URL fetch.
-	Both      bool
-	Deadline  time.Time  // if not resolved by this time, use Fallback
-	Fallback  string     // fallback URL if deadline expires or generation fails
-	target    map[string]any // enrichment map to write staticMap/staticmap into
+	Both     bool
+	Deadline time.Time      // if not resolved by this time, use Fallback
+	Fallback string         // fallback URL if deadline expires or generation fails
+	target   map[string]any // enrichment map to write staticMap/staticmap into
 }
 
 // Apply writes the resolved tile URL into the enrichment map.
@@ -163,13 +163,13 @@ type Resolver struct {
 	client    *http.Client
 	tileQueue chan tileRequest // async tile generation queue
 	done      chan struct{}    // signals tile workers to stop
-	wg        sync.WaitGroup  // tracks tile worker goroutines
+	wg        sync.WaitGroup   // tracks tile worker goroutines
 
 	// Circuit breaker state
-	consecutiveErrors    int
-	circuitOpenSince     time.Time
-	halfOpenProbeActive  bool // true when a half-open probe request is in flight
-	mu                   sync.Mutex
+	consecutiveErrors   int
+	circuitOpenSince    time.Time
+	halfOpenProbeActive bool // true when a half-open probe request is in flight
+	mu                  sync.Mutex
 
 	// Stats counters for periodic logging
 	statCalls   atomic.Int64
@@ -249,7 +249,8 @@ func New(config Config) *Resolver {
 		config.TileDeadlineMs = 10000
 	}
 	if config.PregenTTL == 0 {
-		config.PregenTTL = 300 // 5 minutes
+		config.PregenTTL = 86400 // 1 day — Discord doesn't reliably cache tile bytes,
+		// so a longer tileserver-side TTL avoids regenerating the same tile every few minutes.
 	}
 	if config.InternalURL == "" {
 		config.InternalURL = config.ProviderURL
@@ -303,6 +304,26 @@ func (r *Resolver) TileDeadline() time.Duration {
 // non-empty after New (defaults to ProviderURL).
 func (r *Resolver) internalBase() string {
 	return r.config.InternalURL
+}
+
+// rewriteToPublicBase rewrites a URL produced by the tileserver (which builds
+// it from the internal host the POST landed on) so its scheme/host/path-prefix
+// match ProviderURL. This is what gets embedded in rendered messages — the
+// internal host is unreachable from Discord/Telegram clients.
+//
+// Returns u unchanged if InternalURL == ProviderURL (no split configured) or
+// if u doesn't start with the internal base (already public, or some unrelated
+// URL the tileserver chose to return).
+func (r *Resolver) rewriteToPublicBase(u string) string {
+	internal := strings.TrimRight(r.config.InternalURL, "/")
+	public := strings.TrimRight(r.config.ProviderURL, "/")
+	if internal == "" || public == "" || internal == public {
+		return u
+	}
+	if !strings.HasPrefix(u, internal) {
+		return u
+	}
+	return public + strings.TrimPrefix(u, internal)
 }
 
 // SubmitTile queues an async tile generation request and returns a TilePending.
@@ -410,10 +431,11 @@ func (r *Resolver) tileWorker() {
 				}
 				var publicURL, fetchURL string
 				if strings.HasPrefix(result, "http") {
-					// Unusual: tileserver returned a full URL. Use it as-is
-					// for the public URL; fetch against the same URL (no
-					// internal-URL rewrite possible).
-					publicURL = result
+					// Tileserver returned a full URL. The URL it built
+					// reflects the internal host our POST landed on; use
+					// it verbatim for the internal byte fetch but rewrite
+					// to ProviderURL for the public message URL.
+					publicURL = r.rewriteToPublicBase(result)
 					fetchURL = result
 				} else {
 					publicURL = fmt.Sprintf("%s/%s/pregenerated/%s", r.config.ProviderURL, mapPath, result)
@@ -598,7 +620,7 @@ func (r *Resolver) getConfigForTileType(maptype string) TileTypeConfig {
 	// Start with defaults
 	t, f := true, false
 	opts := TileTypeConfig{
-		Type:        "staticMap",
+		Type:         "staticMap",
 		IncludeStops: &f,
 		Width:        500,
 		Height:       250,
@@ -817,10 +839,13 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 	if result == "" {
 		return ""
 	}
-	// If the tileserver returned a full URL, use it directly.
+	// If the tileserver returned a full URL, rewrite its host back to
+	// ProviderURL — the URL it built reflects the internal host our POST
+	// landed on, which Discord/Telegram clients can't reach.
 	if strings.HasPrefix(result, "http") {
-		log.Debugf("staticmap: tile generated %s", result)
-		return result
+		publicURL := r.rewriteToPublicBase(result)
+		log.Debugf("staticmap: tile generated %s", publicURL)
+		return publicURL
 	}
 	// Otherwise construct the public URL from the tileserver base + pregenerated path.
 	tileURL := fmt.Sprintf("%s/%s/pregenerated/%s", r.config.ProviderURL, mapPath, result)
@@ -850,10 +875,7 @@ func (r *Resolver) downloadTileBytes(fetchURL string) []byte {
 	// Diagnostic: log size, content-type, and the first 8 magic bytes so we
 	// can tell valid image responses from error-page bodies. A valid PNG
 	// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
-	prefixLen := 8
-	if len(b) < prefixLen {
-		prefixLen = len(b)
-	}
+	prefixLen := min(len(b), 8)
 	log.Debugf("staticmap: downloaded %d bytes from %s (ct=%s, first=%x)",
 		len(b), fetchURL, resp.Header.Get("Content-Type"), b[:prefixLen])
 	return b
@@ -943,10 +965,7 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		truncLen := len(respBody)
-		if truncLen > 200 {
-			truncLen = 200
-		}
+		truncLen := min(len(respBody), 200)
 		log.Warnf("staticmap: inline %s got status %d: %s", reqURL, resp.StatusCode, string(respBody[:truncLen]))
 		return nil
 	}
@@ -967,10 +986,7 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 	// Diagnostic: log size, content-type, and the first 8 magic bytes so we
 	// can tell valid image responses from error-page bodies. A valid PNG
 	// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
-	prefixLen := 8
-	if len(respBody) < prefixLen {
-		prefixLen = len(respBody)
-	}
+	prefixLen := min(len(respBody), 8)
 	log.Debugf("staticmap: inline %d bytes from %s (ct=%s, first=%x) in %dms",
 		len(respBody), reqURL, resp.Header.Get("Content-Type"), respBody[:prefixLen], duration.Milliseconds())
 
@@ -1180,7 +1196,7 @@ func Autoposition(shapes AutopositionShape, width, height int, margin, defaultZo
 
 // adjustLatitude shifts a latitude by the given distance in meters.
 func adjustLatitude(lat, distanceM float64) float64 {
-	const earth = 6378.137 // radius of the earth in km
+	const earth = 6378.137                                  // radius of the earth in km
 	m := (1.0 / ((2.0 * math.Pi / 360.0) * earth)) / 1000.0 // 1 meter in degrees
 	return lat + (distanceM * m)
 }

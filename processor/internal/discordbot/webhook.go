@@ -109,7 +109,7 @@ func (b *Bot) handleWebhookList(s *discordgo.Session, m *discordgo.MessageCreate
 
 func (b *Bot) handleWebhookCreate(s *discordgo.Session, m *discordgo.MessageCreate, name string) {
 	if name == "" {
-		name = "Poracle"
+		name = bot.PoracleWebhookName
 	}
 
 	// Check if there's already a Poracle webhook
@@ -127,14 +127,14 @@ func (b *Bot) handleWebhookCreate(s *discordgo.Session, m *discordgo.MessageCrea
 	}
 
 	for _, hook := range hooks {
-		if hook.Name == "Poracle" {
+		if hook.Name == bot.PoracleWebhookName {
 			url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", hook.ID, hook.Token)
 			s.ChannelMessageSend(dmCh.ID, fmt.Sprintf("There is an existing Poracle webhook %s", url))
 			return
 		}
 	}
 
-	wh, err := s.WebhookCreate(m.ChannelID, "Poracle", "")
+	wh, err := s.WebhookCreate(m.ChannelID, bot.PoracleWebhookName, "")
 	if err != nil {
 		log.Warnf("discord bot: create webhook in %s: %v", m.ChannelID, err)
 		s.ChannelMessageSend(m.ChannelID, "Failed to create webhook")
@@ -202,7 +202,7 @@ func (b *Bot) handleWebhookAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	dmCh, _ := s.UserChannelCreate(m.Author.ID)
 
 	for _, hook := range hooks {
-		if hook.Name == "Poracle" {
+		if hook.Name == bot.PoracleWebhookName {
 			webhookURL = fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", hook.ID, hook.Token)
 			if dmCh != nil {
 				s.ChannelMessageSend(dmCh.ID, fmt.Sprintf("There is an existing Poracle webhook %s", webhookURL))
@@ -212,7 +212,7 @@ func (b *Bot) handleWebhookAdd(s *discordgo.Session, m *discordgo.MessageCreate,
 	}
 
 	if webhookURL == "" {
-		wh, err := s.WebhookCreate(m.ChannelID, "Poracle", "")
+		wh, err := s.WebhookCreate(m.ChannelID, bot.PoracleWebhookName, "")
 		if err != nil {
 			log.Warnf("discord bot: create webhook in %s: %v", m.ChannelID, err)
 			s.ChannelMessageSend(m.ChannelID, "Failed to create webhook")

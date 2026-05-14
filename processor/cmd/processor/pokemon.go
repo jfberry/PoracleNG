@@ -2,13 +2,19 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
+	"slices"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/dts"
+	"github.com/pokemon/poracleng/processor/internal/enrichment"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
-	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/pvp"
+	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -79,6 +85,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		encounterState := tracker.EncounterState{
 			PokemonID:     pokemon.PokemonID,
 			Form:          pokemon.Form,
+			Gender:        pokemon.Gender,
 			Weather:       weather,
 			CP:            pokemon.CP,
 			ATK:           atk,
@@ -86,7 +93,6 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			STA:           sta,
 			DisappearTime: pokemon.DisappearTime,
 		}
-		_, change := ps.encounters.Track(pokemon.EncounterID, encounterState)
 
 		// Get rarity group
 		rarityGroup := ps.stats.GetRarityGroup(pokemon.PokemonID)
@@ -94,104 +100,30 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		// Process pokemon into matching format
 		processed := matching.ProcessPokemonWebhook(&pokemon, rarityGroup, ps.pvpCfg)
 
-		// Match
-		st := ps.stateMgr.Get()
-		matchStart := time.Now()
-		matched, matchedAreas := ps.pokemonMatcher.Match(processed, st)
-		metrics.MatchingDuration.WithLabelValues("pokemon").Observe(time.Since(matchStart).Seconds())
+		// Match (against the new state — `processed` was built from the
+		// just-parsed webhook, so this set is correct for both initial
+		// sightings and change events).
+		matched, matchedAreas := ps.pokemonMatcher.Match(processed, ps.stateMgr.Get())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
 
-		if len(matched) > 0 {
-			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
-			metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
+		// Track when someone matches the new state OR an entry already
+		// exists (post-match changes still need diffing so prior
+		// recipients can be notified). Store a PVP-stripped copy —
+		// rankings are heavy and unused by {{original.X}}.
+		trackingEnabled := ps.cfg.Tracking.PokemonChangeTracking
+		shouldTrack := trackingEnabled && (len(matched) > 0 || ps.encounters.Has(pokemon.EncounterID))
+		var change *tracker.EncounterChange
+		if shouldTrack {
+			stored := pokemon
+			stored.PVP = nil
+			stored.PVPRankingsGreatLeague = nil
+			stored.PVPRankingsUltraLeague = nil
+			stored.PVPRankingsLittleLeague = nil
+			_, change = ps.encounters.Track(pokemon.EncounterID, encounterState, &stored)
+		}
 
-			// Register matched users as caring about weather in this cell
-			if ps.cfg.Weather.ChangeAlert {
-				cellID := tracker.GetWeatherCellID(pokemon.Latitude, pokemon.Longitude)
-				for _, u := range matched {
-					ps.weatherCares.Register(cellID, tracker.WeatherCareEntry{
-						ID:         u.ID,
-						Name:       u.Name,
-						Type:       u.Type,
-						Language:   u.Language,
-						Template:   u.Template,
-						Clean:      u.Clean,
-						Ping:       u.Ping,
-						CaresUntil: pokemon.DisappearTime,
-					})
-				}
-
-				// Track active pokemon per user for weather change alerts.
-				// pokemon.Weather (webhook "weather" field) is the in-game boost
-				// weather: >0 means the pokemon IS weather-boosted, 0 means not.
-				// This matches PoracleJS's data.weather used by getAlteringWeathers.
-				if ps.activePokemon != nil {
-					types := ps.pokemonTypes.GetTypes(pokemon.PokemonID, pokemon.Form)
-					boosted := pokemon.Weather > 0
-					for _, u := range matched {
-						ps.activePokemon.Register(cellID, u.ID, pokemon.EncounterID, tracker.ActivePokemon{
-							PokemonID:     pokemon.PokemonID,
-							Form:          pokemon.Form,
-							IV:            processed.IV,
-							CP:            processed.CP,
-							Latitude:      pokemon.Latitude,
-							Longitude:     pokemon.Longitude,
-							DisappearTime: pokemon.DisappearTime,
-							Boosted:       boosted,
-							Types:         types,
-						})
-					}
-				}
-			}
-
-			if processed.Encountered {
-				l.Infof("%s{CP%d/IV%.0f%%} at [%.3f,%.3f] areas(%s) and %d humans cared",
-					ps.pokemonName(pokemon.PokemonID, pokemon.Form), processed.CP, processed.IV,
-					pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
-			} else {
-				l.Infof("%s appeared at [%.3f,%.3f] areas(%s) and %d humans cared",
-					ps.pokemonName(pokemon.PokemonID, pokemon.Form),
-					pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
-			}
-
-			enrichStart := time.Now()
-			mode := ps.tileMode("monster", matched)
-			baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed, mode)
-
-			// Compute per-language translated enrichment
-			var perLang map[string]map[string]any
-			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-				perLang = make(map[string]map[string]any)
-				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.PokemonTranslate(baseEnrichment, &pokemon, lang)
-				}
-			}
-
-			var perUser map[string]map[string]any
-			if ps.enricher.PVPDisplay != nil && perLang != nil {
-				perUser = ps.enricher.PokemonPerUser(perLang, matched)
-			}
-			metrics.EnrichmentDuration.WithLabelValues("pokemon").Observe(time.Since(enrichStart).Seconds())
-
-			if ps.renderCh == nil {
-				return
-			}
-			webhookFields := parseWebhookFields(raw)
-
-			ps.renderCh <- RenderJob{
-				IsPokemon:         true,
-				IsEncountered:     processed.Encountered,
-				Enrichment:        baseEnrichment,
-				PerLangEnrichment: perLang,
-				PerUserEnrichment: perUser,
-				WebhookFields:     webhookFields,
-				MatchedUsers:      matched,
-				MatchedAreas:      matchedAreas,
-				TilePending:       tilePending,
-				LogReference:      pokemon.EncounterID,
-			}
-		} else {
+		if len(matched) == 0 && change == nil {
 			if processed.Encountered {
 				l.Debugf("%s{CP%d/IV%.0f%%} appeared at [%.3f,%.3f] and 0 humans cared",
 					ps.pokemonName(pokemon.PokemonID, pokemon.Form), processed.CP, processed.IV,
@@ -201,24 +133,397 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 					ps.pokemonName(pokemon.PokemonID, pokemon.Form),
 					pokemon.Latitude, pokemon.Longitude)
 			}
+			return
 		}
 
-		// Handle pokemon change
+		if len(matched) > 0 {
+			metrics.MatchedEvents.WithLabelValues("pokemon").Inc()
+			metrics.MatchedUsers.WithLabelValues("pokemon").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
+		}
+
+		// Register matched users as caring about weather in this cell
+		if ps.cfg.Weather.ChangeAlert {
+			cellID := tracker.GetWeatherCellID(pokemon.Latitude, pokemon.Longitude)
+			for _, u := range matched {
+				ps.weatherCares.Register(cellID, tracker.WeatherCareEntry{
+					ID:         u.ID,
+					Name:       u.Name,
+					Type:       u.Type,
+					Language:   u.Language,
+					Template:   u.Template,
+					Clean:      u.Clean,
+					Ping:       u.Ping,
+					CaresUntil: pokemon.DisappearTime,
+				})
+			}
+
+			// Track active pokemon per user for weather change alerts.
+			// pokemon.Weather (webhook "weather" field) is the in-game boost
+			// weather: >0 means the pokemon IS weather-boosted, 0 means not.
+			// This matches PoracleJS's data.weather used by getAlteringWeathers.
+			if ps.activePokemon != nil {
+				types := ps.pokemonTypes.GetTypes(pokemon.PokemonID, pokemon.Form)
+				boosted := pokemon.Weather > 0
+				for _, u := range matched {
+					ps.activePokemon.Register(cellID, u.ID, pokemon.EncounterID, tracker.ActivePokemon{
+						PokemonID:     pokemon.PokemonID,
+						Form:          pokemon.Form,
+						IV:            processed.IV,
+						CP:            processed.CP,
+						Latitude:      pokemon.Latitude,
+						Longitude:     pokemon.Longitude,
+						DisappearTime: pokemon.DisappearTime,
+						Boosted:       boosted,
+						Types:         types,
+					})
+				}
+			}
+		}
+
+		if processed.Encountered {
+			l.Infof("%s{CP%d/IV%.0f%%} at [%.3f,%.3f] areas(%s) and %d humans cared",
+				ps.pokemonName(pokemon.PokemonID, pokemon.Form), processed.CP, processed.IV,
+				pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
+		} else {
+			l.Infof("%s appeared at [%.3f,%.3f] areas(%s) and %d humans cared",
+				ps.pokemonName(pokemon.PokemonID, pokemon.Form),
+				pokemon.Latitude, pokemon.Longitude, areaNames(matchedAreas), len(matched))
+		}
+
+		// Reconstruct prior-only recipients before enrichment so their
+		// languages are included in the perLang map.
+		var priorOnlyUsers []webhook.MatchedUser
+		if change != nil && trackingEnabled && ps.dispatcher != nil {
+			matchedIDs := make(map[string]struct{}, len(matched))
+			for _, u := range matched {
+				matchedIDs[u.ID] = struct{}{}
+			}
+			for _, targetID := range ps.dispatcher.MessageTracker().LookupReplyTargets(pokemon.EncounterID) {
+				if _, ok := matchedIDs[targetID]; ok {
+					continue
+				}
+				if u := ps.rebuildMatchedUserForChange(targetID); u != nil {
+					priorOnlyUsers = append(priorOnlyUsers, *u)
+				}
+			}
+		}
+
+		enrichStart := time.Now()
+		allRecipients := slices.Concat(matched, priorOnlyUsers)
+		mode := ps.tileMode("monster", allRecipients)
+		baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed, mode)
+
+		var perLang map[string]map[string]any
+		if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+			perLang = make(map[string]map[string]any)
+			for _, lang := range distinctLanguages(allRecipients, ps.cfg.General.Locale) {
+				perLang[lang] = ps.enricher.PokemonTranslate(baseEnrichment, &pokemon, lang)
+			}
+		}
+
+		// PerUser PVP display only applies to currently-matched users;
+		// prior-only users (no longer matching) have no rule-specific
+		// rank to render, and monsterChanged doesn't show PVP anyway.
+		var perUser map[string]map[string]any
+		if ps.enricher.PVPDisplay != nil && perLang != nil && len(matched) > 0 {
+			perUser = ps.enricher.PokemonPerUser(perLang, matched)
+		}
+		metrics.EnrichmentDuration.WithLabelValues("pokemon").Observe(time.Since(enrichStart).Seconds())
+
+		if ps.renderCh == nil {
+			return
+		}
+		webhookFields := parseWebhookFields(raw)
+
 		if change != nil {
-			ps.handlePokemonChange(l, raw, change, st)
+			l.Infof("Pokemon changed (%s) from %s to %s",
+				change.Type.String(),
+				ps.pokemonName(change.Old.PokemonID, change.Old.Form),
+				ps.pokemonName(change.New.PokemonID, change.New.Form))
+		}
+
+		if trackingEnabled {
+			ps.dispatchPokemonAlert(pokemonDispatchInput{
+				encounterID:    pokemon.EncounterID,
+				change:         change,
+				matched:        matched,
+				priorOnlyUsers: priorOnlyUsers,
+				matchedAreas:   matchedAreas,
+				enrichment:     baseEnrichment,
+				perLang:        perLang,
+				perUser:        perUser,
+				webhookFields:  webhookFields,
+				tilePending:    tilePending,
+				isEncountered:  processed.Encountered,
+			})
+			return
+		}
+
+		// ReplyKey is set so enabling the flag later threads onto this send.
+		ps.renderCh <- RenderJob{
+			IsPokemon:         true,
+			IsEncountered:     processed.Encountered,
+			Enrichment:        baseEnrichment,
+			PerLangEnrichment: perLang,
+			PerUserEnrichment: perUser,
+			WebhookFields:     webhookFields,
+			MatchedUsers:      matched,
+			MatchedAreas:      matchedAreas,
+			TileGate:          ps.newTileGate(tilePending),
+			LogReference:      pokemon.EncounterID,
+			ReplyKey:          pokemon.EncounterID,
 		}
 	}()
 	return nil
 }
 
-func (ps *ProcessorService) handlePokemonChange(l *log.Entry, raw json.RawMessage, change *tracker.EncounterChange, st *state.State) {
-	// Re-match with new state and send as pokemon_changed
-	oldIV := float64(change.Old.ATK+change.Old.DEF+change.Old.STA) / 0.45
+// pokemonDispatchInput bundles inputs to dispatchPokemonAlert. All
+// fields describe the new state; priorOnlyUsers carries recipients
+// reconstructed from the reply index who no longer match.
+type pokemonDispatchInput struct {
+	encounterID    string
+	change         *tracker.EncounterChange
+	matched        []webhook.MatchedUser
+	priorOnlyUsers []webhook.MatchedUser
+	matchedAreas   []webhook.MatchedArea
+	enrichment     map[string]any
+	perLang        map[string]map[string]any
+	perUser        map[string]map[string]any
+	webhookFields  map[string]any
+	tilePending    *staticmap.TilePending
+	isEncountered  bool
+}
 
-	l.Infof("Pokemon changed from %s to %s",
-		ps.pokemonName(change.Old.PokemonID, change.Old.Form),
-		ps.pokemonName(change.New.PokemonID, change.New.Form))
+// dispatchPokemonAlert emits one RenderJob per language per bucket:
+// matched users get `monster`; prior-only users get `monsterChanged`
+// with a per-language {{original.X}} view. ReplyKey is set on every
+// job so the delivery queue attaches reply metadata when a prior
+// exists. Fresh sends seed the reply-index for future changes. A
+// single tileGate ensures the shared enrichment map is written once
+// before any render worker reads it.
+func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
+	if ps.dispatcher == nil {
+		if len(in.matched) == 0 {
+			return
+		}
+		ps.renderCh <- RenderJob{
+			IsPokemon:         true,
+			IsEncountered:     in.isEncountered,
+			Enrichment:        in.enrichment,
+			PerLangEnrichment: in.perLang,
+			PerUserEnrichment: in.perUser,
+			WebhookFields:     in.webhookFields,
+			MatchedUsers:      in.matched,
+			MatchedAreas:      in.matchedAreas,
+			TileGate:          ps.newTileGate(in.tilePending),
+			LogReference:      in.encounterID,
+			ReplyKey:          in.encounterID,
+		}
+		return
+	}
 
-	// TODO: Route pokemon_changed through render queue with EditKey for message editing.
-	_ = oldIV
+	gate := ps.newTileGate(in.tilePending)
+
+	// Bucket 1: matched users → `monster`, grouped by language.
+	if len(in.matched) > 0 {
+		for _, users := range groupByLanguage(in.matched, ps.cfg.General.Locale) {
+			ps.renderCh <- RenderJob{
+				IsPokemon:         true,
+				IsEncountered:     in.isEncountered,
+				Enrichment:        in.enrichment,
+				PerLangEnrichment: in.perLang,
+				PerUserEnrichment: in.perUser,
+				WebhookFields:     in.webhookFields,
+				MatchedUsers:      users,
+				MatchedAreas:      in.matchedAreas,
+				TileGate:          gate,
+				LogReference:      in.encounterID,
+				ReplyKey:          in.encounterID,
+			}
+		}
+	}
+
+	// Bucket 2: prior-only users → `monsterChanged`, grouped by language.
+	// ChangeEncountered (CP 0 → >0) is filtered out — IV reveal isn't a
+	// change worth notifying about for users whose filter excluded the
+	// new state; the matched-still-matches path already covers users
+	// whose rule was IV-insensitive.
+	if len(in.priorOnlyUsers) > 0 && in.change != nil && in.change.Type != tracker.ChangeEncountered {
+		bucket := changeTypeBucket(in.change.Type)
+
+		var perLangOriginal map[string]map[string]any
+		var fallbackOriginal map[string]any
+		if in.change.OldWebhook != nil {
+			perLangOriginal = ps.buildPerLanguageOriginal(in.change.OldWebhook, in.priorOnlyUsers)
+		}
+		if perLangOriginal == nil {
+			fallbackOriginal = dts.BuildOriginalView(in.change.Old, ps.enricher.GameData, ps.translatorFor(""))
+		}
+
+		byLang := groupByLanguage(in.priorOnlyUsers, ps.cfg.General.Locale)
+		for lang, users := range byLang {
+			orig := fallbackOriginal
+			if perLangOriginal != nil {
+				orig = perLangOriginal[lang]
+			}
+			ps.renderCh <- RenderJob{
+				IsPokemon:         true,
+				IsChange:          true,
+				IsEncountered:     in.isEncountered,
+				Enrichment:        in.enrichment,
+				PerLangEnrichment: ps.perLangWithChangeFields(in.perLang, lang, bucket),
+				PerUserEnrichment: in.perUser,
+				WebhookFields:     in.webhookFields,
+				MatchedUsers:      users,
+				MatchedAreas:      in.matchedAreas,
+				TileGate:          gate,
+				LogReference:      in.encounterID,
+				ReplyKey:          in.encounterID,
+				OriginalView:      orig,
+				ChangeType:        in.change.Type.String(),
+			}
+		}
+	}
+}
+
+// changeTypeBucket collapses the 5-value tracker.ChangeType enum into
+// the two template-facing values:
+//   - "stats" for weather-boost-driven CP/IV shifts (same pokemon,
+//     different effective stats).
+//   - "species" for everything else (species, form, gender — all
+//     identity changes; gender alone effectively never fires).
+// ChangeEncountered is filtered upstream and never reaches here.
+func changeTypeBucket(t tracker.ChangeType) string {
+	if t == tracker.ChangeWeatherBoost {
+		return "stats"
+	}
+	return "species"
+}
+
+// perLangWithChangeFields returns a per-language enrichment map that
+// adds `changeType` and `changeTypeText` to the slot for `lang`,
+// leaving other languages shared by reference. Used only for
+// monsterChanged RenderJobs so the fields don't leak into `monster`
+// jobs that share the upstream perLang map.
+func (ps *ProcessorService) perLangWithChangeFields(perLang map[string]map[string]any, lang, bucket string) map[string]map[string]any {
+	text := ps.translatorFor(lang).T("change_type_text_" + bucket)
+
+	if perLang == nil {
+		return map[string]map[string]any{
+			lang: {"changeType": bucket, "changeTypeText": text},
+		}
+	}
+
+	clone := maps.Clone(perLang[lang])
+	if clone == nil {
+		clone = make(map[string]any, 2)
+	}
+	clone["changeType"] = bucket
+	clone["changeTypeText"] = text
+
+	out := make(map[string]map[string]any, len(perLang))
+	for l, fields := range perLang {
+		out[l] = fields
+	}
+	out[lang] = clone
+	return out
+}
+
+// rebuildMatchedUserForChange synthesises a MatchedUser for a target
+// that had a prior alert for this encounter but no longer matches.
+// Rule-specific fields (Template, Clean, Ping, Distance) stay at
+// zero values — the T1 tracking rule isn't known here and may have
+// been deleted or edited since. Returns nil for unknown or disabled
+// humans; their reply-index entry expires on its own.
+func (ps *ProcessorService) rebuildMatchedUserForChange(targetID string) *webhook.MatchedUser {
+	if ps.humans == nil {
+		return nil
+	}
+	human, err := ps.humans.GetLite(targetID)
+	if err != nil || human == nil {
+		return nil
+	}
+	if !human.Enabled || human.AdminDisable {
+		return nil
+	}
+	return &webhook.MatchedUser{
+		ID:       human.ID,
+		Type:     human.Type,
+		Name:     human.Name,
+		Language: effectiveLanguage(webhook.MatchedUser{Language: human.Language}, ps.cfg.General.Locale),
+	}
+}
+
+// buildPerLanguageOriginal re-runs the regular pokemon enrichment pipeline
+// against the prior-sighting webhook (PVP fields cleared at storage time)
+// and returns one merged base+perLang map per distinct language among the
+// supplied users. The result becomes RenderJob.OriginalView; LayeredView
+// exposes it under {{original.X}}.
+//
+// Static-map tile generation is skipped (TileModeSkip) — the position
+// doesn't change between prior and current sightings, so the tile from the
+// new state's render is reused implicitly. Returns nil when the enricher
+// isn't configured for translation; the caller should fall back to
+// dts.BuildOriginalView in that case.
+func (ps *ProcessorService) buildPerLanguageOriginal(prior *webhook.PokemonWebhook, users []webhook.MatchedUser) map[string]map[string]any {
+	if ps.enricher == nil || prior == nil {
+		return nil
+	}
+	// Without a WeatherProvider the regular Pokemon enrichment path panics
+	// (e.WeatherProvider.GetCurrentWeatherInCell). Treat partial-enricher
+	// setups (tests, early-init) as "no per-language original" so the caller
+	// falls back to the safer dts.BuildOriginalView path.
+	if ps.enricher.WeatherProvider == nil {
+		return nil
+	}
+	rarityGroup := 0
+	if ps.stats != nil {
+		rarityGroup = ps.stats.GetRarityGroup(prior.PokemonID)
+	}
+	pvpCfg := ps.pvpCfg
+	if pvpCfg == nil {
+		// pvp.Calculate dereferences cfg; supply a zero-value to keep the
+		// helper crash-safe in partial-init contexts (tests). The prior
+		// webhook is PVP-stripped anyway, so PVP fields will be empty either
+		// way — original.* doesn't expose PVP.
+		pvpCfg = &pvp.Config{}
+	}
+	processed := matching.ProcessPokemonWebhook(prior, rarityGroup, pvpCfg)
+	base, _ := ps.enricher.Pokemon(prior, processed, enrichment.TileModeSkip)
+	if base == nil {
+		return nil
+	}
+	if ps.enricher.GameData == nil || ps.enricher.Translations == nil {
+		// Without translations the per-language layer is empty, but the base
+		// view still carries identity / battle-stats / icon URLs etc. Return
+		// it under every distinct language so templates don't see nil.
+		out := make(map[string]map[string]any)
+		for _, lang := range distinctLanguages(users, ps.cfg.General.Locale) {
+			out[lang] = base
+		}
+		return out
+	}
+	out := make(map[string]map[string]any)
+	for _, lang := range distinctLanguages(users, ps.cfg.General.Locale) {
+		perLang := ps.enricher.PokemonTranslate(base, prior, lang)
+		merged := make(map[string]any, len(base)+len(perLang))
+		maps.Copy(merged, base)
+		maps.Copy(merged, perLang)
+		out[lang] = merged
+	}
+	return out
+}
+
+// translatorFor returns an i18n translator for the given language. Empty
+// language falls back to the configured default locale. Returns nil if
+// translations are not configured (e.g. in tests with a partial enricher).
+func (ps *ProcessorService) translatorFor(language string) *i18n.Translator {
+	if ps.enricher == nil || ps.enricher.Translations == nil {
+		return nil
+	}
+	if language == "" && ps.cfg != nil {
+		language = ps.cfg.General.Locale
+	}
+	return ps.enricher.Translations.For(language)
 }

@@ -70,15 +70,14 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
 		matched, matchedAreas := ps.maxbattleMatcher.Match(data, st)
-		metrics.MatchingDuration.WithLabelValues("maxbattle").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("max_battle", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("maxbattle").Inc()
 			metrics.MatchedUsers.WithLabelValues("maxbattle").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Maxbattle L%d %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				mb.BattleLevel, ps.pokemonName(mb.BattlePokemonID, mb.BattlePokemonForm),
@@ -108,7 +107,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,
 				MatchedAreas:      matchedAreas,
-				TilePending:       tilePending,
+				TileGate:          ps.newTileGate(tilePending),
 				LogReference:      mb.ID,
 			}
 		} else {

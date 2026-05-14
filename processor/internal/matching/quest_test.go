@@ -384,7 +384,7 @@ func TestQuestRealSquirtleEncounter(t *testing.T) {
 		},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Squirtle quest, got %d", len(matched))
 	}
@@ -405,14 +405,14 @@ func TestQuestRealSquirtleFormFilter(t *testing.T) {
 		Latitude:   51.282747, Longitude: 1.063537,
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 7, FormID: 181}},
 	}
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for correct form 181, got %d", len(matched))
 	}
 
 	// Different form from webhook (172 = Charmander form)
 	data.Rewards[0].FormID = 172
-	matched, _ = matcher.Match(data, st)
+	matched, _, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for form 172 when tracking form 181, got %d", len(matched))
 	}
@@ -432,7 +432,7 @@ func TestQuestRealItemPotion(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 2, ItemID: 2, Amount: 5}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for potion quest, got %d", len(matched))
 	}
@@ -452,7 +452,7 @@ func TestQuestRealItem701(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 2, ItemID: 701, Amount: 3}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for item 701 quest, got %d", len(matched))
 	}
@@ -472,7 +472,7 @@ func TestQuestRealStardust(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 200}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for stardust quest, got %d", len(matched))
 	}
@@ -492,7 +492,7 @@ func TestQuestRealStardustBelowThreshold(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 200}}, // only 200
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for stardust below threshold, got %d", len(matched))
 	}
@@ -512,7 +512,7 @@ func TestQuestRealArchenEncounter(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 566}}, // no form_id in this webhook
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Archen quest, got %d", len(matched))
 	}
@@ -533,7 +533,7 @@ func TestQuestRealPikachuForm(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25, FormID: 598}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Pikachu (any form), got %d", len(matched))
 	}
@@ -553,7 +553,7 @@ func TestQuestRealMegaEnergyAggron(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 12, PokemonID: 306, Amount: 10}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Aggron mega energy, got %d", len(matched))
 	}
@@ -574,7 +574,7 @@ func TestQuestRealLaprasWithBackground(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 131, FormID: 322}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match for Lapras quest, got %d", len(matched))
 	}
@@ -605,7 +605,7 @@ func TestQuestMultipleUsersMultipleTrackings(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 7, FormID: 181}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match (user2 for Squirtle), got %d", len(matched))
 	}
@@ -632,7 +632,7 @@ func TestQuestSameUserMultipleTrackingsDedup(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 200}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match (deduped), got %d", len(matched))
 	}
@@ -654,7 +654,7 @@ func TestQuestBlockedAlerts(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 500}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for blocked alerts, got %d", len(matched))
 	}
@@ -673,7 +673,7 @@ func TestQuestOutsideArea(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 3, Amount: 500}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches outside area, got %d", len(matched))
 	}
@@ -693,7 +693,7 @@ func TestQuestWrongProfile(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches for wrong profile, got %d", len(matched))
 	}
@@ -715,14 +715,14 @@ func TestQuestDistanceFilter(t *testing.T) {
 		Latitude:   51.5001, Longitude: 0.0,
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25}},
 	}
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 1 {
 		t.Errorf("Expected 1 match within distance, got %d", len(matched))
 	}
 
 	// Too far
 	data.Latitude = 51.6
-	matched, _ = matcher.Match(data, st)
+	matched, _, _ = matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches out of distance, got %d", len(matched))
 	}
@@ -739,8 +739,74 @@ func TestQuestNoTrackings(t *testing.T) {
 		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25}},
 	}
 
-	matched, _ := matcher.Match(data, st)
+	matched, _, _ := matcher.Match(data, st)
 	if len(matched) != 0 {
 		t.Errorf("Expected 0 matches with no trackings, got %d", len(matched))
+	}
+}
+
+// Two rules on different humans, one with the summary bit (clean=4) and
+// one without. The matcher must route each user into its respective
+// bucket — the summary user does NOT appear in the immediate slice.
+func TestQuestMatcher_SplitsImmediateAndBuffered(t *testing.T) {
+	immediateUser := makeHuman("immediate-user")
+	bufferedUser := makeHuman("buffered-user")
+
+	quests := []*db.QuestTracking{
+		{ID: "immediate-user", ProfileNo: 1, RewardType: 7, Reward: 25, Template: "1", Clean: 0},
+		{ID: "buffered-user", ProfileNo: 1, RewardType: 7, Reward: 25, Template: "1", Clean: 4},
+	}
+	st := makeQuestTestState(quests, map[string]*db.Human{
+		"immediate-user": immediateUser,
+		"buffered-user":  bufferedUser,
+	})
+	matcher := &QuestMatcher{}
+
+	data := &QuestData{
+		PokestopID: "stop1",
+		Latitude:   51.0, Longitude: 0.5,
+		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25}},
+	}
+
+	immediate, buffered, _ := matcher.Match(data, st)
+
+	if len(immediate) != 1 {
+		t.Fatalf("immediate len = %d, want 1", len(immediate))
+	}
+	if immediate[0].ID != "immediate-user" {
+		t.Errorf("immediate[0].ID = %q, want immediate-user", immediate[0].ID)
+	}
+	if len(buffered) != 1 {
+		t.Fatalf("buffered len = %d, want 1", len(buffered))
+	}
+	if buffered[0].ID != "buffered-user" {
+		t.Errorf("buffered[0].ID = %q, want buffered-user", buffered[0].ID)
+	}
+}
+
+// A rule without the summary bit but with edit/clean bits set must still
+// land in the immediate bucket — only the dedicated summary bit (4)
+// flips the route.
+func TestQuestMatcher_SplitIgnoresNonSummaryCleanBits(t *testing.T) {
+	user := makeHuman("user1")
+
+	// clean=3 == clean+edit, no summary bit — must route as immediate.
+	quests := []*db.QuestTracking{
+		{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Template: "1", Clean: 3},
+	}
+	st := makeQuestTestState(quests, map[string]*db.Human{"user1": user})
+	matcher := &QuestMatcher{}
+
+	data := &QuestData{
+		PokestopID: "stop1",
+		Latitude:   51.0, Longitude: 0.5,
+		Rewards: []QuestRewardData{{Type: 7, PokemonID: 25}},
+	}
+	immediate, buffered, _ := matcher.Match(data, st)
+	if len(immediate) != 1 {
+		t.Errorf("clean=3 (no summary bit) should route as immediate, got %d", len(immediate))
+	}
+	if len(buffered) != 0 {
+		t.Errorf("clean=3 (no summary bit) should not buffer, got %d buffered", len(buffered))
 	}
 }

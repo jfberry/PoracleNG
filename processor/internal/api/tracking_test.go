@@ -52,8 +52,8 @@ func TestIntBoolUnmarshal(t *testing.T) {
 		{"false", false},
 		{"0", false},
 		{"1", true},
-		{"2", true},   // any non-zero integer is truthy
-		{"-1", true},  // negative int is truthy
+		{"2", true},  // any non-zero integer is truthy
+		{"-1", true}, // negative int is truthy
 		{"null", false},
 	}
 	for _, tt := range tests {

@@ -23,8 +23,8 @@ type ParseResult struct {
 
 // Parser is the main NLP parser that converts natural language into Poracle commands.
 type Parser struct {
-	vocabs          *Vocabularies
-	invasionEvents  map[string]bool
+	vocabs         *Vocabularies
+	invasionEvents map[string]bool
 }
 
 // NewParser creates a new Parser from a translator and base directory.
@@ -59,13 +59,13 @@ var shortcutPhrases = map[string]string{
 	"start":                     "!poracle",
 	"register":                  "!poracle",
 	// Area/location shortcuts (exact-match variants)
-	"list areas":       "!area list",
-	"show areas":       "!area list",
-	"what areas":       "!area list",
-	"my areas":         "!area list",
-	"list my areas":    "!area list",
-	"clear location":   "!location",
-	"remove location":  "!location",
+	"list areas":         "!area list",
+	"show areas":         "!area list",
+	"what areas":         "!area list",
+	"my areas":           "!area list",
+	"list my areas":      "!area list",
+	"clear location":     "!location",
+	"remove location":    "!location",
 	"remove my location": "!location",
 }
 

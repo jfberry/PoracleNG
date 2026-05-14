@@ -11,7 +11,7 @@ var testCommunities = []config.CommunityConfig{
 		Name:          "NewYork",
 		AllowedAreas:  []string{"Manhattan", "Bronx", "Brooklyn"},
 		LocationFence: []string{"WholeNewYork"},
-		Telegram:      struct {
+		Telegram: struct {
 			Channels []string `toml:"channels" json:"channels"`
 			Admins   []string `toml:"admins" json:"admins"`
 		}{Admins: []string{"111", "222"}},
@@ -20,7 +20,7 @@ var testCommunities = []config.CommunityConfig{
 		Name:          "Chicago",
 		AllowedAreas:  []string{"NorthSide", "SouthSide"},
 		LocationFence: []string{"WholeChicago", "GreaterChicago"},
-		Telegram:      struct {
+		Telegram: struct {
 			Channels []string `toml:"channels" json:"channels"`
 			Admins   []string `toml:"admins" json:"admins"`
 		}{Admins: []string{"333"}},

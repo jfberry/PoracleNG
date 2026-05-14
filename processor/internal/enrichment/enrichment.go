@@ -34,6 +34,17 @@ type MapConfig struct {
 	RdmURL       string
 	ReactMapURL  string
 	RocketMadURL string
+	DiademURL    string
+}
+
+// diademEntityType maps the plural entity type used internally by addMapURLs
+// to the singular path segment Diadem expects in its URLs.
+var diademEntityType = map[string]string{
+	"gyms":      "gym",
+	"pokestops": "pokestop",
+	"nests":     "nest",
+	"stations":  "station",
+	"pokemon":   "pokemon",
 }
 
 // PVPDisplayConfig holds configuration for per-user PVP display filtering.
@@ -127,6 +138,11 @@ func (e *Enricher) addMapURLs(m map[string]any, lat, lon float64, entityType, en
 	}
 	if e.MapConfig.ReactMapURL != "" {
 		m["reactMapUrl"] = normalizeTrailingSlash(e.MapConfig.ReactMapURL) + "id/" + entityType + "/" + entityID
+	}
+	if e.MapConfig.DiademURL != "" {
+		if singular, ok := diademEntityType[entityType]; ok {
+			m["diademUrl"] = normalizeTrailingSlash(e.MapConfig.DiademURL) + singular + "/" + entityID
+		}
 	}
 	if e.MapConfig.RocketMadURL != "" {
 		m["rocketMadUrl"] = normalizeTrailingSlash(e.MapConfig.RocketMadURL) + "?lat=" + geo.FormatCoord(lat) + "&lon=" + geo.FormatCoord(lon) + "&zoom=18.0"

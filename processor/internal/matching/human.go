@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -19,6 +20,11 @@ func ValidateHumans(
 	if len(monsterList) == 0 {
 		return nil
 	}
+
+	haversineCount := 0
+	defer func() {
+		metrics.MatchingHaversines.WithLabelValues(metrics.TypePokemon).Observe(float64(haversineCount))
+	}()
 
 	// Find unique human IDs
 	humanIDs := make(map[string]bool)
@@ -55,10 +61,22 @@ func ValidateHumans(
 		if monster.ProfileNo != human.CurrentProfileNo {
 			continue
 		}
+
+		// Lazy haversine: compute once when first needed, cache for reuse.
+		var dist int
+		distComputed := false
+		haversine := func() int {
+			if !distComputed {
+				dist = HaversineDistance(human.Latitude, human.Longitude, monsterLat, monsterLon)
+				distComputed = true
+				haversineCount++
+			}
+			return dist
+		}
+
 		// Distance/area check
 		if monster.Distance > 0 {
-			dist := HaversineDistance(human.Latitude, human.Longitude, monsterLat, monsterLon)
-			if dist > monster.Distance {
+			if haversine() > monster.Distance {
 				continue
 			}
 		} else {
@@ -73,8 +91,8 @@ func ValidateHumans(
 			}
 		}
 
-		// Compute actual distance and bearing from user to event
-		actualDist := HaversineDistance(human.Latitude, human.Longitude, monsterLat, monsterLon)
+		// Reuse cached haversine (or compute now for area-based users).
+		actualDist := haversine()
 		bearing := Bearing(human.Latitude, human.Longitude, monsterLat, monsterLon)
 
 		result = append(result, webhook.MatchedUser{
@@ -113,6 +131,11 @@ func ValidateHumansForRaid(
 		return nil
 	}
 
+	haversineCount := 0
+	defer func() {
+		metrics.MatchingHaversines.WithLabelValues(blockedAlertType).Observe(float64(haversineCount))
+	}()
+
 	areas := matchedAreaNames
 
 	seen := make(map[string]bool)
@@ -130,16 +153,27 @@ func ValidateHumansForRaid(
 			continue
 		}
 
+		// Lazy haversine: compute once when first needed, cache for reuse.
+		var dist int
+		distComputed := false
+		haversine := func() int {
+			if !distComputed {
+				dist = HaversineDistance(human.Latitude, human.Longitude, raidLat, raidLon)
+				distComputed = true
+				haversineCount++
+			}
+			return dist
+		}
+
 		// Specific gym tracking - check specificgym block
-		if td.IsSpecificGym {
+		if td.IsSpecificMatch {
 			if human.BlockedAlertsSet["specificgym"] {
 				continue
 			}
 		} else {
 			// Distance/area check
 			if td.Distance > 0 {
-				dist := HaversineDistance(human.Latitude, human.Longitude, raidLat, raidLon)
-				if dist > td.Distance {
+				if haversine() > td.Distance {
 					continue
 				}
 			} else {
@@ -162,8 +196,8 @@ func ValidateHumansForRaid(
 		}
 		seen[human.ID] = true
 
-		// Compute actual distance and bearing from user to event
-		actualDist := HaversineDistance(human.Latitude, human.Longitude, raidLat, raidLon)
+		// Reuse cached haversine (or compute now for area-based users).
+		actualDist := haversine()
 		bearing := Bearing(human.Latitude, human.Longitude, raidLat, raidLon)
 
 		result = append(result, webhook.MatchedUser{
@@ -187,14 +221,14 @@ func ValidateHumansForRaid(
 }
 
 type raidUserData struct {
-	HumanID       string
-	ProfileNo     int
-	Distance      int
-	Template      string
-	Clean         int
-	Ping          string
-	RSVPChanges   int
-	IsSpecificGym bool
+	HumanID         string
+	ProfileNo       int
+	Distance        int
+	Template        string
+	Clean           int
+	Ping            string
+	RSVPChanges     int
+	IsSpecificMatch bool
 }
 
 func areaOverlap(humanAreas []string, matchedAreas map[string]bool) bool {

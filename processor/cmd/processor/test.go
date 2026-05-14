@@ -38,14 +38,14 @@ func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage,
 	}
 
 	matchedUser := webhook.MatchedUser{
-		ID:       target.ID,
-		Name:     target.Name,
-		Type:     target.Type,
-		Language: target.Language,
-		Latitude: target.Latitude,
+		ID:        target.ID,
+		Name:      target.Name,
+		Type:      target.Type,
+		Language:  target.Language,
+		Latitude:  target.Latitude,
 		Longitude: target.Longitude,
-		Template: target.Template,
-		Clean:    0,
+		Template:  target.Template,
+		Clean:     0,
 	}
 
 	switch webhookType {
@@ -110,7 +110,7 @@ func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webho
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -152,7 +152,7 @@ func (ps *ProcessorService) processTestRaid(raw json.RawMessage, target webhook.
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -177,7 +177,7 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 	if displayType == 0 {
 		displayType = inv.IncidentDisplayType
 	}
-	enrichmentData, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0, enrichment.TileModeURL)
+	enrichmentData, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, inv.URL, gruntTypeID, displayType, 0, enrichment.TileModeURL)
 	matched := []webhook.MatchedUser{target}
 
 	var perLang map[string]map[string]any
@@ -198,7 +198,7 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -214,7 +214,7 @@ func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook
 	for _, r := range quest.Rewards {
 		rewards = append(rewards, parseQuestReward(r))
 	}
-	enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, rewards, enrichment.TileModeURL)
+	enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, quest.URL, rewards, enrichment.TileModeURL)
 
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
@@ -234,7 +234,7 @@ func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook
 		WebhookFields:     webhookFields,
 		MatchedUsers:      []webhook.MatchedUser{target},
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -262,7 +262,8 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.GymTranslate(enrichmentData, teamID, 0, 0, target.Language),
+			// Test path has no team-change context, so suppress previousControl* fields.
+			target.Language: ps.enricher.GymTranslate(enrichmentData, teamID, -1, -1, target.Language),
 		}
 	}
 
@@ -277,7 +278,7 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -310,7 +311,7 @@ func (ps *ProcessorService) processTestNest(raw json.RawMessage, target webhook.
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -334,7 +335,7 @@ func (ps *ProcessorService) processTestFort(raw json.RawMessage, target webhook.
 		WebhookFields: webhookFields,
 		MatchedUsers:  []webhook.MatchedUser{target},
 		MatchedAreas:  []webhook.MatchedArea{},
-		TilePending:   tilePending,
+		TileGate:      ps.newTileGate(tilePending),
 		LogReference:  "test",
 	}
 	return nil
@@ -367,7 +368,7 @@ func (ps *ProcessorService) processTestMaxbattle(raw json.RawMessage, target web
 		WebhookFields:     webhookFields,
 		MatchedUsers:      matched,
 		MatchedAreas:      []webhook.MatchedArea{},
-		TilePending:       tilePending,
+		TileGate:          ps.newTileGate(tilePending),
 		LogReference:      "test",
 	}
 	return nil
@@ -407,7 +408,7 @@ func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webh
 			WebhookFields:     webhookFields,
 			MatchedUsers:      matched,
 			MatchedAreas:      []webhook.MatchedArea{},
-			TilePending:       tilePending,
+			TileGate:          ps.newTileGate(tilePending),
 			LogReference:      "test",
 		}
 		return nil

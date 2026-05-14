@@ -63,15 +63,17 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		// On first sight (oldState == nil), use -1 for old values to signal
 		// "unknown previous state" — this triggers team-change alerts matching
 		// the original behavior where old_team_id=-1 means "team changed".
-		oldState := ps.gymState.Update(gymID, teamID, gym.SlotsAvailable, inBattle, gym.LastOwnerID)
+		oldState := ps.gymState.Update(gymID, teamID, gym.SlotsAvailable, inBattle)
 
 		oldTeamID := -1
 		oldSlotsAvailable := -1
+		oldLastOwnerID := -1
 		var oldInBattle bool
 		if oldState != nil {
 			oldTeamID = oldState.TeamID
 			oldSlotsAvailable = oldState.SlotsAvailable
 			oldInBattle = oldState.InBattle
+			oldLastOwnerID = oldState.LastOwnerID
 		}
 
 		if oldState != nil && battleCooldown && oldTeamID == teamID && oldSlotsAvailable == gym.SlotsAvailable {
@@ -92,15 +94,14 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
 		matched, matchedAreas := ps.gymMatcher.Match(data, st)
-		metrics.MatchingDuration.WithLabelValues("gym").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("gym", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("gym").Inc()
 			metrics.MatchedUsers.WithLabelValues("gym").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
 				gym.Name, ps.teamName(oldTeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))
@@ -113,7 +114,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.GymTranslate(enrichmentData, teamID, oldTeamID, gym.LastOwnerID, lang)
+					perLang[lang] = ps.enricher.GymTranslate(enrichmentData, teamID, oldTeamID, oldLastOwnerID, lang)
 				}
 			}
 
@@ -129,7 +130,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,
 				MatchedAreas:      matchedAreas,
-				TilePending:       tilePending,
+				TileGate:          ps.newTileGate(tilePending),
 				LogReference:      gymID,
 			}
 		} else {

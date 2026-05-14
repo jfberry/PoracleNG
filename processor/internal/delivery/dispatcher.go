@@ -101,6 +101,11 @@ func (d *Dispatcher) QueueDepth() int { return len(d.ch) }
 // TrackerSize returns the number of messages being tracked.
 func (d *Dispatcher) TrackerSize() int { return d.tracker.Size() }
 
+// MessageTracker exposes the underlying tracker so callers can perform
+// reply-key lookups (used by pokemon-changed dispatch to partition matched
+// users into "has prior message" / "doesn't" buckets).
+func (d *Dispatcher) MessageTracker() *MessageTracker { return d.tracker }
+
 // DiscordDepth returns the number of discord jobs currently in-flight.
 func (d *Dispatcher) DiscordDepth() int { return d.queue.DiscordDepth() }
 

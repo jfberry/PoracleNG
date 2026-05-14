@@ -20,11 +20,11 @@ type TypeInfo struct {
 
 // rawTypeInfo is the raw masterfile format for types.json.
 type rawTypeInfo struct {
-	TypeID      int   `json:"typeId"`
+	TypeID      int    `json:"typeId"`
 	TypeName    string `json:"typeName"`
-	Weaknesses  []int `json:"weaknesses"`
-	Resistances []int `json:"resistances"`
-	Immunes     []int `json:"immunes"`
+	Weaknesses  []int  `json:"weaknesses"`
+	Resistances []int  `json:"resistances"`
+	Immunes     []int  `json:"immunes"`
 }
 
 // LoadTypes parses the raw masterfile types.json file.

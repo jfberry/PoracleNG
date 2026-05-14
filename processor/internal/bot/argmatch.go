@@ -30,8 +30,8 @@ type ArgMatcher struct {
 	// into a single token before per-param matching runs, so users don't
 	// need to type underscores or quotes for known multi-word names.
 	// See collapseMultiWord.
-	bareMultiWord      map[string]bool            // items + pokemon names (multi-word entries only)
-	prefixedMultiWord  map[string]map[string]bool // "move" → multi-word move names, "form" → form names
+	bareMultiWord     map[string]bool            // items + pokemon names (multi-word entries only)
+	prefixedMultiWord map[string]map[string]bool // "move" → multi-word move names, "form" → form names
 }
 
 // NewArgMatcher builds the pre-computed lookup tables for argument matching.
@@ -109,12 +109,12 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 		// From translation keys
 		levelNames := map[string][]int{
 			strings.ToLower(tr.T("raid.level.legendary")):        {5},
-			strings.ToLower(tr.T("raid.level.mega")):              {6},
-			strings.ToLower(tr.T("raid.level.mega_legendary")):    {7},
-			strings.ToLower(tr.T("raid.level.ultra_beast")):       {8},
-			strings.ToLower(tr.T("raid.level.elite")):             {9},
-			strings.ToLower(tr.T("raid.level.primal")):            {10},
-			strings.ToLower(tr.T("raid.level.shadow_legendary")):  {15},
+			strings.ToLower(tr.T("raid.level.mega")):             {6},
+			strings.ToLower(tr.T("raid.level.mega_legendary")):   {7},
+			strings.ToLower(tr.T("raid.level.ultra_beast")):      {8},
+			strings.ToLower(tr.T("raid.level.elite")):            {9},
+			strings.ToLower(tr.T("raid.level.primal")):           {10},
+			strings.ToLower(tr.T("raid.level.shadow_legendary")): {15},
 		}
 		// "shadow" without qualifier matches all shadow levels
 		shadowLevels := []int{}
@@ -295,11 +295,17 @@ var knownPrefixKeys = []string{
 	"arg.prefix.atk", "arg.prefix.maxatk",
 	"arg.prefix.def", "arg.prefix.maxdef",
 	"arg.prefix.sta", "arg.prefix.maxsta",
-	"arg.prefix.weight", "arg.prefix.maxweight",
+	// arg.prefix.weight / arg.prefix.maxweight are intentionally absent —
+	// !track no longer accepts weight filters because Golbat's weight
+	// field is observer-specific and reset to null on any display change
+	// (see Golbat webhooks-reference). Existing min_weight rows still
+	// filter at match time so old rules don't fire spuriously; new rules
+	// can't add weight constraints.
 	"arg.prefix.rarity", "arg.prefix.maxrarity",
 	"arg.prefix.size", "arg.prefix.maxsize",
 	"arg.prefix.d", "arg.prefix.t", "arg.prefix.gen", "arg.prefix.cap",
 	"arg.prefix.form", "arg.prefix.template", "arg.prefix.move", "arg.prefix.language",
+	"arg.prefix.gym",
 	"arg.prefix.stardust", "arg.prefix.energy", "arg.prefix.candy",
 	"arg.prefix.minspawn",
 	"arg.prefix.great", "arg.prefix.greathigh", "arg.prefix.greatcp",
@@ -310,10 +316,10 @@ var knownPrefixKeys = []string{
 // knownKeywordKeys lists all arg.* keyword keys used by any command.
 var knownKeywordKeys = []string{
 	"arg.remove", "arg.everything", "arg.individually",
-	"arg.clean", "arg.edit", "arg.shiny", "arg.ex",
+	"arg.clean", "arg.edit", "arg.summary", "arg.shiny", "arg.ex",
 	"arg.rsvp", "arg.no_rsvp", "arg.rsvp_only",
 	"arg.gmax",
-	"arg.pokestop", "arg.gym", "arg.location", "arg.new", "arg.removal", "arg.photo", "arg.include_empty",
+	"arg.pokestop", "arg.gym", "arg.station", "arg.location", "arg.new", "arg.removal", "arg.photo", "arg.name", "arg.description", "arg.include_empty",
 	"arg.stardust", "arg.energy", "arg.candy",
 	"arg.slot_changes", "arg.battle_changes",
 }

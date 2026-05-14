@@ -12,8 +12,9 @@ import (
 // ApplyCommand implements !apply <targetIDs> | <command> <args> | <command> <args> ...
 // It executes commands as other users/channels/webhooks.
 // The parser splits by "|" into groups:
-//   group[0] = target IDs (space-separated)
-//   group[1..n] = commands to execute
+//
+//	group[0] = target IDs (space-separated)
+//	group[1..n] = commands to execute
 type ApplyCommand struct{}
 
 func (c *ApplyCommand) Name() string      { return "cmd.apply" }

@@ -288,10 +288,10 @@ func TestSaveEntryCleansAllStaleDuplicates(t *testing.T) {
 // pointing to the DTS.md section so they can self-correct.
 func TestLogSummaryHelpShadowingAdvisory(t *testing.T) {
 	cases := []struct {
-		name        string
-		entries     []DTSEntry
-		wantAdvice  bool
-		wantPhrase  string
+		name       string
+		entries    []DTSEntry
+		wantAdvice bool
+		wantPhrase string
 	}{
 		{
 			name: "user help with default:true fires advisory",

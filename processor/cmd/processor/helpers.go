@@ -80,25 +80,43 @@ func areaNames(areas []webhook.MatchedArea) string {
 	return strings.Join(names, ",")
 }
 
-// distinctLanguages returns the unique language codes from matched users.
-// Users with no language set fall back to defaultLocale.
-func distinctLanguages(matched []webhook.MatchedUser, defaultLocale string) []string {
-	if defaultLocale == "" {
-		defaultLocale = "en"
+// effectiveLanguage returns the language code to use for a matched user,
+// falling back to defaultLocale (or "en" if that's blank). Single source
+// of truth for the blank-language fallback rule.
+func effectiveLanguage(m webhook.MatchedUser, defaultLocale string) string {
+	if m.Language != "" {
+		return m.Language
 	}
+	if defaultLocale != "" {
+		return defaultLocale
+	}
+	return "en"
+}
+
+// distinctLanguages returns the unique language codes from matched users.
+func distinctLanguages(matched []webhook.MatchedUser, defaultLocale string) []string {
 	seen := make(map[string]bool, 4)
 	var langs []string
 	for _, m := range matched {
-		lang := m.Language
-		if lang == "" {
-			lang = defaultLocale
-		}
+		lang := effectiveLanguage(m, defaultLocale)
 		if !seen[lang] {
 			seen[lang] = true
 			langs = append(langs, lang)
 		}
 	}
 	return langs
+}
+
+// groupByLanguage buckets matched users by language code. Used by the
+// change-event dispatcher to fan out one RenderJob per language so each
+// recipient gets a language-specific {{original.X}} view.
+func groupByLanguage(matched []webhook.MatchedUser, defaultLocale string) map[string][]webhook.MatchedUser {
+	out := make(map[string][]webhook.MatchedUser)
+	for _, m := range matched {
+		lang := effectiveLanguage(m, defaultLocale)
+		out[lang] = append(out[lang], m)
+	}
+	return out
 }
 
 // parseWebhookFields deserialises the raw webhook JSON into a map for use as
@@ -111,7 +129,6 @@ func parseWebhookFields(raw json.RawMessage) map[string]any {
 	}
 	return fields
 }
-
 
 // toInt converts a JSON number (float64) to int.
 func toInt(v any) int {
@@ -258,6 +275,18 @@ func (ps *ProcessorService) OnBreach(target, typ, name, language string, limit, 
 	ps.dispatchBypass(target, typ, name, msg, "RateLimit")
 }
 
+// notifySummaryRateBreach sends the one-time "you hit the summary
+// limit" notification on the same bypass channel the alert-bucket
+// breach hook uses. Distinct from OnBreach because (a) the message
+// wording differs (digests vs individual alerts) and (b) the summary
+// bucket has no ban path — opting into summaries should never lead
+// to auto-disable.
+func (ps *ProcessorService) notifySummaryRateBreach(target, typ, name, language string, limit int) {
+	tr := ps.translations.For(language)
+	msg := tr.Tf("rate_limit.summary_reached", limit, ps.cfg.AlertLimits.TimingPeriod, bot.CommandPrefixForType(ps.cfg, typ))
+	ps.dispatchBypass(target, typ, name, msg, "SummaryRateLimit")
+}
+
 // OnBan implements delivery.RateLimitHooks. Invoked when a destination has
 // accumulated enough breaches in 24h to be banned. Disables the human in the
 // DB, sends a farewell message, posts to the shame channel if configured, and
@@ -283,10 +312,21 @@ func (ps *ProcessorService) OnBan(target, typ, name, language string) {
 
 	ps.dispatchBypass(target, typ, name, msg, "RateLimit")
 
-	if ps.cfg.AlertLimits.ShameChannel != "" {
+	// Shame post is a Discord-user @mention; only meaningful for actual
+	// users. Channel/webhook bans don't get publicly shamed (the mention
+	// resolves to nothing useful and just clutters the shame channel).
+	if ps.cfg.AlertLimits.ShameChannel != "" && typ == bot.TypeDiscordUser {
 		shameContent := tr.Tf("rate_limit.shame", target)
 		ps.dispatchBypass(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "RateLimit")
 	}
+
+	// Operator-channel notice for every banned target type, not just
+	// users (the shame channel covers users; the admin channel covers
+	// channels/webhooks/threads that admins want to know about).
+	ps.adminNotice(fmt.Sprintf(
+		":no_entry: Rate-limit ban: auto-disabled %s `%s` (`%s`) after exceeding the per-target limit window.",
+		typ, name, target,
+	))
 
 	ps.triggerReload()
 }
@@ -305,12 +345,26 @@ func (ps *ProcessorService) disableUserForDeliveryFailure(target, name, jobType 
 		return
 	}
 
-	// Post shame message if configured (Discord users only — Telegram doesn't have channel pings the same way)
-	if ps.cfg.AlertLimits.ShameChannel != "" && strings.HasPrefix(jobType, "discord:") {
+	// Post shame message if configured. Only fires for Discord users —
+	// the message uses an @mention which is meaningless for channel /
+	// thread / webhook targets. Use delivery.fail.shame (not the
+	// rate-limit copy) so the operational reason is correct: the user
+	// got disabled because we couldn't reach them, not because they
+	// were too noisy.
+	if ps.cfg.AlertLimits.ShameChannel != "" && jobType == bot.TypeDiscordUser {
 		tr := ps.translations.For(ps.cfg.General.Locale)
-		shameContent := tr.Tf("delivery.shame", target)
+		shameContent := tr.Tf("delivery.fail.shame", target)
 		ps.dispatchMessage(ps.cfg.AlertLimits.ShameChannel, "discord:channel", "Shame channel", shameContent, "DeliveryFail")
 	}
+
+	// Operator-channel notice for every disabled target type. The shame
+	// channel covers users only (the @mention is meaningless elsewhere),
+	// but admins want to know when channels/webhooks/threads they
+	// registered are getting auto-disabled.
+	ps.adminNotice(fmt.Sprintf(
+		":no_entry: Delivery failure: auto-disabled %s `%s` (`%s`) after repeated send failures.",
+		jobType, name, target,
+	))
 
 	ps.triggerReload()
 }
@@ -326,9 +380,13 @@ func (ps *ProcessorService) triggerReload() {
 		ps.reloadTimer.Stop()
 	}
 	ps.reloadTimer = time.AfterFunc(500*time.Millisecond, func() {
-		if err := state.Load(ps.stateMgr, ps.database); err != nil {
+		if err := state.Load(ps.stateMgr, ps.database, ps.summarySchedules); err != nil {
 			log.Errorf("Debounced state reload failed: %s", err)
+			ps.adminNoticeThrottled(
+				"state.reload.fail",
+				fmt.Sprintf(":warning: Debounced state reload failed: %s — new tracking rules won't be picked up until this clears.", err),
+				5*time.Minute,
+			)
 		}
 	})
 }
-

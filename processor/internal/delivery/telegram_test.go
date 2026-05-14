@@ -255,6 +255,123 @@ func TestTelegramParseModeNormalization(t *testing.T) {
 	}
 }
 
+func TestSplitTopicTarget(t *testing.T) {
+	cases := []struct {
+		in        string
+		wantChat  string
+		wantTopic int
+	}{
+		{"12345", "12345", 0},
+		{"-1001234567890", "-1001234567890", 0},
+		{"-1001234567890:42", "-1001234567890", 42},
+		{"-1001234567890:0", "-1001234567890:0", 0}, // topic 0 is not a topic
+		{"-1001234567890:abc", "-1001234567890:abc", 0},
+		{":42", ":42", 0}, // no chat part
+		{"", "", 0},
+	}
+	for _, tc := range cases {
+		gotChat, gotTopic := splitTopicTarget(tc.in)
+		if gotChat != tc.wantChat || gotTopic != tc.wantTopic {
+			t.Errorf("splitTopicTarget(%q) = (%q, %d), want (%q, %d)",
+				tc.in, gotChat, gotTopic, tc.wantChat, tc.wantTopic)
+		}
+	}
+}
+
+// TestTelegramSendTopic exercises the full forum-topic delivery path:
+// the composite Target is split, message_thread_id is added to every
+// outgoing API body, and the persisted sentID keeps the composite chat
+// segment so a subsequent Edit/Delete can recover the topic.
+func TestTelegramSendTopic(t *testing.T) {
+	msgCounter := 0
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		msgCounter++
+		return okResponse(msgCounter)
+	})
+	defer server.Close()
+
+	msg := json.RawMessage(`{
+		"content":"Hello topic",
+		"sticker":"sticker123",
+		"send_order":["sticker","text"]
+	}`)
+	job := &Job{Target: "-1001234567890:42", Type: "telegram:topic", Message: msg}
+
+	result, err := sender.Send(context.Background(), job)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.ID != "-1001234567890:42|sticker=1|text=2" {
+		t.Errorf("expected sentID '-1001234567890:42|sticker=1|text=2', got %q", result.ID)
+	}
+
+	c := *calls
+	if len(c) != 2 {
+		t.Fatalf("expected 2 calls, got %d", len(c))
+	}
+	for i, call := range c {
+		if call.Body["chat_id"] != "-1001234567890" {
+			t.Errorf("call %d: chat_id = %v, want '-1001234567890'", i, call.Body["chat_id"])
+		}
+		if call.Body["message_thread_id"] != float64(42) {
+			t.Errorf("call %d (%s): message_thread_id = %v, want 42",
+				i, call.Method, call.Body["message_thread_id"])
+		}
+	}
+}
+
+// TestTelegramSendNonTopicNoThreadID confirms that we don't accidentally
+// send message_thread_id on plain group / user sends.
+func TestTelegramSendNonTopicNoThreadID(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(1)
+	})
+	defer server.Close()
+
+	msg := json.RawMessage(`{"content":"Hi"}`)
+	job := &Job{Target: "-1001234567890", Type: "telegram:group", Message: msg}
+
+	if _, err := sender.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c := *calls
+	if len(c) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(c))
+	}
+	if _, present := c[0].Body["message_thread_id"]; present {
+		t.Errorf("non-topic send should not include message_thread_id, got %v", c[0].Body["message_thread_id"])
+	}
+}
+
+// TestTelegramEditTopic confirms Edit recovers the bare chat from a
+// composite sentID and omits message_thread_id (editMessageText doesn't
+// take it — Telegram resolves the topic from the message_id).
+func TestTelegramEditTopic(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return http.StatusOK, map[string]any{"ok": true}
+	})
+	defer server.Close()
+
+	editMsg := json.RawMessage(`{"content":"New text","parse_mode":"HTML"}`)
+	err := sender.Edit(context.Background(), "-1001234567890:42|text=99", editMsg, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c := *calls
+	if len(c) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(c))
+	}
+	if c[0].Body["chat_id"] != "-1001234567890" {
+		t.Errorf("chat_id = %v, want '-1001234567890' (bare)", c[0].Body["chat_id"])
+	}
+	if _, present := c[0].Body["message_thread_id"]; present {
+		t.Errorf("editMessageText should not carry message_thread_id, got %v", c[0].Body["message_thread_id"])
+	}
+}
+
 func TestTelegramDelete(t *testing.T) {
 	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		return http.StatusOK, map[string]any{"ok": true}
@@ -406,5 +523,73 @@ func TestTelegramSentIDFormat(t *testing.T) {
 	}
 	if msgID != 12345 {
 		t.Errorf("expected messageID 12345, got %d", msgID)
+	}
+}
+
+// TestTelegramPayloadIncludesReplyToID proves the Telegram sender injects
+// reply_to_message_id (as a JSON number) and allow_sending_without_reply
+// when Job.ReplyToID is set. The ID is parsed out of the SentID's "text="
+// segment so replies attach to the chain's text message.
+func TestTelegramPayloadIncludesReplyToID(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(99)
+	})
+	defer server.Close()
+
+	job := &Job{
+		Target:    "12345",
+		Type:      "telegram:user",
+		Message:   json.RawMessage(`{"content":"reply"}`),
+		ReplyToID: "12345|text=42",
+	}
+
+	if _, err := sender.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c := *calls
+	if len(c) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(c))
+	}
+	body := c[0].Body
+	// JSON unmarshal yields float64 for numbers — assert numerically.
+	got, ok := body["reply_to_message_id"]
+	if !ok {
+		t.Fatalf("expected reply_to_message_id in body, got: %v", body)
+	}
+	if f, isFloat := got.(float64); !isFloat || int(f) != 42 {
+		t.Errorf("expected reply_to_message_id=42 (number), got %v (%T)", got, got)
+	}
+	if body["allow_sending_without_reply"] != true {
+		t.Errorf("expected allow_sending_without_reply=true, got %v", body["allow_sending_without_reply"])
+	}
+}
+
+// TestTelegramSendWithoutReplyToID proves the reply fields stay absent for
+// jobs that don't carry a ReplyToID — we don't want every send to declare a
+// reply target.
+func TestTelegramSendWithoutReplyToID(t *testing.T) {
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		return okResponse(7)
+	})
+	defer server.Close()
+
+	job := &Job{
+		Target:  "12345",
+		Type:    "telegram:user",
+		Message: json.RawMessage(`{"content":"plain"}`),
+	}
+	if _, err := sender.Send(context.Background(), job); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c := *calls
+	if len(c) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(c))
+	}
+	if _, ok := c[0].Body["reply_to_message_id"]; ok {
+		t.Errorf("expected no reply_to_message_id when ReplyToID empty, got body: %v", c[0].Body)
+	}
+	if _, ok := c[0].Body["allow_sending_without_reply"]; ok {
+		t.Errorf("expected no allow_sending_without_reply when ReplyToID empty, got body: %v", c[0].Body)
 	}
 }

@@ -12,9 +12,14 @@ import (
 func (e *Enricher) Lure(lure *webhook.LureWebhook, tileMode int) (map[string]any, *staticmap.TilePending) {
 	m := make(map[string]any)
 
-	// Pokestop identity — lure webhook uses "name" field, normalize to pokestop_name
+	// Pokestop identity — lure webhook uses "name" / "url" fields,
+	// normalize to pokestop_name / pokestop_url so all pokestop-bearing
+	// types (lure, invasion, quest) share the same template field name.
 	m["pokestop_id"] = lure.PokestopID
 	m["pokestop_name"] = lure.Name
+	if lure.URL != "" {
+		m["pokestop_url"] = lure.URL
+	}
 
 	if lure.LureExpiration > 0 {
 		tz := geo.GetTimezone(lure.Latitude, lure.Longitude)

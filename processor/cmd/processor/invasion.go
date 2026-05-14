@@ -93,21 +93,20 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 		}
 
 		st := ps.stateMgr.Get()
-		matchStart := time.Now()
 		matched, matchedAreas := ps.invasionMatcher.Match(data, st)
-		metrics.MatchingDuration.WithLabelValues("invasion").Observe(time.Since(matchStart).Seconds())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("invasion", raw, matchedAreas, matched)
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("invasion").Inc()
 			metrics.MatchedUsers.WithLabelValues("invasion").Add(float64(len(matched)))
+			metrics.IntervalMatched.Add(1)
 
 			l.Infof("Invasion grunt %s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				gruntType, inv.Name, inv.Latitude, inv.Longitude, areaNames(matchedAreas), len(matched))
 
 			mode := ps.tileMode("invasion", matched)
-			baseEnrichment, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, gruntTypeID, displayType, 0, mode)
+			baseEnrichment, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, inv.URL, gruntTypeID, displayType, 0, mode)
 
 			// Compute per-language translated enrichment
 			var perLang map[string]map[string]any
@@ -130,7 +129,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 				WebhookFields:     webhookFields,
 				MatchedUsers:      matched,
 				MatchedAreas:      matchedAreas,
-				TilePending:       tilePending,
+				TileGate:          ps.newTileGate(tilePending),
 				LogReference:      inv.PokestopID,
 			}
 		} else {

@@ -1,15 +1,18 @@
-// Package telegrambot runs a Telegram bot using go-telegram-bot-api for polling.
+// Package telegrambot runs a Telegram bot using go-telegram/bot for polling.
 // It receives messages, parses commands, executes them via the bot framework,
 // and sends replies back to the chat.
 package telegrambot
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	gotgbot "github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -21,10 +24,13 @@ import (
 // Bot is the Telegram bot polling handler.
 type Bot struct {
 	bot.BotDeps
-	api            *tgbotapi.BotAPI
+	api            *gotgbot.Bot
+	username       string // resolved at startup via getMe
 	nlpParser      *nlp.Parser
 	reconciliation *TelegramReconciliation
+	cancelStart    context.CancelFunc
 	stopCh         chan struct{}
+	closeOnce      sync.Once
 }
 
 // Config holds everything needed to create a Telegram bot.
@@ -35,19 +41,25 @@ type Config struct {
 
 // New creates and starts a Telegram bot. Returns the bot (for shutdown) or an error.
 func New(cfg Config) (*Bot, error) {
-	api, err := tgbotapi.NewBotAPI(cfg.Token)
-	if err != nil {
-		return nil, err
-	}
-
 	b := &Bot{
 		BotDeps:   cfg.BotDeps,
-		api:       api,
 		nlpParser: cfg.NLPParser,
 		stopCh:    make(chan struct{}),
 	}
 
-	log.Infof("Telegram bot connected as @%s", api.Self.UserName)
+	api, err := gotgbot.New(cfg.Token, gotgbot.WithDefaultHandler(b.handleUpdate))
+	if err != nil {
+		return nil, fmt.Errorf("create telegram bot: %w", err)
+	}
+	b.api = api
+
+	// Resolve our own username for log lines and config validation echo.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if me, err := api.GetMe(ctx); err == nil && me != nil {
+		b.username = me.Username
+	}
+	log.Infof("Telegram bot connected as @%s", b.username)
 
 	// Validate configured Telegram IDs
 	b.validateConfig()
@@ -61,33 +73,36 @@ func New(cfg Config) (*Bot, error) {
 		}
 	}
 
-	go b.pollUpdates()
+	// Start polling in the background. Cancelling the context stops it.
+	startCtx, cancelStart := context.WithCancel(context.Background())
+	b.cancelStart = cancelStart
+	go api.Start(startCtx)
+
 	return b, nil
 }
 
 // validateConfig checks all configured Telegram IDs (channels, groups, communities)
 // by calling getChat and logs whether they resolve.
 func (b *Bot) validateConfig() {
+	getChat := func(chatID int64) (*models.ChatFullInfo, error) {
+		ctx, cancel := requestCtx()
+		defer cancel()
+		return b.api.GetChat(ctx, &gotgbot.GetChatParams{ChatID: chatID})
+	}
+
 	checkChat := func(label, chatIDStr string) {
 		chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 		if err != nil {
 			log.Warnf("config: %s %s — invalid ID", label, chatIDStr)
 			return
 		}
-		chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
-		chat, err := b.api.GetChat(chatCfg)
+		chat, err := getChat(chatID)
 		if err != nil {
 			log.Warnf("config: %s %s — NOT ACCESSIBLE (bot may not be a member): %v", label, chatIDStr, err)
 			return
 		}
-		name := chat.Title
-		if name == "" {
-			name = chat.UserName
-		}
-		if name == "" {
-			name = chat.FirstName
-		}
-		log.Infof("config: %s %s → %s (%s) ✓", label, chatIDStr, name, chat.Type)
+		log.Infof("config: %s %s → %s (%s) ✓", label, chatIDStr,
+			bot.DisplayName(chat.FirstName, chat.LastName, chat.Username, chat.Title), chat.Type)
 	}
 
 	// Registration channels
@@ -108,21 +123,11 @@ func (b *Bot) validateConfig() {
 		if err != nil {
 			return idStr
 		}
-		chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
-		chat, err := b.api.GetChat(chatCfg)
+		chat, err := getChat(chatID)
 		if err != nil {
 			return idStr
 		}
-		name := chat.FirstName
-		if chat.LastName != "" {
-			name += " " + chat.LastName
-		}
-		if name == "" {
-			name = chat.UserName
-		}
-		if name == "" {
-			name = chat.Title
-		}
+		name := bot.DisplayName(chat.FirstName, chat.LastName, chat.Username, chat.Title)
 		if name == "" {
 			return idStr
 		}
@@ -156,15 +161,11 @@ func (b *Bot) validateConfig() {
 	// Log delegated admins (channel tracking)
 	for target, admins := range b.Cfg.Telegram.DelegatedAdministration.ChannelTracking {
 		targetDesc := target
-		chatID, err := strconv.ParseInt(target, 10, 64)
-		if err == nil {
-			chatCfg := tgbotapi.ChatInfoConfig{ChatConfig: tgbotapi.ChatConfig{ChatID: chatID}}
-			if chat, err := b.api.GetChat(chatCfg); err == nil {
-				name := chat.Title
-				if name == "" {
-					name = chat.UserName
-				}
-				targetDesc = fmt.Sprintf("%s (%s, %s)", name, target, chat.Type)
+		if chatID, err := strconv.ParseInt(target, 10, 64); err == nil {
+			if chat, err := getChat(chatID); err == nil {
+				targetDesc = fmt.Sprintf("%s (%s, %s)",
+					bot.DisplayName(chat.FirstName, chat.LastName, chat.Username, chat.Title),
+					target, chat.Type)
 			}
 		}
 		var adminDescs []string
@@ -185,47 +186,55 @@ func (b *Bot) validateConfig() {
 }
 
 // API returns the underlying Telegram bot API, or nil if the bot is not running.
-func (b *Bot) API() *tgbotapi.BotAPI { return b.api }
+func (b *Bot) API() *gotgbot.Bot { return b.api }
 
-// Close stops the polling loop.
+// Close stops the polling loop. Safe to call more than once.
 func (b *Bot) Close() {
-	close(b.stopCh)
-	b.api.StopReceivingUpdates()
-}
-
-func (b *Bot) pollUpdates() {
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 30
-
-	updates := b.api.GetUpdatesChan(u)
-
-	for {
-		select {
-		case <-b.stopCh:
-			return
-		case update, ok := <-updates:
-			if !ok {
-				return
-			}
-			if update.ChannelPost != nil {
-				b.handleChannelPost(update.ChannelPost)
-			}
-			if update.Message != nil {
-				b.handleMessage(update.Message)
-			}
+	b.closeOnce.Do(func() {
+		if b.cancelStart != nil {
+			b.cancelStart()
 		}
+		close(b.stopCh)
+	})
+}
+
+// handleUpdate is the default handler the library calls per update.
+// The library invokes each handler in its own goroutine and does not
+// recover panics; an unrecovered panic in any handler crashes the
+// entire process. Recover here so a single bad update can't take the
+// bot down.
+func (b *Bot) handleUpdate(ctx context.Context, _ *gotgbot.Bot, u *models.Update) {
+	defer func() {
+		if r := recover(); r != nil {
+			var updateID int64
+			if u != nil {
+				updateID = u.ID
+			}
+			log.Errorf("telegram bot: handler panic on update %d: %v", updateID, r)
+		}
+	}()
+	if u == nil {
+		return
+	}
+	if u.ChannelPost != nil {
+		b.handleChannelPost(u.ChannelPost)
+		return
+	}
+	if u.Message != nil {
+		b.handleMessage(u.Message)
 	}
 }
 
-func (b *Bot) handleChannelPost(m *tgbotapi.Message) {
-	if m.Text != "" && strings.HasPrefix(m.Text, "/identify") {
+// handleChannelPost reacts to /identify in a channel — the only
+// channel-post case Poracle responds to.
+func (b *Bot) handleChannelPost(m *models.Message) {
+	if strings.HasPrefix(m.Text, "/identify") {
 		reply := fmt.Sprintf("This channel is id: [ %d ] and your id is: unknown - this is a channel (and can't be used for bot registration)", m.Chat.ID)
-		msg := tgbotapi.NewMessage(m.Chat.ID, reply)
-		b.api.Send(msg)
+		_, _ = b.sendTopicMessage(m.Chat.ID, m.MessageThreadID, reply)
 	}
 }
 
-func (b *Bot) handleMessage(m *tgbotapi.Message) {
+func (b *Bot) handleMessage(m *models.Message) {
 	if m.From == nil {
 		return
 	}
@@ -233,13 +242,14 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 	// /identify — always respond, no registration required
 	if strings.HasPrefix(m.Text, "/identify") {
 		var reply string
-		if m.Chat.Type == "private" {
+		if m.Chat.Type == models.ChatTypePrivate {
 			reply = fmt.Sprintf("This is a private message and your id is: [ %d ]", m.From.ID)
+		} else if m.MessageThreadID > 0 {
+			reply = fmt.Sprintf("This channel is id: [ %d ], topic id: [ %d ] and your id is: [ %d ]", m.Chat.ID, m.MessageThreadID, m.From.ID)
 		} else {
 			reply = fmt.Sprintf("This channel is id: [ %d ] and your id is: [ %d ]", m.Chat.ID, m.From.ID)
 		}
-		msg := tgbotapi.NewMessage(m.Chat.ID, reply)
-		b.api.Send(msg)
+		_, _ = b.sendTopicMessage(m.Chat.ID, m.MessageThreadID, reply)
 		return
 	}
 
@@ -257,28 +267,36 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 	parsed := b.Parser.Parse(text)
 	if len(parsed) == 0 {
 		// No prefix match — try NLP suggestion for DMs
-		isDM := m.Chat.Type == "private"
+		isDM := m.Chat.Type == models.ChatTypePrivate
 		if isDM && b.nlpParser != nil && b.Cfg.AI.SuggestOnDM {
 			result := b.nlpParser.Parse(text)
 			suggestion := commands.FormatNLPSuggestion(result, "/")
 			if suggestion != "" {
-				msg := tgbotapi.NewMessage(m.Chat.ID, suggestion)
-				b.api.Send(msg)
+				_, _ = b.sendTopicMessage(m.Chat.ID, m.MessageThreadID, suggestion)
 			}
 		}
 		return
 	}
 
 	userID := formatInt64(m.From.ID)
-	isDM := m.Chat.Type == "private"
+	isDM := m.Chat.Type == models.ChatTypePrivate
 	chatID := m.Chat.ID
+	threadID := m.MessageThreadID
 
 	userLang, profileNo, hasLocation, hasArea, isRegistered := bot.LookupUserStateFromStore(b.Humans, userID, b.Cfg.General.Locale)
 	isAdmin := bot.IsAdmin(b.Cfg, "telegram", userID)
 
+	// targetType reflects where the message came from. For forum topics
+	// we register and address the topic itself rather than the parent
+	// supergroup; BuildTarget will look up the composite "<chatID>:<threadID>"
+	// channel ID below to find the topic's human row.
 	targetType := bot.TypeTelegramUser
 	if !isDM {
-		targetType = bot.TypeTelegramGroup
+		if threadID > 0 {
+			targetType = bot.TypeTelegramTopic
+		} else {
+			targetType = bot.TypeTelegramGroup
+		}
 	}
 
 	var spatialIndex *geofence.SpatialIndex
@@ -298,8 +316,8 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			continue
 		}
 
-		// Handle Telegram-specific commands first (require tgbotapi directly).
-		if b.handleTelegramCommand(m, cmd.CommandKey, cmd.Args) {
+		// Handle Telegram-specific commands first (require the underlying API directly).
+		if b.handleTelegramCommand(m, threadID, cmd.CommandKey, cmd.Args) {
 			continue
 		}
 
@@ -318,13 +336,18 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 			cmd.CommandKey = "cmd.poracle"
 		}
 
-		// Registration check — skip for poracle (registration), poracle_test, and version commands
-		if !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
+		// Registration check — DM only. In a group/topic context, BuildTarget
+		// runs the channel/topic-level registration check and routes through
+		// that path's reply; firing this user-registration short-circuit in
+		// groups would falsely tell every non-admin member "you are not
+		// registered." Skipped for poracle (registration), poracle_test, and
+		// version commands.
+		if isDM && !isRegistered && cmd.CommandKey != "cmd.poracle" && cmd.CommandKey != "cmd.version" {
 			if customMsg := b.Cfg.Telegram.UnregisteredUserMessage; customMsg != "" {
-				b.api.Send(tgbotapi.NewMessage(chatID, customMsg))
+				_, _ = b.sendTopicMessage(chatID, threadID, customMsg)
 			} else {
 				tr := b.Translations.For(userLang)
-				b.api.Send(tgbotapi.NewMessage(chatID, tr.T("msg.not_registered")))
+				_, _ = b.sendTopicMessage(chatID, threadID, tr.T("msg.not_registered"))
 			}
 			continue
 		}
@@ -336,12 +359,12 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 					result := b.nlpParser.Parse(text)
 					suggestion := commands.FormatNLPSuggestion(result, "/")
 					if suggestion != "" {
-						b.api.Send(tgbotapi.NewMessage(chatID, suggestion))
+						_, _ = b.sendTopicMessage(chatID, threadID, suggestion)
 						continue
 					}
 				}
 				if customMsg := b.Cfg.Telegram.UnrecognisedCommandMessage; customMsg != "" {
-					b.api.Send(tgbotapi.NewMessage(chatID, customMsg))
+					_, _ = b.sendTopicMessage(chatID, threadID, customMsg)
 				}
 			}
 			continue
@@ -353,43 +376,48 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 		}
 
 		ctx := &bot.CommandContext{
-			UserID:       userID,
-			UserName:     m.From.UserName,
-			Platform:     "telegram",
-			ChannelID:    formatInt64(chatID),
-			IsDM:         isDM,
-			IsAdmin:      isAdmin,
-			Language:     userLang,
-			ProfileNo:    profileNo,
-			HasLocation:  hasLocation,
-			HasArea:      hasArea,
-			TargetID:     userID,
-			TargetName:   m.From.FirstName,
-			TargetType:   targetType,
-			AreaLogic:    bot.NewAreaLogic(fences, b.Cfg),
-			DB:           b.DB,
-			Humans:       b.Humans,
-			Tracking:     b.Tracking,
-			Config:       b.Cfg,
-			StateMgr:     b.StateMgr,
-			GameData:     b.GameData,
-			Translations: b.Translations,
-			Geofence:     spatialIndex,
-			Fences:       fences,
-			Dispatcher:   b.Dispatcher,
-			RowText:      b.RowText,
-			Resolver:     b.Resolver,
-			ArgMatcher:   b.ArgMatcher,
-			Geocoder:     b.Geocoder,
-			StaticMap:    b.StaticMap,
-			Weather:      b.Weather,
-			Stats:        b.Stats,
-			DTS:          b.DTS,
-			Emoji:        b.Emoji,
+			UserID:        userID,
+			UserName:      m.From.Username,
+			Platform:      "telegram",
+			ChannelID:     composeTopicChannelID(chatID, threadID),
+			IsDM:          isDM,
+			IsAdmin:       isAdmin,
+			Language:      userLang,
+			ProfileNo:     profileNo,
+			HasLocation:   hasLocation,
+			HasArea:       hasArea,
+			TargetID:      userID,
+			TargetName:    m.From.FirstName,
+			TargetType:    targetType,
+			AreaLogic:     bot.NewAreaLogic(fences, b.Cfg),
+			DB:            b.DB,
+			Humans:        b.Humans,
+			Tracking:      b.Tracking,
+			Config:        b.Cfg,
+			StateMgr:      b.StateMgr,
+			GameData:      b.GameData,
+			Translations:  b.Translations,
+			Geofence:      spatialIndex,
+			Fences:        fences,
+			Dispatcher:    b.Dispatcher,
+			RowText:       b.RowText,
+			Resolver:      b.Resolver,
+			ArgMatcher:    b.ArgMatcher,
+			Geocoder:      b.Geocoder,
+			StaticMap:     b.StaticMap,
+			Weather:       b.Weather,
+			Stats:         b.Stats,
+			DTS:           b.DTS,
+			Emoji:         b.Emoji,
 			NLP:           b.nlpParser,
-			TestProcessor: b.TestProcessor,
-			Registry:      b.Registry,
-			ReloadFunc:    b.ReloadFunc,
+			TestProcessor:      b.TestProcessor,
+			Registry:           b.Registry,
+			ReloadFunc:         b.ReloadFunc,
+			PostRegister:       b.postRegisterHook(),
+			SummarySchedules:   b.SummarySchedules,
+			SummaryBufferCount: b.SummaryBufferCount,
+			SummaryDispatch:    b.SummaryDispatch,
+			Scanner:            b.Scanner,
 		}
 
 		// Populate delegated admin permissions
@@ -407,8 +435,7 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 		} else {
 			target, args, err := bot.BuildTarget(ctx, cmd.Args)
 			if err != nil {
-				msg := tgbotapi.NewMessage(chatID, bot.LocalizeTargetError(b.Translations.For(userLang), err))
-				b.api.Send(msg)
+				_, _ = b.sendTopicMessage(chatID, threadID, bot.LocalizeTargetError(b.Translations.For(userLang), err))
 				continue
 			}
 			remainingArgs = args
@@ -423,39 +450,36 @@ func (b *Bot) handleMessage(m *tgbotapi.Message) {
 				ctx.HasLocation = target.HasLocation
 				ctx.HasArea = target.HasArea
 				if target.ExecutionMessage != "" {
-					msg := tgbotapi.NewMessage(chatID, target.ExecutionMessage)
-					b.api.Send(msg)
+					_, _ = b.sendTopicMessage(chatID, threadID, target.ExecutionMessage)
 				}
 			}
 		}
 
 		replies := handler.Run(ctx, remainingArgs)
-		b.sendReplies(chatID, m.From.ID, replies)
+		b.sendReplies(chatID, threadID, m.From.ID, replies)
 	}
 }
 
-func (b *Bot) sendReplies(chatID int64, userID int64, replies []bot.Reply) {
+func (b *Bot) sendReplies(chatID int64, threadID int, userID int64, replies []bot.Reply) {
 	for _, reply := range replies {
-		// IsDM replies go to the user's private chat, not the group
+		// IsDM replies go to the user's private chat, not the group/topic.
+		// DMs by definition have no thread context.
 		targetChat := chatID
+		replyThreadID := threadID
 		if reply.IsDM && chatID != userID {
 			targetChat = userID
+			replyThreadID = 0
 		}
 
 		// React — Telegram doesn't support message reactions, send as text
 		if reply.React != "" && reply.Text == "" && len(reply.Embed) == 0 && reply.Attachment == nil {
-			msg := tgbotapi.NewMessage(targetChat, reply.React)
-			b.api.Send(msg)
+			_, _ = b.sendTopicMessage(targetChat, replyThreadID, reply.React)
 			continue
 		}
 
 		// Image URL — send as photo (e.g. area map tiles)
 		if reply.ImageURL != "" {
-			photo := tgbotapi.NewPhoto(targetChat, tgbotapi.FileURL(reply.ImageURL))
-			if reply.Text != "" {
-				photo.Caption = reply.Text
-			}
-			if _, err := b.api.Send(photo); err != nil {
+			if err := b.sendPhotoURLToTopic(targetChat, replyThreadID, reply.ImageURL, reply.Text); err != nil {
 				log.Warnf("telegram bot: send photo failed, falling back to text: %v", err)
 				// Fall through to text handler below
 			} else {
@@ -465,14 +489,7 @@ func (b *Bot) sendReplies(chatID int64, userID int64, replies []bot.Reply) {
 
 		// File attachment
 		if reply.Attachment != nil {
-			doc := tgbotapi.NewDocument(targetChat, tgbotapi.FileBytes{
-				Name:  reply.Attachment.Filename,
-				Bytes: reply.Attachment.Content,
-			})
-			if reply.Text != "" {
-				doc.Caption = reply.Text
-			}
-			if _, err := b.api.Send(doc); err != nil {
+			if err := b.sendDocumentBytesToTopic(targetChat, replyThreadID, reply.Attachment.Filename, reply.Attachment.Content, reply.Text); err != nil {
 				log.Warnf("telegram bot: send document: %v", err)
 			}
 			continue
@@ -482,12 +499,9 @@ func (b *Bot) sendReplies(chatID int64, userID int64, replies []bot.Reply) {
 			// Split long messages at 4095 char limit
 			messages := bot.SplitMessage(reply.Text, 4095)
 			for _, text := range messages {
-				msg := tgbotapi.NewMessage(targetChat, text)
-				msg.ParseMode = "Markdown"
-				if _, err := b.api.Send(msg); err != nil {
+				if err := b.sendMarkdownToTopic(targetChat, replyThreadID, text); err != nil {
 					// Retry without parse mode in case the text has invalid Markdown
-					msg.ParseMode = ""
-					if _, err2 := b.api.Send(msg); err2 != nil {
+					if _, err2 := b.sendTopicMessage(targetChat, replyThreadID, text); err2 != nil {
 						log.Warnf("telegram bot: send message: %v", err2)
 					}
 				}
@@ -495,8 +509,6 @@ func (b *Bot) sendReplies(chatID int64, userID int64, replies []bot.Reply) {
 		}
 	}
 }
-
-
 
 // reconciliationLoop runs periodic reconciliation at the configured interval.
 func (b *Bot) reconciliationLoop() {
@@ -532,12 +544,33 @@ func (b *Bot) runReconciliation() {
 	b.reconciliation.UpdateTelegramChannels()
 }
 
+// postRegisterHook returns the bot.CommandContext.PostRegister callback
+// for Telegram, or nil if reconciliation isn't configured. Invoked by
+// !poracle / /poracle so a freshly-registered user has their channel
+// memberships verified and area_restriction populated immediately
+// rather than waiting for the next periodic cycle. The user ID arrives
+// as a decimal string; SyncSingleUser takes int64 — silently skip if
+// the parse fails (shouldn't happen for real Telegram IDs).
+func (b *Bot) postRegisterHook() func(string) {
+	if b.reconciliation == nil {
+		return nil
+	}
+	r := b.reconciliation
+	return func(userID string) {
+		id, err := strconv.ParseInt(userID, 10, 64)
+		if err != nil {
+			return
+		}
+		go r.SyncSingleUser(id)
+	}
+}
+
 // handleTelegramCommand dispatches Telegram-specific commands that require the
-// tgbotapi directly. Returns true if the command was handled.
-func (b *Bot) handleTelegramCommand(m *tgbotapi.Message, cmdKey string, args []string) bool {
+// underlying API directly. Returns true if the command was handled.
+func (b *Bot) handleTelegramCommand(m *models.Message, threadID int, cmdKey string, args []string) bool {
 	switch cmdKey {
 	case "cmd.channel":
-		b.handleChannel(m, args)
+		b.handleChannel(m, threadID, args)
 		return true
 	default:
 		return false
