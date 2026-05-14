@@ -1,6 +1,8 @@
 {
   "weather.possible_change_at": "Possible weather change at",
   "weather.unknown": "unknown",
+  "change_type_text_species": "species change",
+  "change_type_text_stats": "stats change",
   "rate_limit.reached": "You have reached the limit of {0} messages over {1} seconds",
   "rate_limit.summary_reached": "You have reached the limit of {0} summary digests over {1} seconds. Quests in this period will not be delivered until the window resets — consider using a less frequent {2}summary schedule or trimming your tracked rewards.",
   "msg.settime.err_unknown_prefix": "unknown day prefix \"{0}\"",

@@ -345,17 +345,19 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	}
 
 	// Bucket 2: prior-only users → `monsterChanged`, grouped by language.
-	// Build a per-language `original` view from the stored prior
-	// webhook so {{original.fullName}} etc. reflect what each user
-	// originally got alerted about, in their own language.
-	if len(in.priorOnlyUsers) > 0 && in.change != nil {
+	// ChangeEncountered (CP 0 → >0) is filtered out — IV reveal isn't a
+	// change worth notifying about for users whose filter excluded the
+	// new state; the matched-still-matches path already covers users
+	// whose rule was IV-insensitive.
+	if len(in.priorOnlyUsers) > 0 && in.change != nil && in.change.Type != tracker.ChangeEncountered {
+		bucket := changeTypeBucket(in.change.Type)
+
 		var perLangOriginal map[string]map[string]any
 		var fallbackOriginal map[string]any
 		if in.change.OldWebhook != nil {
 			perLangOriginal = ps.buildPerLanguageOriginal(in.change.OldWebhook, in.priorOnlyUsers)
 		}
 		if perLangOriginal == nil {
-			// Fallback when prior webhook bytes aren't available.
 			fallbackOriginal = dts.BuildOriginalView(in.change.Old, ps.enricher.GameData, ps.translatorFor(""))
 		}
 
@@ -370,7 +372,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 				IsChange:          true,
 				IsEncountered:     in.isEncountered,
 				Enrichment:        in.enrichment,
-				PerLangEnrichment: in.perLang,
+				PerLangEnrichment: ps.perLangWithChangeFields(in.perLang, lang, bucket),
 				PerUserEnrichment: in.perUser,
 				WebhookFields:     in.webhookFields,
 				MatchedUsers:      users,
@@ -383,6 +385,49 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 			}
 		}
 	}
+}
+
+// changeTypeBucket collapses the 5-value tracker.ChangeType enum into
+// the two template-facing values:
+//   - "stats" for weather-boost-driven CP/IV shifts (same pokemon,
+//     different effective stats).
+//   - "species" for everything else (species, form, gender — all
+//     identity changes; gender alone effectively never fires).
+// ChangeEncountered is filtered upstream and never reaches here.
+func changeTypeBucket(t tracker.ChangeType) string {
+	if t == tracker.ChangeWeatherBoost {
+		return "stats"
+	}
+	return "species"
+}
+
+// perLangWithChangeFields returns a per-language enrichment map that
+// adds `changeType` and `changeTypeText` to the slot for `lang`,
+// leaving other languages shared by reference. Used only for
+// monsterChanged RenderJobs so the fields don't leak into `monster`
+// jobs that share the upstream perLang map.
+func (ps *ProcessorService) perLangWithChangeFields(perLang map[string]map[string]any, lang, bucket string) map[string]map[string]any {
+	text := ps.translatorFor(lang).T("change_type_text_" + bucket)
+
+	if perLang == nil {
+		return map[string]map[string]any{
+			lang: {"changeType": bucket, "changeTypeText": text},
+		}
+	}
+
+	clone := maps.Clone(perLang[lang])
+	if clone == nil {
+		clone = make(map[string]any, 2)
+	}
+	clone["changeType"] = bucket
+	clone["changeTypeText"] = text
+
+	out := make(map[string]map[string]any, len(perLang))
+	for l, fields := range perLang {
+		out[l] = fields
+	}
+	out[lang] = clone
+	return out
 }
 
 // rebuildMatchedUserForChange synthesises a MatchedUser for a target

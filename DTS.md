@@ -347,6 +347,26 @@ Only set when fired by a true change event — the dispatcher also leaves
 - Pokemon change tracking is disabled via `[tracking]
   pokemon_change_tracking = false`.
 
+### Change dimension fields
+
+`monsterChanged` also exposes two fields describing the kind of change that
+fired the alert. Use these in templates to switch wording or styling:
+
+| Field | Type | Description |
+|---|---|---|
+| `changeType` | string | One of `species` or `stats`. See table below. |
+| `changeTypeText` | string | Localised label (e.g. "species change", "stats change"). |
+
+| `changeType` | Fires for | Meaning |
+|---|---|---|
+| `species` | `ChangeSpecies`, `ChangeForm`, `ChangeGender` | Identity change. Most commonly community-day re-classifications, or the known "A/B pokemon" server bug where Golbat reports a different species ID for the same encounter. |
+| `stats` | `ChangeWeatherBoost` | Same pokemon, weather boost shifted. Post-boost IVs and CP differ from the originally-alerted state. This is the most common cause in practice. |
+
+The `ChangeEncountered` dimension (CP 0 → >0, "IVs just arrived") does **not**
+fire `monsterChanged`. Users who were tracking IV-insensitive ("any pokemon of
+species X") get a regular `monster` reply to their `monsterNoIv` alert; users
+whose IV filter excluded the post-encounter stats get no follow-up at all.
+
 PoracleNG ships a default `monsterChanged` template per platform in
 `fallbacks/dts.json`; admins override via `config/dts.json` or
 `config/dts/` like any other type.

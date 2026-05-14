@@ -166,6 +166,87 @@ func TestDispatchPokemonAlert_PriorOnlyNoLongerMatches(t *testing.T) {
 	if len(j.MatchedUsers) != 1 || j.MatchedUsers[0].ID != "user-bad-news" {
 		t.Errorf("MatchedUsers should be [user-bad-news], got %v", j.MatchedUsers)
 	}
+	// Template-facing fields: the collapsed bucket + localised label.
+	// minimalProcessor has no Translations bundle, so T() returns the
+	// key — that's the assertion target.
+	lang := effectiveLanguage(priorOnly, ps.cfg.General.Locale)
+	if got := j.PerLangEnrichment[lang]["changeType"]; got != "species" {
+		t.Errorf("PerLangEnrichment[%s][changeType] = %v, want \"species\"", lang, got)
+	}
+	if got := j.PerLangEnrichment[lang]["changeTypeText"]; got != "change_type_text_species" {
+		t.Errorf("PerLangEnrichment[%s][changeTypeText] = %v, want fallback key", lang, got)
+	}
+}
+
+// ChangeEncountered (CP 0 → >0) must NOT fire monsterChanged for
+// prior-only users: their filter excluded the new state, sending a
+// "stats revealed" follow-up would contradict their tracking rule.
+func TestDispatchPokemonAlert_EncounteredChange_PriorOnly_NoJob(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
+
+	encounterID := "enc-iv-reveal"
+	priorOnly := webhook.MatchedUser{ID: "user-iv-strict", Type: "discord:user"}
+
+	change := &tracker.EncounterChange{
+		EncounterID: encounterID,
+		Type:        tracker.ChangeEncountered,
+		Old:         tracker.EncounterState{PokemonID: 25, CP: 0}, // unencountered
+		New:         tracker.EncounterState{PokemonID: 25, CP: 500, ATK: 5, DEF: 5, STA: 5},
+	}
+
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:    encounterID,
+		change:         change,
+		matched:        nil,
+		priorOnlyUsers: []webhook.MatchedUser{priorOnly},
+		isEncountered:  true,
+	})
+
+	jobs := drainRenderJobs(ch)
+	if len(jobs) != 0 {
+		t.Fatalf("expected 0 RenderJobs (ChangeEncountered skips monsterChanged), got %d: %v", len(jobs), jobs)
+	}
+}
+
+// ChangeWeatherBoost maps to the "stats" bucket — same pokemon,
+// different effective IVs / CP. This is the most common real-world
+// trigger for monsterChanged in production.
+func TestDispatchPokemonAlert_WeatherBoost_StatsBucket(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
+
+	encounterID := "enc-weather"
+	priorOnly := webhook.MatchedUser{ID: "user-100iv-only", Type: "discord:user"}
+
+	change := &tracker.EncounterChange{
+		EncounterID: encounterID,
+		Type:        tracker.ChangeWeatherBoost,
+		Old:         tracker.EncounterState{PokemonID: 25, CP: 800, Weather: 1, ATK: 15, DEF: 15, STA: 15},
+		New:         tracker.EncounterState{PokemonID: 25, CP: 640, Weather: 0, ATK: 15, DEF: 15, STA: 15},
+	}
+
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:    encounterID,
+		change:         change,
+		matched:        nil,
+		priorOnlyUsers: []webhook.MatchedUser{priorOnly},
+		isEncountered:  true,
+	})
+
+	jobs := drainRenderJobs(ch)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 monsterChanged RenderJob, got %d", len(jobs))
+	}
+	j := jobs[0]
+	if !j.IsChange {
+		t.Errorf("weather-boost change must use monsterChanged (IsChange=true)")
+	}
+	lang := effectiveLanguage(priorOnly, ps.cfg.General.Locale)
+	if got := j.PerLangEnrichment[lang]["changeType"]; got != "stats" {
+		t.Errorf("PerLangEnrichment[%s][changeType] = %v, want \"stats\"", lang, got)
+	}
+	if got := j.PerLangEnrichment[lang]["changeTypeText"]; got != "change_type_text_stats" {
+		t.Errorf("PerLangEnrichment[%s][changeTypeText] = %v, want fallback key", lang, got)
+	}
 }
 
 // Mixed: matched (A, C) share a language and batch into one
