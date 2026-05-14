@@ -204,14 +204,10 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 				if _, ok := matchedIDs[targetID]; ok {
 					continue
 				}
-				// Inherit Clean from the prior alert so the
-				// monsterChanged reply auto-deletes alongside the
-				// original on TTL — without this, the original
-				// disappears at expiry but the "your pokemon
-				// changed" reply persists.
 				prior := tracker.LookupReplyMessage(pokemon.EncounterID, targetID)
 				if prior == nil {
-					continue // raced with eviction
+					// Prior already TTL-evicted; original is gone, nothing to reply to.
+					continue
 				}
 				if u := ps.rebuildMatchedUserForChange(targetID, prior.Clean); u != nil {
 					priorOnlyUsers = append(priorOnlyUsers, *u)

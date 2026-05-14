@@ -14,6 +14,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
+	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -251,6 +252,41 @@ func TestDispatchPokemonAlert_WeatherBoost_StatsBucket(t *testing.T) {
 	}
 	if got := j.PerLangEnrichment[lang]["changeTypeText"]; got != "change_type_text_stats" {
 		t.Errorf("PerLangEnrichment[%s][changeTypeText] = %v, want fallback key", lang, got)
+	}
+}
+
+// rebuildMatchedUserForChange must stamp the prior message's Clean
+// onto the synthesised MatchedUser so the monsterChanged reply
+// inherits the same TTL clean-delete behaviour as the original.
+// Defaulting Clean to zero was the bug that left orphan reply
+// messages in the channel after the original auto-deleted.
+func TestRebuildMatchedUserForChange_InheritsClean(t *testing.T) {
+	ps, _, _ := minimalProcessor(t)
+	humans := store.NewMockHumanStore()
+	humans.AddHuman(&store.Human{
+		ID:       "user-1",
+		Type:     "discord:user",
+		Name:     "Tester",
+		Enabled:  true,
+		Language: "en",
+	})
+	ps.humans = humans
+
+	got := ps.rebuildMatchedUserForChange("user-1", 1)
+	if got == nil {
+		t.Fatalf("rebuildMatchedUserForChange returned nil for a registered enabled human")
+	}
+	if got.Clean != 1 {
+		t.Errorf("Clean = %d, want 1 (inherited from prior tracked message)", got.Clean)
+	}
+	if got.ID != "user-1" || got.Type != "discord:user" || got.Name != "Tester" {
+		t.Errorf("identity fields wrong: %+v", *got)
+	}
+
+	// Disabled humans drop out so their reply-index entry expires naturally.
+	humans.AddHuman(&store.Human{ID: "user-2", Enabled: false})
+	if got := ps.rebuildMatchedUserForChange("user-2", 1); got != nil {
+		t.Errorf("disabled human should produce nil MatchedUser, got %+v", *got)
 	}
 }
 
