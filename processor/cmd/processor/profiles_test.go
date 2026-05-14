@@ -109,6 +109,66 @@ func TestMatchesTimeWindow(t *testing.T) {
 	}
 }
 
+// TestMatchesTimeWindow_RangeEntry exercises the range+step path that
+// the schedule parser produces from e.g. "weekday:9-17/2" — a single
+// ActiveHourEntry with Step > 0 that expands at scheduler-tick time
+// into multiple fire points (9, 11, 13, 15, 17 in this case). The
+// existing TestMatchesTimeWindow only covers single-fire entries
+// (one Fires() pair), so this test pins the multi-pair iteration.
+func TestMatchesTimeWindow_RangeEntry(t *testing.T) {
+	// "weekday:9-17/2" expressed as a single entry on Day 1 (Mon).
+	// Fires at 09:00, 11:00, 13:00, 15:00, 17:00.
+	entry := db.ActiveHourEntry{Day: 1, Hours: 9, EndHours: 17, Step: 2}
+
+	tests := []struct {
+		name                                  string
+		nowDow, yesterdayDow, nowHour, nowMin int
+		want                                  bool
+	}{
+		// On a fire-point, first 10 minutes — match.
+		{"at first fire 09:00", 1, 7, 9, 0, true},
+		{"at first fire 09:09", 1, 7, 9, 9, true},
+		{"at middle fire 13:05", 1, 7, 13, 5, true},
+		{"at last fire 17:00", 1, 7, 17, 0, true},
+		// Outside the 10-min grace of any fire — miss.
+		{"between fires 10:00 (no 10:00 fire)", 1, 7, 10, 0, false},
+		{"10 minutes past first fire 09:10", 1, 7, 9, 10, false},
+		{"before first fire 08:00", 1, 7, 8, 0, false},
+		{"after last fire 18:00", 1, 7, 18, 0, false},
+		// Cross-hour grace: 12:05 matches if 11:55 was a fire (it isn't).
+		{"12:05 (11:55 not a fire)", 1, 7, 12, 5, false},
+		// Wrong day — miss even on a valid fire-point hour.
+		{"wrong day", 2, 1, 13, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchesTimeWindow(entry, tt.nowDow, tt.yesterdayDow, tt.nowHour, tt.nowMin)
+			if got != tt.want {
+				t.Errorf("matchesTimeWindow(range 9-17/2, dow=%d, hour=%d, min=%d) = %v, want %v",
+					tt.nowDow, tt.nowHour, tt.nowMin, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestMatchesTimeWindow_RangeCrossHourGrace pins the cross-hour grace
+// for a range entry whose step lands a fire-point at HH:55+ (e.g.
+// "9:55-23:55/2" would put a fire at 9:55 that needs to still match
+// at 10:00..10:09 via the "previous hour" grace).
+func TestMatchesTimeWindow_RangeCrossHourGrace(t *testing.T) {
+	// Entry with fire-points at 9:55, 11:55, 13:55, 15:55, 17:55.
+	entry := db.ActiveHourEntry{Day: 1, Hours: 9, Mins: 55, EndHours: 17, EndMins: 55, Step: 2}
+
+	// 10:05 (just after 9:55 fire) should match via "previous hour" grace.
+	if !matchesTimeWindow(entry, 1, 7, 10, 5) {
+		t.Error("expected match at 10:05 (cross-hour grace from 9:55 fire)")
+	}
+	// 10:15 is past the 10-minute grace window.
+	if matchesTimeWindow(entry, 1, 7, 10, 15) {
+		t.Error("expected miss at 10:15 (past 10-min grace)")
+	}
+}
+
 func TestNextScheduleTime(t *testing.T) {
 	loc := time.UTC
 	mins := profileScheduleMinutes // {0, 10, 15, 20, 30, 40, 45, 50}

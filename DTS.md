@@ -347,6 +347,26 @@ Only set when fired by a true change event — the dispatcher also leaves
 - Pokemon change tracking is disabled via `[tracking]
   pokemon_change_tracking = false`.
 
+### Change dimension fields
+
+`monsterChanged` also exposes two fields describing the kind of change that
+fired the alert. Use these in templates to switch wording or styling:
+
+| Field | Type | Description |
+|---|---|---|
+| `changeType` | string | One of `species` or `stats`. See table below. |
+| `changeTypeText` | string | Localised label (e.g. "species change", "stats change"). |
+
+| `changeType` | Fires for | Meaning |
+|---|---|---|
+| `species` | `ChangeSpecies`, `ChangeForm`, `ChangeGender` | Identity change. Most commonly community-day re-classifications, or the known "A/B pokemon" server bug where Golbat reports a different species ID for the same encounter. |
+| `stats` | `ChangeWeatherBoost` | Same pokemon, weather boost shifted. Post-boost IVs and CP differ from the originally-alerted state. This is the most common cause in practice. |
+
+The `ChangeEncountered` dimension (CP 0 → >0, "IVs just arrived") does **not**
+fire `monsterChanged`. Users who were tracking IV-insensitive ("any pokemon of
+species X") get a regular `monster` reply to their `monsterNoIv` alert; users
+whose IV filter excluded the post-encounter stats get no follow-up at all.
+
 PoracleNG ships a default `monsterChanged` template per platform in
 `fallbacks/dts.json`; admins override via `config/dts.json` or
 `config/dts/` like any other type.
@@ -552,6 +572,37 @@ These are flat top-level strings, not nested under a `rewardData` object:
 | `items` | array | Item rewards: `{id, amount, name, nameEng}` |
 | `energyMonsters` | array | Mega energy rewards: `{pokemonId, amount, name, nameEng}` |
 | `candy` | array | Candy rewards: `{pokemonId, amount, name, nameEng}` |
+
+---
+
+## Quest Summary (`questSummary`)
+
+`questSummary` templates render a *grouped* quest message rather than a per-quest one. Quest tracking rules with bit 4 set on `clean` (use the `summary` keyword) skip immediate delivery; their matches are buffered until the user's `[summary_schedules]` active hours fire (or `!summary quest now` is invoked). At dispatch the buffered quests are grouped by `(rewardType, reward)` and rendered once per group.
+
+The view passed to `questSummary` is shaped differently from a regular `quest` template: the reward fields (icon, translated name, count) live at the top level, and the per-pokestop entries live under the `quests` array. Per-entry fields mirror the regular `quest` view (see above), so `{{#each quests}}` rows can use `{{pokestopName}}`, `{{googleMapUrl}}`, `{{addr}}`, etc. just like a single-pokestop quest template. The only `questSummary`-specific per-entry field is `withAR`, which lets a row label AR-required quests separately.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rewardType` | int | Reward type ID (2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy) |
+| `reward` | int | Reward ID (item ID for type 2, dust amount for type 3, pokemon ID for types 4/7/12) |
+| `rewardForm` | int | Pokemon form ID for `rewardType == 7` (so e.g. two different Spinda forms group separately). `0` for all other reward types. |
+| `rewardName` | string | Translated reward name for the group header. Formatted to match the per-row reward strings from regular `quest` enrichment, **with amounts stripped** for types 2/4/12 because amounts vary across stops within a group. Examples: `"Spinda 01"` (type 7 + form, matches per-row `fullName`), `"Lapras Candy"` (type 4), `"Charizard Mega Energy"` (type 12), `"Razz Berry"` (type 2), `"1500 Stardust"` (type 3 — amount is included because it's part of the group key). |
+| `imgUrl` | string | Reward icon URL — best used as a Discord thumbnail/image. Telegram's `/sendSticker` is stricter; use `stickerUrl` there. |
+| `stickerUrl` | string | Reward sticker URL — sized and formatted for Telegram's sticker constraints. Use this for the Telegram `sticker` field. |
+| `staticMap` | string | Multi-pin static map URL — autopositioned over the pokestops in **this chunk** only |
+| `count` | int | Total number of pokestops in the reward group (across every chunk, not just this message) |
+| `chunk` | int | 1-based index of this message when an oversized group is split across multiple messages. Always `1` when `chunks == 1`. |
+| `chunks` | int | Total number of chunks the group was split into. Wrap chunk-suffix output in `{{#if (gt chunks 1)}}…{{/if}}` so single-message groups stay clean. |
+| `quests` | array | Per-pokestop entries for **this chunk** — each carries the same fields as a regular `quest` template view (see [Quest](#quest-quest)) plus `withAR` |
+| `quests[i].withAR` | bool | True if this pokestop's quest requires the AR scanner |
+
+The static map is built via the `questSummary` tile type. Like every other tile type, the URL pattern is `/staticmap/poracle-questsummary`; map mode is configurable via `[geocoding.static_map_type] questSummary = "..."` if you want anything other than the default `staticMap`. Each chunk's map shows only the pokestops in that chunk so the bullet list and pins always match.
+
+### Chunking
+
+When a single reward group would render to a Discord embed bigger than the platform allows (description length, field count, or total embed size), the dispatcher splits the group into multiple messages. Each message gets its own `chunk`/`chunks`/`quests`/`staticMap`; `count` stays at the full group total so the header can read e.g. "60× Rare Candy (1/3)". A single-chunk group has `chunks == 1` — guard chunk-suffix output with `{{#if (gt chunks 1)}}…{{/if}}`.
+
+`questSummary` messages are always fresh sends — edit-mode and reply-threading don't apply. The source rule's `clean` bit is OR'd across the constituent rules contributing to a single reward group, so the summary message for that group inherits clean-deletion if any rule had it enabled. The TTH used for clean-deletion is the latest `ExpiresAt` within the same reward group (the "summarised block" — the one logical message, or the chunks it splits into when oversized), so the message lives at least as long as the longest constituent quest. Different reward groups in the same dispatch compute their own clean + TTH independently.
 
 ---
 

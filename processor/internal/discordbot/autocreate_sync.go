@@ -970,9 +970,7 @@ func (b *Bot) removeOrphanFence(state *autocreateRuleState, fenceName string, op
 	if len(fs.ThreadIDs) > 0 {
 		entry.Threads = map[string]string{}
 		for _, labelMap := range fs.ThreadIDs {
-			for label, tid := range labelMap {
-				entry.Threads[label] = tid
-			}
+			maps.Copy(entry.Threads, labelMap)
 		}
 	}
 	entry.Channel = fs.ChannelID

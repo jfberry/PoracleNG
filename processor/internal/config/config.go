@@ -30,6 +30,7 @@ type Config struct {
 	Geocoding      GeocodingConfig      `toml:"geocoding"`
 	Fallbacks      FallbacksConfig      `toml:"fallbacks"`
 	Tracking       TrackingConfig       `toml:"tracking"`
+	Summariser     SummariserConfig     `toml:"summariser"`
 	AI             AIConfig             `toml:"ai"`
 	Validation     ValidationConfig     `toml:"validation"`
 	Autocreate     AutocreateConfig     `toml:"autocreate"`
@@ -91,12 +92,50 @@ type TrackingConfig struct {
 	// change events fall through to the regular `monster` send path — no
 	// reply threading, no `monsterChanged` template.
 	PokemonChangeTracking bool `toml:"pokemon_change_tracking"`
+	// QuestSummaryEnabled toggles the per-user buffered quest summary
+	// pipeline (matcher routing, scheduler, render). Default true. When
+	// disabled the scheduler isn't started; the buffer is still loaded
+	// and saved so that toggling the flag back on does not lose entries
+	// captured before shutdown.
+	QuestSummaryEnabled bool `toml:"quest_summary_enabled"`
+	// QuestSummaryBufferTTLHours caps how long any buffered entry can
+	// live in memory. The scheduler's sweep evicts entries whose
+	// per-entry ExpiresAt has passed (the primary expiry signal); this
+	// TTL is the safety-net axis that also drops entries whose
+	// CreatedAt is older than the configured age, in case the ExpiresAt
+	// is zero/garbage/far-future from a malformed payload. Set 0 to
+	// disable the CreatedAt-axis sweep entirely. Default 24.
+	QuestSummaryBufferTTLHours int `toml:"quest_summary_buffer_ttl_hours"`
+}
+
+// SummariserConfig holds settings shared by all summariser pipelines
+// (currently quest summary; future raid/gym/etc. summaries will reuse).
+type SummariserConfig struct {
+	// MaxPerMessage chunks any reward group with more than N entries
+	// into ceil(total/N) consecutive messages so they fit Discord's
+	// 4096-char embed-description cap. Each chunk references the same
+	// shared static map (the tileserver caches by URL → one render,
+	// served N times). Default 25 — comfortably under the ~40-stop
+	// limit when shlink is not configured. Set 0 to disable splitting
+	// (oversize groups will fail at the Discord API).
+	MaxPerMessage int `toml:"max_per_message"`
 }
 
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
 	Locale               string                   `toml:"locale"`                // default language code (e.g. "en", "pl")
+	// DefaultTimezone is the IANA timezone name used by the profile and
+	// summary schedulers when a human has lat/lon = 0/0 (no location
+	// set). Empty string means "fall back to the server's local time
+	// zone" (Go's time.Local). Set to a specific IANA name (e.g.
+	// "Europe/London", "America/Los_Angeles") to override.
+	//
+	// Examples of the fallback chain at schedule-tick time:
+	//   - human has lat/lon set → resolve via tzf
+	//   - human has lat/lon = 0/0 AND default_timezone is set → use it
+	//   - human has lat/lon = 0/0 AND default_timezone is empty → server's time.Local
+	DefaultTimezone      string                   `toml:"default_timezone"`
 	RoleCheckMode        string                   `toml:"role_check_mode"`       // "ignore", "disable-user", "delete"
 	DefaultTemplateName  any                      `toml:"default_template_name"` // default DTS template (typically 1 or "1")
 	DisabledCommands     []string                 `toml:"disabled_commands"`     // list of command names to disable (e.g. ["lure", "nest"])
@@ -175,8 +214,21 @@ type AlerterConfig struct {
 
 // DiscordConfig reads the [discord] section for fields the processor needs.
 type DiscordConfig struct {
-	Enabled                      bool                    `toml:"enabled"` // false = disable bot even if token is set
-	Token                        any                     `toml:"token"`   // string or []string
+	Enabled bool `toml:"enabled"` // false = disable bot even if token is set
+	// Token is the bot token (or list of tokens) used by the REST
+	// delivery path: DM creation, channel sends, thread sends, edits,
+	// TTH-deletes. When CommandToken is empty this token also drives
+	// the gateway side (discordgo connection + command handling +
+	// reconciliation), preserving single-bot operation.
+	Token any `toml:"token"` // string or []string
+	// CommandToken, when set, splits the bot in two: this token runs
+	// the gateway side (commands, reconciliation, role management)
+	// while Token continues to handle all outbound message delivery.
+	// The two bots can run side by side in the same guilds — each
+	// needs its own invite + permission grants. Empty by default
+	// (single-bot operation). See CLAUDE.md "Discord Reconciliation"
+	// for the rationale + operator setup notes.
+	CommandToken                 string                  `toml:"command_token"`
 	Prefix                       string                  `toml:"prefix"`
 	Activity                     string                  `toml:"activity"` // bot activity/status text
 	Channels                     []string                `toml:"channels"` // registration channel IDs
@@ -236,8 +288,26 @@ func buildDelegatedAdmin(entries []DelegatedAdminEntry) map[string][]string {
 }
 
 // DiscordTokens returns the discord tokens as a string slice.
+// These drive the REST delivery path (DM/channel/thread sends, edits,
+// TTH-deletes) and the gateway side too when CommandToken is empty.
 func (c DiscordConfig) DiscordTokens() []string {
 	return tomlTokens(c.Token)
+}
+
+// DiscordGatewayToken returns the bot token used for the discordgo
+// gateway connection: command handling, reconciliation, role
+// management. Falls back to the first delivery token when
+// CommandToken is empty (single-bot operation, the historic
+// default). Returns "" when no token at all is configured — callers
+// should treat that as "Discord disabled".
+func (c DiscordConfig) DiscordGatewayToken() string {
+	if c.CommandToken != "" {
+		return c.CommandToken
+	}
+	if t := tomlTokens(c.Token); len(t) > 0 {
+		return t[0]
+	}
+	return ""
 }
 
 // RoleSubscriptionMap converts the [[discord.role_subscriptions]] TOML array
@@ -484,6 +554,14 @@ type AlertLimitsConfig struct {
 	TimingPeriod        int                  `toml:"timing_period"`
 	DMLimit             int                  `toml:"dm_limit"`
 	ChannelLimit        int                  `toml:"channel_limit"`
+	// DM/Channel summary limits cap summary-mode dispatches per
+	// destination per timing_period independently of DMLimit /
+	// ChannelLimit. One fire counts as one (chunked summaries do
+	// not multiply the cost). The DM/Channel split mirrors the
+	// alert bucket — channels generally tolerate more throughput
+	// than individual users. Defaults 10 / 40.
+	DMSummaryLimit      int                  `toml:"dm_summary_limit"`
+	ChannelSummaryLimit int                  `toml:"channel_summary_limit"`
 	MaxLimitsBeforeStop int                  `toml:"max_limits_before_stop"`
 	DisableOnStop       bool                 `toml:"disable_on_stop"`
 	ShameChannel        string               `toml:"shame_channel"`
@@ -737,6 +815,8 @@ func Load(baseDir string) (*Config, error) {
 			TimingPeriod:        240,
 			DMLimit:             20,
 			ChannelLimit:        40,
+			DMSummaryLimit:      10,
+			ChannelSummaryLimit: 40,
 			MaxLimitsBeforeStop: 10,
 		},
 		Database: DatabaseConfig{
@@ -775,7 +855,12 @@ func Load(baseDir string) (*Config, error) {
 			PokestopURL:    "https://raw.githubusercontent.com/jfberry/PoracleNG/images/fallback/pokestop.png",
 		},
 		Tracking: TrackingConfig{
-			PokemonChangeTracking: true,
+			PokemonChangeTracking:      true,
+			QuestSummaryEnabled:        true,
+			QuestSummaryBufferTTLHours: 24,
+		},
+		Summariser: SummariserConfig{
+			MaxPerMessage: 25,
 		},
 	}
 	if err := toml.Unmarshal(data, cfg); err != nil {

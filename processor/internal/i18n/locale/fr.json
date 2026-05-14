@@ -329,7 +329,6 @@
   "msg.location.set": "Position définie à {0},{1}",
   "msg.location.current": "Your current location is {0},{1}",
   "msg.area.usage": "Valid commands are `{0}area list`, `{0}area add <areaname>`, `{0}area remove <areaname>`",
-
   "msg.area.none_available": "No areas available",
   "msg.area.available": "**Available areas:**",
   "msg.area.specify_add": "Please specify area names to add",
@@ -494,5 +493,18 @@
   "language.sv": "Svenska",
   "language.zh-cn": "Chinois (simplifié)",
   "language.ja": "Japonais",
-  "msg.help.text": "**Available commands:**\n{0}track <pokemon> [iv:N] [cp:N] [level:N] [d:N] — Track pokemon\n{0}untrack <pokemon> — Remove pokemon tracking\n{0}raid <pokemon|level:N|legendary> [d:N] — Track raids\n{0}egg <level:N|legendary|mega> [d:N] — Track eggs\n{0}quest <pokemon|stardust|energy:pokemon|candy:pokemon> — Track quests\n{0}invasion [everything|<type>] — Track invasions\n{0}lure <type|everything> — Track lures\n{0}gym <team|everything> [slot_changes] — Track gyms\n{0}nest <pokemon|everything> — Track nests\n{0}maxbattle <pokemon|level:N> — Track max battles\n{0}fort <pokestop|gym|everything> — Track fort updates\n{0}tracked — Show all tracking\n{0}script — Export tracking as commands\n{0}area [list|add|remove] — Manage areas\n{0}location <lat,lon> — Set location\n{0}profile [list|add|remove|switch] — Manage profiles\n{0}language <code> — Set language\n{0}start / {0}stop — Enable/disable alerts\n{0}version — Show version"
+  "msg.help.text": "**Available commands:**\n{0}track <pokemon> [iv:N] [cp:N] [level:N] [d:N] — Track pokemon\n{0}untrack <pokemon> — Remove pokemon tracking\n{0}raid <pokemon|level:N|legendary> [d:N] — Track raids\n{0}egg <level:N|legendary|mega> [d:N] — Track eggs\n{0}quest <pokemon|stardust|energy:pokemon|candy:pokemon> — Track quests\n{0}invasion [everything|<type>] — Track invasions\n{0}lure <type|everything> — Track lures\n{0}gym <team|everything> [slot_changes] — Track gyms\n{0}nest <pokemon|everything> — Track nests\n{0}maxbattle <pokemon|level:N> — Track max battles\n{0}fort <pokestop|gym|everything> — Track fort updates\n{0}tracked — Show all tracking\n{0}script — Export tracking as commands\n{0}area [list|add|remove] — Manage areas\n{0}location <lat,lon> — Set location\n{0}profile [list|add|remove|switch] — Manage profiles\n{0}language <code> — Set language\n{0}start / {0}stop — Enable/disable alerts\n{0}version — Show version",
+  "arg.cleartime": "cleartime",
+  "arg.now": "now",
+  "arg.summary": "summary",
+  "cmd.summary": "summary",
+  "msg.quest.edit_summary_conflict": "`edit` and `summary` are mutually exclusive — pick one.",
+  "msg.summary.usage": "Usage: `{0}summary quest [settime <times>|cleartime|now]`",
+  "msg.summary.no_schedule": "No schedule set for {0} summaries.",
+  "msg.summary.scheduled": "Schedule for {0} summaries: {1}",
+  "msg.summary.cleared": "Cleared schedule for {0} summaries.",
+  "msg.summary.updated": "Updated schedule for {0} summaries: {1}",
+  "msg.summary.no_buffered": "No buffered {0} entries.",
+  "msg.summary.buffer_count": "{0} buffered {1} entries — fires at scheduled time, or use `{2}summary {1} now` to deliver immediately.",
+  "msg.summary.delivered": "Triggered delivery of buffered {0} entries."
 }

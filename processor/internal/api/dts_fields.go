@@ -663,6 +663,39 @@ var monsterChangedExtraFields = []FieldDef{
 	{Name: "original", Type: "object", Description: "Prior-sighting view: every monster field above is also accessible as original.X (e.g. original.fullName, original.cp, original.iv, original.weatherName, original.mapurl). PVP rankings are NOT included.", Category: "identity", Preferred: true},
 }
 
+// questSummaryFields are the shared (group-scoped) fields available
+// inside a questSummary template. The per-pokestop quest fields live
+// under the `quests` array — each entry exposes the same field set as
+// a regular quest template (questString, rewardString, pokestopName,
+// imgUrl, latitude, longitude, etc.) plus the per-row withAR boolean.
+var questSummaryFields = []FieldDef{
+	{Name: "rewardType", Type: "int", Description: "Reward type code (2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy)", Category: "quest", Preferred: true},
+	{Name: "reward", Type: "int", Description: "Reward identifier — pokemon ID for type 4/7/12, item ID for type 2, dust amount for type 3", Category: "quest", Preferred: true},
+	{Name: "rewardForm", Type: "int", Description: "Pokemon form ID for type==7 rewards (so different Spinda forms, costumes, etc. group separately). 0 for all other reward types.", Category: "quest"},
+	{Name: "rewardName", Type: "string", Description: "Translated display name for the shared reward — matches the per-row reward strings from regular quest enrichment, with amounts stripped for types 2/4/12 (amounts vary per stop within a group). Examples: \"Spinda 01\" (type 7 with form), \"Lapras Candy\" (type 4), \"Charizard Mega Energy\" (type 12), \"Razz Berry\" (type 2), \"1500 Stardust\" (type 3 — amount kept because it's part of the group key).", Category: "quest", Preferred: true},
+	{Name: "imgUrl", Type: "string", Description: "Shared reward icon URL — best used as a Discord thumbnail/image. Discord renders webp/png/gif. Telegram's sticker endpoint is stricter — use stickerUrl there.", Category: "maps", Preferred: true},
+	{Name: "stickerUrl", Type: "string", Description: "Shared sticker URL for the reward — sized/formatted for Telegram's sticker constraints. Use this for the Telegram `sticker` field; imgUrl tends to be the wrong size or format.", Category: "maps", Preferred: true},
+	{Name: "staticMap", Type: "string", Description: "Multi-pin static map URL autopositioned over the pokestops in this chunk only", Category: "maps", Preferred: true},
+	{Name: "count", Type: "int", Description: "Total number of pokestops in this reward group (across all chunks, not just this message)", Category: "quest", Preferred: true},
+	{Name: "chunk", Type: "int", Description: "1-based index of this message when a large group is split across multiple messages. Always 1 when chunks == 1.", Category: "quest"},
+	{Name: "chunks", Type: "int", Description: "Total number of chunks the group was split into. Wrap chunk-suffix output in {{#if (gt chunks 1)}}...{{/if}} so single-message groups stay clean.", Category: "quest"},
+	{Name: "quests", Type: "array", Description: "Per-pokestop entries for this chunk — iterate via {{#each quests}}; each entry exposes the regular quest field set plus a withAR boolean for that row", Category: "quest", Preferred: true},
+}
+
+// questSummaryBlockScopes describes the scope inside the
+// {{#each quests}} block — every entry behaves like a regular quest
+// view with an extra withAR boolean.
+var questSummaryBlockScopes = []BlockScope{
+	{
+		Helper:      "each",
+		Args:        []string{"quests"},
+		Description: "Iterate over each pokestop's quest entry (same fields as a regular quest template, plus withAR).",
+		Fields: append([]FieldDef{
+			{Name: "withAR", Type: "bool", Description: "True when the entry came from an AR-required quest", Category: "quest"},
+		}, questFields...),
+	},
+}
+
 var fieldsByType = map[string]fieldEntry{
 	"monster":        {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
 	"monsterNoIv":    {Fields: append(commonFields, monsterFields...), BlockScopes: monsterBlockScopes, Snippets: append(commonSnippets, monsterSnippets...)},
@@ -670,6 +703,7 @@ var fieldsByType = map[string]fieldEntry{
 	"raid":           {Fields: append(commonFields, raidFields...), BlockScopes: raidBlockScopes, Snippets: append(commonSnippets, raidSnippets...)},
 	"egg":            {Fields: append(commonFields, eggFields...), BlockScopes: eggBlockScopes, Snippets: append(commonSnippets, eggSnippets...)},
 	"quest":          {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
+	"questSummary":   {Fields: append(commonFields, questSummaryFields...), BlockScopes: questSummaryBlockScopes, Snippets: append(commonSnippets, questSnippets...)},
 	"invasion":       {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
 	"lure":           {Fields: append(commonFields, lureFields...), Snippets: append(commonSnippets, lureSnippets...)},
 	"nest":           {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},

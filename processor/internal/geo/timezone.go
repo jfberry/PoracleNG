@@ -34,6 +34,52 @@ func GetTimezone(lat, lon float64) string {
 	return tz
 }
 
+// TimezoneSource discriminates where ResolveTimezone got its answer.
+// Display callers (e.g. !profile / !summary show responses) use it to
+// pick the right i18n key for the explanation text — the geo package
+// stays free of message strings.
+type TimezoneSource int
+
+const (
+	// TimezoneFromLocation: lat/lon was non-zero and tzf resolved a
+	// valid IANA name from it.
+	TimezoneFromLocation TimezoneSource = iota
+	// TimezoneFromDefault: lat/lon was zero (or tzf failed) and the
+	// operator's configured default timezone was used.
+	TimezoneFromDefault
+	// TimezoneFromServerLocal: lat/lon was zero AND defaultTZ was
+	// empty (or unparseable) — fell back to time.Local.
+	TimezoneFromServerLocal
+)
+
+// ResolveTimezone returns the *time.Location to use for scheduling
+// against a human, the IANA name (or server-local-equivalent), and
+// the source kind so callers can render a translated explanation.
+//
+// Resolution order:
+//  1. lat/lon non-zero → tzf lookup
+//  2. defaultTZ non-empty → time.LoadLocation(defaultTZ)
+//  3. fallback to time.Local (server's timezone)
+//
+// When tzf or LoadLocation fail, we degrade silently to the next step
+// so a malformed config / unknown name can't break the scheduler.
+func ResolveTimezone(lat, lon float64, defaultTZ string) (loc *time.Location, name string, source TimezoneSource) {
+	if lat != 0 || lon != 0 {
+		tz := finder.GetTimezoneName(lon, lat)
+		if tz != "" {
+			if l, err := time.LoadLocation(tz); err == nil {
+				return l, tz, TimezoneFromLocation
+			}
+		}
+	}
+	if defaultTZ != "" {
+		if l, err := time.LoadLocation(defaultTZ); err == nil {
+			return l, defaultTZ, TimezoneFromDefault
+		}
+	}
+	return time.Local, time.Local.String(), TimezoneFromServerLocal
+}
+
 // FormatTime formats a unix timestamp using the given Go layout in the specified timezone.
 func FormatTime(unixSeconds int64, timezone string, goLayout string) string {
 	loc, err := time.LoadLocation(timezone)

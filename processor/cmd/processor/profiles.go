@@ -83,7 +83,7 @@ func (ps *ProcessorService) checkProfileSwitches() {
 			continue
 		}
 
-		if !isProfileActive(p.ParsedActiveHours, human.Latitude, human.Longitude) {
+		if !ps.isProfileActive(p.ParsedActiveHours, human.Latitude, human.Longitude) {
 			continue
 		}
 
@@ -119,19 +119,27 @@ func (ps *ProcessorService) checkProfileSwitches() {
 }
 
 // isProfileActive checks whether any active_hours entry matches the current
-// local time at the given coordinates.
-func isProfileActive(entries []db.ActiveHourEntry, lat, lon float64) bool {
-	var now time.Time
-	if lat != 0 || lon != 0 {
-		tz := geo.GetTimezone(lat, lon)
-		loc, err := time.LoadLocation(tz)
-		if err != nil {
-			loc = time.UTC
-		}
-		now = time.Now().In(loc)
-	} else {
-		now = time.Now().UTC()
+// local time at the given coordinates. This is a thin wrapper kept for
+// readability at the call site; isScheduleActive carries the actual logic
+// and is shared with the summary scheduler.
+func (ps *ProcessorService) isProfileActive(entries []db.ActiveHourEntry, lat, lon float64) bool {
+	return isScheduleActive(entries, lat, lon, ps.cfg.General.DefaultTimezone, time.Now)
+}
+
+// isScheduleActive checks whether any active_hours entry matches the current
+// local time at the given coordinates. The nowFunc parameter is for test
+// injection; production callers pass time.Now. Used by both the profile
+// scheduler and the summary scheduler.
+//
+// defaultTZ is the operator's configured [general] default_timezone —
+// the fallback when the human has lat/lon = 0/0. Empty means "use
+// server local".
+func isScheduleActive(entries []db.ActiveHourEntry, lat, lon float64, defaultTZ string, nowFunc func() time.Time) bool {
+	if nowFunc == nil {
+		nowFunc = time.Now
 	}
+	loc, _, _ := geo.ResolveTimezone(lat, lon, defaultTZ)
+	now := nowFunc().In(loc)
 
 	nowHour := now.Hour()
 	nowMin := now.Minute()
@@ -149,22 +157,33 @@ func isProfileActive(entries []db.ActiveHourEntry, lat, lon float64) bool {
 	return false
 }
 
-// matchesTimeWindow implements the same 10-minute window logic as the original implementation:
-//   - Same day, same hour, within 10 minutes of scheduled minute
+// matchesTimeWindow implements the same 10-minute window logic as the
+// original implementation, walked across every fire-point the entry
+// produces:
+//   - Same day, same hour, within 10 minutes of a scheduled minute
 //   - First 10 minutes of new hour matching last 10 minutes of previous hour
 //   - Midnight boundary (hour 0, minute <10, yesterday at hour 23, minute >50)
+//
+// For single-fire entries Fires() returns one pair, so this is the
+// same as the original direct check. For range entries each step
+// is evaluated independently — a 9-17/2 entry matches at 9:00, 11:00,
+// 13:00, 15:00, and 17:00 (with the same 10-minute grace as a
+// hand-written single fire).
 func matchesTimeWindow(e db.ActiveHourEntry, nowDow, yesterdayDow, nowHour, nowMin int) bool {
-	// Within 10 minutes in same hour
-	if e.Day == nowDow && e.Hours == nowHour && nowMin >= e.Mins && (nowMin-e.Mins) < 10 {
-		return true
-	}
-	// First 10 minutes of new hour, schedule was in last 10 minutes of previous hour
-	if nowMin < 10 && e.Day == nowDow && e.Hours == nowHour-1 && e.Mins > 50 {
-		return true
-	}
-	// Midnight boundary
-	if nowHour == 0 && nowMin < 10 && e.Day == yesterdayDow && e.Hours == 23 && e.Mins > 50 {
-		return true
+	for _, fire := range e.Fires() {
+		fireHour, fireMin := fire[0], fire[1]
+		// Within 10 minutes in same hour
+		if e.Day == nowDow && fireHour == nowHour && nowMin >= fireMin && (nowMin-fireMin) < 10 {
+			return true
+		}
+		// First 10 minutes of new hour, schedule was in last 10 minutes of previous hour
+		if nowMin < 10 && e.Day == nowDow && fireHour == nowHour-1 && fireMin > 50 {
+			return true
+		}
+		// Midnight boundary
+		if nowHour == 0 && nowMin < 10 && e.Day == yesterdayDow && fireHour == 23 && fireMin > 50 {
+			return true
+		}
 	}
 	return false
 }

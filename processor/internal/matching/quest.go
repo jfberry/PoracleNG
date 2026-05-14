@@ -33,47 +33,71 @@ type QuestMatcher struct {
 	AreaSecurityEnabled bool
 }
 
-// Match returns all matched users for a quest along with the geofence areas
-// that contain the pokestop.
-func (m *QuestMatcher) Match(data *QuestData, st *state.State) ([]webhook.MatchedUser, []webhook.MatchedArea) {
+// Match returns matched users for a quest split into two buckets — those
+// for rules with no summary bit (immediate dispatch) and those for rules
+// with the summary bit set (buffered for grouped delivery). The third
+// return is the geofence areas that contain the pokestop and is
+// independent of the immediate/buffered split: the area listing reflects
+// whether ANY rule matched.
+//
+// A user with both an immediate and a summary rule is returned in BOTH
+// slices because the matcher pre-partitions trackings by summary bit and
+// runs human validation per partition (each call dedups within itself).
+func (m *QuestMatcher) Match(data *QuestData, st *state.State) (immediate []webhook.MatchedUser, buffered []webhook.MatchedUser, areas []webhook.MatchedArea) {
 	start := time.Now()
 	defer func() {
 		metrics.MatchingDuration.WithLabelValues(metrics.TypeQuest).Observe(time.Since(start).Seconds())
 	}()
 
+
 	if st == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	areas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
-	var trackings []trackingUserData
+	geoAreas, matchedAreaNames := st.Geofence.PointAreasAndNames(data.Latitude, data.Longitude)
+	var immediateTrackings []trackingUserData
+	var bufferedTrackings []trackingUserData
 
 	for _, q := range st.Quests {
 		if !questRewardMatches(q, data.Rewards) {
 			continue
 		}
 
-		trackings = append(trackings, trackingUserData{
+		td := trackingUserData{
 			HumanID:   q.ID,
 			ProfileNo: q.ProfileNo,
 			Distance:  q.Distance,
 			Template:  q.Template,
 			Clean:     q.Clean,
 			Ping:      q.Ping,
-		})
+		}
+		if db.IsSummary(q.Clean) {
+			bufferedTrackings = append(bufferedTrackings, td)
+		} else {
+			immediateTrackings = append(immediateTrackings, td)
+		}
 	}
 
-	metrics.MatchingCandidates.WithLabelValues(metrics.TypeQuest).Observe(float64(len(trackings)))
+	metrics.MatchingCandidates.WithLabelValues(metrics.TypeQuest).Observe(float64(len(immediateTrackings) + len(bufferedTrackings)))
 
-	users := ValidateHumansGeneric(
-		trackings,
+	strict := m.AreaSecurityEnabled && m.StrictLocations
+	immediate = ValidateHumansGeneric(
+		immediateTrackings,
 		data.Latitude, data.Longitude,
 		matchedAreaNames,
-		m.AreaSecurityEnabled && m.StrictLocations,
+		strict,
 		st.Humans,
 		"quest",
 	)
-	return users, ConvertAreas(areas)
+	buffered = ValidateHumansGeneric(
+		bufferedTrackings,
+		data.Latitude, data.Longitude,
+		matchedAreaNames,
+		strict,
+		st.Humans,
+		"quest",
+	)
+	return immediate, buffered, ConvertAreas(geoAreas)
 }
 
 // questRewardMatches checks if any quest reward matches the tracking entry.

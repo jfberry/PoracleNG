@@ -71,6 +71,7 @@ var configSchema = []ConfigSection{
 		Title: "General Settings",
 		Fields: []ConfigFieldDef{
 			{Name: "locale", Type: "string", Default: "en", Description: "Default language for new users and system messages (e.g., en, fr, de, it, ru)", HotReload: true},
+			{Name: "default_timezone", Type: "string", Default: "", Description: "IANA timezone name used by profile and summary schedulers when a human has no location set (lat/lon = 0/0). Empty = use the server's local timezone. Examples: Europe/London, America/Los_Angeles, Asia/Tokyo. Users with a !location are unaffected — their timezone is always derived from lat/lon.", HotReload: false},
 			{Name: "role_check_mode", Type: "select", Default: "ignore", Description: "Action when a user loses their required Discord/Telegram role", HotReload: true, Options: []ConfigSelectOption{
 				{Value: "ignore", Label: "Ignore", Description: "Log the event but take no action — user keeps their registration"},
 				{Value: "disable-user", Label: "Disable User", Description: "Set admin_disable flag, remove subscription roles, send goodbye message — user must re-register"},
@@ -343,6 +344,18 @@ var configSchema = []ConfigSection{
 		},
 		Tables: []ConfigTableDef{
 			{
+				Name:        "static_map_type",
+				Title:       "Static Map Type Per Alert",
+				Description: "Choose between staticMap (single-pin) and multiStaticMap (multi-pin) tileserver templates per renderer maptype. Known maptypes include monster, raid, quest, questSummary. The questSummary entry defaults to multiStaticMap because the summary tile autopositions over multiple pokestops.",
+				Fields: []ConfigFieldDef{
+					{Name: "maptype", Type: "string", Description: "Renderer maptype this entry applies to (e.g. monster, raid, questSummary)"},
+					{Name: "type", Type: "select", Default: "staticMap", Description: "TileserverCache template to use for this maptype", Options: []ConfigSelectOption{
+						{Value: "staticMap", Label: "staticMap", Description: "Single-pin tile"},
+						{Value: "multiStaticMap", Label: "multiStaticMap", Description: "Multi-pin tile (used by autopositioned multi-marker maps like questSummary)"},
+					}},
+				},
+			},
+			{
 				Name:        "tileserver_settings",
 				Title:       "Tileserver Settings",
 				Description: "Per-alert-type tile overrides. \"default\" applies to any alert type without its own entry. Known maptypes: default, monster, raid, pokestop, quest, weather, location, nest, gym.",
@@ -415,6 +428,8 @@ var configSchema = []ConfigSection{
 			{Name: "timing_period", Type: "int", Default: 240, Description: "Seconds over which alert rate limits are calculated", HotReload: true},
 			{Name: "dm_limit", Type: "int", Default: 20, Description: "Maximum messages a user can receive in one timing period", HotReload: true},
 			{Name: "channel_limit", Type: "int", Default: 40, Description: "Maximum messages a channel/group can receive in one timing period", HotReload: true},
+			{Name: "dm_summary_limit", Type: "int", Default: 10, Description: "Maximum summary dispatches a user can receive in one timing period. Separate bucket from dm_limit so digests and individual alerts cap independently. 1 fire = 1 against the bucket regardless of chunking.", HotReload: true},
+			{Name: "channel_summary_limit", Type: "int", Default: 40, Description: "Maximum summary dispatches a channel/group can receive in one timing period. Separate bucket from channel_limit so digests and individual alerts cap independently. 1 fire = 1 against the bucket regardless of chunking.", HotReload: true},
 			{Name: "max_limits_before_stop", Type: "int", Default: 10, Description: "Times a user can hit the rate limit within 24 hours before being stopped", HotReload: true},
 			{Name: "disable_on_stop", Type: "bool", Default: false, Description: "Admin-disable stopped users (requires admin to restart) instead of soft stop", HotReload: true},
 			{Name: "shame_channel", Type: "string", Default: "", Description: "Discord channel ID to publicly log stopped/disabled users", Resolve: "discord:channel", HotReload: true},
@@ -448,6 +463,17 @@ var configSchema = []ConfigSection{
 			{Name: "enable_gym_battle", Type: "bool", Default: false, Description: "Allow the battle_changes option in !gym tracking command", HotReload: true},
 			{Name: "default_user_tracking_level_cap", Type: "int", Default: 0, Description: "Default PVP tracking level cap for new users (0 = use all configured caps)", HotReload: true},
 			{Name: "pokemon_change_tracking", Type: "bool", Default: true, Description: "Detect post-encounter pokemon changes (form/species/gender/weather-boost) and reply-thread monsterChanged alerts to users with prior messages. When disabled, change events fall through to the regular monster send path.", HotReload: true},
+			{Name: "quest_summary_enabled", Type: "bool", Default: true, Description: "Enable per-user buffered quest summaries (matcher routing, scheduler, grouped render). When disabled, all matched quests dispatch immediately and the summary scheduler is not started.", HotReload: false},
+			{Name: "quest_summary_buffer_ttl_hours", Type: "int", Default: 24, Description: "Safety-net upper bound on how long any buffered quest entry can live. The scheduler primarily expires entries on each entry's reported ExpiresAt; this TTL drops entries whose CreatedAt is older than the configured age, catching malformed payloads where ExpiresAt is zero or unreliable. Set 0 to disable the CreatedAt-axis sweep.", HotReload: true},
+		},
+	},
+
+	// ---- summariser ----
+	{
+		Name:  "summariser",
+		Title: "Summariser",
+		Fields: []ConfigFieldDef{
+			{Name: "max_per_message", Type: "int", Default: 25, Description: "Chunk reward groups containing more than N entries into ceil(total/N) consecutive messages. Each chunk's static map shows just that chunk's pins. Default 25 leaves headroom under Discord's 4096-char embed-description cap. Set 0 to disable splitting.", HotReload: true},
 		},
 	},
 

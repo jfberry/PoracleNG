@@ -727,9 +727,12 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, actor *autocreateAct
 			DTS:           b.DTS,
 			Emoji:         b.Emoji,
 			NLP:           b.nlpParser,
-			TestProcessor: b.TestProcessor,
-			Registry:      b.Registry,
-			ReloadFunc:    b.ReloadFunc,
+			TestProcessor:      b.TestProcessor,
+			Registry:           b.Registry,
+			ReloadFunc:         b.ReloadFunc,
+			SummarySchedules:   b.SummarySchedules,
+			SummaryBufferCount: b.SummaryBufferCount,
+			SummaryDispatch:    b.SummaryDispatch,
 		}
 
 		st := b.StateMgr.Get()

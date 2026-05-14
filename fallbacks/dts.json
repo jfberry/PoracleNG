@@ -42,7 +42,7 @@
     "embed": {
       "color": "{{ivColor}}",
       "title": "{{round iv}}% {{fullName}} cp:{{cp}} L:{{level}} {{atk}}/{{def}}/{{sta}} {{{boostWeatherEmoji}}}",
-      "description": "Originally seen as **{{original.fullName}}** (CP {{original.cp}}, IV {{toFixed original.iv 0}}%)\nEnd: {{time}}, Time left: {{tthm}}m {{tths}}s \n {{#if weatherChange}}{{{weatherChange}}}\n{{/if}}{{{addr}}} \n quick: {{quickMoveName}}, charge: {{chargeMoveName}} \n{{#if pvpLittle}}**Little league:**\n{{#each pvpLittle}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}}{{#if pvpGreat}}**Great league:**\n{{#each pvpGreat}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}}{{#if pvpUltra}}**Ultra league:**\n{{#each pvpUltra}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}} Maps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+      "description": "Originally seen as **{{original.fullName}}** (CP {{original.cp}}, IV {{toFixed original.iv 0}}%) — {{changeTypeText}}\nEnd: {{time}}, Time left: {{tthm}}m {{tths}}s \n {{#if weatherChange}}{{{weatherChange}}}\n{{/if}}{{{addr}}} \n quick: {{quickMoveName}}, charge: {{chargeMoveName}} \n{{#if pvpLittle}}**Little league:**\n{{#each pvpLittle}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}}{{#if pvpGreat}}**Great league:**\n{{#each pvpGreat}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}}{{#if pvpUltra}}**Ultra league:**\n{{#each pvpUltra}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}} Maps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
       "thumbnail": {
         "url": "{{{imgUrl}}}"
       },
@@ -59,7 +59,7 @@
   "default": true,
   "platform": "telegram",
   "template": {
-    "content": "Originally seen as **{{original.fullName}}** (CP {{original.cp}}, IV {{toFixed original.iv 0}}%)\n{{round iv}}% {{fullName}} cp:{{cp}} L:{{level}} {{atk}}/{{def}}/{{sta}} {{boostWeatherEmoji}}\nEnd: {{time}}, Time left: {{tthm}}m {{tths}}s \n {{#if weatherChange}}{{weatherChange}}\n{{/if}} {{{addr}}} \n quick: {{quickMoveName}}, charge: {{chargeMoveName}} \n{{#if pvpLittle}}**Little league:**\n{{#each pvpLittle}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}}{{#if pvpGreat}}**Great league:**\n{{#each pvpGreat}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}}{{#if pvpUltra}}**Ultra league:**\n{{#each pvpUltra}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}} Maps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+    "content": "Originally seen as **{{original.fullName}}** (CP {{original.cp}}, IV {{toFixed original.iv 0}}%) — {{changeTypeText}}\n{{round iv}}% {{fullName}} cp:{{cp}} L:{{level}} {{atk}}/{{def}}/{{sta}} {{boostWeatherEmoji}}\nEnd: {{time}}, Time left: {{tthm}}m {{tths}}s \n {{#if weatherChange}}{{weatherChange}}\n{{/if}} {{{addr}}} \n quick: {{quickMoveName}}, charge: {{chargeMoveName}} \n{{#if pvpLittle}}**Little league:**\n{{#each pvpLittle}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}}{{#if pvpGreat}}**Great league:**\n{{#each pvpGreat}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}}{{#if pvpUltra}}**Ultra league:**\n{{#each pvpUltra}} - {{fullName}} #{{rank}} @{{cp}}CP (Lvl. {{levelWithCap}})\n{{/each}}{{/if}} Maps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
     "sticker": "{{{stickerUrl}}}",
     "parse_mode": "Markdown",
     "location": true,
@@ -237,7 +237,9 @@
   "platform": "telegram",
   "template": {
     "content": "*{{count}}× {{{rewardName}}}*{{#if (gt chunks 1)}} ({{chunk}}/{{chunks}}){{/if}}\n{{#each quests}}• [{{{pokestopName}}}]({{{googleMapUrl}}}){{#if withAR}} 🔭{{/if}}\n{{/each}}",
-    "sticker": "{{{imgUrl}}}",
+    "sticker": "{{{stickerUrl}}}",
+    "photo": "{{{staticMap}}}",
+    "send_order": ["sticker", "text", "photo"],
     "parse_mode": "Markdown",
     "webpage_preview": false
   }

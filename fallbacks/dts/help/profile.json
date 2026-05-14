@@ -18,7 +18,7 @@
         },
         {
           "name": "Auto-switch by time",
-          "value": "`{{prefix}}profile settime mon09:00 tue18:30 weekday09:00 weekend10:00`\n\nTimes are when the profile becomes active. Use `monHH:MM`, `weekdayHH:MM`, `weekendHH:MM` — the processor switches profiles automatically at those times each day."
+          "value": "`{{prefix}}profile settime mon09:00 tue18:30 weekday09:00 weekend10:00`\n`{{prefix}}profile settime every08:00` — switch to this profile at 08:00 every day\n\nTimes are when the profile becomes active. Day prefixes:\n• `mon`/`tue`/`wed`/`thu`/`fri`/`sat`/`sun` — a single day\n• `weekday` — Mon–Fri\n• `weekend` — Sat–Sun\n• `every` (or `everyday`) — all seven days\n\nFormat: `<prefix><HH>:<MM>` (e.g. `mon09:00`, `every08:30`). The colon and minutes are optional — `mon9` is treated as `mon09:00`.\n\n`{{prefix}}profile cleartime` — remove the auto-switch schedule for this profile (the profile itself is untouched)."
         },
         {
           "name": "Copy between profiles",

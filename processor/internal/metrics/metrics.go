@@ -223,6 +223,12 @@ var (
 		Help: "API requests by method, endpoint, and status",
 	}, []string{"method", "endpoint", "status"})
 
+	// Summary buffer metrics
+	SummaryBufferedTotal = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_summary_buffered_total",
+		Help: "Pending summary-mode messages currently held in the in-memory buffer awaiting the next scheduled dispatch (sum across every humanID + alertType bucket)",
+	})
+
 	// Render queue metrics
 	RenderQueueDepth = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "poracle_render_queue_depth",

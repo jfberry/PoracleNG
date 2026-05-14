@@ -76,6 +76,7 @@ var questParams = []bot.ParamDef{
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
+	{Type: bot.ParamKeyword, Key: "arg.summary"},
 	{Type: bot.ParamKeyword, Key: "arg.shiny"},
 	{Type: bot.ParamKeyword, Key: "arg.stardust"}, // bare "stardust" keyword (any amount)
 	{Type: bot.ParamKeyword, Key: "arg.energy"},   // bare "energy" keyword (any pokemon)
@@ -105,6 +106,15 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	common, block := parseCommonTrackFields(ctx, parsed, "quest")
 	if block != nil {
 		return []bot.Reply{*block}
+	}
+	if parsed.HasKeyword("arg.summary") {
+		// edit and summary are mutually exclusive: edit means update one
+		// in-place message; summary buffers and groups. Reject up-front
+		// so users get a clear error rather than surprising behaviour.
+		if parsed.HasKeyword("arg.edit") {
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.edit_summary_conflict")}}
+		}
+		common.Clean |= 4
 	}
 	shiny := parsed.HasKeyword("arg.shiny")
 
@@ -350,6 +360,12 @@ func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedA
 		for _, mon := range monsterList {
 			targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 7, mon.PokemonID, mon.Form, 0))
 		}
+	} else if itemID := c.matchItemName(ctx, parsed); itemID > 0 {
+		// Item reward (e.g. !quest remove pinap) — match a single item.
+		// Consume matched tokens so the unrecognized-arg checker doesn't
+		// also flag them downstream.
+		parsed.Unrecognized = nil
+		targets = append(targets, c.makeQuest(ctx, common, shiny, pings, 2, itemID, 0, 0))
 	} else {
 		// No specific type — remove everything
 		for _, rt := range []int{7, 3, 12, 4, 2} {
@@ -367,9 +383,25 @@ func (c *QuestCommand) removeQuests(ctx *bot.CommandContext, targets []db.QuestT
 		return []bot.Reply{{React: "🙅"}}
 	}
 
+	// Summary-bit filtering: if the user typed `summary` on the remove
+	// command, the target's Clean carries bit 4 (db.IsSummary). Only
+	// remove rules whose existing Clean also has bit 4 set, so
+	// `!quest remove pikachu summary` removes ONLY the summary-mode
+	// Pikachu rule and leaves a parallel immediate-mode Pikachu rule
+	// untouched. When the user did NOT type `summary` we don't filter
+	// on Clean (the historic behaviour — removes regardless of clean /
+	// edit / ping bits).
+	requireSummary := false
+	if len(targets) > 0 && db.IsSummary(targets[0].Clean) {
+		requireSummary = true
+	}
+
 	var uids []int64
 	var removed []db.QuestTrackingAPI
 	for _, existing := range tracked {
+		if requireSummary && !db.IsSummary(existing.Clean) {
+			continue
+		}
 		for _, target := range targets {
 			if existing.RewardType == target.RewardType &&
 				(target.Reward == 0 || existing.Reward == target.Reward) {

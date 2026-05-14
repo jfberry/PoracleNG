@@ -275,6 +275,18 @@ func (ps *ProcessorService) OnBreach(target, typ, name, language string, limit, 
 	ps.dispatchBypass(target, typ, name, msg, "RateLimit")
 }
 
+// notifySummaryRateBreach sends the one-time "you hit the summary
+// limit" notification on the same bypass channel the alert-bucket
+// breach hook uses. Distinct from OnBreach because (a) the message
+// wording differs (digests vs individual alerts) and (b) the summary
+// bucket has no ban path — opting into summaries should never lead
+// to auto-disable.
+func (ps *ProcessorService) notifySummaryRateBreach(target, typ, name, language string, limit int) {
+	tr := ps.translations.For(language)
+	msg := tr.Tf("rate_limit.summary_reached", limit, ps.cfg.AlertLimits.TimingPeriod, bot.CommandPrefixForType(ps.cfg, typ))
+	ps.dispatchBypass(target, typ, name, msg, "SummaryRateLimit")
+}
+
 // OnBan implements delivery.RateLimitHooks. Invoked when a destination has
 // accumulated enough breaches in 24h to be banned. Disables the human in the
 // DB, sends a farewell message, posts to the shame channel if configured, and
@@ -368,7 +380,7 @@ func (ps *ProcessorService) triggerReload() {
 		ps.reloadTimer.Stop()
 	}
 	ps.reloadTimer = time.AfterFunc(500*time.Millisecond, func() {
-		if err := state.Load(ps.stateMgr, ps.database); err != nil {
+		if err := state.Load(ps.stateMgr, ps.database, ps.summarySchedules); err != nil {
 			log.Errorf("Debounced state reload failed: %s", err)
 			ps.adminNoticeThrottled(
 				"state.reload.fail",

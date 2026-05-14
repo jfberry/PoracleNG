@@ -29,6 +29,10 @@
           "value": "`clean` — auto-delete when the quest expires\n`edit` — single message edited in place\n`ping`"
         },
         {
+          "name": "Summary mode",
+          "value": "`{{prefix}}quest pikachu summary` — buffer this rule's matches and deliver them as a grouped digest on a schedule you set with `{{prefix}}summary quest settime ...`. See `{{prefix}}help summary` for the full schedule syntax."
+        },
+        {
           "name": "Remove",
           "value": "`{{prefix}}quest remove pikachu`\n`{{prefix}}quest remove all_items` — every item-reward rule\n`{{prefix}}quest remove all_pokemon` — every pokemon-reward rule\n`{{prefix}}quest remove stardust`\n`{{prefix}}untrack id:<N>`"
         },

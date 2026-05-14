@@ -11,6 +11,7 @@ All API endpoints are available through the processor (default port 3030). The p
 - [Type-Specific POST Fields](#type-specific-post-fields)
 - [Human Management](#human-management)
 - [Profile Management](#profile-management)
+- [Summary Schedules](#summary-schedules)
 - [Geofence Data & Tiles](#geofence-data--tiles)
 - [State Management](#state-management)
 - [Statistics](#statistics)
@@ -535,6 +536,56 @@ Copy all tracking rules from one profile to another.
 ### DELETE /api/profiles/{id}/byProfileNo/{profile_no}
 
 Delete a profile and all its tracking rules.
+
+---
+
+## Summary Schedules
+
+Summary schedules buffer matched events (currently `quest`) until a per-user, per-alert-type schedule fires. Each row in `summary_schedules` holds an `active_hours` JSON array shaped exactly like a profile's `active_hours` (`[{day, hours, mins}, …]`). Tracking rules opt into buffered delivery by setting bit 4 of the rule's `clean` bitmask (the `summary` keyword in `!quest`).
+
+When `[tracking] quest_summary_enabled = false` all five endpoints return `503 Service Unavailable` with a status payload — clients can distinguish "feature off" from "endpoint missing" without parsing strings.
+
+### GET /api/summaries/{id}
+
+List every summary schedule for the user across all alert types.
+
+```json
+{
+  "status": "ok",
+  "schedules": [
+    {"id": "123", "alert_type": "quest", "active_hours": [{"day": 1, "hours": 7, "mins": 30}]}
+  ]
+}
+```
+
+### GET /api/summaries/{id}/{alertType}
+
+Return one schedule. `alertType` is `quest` today (the only renderer wired). Missing schedules return `404` with `{"status":"error","message":"schedule not found"}`.
+
+```json
+{
+  "status": "ok",
+  "schedule": {"id": "123", "alert_type": "quest", "active_hours": [{"day": 1, "hours": 7, "mins": 30}]}
+}
+```
+
+### POST /api/summaries/{id}/{alertType}
+
+Create or replace a schedule. Body must contain `active_hours` either as a JSON array or a stringified JSON value:
+
+```json
+{"active_hours": [{"day": 1, "hours": 7, "mins": 30}]}
+```
+
+Either form is canonicalised before storage. The processor triggers a debounced state reload after a successful set, so an in-flight scheduler tick picks up the change without waiting for the periodic reload.
+
+### DELETE /api/summaries/{id}/{alertType}
+
+Remove a schedule. Deleting a missing schedule is a no-op (`200 ok`) so idempotent clean-up scripts don't have to special-case 404.
+
+### POST /api/summaries/{id}/{alertType}/trigger
+
+Force-flush the buffered events for `(id, alertType)` immediately. Equivalent to `!summary <alertType> now`. Returns `200 ok` regardless of whether the buffer was empty. The handler invokes the dispatch callback synchronously, so the response only returns after the dispatcher has enqueued (not delivered) the rendered messages.
 
 ---
 

@@ -245,7 +245,7 @@ func TestNilState(t *testing.T) {
 	}
 
 	questMatcher := &QuestMatcher{}
-	if result, _ := questMatcher.Match(&QuestData{}, nil); result != nil {
+	if result, _, _ := questMatcher.Match(&QuestData{}, nil); result != nil {
 		t.Errorf("QuestMatcher with nil state should return nil")
 	}
 

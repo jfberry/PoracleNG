@@ -23,21 +23,25 @@ type TrackedMessage struct {
 	ReplyKey string `json:"reply_key,omitempty"`
 }
 
-// MessageTracker manages sent messages with TTL-based expiry and clean deletion.
+// MessageTracker manages sent messages with TTL-based expiry and clean
+// deletion. Reply linking (LookupReply / LookupReplyTargets) is layered
+// on top via a single reverse index that points back into the cache by
+// editKey — no separate ttlcache or duplicated SentID.
 type MessageTracker struct {
-	cache      *ttlcache.Cache[string, *TrackedMessage]
-	replyIndex *ttlcache.Cache[string, string] // (replyKey + "\x00" + target) → latest SentID
-	senders    map[string]Sender               // "discord" → sender, "telegram" → sender
-	cacheDir   string
-	mu         sync.Mutex
-}
+	cache    *ttlcache.Cache[string, *TrackedMessage]
+	senders  map[string]Sender // "discord" → sender, "telegram" → sender
+	cacheDir string
+	mu       sync.Mutex
 
-// replyIndexKey composes the reply-index lookup key from a reply key
-// and the target identifier. The NUL separator avoids collisions
-// between, e.g., target = "abc:def" / replyKey = "x" and
-// target = "x" / replyKey = "abc:def".
-func replyIndexKey(replyKey, target string) string {
-	return replyKey + "\x00" + target
+	// replies is the reply-key reverse index: replyKey → target →
+	// editKey. The editKey points at the latest cache entry for that
+	// (replyKey, target). Maintained in Track and cleaned up by the
+	// cache's OnEviction handler (which holds the TrackedMessage and
+	// can read its ReplyKey / Target). Single source of truth for
+	// expiration — the cache entry owning the data is the same one
+	// that drives the cleanup.
+	repliesMu sync.RWMutex
+	replies   map[string]map[string]string
 }
 
 // NewMessageTracker creates a new MessageTracker with TTL cache and eviction-based clean deletion.
@@ -45,6 +49,7 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 	mt := &MessageTracker{
 		senders:  senders,
 		cacheDir: cacheDir,
+		replies:  make(map[string]map[string]string),
 	}
 
 	cache := ttlcache.New[string, *TrackedMessage](
@@ -52,12 +57,31 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 	)
 
 	cache.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[string, *TrackedMessage]) {
+		msg := item.Value()
+
+		// Drop the reverse-index pointer if it still references THIS
+		// editKey. A later Track for the same (replyKey, target) with
+		// a fresh editKey will have overwritten the pointer — leave
+		// that newer entry alone.
+		if msg.ReplyKey != "" {
+			evictedKey := item.Key()
+			mt.repliesMu.Lock()
+			if set := mt.replies[msg.ReplyKey]; set != nil {
+				if set[msg.Target] == evictedKey {
+					delete(set, msg.Target)
+					if len(set) == 0 {
+						delete(mt.replies, msg.ReplyKey)
+					}
+				}
+			}
+			mt.repliesMu.Unlock()
+		}
+
 		if reason != ttlcache.EvictionReasonExpired {
 			log.Debugf("delivery: tracker evicted %s (reason=%v) — not a TTL expiry, skipping clean", item.Key(), reason)
 			return
 		}
 		metrics.DeliveryTrackerEvictions.Inc()
-		msg := item.Value()
 		if !db.IsClean(msg.Clean) {
 			return
 		}
@@ -80,36 +104,67 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 	go cache.Start()
 	mt.cache = cache
 
-	replyIndex := ttlcache.New[string, string](
-		ttlcache.WithDisableTouchOnHit[string, string](),
-	)
-	go replyIndex.Start()
-	mt.replyIndex = replyIndex
-
 	return mt
 }
 
-// Track inserts a message into the cache with the given TTL.
-// If msg.ReplyKey is non-empty, the (ReplyKey, Target) pair also indexes
-// msg.SentID in the reply index for O(1) reply lookup.
+// Track inserts a message into the cache with the given TTL. If
+// msg.ReplyKey is non-empty, the (ReplyKey, Target) pair also indexes
+// the cache key so LookupReply and LookupReplyTargets can find it.
 func (mt *MessageTracker) Track(key string, msg *TrackedMessage, ttl time.Duration) {
 	mt.cache.Set(key, msg, ttl)
 	if msg.ReplyKey != "" {
-		mt.replyIndex.Set(replyIndexKey(msg.ReplyKey, msg.Target), msg.SentID, ttl)
+		mt.repliesMu.Lock()
+		set := mt.replies[msg.ReplyKey]
+		if set == nil {
+			set = make(map[string]string)
+			mt.replies[msg.ReplyKey] = set
+		}
+		set[msg.Target] = key
+		mt.repliesMu.Unlock()
 	}
 }
 
+// LookupReplyTargets returns the targets with a live reply entry for
+// the given replyKey. Used by change-event fanout (e.g. pokemon
+// dispatch) to find recipients of the original alert when nobody
+// currently matches. Order is unspecified. O(targets) under RLock.
+func (mt *MessageTracker) LookupReplyTargets(replyKey string) []string {
+	if replyKey == "" {
+		return nil
+	}
+	mt.repliesMu.RLock()
+	set := mt.replies[replyKey]
+	if len(set) == 0 {
+		mt.repliesMu.RUnlock()
+		return nil
+	}
+	out := make([]string, 0, len(set))
+	for t := range set {
+		out = append(out, t)
+	}
+	mt.repliesMu.RUnlock()
+	return out
+}
+
 // LookupReply returns the SentID of the latest message tracked for
-// this (replyKey, target) pair, or "" if none. O(1).
+// this (replyKey, target) pair, or "" if none. Two O(1) lookups:
+// reverse-index map then cache. Returns "" if the cache entry has
+// expired between the two reads (treated as "no prior").
 func (mt *MessageTracker) LookupReply(replyKey, target string) string {
 	if replyKey == "" {
 		return ""
 	}
-	item := mt.replyIndex.Get(replyIndexKey(replyKey, target))
+	mt.repliesMu.RLock()
+	editKey, ok := mt.replies[replyKey][target]
+	mt.repliesMu.RUnlock()
+	if !ok {
+		return ""
+	}
+	item := mt.cache.Get(editKey)
 	if item == nil {
 		return ""
 	}
-	return item.Value()
+	return item.Value().SentID
 }
 
 // LookupEdit returns the tracked message for the given edit key, or nil if not found/expired.
@@ -229,7 +284,16 @@ func (mt *MessageTracker) Load() error {
 		}
 		mt.cache.Set(entry.Key, msg, remaining)
 		if msg.ReplyKey != "" {
-			mt.replyIndex.Set(replyIndexKey(msg.ReplyKey, msg.Target), msg.SentID, remaining)
+			// Cache OnEviction is already live, so the reverse-index
+			// write must be guarded.
+			mt.repliesMu.Lock()
+			set := mt.replies[msg.ReplyKey]
+			if set == nil {
+				set = make(map[string]string)
+				mt.replies[msg.ReplyKey] = set
+			}
+			set[msg.Target] = entry.Key
+			mt.repliesMu.Unlock()
 		}
 	}
 
@@ -240,7 +304,6 @@ func (mt *MessageTracker) Load() error {
 // Stop stops the background eviction processor and persists state to disk.
 func (mt *MessageTracker) Stop() {
 	mt.cache.Stop()
-	mt.replyIndex.Stop()
 	if err := mt.Save(); err != nil {
 		log.Warnf("delivery: failed to save tracker on stop: %v", err)
 	}

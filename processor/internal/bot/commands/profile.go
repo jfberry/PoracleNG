@@ -3,13 +3,13 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
 type ProfileCommand struct{}
@@ -42,6 +42,8 @@ func (c *ProfileCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		return c.listProfiles(ctx)
 	case matchSub("arg.settime") || subcommand == "hours":
 		return c.setTime(ctx, rest)
+	case matchSub("arg.cleartime"):
+		return c.clearTime(ctx)
 	case matchSub("arg.copyto"):
 		return c.copyTo(ctx, rest)
 	default:
@@ -60,11 +62,6 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 
 	if len(profiles) == 0 {
 		return []bot.Reply{{Text: tr.T("msg.profile.none")}}
-	}
-
-	dayKeys := []string{
-		"day.monday", "day.tuesday", "day.wednesday",
-		"day.thursday", "day.friday", "day.saturday", "day.sunday",
 	}
 
 	var sb strings.Builder
@@ -89,22 +86,20 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		}
 		sb.WriteByte('\n')
 
-		// Decode and display active hours
-		if p.ActiveHours != "" && p.ActiveHours != "[]" && p.ActiveHours != "{}" {
-			var hours []struct {
-				Day   int    `json:"day"`
-				Hours string `json:"hours"`
-				Mins  string `json:"mins"`
-			}
-			if err := json.Unmarshal([]byte(p.ActiveHours), &hours); err == nil {
-				for _, h := range hours {
-					dayName := ""
-					if h.Day >= 1 && h.Day <= 7 {
-						dayName = tr.T(dayKeys[h.Day-1])
-					}
-					sb.WriteString(fmt.Sprintf("    %s %s:%s\n", dayName, h.Hours, h.Mins))
-				}
-			}
+		entries, err := db.ParseActiveHours(p.ActiveHours)
+		if err == nil && len(entries) > 0 {
+			body := formatActiveHours(tr, entries, "\n")
+			sb.WriteString("    " + strings.ReplaceAll(body, "\n", "\n    ") + "\n")
+		}
+	}
+	// Append a single timezone-annotation line covering all profiles
+	// (they share the human's location). Skip if neither the target
+	// nor any profile carries a location — the scheduler will fall
+	// back to the operator's default_timezone or the server's local
+	// time and FormatScheduleTimezone reports that honestly.
+	if ctx.Humans != nil && ctx.Config != nil {
+		if human, err := ctx.Humans.Get(ctx.TargetID); err == nil && human != nil {
+			sb.WriteString("\n" + FormatScheduleTimezone(tr, human.Latitude, human.Longitude, ctx.Config.General.DefaultTimezone))
 		}
 	}
 	return []bot.Reply{{Text: sb.String()}}
@@ -195,10 +190,6 @@ func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) [
 	return []bot.Reply{{React: "✅", Text: tr.Tf("profile.switched", profileLabel)}}
 }
 
-// settimeRe matches day-prefix + hours:mins in multiple formats:
-// mon09:00, mon:09:00, mon09, mon:09
-var settimeRe = regexp.MustCompile(`^([a-zA-Z]+?):?(\d{1,2}):?(\d{2})?$`)
-
 // buildDayPrefixMap creates a map from translated + English day prefixes to ISO day numbers.
 func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
 	m := map[string][]int{
@@ -207,6 +198,8 @@ func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
 		"fri": {5}, "sat": {6}, "sun": {7},
 		"weekday": {1, 2, 3, 4, 5},
 		"weekend": {6, 7},
+		"every":    {1, 2, 3, 4, 5, 6, 7},
+		"everyday": {1, 2, 3, 4, 5, 6, 7},
 	}
 
 	// Add translated day abbreviations from i18n
@@ -224,6 +217,8 @@ func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
 		{"arg.prefix.sun", []int{7}},
 		{"arg.prefix.weekday", []int{1, 2, 3, 4, 5}},
 		{"arg.prefix.weekend", []int{6, 7}},
+		{"arg.prefix.every", []int{1, 2, 3, 4, 5, 6, 7}},
+		{"arg.prefix.everyday", []int{1, 2, 3, 4, 5, 6, 7}},
 	}
 
 	tr := ctx.Tr()
@@ -243,35 +238,16 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.profile.settime_usage")}}
 	}
 
-	// Parse day:time patterns from all args.
-	type entry struct {
-		Day   int    `json:"day"`
-		Hours string `json:"hours"`
-		Mins  string `json:"mins"`
-	}
-	var entries []entry
-
 	dayPrefixes := buildDayPrefixMap(ctx)
-
+	var entries []db.ActiveHourEntry
 	for _, arg := range args {
-		m := settimeRe.FindStringSubmatch(strings.ToLower(arg))
-		if m == nil {
-			continue
+		parsed, err := ParseSettimeArg(arg, dayPrefixes)
+		if err != nil {
+			// Matched a known form (range) but failed validation
+			// — surface the reason instead of silently dropping.
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", arg, SettimeErrorMessage(tr, err))}}
 		}
-		prefix := m[1]
-		hours := m[2]
-		mins := m[3]
-		if mins == "" {
-			mins = "00"
-		}
-
-		days, ok := dayPrefixes[prefix]
-		if !ok {
-			continue
-		}
-		for _, d := range days {
-			entries = append(entries, entry{Day: d, Hours: hours, Mins: mins})
-		}
+		entries = append(entries, parsed...)
 	}
 
 	if len(entries) == 0 {
@@ -287,6 +263,21 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 
 	ctx.TriggerReload()
 	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.hours_set", ctx.ProfileNo)}}
+}
+
+// clearTime removes the profile's auto-switch schedule by writing an
+// empty active_hours value. ParseActiveHours treats `""` (and `"[]"` /
+// `"{}"`) as "no schedule", so the profile scheduler simply stops
+// auto-switching to this profile — the profile itself is untouched.
+// Mirrors `!summary cleartime` for symmetry.
+func (c *ProfileCommand) clearTime(ctx *bot.CommandContext) []bot.Reply {
+	tr := ctx.Tr()
+	if err := ctx.Humans.UpdateProfileHours(ctx.TargetID, ctx.ProfileNo, ""); err != nil {
+		log.Errorf("profile: cleartime: %v", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+	ctx.TriggerReload()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.profile.hours_cleared", ctx.ProfileNo)}}
 }
 
 func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Reply {

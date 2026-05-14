@@ -23,6 +23,11 @@ type State struct {
 	Maxbattles []*db.MaxbattleTracking
 	Geofence   *geofence.SpatialIndex
 	Fences     []geofence.Fence
+
+	// SummarySchedules maps humanID -> alertType -> active hour entries.
+	// Empty entries (no parsed hours) are still represented so the summary
+	// scheduler can no-op on them.
+	SummarySchedules map[string]map[string][]db.ActiveHourEntry
 }
 
 // Manager manages the current state with atomic swaps.

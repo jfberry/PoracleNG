@@ -75,7 +75,6 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, p
 
 	prev, exists := et.entries[encounterID]
 	if !exists {
-		// First sighting
 		cp := newState
 		cp.InsertedAt = time.Now().Unix()
 		et.entries[encounterID] = &encounterEntry{state: cp, webhook: pokemon}
@@ -117,15 +116,28 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, p
 		return false, change
 	}
 
-	// Update stored state with latest data (stats, weather, disappear time)
-	// for accurate next-change comparison. The webhook struct is *not*
-	// refreshed here: it represents "the prior change point" for
-	// {{original.X}}, so it must stick from the most recent change
-	// (or first sighting) until the next change fires.
+	// Refresh state for accurate next-change comparison. The webhook
+	// struct is NOT refreshed: it must stick from the most recent
+	// change (or first sighting) so {{original.X}} renders against
+	// the right prior point.
 	prev.state = newState
 	prev.state.InsertedAt = old.InsertedAt
 
 	return false, nil
+}
+
+// Has reports whether the tracker currently holds an entry for the
+// encounter. Used by the pokemon handler to decide whether to keep
+// tracking on a subsequent webhook even when nobody currently matches:
+// if someone matched at T1 (the entry exists), changes at T2 still
+// need to be detected so prior recipients can be notified.
+//
+// O(1) read under RLock — safe to call on every pokemon webhook.
+func (et *EncounterTracker) Has(encounterID string) bool {
+	et.mu.RLock()
+	defer et.mu.RUnlock()
+	_, ok := et.entries[encounterID]
+	return ok
 }
 
 func (et *EncounterTracker) evictionLoop() {
