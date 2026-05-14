@@ -1,6 +1,44 @@
 package geo
 
-import "testing"
+import (
+	"testing"
+)
+
+// TestGetTimezone_KnownCoordinates is a sanity check that the tzf
+// finder backing GetTimezone resolves a representative spread of
+// coordinates correctly. Worth keeping after tzf version bumps —
+// e.g. the v1.0 → v1.2 jump switches NewDefaultFinder for
+// NewFullFinder (FuzzyFinder + accurate Finder fallback) and we
+// want a fast signal if a boundary shifts.
+func TestGetTimezone_KnownCoordinates(t *testing.T) {
+	cases := []struct {
+		name     string
+		lat, lon float64
+		want     string
+	}{
+		{"London", 51.5074, -0.1278, "Europe/London"},
+		{"New York", 40.7128, -74.0060, "America/New_York"},
+		{"Tokyo", 35.6762, 139.6503, "Asia/Tokyo"},
+		{"Sydney", -33.8688, 151.2093, "Australia/Sydney"},
+		{"Los Angeles", 34.0522, -118.2437, "America/Los_Angeles"},
+		{"Paris", 48.8566, 2.3522, "Europe/Paris"},
+		{"São Paulo", -23.5505, -46.6333, "America/Sao_Paulo"},
+		{"Auckland", -36.8485, 174.7633, "Pacific/Auckland"},
+		// Open ocean now resolves to a nautical etc. zone with
+		// NewFullFinder; NewDefaultFinder (v1.0.x) returned ""
+		// and our UTC fallback kicked in. Pokemon spawns are on
+		// land so this doesn't matter in practice — kept here to
+		// document the version-bump behaviour change.
+		{"middle of Atlantic", 0, -30, "Etc/GMT+2"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := GetTimezone(c.lat, c.lon); got != c.want {
+				t.Errorf("GetTimezone(%v, %v) = %q, want %q", c.lat, c.lon, got, c.want)
+			}
+		})
+	}
+}
 
 // TestResolveTimezone_FallbackChain pins the three-step resolution
 // order used by the profile + summary schedulers:

@@ -399,6 +399,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 //     different effective stats).
 //   - "species" for everything else (species, form, gender — all
 //     identity changes; gender alone effectively never fires).
+//
 // ChangeEncountered is filtered upstream and never reaches here.
 func changeTypeBucket(t tracker.ChangeType) string {
 	if t == tracker.ChangeWeatherBoost {
@@ -429,9 +430,7 @@ func (ps *ProcessorService) perLangWithChangeFields(perLang map[string]map[strin
 	clone["changeTypeText"] = text
 
 	out := make(map[string]map[string]any, len(perLang))
-	for l, fields := range perLang {
-		out[l] = fields
-	}
+	maps.Copy(out, perLang)
 	out[lang] = clone
 	return out
 }

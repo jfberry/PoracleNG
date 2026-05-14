@@ -10,7 +10,7 @@ var finder tzf.F
 
 func init() {
 	var err error
-	finder, err = tzf.NewDefaultFinder()
+	finder, err = tzf.NewFullFinder()
 	if err != nil {
 		panic("failed to initialize timezone finder: " + err.Error())
 	}

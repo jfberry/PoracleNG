@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -281,10 +282,5 @@ var knownSummaryAlertTypes = []string{"quest"}
 // silent 200-with-no-effect (DispatchQuestSummary itself no-ops on
 // unknown alert types).
 func isKnownSummaryAlertType(t string) bool {
-	for _, k := range knownSummaryAlertTypes {
-		if k == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(knownSummaryAlertTypes, t)
 }
