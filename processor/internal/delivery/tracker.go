@@ -151,20 +151,34 @@ func (mt *MessageTracker) LookupReplyTargets(replyKey string) []string {
 // reverse-index map then cache. Returns "" if the cache entry has
 // expired between the two reads (treated as "no prior").
 func (mt *MessageTracker) LookupReply(replyKey, target string) string {
-	if replyKey == "" {
+	msg := mt.LookupReplyMessage(replyKey, target)
+	if msg == nil {
 		return ""
+	}
+	return msg.SentID
+}
+
+// LookupReplyMessage returns the full TrackedMessage for the latest
+// message under this (replyKey, target) pair, or nil if none. Used
+// by change-event dispatch to inherit rule-level fields (Clean,
+// Type) from the prior alert when reconstructing a recipient.
+// Same race semantics as LookupReply: nil if the cache entry
+// expires between the index read and the cache read.
+func (mt *MessageTracker) LookupReplyMessage(replyKey, target string) *TrackedMessage {
+	if replyKey == "" {
+		return nil
 	}
 	mt.repliesMu.RLock()
 	editKey, ok := mt.replies[replyKey][target]
 	mt.repliesMu.RUnlock()
 	if !ok {
-		return ""
+		return nil
 	}
 	item := mt.cache.Get(editKey)
 	if item == nil {
-		return ""
+		return nil
 	}
-	return item.Value().SentID
+	return item.Value()
 }
 
 // LookupEdit returns the tracked message for the given edit key, or nil if not found/expired.

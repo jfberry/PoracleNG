@@ -260,6 +260,41 @@ func TestLookupReplyReturnsLatest(t *testing.T) {
 	}
 }
 
+// LookupReplyMessage must return the full prior TrackedMessage so
+// change-event dispatch can inherit rule-level fields (Clean, Type)
+// when reconstructing prior-only recipients. Without this, the
+// monsterChanged reply doesn't auto-delete alongside the original.
+func TestLookupReplyMessage_ReturnsFullPrior(t *testing.T) {
+	mt, _ := newTestTracker(t)
+
+	mt.Track("edit-clean", &TrackedMessage{
+		SentID: "msg-clean", Target: "userA", Type: "discord:user",
+		Clean: 1, ReplyKey: "enc-x",
+	}, time.Hour)
+
+	got := mt.LookupReplyMessage("enc-x", "userA")
+	if got == nil {
+		t.Fatalf("LookupReplyMessage returned nil for a live entry")
+	}
+	if got.SentID != "msg-clean" {
+		t.Errorf("SentID = %q, want msg-clean", got.SentID)
+	}
+	if got.Clean != 1 {
+		t.Errorf("Clean = %d, want 1 (inherited by monsterChanged dispatch)", got.Clean)
+	}
+	if got.Type != "discord:user" {
+		t.Errorf("Type = %q, want discord:user", got.Type)
+	}
+
+	// Misses return nil.
+	if got := mt.LookupReplyMessage("enc-x", "userB"); got != nil {
+		t.Errorf("LookupReplyMessage cross-target = %+v, want nil", got)
+	}
+	if got := mt.LookupReplyMessage("", "userA"); got != nil {
+		t.Errorf("LookupReplyMessage empty key = %+v, want nil", got)
+	}
+}
+
 func TestLookupReplyTargets_EnumeratesAllAndEvicts(t *testing.T) {
 	mt, _ := newTestTracker(t)
 

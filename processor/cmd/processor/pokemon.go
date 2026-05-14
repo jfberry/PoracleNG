@@ -199,11 +199,21 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 			for _, u := range matched {
 				matchedIDs[u.ID] = struct{}{}
 			}
-			for _, targetID := range ps.dispatcher.MessageTracker().LookupReplyTargets(pokemon.EncounterID) {
+			tracker := ps.dispatcher.MessageTracker()
+			for _, targetID := range tracker.LookupReplyTargets(pokemon.EncounterID) {
 				if _, ok := matchedIDs[targetID]; ok {
 					continue
 				}
-				if u := ps.rebuildMatchedUserForChange(targetID); u != nil {
+				// Inherit Clean from the prior alert so the
+				// monsterChanged reply auto-deletes alongside the
+				// original on TTL — without this, the original
+				// disappears at expiry but the "your pokemon
+				// changed" reply persists.
+				prior := tracker.LookupReplyMessage(pokemon.EncounterID, targetID)
+				if prior == nil {
+					continue // raced with eviction
+				}
+				if u := ps.rebuildMatchedUserForChange(targetID, prior.Clean); u != nil {
 					priorOnlyUsers = append(priorOnlyUsers, *u)
 				}
 			}
@@ -432,11 +442,12 @@ func (ps *ProcessorService) perLangWithChangeFields(perLang map[string]map[strin
 
 // rebuildMatchedUserForChange synthesises a MatchedUser for a target
 // that had a prior alert for this encounter but no longer matches.
-// Rule-specific fields (Template, Clean, Ping, Distance) stay at
-// zero values — the T1 tracking rule isn't known here and may have
-// been deleted or edited since. Returns nil for unknown or disabled
-// humans; their reply-index entry expires on its own.
-func (ps *ProcessorService) rebuildMatchedUserForChange(targetID string) *webhook.MatchedUser {
+// Clean is inherited from the prior tracked message so the
+// monsterChanged reply follows the same auto-delete behaviour as
+// the original. Template / Ping / Distance stay at zero values —
+// the T1 tracking rule isn't known here. Returns nil for unknown
+// or disabled humans; their reply-index entry expires on its own.
+func (ps *ProcessorService) rebuildMatchedUserForChange(targetID string, clean int) *webhook.MatchedUser {
 	if ps.humans == nil {
 		return nil
 	}
@@ -452,6 +463,7 @@ func (ps *ProcessorService) rebuildMatchedUserForChange(targetID string) *webhoo
 		Type:     human.Type,
 		Name:     human.Name,
 		Language: effectiveLanguage(webhook.MatchedUser{Language: human.Language}, ps.cfg.General.Locale),
+		Clean:    clean,
 	}
 }
 

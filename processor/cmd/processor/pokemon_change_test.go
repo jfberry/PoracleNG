@@ -126,7 +126,9 @@ func TestDispatchPokemonAlert_PriorOnlyNoLongerMatches(t *testing.T) {
 	ps, ch, _ := minimalProcessor(t)
 
 	encounterID := "enc-bad-news"
-	priorOnly := webhook.MatchedUser{ID: "user-bad-news", Type: "discord:user"}
+	// Clean=1 simulates inheritance from the T1 message so the
+	// monsterChanged reply auto-deletes alongside the original.
+	priorOnly := webhook.MatchedUser{ID: "user-bad-news", Type: "discord:user", Clean: 1}
 
 	change := &tracker.EncounterChange{
 		EncounterID: encounterID,
@@ -165,6 +167,9 @@ func TestDispatchPokemonAlert_PriorOnlyNoLongerMatches(t *testing.T) {
 	}
 	if len(j.MatchedUsers) != 1 || j.MatchedUsers[0].ID != "user-bad-news" {
 		t.Errorf("MatchedUsers should be [user-bad-news], got %v", j.MatchedUsers)
+	}
+	if j.MatchedUsers[0].Clean != 1 {
+		t.Errorf("Clean must propagate from priorOnly fixture into the RenderJob's MatchedUser (else monsterChanged outlives the original): got %d, want 1", j.MatchedUsers[0].Clean)
 	}
 	// Template-facing fields: the collapsed bucket + localised label.
 	// minimalProcessor has no Translations bundle, so T() returns the
