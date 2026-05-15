@@ -123,12 +123,41 @@ func TestTrackDetectsGenderChange(t *testing.T) {
 	}
 }
 
-func TestTrackIVNoiseIgnored(t *testing.T) {
+// Raw IV drift between two encountered webhooks fires ChangeStats.
+// Golbat re-reports the same encounter with different IVs under the
+// A/B scanner anomaly — the user's filter may reject the new reading,
+// so prior recipients need a monsterChanged follow-up.
+func TestTrackDetectsStatsDrift(t *testing.T) {
 	et := NewEncounterTracker()
-	et.Track("enc-3", EncounterState{PokemonID: 25, CP: 1000, ATK: 10}, nil)
-	_, change := et.Track("enc-3", EncounterState{PokemonID: 25, CP: 1000, ATK: 11}, nil)
+	et.Track("enc-3", EncounterState{PokemonID: 25, CP: 1000, ATK: 15, DEF: 15, STA: 15}, nil)
+	_, change := et.Track("enc-3", EncounterState{PokemonID: 25, CP: 1000, ATK: 10, DEF: 10, STA: 10}, nil)
+	if change == nil || change.Type != ChangeStats {
+		t.Fatalf("expected ChangeStats for raw IV drift, got %+v", change)
+	}
+	if change.Old.ATK != 15 || change.New.ATK != 10 {
+		t.Errorf("ATK delta not propagated: old=%d new=%d", change.Old.ATK, change.New.ATK)
+	}
+}
+
+// Stats drift on a pre-encounter sighting (CP=0 → CP>0) is the
+// "encountered" transition, not stats drift. ChangeEncountered wins.
+func TestTrackStatsDriftIgnoredOnEncounterTransition(t *testing.T) {
+	et := NewEncounterTracker()
+	et.Track("enc-3b", EncounterState{PokemonID: 25, CP: 0, ATK: 0, DEF: 0, STA: 0}, nil)
+	_, change := et.Track("enc-3b", EncounterState{PokemonID: 25, CP: 1000, ATK: 15, DEF: 15, STA: 15}, nil)
+	if change == nil || change.Type != ChangeEncountered {
+		t.Fatalf("expected ChangeEncountered (not ChangeStats), got %+v", change)
+	}
+}
+
+// No diff in monitored fields → no change.
+func TestTrackNoChangeOnIdenticalState(t *testing.T) {
+	et := NewEncounterTracker()
+	state := EncounterState{PokemonID: 25, CP: 1000, ATK: 15, DEF: 15, STA: 15, Weather: 1}
+	et.Track("enc-3c", state, nil)
+	_, change := et.Track("enc-3c", state, nil)
 	if change != nil {
-		t.Fatalf("post-encounter IV change should not fire, got %+v", change)
+		t.Fatalf("identical-state re-Track should not fire, got %+v", change)
 	}
 }
 

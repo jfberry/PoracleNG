@@ -393,16 +393,18 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	}
 }
 
-// changeTypeBucket collapses the 5-value tracker.ChangeType enum into
-// the two template-facing values:
-//   - "stats" for weather-boost-driven CP/IV shifts (same pokemon,
-//     different effective stats).
-//   - "species" for everything else (species, form, gender — all
-//     identity changes; gender alone effectively never fires).
+// changeTypeBucket collapses the tracker.ChangeType enum into the
+// two template-facing values:
+//   - "stats" for ChangeWeatherBoost (post-encounter CP shift) and
+//     ChangeStats (raw IV re-report from scanner). Both are "same
+//     pokemon, different effective stats" from the user's view.
+//   - "species" for ChangeSpecies/Form/Gender — identity changes
+//     (gender alone effectively never fires).
 //
 // ChangeEncountered is filtered upstream and never reaches here.
 func changeTypeBucket(t tracker.ChangeType) string {
-	if t == tracker.ChangeWeatherBoost {
+	switch t {
+	case tracker.ChangeWeatherBoost, tracker.ChangeStats:
 		return "stats"
 	}
 	return "species"
