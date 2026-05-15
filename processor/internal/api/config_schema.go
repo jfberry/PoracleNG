@@ -326,6 +326,7 @@ var configSchema = []ConfigSection{
 			{Name: "static_provider", Type: "select", Default: "none", Description: "Static map tile provider for generating map images in alerts", Options: []ConfigSelectOption{
 				{Value: "none", Label: "None", Description: "Disable static map tiles"},
 				{Value: "tileservercache", Label: "TileserverCache", Description: "SwiftTileserverCache (recommended, self-hosted)"},
+					{Value: "rampardos", Label: "Rampardos", Description: "Rampardos — improved tileserver written by Unown (recommended)"},
 				{Value: "google", Label: "Google", Description: "Google Static Maps API"},
 				{Value: "osm", Label: "OSM", Description: "OpenStreetMap tile rendering"},
 				{Value: "mapbox", Label: "Mapbox", Description: "Mapbox Static Images API"},

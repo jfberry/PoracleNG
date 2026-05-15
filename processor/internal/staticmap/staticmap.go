@@ -46,9 +46,21 @@ func boolVal(b *bool) bool {
 	return *b
 }
 
+// isTileserverCacheProvider returns true for any provider name that
+// follows the SwiftTileserverCache POST-body protocol. "rampardos" is
+// a drop-in alternative implementation with identical wire format.
+// Add new aliases here as they ship.
+func isTileserverCacheProvider(p string) bool {
+	switch p {
+	case "tileservercache", "rampardos":
+		return true
+	}
+	return false
+}
+
 // Config holds all static map configuration.
 type Config struct {
-	Provider    string // "none", "tileservercache", "google", "osm", "mapbox"
+	Provider    string // "none", "tileservercache", "rampardos", "google", "osm", "mapbox"
 	ProviderURL string // tileserver URL (public — this is what appears in rendered message URLs for Discord/Telegram to fetch)
 	// InternalURL is the URL the processor uses for its own tileserver HTTP
 	// (render POST, pregenerate POST, upload-images pre-fetch). Empty =
@@ -484,9 +496,15 @@ func (r *Resolver) GetStaticMapURL(maptype string, data map[string]any, keys, pr
 
 	var result string
 
-	switch provider {
-	case "tileservercache":
+	if isTileserverCacheProvider(provider) {
 		result = r.tileserverCache(maptype, data, lat, lon, keys, pregenKeys)
+		if result == "" && r.config.FallbackURL != "" {
+			return r.config.FallbackURL
+		}
+		return result
+	}
+
+	switch provider {
 	case "google":
 		key := r.randomKey()
 		result = fmt.Sprintf(
@@ -523,7 +541,7 @@ func (r *Resolver) GetStaticMapURL(maptype string, data map[string]any, keys, pr
 func (r *Resolver) GetStaticMapURLAsync(maptype string, data map[string]any, keys, pregenKeys []string, target map[string]any) (string, *TilePending) {
 	provider := strings.ToLower(r.config.Provider)
 
-	if provider != "tileservercache" {
+	if !isTileserverCacheProvider(provider) {
 		// Non-tileservercache: instant URL, no async
 		return r.GetStaticMapURL(maptype, data, keys, pregenKeys), nil
 	}
