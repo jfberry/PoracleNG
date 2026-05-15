@@ -184,14 +184,16 @@ func TestDispatchPokemonAlert_PriorOnlyNoLongerMatches(t *testing.T) {
 	}
 }
 
-// ChangeEncountered (CP 0 → >0) must NOT fire monsterChanged for
-// prior-only users: their filter excluded the new state, sending a
-// "stats revealed" follow-up would contradict their tracking rule.
-func TestDispatchPokemonAlert_EncounteredChange_PriorOnly_NoJob(t *testing.T) {
+// ChangeEncountered (CP 0 → >0) fires monsterChanged for prior-only
+// users: their T1 alert was a monsterNoIv "this might be one you
+// care about", and the encounter-reveal rejecting their filter is
+// exactly the follow-up they need to know about. Maps to the
+// "stats" changeType bucket.
+func TestDispatchPokemonAlert_EncounteredChange_PriorOnly_FiresStats(t *testing.T) {
 	ps, ch, _ := minimalProcessor(t)
 
 	encounterID := "enc-iv-reveal"
-	priorOnly := webhook.MatchedUser{ID: "user-iv-strict", Type: "discord:user"}
+	priorOnly := webhook.MatchedUser{ID: "user-iv-strict", Type: "discord:user", Clean: 1}
 
 	change := &tracker.EncounterChange{
 		EncounterID: encounterID,
@@ -209,8 +211,22 @@ func TestDispatchPokemonAlert_EncounteredChange_PriorOnly_NoJob(t *testing.T) {
 	})
 
 	jobs := drainRenderJobs(ch)
-	if len(jobs) != 0 {
-		t.Fatalf("expected 0 RenderJobs (ChangeEncountered skips monsterChanged), got %d: %v", len(jobs), jobs)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 monsterChanged RenderJob for ChangeEncountered priorOnly, got %d", len(jobs))
+	}
+	j := jobs[0]
+	if !j.IsChange {
+		t.Errorf("must use monsterChanged template (IsChange=true)")
+	}
+	if j.ReplyKey != encounterID {
+		t.Errorf("ReplyKey must thread under the monsterNoIv original: got %q", j.ReplyKey)
+	}
+	if j.MatchedUsers[0].Clean != 1 {
+		t.Errorf("Clean must propagate so the reply auto-deletes with the original: got %d", j.MatchedUsers[0].Clean)
+	}
+	lang := effectiveLanguage(priorOnly, ps.cfg.General.Locale)
+	if got := j.PerLangEnrichment[lang]["changeType"]; got != "stats" {
+		t.Errorf("changeType = %v, want \"stats\" (IV reveal is a stats event)", got)
 	}
 }
 

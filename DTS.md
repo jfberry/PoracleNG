@@ -360,12 +360,11 @@ fired the alert. Use these in templates to switch wording or styling:
 | `changeType` | Fires for | Meaning |
 |---|---|---|
 | `species` | `ChangeSpecies`, `ChangeForm`, `ChangeGender` | Identity change. Most commonly community-day re-classifications, or the known "A/B pokemon" server bug where Golbat reports a different species ID for the same encounter. |
-| `stats` | `ChangeWeatherBoost` | Same pokemon, weather boost shifted. Post-boost IVs and CP differ from the originally-alerted state. This is the most common cause in practice. |
+| `stats` | `ChangeWeatherBoost`, `ChangeEncountered` | Same pokemon, different effective stats. Weather-boost shifts the CP/level post-encounter; ChangeEncountered fires when the encounter scan reveals IV/CP/level values that reject the user's tracking filter (closing the loop on the optimistic `monsterNoIv` they got at the wild scan). |
 
-The `ChangeEncountered` dimension (CP 0 → >0, "IVs just arrived") does **not**
-fire `monsterChanged`. Users who were tracking IV-insensitive ("any pokemon of
-species X") get a regular `monster` reply to their `monsterNoIv` alert; users
-whose IV filter excluded the post-encounter stats get no follow-up at all.
+Users who still match at T2 (no stat filter, or filter still passes)
+receive a regular `monster` reply via the matched path — `monsterChanged`
+only fires for recipients whose filter excluded the new state.
 
 PoracleNG ships a default `monsterChanged` template per platform in
 `fallbacks/dts.json`; admins override via `config/dts.json` or

@@ -350,12 +350,13 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 		}
 	}
 
-	// Bucket 2: prior-only users → `monsterChanged`, grouped by language.
-	// ChangeEncountered (CP 0 → >0) is filtered out — IV reveal isn't a
-	// change worth notifying about for users whose filter excluded the
-	// new state; the matched-still-matches path already covers users
-	// whose rule was IV-insensitive.
-	if len(in.priorOnlyUsers) > 0 && in.change != nil && in.change.Type != tracker.ChangeEncountered {
+	// Bucket 2: prior-only users → `monsterChanged`, grouped by
+	// language. ChangeEncountered fires too: the prior was a
+	// monsterNoIv "this might be one you care about" alert and we
+	// owe the user a follow-up when the IV/CP/level/etc. reveal
+	// rejects their filter, otherwise the optimistic T1 alert is
+	// left dangling.
+	if len(in.priorOnlyUsers) > 0 && in.change != nil {
 		bucket := changeTypeBucket(in.change.Type)
 
 		var perLangOriginal map[string]map[string]any
@@ -395,14 +396,14 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 
 // changeTypeBucket collapses the 5-value tracker.ChangeType enum into
 // the two template-facing values:
-//   - "stats" for weather-boost-driven CP/IV shifts (same pokemon,
-//     different effective stats).
-//   - "species" for everything else (species, form, gender — all
-//     identity changes; gender alone effectively never fires).
-//
-// ChangeEncountered is filtered upstream and never reaches here.
+//   - "stats" for ChangeWeatherBoost (post-encounter CP shift) and
+//     ChangeEncountered (IV/CP reveal that rejected the user's filter).
+//     Both are "same pokemon, different effective stats".
+//   - "species" for ChangeSpecies/Form/Gender — identity changes
+//     (gender alone effectively never fires).
 func changeTypeBucket(t tracker.ChangeType) string {
-	if t == tracker.ChangeWeatherBoost {
+	switch t {
+	case tracker.ChangeWeatherBoost, tracker.ChangeEncountered:
 		return "stats"
 	}
 	return "species"
