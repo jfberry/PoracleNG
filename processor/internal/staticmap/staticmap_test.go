@@ -206,6 +206,35 @@ func TestGetConfigForTileTypeStaticMapType(t *testing.T) {
 	}
 }
 
+// Trailing slashes on the configured tileserver URL must be trimmed
+// at New() so downstream `host + "/" + path` concats don't yield
+// `host//path` (which tileservers reject with 404). Operator-paste
+// mistake; regression guard.
+func TestTileserverURLTrailingSlashTrimmed(t *testing.T) {
+	cases := []struct {
+		name        string
+		providerURL string
+	}{
+		{"trailing slash", "http://vpsip:9000/"},
+		{"no trailing slash", "http://vpsip:9000"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := New(Config{
+				Provider:    "tileservercache",
+				ProviderURL: c.providerURL,
+			})
+			url := r.GetTileURL("monster", map[string]any{"latitude": 51.28, "longitude": 1.08}, "staticMap")
+			if strings.Contains(url, "//staticmap") {
+				t.Errorf("tile URL contains double slash before staticmap: %q", url)
+			}
+			if !strings.Contains(url, "/staticmap/poracle-monster") {
+				t.Errorf("tile URL missing expected path: %q", url)
+			}
+		})
+	}
+}
+
 // Provider="rampardos" must route through the same tileservercache
 // pipeline (identical wire format). GetStaticMapURLAsync's gate is
 // the load-bearing one — non-tileservercache providers bypass async

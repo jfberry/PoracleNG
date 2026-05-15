@@ -267,6 +267,12 @@ func New(config Config) *Resolver {
 	if config.InternalURL == "" {
 		config.InternalURL = config.ProviderURL
 	}
+	// Operators commonly paste tileserver URLs with a trailing slash;
+	// downstream concat sites all do fmt.Sprintf("%s/%s/..."), so a
+	// trailing slash here yields a `host//path` request that
+	// tileservers reject with 404.
+	config.ProviderURL = strings.TrimRight(config.ProviderURL, "/")
+	config.InternalURL = strings.TrimRight(config.InternalURL, "/")
 
 	r := &Resolver{
 		config: config,
