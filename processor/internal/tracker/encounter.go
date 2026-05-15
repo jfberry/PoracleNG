@@ -120,6 +120,17 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, p
 		return false, change
 	}
 
+	// Wild re-scan of an already-encountered pokemon: don't downgrade.
+	// Golbat re-emits wild webhooks (CP=0, zeroed IVs) after the
+	// initial encounter, often after weather shifts. Overwriting the
+	// encountered snapshot with that zero data makes the next encounter
+	// webhook look like a fresh CP 0→>0 transition (ChangeEncountered),
+	// hiding the real stats/weather diff and dropping prior recipients
+	// silently.
+	if old.CP > 0 && newState.CP == 0 {
+		return false, nil
+	}
+
 	// Refresh state for accurate next-change comparison. The webhook
 	// struct is NOT refreshed: it must stick from the most recent
 	// change (or first sighting) so {{original.X}} renders against

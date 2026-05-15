@@ -161,6 +161,52 @@ func TestTrackNoChangeOnIdenticalState(t *testing.T) {
 	}
 }
 
+// Wild re-scan after a weather shift must not downgrade the
+// encountered state. Real webhook sequence from production:
+//
+//   W1 wild      CP=0    weather=0  → first sighting
+//   W2 encounter CP=153  weather=0  IVs=15/15/15  → ChangeEncountered
+//   W3 wild      CP=0    weather=4  → must NOT overwrite state
+//   W4 encounter CP=280  weather=4  IVs=13/13/12  → must fire
+//                                                   ChangeWeatherBoost
+//                                                   against W2's stats
+//
+// Without the wild-rescan guard, W3 zeroed prev.state.CP and W4 then
+// triggered a second ChangeEncountered, which the dispatcher skips
+// for prior-only users — silently dropping the follow-up alert.
+func TestTrackWildRescanDoesNotDowngradeEncounteredState(t *testing.T) {
+	et := NewEncounterTracker()
+
+	w1 := EncounterState{PokemonID: 23, Form: 697, Gender: 2, CP: 0, Weather: 0}
+	w2 := EncounterState{PokemonID: 23, Form: 697, Gender: 2, CP: 153, Weather: 0, ATK: 15, DEF: 15, STA: 15}
+	w3 := EncounterState{PokemonID: 23, Form: 697, Gender: 2, CP: 0, Weather: 4}
+	w4 := EncounterState{PokemonID: 23, Form: 697, Gender: 2, CP: 280, Weather: 4, ATK: 13, DEF: 13, STA: 12}
+
+	et.Track("enc-prod", w1, nil)
+
+	_, change2 := et.Track("enc-prod", w2, nil)
+	if change2 == nil || change2.Type != ChangeEncountered {
+		t.Fatalf("W2 should fire ChangeEncountered, got %+v", change2)
+	}
+
+	_, change3 := et.Track("enc-prod", w3, nil)
+	if change3 != nil {
+		t.Fatalf("W3 (wild re-scan) should not fire a change, got %+v", change3)
+	}
+
+	_, change4 := et.Track("enc-prod", w4, nil)
+	if change4 == nil {
+		t.Fatalf("W4 must fire a change against W2's preserved state, got nil")
+	}
+	if change4.Type != ChangeWeatherBoost {
+		t.Errorf("W4 change type: got %v, want ChangeWeatherBoost", change4.Type)
+	}
+	// And the diff must reflect W2's stats, not W3's zeroed state.
+	if change4.Old.CP != 153 || change4.Old.ATK != 15 {
+		t.Errorf("W4 change.Old must reflect W2's encountered state, got CP=%d ATK=%d (W3 would have CP=0 ATK=0)", change4.Old.CP, change4.Old.ATK)
+	}
+}
+
 func TestTrackDetectsWeatherBoost(t *testing.T) {
 	et := NewEncounterTracker()
 	et.Track("enc-4", EncounterState{PokemonID: 25, CP: 1000, Weather: 1}, nil)
