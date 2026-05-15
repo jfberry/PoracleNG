@@ -359,13 +359,15 @@ fired the alert. Use these in templates to switch wording or styling:
 
 | `changeType` | Fires for | Meaning |
 |---|---|---|
-| `species` | `ChangeSpecies`, `ChangeForm`, `ChangeGender` | Identity change. Most commonly community-day re-classifications, or the known "A/B pokemon" server bug where Golbat reports a different species ID for the same encounter. |
-| `stats` | `ChangeWeatherBoost` | Same pokemon, weather boost shifted. Post-boost IVs and CP differ from the originally-alerted state. This is the most common cause in practice. |
+| `species` | `ChangeSpecies`, `ChangeForm`, `ChangeGender` | Identity change. Community-day re-classifications, or the "A/B pokemon" anomaly where Golbat reports a different species ID for the same encounter. |
+| `stats` | `ChangeWeatherBoost`, `ChangeStats` | Same pokemon, different effective stats. Weather-boost shifts the CP/level post-encounter; `ChangeStats` fires when Golbat re-reports the same encounter with different raw IVs (atk/def/sta) — the scanner anomaly where successive webhooks for the same encounter ID carry different IV values. |
 
 The `ChangeEncountered` dimension (CP 0 → >0, "IVs just arrived") does **not**
-fire `monsterChanged`. Users who were tracking IV-insensitive ("any pokemon of
-species X") get a regular `monster` reply to their `monsterNoIv` alert; users
-whose IV filter excluded the post-encounter stats get no follow-up at all.
+fire `monsterChanged`. Users tracking IV-insensitively (`!track pikachu`, no
+filter) get a regular `monster` reply via the matched path. Users with strict
+IV filters never matched the wild webhook in the first place (the matcher
+rejects rules with `min_iv > -1` when CP=0), so there is no prior message
+to follow up.
 
 PoracleNG ships a default `monsterChanged` template per platform in
 `fallbacks/dts.json`; admins override via `config/dts.json` or

@@ -83,10 +83,12 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, p
 
 	old := prev.state
 
-	// Detect change type. Priority order: species > form > gender > encountered > weather_boost.
+	// Detect change type. Priority order: species > form > gender > encountered > weather_boost > stats.
 	// Gender change only fires when both old and new are non-zero (initial gender resolution doesn't count).
 	// Weather-boost shift only fires post-encounter (both CPs > 0) AND when the CP actually moved.
-	// Raw IV (atk/def/sta) drift is ignored — physical IVs don't change post-encounter.
+	// Stats drift (raw atk/def/sta differing between two encountered webhooks) fires when
+	// Golbat re-reports the same encounter with different IVs — happens with the A/B
+	// scanner anomaly. Physical IVs don't change in-game, but scanner reports can.
 	var changeType ChangeType
 	switch {
 	case old.PokemonID != newState.PokemonID:
@@ -99,6 +101,8 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, p
 		changeType = ChangeEncountered
 	case old.Weather != newState.Weather && old.CP > 0 && newState.CP > 0 && old.CP != newState.CP:
 		changeType = ChangeWeatherBoost
+	case old.CP > 0 && newState.CP > 0 && (old.ATK != newState.ATK || old.DEF != newState.DEF || old.STA != newState.STA):
+		changeType = ChangeStats
 	}
 
 	if changeType != ChangeNone {
@@ -114,6 +118,17 @@ func (et *EncounterTracker) Track(encounterID string, newState EncounterState, p
 		prev.state = cp
 		prev.webhook = pokemon
 		return false, change
+	}
+
+	// Wild re-scan of an already-encountered pokemon: don't downgrade.
+	// Golbat re-emits wild webhooks (CP=0, zeroed IVs) after the
+	// initial encounter, often after weather shifts. Overwriting the
+	// encountered snapshot with that zero data makes the next encounter
+	// webhook look like a fresh CP 0→>0 transition (ChangeEncountered),
+	// hiding the real stats/weather diff and dropping prior recipients
+	// silently.
+	if old.CP > 0 && newState.CP == 0 {
+		return false, nil
 	}
 
 	// Refresh state for accurate next-change comparison. The webhook

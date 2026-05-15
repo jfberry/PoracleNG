@@ -255,6 +255,51 @@ func TestDispatchPokemonAlert_WeatherBoost_StatsBucket(t *testing.T) {
 	}
 }
 
+// ChangeStats (raw IV drift between two encountered webhooks)
+// fires monsterChanged via the "stats" bucket — same pokemon,
+// scanner re-reported different IVs (A/B anomaly), user's filter
+// now rejects.
+func TestDispatchPokemonAlert_StatsDrift_StatsBucket(t *testing.T) {
+	ps, ch, _ := minimalProcessor(t)
+
+	encounterID := "enc-iv-drift"
+	priorOnly := webhook.MatchedUser{ID: "user-iv-strict", Type: "discord:user", Clean: 1}
+
+	change := &tracker.EncounterChange{
+		EncounterID: encounterID,
+		Type:        tracker.ChangeStats,
+		Old:         tracker.EncounterState{PokemonID: 25, CP: 1200, Weather: 1, ATK: 15, DEF: 15, STA: 15}, // 100% IV
+		New:         tracker.EncounterState{PokemonID: 25, CP: 1200, Weather: 1, ATK: 11, DEF: 11, STA: 11}, // 73% IV
+	}
+
+	ps.dispatchPokemonAlert(pokemonDispatchInput{
+		encounterID:    encounterID,
+		change:         change,
+		matched:        nil,
+		priorOnlyUsers: []webhook.MatchedUser{priorOnly},
+		isEncountered:  true,
+	})
+
+	jobs := drainRenderJobs(ch)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 monsterChanged RenderJob for ChangeStats priorOnly, got %d", len(jobs))
+	}
+	j := jobs[0]
+	if !j.IsChange {
+		t.Errorf("ChangeStats must use monsterChanged (IsChange=true)")
+	}
+	if j.ReplyKey != encounterID {
+		t.Errorf("ReplyKey must thread under the prior message: got %q", j.ReplyKey)
+	}
+	if j.MatchedUsers[0].Clean != 1 {
+		t.Errorf("Clean must propagate: got %d, want 1", j.MatchedUsers[0].Clean)
+	}
+	lang := effectiveLanguage(priorOnly, ps.cfg.General.Locale)
+	if got := j.PerLangEnrichment[lang]["changeType"]; got != "stats" {
+		t.Errorf("changeType = %v, want \"stats\" (raw IV drift is a stats event)", got)
+	}
+}
+
 // rebuildMatchedUserForChange must stamp the prior message's Clean
 // onto the synthesised MatchedUser so the monsterChanged reply
 // inherits the same TTL clean-delete behaviour as the original.

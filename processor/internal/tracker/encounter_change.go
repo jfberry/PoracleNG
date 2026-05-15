@@ -10,6 +10,7 @@ const (
 	ChangeGender
 	ChangeEncountered  // non-IV sighting filled in with CP/IVs
 	ChangeWeatherBoost // post-encounter weather change that moved CP
+	ChangeStats        // raw IV (atk/def/sta) drift between two encountered webhooks
 )
 
 func (c ChangeType) String() string {
@@ -24,6 +25,8 @@ func (c ChangeType) String() string {
 		return "encountered"
 	case ChangeWeatherBoost:
 		return "weather_boost"
+	case ChangeStats:
+		return "stats"
 	}
 	return "none"
 }

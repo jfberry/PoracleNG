@@ -123,12 +123,87 @@ func TestTrackDetectsGenderChange(t *testing.T) {
 	}
 }
 
-func TestTrackIVNoiseIgnored(t *testing.T) {
+// Raw IV drift between two encountered webhooks fires ChangeStats.
+// Golbat re-reports the same encounter with different IVs under the
+// A/B scanner anomaly — the user's filter may reject the new reading,
+// so prior recipients need a monsterChanged follow-up.
+func TestTrackDetectsStatsDrift(t *testing.T) {
 	et := NewEncounterTracker()
-	et.Track("enc-3", EncounterState{PokemonID: 25, CP: 1000, ATK: 10}, nil)
-	_, change := et.Track("enc-3", EncounterState{PokemonID: 25, CP: 1000, ATK: 11}, nil)
+	et.Track("enc-3", EncounterState{PokemonID: 25, CP: 1000, ATK: 15, DEF: 15, STA: 15}, nil)
+	_, change := et.Track("enc-3", EncounterState{PokemonID: 25, CP: 1000, ATK: 10, DEF: 10, STA: 10}, nil)
+	if change == nil || change.Type != ChangeStats {
+		t.Fatalf("expected ChangeStats for raw IV drift, got %+v", change)
+	}
+	if change.Old.ATK != 15 || change.New.ATK != 10 {
+		t.Errorf("ATK delta not propagated: old=%d new=%d", change.Old.ATK, change.New.ATK)
+	}
+}
+
+// Stats drift on a pre-encounter sighting (CP=0 → CP>0) is the
+// "encountered" transition, not stats drift. ChangeEncountered wins.
+func TestTrackStatsDriftIgnoredOnEncounterTransition(t *testing.T) {
+	et := NewEncounterTracker()
+	et.Track("enc-3b", EncounterState{PokemonID: 25, CP: 0, ATK: 0, DEF: 0, STA: 0}, nil)
+	_, change := et.Track("enc-3b", EncounterState{PokemonID: 25, CP: 1000, ATK: 15, DEF: 15, STA: 15}, nil)
+	if change == nil || change.Type != ChangeEncountered {
+		t.Fatalf("expected ChangeEncountered (not ChangeStats), got %+v", change)
+	}
+}
+
+// No diff in monitored fields → no change.
+func TestTrackNoChangeOnIdenticalState(t *testing.T) {
+	et := NewEncounterTracker()
+	state := EncounterState{PokemonID: 25, CP: 1000, ATK: 15, DEF: 15, STA: 15, Weather: 1}
+	et.Track("enc-3c", state, nil)
+	_, change := et.Track("enc-3c", state, nil)
 	if change != nil {
-		t.Fatalf("post-encounter IV change should not fire, got %+v", change)
+		t.Fatalf("identical-state re-Track should not fire, got %+v", change)
+	}
+}
+
+// Wild re-scan after a weather shift must not downgrade the
+// encountered state. Real webhook sequence from production:
+//
+//   W1 wild      CP=0    weather=0  → first sighting
+//   W2 encounter CP=153  weather=0  IVs=15/15/15  → ChangeEncountered
+//   W3 wild      CP=0    weather=4  → must NOT overwrite state
+//   W4 encounter CP=280  weather=4  IVs=13/13/12  → must fire
+//                                                   ChangeWeatherBoost
+//                                                   against W2's stats
+//
+// Without the wild-rescan guard, W3 zeroed prev.state.CP and W4 then
+// triggered a second ChangeEncountered, which the dispatcher skips
+// for prior-only users — silently dropping the follow-up alert.
+func TestTrackWildRescanDoesNotDowngradeEncounteredState(t *testing.T) {
+	et := NewEncounterTracker()
+
+	w1 := EncounterState{PokemonID: 23, Form: 697, Gender: 2, CP: 0, Weather: 0}
+	w2 := EncounterState{PokemonID: 23, Form: 697, Gender: 2, CP: 153, Weather: 0, ATK: 15, DEF: 15, STA: 15}
+	w3 := EncounterState{PokemonID: 23, Form: 697, Gender: 2, CP: 0, Weather: 4}
+	w4 := EncounterState{PokemonID: 23, Form: 697, Gender: 2, CP: 280, Weather: 4, ATK: 13, DEF: 13, STA: 12}
+
+	et.Track("enc-prod", w1, nil)
+
+	_, change2 := et.Track("enc-prod", w2, nil)
+	if change2 == nil || change2.Type != ChangeEncountered {
+		t.Fatalf("W2 should fire ChangeEncountered, got %+v", change2)
+	}
+
+	_, change3 := et.Track("enc-prod", w3, nil)
+	if change3 != nil {
+		t.Fatalf("W3 (wild re-scan) should not fire a change, got %+v", change3)
+	}
+
+	_, change4 := et.Track("enc-prod", w4, nil)
+	if change4 == nil {
+		t.Fatalf("W4 must fire a change against W2's preserved state, got nil")
+	}
+	if change4.Type != ChangeWeatherBoost {
+		t.Errorf("W4 change type: got %v, want ChangeWeatherBoost", change4.Type)
+	}
+	// And the diff must reflect W2's stats, not W3's zeroed state.
+	if change4.Old.CP != 153 || change4.Old.ATK != 15 {
+		t.Errorf("W4 change.Old must reflect W2's encountered state, got CP=%d ATK=%d (W3 would have CP=0 ATK=0)", change4.Old.CP, change4.Old.ATK)
 	}
 }
 
