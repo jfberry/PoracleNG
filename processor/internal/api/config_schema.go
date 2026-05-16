@@ -478,6 +478,19 @@ var configSchema = []ConfigSection{
 		},
 	},
 
+	// ---- discord.slash_commands ----
+	{
+		Name:  "discord.slash_commands",
+		Title: "Discord Slash Commands (optional surface)",
+		Fields: []ConfigFieldDef{
+			{Name: "enabled", Type: "bool", Default: false, Description: "Register Discord slash commands alongside the ! text commands. Off by default; turn on per-guild first to test."},
+			{Name: "register_globally", Type: "bool", Default: true, Description: "Single global command set across every guild. Updates can take up to 1 hour to appear in clients; off + a guilds list propagates in seconds."},
+			{Name: "guilds", Type: "string[]", Default: []string{}, Description: "Guild IDs to register slash commands in. Only consulted when register_globally=false.", Resolve: "discord:guild"},
+			{Name: "sync_on_startup", Type: "bool", Default: true, Description: "Push the command set to Discord at startup. Idempotent via a fingerprint cache, so a no-op startup costs no API calls."},
+			{Name: "enable", Type: "string[]", Default: []string{}, Description: "Optional allow-list of canonical short command names (e.g. \"track\", \"raid\"). Empty means all supported commands are registered.", Advanced: true},
+		},
+	},
+
 	// ---- reconciliation.discord ----
 	{
 		Name:  "reconciliation.discord",

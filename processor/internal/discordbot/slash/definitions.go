@@ -143,6 +143,10 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 		return buildDefinition(bundle, key, canon, nil)
 	case "cmd.info":
 		return buildDefinition(bundle, key, canon, nil)
+	case "cmd.start":
+		return buildDefinition(bundle, key, canon, nil)
+	case "cmd.stop":
+		return buildDefinition(bundle, key, canon, nil)
 	case "cmd.help":
 		opts := []*discordgo.ApplicationCommandOption{
 			{
@@ -1058,6 +1062,7 @@ func allCommandKeys() []string {
 	return []string{
 		"cmd.version",
 		"cmd.tracked", "cmd.help", "cmd.info", "cmd.language",
+		"cmd.start", "cmd.stop",
 		"cmd.track", "cmd.raid", "cmd.egg", "cmd.quest", "cmd.invasion",
 		"cmd.incident",
 		"cmd.lure", "cmd.nest", "cmd.maxbattle", "cmd.gym", "cmd.fort",
