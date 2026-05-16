@@ -418,16 +418,22 @@ enable = ["track", "raid", "tracked", "version"]
 func TestSlashCommandsDefaults(t *testing.T) {
     cfg, _ := LoadFromReader(strings.NewReader(""))
     sc := cfg.Discord.SlashCommands
-    if sc.Enabled { t.Error("should default disabled") }
+    if sc.Enabled { t.Error("should default disabled (master switch off)") }
     if !sc.RegisterGlobally { t.Error("should default global") }
     if !sc.SyncOnStartup { t.Error("should default sync on") }
-    if len(sc.Enable) != 0 { t.Error("Enable should default to empty (opt-in)") }
+    if len(sc.Enable) != 0 { t.Error("Enable should default to empty (meaning all)") }
 }
 
-func TestIsSlashCommandEnabled(t *testing.T) {
+func TestIsSlashCommandEnabledEmptyMeansAll(t *testing.T) {
+    sc := DiscordSlashCommands{}  // empty Enable
+    if !sc.IsEnabled("track") { t.Error("empty Enable should enable everything") }
+    if !sc.IsEnabled("gym") { t.Error("empty Enable should enable everything") }
+}
+
+func TestIsSlashCommandEnabledExplicitSubset(t *testing.T) {
     sc := DiscordSlashCommands{Enable: []string{"track", "raid"}}
     if !sc.IsEnabled("track") { t.Error("track should be enabled") }
-    if sc.IsEnabled("gym") { t.Error("gym should not be enabled") }
+    if sc.IsEnabled("gym") { t.Error("gym should not be enabled when subset restricts") }
 }
 ```
 
@@ -450,14 +456,17 @@ type DiscordSlashCommands struct {
     RegisterGlobally bool     `toml:"register_globally"`
     Guilds           []string `toml:"guilds"`
     SyncOnStartup    bool     `toml:"sync_on_startup"`
-    // Enable lists short slash command names ("track", "raid", ...) that this
-    // installation registers. Empty array = no slash commands registered.
-    // Explicit opt-in so new commands don't auto-enable on binary upgrade.
+    // Enable optionally restricts which slash commands register. Empty/nil =
+    // all commands this build supports. Set explicitly only when the operator
+    // wants to limit the surface to a subset. Use the master `Enabled = false`
+    // flag to turn slash off entirely.
     Enable           []string `toml:"enable"`
 }
 
-// IsEnabled checks whether the given short command name is in the Enable list.
+// IsEnabled returns true when the given short slash name should be registered.
+// Empty Enable list means "all enabled".
 func (s DiscordSlashCommands) IsEnabled(name string) bool {
+    if len(s.Enable) == 0 { return true }
     for _, n := range s.Enable {
         if n == name { return true }
     }
@@ -958,13 +967,14 @@ func descriptionFor(key string) string {
 // by the operator's [discord.slash_commands] enable allow-list. Exported for
 // use by the coverage meta-test (Task 48).
 func AllDefinitions(enable []string) []*discordgo.ApplicationCommand {
+    allEnabled := len(enable) == 0  // empty means all commands enabled
     enableSet := map[string]bool{}
     for _, n := range enable { enableSet[n] = true }
 
     defs := make([]*discordgo.ApplicationCommand, 0, len(allCommandKeys()))
     for _, key := range allCommandKeys() {
         name := shortName(key)
-        if !enableSet[name] { continue }
+        if !allEnabled && !enableSet[name] { continue }
         def := buildCommandDef(key, name)
         if def == nil { continue }
         defs = append(defs, def)
