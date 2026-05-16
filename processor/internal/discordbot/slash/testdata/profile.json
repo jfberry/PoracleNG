@@ -74,6 +74,58 @@
       ],
       "autocomplete": false,
       "choices": null
+    },
+    {
+      "type": 1,
+      "name": "settime",
+      "description": "Set active-hours for the current profile",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "times",
+          "description": "Time-range string (e.g. mon07:30, weekday07:30-18:00, weekday:9-17/2)",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "cleartime",
+      "description": "Clear active-hours from the current profile",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "copyto",
+      "description": "Copy this profile's tracking to another profile",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "profile",
+          "description": "Target profile name or number",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
     }
   ]
 }

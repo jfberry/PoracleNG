@@ -71,8 +71,16 @@ func Quest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 		tokens = append(tokens, fmt.Sprintf("amount:%d", v.IntValue()))
 	}
 	appendDistance(&tokens, o["distance"])
-	if v, ok := o["clean"]; ok && v.BoolValue() {
-		tokens = append(tokens, "clean")
+	if tok := emitFlag(o["clean"], "clean"); tok != "" {
+		tokens = append(tokens, tok)
+	}
+	// `summary` is the text-bot's arg.summary keyword: a quest matched
+	// while this flag is set is buffered for scheduled batch delivery
+	// instead of firing an immediate alert. The slash option is a
+	// single-choice "Yes" string (no second click to toggle), and
+	// emitFlag returns the bare keyword for any non-empty value.
+	if tok := emitFlag(o["summary"], "summary"); tok != "" {
+		tokens = append(tokens, tok)
 	}
 	if v, ok := o["template"]; ok && v.StringValue() != "" {
 		tokens = append(tokens, "template:"+v.StringValue())

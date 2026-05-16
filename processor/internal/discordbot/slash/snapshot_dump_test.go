@@ -42,6 +42,8 @@ func TestDumpSnapshots(t *testing.T) {
 		withOverride("en", "slash.desc.profile", "Manage your profiles"),
 		withOverride("en", "slash.cmd.location", "location"),
 		withOverride("en", "slash.desc.location", "Set your location"),
+		withOverride("en", "slash.cmd.summary", "summary"),
+		withOverride("en", "slash.desc.summary", "Manage scheduled summary digests (e.g. quest)"),
 	)
 	for _, c := range []struct{ key, canon string }{
 		{"cmd.track", "track"},
@@ -58,6 +60,7 @@ func TestDumpSnapshots(t *testing.T) {
 		{"cmd.area", "area"},
 		{"cmd.profile", "profile"},
 		{"cmd.location", "location"},
+		{"cmd.summary", "summary"},
 	} {
 		def := buildCommandDef(bundle, c.key, c.canon)
 		if def == nil {

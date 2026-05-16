@@ -247,6 +247,17 @@
   text: "!quest energy:charizard"
   expected_tokens: ["energy:charizard"]
 
+- name: quest-summary
+  description: /quest with the summary flag set — match buffered for batch dispatch
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      pokemon: pikachu
+      summary: "yes"
+  text: "!quest pikachu summary"
+  expected_tokens: [pikachu, summary]
+
 # xl_candy is no longer a /quest option — matching/quest.go and
 # enrichment/quest.go have no XL-candy reward type. Removed from the slash
 # surface; the parity test no longer exercises it.
@@ -586,6 +597,36 @@
   text: "!profile remove weekend"
   expected_tokens: [remove, weekend]
 
+- name: profile-settime
+  description: /profile settime — set the active-hours window verbatim
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      settime.times: "weekday07:30-18:00"
+  text: "!profile settime weekday07:30-18:00"
+  expected_tokens: [settime, "weekday07:30-18:00"]
+
+- name: profile-cleartime
+  description: /profile cleartime — drop the active-hours schedule
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      cleartime: _bare
+  text: "!profile cleartime"
+  expected_tokens: [cleartime]
+
+- name: profile-copyto
+  description: /profile copyto — copy tracking from the active profile to a target
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      copyto.profile: holiday
+  text: "!profile copyto holiday"
+  expected_tokens: [copyto, holiday]
+
 # -----------------------------------------------------------------------------
 # /location — coordinate fast-path. Geocoding case requires BotDeps so the
 # parity runner SKIPS this fixture; it remains here so the coverage test
@@ -601,3 +642,47 @@
       place: "51.28, 1.08"
   text: "!location 51.28,1.08"
   expected_tokens: ["51.28,1.08"]
+
+# -----------------------------------------------------------------------------
+# /summary — sub-command-group per alertType, action sub-command per CRUD verb.
+# alertType + action both fan out into separate tokens consumed by SummaryCommand.
+# -----------------------------------------------------------------------------
+- name: summary-quest-show
+  description: /summary quest show — bare-alertType status display
+  command: cmd.summary
+  slash:
+    name: summary
+    options:
+      quest.show: _bare
+  text: "!summary quest"
+  expected_tokens: [quest]
+
+- name: summary-quest-settime
+  description: /summary quest settime — install an active-hours schedule
+  command: cmd.summary
+  slash:
+    name: summary
+    options:
+      quest.settime.times: "weekday07:30-18:00"
+  text: "!summary quest settime weekday07:30-18:00"
+  expected_tokens: [quest, settime, "weekday07:30-18:00"]
+
+- name: summary-quest-cleartime
+  description: /summary quest cleartime — drop the active-hours schedule
+  command: cmd.summary
+  slash:
+    name: summary
+    options:
+      quest.cleartime: _bare
+  text: "!summary quest cleartime"
+  expected_tokens: [quest, cleartime]
+
+- name: summary-quest-now
+  description: /summary quest now — force-dispatch the buffer
+  command: cmd.summary
+  slash:
+    name: summary
+    options:
+      quest.now: _bare
+  text: "!summary quest now"
+  expected_tokens: [quest, now]

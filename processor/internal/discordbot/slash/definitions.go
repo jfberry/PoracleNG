@@ -193,6 +193,8 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 		return buildDefinition(bundle, key, canon, profileOptions())
 	case "cmd.location":
 		return buildDefinition(bundle, key, canon, locationOptions())
+	case "cmd.summary":
+		return buildDefinition(bundle, key, canon, summaryOptions())
 	}
 	return nil
 }
@@ -275,10 +277,10 @@ func areaOptions() []*discordgo.ApplicationCommandOption {
 	}
 }
 
-// profileOptions exposes /profile list, change, create, and delete. The
-// text bot's settime/copyto sub-commands are not surfaced via slash — both
-// require multi-token argument patterns that don't translate well to a
-// single Discord option.
+// profileOptions exposes /profile list, change, create, delete, settime,
+// cleartime, and copyto. settime/cleartime/copyto map to the text-bot's
+// active-hours grammar — settime accepts a single string with the entire
+// time-range expression (the bot's ParseSettimeArg tokenises commas itself).
 func profileOptions() []*discordgo.ApplicationCommandOption {
 	return []*discordgo.ApplicationCommandOption{
 		{
@@ -324,6 +326,92 @@ func profileOptions() []*discordgo.ApplicationCommandOption {
 					Description:  "Profile name",
 					Required:     true,
 					Autocomplete: true,
+				},
+			},
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "settime",
+			Description: "Set active-hours for the current profile",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "times",
+					Description: "Time-range string (e.g. mon07:30, weekday07:30-18:00, weekday:9-17/2)",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "cleartime",
+			Description: "Clear active-hours from the current profile",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "copyto",
+			Description: "Copy this profile's tracking to another profile",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "profile",
+					Description:  "Target profile name or number",
+					Required:     true,
+					Autocomplete: true,
+				},
+			},
+		},
+	}
+}
+
+// summaryOptions exposes /summary with one sub-command group per supported
+// alertType (today: just `quest`). Each group has four sub-commands matching
+// the text bot's grammar:
+//
+//	/summary quest show       → !summary quest               (status)
+//	/summary quest settime    → !summary quest settime <times>
+//	/summary quest cleartime  → !summary quest cleartime
+//	/summary quest now        → !summary quest now           (force-dispatch)
+//
+// Discord's command tree limits depth to (Command → Group → Subcommand) =
+// three levels including the command itself, so the alertType lives at the
+// group level and the action at the subcommand level. Adding a second
+// alertType later is "register another group alongside `quest`" — no
+// schema change required.
+func summaryOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommandGroup,
+			Name:        "quest",
+			Description: "Manage quest-summary buffering",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "show",
+					Description: "Show schedule and current buffer count",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "settime",
+					Description: "Set the active-hours schedule for the quest summary",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "times",
+							Description: "Time-range string (e.g. mon07:30, weekday07:30-18:00, weekday:9-17/2)",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "cleartime",
+					Description: "Clear the active-hours schedule",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "now",
+					Description: "Force-dispatch the currently-buffered quests",
 				},
 			},
 		},
@@ -382,9 +470,12 @@ func trackOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Top PVP rank in the Little League",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the pokemon despawns",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -436,9 +527,12 @@ func raidOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Alert radius in metres",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the raid expires",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -471,9 +565,12 @@ func eggOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Alert radius in metres",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the egg hatches",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -532,9 +629,20 @@ func questOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Alert radius in metres",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the quest is completed",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			Name:        "summary",
+			Description: "Buffer matches and dispatch in a scheduled batch instead of alerting immediately",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -563,9 +671,12 @@ func invasionOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Alert radius in metres",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the invasion expires",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -592,9 +703,12 @@ func lureOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Alert radius in metres",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the lure expires",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -626,9 +740,12 @@ func nestOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Alert radius in metres",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the nest expires",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -666,9 +783,12 @@ func maxbattleOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Alert radius in metres",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the battle ends",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -705,9 +825,12 @@ func gymOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Alert radius in metres",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the gym state changes",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -739,9 +862,12 @@ func fortOptions() []*discordgo.ApplicationCommandOption {
 			Description: "Alert radius in metres",
 		},
 		{
-			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Type:        discordgo.ApplicationCommandOptionString,
 			Name:        "clean",
 			Description: "Auto-delete the alert when the fort changes again",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
 		},
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
@@ -873,6 +999,8 @@ func allCommandKeys() []string {
 		"cmd.untrack",
 		// Phase 5
 		"cmd.area", "cmd.profile", "cmd.location",
+		// Phase 6
+		"cmd.summary",
 	}
 }
 
