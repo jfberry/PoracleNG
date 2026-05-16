@@ -50,47 +50,33 @@ func TestRaidBoss_EmptyShowsRecentActivity(t *testing.T) {
 	}
 }
 
-func TestRaidBoss_KeywordMatch(t *testing.T) {
+// Boss autocomplete is pokemon-only — tier keywords belong to /raid level.
+// A typed search returns matching pokemon names, never keywords.
+func TestRaidBoss_TypedSearchOnlyReturnsPokemon(t *testing.T) {
 	deps := raidBossTestDeps(t, false)
 	out := RaidBoss(context.Background(), deps, "me", "en")
-	found := false
 	for _, c := range out {
-		if c.Name == "mega" {
-			found = true
+		switch c.Name {
+		case "mega", "legendary", "shadow", "ultra beast", "1", "3", "5", "6":
+			t.Errorf("keyword %q leaked into boss autocomplete: %+v", c.Name, out)
 		}
-	}
-	if !found {
-		t.Errorf("expected 'mega' keyword in 'me' results: %+v", out)
 	}
 }
 
-func TestRaidBoss_EmptyNoRecentShowsKeywordsAndPokemon(t *testing.T) {
-	// On empty focused with no RecentActivity, we surface tier keywords
-	// AND fall through to the general pokemon autocomplete (which now
-	// returns an alphabetical starter list rather than nil), so the user
-	// always sees a populated dropdown.
+func TestRaidBoss_EmptyNoRecentShowsPokemonOnly(t *testing.T) {
+	// On empty focused with no RecentActivity, fall through to the
+	// general pokemon autocomplete (alphabetical starter). No tier
+	// keywords in the boss field.
 	deps := raidBossTestDeps(t, false)
 	out := RaidBoss(context.Background(), deps, "", "en")
 	if len(out) == 0 {
 		t.Fatalf("expected non-empty choices on empty focused")
 	}
-	keywords := map[string]bool{}
-	for _, kw := range raidLevelKeywords {
-		keywords[kw] = true
-	}
-	gotKeyword, gotPokemon := false, false
 	for _, c := range out {
-		if keywords[c.Name] {
-			gotKeyword = true
-		} else if c.Name != "Everything" {
-			gotPokemon = true
+		switch c.Name {
+		case "mega", "legendary", "shadow", "ultra beast", "1", "3", "5", "6":
+			t.Errorf("keyword %q in boss autocomplete: %+v", c.Name, out)
 		}
-	}
-	if !gotKeyword {
-		t.Errorf("no tier/keyword entries surfaced: %+v", out)
-	}
-	if !gotPokemon {
-		t.Errorf("no pokemon entries surfaced: %+v", out)
 	}
 }
 
