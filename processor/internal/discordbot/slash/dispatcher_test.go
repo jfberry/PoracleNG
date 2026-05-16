@@ -231,3 +231,132 @@ func TestRegistrationErrorTextHasGuidance(t *testing.T) {
 		t.Errorf("registrationErrorText=%q, expected mention of !poracle", got)
 	}
 }
+
+// dispatcherWithSecurity constructs a Dispatcher whose cfgRoot has the given
+// command_security mapping (security key → allow list of user/role IDs).
+func dispatcherWithSecurity(t *testing.T, security map[string][]string) *Dispatcher {
+	t.Helper()
+	cfg := &config.Config{}
+	cfg.Discord.CommandSecurity = security
+	d := NewDispatcher(Config{})
+	d.cfgRoot = cfg
+	d.bundle = testBundle(t)
+	return d
+}
+
+// buildInteractionWithRoles is a guild-style invocation with Member populated
+// (so userRoles returns the supplied list). Mirrors buildInteraction but
+// promotes the User into Member.User and adds Roles.
+func buildInteractionWithRoles(userID, guildID string, roles []string) *discordgo.InteractionCreate {
+	return &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{
+		Type:    discordgo.InteractionApplicationCommand,
+		GuildID: guildID,
+		Member: &discordgo.Member{
+			User:  &discordgo.User{ID: userID, Username: userID},
+			Roles: roles,
+		},
+	}}
+}
+
+func TestCommandAllowedAdminBypass(t *testing.T) {
+	// Admin should pass even when command_security would otherwise deny.
+	d := dispatcherWithSecurity(t, map[string][]string{
+		"monster": {"role-tracker"},
+	})
+	ic := buildInteractionWithRoles("42", "guild-1", nil)
+	if !d.commandAllowed(ic, "cmd.track", true) {
+		t.Error("admin should bypass command_security")
+	}
+}
+
+func TestCommandAllowedRoleGated(t *testing.T) {
+	// User has role-tracker, which is the only role allowed for monster.
+	// Should pass for cmd.track (mapped to "monster") and fail for cmd.raid
+	// (mapped to "raid", which has no allow list configured — so it passes
+	// trivially). To make a meaningful negative case, restrict "raid" too.
+	d := dispatcherWithSecurity(t, map[string][]string{
+		"monster": {"role-tracker"},
+		"raid":    {"role-raid-admin"},
+	})
+	ic := buildInteractionWithRoles("42", "guild-1", []string{"role-tracker"})
+
+	if !d.commandAllowed(ic, "cmd.track", false) {
+		t.Error("cmd.track: user with role-tracker should be allowed")
+	}
+	if d.commandAllowed(ic, "cmd.raid", false) {
+		t.Error("cmd.raid: user without role-raid-admin should be denied")
+	}
+}
+
+func TestCommandAllowedNoRoles(t *testing.T) {
+	// User with no roles, but command is restricted — should be denied.
+	d := dispatcherWithSecurity(t, map[string][]string{
+		"monster": {"role-tracker"},
+	})
+	ic := buildInteractionWithRoles("42", "guild-1", nil)
+	if d.commandAllowed(ic, "cmd.track", false) {
+		t.Error("user with no roles should be denied for restricted command")
+	}
+}
+
+func TestCommandAllowedUnconfiguredCommand(t *testing.T) {
+	// No command_security at all — every command should pass (except admin
+	// bypass which is moot). cmd.version has no security mapping anyway, so
+	// it passes regardless; cmd.track also passes because nothing is
+	// configured.
+	d := dispatcherWithSecurity(t, nil)
+	ic := buildInteractionWithRoles("42", "guild-1", nil)
+	if !d.commandAllowed(ic, "cmd.track", false) {
+		t.Error("command without security config should be allowed")
+	}
+	if !d.commandAllowed(ic, "cmd.version", false) {
+		t.Error("cmd.version (no security mapping) should always be allowed")
+	}
+}
+
+func TestCommandAllowedDMHasNoRoles(t *testing.T) {
+	// DM-style interaction: Member is nil. userRoles returns nil. Restricted
+	// commands fail closed; unrestricted commands still pass.
+	d := dispatcherWithSecurity(t, map[string][]string{
+		"monster": {"role-tracker"},
+	})
+	ic := buildInteraction("42", "") // DM: User populated, Member nil
+	if ic.Member != nil {
+		t.Fatal("test setup: expected DM-style interaction with nil Member")
+	}
+	if d.commandAllowed(ic, "cmd.track", false) {
+		t.Error("DM with no roles should be denied for restricted command")
+	}
+	// Unrestricted command still passes via the empty securityName path.
+	if !d.commandAllowed(ic, "cmd.version", false) {
+		t.Error("DM should still allow commands with no security mapping")
+	}
+}
+
+func TestCommandAllowedUserIDInAllowList(t *testing.T) {
+	// command_security allow lists can name user IDs directly (not just role
+	// IDs). User 42 is explicitly named for "monster", so they pass even
+	// with no roles attached.
+	d := dispatcherWithSecurity(t, map[string][]string{
+		"monster": {"42"},
+	})
+	ic := buildInteractionWithRoles("42", "guild-1", nil)
+	if !d.commandAllowed(ic, "cmd.track", false) {
+		t.Error("user named directly in allow list should be allowed")
+	}
+}
+
+func TestUserRolesNilMember(t *testing.T) {
+	ic := buildInteraction("42", "") // DM: no Member
+	if got := userRoles(ic); got != nil {
+		t.Errorf("userRoles(DM)=%v, want nil", got)
+	}
+}
+
+func TestUserRolesReturnsMemberRoles(t *testing.T) {
+	ic := buildInteractionWithRoles("42", "guild-1", []string{"r1", "r2"})
+	got := userRoles(ic)
+	if len(got) != 2 || got[0] != "r1" || got[1] != "r2" {
+		t.Errorf("userRoles=%v, want [r1 r2]", got)
+	}
+}
