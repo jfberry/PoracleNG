@@ -203,8 +203,15 @@ func (mt *MessageTracker) UpdateEdit(editKey string, newSentID string) {
 	mt.cache.Set(editKey, &updated, ttlcache.DefaultTTL)
 }
 
-// Size returns the number of tracked messages.
+// Size returns the number of tracked messages. Safe to call on a nil
+// tracker (returns 0) or a tracker whose cache hasn't been initialised
+// yet — the status goroutine can hit Size before init completes during
+// a partial dispatcher setup, and crashing on a metrics read is worse
+// than reporting zero.
 func (mt *MessageTracker) Size() int {
+	if mt == nil || mt.cache == nil {
+		return 0
+	}
 	return mt.cache.Len()
 }
 
