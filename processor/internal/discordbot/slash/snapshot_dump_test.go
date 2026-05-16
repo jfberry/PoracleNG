@@ -20,11 +20,32 @@ func TestDumpSnapshots(t *testing.T) {
 		withOverride("en", "slash.desc.raid", "Track a raid boss or raid level"),
 		withOverride("en", "slash.cmd.egg", "egg"),
 		withOverride("en", "slash.desc.egg", "Track an egg / raid level"),
+		withOverride("en", "slash.cmd.quest", "quest"),
+		withOverride("en", "slash.desc.quest", "Track a quest reward"),
+		withOverride("en", "slash.cmd.invasion", "invasion"),
+		withOverride("en", "slash.desc.invasion", "Track a Team Rocket invasion"),
+		withOverride("en", "slash.cmd.lure", "lure"),
+		withOverride("en", "slash.desc.lure", "Track a pokestop lure"),
+		withOverride("en", "slash.cmd.nest", "nest"),
+		withOverride("en", "slash.desc.nest", "Track a nesting pokemon"),
+		withOverride("en", "slash.cmd.maxbattle", "maxbattle"),
+		withOverride("en", "slash.desc.maxbattle", "Track a max (Dynamax) battle"),
+		withOverride("en", "slash.cmd.gym", "gym"),
+		withOverride("en", "slash.desc.gym", "Track gym team / slot / battle changes"),
+		withOverride("en", "slash.cmd.fort", "fort"),
+		withOverride("en", "slash.desc.fort", "Track pokestop or gym updates"),
 	)
 	for _, c := range []struct{ key, canon string }{
 		{"cmd.track", "track"},
 		{"cmd.raid", "raid"},
 		{"cmd.egg", "egg"},
+		{"cmd.quest", "quest"},
+		{"cmd.invasion", "invasion"},
+		{"cmd.lure", "lure"},
+		{"cmd.nest", "nest"},
+		{"cmd.maxbattle", "maxbattle"},
+		{"cmd.gym", "gym"},
+		{"cmd.fort", "fort"},
 	} {
 		def := buildCommandDef(bundle, c.key, c.canon)
 		if def == nil {
