@@ -18,6 +18,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/discordbot/slash"
 	"github.com/pokemon/poracleng/processor/internal/discordroles"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
@@ -33,6 +34,10 @@ type Bot struct {
 	threadCache    *threadCache
 	autocreateSync *autocreateSyncer
 	stopKeepAlive  func()
+
+	// slash routes Discord application-command interactions when
+	// [discord.slash_commands].enabled = true. nil when disabled.
+	slash *slash.Dispatcher
 
 	// Throttle for PostAdminNoticeThrottled. Map of key → last-posted
 	// time. Lazily initialised; guarded by adminThrottleMu.
@@ -83,6 +88,20 @@ func New(cfg Config) (*Bot, error) {
 
 	// Thread-join button interactions.
 	session.AddHandler(b.onInteractionCreate)
+
+	// Construct the slash dispatcher when enabled. Attach binds it to the
+	// session and shared deps; registration of application commands happens
+	// in a later task. When disabled, b.slash stays nil and
+	// onInteractionCreate skips the ApplicationCommand/Autocomplete branches.
+	if cfg.Cfg.Discord.SlashCommands.Enabled {
+		b.slash = slash.NewDispatcher(slash.Config{
+			Enabled: true,
+			Global:  cfg.Cfg.Discord.SlashCommands.RegisterGlobally,
+			Guilds:  cfg.Cfg.Discord.SlashCommands.Guilds,
+			Enable:  cfg.Cfg.Discord.SlashCommands.Enable,
+		})
+		b.slash.Attach(session, &b.BotDeps, b.Registry, b.Translations, b.Cfg)
+	}
 
 	if err := session.Open(); err != nil {
 		return nil, err
