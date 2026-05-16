@@ -13,7 +13,8 @@ type Config struct {
 	Global  bool
 	Guilds  []string
 	// Enable lists short command names this installation registers (e.g. "track").
-	// Empty = nothing registered. Maps 1:1 from config's [discord.slash_commands] enable.
+	// Empty = all supported commands enabled. Maps 1:1 from config's
+	// [discord.slash_commands] enable.
 	Enable []string
 	// Optional override paths for testing
 	CachePath string
