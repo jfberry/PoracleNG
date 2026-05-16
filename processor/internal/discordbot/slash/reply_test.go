@@ -60,3 +60,73 @@ func TestRawUserIDFallsBackToUser(t *testing.T) {
 		t.Errorf("rawUserID=%q, want user-id", got)
 	}
 }
+
+// /area overview returns a Reply with Text + ImageURL — the slash sender
+// must produce a single embed payload carrying both, not drop the image.
+// We don't fetch the URL in this test (would hit the network); we let
+// DownloadImage fail and assert the fallback URL-embed path.
+func TestBuildReplyPayloadsImageURLFallback(t *testing.T) {
+	// http://localhost:1/no-such-port is unreachable so DownloadImage
+	// fails and we exercise the URL-embed fallback. The reply still has
+	// to produce an embed with the URL set.
+	payloads := buildReplyPayloads(bot.Reply{
+		Text:     "Your areas: London",
+		ImageURL: "http://localhost:1/area-overview.png",
+	})
+	if len(payloads) != 1 {
+		t.Fatalf("expected 1 payload, got %d", len(payloads))
+	}
+	p := payloads[0]
+	if len(p.embeds) != 1 {
+		t.Fatalf("expected 1 embed, got %d", len(p.embeds))
+	}
+	embed := p.embeds[0]
+	if embed.Description != "Your areas: London" {
+		t.Errorf("embed description=%q, want text", embed.Description)
+	}
+	if embed.Image == nil || embed.Image.URL == "" {
+		t.Errorf("embed has no image URL: %+v", embed)
+	}
+	if p.content != "" {
+		t.Errorf("content should be empty when text rides in the embed; got %q", p.content)
+	}
+}
+
+func TestBuildReplyPayloadsPlainTextChunks(t *testing.T) {
+	r := bot.Reply{Text: strings.Repeat("x", 2500)}
+	payloads := buildReplyPayloads(r)
+	if len(payloads) < 2 {
+		t.Errorf("expected ≥2 chunks for 2500-byte text, got %d", len(payloads))
+	}
+	for _, p := range payloads {
+		if len(p.content) > 2000 {
+			t.Errorf("chunk too long: %d", len(p.content))
+		}
+		if len(p.embeds) != 0 || len(p.files) != 0 {
+			t.Errorf("plain text payload should not have embeds/files: %+v", p)
+		}
+	}
+}
+
+func TestBuildReplyPayloadsEmbedJSON(t *testing.T) {
+	// A raw Embed JSON blob (used by /track confirmations etc.) is
+	// parsed and reflected as a Discord MessageEmbed in the payload.
+	raw := []byte(`{"content":"hi","embed":{"title":"Tracked","description":"ok"}}`)
+	payloads := buildReplyPayloads(bot.Reply{Embed: raw})
+	if len(payloads) != 1 {
+		t.Fatalf("expected 1 payload, got %d", len(payloads))
+	}
+	p := payloads[0]
+	if p.content != "hi" {
+		t.Errorf("content=%q, want hi", p.content)
+	}
+	if len(p.embeds) != 1 || p.embeds[0].Title != "Tracked" {
+		t.Errorf("embed parse failed: %+v", p.embeds)
+	}
+}
+
+func TestBuildReplyPayloadsEmptyReplyReturnsNothing(t *testing.T) {
+	if got := buildReplyPayloads(bot.Reply{}); len(got) != 0 {
+		t.Errorf("expected no payloads for empty reply, got %+v", got)
+	}
+}
