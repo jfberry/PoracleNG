@@ -128,9 +128,12 @@ jobs:
       - name: Create multi-arch manifest
         working-directory: /tmp/digests
         run: |
+          # Per-arch digest files already contain the full "sha256:<hex>"
+          # form (that's what build-push-action's `digest` output emits),
+          # so don't prepend "sha256:" again.
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ steps.img.outputs.name }}@sha256:%s ' $(cat *))
+            $(printf '${{ env.REGISTRY }}/${{ steps.img.outputs.name }}@%s ' $(cat *))
 
       - name: Inspect image
         run: |
