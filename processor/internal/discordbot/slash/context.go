@@ -10,9 +10,9 @@ import (
 )
 
 // discordLocaleToPoracle maps a Discord client locale to the Poracle language
-// code used by the i18n bundle. Phase 2 ships the common-European subset; Task
-// 43 will expand this to cover every Discord locale Poracle has translations
-// for. Unmapped locales fall through to [general] locale.
+// code used by the i18n bundle. Currently ships the common-European subset;
+// expand as additional translations land. Unmapped locales fall through to
+// [general] locale.
 //
 // The map intentionally uses the typed discordgo.Locale constants (not the
 // raw string values like "de" or "fr") so a compile error catches any rename
@@ -74,15 +74,20 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 	}
 
 	if human != nil {
+		// Admin-disabled users are treated as unregistered (role removed,
+		// banned). enabled=0 (!stop) just pauses alerts — user is still
+		// registered and can run commands like !start, !tracked, !area, etc.
+		// Mirrors the gating logic in bot.LookupUserStateFromStore.
+		ctx.IsRegistered = !human.AdminDisable
 		ctx.ProfileNo = human.CurrentProfileNo
 		ctx.HasLocation = human.Latitude != 0 || human.Longitude != 0
 		ctx.HasArea = len(human.Area) > 0
 	}
 
 	// Wire injected deps from BotDeps so the underlying Command has everything
-	// it needs. /version doesn't touch most of these, but commands added in
-	// later phases (Tasks 16+) will, and keeping the wiring here means the
-	// dispatch path is consistent regardless of which command is invoked.
+	// it needs. /version doesn't touch most of these, but most tracking and
+	// area/profile commands do; keeping the wiring here means the dispatch
+	// path is consistent regardless of which command is invoked.
 	if d.deps != nil {
 		ctx.DB = d.deps.DB
 		ctx.Humans = d.deps.Humans

@@ -1,7 +1,6 @@
 package slash
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -23,12 +22,11 @@ type commandsAPI interface {
 // When d.cfg.CachePath is empty, the cache is disabled entirely (no read, no
 // write) and every call pushes — this matches the test-default behavior where
 // a Dispatcher is constructed without a CachePath. The wiring that defaults
-// the path to config/.cache/slash-fingerprint.json lives in main.go (Task 45).
+// the path to config/.cache/slash-fingerprint.json lives in main.go.
 //
 // All decision branches log at Info so the operator can verify from the
 // startup log what actually happened (pushed, skipped, or partial-failure).
-func (d *Dispatcher) SyncCommands(ctx context.Context) error {
-	_ = ctx
+func (d *Dispatcher) SyncCommands() error {
 	intent := AllDefinitions(d.bundle, d.cfg.Enable)
 	want := Fingerprint(intent)
 	api := d.commandsAPI
@@ -107,8 +105,7 @@ func (d *Dispatcher) SyncCommands(ctx context.Context) error {
 //
 // Also clears the cached global fingerprint so the next SyncCommands push is
 // not short-circuited by a stale cache hit.
-func (d *Dispatcher) ClearGlobalCommands(ctx context.Context) error {
-	_ = ctx
+func (d *Dispatcher) ClearGlobalCommands() error {
 	api := d.commandsAPI
 	if api == nil {
 		api = d.session
@@ -133,8 +130,7 @@ func (d *Dispatcher) ClearGlobalCommands(ctx context.Context) error {
 // in d.cfg.Guilds. Use after switching from register_globally=false to
 // true so the per-guild registrations are removed instead of duplicating
 // the global set Discord receives next.
-func (d *Dispatcher) ClearGuildCommands(ctx context.Context) error {
-	_ = ctx
+func (d *Dispatcher) ClearGuildCommands() error {
 	api := d.commandsAPI
 	if api == nil {
 		api = d.session

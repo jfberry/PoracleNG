@@ -210,8 +210,8 @@ func TestFormatMapperErrorFallsBackToKey(t *testing.T) {
 	merr := &mappers.MapperError{Key: "mapper.err.unknown"}
 
 	got := formatMapperError(merr, "en", bundle)
-	// Translator.T returns the key itself when missing; that's acceptable for
-	// Phase 1 — Task 44 will replace this with proper i18n.
+	// Translator.T returns the key itself when missing; that's the fallback
+	// when the i18n bundle has no entry for the mapper error.
 	if !strings.Contains(got, "mapper.err.unknown") {
 		t.Errorf("formatMapperError=%q, want fallback to key", got)
 	}
@@ -421,7 +421,7 @@ func TestUserRolesReturnsMemberRoles(t *testing.T) {
 	}
 }
 
-// --- Task 28: autocomplete dispatcher helpers ---
+// --- autocomplete dispatcher helpers ---
 
 func TestNewDispatcherRegistersAutocompleteListers(t *testing.T) {
 	// The constructor must wire the three built-in listers so HandleAutocomplete

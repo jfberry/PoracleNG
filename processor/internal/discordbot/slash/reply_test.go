@@ -33,31 +33,31 @@ func TestRenderRepliesLongTextSplits(t *testing.T) {
 	}
 }
 
-func TestRawUserIDEmptyForMissingUser(t *testing.T) {
+func TestInteractionUserIDEmptyForMissingUser(t *testing.T) {
 	// sendToDM's early-return guard: an interaction with no Member.User and no
 	// User should yield empty userID, which sendToDM rejects without panicking.
 	ic := &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{}}
-	if got := rawUserID(ic); got != "" {
-		t.Errorf("rawUserID=%q, want empty", got)
+	if got := interactionUserID(ic); got != "" {
+		t.Errorf("interactionUserID=%q, want empty", got)
 	}
 }
 
-func TestRawUserIDPrefersMember(t *testing.T) {
+func TestInteractionUserIDPrefersMember(t *testing.T) {
 	ic := &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{
 		Member: &discordgo.Member{User: &discordgo.User{ID: "member-id"}},
 		User:   &discordgo.User{ID: "user-id"},
 	}}
-	if got := rawUserID(ic); got != "member-id" {
-		t.Errorf("rawUserID=%q, want member-id", got)
+	if got := interactionUserID(ic); got != "member-id" {
+		t.Errorf("interactionUserID=%q, want member-id", got)
 	}
 }
 
-func TestRawUserIDFallsBackToUser(t *testing.T) {
+func TestInteractionUserIDFallsBackToUser(t *testing.T) {
 	ic := &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{
 		User: &discordgo.User{ID: "user-id"},
 	}}
-	if got := rawUserID(ic); got != "user-id" {
-		t.Errorf("rawUserID=%q, want user-id", got)
+	if got := interactionUserID(ic); got != "user-id" {
+		t.Errorf("interactionUserID=%q, want user-id", got)
 	}
 }
 

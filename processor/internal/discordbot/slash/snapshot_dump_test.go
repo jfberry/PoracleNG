@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// TestDumpSnapshots writes testdata snapshot files for the new Phase 4
-// commands when POROCLE_DUMP_SNAPSHOTS=1. Skipped during normal test runs.
+// TestDumpSnapshots writes testdata snapshot files for the slash command
+// definitions when POROCLE_DUMP_SNAPSHOTS=1. Skipped during normal test runs.
 func TestDumpSnapshots(t *testing.T) {
 	if os.Getenv("POROCLE_DUMP_SNAPSHOTS") != "1" {
 		t.Skip("set POROCLE_DUMP_SNAPSHOTS=1 to regenerate")

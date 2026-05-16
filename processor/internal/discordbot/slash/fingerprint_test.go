@@ -1,7 +1,6 @@
 package slash
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -95,7 +94,7 @@ func TestSyncSkipsWhenFingerprintMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.SyncCommands(context.Background()); err != nil {
+	if err := d.SyncCommands(); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.called) != 0 {
@@ -130,7 +129,7 @@ func TestSyncForcesWhenForceSyncSet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.SyncCommands(context.Background()); err != nil {
+	if err := d.SyncCommands(); err != nil {
 		t.Fatal(err)
 	}
 	if len(fs.called) != 1 {
