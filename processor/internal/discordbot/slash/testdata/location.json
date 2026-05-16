@@ -1,0 +1,16 @@
+{
+  "name": "location",
+  "description": "Set your location",
+  "options": [
+    {
+      "type": 3,
+      "name": "place",
+      "description": "Coordinates (\"51.28, 1.08\") or a place name",
+      "channel_types": null,
+      "required": true,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    }
+  ]
+}

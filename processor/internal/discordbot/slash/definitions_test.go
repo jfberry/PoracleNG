@@ -61,6 +61,14 @@ func testBundle(t *testing.T, opts ...bundleOpt) *i18n.Bundle {
 			"slash.desc.gym":       "Track gym team / slot / battle changes",
 			"slash.cmd.fort":       "fort",
 			"slash.desc.fort":      "Track pokestop or gym updates",
+			"slash.cmd.untrack":    "untrack",
+			"slash.desc.untrack":   "Remove a tracking rule",
+			"slash.cmd.area":       "area",
+			"slash.desc.area":      "Manage your areas",
+			"slash.cmd.profile":    "profile",
+			"slash.desc.profile":   "Manage your profiles",
+			"slash.cmd.location":   "location",
+			"slash.desc.location":  "Set your location",
 		},
 	}
 	for _, opt := range opts {
@@ -126,8 +134,10 @@ func TestAllDefinitionsFiltersByEnable(t *testing.T) {
 		}
 	}
 
-	// Explicit enable for a not-yet-implemented Phase 5 command → no defs.
-	defs = AllDefinitions(bundle, []string{"untrack"})
+	// Phase 4 + Phase 5 mutating commands now fully implemented; the only
+	// remaining "not implemented" commands are anything outside the keyset
+	// in allCommandKeys() (e.g. a typo in operator config).
+	defs = AllDefinitions(bundle, []string{"not-a-real-command"})
 	if len(defs) != 0 {
 		t.Errorf("expected 0 defs when only unimplemented commands enabled, got %d", len(defs))
 	}
@@ -139,6 +149,12 @@ func TestAllDefinitionsFiltersByEnable(t *testing.T) {
 	})
 	if len(defs) != 10 {
 		t.Fatalf("expected 10 defs for full Phase 4 set, got %d", len(defs))
+	}
+
+	// Phase 5 commands all implemented.
+	defs = AllDefinitions(bundle, []string{"untrack", "area", "profile", "location"})
+	if len(defs) != 4 {
+		t.Fatalf("expected 4 defs for full Phase 5 set, got %d", len(defs))
 	}
 
 	// Explicit enable that includes "version" → returns just it.
@@ -436,6 +452,82 @@ func TestSnapshotFort(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	want, err := os.ReadFile("testdata/fort.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotUntrack(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.untrack", "untrack")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.untrack")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/untrack.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotArea(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.area", "area")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.area")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/area.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotProfile(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.profile", "profile")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.profile")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/profile.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotLocation(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.location", "location")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.location")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/location.json")
 	if err != nil {
 		t.Fatalf("read testdata: %v", err)
 	}

@@ -1,0 +1,216 @@
+{
+  "name": "untrack",
+  "description": "Remove a tracking rule",
+  "options": [
+    {
+      "type": 1,
+      "name": "pokemon",
+      "description": "Remove a pokemon tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing pokemon tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "raid",
+      "description": "Remove a raid tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing raid tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "egg",
+      "description": "Remove a egg tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing egg tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "quest",
+      "description": "Remove a quest tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing quest tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "invasion",
+      "description": "Remove a invasion tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing invasion tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "lure",
+      "description": "Remove a lure tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing lure tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "nest",
+      "description": "Remove a nest tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing nest tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "gym",
+      "description": "Remove a gym tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing gym tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "fort",
+      "description": "Remove a fort tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing fort tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "maxbattle",
+      "description": "Remove a maxbattle tracking rule",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "tracking",
+          "description": "Pick from your existing maxbattle tracking rules",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    }
+  ]
+}
