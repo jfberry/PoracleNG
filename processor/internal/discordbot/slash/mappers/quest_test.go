@@ -208,17 +208,22 @@ func TestQuestMapperMinAmountRejectedForPokemon(t *testing.T) {
 	}
 }
 
-func TestQuestMapperMinAmountRejectedForStardust(t *testing.T) {
-	_, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+// Stardust + min_amount is accepted: the text bot routes min_amount
+// into the stardust Reward column (matcher quirk). The slash mapper
+// emits both tokens; the bot's stardust:N branch ignores the peer
+// amount:N when stardust:N is explicit. The user gets a working rule
+// either way.
+func TestQuestMapperMinAmountAcceptedWithStardust(t *testing.T) {
+	tokens, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
 		iopt("stardust", 1000),
 		iopt("min_amount", 5),
 	})
-	me, ok := err.(*MapperError)
-	if !ok {
-		t.Fatalf("expected MapperError, got %T", err)
+	if err != nil {
+		t.Fatalf("stardust + min_amount should be accepted, got %v", err)
 	}
-	if me.Key != "error.slash.quest.amount_not_applicable" {
-		t.Errorf("key=%q", me.Key)
+	// Both tokens emitted — the text bot decides precedence.
+	if got := tokens; len(got) != 2 || got[0] != "stardust:1000" || got[1] != "amount:5" {
+		t.Errorf("tokens=%v, want [stardust:1000 amount:5]", got)
 	}
 }
 

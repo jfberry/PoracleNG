@@ -129,11 +129,14 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Also supports bare keywords: energy, candy, stardust (+ separate pokemon name)
 	var insert []db.QuestTrackingAPI
 
-	// amount:N — minimum-amount filter for reward types that support it
-	// (item=2, candy=4, mega_energy=12). The matcher in
-	// internal/matching/quest.go already honours q.Amount for those types;
-	// pokemon (7) has no amount semantics and stardust (3) stores its
-	// minimum in Reward, so amount:N for those is a user error.
+	// amount:N — minimum-amount filter for reward types that support it.
+	// internal/matching/quest.go honours q.Amount for item (2), candy (4),
+	// and mega_energy (12). Stardust (3) stores its minimum in Reward,
+	// not Amount — when paired with a stardust reward we route the
+	// amount into Reward instead of rejecting, so users don't have to
+	// remember which keyword goes where. Pokemon (7) has no amount
+	// semantics; rejecting amount:N with pokemon-reward prevents a
+	// silent no-op the user wouldn't notice.
 	amountStr, amountSet := parsed.Strings["amount"]
 	amountVal := 0
 	if amountSet {
@@ -141,18 +144,16 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	if stardustVal, ok := parsed.Strings["stardust"]; ok {
-		if amountSet {
-			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.amount_not_applicable")}}
-		}
-		// stardust:1000 — minimum amount stored in Reward field (matching alerter)
+		// Explicit stardust:N wins over a peer amount:N — the explicit
+		// form is unambiguous about which column to fill.
+		_ = amountSet
 		amount := questParseInt(stardustVal)
 		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, amount, 0, 0))
 	} else if parsed.HasKeyword("arg.stardust") {
-		if amountSet {
-			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.amount_not_applicable")}}
-		}
-		// bare "stardust" — any amount
-		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, 0, 0, 0))
+		// bare "stardust" + amount:N — route amount into the Reward
+		// column (the stardust grammar's own min-amount slot). bare
+		// "stardust" alone means "any amount".
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, amountVal, 0, 0))
 	} else if energyVal, ok := parsed.Strings["energy"]; ok {
 		// energy:charizard — resolve pokemon name
 		resolved := ctx.Resolver.Resolve(energyVal, ctx.Language)
@@ -192,23 +193,17 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, amountVal))
 		}
 	} else if parsed.HasKeyword("arg.everything") {
-		if amountSet {
-			// "everything" spans pokemon + stardust rules where Amount
-			// has no defined meaning — reject up-front rather than
-			// silently dropping the filter on those rows.
-			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.amount_not_applicable")}}
-		}
-		// Everything: track all quest reward types (matching alerter behavior)
-		// Pokemon quests
+		// Everything: track all quest reward types. When amount:N is
+		// paired with everything, apply it per-row where supported:
+		//
+		//	pokemon (7)        — no amount semantics; always 0
+		//	stardust (3)       — min lives in Reward (matcher quirk)
+		//	candy / mega / item — q.Amount > 0 filter (the natural slot)
 		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 7, 0, 0, 0))
-		// Stardust quests (reward=0 means any amount)
-		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, 0, 0, 0))
-		// Mega energy quests
-		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, 0))
-		// Candy quests
-		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, 0))
-		// Item quests
-		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 2, 0, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, amountVal, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, amountVal))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, amountVal))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 2, 0, 0, amountVal))
 	} else if len(parsed.Pokemon) > 0 {
 		if amountSet {
 			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.amount_not_applicable")}}
