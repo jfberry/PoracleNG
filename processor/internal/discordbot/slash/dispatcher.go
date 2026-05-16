@@ -1,6 +1,7 @@
 package slash
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
@@ -8,8 +9,11 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/discordbot/slash/autocomplete"
+	"github.com/pokemon/poracleng/processor/internal/discordbot/slash/autocomplete/listers"
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash/mappers"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 type Config struct {
@@ -41,6 +45,15 @@ type Dispatcher struct {
 	// Attach() so HandleCommand can route interactions whose Name was
 	// localized at registration time.
 	nameToKey map[string]string
+
+	// autocompleteRegistry hosts the UserStateLister implementations used by
+	// HandleAutocomplete. Populated in NewDispatcher; HandleAutocomplete
+	// looks up listers by name when routing user-state options
+	// (tracking/areas/profiles). Built-in providers (Pokemon, IV, RaidBoss,
+	// Template) are called directly without going through the registry —
+	// the registry exists only for state-bound listers that need deps +
+	// userID + a hint.
+	autocompleteRegistry *autocomplete.Registry
 }
 
 // commandsSkippingRegistration matches the text bot's special-case logic in
@@ -52,7 +65,14 @@ var commandsSkippingRegistration = map[string]bool{
 }
 
 func NewDispatcher(cfg Config) *Dispatcher {
-	return &Dispatcher{cfg: cfg}
+	d := &Dispatcher{
+		cfg:                  cfg,
+		autocompleteRegistry: autocomplete.NewRegistry(),
+	}
+	d.autocompleteRegistry.Register("tracking", listers.ListTracking)
+	d.autocompleteRegistry.Register("areas", listers.ListAreas)
+	d.autocompleteRegistry.Register("profiles", listers.ListProfiles)
+	return d
 }
 
 func (d *Dispatcher) Attach(s *discordgo.Session, deps *bot.BotDeps, registry *bot.Registry, bundle *i18n.Bundle, cfg *config.Config) {
@@ -194,13 +214,193 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 	}
 }
 
-// HandleAutocomplete routes an ApplicationCommandAutocomplete interaction.
-// No-op skeleton for Phase 0.
+// HandleAutocomplete routes an ApplicationCommandAutocomplete interaction
+// to the appropriate provider based on the (command, option) tuple.
+//
+// The flow mirrors HandleCommand's early stages but never defers — Discord
+// expects an autocomplete response within 3 seconds in the same response
+// frame, not a deferred follow-up.
+//
+//  1. Find the focused option (walks sub-commands).
+//  2. Resolve user language for localized labels.
+//  3. Unregistered-user gate: commands not in commandsSkippingRegistration
+//     return empty choices so the suggestion list doesn't entice a user
+//     into typing input they can't submit.
+//  4. Dispatch on (cmd, opt) to a built-in provider or to a registered
+//     UserStateLister.
+//  5. Respond with the choice list (always emit a response — empty
+//     choices is still a valid autocomplete reply).
 func (d *Dispatcher) HandleAutocomplete(s *discordgo.Session, ic *discordgo.InteractionCreate) {
 	if d == nil || ic == nil {
 		return
 	}
-	// TODO: Task 28 — implement autocomplete routing
+
+	data := ic.ApplicationCommandData()
+	focused := focusedOption(data.Options)
+	if focused == nil {
+		return
+	}
+
+	cmdName := data.Name
+	optName := focused.Name
+	focusedValue := focusedStringValue(focused)
+
+	// Resolve user language for localized labels.
+	userID := interactionUserID(ic)
+	var human *store.HumanLite
+	if d.deps != nil && d.deps.Humans != nil && userID != "" {
+		human, _ = d.deps.Humans.GetLite(userID)
+	}
+	userLang := d.resolveLanguage(ic, human)
+
+	// Resolve cmdKey from invoked name to check skip-registration list.
+	cmdKey := d.resolveCommandKey(cmdName)
+
+	// Unregistered user → return empty choices (don't mislead with active
+	// suggestions they can't actually submit successfully).
+	if human == nil && !commandsSkippingRegistration[cmdKey] {
+		respondAutocomplete(s, ic, nil)
+		return
+	}
+
+	choices := d.routeAutocomplete(cmdName, optName, focusedValue, userLang, ic)
+	respondAutocomplete(s, ic, choices)
+}
+
+// routeAutocomplete dispatches by (command, option) tuple. The plan's
+// tracking option lives under an /untrack sub-command whose name IS the
+// tracking subtype, so we walk the option tree to find it.
+func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *discordgo.InteractionCreate) []*discordgo.ApplicationCommandOptionChoice {
+	switch {
+	case opt == "pokemon":
+		return autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
+	case opt == "iv":
+		return autocomplete.IVRange(focused)
+	case opt == "boss" && cmd == "raid":
+		return autocomplete.RaidBoss(context.Background(), d.deps, focused, userLang)
+	case opt == "template":
+		return autocomplete.Template(context.Background(), d.deps, focused, dtsTypeFor(cmd), "discord", userLang)
+	case opt == "tracking" && cmd == "untrack":
+		subtype := findUntrackSubtype(ic)
+		return d.userstateAutocomplete(ic, "tracking", subtype, focused)
+	case opt == "area":
+		return d.userstateAutocomplete(ic, "areas", "", focused)
+	case opt == "name" && cmd == "profile":
+		return d.userstateAutocomplete(ic, "profiles", "", focused)
+	}
+	return nil
+}
+
+// userstateAutocomplete looks up a lister by name and runs it with the
+// invoking user's ID. Returns nil when the registry has no such lister or
+// the lister errors — autocomplete shouldn't surface infrastructure errors
+// to the end user, so we degrade silently to "no suggestions".
+func (d *Dispatcher) userstateAutocomplete(ic *discordgo.InteractionCreate, listerName, subtype, focused string) []*discordgo.ApplicationCommandOptionChoice {
+	if d.autocompleteRegistry == nil {
+		return nil
+	}
+	lister := d.autocompleteRegistry.Lookup(listerName)
+	if lister == nil {
+		return nil
+	}
+	userID := interactionUserID(ic)
+	out, err := lister(context.Background(), d.deps, userID, autocomplete.UserStateHint{Subtype: subtype, Focused: focused})
+	if err != nil {
+		return nil
+	}
+	return autocomplete.FilterAndCap(out, focused)
+}
+
+// focusedOption returns the option flagged Focused=true. Walks into
+// sub-command options because Discord nests an autocomplete option inside
+// the chosen sub-command (e.g. /untrack raid <tracking> → top-level
+// option "raid" has Focused=false; its Options child "tracking" has
+// Focused=true).
+func focusedOption(opts []*discordgo.ApplicationCommandInteractionDataOption) *discordgo.ApplicationCommandInteractionDataOption {
+	for _, o := range opts {
+		if o == nil {
+			continue
+		}
+		if o.Focused {
+			return o
+		}
+		if len(o.Options) > 0 {
+			if sub := focusedOption(o.Options); sub != nil {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+
+// focusedStringValue extracts the focused option's typed value as a string.
+// discordgo's StringValue panics when the option type isn't String, so we
+// guard against that path — autocomplete focused options are nearly always
+// strings, but a defensive read avoids tripping over a misregistered option.
+func focusedStringValue(opt *discordgo.ApplicationCommandInteractionDataOption) string {
+	if opt == nil {
+		return ""
+	}
+	if opt.Type != discordgo.ApplicationCommandOptionString {
+		if s, ok := opt.Value.(string); ok {
+			return s
+		}
+		return ""
+	}
+	if s, ok := opt.Value.(string); ok {
+		return s
+	}
+	return ""
+}
+
+// findUntrackSubtype walks the top-level interaction options for an
+// /untrack invocation and returns the chosen sub-command's name (which IS
+// the tracking subtype: "raid", "egg", ...). Returns "" when no
+// sub-command option is present — caller treats that as "no subtype hint".
+func findUntrackSubtype(ic *discordgo.InteractionCreate) string {
+	if ic == nil || ic.Interaction == nil {
+		return ""
+	}
+	for _, o := range ic.ApplicationCommandData().Options {
+		if o == nil {
+			continue
+		}
+		if o.Type == discordgo.ApplicationCommandOptionSubCommand {
+			return o.Name
+		}
+	}
+	return ""
+}
+
+// dtsTypeFor maps a slash command name to the DTS template type used by
+// the template store. Most are identical to the slash command name; the
+// exception is /track → "monster", which preserves the historic webhook
+// naming.
+//
+// The DTS types come from fallbacks/dts.json: monster, raid, egg, quest,
+// invasion, lure, nest, gym, fort-update, maxbattle.
+func dtsTypeFor(cmd string) string {
+	switch cmd {
+	case "track":
+		return "monster"
+	case "fort":
+		return "fort-update"
+	}
+	return cmd
+}
+
+// respondAutocomplete sends an autocomplete result with the given choices.
+// Nil choices is a valid Discord autocomplete reply ("no suggestions"); we
+// pass it through unchanged so a legitimately empty result doesn't trigger
+// retries.
+func respondAutocomplete(s *discordgo.Session, ic *discordgo.InteractionCreate, choices []*discordgo.ApplicationCommandOptionChoice) {
+	if s == nil || ic == nil || ic.Interaction == nil {
+		return
+	}
+	_ = s.InteractionRespond(ic.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{Choices: choices},
+	})
 }
 
 // commandAllowed checks command_security for the invoking user.
