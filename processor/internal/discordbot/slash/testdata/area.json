@@ -1,0 +1,58 @@
+{
+  "name": "area",
+  "description": "Manage your areas",
+  "options": [
+    {
+      "type": 1,
+      "name": "add",
+      "description": "Add an area to your tracking",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "area",
+          "description": "Area to add",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "remove",
+      "description": "Remove an area from your tracking",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "area",
+          "description": "Area to remove",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "show",
+      "description": "Show your selected areas",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    }
+  ]
+}

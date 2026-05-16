@@ -194,13 +194,21 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 		return
 	}
 
-	// 7. Map slash options to text-command tokens.
-	mapperFn := mappers.Lookup(canon)
-	if mapperFn == nil {
-		d.respondError(s, ic, "🛑 Command not implemented.")
-		return
+	// 7. Map slash options to text-command tokens. /location has a
+	// non-standard mapper signature (it needs BotDeps for the Forward
+	// geocoder call) and is therefore not in the shared registry; we
+	// dispatch it directly.
+	var tokens []string
+	if canon == "location" {
+		tokens, err = mappers.Location(ic.ApplicationCommandData().Options, d.deps)
+	} else {
+		mapperFn := mappers.Lookup(canon)
+		if mapperFn == nil {
+			d.respondError(s, ic, "🛑 Command not implemented.")
+			return
+		}
+		tokens, err = mapperFn(ic.ApplicationCommandData().Options)
 	}
-	tokens, err := mapperFn(ic.ApplicationCommandData().Options)
 	if err != nil {
 		d.respondError(s, ic, formatMapperError(err, ctx.Language, d.bundle))
 		return
