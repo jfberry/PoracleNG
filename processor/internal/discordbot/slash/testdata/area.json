@@ -53,6 +53,26 @@
       "options": null,
       "autocomplete": false,
       "choices": null
+    },
+    {
+      "type": 1,
+      "name": "list",
+      "description": "List every area available to you (✓ = already added)",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "overview",
+      "description": "Map overview of every area available to you",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
     }
   ]
 }
