@@ -117,21 +117,9 @@ func TestQuestMapperRejectsRemovedXLCandy(t *testing.T) {
 	}
 }
 
-func TestQuestMapperMinAmount(t *testing.T) {
-	tokens, _ := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
-		sopt("candy", "pikachu"),
-		iopt("min_amount", 5),
-	})
-	want := []string{"candy:pikachu", "amount:5"}
-	if !reflect.DeepEqual(tokens, want) {
-		t.Errorf("tokens=%v want %v", tokens, want)
-	}
-}
-
 func TestQuestMapperAllExtras(t *testing.T) {
 	tokens, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
 		sopt("pokemon", "pikachu"),
-		iopt("min_amount", 3),
 		iopt("distance", 750),
 		bopt("clean", true),
 		sopt("template", "fancy"),
@@ -139,19 +127,9 @@ func TestQuestMapperAllExtras(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"pikachu", "amount:3", "d750", "clean", "template:fancy"}
+	want := []string{"pikachu", "d750", "clean", "template:fancy"}
 	if !reflect.DeepEqual(tokens, want) {
 		t.Errorf("tokens=%v want %v", tokens, want)
-	}
-}
-
-func TestQuestMapperMinAmountZeroOmitted(t *testing.T) {
-	tokens, _ := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
-		sopt("pokemon", "pikachu"),
-		iopt("min_amount", 0),
-	})
-	if !reflect.DeepEqual(tokens, []string{"pikachu"}) {
-		t.Errorf("tokens=%v", tokens)
 	}
 }
 
