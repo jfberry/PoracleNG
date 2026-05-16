@@ -22,13 +22,14 @@ type Config struct {
 }
 
 type Dispatcher struct {
-	cfg      Config
-	session  *discordgo.Session // set by Attach()
-	appID    string             // set after session.Open()
-	deps     *bot.BotDeps
-	registry *bot.Registry
-	bundle   *i18n.Bundle
-	cfgRoot  *config.Config
+	cfg         Config
+	session     *discordgo.Session // set by Attach()
+	appID       string             // set after session.Open()
+	deps        *bot.BotDeps
+	registry    *bot.Registry
+	bundle      *i18n.Bundle
+	cfgRoot     *config.Config
+	commandsAPI commandsAPI // test seam; nil = use session
 }
 
 func NewDispatcher(cfg Config) *Dispatcher {
