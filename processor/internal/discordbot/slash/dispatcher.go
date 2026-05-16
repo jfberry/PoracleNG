@@ -263,13 +263,20 @@ func (d *Dispatcher) HandleAutocomplete(s *discordgo.Session, ic *discordgo.Inte
 	optName := focused.Name
 	focusedValue := focusedStringValue(focused)
 
-	// Resolve user language for localized labels.
+	// Resolve user language for localized labels. Autocomplete only needs
+	// language + the "registered?" bit, so the lightweight GetLite is enough
+	// here — buildContext (the dispatch path) takes the heavier Get because
+	// commands like /tracked also need HasArea / HasLocation.
 	userID := interactionUserID(ic)
 	var human *store.HumanLite
 	if d.deps != nil && d.deps.Humans != nil && userID != "" {
 		human, _ = d.deps.Humans.GetLite(userID)
 	}
-	userLang := d.resolveLanguage(ic, human)
+	humanLang := ""
+	if human != nil {
+		humanLang = human.Language
+	}
+	userLang := d.resolveLanguage(ic, humanLang)
 
 	// Resolve cmdKey from invoked name to check skip-registration list.
 	cmdKey := d.resolveCommandKey(cmdName)
