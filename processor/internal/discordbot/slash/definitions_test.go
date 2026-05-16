@@ -51,6 +51,8 @@ func testBundle(t *testing.T, opts ...bundleOpt) *i18n.Bundle {
 			"slash.desc.quest":     "Track a quest reward",
 			"slash.cmd.invasion":   "invasion",
 			"slash.desc.invasion":  "Track a Team Rocket invasion",
+			"slash.cmd.incident":   "incident",
+			"slash.desc.incident":  "Track a pokestop incident (Kecleon, Gold Pokestop, Showcase…)",
 			"slash.cmd.lure":       "lure",
 			"slash.desc.lure":      "Track a pokestop lure",
 			"slash.cmd.nest":       "nest",
