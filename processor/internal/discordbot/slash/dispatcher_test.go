@@ -224,11 +224,69 @@ func TestFormatMapperErrorNonMapperError(t *testing.T) {
 }
 
 func TestRegistrationErrorTextHasGuidance(t *testing.T) {
-	// Phase 1 hardcoded message — sanity check that the text mentions
-	// "poracle" so users know what to do.
+	// Bundle-less call path (defensive: should not panic, must mention
+	// "poracle" so unregistered users see what to do).
 	got := registrationErrorText(nil, nil, "en", "")
 	if !strings.Contains(strings.ToLower(got), "poracle") {
 		t.Errorf("registrationErrorText=%q, expected mention of !poracle", got)
+	}
+}
+
+func TestRegistrationErrorTextDMOnlyWhenNoChannelConfigured(t *testing.T) {
+	bundle := testBundle(t,
+		withOverride("en", "error.slash.unregistered_dm_only", "🛑 Register first. DM !poracle."),
+		withOverride("en", "error.slash.unregistered_with_channel", "🛑 Register first. DM !poracle or use {0}."),
+	)
+	cfg := &config.Config{}
+	// No channels configured → DM-only form even when guildID is set.
+	got := registrationErrorText(cfg, bundle, "en", "guild-1")
+	if !strings.Contains(got, "DM !poracle") {
+		t.Errorf("expected DM-only form, got %q", got)
+	}
+	if strings.Contains(got, "<#") {
+		t.Errorf("did not expect channel mention, got %q", got)
+	}
+}
+
+func TestRegistrationErrorTextChannelHintWhenSingleChannel(t *testing.T) {
+	bundle := testBundle(t,
+		withOverride("en", "error.slash.unregistered_dm_only", "🛑 Register first. DM !poracle."),
+		withOverride("en", "error.slash.unregistered_with_channel", "🛑 Register first. DM !poracle or use {0}."),
+	)
+	cfg := &config.Config{}
+	cfg.Discord.Channels = []string{"chan-42"}
+
+	got := registrationErrorText(cfg, bundle, "en", "guild-1")
+	if !strings.Contains(got, "<#chan-42>") {
+		t.Errorf("expected channel mention <#chan-42>, got %q", got)
+	}
+}
+
+func TestRegistrationErrorTextSkipsHintWhenMultipleChannels(t *testing.T) {
+	// Multiple channels — we can't tell which guild they belong to, so
+	// degrade to the DM-only message rather than mis-link the user.
+	bundle := testBundle(t,
+		withOverride("en", "error.slash.unregistered_dm_only", "🛑 Register first. DM !poracle."),
+		withOverride("en", "error.slash.unregistered_with_channel", "🛑 Register first. DM !poracle or use {0}."),
+	)
+	cfg := &config.Config{}
+	cfg.Discord.Channels = []string{"chan-1", "chan-2"}
+
+	got := registrationErrorText(cfg, bundle, "en", "guild-1")
+	if strings.Contains(got, "<#") {
+		t.Errorf("expected no channel mention with multiple channels, got %q", got)
+	}
+}
+
+func TestRegistrationErrorTextLanguageFallback(t *testing.T) {
+	// Bundle has only English keys; a user with lang="de" still gets a
+	// usable message via the English fallback.
+	bundle := testBundle(t,
+		withOverride("en", "error.slash.unregistered_dm_only", "Register first via !poracle (English)."),
+	)
+	got := registrationErrorText(&config.Config{}, bundle, "de", "")
+	if !strings.Contains(got, "English") {
+		t.Errorf("expected English fallback for missing German entry, got %q", got)
 	}
 }
 
