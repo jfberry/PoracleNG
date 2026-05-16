@@ -189,9 +189,163 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 		return buildDefinition(bundle, key, canon, gymOptions())
 	case "cmd.fort":
 		return buildDefinition(bundle, key, canon, fortOptions())
-	// Other commands added in later phase tasks.
+	case "cmd.untrack":
+		return buildDefinition(bundle, key, canon, untrackOptions())
+	case "cmd.area":
+		return buildDefinition(bundle, key, canon, areaOptions())
+	case "cmd.profile":
+		return buildDefinition(bundle, key, canon, profileOptions())
+	case "cmd.location":
+		return buildDefinition(bundle, key, canon, locationOptions())
 	}
 	return nil
+}
+
+// untrackOptions exposes one sub-command per tracking type. Each sub-command
+// has a single autocomplete-backed "tracking" option whose value is the
+// database UID of the rule the user wants to remove. The sub-command name
+// IS the tracking subtype — both the slash dispatcher (findUntrackSubtype)
+// and the autocomplete lister read it directly to scope the choice list.
+func untrackOptions() []*discordgo.ApplicationCommandOption {
+	subs := []string{"pokemon", "raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"}
+	out := make([]*discordgo.ApplicationCommandOption, 0, len(subs))
+	for _, sub := range subs {
+		out = append(out, untrackSub(sub))
+	}
+	return out
+}
+
+// untrackSub builds a single /untrack <subtype> sub-command. Keeping the
+// shape identical across subtypes (one required "tracking" option, picker
+// only) means there is exactly one Discord UI affordance per tracking type
+// and the operator's mental model stays "pick one of your rules, click
+// remove".
+func untrackSub(typ string) *discordgo.ApplicationCommandOption {
+	return &discordgo.ApplicationCommandOption{
+		Type:        discordgo.ApplicationCommandOptionSubCommand,
+		Name:        typ,
+		Description: "Remove a " + typ + " tracking rule",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:         discordgo.ApplicationCommandOptionString,
+				Name:         "tracking",
+				Description:  "Pick from your existing " + typ + " tracking rules",
+				Required:     true,
+				Autocomplete: true,
+			},
+		},
+	}
+}
+
+// areaOptions exposes /area add, /area remove, and /area show. The full text
+// command supports list/show-by-name/overview as well; those are reachable
+// via the text bot for power users but excluded from the slash surface to
+// keep the menu uncluttered.
+func areaOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "add",
+			Description: "Add an area to your tracking",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "area",
+					Description:  "Area to add",
+					Required:     true,
+					Autocomplete: true,
+				},
+			},
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "remove",
+			Description: "Remove an area from your tracking",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "area",
+					Description:  "Area to remove",
+					Required:     true,
+					Autocomplete: true,
+				},
+			},
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "show",
+			Description: "Show your selected areas",
+		},
+	}
+}
+
+// profileOptions exposes /profile list, change, create, and delete. The
+// text bot's settime/copyto sub-commands are not surfaced via slash — both
+// require multi-token argument patterns that don't translate well to a
+// single Discord option.
+func profileOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "list",
+			Description: "List your profiles",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "change",
+			Description: "Switch active profile",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "name",
+					Description:  "Profile name",
+					Required:     true,
+					Autocomplete: true,
+				},
+			},
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "create",
+			Description: "Create a new profile",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "name",
+					Description: "Profile name",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "delete",
+			Description: "Delete a profile",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "name",
+					Description:  "Profile name",
+					Required:     true,
+					Autocomplete: true,
+				},
+			},
+		},
+	}
+}
+
+// locationOptions exposes /location with a single required "place" option
+// that accepts either "lat,lon" coordinates or a free-form place name. The
+// mapper forward-geocodes place names via deps.Geocoder when present.
+func locationOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			Name:        "place",
+			Description: "Coordinates (\"51.28, 1.08\") or a place name",
+			Required:    true,
+		},
+	}
 }
 
 // trackOptions builds the slash option list for /track. Pokemon is the

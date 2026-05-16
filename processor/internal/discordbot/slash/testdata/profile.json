@@ -1,0 +1,79 @@
+{
+  "name": "profile",
+  "description": "Manage your profiles",
+  "options": [
+    {
+      "type": 1,
+      "name": "list",
+      "description": "List your profiles",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "change",
+      "description": "Switch active profile",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "name",
+          "description": "Profile name",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "create",
+      "description": "Create a new profile",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "name",
+          "description": "Profile name",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "delete",
+      "description": "Delete a profile",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "name",
+          "description": "Profile name",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": true,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    }
+  ]
+}

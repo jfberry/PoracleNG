@@ -34,6 +34,14 @@ func TestDumpSnapshots(t *testing.T) {
 		withOverride("en", "slash.desc.gym", "Track gym team / slot / battle changes"),
 		withOverride("en", "slash.cmd.fort", "fort"),
 		withOverride("en", "slash.desc.fort", "Track pokestop or gym updates"),
+		withOverride("en", "slash.cmd.untrack", "untrack"),
+		withOverride("en", "slash.desc.untrack", "Remove a tracking rule"),
+		withOverride("en", "slash.cmd.area", "area"),
+		withOverride("en", "slash.desc.area", "Manage your areas"),
+		withOverride("en", "slash.cmd.profile", "profile"),
+		withOverride("en", "slash.desc.profile", "Manage your profiles"),
+		withOverride("en", "slash.cmd.location", "location"),
+		withOverride("en", "slash.desc.location", "Set your location"),
 	)
 	for _, c := range []struct{ key, canon string }{
 		{"cmd.track", "track"},
@@ -46,6 +54,10 @@ func TestDumpSnapshots(t *testing.T) {
 		{"cmd.maxbattle", "maxbattle"},
 		{"cmd.gym", "gym"},
 		{"cmd.fort", "fort"},
+		{"cmd.untrack", "untrack"},
+		{"cmd.area", "area"},
+		{"cmd.profile", "profile"},
+		{"cmd.location", "location"},
 	} {
 		def := buildCommandDef(bundle, c.key, c.canon)
 		if def == nil {
