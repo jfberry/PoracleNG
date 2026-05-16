@@ -46,7 +46,7 @@ func resolveSlashName(bundle *i18n.Bundle, key, canonShortName string) string {
 	val := en.T(slashKey)
 	// Translator.T returns the key itself when missing; treat that as absent.
 	if val == "" || val == slashKey {
-		log.Warnf("slash: missing English %s; falling back to canonical %q", slashKey, canonShortName)
+		log.Debugf("slash: missing English %s; falling back to canonical %q", slashKey, canonShortName)
 		return canonShortName
 	}
 	if !validSlashName(val) {
@@ -69,7 +69,7 @@ func slashDescription(bundle *i18n.Bundle, key string) string {
 	}
 	val := en.T(descKey)
 	if val == "" || val == descKey {
-		log.Warnf("slash: missing English description %s", descKey)
+		log.Debugf("slash: missing English description %s", descKey)
 		return ""
 	}
 	return val
