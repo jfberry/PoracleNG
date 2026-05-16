@@ -276,6 +276,7 @@
   "arg.prefix.stardust": "stardust",
   "arg.prefix.energy": "energy",
   "arg.prefix.candy": "candy",
+  "arg.prefix.amount": "amount",
   "arg.prefix.name": "name",
   "arg.prefix.user": "user",
   "arg.prefix.channel": "channel",
@@ -345,6 +346,7 @@
   "msg.no_raid_target": "No raid levels or pokemon specified",
   "msg.no_lure_type": "No lure type specified",
   "msg.no_quest_type": "No quest type specified",
+  "msg.quest.amount_not_applicable": "`amount:N` only applies to item, candy, and mega-energy rewards — not pokemon or stardust quests.",
   "msg.removed_n": "Removed {0} tracking rules",
 
   "msg.egg.usage": "Valid commands are e.g. `{0}egg level:5`, `{0}egg legendary`, `{0}egg remove everything`",
@@ -625,6 +627,7 @@
   "error.slash.egg.no_level": "Please specify an egg level.",
   "error.slash.quest.no_reward": "Please specify exactly one reward type (pokemon, item, stardust, candy, mega_energy, or xl_candy).",
   "error.slash.quest.exactly_one_reward": "Please specify exactly one reward type, not multiple: {0}.",
+  "error.slash.quest.amount_not_applicable": "`min_amount` only applies to item, candy, and mega_energy rewards. Use the `stardust` option's value for stardust thresholds; pokemon quests have no minimum.",
   "error.slash.invasion.no_grunt": "Please specify a grunt type.",
   "error.slash.incident.no_type": "Please specify an incident type.",
   "error.slash.lure.no_type": "Please specify a lure type.",
