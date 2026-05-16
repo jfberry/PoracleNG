@@ -76,6 +76,30 @@ func TestAreaMapperShowEmitsNoTokens(t *testing.T) {
 	}
 }
 
+func TestAreaMapperListEmitsListToken(t *testing.T) {
+	tokens, err := Area([]*discordgo.ApplicationCommandInteractionDataOption{
+		subopt("list"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 1 || tokens[0] != "list" {
+		t.Errorf("expected [list], got %v", tokens)
+	}
+}
+
+func TestAreaMapperOverviewEmitsOverviewToken(t *testing.T) {
+	tokens, err := Area([]*discordgo.ApplicationCommandInteractionDataOption{
+		subopt("overview"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 1 || tokens[0] != "overview" {
+		t.Errorf("expected [overview], got %v", tokens)
+	}
+}
+
 func TestAreaMapperUnknownSubcommand(t *testing.T) {
 	_, err := Area([]*discordgo.ApplicationCommandInteractionDataOption{
 		subopt("bogus"),
