@@ -58,7 +58,7 @@ type Dispatcher struct {
 
 // commandsSkippingRegistration matches the text bot's special-case logic in
 // internal/discordbot/bot.go: commands that work even when the user has not
-// registered with !poracle. /version is the only Phase 1 entry; /poracle
+// registered with !poracle. /version is currently the only entry; /poracle
 // itself is not surfaced as a slash command.
 var commandsSkippingRegistration = map[string]bool{
 	"cmd.version": true,
@@ -184,17 +184,13 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 	// 5. Registration check. Skipped for /version (and the other
 	//    commandsSkippingRegistration entries) so a brand-new user can still
 	//    poke at the bot to confirm it's alive.
+	//
+	// buildContext already loaded the human and set ctx.IsRegistered, so we
+	// avoid a second store lookup here.
 	if !commandsSkippingRegistration[cmdKey] {
-		// buildContext already resolved ctx.Language via the proper chain
-		// (human → Discord locale → cfgRoot.General.Locale). The registration
-		// check here only consults the same store for the registered bit.
-		if d.deps != nil && d.deps.Humans != nil {
-			_, _, _, _, registered := bot.LookupUserStateFromStore(
-				d.deps.Humans, ctx.UserID, ctx.Language)
-			if !registered {
-				d.respondError(s, ic, registrationErrorText(d.cfgRoot, d.bundle, ctx.Language, ic.GuildID))
-				return
-			}
+		if d.deps != nil && d.deps.Humans != nil && !ctx.IsRegistered {
+			d.respondError(s, ic, registrationErrorText(d.cfgRoot, d.bundle, ctx.Language, ic.GuildID))
+			return
 		}
 	}
 
@@ -230,7 +226,7 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 	// id:N"). The mapper emits the right token grammar for each branch.
 	runKey := cmdKey
 	if canon == "untrack" {
-		if sub := findUntrackSubtype(ic); sub != "" && sub != "pokemon" && sub != "monster" {
+		if sub := findUntrackSubtype(ic); sub != "" && sub != "pokemon" {
 			runKey = "cmd." + sub
 		}
 	}
@@ -626,10 +622,6 @@ func registrationChannelHint(cfg *config.Config, guildID string) string {
 
 // formatMapperError translates a *mappers.MapperError to a user-facing string.
 // Falls back to the raw key when no translation is available.
-//
-// TODO(Task 44): when slash-specific error keys land in the i18n bundle this
-// becomes a plain Tf call; for now the raw key is acceptable since /version
-// has no mapper errors.
 func formatMapperError(err error, lang string, bundle *i18n.Bundle) string {
 	me, ok := err.(*mappers.MapperError)
 	if !ok || me == nil {

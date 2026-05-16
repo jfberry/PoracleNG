@@ -36,7 +36,7 @@ func Untrack(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]strin
 	if uid == "" {
 		return nil, &MapperError{Key: "error.slash.untrack.no_tracking"}
 	}
-	if sub.Name == "pokemon" || sub.Name == "monster" {
+	if sub.Name == "pokemon" {
 		return []string{"id:" + uid}, nil
 	}
 	return []string{"remove", "id:" + uid}, nil

@@ -105,7 +105,7 @@ func slashDescriptionLocalizations(bundle *i18n.Bundle, key string) *map[discord
 // AllDefinitions returns the slash command set this build supports, filtered
 // by the operator's [discord.slash_commands] enable subset. Empty enable
 // means "all commands this build supports". Exported for use by the
-// coverage meta-test (Task 48).
+// coverage meta-test.
 //
 // The `enable` list always uses canonical English short names ("track",
 // "raid", ...) regardless of i18n renaming — so an operator's enable
@@ -1056,18 +1056,13 @@ func languageChoices(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOptionC
 // config.Enable.
 func allCommandKeys() []string {
 	return []string{
-		// Phase 1
 		"cmd.version",
-		// Phase 2
 		"cmd.tracked", "cmd.help", "cmd.info", "cmd.language",
-		// Phase 4
 		"cmd.track", "cmd.raid", "cmd.egg", "cmd.quest", "cmd.invasion",
 		"cmd.incident",
 		"cmd.lure", "cmd.nest", "cmd.maxbattle", "cmd.gym", "cmd.fort",
 		"cmd.untrack",
-		// Phase 5
 		"cmd.area", "cmd.profile", "cmd.location",
-		// Phase 6
 		"cmd.summary",
 	}
 }

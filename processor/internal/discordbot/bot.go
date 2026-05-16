@@ -5,7 +5,6 @@ package discordbot
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -161,17 +160,17 @@ func New(cfg Config) (*Bot, error) {
 		// guild set; the fingerprint cache afterwards reflects guild-only
 		// reality. Ditto in reverse for ClearGuildSlash.
 		if cfg.ClearGlobalSlash {
-			if err := b.slash.ClearGlobalCommands(context.Background()); err != nil {
+			if err := b.slash.ClearGlobalCommands(); err != nil {
 				log.Errorf("slash: clear global commands failed: %v", err)
 			}
 		}
 		if cfg.ClearGuildSlash {
-			if err := b.slash.ClearGuildCommands(context.Background()); err != nil {
+			if err := b.slash.ClearGuildCommands(); err != nil {
 				log.Errorf("slash: clear guild commands failed: %v", err)
 			}
 		}
 		if cfg.Cfg.Discord.SlashCommands.SyncOnStartup || cfg.ForceSyncSlash {
-			if err := b.slash.SyncCommands(context.Background()); err != nil {
+			if err := b.slash.SyncCommands(); err != nil {
 				log.Errorf("slash sync failed: %v", err)
 			}
 		}

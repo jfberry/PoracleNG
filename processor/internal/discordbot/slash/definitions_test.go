@@ -125,7 +125,7 @@ func TestSnapshotVersion(t *testing.T) {
 
 func TestAllDefinitionsFiltersByEnable(t *testing.T) {
 	bundle := testBundle(t)
-	// Phase 1 + Phase 2 read-only commands implemented in buildCommandDef.
+	// Read-only commands implemented in buildCommandDef.
 	// Empty enable list → return everything we can actually build.
 	defs := AllDefinitions(bundle, nil)
 	gotNames := map[string]bool{}
@@ -138,27 +138,26 @@ func TestAllDefinitionsFiltersByEnable(t *testing.T) {
 		}
 	}
 
-	// Phase 4 + Phase 5 mutating commands now fully implemented; the only
-	// remaining "not implemented" commands are anything outside the keyset
-	// in allCommandKeys() (e.g. a typo in operator config).
+	// Anything outside the keyset in allCommandKeys() (e.g. a typo in
+	// operator config) is filtered out.
 	defs = AllDefinitions(bundle, []string{"not-a-real-command"})
 	if len(defs) != 0 {
 		t.Errorf("expected 0 defs when only unimplemented commands enabled, got %d", len(defs))
 	}
 
-	// Phase 4 mutating commands now fully implemented.
+	// All tracking-mutation commands.
 	defs = AllDefinitions(bundle, []string{
 		"track", "raid", "egg",
 		"quest", "invasion", "lure", "nest", "maxbattle", "gym", "fort",
 	})
 	if len(defs) != 10 {
-		t.Fatalf("expected 10 defs for full Phase 4 set, got %d", len(defs))
+		t.Fatalf("expected 10 defs for full tracking-mutation set, got %d", len(defs))
 	}
 
-	// Phase 5 commands all implemented.
+	// /untrack and the user-state commands.
 	defs = AllDefinitions(bundle, []string{"untrack", "area", "profile", "location"})
 	if len(defs) != 4 {
-		t.Fatalf("expected 4 defs for full Phase 5 set, got %d", len(defs))
+		t.Fatalf("expected 4 defs for user-state set, got %d", len(defs))
 	}
 
 	// Explicit enable that includes "version" → returns just it.
@@ -167,7 +166,7 @@ func TestAllDefinitionsFiltersByEnable(t *testing.T) {
 		t.Errorf("expected version only, got %+v", defs)
 	}
 
-	// Explicit enable that includes the new Phase 2 commands.
+	// Explicit enable that includes the read-only user-info commands.
 	defs = AllDefinitions(bundle, []string{"tracked", "help", "info", "language"})
 	if len(defs) != 4 {
 		t.Fatalf("expected 4 defs, got %d", len(defs))
