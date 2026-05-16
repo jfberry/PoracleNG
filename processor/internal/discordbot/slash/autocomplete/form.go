@@ -34,14 +34,21 @@ func Form(ctx context.Context, deps *bot.BotDeps, pokemonName, focused, userLang
 	userTr := deps.Translations.For(userLang)
 
 	type formChoice struct {
-		label   string
-		value   string
-		formID  int // 0 means "default/any"; named forms have non-zero IDs
+		label  string
+		value  string
+		formID int
 	}
 	seenForm := make(map[int]bool)
 	var out []formChoice
 	for key := range deps.GameData.Monsters {
 		if key.ID != pokemonID {
+			continue
+		}
+		// Form 0 is the "any form" placeholder — picking it has the same
+		// effect as not setting the form option at all, so don't clutter
+		// the picker with it. Users who want to specify a form pick a
+		// named one; users who want any form leave form: unset.
+		if key.Form == 0 {
 			continue
 		}
 		if seenForm[key.Form] {
@@ -59,22 +66,12 @@ func Form(ctx context.Context, deps *bot.BotDeps, pokemonName, focused, userLang
 		out = append(out, formChoice{label: label, value: value, formID: key.Form})
 	}
 
-	// Dedupe by lowercase label: a species can carry both form 0 (the
-	// generic "any form" placeholder we render as "Normal") AND a named
-	// "Normal" form (e.g. Exeggutor has both — the named one means
-	// specifically the Kanto variant, distinct from Alolan). Prefer the
-	// named form so picking "Normal" emits a specific value the text
-	// bot resolves to the right form ID. When two named forms collide on
-	// label (rare), the lower form ID wins for stability.
+	// Dedupe by lowercase label. Two named forms occasionally share a
+	// label across costume variants — keep the lower formID for stability.
 	sort.SliceStable(out, func(i, j int) bool {
 		li, lj := strings.ToLower(out[i].label), strings.ToLower(out[j].label)
 		if li != lj {
 			return li < lj
-		}
-		// Same label: prefer named (non-zero) form; among named forms
-		// prefer lower formID for determinism.
-		if (out[i].formID == 0) != (out[j].formID == 0) {
-			return out[j].formID == 0
 		}
 		return out[i].formID < out[j].formID
 	})
@@ -132,14 +129,10 @@ func resolvePokemonID(deps *bot.BotDeps, name string) int {
 	return 0
 }
 
-// formLabel produces the user-facing label and value for a form option.
-// Form 0 is the species' default — emitted as "Normal" so the user can
-// pick the no-form variant explicitly. Non-default forms use the
-// translated form_<id> string.
+// formLabel produces the user-facing label and value for a named form.
+// Form 0 is the species' "any form" placeholder and is filtered out by
+// the caller — the user achieves that semantic by not picking a form.
 func formLabel(enTr, userTr interface{ T(string) string }, formID int) (label, value string) {
-	if formID == 0 {
-		return "Normal", "normal"
-	}
 	key := gamedata.FormTranslationKey(formID)
 	name := ""
 	if userTr != nil {
