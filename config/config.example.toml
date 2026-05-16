@@ -347,11 +347,6 @@ register_globally = true
 # false. Updates appear within seconds — use during testing.
 guilds = []
 
-# Push the command set to Discord at startup. Idempotent via a fingerprint
-# cache at config/.cache/slash-fingerprint.json so a no-op startup costs
-# no API calls. Leave true.
-sync_on_startup = true
-
 # Optional allow-list of canonical short names to expose. Empty = all
 # commands this build supports. Use this to hide commands rather than
 # disable categories outright. Names always reference the canonical

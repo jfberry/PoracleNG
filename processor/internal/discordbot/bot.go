@@ -125,10 +125,7 @@ func New(cfg Config) (*Bot, error) {
 		if cfg.Cfg.Discord.SlashCommands.RegisterGlobally {
 			scope = "global"
 		}
-		log.Infof("slash: dispatcher enabled, %s, sync_on_startup=%v, force_sync=%v",
-			scope,
-			cfg.Cfg.Discord.SlashCommands.SyncOnStartup,
-			cfg.ForceSyncSlash)
+		log.Infof("slash: dispatcher enabled, %s, force_sync=%v", scope, cfg.ForceSyncSlash)
 		b.slash = slash.NewDispatcher(slash.Config{
 			Enabled:   true,
 			Global:    cfg.Cfg.Discord.SlashCommands.RegisterGlobally,
@@ -148,11 +145,11 @@ func New(cfg Config) (*Bot, error) {
 
 	log.Infof("Discord bot connected as %s", session.State.User.Username)
 
-	// Slash sync: now that the gateway is open we have an appID. Push the
-	// command set whenever SyncOnStartup is true OR the operator forced a
-	// sync via -sync-slash-commands. SyncCommands is idempotent — the
-	// fingerprint cache short-circuits when nothing has changed, so leaving
-	// SyncOnStartup=true is the safe default.
+	// Slash sync: now that the gateway is open we have an appID. The push
+	// runs unconditionally — SyncCommands is idempotent via a fingerprint
+	// cache, so a no-op startup costs only a cache read and a log line.
+	// To turn slash off entirely set [discord.slash_commands] enabled=false
+	// (above gates the dispatcher itself out).
 	if b.slash != nil && session.State != nil && session.State.User != nil {
 		b.slash.SetAppID(session.State.User.ID)
 		// Clear-purge flags run BEFORE the normal sync so the cache stays
@@ -170,10 +167,8 @@ func New(cfg Config) (*Bot, error) {
 				log.Errorf("slash: clear guild commands failed: %v", err)
 			}
 		}
-		if cfg.Cfg.Discord.SlashCommands.SyncOnStartup || cfg.ForceSyncSlash {
-			if err := b.slash.SyncCommands(); err != nil {
-				log.Errorf("slash sync failed: %v", err)
-			}
+		if err := b.slash.SyncCommands(); err != nil {
+			log.Errorf("slash sync failed: %v", err)
 		}
 	}
 
