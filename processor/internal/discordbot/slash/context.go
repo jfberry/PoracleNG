@@ -1,33 +1,52 @@
 package slash
 
 import (
+	"slices"
+
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
-// buildContext assembles a minimal CommandContext for a slash dispatch.
+// discordLocaleToPoracle maps a Discord client locale to the Poracle language
+// code used by the i18n bundle. Phase 2 ships the common-European subset; Task
+// 43 will expand this to cover every Discord locale Poracle has translations
+// for. Unmapped locales fall through to [general] locale.
 //
-// Phase 1 scope: enough fields to run /version (which only needs identity +
-// translations). Task 14 expands this to load the human row, populate
-// permissions, hand-shake with BuildTarget, etc.
+// The map intentionally uses the typed discordgo.Locale constants (not the
+// raw string values like "de" or "fr") so a compile error catches any rename
+// in the upstream library.
+var discordLocaleToPoracle = map[discordgo.Locale]string{
+	discordgo.German:    "de",
+	discordgo.French:    "fr",
+	discordgo.SpanishES: "es",
+	discordgo.Italian:   "it",
+}
+
+// buildContext assembles a CommandContext for a slash dispatch.
 //
-// Returns (ctx, nil) on success. The error return path is reserved for Task 14
-// so that future failures (e.g. ProvideUserContext-style guild/channel
-// validation) can surface as user-facing errors via respondError.
+// Wires the full BotDeps graph through, resolves the user's language using
+// the chain human.Language → Discord client locale → [general] locale → "en",
+// loads identity from the HumanLite store, and populates the admin flag.
+//
+// Returns (ctx, nil) on success. The error return path is reserved for future
+// per-command guild/channel validation (BuildTarget-style overrides).
 func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string) (*bot.CommandContext, error) {
-	_ = cmdKey // reserved — Task 14 will use this for per-command overrides
+	_ = cmdKey // reserved — later phases may use this for per-command overrides
 
 	userID := interactionUserID(ic)
 	userName := interactionUserName(ic)
 
-	lang := ""
-	if d.cfgRoot != nil {
-		lang = d.cfgRoot.General.Locale
+	// Load the human record if available. nil result means unregistered, which
+	// is allowed at this stage — the dispatcher's registration check runs after
+	// buildContext and decides whether to gate the command.
+	var human *store.HumanLite
+	if d.deps != nil && d.deps.Humans != nil && userID != "" {
+		human, _ = d.deps.Humans.GetLite(userID)
 	}
-	if lang == "" {
-		lang = "en"
-	}
+
+	lang := d.resolveLanguage(ic, human)
 
 	ctx := &bot.CommandContext{
 		UserID:       userID,
@@ -37,11 +56,20 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 		GuildID:      ic.GuildID,
 		IsDM:         ic.GuildID == "",
 		Language:     lang,
+		IsAdmin:      d.isAdmin(userID),
 		TargetID:     userID,
 		TargetName:   userName,
 		TargetType:   bot.TypeDiscordUser,
 		Config:       d.cfgRoot,
 		Translations: d.bundle,
+	}
+
+	if human != nil {
+		ctx.ProfileNo = human.CurrentProfileNo
+		// HasLocation / HasArea live on the full Human row (lat/lon, area JSON)
+		// which GetLite intentionally skips. Commands that need these (e.g.
+		// !location, !area) call the full Get themselves; leaving these unset
+		// here keeps the hot path cheap.
 	}
 
 	// Wire injected deps from BotDeps so the underlying Command has everything
@@ -72,6 +100,35 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 	}
 
 	return ctx, nil
+}
+
+// resolveLanguage walks the language chain: explicit human language → mapped
+// Discord client locale → [general] locale → "en". The final "en" guard
+// matches buildContext's previous behaviour so downstream code always sees a
+// non-empty language even when the operator has not configured a locale.
+func (d *Dispatcher) resolveLanguage(ic *discordgo.InteractionCreate, human *store.HumanLite) string {
+	if human != nil && human.Language != "" {
+		return human.Language
+	}
+	if ic != nil && ic.Interaction != nil {
+		if mapped, ok := discordLocaleToPoracle[ic.Locale]; ok {
+			return mapped
+		}
+	}
+	if d.cfgRoot != nil && d.cfgRoot.General.Locale != "" {
+		return d.cfgRoot.General.Locale
+	}
+	return "en"
+}
+
+// isAdmin returns true if userID is in the configured Discord admin list.
+// Safe to call with an empty userID (returns false) and does not panic on a
+// nil cfgRoot.
+func (d *Dispatcher) isAdmin(userID string) bool {
+	if userID == "" || d.cfgRoot == nil {
+		return false
+	}
+	return slices.Contains(d.cfgRoot.Discord.Admins, userID)
 }
 
 // interactionUserID extracts the invoking user's typed ID. Guild interactions
