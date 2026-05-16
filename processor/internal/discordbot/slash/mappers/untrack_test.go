@@ -51,7 +51,9 @@ func TestUntrackMapperEmptyTracking(t *testing.T) {
 	}
 }
 
-func TestUntrackMapperEmitsIDToken(t *testing.T) {
+// /untrack pokemon → cmd.untrack accepts a bare "id:N" and routes through
+// ParamRemoveUID to removeByUIDs(); no "remove" keyword is required.
+func TestUntrackMapperEmitsIDTokenForPokemon(t *testing.T) {
 	tokens, err := Untrack([]*discordgo.ApplicationCommandInteractionDataOption{
 		subopt("pokemon", sopt("tracking", "45")),
 	})
@@ -63,17 +65,34 @@ func TestUntrackMapperEmitsIDToken(t *testing.T) {
 	}
 }
 
-// Sub-command names other than pokemon/raid/etc. still produce the right
-// token shape — the mapper does not validate sub-command names, that's
-// purely a Discord-side concern.
-func TestUntrackMapperAnySubcommandUID(t *testing.T) {
+// /untrack <non-pokemon> → cmd.<subtype> requires the explicit "remove"
+// keyword alongside "id:N"; without it the typed command treats the UID as
+// just a filter and silently no-ops, leaving the rule in place.
+func TestUntrackMapperEmitsRemoveAndIDForNonPokemon(t *testing.T) {
+	for _, sub := range []string{"raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"} {
+		tokens, err := Untrack([]*discordgo.ApplicationCommandInteractionDataOption{
+			subopt(sub, sopt("tracking", "123")),
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", sub, err)
+		}
+		want := []string{"remove", "id:123"}
+		if !reflect.DeepEqual(tokens, want) {
+			t.Errorf("%s: tokens=%v, want %v", sub, tokens, want)
+		}
+	}
+}
+
+// "monster" is the canonical text-bot type name for pokemon; treat the same
+// as "pokemon" to be defensive against a future definition that uses either.
+func TestUntrackMapperMonsterTreatedAsPokemon(t *testing.T) {
 	tokens, err := Untrack([]*discordgo.ApplicationCommandInteractionDataOption{
-		subopt("gym", sopt("tracking", "123")),
+		subopt("monster", sopt("tracking", "9")),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(tokens, []string{"id:123"}) {
+	if !reflect.DeepEqual(tokens, []string{"id:9"}) {
 		t.Errorf("tokens=%v", tokens)
 	}
 }

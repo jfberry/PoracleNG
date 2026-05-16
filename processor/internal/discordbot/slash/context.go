@@ -63,6 +63,7 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 		ChannelID:    ic.ChannelID,
 		GuildID:      ic.GuildID,
 		IsDM:         ic.GuildID == "",
+		IsSlash:      true,
 		Language:     lang,
 		IsAdmin:      d.isAdmin(userID),
 		TargetID:     userID,

@@ -224,8 +224,21 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 		return
 	}
 
-	// 8. Dispatch & send.
-	cmd := d.registry.Lookup(cmdKey)
+	// 8. Dispatch & send. /untrack reroutes to the per-type command for
+	// non-pokemon sub-commands (cmd.untrack only knows how to delete monster
+	// rules; eggs, raids, etc. live on their own commands as "<type> remove
+	// id:N"). The mapper emits the right token grammar for each branch.
+	runKey := cmdKey
+	if canon == "untrack" {
+		if sub := findUntrackSubtype(ic); sub != "" && sub != "pokemon" && sub != "monster" {
+			runKey = "cmd." + sub
+		}
+	}
+	cmd := d.registry.Lookup(runKey)
+	if cmd == nil {
+		d.respondError(s, ic, "🛑 Command not implemented.")
+		return
+	}
 	replies := cmd.Run(ctx, tokens)
 	if err := Send(s, ic, replies); err != nil {
 		log.WithError(err).Warnf("slash: failed to send replies for /%s", invoked)
