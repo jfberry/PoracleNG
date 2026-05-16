@@ -68,6 +68,11 @@ type BotDeps struct {
 	// no scanner is configured — commands check and reject `gym:`
 	// usage with a clear error.
 	Scanner scanner.Scanner
+
+	// RecentActivity tracks recently-seen pokemon/items/grunts (6h TTL)
+	// used by slash autocomplete to prioritise currently-active entities.
+	// Always non-nil; populated by webhook handlers post-dedup.
+	RecentActivity *tracker.RecentActivity
 }
 
 // TestTarget specifies who to deliver a test alert to.
