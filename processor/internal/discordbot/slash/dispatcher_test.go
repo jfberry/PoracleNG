@@ -10,7 +10,9 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash/mappers"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
 func TestNewDispatcherStoresConfig(t *testing.T) {
@@ -588,4 +590,152 @@ func TestUserstateAutocompleteUnknownListerReturnsNil(t *testing.T) {
 	if got != nil {
 		t.Errorf("unknown lister: got %v, want nil", got)
 	}
+}
+
+// boostRouteDeps builds a minimal BotDeps with translated pokemon/items/grunts
+// and a primed RecentActivity tracker — used for testing dispatcher routing
+// of the recent-activity boost across /maxbattle, /quest, and /invasion.
+func boostRouteDeps(t *testing.T) *bot.BotDeps {
+	t.Helper()
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"poke_25":      "Pikachu",
+		"poke_6":       "Charizard",
+		"poke_150":     "Mewtwo",
+		"item_706":     "Golden Razz Berry",
+		"poke_type_10": "Fire",
+		"poke_type_11": "Water",
+	}))
+	bundle.LinkFallbacks()
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
+			{ID: 25, Form: 0}:  {PokemonID: 25},
+			{ID: 6, Form: 0}:   {PokemonID: 6},
+			{ID: 150, Form: 0}: {PokemonID: 150},
+		},
+		Items: map[int]*gamedata.Item{
+			706: {ItemID: 706},
+		},
+		Grunts: map[int]*gamedata.Grunt{
+			1: {Template: "CHARACTER_FIRE_GRUNT_MALE", TypeID: 10},
+			2: {Template: "CHARACTER_WATER_GRUNT_FEMALE", TypeID: 11},
+		},
+	}
+	ra := tracker.NewRecentActivity()
+	ra.RecordMaxBattleBoss(150)
+	ra.RecordQuestPokemon(6)
+	ra.RecordQuestCandy(25)
+	ra.RecordQuestMega(6)
+	ra.RecordQuestItem(706)
+	ra.RecordInvasionGrunt(11) // TypeID = 11 (Water)
+	return &bot.BotDeps{
+		Translations:   bundle,
+		GameData:       gd,
+		Cfg:            &config.Config{},
+		RecentActivity: ra,
+	}
+}
+
+func TestRouteAutocomplete_MaxBattlePokemon_BoostsRecentActivity(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = boostRouteDeps(t)
+	out := d.routeAutocomplete("maxbattle", "pokemon", "", "en", nil)
+	if len(out) == 0 || out[0].Name != "Mewtwo" {
+		t.Errorf("/maxbattle pokemon empty focused: first=%+v, want Mewtwo (RecentActivity-active)", firstName(out))
+	}
+}
+
+func TestRouteAutocomplete_QuestPokemon_BoostsRecentActivity(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = boostRouteDeps(t)
+	out := d.routeAutocomplete("quest", "pokemon", "", "en", nil)
+	if len(out) == 0 || out[0].Name != "Charizard" {
+		t.Errorf("/quest pokemon empty focused: first=%+v, want Charizard", firstName(out))
+	}
+}
+
+func TestRouteAutocomplete_QuestCandy_BoostsRecentActivity(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = boostRouteDeps(t)
+	out := d.routeAutocomplete("quest", "candy", "", "en", nil)
+	if len(out) == 0 || out[0].Name != "Pikachu" {
+		t.Errorf("/quest candy empty focused: first=%+v, want Pikachu", firstName(out))
+	}
+}
+
+func TestRouteAutocomplete_QuestMegaEnergy_BoostsRecentActivity(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = boostRouteDeps(t)
+	out := d.routeAutocomplete("quest", "mega_energy", "", "en", nil)
+	if len(out) == 0 || out[0].Name != "Charizard" {
+		t.Errorf("/quest mega_energy empty focused: first=%+v, want Charizard", firstName(out))
+	}
+}
+
+func TestRouteAutocomplete_QuestItem_BoostsRecentActivity(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = boostRouteDeps(t)
+	out := d.routeAutocomplete("quest", "item", "", "en", nil)
+	if len(out) == 0 || out[0].Name != "Golden Razz Berry" {
+		t.Errorf("/quest item empty focused: first=%+v, want Golden Razz Berry", firstName(out))
+	}
+}
+
+func TestRouteAutocomplete_InvasionGruntType_BoostsRecentActivity(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = boostRouteDeps(t)
+	out := d.routeAutocomplete("invasion", "grunt_type", "", "en", nil)
+	if len(out) == 0 || out[0].Name != "Water Grunt" {
+		t.Errorf("/invasion grunt_type empty focused: first=%+v, want Water Grunt (TypeID 11)", firstName(out))
+	}
+}
+
+// On non-empty focused the boost stays out of the way — the user is
+// typing a specific search, not browsing for active entities.
+func TestRouteAutocomplete_QuestPokemon_NonEmptyFocusedNoBoost(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = boostRouteDeps(t)
+	// Search for "pika" — RecentActivity has Charizard (6), so a non-typed
+	// boost would surface it first. With typed search active, the underlying
+	// Pokemon autocomplete should put Pikachu first.
+	out := d.routeAutocomplete("quest", "pokemon", "pika", "en", nil)
+	if len(out) == 0 || out[0].Name != "Pikachu" {
+		t.Errorf("non-empty focused 'pika': first=%+v, want Pikachu (no boost)", firstName(out))
+	}
+}
+
+// Nil RecentActivity must not crash; route falls back to the underlying
+// autocomplete provider unchanged.
+func TestRouteAutocomplete_NilRecentActivity_Survives(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	deps := boostRouteDeps(t)
+	deps.RecentActivity = nil
+	d.deps = deps
+	out := d.routeAutocomplete("maxbattle", "pokemon", "", "en", nil)
+	if len(out) == 0 {
+		t.Errorf("/maxbattle pokemon with nil RecentActivity: got empty, want fallthrough to Pokemon autocomplete")
+	}
+}
+
+func firstName(c []*discordgo.ApplicationCommandOptionChoice) string {
+	if len(c) == 0 {
+		return "<empty>"
+	}
+	return c[0].Name
 }
