@@ -101,21 +101,19 @@ register_globally = true         # global vs guild-scoped registration
 guilds = []                      # if non-empty, register only to these guild IDs (fast iteration, no 1h cache)
 sync_on_startup = true           # reconcile commands with Discord at boot
 
-# Opt-in command allow-list. Only commands listed here are registered.
-# Empty array (and the default) = no slash commands. Explicit list keeps new
-# commands from auto-enabling when the binary updates — operators who restrict
-# commands must explicitly add new ones.
-enable = ["track", "raid", "egg", "quest", "invasion", "lure", "nest",
-          "maxbattle", "gym", "fort", "untrack", "area", "profile",
-          "location", "language", "tracked", "help", "info", "version"]
+# Optional subset restriction. Empty (or absent) = all slash commands enabled.
+# Use this only when an operator wants to limit the surface to a subset.
+# The master `enabled = false` flag is the right way to turn slash off entirely.
+enable = []
 ```
 
-**Two disable layers**:
+**Layered controls**:
 
-1. `[discord.slash_commands] enable` — slash-specific allow-list.
-2. `[general] disabled_commands` (existing) — disables a command on *both* surfaces. Slash dispatch consults `bot.IsCommandDisabled` before invoking the registered handler, so a command disabled here returns an ephemeral "this command is disabled" error regardless of slash registration.
+1. `[discord.slash_commands] enabled = false` — master switch; no slash commands registered.
+2. `[discord.slash_commands] enable = [...]` — optional subset restriction. Empty/absent = all commands.
+3. `[general] disabled_commands` (existing) — disables a command on *both* surfaces. Slash dispatch consults `bot.IsCommandDisabled` before invoking the registered handler, so a command disabled here returns an ephemeral "this command is disabled" error regardless of slash registration.
 
-This means a command can be (a) entirely off, (b) text-only via `enable` exclusion, or (c) text-only + visible-via-slash-but-rejected (when `disabled_commands` excludes it but `enable` includes it — edge case; gives a clear error).
+This means a command can be (a) entirely off (master switch), (b) text-only via `enable` exclusion (when operator restricts the slash subset), or (c) text-only + visible-via-slash-but-rejected (when `disabled_commands` excludes it but `enable` includes it — edge case; gives a clear error).
 
 No per-command renaming. Discord command names are the canonical English (`track`, `raid`, etc.). Localizations cover description text only.
 
