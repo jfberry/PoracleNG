@@ -8,11 +8,8 @@ import (
 // AreaCommand in processor/internal/bot/commands/area.go.
 //
 // The text grammar accepts `arg.add <name>`, `arg.remove <name>`, `arg.list`,
-// `arg.show [name]`, `arg.overview [name]`. The slash surface trims the
-// option set down to the three operations a typical user wants from a
-// drop-down command: add, remove, and (no-arg) show-current. Power users can
-// still reach overview/list/show-by-name via the text command.
-//
+// `arg.show [name]`, `arg.overview [name]`. The slash surface exposes add,
+// remove, show (selected), list (available, marked), and overview (map).
 // /area show with no further arguments emits an empty token slice; the text
 // command's bare `!area` invocation displays the user's current areas + a
 // usage hint, which is exactly what we want for the "show" sub-command.
@@ -39,6 +36,10 @@ func Area(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, 
 		// Bare `!area` text invocation shows current areas + usage hint;
 		// returning no tokens is exactly that path.
 		return nil, nil
+	case "list":
+		return []string{"list"}, nil
+	case "overview":
+		return []string{"overview"}, nil
 	}
 	return nil, &MapperError{Key: "error.slash.area.unknown_subcommand"}
 }

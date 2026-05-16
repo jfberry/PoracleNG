@@ -554,6 +554,26 @@
   text: "!area"
   expected_tokens: []
 
+- name: area-list
+  description: /area list — enumerate available areas (✓ for already-added)
+  command: cmd.area
+  slash:
+    name: area
+    options:
+      list: _bare
+  text: "!area list"
+  expected_tokens: [list]
+
+- name: area-overview
+  description: /area overview — map of every available area
+  command: cmd.area
+  slash:
+    name: area
+    options:
+      overview: _bare
+  text: "!area overview"
+  expected_tokens: [overview]
+
 # -----------------------------------------------------------------------------
 # /profile — sub-commands list (bare), change/create/delete (with name option)
 # -----------------------------------------------------------------------------
