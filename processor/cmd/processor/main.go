@@ -761,6 +761,7 @@ func main() {
 		SummaryBufferCount: proc.SummaryBufferCount,
 		SummaryDispatch:    proc.DispatchQuestSummary,
 		Scanner:            proc.scanner,
+		RecentActivity:     proc.recentActivity,
 	}
 
 	gatewayToken := cfg.Discord.DiscordGatewayToken()
@@ -948,6 +949,7 @@ type ProcessorService struct {
 	maxbattleMatcher *matching.MaxbattleMatcher
 	pvpCfg           *pvp.Config
 	activePokemon    *tracker.ActivePokemonTracker
+	recentActivity   *tracker.RecentActivity
 	pokemonTypes     *gamedata.PokemonTypes
 	enricher         *enrichment.Enricher
 	dtsRenderer      *dts.Renderer
@@ -1328,6 +1330,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		maxbattleMatcher: &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		pvpCfg:           pvpCfg,
 		activePokemon:    activePokemon,
+		recentActivity:   tracker.NewRecentActivity(),
 		pokemonTypes:     pokemonTypes,
 		rateLimiter:      rateLimiter,
 		validator: validation.New(
