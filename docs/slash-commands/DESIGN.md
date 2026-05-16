@@ -116,26 +116,33 @@ This means a command can be (a) entirely off (master switch), (b) text-only via 
 
 ### Command names come from i18n
 
-Slash command names are driven by the i18n bundle under a **separate `slash.cmd.*` namespace** (distinct from `cmd.*` which the text bot uses for command parsing).
+Slash command names are driven by the i18n bundle under a **separate `slash.*` namespace** (distinct from `cmd.*` which the text bot uses for command parsing). The slash UI has three layers of localizable text — command, option, and choice — each with its own key prefix:
 
 | Key | Used for | Source |
 |---|---|---|
 | `cmd.track` | Text command parsing (`!track`, `!verfolge`) | Existing |
 | `slash.cmd.track` | Slash command name (`/track`, `/verfolge`) | New |
 | `slash.desc.track` | Slash command description | New |
-| `slash.opt.track.pokemon` | Option label for /track pokemon | New |
-| `slash.opt.track.pokemon.desc` | Option description for /track pokemon | New |
+| `slash.opt.track.pokemon` | Option label for `/track pokemon` | New |
+| `slash.opt.track.pokemon.desc` | Option description | New |
+| `slash.choice.raid.team.1` | Choice label for `/raid team: Mystic` | New |
+
+Sub-command-grouped commands (`/area`, `/profile`, `/untrack`, `/summary`) use the full dotted path so each leaf option stays addressable: `slash.opt.area.add.area` / `slash.opt.area.add.area.desc`, `slash.opt.summary.quest.settime.times`, etc.
 
 **English seed** (`processor/internal/i18n/locale/en.json`):
 ```json
 {
-  "slash.cmd.track":      "track",
-  "slash.desc.track":     "Track a Pokemon",
-  "slash.opt.track.pokemon": "pokemon"
+  "slash.cmd.track":               "track",
+  "slash.desc.track":              "Track a Pokemon",
+  "slash.opt.track.pokemon":       "pokemon",
+  "slash.opt.track.pokemon.desc":  "Pokemon to track (or 'everything')",
+  "slash.choice.track.size.xxl":   "XXL"
 }
 ```
 
-**Localizations** (`de.json`, `fr.json`, etc.) populate `NameLocalizations` / `DescriptionLocalizations` automatically. A German user sees `/verfolge` if `slash.cmd.track = "verfolge"` in `de.json`.
+**Localizations** (`de.json`, `fr.json`, etc.) populate `NameLocalizations` / `DescriptionLocalizations` automatically at all three layers. A German user sees `/track` with an option labelled `größe` and a choice labelled `XXL` if those keys exist in `de.json`. Choice **values** stay canonical English regardless of locale — the slash mapper and text bot both resolve by Value, not display Name.
+
+**Fallback chain**: each builder ships a hardcoded canonical English fallback (matched against the same key the operator can override). When a key is missing or — for slash names only — fails Discord's `^[\p{L}\p{N}_-]{1,32}$` regex, the canonical English is used and the localization map for that field is dropped. Translators that ship a valid German entry still see it surface, even if a different language's entry was invalid.
 
 **Operator overrides**: the existing `config/custom.{lang}.json` mechanism (already used for text commands) extends naturally — drop `"slash.cmd.track": "alerts"` in `config/custom.en.json` and the command becomes `/alerts` for English users at next startup. No new config surface.
 

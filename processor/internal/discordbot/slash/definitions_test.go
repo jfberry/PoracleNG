@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/bwmarrin/discordgo"
+
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
 
@@ -572,6 +574,106 @@ func TestCanonShortName(t *testing.T) {
 	for in, want := range cases {
 		if got := canonShortName(in); got != want {
 			t.Errorf("canonShortName(%q)=%q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestGermanLocalizationOnTrackDefinition verifies that when both English
+// and German entries are present in the bundle, the /track definition's
+// option name, option description, and choice labels all populate their
+// German localization maps. This is the operator-facing assertion that
+// the three-layer wiring (cmd / opt / choice) made it through to the
+// rendered ApplicationCommand.
+func TestGermanLocalizationOnTrackDefinition(t *testing.T) {
+	bundle := testBundle(t,
+		withOverride("en", "slash.opt.track.pokemon", "pokemon"),
+		withOverride("en", "slash.opt.track.pokemon.desc", "Pokemon to track"),
+		withOverride("en", "slash.opt.track.size", "size"),
+		withOverride("en", "slash.opt.track.size.desc", "Pokemon size class"),
+		withOverride("en", "slash.choice.track.size.xxl", "XXL"),
+		withOverride("de", "slash.cmd.track", "track"),
+		withOverride("de", "slash.desc.track", "Ein Pokémon verfolgen"),
+		withOverride("de", "slash.opt.track.pokemon", "pokemon"),
+		withOverride("de", "slash.opt.track.pokemon.desc", "Pokémon zum Verfolgen"),
+		withOverride("de", "slash.opt.track.size", "größe"),
+		withOverride("de", "slash.opt.track.size.desc", "Pokémon-Größenklasse"),
+		withOverride("de", "slash.choice.track.size.xxl", "XXL"),
+	)
+	def := buildCommandDef(bundle, "cmd.track", "track")
+	if def == nil {
+		t.Fatal("nil track def")
+	}
+	if def.DescriptionLocalizations == nil || (*def.DescriptionLocalizations)[discordgo.German] != "Ein Pokémon verfolgen" {
+		t.Errorf("command desc localizations missing German: %v", def.DescriptionLocalizations)
+	}
+
+	// Look up the size option and verify localizations propagate through.
+	var sizeOpt *discordgo.ApplicationCommandOption
+	for _, o := range def.Options {
+		if o.Name == "size" {
+			sizeOpt = o
+			break
+		}
+	}
+	if sizeOpt == nil {
+		t.Fatal("size option not found")
+	}
+	if sizeOpt.NameLocalizations[discordgo.German] != "größe" {
+		t.Errorf("size NameLocalizations[de] = %q, want \"größe\"", sizeOpt.NameLocalizations[discordgo.German])
+	}
+	if sizeOpt.DescriptionLocalizations[discordgo.German] != "Pokémon-Größenklasse" {
+		t.Errorf("size DescriptionLocalizations[de] = %q, want \"Pokémon-Größenklasse\"", sizeOpt.DescriptionLocalizations[discordgo.German])
+	}
+
+	// Verify the xxl choice within size shows German localization. Choice
+	// value stays canonical English regardless of i18n.
+	var xxlChoice *discordgo.ApplicationCommandOptionChoice
+	for _, c := range sizeOpt.Choices {
+		if c.Value == "xxl" {
+			xxlChoice = c
+			break
+		}
+	}
+	if xxlChoice == nil {
+		t.Fatal("xxl choice not found")
+	}
+	if xxlChoice.NameLocalizations[discordgo.German] != "XXL" {
+		t.Errorf("xxl choice NameLocalizations[de] = %q", xxlChoice.NameLocalizations[discordgo.German])
+	}
+	// Critical: choice value must remain canonical English so the mapper
+	// resolves correctly regardless of the user's client locale.
+	if xxlChoice.Value != "xxl" {
+		t.Errorf("xxl choice value drifted: %v", xxlChoice.Value)
+	}
+}
+
+// TestEnglishOnlyBundleEmitsNoLocalizations confirms the test-bundle baseline:
+// when only English is loaded, every level (cmd / opt / choice) emits no
+// localization maps. This is what keeps snapshot fixtures stable as the
+// German bundle grows.
+func TestEnglishOnlyBundleEmitsNoLocalizations(t *testing.T) {
+	bundle := testBundle(t,
+		withOverride("en", "slash.opt.track.pokemon", "pokemon"),
+		withOverride("en", "slash.opt.track.pokemon.desc", "Pokemon to track"),
+	)
+	def := buildCommandDef(bundle, "cmd.track", "track")
+	if def == nil {
+		t.Fatal("nil track def")
+	}
+	if def.NameLocalizations != nil {
+		t.Errorf("command NameLocalizations expected nil, got %v", def.NameLocalizations)
+	}
+	for _, o := range def.Options {
+		if o.NameLocalizations != nil {
+			t.Errorf("option %q NameLocalizations expected nil, got %v", o.Name, o.NameLocalizations)
+		}
+		if o.DescriptionLocalizations != nil {
+			t.Errorf("option %q DescriptionLocalizations expected nil, got %v", o.Name, o.DescriptionLocalizations)
+		}
+		for _, c := range o.Choices {
+			if c.NameLocalizations != nil {
+				t.Errorf("choice %q NameLocalizations expected nil, got %v", c.Name, c.NameLocalizations)
+			}
 		}
 	}
 }
