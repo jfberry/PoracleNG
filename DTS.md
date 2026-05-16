@@ -339,6 +339,15 @@ appropriate translated names (`original.fullName` for a German user is
 "Glumanda", for an English user "Charmander"). PVP rankings are not
 available under `original.*`.
 
+**Guard stat fields with `{{#if encountered}}`.** A species/form change
+fires `monsterChanged` as soon as the new species is *known*, which can
+be before it has been encountered (Golbat's wild webhook lands before
+the encounter webhook). In that window, `cp`, `level`, `atk/def/sta`,
+`iv`, `quickMoveName`, etc. are all zero/empty, and `iv` is `-1`. Wrap
+the stats portion of your template in `{{#if encountered}}…{{else}}…{{/if}}`
+so you don't render "−1% Foo cp:0 L:0 0/0/0" while waiting for the
+encounter. The shipped fallbacks do this.
+
 Only set when fired by a true change event — the dispatcher also leaves
 `{{original.X}}` empty when:
 - The encounter event reuses the regular `monster` template (CP 0 → >0).
