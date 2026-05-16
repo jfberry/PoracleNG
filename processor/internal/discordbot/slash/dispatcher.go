@@ -75,6 +75,16 @@ func NewDispatcher(cfg Config) *Dispatcher {
 	return d
 }
 
+// SetAppID stores the application ID used by SyncCommands. Called by the
+// discordbot wrapper after session.Open() resolves the bot's own user ID,
+// which doubles as the Discord application ID for slash registration.
+func (d *Dispatcher) SetAppID(id string) {
+	if d == nil {
+		return
+	}
+	d.appID = id
+}
+
 func (d *Dispatcher) Attach(s *discordgo.Session, deps *bot.BotDeps, registry *bot.Registry, bundle *i18n.Bundle, cfg *config.Config) {
 	d.session = s
 	d.deps = deps
@@ -462,15 +472,51 @@ func (d *Dispatcher) respondError(s *discordgo.Session, ic *discordgo.Interactio
 // registrationErrorText returns the user-facing message shown to an
 // unregistered user who runs a slash command that requires registration.
 //
-// TODO(Task 44): replace this hardcoded English with the operator's
-// UnregisteredUserMessage / "msg.not_registered" i18n key, matching the text
-// bot's branch in internal/discordbot/bot.go.
+// The message is rendered in the user's resolved language (falling back to
+// English when the bundle has no entry). When the operator has configured
+// a single registration channel for Discord we mention it inline so the
+// user has a one-click destination; otherwise we render the DM-only form.
+// We deliberately do NOT mention a channel when multiple registration
+// channels are configured because the flat [discord] channels list isn't
+// keyed by guild — naming an arbitrary channel could send the user into
+// the wrong server.
 func registrationErrorText(cfg *config.Config, bundle *i18n.Bundle, lang, guildID string) string {
-	_ = cfg
-	_ = bundle
-	_ = lang
-	_ = guildID
+	var tr *i18n.Translator
+	if bundle != nil {
+		tr = bundle.For(lang)
+		if tr == nil {
+			tr = bundle.For("en")
+		}
+	}
+	channel := registrationChannelHint(cfg, guildID)
+	if tr != nil {
+		if channel != "" {
+			return tr.Tf("error.slash.unregistered_with_channel", channel)
+		}
+		return tr.T("error.slash.unregistered_dm_only")
+	}
+	// Bundle-less fallback (test seam): keep wording that mentions !poracle
+	// so the existing TestRegistrationErrorTextHasGuidance assertion holds.
 	return "🛑 You are not registered with Poracle. DM the bot with `!poracle` to register first."
+}
+
+// registrationChannelHint returns a Discord channel mention for the
+// operator-configured registration channel, or "" when no unambiguous
+// channel exists. We require a non-empty guildID and exactly one entry in
+// [discord] channels — anything else (zero, or multiple channels across
+// multiple guilds) could mislead the user and we silently skip the hint.
+func registrationChannelHint(cfg *config.Config, guildID string) string {
+	if cfg == nil || guildID == "" {
+		return ""
+	}
+	if len(cfg.Discord.Channels) != 1 {
+		return ""
+	}
+	ch := cfg.Discord.Channels[0]
+	if ch == "" {
+		return ""
+	}
+	return "<#" + ch + ">"
 }
 
 // formatMapperError translates a *mappers.MapperError to a user-facing string.
