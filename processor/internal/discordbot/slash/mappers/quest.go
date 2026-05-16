@@ -16,7 +16,6 @@ import (
 //	stardust    (int)                  — minimum stardust amount
 //	candy       (string, autocomplete) — candy reward pokemon
 //	mega_energy (string, autocomplete) — mega energy reward pokemon
-//	xl_candy    (string, autocomplete) — XL candy reward pokemon (slash-only)
 //	min_amount  (int)                  — minimum amount for amount-bearing rewards
 //	distance    (int)                  — alert radius in metres
 //	clean       (bool)                  — auto-delete on expiry
@@ -24,14 +23,20 @@ import (
 //
 // The text bot's /quest grammar uses prefix tokens (`stardust:1000`,
 // `candy:pikachu`, `energy:charizard`) plus a bare pokemon name for
-// reward_type=7. Items match against translated item names. Mutual
-// exclusion is enforced here because the text grammar can't distinguish
-// "track only pokemon" from "track pokemon AND stardust" — the bot would
-// silently pick the first matching branch.
+// reward_type=7. Items match against translated item names via
+// matchItemName on Unrecognized args — so item picks emit the bare name,
+// not an `item:` prefix that the bot has no matcher for. Mutual exclusion
+// is enforced here because the text grammar can't distinguish "track only
+// pokemon" from "track pokemon AND stardust" — the bot would silently
+// pick the first matching branch.
+//
+// XL-candy is not surfaced: matching/quest.go and enrichment/quest.go
+// handle reward types 2/3/4/7/12 only — XL candy has no reward type and
+// no matcher entry, so a slash option would silently never fire.
 func Quest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, error) {
 	o := flattenOptions(opts)
 
-	rewardOpts := []string{"pokemon", "item", "stardust", "candy", "mega_energy", "xl_candy"}
+	rewardOpts := []string{"pokemon", "item", "stardust", "candy", "mega_energy"}
 	var set []string
 	for _, name := range rewardOpts {
 		if hasNonZeroValue(o[name]) {
@@ -50,15 +55,16 @@ func Quest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 	case "pokemon":
 		tokens = append(tokens, strings.ToLower(o["pokemon"].StringValue()))
 	case "item":
-		tokens = append(tokens, "item:"+o["item"].StringValue())
+		// Bare name, no prefix — matchItemName resolves against translated
+		// item names from Unrecognized args. Lowercased so the matcher's
+		// case-folded comparison sees what it expects.
+		tokens = append(tokens, strings.ToLower(o["item"].StringValue()))
 	case "stardust":
 		tokens = append(tokens, fmt.Sprintf("stardust:%d", o["stardust"].IntValue()))
 	case "candy":
 		tokens = append(tokens, "candy:"+o["candy"].StringValue())
 	case "mega_energy":
 		tokens = append(tokens, "energy:"+o["mega_energy"].StringValue())
-	case "xl_candy":
-		tokens = append(tokens, "xlcandy:"+o["xl_candy"].StringValue())
 	}
 
 	if v, ok := o["min_amount"]; ok && v.IntValue() > 0 {

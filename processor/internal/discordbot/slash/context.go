@@ -106,6 +106,18 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 		ctx.ReloadFunc = d.deps.ReloadFunc
 	}
 
+	// Geofence + AreaLogic come from the current state snapshot. The text
+	// bot does the same lookup in discordbot/bot.go before invoking Run —
+	// /area, /track (area pinning), and several other commands consult
+	// ctx.AreaLogic / ctx.Fences directly.
+	if d.deps != nil && d.deps.StateMgr != nil {
+		if st := d.deps.StateMgr.Get(); st != nil {
+			ctx.Geofence = st.Geofence
+			ctx.Fences = st.Fences
+			ctx.AreaLogic = bot.NewAreaLogic(st.Fences, d.cfgRoot)
+		}
+	}
+
 	return ctx, nil
 }
 

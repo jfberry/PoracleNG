@@ -66,15 +66,14 @@ func RaidBoss(ctx context.Context, deps *bot.BotDeps, focused, userLang string) 
 		}
 	}
 
-	// Source 3: fall through to the general pokemon autocomplete for
-	// anything the user has typed. Pokemon() already caps at 25 entries
-	// and skips early on empty focused, so this is a cheap no-op when
-	// nothing's been typed.
-	if focused != "" {
-		for _, p := range Pokemon(ctx, deps, focused, userLang) {
-			if add(p.Name, p.Value.(string)) {
-				return out
-			}
+	// Source 3: fall through to the general pokemon autocomplete. We call
+	// this for both typed and empty focused — Pokemon() now surfaces an
+	// alphabetical top-25 starter list on empty, which is the right
+	// fallback when RecentActivity is quiet (a freshly-started bot, or
+	// off-peak hours). Pokemon() handles the cap internally.
+	for _, p := range Pokemon(ctx, deps, focused, userLang) {
+		if add(p.Name, p.Value.(string)) {
+			return out
 		}
 	}
 	return out
