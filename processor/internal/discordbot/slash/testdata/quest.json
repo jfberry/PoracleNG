@@ -1,0 +1,106 @@
+{
+  "name": "quest",
+  "description": "Track a quest reward",
+  "options": [
+    {
+      "type": 3,
+      "name": "pokemon",
+      "description": "Pokemon reward",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "item",
+      "description": "Item reward (e.g. golden razz berry)",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "stardust",
+      "description": "Stardust reward (minimum amount)",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "candy",
+      "description": "Candy reward pokemon",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "mega_energy",
+      "description": "Mega energy reward pokemon",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "xl_candy",
+      "description": "XL candy reward pokemon",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "min_amount",
+      "description": "Minimum reward amount",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "distance",
+      "description": "Alert radius in metres",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 5,
+      "name": "clean",
+      "description": "Auto-delete the alert when the quest is completed",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "template",
+      "description": "DTS template name",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    }
+  ]
+}

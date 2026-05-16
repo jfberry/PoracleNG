@@ -1,0 +1,71 @@
+{
+  "name": "lure",
+  "description": "Track a pokestop lure",
+  "options": [
+    {
+      "type": 3,
+      "name": "lure_type",
+      "description": "Lure type",
+      "channel_types": null,
+      "required": true,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Normal",
+          "value": "normal"
+        },
+        {
+          "name": "Glacial",
+          "value": "glacial"
+        },
+        {
+          "name": "Mossy",
+          "value": "mossy"
+        },
+        {
+          "name": "Magnetic",
+          "value": "magnetic"
+        },
+        {
+          "name": "Rainy",
+          "value": "rainy"
+        },
+        {
+          "name": "Sparkly",
+          "value": "sparkly"
+        }
+      ]
+    },
+    {
+      "type": 4,
+      "name": "distance",
+      "description": "Alert radius in metres",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 5,
+      "name": "clean",
+      "description": "Auto-delete the alert when the lure expires",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "template",
+      "description": "DTS template name",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    }
+  ]
+}

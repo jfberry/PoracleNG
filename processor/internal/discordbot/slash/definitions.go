@@ -1,6 +1,7 @@
 package slash
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -174,6 +175,20 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 		return buildDefinition(bundle, key, canon, raidOptions())
 	case "cmd.egg":
 		return buildDefinition(bundle, key, canon, eggOptions())
+	case "cmd.quest":
+		return buildDefinition(bundle, key, canon, questOptions())
+	case "cmd.invasion":
+		return buildDefinition(bundle, key, canon, invasionOptions())
+	case "cmd.lure":
+		return buildDefinition(bundle, key, canon, lureOptions())
+	case "cmd.nest":
+		return buildDefinition(bundle, key, canon, nestOptions())
+	case "cmd.maxbattle":
+		return buildDefinition(bundle, key, canon, maxbattleOptions())
+	case "cmd.gym":
+		return buildDefinition(bundle, key, canon, gymOptions())
+	case "cmd.fort":
+		return buildDefinition(bundle, key, canon, fortOptions())
 	// Other commands added in later phase tasks.
 	}
 	return nil
@@ -316,6 +331,313 @@ func eggOptions() []*discordgo.ApplicationCommandOption {
 			Description:  "DTS template name",
 			Autocomplete: true,
 		},
+	}
+}
+
+// questOptions builds the slash option list for /quest. Reward types are
+// mutually exclusive — enforced in the mapper rather than declaratively
+// because Discord lacks option-group XOR semantics.
+func questOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "pokemon",
+			Description:  "Pokemon reward",
+			Autocomplete: true,
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "item",
+			Description:  "Item reward (e.g. golden razz berry)",
+			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "stardust",
+			Description: "Stardust reward (minimum amount)",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "candy",
+			Description:  "Candy reward pokemon",
+			Autocomplete: true,
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "mega_energy",
+			Description:  "Mega energy reward pokemon",
+			Autocomplete: true,
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "xl_candy",
+			Description:  "XL candy reward pokemon",
+			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "min_amount",
+			Description: "Minimum reward amount",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the quest is completed",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
+// invasionOptions builds the slash option list for /invasion. grunt_type is
+// required and autocomplete-flagged so the dispatcher can layer a provider
+// onto it later (currently returns nil — free-text grunt names accepted).
+func invasionOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "grunt_type",
+			Description:  "Grunt type or special incident name",
+			Required:     true,
+			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the invasion expires",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
+// lureOptions builds the slash option list for /lure. lure_type is required.
+func lureOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			Name:        "lure_type",
+			Description: "Lure type",
+			Required:    true,
+			Choices:     lureTypeChoices(),
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the lure expires",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
+// nestOptions builds the slash option list for /nest. pokemon is required.
+func nestOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "pokemon",
+			Description:  "Nesting pokemon",
+			Required:     true,
+			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "min_spawn_avg",
+			Description: "Minimum spawns per hour",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the nest expires",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
+// maxbattleOptions builds the slash option list for /maxbattle.
+func maxbattleOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "pokemon",
+			Description:  "Max battle pokemon",
+			Required:     true,
+			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "level",
+			Description: "Battle level (1..6)",
+			Choices:     maxbattleLevelChoices(),
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "gmax",
+			Description: "Gigantamax only",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the battle ends",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
+// gymOptions builds the slash option list for /gym. Team is optional —
+// omitting it tracks all teams.
+func gymOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "team",
+			Description: "Gym-control team to alert on",
+			Choices:     teamChoices(),
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "slot_changes",
+			Description: "Alert on slot composition changes",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "battle_changes",
+			Description: "Alert on battle state changes",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the gym state changes",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
+// fortOptions builds the slash option list for /fort. fort_type is required.
+func fortOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "fort_type",
+			Description: "Fort type to track",
+			Required:    true,
+			Choices:     fortTypeChoices(),
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "include_empty",
+			Description: "Alert on empty/unowned forts",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the fort changes again",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
+// lureTypeChoices maps the slash /lure lure_type option to the lure-name
+// keywords accepted by the bot's argmatch.go (arg.normal..arg.sparkly).
+func lureTypeChoices() []*discordgo.ApplicationCommandOptionChoice {
+	return []*discordgo.ApplicationCommandOptionChoice{
+		{Name: "Normal", Value: "normal"},
+		{Name: "Glacial", Value: "glacial"},
+		{Name: "Mossy", Value: "mossy"},
+		{Name: "Magnetic", Value: "magnetic"},
+		{Name: "Rainy", Value: "rainy"},
+		{Name: "Sparkly", Value: "sparkly"},
+	}
+}
+
+// maxbattleLevelChoices enumerates battle tiers 1..6. The slash form is
+// stricter than the bot (which accepts any int), but the canonical set
+// of supported max battle tiers in the game today is 1..6.
+func maxbattleLevelChoices() []*discordgo.ApplicationCommandOptionChoice {
+	out := make([]*discordgo.ApplicationCommandOptionChoice, 0, 6)
+	for i := 1; i <= 6; i++ {
+		out = append(out, &discordgo.ApplicationCommandOptionChoice{
+			Name:  fmt.Sprintf("Level %d", i),
+			Value: i,
+		})
+	}
+	return out
+}
+
+// fortTypeChoices maps the slash /fort fort_type integer to the canonical
+// English fort-type keyword via fortTypeName in mappers/common.go.
+func fortTypeChoices() []*discordgo.ApplicationCommandOptionChoice {
+	return []*discordgo.ApplicationCommandOptionChoice{
+		{Name: "Pokestop", Value: 0},
+		{Name: "Gym", Value: 1},
 	}
 }
 
