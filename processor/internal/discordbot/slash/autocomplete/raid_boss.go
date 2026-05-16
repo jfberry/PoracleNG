@@ -10,20 +10,12 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 )
 
-// raidLevelKeywords are the non-pokemon raid filter tokens (tier numbers
-// and special boss categories) offered to the user alongside concrete
-// pokemon names.
-var raidLevelKeywords = []string{"1", "3", "5", "6", "mega", "legendary", "shadow", "ultra beast"}
-
-// RaidBoss combines three signal sources for the user's raid-boss input:
-//
-//  1. Currently-active bosses from RecentActivity (when nothing typed).
-//  2. The fixed list of tier / category keywords.
-//  3. A fall-through to the general Pokemon name autocomplete.
-//
-// We cap entry sources independently so a quiet RecentActivity doesn't
-// starve the keyword/pokemon suggestions and a noisy one doesn't drown
-// the keywords.
+// RaidBoss returns pokemon name choices for /raid boss. Tier keywords
+// ("5", "mega", "legendary", ...) belong to /raid level, which has its
+// own static Choices list — mixing them into boss would be redundant
+// and visually confuses the user. RecentActivity-active raid bosses
+// surface first on empty focused so currently-spawning bosses are one
+// click away.
 func RaidBoss(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*discordgo.ApplicationCommandOptionChoice {
 	focused = strings.ToLower(strings.TrimSpace(focused))
 	out := make([]*discordgo.ApplicationCommandOptionChoice, 0, 25)
@@ -38,11 +30,12 @@ func RaidBoss(ctx context.Context, deps *bot.BotDeps, focused, userLang string) 
 		return len(out) >= 25
 	}
 
-	// Source 1: recently-active raid bosses (only when focused is empty,
-	// so a typed query goes straight to keyword/general lookup).
+	// On empty focused, prepend recently-active raid bosses so live
+	// ones are one click away. Capped at 10 to leave room for the
+	// general alphabetical pokemon list below.
 	if focused == "" && deps != nil && deps.RecentActivity != nil {
 		for i, id := range deps.RecentActivity.ActiveRaidBosses() {
-			if i >= 10 { // leave room for keywords + pokemon
+			if i >= 10 {
 				break
 			}
 			name := pokemonNameFor(deps, id, userLang)
@@ -55,22 +48,8 @@ func RaidBoss(ctx context.Context, deps *bot.BotDeps, focused, userLang string) 
 		}
 	}
 
-	// Source 2: tier / category keywords. Always offered; substring-filter
-	// when the user has typed something.
-	for _, kw := range raidLevelKeywords {
-		if focused != "" && !strings.Contains(kw, focused) {
-			continue
-		}
-		if add(kw, kw) {
-			return out
-		}
-	}
-
-	// Source 3: fall through to the general pokemon autocomplete. We call
-	// this for both typed and empty focused — Pokemon() now surfaces an
-	// alphabetical top-25 starter list on empty, which is the right
-	// fallback when RecentActivity is quiet (a freshly-started bot, or
-	// off-peak hours). Pokemon() handles the cap internally.
+	// Fill the rest from the general pokemon autocomplete (alphabetical
+	// starter on empty focused, scored search on typed).
 	for _, p := range Pokemon(ctx, deps, focused, userLang) {
 		if add(p.Name, p.Value.(string)) {
 			return out

@@ -276,17 +276,18 @@
   expected_tokens: [fire]
 
 - name: invasion-all-options
-  description: /invasion with distance/clean/template
+  description: /invasion with gender/distance/clean/template
   command: cmd.invasion
   slash:
     name: invasion
     options:
       grunt_type: water
+      gender: female
       distance: 1000
       clean: true
       template: short
-  text: "!invasion water d1000 clean template:short"
-  expected_tokens: [water, d1000, clean, "template:short"]
+  text: "!invasion water female d1000 clean template:short"
+  expected_tokens: [water, female, d1000, clean, "template:short"]
 
 # -----------------------------------------------------------------------------
 # /lure
