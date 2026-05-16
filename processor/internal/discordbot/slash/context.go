@@ -28,7 +28,8 @@ var discordLocaleToPoracle = map[discordgo.Locale]string{
 //
 // Wires the full BotDeps graph through, resolves the user's language using
 // the chain human.Language → Discord client locale → [general] locale → "en",
-// loads identity from the HumanLite store, and populates the admin flag.
+// loads identity and area/location state from the Human store, and populates
+// the admin flag.
 //
 // Returns (ctx, nil) on success. The error return path is reserved for future
 // per-command guild/channel validation (BuildTarget-style overrides).
@@ -38,15 +39,22 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 	userID := interactionUserID(ic)
 	userName := interactionUserName(ic)
 
-	// Load the human record if available. nil result means unregistered, which
-	// is allowed at this stage — the dispatcher's registration check runs after
-	// buildContext and decides whether to gate the command.
-	var human *store.HumanLite
+	// Load the full human record if available. nil result means unregistered,
+	// which is allowed at this stage — the dispatcher's registration check
+	// runs after buildContext and decides whether to gate the command. The
+	// full Get (vs GetLite) is needed because /tracked and other read-only
+	// commands inspect ctx.HasArea / ctx.HasLocation, which require the lat,
+	// lon, and area JSON columns that GetLite skips.
+	var human *store.Human
 	if d.deps != nil && d.deps.Humans != nil && userID != "" {
-		human, _ = d.deps.Humans.GetLite(userID)
+		human, _ = d.deps.Humans.Get(userID)
 	}
 
-	lang := d.resolveLanguage(ic, human)
+	humanLang := ""
+	if human != nil {
+		humanLang = human.Language
+	}
+	lang := d.resolveLanguage(ic, humanLang)
 
 	ctx := &bot.CommandContext{
 		UserID:       userID,
@@ -66,10 +74,8 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 
 	if human != nil {
 		ctx.ProfileNo = human.CurrentProfileNo
-		// HasLocation / HasArea live on the full Human row (lat/lon, area JSON)
-		// which GetLite intentionally skips. Commands that need these (e.g.
-		// !location, !area) call the full Get themselves; leaving these unset
-		// here keeps the hot path cheap.
+		ctx.HasLocation = human.Latitude != 0 || human.Longitude != 0
+		ctx.HasArea = len(human.Area) > 0
 	}
 
 	// Wire injected deps from BotDeps so the underlying Command has everything
@@ -103,12 +109,12 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 }
 
 // resolveLanguage walks the language chain: explicit human language → mapped
-// Discord client locale → [general] locale → "en". The final "en" guard
-// matches buildContext's previous behaviour so downstream code always sees a
-// non-empty language even when the operator has not configured a locale.
-func (d *Dispatcher) resolveLanguage(ic *discordgo.InteractionCreate, human *store.HumanLite) string {
-	if human != nil && human.Language != "" {
-		return human.Language
+// Discord client locale → [general] locale → "en". Pass the human's Language
+// field directly (empty string when the user has no preference) so the helper
+// stays decoupled from the store's Human / HumanLite types.
+func (d *Dispatcher) resolveLanguage(ic *discordgo.InteractionCreate, humanLang string) string {
+	if humanLang != "" {
+		return humanLang
 	}
 	if ic != nil && ic.Interaction != nil {
 		if mapped, ok := discordLocaleToPoracle[ic.Locale]; ok {

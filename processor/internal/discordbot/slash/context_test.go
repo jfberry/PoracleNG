@@ -51,6 +51,21 @@ func buildInteraction(userID, channelID string) *discordgo.InteractionCreate {
 	}}
 }
 
+// dispatcherWithFakeHuman seeds the mock store with one full *store.Human so
+// tests can exercise fields (Area, Latitude, Longitude) that HumanLite skips.
+func dispatcherWithFakeHuman(t *testing.T, h *store.Human) *Dispatcher {
+	t.Helper()
+	mock := store.NewMockHumanStore()
+	if h != nil {
+		mock.AddHuman(h)
+	}
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = &bot.BotDeps{Humans: mock}
+	return d
+}
+
 func TestBuildContextLanguageFromHuman(t *testing.T) {
 	d := dispatcherWithFakeHumans(t, map[string]*store.HumanLite{
 		"42": {ID: "42", Language: "de"},
@@ -183,5 +198,42 @@ func TestBuildContextLanguageUnmappedDiscordLocaleFallsThrough(t *testing.T) {
 	ctx, _ := d.buildContext(ic, "cmd.tracked")
 	if ctx.Language != "fr" {
 		t.Errorf("language=%q, want fr (unmapped locale falls through)", ctx.Language)
+	}
+}
+
+// Regression: /tracked emits an "⚠️ no areas set" warning when ctx.HasArea is
+// false, even when the underlying Human row has areas. buildContext must pull
+// the full record so HasArea / HasLocation reflect the persisted state.
+func TestBuildContextPopulatesHasAreaAndHasLocation(t *testing.T) {
+	d := dispatcherWithFakeHuman(t, &store.Human{
+		ID:        "42",
+		Area:      []string{"london", "paris"},
+		Latitude:  51.5,
+		Longitude: -0.1,
+	})
+	ic := buildInteraction("42", "")
+
+	ctx, err := d.buildContext(ic, "cmd.tracked")
+	if err != nil {
+		t.Fatalf("buildContext err: %v", err)
+	}
+	if !ctx.HasArea {
+		t.Error("HasArea=false, want true (human row has areas)")
+	}
+	if !ctx.HasLocation {
+		t.Error("HasLocation=false, want true (human row has lat/lon)")
+	}
+}
+
+func TestBuildContextNoAreaNoLocationWhenUnset(t *testing.T) {
+	d := dispatcherWithFakeHuman(t, &store.Human{ID: "42"})
+	ic := buildInteraction("42", "")
+
+	ctx, _ := d.buildContext(ic, "cmd.tracked")
+	if ctx.HasArea {
+		t.Error("HasArea=true on a human with no areas")
+	}
+	if ctx.HasLocation {
+		t.Error("HasLocation=true on a human with no lat/lon")
 	}
 }
