@@ -1,6 +1,7 @@
 package slash
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -141,9 +142,52 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 	switch key {
 	case "cmd.version":
 		return buildDefinition(bundle, key, canon, nil)
+	case "cmd.tracked":
+		return buildDefinition(bundle, key, canon, nil)
+	case "cmd.info":
+		return buildDefinition(bundle, key, canon, nil)
+	case "cmd.help":
+		opts := []*discordgo.ApplicationCommandOption{
+			{
+				Type:         discordgo.ApplicationCommandOptionString,
+				Name:         "topic",
+				Description:  "Help topic",
+				Required:     false,
+				Autocomplete: true,
+			},
+		}
+		return buildDefinition(bundle, key, canon, opts)
+	case "cmd.language":
+		opts := []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "code",
+				Description: "Language code",
+				Required:    false,
+				Choices:     languageChoices(bundle),
+			},
+		}
+		return buildDefinition(bundle, key, canon, opts)
 	// Other commands added in later phase tasks.
 	}
 	return nil
+}
+
+// languageChoices builds the sorted Discord choice list for the /language
+// command's "code" option from the i18n bundle's loaded locales. The list
+// reflects whatever languages are actually present in the running build —
+// no hardcoded list to drift from reality.
+func languageChoices(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOptionChoice {
+	if bundle == nil {
+		return nil
+	}
+	langs := bundle.LoadedLanguages()
+	sort.Strings(langs)
+	out := make([]*discordgo.ApplicationCommandOptionChoice, 0, len(langs))
+	for _, l := range langs {
+		out = append(out, &discordgo.ApplicationCommandOptionChoice{Name: l, Value: l})
+	}
+	return out
 }
 
 // allCommandKeys lists every slash-command key this build supports.

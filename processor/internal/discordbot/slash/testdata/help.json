@@ -1,0 +1,16 @@
+{
+  "name": "help",
+  "description": "Show help",
+  "options": [
+    {
+      "type": 3,
+      "name": "topic",
+      "description": "Help topic",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    }
+  ]
+}

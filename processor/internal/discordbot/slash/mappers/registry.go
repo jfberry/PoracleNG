@@ -21,7 +21,9 @@ func Lookup(commandName string) Mapper {
 	return registry[commandName]
 }
 
-// registry maps slash command name → mapper. Populated in init() per file.
+// registry maps slash command name → mapper. Seeded with the always-on
+// /version mapper; additional commands register themselves via init() in
+// their respective files.
 var registry = map[string]Mapper{
 	"version": Version,
 }
