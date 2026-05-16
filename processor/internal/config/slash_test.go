@@ -35,7 +35,6 @@ func TestParseSlashCommandsConfig(t *testing.T) {
 enabled = true
 register_globally = false
 guilds = ["111", "222"]
-sync_on_startup = true
 enable = ["track", "raid", "tracked", "version"]
 `
 	cfg, err := loadFromReader(t, raw)
@@ -69,9 +68,6 @@ func TestSlashCommandsDefaults(t *testing.T) {
 	}
 	if !sc.RegisterGlobally {
 		t.Error("should default global")
-	}
-	if !sc.SyncOnStartup {
-		t.Error("should default sync on")
 	}
 	if len(sc.Enable) != 0 {
 		t.Error("Enable should default to empty (meaning all)")

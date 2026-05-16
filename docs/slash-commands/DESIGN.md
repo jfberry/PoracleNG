@@ -99,7 +99,6 @@ Two config keys, both default off:
 enabled = false                  # master switch; nothing registers if false
 register_globally = true         # global vs guild-scoped registration
 guilds = []                      # if non-empty, register only to these guild IDs (fast iteration, no 1h cache)
-sync_on_startup = true           # reconcile commands with Discord at boot
 
 # Optional subset restriction. Empty (or absent) = all slash commands enabled.
 # Use this only when an operator wants to limit the surface to a subset.
