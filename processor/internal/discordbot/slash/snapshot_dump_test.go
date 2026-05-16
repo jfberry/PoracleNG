@@ -46,8 +46,14 @@ func TestDumpSnapshots(t *testing.T) {
 		withOverride("en", "slash.desc.location", "Set your location"),
 		withOverride("en", "slash.cmd.summary", "summary"),
 		withOverride("en", "slash.desc.summary", "Manage scheduled summary digests (e.g. quest)"),
+		withOverride("en", "slash.cmd.start", "start"),
+		withOverride("en", "slash.desc.start", "Resume alert delivery (after /stop)"),
+		withOverride("en", "slash.cmd.stop", "stop"),
+		withOverride("en", "slash.desc.stop", "Pause alert delivery (resume with /start)"),
 	)
 	for _, c := range []struct{ key, canon string }{
+		{"cmd.start", "start"},
+		{"cmd.stop", "stop"},
 		{"cmd.track", "track"},
 		{"cmd.raid", "raid"},
 		{"cmd.egg", "egg"},

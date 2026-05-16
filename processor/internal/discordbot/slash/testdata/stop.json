@@ -1,0 +1,5 @@
+{
+  "name": "stop",
+  "description": "Pause alert delivery (resume with /start)",
+  "options": null
+}
