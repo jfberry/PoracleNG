@@ -5,14 +5,29 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// onInteractionCreate routes message-component (button) interactions
-// whose custom_id matches the thread-join prefix. Other interaction
-// types are ignored — Poracle doesn't currently use slash commands or
-// modals through this handler.
+// onInteractionCreate routes Discord interactions. Application-command
+// and autocomplete interactions go to the slash dispatcher (when
+// configured); message-component interactions are routed to the
+// thread-join handler (the only component-driven flow Poracle owns
+// today). Other interaction types are ignored.
 func (b *Bot) onInteractionCreate(s *discordgo.Session, ic *discordgo.InteractionCreate) {
-	if ic.Type != discordgo.InteractionMessageComponent {
+	switch ic.Type {
+	case discordgo.InteractionApplicationCommand:
+		if b.slash != nil {
+			b.slash.HandleCommand(s, ic)
+		}
+		return
+	case discordgo.InteractionApplicationCommandAutocomplete:
+		if b.slash != nil {
+			b.slash.HandleAutocomplete(s, ic)
+		}
+		return
+	case discordgo.InteractionMessageComponent:
+		// fall through to the thread-join handler below
+	default:
 		return
 	}
+
 	data := ic.MessageComponentData()
 	masterID, threadID, ok := decodeThreadJoinID(data.CustomID)
 	if !ok {
