@@ -16,8 +16,10 @@ type RDMScanner struct {
 	db *sqlx.DB
 }
 
-// NewRDM creates a new RDMScanner with the given DSN.
-func NewRDM(dsn string) (*RDMScanner, error) {
+// NewRDM creates a new RDMScanner with the given DSN. Returns the
+// Scanner interface (not *RDMScanner) — see NewGolbat's doc-comment
+// for why.
+func NewRDM(dsn string) (Scanner, error) {
 	db, err := sqlx.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("scanner: open rdm db: %w", err)
