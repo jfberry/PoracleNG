@@ -37,13 +37,7 @@ func Maxbattle(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]str
 	if v, ok := o["gmax"]; ok && v.BoolValue() {
 		tokens = append(tokens, "gmax")
 	}
-	appendDistance(&tokens, o["distance"])
-	if tok := emitFlag(o["clean"], "clean"); tok != "" {
-		tokens = append(tokens, tok)
-	}
-	if v, ok := o["template"]; ok && v.StringValue() != "" {
-		tokens = append(tokens, "template:"+v.StringValue())
-	}
+	appendCommonTail(&tokens, o)
 	return tokens, nil
 }
 
