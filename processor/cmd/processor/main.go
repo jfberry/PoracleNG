@@ -61,6 +61,8 @@ import (
 func main() {
 	baseDir := flag.String("basedir", "..", "path to project root directory")
 	forceSyncSlash := flag.Bool("sync-slash-commands", false, "Force slash command sync regardless of cache")
+	clearGlobalSlash := flag.Bool("clear-global-slash-commands", false, "Clear all globally-registered slash commands at startup (use when switching from register_globally=true to false to remove the global duplicates)")
+	clearGuildSlash := flag.Bool("clear-guild-slash-commands", false, "Clear all guild-scoped slash commands at startup for the guilds listed in [discord.slash_commands] (use when switching from register_globally=false to true)")
 	flag.Parse()
 
 	// Register build info from version.go + Go's embedded VCS metadata
@@ -779,9 +781,11 @@ func main() {
 		}
 		log.Infof("Discord bot starting in %s mode", mode)
 		dbot, err := discordbot.New(discordbot.Config{
-			Token:          gatewayToken,
-			BotDeps:        deps,
-			ForceSyncSlash: *forceSyncSlash,
+			Token:            gatewayToken,
+			BotDeps:          deps,
+			ForceSyncSlash:   *forceSyncSlash,
+			ClearGlobalSlash: *clearGlobalSlash,
+			ClearGuildSlash:  *clearGuildSlash,
 		})
 		if err != nil {
 			// When command_token is set, treat a gateway failure as

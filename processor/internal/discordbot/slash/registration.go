@@ -97,3 +97,73 @@ func (d *Dispatcher) SyncCommands(ctx context.Context) error {
 	}
 	return lastErr
 }
+
+// ClearGlobalCommands issues an empty bulk-overwrite against the global
+// application commands, removing every globally-registered slash command.
+// Used by the -clear-global-slash-commands flag to clean up after switching
+// from register_globally=true to per-guild registration — the stale global
+// registrations would otherwise sit alongside the new guild ones and Discord
+// would show duplicates.
+//
+// Also clears the cached global fingerprint so the next SyncCommands push is
+// not short-circuited by a stale cache hit.
+func (d *Dispatcher) ClearGlobalCommands(ctx context.Context) error {
+	_ = ctx
+	api := d.commandsAPI
+	if api == nil {
+		api = d.session
+	}
+	log.Info("slash: clearing all globally-registered slash commands")
+	if _, err := api.ApplicationCommandBulkOverwrite(d.appID, "", []*discordgo.ApplicationCommand{}); err != nil {
+		return fmt.Errorf("clear global slash commands: %w", err)
+	}
+	log.Info("slash: global commands cleared")
+	if d.cfg.CachePath != "" {
+		cache := &Cache{Path: d.cfg.CachePath, Guilds: map[string]CacheEntry{}}
+		_ = cache.Load()
+		cache.Global = CacheEntry{}
+		if err := cache.Save(); err != nil {
+			log.WithError(err).Warn("slash: failed to update fingerprint cache after global clear")
+		}
+	}
+	return nil
+}
+
+// ClearGuildCommands issues an empty bulk-overwrite against each guild
+// in d.cfg.Guilds. Use after switching from register_globally=false to
+// true so the per-guild registrations are removed instead of duplicating
+// the global set Discord receives next.
+func (d *Dispatcher) ClearGuildCommands(ctx context.Context) error {
+	_ = ctx
+	api := d.commandsAPI
+	if api == nil {
+		api = d.session
+	}
+	if len(d.cfg.Guilds) == 0 {
+		log.Warn("slash: clear guild requested but no guilds configured")
+		return nil
+	}
+	var lastErr error
+	cache := &Cache{Path: d.cfg.CachePath, Guilds: map[string]CacheEntry{}}
+	useCache := d.cfg.CachePath != ""
+	if useCache {
+		_ = cache.Load()
+	}
+	for _, gid := range d.cfg.Guilds {
+		log.Infof("slash: clearing guild %s slash commands", gid)
+		if _, err := api.ApplicationCommandBulkOverwrite(d.appID, gid, []*discordgo.ApplicationCommand{}); err != nil {
+			lastErr = fmt.Errorf("clear guild %s slash commands: %w", gid, err)
+			log.WithError(err).Warnf("slash: clear guild %s failed; continuing", gid)
+			continue
+		}
+		if useCache {
+			delete(cache.Guilds, gid)
+		}
+	}
+	if useCache {
+		if err := cache.Save(); err != nil {
+			log.WithError(err).Warn("slash: failed to update fingerprint cache after guild clear")
+		}
+	}
+	return lastErr
+}
