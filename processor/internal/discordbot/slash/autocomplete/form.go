@@ -34,19 +34,20 @@ func Form(ctx context.Context, deps *bot.BotDeps, pokemonName, focused, userLang
 	userTr := deps.Translations.For(userLang)
 
 	type formChoice struct {
-		label string
-		value string
+		label   string
+		value   string
+		formID  int // 0 means "default/any"; named forms have non-zero IDs
 	}
-	seen := make(map[int]bool)
+	seenForm := make(map[int]bool)
 	var out []formChoice
 	for key := range deps.GameData.Monsters {
 		if key.ID != pokemonID {
 			continue
 		}
-		if seen[key.Form] {
+		if seenForm[key.Form] {
 			continue
 		}
-		seen[key.Form] = true
+		seenForm[key.Form] = true
 
 		label, value := formLabel(enTr, userTr, key.Form)
 		if value == "" {
@@ -55,10 +56,40 @@ func Form(ctx context.Context, deps *bot.BotDeps, pokemonName, focused, userLang
 		if focused != "" && !strings.Contains(strings.ToLower(label), focused) {
 			continue
 		}
-		out = append(out, formChoice{label: label, value: value})
+		out = append(out, formChoice{label: label, value: value, formID: key.Form})
 	}
 
-	sort.SliceStable(out, func(i, j int) bool { return out[i].label < out[j].label })
+	// Dedupe by lowercase label: a species can carry both form 0 (the
+	// generic "any form" placeholder we render as "Normal") AND a named
+	// "Normal" form (e.g. Exeggutor has both — the named one means
+	// specifically the Kanto variant, distinct from Alolan). Prefer the
+	// named form so picking "Normal" emits a specific value the text
+	// bot resolves to the right form ID. When two named forms collide on
+	// label (rare), the lower form ID wins for stability.
+	sort.SliceStable(out, func(i, j int) bool {
+		li, lj := strings.ToLower(out[i].label), strings.ToLower(out[j].label)
+		if li != lj {
+			return li < lj
+		}
+		// Same label: prefer named (non-zero) form; among named forms
+		// prefer lower formID for determinism.
+		if (out[i].formID == 0) != (out[j].formID == 0) {
+			return out[j].formID == 0
+		}
+		return out[i].formID < out[j].formID
+	})
+	deduped := out[:0]
+	var lastLabel string
+	for i, c := range out {
+		lower := strings.ToLower(c.label)
+		if i > 0 && lower == lastLabel {
+			continue
+		}
+		lastLabel = lower
+		deduped = append(deduped, c)
+	}
+	out = deduped
+
 	if len(out) > 25 {
 		out = out[:25]
 	}
