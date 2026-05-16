@@ -13,15 +13,14 @@ import (
 )
 
 // Grunt returns autocomplete choices for /invasion's grunt_type option.
-// Builds three categories:
+// Covers two categories — Team Rocket grunts that have a gender variant:
 //
 //   - Bosses: Giovanni, Arlo, Cliff, Sierra (canonical leader names)
 //   - Typed grunts: Fire, Water, Grass, ... using poke_type_N translations
-//   - Special incidents: Kecleon, Gold Pokestop, Showcase, ... from
-//     util.PokestopEvent
 //
-// Plus the "Everything" keyword when nothing's been typed. The result is
-// sorted by category-then-label and capped at 25 entries (Discord's limit).
+// Plus the "Everything" keyword. Pokestop incidents (Kecleon, Showcase,
+// Gold Pokestop) live on /incident instead — those events have no gender
+// variants and don't share UX with grunt encounters.
 //
 // Value is always the lowercased English canonical name the text bot's
 // matchInvasionType resolver compares against — see
@@ -35,7 +34,7 @@ func Grunt(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*
 	type entry struct {
 		label string // user-facing (translated when applicable)
 		value string // canonical English DB value the text bot accepts
-		group int    // 0=keywords, 1=bosses, 2=types, 3=incidents — controls sort order
+		group int    // 0=keywords, 1=bosses, 2=types
 	}
 
 	enTr := deps.Translations.For("en")
@@ -54,11 +53,8 @@ func Grunt(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*
 		entries = append(entries, entry{label: label, value: value, group: group})
 	}
 
-	// Keyword group: "Everything" first when nothing's been typed.
 	add("Everything", "everything", 0)
 
-	// Walk loaded grunts: typed grunts contribute type names, boss-tagged
-	// grunts contribute leader names.
 	bossSeen := map[string]bool{}
 	for _, g := range deps.GameData.Grunts {
 		canonical := strings.ToLower(gamedata.TypeNameFromTemplate(g.Template))
@@ -66,8 +62,6 @@ func Grunt(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*
 			continue
 		}
 		if g.Boss {
-			// Leader templates (Giovanni, Arlo, Cliff, Sierra). Display as
-			// title-case so the dropdown reads cleanly.
 			if !bossSeen[canonical] {
 				bossSeen[canonical] = true
 				add(titleCase(canonical), canonical, 1)
@@ -75,8 +69,6 @@ func Grunt(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*
 			continue
 		}
 		if g.TypeID > 0 {
-			// Typed grunt — label "Fire Grunt", "Water Grunt", etc. using
-			// translated type names.
 			typeKey := gamedata.TypeTranslationKey(g.TypeID)
 			typeName := ""
 			if userTr != nil {
@@ -93,32 +85,10 @@ func Grunt(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*
 				add(typeName+" Grunt", canonical, 2)
 			}
 		} else {
-			// Untyped specials (Mixed, Gruntb, etc.). Use the canonical
-			// name title-cased for the label.
 			add(titleCase(canonical), canonical, 2)
 		}
 	}
 
-	// Pokestop events (incidents): Kecleon, Gold Pokestop, Showcase, etc.
-	if deps.GameData.Util != nil {
-		for id, ev := range deps.GameData.Util.PokestopEvent {
-			canonical := strings.ToLower(ev.Name)
-			if canonical == "" {
-				continue
-			}
-			label := ev.Name // English from util.json
-			if userTr != nil {
-				key := fmt.Sprintf("display_type_%d", id)
-				if v := userTr.T(key); v != "" && v != key {
-					label = v
-				}
-			}
-			add(label, canonical, 3)
-		}
-	}
-
-	// Substring-filter when the user has typed something. Match against
-	// both label and canonical so "fire" works in any language.
 	if focused != "" {
 		filtered := entries[:0]
 		for _, e := range entries {
@@ -130,13 +100,65 @@ func Grunt(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*
 		entries = filtered
 	}
 
-	// Sort by group (keywords → bosses → types → incidents), then label.
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].group != entries[j].group {
 			return entries[i].group < entries[j].group
 		}
 		return entries[i].label < entries[j].label
 	})
+
+	if len(entries) > 25 {
+		entries = entries[:25]
+	}
+	out := make([]*discordgo.ApplicationCommandOptionChoice, len(entries))
+	for i, e := range entries {
+		out[i] = &discordgo.ApplicationCommandOptionChoice{Name: e.label, Value: e.value}
+	}
+	return out
+}
+
+// IncidentType returns autocomplete choices for /incident's type option —
+// pokestop events from util.PokestopEvent (Kecleon, Gold Pokestop,
+// Showcase, Pokestop Spawn, …). Labels use display_type_N translations
+// when present; values are the canonical English name the text bot's
+// matchInvasionType resolves against.
+func IncidentType(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*discordgo.ApplicationCommandOptionChoice {
+	if deps == nil || deps.GameData == nil || deps.GameData.Util == nil {
+		return nil
+	}
+	focused = strings.ToLower(strings.TrimSpace(focused))
+
+	userTr := deps.Translations.For(userLang)
+	if userTr == nil {
+		userTr = deps.Translations.For("en")
+	}
+
+	type entry struct {
+		label string
+		value string
+	}
+	var entries []entry
+	for id, ev := range deps.GameData.Util.PokestopEvent {
+		canonical := strings.ToLower(ev.Name)
+		if canonical == "" {
+			continue
+		}
+		label := ev.Name
+		if userTr != nil {
+			key := fmt.Sprintf("display_type_%d", id)
+			if v := userTr.T(key); v != "" && v != key {
+				label = v
+			}
+		}
+		if focused != "" &&
+			!strings.Contains(strings.ToLower(label), focused) &&
+			!strings.Contains(canonical, focused) {
+			continue
+		}
+		entries = append(entries, entry{label: label, value: canonical})
+	}
+
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].label < entries[j].label })
 
 	if len(entries) > 25 {
 		entries = entries[:25]
