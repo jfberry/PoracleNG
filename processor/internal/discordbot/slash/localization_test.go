@@ -155,3 +155,133 @@ func TestValidSlashNameLengthBoundary(t *testing.T) {
 		t.Errorf("33-char name accepted: %q", tooLong)
 	}
 }
+
+// TestLookupEnglishOrFallback covers the canonical-English source for the
+// option/choice helpers: present → returned, absent → fallback, raw-key
+// (Translator.T return-the-key behaviour) → fallback.
+func TestLookupEnglishOrFallback(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"slash.opt.track.pokemon":      "pokemon",
+		"slash.opt.track.pokemon.desc": "Pokemon to track",
+	}))
+	if got := lookupEnglishOrFallback(bundle, "slash.opt.track.pokemon", "fallback"); got != "pokemon" {
+		t.Errorf("present key returned %q, want \"pokemon\"", got)
+	}
+	if got := lookupEnglishOrFallback(bundle, "slash.opt.track.absent", "fallback"); got != "fallback" {
+		t.Errorf("absent key returned %q, want \"fallback\"", got)
+	}
+	if got := lookupEnglishOrFallback(nil, "any.key", "fallback"); got != "fallback" {
+		t.Errorf("nil bundle returned %q, want \"fallback\"", got)
+	}
+}
+
+// TestOptNameFallsBackOnInvalid covers the validateName branch: when the
+// English translation contains a space (or other regex-rejected character),
+// optName falls back to the canonical English and returns nil localizations.
+// This prevents an admin typo (e.g. "track pokemon" with a space) from
+// poisoning every translator's view of the option.
+func TestOptNameFallsBackOnInvalid(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"slash.opt.track.pokemon": "with spaces",
+	}))
+	bundle.AddTranslator(i18n.NewTranslator("de", map[string]string{
+		"slash.opt.track.pokemon": "pokemon", // valid, but English failed first
+	}))
+	bundle.LinkFallbacks()
+	name, loc := optName(bundle, "track.pokemon", "pokemon")
+	if name != "pokemon" {
+		t.Errorf("got name %q, want canonical fallback \"pokemon\"", name)
+	}
+	if loc != nil {
+		t.Errorf("expected nil localizations when English fell back, got %v", loc)
+	}
+}
+
+// TestOptNameUsesEnglishWhenValid: the English bundle value is honoured when
+// it's a valid slash name and the localization map for other languages flows
+// through.
+func TestOptNameUsesEnglishWhenValid(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"slash.opt.track.pokemon": "pokemon",
+	}))
+	bundle.AddTranslator(i18n.NewTranslator("de", map[string]string{
+		"slash.opt.track.pokemon": "pokémon",
+	}))
+	bundle.LinkFallbacks()
+	name, loc := optName(bundle, "track.pokemon", "fallback")
+	if name != "pokemon" {
+		t.Errorf("got name %q, want \"pokemon\"", name)
+	}
+	if loc == nil {
+		t.Fatal("expected non-nil localizations when German entry valid")
+	}
+	if loc[discordgo.German] != "pokémon" {
+		t.Errorf("German localization = %q", loc[discordgo.German])
+	}
+}
+
+// TestOptDescGermanLocalization verifies descriptions flow through with no
+// regex validation — spaces and punctuation are preserved.
+func TestOptDescGermanLocalization(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"slash.opt.track.pokemon.desc": "Pokemon to track",
+	}))
+	bundle.AddTranslator(i18n.NewTranslator("de", map[string]string{
+		"slash.opt.track.pokemon.desc": "Pokémon zum Verfolgen",
+	}))
+	bundle.LinkFallbacks()
+	desc, loc := optDesc(bundle, "track.pokemon", "fallback")
+	if desc != "Pokemon to track" {
+		t.Errorf("desc = %q", desc)
+	}
+	if loc == nil || loc[discordgo.German] != "Pokémon zum Verfolgen" {
+		t.Errorf("German desc localization missing: %v", loc)
+	}
+}
+
+// TestChoiceNameGermanLocalization verifies choice labels (which permit
+// spaces and capitals — they aren't validated by the slash-name regex)
+// translate cleanly.
+func TestChoiceNameGermanLocalization(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"slash.choice.raid.level.5": "Tier 5",
+	}))
+	bundle.AddTranslator(i18n.NewTranslator("de", map[string]string{
+		"slash.choice.raid.level.5": "Stufe 5",
+	}))
+	bundle.LinkFallbacks()
+	name, loc := choiceName(bundle, "raid.level.5", "fallback")
+	if name != "Tier 5" {
+		t.Errorf("English name = %q", name)
+	}
+	if loc == nil || loc[discordgo.German] != "Stufe 5" {
+		t.Errorf("German choice localization missing: %v", loc)
+	}
+}
+
+// TestChoiceNameFallback: missing English key → canonical English fallback
+// and no localizations (a translator that filled in only their own
+// language without the English seed is still ignored so the message
+// doesn't drift away from the operator's seeded set).
+func TestChoiceNameFallback(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{}))
+	bundle.AddTranslator(i18n.NewTranslator("de", map[string]string{
+		"slash.choice.raid.level.5": "Stufe 5",
+	}))
+	bundle.LinkFallbacks()
+	name, loc := choiceName(bundle, "raid.level.5", "Tier 5")
+	if name != "Tier 5" {
+		t.Errorf("expected fallback, got %q", name)
+	}
+	// Localization map is still populated — translators may legitimately ship
+	// before the English seed catches up, and Discord ignores duplicates.
+	if loc == nil || loc[discordgo.German] != "Stufe 5" {
+		t.Errorf("German choice localization missing: %v", loc)
+	}
+}

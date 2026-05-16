@@ -46,6 +46,86 @@ func validSlashName(s string) bool {
 	return slashNameRe.MatchString(s)
 }
 
+// lookupEnglishOrFallback reads `key` from the bundle's English translator and
+// returns the value if present and non-empty; otherwise returns `fallback`.
+// Skips the slash-name regex — use this for descriptions and choice labels,
+// which permit spaces and punctuation.
+//
+// Used by the option/choice localization helpers below to source the canonical
+// English text. The hardcoded English in the option builders is the safety net
+// for when the bundle hasn't been seeded with the slash.opt.* / slash.choice.*
+// key yet — degrading to readable English beats emitting raw key text.
+func lookupEnglishOrFallback(bundle *i18n.Bundle, key, fallback string) string {
+	if bundle == nil {
+		return fallback
+	}
+	en := bundle.For("en")
+	if en == nil {
+		return fallback
+	}
+	// Translator.T returns the key itself when missing; treat that as absent.
+	val := en.T(key)
+	if val == "" || val == key {
+		return fallback
+	}
+	return val
+}
+
+// optName returns the English option name + its Discord locale map. Reads
+// slash.opt.<key>. If the English value is missing or fails Discord's slash-
+// name regex, falls back to canonFallback (the hardcoded English in the option
+// builder) and returns a nil localizations map.
+//
+// The returned map type is map[discordgo.Locale]string (not the pointer form
+// the top-level command uses): ApplicationCommandOption.NameLocalizations is
+// declared as a non-pointer map with omitempty, so nil suffices to omit the
+// field from the wire payload.
+func optName(bundle *i18n.Bundle, key, canonFallback string) (string, map[discordgo.Locale]string) {
+	full := "slash.opt." + key
+	name := lookupEnglishOrFallback(bundle, full, canonFallback)
+	if !validSlashName(name) {
+		// English translation isn't a valid slash name (e.g. contains
+		// spaces). Drop back to the canonical English and emit no
+		// localizations either — translators that mirrored the
+		// invalid form would just be filtered by validateName anyway.
+		return canonFallback, nil
+	}
+	loc := localizationsForKey(bundle, full, true /* validateName */)
+	return name, derefLocaleMap(loc)
+}
+
+// optDesc returns the English option description + its Discord locale map.
+// Reads slash.opt.<key>.desc. Falls back to canonFallback when the English
+// value is missing. Descriptions are not regex-validated.
+func optDesc(bundle *i18n.Bundle, key, canonFallback string) (string, map[discordgo.Locale]string) {
+	full := "slash.opt." + key + ".desc"
+	desc := lookupEnglishOrFallback(bundle, full, canonFallback)
+	loc := localizationsForKey(bundle, full, false /* validateName */)
+	return desc, derefLocaleMap(loc)
+}
+
+// choiceName returns the English choice display label + its Discord locale
+// map. Reads slash.choice.<key>. Falls back to canonFallback when the English
+// value is missing. Choice labels are not regex-validated — only the Value
+// field matters for routing, and that stays canonical English.
+func choiceName(bundle *i18n.Bundle, key, canonFallback string) (string, map[discordgo.Locale]string) {
+	full := "slash.choice." + key
+	name := lookupEnglishOrFallback(bundle, full, canonFallback)
+	loc := localizationsForKey(bundle, full, false /* validateName */)
+	return name, derefLocaleMap(loc)
+}
+
+// derefLocaleMap converts the *map form returned by localizationsForKey into
+// the plain-map form ApplicationCommandOption / ApplicationCommandOptionChoice
+// fields expect. Returns nil when no localizations applied — relies on the
+// fields' omitempty tag to drop the JSON entry.
+func derefLocaleMap(p *map[discordgo.Locale]string) map[discordgo.Locale]string {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
 // localizationsForKey walks every loaded language in the bundle, looks up
 // the given i18n key in each, and returns a Discord-locale-keyed map of the
 // non-English values that have a real entry in that language.
