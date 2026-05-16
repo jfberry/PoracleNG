@@ -1,0 +1,29 @@
+{
+  "name": "language",
+  "description": "Show or set your language",
+  "options": [
+    {
+      "type": 3,
+      "name": "code",
+      "description": "Language code",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "de",
+          "value": "de"
+        },
+        {
+          "name": "en",
+          "value": "en"
+        },
+        {
+          "name": "fr",
+          "value": "fr"
+        }
+      ]
+    }
+  ]
+}
