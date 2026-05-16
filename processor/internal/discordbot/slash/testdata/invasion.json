@@ -5,12 +5,35 @@
     {
       "type": 3,
       "name": "grunt_type",
-      "description": "Grunt type or special incident name",
+      "description": "Grunt type (Fire, Water…), boss (Giovanni…), or incident (Kecleon…)",
       "channel_types": null,
       "required": true,
       "options": null,
       "autocomplete": true,
       "choices": null
+    },
+    {
+      "type": 3,
+      "name": "gender",
+      "description": "Filter by grunt gender",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Male",
+          "value": "male"
+        },
+        {
+          "name": "Female",
+          "value": "female"
+        },
+        {
+          "name": "Genderless",
+          "value": "genderless"
+        }
+      ]
     },
     {
       "type": 4,
