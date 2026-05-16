@@ -41,6 +41,12 @@ func testBundle(t *testing.T, opts ...bundleOpt) *i18n.Bundle {
 			"slash.desc.info":     "Show your bot registration info",
 			"slash.cmd.language":  "language",
 			"slash.desc.language": "Show or set your language",
+			"slash.cmd.track":     "track",
+			"slash.desc.track":    "Track a Pokemon",
+			"slash.cmd.raid":      "raid",
+			"slash.desc.raid":     "Track a raid boss or raid level",
+			"slash.cmd.egg":       "egg",
+			"slash.desc.egg":      "Track an egg / raid level",
 		},
 	}
 	for _, opt := range opts {
@@ -106,10 +112,16 @@ func TestAllDefinitionsFiltersByEnable(t *testing.T) {
 		}
 	}
 
-	// Explicit enable that excludes "version" → no version in result.
-	defs = AllDefinitions(bundle, []string{"track"})
+	// Explicit enable for a not-yet-implemented Phase 4 command → no defs.
+	defs = AllDefinitions(bundle, []string{"quest"})
 	if len(defs) != 0 {
 		t.Errorf("expected 0 defs when only unimplemented commands enabled, got %d", len(defs))
+	}
+
+	// Phase 4 mutating commands implemented in this batch.
+	defs = AllDefinitions(bundle, []string{"track", "raid", "egg"})
+	if len(defs) != 3 {
+		t.Fatalf("expected 3 defs for track/raid/egg, got %d", len(defs))
 	}
 
 	// Explicit enable that includes "version" → returns just it.
@@ -222,6 +234,63 @@ func TestLanguageChoicesSorted(t *testing.T) {
 			t.Errorf("choices not sorted: %q before %q", prev, c.Value)
 		}
 		prev = c.Value.(string)
+	}
+}
+
+func TestSnapshotTrack(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.track", "track")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.track")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/track.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotRaid(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.raid", "raid")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.raid")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/raid.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotEgg(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.egg", "egg")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.egg")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/egg.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
 	}
 }
 
