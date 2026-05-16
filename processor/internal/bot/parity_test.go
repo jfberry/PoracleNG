@@ -56,8 +56,13 @@ func TestSlashTextParity(t *testing.T) {
 //   - A dotted key "sub.opt" denotes a SubCommand option named "sub" with
 //     a child option named "opt". Multiple dotted keys sharing a prefix
 //     collect under the same SubCommand.
+//   - A double-dotted key "group.sub.opt" denotes a SubCommandGroup option
+//     named "group" with a SubCommand "sub" with a child option "opt"
+//     (used by /summary).
 //   - A key whose string value is exactly "_bare" denotes a bare
 //     SubCommand option (no children). Used for /area show, /profile list.
+//   - A double-dotted key "group.sub" with value "_bare" denotes a bare
+//     sub-command nested under a SubCommandGroup.
 //
 // Type inference for scalar values follows YAML unmarshal defaults:
 //   - bool → ApplicationCommandOptionBoolean
@@ -66,9 +71,9 @@ func TestSlashTextParity(t *testing.T) {
 //     anything that isn't float64 inside Value).
 //   - string → ApplicationCommandOptionString
 //
-// SubCommand options are sorted to the front of the returned slice so
-// opts[0] is the sub-command for sub-command-aware mappers (area, profile,
-// untrack).
+// SubCommand and SubCommandGroup options are sorted to the front of the
+// returned slice so opts[0] is the sub-command (or group) for
+// sub-command-aware mappers (area, profile, untrack, summary).
 func optionsFromMap(m map[string]interface{}) []*discordgo.ApplicationCommandInteractionDataOption {
 	if len(m) == 0 {
 		return nil
@@ -82,34 +87,79 @@ func optionsFromMap(m map[string]interface{}) []*discordgo.ApplicationCommandInt
 	}
 	sort.Strings(keys)
 
+	// First pass: detect which top-level names are SubCommandGroups by
+	// looking for either:
+	//   - a key with 2 dots ("group.sub.opt"), or
+	//   - a 1-dot key whose value is "_bare" ("group.sub" → bare sub
+	//     inside a group; the only valid interpretation of a 2-segment
+	//     key with a _bare value, because flat SubCommands don't have
+	//     bare leaf options).
+	groupNames := map[string]bool{}
+	for _, k := range keys {
+		dots := strings.Count(k, ".")
+		if dots >= 2 {
+			groupNames[k[:strings.IndexByte(k, '.')]] = true
+			continue
+		}
+		if dots == 1 {
+			if s, ok := m[k].(string); ok && s == "_bare" {
+				groupNames[k[:strings.IndexByte(k, '.')]] = true
+			}
+		}
+	}
+
 	subs := map[string][]*discordgo.ApplicationCommandInteractionDataOption{}
 	bareSubs := map[string]bool{}
+	// Two-level: group → sub-command → its children (or empty for bare).
+	groups := map[string]map[string][]*discordgo.ApplicationCommandInteractionDataOption{}
+	groupBare := map[string]map[string]bool{}
 	var flat []*discordgo.ApplicationCommandInteractionDataOption
 
 	for _, k := range keys {
 		v := m[k]
+		isBare := false
 		if s, ok := v.(string); ok && s == "_bare" {
-			bareSubs[k] = true
-			continue
+			isBare = true
 		}
-		if dot := strings.IndexByte(k, '.'); dot > 0 {
-			sub := k[:dot]
-			opt := k[dot+1:]
-			subs[sub] = append(subs[sub], buildOption(opt, v))
-			continue
+		dots := strings.Count(k, ".")
+		switch {
+		case dots == 0:
+			if isBare {
+				bareSubs[k] = true
+			} else {
+				flat = append(flat, buildOption(k, v))
+			}
+		case dots == 1:
+			parts := strings.SplitN(k, ".", 2)
+			topName, child := parts[0], parts[1]
+			if groupNames[topName] {
+				// Bare sub-command nested in a SubCommandGroup.
+				if _, ok := groupBare[topName]; !ok {
+					groupBare[topName] = map[string]bool{}
+				}
+				groupBare[topName][child] = true
+			} else {
+				subs[topName] = append(subs[topName], buildOption(child, v))
+			}
+		default:
+			parts := strings.SplitN(k, ".", 3)
+			group, sub, opt := parts[0], parts[1], parts[2]
+			if _, ok := groups[group]; !ok {
+				groups[group] = map[string][]*discordgo.ApplicationCommandInteractionDataOption{}
+			}
+			groups[group][sub] = append(groups[group][sub], buildOption(opt, v))
 		}
-		flat = append(flat, buildOption(k, v))
 	}
 
 	// Build a stable sub-command order: dotted-key subs alphabetically,
-	// then bare subs alphabetically.
-	subNames := make([]string, 0, len(subs))
+	// then bare subs alphabetically, then groups alphabetically.
+	subOrder := make([]string, 0, len(subs))
 	for s := range subs {
-		subNames = append(subNames, s)
+		subOrder = append(subOrder, s)
 	}
-	sort.Strings(subNames)
+	sort.Strings(subOrder)
 	var subOpts []*discordgo.ApplicationCommandInteractionDataOption
-	for _, name := range subNames {
+	for _, name := range subOrder {
 		children := subs[name]
 		sort.SliceStable(children, func(i, j int) bool { return children[i].Name < children[j].Name })
 		subOpts = append(subOpts, &discordgo.ApplicationCommandInteractionDataOption{
@@ -127,6 +177,51 @@ func optionsFromMap(m map[string]interface{}) []*discordgo.ApplicationCommandInt
 		subOpts = append(subOpts, &discordgo.ApplicationCommandInteractionDataOption{
 			Name: name,
 			Type: discordgo.ApplicationCommandOptionSubCommand,
+		})
+	}
+
+	// SubCommandGroups: combine option-bearing + bare children per group.
+	groupOrder := make([]string, 0, len(groupNames))
+	for g := range groupNames {
+		groupOrder = append(groupOrder, g)
+	}
+	sort.Strings(groupOrder)
+	for _, gName := range groupOrder {
+		var children []*discordgo.ApplicationCommandInteractionDataOption
+		seen := map[string]bool{}
+
+		subWithOpts := make([]string, 0, len(groups[gName]))
+		for s := range groups[gName] {
+			subWithOpts = append(subWithOpts, s)
+		}
+		sort.Strings(subWithOpts)
+		for _, sName := range subWithOpts {
+			subChildren := groups[gName][sName]
+			sort.SliceStable(subChildren, func(i, j int) bool { return subChildren[i].Name < subChildren[j].Name })
+			children = append(children, &discordgo.ApplicationCommandInteractionDataOption{
+				Name:    sName,
+				Type:    discordgo.ApplicationCommandOptionSubCommand,
+				Options: subChildren,
+			})
+			seen[sName] = true
+		}
+		bareInGroup := make([]string, 0, len(groupBare[gName]))
+		for s := range groupBare[gName] {
+			if !seen[s] {
+				bareInGroup = append(bareInGroup, s)
+			}
+		}
+		sort.Strings(bareInGroup)
+		for _, sName := range bareInGroup {
+			children = append(children, &discordgo.ApplicationCommandInteractionDataOption{
+				Name: sName,
+				Type: discordgo.ApplicationCommandOptionSubCommand,
+			})
+		}
+		subOpts = append(subOpts, &discordgo.ApplicationCommandInteractionDataOption{
+			Name:    gName,
+			Type:    discordgo.ApplicationCommandOptionSubCommandGroup,
+			Options: children,
 		})
 	}
 
