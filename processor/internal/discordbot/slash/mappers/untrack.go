@@ -5,20 +5,20 @@ import (
 )
 
 // Untrack maps /untrack <subtype> tracking:<uid> sub-command invocations into
-// the text-command grammar that UntrackCommand recognises.
+// text tokens for the underlying per-type command.
 //
-// The slash surface uses one sub-command per tracking type ("pokemon", "raid",
-// ...). Each sub-command exposes a single autocomplete-backed "tracking"
-// option whose value is the database UID of the rule to remove. The text
-// equivalent is `!untrack id:<uid>` — UntrackCommand's ParamRemoveUID matcher
-// reads the `id:` prefix and routes to removeByUIDs(), bypassing
-// pokemon/gen/type matching.
+// Only cmd.untrack itself (the pokemon untracker) treats a bare "id:<uid>" as
+// "remove this rule". Every other per-type command (cmd.raid, cmd.egg, ...)
+// requires the explicit "remove" keyword alongside the UID; bare "id:<uid>"
+// without "remove" is just a filter token and would silently no-op. Emit the
+// keyword for the non-pokemon sub-commands so the rerouted command actually
+// deletes the row.
 //
-// The slash sub-command name itself ("pokemon", "raid", ...) is purely a
-// routing hint: the autocomplete dispatcher uses it to filter the choice list
-// by tracking type via findUntrackSubtype. The mapper does not propagate it
-// to the text command — UntrackCommand has no per-type entry point; the UID
-// alone is unambiguous.
+// The dispatcher special-cases /untrack and rewrites cmdKey to cmd.<subtype>
+// for the non-pokemon sub-commands — see HandleCommand. The mapper does not
+// know which command will ultimately run; it just emits a grammar that works
+// regardless ("remove id:N" is harmless on cmd.untrack, but cmd.untrack is
+// only routed to for "pokemon").
 func Untrack(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, error) {
 	if len(opts) == 0 {
 		return nil, &MapperError{Key: "error.slash.untrack.no_subcommand"}
@@ -36,7 +36,10 @@ func Untrack(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]strin
 	if uid == "" {
 		return nil, &MapperError{Key: "error.slash.untrack.no_tracking"}
 	}
-	return []string{"id:" + uid}, nil
+	if sub.Name == "pokemon" || sub.Name == "monster" {
+		return []string{"id:" + uid}, nil
+	}
+	return []string{"remove", "id:" + uid}, nil
 }
 
 func init() { registry["untrack"] = Untrack }
