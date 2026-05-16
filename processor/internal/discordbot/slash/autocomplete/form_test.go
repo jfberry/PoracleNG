@@ -82,6 +82,48 @@ func TestForm_UnknownPokemonReturnsNil(t *testing.T) {
 	}
 }
 
+// Regression for /track form: showing "Normal" twice for Exeggutor:
+// gamedata can carry both form 0 (generic "any form" placeholder) and a
+// named "Normal" form (e.g. Exeggutor's Kanto variant has a distinct
+// formID with the label "Normal"). The picker should dedupe, preferring
+// the named form's value so the text bot can resolve to a specific ID.
+func TestForm_DedupesNormalLabel(t *testing.T) {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"poke_103": "Exeggutor",
+		"form_47":  "Alolan",
+		"form_103": "Normal", // named "Normal" form distinct from form 0
+	}))
+	bundle.LinkFallbacks()
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
+			{ID: 103, Form: 0}:   {PokemonID: 103},
+			{ID: 103, Form: 103}: {PokemonID: 103, FormID: 103},
+			{ID: 103, Form: 47}:  {PokemonID: 103, FormID: 47},
+		},
+	}
+	deps := &bot.BotDeps{Translations: bundle, GameData: gd, Cfg: &config.Config{}}
+
+	out := Form(context.Background(), deps, "exeggutor", "", "en")
+	normalCount := 0
+	var normalValue string
+	for _, c := range out {
+		if strings.EqualFold(c.Name, "normal") {
+			normalCount++
+			normalValue, _ = c.Value.(string)
+		}
+	}
+	if normalCount != 1 {
+		t.Errorf("expected exactly one 'Normal' entry, got %d (%+v)", normalCount, out)
+	}
+	// Preferred the named form (form 103, label "Normal") over the
+	// generic form 0 placeholder. The text bot's form: resolver will
+	// see "normal" and pick the specific form ID.
+	if normalValue == "" {
+		t.Errorf("normal value is empty: %+v", out)
+	}
+}
+
 func TestForm_NormalValueIsLowercase(t *testing.T) {
 	// Form 0 emits "Normal" as label and "normal" as value so the bot's
 	// existing form prefix parser sees the same token shape it would
