@@ -271,7 +271,6 @@ type DiscordSlashCommands struct {
 	Enabled          bool     `toml:"enabled"`
 	RegisterGlobally bool     `toml:"register_globally"`
 	Guilds           []string `toml:"guilds"`
-	SyncOnStartup    bool     `toml:"sync_on_startup"`
 	// Enable optionally restricts which slash commands register. Empty/nil =
 	// all commands this build supports. Set explicitly only when the operator
 	// wants to limit the surface to a subset. Use the master Enabled = false
@@ -848,7 +847,6 @@ func Load(baseDir string) (*Config, error) {
 				// Enable defaults nil — when Enabled is flipped on, all built-in
 				// commands register unless this list is set explicitly.
 				RegisterGlobally: true,
-				SyncOnStartup:    true,
 			},
 		},
 		AlertLimits: AlertLimitsConfig{
