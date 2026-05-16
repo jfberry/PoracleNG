@@ -630,11 +630,14 @@ func questOptions() []*discordgo.ApplicationCommandOption {
 		// xl_candy intentionally omitted — matching/quest.go and
 		// enrichment/quest.go handle reward types 2/3/4/7/12 only; XL
 		// candy isn't wired anywhere so the option would never fire.
-		{
-			Type:        discordgo.ApplicationCommandOptionInteger,
-			Name:        "min_amount",
-			Description: "Minimum reward amount",
-		},
+		//
+		// min_amount intentionally omitted — cmd.quest has no
+		// arg.prefix.amount matcher (see internal/bot/commands/quest.go),
+		// so an `amount:N` token would fall through to Unrecognized and
+		// the user would get an "I didn't understand" reaction. The
+		// stardust option already accepts a minimum amount via its
+		// `stardust:N` grammar; other reward types have no equivalent
+		// today.
 		{
 			Type:        discordgo.ApplicationCommandOptionInteger,
 			Name:        "distance",

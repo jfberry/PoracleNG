@@ -214,18 +214,17 @@
   expected_tokens: ["golden razz berry"]
 
 - name: quest-stardust-all-extras
-  description: /quest stardust + min_amount + distance + clean + template (covers tail options)
+  description: /quest stardust + distance + clean + template (covers tail options)
   command: cmd.quest
   slash:
     name: quest
     options:
       stardust: 1000
-      min_amount: 2000
       distance: 500
       clean: true
       template: dust
-  text: "!quest stardust:1000 amount:2000 d500 clean template:dust"
-  expected_tokens: ["stardust:1000", "amount:2000", d500, clean, "template:dust"]
+  text: "!quest stardust:1000 d500 clean template:dust"
+  expected_tokens: ["stardust:1000", d500, clean, "template:dust"]
 
 - name: quest-candy-reward
   description: /quest with candy reward
