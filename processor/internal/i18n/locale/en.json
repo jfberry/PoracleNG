@@ -572,6 +572,8 @@
   "language.zh-cn": "Chinese (Simplified)",
   "language.ja": "Japanese",
 
+  "slash.cmd.version": "version",
+  "slash.desc.version": "Show Poracle version",
   "slash.cmd.tracked": "tracked",
   "slash.cmd.help": "help",
   "slash.cmd.info": "info",
@@ -608,6 +610,9 @@
   "slash.desc.area": "Manage your areas",
   "slash.desc.profile": "Manage your profiles",
   "slash.desc.location": "Set your location",
+
+  "error.slash.unregistered_with_channel": "🛑 You need to register first. DM me with !poracle, or run !poracle in {0}.",
+  "error.slash.unregistered_dm_only": "🛑 You need to register first. DM me with !poracle.",
 
   "error.slash.track.no_pokemon": "Please specify a Pokemon to track.",
   "error.slash.raid.need_boss_or_level": "Please specify either a boss or a level.",
