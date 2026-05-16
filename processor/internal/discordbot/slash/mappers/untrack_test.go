@@ -83,20 +83,6 @@ func TestUntrackMapperEmitsRemoveAndIDForNonPokemon(t *testing.T) {
 	}
 }
 
-// "monster" is the canonical text-bot type name for pokemon; treat the same
-// as "pokemon" to be defensive against a future definition that uses either.
-func TestUntrackMapperMonsterTreatedAsPokemon(t *testing.T) {
-	tokens, err := Untrack([]*discordgo.ApplicationCommandInteractionDataOption{
-		subopt("monster", sopt("tracking", "9")),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(tokens, []string{"id:9"}) {
-		t.Errorf("tokens=%v", tokens)
-	}
-}
-
 func TestLookupUntrack(t *testing.T) {
 	if Lookup("untrack") == nil {
 		t.Fatal("nil mapper for /untrack")

@@ -118,6 +118,7 @@ type CommandContext struct {
 	// Permissions (resolved before command runs)
 	IsAdmin          bool
 	IsCommunityAdmin bool
+	IsRegistered     bool
 	Permissions      Permissions
 
 	// User state (loaded from DB before command runs)

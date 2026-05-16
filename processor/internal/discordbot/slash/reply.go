@@ -173,7 +173,7 @@ func parseEmbedJSON(raw json.RawMessage) (replyPayload, bool) {
 // the reply text there. The caller is responsible for any ephemeral
 // confirmation in the originating channel.
 func sendToDM(s *discordgo.Session, ic *discordgo.InteractionCreate, r bot.Reply) error {
-	userID := rawUserID(ic)
+	userID := interactionUserID(ic)
 	if userID == "" {
 		return fmt.Errorf("cannot resolve user for DM")
 	}
@@ -185,21 +185,6 @@ func sendToDM(s *discordgo.Session, ic *discordgo.InteractionCreate, r bot.Reply
 		Content: r.Text,
 	})
 	return err
-}
-
-// rawUserID extracts the invoking user's ID from an interaction. Guild
-// interactions populate Member.User; DM interactions populate User directly.
-func rawUserID(ic *discordgo.InteractionCreate) string {
-	if ic == nil || ic.Interaction == nil {
-		return ""
-	}
-	if ic.Member != nil && ic.Member.User != nil {
-		return ic.Member.User.ID
-	}
-	if ic.User != nil {
-		return ic.User.ID
-	}
-	return ""
 }
 
 // splitReplyText chunks text into pieces ≤2000 bytes (Discord's per-message
