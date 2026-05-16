@@ -182,18 +182,33 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 				perLang = map[string]map[string]any{lang: langEnrichment}
 			}
 
-			// For clean weather alerts, TTH aligns with the longest TTH of any
-			// matched pokemon (CaresUntil). This is maintained by the weather
-			// care tracker independently of show_altered_pokemon, so clean
-			// weather alerts get a correct TTH even when the active-pokemon
-			// tracker is disabled. Users below the min-alert threshold were
-			// already dropped when matched was built.
+			// For clean weather alerts, align TTH with the longest-lived
+			// pokemon actually shown in the alert. CaresUntil is the max
+			// across every pokemon ever registered for this cell (extended,
+			// never reduced — see WeatherCareTracker.Register) and so can
+			// outlive the pokemon the alert mentions. Using it directly
+			// produced a real-world bug: pokemon A despawned and was
+			// clean-deleted, but the weather alert that mentioned A stayed
+			// behind until pokemon B's later despawn time. When the
+			// activePokemon tracker is off we have no per-pokemon data,
+			// so we fall back to CaresUntil as the best estimate.
 			userEnrichment := baseEnrichment
-			if user.Clean > 0 && user.CaresUntil > 0 {
-				// Copy base enrichment to avoid mutating shared map
-				userEnrichment = make(map[string]any, len(baseEnrichment)+1)
-				maps.Copy(userEnrichment, baseEnrichment)
-				userEnrichment["tth"] = geo.ComputeTTH(user.CaresUntil)
+			if user.Clean > 0 {
+				cleanUntil := weatherAlertCleanUntil(user)
+				if cleanUntil > 0 {
+					// Re-check the min-alert threshold with the
+					// alert-accurate TTH (the pre-filter at the top of
+					// the loop used CaresUntil, which can over-estimate
+					// when only short-lived active pokemon remain).
+					if remaining := cleanUntil - now; remaining < minAlert {
+						l.Debugf("Weather alert suppressed for %s (%s) — alert TTH %ds below alert_minimum_time %ds",
+							user.Name, user.ID, remaining, minAlert)
+						continue
+					}
+					userEnrichment = make(map[string]any, len(baseEnrichment)+1)
+					maps.Copy(userEnrichment, baseEnrichment)
+					userEnrichment["tth"] = geo.ComputeTTH(cleanUntil)
+				}
 			}
 
 			// Use per-user tile if available, otherwise base tile
@@ -214,4 +229,23 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			}
 		}
 	}
+}
+
+// weatherAlertCleanUntil returns the unix timestamp at which a clean
+// weather alert should auto-delete. Prefers max(ActivePokemons.DisappearTime)
+// — those are the pokemon the alert actually mentions, and aligning TTH
+// with them avoids orphan weather messages outliving the alerted pokemon.
+// Falls back to CaresUntil (the user's cell-wide care window) when the
+// active-pokemon tracker is off, since per-pokemon data isn't available.
+func weatherAlertCleanUntil(user webhook.MatchedUser) int64 {
+	if len(user.ActivePokemons) == 0 {
+		return user.CaresUntil
+	}
+	var maxDisappear int64
+	for _, ap := range user.ActivePokemons {
+		if ap.DisappearTime > maxDisappear {
+			maxDisappear = ap.DisappearTime
+		}
+	}
+	return maxDisappear
 }
