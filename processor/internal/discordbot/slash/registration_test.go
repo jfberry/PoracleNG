@@ -1,7 +1,6 @@
 package slash
 
 import (
-	"context"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -20,7 +19,7 @@ func TestSyncGlobal(t *testing.T) {
 	fs := &fakeSession{}
 	d.commandsAPI = fs
 
-	err := d.SyncCommands(context.Background())
+	err := d.SyncCommands()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +34,7 @@ func TestSyncGuilds(t *testing.T) {
 	fs := &fakeSession{}
 	d.commandsAPI = fs
 
-	err := d.SyncCommands(context.Background())
+	err := d.SyncCommands()
 	if err != nil {
 		t.Fatal(err)
 	}

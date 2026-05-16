@@ -625,7 +625,7 @@
   "error.slash.raid.need_boss_or_level": "Please specify either a boss or a level.",
   "error.slash.raid.boss_and_level": "Please specify either a boss OR a level, not both.",
   "error.slash.egg.no_level": "Please specify an egg level.",
-  "error.slash.quest.no_reward": "Please specify exactly one reward type (pokemon, item, stardust, candy, mega_energy, or xl_candy).",
+  "error.slash.quest.no_reward": "Please specify exactly one reward type (pokemon, item, stardust, candy, or mega_energy).",
   "error.slash.quest.exactly_one_reward": "Please specify exactly one reward type, not multiple: {0}.",
   "error.slash.quest.amount_not_applicable": "`min_amount` doesn't apply to pokemon quests. For stardust, both `stardust` and `min_amount` end up in the same field — pick whichever reads better.",
   "error.slash.invasion.no_grunt": "Please specify a grunt type.",

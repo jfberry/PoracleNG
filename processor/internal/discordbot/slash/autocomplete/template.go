@@ -68,19 +68,9 @@ func templateChoiceLabel(info dts.UserTemplateInfo) string {
 		prefix = "⭐ " + prefix
 	}
 	if info.Description == "" {
-		return truncateChoiceName(prefix)
+		return truncateChoiceLabel(prefix)
 	}
-	return truncateChoiceName(prefix + " — " + info.Description)
-}
-
-// truncateChoiceName clips a label to Discord's 100-character choice-name
-// limit, appending an ellipsis when truncated.
-func truncateChoiceName(s string) string {
-	const max = 100
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-1] + "…"
+	return truncateChoiceLabel(prefix + " — " + info.Description)
 }
 
 // filterStringChoices substring-filters names by focused (case-insensitive)

@@ -72,7 +72,8 @@ func Pokemon(ctx context.Context, deps *bot.BotDeps, focused, userLang string) [
 		canonical := strings.ToLower(canonicalName)
 		label := canonicalName
 		if userTr != nil && userTr != enTr {
-			if local := userTr.T(gamedata.PokemonTranslationKey(id)); local != "" && local != gamedata.PokemonTranslationKey(id) {
+			key := gamedata.PokemonTranslationKey(id)
+			if local := userTr.T(key); local != "" && local != key {
 				label = local
 			}
 		}

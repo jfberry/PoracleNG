@@ -38,7 +38,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 	tr := translatorFor(deps, userID)
 
 	switch hint.Subtype {
-	case "pokemon", "monster", "monsters":
+	case "pokemon":
 		rows, err := deps.Tracking.Monsters.SelectByIDProfile(userID, profileNo)
 		if err != nil {
 			return nil, err
@@ -134,7 +134,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 		}
 		return out, nil
 
-	case "fort", "fort-update", "fortUpdate":
+	case "fort":
 		rows, err := deps.Tracking.Forts.SelectByIDProfile(userID, profileNo)
 		if err != nil {
 			return nil, err
@@ -146,7 +146,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 		}
 		return out, nil
 
-	case "maxbattle", "max-battle":
+	case "maxbattle":
 		rows, err := deps.Tracking.Maxbattles.SelectByIDProfile(userID, profileNo)
 		if err != nil {
 			return nil, err
