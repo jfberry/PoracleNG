@@ -337,6 +337,11 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 		return autocomplete.Item(context.Background(), d.deps, focused, userLang)
 	case (opt == "candy" || opt == "mega_energy") && cmd == "quest":
 		return autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
+	// /invasion grunt_type combines typed grunts (Fire, Water…), bosses
+	// (Giovanni, Arlo, Cliff, Sierra), and pokestop incidents (Kecleon,
+	// Gold Pokestop, Showcase).
+	case opt == "grunt_type" && cmd == "invasion":
+		return autocomplete.Grunt(context.Background(), d.deps, focused, userLang)
 	// /track form cascades from the user's currently-selected pokemon
 	// option in the same interaction.
 	case opt == "form" && cmd == "track":

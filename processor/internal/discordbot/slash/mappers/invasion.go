@@ -10,20 +10,17 @@ import (
 //
 // Options:
 //
-//	grunt_type  (string, required, autocomplete) — grunt template/type or event name
+//	grunt_type  (string, required, autocomplete) — grunt type / boss / incident
+//	gender      (string, choices)                — male / female / genderless
 //	distance    (int)                            — alert radius in metres
-//	clean       (bool)                            — auto-delete on expiry
+//	clean       (string, single-choice)          — auto-delete on expiry
 //	template    (string, autocomplete)           — DTS template name
 //
-// The grunt_type is sent as a bare lowercased token; the bot's invasion
-// command matches it against grunt template-derived names, translated type
-// names, and pokestop event names (kecleon, showcase, etc.) — see
-// processor/internal/bot/commands/invasion.go.
-//
-// Autocomplete for grunt_type is declared Autocomplete=true so Discord
-// rounds-trips a request, but the dispatcher's routeAutocomplete tuple
-// for (invasion, grunt_type) returns nil today — the field still accepts
-// any free-text value the user types.
+// grunt_type is sent as a bare lowercased token; the bot's InvasionCommand
+// matches it against grunt template-derived names, translated type names,
+// boss leader names, and pokestop event names — see
+// processor/internal/bot/commands/invasion.go::validTypes. gender goes
+// through unchanged for ParamGender to parse.
 func Invasion(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, error) {
 	o := flattenOptions(opts)
 
@@ -33,6 +30,9 @@ func Invasion(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]stri
 	}
 
 	tokens := []string{grunt}
+	if v, ok := o["gender"]; ok && v.StringValue() != "" {
+		tokens = append(tokens, strings.ToLower(v.StringValue()))
+	}
 	appendDistance(&tokens, o["distance"])
 	if tok := emitFlag(o["clean"], "clean"); tok != "" {
 		tokens = append(tokens, tok)

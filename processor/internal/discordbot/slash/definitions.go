@@ -664,16 +664,27 @@ func questOptions() []*discordgo.ApplicationCommandOption {
 }
 
 // invasionOptions builds the slash option list for /invasion. grunt_type is
-// required and autocomplete-flagged so the dispatcher can layer a provider
-// onto it later (currently returns nil — free-text grunt names accepted).
+// required and autocomplete-served by autocomplete.Grunt (typed grunts +
+// bosses + pokestop events). gender is an optional fixed-choice filter
+// matching ParamGender on the text-bot side.
 func invasionOptions() []*discordgo.ApplicationCommandOption {
 	return []*discordgo.ApplicationCommandOption{
 		{
 			Type:         discordgo.ApplicationCommandOptionString,
 			Name:         "grunt_type",
-			Description:  "Grunt type or special incident name",
+			Description:  "Grunt type (Fire, Water…), boss (Giovanni…), or incident (Kecleon…)",
 			Required:     true,
 			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			Name:        "gender",
+			Description: "Filter by grunt gender",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Male", Value: "male"},
+				{Name: "Female", Value: "female"},
+				{Name: "Genderless", Value: "genderless"},
+			},
 		},
 		{
 			Type:        discordgo.ApplicationCommandOptionInteger,
