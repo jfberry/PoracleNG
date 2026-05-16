@@ -56,21 +56,32 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 	}
 	lang := d.resolveLanguage(ic, humanLang)
 
-	ctx := &bot.CommandContext{
-		UserID:       userID,
-		UserName:     userName,
-		Platform:     "discord",
-		ChannelID:    ic.ChannelID,
-		GuildID:      ic.GuildID,
-		IsDM:         ic.GuildID == "",
-		IsSlash:      true,
-		Language:     lang,
-		IsAdmin:      d.isAdmin(userID),
-		TargetID:     userID,
-		TargetName:   userName,
-		TargetType:   bot.TypeDiscordUser,
-		Config:       d.cfgRoot,
-		Translations: d.bundle,
+	// Wire injected deps from BotDeps via the shared constructor so the
+	// dispatcher and the text bot stay in lockstep — a new BotDeps field
+	// flows into both surfaces from one site. Per-interaction fields are
+	// layered on top below; nil deps yields a bare CommandContext that
+	// still gets the identity / language / admin fields populated.
+	//
+	// NB: ctx.Translations falls back to d.bundle when deps is nil so the
+	// downstream Tr() lookup doesn't panic on a misconfigured dispatcher.
+	ctx := bot.NewCommandContext(d.deps)
+	ctx.UserID = userID
+	ctx.UserName = userName
+	ctx.Platform = "discord"
+	ctx.ChannelID = ic.ChannelID
+	ctx.GuildID = ic.GuildID
+	ctx.IsDM = ic.GuildID == ""
+	ctx.IsSlash = true
+	ctx.Language = lang
+	ctx.IsAdmin = d.isAdmin(userID)
+	ctx.TargetID = userID
+	ctx.TargetName = userName
+	ctx.TargetType = bot.TypeDiscordUser
+	if ctx.Config == nil {
+		ctx.Config = d.cfgRoot
+	}
+	if ctx.Translations == nil {
+		ctx.Translations = d.bundle
 	}
 
 	if human != nil {
@@ -82,40 +93,6 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 		ctx.ProfileNo = human.CurrentProfileNo
 		ctx.HasLocation = human.Latitude != 0 || human.Longitude != 0
 		ctx.HasArea = len(human.Area) > 0
-	}
-
-	// Wire injected deps from BotDeps so the underlying Command has everything
-	// it needs. /version doesn't touch most of these, but most tracking and
-	// area/profile commands do; keeping the wiring here means the dispatch
-	// path is consistent regardless of which command is invoked.
-	if d.deps != nil {
-		ctx.DB = d.deps.DB
-		ctx.Humans = d.deps.Humans
-		ctx.Tracking = d.deps.Tracking
-		ctx.StateMgr = d.deps.StateMgr
-		ctx.GameData = d.deps.GameData
-		ctx.Dispatcher = d.deps.Dispatcher
-		ctx.RowText = d.deps.RowText
-		ctx.Resolver = d.deps.Resolver
-		ctx.ArgMatcher = d.deps.ArgMatcher
-		ctx.Geocoder = d.deps.Geocoder
-		ctx.StaticMap = d.deps.StaticMap
-		ctx.Weather = d.deps.Weather
-		ctx.Stats = d.deps.Stats
-		ctx.DTS = d.deps.DTS
-		ctx.Emoji = d.deps.Emoji
-		ctx.NLP = d.deps.NLPParser
-		ctx.TestProcessor = d.deps.TestProcessor
-		ctx.Registry = d.deps.Registry
-		ctx.Scanner = d.deps.Scanner
-		ctx.ReloadFunc = d.deps.ReloadFunc
-		// /summary needs the schedule store + buffer-count/dispatch
-		// callbacks. The text bot wires the same trio for !summary; nil
-		// values disable the feature gracefully (the command reacts with
-		// the usage hint instead of erroring).
-		ctx.SummarySchedules = d.deps.SummarySchedules
-		ctx.SummaryBufferCount = d.deps.SummaryBufferCount
-		ctx.SummaryDispatch = d.deps.SummaryDispatch
 	}
 
 	// Geofence + AreaLogic come from the current state snapshot. The text

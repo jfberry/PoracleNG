@@ -32,13 +32,7 @@ func Nest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, 
 	if v, ok := o["min_spawn_avg"]; ok && v.IntValue() > 0 {
 		tokens = append(tokens, fmt.Sprintf("minspawn%d", v.IntValue()))
 	}
-	appendDistance(&tokens, o["distance"])
-	if tok := emitFlag(o["clean"], "clean"); tok != "" {
-		tokens = append(tokens, tok)
-	}
-	if v, ok := o["template"]; ok && v.StringValue() != "" {
-		tokens = append(tokens, "template:"+v.StringValue())
-	}
+	appendCommonTail(&tokens, o)
 	return tokens, nil
 }
 

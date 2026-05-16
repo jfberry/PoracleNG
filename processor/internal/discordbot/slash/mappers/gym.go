@@ -38,13 +38,7 @@ func Gym(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, e
 	if v, ok := o["battle_changes"]; ok && v.BoolValue() {
 		tokens = append(tokens, "battle changes")
 	}
-	appendDistance(&tokens, o["distance"])
-	if tok := emitFlag(o["clean"], "clean"); tok != "" {
-		tokens = append(tokens, tok)
-	}
-	if v, ok := o["template"]; ok && v.StringValue() != "" {
-		tokens = append(tokens, "template:"+v.StringValue())
-	}
+	appendCommonTail(&tokens, o)
 	return tokens, nil
 }
 

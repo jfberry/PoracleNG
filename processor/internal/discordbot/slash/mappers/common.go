@@ -105,6 +105,29 @@ func emitFlag(opt *discordgo.ApplicationCommandInteractionDataOption, keyword st
 	return ""
 }
 
+// appendCommonTail emits the distance / clean / template tokens that every
+// tracking-style mapper accepts as its tail. Equivalent to the inline block
+//
+//	appendDistance(&tokens, o["distance"])
+//	if tok := emitFlag(o["clean"], "clean"); tok != "" {
+//	    tokens = append(tokens, tok)
+//	}
+//	if v, ok := o["template"]; ok && v.StringValue() != "" {
+//	    tokens = append(tokens, "template:"+v.StringValue())
+//	}
+//
+// Mappers with extra interleaved options (e.g. /quest's `summary` between
+// `clean` and `template`) emit those inline rather than using this helper.
+func appendCommonTail(tokens *[]string, o map[string]*discordgo.ApplicationCommandInteractionDataOption) {
+	appendDistance(tokens, o["distance"])
+	if tok := emitFlag(o["clean"], "clean"); tok != "" {
+		*tokens = append(*tokens, tok)
+	}
+	if v, ok := o["template"]; ok && v.StringValue() != "" {
+		*tokens = append(*tokens, "template:"+v.StringValue())
+	}
+}
+
 // fortTypeName maps the /fort fort_type choice integer to the canonical
 // English fort-type keyword expected by the text bot. Values are aligned
 // with the strings the bot's arg matcher accepts (`pokestop` / `gym`).
