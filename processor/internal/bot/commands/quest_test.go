@@ -324,18 +324,61 @@ func TestQuest_AmountRejectedOnPokemonReward(t *testing.T) {
 	assert.Empty(t, rows, "rejected combo should not persist")
 }
 
-// Stardust stores its minimum in Reward (via the stardust:N grammar);
-// amount:N is therefore both redundant and misleading on a stardust
-// quest. Reject so the user fixes their command instead of silently
-// having the amount go nowhere.
-func TestQuest_AmountRejectedOnStardust(t *testing.T) {
+// Explicit stardust:N + amount:N — the explicit form wins (stardust:N
+// is unambiguous about which column to fill). The bot accepts the
+// combo and the resulting row stores 1000 in Reward (stardust min).
+func TestQuest_StardustExplicitTakesPrecedenceOverAmount(t *testing.T) {
 	ctx := questCtx(t)
 	replies := runQuest(t, ctx, "stardust:1000 amount:5")
 	require.NotEmpty(t, replies)
-	assert.Equal(t, "🙅", replies[0].React, "should reject amount:N on stardust, reply: %s", replies[0].Text)
+	assert.Equal(t, "✅", replies[0].React, "should accept stardust:N + amount:N, reply: %s", replies[0].Text)
 
 	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
-	assert.Empty(t, rows)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 3, rows[0].RewardType, "stardust reward type")
+	assert.Equal(t, 1000, rows[0].Reward, "stardust:N populates Reward")
+	assert.Equal(t, 0, rows[0].Amount, "amount:N is ignored when stardust:N is explicit")
+}
+
+// Bare "stardust" + amount:N — the amount routes into the Reward
+// column (stardust's own min slot). Equivalent to `stardust:N` but
+// reads more naturally to users who think of "amount" as the threshold.
+func TestQuest_BareStardustWithAmountRoutesToReward(t *testing.T) {
+	ctx := questCtx(t)
+	replies := runQuest(t, ctx, "stardust amount:500")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "should accept bare stardust + amount:N, reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 3, rows[0].RewardType)
+	assert.Equal(t, 500, rows[0].Reward, "amount:N populates Reward for bare stardust")
+	assert.Equal(t, 0, rows[0].Amount, "Amount column unused for stardust")
+}
+
+// `everything` + amount:N applies the amount per-row where supported:
+// pokemon ignores it, stardust routes into Reward, candy/mega/item
+// store it in Amount.
+func TestQuest_EverythingWithAmountRoutesPerRewardType(t *testing.T) {
+	ctx := questCtx(t)
+	replies := runQuest(t, ctx, "everything amount:25")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "should accept everything + amount:N, reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 5, "everything inserts one row per reward type")
+
+	byType := map[int]db.QuestTrackingAPI{}
+	for _, r := range rows {
+		byType[r.RewardType] = r
+	}
+	assert.Equal(t, 0, byType[7].Amount, "pokemon: no amount")
+	assert.Equal(t, 0, byType[7].Reward, "pokemon: no reward filter")
+	assert.Equal(t, 25, byType[3].Reward, "stardust: amount routes into Reward")
+	assert.Equal(t, 0, byType[3].Amount, "stardust: Amount unused")
+	assert.Equal(t, 25, byType[12].Amount, "mega energy: amount → Amount")
+	assert.Equal(t, 25, byType[4].Amount, "candy: amount → Amount")
+	assert.Equal(t, 25, byType[2].Amount, "item: amount → Amount")
 }
 
 // TestQuest_RemoveWithoutSummary_RemovesBoth confirms back-compat: a
