@@ -46,8 +46,8 @@ func Track(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 
 	appendDistance(&tokens, o["distance"])
 
-	if v, ok := o["clean"]; ok && v.BoolValue() {
-		tokens = append(tokens, "clean")
+	if tok := emitFlag(o["clean"], "clean"); tok != "" {
+		tokens = append(tokens, tok)
 	}
 
 	if v, ok := o["template"]; ok && v.StringValue() != "" {

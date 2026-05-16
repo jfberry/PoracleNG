@@ -104,6 +104,13 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 		ctx.Registry = d.deps.Registry
 		ctx.Scanner = d.deps.Scanner
 		ctx.ReloadFunc = d.deps.ReloadFunc
+		// /summary needs the schedule store + buffer-count/dispatch
+		// callbacks. The text bot wires the same trio for !summary; nil
+		// values disable the feature gracefully (the command reacts with
+		// the usage hint instead of erroring).
+		ctx.SummarySchedules = d.deps.SummarySchedules
+		ctx.SummaryBufferCount = d.deps.SummaryBufferCount
+		ctx.SummaryDispatch = d.deps.SummaryDispatch
 	}
 
 	// Geofence + AreaLogic come from the current state snapshot. The text

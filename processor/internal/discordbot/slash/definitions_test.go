@@ -69,6 +69,8 @@ func testBundle(t *testing.T, opts ...bundleOpt) *i18n.Bundle {
 			"slash.desc.profile":   "Manage your profiles",
 			"slash.cmd.location":   "location",
 			"slash.desc.location":  "Set your location",
+			"slash.cmd.summary":    "summary",
+			"slash.desc.summary":   "Manage scheduled summary digests (e.g. quest)",
 		},
 	}
 	for _, opt := range opts {
@@ -528,6 +530,25 @@ func TestSnapshotLocation(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	want, err := os.ReadFile("testdata/location.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotSummary(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.summary", "summary")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.summary")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/summary.json")
 	if err != nil {
 		t.Fatalf("read testdata: %v", err)
 	}

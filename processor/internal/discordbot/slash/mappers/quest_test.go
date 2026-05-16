@@ -155,6 +155,43 @@ func TestQuestMapperMinAmountZeroOmitted(t *testing.T) {
 	}
 }
 
+// /quest summary token mirrors the text bot's arg.summary keyword: when
+// set, matching quests are buffered for scheduled batch delivery instead
+// of alerting immediately. emitFlag accepts either a non-empty String
+// value (the single-choice "Yes" path) or a Boolean true (legacy/parity
+// fixtures), so both shapes route to the same `summary` token here.
+func TestQuestMapperSummaryString(t *testing.T) {
+	tokens, _ := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "pikachu"),
+		sopt("summary", "yes"),
+	})
+	want := []string{"pikachu", "summary"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
+func TestQuestMapperSummaryBool(t *testing.T) {
+	tokens, _ := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "pikachu"),
+		bopt("summary", true),
+	})
+	want := []string{"pikachu", "summary"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
+func TestQuestMapperSummaryEmpty(t *testing.T) {
+	tokens, _ := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "pikachu"),
+		sopt("summary", ""),
+	})
+	if !reflect.DeepEqual(tokens, []string{"pikachu"}) {
+		t.Errorf("tokens=%v", tokens)
+	}
+}
+
 func TestLookupQuest(t *testing.T) {
 	if Lookup("quest") == nil {
 		t.Fatal("nil mapper for /quest")
