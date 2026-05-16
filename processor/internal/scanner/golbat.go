@@ -19,7 +19,13 @@ type GolbatScanner struct {
 }
 
 // NewGolbat creates a new GolbatScanner with the given DSN.
-func NewGolbat(dsn string) (*GolbatScanner, error) {
+//
+// Returns the Scanner interface (not *GolbatScanner) so the error
+// path `return nil, err` yields a true nil interface for the caller.
+// Returning the concrete type would assign a typed-nil into the
+// caller's interface variable, which compares != nil and panics on
+// the first method call (nil receiver derefs s.db).
+func NewGolbat(dsn string) (Scanner, error) {
 	db, err := sqlx.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("scanner: open golbat db: %w", err)
