@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
@@ -35,7 +36,7 @@ func pokemonTestDeps(t *testing.T) *bot.BotDeps {
 			{ID: 25, Form: 0}: {PokemonID: 25},
 		},
 	}
-	return &bot.BotDeps{Translations: bundle, GameData: gd}
+	return &bot.BotDeps{Translations: bundle, GameData: gd, Cfg: &config.Config{}}
 }
 
 func TestPokemon_ExactMatchFirst(t *testing.T) {
@@ -70,7 +71,9 @@ func TestPokemon_PrefixMatch(t *testing.T) {
 func TestPokemon_EmptyFocusedReturnsAlphabeticalTop(t *testing.T) {
 	// When the user has clicked the field but typed nothing, return entries
 	// sorted alphabetically by label so Discord shows a non-empty dropdown.
-	// Capped at 25 by the function itself.
+	// Capped at 25 by the function itself. "Everything" is prepended as a
+	// head entry when EverythingFlagPermissions is not "deny"; the rest
+	// remain alphabetical.
 	deps := pokemonTestDeps(t)
 	out := Pokemon(context.Background(), deps, "", "en")
 	if len(out) == 0 {
@@ -79,10 +82,41 @@ func TestPokemon_EmptyFocusedReturnsAlphabeticalTop(t *testing.T) {
 	if len(out) > 25 {
 		t.Errorf("expected ≤25 entries, got %d", len(out))
 	}
-	for i := 1; i < len(out); i++ {
+	start := 0
+	if out[0].Name == "Everything" {
+		start = 1 // head, not part of the alphabetical body
+	}
+	for i := start + 1; i < len(out); i++ {
 		if out[i-1].Name > out[i].Name {
 			t.Errorf("results not alphabetical at index %d: %q > %q", i, out[i-1].Name, out[i].Name)
 		}
+	}
+}
+
+func TestPokemon_EverythingSuppressedByDenyPolicy(t *testing.T) {
+	deps := pokemonTestDeps(t)
+	deps.Cfg.Tracking.EverythingFlagPermissions = "deny"
+	out := Pokemon(context.Background(), deps, "", "en")
+	for _, c := range out {
+		if c.Name == "Everything" {
+			t.Errorf("'Everything' entry leaked through deny policy")
+		}
+	}
+}
+
+func TestPokemon_EverythingPrefixMatch(t *testing.T) {
+	// Typing "ever" should keep Everything in the list (prefix match).
+	deps := pokemonTestDeps(t)
+	out := Pokemon(context.Background(), deps, "ever", "en")
+	found := false
+	for _, c := range out {
+		if c.Name == "Everything" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'Everything' to appear for prefix 'ever', got %+v", out)
 	}
 }
 

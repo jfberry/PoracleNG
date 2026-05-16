@@ -325,8 +325,41 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 		return d.userstateAutocomplete(ic, "areas", "", focused)
 	case opt == "name" && cmd == "profile":
 		return d.userstateAutocomplete(ic, "profiles", "", focused)
+	// /quest reward-type options. Item is its own translated lookup;
+	// candy and mega_energy are pokemon-keyed (the reward IS for a
+	// specific species), so they reuse the pokemon autocomplete.
+	case opt == "item" && cmd == "quest":
+		return autocomplete.Item(context.Background(), d.deps, focused, userLang)
+	case (opt == "candy" || opt == "mega_energy") && cmd == "quest":
+		return autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
+	// /track form cascades from the user's currently-selected pokemon
+	// option in the same interaction.
+	case opt == "form" && cmd == "track":
+		pokemonValue := siblingOptionString(ic, "pokemon")
+		return autocomplete.Form(context.Background(), d.deps, pokemonValue, focused, userLang)
 	}
 	return nil
+}
+
+// siblingOptionString returns the StringValue of the given top-level
+// option name on the interaction's command data, or "" if the option is
+// absent or not string-typed. Cascading autocompletes (e.g. /track form
+// reading the chosen pokemon) use this to read peers without rebuilding
+// the parser.
+func siblingOptionString(ic *discordgo.InteractionCreate, name string) string {
+	if ic == nil {
+		return ""
+	}
+	for _, o := range ic.ApplicationCommandData().Options {
+		if o == nil || o.Name != name {
+			continue
+		}
+		if o.Type != discordgo.ApplicationCommandOptionString {
+			return ""
+		}
+		return o.StringValue()
+	}
+	return ""
 }
 
 // userstateAutocomplete looks up a lister by name and runs it with the
