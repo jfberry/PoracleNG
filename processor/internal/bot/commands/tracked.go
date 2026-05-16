@@ -361,10 +361,17 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		sb.WriteByte('\n')
 	}
 
-	// Hint about id-based removal
+	// Hint about id-based removal. The text-bot grammar (!untrack id:N /
+	// !raid remove id:M) doesn't map cleanly to slash — there is no bare
+	// /untrack id:N, the slash surface uses /untrack <type> with an
+	// autocomplete pick. Emit a surface-appropriate hint.
 	if hasAnyRules {
-		prefix := bot.CommandPrefix(ctx)
-		sb.WriteString("\n" + tr.Tf("tracking.id_hint", prefix, prefix))
+		if ctx.IsSlash {
+			sb.WriteString("\n" + tr.T("tracking.id_hint_slash"))
+		} else {
+			prefix := bot.CommandPrefix(ctx)
+			sb.WriteString("\n" + tr.Tf("tracking.id_hint", prefix, prefix))
+		}
 	}
 
 	// Summary warnings at the end

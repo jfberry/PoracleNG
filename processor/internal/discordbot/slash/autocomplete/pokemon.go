@@ -18,13 +18,12 @@ import (
 // English lowercase name so downstream parsers see a stable input
 // regardless of userLang.
 //
-// Returns nil for empty focused — the caller (dispatcher) is responsible
-// for boosting RecentActivity entries when nothing has been typed yet.
+// When focused is empty (the user clicked the field but hasn't typed yet),
+// returns the first 25 entries sorted alphabetically by label so Discord
+// has something to show — otherwise the dropdown would be empty and the
+// command feels broken.
 func Pokemon(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*discordgo.ApplicationCommandOptionChoice {
 	focused = strings.ToLower(strings.TrimSpace(focused))
-	if focused == "" {
-		return nil
-	}
 	if deps == nil || deps.GameData == nil || deps.Translations == nil {
 		return nil
 	}
