@@ -60,6 +60,24 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			rewards = append(rewards, parseQuestReward(r))
 		}
 
+		// Record reward entities for slash autocomplete recency.
+		if ps.recentActivity != nil {
+			for _, r := range rewards {
+				switch r.Type {
+				case 7: // pokemon
+					ps.recentActivity.RecordQuestPokemon(r.PokemonID)
+				case 2: // item
+					ps.recentActivity.RecordQuestItem(r.ItemID)
+				case 4: // candy
+					ps.recentActivity.RecordQuestCandy(r.PokemonID)
+				case 12: // mega energy
+					ps.recentActivity.RecordQuestMega(r.PokemonID)
+				}
+				// case 3 (stardust) has no per-entity ID to record.
+				// XL candy (when supported) would be recorded via RecordQuestXL.
+			}
+		}
+
 		data := &matching.QuestData{
 			PokestopID: quest.PokestopID,
 			Latitude:   quest.Latitude,
