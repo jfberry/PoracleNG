@@ -65,6 +65,11 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			gruntTypeID = inv.GruntType
 		}
 
+		// Record the grunt for slash autocomplete recency.
+		if ps.recentActivity != nil {
+			ps.recentActivity.RecordInvasionGrunt(gruntTypeID)
+		}
+
 		// Resolve type name for matching against tracking rules.
 		// The !invasion command stores the English type name lowercased (e.g. "electric")
 		// or event name (e.g. "kecleon"). Two O(1) map lookups — fine for invasion volume.

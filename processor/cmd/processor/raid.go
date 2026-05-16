@@ -58,6 +58,11 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			return
 		}
 
+		// Record the boss for slash autocomplete recency (no-op when ID is 0/egg).
+		if ps.recentActivity != nil {
+			ps.recentActivity.RecordRaidBoss(raid.PokemonID)
+		}
+
 		// ignore_long_raids: skip raids/eggs with > 47 minutes remaining
 		if ps.cfg.General.IgnoreLongRaids {
 			tthSeconds := raid.End - time.Now().Unix()

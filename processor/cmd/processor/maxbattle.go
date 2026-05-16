@@ -47,6 +47,11 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 			return
 		}
 
+		// Record the boss for slash autocomplete recency.
+		if ps.recentActivity != nil {
+			ps.recentActivity.RecordMaxBattleBoss(mb.BattlePokemonID)
+		}
+
 		// Derive gmax from bread_mode (2=Gigantamax). Fall back to the
 		// battle-level heuristic when bread_mode is absent.
 		gmax := 0
