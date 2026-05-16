@@ -48,9 +48,16 @@ func TestGrunt_EmptyFocusedReturnsAllCategories(t *testing.T) {
 	for _, c := range out {
 		names[c.Name] = true
 	}
-	for _, want := range []string{"Everything", "Giovanni", "Fire Grunt", "Water Grunt", "Kecleon", "Showcase"} {
+	for _, want := range []string{"Everything", "Giovanni", "Fire Grunt", "Water Grunt"} {
 		if !names[want] {
 			t.Errorf("missing expected entry %q in %+v", want, names)
+		}
+	}
+	// Incidents live on /incident now; /invasion grunt_type must NOT
+	// surface them.
+	for _, incident := range []string{"Kecleon", "Showcase"} {
+		if names[incident] {
+			t.Errorf("incident %q leaked into /invasion grunt_type — should be on /incident only", incident)
 		}
 	}
 }
@@ -83,13 +90,12 @@ func TestGrunt_TypeNameValueIsCanonical(t *testing.T) {
 	}
 }
 
-// Bosses come before typed grunts come before incidents. Verifies the
-// sort-by-group ordering so the dropdown reads top-down with the most
-// salient categories first.
+// Bosses come before typed grunts. Verifies the sort-by-group ordering
+// so the dropdown surfaces the most-salient categories first.
 func TestGrunt_CategoryOrdering(t *testing.T) {
 	deps := gruntTestDeps(t)
 	out := Grunt(context.Background(), deps, "", "en")
-	var firstBoss, firstType, firstIncident int = -1, -1, -1
+	firstBoss, firstType := -1, -1
 	for i, c := range out {
 		switch c.Name {
 		case "Giovanni":
@@ -100,17 +106,49 @@ func TestGrunt_CategoryOrdering(t *testing.T) {
 			if firstType == -1 {
 				firstType = i
 			}
-		case "Kecleon", "Showcase":
-			if firstIncident == -1 {
-				firstIncident = i
-			}
 		}
 	}
-	if firstBoss == -1 || firstType == -1 || firstIncident == -1 {
-		t.Fatalf("missing category samples: boss=%d type=%d incident=%d", firstBoss, firstType, firstIncident)
+	if firstBoss == -1 || firstType == -1 {
+		t.Fatalf("missing category samples: boss=%d type=%d", firstBoss, firstType)
 	}
-	if !(firstBoss < firstType && firstType < firstIncident) {
-		t.Errorf("category ordering wrong: boss=%d type=%d incident=%d (want boss<type<incident)", firstBoss, firstType, firstIncident)
+	if firstBoss >= firstType {
+		t.Errorf("category ordering wrong: boss=%d type=%d (want boss<type)", firstBoss, firstType)
+	}
+}
+
+func TestIncidentType_ListsPokestopEvents(t *testing.T) {
+	deps := gruntTestDeps(t)
+	out := IncidentType(context.Background(), deps, "", "en")
+	if len(out) != 2 {
+		t.Fatalf("expected 2 incident choices, got %d (%+v)", len(out), out)
+	}
+	names := map[string]bool{}
+	for _, c := range out {
+		names[c.Name] = true
+	}
+	if !names["Kecleon"] || !names["Showcase"] {
+		t.Errorf("expected Kecleon + Showcase, got %+v", names)
+	}
+}
+
+func TestIncidentType_SubstringFilter(t *testing.T) {
+	deps := gruntTestDeps(t)
+	out := IncidentType(context.Background(), deps, "kec", "en")
+	if len(out) != 1 || out[0].Name != "Kecleon" {
+		t.Errorf("expected only Kecleon for 'kec', got %+v", out)
+	}
+	if v, _ := out[0].Value.(string); v != "kecleon" {
+		t.Errorf("value=%q, want 'kecleon'", v)
+	}
+}
+
+func TestIncidentType_NilUtilReturnsNil(t *testing.T) {
+	deps := &bot.BotDeps{
+		Translations: i18n.NewBundle(),
+		GameData:     &gamedata.GameData{},
+	}
+	if out := IncidentType(context.Background(), deps, "", "en"); out != nil {
+		t.Errorf("expected nil for missing Util, got %+v", out)
 	}
 }
 

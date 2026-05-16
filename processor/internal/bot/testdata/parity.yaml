@@ -290,6 +290,33 @@
   expected_tokens: [water, female, d1000, clean, "template:short"]
 
 # -----------------------------------------------------------------------------
+# /incident — pokestop events (Kecleon, Gold Pokestop, Showcase…). Routes
+# through cmd.invasion via the cmd.incident alias on the registry.
+# -----------------------------------------------------------------------------
+- name: incident-type-only
+  description: /incident minimum (type only)
+  command: cmd.incident
+  slash:
+    name: incident
+    options:
+      type: kecleon
+  text: "!incident kecleon"
+  expected_tokens: [kecleon]
+
+- name: incident-all-options
+  description: /incident with distance/clean/template
+  command: cmd.incident
+  slash:
+    name: incident
+    options:
+      type: showcase
+      distance: 250
+      clean: true
+      template: short
+  text: "!incident showcase d250 clean template:short"
+  expected_tokens: [showcase, d250, clean, "template:short"]
+
+# -----------------------------------------------------------------------------
 # /lure
 # -----------------------------------------------------------------------------
 - name: lure-glacial

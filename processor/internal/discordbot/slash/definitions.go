@@ -175,6 +175,8 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 		return buildDefinition(bundle, key, canon, questOptions())
 	case "cmd.invasion":
 		return buildDefinition(bundle, key, canon, invasionOptions())
+	case "cmd.incident":
+		return buildDefinition(bundle, key, canon, incidentOptions())
 	case "cmd.lure":
 		return buildDefinition(bundle, key, canon, lureOptions())
 	case "cmd.nest":
@@ -708,6 +710,42 @@ func invasionOptions() []*discordgo.ApplicationCommandOption {
 	}
 }
 
+// incidentOptions builds the slash option list for /incident — the
+// pokestop-event surface (Kecleon, Gold Pokestop, Showcase, Pokestop
+// Spawn …) split out of /invasion grunt_type. Routes through the same
+// cmd.invasion handler because cmd.incident is just an alias on the
+// text-bot side; both write the same gruntType DB column.
+func incidentOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "type",
+			Description:  "Pokestop incident type (Kecleon, Gold Pokestop, Showcase…)",
+			Required:     true,
+			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the incident expires",
+			Choices: []*discordgo.ApplicationCommandOptionChoice{
+				{Name: "Yes", Value: "yes"},
+			},
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
 // lureOptions builds the slash option list for /lure. lure_type is required.
 func lureOptions() []*discordgo.ApplicationCommandOption {
 	return []*discordgo.ApplicationCommandOption{
@@ -1016,6 +1054,7 @@ func allCommandKeys() []string {
 		"cmd.tracked", "cmd.help", "cmd.info", "cmd.language",
 		// Phase 4
 		"cmd.track", "cmd.raid", "cmd.egg", "cmd.quest", "cmd.invasion",
+		"cmd.incident",
 		"cmd.lure", "cmd.nest", "cmd.maxbattle", "cmd.gym", "cmd.fort",
 		"cmd.untrack",
 		// Phase 5
