@@ -44,15 +44,7 @@ func Track(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 		}
 	}
 
-	appendDistance(&tokens, o["distance"])
-
-	if tok := emitFlag(o["clean"], "clean"); tok != "" {
-		tokens = append(tokens, tok)
-	}
-
-	if v, ok := o["template"]; ok && v.StringValue() != "" {
-		tokens = append(tokens, "template:"+v.StringValue())
-	}
+	appendCommonTail(&tokens, o)
 
 	if v, ok := o["form"]; ok && v.StringValue() != "" {
 		tokens = append(tokens, "form:"+v.StringValue())
