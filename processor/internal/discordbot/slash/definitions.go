@@ -518,12 +518,9 @@ func questOptions() []*discordgo.ApplicationCommandOption {
 			Description:  "Mega energy reward pokemon",
 			Autocomplete: true,
 		},
-		{
-			Type:         discordgo.ApplicationCommandOptionString,
-			Name:         "xl_candy",
-			Description:  "XL candy reward pokemon",
-			Autocomplete: true,
-		},
+		// xl_candy intentionally omitted — matching/quest.go and
+		// enrichment/quest.go handle reward types 2/3/4/7/12 only; XL
+		// candy isn't wired anywhere so the option would never fire.
 		{
 			Type:        discordgo.ApplicationCommandOptionInteger,
 			Name:        "min_amount",

@@ -59,7 +59,11 @@ func TestQuestMapperItem(t *testing.T) {
 	tokens, _ := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
 		sopt("item", "Golden Razz Berry"),
 	})
-	want := []string{"item:Golden Razz Berry"}
+	// Bare name (lowercased), no "item:" prefix — matchItemName resolves
+	// translated item names from Unrecognized args and lowercases before
+	// comparison, so passing it lowercased keeps the matcher happy
+	// without forcing it to do the casing.
+	want := []string{"golden razz berry"}
 	if !reflect.DeepEqual(tokens, want) {
 		t.Errorf("tokens=%v want %v", tokens, want)
 	}
@@ -92,12 +96,24 @@ func TestQuestMapperMegaEnergy(t *testing.T) {
 	}
 }
 
-func TestQuestMapperXLCandy(t *testing.T) {
-	tokens, _ := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+// xl_candy was removed from the /quest option list because the bot has
+// no reward-type matcher for it. A flag-of-incompletion test confirms the
+// reward-set guard rejects an XL-candy-like value if anyone reintroduces
+// it without wiring the matcher first.
+func TestQuestMapperRejectsRemovedXLCandy(t *testing.T) {
+	// Set xl_candy via an unknown option — flattenOptions accepts any
+	// name, but the mutual-exclusion guard's allow-list no longer
+	// contains it, so an "xl_candy"-only invocation should report
+	// no-reward.
+	_, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
 		sopt("xl_candy", "pikachu"),
 	})
-	if !reflect.DeepEqual(tokens, []string{"xlcandy:pikachu"}) {
-		t.Errorf("tokens=%v", tokens)
+	me, ok := err.(*MapperError)
+	if !ok {
+		t.Fatalf("expected MapperError for xl_candy-only invocation, got %T", err)
+	}
+	if me.Key != "error.slash.quest.no_reward" {
+		t.Errorf("key=%q, want error.slash.quest.no_reward", me.Key)
 	}
 }
 

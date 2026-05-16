@@ -21,11 +21,27 @@ import (
 // When focused is empty (the user clicked the field but hasn't typed yet),
 // returns the first 25 entries sorted alphabetically by label so Discord
 // has something to show — otherwise the dropdown would be empty and the
-// command feels broken.
+// command feels broken. The synthetic "Everything" entry is prepended
+// (case-insensitive prefix-match against focused) when
+// cfg.Tracking.EverythingFlagPermissions is not "deny" — surfacing the
+// keyword the text bot recognises for "track all pokemon".
 func Pokemon(ctx context.Context, deps *bot.BotDeps, focused, userLang string) []*discordgo.ApplicationCommandOptionChoice {
 	focused = strings.ToLower(strings.TrimSpace(focused))
 	if deps == nil || deps.GameData == nil || deps.Translations == nil {
 		return nil
+	}
+
+	// Synthetic "everything" entry — keep it first so users see it without
+	// scrolling. Cfg may be nil in tests; treat missing config as "allow"
+	// because the gate is operator-applied, not user-applied.
+	var head []*discordgo.ApplicationCommandOptionChoice
+	if everythingAllowed(deps) {
+		if focused == "" || strings.HasPrefix("everything", focused) {
+			head = append(head, &discordgo.ApplicationCommandOptionChoice{
+				Name:  "Everything",
+				Value: "everything",
+			})
+		}
 	}
 
 	enTr := deps.Translations.For("en")
@@ -74,15 +90,31 @@ func Pokemon(ctx context.Context, deps *bot.BotDeps, focused, userLang string) [
 		}
 		return results[i].label < results[j].label
 	})
-	if len(results) > 25 {
-		results = results[:25]
+
+	// Trim so head + results fits under Discord's 25-choice cap.
+	cap := 25 - len(head)
+	if len(results) > cap {
+		results = results[:cap]
 	}
 
-	out := make([]*discordgo.ApplicationCommandOptionChoice, len(results))
-	for i, r := range results {
-		out[i] = &discordgo.ApplicationCommandOptionChoice{Name: r.label, Value: r.canonical}
+	out := make([]*discordgo.ApplicationCommandOptionChoice, 0, len(head)+len(results))
+	out = append(out, head...)
+	for _, r := range results {
+		out = append(out, &discordgo.ApplicationCommandOptionChoice{Name: r.label, Value: r.canonical})
 	}
 	return out
+}
+
+// everythingAllowed reports whether the "Everything" entry should surface
+// for the invoking user. Mirrors the text bot's gate at
+// commands/track.go:272 — operator config opts in/out. Treats a nil cfg
+// as "allow" so tests with bare deps don't have to wire the full config.
+func everythingAllowed(deps *bot.BotDeps) bool {
+	if deps == nil || deps.Cfg == nil {
+		return true
+	}
+	mode := strings.ToLower(deps.Cfg.Tracking.EverythingFlagPermissions)
+	return mode != "deny"
 }
 
 // scorePokemon ranks a pokemon entry against the user's input.
