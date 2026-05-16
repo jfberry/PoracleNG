@@ -16,7 +16,10 @@ import (
 //	stardust    (int)                  — minimum stardust amount
 //	candy       (string, autocomplete) — candy reward pokemon
 //	mega_energy (string, autocomplete) — mega energy reward pokemon
-//	(min_amount removed — see definitions.go comment)
+//	min_amount  (int)                  — minimum reward amount; only valid for
+//	                                     item / candy / mega_energy rewards
+//	                                     (pokemon has no amount, stardust uses
+//	                                     its dedicated option)
 //	distance    (int)                  — alert radius in metres
 //	clean       (bool)                  — auto-delete on expiry
 //	template    (string, autocomplete) — DTS template name
@@ -50,6 +53,20 @@ func Quest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 		return nil, &MapperError{Key: "error.slash.quest.exactly_one_reward", Args: []any{strings.Join(set, ", ")}}
 	}
 
+	// min_amount only applies to amount-bearing reward types. Pokemon (7)
+	// has no amount and stardust (3) uses its dedicated option (which
+	// also stores its threshold in Reward, not Amount). Reject the
+	// invalid combination here so the user sees the error in the
+	// slash-response edit rather than as an opaque text-bot rejection.
+	var minAmount int64
+	if v, ok := o["min_amount"]; ok && v.IntValue() > 0 {
+		switch set[0] {
+		case "pokemon", "stardust":
+			return nil, &MapperError{Key: "error.slash.quest.amount_not_applicable"}
+		}
+		minAmount = v.IntValue()
+	}
+
 	tokens := []string{}
 	switch set[0] {
 	case "pokemon":
@@ -65,6 +82,10 @@ func Quest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 		tokens = append(tokens, "candy:"+o["candy"].StringValue())
 	case "mega_energy":
 		tokens = append(tokens, "energy:"+o["mega_energy"].StringValue())
+	}
+
+	if minAmount > 0 {
+		tokens = append(tokens, fmt.Sprintf("amount:%d", minAmount))
 	}
 
 	appendDistance(&tokens, o["distance"])

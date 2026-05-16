@@ -73,6 +73,7 @@ var questParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.stardust"}, // stardust:1000 (min amount)
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.energy"},   // energy:charizard (pokemon)
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.candy"},    // candy:pikachu (pokemon)
+	{Type: bot.ParamPrefixString, Key: "arg.prefix.amount"},   // amount:N (min amount for item/candy/mega_energy quests)
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -128,11 +129,28 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Also supports bare keywords: energy, candy, stardust (+ separate pokemon name)
 	var insert []db.QuestTrackingAPI
 
+	// amount:N — minimum-amount filter for reward types that support it
+	// (item=2, candy=4, mega_energy=12). The matcher in
+	// internal/matching/quest.go already honours q.Amount for those types;
+	// pokemon (7) has no amount semantics and stardust (3) stores its
+	// minimum in Reward, so amount:N for those is a user error.
+	amountStr, amountSet := parsed.Strings["amount"]
+	amountVal := 0
+	if amountSet {
+		amountVal = questParseInt(amountStr)
+	}
+
 	if stardustVal, ok := parsed.Strings["stardust"]; ok {
+		if amountSet {
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.amount_not_applicable")}}
+		}
 		// stardust:1000 — minimum amount stored in Reward field (matching alerter)
 		amount := questParseInt(stardustVal)
 		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, amount, 0, 0))
 	} else if parsed.HasKeyword("arg.stardust") {
+		if amountSet {
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.amount_not_applicable")}}
+		}
 		// bare "stardust" — any amount
 		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 3, 0, 0, 0))
 	} else if energyVal, ok := parsed.Strings["energy"]; ok {
@@ -140,40 +158,46 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		resolved := ctx.Resolver.Resolve(energyVal, ctx.Language)
 		if len(resolved) > 0 {
 			for _, mon := range resolved {
-				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
+				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, mon.PokemonID, mon.Form, amountVal))
 			}
 		} else {
-			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, 0))
+			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, amountVal))
 		}
 	} else if parsed.HasKeyword("arg.energy") {
 		// bare "energy" — check for pokemon in args
 		if len(parsed.Pokemon) > 0 {
 			for _, mon := range parsed.Pokemon {
-				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, mon.PokemonID, mon.Form, 0))
+				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, mon.PokemonID, mon.Form, amountVal))
 			}
 		} else {
-			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, 0))
+			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 12, 0, 0, amountVal))
 		}
 	} else if candyVal, ok := parsed.Strings["candy"]; ok {
 		// candy:pikachu — resolve pokemon name
 		resolved := ctx.Resolver.Resolve(candyVal, ctx.Language)
 		if len(resolved) > 0 {
 			for _, mon := range resolved {
-				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
+				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, mon.PokemonID, mon.Form, amountVal))
 			}
 		} else {
-			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, 0))
+			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, amountVal))
 		}
 	} else if parsed.HasKeyword("arg.candy") {
 		// bare "candy" — check for pokemon in args
 		if len(parsed.Pokemon) > 0 {
 			for _, mon := range parsed.Pokemon {
-				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, mon.PokemonID, mon.Form, 0))
+				insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, mon.PokemonID, mon.Form, amountVal))
 			}
 		} else {
-			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, 0))
+			insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 4, 0, 0, amountVal))
 		}
 	} else if parsed.HasKeyword("arg.everything") {
+		if amountSet {
+			// "everything" spans pokemon + stardust rules where Amount
+			// has no defined meaning — reject up-front rather than
+			// silently dropping the filter on those rows.
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.amount_not_applicable")}}
+		}
 		// Everything: track all quest reward types (matching alerter behavior)
 		// Pokemon quests
 		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 7, 0, 0, 0))
@@ -186,6 +210,9 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// Item quests
 		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 2, 0, 0, 0))
 	} else if len(parsed.Pokemon) > 0 {
+		if amountSet {
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.amount_not_applicable")}}
+		}
 		// Pokemon quest tracking (reward_type = 7)
 		monsterList, formReply := c.resolveMonsters(ctx, parsed)
 		if formReply != nil {
@@ -210,7 +237,7 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// Item quest tracking (reward_type = 2)
 		// Consume matched item tokens from Unrecognized
 		parsed.Unrecognized = nil
-		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 2, itemID, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, shiny, pings, 2, itemID, 0, amountVal))
 	} else {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_quest_type")}}
 	}
