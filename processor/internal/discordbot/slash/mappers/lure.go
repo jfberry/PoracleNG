@@ -29,8 +29,8 @@ func Lure(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, 
 
 	tokens := []string{lure}
 	appendDistance(&tokens, o["distance"])
-	if v, ok := o["clean"]; ok && v.BoolValue() {
-		tokens = append(tokens, "clean")
+	if tok := emitFlag(o["clean"], "clean"); tok != "" {
+		tokens = append(tokens, tok)
 	}
 	if v, ok := o["template"]; ok && v.StringValue() != "" {
 		tokens = append(tokens, "template:"+v.StringValue())

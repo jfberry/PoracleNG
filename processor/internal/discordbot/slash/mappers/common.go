@@ -76,6 +76,35 @@ func hasNonZeroValue(opt *discordgo.ApplicationCommandInteractionDataOption) boo
 	return false
 }
 
+// emitFlag returns keyword when opt represents an "on" value, otherwise "".
+//
+// Supports two option shapes so a mapper can switch the underlying option
+// type (Boolean ↔ String-with-single-Choice) without changing call sites:
+//
+//   - ApplicationCommandOptionString: non-empty StringValue → on. This is
+//     the single-click "Yes" pattern (`{Choices: [{Name: "Yes", Value: "yes"}]}`),
+//     where picking the option auto-fills the only choice.
+//   - ApplicationCommandOptionBoolean: BoolValue() == true → on. Legacy
+//     two-click pattern, retained so a future revert is one definition flip.
+//
+// Other types (Integer, etc.) return "" — emitFlag is intentionally narrow.
+func emitFlag(opt *discordgo.ApplicationCommandInteractionDataOption, keyword string) string {
+	if opt == nil {
+		return ""
+	}
+	switch opt.Type {
+	case discordgo.ApplicationCommandOptionString:
+		if opt.StringValue() != "" {
+			return keyword
+		}
+	case discordgo.ApplicationCommandOptionBoolean:
+		if opt.BoolValue() {
+			return keyword
+		}
+	}
+	return ""
+}
+
 // fortTypeName maps the /fort fort_type choice integer to the canonical
 // English fort-type keyword expected by the text bot. Values are aligned
 // with the strings the bot's arg matcher accepts (`pokestop` / `gym`).

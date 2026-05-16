@@ -1,0 +1,68 @@
+{
+  "name": "summary",
+  "description": "Manage scheduled summary digests (e.g. quest)",
+  "options": [
+    {
+      "type": 2,
+      "name": "quest",
+      "description": "Manage quest-summary buffering",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 1,
+          "name": "show",
+          "description": "Show schedule and current buffer count",
+          "channel_types": null,
+          "required": false,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        },
+        {
+          "type": 1,
+          "name": "settime",
+          "description": "Set the active-hours schedule for the quest summary",
+          "channel_types": null,
+          "required": false,
+          "options": [
+            {
+              "type": 3,
+              "name": "times",
+              "description": "Time-range string (e.g. mon07:30, weekday07:30-18:00, weekday:9-17/2)",
+              "channel_types": null,
+              "required": true,
+              "options": null,
+              "autocomplete": false,
+              "choices": null
+            }
+          ],
+          "autocomplete": false,
+          "choices": null
+        },
+        {
+          "type": 1,
+          "name": "cleartime",
+          "description": "Clear the active-hours schedule",
+          "channel_types": null,
+          "required": false,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        },
+        {
+          "type": 1,
+          "name": "now",
+          "description": "Force-dispatch the currently-buffered quests",
+          "channel_types": null,
+          "required": false,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    }
+  ]
+}

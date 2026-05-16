@@ -325,6 +325,11 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 		return d.userstateAutocomplete(ic, "areas", "", focused)
 	case opt == "name" && cmd == "profile":
 		return d.userstateAutocomplete(ic, "profiles", "", focused)
+	// /profile copyto target — pick another profile of the same user.
+	// Reuses the same profiles lister as `name`; the sub-command name
+	// (copyto) selects the option name (profile), not a different list.
+	case opt == "profile" && cmd == "profile":
+		return d.userstateAutocomplete(ic, "profiles", "", focused)
 	// /quest reward-type options. Item is its own translated lookup;
 	// candy and mega_energy are pokemon-keyed (the reward IS for a
 	// specific species), so they reuse the pokemon autocomplete.

@@ -45,24 +45,47 @@ func TestEveryCommandAndOptionHasFixture(t *testing.T) {
 			continue
 		}
 		for _, opt := range cmd.Options {
-			if opt.Type != discordgo.ApplicationCommandOptionSubCommand {
+			switch opt.Type {
+			case discordgo.ApplicationCommandOptionSubCommand:
+				// Sub-command: each child option needs a "<sub>.<opt>" key.
+				// A child-less sub-command needs a bare-key entry (e.g. show=_bare).
+				if len(opt.Options) == 0 {
+					if !opts[opt.Name] {
+						t.Errorf("slash command %q subcommand %q never exercised (expected bare-subcommand fixture)", cmd.Name, opt.Name)
+					}
+					continue
+				}
+				for _, subOpt := range opt.Options {
+					key := opt.Name + "." + subOpt.Name
+					if !opts[key] {
+						t.Errorf("slash command %q subcommand %q option %q never exercised in any parity fixture (key=%q)", cmd.Name, opt.Name, subOpt.Name, key)
+					}
+				}
+			case discordgo.ApplicationCommandOptionSubCommandGroup:
+				// SubCommandGroup: walk one level deeper. Each child sub-command
+				// uses a "<group>.<sub>" key for bare entries, or a
+				// "<group>.<sub>.<opt>" key for each child option.
+				for _, sub := range opt.Options {
+					if sub.Type != discordgo.ApplicationCommandOptionSubCommand {
+						continue
+					}
+					if len(sub.Options) == 0 {
+						key := opt.Name + "." + sub.Name
+						if !opts[key] {
+							t.Errorf("slash command %q group %q subcommand %q never exercised (expected bare-subcommand fixture, key=%q)", cmd.Name, opt.Name, sub.Name, key)
+						}
+						continue
+					}
+					for _, subOpt := range sub.Options {
+						key := opt.Name + "." + sub.Name + "." + subOpt.Name
+						if !opts[key] {
+							t.Errorf("slash command %q group %q subcommand %q option %q never exercised (key=%q)", cmd.Name, opt.Name, sub.Name, subOpt.Name, key)
+						}
+					}
+				}
+			default:
 				if !opts[opt.Name] {
 					t.Errorf("slash command %q option %q never exercised in any parity fixture", cmd.Name, opt.Name)
-				}
-				continue
-			}
-			// Sub-command: each child option needs a "<sub>.<opt>" key.
-			// A child-less sub-command needs a bare-key entry (e.g. show=_bare).
-			if len(opt.Options) == 0 {
-				if !opts[opt.Name] {
-					t.Errorf("slash command %q subcommand %q never exercised (expected bare-subcommand fixture)", cmd.Name, opt.Name)
-				}
-				continue
-			}
-			for _, subOpt := range opt.Options {
-				key := opt.Name + "." + subOpt.Name
-				if !opts[key] {
-					t.Errorf("slash command %q subcommand %q option %q never exercised in any parity fixture (key=%q)", cmd.Name, opt.Name, subOpt.Name, key)
 				}
 			}
 		}
@@ -113,6 +136,8 @@ func coverageBundle() *i18n.Bundle {
 		"slash.desc.profile":   "Manage your profiles",
 		"slash.cmd.location":   "location",
 		"slash.desc.location":  "Set your location",
+		"slash.cmd.summary":    "summary",
+		"slash.desc.summary":   "Manage scheduled summary digests (e.g. quest)",
 	}
 	b := i18n.NewBundle()
 	b.AddTranslator(i18n.NewTranslator("en", msgs))
