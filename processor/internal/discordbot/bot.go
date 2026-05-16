@@ -109,6 +109,14 @@ func New(cfg Config) (*Bot, error) {
 	// When disabled, b.slash stays nil and onInteractionCreate skips the
 	// ApplicationCommand/Autocomplete branches.
 	if cfg.Cfg.Discord.SlashCommands.Enabled {
+		scope := "guilds=" + fmt.Sprint(cfg.Cfg.Discord.SlashCommands.Guilds)
+		if cfg.Cfg.Discord.SlashCommands.RegisterGlobally {
+			scope = "global"
+		}
+		log.Infof("slash: dispatcher enabled, %s, sync_on_startup=%v, force_sync=%v",
+			scope,
+			cfg.Cfg.Discord.SlashCommands.SyncOnStartup,
+			cfg.ForceSyncSlash)
 		b.slash = slash.NewDispatcher(slash.Config{
 			Enabled:   true,
 			Global:    cfg.Cfg.Discord.SlashCommands.RegisterGlobally,
@@ -118,6 +126,8 @@ func New(cfg Config) (*Bot, error) {
 			ForceSync: cfg.ForceSyncSlash,
 		})
 		b.slash.Attach(session, &b.BotDeps, b.Registry, b.Translations, b.Cfg)
+	} else {
+		log.Info("slash: dispatcher disabled ([discord.slash_commands] enabled=false)")
 	}
 
 	if err := session.Open(); err != nil {
