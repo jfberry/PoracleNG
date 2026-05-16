@@ -360,3 +360,174 @@ func TestUserRolesReturnsMemberRoles(t *testing.T) {
 		t.Errorf("userRoles=%v, want [r1 r2]", got)
 	}
 }
+
+// --- Task 28: autocomplete dispatcher helpers ---
+
+func TestNewDispatcherRegistersAutocompleteListers(t *testing.T) {
+	// The constructor must wire the three built-in listers so HandleAutocomplete
+	// can route tracking/area/profile options without further setup.
+	d := NewDispatcher(Config{})
+	if d.autocompleteRegistry == nil {
+		t.Fatal("autocompleteRegistry not constructed")
+	}
+	for _, name := range []string{"tracking", "areas", "profiles"} {
+		if d.autocompleteRegistry.Lookup(name) == nil {
+			t.Errorf("lister %q not registered", name)
+		}
+	}
+}
+
+func TestFocusedOptionTopLevel(t *testing.T) {
+	opts := []*discordgo.ApplicationCommandInteractionDataOption{
+		{Name: "iv", Focused: true, Type: discordgo.ApplicationCommandOptionString, Value: "0-100"},
+	}
+	got := focusedOption(opts)
+	if got == nil || got.Name != "iv" {
+		t.Errorf("got %v, want option named iv", got)
+	}
+}
+
+func TestFocusedOptionNestedInSubCommand(t *testing.T) {
+	// /untrack raid <tracking> — sub-command "raid" wraps the focused option.
+	opts := []*discordgo.ApplicationCommandInteractionDataOption{
+		{
+			Name: "raid",
+			Type: discordgo.ApplicationCommandOptionSubCommand,
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{
+				{Name: "tracking", Focused: true, Type: discordgo.ApplicationCommandOptionString, Value: ""},
+			},
+		},
+	}
+	got := focusedOption(opts)
+	if got == nil || got.Name != "tracking" {
+		t.Errorf("got %v, want nested option named tracking", got)
+	}
+}
+
+func TestFocusedOptionNoneFocused(t *testing.T) {
+	opts := []*discordgo.ApplicationCommandInteractionDataOption{
+		{Name: "iv"},
+		{Name: "pokemon"},
+	}
+	if got := focusedOption(opts); got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+}
+
+func TestFocusedOptionEmptySlice(t *testing.T) {
+	if got := focusedOption(nil); got != nil {
+		t.Errorf("nil opts: got %v, want nil", got)
+	}
+}
+
+func TestFocusedStringValueStringType(t *testing.T) {
+	opt := &discordgo.ApplicationCommandInteractionDataOption{
+		Type:  discordgo.ApplicationCommandOptionString,
+		Value: "pika",
+	}
+	if got := focusedStringValue(opt); got != "pika" {
+		t.Errorf("got %q, want pika", got)
+	}
+}
+
+func TestFocusedStringValueNonString(t *testing.T) {
+	// Defensive read: an integer-typed option should not panic, but return ""
+	// (or the underlying string value if Discord sent one regardless).
+	opt := &discordgo.ApplicationCommandInteractionDataOption{
+		Type:  discordgo.ApplicationCommandOptionInteger,
+		Value: float64(42),
+	}
+	if got := focusedStringValue(opt); got != "" {
+		t.Errorf("non-string opt: got %q, want empty", got)
+	}
+}
+
+func TestFocusedStringValueNil(t *testing.T) {
+	if got := focusedStringValue(nil); got != "" {
+		t.Errorf("nil opt: got %q, want empty", got)
+	}
+}
+
+func TestDtsTypeForKnownMappings(t *testing.T) {
+	cases := map[string]string{
+		"track":     "monster",
+		"fort":      "fort-update",
+		"raid":      "raid",
+		"egg":       "egg",
+		"quest":     "quest",
+		"invasion":  "invasion",
+		"lure":      "lure",
+		"nest":      "nest",
+		"gym":       "gym",
+		"maxbattle": "maxbattle",
+	}
+	for cmd, want := range cases {
+		if got := dtsTypeFor(cmd); got != want {
+			t.Errorf("dtsTypeFor(%q)=%q, want %q", cmd, got, want)
+		}
+	}
+}
+
+func TestFindUntrackSubtypeReturnsSubCommandName(t *testing.T) {
+	ic := &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{
+		Type: discordgo.InteractionApplicationCommandAutocomplete,
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name: "untrack",
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{
+				{
+					Name: "raid",
+					Type: discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandInteractionDataOption{
+						{Name: "tracking", Focused: true, Type: discordgo.ApplicationCommandOptionString, Value: ""},
+					},
+				},
+			},
+		},
+	}}
+	if got := findUntrackSubtype(ic); got != "raid" {
+		t.Errorf("findUntrackSubtype=%q, want raid", got)
+	}
+}
+
+func TestFindUntrackSubtypeNoSubCommand(t *testing.T) {
+	// Flat options (no sub-command) — caller treats empty as "no subtype hint".
+	ic := &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{
+		Type: discordgo.InteractionApplicationCommandAutocomplete,
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name: "untrack",
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{
+				{Name: "tracking", Focused: true, Type: discordgo.ApplicationCommandOptionString},
+			},
+		},
+	}}
+	if got := findUntrackSubtype(ic); got != "" {
+		t.Errorf("findUntrackSubtype=%q, want empty (no sub-command)", got)
+	}
+}
+
+func TestFindUntrackSubtypeNilInteraction(t *testing.T) {
+	if got := findUntrackSubtype(nil); got != "" {
+		t.Errorf("findUntrackSubtype(nil)=%q, want empty", got)
+	}
+}
+
+func TestRouteAutocompleteUnknownTupleReturnsNil(t *testing.T) {
+	// An option name we don't recognise should return nil — the caller still
+	// emits an empty autocomplete response, but we don't fabricate suggestions.
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	got := d.routeAutocomplete("track", "unknownopt", "abc", "en", nil)
+	if got != nil {
+		t.Errorf("unknown opt: got %v, want nil", got)
+	}
+}
+
+func TestUserstateAutocompleteUnknownListerReturnsNil(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	got := d.userstateAutocomplete(nil, "no-such-lister", "", "")
+	if got != nil {
+		t.Errorf("unknown lister: got %v, want nil", got)
+	}
+}
