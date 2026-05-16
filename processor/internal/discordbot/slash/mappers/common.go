@@ -57,3 +57,34 @@ func teamNameForValue(v int) string {
 	}
 	return ""
 }
+
+// hasNonZeroValue returns true when an option is present and its value is not
+// the zero value for its type. Used by /quest to enforce mutual exclusion
+// between reward types.
+func hasNonZeroValue(opt *discordgo.ApplicationCommandInteractionDataOption) bool {
+	if opt == nil {
+		return false
+	}
+	switch opt.Type {
+	case discordgo.ApplicationCommandOptionString:
+		return opt.StringValue() != ""
+	case discordgo.ApplicationCommandOptionInteger:
+		return opt.IntValue() > 0
+	case discordgo.ApplicationCommandOptionBoolean:
+		return opt.BoolValue()
+	}
+	return false
+}
+
+// fortTypeName maps the /fort fort_type choice integer to the canonical
+// English fort-type keyword expected by the text bot. Values are aligned
+// with the strings the bot's arg matcher accepts (`pokestop` / `gym`).
+func fortTypeName(v int) string {
+	switch v {
+	case 0:
+		return "pokestop"
+	case 1:
+		return "gym"
+	}
+	return ""
+}

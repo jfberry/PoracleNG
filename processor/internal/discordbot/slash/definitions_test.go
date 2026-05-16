@@ -31,22 +31,36 @@ func testBundle(t *testing.T, opts ...bundleOpt) *i18n.Bundle {
 
 	langs := map[string]map[string]string{
 		"en": {
-			"slash.cmd.version":   "version",
-			"slash.desc.version":  "Show Poracle version",
-			"slash.cmd.tracked":   "tracked",
-			"slash.desc.tracked":  "List your tracking rules",
-			"slash.cmd.help":      "help",
-			"slash.desc.help":     "Show help",
-			"slash.cmd.info":      "info",
-			"slash.desc.info":     "Show your bot registration info",
-			"slash.cmd.language":  "language",
-			"slash.desc.language": "Show or set your language",
-			"slash.cmd.track":     "track",
-			"slash.desc.track":    "Track a Pokemon",
-			"slash.cmd.raid":      "raid",
-			"slash.desc.raid":     "Track a raid boss or raid level",
-			"slash.cmd.egg":       "egg",
-			"slash.desc.egg":      "Track an egg / raid level",
+			"slash.cmd.version":    "version",
+			"slash.desc.version":   "Show Poracle version",
+			"slash.cmd.tracked":    "tracked",
+			"slash.desc.tracked":   "List your tracking rules",
+			"slash.cmd.help":       "help",
+			"slash.desc.help":      "Show help",
+			"slash.cmd.info":       "info",
+			"slash.desc.info":      "Show your bot registration info",
+			"slash.cmd.language":   "language",
+			"slash.desc.language":  "Show or set your language",
+			"slash.cmd.track":      "track",
+			"slash.desc.track":     "Track a Pokemon",
+			"slash.cmd.raid":       "raid",
+			"slash.desc.raid":      "Track a raid boss or raid level",
+			"slash.cmd.egg":        "egg",
+			"slash.desc.egg":       "Track an egg / raid level",
+			"slash.cmd.quest":      "quest",
+			"slash.desc.quest":     "Track a quest reward",
+			"slash.cmd.invasion":   "invasion",
+			"slash.desc.invasion":  "Track a Team Rocket invasion",
+			"slash.cmd.lure":       "lure",
+			"slash.desc.lure":      "Track a pokestop lure",
+			"slash.cmd.nest":       "nest",
+			"slash.desc.nest":      "Track a nesting pokemon",
+			"slash.cmd.maxbattle":  "maxbattle",
+			"slash.desc.maxbattle": "Track a max (Dynamax) battle",
+			"slash.cmd.gym":        "gym",
+			"slash.desc.gym":       "Track gym team / slot / battle changes",
+			"slash.cmd.fort":       "fort",
+			"slash.desc.fort":      "Track pokestop or gym updates",
 		},
 	}
 	for _, opt := range opts {
@@ -112,16 +126,19 @@ func TestAllDefinitionsFiltersByEnable(t *testing.T) {
 		}
 	}
 
-	// Explicit enable for a not-yet-implemented Phase 4 command → no defs.
-	defs = AllDefinitions(bundle, []string{"quest"})
+	// Explicit enable for a not-yet-implemented Phase 5 command → no defs.
+	defs = AllDefinitions(bundle, []string{"untrack"})
 	if len(defs) != 0 {
 		t.Errorf("expected 0 defs when only unimplemented commands enabled, got %d", len(defs))
 	}
 
-	// Phase 4 mutating commands implemented in this batch.
-	defs = AllDefinitions(bundle, []string{"track", "raid", "egg"})
-	if len(defs) != 3 {
-		t.Fatalf("expected 3 defs for track/raid/egg, got %d", len(defs))
+	// Phase 4 mutating commands now fully implemented.
+	defs = AllDefinitions(bundle, []string{
+		"track", "raid", "egg",
+		"quest", "invasion", "lure", "nest", "maxbattle", "gym", "fort",
+	})
+	if len(defs) != 10 {
+		t.Fatalf("expected 10 defs for full Phase 4 set, got %d", len(defs))
 	}
 
 	// Explicit enable that includes "version" → returns just it.
@@ -286,6 +303,139 @@ func TestSnapshotEgg(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	want, err := os.ReadFile("testdata/egg.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotQuest(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.quest", "quest")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.quest")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/quest.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotInvasion(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.invasion", "invasion")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.invasion")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/invasion.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotLure(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.lure", "lure")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.lure")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/lure.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotNest(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.nest", "nest")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.nest")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/nest.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotMaxbattle(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.maxbattle", "maxbattle")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.maxbattle")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/maxbattle.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotGym(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.gym", "gym")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.gym")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/gym.json")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("snapshot drift:\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestSnapshotFort(t *testing.T) {
+	bundle := testBundle(t)
+	def := buildCommandDef(bundle, "cmd.fort", "fort")
+	if def == nil {
+		t.Fatal("buildCommandDef returned nil for cmd.fort")
+	}
+	got, err := json.MarshalIndent(def, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	want, err := os.ReadFile("testdata/fort.json")
 	if err != nil {
 		t.Fatalf("read testdata: %v", err)
 	}
