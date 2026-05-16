@@ -169,9 +169,6 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 	}
 
 	// 6. command_security check (text+slash shared config).
-	//    TODO(Task 15): pull user roles for Discord and pass them in. /version
-	//    has no security mapping (commandSecurityName returns "") so this
-	//    check trivially passes for Phase 1.
 	if !d.commandAllowed(ic, cmdKey, ctx.IsAdmin) {
 		d.respondError(s, ic, fmt.Sprintf("🛑 You don't have permission to run /%s.", invoked))
 		return
@@ -208,15 +205,30 @@ func (d *Dispatcher) HandleAutocomplete(s *discordgo.Session, ic *discordgo.Inte
 
 // commandAllowed checks command_security for the invoking user.
 //
-// TODO(Task 15): pull the user's Discord role list (from gateway state cache
-// with REST fallback, matching internal/discordbot/bot.go's lazy fetchRoles)
-// and call bot.CommandAllowed properly. For Phase 1 this stub returns true so
-// /version (which has no security mapping anyway) dispatches cleanly.
+// Admins always bypass. Non-admins are evaluated by bot.CommandAllowed against
+// the operator's [discord] command_security mapping: a command with no entry
+// (commandSecurityName returns "") trivially passes; a command with an entry
+// requires the user's ID or one of their guild roles to be in the allow list.
+//
+// In DMs ic.Member is nil so roles come back empty — commands without a
+// security mapping still pass, restricted ones fail closed. This matches the
+// text bot's behaviour for the same code path.
 func (d *Dispatcher) commandAllowed(ic *discordgo.InteractionCreate, cmdKey string, isAdmin bool) bool {
-	_ = ic
-	_ = cmdKey
-	_ = isAdmin
-	return true
+	if isAdmin {
+		return true
+	}
+	userID := interactionUserID(ic)
+	return bot.CommandAllowed(d.cfgRoot, "discord", cmdKey, userID, userRoles(ic))
+}
+
+// userRoles returns the guild role IDs attached to the invoking member. In
+// DM-style interactions Member is nil and the result is nil — bot.CommandAllowed
+// handles that as "no roles, only unrestricted commands allowed".
+func userRoles(ic *discordgo.InteractionCreate) []string {
+	if ic == nil || ic.Interaction == nil || ic.Member == nil {
+		return nil
+	}
+	return ic.Member.Roles
 }
 
 // respondError edits the deferred ephemeral reply with an error message. Falls
