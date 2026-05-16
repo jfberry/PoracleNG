@@ -49,6 +49,24 @@
   text: "!info"
   expected_tokens: []
 
+- name: start-no-options
+  description: /start resumes alert delivery — no options
+  command: cmd.start
+  slash:
+    name: start
+    options: {}
+  text: "!start"
+  expected_tokens: []
+
+- name: stop-no-options
+  description: /stop pauses alert delivery — no options
+  command: cmd.stop
+  slash:
+    name: stop
+    options: {}
+  text: "!stop"
+  expected_tokens: []
+
 # -----------------------------------------------------------------------------
 # /help — optional topic
 # -----------------------------------------------------------------------------
