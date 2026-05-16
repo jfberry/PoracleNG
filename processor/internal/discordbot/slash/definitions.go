@@ -168,9 +168,208 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 			},
 		}
 		return buildDefinition(bundle, key, canon, opts)
+	case "cmd.track":
+		return buildDefinition(bundle, key, canon, trackOptions())
+	case "cmd.raid":
+		return buildDefinition(bundle, key, canon, raidOptions())
+	case "cmd.egg":
+		return buildDefinition(bundle, key, canon, eggOptions())
 	// Other commands added in later phase tasks.
 	}
 	return nil
+}
+
+// trackOptions builds the slash option list for /track. Pokemon is the
+// only required option; everything else is filtered or omitted.
+func trackOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "pokemon",
+			Description:  "Pokemon to track (or 'everything')",
+			Required:     true,
+			Autocomplete: true,
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "iv",
+			Description:  "IV filter (e.g. 100, 95, 0-0)",
+			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "great_rank",
+			Description: "Top PVP rank in the Great League",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "ultra_rank",
+			Description: "Top PVP rank in the Ultra League",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "little_rank",
+			Description: "Top PVP rank in the Little League",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the pokemon despawns",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "form",
+			Description:  "Pokemon form",
+			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			Name:        "size",
+			Description: "Pokemon size class",
+			Choices:     sizeChoices(),
+		},
+	}
+}
+
+// raidOptions builds the slash option list for /raid. Boss XOR level is
+// enforced in the mapper rather than declaratively (Discord does not
+// support mutual-exclusion natively on option groups).
+func raidOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "boss",
+			Description:  "Raid boss pokemon",
+			Autocomplete: true,
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			Name:        "level",
+			Description: "Raid level",
+			Choices:     raidLevelOptionChoices(),
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "team",
+			Description: "Required gym-control team",
+			Choices:     teamChoices(),
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the raid expires",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
+// eggOptions builds the slash option list for /egg. Level is required.
+func eggOptions() []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionString,
+			Name:        "level",
+			Description: "Egg / raid level",
+			Required:    true,
+			Choices:     raidLevelOptionChoices(),
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "team",
+			Description: "Required gym-control team",
+			Choices:     teamChoices(),
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionInteger,
+			Name:        "distance",
+			Description: "Alert radius in metres",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionBoolean,
+			Name:        "clean",
+			Description: "Auto-delete the alert when the egg hatches",
+		},
+		{
+			Type:         discordgo.ApplicationCommandOptionString,
+			Name:         "template",
+			Description:  "DTS template name",
+			Autocomplete: true,
+		},
+	}
+}
+
+// raidLevelChoice is the static (label, value) pair backing the raid
+// level dropdown. Value strings are what the text bot expects as tokens.
+type raidLevelChoice struct{ Label, Value string }
+
+var raidLevelChoices = []raidLevelChoice{
+	{"Tier 1", "1"},
+	{"Tier 3", "3"},
+	{"Tier 5", "5"},
+	{"Tier 6", "6"},
+	{"Mega", "mega"},
+	{"Legendary", "legendary"},
+	{"Shadow Tier 1", "shadow1"},
+	{"Shadow Tier 3", "shadow3"},
+	{"Shadow Tier 5", "shadow5"},
+	{"Ultra Beast", "ultra beast"},
+	{"Everything", "everything"},
+}
+
+// raidLevelOptionChoices builds the Discord choice slice for the raid level
+// option. Shared by /raid and /egg.
+func raidLevelOptionChoices() []*discordgo.ApplicationCommandOptionChoice {
+	out := make([]*discordgo.ApplicationCommandOptionChoice, len(raidLevelChoices))
+	for i, c := range raidLevelChoices {
+		out[i] = &discordgo.ApplicationCommandOptionChoice{Name: c.Label, Value: c.Value}
+	}
+	return out
+}
+
+// teamChoices builds the Discord choice slice for the gym-control team
+// option. Values match the canonical team IDs in argmatch.go.
+func teamChoices() []*discordgo.ApplicationCommandOptionChoice {
+	return []*discordgo.ApplicationCommandOptionChoice{
+		{Name: "Harmony", Value: 0},
+		{Name: "Mystic", Value: 1},
+		{Name: "Valor", Value: 2},
+		{Name: "Instinct", Value: 3},
+	}
+}
+
+// sizeChoices builds the Discord choice slice for the pokemon size option.
+// "all" is the explicit catch-all that omits a size token from the rendered
+// text command, matching the text bot's "no size filter" default.
+func sizeChoices() []*discordgo.ApplicationCommandOptionChoice {
+	return []*discordgo.ApplicationCommandOptionChoice{
+		{Name: "All sizes", Value: "all"},
+		{Name: "XXS", Value: "xxs"},
+		{Name: "XS", Value: "xs"},
+		{Name: "M", Value: "m"},
+		{Name: "XL", Value: "xl"},
+		{Name: "XXL", Value: "xxl"},
+	}
 }
 
 // languageChoices builds the sorted Discord choice list for the /language
