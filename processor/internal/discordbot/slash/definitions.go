@@ -235,10 +235,10 @@ func untrackSub(typ string) *discordgo.ApplicationCommandOption {
 	}
 }
 
-// areaOptions exposes /area add, /area remove, and /area show. The full text
-// command supports list/show-by-name/overview as well; those are reachable
-// via the text bot for power users but excluded from the slash surface to
-// keep the menu uncluttered.
+// areaOptions exposes /area add, /area remove, /area list (every area the
+// user could subscribe to, with ✓ marks for the ones they already have),
+// /area overview (overview map of selected areas), and /area show (list of
+// selected area names).
 func areaOptions() []*discordgo.ApplicationCommandOption {
 	return []*discordgo.ApplicationCommandOption{
 		{
@@ -273,6 +273,16 @@ func areaOptions() []*discordgo.ApplicationCommandOption {
 			Type:        discordgo.ApplicationCommandOptionSubCommand,
 			Name:        "show",
 			Description: "Show your selected areas",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "list",
+			Description: "List every area available to you (✓ = already added)",
+		},
+		{
+			Type:        discordgo.ApplicationCommandOptionSubCommand,
+			Name:        "overview",
+			Description: "Map overview of every area available to you",
 		},
 	}
 }
