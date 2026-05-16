@@ -879,13 +879,22 @@ import (
 )
 
 func TestVersionDefinition(t *testing.T) {
-    def := buildDefinition("cmd.version", "version", nil, nil)
+    bundle := testBundle(t)  // bundle with slash.cmd.version="version", slash.desc.version="Show Poracle version"
+    def := buildDefinition(bundle, "cmd.version", "version", nil)
     if def.Name != "version" { t.Errorf("name=%q", def.Name) }
     if len(def.Options) != 0 { t.Errorf("expected 0 options, got %d", len(def.Options)) }
 }
 
+func TestVersionDefinitionRenamedByI18n(t *testing.T) {
+    // Operator override (config/custom.en.json) renames /version → /poracle-version
+    bundle := testBundle(t, withOverride("en", "slash.cmd.version", "poracle-version"))
+    def := buildDefinition(bundle, "cmd.version", "version", nil)
+    if def.Name != "poracle-version" { t.Errorf("expected renamed, got %q", def.Name) }
+}
+
 func TestSnapshotVersion(t *testing.T) {
-    def := buildDefinition("cmd.version", "version", nil, nil)
+    bundle := testBundle(t)
+    def := buildDefinition(bundle, "cmd.version", "version", nil)
     got, _ := json.MarshalIndent(def, "", "  ")
     want, _ := os.ReadFile("testdata/version.json")
     if string(got) != string(want) {
@@ -920,79 +929,104 @@ import (
 )
 
 // buildDefinition is the shared constructor for ApplicationCommand defs.
-// nameLoc/descLoc are optional per-locale overrides (added in Phase 6).
+// Name + Description + their localizations are all sourced from the i18n
+// bundle. canonShortName is the canonical English short name used for
+// programmatic lookup (enable list, command routing) — does NOT change with
+// localization.
 func buildDefinition(
-    key string,
-    name string,
+    bundle *i18n.Bundle,
+    key string,                 // e.g. "cmd.track"
+    canonShortName string,      // e.g. "track" — used for routing/enable
     options []*discordgo.ApplicationCommandOption,
-    nameLoc, descLoc *map[discordgo.Locale]string,
 ) *discordgo.ApplicationCommand {
     return &discordgo.ApplicationCommand{
-        Name:                     name,
-        NameLocalizations:        nameLoc,
-        Description:              descriptionFor(key),
-        DescriptionLocalizations: descLoc,
+        Name:                     resolveSlashName(bundle, key, canonShortName),
+        NameLocalizations:        slashNameLocalizations(bundle, key),
+        Description:              slashDescription(bundle, key),
+        DescriptionLocalizations: slashDescriptionLocalizations(bundle, key),
         Options:                  options,
     }
 }
 
-// descriptionFor returns the English description text for a slash command
-// key. Phase 6 will replace this with i18n bundle lookups; for now hardcode.
-func descriptionFor(key string) string {
-    switch key {
-    case "cmd.version": return "Show Poracle version"
-    case "cmd.tracked": return "List your tracking rules"
-    case "cmd.help":    return "Show help"
-    case "cmd.info":    return "Show your registration info"
-    case "cmd.language":return "Show your alert language"
-    case "cmd.track":   return "Track a Pokemon"
-    case "cmd.raid":    return "Track a raid"
-    case "cmd.egg":     return "Track a raid egg"
-    case "cmd.quest":   return "Track a research quest"
-    case "cmd.invasion":return "Track a Rocket invasion"
-    case "cmd.lure":    return "Track a lured stop"
-    case "cmd.nest":    return "Track a nesting pokemon"
-    case "cmd.maxbattle": return "Track a max battle"
-    case "cmd.gym":     return "Track a gym"
-    case "cmd.fort":    return "Track a fort change"
-    case "cmd.untrack": return "Remove a tracking rule"
-    case "cmd.area":    return "Manage your alert areas"
-    case "cmd.profile": return "Manage your profiles"
-    case "cmd.location":return "Set your home location"
+// resolveSlashName returns the English (primary) slash name from the i18n
+// bundle's "slash.cmd.<short>" key, falling back to the canonical short name.
+// Warning logged if the English key is missing.
+func resolveSlashName(bundle *i18n.Bundle, key, canonShortName string) string {
+    slashKey := "slash." + key  // "cmd.track" → "slash.cmd.track"
+    en := bundle.For("en")
+    if en == nil {
+        log.Warnf("slash: English bundle missing; using canonical %q for %s", canonShortName, slashKey)
+        return canonShortName
     }
-    return ""
+    val := en.T(slashKey)
+    if val == "" || val == slashKey {
+        log.Warnf("slash: missing English %s; falling back to canonical %q", slashKey, canonShortName)
+        return canonShortName
+    }
+    if !validSlashName(val) {
+        log.Warnf("slash: English %s = %q fails Discord name regex; using canonical %q", slashKey, val, canonShortName)
+        return canonShortName
+    }
+    return val
 }
 
+// slashDescription returns the English description from "slash.desc.<short>".
+func slashDescription(bundle *i18n.Bundle, key string) string {
+    short := strings.TrimPrefix(key, "cmd.")
+    descKey := "slash.desc." + short
+    en := bundle.For("en")
+    if en == nil { return "" }
+    val := en.T(descKey)
+    if val == "" || val == descKey {
+        log.Warnf("slash: missing English description %s", descKey)
+        return ""
+    }
+    return val
+}
+
+// slashNameLocalizations / slashDescriptionLocalizations: walk loaded
+// languages (not all Discord locales), look up "slash.cmd.<short>" /
+// "slash.desc.<short>" per language, return only entries that exist
+// and pass validSlashName for the name path.
+//
+// Implementation reuses localizationsForKey (Task 43) but with the
+// slash.* key namespace.
+
 // AllDefinitions returns the slash command set this build supports, filtered
-// by the operator's [discord.slash_commands] enable allow-list. Exported for
-// use by the coverage meta-test (Task 48).
-func AllDefinitions(enable []string) []*discordgo.ApplicationCommand {
-    allEnabled := len(enable) == 0  // empty means all commands enabled
+// by the operator's [discord.slash_commands] enable subset. Empty enable
+// means "all commands this build supports". Exported for use by the
+// coverage meta-test (Task 48).
+//
+// The `enable` list always uses canonical English short names ("track",
+// "raid", ...) regardless of i18n renaming — so an operator's enable
+// config stays valid across language changes.
+func AllDefinitions(bundle *i18n.Bundle, enable []string) []*discordgo.ApplicationCommand {
+    allEnabled := len(enable) == 0
     enableSet := map[string]bool{}
     for _, n := range enable { enableSet[n] = true }
 
     defs := make([]*discordgo.ApplicationCommand, 0, len(allCommandKeys()))
     for _, key := range allCommandKeys() {
-        name := shortName(key)
-        if !allEnabled && !enableSet[name] { continue }
-        def := buildCommandDef(key, name)
+        canon := canonShortName(key)
+        if !allEnabled && !enableSet[canon] { continue }
+        def := buildCommandDef(bundle, key, canon)
         if def == nil { continue }
         defs = append(defs, def)
     }
     return defs
 }
 
-func buildCommandDef(key, name string) *discordgo.ApplicationCommand {
+func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.ApplicationCommand {
     switch key {
     case "cmd.version":
-        return buildDefinition(key, name, nil, nil, nil)
+        return buildDefinition(bundle, key, canon, nil)
     // ... other commands added in later tasks
     }
     return nil
 }
 
 // allCommandKeys lists every slash-command key this build supports.
-// Used by allDefinitions to walk and build the registered set, filtered by config.Enable.
+// Used by AllDefinitions to walk and build the registered set, filtered by config.Enable.
 func allCommandKeys() []string {
     return []string{
         "cmd.version",  // Phase 1
@@ -1007,9 +1041,10 @@ func allCommandKeys() []string {
     }
 }
 
-// shortName maps a command key to its canonical slash name.
-// No per-installation renaming — English canonical names everywhere.
-func shortName(key string) string {
+// canonShortName returns the canonical English short name for a command key.
+// Always the canonical name — never the i18n-localized variant.
+// Used for the enable allow-list and for slash dispatch routing.
+func canonShortName(key string) string {
     return strings.TrimPrefix(key, "cmd.")
 }
 ```
@@ -1238,7 +1273,7 @@ type commandsAPI interface {
 // SyncCommands pushes the current command set to Discord.
 // Phase 1 omits the fingerprint cache; Task 12 adds it.
 func (d *Dispatcher) SyncCommands(ctx context.Context) error {
-    intent := AllDefinitions(d.cfg.Enable)
+    intent := AllDefinitions(d.bundle, d.cfg.Enable)
     api := d.commandsAPI
     if api == nil { api = d.session }
 
@@ -1353,13 +1388,16 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
         return
     }
 
-    // 2. Resolve command key (slash names are canonical English: "track" → cmd.track)
+    // 2. Resolve command key. The invoked name may be the operator-renamed
+    //    or i18n-localized form (e.g. "verfolge") — look it up via the
+    //    name-to-key map built at startup from the slash.cmd.* i18n keys.
     invoked := ic.ApplicationCommandData().Name
-    cmdKey := "cmd." + invoked
-    if d.registry.Lookup(cmdKey) == nil {
+    cmdKey := d.resolveCommandKey(invoked)
+    if cmdKey == "" || d.registry.Lookup(cmdKey) == nil {
         d.respondError(s, ic, "🛑 Unknown command.")
         return
     }
+    canon := canonShortName(cmdKey)  // for mapper lookup, which uses canonical names
 
     // 3. Disabled-command check (shared text+slash mechanism). A command in
     //    [general] disabled_commands is rejected here even if /slash is enabled.
@@ -1387,8 +1425,9 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
         return
     }
 
-    // 7. Mapper
-    mapperFn := mappers.Lookup(invoked)
+    // 7. Mapper — looked up by canonical short name (mapper registry is
+    //    independent of i18n renaming)
+    mapperFn := mappers.Lookup(canon)
     if mapperFn == nil {
         d.respondError(s, ic, "🛑 Command not implemented.")
         return
@@ -1420,15 +1459,26 @@ func formatMapperError(err error, lang string, bundle *i18n.Bundle) string {
     return "🛑 " + err.Error()
 }
 
-// resolveCommandKey converts an invoked slash name → "cmd.<name>".
-// Returns "" if the command isn't in the registered set for this build.
-// No per-installation rename — names are canonical English.
+// resolveCommandKey converts an invoked slash name → "cmd.<short>".
+// The invoked name may be the localized form ("verfolge") or an operator-
+// renamed form ("alerts"). We walk the registered set, resolve each command
+// key's English slash name from the bundle, and match. Cached at startup
+// to avoid bundle lookups per interaction.
 func (d *Dispatcher) resolveCommandKey(invokedName string) string {
-    key := "cmd." + invokedName
-    for _, k := range allCommandKeys() {
-        if k == key { return key }
-    }
+    if key, ok := d.nameToKey[invokedName]; ok { return key }
     return ""
+}
+
+// buildNameMap is called once after sync. Maps the resolved English slash
+// name → canonical command key. Run-time invocations come back as that
+// English name (Discord sends the primary Name, not localizations).
+func (d *Dispatcher) buildNameMap() {
+    d.nameToKey = map[string]string{}
+    for _, key := range allCommandKeys() {
+        canon := canonShortName(key)
+        name := resolveSlashName(d.bundle, key, canon)
+        d.nameToKey[name] = key
+    }
 }
 
 // registrationErrorText composes the registration-prompt error including
@@ -1642,7 +1692,7 @@ Update SyncCommands to use the cache:
 ```go
 // processor/internal/discordbot/slash/registration.go — replace SyncCommands
 func (d *Dispatcher) SyncCommands(ctx context.Context) error {
-    intent := AllDefinitions(d.cfg.Enable)
+    intent := AllDefinitions(d.bundle, d.cfg.Enable)
     want := Fingerprint(intent)
     api := d.commandsAPI
     if api == nil { api = d.session }
@@ -3281,10 +3331,11 @@ func Location(opts []*discordgo.ApplicationCommandInteractionDataOption, deps *b
 Option 1 is less invasive. Implement as:
 ```go
 // dispatcher.go — replace the mapper call for /location
-if invoked == "location" {
+// (uses canonical short name; i18n-renamed "location" → still routes here)
+if canon == "location" {
     tokens, err = mappers.Location(ic.ApplicationCommandData().Options, d.deps)
 } else {
-    mapperFn := mappers.Lookup(invoked)
+    mapperFn := mappers.Lookup(canon)
     tokens, err = mapperFn(ic.ApplicationCommandData().Options)
 }
 ```
@@ -3399,56 +3450,97 @@ git commit -m "discordbot/slash: localization helpers"
 
 ---
 
-### Task 44: Apply localizations to definitions
+### Task 44: i18n key seeds + slashNameLocalizations / slashDescriptionLocalizations
 
-Modify `buildDefinition` to look up `slash.<cmd>.desc` from the bundle and pass `NameLocalizations` / `DescriptionLocalizations`.
+`buildDefinition` already routes through `resolveSlashName` and `slashDescription` (defined in Task 7). This task adds the actual localization map builders that read from the bundle's loaded languages.
 
 ```go
-func buildDefinition(key, name string, options []*discordgo.ApplicationCommandOption, bundle *i18n.Bundle) *discordgo.ApplicationCommand {
-    return &discordgo.ApplicationCommand{
-        Name:                     name,
-        NameLocalizations:        localizationsForKey(bundle, key),                    // cmd.track → /verfolge in DE
-        Description:              bundle.For("en").T("slash." + simpleKey(key) + ".desc"),
-        DescriptionLocalizations: localizationsForKey(bundle, "slash." + simpleKey(key) + ".desc"),
-        Options:                  options,
+// localization.go
+//
+// slashNameLocalizations builds NameLocalizations for a slash command from
+// the "slash.cmd.<short>" key namespace in each loaded language.
+func slashNameLocalizations(bundle *i18n.Bundle, key string) *map[discordgo.Locale]string {
+    return localizationsForKey(bundle, "slash."+key, true /* validateSlashName */)
+}
+
+// slashDescriptionLocalizations builds DescriptionLocalizations from the
+// "slash.desc.<short>" key namespace.
+func slashDescriptionLocalizations(bundle *i18n.Bundle, key string) *map[discordgo.Locale]string {
+    short := strings.TrimPrefix(key, "cmd.")
+    return localizationsForKey(bundle, "slash.desc."+short, false /* descriptions don't need slash-name regex */)
+}
+
+// Generic helper — iterates loaded languages, fetches the key value per
+// language, filters out empty / equal-to-key (untranslated) / invalid (when
+// validateName=true).
+func localizationsForKey(bundle *i18n.Bundle, key string, validateName bool) *map[discordgo.Locale]string {
+    out := map[discordgo.Locale]string{}
+    for _, lang := range bundle.LoadedLanguages() {
+        if lang == "en" { continue }
+        discordCode, ok := poracleToDiscord[lang]
+        if !ok { continue }
+        tr := bundle.For(lang)
+        if tr == nil { continue }
+        val := tr.T(key)
+        if val == "" || val == key { continue }
+        if validateName && !validSlashName(val) { continue }
+        out[discordCode] = val
     }
+    if len(out) == 0 { return nil }
+    return &out
 }
 ```
 
-Update all callers in `buildCommandDef` to pass the bundle.
-
-Add entries to `processor/internal/i18n/locale/en.json`:
+Seed `processor/internal/i18n/locale/en.json`:
 
 ```json
 {
-  "slash.version.desc": "Show Poracle version",
-  "slash.tracked.desc": "List your tracking rules",
-  "slash.track.desc": "Track a Pokemon",
-  "slash.track.opt.pokemon": "Pokemon name",
-  "slash.track.opt.iv": "IV range (e.g. \"100\", \"95\", \"0-0\")",
+  "slash.cmd.version":  "version",
+  "slash.cmd.tracked":  "tracked",
+  "slash.cmd.track":    "track",
+  "slash.cmd.raid":     "raid",
+  "slash.cmd.egg":      "egg",
+  "slash.cmd.quest":    "quest",
+  "slash.cmd.invasion": "invasion",
+  "slash.cmd.lure":     "lure",
+  "slash.cmd.nest":     "nest",
+  "slash.cmd.maxbattle":"maxbattle",
+  "slash.cmd.gym":      "gym",
+  "slash.cmd.fort":     "fort",
+  "slash.cmd.untrack":  "untrack",
+  "slash.cmd.area":     "area",
+  "slash.cmd.profile":  "profile",
+  "slash.cmd.location": "location",
+  "slash.cmd.language": "language",
+  "slash.cmd.help":     "help",
+  "slash.cmd.info":     "info",
+
+  "slash.desc.version":  "Show Poracle version",
+  "slash.desc.tracked":  "List your tracking rules",
+  "slash.desc.track":    "Track a Pokemon",
+  "slash.desc.raid":     "Track a raid",
+  ...
+
+  "slash.opt.track.pokemon":      "pokemon",
+  "slash.opt.track.pokemon.desc": "Pokemon to track (or 'Everything')",
+  "slash.opt.track.iv":           "iv",
+  "slash.opt.track.iv.desc":      "IV range (e.g. \"100\", \"95\", \"0-0\")",
   ...
 }
 ```
 
-Add warning logger for missing **English** keys at registration time (silent fallback for missing translations):
+**Operator overrides** use the existing `config/custom.{lang}.json` mechanism. To rename `/track` to `/alerts` for English users:
 
-```go
-// definitions.go — extend descriptionFor / wrap bundle lookups
-func descriptionFor(bundle *i18n.Bundle, key string) string {
-    descKey := "slash." + simpleKey(key) + ".desc"
-    en := bundle.For("en")
-    if en == nil {
-        log.Warnf("slash: English bundle missing for %q (broken intent)", descKey)
-        return ""
-    }
-    val := en.T(descKey)
-    if val == "" || val == descKey {
-        log.Warnf("slash: missing English description for %q", descKey)
-        return ""
-    }
-    return val
+```json
+// config/custom.en.json
+{
+  "slash.cmd.track": "alerts"
 }
 ```
+
+At next startup, the slash command Name becomes `alerts`. The internal cmd key, mapper registration, and `[discord.slash_commands] enable` allow-list all stay keyed on canonical `"track"`.
+
+`resolveSlashName` already logs a warning when the English `slash.cmd.<short>` key is missing — covered.
 
 Convert `registrationErrorText` (defined in Task 11) to use the i18n bundle:
 
@@ -3712,7 +3804,7 @@ func TestEveryCommandAndOptionHasFixture(t *testing.T) {
         }
     }
 
-    for _, cmd := range slash.AllDefinitions(nil) {
+    for _, cmd := range slash.AllDefinitions(testBundle(t), nil) {
         opts, ok := covered[cmd.Name]
         if !ok {
             t.Errorf("slash command %q has no parity fixture", cmd.Name)
