@@ -67,11 +67,22 @@ func TestPokemon_PrefixMatch(t *testing.T) {
 	}
 }
 
-func TestPokemon_EmptyFocusedReturnsNil(t *testing.T) {
+func TestPokemon_EmptyFocusedReturnsAlphabeticalTop(t *testing.T) {
+	// When the user has clicked the field but typed nothing, return entries
+	// sorted alphabetically by label so Discord shows a non-empty dropdown.
+	// Capped at 25 by the function itself.
 	deps := pokemonTestDeps(t)
 	out := Pokemon(context.Background(), deps, "", "en")
-	if out != nil {
-		t.Errorf("expected nil for empty focused, got %d entries", len(out))
+	if len(out) == 0 {
+		t.Fatal("empty focused: expected non-empty results, got 0 entries")
+	}
+	if len(out) > 25 {
+		t.Errorf("expected ≤25 entries, got %d", len(out))
+	}
+	for i := 1; i < len(out); i++ {
+		if out[i-1].Name > out[i].Name {
+			t.Errorf("results not alphabetical at index %d: %q > %q", i, out[i-1].Name, out[i].Name)
+		}
 	}
 }
 
