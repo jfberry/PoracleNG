@@ -204,14 +204,14 @@
   expected_tokens: [bulbasaur]
 
 - name: quest-item-reward
-  description: /quest with item reward
+  description: /quest with item reward (bare name — matchItemName resolves it)
   command: cmd.quest
   slash:
     name: quest
     options:
       item: "golden razz berry"
-  text: "!quest item:golden razz berry"
-  expected_tokens: ["item:golden razz berry"]
+  text: "!quest golden razz berry"
+  expected_tokens: ["golden razz berry"]
 
 - name: quest-stardust-all-extras
   description: /quest stardust + min_amount + distance + clean + template (covers tail options)
@@ -247,15 +247,9 @@
   text: "!quest energy:charizard"
   expected_tokens: ["energy:charizard"]
 
-- name: quest-xl-candy-reward
-  description: /quest with XL candy reward
-  command: cmd.quest
-  slash:
-    name: quest
-    options:
-      xl_candy: lapras
-  text: "!quest xlcandy:lapras"
-  expected_tokens: ["xlcandy:lapras"]
+# xl_candy is no longer a /quest option — matching/quest.go and
+# enrichment/quest.go have no XL-candy reward type. Removed from the slash
+# surface; the parity test no longer exercises it.
 
 # -----------------------------------------------------------------------------
 # /invasion

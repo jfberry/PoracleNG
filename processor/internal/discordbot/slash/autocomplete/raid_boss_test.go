@@ -64,25 +64,33 @@ func TestRaidBoss_KeywordMatch(t *testing.T) {
 	}
 }
 
-func TestRaidBoss_EmptyNoRecentShowsKeywords(t *testing.T) {
+func TestRaidBoss_EmptyNoRecentShowsKeywordsAndPokemon(t *testing.T) {
+	// On empty focused with no RecentActivity, we surface tier keywords
+	// AND fall through to the general pokemon autocomplete (which now
+	// returns an alphabetical starter list rather than nil), so the user
+	// always sees a populated dropdown.
 	deps := raidBossTestDeps(t, false)
 	out := RaidBoss(context.Background(), deps, "", "en")
 	if len(out) == 0 {
-		t.Fatalf("expected keyword choices even without RecentActivity")
+		t.Fatalf("expected non-empty choices on empty focused")
 	}
-	// All entries should be keywords (since no recent activity and no
-	// general-pokemon fallthrough on empty focused).
+	keywords := map[string]bool{}
+	for _, kw := range raidLevelKeywords {
+		keywords[kw] = true
+	}
+	gotKeyword, gotPokemon := false, false
 	for _, c := range out {
-		isKeyword := false
-		for _, kw := range raidLevelKeywords {
-			if c.Name == kw {
-				isKeyword = true
-				break
-			}
+		if keywords[c.Name] {
+			gotKeyword = true
+		} else if c.Name != "Everything" {
+			gotPokemon = true
 		}
-		if !isKeyword {
-			t.Errorf("entry %q is not a keyword; should not appear for empty focused without RecentActivity", c.Name)
-		}
+	}
+	if !gotKeyword {
+		t.Errorf("no tier/keyword entries surfaced: %+v", out)
+	}
+	if !gotPokemon {
+		t.Errorf("no pokemon entries surfaced: %+v", out)
 	}
 }
 
