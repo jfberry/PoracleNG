@@ -155,14 +155,12 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 	//    commandsSkippingRegistration entries) so a brand-new user can still
 	//    poke at the bot to confirm it's alive.
 	if !commandsSkippingRegistration[cmdKey] {
-		// Look up registration state. Mirrors the text bot's check in
-		// discordbot/bot.go. Phase 1 only ships /version so this branch is
-		// effectively unreached; Task 14 will rebuild it with full state
-		// (profileNo, hasLocation, hasArea) and Task 16+ will exercise it.
+		// buildContext already resolved ctx.Language via the proper chain
+		// (human → Discord locale → cfgRoot.General.Locale). The registration
+		// check here only consults the same store for the registered bit.
 		if d.deps != nil && d.deps.Humans != nil {
-			lang, _, _, _, registered := bot.LookupUserStateFromStore(
+			_, _, _, _, registered := bot.LookupUserStateFromStore(
 				d.deps.Humans, ctx.UserID, ctx.Language)
-			ctx.Language = lang
 			if !registered {
 				d.respondError(s, ic, registrationErrorText(d.cfgRoot, d.bundle, ctx.Language, ic.GuildID))
 				return
