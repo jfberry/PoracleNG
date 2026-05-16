@@ -78,32 +78,28 @@ func slashDescription(bundle *i18n.Bundle, key string) string {
 }
 
 // slashNameLocalizations returns a *map[discordgo.Locale]string of localized
-// command names, or nil when no localizations apply. Filled in by Task 43/44
-// (Phase 6 localization). Returning nil here is correct: discordgo emits
-// `name_localizations` only when non-nil.
+// command names from the "slash.cmd.<short>" key across loaded locales, or
+// nil when no translations apply. Returning nil is significant: discordgo
+// emits `name_localizations` only when the pointer is non-nil, so this is
+// how we shrink the registered payload when an operator only ships English.
+//
+// Name values are filtered through Discord's slash-name regex via
+// localizationsForKey(validateName=true) so a translator's stray uppercase
+// or whitespace doesn't reject the entire bulk-overwrite call.
 func slashNameLocalizations(bundle *i18n.Bundle, key string) *map[discordgo.Locale]string {
-	// TODO(Task 43/44): emit per-locale renamings from "slash.cmd.<short>" entries.
-	_ = bundle
-	_ = key
-	return nil
+	return localizationsForKey(bundle, "slash."+key, true /* validateName */)
 }
 
 // slashDescriptionLocalizations returns a *map[discordgo.Locale]string of
-// localized descriptions, or nil when no localizations apply. Filled in by
-// Task 43/44 (Phase 6 localization).
+// localized descriptions from the "slash.desc.<short>" key. Same nil-vs-empty
+// semantics as slashNameLocalizations: nil means "field omitted from payload".
+//
+// Descriptions are NOT validated against the name regex — Discord allows
+// arbitrary 1..100-char description text, so we accept whatever the
+// translator provides as long as it is non-empty.
 func slashDescriptionLocalizations(bundle *i18n.Bundle, key string) *map[discordgo.Locale]string {
-	// TODO(Task 43/44): emit per-locale descriptions from "slash.desc.<short>" entries.
-	_ = bundle
-	_ = key
-	return nil
-}
-
-// validSlashName checks that a slash command name matches Discord's regex.
-// Real implementation lands in Task 43; the stub accepts anything 1..32 chars.
-func validSlashName(s string) bool {
-	// TODO(Task 43): replace with Discord's official regex
-	// (^[-_\p{L}\p{N}\p{Devanagari}\p{Thai}]{1,32}$, lowercase-required).
-	return len(s) >= 1 && len(s) <= 32
+	short := strings.TrimPrefix(key, "cmd.")
+	return localizationsForKey(bundle, "slash.desc."+short, false /* validateName */)
 }
 
 // AllDefinitions returns the slash command set this build supports, filtered

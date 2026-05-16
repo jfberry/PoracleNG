@@ -5,9 +5,11 @@ package discordbot
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +24,13 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
 )
+
+// slashCachePath returns the on-disk fingerprint cache location for the
+// slash dispatcher. Lives next to the other startup-state caches (thread
+// cache, autocreate cache, gym state) under config/.cache/.
+func slashCachePath(baseDir string) string {
+	return filepath.Join(baseDir, "config", ".cache", "slash-fingerprint.json")
+}
 
 // Bot is the Discord bot gateway handler.
 type Bot struct {
@@ -48,6 +57,12 @@ type Bot struct {
 type Config struct {
 	Token string
 	bot.BotDeps
+
+	// ForceSyncSlash, when true, forces the slash dispatcher to push to
+	// Discord regardless of the fingerprint cache. Plumbed from main.go's
+	// -sync-slash-commands CLI flag. Has no effect when slash commands are
+	// disabled in TOML.
+	ForceSyncSlash bool
 }
 
 // New creates and starts a Discord bot. Returns the bot (for shutdown) or an error.
@@ -89,15 +104,18 @@ func New(cfg Config) (*Bot, error) {
 	session.AddHandler(b.onInteractionCreate)
 
 	// Construct the slash dispatcher when enabled. Attach binds it to the
-	// session and shared deps; registration of application commands happens
-	// in a later task. When disabled, b.slash stays nil and
-	// onInteractionCreate skips the ApplicationCommand/Autocomplete branches.
+	// session and shared deps; the actual ApplicationCommandBulkOverwrite
+	// happens after session.Open() so we have an appID to push under.
+	// When disabled, b.slash stays nil and onInteractionCreate skips the
+	// ApplicationCommand/Autocomplete branches.
 	if cfg.Cfg.Discord.SlashCommands.Enabled {
 		b.slash = slash.NewDispatcher(slash.Config{
-			Enabled: true,
-			Global:  cfg.Cfg.Discord.SlashCommands.RegisterGlobally,
-			Guilds:  cfg.Cfg.Discord.SlashCommands.Guilds,
-			Enable:  cfg.Cfg.Discord.SlashCommands.Enable,
+			Enabled:   true,
+			Global:    cfg.Cfg.Discord.SlashCommands.RegisterGlobally,
+			Guilds:    cfg.Cfg.Discord.SlashCommands.Guilds,
+			Enable:    cfg.Cfg.Discord.SlashCommands.Enable,
+			CachePath: slashCachePath(cfg.Cfg.BaseDir),
+			ForceSync: cfg.ForceSyncSlash,
 		})
 		b.slash.Attach(session, &b.BotDeps, b.Registry, b.Translations, b.Cfg)
 	}
@@ -107,6 +125,20 @@ func New(cfg Config) (*Bot, error) {
 	}
 
 	log.Infof("Discord bot connected as %s", session.State.User.Username)
+
+	// Slash sync: now that the gateway is open we have an appID. Push the
+	// command set whenever SyncOnStartup is true OR the operator forced a
+	// sync via -sync-slash-commands. SyncCommands is idempotent — the
+	// fingerprint cache short-circuits when nothing has changed, so leaving
+	// SyncOnStartup=true is the safe default.
+	if b.slash != nil && session.State != nil && session.State.User != nil {
+		b.slash.SetAppID(session.State.User.ID)
+		if cfg.Cfg.Discord.SlashCommands.SyncOnStartup || cfg.ForceSyncSlash {
+			if err := b.slash.SyncCommands(context.Background()); err != nil {
+				log.Errorf("slash sync failed: %v", err)
+			}
+		}
+	}
 
 	// Set bot activity/status
 	if activity := cfg.Cfg.Discord.Activity; activity != "" {

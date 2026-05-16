@@ -60,6 +60,7 @@ import (
 
 func main() {
 	baseDir := flag.String("basedir", "..", "path to project root directory")
+	forceSyncSlash := flag.Bool("sync-slash-commands", false, "Force slash command sync regardless of cache")
 	flag.Parse()
 
 	// Register build info from version.go + Go's embedded VCS metadata
@@ -778,8 +779,9 @@ func main() {
 		}
 		log.Infof("Discord bot starting in %s mode", mode)
 		dbot, err := discordbot.New(discordbot.Config{
-			Token:   gatewayToken,
-			BotDeps: deps,
+			Token:          gatewayToken,
+			BotDeps:        deps,
+			ForceSyncSlash: *forceSyncSlash,
 		})
 		if err != nil {
 			// When command_token is set, treat a gateway failure as
