@@ -258,6 +258,39 @@ type DiscordConfig struct {
 
 	// Internal computed maps (populated from TOML entries after load)
 	DelegatedAdministration DelegatedAdminConfig `toml:"-"`
+
+	// SlashCommands toggles the optional Discord application-commands surface.
+	// See DiscordSlashCommands for field-by-field semantics.
+	SlashCommands DiscordSlashCommands `toml:"slash_commands"`
+}
+
+// DiscordSlashCommands configures the optional Discord slash-command surface
+// under [discord.slash_commands]. The master switch is Enabled — when false,
+// no commands are registered regardless of the other fields.
+type DiscordSlashCommands struct {
+	Enabled          bool     `toml:"enabled"`
+	RegisterGlobally bool     `toml:"register_globally"`
+	Guilds           []string `toml:"guilds"`
+	SyncOnStartup    bool     `toml:"sync_on_startup"`
+	// Enable optionally restricts which slash commands register. Empty/nil =
+	// all commands this build supports. Set explicitly only when the operator
+	// wants to limit the surface to a subset. Use the master Enabled = false
+	// flag to turn slash off entirely.
+	Enable []string `toml:"enable"`
+}
+
+// IsEnabled returns true when the given short slash name should be registered.
+// An empty Enable list means "all commands enabled".
+func (s DiscordSlashCommands) IsEnabled(name string) bool {
+	if len(s.Enable) == 0 {
+		return true
+	}
+	for _, n := range s.Enable {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
 
 // DelegatedAdminEntry represents a [[delegated_admins]] TOML array-of-tables entry.
@@ -810,6 +843,13 @@ func Load(baseDir string) (*Config, error) {
 			IvColors:          []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"},
 			CheckRoleInterval: 6,
 			Activity:          "PoracleNG",
+			SlashCommands: DiscordSlashCommands{
+				// Enabled defaults false — master switch, opt-in.
+				// Enable defaults nil — when Enabled is flipped on, all built-in
+				// commands register unless this list is set explicitly.
+				RegisterGlobally: true,
+				SyncOnStartup:    true,
+			},
 		},
 		AlertLimits: AlertLimitsConfig{
 			TimingPeriod:        240,
