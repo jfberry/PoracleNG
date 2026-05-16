@@ -115,7 +115,34 @@ enable = []
 
 This means a command can be (a) entirely off (master switch), (b) text-only via `enable` exclusion (when operator restricts the slash subset), or (c) text-only + visible-via-slash-but-rejected (when `disabled_commands` excludes it but `enable` includes it — edge case; gives a clear error).
 
-No per-command renaming. Discord command names are the canonical English (`track`, `raid`, etc.). Localizations cover description text only.
+### Command names come from i18n
+
+Slash command names are driven by the i18n bundle under a **separate `slash.cmd.*` namespace** (distinct from `cmd.*` which the text bot uses for command parsing).
+
+| Key | Used for | Source |
+|---|---|---|
+| `cmd.track` | Text command parsing (`!track`, `!verfolge`) | Existing |
+| `slash.cmd.track` | Slash command name (`/track`, `/verfolge`) | New |
+| `slash.desc.track` | Slash command description | New |
+| `slash.opt.track.pokemon` | Option label for /track pokemon | New |
+| `slash.opt.track.pokemon.desc` | Option description for /track pokemon | New |
+
+**English seed** (`processor/internal/i18n/locale/en.json`):
+```json
+{
+  "slash.cmd.track":      "track",
+  "slash.desc.track":     "Track a Pokemon",
+  "slash.opt.track.pokemon": "pokemon"
+}
+```
+
+**Localizations** (`de.json`, `fr.json`, etc.) populate `NameLocalizations` / `DescriptionLocalizations` automatically. A German user sees `/verfolge` if `slash.cmd.track = "verfolge"` in `de.json`.
+
+**Operator overrides**: the existing `config/custom.{lang}.json` mechanism (already used for text commands) extends naturally — drop `"slash.cmd.track": "alerts"` in `config/custom.en.json` and the command becomes `/alerts` for English users at next startup. No new config surface.
+
+The `[discord.slash_commands] enable` allow-list always uses the **canonical English short name** (`"track"`, not `"verfolge"` or `"alerts"`) so operator-renamed installations have stable enable-lists. The enable check happens before name resolution; renaming is purely cosmetic.
+
+Command names and option names are localizable via the `slash.cmd.*` / `slash.opt.*` i18n keys (see below). Operators rename per-locale via existing `config/custom.{lang}.json` overrides.
 
 ---
 
