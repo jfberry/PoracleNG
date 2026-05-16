@@ -236,6 +236,17 @@
   text: "!quest candy:pikachu"
   expected_tokens: ["candy:pikachu"]
 
+- name: quest-candy-min-amount
+  description: /quest candy + min_amount — Amount filter on the matcher (q.Amount > 0)
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      candy: pikachu
+      min_amount: 5
+  text: "!quest candy:pikachu amount:5"
+  expected_tokens: ["candy:pikachu", "amount:5"]
+
 - name: quest-mega-energy-reward
   description: /quest with mega energy reward
   command: cmd.quest

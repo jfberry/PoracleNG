@@ -310,6 +310,23 @@ func (d *Dispatcher) HandleAutocomplete(s *discordgo.Session, ic *discordgo.Inte
 // tracking subtype, so we walk the option tree to find it.
 func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *discordgo.InteractionCreate) []*discordgo.ApplicationCommandOptionChoice {
 	switch {
+	// /maxbattle pokemon — empty focused boosts currently-active max
+	// battle bosses (recorded by the maxbattle webhook handler).
+	// Routed before the generic `pokemon` case so the boost wins.
+	case opt == "pokemon" && cmd == "maxbattle":
+		base := autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			base = autocomplete.PrependActivePokemon(base, d.deps, d.deps.RecentActivity.ActiveMaxBattleBosses(), userLang)
+		}
+		return base
+	// /quest pokemon — empty focused boosts currently-active quest
+	// pokemon rewards. Routed before the generic `pokemon` case.
+	case opt == "pokemon" && cmd == "quest":
+		base := autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			base = autocomplete.PrependActivePokemon(base, d.deps, d.deps.RecentActivity.ActiveQuestPokemon(), userLang)
+		}
+		return base
 	case opt == "pokemon":
 		return autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
 	case opt == "iv":
@@ -333,14 +350,36 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 	// /quest reward-type options. Item is its own translated lookup;
 	// candy and mega_energy are pokemon-keyed (the reward IS for a
 	// specific species), so they reuse the pokemon autocomplete.
+	// All three boost from RecentActivity on empty focused so live
+	// quest rewards surface first.
 	case opt == "item" && cmd == "quest":
-		return autocomplete.Item(context.Background(), d.deps, focused, userLang)
-	case (opt == "candy" || opt == "mega_energy") && cmd == "quest":
-		return autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
+		base := autocomplete.Item(context.Background(), d.deps, focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			base = autocomplete.PrependActiveItems(base, d.deps, d.deps.RecentActivity.ActiveQuestItems(), userLang)
+		}
+		return base
+	case opt == "candy" && cmd == "quest":
+		base := autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			base = autocomplete.PrependActivePokemon(base, d.deps, d.deps.RecentActivity.ActiveQuestCandy(), userLang)
+		}
+		return base
+	case opt == "mega_energy" && cmd == "quest":
+		base := autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			base = autocomplete.PrependActivePokemon(base, d.deps, d.deps.RecentActivity.ActiveQuestMega(), userLang)
+		}
+		return base
 	// /invasion grunt_type: typed grunts (Fire, Water…) and bosses
 	// (Giovanni, Arlo, Cliff, Sierra). Incidents live on /incident.
+	// Empty focused boosts currently-active grunt types (TypeID-keyed
+	// from invasion webhooks).
 	case opt == "grunt_type" && cmd == "invasion":
-		return autocomplete.Grunt(context.Background(), d.deps, focused, userLang)
+		base := autocomplete.Grunt(context.Background(), d.deps, focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			base = autocomplete.PrependActiveGrunts(base, d.deps, d.deps.RecentActivity.ActiveInvasionGrunts(), userLang)
+		}
+		return base
 	// /incident type: pokestop events (Kecleon, Gold Pokestop, Showcase,
 	// Pokestop Spawn…).
 	case opt == "type" && cmd == "incident":

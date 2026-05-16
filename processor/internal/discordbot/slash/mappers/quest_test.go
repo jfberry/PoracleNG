@@ -133,6 +133,95 @@ func TestQuestMapperAllExtras(t *testing.T) {
 	}
 }
 
+// min_amount is honoured for the three amount-bearing reward types
+// (item=2, candy=4, mega_energy=12). The text bot's `amount:N` token
+// flows into QuestTrackingAPI.Amount which the matcher tests against
+// the webhook reward.
+func TestQuestMapperMinAmountCandy(t *testing.T) {
+	tokens, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("candy", "pikachu"),
+		iopt("min_amount", 5),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"candy:pikachu", "amount:5"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
+func TestQuestMapperMinAmountMegaEnergy(t *testing.T) {
+	tokens, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("mega_energy", "charizard"),
+		iopt("min_amount", 50),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"energy:charizard", "amount:50"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
+func TestQuestMapperMinAmountItem(t *testing.T) {
+	tokens, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("item", "Golden Razz Berry"),
+		iopt("min_amount", 3),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"golden razz berry", "amount:3"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
+func TestQuestMapperMinAmountZeroOmitted(t *testing.T) {
+	tokens, _ := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("candy", "pikachu"),
+		iopt("min_amount", 0),
+	})
+	if !reflect.DeepEqual(tokens, []string{"candy:pikachu"}) {
+		t.Errorf("tokens=%v", tokens)
+	}
+}
+
+// Pokemon and stardust rewards have no Amount semantics — pokemon (7)
+// doesn't use the column and stardust (3) stores its threshold in
+// Reward via the dedicated `stardust` integer option. The mapper
+// rejects the combination so the user sees a clear validation error
+// instead of an opaque text-bot rejection.
+func TestQuestMapperMinAmountRejectedForPokemon(t *testing.T) {
+	_, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "pikachu"),
+		iopt("min_amount", 5),
+	})
+	me, ok := err.(*MapperError)
+	if !ok {
+		t.Fatalf("expected MapperError, got %T", err)
+	}
+	if me.Key != "error.slash.quest.amount_not_applicable" {
+		t.Errorf("key=%q", me.Key)
+	}
+}
+
+func TestQuestMapperMinAmountRejectedForStardust(t *testing.T) {
+	_, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		iopt("stardust", 1000),
+		iopt("min_amount", 5),
+	})
+	me, ok := err.(*MapperError)
+	if !ok {
+		t.Fatalf("expected MapperError, got %T", err)
+	}
+	if me.Key != "error.slash.quest.amount_not_applicable" {
+		t.Errorf("key=%q", me.Key)
+	}
+}
+
 // /quest summary token mirrors the text bot's arg.summary keyword: when
 // set, matching quests are buffered for scheduled batch delivery instead
 // of alerting immediately. emitFlag accepts either a non-empty String
