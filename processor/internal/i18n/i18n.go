@@ -182,6 +182,19 @@ func (b *Bundle) LoadCustomFile(path string, locale string) error {
 	return nil
 }
 
+// LoadedLanguages returns the locale codes of every translator currently in
+// the bundle. Order is not guaranteed; callers that need stable ordering
+// should sort the result.
+func (b *Bundle) LoadedLanguages() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	out := make([]string, 0, len(b.translators))
+	for locale := range b.translators {
+		out = append(out, locale)
+	}
+	return out
+}
+
 // For returns the translator for the given locale, falling back to English.
 func (b *Bundle) For(locale string) *Translator {
 	if locale == "" {
