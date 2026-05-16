@@ -16,7 +16,7 @@ import (
 //	stardust    (int)                  — minimum stardust amount
 //	candy       (string, autocomplete) — candy reward pokemon
 //	mega_energy (string, autocomplete) — mega energy reward pokemon
-//	min_amount  (int)                  — minimum amount for amount-bearing rewards
+//	(min_amount removed — see definitions.go comment)
 //	distance    (int)                  — alert radius in metres
 //	clean       (bool)                  — auto-delete on expiry
 //	template    (string, autocomplete) — DTS template name
@@ -67,9 +67,6 @@ func Quest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 		tokens = append(tokens, "energy:"+o["mega_energy"].StringValue())
 	}
 
-	if v, ok := o["min_amount"]; ok && v.IntValue() > 0 {
-		tokens = append(tokens, fmt.Sprintf("amount:%d", v.IntValue()))
-	}
 	appendDistance(&tokens, o["distance"])
 	if tok := emitFlag(o["clean"], "clean"); tok != "" {
 		tokens = append(tokens, tok)

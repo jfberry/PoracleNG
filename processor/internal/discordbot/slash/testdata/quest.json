@@ -54,16 +54,6 @@
     },
     {
       "type": 4,
-      "name": "min_amount",
-      "description": "Minimum reward amount",
-      "channel_types": null,
-      "required": false,
-      "options": null,
-      "autocomplete": false,
-      "choices": null
-    },
-    {
-      "type": 4,
       "name": "distance",
       "description": "Alert radius in metres",
       "channel_types": null,
