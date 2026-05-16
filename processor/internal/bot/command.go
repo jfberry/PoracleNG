@@ -113,6 +113,7 @@ type CommandContext struct {
 	ChannelID string
 	GuildID   string // Discord only, empty for Telegram
 	IsDM      bool
+	IsSlash   bool // Discord slash command invocation (vs. text message)
 
 	// Permissions (resolved before command runs)
 	IsAdmin          bool

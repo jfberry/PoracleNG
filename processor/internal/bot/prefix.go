@@ -9,6 +9,8 @@ import (
 // CommandPrefix returns the user-visible command prefix for the sender's
 // platform. Discord's prefix is configurable (cfg.Discord.Prefix, defaults
 // to "!"); Telegram always uses "/" because the Bot API hard-codes it.
+// Discord slash command invocations also use "/" so reply text steers the
+// user back to the same command surface they invoked from.
 //
 // All user-facing text that references a command name ("use !location to
 // set one", "I have made a lot of changes. See !tracked for details") MUST
@@ -17,6 +19,9 @@ import (
 func CommandPrefix(ctx *CommandContext) string {
 	if ctx == nil {
 		return "!"
+	}
+	if ctx.IsSlash {
+		return "/"
 	}
 	if ctx.Platform == "telegram" {
 		return "/"
