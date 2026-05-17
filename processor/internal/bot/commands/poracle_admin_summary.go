@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -198,13 +197,20 @@ func paSummaryShow(ctx *bot.CommandContext, args []string) []bot.Reply {
 		for _, g := range shown {
 			formSuffix := ""
 			if g.k.Form > 0 {
-				formSuffix = fmt.Sprintf(" form %d", g.k.Form)
+				formSuffix = tr.Tf("cmd.poracle_admin.summary.show.form_suffix",
+					strconv.Itoa(g.k.Form))
 			}
-			sb.WriteString(fmt.Sprintf("    Reward type %d, reward %d%s — %d stops\n",
-				g.k.RewardType, g.k.Reward, formSuffix, g.count))
+			sb.WriteString(tr.Tf("cmd.poracle_admin.summary.show.reward_row",
+				strconv.Itoa(g.k.RewardType),
+				strconv.Itoa(g.k.Reward),
+				formSuffix,
+				strconv.Itoa(g.count)))
+			sb.WriteString("\n")
 		}
 		if len(groups) > maxGroups {
-			sb.WriteString(fmt.Sprintf("    ... (%d more reward groups)\n", len(groups)-maxGroups))
+			sb.WriteString(tr.Tf("cmd.poracle_admin.summary.show.reward_more",
+				strconv.Itoa(len(groups)-maxGroups)))
+			sb.WriteString("\n")
 		}
 	}
 
