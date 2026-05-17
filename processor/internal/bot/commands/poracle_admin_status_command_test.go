@@ -15,7 +15,7 @@ func statusCtxWithRouteDetail(t *testing.T) (*bot.CommandContext, string) {
 	t.Helper()
 	const routeKey = "/channels/:id/messages"
 	ctx := statusCtx(t)
-	ctx.DiscordRate = func() delivery.DiscordRateSnapshot {
+	ctx.Admin.DiscordRate = func() delivery.DiscordRateSnapshot {
 		return delivery.DiscordRateSnapshot{
 			GlobalTokens:   30,
 			GlobalCapacity: 50,

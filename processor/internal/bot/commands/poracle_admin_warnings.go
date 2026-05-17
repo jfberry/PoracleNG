@@ -31,7 +31,7 @@ var paWarnings = &paSubgroup{
 func paWarningsHelp(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
-	if ctx.LogBuffer == nil {
+	if ctx.Admin == nil || ctx.Admin.LogBuffer == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.warnings.not_configured")}}
 	}
 
@@ -45,7 +45,7 @@ func paWarningsRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return paWarningsHelpText(ctx)
 	}
 
-	if ctx.LogBuffer == nil {
+	if ctx.Admin == nil || ctx.Admin.LogBuffer == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.warnings.not_configured")}}
 	}
 
@@ -82,21 +82,21 @@ func paWarningsHelpText(ctx *bot.CommandContext) []bot.Reply {
 // paWarningsBoth renders both the startup and recent sections.
 func paWarningsBoth(ctx *bot.CommandContext) []bot.Reply {
 	var sb strings.Builder
-	sb.WriteString(renderWarningsSection(ctx, ctx.LogBuffer.Startup(), "startup"))
+	sb.WriteString(renderWarningsSection(ctx, ctx.Admin.LogBuffer.Startup(), "startup"))
 	sb.WriteString("\n\n")
-	sb.WriteString(renderWarningsSection(ctx, ctx.LogBuffer.Recent(), "recent"))
+	sb.WriteString(renderWarningsSection(ctx, ctx.Admin.LogBuffer.Recent(), "recent"))
 	return bot.SplitTextReply(sb.String())
 }
 
 // paWarningsStartup renders only the startup buffer.
 func paWarningsStartup(ctx *bot.CommandContext) []bot.Reply {
-	text := renderWarningsSection(ctx, ctx.LogBuffer.Startup(), "startup")
+	text := renderWarningsSection(ctx, ctx.Admin.LogBuffer.Startup(), "startup")
 	return bot.SplitTextReply(text)
 }
 
 // paWarningsRecent renders only the rolling buffer.
 func paWarningsRecent(ctx *bot.CommandContext) []bot.Reply {
-	text := renderWarningsSection(ctx, ctx.LogBuffer.Recent(), "recent")
+	text := renderWarningsSection(ctx, ctx.Admin.LogBuffer.Recent(), "recent")
 	return bot.SplitTextReply(text)
 }
 
@@ -104,8 +104,8 @@ func paWarningsRecent(ctx *bot.CommandContext) []bot.Reply {
 func paWarningsClear(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 	// Capture the count before clearing — ClearRecent returns void.
-	count := len(ctx.LogBuffer.Recent())
-	ctx.LogBuffer.ClearRecent()
+	count := len(ctx.Admin.LogBuffer.Recent())
+	ctx.Admin.LogBuffer.ClearRecent()
 	return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.warnings.cleared", count)}}
 }
 

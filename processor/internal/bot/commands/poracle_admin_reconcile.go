@@ -57,7 +57,7 @@ func paReconcileRunAll(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
 	start := time.Now()
-	err := ctx.RunReconcile()
+	err := ctx.Admin.RunReconcile()
 	elapsed := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -83,7 +83,7 @@ func paReconcileUser(ctx *bot.CommandContext, args []string) []bot.Reply {
 	userID := args[0]
 
 	start := time.Now()
-	err := ctx.Reconciler(userID)
+	err := ctx.Admin.Reconciler(userID)
 	elapsed := time.Since(start).Milliseconds()
 
 	if err != nil {

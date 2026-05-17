@@ -41,7 +41,7 @@ func paMaintenanceRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
 	// No dispatcher wired — graceful fallback for all subcommands.
-	if ctx.Dispatcher == nil {
+	if ctx.Admin == nil || ctx.Admin.Dispatcher == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.maintenance.no_dispatcher")}}
 	}
 
@@ -70,7 +70,7 @@ func paMaintenancePause(ctx *bot.CommandContext, reasonArgs []string) []bot.Repl
 
 	// Check before calling Pause — reading PauseState first avoids any
 	// subtle ordering issue with the idempotency semantics.
-	paused, existingReason, existingSince := ctx.Dispatcher.PauseState()
+	paused, existingReason, existingSince := ctx.Admin.Dispatcher.PauseState()
 	if paused {
 		d := time.Since(existingSince).Round(time.Second)
 		ts := existingSince.UTC().Format("2006-01-02 15:04:05 UTC")
@@ -83,7 +83,7 @@ func paMaintenancePause(ctx *bot.CommandContext, reasonArgs []string) []bot.Repl
 		reason = tr.T("cmd.poracle_admin.maintenance.no_reason")
 	}
 
-	ctx.Dispatcher.Pause(reason)
+	ctx.Admin.Dispatcher.Pause(reason)
 
 	var sb strings.Builder
 	sb.WriteString(tr.Tf("cmd.poracle_admin.maintenance.pause.new", reason))
@@ -96,13 +96,13 @@ func paMaintenancePause(ctx *bot.CommandContext, reasonArgs []string) []bot.Repl
 func paMaintenanceResume(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
-	paused, reason, since := ctx.Dispatcher.PauseState()
+	paused, reason, since := ctx.Admin.Dispatcher.PauseState()
 	if !paused {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.maintenance.resume.not_paused")}}
 	}
 
 	d := time.Since(since).Round(time.Second)
-	ctx.Dispatcher.Resume()
+	ctx.Admin.Dispatcher.Resume()
 
 	var sb strings.Builder
 	sb.WriteString(tr.Tf("cmd.poracle_admin.maintenance.resume.success", formatDuration(d), reason))
@@ -115,7 +115,7 @@ func paMaintenanceResume(ctx *bot.CommandContext) []bot.Reply {
 func paMaintenanceStatus(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
-	paused, reason, since := ctx.Dispatcher.PauseState()
+	paused, reason, since := ctx.Admin.Dispatcher.PauseState()
 	if !paused {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.maintenance.status.running")}}
 	}
@@ -125,9 +125,9 @@ func paMaintenanceStatus(ctx *bot.CommandContext) []bot.Reply {
 	sb.WriteString(tr.Tf("cmd.poracle_admin.maintenance.status.paused", reason, formatDuration(d)))
 
 	// Queue depth — per-platform breakdown via dispatcher accessors.
-	discord := ctx.Dispatcher.DiscordDepth()
-	telegram := ctx.Dispatcher.TelegramDepth()
-	total := ctx.Dispatcher.QueueDepth()
+	discord := ctx.Admin.Dispatcher.DiscordDepth()
+	telegram := ctx.Admin.Dispatcher.TelegramDepth()
+	total := ctx.Admin.Dispatcher.QueueDepth()
 	sb.WriteString("\n")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.maintenance.status.queued",
 		total, discord, telegram))

@@ -716,7 +716,6 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, actor *autocreateAct
 			StateMgr:      b.StateMgr,
 			GameData:      b.GameData,
 			Translations:  b.Translations,
-			Dispatcher:    b.Dispatcher,
 			RowText:       b.RowText,
 			Resolver:      b.Resolver,
 			ArgMatcher:    b.ArgMatcher,
@@ -733,6 +732,9 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, actor *autocreateAct
 			SummarySchedules:   b.SummarySchedules,
 			SummaryBufferCount: b.SummaryBufferCount,
 			SummaryDispatch:    b.SummaryDispatch,
+			Admin: &bot.AdminDeps{
+				Dispatcher: b.Dispatcher,
+			},
 		}
 
 		st := b.StateMgr.Get()

@@ -36,7 +36,7 @@ func ratelimitCtx(t *testing.T) *bot.CommandContext {
 	t.Helper()
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.AlertLimiter = newTestLimiter(t)
+	ctx.Admin = &bot.AdminDeps{AlertLimiter: newTestLimiter(t)}
 	ctx.Registry = bot.NewRegistry()
 	return ctx
 }
@@ -88,7 +88,7 @@ func TestRatelimit_ListPopulated(t *testing.T) {
 
 	// Breach the alert bucket for two users.
 	// DM limit is 20, so we send 21 to exceed it.
-	seedBreach(ctx.AlertLimiter, "user111", "discord:user", 21)
+	seedBreach(ctx.Admin.AlertLimiter, "user111", "discord:user", 21)
 	// For the banned target: MaxLimitsBeforeStop=5 and TimingPeriod=300s.
 	// We need at least 5 violations. To trigger violations in a single window
 	// we cannot wait for window resets, so instead create a fresh limiter
@@ -104,9 +104,9 @@ func TestRatelimit_ListPopulated(t *testing.T) {
 	bannedLimiter.Check("bannedUser", "discord:user")
 	bannedLimiter.Check("bannedUser", "discord:user")
 
-	ctx.AlertLimiter = bannedLimiter
+	ctx.Admin.AlertLimiter = bannedLimiter
 	// Also add a breach (user111 won't show up here since we replaced the limiter).
-	seedBreach(ctx.AlertLimiter, "user222", "discord:user", 3)
+	seedBreach(ctx.Admin.AlertLimiter, "user222", "discord:user", 3)
 
 	replies := runRatelimit(t, ctx, "list")
 	if len(replies) == 0 {
@@ -134,8 +134,8 @@ func TestRatelimit_ShowKnownTarget(t *testing.T) {
 	ctx := ratelimitCtx(t)
 
 	// Seed both buckets.
-	ctx.AlertLimiter.Check("target1", "discord:user")
-	ctx.AlertLimiter.CheckSummary("target1", "discord:user")
+	ctx.Admin.AlertLimiter.Check("target1", "discord:user")
+	ctx.Admin.AlertLimiter.CheckSummary("target1", "discord:user")
 
 	// Use dtype/id form.
 	replies := runRatelimit(t, ctx, "show", "discord:user/target1")
@@ -192,7 +192,7 @@ func TestRatelimit_ShowMissingArg(t *testing.T) {
 func TestRatelimit_ResetSuccess(t *testing.T) {
 	ctx := ratelimitCtx(t)
 	// Seed a breached state.
-	seedBreach(ctx.AlertLimiter, "resetMe", "discord:user", 21)
+	seedBreach(ctx.Admin.AlertLimiter, "resetMe", "discord:user", 21)
 
 	replies := runRatelimit(t, ctx, "reset", "resetMe")
 	if len(replies) == 0 {
@@ -296,7 +296,7 @@ func TestRatelimit_NotConfigured(t *testing.T) {
 		t.Run(sub[0], func(t *testing.T) {
 			ctx, _ := testCtx(t)
 			ctx.IsAdmin = true
-			ctx.AlertLimiter = nil
+			ctx.Admin = &bot.AdminDeps{AlertLimiter: nil}
 			ctx.Registry = bot.NewRegistry()
 
 			replies := runRatelimit(t, ctx, sub...)
