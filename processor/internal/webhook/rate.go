@@ -59,7 +59,7 @@ func (r *RateCounter) Record(webhookType string) {
 	// If the slot belongs to a different (older) minute, reset it.
 	if r.totals[idx].minute != min {
 		r.totals[idx] = minuteSlot{minute: min, count: 0}
-		r.byType[idx] = make(map[string]int)
+		clear(r.byType[idx])
 	}
 
 	r.totals[idx].count++
