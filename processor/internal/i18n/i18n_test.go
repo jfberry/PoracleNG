@@ -251,9 +251,13 @@ func TestPoracleAdminI18nParity(t *testing.T) {
 	de := b.For("de")
 
 	// command name and its alias are intentionally English in all locales.
+	// Pure-format keys (indentation + placeholder only, no translatable text)
+	// are also excluded from the same-value check.
 	englishOnlyKeys := map[string]bool{
 		"cmd.poracle_admin": true,
 		"cmd.pa":            true,
+		// "  {0}" is pure indentation + placeholder — no translatable text.
+		"cmd.poracle_admin.summary.list.user_header": true,
 	}
 
 	for key := range en.Messages() {

@@ -59,6 +59,9 @@ type BotDeps struct {
 	// SummarySchedules backs the !summary command's CRUD operations.
 	// nil disables the command (e.g. when quest_summary_enabled=false).
 	SummarySchedules store.SummaryScheduleStore
+	// SummaryBuffer is the raw summary buffer, used by !poracle-admin summary
+	// subcommands (list/show/fire). May be nil in test contexts.
+	SummaryBuffer *tracker.SummaryBuffer
 	// SummaryBufferCount returns how many entries are currently buffered
 	// for (humanID, alertType). Used by !summary to show status.
 	// nil treated as zero by the command.
@@ -245,6 +248,9 @@ type CommandContext struct {
 	// SummarySchedules backs the !summary command's CRUD ops. nil disables
 	// the !summary command when the feature flag is off.
 	SummarySchedules store.SummaryScheduleStore
+	// SummaryBuffer is the raw buffer used by !poracle-admin summary subcommands.
+	// May be nil in test contexts or when quest summaries are disabled.
+	SummaryBuffer *tracker.SummaryBuffer
 	// SummaryBufferCount returns buffered entry count for status display.
 	// nil treated as zero by the command.
 	SummaryBufferCount func(humanID, alertType string) int
@@ -357,6 +363,7 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		Scanner:            deps.Scanner,
 		ReloadFunc:         deps.ReloadFunc,
 		SummarySchedules:   deps.SummarySchedules,
+		SummaryBuffer:      deps.SummaryBuffer,
 		SummaryBufferCount: deps.SummaryBufferCount,
 		SummaryDispatch:    deps.SummaryDispatch,
 		ReloadDTS:          deps.ReloadDTS,

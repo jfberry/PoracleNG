@@ -787,6 +787,7 @@ func main() {
 		TestProcessor:      proc,
 		ReloadFunc:         proc.triggerReload,
 		SummarySchedules:   proc.SummarySchedules(),
+		SummaryBuffer:      proc.summaryBuffer,
 		SummaryBufferCount: proc.SummaryBufferCount,
 		SummaryDispatch:    proc.DispatchQuestSummary,
 		Scanner:            proc.scanner,
