@@ -39,6 +39,7 @@ var paSubgroups = map[string]*paSubgroup{
 	"summary":     paSummary,
 	"status":      paStatus,
 	"maintenance": paMaintenance,
+	"config":      paConfig,
 }
 
 // paSubgroupOrder controls the display order in the top-level help listing.
@@ -52,6 +53,7 @@ var paSubgroupOrder = []string{
 	"summary",
 	"status",
 	"maintenance",
+	"config",
 }
 
 func (c *PoracleAdminCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {

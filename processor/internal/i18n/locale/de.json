@@ -185,6 +185,7 @@
   "cmd.poracle_admin.group.summary.desc": "Zusammenfassungs-Puffer prüfen und manuell ausliefern",
   "cmd.poracle_admin.group.status.desc": "Live-Systemzustand anzeigen",
   "cmd.poracle_admin.group.maintenance.desc": "Ausgehende Zustellung pausieren/fortsetzen",
+  "cmd.poracle_admin.group.config.desc": "Effektive Konfiguration mit maskierten Geheimnissen anzeigen",
 
   "cmd.poracle_admin.reload.help.intro": "Laufzeitzustand von Festplatte oder Datenbank neu laden.",
   "cmd.poracle_admin.reload.dts.desc": "`dts` — DTS-Vorlagen und Partials von der Festplatte neu laden",
@@ -1077,5 +1078,14 @@
   "slash.opt.summary.quest.cleartime": "zeitleeren",
   "slash.opt.summary.quest.cleartime.desc": "Den Zeitplan löschen",
   "slash.opt.summary.quest.now": "jetzt",
-  "slash.opt.summary.quest.now.desc": "Die aktuell gepufferten Quests sofort ausliefern"
+  "slash.opt.summary.quest.now.desc": "Die aktuell gepufferten Quests sofort ausliefern",
+
+  "cmd.poracle_admin.config.help.intro": "⚙️ Konfigurationsanzeige — Effektive Konfiguration mit maskierten Geheimnissen anzeigen.\nUnterbefehle:",
+  "cmd.poracle_admin.config.keys.desc": "Abschnittsnamen mit Schlüsselanzahl auflisten",
+  "cmd.poracle_admin.config.section.desc": "Nur diesen Abschnitt anzeigen (z.B. `!poracle-admin config discord`)",
+  "cmd.poracle_admin.config.full.desc": "Gesamte Konfiguration anzeigen (alle Abschnitte, Geheimnisse maskiert)",
+  "cmd.poracle_admin.config.keys.header": "⚙️ Konfigurationsabschnitte:",
+  "cmd.poracle_admin.config.keys.row": "  {0}: {1} Schlüssel",
+  "cmd.poracle_admin.config.unknown_section": "Unbekannter Konfigurationsabschnitt: `{0}`. Verwenden Sie `!poracle-admin config keys` für gültige Abschnitte.",
+  "cmd.poracle_admin.config.empty_section": "Abschnitt `{0}` hat keine konfigurierbaren Felder."
 }
