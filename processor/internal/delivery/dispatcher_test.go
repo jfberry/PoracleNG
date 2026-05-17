@@ -158,32 +158,37 @@ func TestDispatcher_NotPaused_NoOp(t *testing.T) {
 	}
 }
 
-// TestDispatcher_PausedHoldsNormalJob verifies a normal job blocks during pause
-// and drains after Resume.
-func TestDispatcher_PausedHoldsNormalJob(t *testing.T) {
+// TestDispatcher_PausedDropsNormalJob verifies normal jobs are dropped (not
+// buffered) during pause. Buffering would OOM on long pauses and flood users
+// with stale alerts on resume.
+func TestDispatcher_PausedDropsNormalJob(t *testing.T) {
 	d, mock := newPauseTestDispatcher(t, 1)
 	d.Start()
 
-	d.Pause("test hold")
+	d.Pause("test drop")
 
-	done := make(chan struct{})
-	go func() {
-		d.Dispatch(normalJob())
-		close(done) // not meaningful for ordering, but stops goroutine leak
-	}()
-
-	// The job should NOT have been sent within 100ms while paused.
+	d.Dispatch(normalJob())
+	// Give the worker time to pick the job up and drop it.
 	time.Sleep(100 * time.Millisecond)
+
 	if got := len(mock.getSendCalls()); got != 0 {
-		t.Fatalf("expected 0 sends while paused, got %d", got)
+		t.Fatalf("expected 0 sends (job dropped) while paused, got %d", got)
 	}
 
-	// Resume — job should now drain.
+	// Resume — nothing new should arrive because the previous job is gone, not buffered.
 	d.Resume()
 	time.Sleep(200 * time.Millisecond)
 
+	if got := len(mock.getSendCalls()); got != 0 {
+		t.Errorf("expected 0 sends after resume (dropped job is gone), got %d", got)
+	}
+
+	// A subsequent job after resume should send normally.
+	d.Dispatch(normalJob())
+	time.Sleep(200 * time.Millisecond)
+
 	if got := len(mock.getSendCalls()); got != 1 {
-		t.Errorf("expected 1 send after resume, got %d", got)
+		t.Errorf("expected 1 send for the post-resume job, got %d", got)
 	}
 
 	d.Stop()
@@ -221,80 +226,57 @@ func TestDispatcher_PausedAllowsBypassJob(t *testing.T) {
 	d.Stop()
 }
 
-// TestDispatcher_PausedAllowsEditJob verifies edit jobs (EditKey != "") skip the pause gate.
-func TestDispatcher_PausedAllowsEditJob(t *testing.T) {
+// TestDispatcher_PausedDropsEditJob verifies edit jobs are ALSO dropped during
+// pause — operator's mental model is "throw everything on the floor"; updating
+// already-sent messages while paused doesn't serve maintenance.
+func TestDispatcher_PausedDropsEditJob(t *testing.T) {
 	d, mock := newPauseTestDispatcher(t, 1)
 	d.Start()
 
-	d.Pause("test edit bypass")
+	d.Pause("test edit drop")
 
 	d.Dispatch(&Job{
 		Target:  "user1",
 		Type:    "discord:user",
 		Message: json.RawMessage(`{"content":"edit"}`),
-		EditKey: "some-key", // non-empty → skips pause gate
+		EditKey: "some-key",
 	})
+	time.Sleep(150 * time.Millisecond)
 
-	// Edit job must arrive within 200ms without needing Resume.
-	deadline := time.After(200 * time.Millisecond)
-	for {
-		if len(mock.getSendCalls()) == 1 {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatalf("edit job did not send within 200ms while paused (sends=%d)", len(mock.getSendCalls()))
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
+	if got := len(mock.getSendCalls()); got != 0 {
+		t.Errorf("expected 0 sends (edit job dropped) while paused, got %d", got)
 	}
 
 	d.Resume()
 	d.Stop()
 }
 
-// TestDispatcher_ResumeWakesMultipleWaiters verifies that Resume unblocks all
-// goroutines waiting in the pause gate simultaneously.
-func TestDispatcher_ResumeWakesMultipleWaiters(t *testing.T) {
-	// 3 workers + 3 jobs ensures all three are parked in waitWhilePaused
-	// at the same time, so Resume must broadcast (not signal) to wake them.
+// TestDispatcher_PausedDropsMultipleJobs verifies that many normal jobs
+// dispatched during pause are all dropped (no buffering / memory growth).
+func TestDispatcher_PausedDropsMultipleJobs(t *testing.T) {
 	d, mock := newPauseTestDispatcher(t, 3)
 	d.Start()
 
-	d.Pause("test multiple")
+	d.Pause("test multiple drop")
 
 	var wg sync.WaitGroup
-	for range 3 {
+	for range 5 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			d.Dispatch(normalJob())
 		}()
 	}
+	wg.Wait()
 
-	// Give goroutines time to reach the pause gate.
-	time.Sleep(100 * time.Millisecond)
+	// Give workers time to process all 5 dropped jobs.
+	time.Sleep(200 * time.Millisecond)
+
 	if got := len(mock.getSendCalls()); got != 0 {
-		t.Fatalf("expected 0 sends while paused (3 jobs queued), got %d", got)
+		t.Errorf("expected 0 sends (all dropped) while paused, got %d", got)
 	}
 
 	d.Resume()
-
-	// All 3 should drain within a generous timeout.
-	deadline := time.After(2 * time.Second)
-	for {
-		if len(mock.getSendCalls()) == 3 {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatalf("only %d/3 sends completed after resume", len(mock.getSendCalls()))
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-
-	wg.Wait()
 	d.Stop()
 }
 
