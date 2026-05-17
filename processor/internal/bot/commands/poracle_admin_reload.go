@@ -46,11 +46,11 @@ func paReloadRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return paReloadHelp(ctx)
 
 	case "dts":
-		if ctx.ReloadDTS == nil {
+		if ctx.Admin == nil || ctx.Admin.ReloadDTS == nil {
 			return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.reload.error", "DTS reload not configured")}}
 		}
 		start := time.Now()
-		count, err := ctx.ReloadDTS()
+		count, err := ctx.Admin.ReloadDTS()
 		elapsed := time.Since(start).Milliseconds()
 		if err != nil {
 			return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.reload.error", err.Error())}}
@@ -61,11 +61,11 @@ func paReloadRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 		)}}
 
 	case "geofence":
-		if ctx.ReloadGeofence == nil {
+		if ctx.Admin == nil || ctx.Admin.ReloadGeofence == nil {
 			return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.reload.error", "geofence reload not configured")}}
 		}
 		start := time.Now()
-		err := ctx.ReloadGeofence()
+		err := ctx.Admin.ReloadGeofence()
 		elapsed := time.Since(start).Milliseconds()
 		if err != nil {
 			return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.reload.error", err.Error())}}
@@ -86,11 +86,11 @@ func paReloadRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 		)}}
 
 	case "state":
-		if ctx.ReloadState == nil {
+		if ctx.Admin == nil || ctx.Admin.ReloadState == nil {
 			return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.reload.error", "state reload not configured")}}
 		}
 		start := time.Now()
-		err := ctx.ReloadState()
+		err := ctx.Admin.ReloadState()
 		elapsed := time.Since(start).Milliseconds()
 		if err != nil {
 			return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.reload.error", err.Error())}}

@@ -202,6 +202,50 @@ type Command interface {
 	Run(ctx *CommandContext, args []string) []Reply
 }
 
+// AdminDeps groups the function pointers and state that only the
+// !poracle-admin subgroups (and admin-gated commands like !broadcast)
+// reach for. Keeping it as a single field on CommandContext stops the
+// ~20 admin-only entries from polluting the user-facing command surface.
+type AdminDeps struct {
+	Dispatcher   *delivery.Dispatcher
+	WebhookRate  func() webhook.RateSnapshot
+	AlertLimiter *ratelimit.Limiter
+	DiscordRate  func() delivery.DiscordRateSnapshot
+	TelegramRate func() delivery.TelegramRateSnapshot
+
+	GeocoderStats func() geocoding.CacheStats
+	GeocoderClear func() int
+
+	Reconciler   func(userID string) error
+	RunReconcile func() error
+
+	LogBuffer *logbuffer.Buffer
+
+	SlashSync        func() error
+	SlashForceResync func() error
+	SlashClearGlobal func() error
+	SlashClearGuild  func(guildID string) error
+	SlashStatus      func() (global SlashScope, guilds []SlashScope, err error)
+
+	// Admin reload functions — live-ops commands only.
+	// Each bypasses the debouncer and executes synchronously.
+	ReloadDTS      func() (int, error) // returns template count
+	ReloadGeofence func() error
+	ReloadState    func() error
+
+	// EmojiReload reloads config/emoji.json and returns the key count.
+	// nil when DTS renderer is not configured.
+	EmojiReload func() (int, error)
+
+	// EmojiOperation — see BotDeps.EmojiOperation.
+	EmojiOperation func(channelID, guildID string, upload, overwrite bool) []Reply
+
+	// ProcessStart is the time at which the processor's main service
+	// was constructed. Surfaced for uptime display in !poracle-admin status.
+	// Zero value is acceptable (uptime will be reported as 0).
+	ProcessStart time.Time
+}
+
 // CommandContext carries user info, permissions, and injected dependencies.
 // It is built fresh for each command invocation by the bot or API handler.
 type CommandContext struct {
@@ -244,7 +288,6 @@ type CommandContext struct {
 	Translations  *i18n.Bundle
 	Geofence      *geofence.SpatialIndex
 	Fences        []geofence.Fence
-	Dispatcher    *delivery.Dispatcher
 	RowText       *rowtext.Generator
 	Resolver      *PokemonResolver
 	ArgMatcher    *ArgMatcher
@@ -276,65 +319,10 @@ type CommandContext struct {
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
 
-	// Admin reload functions — live-ops commands only.
-	// Each bypasses the debouncer and executes synchronously.
-	ReloadDTS      func() (int, error) // returns template count
-	ReloadGeofence func() error
-	ReloadState    func() error
-	// EmojiReload reloads config/emoji.json and returns the key count.
-	// nil when DTS renderer is not configured.
-	EmojiReload func() (int, error)
-
-	// EmojiOperation — see BotDeps.EmojiOperation.
-	EmojiOperation func(channelID, guildID string, upload, overwrite bool) []Reply
-
-	// Phase 2 introspection APIs — used by admin status/diagnostic subcommands.
-
-	// WebhookRate returns a point-in-time snapshot of webhook arrival rates.
-	WebhookRate func() webhook.RateSnapshot
-
-	// AlertLimiter is the per-destination alert rate limiter.
-	AlertLimiter *ratelimit.Limiter
-
-	// DiscordRate returns a point-in-time snapshot of Discord API rate-limit state.
-	DiscordRate func() delivery.DiscordRateSnapshot
-
-	// TelegramRate returns a point-in-time snapshot of Telegram API rate-limit state.
-	TelegramRate func() delivery.TelegramRateSnapshot
-
-	// GeocoderStats returns a point-in-time snapshot of geocoder cache health.
-	GeocoderStats func() geocoding.CacheStats
-
-	// GeocoderClear drops all entries from the in-memory geocoder cache layer.
-	GeocoderClear func() int
-
-	// Reconciler immediately reconciles a single Discord user's role membership.
-	// Always non-nil. Returns discordbot.ErrReconciliationDisabled when Discord
-	// reconciliation is not configured (Telegram-only deploys, or check_role=false).
-	// Use errors.Is(err, discordbot.ErrReconciliationDisabled) to detect.
-	Reconciler func(userID string) error
-
-	// RunReconcile runs the full Discord role + channel reconciliation immediately
-	// instead of waiting for the periodic timer. Always non-nil. Returns
-	// discordbot.ErrReconciliationDisabled when Discord reconciliation is not
-	// configured. Use errors.Is(err, discordbot.ErrReconciliationDisabled) to detect.
-	RunReconcile func() error
-
-	// LogBuffer holds the in-memory startup + rolling log capture.
-	LogBuffer *logbuffer.Buffer
-
-	// ProcessStart is the time at which the processor's main service was
-	// constructed. Used by !poracle-admin status to compute uptime.
-	ProcessStart time.Time
-
-	// Slash command lifecycle — used by !poracle-admin slash subcommands.
-	// Always non-nil in production; return slash.ErrSlashNotConfigured when
-	// Discord is disabled or slash commands are not enabled.
-	SlashSync        func() error
-	SlashForceResync func() error
-	SlashClearGlobal func() error
-	SlashClearGuild  func(guildID string) error
-	SlashStatus      func() (global SlashScope, guilds []SlashScope, err error)
+	// Admin holds the function pointers and state that only admin subgroup
+	// commands reach for. nil in non-admin contexts or test stubs that don't
+	// exercise admin paths.
+	Admin *AdminDeps
 
 	// PostRegister, when set, is invoked after !poracle creates a new
 	// human row. The platform sets this to its single-user reconciliation
@@ -365,7 +353,6 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		StateMgr:           deps.StateMgr,
 		GameData:           deps.GameData,
 		Translations:       deps.Translations,
-		Dispatcher:         deps.Dispatcher,
 		RowText:            deps.RowText,
 		Resolver:           deps.Resolver,
 		ArgMatcher:         deps.ArgMatcher,
@@ -384,26 +371,29 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		SummaryBuffer:      deps.SummaryBuffer,
 		SummaryBufferCount: deps.SummaryBufferCount,
 		SummaryDispatch:    deps.SummaryDispatch,
-		ReloadDTS:          deps.ReloadDTS,
-		ReloadGeofence:     deps.ReloadGeofence,
-		ReloadState:        deps.ReloadState,
-		EmojiReload:        deps.EmojiReload,
-		EmojiOperation:     deps.EmojiOperation,
-		WebhookRate:        deps.WebhookRate,
-		AlertLimiter:       deps.AlertLimiter,
-		DiscordRate:        deps.DiscordRate,
-		TelegramRate:       deps.TelegramRate,
-		GeocoderStats:      deps.GeocoderStats,
-		GeocoderClear:      deps.GeocoderClear,
-		Reconciler:         deps.Reconciler,
-		RunReconcile:       deps.RunReconcile,
-		LogBuffer:          deps.LogBuffer,
-		ProcessStart:       deps.ProcessStart,
-		SlashSync:          deps.SlashSync,
-		SlashForceResync:   deps.SlashForceResync,
-		SlashClearGlobal:   deps.SlashClearGlobal,
-		SlashClearGuild:    deps.SlashClearGuild,
-		SlashStatus:        deps.SlashStatus,
+		Admin: &AdminDeps{
+			Dispatcher:       deps.Dispatcher,
+			WebhookRate:      deps.WebhookRate,
+			AlertLimiter:     deps.AlertLimiter,
+			DiscordRate:      deps.DiscordRate,
+			TelegramRate:     deps.TelegramRate,
+			GeocoderStats:    deps.GeocoderStats,
+			GeocoderClear:    deps.GeocoderClear,
+			Reconciler:       deps.Reconciler,
+			RunReconcile:     deps.RunReconcile,
+			LogBuffer:        deps.LogBuffer,
+			SlashSync:        deps.SlashSync,
+			SlashForceResync: deps.SlashForceResync,
+			SlashClearGlobal: deps.SlashClearGlobal,
+			SlashClearGuild:  deps.SlashClearGuild,
+			SlashStatus:      deps.SlashStatus,
+			ReloadDTS:        deps.ReloadDTS,
+			ReloadGeofence:   deps.ReloadGeofence,
+			ReloadState:      deps.ReloadState,
+			EmojiReload:      deps.EmojiReload,
+			EmojiOperation:   deps.EmojiOperation,
+			ProcessStart:     deps.ProcessStart,
+		},
 	}
 }
 

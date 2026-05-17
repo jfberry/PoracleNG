@@ -117,10 +117,10 @@ func formatHeaderTimestamp(t time.Time) string {
 // paused (or when no dispatcher is available). Otherwise the formatted
 // 🔴 PAUSED banner.
 func renderPausedBanner(ctx *bot.CommandContext, tr translator) string {
-	if ctx.Dispatcher == nil {
+	if ctx.Admin == nil || ctx.Admin.Dispatcher == nil {
 		return ""
 	}
-	paused, reason, since := ctx.Dispatcher.PauseState()
+	paused, reason, since := ctx.Admin.Dispatcher.PauseState()
 	if !paused {
 		return ""
 	}
@@ -159,8 +159,8 @@ func renderBuildSection(ctx *bot.CommandContext, tr translator) string {
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.version", version, commit, date))
 
 	uptime := tr.T("cmd.poracle_admin.status.value.na")
-	if !ctx.ProcessStart.IsZero() {
-		uptime = formatDuration(time.Since(ctx.ProcessStart))
+	if ctx.Admin != nil && !ctx.Admin.ProcessStart.IsZero() {
+		uptime = formatDuration(time.Since(ctx.Admin.ProcessStart))
 	}
 	sb.WriteString("\n  ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.uptime", uptime))
@@ -173,12 +173,12 @@ func renderWebhooksSection(ctx *bot.CommandContext, tr translator, verbose bool)
 	var sb strings.Builder
 	sb.WriteString(tr.T("cmd.poracle_admin.status.section.webhooks"))
 
-	if ctx.WebhookRate == nil {
+	if ctx.Admin == nil || ctx.Admin.WebhookRate == nil {
 		sb.WriteString("\n  ")
 		sb.WriteString(tr.T("cmd.poracle_admin.status.value.na"))
 		return sb.String()
 	}
-	snap := ctx.WebhookRate()
+	snap := ctx.Admin.WebhookRate()
 
 	// Indicator selection.
 	indicator := indicatorGreen
@@ -247,22 +247,22 @@ func renderDeliverySection(ctx *bot.CommandContext, tr translator, verbose bool)
 	var sb strings.Builder
 	sb.WriteString(tr.T("cmd.poracle_admin.status.section.delivery"))
 
-	if ctx.Dispatcher == nil {
+	if ctx.Admin == nil || ctx.Admin.Dispatcher == nil {
 		sb.WriteString("\n  ")
 		sb.WriteString(tr.T("cmd.poracle_admin.status.value.na"))
 		return sb.String()
 	}
 
-	totalQueueDepth := ctx.Dispatcher.QueueDepth()
+	totalQueueDepth := ctx.Admin.Dispatcher.QueueDepth()
 
 	type platRow struct {
 		labelKey string
 		inFlight int
 	}
 	rows := []platRow{
-		{"cmd.poracle_admin.status.label.delivery_discord", ctx.Dispatcher.DiscordDepth()},
-		{"cmd.poracle_admin.status.label.delivery_telegram", ctx.Dispatcher.TelegramDepth()},
-		{"cmd.poracle_admin.status.label.delivery_webhook", ctx.Dispatcher.WebhookDepth()},
+		{"cmd.poracle_admin.status.label.delivery_discord", ctx.Admin.Dispatcher.DiscordDepth()},
+		{"cmd.poracle_admin.status.label.delivery_telegram", ctx.Admin.Dispatcher.TelegramDepth()},
+		{"cmd.poracle_admin.status.label.delivery_webhook", ctx.Admin.Dispatcher.WebhookDepth()},
 	}
 	for _, r := range rows {
 		indicator := indicatorGreen
@@ -290,12 +290,12 @@ func renderDiscordRateSection(ctx *bot.CommandContext, tr translator, verbose bo
 	var sb strings.Builder
 	sb.WriteString(tr.T("cmd.poracle_admin.status.section.discord_rate"))
 
-	if ctx.DiscordRate == nil {
+	if ctx.Admin == nil || ctx.Admin.DiscordRate == nil {
 		sb.WriteString("\n  ")
 		sb.WriteString(tr.T("cmd.poracle_admin.status.value.na"))
 		return sb.String()
 	}
-	snap := ctx.DiscordRate()
+	snap := ctx.Admin.DiscordRate()
 
 	indicator429 := indicatorGreen
 	if snap.Recent429Count > 0 {
@@ -347,12 +347,12 @@ func renderTelegramRateSection(ctx *bot.CommandContext, tr translator) string {
 	var sb strings.Builder
 	sb.WriteString(tr.T("cmd.poracle_admin.status.section.telegram_rate"))
 
-	if ctx.TelegramRate == nil {
+	if ctx.Admin == nil || ctx.Admin.TelegramRate == nil {
 		sb.WriteString("\n  ")
 		sb.WriteString(tr.T("cmd.poracle_admin.status.value.na"))
 		return sb.String()
 	}
-	snap := ctx.TelegramRate()
+	snap := ctx.Admin.TelegramRate()
 
 	indicator := indicatorGreen
 	if snap.Recent429Count > 0 || (!snap.CurrentBackoffUntil.IsZero() && snap.CurrentBackoffUntil.After(time.Now())) {
@@ -381,12 +381,12 @@ func renderAlertLimitsSection(ctx *bot.CommandContext, tr translator) string {
 	var sb strings.Builder
 	sb.WriteString(tr.T("cmd.poracle_admin.status.section.alert_limits"))
 
-	if ctx.AlertLimiter == nil {
+	if ctx.Admin == nil || ctx.Admin.AlertLimiter == nil {
 		sb.WriteString("\n  ")
 		sb.WriteString(tr.T("cmd.poracle_admin.status.value.na"))
 		return sb.String()
 	}
-	blocked := ctx.AlertLimiter.ListBlocked()
+	blocked := ctx.Admin.AlertLimiter.ListBlocked()
 	now := time.Now()
 
 	var alertCount, summaryCount int

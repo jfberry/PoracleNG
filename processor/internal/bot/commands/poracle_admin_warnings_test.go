@@ -14,7 +14,7 @@ func warningsCtx(t *testing.T, buf *logbuffer.Buffer) *bot.CommandContext {
 	t.Helper()
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.LogBuffer = buf
+	ctx.Admin = &bot.AdminDeps{LogBuffer: buf}
 	return ctx
 }
 
@@ -251,7 +251,7 @@ func TestWarnings_NotConfigured(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx, _ := testCtx(t)
 			ctx.IsAdmin = true
-			ctx.LogBuffer = nil // not configured
+			ctx.Admin = &bot.AdminDeps{LogBuffer: nil} // not configured
 
 			replies := runWarnings(t, ctx, sub...)
 			if len(replies) == 0 {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	reconcilesentinel "github.com/pokemon/poracleng/processor/internal/discordbot/reconcile"
 )
 
@@ -32,7 +33,7 @@ func TestReconcile_HelpNoArgs(t *testing.T) {
 func TestReconcile_RunSuccess(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.RunReconcile = func() error { return nil }
+	ctx.Admin = &bot.AdminDeps{RunReconcile: func() error { return nil }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reconcile", "run"})
@@ -50,7 +51,7 @@ func TestReconcile_RunSuccess(t *testing.T) {
 func TestReconcile_RunDisabled(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.RunReconcile = func() error { return reconcilesentinel.ErrDisabled }
+	ctx.Admin = &bot.AdminDeps{RunReconcile: func() error { return reconcilesentinel.ErrDisabled }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reconcile", "run"})
@@ -72,9 +73,9 @@ func TestReconcile_RunDisabled(t *testing.T) {
 func TestReconcile_RunDisabledWrapped(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.RunReconcile = func() error {
+	ctx.Admin = &bot.AdminDeps{RunReconcile: func() error {
 		return errors.Join(reconcilesentinel.ErrDisabled, errors.New("extra"))
-	}
+	}}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reconcile", "run"})
@@ -92,7 +93,7 @@ func TestReconcile_RunDisabledWrapped(t *testing.T) {
 func TestReconcile_RunGenericError(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.RunReconcile = func() error { return errors.New("discord gateway timeout") }
+	ctx.Admin = &bot.AdminDeps{RunReconcile: func() error { return errors.New("discord gateway timeout") }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reconcile", "run"})
@@ -114,7 +115,7 @@ func TestReconcile_UserSuccess(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
 	var gotID string
-	ctx.Reconciler = func(userID string) error { gotID = userID; return nil }
+	ctx.Admin = &bot.AdminDeps{Reconciler: func(userID string) error { gotID = userID; return nil }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reconcile", "user", "123456789"})
@@ -139,7 +140,7 @@ func TestReconcile_UserSuccess(t *testing.T) {
 func TestReconcile_UserDisabled(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Reconciler = func(userID string) error { return reconcilesentinel.ErrDisabled }
+	ctx.Admin = &bot.AdminDeps{Reconciler: func(userID string) error { return reconcilesentinel.ErrDisabled }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reconcile", "user", "987654321"})
@@ -161,7 +162,7 @@ func TestReconcile_UserDisabled(t *testing.T) {
 func TestReconcile_UserError(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Reconciler = func(userID string) error { return errors.New("member fetch failed") }
+	ctx.Admin = &bot.AdminDeps{Reconciler: func(userID string) error { return errors.New("member fetch failed") }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reconcile", "user", "111222333"})
@@ -186,7 +187,7 @@ func TestReconcile_UserError(t *testing.T) {
 func TestReconcile_UserMissingArg(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Reconciler = func(userID string) error { return nil }
+	ctx.Admin = &bot.AdminDeps{Reconciler: func(userID string) error { return nil }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reconcile", "user"})
