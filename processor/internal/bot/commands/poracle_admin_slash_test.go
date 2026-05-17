@@ -9,6 +9,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash"
 )
 
+
 // stubSlashDeps wires all 5 slash closures on ctx using the provided stubs.
 // Pass nil for any closure to leave it nil (simulates unconfigured).
 func stubSlashDeps(ctx *bot.CommandContext,
@@ -18,11 +19,14 @@ func stubSlashDeps(ctx *bot.CommandContext,
 	clearGuildFn func(string) error,
 	statusFn func() (bot.SlashScope, []bot.SlashScope, error),
 ) {
-	ctx.SlashSync = syncFn
-	ctx.SlashForceResync = forceResyncFn
-	ctx.SlashClearGlobal = clearGlobalFn
-	ctx.SlashClearGuild = clearGuildFn
-	ctx.SlashStatus = statusFn
+	if ctx.Admin == nil {
+		ctx.Admin = &bot.AdminDeps{}
+	}
+	ctx.Admin.SlashSync = syncFn
+	ctx.Admin.SlashForceResync = forceResyncFn
+	ctx.Admin.SlashClearGlobal = clearGlobalFn
+	ctx.Admin.SlashClearGuild = clearGuildFn
+	ctx.Admin.SlashStatus = statusFn
 }
 
 // TestSlash_HelpNoArgs verifies that calling the slash subgroup with no args

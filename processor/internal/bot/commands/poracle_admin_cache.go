@@ -57,11 +57,11 @@ func paCacheRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 func paCacheStats(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
-	if ctx.GeocoderStats == nil {
+	if ctx.Admin == nil || ctx.Admin.GeocoderStats == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.cache.not_configured")}}
 	}
 
-	s := ctx.GeocoderStats()
+	s := ctx.Admin.GeocoderStats()
 
 	total := s.HitsMemory + s.HitsDisk + s.Misses
 	var hitRate int
@@ -90,10 +90,10 @@ func paCacheStats(ctx *bot.CommandContext) []bot.Reply {
 func paCacheClearGeocoder(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
-	if ctx.GeocoderClear == nil {
+	if ctx.Admin == nil || ctx.Admin.GeocoderClear == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.cache.not_configured")}}
 	}
 
-	count := ctx.GeocoderClear()
+	count := ctx.Admin.GeocoderClear()
 	return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.cache.clear.geocoder.success", count)}}
 }

@@ -122,12 +122,12 @@ func paEmojiList(ctx *bot.CommandContext) []bot.Reply {
 func paEmojiReload(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
-	if ctx.EmojiReload == nil {
+	if ctx.Admin == nil || ctx.Admin.EmojiReload == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.emoji.not_loaded")}}
 	}
 
 	start := time.Now()
-	count, err := ctx.EmojiReload()
+	count, err := ctx.Admin.EmojiReload()
 	elapsed := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -149,10 +149,10 @@ func paEmojiOperation(ctx *bot.CommandContext, upload, overwrite bool) []bot.Rep
 	if ctx.Platform != "discord" {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.emoji.discord_only")}}
 	}
-	if ctx.EmojiOperation == nil {
+	if ctx.Admin == nil || ctx.Admin.EmojiOperation == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.emoji.discord_only")}}
 	}
-	return ctx.EmojiOperation(ctx.ChannelID, ctx.GuildID, upload, overwrite)
+	return ctx.Admin.EmojiOperation(ctx.ChannelID, ctx.GuildID, upload, overwrite)
 }
 
 func paEmojiTest(ctx *bot.CommandContext, args []string) []bot.Reply {
