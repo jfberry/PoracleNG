@@ -432,7 +432,8 @@ Bare `!track everything` with no meaningful filters (IV, CP, level, PVP, type, g
 - `!nest`, `!lure`, `!gym`, `!fort`, `!invasion`, `!maxbattle` — type-specific filters
 - `!tracked` — list all active tracking, shows `[id:XX]` per rule for targeted removal
 - `!untrack id:45` or `!raid remove id:12` — remove a specific tracking rule by database UID (works for all tracking types)
-- `!untrack <type> [args]` — reroute to per-type remove handler (e.g. `!untrack raid id:12`, `!untrack egg level:5`, `!untrack invasion grunt:bug`); mirrors the `/untrack <subtype>` slash form
+- `!untrack <type> [args]` — reroute to per-type remove handler (e.g. `!untrack raid id:12`, `!untrack egg level:5`, `!untrack invasion grunt:bug`); mirrors the `/untrack <subtype>` slash form. First token is matched against the canonical English type list (`raid`, `egg`, `quest`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`); other tokens fall through to the existing pokemon-untrack path.
+- `!poracle-admin <group> [subcommand] [args]` (also `!pa`) — administrative umbrella for live operations, admin-only. Groups: `slash` (slash-command lifecycle), `reload` (dts/geofence/state), `status` (health snapshot), `ratelimit` (inspect/reset alert limits), `summary` (summary buffer), `cache` (geocoder stats/clear), `maintenance` (pause/resume delivery), `emoji` (emoji config inspection), `reconcile` (Discord role sync), `config` (effective config dump), `warnings` (captured WARN/ERROR log buffer). See `docs/admin-commands/` for design and smoke-test checklist.
 - `!poracle` — register/start
 - `!profile` — switch/create/delete profiles
 - `!area` — add/remove geofence areas
