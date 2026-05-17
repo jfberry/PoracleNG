@@ -306,6 +306,9 @@
   "cmd.poracle_admin.status.section.telegram_rate": "**Telegram-Limits**",
   "cmd.poracle_admin.status.section.alert_limits": "**Nachrichten-Limits**",
   "cmd.poracle_admin.status.section.summary_buffer": "**Zusammenfassungs-Puffer**",
+  "cmd.poracle_admin.status.label.summary_buffer_totals": "Einträge: {0} in {1} Bucket(s)",
+  "cmd.poracle_admin.status.label.summary_buffer_top": "Top-Benutzer:",
+  "cmd.poracle_admin.status.label.summary_buffer_user_row": "  {0} ({1}): {2} Einträge",
   "cmd.poracle_admin.status.section.tracking": "**Tracking-Übersicht**",
   "cmd.poracle_admin.status.section.mysql": "**MySQL-Datenbank**",
 

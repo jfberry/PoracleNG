@@ -33,12 +33,16 @@ func statusCtxWithRouteDetail(t *testing.T) (*bot.CommandContext, string) {
 	return ctx, routeKey
 }
 
-// TestStatus_NoArgs_RendersReport verifies that calling paStatusRun with no
-// arguments produces the full health snapshot (non-verbose path).
+// TestStatus_NoArgs_RendersReport verifies that the no-arg entry point
+// (paStatus.help — the hook called when no further args are given to the
+// subgroup) renders the full health snapshot, not just help text.
+// This exercises the actual user-hit path: "!poracle-admin status".
 func TestStatus_NoArgs_RendersReport(t *testing.T) {
 	ctx := statusCtx(t)
 
-	replies := paStatusRun(ctx, []string{})
+	// paStatus.help is the hook invoked when the user types just
+	// "!poracle-admin status" with no further arguments.
+	replies := paStatus.help(ctx)
 
 	out := firstReplyText(t, replies)
 
