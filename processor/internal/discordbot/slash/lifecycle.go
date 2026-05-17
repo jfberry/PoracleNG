@@ -6,24 +6,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// ForceResync clears the on-disk fingerprint cache for all scopes and then
-// calls SyncCommands, bypassing the fingerprint guard. The next sync will
-// push the full command set to Discord regardless of what was there before.
+// ForceResync forces a full push to Discord by temporarily enabling
+// ForceSync, then calling SyncCommands. No cache wipe is necessary:
+// ForceSync=true bypasses the fingerprint guard inside SyncCommands
+// regardless of what the cache file contains, and SyncCommands writes
+// the new fingerprint back after a successful push.
 //
-// This is the live-command equivalent of -sync-slash-commands with an empty
-// cache, useful when something outside Go (e.g. a manual Discord portal
-// change) has made the cached fingerprint stale.
+// This is the live-command equivalent of -sync-slash-commands, useful
+// when something outside Go (e.g. a manual Discord portal change) has
+// made the cached fingerprint stale.
 func (d *Dispatcher) ForceResync() error {
-	if d.cfg.CachePath != "" {
-		cache := &Cache{Path: d.cfg.CachePath, Guilds: map[string]CacheEntry{}}
-		// Reset all entries to zero value so SyncCommands sees mismatches.
-		if err := cache.Save(); err != nil {
-			// Non-fatal: SyncCommands will still push (cache read will return
-			// the stale file, but we'll save the new one after push).
-			// Intentionally continue.
-			_ = err
-		}
-	}
 	// Temporarily enable ForceSync for this call only.
 	origForce := d.cfg.ForceSync
 	d.cfg.ForceSync = true

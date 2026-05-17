@@ -601,32 +601,6 @@ func renderMySQLSection(ctx *bot.CommandContext, tr translator) string {
 	return sb.String()
 }
 
-// formatDuration formats a duration in a compact, operator-readable
-// way: "2d 3h 14m" / "3h 14m 12s" / "12s". Rounded to seconds.
-func formatDuration(d time.Duration) string {
-	d = d.Round(time.Second)
-	if d < 0 {
-		d = 0
-	}
-	days := int(d / (24 * time.Hour))
-	d -= time.Duration(days) * 24 * time.Hour
-	hours := int(d / time.Hour)
-	d -= time.Duration(hours) * time.Hour
-	mins := int(d / time.Minute)
-	d -= time.Duration(mins) * time.Minute
-	secs := int(d / time.Second)
-
-	switch {
-	case days > 0:
-		return fmt.Sprintf("%dd %dh %dm", days, hours, mins)
-	case hours > 0:
-		return fmt.Sprintf("%dh %dm %ds", hours, mins, secs)
-	case mins > 0:
-		return fmt.Sprintf("%dm %ds", mins, secs)
-	default:
-		return fmt.Sprintf("%ds", secs)
-	}
-}
 
 // typeCount is a (name, count) pair used to sort webhook breakdown
 // entries by count descending.
