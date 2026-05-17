@@ -157,7 +157,7 @@ func paConfigKeys(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
 	if ctx.Config == nil {
-		return []bot.Reply{{Text: "Config not loaded"}}
+		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.config.not_loaded")}}
 	}
 
 	sections := configSections(ctx.Config)
@@ -178,7 +178,7 @@ func paConfigSection(ctx *bot.CommandContext, section string) []bot.Reply {
 	tr := ctx.Tr()
 
 	if ctx.Config == nil {
-		return []bot.Reply{{Text: "Config not loaded"}}
+		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.config.not_loaded")}}
 	}
 
 	sections := configSections(ctx.Config)
@@ -203,8 +203,10 @@ func paConfigSection(ctx *bot.CommandContext, section string) []bot.Reply {
 // paConfigFull renders the entire config, all sections, redacted.
 // Called when no sub-argument is given (and it's not "help").
 func paConfigFull(ctx *bot.CommandContext) []bot.Reply {
+	tr := ctx.Tr()
+
 	if ctx.Config == nil {
-		return []bot.Reply{{Text: "Config not loaded"}}
+		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.config.not_loaded")}}
 	}
 
 	sections := configSections(ctx.Config)

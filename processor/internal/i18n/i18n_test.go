@@ -287,3 +287,42 @@ func TestPoracleAdminI18nParity(t *testing.T) {
 		}
 	}
 }
+
+// TestAdminAdjacentI18nParity verifies that admin-adjacent keys added during
+// the admin-commands implementation (but living outside the cmd.poracle_admin.*
+// prefix) are also present and translated in the German bundle.
+//
+// Covered key families:
+//   - cmd.info.poracle.moved / cmd.info.config.moved — stub messages added in
+//     Task 3.3 when the info and config views were redirected to poracle-admin.
+//   - cmd.maintenance.active_suffix — appended to every bot reply when delivery
+//     is paused via !poracle-admin maintenance pause.
+func TestAdminAdjacentI18nParity(t *testing.T) {
+	b := Load("")
+	en := b.For("en")
+	de := b.For("de")
+
+	keys := []string{
+		"cmd.info.poracle.moved",
+		"cmd.info.config.moved",
+		"cmd.maintenance.active_suffix",
+	}
+
+	for _, key := range keys {
+		enVal := en.T(key)
+		if enVal == key {
+			t.Errorf("en: key %q not found in English bundle — add it to en.json", key)
+			continue
+		}
+
+		deVal := de.T(key)
+		if deVal == key {
+			t.Errorf("de: key %q not found in German bundle — add it to de.json", key)
+			continue
+		}
+
+		if deVal == enVal {
+			t.Errorf("de: key %q appears to be missing a German translation (de returned same value as en: %q)", key, enVal)
+		}
+	}
+}
