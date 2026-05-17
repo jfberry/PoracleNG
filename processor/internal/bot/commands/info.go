@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"slices"
@@ -9,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pokemon/poracleng/processor/internal/api"
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -48,15 +46,9 @@ func (c *InfoCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	case matchSub("msg.info.sub.weather"):
 		return c.weatherInfo(ctx, args[1:])
 	case matchSub("msg.info.sub.poracle"):
-		if !ctx.IsAdmin {
-			return []bot.Reply{{React: "🙅"}}
-		}
-		return c.poracleInfo(ctx)
+		return []bot.Reply{{Text: tr.T("cmd.info.poracle.moved")}}
 	case matchSub("msg.info.sub.config"):
-		if !ctx.IsAdmin {
-			return []bot.Reply{{React: "🙅"}}
-		}
-		return c.configInfo(ctx, args[1:])
+		return []bot.Reply{{Text: tr.T("cmd.info.config.moved")}}
 	case matchSub("msg.info.sub.translate"):
 		if !ctx.IsAdmin {
 			return []bot.Reply{{React: "🙅"}}
@@ -760,40 +752,6 @@ func (c *InfoCommand) weatherInfo(ctx *bot.CommandContext, args []string) []bot.
 	return []bot.Reply{{Text: sb.String()}}
 }
 
-// poracleInfo shows admin-only system status information.
-func (c *InfoCommand) poracleInfo(ctx *bot.CommandContext) []bot.Reply {
-	var sb strings.Builder
-	sb.WriteString("**Poracle Info**\n")
-
-	// Dispatcher queue depths
-	if ctx.Dispatcher != nil {
-		sb.WriteString("\n**Delivery Queues:**\n")
-		sb.WriteString(fmt.Sprintf("  Queue depth: %d\n", ctx.Dispatcher.QueueDepth()))
-		sb.WriteString(fmt.Sprintf("  Discord depth: %d\n", ctx.Dispatcher.DiscordDepth()))
-		sb.WriteString(fmt.Sprintf("  Webhook depth: %d\n", ctx.Dispatcher.WebhookDepth()))
-		sb.WriteString(fmt.Sprintf("  Telegram depth: %d\n", ctx.Dispatcher.TelegramDepth()))
-		sb.WriteString(fmt.Sprintf("  Tracker size: %d\n", ctx.Dispatcher.TrackerSize()))
-	}
-
-	// State info
-	if ctx.StateMgr != nil {
-		s := ctx.StateMgr.Get()
-		if s != nil {
-			monsterCount := 0
-			if s.Monsters != nil {
-				monsterCount = s.Monsters.Total
-			}
-			sb.WriteString(fmt.Sprintf("\n**State:** %d humans, %d monster rules, %d raid rules, %d egg rules\n",
-				len(s.Humans), monsterCount, len(s.Raids), len(s.Eggs)))
-			sb.WriteString(fmt.Sprintf("  %d invasion rules, %d quest rules, %d lure rules\n",
-				len(s.Invasions), len(s.Quests), len(s.Lures)))
-			sb.WriteString(fmt.Sprintf("  %d gym rules, %d nest rules, %d fort rules, %d maxbattle rules\n",
-				len(s.Gyms), len(s.Nests), len(s.Forts), len(s.Maxbattles)))
-		}
-	}
-
-	return []bot.Reply{{Text: sb.String()}}
-}
 
 // translateDebug shows forward and reverse translation debug info.
 func (c *InfoCommand) translateDebug(ctx *bot.CommandContext, args []string) []bot.Reply {
@@ -971,94 +929,3 @@ func (c *InfoCommand) templateList(ctx *bot.CommandContext) []bot.Reply {
 	return bot.SplitTextReply(strings.TrimSpace(sb.String()))
 }
 
-// configInfo dumps the web-editable subset of the config (with secrets masked
-// as "****") for diagnosis. With no arg, returns the whole thing as a file
-// attachment. With a search arg, filters to lines whose key or value matches
-// the substring (case-insensitive).
-func (c *InfoCommand) configInfo(ctx *bot.CommandContext, args []string) []bot.Reply {
-	if ctx.Config == nil {
-		return []bot.Reply{{Text: "Config not loaded"}}
-	}
-
-	values := api.ExtractValues(ctx.Config, "")
-	var lines []string
-	flattenConfigValues("", values, &lines)
-	sort.Strings(lines)
-
-	search := strings.ToLower(strings.TrimSpace(strings.Join(args, " ")))
-	if search != "" {
-		filtered := lines[:0:0]
-		for _, line := range lines {
-			if strings.Contains(strings.ToLower(line), search) {
-				filtered = append(filtered, line)
-			}
-		}
-		if len(filtered) == 0 {
-			return []bot.Reply{{Text: fmt.Sprintf("No config entries match `%s`", search)}}
-		}
-		text := strings.Join(filtered, "\n")
-		// Inline if it fits comfortably in a Discord message; otherwise attach.
-		if len(text)+20 < 1900 {
-			return []bot.Reply{{Text: fmt.Sprintf("```toml\n%s\n```", text)}}
-		}
-		return []bot.Reply{{
-			Text: fmt.Sprintf("**Config search: `%s`** (%d entries)", search, len(filtered)),
-			Attachment: &bot.Attachment{
-				Filename: "config-search.txt",
-				Content:  []byte(text + "\n"),
-			},
-		}}
-	}
-
-	text := strings.Join(lines, "\n")
-	return []bot.Reply{{
-		Text: fmt.Sprintf("**Poracle config** (web-editable fields, secrets masked) — %d entries", len(lines)),
-		Attachment: &bot.Attachment{
-			Filename: "config.txt",
-			Content:  []byte(text + "\n"),
-		},
-	}}
-}
-
-// flattenConfigValues walks the nested map produced by api.ExtractValues and
-// emits "dotted.path = value" lines. Tables (slices of maps) and other complex
-// structures are JSON-encoded so the output stays one line per leaf.
-func flattenConfigValues(prefix string, v any, out *[]string) {
-	switch val := v.(type) {
-	case map[string]any:
-		keys := make([]string, 0, len(val))
-		for k := range val {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			path := k
-			if prefix != "" {
-				path = prefix + "." + k
-			}
-			flattenConfigValues(path, val[k], out)
-		}
-	default:
-		*out = append(*out, fmt.Sprintf("%s = %s", prefix, formatConfigValue(v)))
-	}
-}
-
-// formatConfigValue renders a config leaf value for display. Strings are
-// quoted, primitives are printed natively, and slices/maps are JSON-encoded
-// (compact) so they don't sprawl across multiple lines.
-func formatConfigValue(v any) string {
-	switch val := v.(type) {
-	case nil:
-		return "null"
-	case string:
-		return fmt.Sprintf("%q", val)
-	case bool, int, int32, int64, uint, uint32, uint64, float32, float64:
-		return fmt.Sprintf("%v", val)
-	default:
-		b, err := json.Marshal(val)
-		if err != nil {
-			return fmt.Sprintf("%v", val)
-		}
-		return string(b)
-	}
-}
