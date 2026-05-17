@@ -1012,6 +1012,8 @@
   "cmd.poracle_admin.status.help_stub": "(no commands available yet — coming in a later task)",
   "cmd.poracle_admin.maintenance.help_stub": "(no commands available yet — coming in a later task)",
 
+  "cmd.poracle_admin.status.help.intro": "!poracle-admin status — current health snapshot. Add -v for verbose mode (per-route Discord detail, full webhook per-type breakdown).",
+
   "cmd.poracle_admin.status.header": "🛠️ Poracle Admin — Status",
   "cmd.poracle_admin.status.paused_banner": "🔴 PAUSED — {0} (since {1} ago)\n   Outbound delivery is held. Webhooks still ingest and queue.",
   "cmd.poracle_admin.status.value.na": "n/a",
