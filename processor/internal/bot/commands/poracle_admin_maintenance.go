@@ -12,33 +12,18 @@ import (
 //
 // Subcommands:
 //
-//	(no arg) → status (most common, idempotent)
-//	help     → group help
-//	pause [reason words...] → call Dispatcher.Pause(reason)
-//	resume   → call Dispatcher.Resume()
+//	(no arg) → subcommand listing (paMaintenanceShowHelp)
+//	help     → same as no arg
+//	pause [reason...]  (alias: start) → Dispatcher.Pause(reason)
+//	resume             (alias: stop)  → Dispatcher.Resume()
 //	status   → render current paused/running state
-//
-// Note: the `help` hook on paSubgroup is called when the user types just
-// `!poracle-admin maintenance` (no further args). For this subgroup we
-// redirect that to status since it's the most useful idempotent op.
-// The actual help text is reached via `!poracle-admin maintenance help`.
 var paMaintenance = &paSubgroup{
 	run:  paMaintenanceRun,
-	help: paMaintenanceHelpAsStatus,
+	help: paMaintenanceShowHelp,
 }
 
-// paMaintenanceHelpAsStatus is the paSubgroup.help hook — called when the user
-// types `!poracle-admin maintenance` with no further args. Delegates to status
-// rather than showing command syntax, matching the task spec: "(no arg) → status".
-func paMaintenanceHelpAsStatus(ctx *bot.CommandContext) []bot.Reply {
-	if ctx.Dispatcher == nil {
-		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.maintenance.no_dispatcher")}}
-	}
-	return paMaintenanceStatus(ctx)
-}
-
-// paMaintenanceShowHelp renders the actual subgroup help text.
+// paMaintenanceShowHelp renders the subgroup help text — listing of subcommands.
+// Called when the user types `!poracle-admin maintenance` with no further args.
 func paMaintenanceShowHelp(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 	var sb strings.Builder
@@ -60,17 +45,17 @@ func paMaintenanceRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.maintenance.no_dispatcher")}}
 	}
 
-	// No arg → status (most common, idempotent).
+	// No arg → subcommand listing. (Status is reached via `status`.)
 	if len(args) == 0 {
-		return paMaintenanceStatus(ctx)
+		return paMaintenanceShowHelp(ctx)
 	}
 
 	switch strings.ToLower(args[0]) {
 	case "help":
 		return paMaintenanceShowHelp(ctx)
-	case "pause":
+	case "pause", "start":
 		return paMaintenancePause(ctx, args[1:])
-	case "resume":
+	case "resume", "stop":
 		return paMaintenanceResume(ctx)
 	case "status":
 		return paMaintenanceStatus(ctx)
