@@ -1126,5 +1126,7 @@
   "cmd.poracle_admin.warnings.cleared": "✅ {0} Einträge aus dem Rolling-Puffer gelöscht (Startup-Puffer nicht betroffen).",
   "cmd.poracle_admin.warnings.startup.desc": "`startup` — nur den Startup-Puffer anzeigen (nach dem Start eingefroren)",
   "cmd.poracle_admin.warnings.recent.desc": "`recent` — nur den Rolling-Puffer anzeigen (letzte 50 Einträge)",
-  "cmd.poracle_admin.warnings.clear.desc": "`clear` — Rolling-Puffer leeren"
+  "cmd.poracle_admin.warnings.clear.desc": "`clear` — Rolling-Puffer leeren",
+
+  "cmd.maintenance.active_suffix": "🔧 Wartungsmodus aktiv — Alerts werden nicht ausgeliefert."
 }
