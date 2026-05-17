@@ -236,6 +236,12 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 		return
 	}
 	replies := cmd.Run(ctx, tokens)
+	// Apply maintenance suffix so slash users see the paused-delivery
+	// warning, matching the gateway (discordbot/bot.go) and Telegram surfaces.
+	if d.bundle != nil && ctx != nil && d.deps != nil {
+		tr := d.bundle.For(ctx.Language)
+		replies = bot.ApplyMaintenanceSuffix(replies, d.deps.Dispatcher, tr.T("cmd.maintenance.active_suffix"))
+	}
 	if err := Send(s, ic, replies); err != nil {
 		log.WithError(err).Warnf("slash: failed to send replies for /%s", invoked)
 	}
