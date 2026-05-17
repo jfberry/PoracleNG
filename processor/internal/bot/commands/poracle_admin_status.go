@@ -53,13 +53,13 @@ func statusReport(ctx *bot.CommandContext, verbose bool) []bot.Reply {
 	sb.WriteString("\n")
 	sb.WriteString(formatHeaderTimestamp(time.Now()))
 
-	// Section 3 (placed early for visibility): Maintenance banner.
+	// Section 2 (placed early for visibility): Maintenance banner.
 	if banner := renderPausedBanner(ctx, tr); banner != "" {
 		sb.WriteString("\n\n")
 		sb.WriteString(banner)
 	}
 
-	// Section 2: Build / uptime.
+	// Section 3: Build / uptime.
 	sb.WriteString("\n\n")
 	sb.WriteString(renderBuildSection(ctx, tr))
 
@@ -390,10 +390,11 @@ func renderAlertLimitsSection(ctx *bot.CommandContext, tr translator) string {
 	blocked := ctx.AlertLimiter.ListBlocked()
 	now := time.Now()
 
-	var alertCount, summaryCount, bannedCount int
+	var alertCount, summaryCount int
+	bannedTargets := make(map[string]bool)
 	for _, t := range blocked {
 		if !t.BannedUntil.IsZero() && t.BannedUntil.After(now) {
-			bannedCount++
+			bannedTargets[t.ID] = true
 		}
 		switch t.Bucket {
 		case "summary":
@@ -402,6 +403,7 @@ func renderAlertLimitsSection(ctx *bot.CommandContext, tr translator) string {
 			alertCount++
 		}
 	}
+	bannedCount := len(bannedTargets)
 
 	indicator := indicatorGreen
 	if bannedCount > 0 {
@@ -498,12 +500,14 @@ func renderTrackingSection(ctx *bot.CommandContext, tr translator) string {
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.tracking_active_humans",
 		fmt.Sprintf("%d", activeHumans)))
 
-	// Registered humans (total): query the store. If unavailable,
-	// fall back to the active count rather than blow up the report.
+	// Registered humans (total): query the store. Surface error
+	// explicitly rather than silently omitting the line.
 	if ctx.Humans != nil {
 		all, err := ctx.Humans.ListAll()
-		if err == nil {
-			sb.WriteString("\n  ")
+		sb.WriteString("\n  ")
+		if err != nil {
+			sb.WriteString(tr.T("cmd.poracle_admin.status.label.tracking_registered_humans_error"))
+		} else {
 			sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.tracking_registered_humans",
 				fmt.Sprintf("%d", len(all))))
 		}

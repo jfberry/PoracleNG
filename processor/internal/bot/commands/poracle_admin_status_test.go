@@ -305,6 +305,57 @@ func TestStatusReport_NilFieldsTolerated(t *testing.T) {
 	}
 }
 
+func TestStatusReport_TelegramRateLimited(t *testing.T) {
+	ctx := statusCtx(t)
+	ctx.TelegramRate = func() delivery.TelegramRateSnapshot {
+		return delivery.TelegramRateSnapshot{
+			Recent429Count:      0,
+			CurrentBackoffUntil: time.Now().Add(30 * time.Second),
+		}
+	}
+
+	out := firstReplyText(t, statusReport(ctx, false))
+
+	telegramIdx := strings.Index(out, "Telegram")
+	if telegramIdx < 0 {
+		t.Fatalf("missing Telegram rate section:\n%s", out)
+	}
+	tail := sectionTail(out, telegramIdx)
+	if !strings.Contains(tail, indicatorRed) {
+		t.Errorf("expected 🔴 in Telegram section when backoff is active:\n%s", out)
+	}
+}
+
+func TestStatusReport_WebhookAllZerosNeutral(t *testing.T) {
+	ctx := statusCtx(t)
+	ctx.WebhookRate = func() webhook.RateSnapshot {
+		return webhook.RateSnapshot{
+			Per5Min:  0,
+			Per15Min: 0,
+			Per60Min: 0,
+			PerType:  map[string]int{},
+		}
+	}
+
+	out := firstReplyText(t, statusReport(ctx, false))
+
+	// Webhooks section must be present.
+	webhooksIdx := strings.Index(out, "Webhooks")
+	if webhooksIdx < 0 {
+		t.Fatalf("missing Webhooks section:\n%s", out)
+	}
+	tail := sectionTail(out, webhooksIdx)
+
+	// All-zeros is neutral (🟡), NOT 🔴 — the stopped-receiving
+	// trigger requires Per60Min > 0 alongside Per5Min == 0.
+	if strings.Contains(tail, indicatorRed) {
+		t.Errorf("all-zeros webhook snapshot should not trigger 🔴:\n%s", out)
+	}
+	if !strings.Contains(tail, indicatorYellow) {
+		t.Errorf("all-zeros webhook snapshot should show 🟡 (neutral):\n%s", out)
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	cases := []struct {
 		in   time.Duration
