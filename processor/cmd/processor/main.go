@@ -40,6 +40,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/logbuffer"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
@@ -86,6 +87,15 @@ func main() {
 		MaxBackups:         cfg.Logging.MaxBackups,
 		Compress:           cfg.Logging.Compress,
 	})
+
+	// Construct the in-memory log buffer and register it as a logrus hook
+	// immediately after the logger is configured so we capture as much of
+	// startup as possible (resource downloads, DB open, migrations, …).
+	// startupCap=200 bounds the buffer against a misconfigured deployment
+	// that might otherwise flood memory; rollingCap=50 keeps the last 50
+	// WARN/ERROR events post-startup for !poracle-admin warnings.
+	logBuf := logbuffer.New(200, 50)
+	log.AddHook(logbuffer.NewHook(logBuf))
 
 	log.Infof("Poracle processor %s (commit %s, built %s)", buildVersion, buildCommit, buildDate)
 
@@ -888,6 +898,12 @@ func main() {
 		filepath.Join(cfg.BaseDir, "config"),
 		backup.Retention,
 	)
+
+	// Freeze the startup buffer: everything logged from here on goes to
+	// the rolling buffer. MarkStartupComplete is placed right before the
+	// HTTP server starts accepting requests so all subsystem initialisation
+	// (migrations, state load, bots, …) is captured in the startup snapshot.
+	logBuf.MarkStartupComplete()
 
 	// Start server
 	go func() {
