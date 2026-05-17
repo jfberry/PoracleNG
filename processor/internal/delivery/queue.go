@@ -224,14 +224,16 @@ func (fq *FairQueue) processJob(job *Job) {
 		}
 	}
 
-	// Pause gate. Sits BEFORE the rate-limit check so no counters increment
-	// during a pause window and no breach notifications are generated.
-	// Bypass jobs (rate-limit notifications, ban farewells) and edit jobs
-	// (mutations of already-tracked messages) skip this check entirely.
-	if !job.BypassRateLimit && job.EditKey == "" {
-		if fq.dispatcher != nil {
-			fq.dispatcher.waitWhilePaused()
-		}
+	// Pause gate. During maintenance, normal deliveries are DROPPED on the
+	// floor rather than buffered — buffering would balloon memory on long
+	// pauses and produce a flood of stale alerts to users on resume.
+	// Bypass jobs (rate-limit notifications, ban farewells) still send;
+	// they're administrative messages, not user alerts, and tend to be rare.
+	if !job.BypassRateLimit && fq.dispatcher != nil && fq.dispatcher.IsPaused() {
+		log.Debugf("%s: dropped — delivery paused (type=%s target=%s)",
+			job.LogReference, job.Type, job.Target)
+		metrics.DeliveryTotal.WithLabelValues(platform, "dropped_paused").Inc()
+		return
 	}
 
 	// 2b. Squash sends that ask for clean but whose TTH is already expired.
