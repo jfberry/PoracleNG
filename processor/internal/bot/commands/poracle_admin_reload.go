@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
-	"github.com/pokemon/poracleng/processor/internal/state"
 )
 
 // paReload implements !poracle-admin reload with three subcommands:
@@ -116,25 +115,4 @@ func paReloadRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 }
 
-// countTrackingRules returns the total number of tracking rules across all
-// types in the given state snapshot. Monsters uses its pre-computed Total
-// field; all other types are plain slices.
-func countTrackingRules(s *state.State) int {
-	if s == nil {
-		return 0
-	}
-	total := 0
-	if s.Monsters != nil {
-		total += s.Monsters.Total
-	}
-	total += len(s.Raids)
-	total += len(s.Eggs)
-	total += len(s.Invasions)
-	total += len(s.Quests)
-	total += len(s.Lures)
-	total += len(s.Gyms)
-	total += len(s.Nests)
-	total += len(s.Forts)
-	total += len(s.Maxbattles)
-	return total
-}
+// countTrackingRules is defined in poracle_admin_util.go and shared here.

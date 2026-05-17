@@ -144,5 +144,4 @@ func formatWarningEntry(tr interface{ Tf(string, ...any) string }, e logbuffer.E
 	return tr.Tf("cmd.poracle_admin.warnings.entry_row", ts, e.Level, e.Message, source)
 }
 
-// formatDuration is defined in poracle_admin_ratelimit.go and shared here.
-// No re-declaration needed.
+// formatDuration is defined in poracle_admin_util.go and shared here.
