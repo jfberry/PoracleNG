@@ -997,7 +997,6 @@
   "cmd.poracle_admin.group.status.desc": "live health snapshot",
   "cmd.poracle_admin.group.maintenance.desc": "pause/resume outbound delivery",
 
-  "cmd.poracle_admin.slash.help_stub": "(no commands available yet — coming in a later task)",
   "cmd.poracle_admin.reload.help.intro": "Reload runtime state from disk or database.",
   "cmd.poracle_admin.reload.dts.desc": "`dts` — reload DTS templates and partials from disk",
   "cmd.poracle_admin.reload.geofence.desc": "`geofence` — reload geofence files and refresh state",
@@ -1087,5 +1086,6 @@
   "cmd.poracle_admin.slash.status.header": "**Slash command registration status:**",
   "cmd.poracle_admin.slash.status.scope_row": "  **{0}**: last synced {1} · fingerprint `{2}`",
   "cmd.poracle_admin.slash.status.never_synced": "never",
+  "cmd.poracle_admin.slash.status.ago": "{0} ago",
   "cmd.poracle_admin.slash.status.error": "❌ Status read failed: {0}"
 }

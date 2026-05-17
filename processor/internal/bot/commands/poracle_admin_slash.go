@@ -169,7 +169,7 @@ func runSlashStatus(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Reply {
 		syncedStr := tr.T("cmd.poracle_admin.slash.status.never_synced")
 		if !scope.LastSyncedAt.IsZero() {
 			ago := time.Since(scope.LastSyncedAt)
-			syncedStr = formatDuration(ago) + " ago"
+			syncedStr = tr.Tf("cmd.poracle_admin.slash.status.ago", formatDuration(ago))
 		}
 
 		sb.WriteString("\n")
