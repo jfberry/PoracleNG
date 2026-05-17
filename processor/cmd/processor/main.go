@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -473,7 +474,7 @@ func main() {
 	// so the logic lives in exactly one place.
 	reloadDTS := func() (int, error) {
 		if proc.dtsRenderer == nil {
-			return 0, nil
+			return 0, errors.New("DTS renderer not configured")
 		}
 		ts := proc.dtsRenderer.Templates()
 		if err := ts.Reload(

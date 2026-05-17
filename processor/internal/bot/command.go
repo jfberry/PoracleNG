@@ -199,19 +199,11 @@ type CommandContext struct {
 	languageHint string
 }
 
-// NewCommandContext returns a CommandContext pre-populated with the dep wires
-// from BotDeps (DB, Humans, Tracking, StateMgr, GameData, Translations,
-// Dispatcher, RowText, Resolver, ArgMatcher, Geocoder, StaticMap, Weather,
-// Stats, DTS, Emoji, NLP, TestProcessor, Registry, Scanner, ReloadFunc,
-// SummarySchedules, SummaryBufferCount, SummaryDispatch) and the static
-// config pointer. Callers fill in the per-interaction fields: UserID,
-// UserName, Platform, ChannelID, GuildID, IsDM, IsSlash, IsAdmin,
-// IsRegistered, Language, Profile*, Target*, AreaLogic, Geofence, Fences,
-// Permissions, PostRegister.
-//
-// Keeps the dep-wiring identical across the Discord text bot, slash
-// dispatcher, and Telegram bot so a new BotDeps field doesn't have to be
-// wired in three places. Returns an empty CommandContext when deps is nil.
+// NewCommandContext returns a CommandContext seeded with every BotDeps
+// field, plus the static config pointer. Every command run on every
+// surface (text bot, slash bot, Telegram bot) is constructed through
+// here so additions to BotDeps reach all surfaces in one place.
+// Returns an empty CommandContext when deps is nil.
 func NewCommandContext(deps *BotDeps) *CommandContext {
 	if deps == nil {
 		return &CommandContext{}
