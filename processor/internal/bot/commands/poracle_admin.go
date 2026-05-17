@@ -139,11 +139,7 @@ func paStubHelp(name string) func(ctx *bot.CommandContext) []bot.Reply {
 	}
 }
 
-var paEmoji = &paSubgroup{
-	run:  paStubRun,
-	help: paStubHelp("emoji"),
-}
-
+// paEmoji is declared in poracle_admin_emoji.go.
 // paReconcile is declared in poracle_admin_reconcile.go.
 // paRatelimit is declared in poracle_admin_ratelimit.go.
 // paSummary is declared in poracle_admin_summary.go.

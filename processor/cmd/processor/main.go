@@ -793,6 +793,12 @@ func main() {
 		Scanner:            proc.scanner,
 		RecentActivity:     proc.recentActivity,
 		ReloadDTS: reloadDTS,
+		EmojiReload: func() (int, error) {
+			if cmdEmoji == nil {
+				return 0, errors.New("emoji config not loaded (DTS renderer not configured)")
+			}
+			return cmdEmoji.Reload()
+		},
 		ReloadGeofence: func() error {
 			return state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence)
 		},

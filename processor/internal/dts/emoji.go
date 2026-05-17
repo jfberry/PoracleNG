@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -12,8 +13,9 @@ import (
 // EmojiLookup resolves emoji strings by key and platform.
 // Custom per-platform overrides (from emoji.json) take priority over defaults (from util.json).
 type EmojiLookup struct {
-	custom   map[string]map[string]string // platform → key → emoji string
-	defaults map[string]string            // key → emoji string
+	custom    map[string]map[string]string // platform → key → emoji string
+	defaults  map[string]string            // key → emoji string
+	configDir string                       // stored for Reload
 }
 
 // LoadEmoji creates an EmojiLookup by reading optional {configDir}/emoji.json
@@ -22,8 +24,9 @@ type EmojiLookup struct {
 // If utilEmojis is nil, an empty default map is used.
 func LoadEmoji(configDir string, utilEmojis map[string]string) *EmojiLookup {
 	e := &EmojiLookup{
-		custom:   make(map[string]map[string]string),
-		defaults: utilEmojis,
+		custom:    make(map[string]map[string]string),
+		defaults:  utilEmojis,
+		configDir: configDir,
 	}
 	if e.defaults == nil {
 		e.defaults = make(map[string]string)
@@ -101,4 +104,53 @@ func (e *EmojiLookup) Lookup(key, platform string) string {
 		return emoji
 	}
 	return ""
+}
+
+// Reload re-reads emoji.json from the configured config directory and
+// swaps the custom override map in place. The defaults layer (from
+// util.json) is never touched. Returns the total number of unique keys
+// across all platforms after the reload (or 0 on error).
+func (e *EmojiLookup) Reload() (int, error) {
+	if e == nil {
+		return 0, nil
+	}
+	path := filepath.Join(e.configDir, "emoji.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File removed — clear custom overrides and report 0 custom keys.
+			e.custom = make(map[string]map[string]string)
+			return len(e.AllKeys()), nil
+		}
+		return 0, err
+	}
+	var custom map[string]map[string]string
+	if err := json.Unmarshal(data, &custom); err != nil {
+		return 0, err
+	}
+	e.custom = custom
+	return len(e.AllKeys()), nil
+}
+
+// AllKeys returns a sorted slice of every emoji key present across either
+// the defaults map or any per-platform custom override map.
+func (e *EmojiLookup) AllKeys() []string {
+	if e == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(e.defaults))
+	for k := range e.defaults {
+		seen[k] = struct{}{}
+	}
+	for _, m := range e.custom {
+		for k := range m {
+			seen[k] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
 }
