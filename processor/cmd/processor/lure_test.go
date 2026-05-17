@@ -6,16 +6,11 @@ import (
 	"testing"
 )
 
-// TestProcessLure_SetsEditKey is a source-level guard: lure
-// RenderJobs must carry EditKey = "lure:<pokestop>:<lure_id>" so
-// users with the edit flag (Clean bit 2) get the revised-expiration
-// update edited in place instead of receiving a duplicate alert.
-// Without this, Golbat's mid-lure expiration revisions show up as
-// back-to-back "Lure at X" messages — exactly the screenshot the
-// user reported. Source-grep on purpose: ProcessLure needs a fully
-// constructed ProcessorService (matcher, enricher, render channel)
-// which is impractical to assemble here. The per-user gating
-// (only-set-for-edit-flag) is exercised at the renderer layer.
+// TestProcessLure_SetsEditKey: lure RenderJobs must carry
+// EditKey = "lure:<pokestop>:<lure_id>" so users with the edit
+// flag get revised-expiration updates edited in place. Source-grep
+// on purpose: ProcessLure needs a fully-wired ProcessorService to
+// drive end-to-end. Per-user gating is covered by renderer tests.
 func TestProcessLure_SetsEditKey(t *testing.T) {
 	src, err := os.ReadFile("lure.go")
 	if err != nil {

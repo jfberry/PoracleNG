@@ -20,6 +20,7 @@ var lureParams = []bot.ParamDef{
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
+	{Type: bot.ParamKeyword, Key: "arg.edit"},
 	{Type: bot.ParamLureType},
 }
 
