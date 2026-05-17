@@ -432,6 +432,7 @@ Bare `!track everything` with no meaningful filters (IV, CP, level, PVP, type, g
 - `!nest`, `!lure`, `!gym`, `!fort`, `!invasion`, `!maxbattle` — type-specific filters
 - `!tracked` — list all active tracking, shows `[id:XX]` per rule for targeted removal
 - `!untrack id:45` or `!raid remove id:12` — remove a specific tracking rule by database UID (works for all tracking types)
+- `!untrack <type> [args]` — reroute to per-type remove handler (e.g. `!untrack raid id:12`, `!untrack egg level:5`, `!untrack invasion grunt:bug`); mirrors the `/untrack <subtype>` slash form
 - `!poracle` — register/start
 - `!profile` — switch/create/delete profiles
 - `!area` — add/remove geofence areas

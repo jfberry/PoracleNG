@@ -9,10 +9,35 @@ import (
 )
 
 // UntrackCommand implements !untrack — remove pokemon tracking rules.
+// When the first argument is a recognised tracking type (raid, egg, quest,
+// invasion, incident, lure, nest, gym, fort, maxbattle) the command is
+// rerouted to that type's command with "remove" prepended, matching what
+// the slash dispatcher does for /untrack <subtype>.
 type UntrackCommand struct{}
 
 func (c *UntrackCommand) Name() string      { return "cmd.untrack" }
 func (c *UntrackCommand) Aliases() []string { return nil }
+
+// validUntrackTypes is the set of canonical English tracking-type short names
+// that !untrack <type> can reroute to. Pokemon is excluded because it IS the
+// default path handled by this command's own logic.
+var validUntrackTypes = map[string]bool{
+	"raid":      true,
+	"egg":       true,
+	"quest":     true,
+	"invasion":  true,
+	"incident":  true,
+	"lure":      true,
+	"nest":      true,
+	"gym":       true,
+	"fort":      true,
+	"maxbattle": true,
+}
+
+// validUntrackType reports whether s is a recognised non-pokemon tracking type.
+func validUntrackType(s string) bool {
+	return validUntrackTypes[s]
+}
 
 var untrackParams = []bot.ParamDef{
 	{Type: bot.ParamRemoveUID},
@@ -23,6 +48,24 @@ var untrackParams = []bot.ParamDef{
 }
 
 func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	// Reroute !untrack <type> [...] to the per-type command with "remove"
+	// prepended, mirroring the slash dispatcher's /untrack <subtype> handling.
+	// This must be first so the pokemon-untrack logic never sees a type token.
+	if len(args) >= 1 && validUntrackType(args[0]) {
+		typeName := args[0]
+		cmdKey := "cmd." + typeName
+		if ctx.Registry == nil {
+			log.Errorf("untrack command: registry is nil (cannot reroute to %s)", cmdKey)
+			return []bot.Reply{{React: "🙅"}}
+		}
+		target := ctx.Registry.Lookup(cmdKey)
+		if target == nil {
+			log.Errorf("untrack command: %s not found in registry", cmdKey)
+			return []bot.Reply{{React: "🙅"}}
+		}
+		return target.Run(ctx, append([]string{"remove"}, args[1:]...))
+	}
+
 	tr := ctx.Tr()
 	parsed := ctx.ArgMatcher.Match(args, untrackParams, ctx.Language)
 
