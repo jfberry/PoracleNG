@@ -974,3 +974,23 @@ func (b *Bot) postRegisterHook() func(string) {
 		go r.ReconcileSingleUser(userID, false)
 	}
 }
+
+// ReconcileUserNow immediately re-evaluates one Discord user's role membership
+// and community/area-security state, without waiting for the periodic timer.
+// It is the public entrypoint for the !poracle-admin reconcile user <id> subcommand.
+//
+// removeInvalidUsers mirrors the operator's [reconciliation.discord] remove_invalid_users
+// config flag so on-demand behaviour is consistent with the periodic sync.
+//
+// Returns ErrReconciliationDisabled if reconciliation is not configured.
+func (b *Bot) ReconcileUserNow(userID string) error {
+	if b.reconciliation == nil {
+		return ErrReconciliationDisabled
+	}
+	b.reconciliation.ReconcileSingleUser(userID, b.Cfg.Reconciliation.Discord.RemoveInvalidUsers)
+	return nil
+}
+
+// ErrReconciliationDisabled is returned by ReconcileUserNow when Discord
+// reconciliation has not been configured (check_role = false or no session).
+var ErrReconciliationDisabled = fmt.Errorf("discord reconciliation is not enabled")
