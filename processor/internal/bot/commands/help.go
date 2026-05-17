@@ -19,14 +19,16 @@ type HelpCommand struct{}
 // adminOnlyHelpTopics — non-admins asking "!help enable" get the 🙅
 // unknown-topic reply rather than the admin command surface.
 var adminOnlyHelpTopics = map[string]bool{
-	"enable":    true,
-	"disable":   true,
-	"broadcast": true,
-	"userlist":  true,
-	"community": true,
-	"apply":     true,
-	"backup":    true,
-	"restore":   true,
+	"enable":         true,
+	"disable":        true,
+	"broadcast":      true,
+	"userlist":       true,
+	"community":      true,
+	"apply":          true,
+	"backup":         true,
+	"restore":        true,
+	"poracle-admin":  true,
+	"pa":             true,
 }
 
 func (c *HelpCommand) Name() string      { return "cmd.help" }

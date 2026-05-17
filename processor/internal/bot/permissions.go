@@ -194,6 +194,8 @@ func commandSecurityName(cmdKey string) string {
 		return "nest"
 	case "cmd.maxbattle":
 		return "maxbattle"
+	case "cmd.poracle_admin":
+		return "poracle_admin"
 	default:
 		return ""
 	}
