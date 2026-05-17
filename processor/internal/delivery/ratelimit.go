@@ -246,15 +246,14 @@ func (rl *DiscordRateLimiter) now() time.Time {
 // Record429 records a 429 response in the rolling 5-minute window counter.
 // Safe to call from any goroutine.
 func (rl *DiscordRateLimiter) Record429() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
 	now := rl.now()
 	// Use a 60-slot ring keyed by Unix minute, giving 60 minutes of history.
 	// We only report the last 5 minutes, but extra history is free and allows
 	// future widening without a schema change.
 	currentMin := now.Unix() / 60
 	slot := int(currentMin % 60)
-
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
 	if rl.counter429Mins[slot] != currentMin {
 		// Slot belongs to a different (older) minute — reset it.
 		rl.counter429[slot] = 0
@@ -285,16 +284,16 @@ func (rl *DiscordRateLimiter) Snapshot() DiscordRateSnapshot {
 	rl.mu.Lock()
 	var routes []RouteState
 	for key, tl := range rl.targets {
-		// Only include partially-consumed routes (Remaining < Limit).
-		// Skip routes where limit is unknown (0) but remaining is also 0 — these
-		// are exhausted routes with no limit info; include them too so operators
-		// can see blocked routes even without a Limit header.
+		// Omit fully-quota'd routes (have limit info, no capacity consumed).
 		if tl.limit > 0 && tl.remaining >= tl.limit {
-			continue // fully-quota'd, omit
+			continue
 		}
+		// Omit routes with positive remaining but no limit info — not useful to surface.
 		if tl.limit == 0 && tl.remaining > 0 {
-			continue // positive remaining, no limit info — not interesting
+			continue
 		}
+		// Everything else: partially-consumed (remaining < limit) or exhausted
+		// without limit info (both 0). Include.
 		routes = append(routes, RouteState{
 			Route:     key,
 			Remaining: tl.remaining,
