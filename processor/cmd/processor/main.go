@@ -766,6 +766,25 @@ func main() {
 		SummaryDispatch:    proc.DispatchQuestSummary,
 		Scanner:            proc.scanner,
 		RecentActivity:     proc.recentActivity,
+		ReloadDTS: func() (int, error) {
+			if proc.dtsRenderer == nil {
+				return 0, nil
+			}
+			ts := proc.dtsRenderer.Templates()
+			if err := ts.Reload(
+				filepath.Join(cfg.BaseDir, "config"),
+				filepath.Join(cfg.BaseDir, "fallbacks"),
+			); err != nil {
+				return 0, err
+			}
+			return len(ts.FilteredEntries("", "", "", "")), nil
+		},
+		ReloadGeofence: func() error {
+			return state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence)
+		},
+		ReloadState: func() error {
+			return state.Load(stateMgr, database, summaryScheduleStore)
+		},
 	}
 
 	gatewayToken := cfg.Discord.DiscordGatewayToken()

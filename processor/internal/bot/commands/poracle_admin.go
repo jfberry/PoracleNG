@@ -27,6 +27,8 @@ type paSubgroup struct {
 
 // paSubgroups is the canonical dispatch table for !poracle-admin subgroups.
 // Keys are the short English names users type on the command line.
+// Each subgroup is declared as a package-level var in its own file
+// (poracle_admin_reload.go, etc.) and referenced here.
 var paSubgroups = map[string]*paSubgroup{
 	"slash":       paSlash,
 	"reload":      paReload,
@@ -136,11 +138,6 @@ func paStubHelp(name string) func(ctx *bot.CommandContext) []bot.Reply {
 var paSlash = &paSubgroup{
 	run:  paStubRun,
 	help: paStubHelp("slash"),
-}
-
-var paReload = &paSubgroup{
-	run:  paStubRun,
-	help: paStubHelp("reload"),
 }
 
 var paEmoji = &paSubgroup{
