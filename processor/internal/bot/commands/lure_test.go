@@ -79,6 +79,24 @@ func TestLure_Glacial(t *testing.T) {
 	assert.NotEqual(t, 0, rows[0].LureID, "glacial should have a specific lure ID")
 }
 
+// `!lure <type> edit` must set Clean bit 2 (db.IsEdit). Without
+// arg.edit in lureParams the matcher would warn "unrecognized" and
+// the edit flag would never propagate, defeating the EditKey wiring
+// in cmd/processor/lure.go.
+func TestLure_EditFlag(t *testing.T) {
+	ctx := lureCtx(t)
+	replies := runLure(t, ctx, "glacial edit")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Lures.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	if rows[0].Clean&2 == 0 {
+		t.Errorf("Clean bit 2 (edit) not set: got %d", rows[0].Clean)
+	}
+}
+
 func TestLure_Duplicate(t *testing.T) {
 	ctx := lureCtx(t)
 	replies1 := runLure(t, ctx, "everything")
