@@ -106,7 +106,7 @@ func newTestFairQueue(t *testing.T, senders map[string]Sender, cfg QueueConfig) 
 	ch := make(chan *Job, 100)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
-	fq := NewFairQueue(ch, senders, tracker, cfg)
+	fq := NewFairQueue(ch, senders, tracker, cfg, nil)
 	return fq, ch
 }
 
@@ -177,7 +177,7 @@ func TestFairQueueConcurrency(t *testing.T) {
 		ConcurrentDiscord:  2,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	// Send 6 jobs — with concurrency 2 and 50ms delay, they should be serialized in pairs
@@ -253,7 +253,7 @@ func TestFairQueueEditLookup(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -304,7 +304,7 @@ func TestFairQueueEditFallback(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -343,7 +343,7 @@ func TestFairQueueCleanTracking(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -388,7 +388,7 @@ func TestFairQueueSuppressesExpiredCleanMessage(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -422,7 +422,7 @@ func TestFairQueueEditOnlyExpiredStillSends(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -535,7 +535,7 @@ func TestRateLimitEditNotCounted(t *testing.T) {
 	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
-	})
+	}, nil)
 	fq.Start()
 
 	// First send establishes the tracked message under EditKey "raid:1".
@@ -584,7 +584,7 @@ func TestRateLimitFailedEditCounts(t *testing.T) {
 	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
-	})
+	}, nil)
 	fq.Start()
 
 	// First send establishes the tracked message under EditKey "raid:1".
@@ -636,7 +636,7 @@ func TestRateLimitHookDoesNotDeadlock(t *testing.T) {
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
 		RateLimitHooks:    hooks,
-	})
+	}, nil)
 	fq.Start()
 
 	// Burn the DM slot.
@@ -693,7 +693,7 @@ func TestQueueStampsReplyToID(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -747,7 +747,7 @@ func TestQueueDoesNotStampWhenEditKeyMatches(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -794,7 +794,7 @@ func TestQueueTracksReplyKeyAfterSend(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	// First job: no prior, but carries ReplyKey so the send is tracked under it.
