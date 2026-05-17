@@ -6,6 +6,9 @@ import "time"
 // It is defined here in the bot package to avoid an import cycle (delivery
 // already imports bot via the job type).
 type PauseChecker interface {
+	// IsPaused returns whether delivery is currently paused. Lock-free fast
+	// path — suitable for the per-reply maintenance-suffix check.
+	IsPaused() bool
 	// PauseState returns whether delivery is currently paused, the reason,
 	// and when the pause started. All zero-values when not paused.
 	PauseState() (paused bool, reason string, since time.Time)
@@ -30,8 +33,9 @@ func ApplyMaintenanceSuffix(replies []Reply, checker PauseChecker, suffix string
 	if checker == nil || len(replies) == 0 {
 		return replies
 	}
-	paused, _, _ := checker.PauseState()
-	if !paused {
+	// Fast lock-free check: the 99.9 % not-paused case returns here without
+	// ever acquiring pauseMu.
+	if !checker.IsPaused() {
 		return replies
 	}
 

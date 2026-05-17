@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -47,6 +48,10 @@ type Dispatcher struct {
 	paused      bool
 	pauseReason string
 	pausedSince time.Time
+
+	// pausedAtomic mirrors paused for cheap lock-free reads (e.g. per-reply
+	// maintenance-suffix check). Always updated inside pauseMu alongside paused.
+	pausedAtomic atomic.Bool
 }
 
 // NewDispatcher creates a Dispatcher with the configured senders, tracker, and queue.
@@ -166,6 +171,7 @@ func (d *Dispatcher) Pause(reason string) {
 		d.paused = true
 		d.pauseReason = reason
 		d.pausedSince = time.Now()
+		d.pausedAtomic.Store(true)
 	}
 }
 
@@ -176,8 +182,15 @@ func (d *Dispatcher) Resume() {
 	d.paused = false
 	d.pauseReason = ""
 	d.pausedSince = time.Time{}
+	d.pausedAtomic.Store(false)
 	d.pauseMu.Unlock()
 	d.pauseCond.Broadcast()
+}
+
+// IsPaused returns whether delivery is currently paused. Lock-free fast path —
+// suitable for the per-reply maintenance-suffix check in the hot path.
+func (d *Dispatcher) IsPaused() bool {
+	return d.pausedAtomic.Load()
 }
 
 // PauseState returns the current pause state: whether delivery is paused, the
