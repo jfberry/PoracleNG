@@ -201,6 +201,8 @@
   "cmd.poracle_admin.status.help_stub": "(noch keine Befehle verfügbar — wird in einer späteren Aufgabe ergänzt)",
   "cmd.poracle_admin.maintenance.help_stub": "(noch keine Befehle verfügbar — wird in einer späteren Aufgabe ergänzt)",
 
+  "cmd.poracle_admin.status.help.intro": "!poracle-admin status — aktuelle Systemübersicht. Mit -v ausführlichere Ausgabe (Discord-Routen-Details, vollständige Webhook-Aufschlüsselung nach Typ).",
+
   "cmd.poracle_admin.status.header": "🛠️ Poracle Admin — Übersicht",
   "cmd.poracle_admin.status.paused_banner": "🔴 PAUSIERT — {0} (seit {1})\n   Ausgehende Zustellung ist angehalten. Webhooks werden weiterhin empfangen und in die Warteschlange aufgenommen.",
   "cmd.poracle_admin.status.value.na": "k.A.",

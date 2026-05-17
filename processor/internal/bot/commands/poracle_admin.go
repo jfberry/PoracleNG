@@ -165,11 +165,6 @@ var paSummary = &paSubgroup{
 	help: paStubHelp("summary"),
 }
 
-var paStatus = &paSubgroup{
-	run:  paStubRun,
-	help: paStubHelp("status"),
-}
-
 var paMaintenance = &paSubgroup{
 	run:  paStubRun,
 	help: paStubHelp("maintenance"),
