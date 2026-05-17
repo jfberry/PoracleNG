@@ -602,6 +602,7 @@ func main() {
 	cmdRegistry.Register(&commands.RestoreCommand{})
 	cmdRegistry.Register(&commands.BroadcastCommand{})
 	cmdRegistry.Register(&commands.ApplyCommand{})
+	cmdRegistry.Register(&commands.PoracleAdminCommand{})
 
 	// NLP parser for !ask command and suggest_on_dm
 	var nlpParser *nlp.Parser
