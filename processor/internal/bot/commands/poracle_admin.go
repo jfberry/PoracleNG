@@ -144,7 +144,4 @@ func paStubHelp(name string) func(ctx *bot.CommandContext) []bot.Reply {
 // paRatelimit is declared in poracle_admin_ratelimit.go.
 // paSummary is declared in poracle_admin_summary.go.
 
-var paMaintenance = &paSubgroup{
-	run:  paStubRun,
-	help: paStubHelp("maintenance"),
-}
+// paMaintenance is declared in poracle_admin_maintenance.go.
