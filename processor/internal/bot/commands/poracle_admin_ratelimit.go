@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -172,11 +171,11 @@ func paRatelimitShow(ctx *bot.CommandContext, args []string) []bot.Reply {
 		}
 
 		// Count / limit line.
-		overUnder := "under limit"
+		overUnder := tr.T("cmd.poracle_admin.ratelimit.show.status.under_limit")
 		if s.Count >= s.Limit {
-			overUnder = "over limit"
+			overUnder = tr.T("cmd.poracle_admin.ratelimit.show.status.over_limit")
 		}
-		sb.WriteString(fmt.Sprintf("    Count: %d / %d (%s)\n", s.Count, s.Limit, overUnder))
+		sb.WriteString(tr.Tf("cmd.poracle_admin.ratelimit.show.row.count", s.Count, s.Limit, overUnder))
 
 		// Window timing.
 		if !s.WindowStart.IsZero() {
@@ -185,7 +184,7 @@ func paRatelimitShow(ctx *bot.CommandContext, args []string) []bot.Reply {
 			if resetsIn < 0 {
 				resetsIn = 0
 			}
-			sb.WriteString(fmt.Sprintf("    Window: opened %s ago, resets in %s\n",
+			sb.WriteString(tr.Tf("cmd.poracle_admin.ratelimit.show.row.window",
 				formatDuration(ago), formatDuration(resetsIn)))
 		}
 
