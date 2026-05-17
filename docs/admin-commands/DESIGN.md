@@ -211,13 +211,15 @@ Implementation: a new `internal/logbuffer/` package with a thread-safe ring + ho
 
 | Subcommand | What it does |
 |---|---|
-| `pause [reason]` | Halt outbound delivery (Discord + Telegram). Webhooks still ingest, match, render, and queue; the dispatcher holds them. Optionally records a reason for `status` to display. |
-| `resume` | Resume delivery. Queued messages drain. |
+| `pause [reason]` (alias `start`) | Halt outbound delivery (Discord + Telegram). Webhooks still ingest, match, and render — but their delivery jobs are **dropped on the floor**. Optionally records a reason for `status` to display. |
+| `resume` (alias `stop`) | Resume delivery. Nothing to drain — jobs dropped during the pause window are gone, not buffered. |
 | `status` | Show current state (paused/running) and queue depth. |
 
 Use for DB maintenance, scanner upgrades, or panic-mode "stop sending while we debug". A paused state survives restarts only if persisted — design choice: **don't persist**. A restart implicitly resumes, which matches the safer "I rebooted to fix this and want alerts back" expectation.
 
-**Pause ordering.** The pause check sits *before* the rate-limit check in `FairQueue.processJob`, so during pause no counter increments and no breach-notification jobs are produced. This makes the debate-point about whether pause should silence rate-limit pings moot — the upstream cause won't fire. Bypass jobs (rate-limit notifications, ban farewells) keep their existing semantics for when pause is *not* active.
+**Drop, don't buffer.** When paused, normal delivery jobs are dropped rather than queued. Buffering would balloon memory on long pauses and produce a flood of stale alerts on resume — neither matches what an operator wants from "maintenance mode." Bypass jobs (rate-limit notifications, ban farewells) still send; they're administrative messages and tend to be rare. Edit jobs (RSVP updates etc.) are also dropped — the operator's mental model is "throw everything on the floor."
+
+**Pause check ordering.** The pause check sits *before* the rate-limit check in `FairQueue.processJob`, so during pause no counter increments and no breach-notification jobs are produced — the upstream cause won't fire.
 
 **Universal "maintenance active" suffix.** Every command reply (not just `!poracle-admin` — every command on every surface) appends `cmd.maintenance.active_suffix`: "🔧 Maintenance mode is active — alerts are not being delivered." while pause is on. This stops users from filing "the bot is broken" tickets when their `!track` succeeds but no alerts arrive. Implementation lives in the reply-emission layer (Discord and Telegram bots), so every command benefits without modification — and the suffix vanishes the moment `resume` is called.
 

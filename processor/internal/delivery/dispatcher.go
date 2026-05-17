@@ -42,15 +42,15 @@ type Dispatcher struct {
 	queue   *FairQueue
 	tracker *MessageTracker
 
-	// Pause state — protected by pauseMu / pauseCond.
+	// Pause state — protected by pauseMu.
 	pauseMu     sync.Mutex
-	pauseCond   *sync.Cond
 	paused      bool
 	pauseReason string
 	pausedSince time.Time
 
-	// pausedAtomic mirrors paused for cheap lock-free reads (e.g. per-reply
-	// maintenance-suffix check). Always updated inside pauseMu alongside paused.
+	// pausedAtomic mirrors paused for cheap lock-free reads (e.g. the
+	// per-reply maintenance-suffix check and the per-job drop check in
+	// FairQueue.processJob). Always updated inside pauseMu alongside paused.
 	pausedAtomic atomic.Bool
 }
 
@@ -78,7 +78,6 @@ func NewDispatcher(cfg DispatcherConfig) (*Dispatcher, error) {
 	ch := make(chan *Job, queueSize)
 
 	d := &Dispatcher{ch: ch, tracker: tracker}
-	d.pauseCond = sync.NewCond(&d.pauseMu)
 	d.queue = NewFairQueue(ch, senders, tracker, cfg.Queue, d)
 
 	return d, nil
@@ -91,7 +90,6 @@ func NewDispatcherWithSenders(senders map[string]Sender, tracker *MessageTracker
 	}
 	ch := make(chan *Job, queueSize)
 	d := &Dispatcher{ch: ch, tracker: tracker}
-	d.pauseCond = sync.NewCond(&d.pauseMu)
 	d.queue = NewFairQueue(ch, senders, tracker, queueCfg, d)
 	return d
 }
@@ -161,9 +159,14 @@ func (d *Dispatcher) TelegramRateSnapshot() TelegramRateSnapshot {
 	return TelegramRateSnapshot{}
 }
 
-// Pause suspends outbound message delivery. Normal (non-bypass, non-edit) jobs
-// will block in the queue until Resume is called. Calling Pause while already
-// paused is a no-op — the original reason and timestamp are preserved.
+// Pause suspends outbound message delivery. Normal (non-bypass) jobs are
+// DROPPED on the floor for the duration of the pause — they are not buffered.
+// This avoids OOM during long pauses and the stale-alert flood that would
+// follow a Resume. Bypass jobs (rate-limit notifications, ban farewells)
+// still send.
+//
+// Calling Pause while already paused is a no-op — the original reason and
+// timestamp are preserved.
 func (d *Dispatcher) Pause(reason string) {
 	d.pauseMu.Lock()
 	defer d.pauseMu.Unlock()
@@ -172,23 +175,28 @@ func (d *Dispatcher) Pause(reason string) {
 		d.pauseReason = reason
 		d.pausedSince = time.Now()
 		d.pausedAtomic.Store(true)
+		log.Infof("delivery: paused (reason: %s)", reason)
 	}
 }
 
-// Resume lifts a previous Pause, allowing queued and future jobs to proceed.
-// Safe to call when not paused.
+// Resume lifts a previous Pause. Subsequent jobs are delivered normally;
+// jobs dropped while paused are gone. Safe to call when not paused.
 func (d *Dispatcher) Resume() {
 	d.pauseMu.Lock()
+	wasPaused := d.paused
 	d.paused = false
 	d.pauseReason = ""
 	d.pausedSince = time.Time{}
 	d.pausedAtomic.Store(false)
 	d.pauseMu.Unlock()
-	d.pauseCond.Broadcast()
+	if wasPaused {
+		log.Info("delivery: resumed")
+	}
 }
 
 // IsPaused returns whether delivery is currently paused. Lock-free fast path —
-// suitable for the per-reply maintenance-suffix check in the hot path.
+// suitable for the per-reply maintenance-suffix check and the per-job drop
+// check in FairQueue.processJob.
 func (d *Dispatcher) IsPaused() bool {
 	return d.pausedAtomic.Load()
 }
@@ -200,15 +208,4 @@ func (d *Dispatcher) PauseState() (paused bool, reason string, since time.Time) 
 	d.pauseMu.Lock()
 	defer d.pauseMu.Unlock()
 	return d.paused, d.pauseReason, d.pausedSince
-}
-
-// waitWhilePaused blocks until the dispatcher is not paused. It is called by
-// FairQueue.processJob before the rate-limit check so that no rate-limit
-// counters increment during a pause window.
-func (d *Dispatcher) waitWhilePaused() {
-	d.pauseMu.Lock()
-	for d.paused {
-		d.pauseCond.Wait()
-	}
-	d.pauseMu.Unlock()
 }
