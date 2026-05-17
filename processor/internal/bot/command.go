@@ -134,6 +134,29 @@ type BotDeps struct {
 	// was constructed. Surfaced for uptime display in !poracle-admin status.
 	// Zero value is acceptable (uptime will be reported as 0).
 	ProcessStart time.Time
+
+	// Slash command lifecycle — used by !poracle-admin slash subcommands.
+	// All five are always non-nil in production. When slash is not
+	// configured (Discord disabled, or [discord.slash_commands] enabled=false)
+	// the closures return slash.ErrSlashNotConfigured.
+	//
+	// SlashStatus reads the on-disk fingerprint cache; all other operations
+	// mutate Discord via the slash Dispatcher.
+	SlashSync        func() error
+	SlashForceResync func() error
+	SlashClearGlobal func() error
+	SlashClearGuild  func(guildID string) error
+	SlashStatus      func() (global SlashScope, guilds []SlashScope, err error)
+}
+
+// SlashScope is a per-scope snapshot of slash registration state.
+// "global" or a specific guild ID for Name.
+// Defined here (not in internal/discordbot/slash) to avoid an import cycle:
+// the slash package already imports internal/bot.
+type SlashScope struct {
+	Name         string    // "global" or guild ID
+	LastSyncedAt time.Time // zero if never synced
+	Fingerprint  string    // first 8 chars, or empty if never synced
 }
 
 // TestTarget specifies who to deliver a test alert to.
@@ -280,6 +303,15 @@ type CommandContext struct {
 	// constructed. Used by !poracle-admin status to compute uptime.
 	ProcessStart time.Time
 
+	// Slash command lifecycle — used by !poracle-admin slash subcommands.
+	// Always non-nil in production; return slash.ErrSlashNotConfigured when
+	// Discord is disabled or slash commands are not enabled.
+	SlashSync        func() error
+	SlashForceResync func() error
+	SlashClearGlobal func() error
+	SlashClearGuild  func(guildID string) error
+	SlashStatus      func() (global SlashScope, guilds []SlashScope, err error)
+
 	// PostRegister, when set, is invoked after !poracle creates a new
 	// human row. The platform sets this to its single-user reconciliation
 	// hook so a freshly-registered user has their community_membership /
@@ -340,6 +372,11 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		RunReconcile:       deps.RunReconcile,
 		LogBuffer:          deps.LogBuffer,
 		ProcessStart:       deps.ProcessStart,
+		SlashSync:          deps.SlashSync,
+		SlashForceResync:   deps.SlashForceResync,
+		SlashClearGlobal:   deps.SlashClearGlobal,
+		SlashClearGuild:    deps.SlashClearGuild,
+		SlashStatus:        deps.SlashStatus,
 	}
 }
 

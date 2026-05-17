@@ -398,6 +398,16 @@ func (b *Bot) Session() *discordgo.Session {
 	return b.session
 }
 
+// SlashDispatcher returns the slash.Dispatcher when slash commands are
+// enabled, or nil when disabled. Used by main.go to wire the BotDeps
+// slash lifecycle closures without exposing the private field.
+func (b *Bot) SlashDispatcher() *slash.Dispatcher {
+	if b == nil {
+		return nil
+	}
+	return b.slash
+}
+
 // PostAdminNotice sends a short operational message to the channel
 // configured at [discord] admin_channel_id. No-op if the channel ID is
 // empty or the bot isn't running. Used for events the operator should
