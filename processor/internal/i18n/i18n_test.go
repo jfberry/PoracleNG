@@ -237,3 +237,77 @@ func TestAllKeysPresent(t *testing.T) {
 		}
 	}
 }
+
+// TestPoracleAdminI18nParity verifies that every cmd.poracle_admin.* and
+// cmd.pa key present in the English bundle is also present in the German
+// bundle. German is checked as the reference non-English locale for the
+// skeleton. Other locales may lag until later tasks add them.
+func TestPoracleAdminI18nParity(t *testing.T) {
+	b := Load("")
+	en := b.For("en")
+	de := b.For("de")
+
+	// Collect all cmd.poracle_admin.* and cmd.pa keys from English.
+	// We test by attempting to resolve them in de — if de returns the raw key
+	// it means the translation is missing (de falls back to en for missing keys,
+	// so a raw-key result means both en AND de are missing, which shouldn't
+	// happen for keys we've deliberately added).
+	//
+	// The reliable test is: does de have its OWN value (not delegated to en)?
+	// We compare de.T(key) with en.T(key): if they're the same AND the key
+	// isn't one of the English-only name keys (cmd.poracle_admin, cmd.pa),
+	// that's a missing German translation.
+	englishOnlyKeys := map[string]bool{
+		"cmd.poracle_admin": true, // command name — intentionally English in all locales
+		"cmd.pa":            true, // alias — intentionally English in all locales
+	}
+
+	keysToCheck := []string{
+		"cmd.poracle_admin",
+		"cmd.pa",
+		"cmd.poracle_admin.desc",
+		"cmd.poracle_admin.not_admin",
+		"cmd.poracle_admin.unknown_group",
+		"cmd.poracle_admin.unknown_sub",
+		"cmd.poracle_admin.help.admin_only",
+		"cmd.poracle_admin.help.groups",
+		"cmd.poracle_admin.help_intro",
+		"cmd.poracle_admin.stub",
+		"cmd.poracle_admin.group.slash.desc",
+		"cmd.poracle_admin.group.reload.desc",
+		"cmd.poracle_admin.group.emoji.desc",
+		"cmd.poracle_admin.group.reconcile.desc",
+		"cmd.poracle_admin.group.cache.desc",
+		"cmd.poracle_admin.group.ratelimit.desc",
+		"cmd.poracle_admin.group.summary.desc",
+		"cmd.poracle_admin.group.status.desc",
+		"cmd.poracle_admin.group.maintenance.desc",
+		"cmd.poracle_admin.slash.help_stub",
+		"cmd.poracle_admin.reload.help_stub",
+		"cmd.poracle_admin.emoji.help_stub",
+		"cmd.poracle_admin.reconcile.help_stub",
+		"cmd.poracle_admin.cache.help_stub",
+		"cmd.poracle_admin.ratelimit.help_stub",
+		"cmd.poracle_admin.summary.help_stub",
+		"cmd.poracle_admin.status.help_stub",
+		"cmd.poracle_admin.maintenance.help_stub",
+	}
+
+	for _, key := range keysToCheck {
+		enVal := en.T(key)
+		if enVal == key {
+			t.Errorf("en: key %q not found in English bundle — add it to en.json", key)
+			continue
+		}
+
+		deVal := de.T(key)
+		if deVal == key {
+			t.Errorf("de: key %q not found (returned raw key)", key)
+			continue
+		}
+
+		if !englishOnlyKeys[key] && deVal == enVal {
+			t.Errorf("de: key %q appears to be missing a German translation (de returned same value as en: %q)", key, enVal)
+		}
+	}
+}
