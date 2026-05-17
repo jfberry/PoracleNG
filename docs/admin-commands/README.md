@@ -12,7 +12,7 @@ This directory holds the design and implementation plan for live administrative 
 
 ## Status
 
-Plan stage. Not yet implemented. Intended branch: `admin-commands`.
+Implemented. Branch: `slash-commands-design` (implemented alongside the slash-command surface). Smoke verification pending; see `SMOKE.md`.
 
 ## Why
 
@@ -20,10 +20,4 @@ A handful of common operator actions today require either editing the config and
 
 ## Slicing
 
-The plan is structured so any single phase can ship as its own PR. Recommended slicing for low-risk delivery:
-
-1. **PR-A (foundation):** `!untrack <type>` reroute + `!poracle-admin` skeleton + `reload` subgroup. ~150 LoC, no new introspection APIs.
-2. **PR-B (introspection):** new read-only state-inspection APIs (webhook rate, ratelimit, cache stats), plus the `status` subcommand that consumes them and `!info poracle` convergence.
-3. **PR-C (the rest):** `slash`, `ratelimit`, `summary`, `reconcile`, `emoji`, `cache`, `maintenance`.
-
-Each PR is independently revertable.
+The plan was structured for three PRs but was implemented as a single branch (`slash-commands-design`) alongside the Discord slash-command surface. All phases shipped together rather than incrementally. Each subgroup remains independently auditable in its own file (`poracle_admin_reload.go`, `poracle_admin_status.go`, etc.).

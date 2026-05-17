@@ -1,6 +1,25 @@
 # Admin Commands — Design
 
-> **Status:** Draft for discussion. Branch: `admin-commands` (planned).
+> **Status:** Implemented. Branch: `slash-commands-design`.
+
+## Implementation status
+
+Implemented in branch `slash-commands-design` alongside the Discord slash-command surface. All 11 subgroups (`slash`, `reload`, `emoji`, `reconcile`, `cache`, `ratelimit`, `summary`, `status`, `maintenance`, `config`, `warnings`) are live.
+
+**Smoke verification:** `docs/admin-commands/SMOKE.md` — work through that checklist against a dev deployment before merging to main.
+
+**Deferred items** (explicitly not implemented; tracked here for follow-up):
+
+- `[processor.status]` config section for customisable status thresholds (webhook floor, render-queue warn %, delivery-queue warn depth, summary-buffer warn count). Currently hardcoded to the constants in `poracle_admin_status.go`.
+- Persistent maintenance pause across restarts. A restart implicitly resumes, which is the safer default.
+- Render-queue depth accessor in `BotDeps`. The `status` command reports "n/a" for the render-queue section; a `RenderQueueDepth`/`RenderQueueCapacity` closure would need to be added to `BotDeps` and wired in `main.go`.
+- Summary buffer size in `BotDeps`. The `status` command reports "n/a" for the summary-buffer section; `SummaryBuffer.EnumerateUsers()` is accessible via `paSummary` but not surfaced in `statusReport` yet.
+- Per-subgroup `command_security` ACLs (`poracle_admin.reload`, `poracle_admin.maintenance`, etc.). Currently only the top-level `poracle_admin` key is checked.
+- Slash-command surface for admin operations (intentionally out of scope — admin actions are text-only by design).
+- Webhook log replay (`!poracle-admin webhook replay <id>`).
+- Gym state reset (`!poracle-admin gym reset`).
+- Per-route Discord rate-limit tuning (inspection only is implemented).
+- Unified `!stats` view rolling up `/api/stats/rarity` and `/api/stats/shiny`.
 
 **Goal:** Provide a live administrative surface in chat so operators can manage slash-command registration, reload runtime state, inspect rate-limit and webhook health, manage emoji, trigger reconciliation, and pause delivery — all without editing config and restarting the processor.
 
