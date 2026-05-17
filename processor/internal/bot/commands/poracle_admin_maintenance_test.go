@@ -52,24 +52,46 @@ func runMaintenance(t *testing.T, ctx *bot.CommandContext, args ...string) []bot
 // Tests
 // ----------------------------------------------------------------------------
 
-// TestMaintenance_HelpNoArgs_RendersStatus verifies that no-arg invocation
-// shows status (not help), since status is the most common, idempotent op.
-func TestMaintenance_HelpNoArgs_RendersStatus(t *testing.T) {
+// TestMaintenance_NoArgs_RendersHelp verifies that no-arg invocation
+// shows the subcommand listing. (Status is reached explicitly via `status`.)
+func TestMaintenance_NoArgs_RendersHelp(t *testing.T) {
 	d := newTestDispatcher(t)
 	ctx := maintenanceCtx(t, d)
 
-	// Call with no args after "maintenance" — paMaintenance.run is called with [].
 	replies := runMaintenance(t, ctx)
-
 	out := firstReplyText(t, replies)
 
-	// Status when running → should contain 🟢 running indicator.
-	if !containsStr(out, "🟢") {
-		t.Errorf("no-arg (status) output should contain 🟢, got:\n%s", out)
+	for _, want := range []string{"pause", "resume", "status"} {
+		if !containsStr(out, want) {
+			t.Errorf("no-arg should render subcommand listing including %q, got:\n%s", want, out)
+		}
 	}
-	// Should NOT be the help text (which would contain "pause" as a subcommand).
-	if containsStr(out, "`pause") {
-		t.Errorf("no-arg should render status not help, got:\n%s", out)
+}
+
+// TestMaintenance_StartStopAliases verifies that `start` aliases to `pause`
+// and `stop` aliases to `resume`.
+func TestMaintenance_StartStopAliases(t *testing.T) {
+	d := newTestDispatcher(t)
+	ctx := maintenanceCtx(t, d)
+
+	// start should pause
+	replies := runMaintenance(t, ctx, "start", "operator test")
+	out := firstReplyText(t, replies)
+	if !containsStr(out, "🔴") {
+		t.Errorf("start alias should pause and show 🔴, got:\n%s", out)
+	}
+	if !d.IsPaused() {
+		t.Error("start alias should have set IsPaused=true")
+	}
+
+	// stop should resume
+	replies = runMaintenance(t, ctx, "stop")
+	out = firstReplyText(t, replies)
+	if !containsStr(out, "🟢") {
+		t.Errorf("stop alias should resume and show 🟢, got:\n%s", out)
+	}
+	if d.IsPaused() {
+		t.Error("stop alias should have cleared IsPaused")
 	}
 }
 
@@ -238,8 +260,10 @@ func TestMaintenance_NoDispatcher(t *testing.T) {
 	ctx.IsAdmin = true
 	ctx.Dispatcher = nil // explicitly nil
 
+	// pause/resume/status need the dispatcher and must report it's missing.
+	// (no-arg) renders help text, which doesn't need the dispatcher and
+	// always renders the subcommand listing.
 	for _, sub := range [][]string{
-		{},
 		{"pause"},
 		{"resume"},
 		{"status"},
