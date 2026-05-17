@@ -248,6 +248,40 @@ func TestConfig_NilConfig(t *testing.T) {
 	}
 }
 
+// TestConfig_SliceOfSecretsRedacted — weather.accuweather_api_keys is a
+// []string; every element must be redacted and the raw values must not appear.
+func TestConfig_SliceOfSecretsRedacted(t *testing.T) {
+	ctx := adminCtx(t)
+	ctx.Config.Weather.AccuWeatherAPIKeys = []string{"super-secret-1", "super-secret-2"}
+
+	replies := paConfigFull(ctx)
+	text := collectText(replies)
+
+	if containsStr(text, "super-secret-1") || containsStr(text, "super-secret-2") {
+		t.Errorf("slice secret leaked into output: %.500s", text)
+	}
+	if !containsStr(text, redactedLabel) {
+		t.Errorf("expected redaction marker %q in output: %.500s", redactedLabel, text)
+	}
+}
+
+// TestConfig_NestedStructSecretRedacted — database.scanner.password is a
+// nested struct field; the plain value must not appear and redaction must fire.
+func TestConfig_NestedStructSecretRedacted(t *testing.T) {
+	ctx := adminCtx(t)
+	ctx.Config.Database.Scanner.Password = "scanner-db-secret"
+
+	replies := paConfig.run(ctx, []string{"database"})
+	text := collectText(replies)
+
+	if containsStr(text, "scanner-db-secret") {
+		t.Errorf("nested struct secret leaked into output: %.500s", text)
+	}
+	if !containsStr(text, redactedLabel) {
+		t.Errorf("expected redaction marker %q in output: %.500s", redactedLabel, text)
+	}
+}
+
 // TestShouldRedact_Heuristic — confirm the defensive heuristic fires for
 // unlisted but sensitive-sounding field names.
 func TestShouldRedact_Heuristic(t *testing.T) {
@@ -256,17 +290,21 @@ func TestShouldRedact_Heuristic(t *testing.T) {
 		expect bool
 	}{
 		{"discord.token", true},
-		{"discord.command_token", true},
+		{"discord.command_token", true},           // HasSuffix("command_token","token")
 		{"telegram.token", true},
 		{"database.password", true},
 		{"processor.api_secret", true},
-		{"geocoding.geocoding_key", true},
-		{"geocoding.static_key", true},
+		{"geocoding.geocoding_key", true},         // explicit map + HasSuffix("geocoding_key","key")
+		{"geocoding.static_key", true},            // explicit map + HasSuffix("static_key","key")
+		{"weather.accuweather_api_keys", true},    // explicit map + HasSuffix("accuweather_api_keys","keys")
 		{"geofence.koji.bearer_token", true},
-		{"some.unknown.api_key", true},  // heuristic
-		{"some.unknown.secret", true},  // heuristic
-		{"discord.admins", false},       // explicit not-redacted
-		{"discord.prefix", false},       // not sensitive
+		{"some.unknown.api_key", true},            // heuristic: exact "api_key"
+		{"some.unknown.secret", true},             // heuristic: exact "secret"
+		{"some.unknown.geocoding_key", true},      // heuristic: HasSuffix(*,"key")
+		{"some.unknown.static_key", true},         // heuristic: HasSuffix(*,"key")
+		{"some.unknown.api_keys", true},           // heuristic: HasSuffix(*,"keys")
+		{"discord.admins", false},                 // explicit not-redacted
+		{"discord.prefix", false},                 // not sensitive
 		{"general.locale", false},
 	}
 
