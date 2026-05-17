@@ -15,9 +15,9 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/uicons"
 )
 
-// handleEmoji handles the !poracle-emoji command.
-// Downloads emoji images from the configured uicons repository and uploads them to the Discord guild.
-// Generates an emoji.json config snippet as output.
+// handleEmoji handles the !poracle-emoji text command (Discord-specific
+// gateway path). Forwards to RunEmojiOperation and emits each reply directly
+// via the session so progress streams as the upload runs.
 func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args []string) {
 	if !bot.IsAdmin(b.Cfg, "discord", m.Author.ID) {
 		s.MessageReactionAdd(m.ChannelID, m.ID, "🙅")
@@ -30,39 +30,8 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 		if gid := parseGuildArg(args); gid != "" {
 			guildID = gid
 		}
-		if guildID == "" {
-			s.ChannelMessageSend(m.ChannelID, "No guild has been set, either execute inside a channel or specify guild<id>")
-			return
-		}
 	}
 
-	// Check if imgUrl is a uicons repository by checking for index.json.
-	imgURL := b.Cfg.General.ImgURL
-	if imgURL == "" {
-		s.ChannelMessageSend(m.ChannelID, "No img_url configured")
-		return
-	}
-
-	if !isUiconsRepository(imgURL) {
-		s.ChannelMessageSend(m.ChannelID, "Currently configured img_url is not a uicons repository")
-		return
-	}
-
-	// Create a temporary Uicons instance to resolve icon URLs.
-	icons := uicons.New(imgURL, "png")
-
-	// Load existing guild emojis.
-	existingEmojis, err := s.GuildEmojis(guildID)
-	if err != nil {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to load guild emojis: %v", err))
-		return
-	}
-	emojiMap := make(map[string]*discordgo.Emoji, len(existingEmojis))
-	for _, e := range existingEmojis {
-		emojiMap[e.Name] = e
-	}
-
-	// Parse args.
 	upload := false
 	overwrite := false
 	for _, arg := range args {
@@ -74,8 +43,53 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 		}
 	}
 
+	for _, reply := range b.RunEmojiOperation(m.ChannelID, guildID, upload, overwrite) {
+		b.sendOneReply(s, m, reply)
+	}
+}
+
+// RunEmojiOperation is the shared core for both `!poracle-emoji` and
+// `!poracle-admin emoji upload` / `discord-config`. It streams progress
+// messages directly to the channel via b.session as work proceeds (uploads
+// take a while), and returns the final reply slice (the emoji.json
+// attachment, or any setup errors).
+//
+//   - upload=false → just generate emoji.json from current guild state, no API writes.
+//   - upload=true  → pull icons from the uicons repository and create missing emojis.
+//   - overwrite=true (with upload) → delete + re-upload existing emojis.
+func (b *Bot) RunEmojiOperation(channelID, guildID string, upload, overwrite bool) []bot.Reply {
+	if guildID == "" {
+		return []bot.Reply{{Text: "No guild has been set, either execute inside a channel or specify guild<id>"}}
+	}
+
+	imgURL := b.Cfg.General.ImgURL
+	if imgURL == "" {
+		return []bot.Reply{{Text: "No img_url configured"}}
+	}
+
+	if !isUiconsRepository(imgURL) {
+		return []bot.Reply{{Text: "Currently configured img_url is not a uicons repository"}}
+	}
+
+	s := b.session
+	if s == nil {
+		return []bot.Reply{{Text: "Discord session not available"}}
+	}
+
+	// Create a temporary Uicons instance to resolve icon URLs.
+	icons := uicons.New(imgURL, "png")
+
+	existingEmojis, err := s.GuildEmojis(guildID)
+	if err != nil {
+		return []bot.Reply{{Text: fmt.Sprintf("Failed to load guild emojis: %v", err)}}
+	}
+	emojiMap := make(map[string]*discordgo.Emoji, len(existingEmojis))
+	for _, e := range existingEmojis {
+		emojiMap[e.Name] = e
+	}
+
 	if upload {
-		s.ChannelMessageSend(m.ChannelID, "Beginning upload of emojis, this may take a little while. Don't run a second time unless you are told it is finished!")
+		s.ChannelMessageSend(channelID, "Beginning upload of emojis, this may take a little while. Don't run a second time unless you are told it is finished!")
 	}
 
 	poracleEmoji := make(map[string]emojiInfo)
@@ -94,12 +108,12 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 			}
 
 			if _, exists := emojiMap[discordName]; !exists {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Uploading %s from %s", discordName, url))
+				s.ChannelMessageSend(channelID, fmt.Sprintf("Uploading %s from %s", discordName, url))
 
 				imageData, err := downloadImage(client, url)
 				if err != nil {
 					log.Warnf("discord bot: download emoji %s from %s: %v", discordName, url, err)
-					s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to download %s", discordName))
+					s.ChannelMessageSend(channelID, fmt.Sprintf("Failed to download %s", discordName))
 					return
 				}
 
@@ -110,7 +124,7 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 				})
 				if err != nil {
 					log.Warnf("discord bot: create emoji %s: %v", discordName, err)
-					s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to upload %s: %v", discordName, err))
+					s.ChannelMessageSend(channelID, fmt.Sprintf("Failed to upload %s: %v", discordName, err))
 					return
 				}
 				emojiMap[discordName] = emoji
@@ -119,7 +133,7 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 				time.Sleep(1 * time.Second)
 			}
 		} else if url != "" && strings.HasSuffix(url, "/0.png") {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Repository does not have a suitable emoji for %s", discordName))
+			s.ChannelMessageSend(channelID, fmt.Sprintf("Repository does not have a suitable emoji for %s", discordName))
 		}
 
 		if e, ok := emojiMap[discordName]; ok {
@@ -187,19 +201,39 @@ func (b *Bot) handleEmoji(s *discordgo.Session, m *discordgo.MessageCreate, args
 	}
 	sb.WriteString("\n  }\n}\n")
 
-	// Send the emoji.json as a file attachment.
-	emojiJSON := sb.String()
-	reader := strings.NewReader(emojiJSON)
+	return []bot.Reply{{
+		Text: "Here's a nice new emoji.json for you!",
+		Attachment: &bot.Attachment{
+			Filename: "emoji.json",
+			Content:  []byte(sb.String()),
+		},
+	}}
+}
 
-	msg := &discordgo.MessageSend{
-		Content: "Here's a nice new emoji.json for you!",
-		Files: []*discordgo.File{{
-			Name:   "emoji.json",
-			Reader: reader,
-		}},
+// sendOneReply emits one bot.Reply via the gateway session, referencing the
+// triggering message. Used by handleEmoji to forward the RunEmojiOperation
+// reply slice to the channel.
+func (b *Bot) sendOneReply(s *discordgo.Session, m *discordgo.MessageCreate, reply bot.Reply) {
+	if reply.Attachment != nil {
+		_, err := s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{
+			Content: reply.Text,
+			Reference: &discordgo.MessageReference{
+				MessageID: m.ID,
+				ChannelID: m.ChannelID,
+				GuildID:   m.GuildID,
+			},
+			Files: []*discordgo.File{{
+				Name:   reply.Attachment.Filename,
+				Reader: strings.NewReader(string(reply.Attachment.Content)),
+			}},
+		})
+		if err != nil {
+			log.Warnf("discord bot: send emoji.json: %v", err)
+		}
+		return
 	}
-	if _, err := s.ChannelMessageSendComplex(m.ChannelID, msg); err != nil {
-		log.Warnf("discord bot: send emoji.json: %v", err)
+	if reply.Text != "" {
+		s.ChannelMessageSend(m.ChannelID, reply.Text)
 	}
 }
 

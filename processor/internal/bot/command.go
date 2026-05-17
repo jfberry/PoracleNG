@@ -91,6 +91,15 @@ type BotDeps struct {
 	// nil when DTS renderer is not configured.
 	EmojiReload func() (int, error)
 
+	// EmojiOperation runs an emoji upload + emoji.json generation against
+	// the caller's Discord guild. With upload=false it dumps the current
+	// guild state as emoji.json (no writes). With upload+overwrite it
+	// deletes and re-uploads existing emojis. Streams progress messages
+	// directly to channelID via the gateway session; returns the final
+	// emoji.json attachment in the reply slice. nil on Telegram-only deploys
+	// or when the Discord bot is not configured.
+	EmojiOperation func(channelID, guildID string, upload, overwrite bool) []Reply
+
 	// Phase 2 introspection APIs — used by admin status/diagnostic subcommands.
 
 	// WebhookRate returns a point-in-time snapshot of webhook arrival rates.
@@ -276,6 +285,9 @@ type CommandContext struct {
 	// nil when DTS renderer is not configured.
 	EmojiReload func() (int, error)
 
+	// EmojiOperation — see BotDeps.EmojiOperation.
+	EmojiOperation func(channelID, guildID string, upload, overwrite bool) []Reply
+
 	// Phase 2 introspection APIs — used by admin status/diagnostic subcommands.
 
 	// WebhookRate returns a point-in-time snapshot of webhook arrival rates.
@@ -376,6 +388,7 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		ReloadGeofence:     deps.ReloadGeofence,
 		ReloadState:        deps.ReloadState,
 		EmojiReload:        deps.EmojiReload,
+		EmojiOperation:     deps.EmojiOperation,
 		WebhookRate:        deps.WebhookRate,
 		AlertLimiter:       deps.AlertLimiter,
 		DiscordRate:        deps.DiscordRate,
