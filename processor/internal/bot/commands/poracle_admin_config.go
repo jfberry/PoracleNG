@@ -80,6 +80,15 @@ var redactedFields = map[string]bool{
 
 const redactedLabel = "***"
 
+// sensitiveSuffixes lists terminal-segment suffixes that trigger defensive
+// redaction when a dotted config path is not explicitly listed in redactedFields.
+// Package-level so shouldRedact doesn't allocate the slice on every call.
+var sensitiveSuffixes = []string{
+	"token", "password", "secret", "api_key", "apikey",
+	"dsn", "bearer_token", "api_keys",
+	"key", "keys", // catches *_key, *_keys (geocoding_key, static_key, …)
+}
+
 // configSectionOrder controls the display order when rendering the full config.
 // Sections not in this list appear alphabetically after the listed ones.
 var configSectionOrder = []string{
@@ -167,7 +176,7 @@ func paConfigKeys(ctx *bot.CommandContext) []bot.Reply {
 
 	for _, sec := range sections {
 		sb.WriteString("\n  ")
-		sb.WriteString(tr.Tf("cmd.poracle_admin.config.keys.row", sec.name, fmt.Sprintf("%d", sec.keyCount)))
+		sb.WriteString(tr.Tf("cmd.poracle_admin.config.keys.row", sec.name, sec.keyCount))
 	}
 
 	return []bot.Reply{{Text: sb.String()}}
@@ -608,11 +617,6 @@ func shouldRedact(path string) bool {
 	// with any of these suffixes, redact defensively.
 	// Using HasSuffix (not exact equality) catches compound names like
 	// geocoding_key, static_key, accuweather_api_keys, command_token, etc.
-	sensitive := []string{
-		"token", "password", "secret", "api_key", "apikey",
-		"dsn", "bearer_token", "api_keys",
-		"key", "keys", // catches *_key, *_keys (geocoding_key, static_key, …)
-	}
 	lower := strings.ToLower(path)
 	// Get the final segment.
 	lastDot := strings.LastIndex(lower, ".")
@@ -620,7 +624,7 @@ func shouldRedact(path string) bool {
 	if lastDot >= 0 {
 		segment = lower[lastDot+1:]
 	}
-	for _, s := range sensitive {
+	for _, s := range sensitiveSuffixes {
 		if strings.HasSuffix(segment, s) {
 			return true
 		}

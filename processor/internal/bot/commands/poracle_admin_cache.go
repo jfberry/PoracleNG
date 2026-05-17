@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -73,17 +72,17 @@ func paCacheStats(ctx *bot.CommandContext) []bot.Reply {
 	var sb strings.Builder
 	sb.WriteString(tr.T("cmd.poracle_admin.cache.stats.header"))
 	sb.WriteString("\n")
-	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.memory_entries", fmt.Sprintf("%d", s.MemoryEntries)))
+	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.memory_entries", s.MemoryEntries))
 	sb.WriteString("\n")
-	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.disk_entries", fmt.Sprintf("%d", s.DiskEntries)))
+	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.disk_entries", s.DiskEntries))
 	sb.WriteString("\n")
-	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.hits_memory", fmt.Sprintf("%d", s.HitsMemory)))
+	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.hits_memory", s.HitsMemory))
 	sb.WriteString("\n")
-	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.hits_disk", fmt.Sprintf("%d", s.HitsDisk)))
+	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.hits_disk", s.HitsDisk))
 	sb.WriteString("\n")
-	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.misses", fmt.Sprintf("%d", s.Misses)))
+	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.misses", s.Misses))
 	sb.WriteString("\n")
-	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.hit_rate", fmt.Sprintf("%d", hitRate)))
+	sb.WriteString(tr.Tf("cmd.poracle_admin.cache.stats.row.hit_rate", hitRate))
 
 	return []bot.Reply{{Text: sb.String()}}
 }
@@ -96,5 +95,5 @@ func paCacheClearGeocoder(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	count := ctx.GeocoderClear()
-	return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.cache.clear.geocoder.success", fmt.Sprintf("%d", count))}}
+	return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.cache.clear.geocoder.success", count)}}
 }
