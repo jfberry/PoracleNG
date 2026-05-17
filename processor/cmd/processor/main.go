@@ -280,7 +280,7 @@ func main() {
 	webhookHandler := webhook.NewHandler(proc, webhookLogger)
 
 	// Public endpoints (no auth)
-	r.POST("/", webhookHandler)
+	r.POST("/", webhookHandler.GinHandler())
 	r.GET("/health", api.HandleHealth())
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
