@@ -235,6 +235,7 @@
   "cmd.poracle_admin.status.label.tracking_total": "Tracking-Regeln gesamt: {0}",
   "cmd.poracle_admin.status.label.tracking_active_humans": "Aktive Benutzer: {0}",
   "cmd.poracle_admin.status.label.tracking_registered_humans": "Registrierte Benutzer: {0}",
+  "cmd.poracle_admin.status.label.tracking_registered_humans_error": "Registrierte Benutzer: k.A. (Fehler)",
   "cmd.poracle_admin.status.label.tracking_type": "{0} → {1}",
   "cmd.poracle_admin.status.label.mysql_ping_ok": "Ping: erfolgreich",
   "cmd.poracle_admin.status.label.mysql_ping_fail": "Ping: fehlgeschlagen ({0})",
