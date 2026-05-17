@@ -643,36 +643,14 @@ func main() {
 		log.Info("NLP command parser initialized")
 	}
 
-	// Command API endpoint (for testing commands without bots)
+	// cmdDTS / cmdEmoji are used both by sharedBotDeps (below) and by the
+	// /api/command endpoint that routes through it.
 	var cmdDTS *dts.TemplateStore
 	var cmdEmoji *dts.EmojiLookup
 	if proc.dtsRenderer != nil {
 		cmdDTS = proc.dtsRenderer.Templates()
 		cmdEmoji = proc.dtsRenderer.Emoji()
 	}
-	cmdDeps := &api.CommandDeps{
-		DB:            database,
-		Humans:        humanStore,
-		Tracking:      trackingStores,
-		Config:        cfg,
-		StateMgr:      stateMgr,
-		GameData:      proc.enricher.GameData,
-		Translations:  proc.enricher.Translations,
-		Dispatcher:    proc.dispatcher,
-		RowText:       trackingDeps.RowText,
-		Resolver:      cmdResolver,
-		ArgMatcher:    cmdArgMatcher,
-		Parser:        cmdParser,
-		Registry:      cmdRegistry,
-		Weather:       proc.weather,
-		Stats:         proc.stats,
-		DTS:           cmdDTS,
-		Emoji:         cmdEmoji,
-		NLPParser:     nlpParser,
-		TestProcessor: proc,
-		ReloadFunc:    proc.triggerReload,
-	}
-	apiGroup.POST("/command", api.HandleCommand(cmdDeps))
 
 	server := &http.Server{
 		Addr:    cfg.Processor.ListenAddr(),
@@ -897,6 +875,16 @@ func main() {
 			}
 			return gscope, guildScopes, nil
 		},
+	}
+
+	// /api/command — routes through the full BotDeps graph so every admin
+	// closure (WebhookRate, AlertLimiter, Reconciler, SlashSync, etc.) is
+	// populated. Parser is added on top of sharedBotDeps, matching the
+	// per-bot pattern used for Discord and Telegram below.
+	{
+		apiCmdDeps := sharedBotDeps
+		apiCmdDeps.Parser = cmdParser
+		apiGroup.POST("/command", api.HandleCommand(&apiCmdDeps))
 	}
 
 	gatewayToken := cfg.Discord.DiscordGatewayToken()
