@@ -57,7 +57,7 @@ func (c *PoracleAdminCommand) Run(ctx *bot.CommandContext, args []string) []bot.
 
 	// Admin gate — text refusal (not 🙅 react, which is reserved for
 	// command_security role denials).
-	if !bot.IsAdmin(ctx.Config, ctx.Platform, ctx.UserID) {
+	if !ctx.IsAdmin {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.not_admin")}}
 	}
 
