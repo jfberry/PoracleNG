@@ -184,3 +184,107 @@ func TestTokenBucketTimeUntilAvailable(t *testing.T) {
 		t.Errorf("timeUntilAvailable() = %v, expected ~100ms", d)
 	}
 }
+
+// --- Snapshot tests ---
+
+func TestDiscordRateLimiter_Snapshot_Empty(t *testing.T) {
+	rl := NewDiscordRateLimiter()
+	snap := rl.Snapshot()
+
+	if len(snap.Routes) != 0 {
+		t.Errorf("Routes = %v, want empty on fresh limiter", snap.Routes)
+	}
+	if snap.GlobalCapacity != 50 {
+		t.Errorf("GlobalCapacity = %d, want 50", snap.GlobalCapacity)
+	}
+	if snap.GlobalTokens != 50 {
+		t.Errorf("GlobalTokens = %d, want 50 (full bucket)", snap.GlobalTokens)
+	}
+	if snap.Recent429Count != 0 {
+		t.Errorf("Recent429Count = %d, want 0", snap.Recent429Count)
+	}
+}
+
+func TestDiscordRateLimiter_Snapshot_PartialRoute(t *testing.T) {
+	rl := NewDiscordRateLimiter()
+
+	// Seed a route via Update so we exercise the real path.
+	headers := http.Header{}
+	headers.Set("X-RateLimit-Remaining", "2")
+	headers.Set("X-RateLimit-Limit", "5")
+	headers.Set("X-RateLimit-Reset-After", "10.0")
+	rl.Update("POST /channels/123/messages", headers)
+
+	snap := rl.Snapshot()
+
+	if len(snap.Routes) != 1 {
+		t.Fatalf("Routes len = %d, want 1", len(snap.Routes))
+	}
+	r := snap.Routes[0]
+	if r.Route != "POST /channels/123/messages" {
+		t.Errorf("Route = %q, want POST /channels/123/messages", r.Route)
+	}
+	if r.Remaining != 2 {
+		t.Errorf("Remaining = %d, want 2", r.Remaining)
+	}
+	if r.Limit != 5 {
+		t.Errorf("Limit = %d, want 5", r.Limit)
+	}
+	if r.ResetAt.IsZero() {
+		t.Error("ResetAt should be set")
+	}
+}
+
+func TestDiscordRateLimiter_Snapshot_FullRouteOmitted(t *testing.T) {
+	rl := NewDiscordRateLimiter()
+
+	// Remaining == Limit → fully-quota'd, should be omitted.
+	headers := http.Header{}
+	headers.Set("X-RateLimit-Remaining", "5")
+	headers.Set("X-RateLimit-Limit", "5")
+	headers.Set("X-RateLimit-Reset-After", "1.0")
+	rl.Update("POST /channels/456/messages", headers)
+
+	snap := rl.Snapshot()
+
+	if len(snap.Routes) != 0 {
+		t.Errorf("Routes = %v, want empty — fully-quota'd route should be omitted", snap.Routes)
+	}
+}
+
+func TestDiscordRateLimiter_Record429_CountsCorrectly(t *testing.T) {
+	rl := NewDiscordRateLimiter()
+
+	// All five 429s happen in the same minute.
+	fixedTime := time.Date(2026, 1, 1, 12, 0, 30, 0, time.UTC)
+	rl.nowFunc = func() time.Time { return fixedTime }
+
+	for range 5 {
+		rl.Record429()
+	}
+
+	snap := rl.Snapshot()
+	if snap.Recent429Count != 5 {
+		t.Errorf("Recent429Count = %d, want 5", snap.Recent429Count)
+	}
+}
+
+func TestDiscordRateLimiter_Record429_DecaysAfter5Min(t *testing.T) {
+	rl := NewDiscordRateLimiter()
+
+	// Record three 429s at t=0.
+	pastTime := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	rl.nowFunc = func() time.Time { return pastTime }
+	rl.Record429()
+	rl.Record429()
+	rl.Record429()
+
+	// Advance clock by 6 minutes — past the 5-minute window.
+	futureTime := pastTime.Add(6 * time.Minute)
+	rl.nowFunc = func() time.Time { return futureTime }
+
+	snap := rl.Snapshot()
+	if snap.Recent429Count != 0 {
+		t.Errorf("Recent429Count = %d, want 0 — 429s from 6 min ago should be outside the 5-min window", snap.Recent429Count)
+	}
+}
