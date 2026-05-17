@@ -89,8 +89,7 @@ func statusReport(ctx *bot.CommandContext, verbose bool) []bot.Reply {
 	sb.WriteString("\n\n")
 	sb.WriteString(renderAlertLimitsSection(ctx, tr))
 
-	// Section 10: Summary buffer. The SummaryBuffer reference is not
-	// (yet) on BotDeps; render "n/a" per spec.
+	// Section 10: Summary buffer.
 	sb.WriteString("\n\n")
 	sb.WriteString(renderSummaryBufferSection(ctx, tr))
 
@@ -424,19 +423,62 @@ func renderAlertLimitsSection(ctx *bot.CommandContext, tr translator) string {
 	return sb.String()
 }
 
-// renderSummaryBufferSection renders the summary buffer count. The
-// underlying *tracker.SummaryBuffer reference isn't exposed via
-// BotDeps today; render "n/a".
-//
-// TODO(slash-commands): Task 5.3 adds a SummaryBuffer enumeration API.
-// When that lands, also surface a SummaryBufferSize closure here so
-// the count + 🟡 threshold check can be reported.
+// renderSummaryBufferSection renders the summary buffer count using
+// ctx.SummaryBuffer.EnumerateUsers(). Reports total buffered entries,
+// bucket count, and top-3 users by entry count. Paints 🟡 when the
+// total exceeds the summaryBufferWarn threshold.
 func renderSummaryBufferSection(ctx *bot.CommandContext, tr translator) string {
-	_ = ctx
 	var sb strings.Builder
 	sb.WriteString(tr.T("cmd.poracle_admin.status.section.summary_buffer"))
+
+	if ctx.SummaryBuffer == nil {
+		sb.WriteString("\n  ")
+		sb.WriteString(tr.T("cmd.poracle_admin.status.value.na"))
+		return sb.String()
+	}
+
+	enums := ctx.SummaryBuffer.EnumerateUsers()
+
+	totalEntries := 0
+	bucketCount := len(enums)
+	for _, e := range enums {
+		totalEntries += e.Count
+	}
+
+	indicator := indicatorGreen
+	if totalEntries > summaryBufferWarn {
+		indicator = indicatorYellow
+	}
+
 	sb.WriteString("\n  ")
-	sb.WriteString(tr.T("cmd.poracle_admin.status.value.na"))
+	sb.WriteString(indicator)
+	sb.WriteString(" ")
+	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.summary_buffer_totals",
+		fmt.Sprintf("%d", totalEntries),
+		fmt.Sprintf("%d", bucketCount),
+	))
+
+	if len(enums) > 0 {
+		// Sort by count descending to show top-3.
+		sort.Slice(enums, func(i, j int) bool {
+			return enums[i].Count > enums[j].Count
+		})
+		top := enums
+		if len(top) > 3 {
+			top = top[:3]
+		}
+		sb.WriteString("\n  ")
+		sb.WriteString(tr.T("cmd.poracle_admin.status.label.summary_buffer_top"))
+		for _, e := range top {
+			sb.WriteString("\n")
+			sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.summary_buffer_user_row",
+				e.HumanID,
+				e.AlertType,
+				fmt.Sprintf("%d", e.Count),
+			))
+		}
+	}
+
 	return sb.String()
 }
 

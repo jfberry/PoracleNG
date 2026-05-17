@@ -8,6 +8,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
+	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -372,4 +373,73 @@ func TestFormatDuration(t *testing.T) {
 			t.Errorf("formatDuration(%v) = %q, want %q", c.in, got, c.want)
 		}
 	}
+}
+
+// TestStatusReport_SummaryBufferSection verifies that the summary buffer
+// section reads from ctx.SummaryBuffer and reports counts correctly.
+func TestStatusReport_SummaryBufferSection(t *testing.T) {
+	t.Run("nil_buffer_renders_na", func(t *testing.T) {
+		ctx := statusCtx(t)
+		ctx.SummaryBuffer = nil
+
+		out := firstReplyText(t, statusReport(ctx, false))
+
+		idx := strings.Index(out, "Summary buffer")
+		if idx < 0 {
+			t.Fatalf("expected 'Summary buffer' section in output:\n%s", out)
+		}
+		section := sectionTail(out, idx)
+		if !strings.Contains(section, "n/a") {
+			t.Errorf("expected n/a when SummaryBuffer is nil, got section:\n%s", section)
+		}
+	})
+
+	t.Run("empty_buffer_green", func(t *testing.T) {
+		ctx := statusCtx(t)
+		ctx.SummaryBuffer = tracker.NewSummaryBuffer("")
+
+		out := firstReplyText(t, statusReport(ctx, false))
+
+		idx := strings.Index(out, "Summary buffer")
+		if idx < 0 {
+			t.Fatalf("expected 'Summary buffer' section in output:\n%s", out)
+		}
+		section := sectionTail(out, idx)
+		// Zero entries → 🟢 indicator.
+		if !strings.Contains(section, indicatorGreen) {
+			t.Errorf("expected 🟢 for empty buffer, got section:\n%s", section)
+		}
+		if strings.Contains(section, indicatorYellow) {
+			t.Errorf("did not expect 🟡 for empty buffer:\n%s", section)
+		}
+	})
+
+	t.Run("over_threshold_yellow", func(t *testing.T) {
+		ctx := statusCtx(t)
+		buf := tracker.NewSummaryBuffer("")
+		// Append enough entries to exceed summaryBufferWarn (100).
+		for i := 0; i <= summaryBufferWarn; i++ {
+			buf.Append("user-1", "quest", tracker.BufferedQuest{
+				RewardType: 1,
+				Reward:     i + 1, // distinct reward per iteration to avoid dedup
+				PokestopID: "stop-id",
+			})
+		}
+		ctx.SummaryBuffer = buf
+
+		out := firstReplyText(t, statusReport(ctx, false))
+
+		idx := strings.Index(out, "Summary buffer")
+		if idx < 0 {
+			t.Fatalf("expected 'Summary buffer' section in output:\n%s", out)
+		}
+		section := sectionTail(out, idx)
+		if !strings.Contains(section, indicatorYellow) {
+			t.Errorf("expected 🟡 when buffer exceeds threshold, got section:\n%s", section)
+		}
+		// Should also show top-user line.
+		if !strings.Contains(section, "user-1") {
+			t.Errorf("expected top-user 'user-1' in section:\n%s", section)
+		}
+	})
 }

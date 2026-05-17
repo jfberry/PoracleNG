@@ -13,9 +13,22 @@ import (
 //	!poracle-admin status --verbose — same as -v
 //	!poracle-admin status verbose   — same as -v
 //	!poracle-admin status help      — show this help text
+//
+// The help hook renders the snapshot (not help text) so that typing just
+// "!poracle-admin status" immediately returns the useful output. The
+// explicit "help" sub-subcommand still reaches the introductory text.
+// This mirrors the operator-pragmatic pattern used by paMaintenance.
 var paStatus = &paSubgroup{
 	run:  paStatusRun,
-	help: paStatusHelp,
+	help: paStatusHelpAsReport,
+}
+
+// paStatusHelpAsReport is the paSubgroup.help hook — called when the user
+// types `!poracle-admin status` with no further args. Renders the full
+// snapshot rather than the help text so the most useful output is always
+// one word away. Matches the pattern established by paMaintenance.
+func paStatusHelpAsReport(ctx *bot.CommandContext) []bot.Reply {
+	return statusReport(ctx, false)
 }
 
 func paStatusRun(ctx *bot.CommandContext, args []string) []bot.Reply {

@@ -1117,6 +1117,9 @@
   "cmd.poracle_admin.status.section.telegram_rate": "**Telegram rate**",
   "cmd.poracle_admin.status.section.alert_limits": "**Alert limits**",
   "cmd.poracle_admin.status.section.summary_buffer": "**Summary buffer**",
+  "cmd.poracle_admin.status.label.summary_buffer_totals": "Entries: {0} across {1} bucket(s)",
+  "cmd.poracle_admin.status.label.summary_buffer_top": "Top users:",
+  "cmd.poracle_admin.status.label.summary_buffer_user_row": "  {0} ({1}): {2} entries",
   "cmd.poracle_admin.status.section.tracking": "**Tracking**",
   "cmd.poracle_admin.status.section.mysql": "**MySQL**",
 
