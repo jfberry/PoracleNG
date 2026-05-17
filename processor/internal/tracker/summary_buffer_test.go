@@ -305,3 +305,52 @@ func TestSummaryBuffer_SaveLoadEmpty(t *testing.T) {
 		t.Errorf("Load with empty path: %v", err)
 	}
 }
+
+func TestSummaryBuffer_EnumerateUsers_Empty(t *testing.T) {
+	sb := NewSummaryBuffer("")
+	got := sb.EnumerateUsers()
+	if len(got) != 0 {
+		t.Errorf("EnumerateUsers on empty buffer: got %v, want empty slice", got)
+	}
+}
+
+func TestSummaryBuffer_EnumerateUsers_Multi(t *testing.T) {
+	sb := NewSummaryBuffer("")
+
+	// user-A: 2 alertTypes, user-B: 2 alertTypes
+	sb.Append("user-A", "quest", BufferedQuest{PokestopID: "a1", ExpiresAt: 9999})
+	sb.Append("user-A", "quest", BufferedQuest{PokestopID: "a2", ExpiresAt: 9999})
+	sb.Append("user-A", "quest", BufferedQuest{PokestopID: "a3", ExpiresAt: 9999})
+	sb.Append("user-A", "raid", BufferedQuest{PokestopID: "r1", ExpiresAt: 9999})
+	sb.Append("user-B", "quest", BufferedQuest{PokestopID: "b1", ExpiresAt: 9999})
+	sb.Append("user-B", "invasion", BufferedQuest{PokestopID: "i1", ExpiresAt: 9999})
+
+	got := sb.EnumerateUsers()
+	if len(got) != 4 {
+		t.Fatalf("EnumerateUsers: got %d entries, want 4: %+v", len(got), got)
+	}
+
+	// Build a map for easy assertion without depending on order.
+	type key struct{ h, a string }
+	counts := make(map[key]int, 4)
+	for _, e := range got {
+		counts[key{e.HumanID, e.AlertType}] = e.Count
+		// NextFireAt should always be zero — schedules are in the scheduler.
+		if !e.NextFireAt.IsZero() {
+			t.Errorf("EnumerateUsers: NextFireAt should be zero, got %v for %s/%s",
+				e.NextFireAt, e.HumanID, e.AlertType)
+		}
+	}
+
+	want := map[key]int{
+		{"user-A", "quest"}:    3,
+		{"user-A", "raid"}:     1,
+		{"user-B", "quest"}:    1,
+		{"user-B", "invasion"}: 1,
+	}
+	for k, wantCount := range want {
+		if got := counts[k]; got != wantCount {
+			t.Errorf("EnumerateUsers %s/%s: count=%d, want %d", k.h, k.a, got, wantCount)
+		}
+	}
+}

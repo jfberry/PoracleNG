@@ -146,11 +146,7 @@ var paReconcile = &paSubgroup{
 }
 
 // paRatelimit is declared in poracle_admin_ratelimit.go.
-
-var paSummary = &paSubgroup{
-	run:  paStubRun,
-	help: paStubHelp("summary"),
-}
+// paSummary is declared in poracle_admin_summary.go.
 
 var paMaintenance = &paSubgroup{
 	run:  paStubRun,
