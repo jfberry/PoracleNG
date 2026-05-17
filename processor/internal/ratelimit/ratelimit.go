@@ -28,7 +28,15 @@ type RateResult struct {
 type counter struct {
 	count    int
 	windowAt time.Time // when this window started
-	dtype    string    // destination type (recorded on first write, used by StateFor type filter)
+	// dtype records the destination type that opened this window. The
+	// counters map is keyed by ID alone (not ID+type), so if the same
+	// ID is later used with a different type within the same window,
+	// the stored dtype is NOT updated — TargetState.Type will reflect
+	// the first-write type. In practice IDs don't collide across types
+	// (Discord user IDs and channel IDs come from different snowflake
+	// namespaces), so this is a documented latent edge case rather
+	// than a triggered bug.
+	dtype string
 }
 
 type violation struct {
