@@ -340,11 +340,16 @@ enabled = false
 
 # Global registration: a single set of commands available across every
 # guild the bot is in, plus DMs. Discord caches these aggressively, so
-# changes can take up to an hour to appear in users' clients.
-register_globally = true
+# changes can take up to an hour to appear in users' clients. Defaults
+# off so flipping enabled=true never silently pushes commands to every
+# server the bot has ever been invited to — opt in explicitly.
+register_globally = false
 
-# Per-guild registration list. Only consulted when register_globally is
-# false. Updates appear within seconds — use during testing.
+# Per-guild registration list. Used when register_globally is false.
+# Updates appear within seconds, which makes this the right choice for
+# testing and most single-server deployments. If both this list is empty
+# and register_globally is false, no commands are registered (the sync
+# logs a warning).
 guilds = []
 
 # Optional allow-list of canonical short names to expose. Empty = all

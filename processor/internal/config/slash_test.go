@@ -66,8 +66,8 @@ func TestSlashCommandsDefaults(t *testing.T) {
 	if sc.Enabled {
 		t.Error("should default disabled (master switch off)")
 	}
-	if !sc.RegisterGlobally {
-		t.Error("should default global")
+	if sc.RegisterGlobally {
+		t.Error("should default to per-guild registration (operator must opt in to global)")
 	}
 	if len(sc.Enable) != 0 {
 		t.Error("Enable should default to empty (meaning all)")
