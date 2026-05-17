@@ -169,6 +169,26 @@ func TestReload_UnknownSub(t *testing.T) {
 	}
 }
 
+func TestReload_DtsRendererNotConfigured(t *testing.T) {
+	ctx, _ := testCtx(t)
+	ctx.IsAdmin = true
+	ctx.ReloadDTS = func() (int, error) { return 0, errors.New("DTS renderer not configured") }
+
+	cmd := &PoracleAdminCommand{}
+	replies := cmd.Run(ctx, []string{"reload", "dts"})
+
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply, got none")
+	}
+	text := replies[0].Text
+	if !containsStr(text, "DTS renderer not configured") {
+		t.Errorf("expected sentinel error message in reply, got: %q", text)
+	}
+	if containsStr(text, "DTS reloaded") {
+		t.Errorf("reply must not contain success message when renderer is nil, got: %q", text)
+	}
+}
+
 func TestReload_DtsNilFunc(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
