@@ -186,6 +186,7 @@
   "cmd.poracle_admin.group.status.desc": "Live-Systemzustand anzeigen",
   "cmd.poracle_admin.group.maintenance.desc": "Ausgehende Zustellung pausieren/fortsetzen",
   "cmd.poracle_admin.group.config.desc": "Effektive Konfiguration mit maskierten Geheimnissen anzeigen",
+  "cmd.poracle_admin.group.warnings.desc": "Erfasste WARN/ERROR-Logeinträge anzeigen (Startup- und Rolling-Puffer)",
 
   "cmd.poracle_admin.reload.help.intro": "Laufzeitzustand von Festplatte oder Datenbank neu laden.",
   "cmd.poracle_admin.reload.dts.desc": "`dts` — DTS-Vorlagen und Partials von der Festplatte neu laden",
@@ -1087,5 +1088,17 @@
   "cmd.poracle_admin.config.keys.header": "⚙️ Konfigurationsabschnitte:",
   "cmd.poracle_admin.config.keys.row": "  {0}: {1} Schlüssel",
   "cmd.poracle_admin.config.unknown_section": "Unbekannter Konfigurationsabschnitt: `{0}`. Verwenden Sie `!poracle-admin config keys` für gültige Abschnitte.",
-  "cmd.poracle_admin.config.empty_section": "Abschnitt `{0}` hat keine konfigurierbaren Felder."
+  "cmd.poracle_admin.config.empty_section": "Abschnitt `{0}` hat keine konfigurierbaren Felder.",
+
+  "cmd.poracle_admin.warnings.help.intro": "🛠️ Erfasste Warnungen — In-Memory WARN/ERROR-Logeinträge anzeigen.\n\nUnterbefehle:\n  (kein Arg) — Startup- und Recent-Puffer anzeigen\n  `startup` — nur den Startup-Puffer anzeigen (erste 200 Einträge, nach dem Start eingefroren)\n  `recent` — nur den Rolling-Puffer anzeigen (letzte 50 Einträge)\n  `clear` — Rolling-Puffer leeren (Startup-Puffer ist unveränderlich)",
+  "cmd.poracle_admin.warnings.not_configured": "ℹ️ Log-Puffer ist auf dieser Instanz nicht konfiguriert.",
+  "cmd.poracle_admin.warnings.section.startup": "🛠️ Erfasste Warnungen — Startup ({0} Einträge)",
+  "cmd.poracle_admin.warnings.section.recent": "🛠️ Erfasste Warnungen — Recent ({0} Einträge)",
+  "cmd.poracle_admin.warnings.empty.startup": "🟢 Keine Startup-Warnungen erfasst.",
+  "cmd.poracle_admin.warnings.empty.recent": "🟢 Keine aktuellen Warnungen.",
+  "cmd.poracle_admin.warnings.entry_row": "  {0}  {1}  {2} {3}",
+  "cmd.poracle_admin.warnings.cleared": "✅ {0} Einträge aus dem Rolling-Puffer gelöscht (Startup-Puffer nicht betroffen).",
+  "cmd.poracle_admin.warnings.startup.desc": "`startup` — nur den Startup-Puffer anzeigen (nach dem Start eingefroren)",
+  "cmd.poracle_admin.warnings.recent.desc": "`recent` — nur den Rolling-Puffer anzeigen (letzte 50 Einträge)",
+  "cmd.poracle_admin.warnings.clear.desc": "`clear` — Rolling-Puffer leeren"
 }

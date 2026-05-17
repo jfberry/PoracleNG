@@ -997,6 +997,7 @@
   "cmd.poracle_admin.group.status.desc": "live health snapshot",
   "cmd.poracle_admin.group.maintenance.desc": "pause/resume outbound delivery",
   "cmd.poracle_admin.group.config.desc": "view effective merged config with secrets redacted",
+  "cmd.poracle_admin.group.warnings.desc": "inspect captured WARN/ERROR log entries (startup + rolling buffers)",
 
   "cmd.poracle_admin.reload.help.intro": "Reload runtime state from disk or database.",
   "cmd.poracle_admin.reload.dts.desc": "`dts` — reload DTS templates and partials from disk",
@@ -1161,5 +1162,17 @@
   "cmd.poracle_admin.config.keys.header": "⚙️ Config sections:",
   "cmd.poracle_admin.config.keys.row": "  {0}: {1} keys",
   "cmd.poracle_admin.config.unknown_section": "Unknown config section: `{0}`. Use `!poracle-admin config keys` to list valid sections.",
-  "cmd.poracle_admin.config.empty_section": "Section `{0}` has no configurable fields."
+  "cmd.poracle_admin.config.empty_section": "Section `{0}` has no configurable fields.",
+
+  "cmd.poracle_admin.warnings.help.intro": "🛠️ Captured warnings — inspect in-memory WARN/ERROR log entries.\n\nSubcommands:\n  (no arg) — show both startup and recent buffers\n  `startup` — show only the startup buffer (first 200 entries, frozen after init)\n  `recent` — show only the rolling buffer (last 50 entries)\n  `clear` — empty the rolling buffer (startup is immutable)",
+  "cmd.poracle_admin.warnings.not_configured": "ℹ️ Log buffer is not configured on this instance.",
+  "cmd.poracle_admin.warnings.section.startup": "🛠️ Captured warnings — startup ({0} entries)",
+  "cmd.poracle_admin.warnings.section.recent": "🛠️ Captured warnings — recent ({0} entries)",
+  "cmd.poracle_admin.warnings.empty.startup": "🟢 No startup warnings captured.",
+  "cmd.poracle_admin.warnings.empty.recent": "🟢 No recent warnings.",
+  "cmd.poracle_admin.warnings.entry_row": "  {0}  {1}  {2} {3}",
+  "cmd.poracle_admin.warnings.cleared": "✅ Cleared {0} entries from the rolling buffer (startup buffer is unaffected).",
+  "cmd.poracle_admin.warnings.startup.desc": "`startup` — show only the startup buffer (frozen after init)",
+  "cmd.poracle_admin.warnings.recent.desc": "`recent` — show only the rolling buffer (last 50 entries)",
+  "cmd.poracle_admin.warnings.clear.desc": "`clear` — empty the rolling buffer"
 }
