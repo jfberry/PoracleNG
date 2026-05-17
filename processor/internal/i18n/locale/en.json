@@ -1065,5 +1065,27 @@
   "cmd.poracle_admin.status.tracking_type.nest": "nest",
   "cmd.poracle_admin.status.tracking_type.gym": "gym",
   "cmd.poracle_admin.status.tracking_type.fort": "fort",
-  "cmd.poracle_admin.status.tracking_type.maxbattle": "maxbattle"
+  "cmd.poracle_admin.status.tracking_type.maxbattle": "maxbattle",
+
+  "cmd.poracle_admin.slash.help.intro": "**!poracle-admin slash** — slash-command registration lifecycle.\nSubcommands:",
+  "cmd.poracle_admin.slash.discord_only": "❌ Slash commands are Discord-only and cannot be managed from Telegram.",
+  "cmd.poracle_admin.slash.not_configured": "❌ Slash commands are not configured (Discord disabled or [discord.slash_commands] enabled=false).",
+  "cmd.poracle_admin.slash.sync.desc": "push the current command set to Discord (fingerprint-cached, skips if unchanged)",
+  "cmd.poracle_admin.slash.sync.success": "✅ Slash sync complete ({0}ms)",
+  "cmd.poracle_admin.slash.sync.error": "❌ Slash sync failed: {0}",
+  "cmd.poracle_admin.slash.force_resync.desc": "clear fingerprint cache and push unconditionally",
+  "cmd.poracle_admin.slash.force_resync.success": "✅ Force-resync complete ({0}ms)",
+  "cmd.poracle_admin.slash.force_resync.error": "❌ Force-resync failed: {0}",
+  "cmd.poracle_admin.slash.clear_global.desc": "remove all globally-registered Discord slash commands",
+  "cmd.poracle_admin.slash.clear_global.success": "✅ Global slash commands cleared.",
+  "cmd.poracle_admin.slash.clear_global.error": "❌ Clear global failed: {0}",
+  "cmd.poracle_admin.slash.clear_guild.desc": "remove slash commands from one guild (requires guild_id arg)",
+  "cmd.poracle_admin.slash.clear_guild.needs_arg": "❌ Usage: `!poracle-admin slash clear-guild <guild_id>`",
+  "cmd.poracle_admin.slash.clear_guild.success": "✅ Slash commands cleared from guild {0}.",
+  "cmd.poracle_admin.slash.clear_guild.error": "❌ Clear guild failed: {0}",
+  "cmd.poracle_admin.slash.status.desc": "show last sync timestamp and fingerprint per scope",
+  "cmd.poracle_admin.slash.status.header": "**Slash command registration status:**",
+  "cmd.poracle_admin.slash.status.scope_row": "  **{0}**: last synced {1} · fingerprint `{2}`",
+  "cmd.poracle_admin.slash.status.never_synced": "never",
+  "cmd.poracle_admin.slash.status.error": "❌ Status read failed: {0}"
 }
