@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -93,6 +94,16 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 				MatchedAreas:      matchedAreas,
 				TileGate:          ps.newTileGate(tilePending),
 				LogReference:      lure.PokestopID,
+				// Edit key for users with the edit flag (Clean bit 2):
+				// a revised lure expiration on the same (pokestop,
+				// lure_id) re-uses the prior message instead of
+				// sending a fresh one. Stops can host only one lure
+				// at a time, so this is safe even across non-overlapping
+				// lures of the same type — the message tracker entry
+				// for the prior lure has TTL aligned with its expiry
+				// and will have evicted before a new same-type lure
+				// can plausibly arrive.
+				EditKey: fmt.Sprintf("lure:%s:%d", lure.PokestopID, lure.LureID),
 			}
 		} else {
 			l.Debugf("%s at %s [%.3f,%.3f] and 0 humans cared",
