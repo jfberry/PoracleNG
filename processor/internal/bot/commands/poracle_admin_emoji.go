@@ -8,17 +8,19 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 )
 
-// paEmoji implements !poracle-admin emoji — inspection of the processor's
-// loaded emoji config (config/emoji.json + util.json defaults).
+// paEmoji implements !poracle-admin emoji — manages and inspects the
+// processor's emoji configuration AND the Discord guild's emoji assets.
 //
 // Subcommands:
 //
-//	list          — list all configured emoji keys with per-platform resolutions
-//	reload        — reload config/emoji.json from disk
-//	test <key>    — resolve one emoji key for the current platform
+//	list                       — list configured keys with per-platform resolutions
+//	reload                     — reload config/emoji.json from disk
+//	test <key>                 — resolve one emoji key for the current platform
+//	upload [overwrite]         — upload uicons-based emojis to the guild + write emoji.json
+//	discord-config             — dump emoji.json from current guild state (no uploads)
 //
-// Distinct from !poracle-emoji which manages Discord guild assets; this one
-// inspects the processor's internal view of the emoji configuration.
+// upload and discord-config require a Discord bot — they call into the gateway
+// session to talk to the guild API.
 var paEmoji = &paSubgroup{
 	run:  paEmojiRun,
 	help: paEmojiHelp,
@@ -35,6 +37,10 @@ func paEmojiHelp(ctx *bot.CommandContext) []bot.Reply {
 	sb.WriteString(tr.T("cmd.poracle_admin.emoji.reload.desc"))
 	sb.WriteString("\n")
 	sb.WriteString(tr.T("cmd.poracle_admin.emoji.test.desc"))
+	sb.WriteString("\n")
+	sb.WriteString(tr.T("cmd.poracle_admin.emoji.upload.desc"))
+	sb.WriteString("\n")
+	sb.WriteString(tr.T("cmd.poracle_admin.emoji.discord_config.desc"))
 
 	return []bot.Reply{{Text: sb.String()}}
 }
@@ -51,6 +57,16 @@ func paEmojiRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return paEmojiReload(ctx)
 	case "test":
 		return paEmojiTest(ctx, args[1:])
+	case "upload":
+		overwrite := false
+		for _, a := range args[1:] {
+			if strings.EqualFold(a, "overwrite") {
+				overwrite = true
+			}
+		}
+		return paEmojiOperation(ctx, true, overwrite)
+	case "discord-config", "discord_config":
+		return paEmojiOperation(ctx, false, false)
 	default:
 		tr := ctx.Tr()
 		return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.unknown_sub", "emoji")}}
@@ -122,6 +138,21 @@ func paEmojiReload(ctx *bot.CommandContext) []bot.Reply {
 		strconv.Itoa(count),
 		strconv.FormatInt(elapsed, 10),
 	)}}
+}
+
+// paEmojiOperation routes to the shared EmojiOperation closure on BotDeps
+// (which calls into the discord bot's gateway session). Used by both
+// `upload` (with optional overwrite) and `discord-config` (no upload).
+func paEmojiOperation(ctx *bot.CommandContext, upload, overwrite bool) []bot.Reply {
+	tr := ctx.Tr()
+
+	if ctx.Platform != "discord" {
+		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.emoji.discord_only")}}
+	}
+	if ctx.EmojiOperation == nil {
+		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.emoji.discord_only")}}
+	}
+	return ctx.EmojiOperation(ctx.ChannelID, ctx.GuildID, upload, overwrite)
 }
 
 func paEmojiTest(ctx *bot.CommandContext, args []string) []bot.Reply {

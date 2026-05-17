@@ -777,6 +777,13 @@ func main() {
 			}
 			return cmdEmoji.Reload()
 		},
+		EmojiOperation: func(channelID, guildID string, upload, overwrite bool) []bot.Reply {
+			b := discordBotRef
+			if b == nil {
+				return []bot.Reply{{Text: "Discord bot is not configured on this deployment."}}
+			}
+			return b.RunEmojiOperation(channelID, guildID, upload, overwrite)
+		},
 		ReloadGeofence: func() error {
 			return state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence)
 		},
