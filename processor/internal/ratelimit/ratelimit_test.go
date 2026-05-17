@@ -603,14 +603,31 @@ func TestLimiter_StateFor_NotFound(t *testing.T) {
 }
 
 func TestLimiter_Reset_ClearsBothBuckets(t *testing.T) {
-	l := New(Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5, MaxLimitsBeforeStop: 10})
+	// MaxLimitsBeforeStop=1 so the single breach below constitutes a ban.
+	// This makes the post-reset ListBlocked assertion meaningful: without
+	// Reset actually clearing violations the banned target would still
+	// appear (violation window is 24h, far longer than this test).
+	l := New(Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5, MaxLimitsBeforeStop: 1})
 	defer l.Close()
 
 	// Seed both buckets and a violation.
 	l.Check("user1", "discord:user")
 	l.Check("user1", "discord:user")
-	l.Check("user1", "discord:user") // breach → violation recorded
+	l.Check("user1", "discord:user") // breach → 1 violation recorded → banned (threshold=1)
 	l.CheckSummary("user1", "discord:user")
+
+	// Verify the target IS in ListBlocked before reset (proves the ban was
+	// triggered, so the subsequent assertion is non-vacuous).
+	var foundBefore bool
+	for _, s := range l.ListBlocked() {
+		if s.ID == "user1" {
+			foundBefore = true
+			break
+		}
+	}
+	if !foundBefore {
+		t.Fatal("before Reset: user1 should appear in ListBlocked (violation at threshold=1 should be a ban)")
+	}
 
 	// Verify state exists before reset.
 	before := l.StateFor("user1", "discord:user")
@@ -629,7 +646,9 @@ func TestLimiter_Reset_ClearsBothBuckets(t *testing.T) {
 		t.Fatalf("after Reset: expected 0 entries, got %d: %+v", len(after), after)
 	}
 
-	// And ListBlocked should not contain the target.
+	// And ListBlocked should not contain the target — violations must have
+	// been cleared (not merely the counters), otherwise the banned-targets
+	// path in ListBlocked would still surface user1 for the next 24h.
 	for _, s := range l.ListBlocked() {
 		if s.ID == "user1" {
 			t.Fatalf("after Reset: user1 should not appear in ListBlocked: %+v", s)
