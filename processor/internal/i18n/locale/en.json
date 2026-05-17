@@ -1200,5 +1200,7 @@
   "cmd.poracle_admin.warnings.cleared": "✅ Cleared {0} entries from the rolling buffer (startup buffer is unaffected).",
   "cmd.poracle_admin.warnings.startup.desc": "`startup` — show only the startup buffer (frozen after init)",
   "cmd.poracle_admin.warnings.recent.desc": "`recent` — show only the rolling buffer (last 50 entries)",
-  "cmd.poracle_admin.warnings.clear.desc": "`clear` — empty the rolling buffer"
+  "cmd.poracle_admin.warnings.clear.desc": "`clear` — empty the rolling buffer",
+
+  "cmd.maintenance.active_suffix": "🔧 Maintenance mode is active — alerts are not being delivered."
 }
