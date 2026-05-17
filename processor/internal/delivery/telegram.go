@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -21,11 +22,24 @@ const defaultTelegramBaseURL = "https://api.telegram.org"
 
 var defaultSendOrder = []string{"sticker", "photo", "text", "location", "venue"}
 
+// TelegramRateSnapshot is a point-in-time read of Telegram rate-limit state.
+type TelegramRateSnapshot struct {
+	Recent429Count      int       // 429s observed in the last 5 minutes
+	CurrentBackoffUntil time.Time // zero value if not currently backing off
+}
+
 // TelegramSender delivers messages via the Telegram Bot API.
 type TelegramSender struct {
 	token   string
 	baseURL string
 	client  *http.Client
+
+	// Rate-limit introspection state.
+	rlMu               sync.Mutex
+	counter429         [60]int32 // 60-slot ring, one slot per minute
+	counter429Mins     [60]int64 // Unix minute when the slot was last written
+	currentBackoffUntil time.Time // zero if not backing off
+	nowFunc            func() time.Time // injectable for tests; nil → time.Now
 }
 
 // NewTelegramSender creates a new Telegram sender.
@@ -34,6 +48,69 @@ func NewTelegramSender(token string) *TelegramSender {
 		token:   token,
 		baseURL: defaultTelegramBaseURL,
 		client:  &http.Client{Timeout: 30 * time.Second},
+	}
+}
+
+// now returns the current time, using the injected nowFunc when set (tests only).
+func (ts *TelegramSender) now() time.Time {
+	if ts.nowFunc != nil {
+		return ts.nowFunc()
+	}
+	return time.Now()
+}
+
+// Record429 records a 429 response in the rolling 5-minute window counter.
+// Safe to call from any goroutine.
+func (ts *TelegramSender) Record429() {
+	ts.rlMu.Lock()
+	defer ts.rlMu.Unlock()
+	now := ts.now()
+	currentMin := now.Unix() / 60
+	slot := int(currentMin % 60)
+	if ts.counter429Mins[slot] != currentMin {
+		ts.counter429[slot] = 0
+		ts.counter429Mins[slot] = currentMin
+	}
+	ts.counter429[slot]++
+}
+
+// setBackoffUntil records the active backoff deadline.
+func (ts *TelegramSender) setBackoffUntil(t time.Time) {
+	ts.rlMu.Lock()
+	ts.currentBackoffUntil = t
+	ts.rlMu.Unlock()
+}
+
+// recent429Count sums the 429 slots covering the last 5 minutes.
+// Must be called with ts.rlMu held.
+func (ts *TelegramSender) recent429Count() int {
+	now := ts.now()
+	currentMin := now.Unix() / 60
+	count := 0
+	for i := range 5 {
+		targetMin := currentMin - int64(i)
+		slot := int(targetMin % 60)
+		if ts.counter429Mins[slot] == targetMin {
+			count += int(ts.counter429[slot])
+		}
+	}
+	return count
+}
+
+// Snapshot returns a point-in-time read of Telegram rate-limit state.
+// Safe to call from any goroutine.
+func (ts *TelegramSender) Snapshot() TelegramRateSnapshot {
+	ts.rlMu.Lock()
+	defer ts.rlMu.Unlock()
+	count := ts.recent429Count()
+	backoff := ts.currentBackoffUntil
+	// Only surface backoffs that are still in the future.
+	if !backoff.IsZero() && !backoff.After(ts.now()) {
+		backoff = time.Time{}
+	}
+	return TelegramRateSnapshot{
+		Recent429Count:      count,
+		CurrentBackoffUntil: backoff,
 	}
 }
 
@@ -496,16 +573,19 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 				retryAfter = tgResp.Parameters.RetryAfter
 			}
 			metrics.DeliveryRateLimited.WithLabelValues("telegram").Inc()
+			ts.Record429()
 			// Cap retry to 60 seconds — values like 23501s indicate a permanent block
 			if retryAfter > 60 {
 				log.Warnf("telegram: 429 rate limited for %s %s, retry_after=%ds is excessive — capping to 60s and giving up (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
 				return 0, fmt.Errorf("telegram rate limit too long: %ds", retryAfter)
 			}
 			log.Warnf("telegram: 429 rate limited for %s %s, retry_after=%ds (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
+			backoffUntil := ts.now().Add(time.Duration(retryAfter) * time.Second)
+			ts.setBackoffUntil(backoffUntil)
 			select {
 			case <-ctx.Done():
 				return 0, ctx.Err()
-			case <-time.After(time.Duration(retryAfter) * time.Second):
+			case <-time.After(time.Until(backoffUntil)):
 			}
 			continue
 		}
