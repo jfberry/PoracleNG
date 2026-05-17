@@ -996,6 +996,7 @@
   "cmd.poracle_admin.group.summary.desc": "summary buffer inspection and forced dispatch",
   "cmd.poracle_admin.group.status.desc": "live health snapshot",
   "cmd.poracle_admin.group.maintenance.desc": "pause/resume outbound delivery",
+  "cmd.poracle_admin.group.config.desc": "view effective merged config with secrets redacted",
 
   "cmd.poracle_admin.reload.help.intro": "Reload runtime state from disk or database.",
   "cmd.poracle_admin.reload.dts.desc": "`dts` — reload DTS templates and partials from disk",
@@ -1151,5 +1152,14 @@
   "cmd.poracle_admin.slash.status.scope_row": "  **{0}**: last synced {1} · fingerprint `{2}`",
   "cmd.poracle_admin.slash.status.never_synced": "never",
   "cmd.poracle_admin.slash.status.ago": "{0} ago",
-  "cmd.poracle_admin.slash.status.error": "❌ Status read failed: {0}"
+  "cmd.poracle_admin.slash.status.error": "❌ Status read failed: {0}",
+
+  "cmd.poracle_admin.config.help.intro": "⚙️ Config viewer — show effective merged config with secrets redacted.\nSubcommands:",
+  "cmd.poracle_admin.config.keys.desc": "list section names with key counts",
+  "cmd.poracle_admin.config.section.desc": "show just that section (e.g. `!poracle-admin config discord`)",
+  "cmd.poracle_admin.config.full.desc": "show the full config (all sections, secrets redacted)",
+  "cmd.poracle_admin.config.keys.header": "⚙️ Config sections:",
+  "cmd.poracle_admin.config.keys.row": "  {0}: {1} keys",
+  "cmd.poracle_admin.config.unknown_section": "Unknown config section: `{0}`. Use `!poracle-admin config keys` to list valid sections.",
+  "cmd.poracle_admin.config.empty_section": "Section `{0}` has no configurable fields."
 }
