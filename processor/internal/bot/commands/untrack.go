@@ -21,12 +21,16 @@ func (c *UntrackCommand) Aliases() []string { return nil }
 // validUntrackTypes is the set of canonical English tracking-type short names
 // that !untrack <type> can reroute to. Pokemon is excluded because it IS the
 // default path handled by this command's own logic.
+//
+// This mirrors the non-pokemon entries in the subs slice inside
+// discordbot/slash/definitions.go's untrackOptions(). When adding a type
+// here, add it there too (and vice versa).
 var validUntrackTypes = map[string]bool{
 	"raid":      true,
 	"egg":       true,
 	"quest":     true,
 	"invasion":  true,
-	"incident":  true,
+	"incident":  true, // text-only: slash uses /incident directly, not /untrack incident
 	"lure":      true,
 	"nest":      true,
 	"gym":       true,
