@@ -1046,6 +1046,7 @@
   "cmd.poracle_admin.status.label.tracking_total": "Total tracking rules: {0}",
   "cmd.poracle_admin.status.label.tracking_active_humans": "Active humans: {0}",
   "cmd.poracle_admin.status.label.tracking_registered_humans": "Registered humans: {0}",
+  "cmd.poracle_admin.status.label.tracking_registered_humans_error": "Registered humans: n/a (error)",
   "cmd.poracle_admin.status.label.tracking_type": "{0}: {1}",
   "cmd.poracle_admin.status.label.mysql_ping_ok": "Ping: ok",
   "cmd.poracle_admin.status.label.mysql_ping_fail": "Ping: failed ({0})",
