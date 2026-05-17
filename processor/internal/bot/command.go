@@ -18,13 +18,16 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/logbuffer"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
+	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // BotDeps holds shared dependencies needed by both Discord and Telegram bots.
@@ -80,6 +83,49 @@ type BotDeps struct {
 	ReloadDTS      func() (int, error) // returns template count
 	ReloadGeofence func() error        // calls state.LoadWithGeofences
 	ReloadState    func() error        // calls state.Load directly
+
+	// Phase 2 introspection APIs — used by admin status/diagnostic subcommands.
+
+	// WebhookRate returns a point-in-time snapshot of webhook arrival rates.
+	// Always non-nil in production.
+	WebhookRate func() webhook.RateSnapshot
+
+	// AlertLimiter is the per-destination alert rate limiter.
+	// Always non-nil in production.
+	AlertLimiter *ratelimit.Limiter
+
+	// DiscordRate returns a point-in-time snapshot of Discord API rate-limit
+	// state. Always non-nil in production; returns a zero-value snapshot
+	// when Discord delivery is not configured.
+	DiscordRate func() delivery.DiscordRateSnapshot
+
+	// TelegramRate returns a point-in-time snapshot of Telegram API rate-limit
+	// state. Always non-nil in production; returns a zero-value snapshot
+	// when Telegram delivery is not configured.
+	TelegramRate func() delivery.TelegramRateSnapshot
+
+	// GeocoderStats returns a point-in-time snapshot of geocoder cache health.
+	// Always non-nil in production; returns a zero-value snapshot when no
+	// geocoder is configured.
+	GeocoderStats func() geocoding.CacheStats
+
+	// GeocoderClear drops all entries from the in-memory geocoder cache layer.
+	// Returns the number of entries cleared. Always non-nil in production.
+	GeocoderClear func() int
+
+	// Reconciler immediately reconciles a single Discord user's role membership.
+	// nil when Discord reconciliation is not configured (Telegram-only deploys,
+	// or check_role = false). Admin command callers must nil-check before use.
+	Reconciler func(userID string) error
+
+	// RunReconcile triggers a full Discord reconciliation cycle synchronously.
+	// nil when Discord reconciliation is not configured. Admin command callers
+	// must nil-check before use.
+	RunReconcile func() error
+
+	// LogBuffer holds the in-memory startup + rolling log capture.
+	// Always non-nil in production.
+	LogBuffer *logbuffer.Buffer
 }
 
 // TestTarget specifies who to deliver a test alert to.
@@ -187,6 +233,37 @@ type CommandContext struct {
 	ReloadGeofence func() error
 	ReloadState    func() error
 
+	// Phase 2 introspection APIs — used by admin status/diagnostic subcommands.
+
+	// WebhookRate returns a point-in-time snapshot of webhook arrival rates.
+	WebhookRate func() webhook.RateSnapshot
+
+	// AlertLimiter is the per-destination alert rate limiter.
+	AlertLimiter *ratelimit.Limiter
+
+	// DiscordRate returns a point-in-time snapshot of Discord API rate-limit state.
+	DiscordRate func() delivery.DiscordRateSnapshot
+
+	// TelegramRate returns a point-in-time snapshot of Telegram API rate-limit state.
+	TelegramRate func() delivery.TelegramRateSnapshot
+
+	// GeocoderStats returns a point-in-time snapshot of geocoder cache health.
+	GeocoderStats func() geocoding.CacheStats
+
+	// GeocoderClear drops all entries from the in-memory geocoder cache layer.
+	GeocoderClear func() int
+
+	// Reconciler immediately reconciles a single Discord user's role membership.
+	// nil when Discord reconciliation is not configured.
+	Reconciler func(userID string) error
+
+	// RunReconcile triggers a full Discord reconciliation cycle synchronously.
+	// nil when Discord reconciliation is not configured.
+	RunReconcile func() error
+
+	// LogBuffer holds the in-memory startup + rolling log capture.
+	LogBuffer *logbuffer.Buffer
+
 	// PostRegister, when set, is invoked after !poracle creates a new
 	// human row. The platform sets this to its single-user reconciliation
 	// hook so a freshly-registered user has their community_membership /
@@ -237,6 +314,15 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		ReloadDTS:          deps.ReloadDTS,
 		ReloadGeofence:     deps.ReloadGeofence,
 		ReloadState:        deps.ReloadState,
+		WebhookRate:        deps.WebhookRate,
+		AlertLimiter:       deps.AlertLimiter,
+		DiscordRate:        deps.DiscordRate,
+		TelegramRate:       deps.TelegramRate,
+		GeocoderStats:      deps.GeocoderStats,
+		GeocoderClear:      deps.GeocoderClear,
+		Reconciler:         deps.Reconciler,
+		RunReconcile:       deps.RunReconcile,
+		LogBuffer:          deps.LogBuffer,
 	}
 }
 

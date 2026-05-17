@@ -235,6 +235,24 @@ func (g *Geocoder) ResetStats() {
 	g.statCircuitBreaks.Store(0)
 }
 
+// CacheStats returns a point-in-time snapshot of the geocoder's cache health.
+// Returns a zero-value CacheStats when no cache is configured.
+func (g *Geocoder) CacheStats() CacheStats {
+	if g.cache == nil {
+		return CacheStats{}
+	}
+	return g.cache.Stats()
+}
+
+// ClearCache drops all entries from the in-memory cache layer.
+// Returns the number of entries cleared. Safe to call when no cache is configured.
+func (g *Geocoder) ClearCache() int {
+	if g.cache == nil {
+		return 0
+	}
+	return g.cache.ClearMemory()
+}
+
 // Close shuts down the geocoder and releases resources.
 func (g *Geocoder) Close() error {
 	if g.cache != nil {
