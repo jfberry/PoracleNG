@@ -87,6 +87,9 @@ type BotDeps struct {
 	ReloadDTS      func() (int, error) // returns template count
 	ReloadGeofence func() error        // calls state.LoadWithGeofences
 	ReloadState    func() error        // calls state.Load directly
+	// EmojiReload reloads config/emoji.json and returns the key count.
+	// nil when DTS renderer is not configured.
+	EmojiReload func() (int, error)
 
 	// Phase 2 introspection APIs — used by admin status/diagnostic subcommands.
 
@@ -269,6 +272,9 @@ type CommandContext struct {
 	ReloadDTS      func() (int, error) // returns template count
 	ReloadGeofence func() error
 	ReloadState    func() error
+	// EmojiReload reloads config/emoji.json and returns the key count.
+	// nil when DTS renderer is not configured.
+	EmojiReload func() (int, error)
 
 	// Phase 2 introspection APIs — used by admin status/diagnostic subcommands.
 
@@ -369,6 +375,7 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		ReloadDTS:          deps.ReloadDTS,
 		ReloadGeofence:     deps.ReloadGeofence,
 		ReloadState:        deps.ReloadState,
+		EmojiReload:        deps.EmojiReload,
 		WebhookRate:        deps.WebhookRate,
 		AlertLimiter:       deps.AlertLimiter,
 		DiscordRate:        deps.DiscordRate,
