@@ -167,7 +167,6 @@
   "cmd.poracle_admin": "poracle-admin",
   "cmd.pa": "pa",
 
-  "cmd.poracle_admin.desc": "Administrative Befehle (Neuladen, Status, Wartung, Emoji, Abgleich)",
   "cmd.poracle_admin.not_admin": "Dieser Befehl ist Administratoren vorbehalten.",
   "cmd.poracle_admin.unknown_group": "Unbekannte Untergruppe. Verwenden Sie `!poracle-admin` für die Liste.",
   "cmd.poracle_admin.unknown_sub": "Unbekannter Unterbefehl für `{0}`. Verwenden Sie `!poracle-admin {0}` für eine Übersicht.",
@@ -275,9 +274,7 @@
   "cmd.poracle_admin.summary.show.alert_type": "  {0}: {1} Einträge",
   "cmd.poracle_admin.summary.show.usage": "Verwendung: !poracle-admin summary show <Benutzer>",
   "cmd.poracle_admin.summary.fire.success": "✅ Zusammenfassung für {0} / {1} ausgeliefert — {2} Einträge versendet.",
-  "cmd.poracle_admin.summary.fire.error": "❌ Versand fehlgeschlagen: {0}",
   "cmd.poracle_admin.summary.fire.usage": "Verwendung: !poracle-admin summary fire <Benutzer> [alertType]",
-  "cmd.poracle_admin.status.help_stub": "(noch keine Befehle verfügbar — wird in einer späteren Aufgabe ergänzt)",
   "cmd.poracle_admin.maintenance.help.intro": "🛠️ **!poracle-admin maintenance** — Live-Steuerung der ausgehenden Zustellung.\n\nUnterbefehle:",
   "cmd.poracle_admin.maintenance.no_dispatcher": "ℹ️ Der Dispatcher ist auf dieser Instanz nicht verfügbar.",
   "cmd.poracle_admin.maintenance.no_reason": "(kein Grund angegeben)",
@@ -1115,6 +1112,7 @@
   "cmd.poracle_admin.config.keys.row": "  {0}: {1} Schlüssel",
   "cmd.poracle_admin.config.unknown_section": "Unbekannter Konfigurationsabschnitt: `{0}`. Verwenden Sie `!poracle-admin config keys` für gültige Abschnitte.",
   "cmd.poracle_admin.config.empty_section": "Abschnitt `{0}` hat keine konfigurierbaren Felder.",
+  "cmd.poracle_admin.config.not_loaded": "❌ Konfiguration nicht geladen.",
 
   "cmd.poracle_admin.warnings.help.intro": "🛠️ Erfasste Warnungen — In-Memory WARN/ERROR-Logeinträge anzeigen.\n\nUnterbefehle:\n  (kein Arg) — Startup- und Recent-Puffer anzeigen\n  `startup` — nur den Startup-Puffer anzeigen (erste 200 Einträge, nach dem Start eingefroren)\n  `recent` — nur den Rolling-Puffer anzeigen (letzte 50 Einträge)\n  `clear` — Rolling-Puffer leeren (Startup-Puffer ist unveränderlich)",
   "cmd.poracle_admin.warnings.not_configured": "ℹ️ Log-Puffer ist auf dieser Instanz nicht konfiguriert.",
