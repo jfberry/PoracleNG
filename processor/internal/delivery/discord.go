@@ -395,6 +395,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 			json.Unmarshal(respBody, &rateLimitResp) //nolint:errcheck
 			d := ParseRetryAfter(rateLimitResp.RetryAfter)
 			metrics.DeliveryRateLimited.WithLabelValues("discord").Inc()
+			ds.rateLimiter.Record429()
 			log.Warnf("discord: 429 rate limited for %s, retry_after=%.1fs (attempt %d/%d)", rateLimitKey, rateLimitResp.RetryAfter, attempt+1, maxRetries+1)
 			select {
 			case <-ctx.Done():
