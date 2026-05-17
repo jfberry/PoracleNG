@@ -7,8 +7,6 @@ import (
 func TestPoracleAdmin_NonAdmin_TextRefusal(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = false
-	// Ensure the user is NOT in the admin list.
-	ctx.Config.Discord.Admins = nil
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, nil)
@@ -34,7 +32,6 @@ func TestPoracleAdmin_NonAdmin_TextRefusal(t *testing.T) {
 func TestPoracleAdmin_NoArgs_ShowsHelp(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Config.Discord.Admins = []string{ctx.UserID}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, nil)
@@ -55,7 +52,6 @@ func TestPoracleAdmin_NoArgs_ShowsHelp(t *testing.T) {
 func TestPoracleAdmin_UnknownGroup_Refusal(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Config.Discord.Admins = []string{ctx.UserID}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"bogus"})
@@ -74,7 +70,6 @@ func TestPoracleAdmin_UnknownGroup_Refusal(t *testing.T) {
 func TestPoracleAdmin_KnownGroupNoArgs_ShowsGroupHelp(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Config.Discord.Admins = []string{ctx.UserID}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"slash"})
@@ -90,7 +85,6 @@ func TestPoracleAdmin_KnownGroupNoArgs_ShowsGroupHelp(t *testing.T) {
 func TestPoracleAdmin_KnownGroupWithArgs_CallsSubgroupRun(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Config.Discord.Admins = []string{ctx.UserID}
 
 	cmd := &PoracleAdminCommand{}
 	// "slash sync" — subgroup run, args=["sync"]. Stub returns the stub text.
@@ -107,7 +101,6 @@ func TestPoracleAdmin_KnownGroupWithArgs_CallsSubgroupRun(t *testing.T) {
 func TestPoracleAdmin_AllGroupsWired(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Config.Discord.Admins = []string{ctx.UserID}
 
 	cmd := &PoracleAdminCommand{}
 
