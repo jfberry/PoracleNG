@@ -19,6 +19,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	reconcilesentinel "github.com/pokemon/poracleng/processor/internal/discordbot/reconcile"
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash"
 	"github.com/pokemon/poracleng/processor/internal/discordroles"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
@@ -1026,4 +1027,5 @@ func (b *Bot) RunReconciliationNow() error {
 
 // ErrReconciliationDisabled is returned by ReconcileUserNow when Discord
 // reconciliation has not been configured (check_role = false or no session).
-var ErrReconciliationDisabled = fmt.Errorf("discord reconciliation is not enabled")
+// It is an alias for reconcile.ErrDisabled — both sentinels are the same value.
+var ErrReconciliationDisabled = reconcilesentinel.ErrDisabled

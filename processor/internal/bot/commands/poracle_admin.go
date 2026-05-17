@@ -140,11 +140,7 @@ var paEmoji = &paSubgroup{
 	help: paStubHelp("emoji"),
 }
 
-var paReconcile = &paSubgroup{
-	run:  paStubRun,
-	help: paStubHelp("reconcile"),
-}
-
+// paReconcile is declared in poracle_admin_reconcile.go.
 // paRatelimit is declared in poracle_admin_ratelimit.go.
 // paSummary is declared in poracle_admin_summary.go.
 
