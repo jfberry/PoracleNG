@@ -138,6 +138,8 @@
   "cmd.fort": "fort",
   "cmd.help": "help",
   "cmd.info": "info",
+  "cmd.info.poracle.moved": "→ This view has moved to `!poracle-admin status` — please use that instead.",
+  "cmd.info.config.moved": "→ This view has moved to `!poracle-admin config` — please use that instead.",
   "cmd.start": "start",
   "cmd.stop": "stop",
   "cmd.tracked": "tracked",
