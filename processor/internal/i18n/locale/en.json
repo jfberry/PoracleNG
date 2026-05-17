@@ -976,8 +976,12 @@
   "cmd.poracle_admin": "poracle-admin",
   "cmd.pa": "pa",
 
+  "cmd.poracle_admin.desc": "Administrative operations (reload, status, maintenance, emoji, reconciliation)",
   "cmd.poracle_admin.not_admin": "This command is reserved for administrators.",
   "cmd.poracle_admin.unknown_group": "Unknown subgroup. Try `!poracle-admin` for the list.",
+  "cmd.poracle_admin.unknown_sub": "Unknown subcommand for `{0}`. Try `!poracle-admin {0}` to see what's available.",
+  "cmd.poracle_admin.help.admin_only": "This command is reserved for server administrators. Each subgroup performs a live operations task.",
+  "cmd.poracle_admin.help.groups": "Available subgroups:",
   "cmd.poracle_admin.help_intro": "🛠️ Poracle Admin\n\nLive operations subgroups (administrators only):",
   "cmd.poracle_admin.stub": "(not yet implemented)",
 
