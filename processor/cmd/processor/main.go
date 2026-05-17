@@ -799,12 +799,8 @@ func main() {
 		},
 		WebhookRate: webhookHandler.RateSnapshot,
 		AlertLimiter: proc.rateLimiter,
-		DiscordRate: func() delivery.DiscordRateSnapshot {
-			return proc.dispatcher.DiscordRateSnapshot()
-		},
-		TelegramRate: func() delivery.TelegramRateSnapshot {
-			return proc.dispatcher.TelegramRateSnapshot()
-		},
+		DiscordRate:  proc.dispatcher.DiscordRateSnapshot,
+		TelegramRate: proc.dispatcher.TelegramRateSnapshot,
 		GeocoderStats: func() geocoding.CacheStats {
 			if proc.enricher.Geocoder == nil {
 				return geocoding.CacheStats{}
@@ -817,10 +813,9 @@ func main() {
 			}
 			return proc.enricher.Geocoder.ClearCache()
 		},
-		// Reconciler and RunReconcile are closures that lazily dereference
-		// discordBot. discordBot is nil here but may be set after the Discord
-		// bot starts below. Command callers must nil-check the returned error
-		// for ErrReconciliationDisabled or handle the nil func directly.
+		// Reconciler / RunReconcile are always non-nil. When Discord is not
+		// configured, the closures return discordbot.ErrReconciliationDisabled.
+		// Command callers use errors.Is to detect.
 		Reconciler: func(userID string) error {
 			if discordBot == nil {
 				return discordbot.ErrReconciliationDisabled

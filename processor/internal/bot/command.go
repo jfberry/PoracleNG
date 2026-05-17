@@ -114,13 +114,15 @@ type BotDeps struct {
 	GeocoderClear func() int
 
 	// Reconciler immediately reconciles a single Discord user's role membership.
-	// nil when Discord reconciliation is not configured (Telegram-only deploys,
-	// or check_role = false). Admin command callers must nil-check before use.
+	// Always non-nil. Returns discordbot.ErrReconciliationDisabled when Discord
+	// reconciliation is not configured (Telegram-only deploys, or check_role=false).
+	// Use errors.Is(err, discordbot.ErrReconciliationDisabled) to detect.
 	Reconciler func(userID string) error
 
-	// RunReconcile triggers a full Discord reconciliation cycle synchronously.
-	// nil when Discord reconciliation is not configured. Admin command callers
-	// must nil-check before use.
+	// RunReconcile runs the full Discord role + channel reconciliation immediately
+	// instead of waiting for the periodic timer. Always non-nil. Returns
+	// discordbot.ErrReconciliationDisabled when Discord reconciliation is not
+	// configured. Use errors.Is(err, discordbot.ErrReconciliationDisabled) to detect.
 	RunReconcile func() error
 
 	// LogBuffer holds the in-memory startup + rolling log capture.
@@ -254,11 +256,15 @@ type CommandContext struct {
 	GeocoderClear func() int
 
 	// Reconciler immediately reconciles a single Discord user's role membership.
-	// nil when Discord reconciliation is not configured.
+	// Always non-nil. Returns discordbot.ErrReconciliationDisabled when Discord
+	// reconciliation is not configured (Telegram-only deploys, or check_role=false).
+	// Use errors.Is(err, discordbot.ErrReconciliationDisabled) to detect.
 	Reconciler func(userID string) error
 
-	// RunReconcile triggers a full Discord reconciliation cycle synchronously.
-	// nil when Discord reconciliation is not configured.
+	// RunReconcile runs the full Discord role + channel reconciliation immediately
+	// instead of waiting for the periodic timer. Always non-nil. Returns
+	// discordbot.ErrReconciliationDisabled when Discord reconciliation is not
+	// configured. Use errors.Is(err, discordbot.ErrReconciliationDisabled) to detect.
 	RunReconcile func() error
 
 	// LogBuffer holds the in-memory startup + rolling log capture.
