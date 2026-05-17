@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 )
 
@@ -99,7 +100,7 @@ func TestEmoji_ListEmpty(t *testing.T) {
 func TestEmoji_ReloadSuccess(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.EmojiReload = func() (int, error) { return 42, nil }
+	ctx.Admin = &bot.AdminDeps{EmojiReload: func() (int, error) { return 42, nil }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"emoji", "reload"})
@@ -120,7 +121,7 @@ func TestEmoji_ReloadSuccess(t *testing.T) {
 func TestEmoji_ReloadError(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.EmojiReload = func() (int, error) { return 0, errors.New("disk read failed") }
+	ctx.Admin = &bot.AdminDeps{EmojiReload: func() (int, error) { return 0, errors.New("disk read failed") }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"emoji", "reload"})
@@ -255,7 +256,7 @@ func TestEmoji_NotLoaded(t *testing.T) {
 		ctx2, _ := testCtx(t)
 		ctx2.IsAdmin = true
 		ctx2.Emoji = nil
-		ctx2.EmojiReload = nil
+		ctx2.Admin = &bot.AdminDeps{EmojiReload: nil}
 		replies := cmd.Run(ctx2, []string{"emoji", "reload"})
 		if len(replies) == 0 {
 			t.Fatal("expected at least one reply")

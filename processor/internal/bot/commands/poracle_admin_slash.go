@@ -75,11 +75,11 @@ func paSlashRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 }
 
 func runSlashSync(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Reply {
-	if ctx.SlashSync == nil {
+	if ctx.Admin == nil || ctx.Admin.SlashSync == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}
 	}
 	start := time.Now()
-	err := ctx.SlashSync()
+	err := ctx.Admin.SlashSync()
 	elapsed := time.Since(start).Milliseconds()
 	if err != nil {
 		if errors.Is(err, slash.ErrSlashNotConfigured) {
@@ -93,11 +93,11 @@ func runSlashSync(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Reply {
 }
 
 func runSlashForceResync(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Reply {
-	if ctx.SlashForceResync == nil {
+	if ctx.Admin == nil || ctx.Admin.SlashForceResync == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}
 	}
 	start := time.Now()
-	err := ctx.SlashForceResync()
+	err := ctx.Admin.SlashForceResync()
 	elapsed := time.Since(start).Milliseconds()
 	if err != nil {
 		if errors.Is(err, slash.ErrSlashNotConfigured) {
@@ -111,10 +111,10 @@ func runSlashForceResync(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Rep
 }
 
 func runSlashClearGlobal(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Reply {
-	if ctx.SlashClearGlobal == nil {
+	if ctx.Admin == nil || ctx.Admin.SlashClearGlobal == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}
 	}
-	err := ctx.SlashClearGlobal()
+	err := ctx.Admin.SlashClearGlobal()
 	if err != nil {
 		if errors.Is(err, slash.ErrSlashNotConfigured) {
 			return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}
@@ -129,10 +129,10 @@ func runSlashClearGuild(ctx *bot.CommandContext, tr *i18n.Translator, args []str
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.clear_guild.needs_arg")}}
 	}
 	guildID := args[0]
-	if ctx.SlashClearGuild == nil {
+	if ctx.Admin == nil || ctx.Admin.SlashClearGuild == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}
 	}
-	err := ctx.SlashClearGuild(guildID)
+	err := ctx.Admin.SlashClearGuild(guildID)
 	if err != nil {
 		if errors.Is(err, slash.ErrSlashNotConfigured) {
 			return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}
@@ -143,10 +143,10 @@ func runSlashClearGuild(ctx *bot.CommandContext, tr *i18n.Translator, args []str
 }
 
 func runSlashStatus(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Reply {
-	if ctx.SlashStatus == nil {
+	if ctx.Admin == nil || ctx.Admin.SlashStatus == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}
 	}
-	global, guilds, err := ctx.SlashStatus()
+	global, guilds, err := ctx.Admin.SlashStatus()
 	if err != nil {
 		if errors.Is(err, slash.ErrSlashNotConfigured) {
 			return []bot.Reply{{Text: tr.T("cmd.poracle_admin.slash.not_configured")}}

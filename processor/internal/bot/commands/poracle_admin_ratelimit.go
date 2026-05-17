@@ -65,11 +65,11 @@ func paRatelimitRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 func paRatelimitList(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
-	if ctx.AlertLimiter == nil {
+	if ctx.Admin == nil || ctx.Admin.AlertLimiter == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.ratelimit.not_configured")}}
 	}
 
-	blocked := ctx.AlertLimiter.ListBlocked()
+	blocked := ctx.Admin.AlertLimiter.ListBlocked()
 	if len(blocked) == 0 {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.ratelimit.list.empty")}}
 	}
@@ -134,14 +134,14 @@ func paRatelimitShow(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.ratelimit.usage.show")}}
 	}
 
-	if ctx.AlertLimiter == nil {
+	if ctx.Admin == nil || ctx.Admin.AlertLimiter == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.ratelimit.not_configured")}}
 	}
 
 	rawTarget := args[0]
 	id, dtype := parseTargetArg(rawTarget)
 
-	states := ctx.AlertLimiter.StateFor(id, dtype)
+	states := ctx.Admin.AlertLimiter.StateFor(id, dtype)
 	if len(states) == 0 {
 		return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.ratelimit.show.empty", rawTarget)}}
 	}
@@ -223,14 +223,14 @@ func paRatelimitReset(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.ratelimit.usage.reset")}}
 	}
 
-	if ctx.AlertLimiter == nil {
+	if ctx.Admin == nil || ctx.Admin.AlertLimiter == nil {
 		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.ratelimit.not_configured")}}
 	}
 
 	rawTarget := args[0]
 	id, dtype := parseTargetArg(rawTarget)
 
-	changed := ctx.AlertLimiter.Reset(id, dtype)
+	changed := ctx.Admin.AlertLimiter.Reset(id, dtype)
 	if !changed {
 		return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.ratelimit.reset.no_state", rawTarget)}}
 	}

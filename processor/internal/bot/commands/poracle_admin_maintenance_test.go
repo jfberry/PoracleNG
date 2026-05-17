@@ -35,7 +35,7 @@ func maintenanceCtx(t *testing.T, d *delivery.Dispatcher) *bot.CommandContext {
 	t.Helper()
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Dispatcher = d
+	ctx.Admin = &bot.AdminDeps{Dispatcher: d}
 	return ctx
 }
 
@@ -252,13 +252,13 @@ func TestMaintenance_StatusPaused(t *testing.T) {
 	d.Resume()
 }
 
-// TestMaintenance_NoDispatcher verifies graceful handling when ctx.Dispatcher
+// TestMaintenance_NoDispatcher verifies graceful handling when ctx.Admin.Dispatcher
 // is nil — all subcommands should return a clear "no dispatcher" message
 // rather than panicking.
 func TestMaintenance_NoDispatcher(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.Dispatcher = nil // explicitly nil
+	ctx.Admin = &bot.AdminDeps{Dispatcher: nil} // explicitly nil
 
 	// pause/resume/status need the dispatcher and must report it's missing.
 	// (no-arg) renders help text, which doesn't need the dispatcher and

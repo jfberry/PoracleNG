@@ -3,6 +3,8 @@ package commands
 import (
 	"errors"
 	"testing"
+
+	"github.com/pokemon/poracleng/processor/internal/bot"
 )
 
 func TestReload_HelpNoArgs(t *testing.T) {
@@ -44,7 +46,7 @@ func TestReload_HelpExplicit(t *testing.T) {
 func TestReload_DtsSuccess(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.ReloadDTS = func() (int, error) { return 42, nil }
+	ctx.Admin = &bot.AdminDeps{ReloadDTS: func() (int, error) { return 42, nil }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reload", "dts"})
@@ -65,7 +67,7 @@ func TestReload_DtsSuccess(t *testing.T) {
 func TestReload_DtsError(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.ReloadDTS = func() (int, error) { return 0, errors.New("disk read failed") }
+	ctx.Admin = &bot.AdminDeps{ReloadDTS: func() (int, error) { return 0, errors.New("disk read failed") }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reload", "dts"})
@@ -82,7 +84,7 @@ func TestReload_DtsError(t *testing.T) {
 func TestReload_GeofenceSuccess(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.ReloadGeofence = func() error { return nil }
+	ctx.Admin = &bot.AdminDeps{ReloadGeofence: func() error { return nil }}
 	// StateMgr is nil in test ctx, so counts will be 0 — that's fine.
 
 	cmd := &PoracleAdminCommand{}
@@ -100,7 +102,7 @@ func TestReload_GeofenceSuccess(t *testing.T) {
 func TestReload_GeofenceError(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.ReloadGeofence = func() error { return errors.New("no geofence file") }
+	ctx.Admin = &bot.AdminDeps{ReloadGeofence: func() error { return errors.New("no geofence file") }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reload", "geofence"})
@@ -117,7 +119,7 @@ func TestReload_GeofenceError(t *testing.T) {
 func TestReload_StateSuccess(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.ReloadState = func() error { return nil }
+	ctx.Admin = &bot.AdminDeps{ReloadState: func() error { return nil }}
 	// StateMgr is nil in test ctx, so counts will be 0 — acceptable.
 
 	cmd := &PoracleAdminCommand{}
@@ -135,7 +137,7 @@ func TestReload_StateSuccess(t *testing.T) {
 func TestReload_StateError(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.ReloadState = func() error { return errors.New("db connection refused") }
+	ctx.Admin = &bot.AdminDeps{ReloadState: func() error { return errors.New("db connection refused") }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reload", "state"})
@@ -172,7 +174,7 @@ func TestReload_UnknownSub(t *testing.T) {
 func TestReload_DtsRendererNotConfigured(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.ReloadDTS = func() (int, error) { return 0, errors.New("DTS renderer not configured") }
+	ctx.Admin = &bot.AdminDeps{ReloadDTS: func() (int, error) { return 0, errors.New("DTS renderer not configured") }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reload", "dts"})
@@ -192,7 +194,7 @@ func TestReload_DtsRendererNotConfigured(t *testing.T) {
 func TestReload_DtsNilFunc(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.ReloadDTS = nil // not configured
+	ctx.Admin = &bot.AdminDeps{ReloadDTS: nil} // not configured
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"reload", "dts"})

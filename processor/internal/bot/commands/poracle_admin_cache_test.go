@@ -3,6 +3,7 @@ package commands
 import (
 	"testing"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 )
 
@@ -28,14 +29,16 @@ func TestCache_HelpNoArgs(t *testing.T) {
 func TestCache_Stats_Renders(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.GeocoderStats = func() geocoding.CacheStats {
-		return geocoding.CacheStats{
-			MemoryEntries: 1234,
-			DiskEntries:   45678,
-			HitsMemory:    10000,
-			HitsDisk:      2500,
-			Misses:        3200,
-		}
+	ctx.Admin = &bot.AdminDeps{
+		GeocoderStats: func() geocoding.CacheStats {
+			return geocoding.CacheStats{
+				MemoryEntries: 1234,
+				DiskEntries:   45678,
+				HitsMemory:    10000,
+				HitsDisk:      2500,
+				Misses:        3200,
+			}
+		},
 	}
 
 	cmd := &PoracleAdminCommand{}
@@ -56,14 +59,16 @@ func TestCache_Stats_Renders(t *testing.T) {
 func TestCache_Stats_ZeroDivisionGuard(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.GeocoderStats = func() geocoding.CacheStats {
-		return geocoding.CacheStats{
-			MemoryEntries: 0,
-			DiskEntries:   0,
-			HitsMemory:    0,
-			HitsDisk:      0,
-			Misses:        0,
-		}
+	ctx.Admin = &bot.AdminDeps{
+		GeocoderStats: func() geocoding.CacheStats {
+			return geocoding.CacheStats{
+				MemoryEntries: 0,
+				DiskEntries:   0,
+				HitsMemory:    0,
+				HitsDisk:      0,
+				Misses:        0,
+			}
+		},
 	}
 
 	cmd := &PoracleAdminCommand{}
@@ -83,7 +88,7 @@ func TestCache_Stats_ZeroDivisionGuard(t *testing.T) {
 func TestCache_ClearGeocoder_Success(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.GeocoderClear = func() int { return 42 }
+	ctx.Admin = &bot.AdminDeps{GeocoderClear: func() int { return 42 }}
 
 	cmd := &PoracleAdminCommand{}
 	replies := cmd.Run(ctx, []string{"cache", "clear", "geocoder"})
@@ -136,7 +141,7 @@ func TestCache_UnknownSub(t *testing.T) {
 func TestCache_NotConfigured_Stats(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.GeocoderStats = nil // not configured
+	ctx.Admin = &bot.AdminDeps{GeocoderStats: nil} // not configured
 
 	cmd := &PoracleAdminCommand{}
 	// Must not panic.
@@ -158,7 +163,7 @@ func TestCache_NotConfigured_Stats(t *testing.T) {
 func TestCache_NotConfigured_Clear(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.GeocoderClear = nil // not configured
+	ctx.Admin = &bot.AdminDeps{GeocoderClear: nil} // not configured
 
 	cmd := &PoracleAdminCommand{}
 	// Must not panic.

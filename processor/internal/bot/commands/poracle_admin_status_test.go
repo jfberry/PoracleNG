@@ -20,37 +20,10 @@ func statusCtx(t *testing.T) *bot.CommandContext {
 	t.Helper()
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
-	ctx.ProcessStart = time.Now().Add(-2 * time.Hour)
-	// Healthy defaults — overridden per test.
-	ctx.WebhookRate = func() webhook.RateSnapshot {
-		return webhook.RateSnapshot{
-			Per5Min:  500,
-			Per15Min: 1500,
-			Per60Min: 6000,
-			PerType: map[string]int{
-				"pokemon": 4000,
-				"raid":    1500,
-				"quest":   500,
-			},
-		}
-	}
-	ctx.DiscordRate = func() delivery.DiscordRateSnapshot {
-		return delivery.DiscordRateSnapshot{
-			GlobalTokens:   50,
-			GlobalCapacity: 50,
-			Recent429Count: 0,
-		}
-	}
-	ctx.TelegramRate = func() delivery.TelegramRateSnapshot {
-		return delivery.TelegramRateSnapshot{
-			Recent429Count:      0,
-			CurrentBackoffUntil: time.Time{},
-		}
-	}
 	// AlertLimiter with default config + no traffic → no blocked targets.
 	// Stash the constructed limiter in a local so the cleanup closure
 	// always closes the original, even if a test later replaces
-	// ctx.AlertLimiter on the context.
+	// ctx.Admin.AlertLimiter on the context.
 	defaultLim := ratelimit.New(ratelimit.Config{
 		TimingPeriod:        240,
 		DMLimit:             20,
@@ -59,8 +32,37 @@ func statusCtx(t *testing.T) *bot.CommandContext {
 		ChannelSummaryLimit: 40,
 		MaxLimitsBeforeStop: 10,
 	})
-	ctx.AlertLimiter = defaultLim
 	t.Cleanup(defaultLim.Close)
+	ctx.Admin = &bot.AdminDeps{
+		ProcessStart: time.Now().Add(-2 * time.Hour),
+		// Healthy defaults — overridden per test.
+		WebhookRate: func() webhook.RateSnapshot {
+			return webhook.RateSnapshot{
+				Per5Min:  500,
+				Per15Min: 1500,
+				Per60Min: 6000,
+				PerType: map[string]int{
+					"pokemon": 4000,
+					"raid":    1500,
+					"quest":   500,
+				},
+			}
+		},
+		DiscordRate: func() delivery.DiscordRateSnapshot {
+			return delivery.DiscordRateSnapshot{
+				GlobalTokens:   50,
+				GlobalCapacity: 50,
+				Recent429Count: 0,
+			}
+		},
+		TelegramRate: func() delivery.TelegramRateSnapshot {
+			return delivery.TelegramRateSnapshot{
+				Recent429Count:      0,
+				CurrentBackoffUntil: time.Time{},
+			}
+		},
+		AlertLimiter: defaultLim,
+	}
 	return ctx
 }
 
@@ -119,7 +121,7 @@ func TestStatusReport_PausedBanner(t *testing.T) {
 	// need PauseState() to return paused=true.
 	disp := delivery.NewDispatcherWithSenders(nil, nil, 0, delivery.QueueConfig{})
 	disp.Pause("test maintenance window")
-	ctx.Dispatcher = disp
+	ctx.Admin.Dispatcher = disp
 	t.Cleanup(disp.Resume)
 
 	out := firstReplyText(t, statusReport(ctx, false))
@@ -137,7 +139,7 @@ func TestStatusReport_PausedBanner(t *testing.T) {
 
 func TestStatusReport_WebhookFloorTriggers(t *testing.T) {
 	ctx := statusCtx(t)
-	ctx.WebhookRate = func() webhook.RateSnapshot {
+	ctx.Admin.WebhookRate = func() webhook.RateSnapshot {
 		// 0 in last 5 min but 100 in last hour → install just went silent.
 		return webhook.RateSnapshot{
 			Per5Min:  0,
@@ -164,7 +166,7 @@ func TestStatusReport_WebhookFloorTriggers(t *testing.T) {
 
 func TestStatusReport_DiscordRateLimited(t *testing.T) {
 	ctx := statusCtx(t)
-	ctx.DiscordRate = func() delivery.DiscordRateSnapshot {
+	ctx.Admin.DiscordRate = func() delivery.DiscordRateSnapshot {
 		return delivery.DiscordRateSnapshot{
 			GlobalTokens:   10,
 			GlobalCapacity: 50,
@@ -205,7 +207,7 @@ func TestStatusReport_AlertLimitsBanned(t *testing.T) {
 		MaxLimitsBeforeStop: 1,
 	})
 	t.Cleanup(lim.Close)
-	ctx.AlertLimiter = lim
+	ctx.Admin.AlertLimiter = lim
 
 	// First Check fills the limit; second triggers JustBreached and
 	// records the violation, tipping over MaxLimitsBeforeStop=1.
@@ -256,7 +258,7 @@ func TestStatusReport_RenderQueueWarning(t *testing.T) {
 
 func TestStatusReport_VerboseAddsRouteDetail(t *testing.T) {
 	ctx := statusCtx(t)
-	ctx.DiscordRate = func() delivery.DiscordRateSnapshot {
+	ctx.Admin.DiscordRate = func() delivery.DiscordRateSnapshot {
 		return delivery.DiscordRateSnapshot{
 			GlobalTokens:   30,
 			GlobalCapacity: 50,
@@ -308,7 +310,7 @@ func TestStatusReport_NilFieldsTolerated(t *testing.T) {
 
 func TestStatusReport_TelegramRateLimited(t *testing.T) {
 	ctx := statusCtx(t)
-	ctx.TelegramRate = func() delivery.TelegramRateSnapshot {
+	ctx.Admin.TelegramRate = func() delivery.TelegramRateSnapshot {
 		return delivery.TelegramRateSnapshot{
 			Recent429Count:      0,
 			CurrentBackoffUntil: time.Now().Add(30 * time.Second),
@@ -329,7 +331,7 @@ func TestStatusReport_TelegramRateLimited(t *testing.T) {
 
 func TestStatusReport_WebhookAllZerosNeutral(t *testing.T) {
 	ctx := statusCtx(t)
-	ctx.WebhookRate = func() webhook.RateSnapshot {
+	ctx.Admin.WebhookRate = func() webhook.RateSnapshot {
 		return webhook.RateSnapshot{
 			Per5Min:  0,
 			Per15Min: 0,
