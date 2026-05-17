@@ -145,11 +145,6 @@ var paReconcile = &paSubgroup{
 	help: paStubHelp("reconcile"),
 }
 
-var paCache = &paSubgroup{
-	run:  paStubRun,
-	help: paStubHelp("cache"),
-}
-
 var paRatelimit = &paSubgroup{
 	run:  paStubRun,
 	help: paStubHelp("ratelimit"),
