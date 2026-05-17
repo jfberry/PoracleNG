@@ -85,6 +85,10 @@ func (h *Handler) handle(c *gin.Context) {
 
 		metrics.WebhooksReceived.WithLabelValues(hook.Type).Inc()
 		metrics.IntervalWebhooks.Add(1)
+		// Record by raw Golbat type. Note: "pokestop" aggregates lures and
+		// invasions here — those sub-types are determined inside routePokestop
+		// after this call, so PerType["lure"] and PerType["invasion"] are
+		// always 0. Matches the existing WebhooksReceived Prometheus counter.
 		h.rateCounter.Record(hook.Type)
 
 		switch hook.Type {
