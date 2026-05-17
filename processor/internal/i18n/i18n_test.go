@@ -258,6 +258,8 @@ func TestPoracleAdminI18nParity(t *testing.T) {
 		"cmd.pa":            true,
 		// "  {0}" is pure indentation + placeholder — no translatable text.
 		"cmd.poracle_admin.summary.list.user_header": true,
+		// "  {0}  {1}  {2} {3}" is pure format — indentation + placeholders only.
+		"cmd.poracle_admin.warnings.entry_row": true,
 	}
 
 	for key := range en.Messages() {
