@@ -165,6 +165,19 @@ func TestUntrack_NilRegistry_ReturnsError(t *testing.T) {
 	assert.Equal(t, "🙅", replies[0].React)
 }
 
+// TestUntrack_LookupReturnsNil_ReturnsError verifies that when the registry is
+// populated but does not contain the target command (e.g. the raid command was
+// never registered), the reroute path returns a 🙅 reply rather than panicking.
+func TestUntrack_LookupReturnsNil_ReturnsError(t *testing.T) {
+	ctx, _ := untrackCtx(t)
+	// Replace the registry with a fresh empty one so Lookup("cmd.raid") misses.
+	ctx.Registry = bot.NewRegistry()
+
+	replies := runUntrack(t, ctx, "raid id:12")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "🙅", replies[0].React)
+}
+
 // TestUntrack_ValidUntrackType_HelperCoverage exercises validUntrackType.
 func TestUntrack_ValidUntrackType_HelperCoverage(t *testing.T) {
 	for _, typ := range []string{"raid", "egg", "quest", "invasion", "incident", "lure", "nest", "gym", "fort", "maxbattle"} {
