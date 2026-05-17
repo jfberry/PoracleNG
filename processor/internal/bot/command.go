@@ -73,6 +73,13 @@ type BotDeps struct {
 	// used by slash autocomplete to prioritise currently-active entities.
 	// Always non-nil; populated by webhook handlers post-dedup.
 	RecentActivity *tracker.RecentActivity
+
+	// Admin reload functions — wired by ProcessorService in main.go.
+	// Called directly by !poracle-admin reload subcommands; they bypass
+	// triggerReload's 500ms debouncer on purpose (operator typed it).
+	ReloadDTS      func() (int, error) // returns template count
+	ReloadGeofence func() error        // calls state.LoadWithGeofences
+	ReloadState    func() error        // calls state.Load directly
 }
 
 // TestTarget specifies who to deliver a test alert to.
@@ -174,6 +181,12 @@ type CommandContext struct {
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
 
+	// Admin reload functions — live-ops commands only.
+	// Each bypasses the debouncer and executes synchronously.
+	ReloadDTS      func() (int, error) // returns template count
+	ReloadGeofence func() error
+	ReloadState    func() error
+
 	// PostRegister, when set, is invoked after !poracle creates a new
 	// human row. The platform sets this to its single-user reconciliation
 	// hook so a freshly-registered user has their community_membership /
@@ -229,6 +242,9 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		SummarySchedules:   deps.SummarySchedules,
 		SummaryBufferCount: deps.SummaryBufferCount,
 		SummaryDispatch:    deps.SummaryDispatch,
+		ReloadDTS:          deps.ReloadDTS,
+		ReloadGeofence:     deps.ReloadGeofence,
+		ReloadState:        deps.ReloadState,
 	}
 }
 
