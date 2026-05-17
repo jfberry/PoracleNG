@@ -843,10 +843,12 @@ func Load(baseDir string) (*Config, error) {
 			CheckRoleInterval: 6,
 			Activity:          "PoracleNG",
 			SlashCommands: DiscordSlashCommands{
-				// Enabled defaults false — master switch, opt-in.
-				// Enable defaults nil — when Enabled is flipped on, all built-in
-				// commands register unless this list is set explicitly.
-				RegisterGlobally: true,
+				// All defaults are zero-value so an operator who flips
+				// Enabled=true doesn't accidentally pollute Discord's
+				// global namespace — they have to explicitly opt in via
+				// register_globally=true OR a guilds list. With both at
+				// their defaults, the dispatcher logs a warning and the
+				// sync no-ops.
 			},
 		},
 		AlertLimits: AlertLimitsConfig{

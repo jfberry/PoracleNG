@@ -484,7 +484,7 @@ var configSchema = []ConfigSection{
 		Title: "Discord Slash Commands (optional surface)",
 		Fields: []ConfigFieldDef{
 			{Name: "enabled", Type: "bool", Default: false, Description: "Register Discord slash commands alongside the ! text commands. Off by default; turn on per-guild first to test."},
-			{Name: "register_globally", Type: "bool", Default: true, Description: "Single global command set across every guild. Updates can take up to 1 hour to appear in clients; off + a guilds list propagates in seconds."},
+			{Name: "register_globally", Type: "bool", Default: false, Description: "Single global command set across every guild. Defaults off (opt-in) so enabling slash never silently pushes commands to every server. Updates can take up to 1 hour to appear in clients; per-guild (off + a guilds list) propagates in seconds."},
 			{Name: "guilds", Type: "string[]", Default: []string{}, Description: "Guild IDs to register slash commands in. Only consulted when register_globally=false.", Resolve: "discord:guild"},
 			{Name: "enable", Type: "string[]", Default: []string{}, Description: "Optional allow-list of canonical short command names (e.g. \"track\", \"raid\"). Empty means all supported commands are registered.", Advanced: true},
 		},
