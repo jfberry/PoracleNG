@@ -828,7 +828,8 @@ func main() {
 			}
 			return discordBot.RunReconciliationNow()
 		},
-		LogBuffer: logBuf,
+		LogBuffer:    logBuf,
+		ProcessStart: proc.ProcessStart(),
 	}
 
 	gatewayToken := cfg.Discord.DiscordGatewayToken()
@@ -1054,6 +1055,21 @@ type ProcessorService struct {
 	// main can post an admin notice once the Discord bot is up. nil
 	// when DTS init succeeded.
 	dtsInitErr error
+
+	// procStart is captured in NewProcessorService and used by
+	// !poracle-admin status to report uptime. ProcessorService is the
+	// natural anchor point — it's constructed once at startup and lives
+	// for the lifetime of the process.
+	procStart time.Time
+}
+
+// ProcessStart returns the timestamp at which this ProcessorService was
+// constructed. Used by !poracle-admin status for uptime display.
+func (ps *ProcessorService) ProcessStart() time.Time {
+	if ps == nil {
+		return time.Time{}
+	}
+	return ps.procStart
 }
 
 // SummaryBufferCount returns the number of buffered entries in the
@@ -1380,6 +1396,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		enricher:     enricher,
 		dtsRenderer:  dtsRenderer,
 		dtsInitErr:   dtsInitErr,
+		procStart:    time.Now(),
 		scanner:      scannerInstance,
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),

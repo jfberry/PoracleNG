@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -128,6 +129,11 @@ type BotDeps struct {
 	// LogBuffer holds the in-memory startup + rolling log capture.
 	// Always non-nil in production.
 	LogBuffer *logbuffer.Buffer
+
+	// ProcessStart is the time at which the processor's main service
+	// was constructed. Surfaced for uptime display in !poracle-admin status.
+	// Zero value is acceptable (uptime will be reported as 0).
+	ProcessStart time.Time
 }
 
 // TestTarget specifies who to deliver a test alert to.
@@ -270,6 +276,10 @@ type CommandContext struct {
 	// LogBuffer holds the in-memory startup + rolling log capture.
 	LogBuffer *logbuffer.Buffer
 
+	// ProcessStart is the time at which the processor's main service was
+	// constructed. Used by !poracle-admin status to compute uptime.
+	ProcessStart time.Time
+
 	// PostRegister, when set, is invoked after !poracle creates a new
 	// human row. The platform sets this to its single-user reconciliation
 	// hook so a freshly-registered user has their community_membership /
@@ -329,6 +339,7 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		Reconciler:         deps.Reconciler,
 		RunReconcile:       deps.RunReconcile,
 		LogBuffer:          deps.LogBuffer,
+		ProcessStart:       deps.ProcessStart,
 	}
 }
 
