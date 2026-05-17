@@ -82,14 +82,13 @@ func TestSlash_SyncNotConfigured(t *testing.T) {
 	if len(replies) == 0 {
 		t.Fatal("expected reply, got none")
 	}
-	// The "not configured" key must surface; the raw error sentinel must NOT.
-	if containsStr(replies[0].Text, slash.ErrSlashNotConfigured.Error()) &&
-		!containsStr(replies[0].Text, "not configured") {
-		t.Errorf("expected 'not configured' message, got: %q", replies[0].Text)
+	// The i18n "not configured" message must be present in the reply.
+	if !containsStr(replies[0].Text, "not configured") {
+		t.Errorf("expected not-configured message, got: %q", replies[0].Text)
 	}
 	// Must not be a success reply.
 	if containsStr(replies[0].Text, "✅") {
-		t.Errorf("must not be success reply when not configured, got: %q", replies[0].Text)
+		t.Errorf("not-configured reply should not contain success indicator: %q", replies[0].Text)
 	}
 }
 

@@ -186,7 +186,6 @@
   "cmd.poracle_admin.group.status.desc": "Live-Systemzustand anzeigen",
   "cmd.poracle_admin.group.maintenance.desc": "Ausgehende Zustellung pausieren/fortsetzen",
 
-  "cmd.poracle_admin.slash.help_stub": "(noch keine Befehle verfügbar — wird in einer späteren Aufgabe ergänzt)",
   "cmd.poracle_admin.reload.help.intro": "Laufzeitzustand von Festplatte oder Datenbank neu laden.",
   "cmd.poracle_admin.reload.dts.desc": "`dts` — DTS-Vorlagen und Partials von der Festplatte neu laden",
   "cmd.poracle_admin.reload.geofence.desc": "`geofence` — Geofence-Dateien neu laden und Zustand aktualisieren",
@@ -276,6 +275,7 @@
   "cmd.poracle_admin.slash.status.header": "**Status der Slash-Befehl-Registrierung:**",
   "cmd.poracle_admin.slash.status.scope_row": "  **{0}**: zuletzt synchronisiert {1} · Fingerabdruck `{2}`",
   "cmd.poracle_admin.slash.status.never_synced": "nie",
+  "cmd.poracle_admin.slash.status.ago": "vor {0}",
   "cmd.poracle_admin.slash.status.error": "❌ Statusabfrage fehlgeschlagen: {0}",
 
   "arg.remove": "entfernen",
