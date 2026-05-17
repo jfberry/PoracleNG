@@ -589,20 +589,27 @@ func renderAny(v any) string {
 	}
 }
 
-// shouldRedact returns true when the dotted path must be replaced with "***".
-// Exact-match check; partial-path substrings do not trigger redaction unless
-// the exact key is listed.
+// shouldRedact returns true when the field at `path` should be displayed
+// as "***" rather than its real value. Two layers:
+//  1. Exact path match in redactedFields — explicit overrides (true to
+//     redact, false to explicitly NOT redact).
+//  2. Heuristic: the path's final segment ends with a known sensitive
+//     suffix. Errs on the side of redaction — false positives on
+//     non-secret fields are safer than missed secrets.
 func shouldRedact(path string) bool {
 	// Exact match first.
 	if v, ok := redactedFields[path]; ok {
 		return v
 	}
 
-	// Heuristic for unlisted keys: if the path contains any of these
-	// substrings as a segment suffix, redact defensively.
+	// Heuristic for unlisted keys: if the final segment of the path ends
+	// with any of these suffixes, redact defensively.
+	// Using HasSuffix (not exact equality) catches compound names like
+	// geocoding_key, static_key, accuweather_api_keys, command_token, etc.
 	sensitive := []string{
 		"token", "password", "secret", "api_key", "apikey",
 		"dsn", "bearer_token", "api_keys",
+		"key", "keys", // catches *_key, *_keys (geocoding_key, static_key, …)
 	}
 	lower := strings.ToLower(path)
 	// Get the final segment.
@@ -612,7 +619,7 @@ func shouldRedact(path string) bool {
 		segment = lower[lastDot+1:]
 	}
 	for _, s := range sensitive {
-		if segment == s {
+		if strings.HasSuffix(segment, s) {
 			return true
 		}
 	}
