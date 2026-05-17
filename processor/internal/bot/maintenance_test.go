@@ -10,6 +10,7 @@ const testSuffix = "🔧 Maintenance mode is active — alerts are not being del
 // mockPauser implements PauseChecker for tests.
 type mockPauser struct{ paused bool }
 
+func (m *mockPauser) IsPaused() bool                            { return m.paused }
 func (m *mockPauser) PauseState() (bool, string, time.Time) {
 	return m.paused, "test", time.Time{}
 }
