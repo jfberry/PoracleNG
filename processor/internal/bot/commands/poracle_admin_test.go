@@ -41,6 +41,19 @@ func TestPoracleAdmin_NoArgs_ShowsHelp(t *testing.T) {
 	}
 
 	text := replies[0].Text
+
+	// The admin-only banner must appear (first section).
+	if !containsStr(text, "server administrators") {
+		t.Errorf("top-level help missing admin_only banner (want 'server administrators'), got:\n%s", text)
+	}
+	// The original intro must appear (second section).
+	if !containsStr(text, "Poracle Admin") {
+		t.Errorf("top-level help missing help_intro (want 'Poracle Admin'), got:\n%s", text)
+	}
+	// The groups header must appear (third section).
+	if !containsStr(text, "subgroups") {
+		t.Errorf("top-level help missing groups header (want 'subgroups'), got:\n%s", text)
+	}
 	// All nine group names must appear in the help output.
 	for _, group := range paSubgroupOrder {
 		if !containsStr(text, group) {

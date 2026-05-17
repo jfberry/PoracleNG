@@ -83,12 +83,29 @@ func (c *PoracleAdminCommand) Run(ctx *bot.CommandContext, args []string) []bot.
 
 // topLevelHelp renders the listing of all nine subgroups with their one-line
 // descriptions.
+//
+// Output structure:
+//  1. cmd.poracle_admin.help.admin_only  (admin-only banner)
+//  2. blank line
+//  3. cmd.poracle_admin.help_intro       (existing emoji + title line)
+//  4. blank line
+//  5. cmd.poracle_admin.help.groups      (subgroups header)
+//  6. one line per subgroup with its description
+//
+// Note for real subgroup implementations: when a subgroup receives subcommand
+// args that it does not recognise, it should emit cmd.poracle_admin.unknown_sub
+// with the subgroup name as {0}, e.g.:
+//
+//	tr.Tf("cmd.poracle_admin.unknown_sub", subgroupName)
 func (c *PoracleAdminCommand) topLevelHelp(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
 
 	var sb strings.Builder
+	sb.WriteString(tr.T("cmd.poracle_admin.help.admin_only"))
+	sb.WriteString("\n\n")
 	sb.WriteString(tr.T("cmd.poracle_admin.help_intro"))
-	sb.WriteString("\n")
+	sb.WriteString("\n\n")
+	sb.WriteString(tr.T("cmd.poracle_admin.help.groups"))
 	for _, name := range paSubgroupOrder {
 		descKey := "cmd.poracle_admin.group." + name + ".desc"
 		sb.WriteString("\n  **")
