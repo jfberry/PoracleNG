@@ -991,6 +991,17 @@ func (b *Bot) ReconcileUserNow(userID string) error {
 	return nil
 }
 
+// RunReconciliationNow triggers a full Discord reconciliation cycle synchronously.
+// It is the public entrypoint for the !poracle-admin reconcile full subcommand.
+// Returns ErrReconciliationDisabled if reconciliation is not configured.
+func (b *Bot) RunReconciliationNow() error {
+	if b.reconciliation == nil {
+		return ErrReconciliationDisabled
+	}
+	b.runReconciliation()
+	return nil
+}
+
 // ErrReconciliationDisabled is returned by ReconcileUserNow when Discord
 // reconciliation has not been configured (check_role = false or no session).
 var ErrReconciliationDisabled = fmt.Errorf("discord reconciliation is not enabled")

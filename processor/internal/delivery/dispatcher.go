@@ -138,6 +138,24 @@ func (d *Dispatcher) RateLimitWaiting() int64 {
 	return 0
 }
 
+// DiscordRateSnapshot returns a point-in-time snapshot of Discord rate-limit
+// state. Returns a zero-value snapshot when Discord is not configured.
+func (d *Dispatcher) DiscordRateSnapshot() DiscordRateSnapshot {
+	if ds, ok := d.queue.senders["discord"].(*DiscordSender); ok {
+		return ds.rateLimiter.Snapshot()
+	}
+	return DiscordRateSnapshot{}
+}
+
+// TelegramRateSnapshot returns a point-in-time snapshot of Telegram rate-limit
+// state. Returns a zero-value snapshot when Telegram is not configured.
+func (d *Dispatcher) TelegramRateSnapshot() TelegramRateSnapshot {
+	if ts, ok := d.queue.senders["telegram"].(*TelegramSender); ok {
+		return ts.Snapshot()
+	}
+	return TelegramRateSnapshot{}
+}
+
 // Pause suspends outbound message delivery. Normal (non-bypass, non-edit) jobs
 // will block in the queue until Resume is called. Calling Pause while already
 // paused is a no-op — the original reason and timestamp are preserved.
