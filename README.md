@@ -300,6 +300,10 @@ After migrating, review `config/config.toml` for any incorrect ports or values, 
 
 **DTS templates.** Templates have access to both pre-translated Poracle fields (recommended) and raw webhook fields. See [DTS.md](DTS.md) for the full field reference.
 
+## Admin Commands
+
+Operators can manage the processor from within Discord or Telegram using `!poracle-admin <group> [subcommand]` (alias `!pa`). This admin-only umbrella covers live reload (`dts`, `geofence`, `state`), a health snapshot (`status`), alert-limit inspection and reset (`ratelimit`), summary-buffer management (`summary`), geocoder cache stats (`cache`), delivery pause/resume (`maintenance`), emoji config inspection (`emoji`), Discord slash-command lifecycle (`slash`), role reconciliation (`reconcile`), effective config view (`config`), and captured WARN/ERROR log inspection (`warnings`). Full command reference and a smoke-test checklist are in [`docs/admin-commands/`](docs/admin-commands/).
+
 ## API Endpoints
 
 All API endpoints are served by the processor (default port 3030). See [API.md](API.md) for the full reference with request/response examples.
