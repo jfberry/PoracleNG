@@ -10,6 +10,7 @@ import (
 // discordMockPauser implements bot.PauseChecker for Discord bot tests.
 type discordMockPauser struct{ paused bool }
 
+func (m *discordMockPauser) IsPaused() bool                            { return m.paused }
 func (m *discordMockPauser) PauseState() (bool, string, time.Time) {
 	return m.paused, "test-reason", time.Time{}
 }

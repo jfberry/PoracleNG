@@ -10,6 +10,7 @@ import (
 // telegramMockPauser implements bot.PauseChecker for Telegram bot tests.
 type telegramMockPauser struct{ paused bool }
 
+func (m *telegramMockPauser) IsPaused() bool                            { return m.paused }
 func (m *telegramMockPauser) PauseState() (bool, string, time.Time) {
 	return m.paused, "test-reason", time.Time{}
 }
