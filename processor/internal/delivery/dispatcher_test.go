@@ -86,15 +86,16 @@ func TestDispatcherTrackerSize(t *testing.T) {
 }
 
 // newPauseTestDispatcher creates a Dispatcher with a single discord sender for
-// pause/resume tests. The caller is responsible for calling d.Stop().
-func newPauseTestDispatcher(t *testing.T) (*Dispatcher, *queueMockSender) {
+// pause/resume tests. concurrentDiscord controls worker parallelism; pass 1 for
+// serialised tests. The caller is responsible for calling d.Stop().
+func newPauseTestDispatcher(t *testing.T, concurrentDiscord int) (*Dispatcher, *queueMockSender) {
 	t.Helper()
 	mock := &queueMockSender{platform: "discord"}
 	senders := map[string]Sender{"discord": mock}
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 	d := NewDispatcherWithSenders(senders, tracker, 100, QueueConfig{
-		ConcurrentDiscord:  1,
+		ConcurrentDiscord:  concurrentDiscord,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	})
@@ -111,7 +112,7 @@ func normalJob() *Job {
 
 // TestDispatcher_PauseResume_State verifies the PauseState accessors.
 func TestDispatcher_PauseResume_State(t *testing.T) {
-	d, _ := newPauseTestDispatcher(t)
+	d, _ := newPauseTestDispatcher(t, 1)
 	d.Start()
 	defer d.Stop()
 
@@ -145,7 +146,7 @@ func TestDispatcher_PauseResume_State(t *testing.T) {
 
 // TestDispatcher_NotPaused_NoOp verifies normal dispatch is unaffected when not paused.
 func TestDispatcher_NotPaused_NoOp(t *testing.T) {
-	d, mock := newPauseTestDispatcher(t)
+	d, mock := newPauseTestDispatcher(t, 1)
 	d.Start()
 	defer d.Stop()
 
@@ -160,7 +161,7 @@ func TestDispatcher_NotPaused_NoOp(t *testing.T) {
 // TestDispatcher_PausedHoldsNormalJob verifies a normal job blocks during pause
 // and drains after Resume.
 func TestDispatcher_PausedHoldsNormalJob(t *testing.T) {
-	d, mock := newPauseTestDispatcher(t)
+	d, mock := newPauseTestDispatcher(t, 1)
 	d.Start()
 
 	d.Pause("test hold")
@@ -190,7 +191,7 @@ func TestDispatcher_PausedHoldsNormalJob(t *testing.T) {
 
 // TestDispatcher_PausedAllowsBypassJob verifies bypass jobs skip the pause gate.
 func TestDispatcher_PausedAllowsBypassJob(t *testing.T) {
-	d, mock := newPauseTestDispatcher(t)
+	d, mock := newPauseTestDispatcher(t, 1)
 	d.Start()
 
 	d.Pause("test bypass")
@@ -222,7 +223,7 @@ func TestDispatcher_PausedAllowsBypassJob(t *testing.T) {
 
 // TestDispatcher_PausedAllowsEditJob verifies edit jobs (EditKey != "") skip the pause gate.
 func TestDispatcher_PausedAllowsEditJob(t *testing.T) {
-	d, mock := newPauseTestDispatcher(t)
+	d, mock := newPauseTestDispatcher(t, 1)
 	d.Start()
 
 	d.Pause("test edit bypass")
@@ -255,7 +256,9 @@ func TestDispatcher_PausedAllowsEditJob(t *testing.T) {
 // TestDispatcher_ResumeWakesMultipleWaiters verifies that Resume unblocks all
 // goroutines waiting in the pause gate simultaneously.
 func TestDispatcher_ResumeWakesMultipleWaiters(t *testing.T) {
-	d, mock := newPauseTestDispatcher(t)
+	// 3 workers + 3 jobs ensures all three are parked in waitWhilePaused
+	// at the same time, so Resume must broadcast (not signal) to wake them.
+	d, mock := newPauseTestDispatcher(t, 3)
 	d.Start()
 
 	d.Pause("test multiple")
@@ -298,11 +301,10 @@ func TestDispatcher_ResumeWakesMultipleWaiters(t *testing.T) {
 // TestDispatcher_PauseIsIdempotent verifies that calling Pause twice keeps the
 // original reason and timestamp (not reset by the second call).
 func TestDispatcher_PauseIsIdempotent(t *testing.T) {
-	d, _ := newPauseTestDispatcher(t)
+	d, _ := newPauseTestDispatcher(t, 1)
 	d.Start()
 	defer d.Stop()
 
-	before := time.Now()
 	d.Pause("first reason")
 	_, _, since1 := d.PauseState()
 
@@ -310,7 +312,6 @@ func TestDispatcher_PauseIsIdempotent(t *testing.T) {
 	d.Pause("second reason")
 
 	paused, reason, since2 := d.PauseState()
-	_ = before
 
 	if !paused {
 		t.Error("expected paused=true")
