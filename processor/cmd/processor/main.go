@@ -34,6 +34,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/discordbot"
+	"github.com/pokemon/poracleng/processor/internal/discordbot/slash"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -830,6 +831,65 @@ func main() {
 		},
 		LogBuffer:    logBuf,
 		ProcessStart: proc.ProcessStart(),
+
+		// Slash command lifecycle — always non-nil. When the Discord bot is
+		// not up or slash commands are disabled, the closures return
+		// slash.ErrSlashNotConfigured so the command handler can emit a
+		// friendly operator message.
+		SlashSync: func() error {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return slash.ErrSlashNotConfigured
+			}
+			return d.SyncCommands()
+		},
+		SlashForceResync: func() error {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return slash.ErrSlashNotConfigured
+			}
+			return d.ForceResync()
+		},
+		SlashClearGlobal: func() error {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return slash.ErrSlashNotConfigured
+			}
+			return d.ClearGlobalCommands()
+		},
+		SlashClearGuild: func(guildID string) error {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return slash.ErrSlashNotConfigured
+			}
+			// ClearGuildCommands clears all configured guilds; to target a
+			// single guild we temporarily patch the dispatcher's guild list.
+			return d.ClearSingleGuild(guildID)
+		},
+		SlashStatus: func() (bot.SlashScope, []bot.SlashScope, error) {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return bot.SlashScope{}, nil, slash.ErrSlashNotConfigured
+			}
+			global, guilds, err := d.CacheStatus()
+			if err != nil {
+				return bot.SlashScope{}, nil, err
+			}
+			gscope := bot.SlashScope{
+				Name:         "global",
+				LastSyncedAt: global.SyncedAt,
+				Fingerprint:  global.Fingerprint,
+			}
+			var guildScopes []bot.SlashScope
+			for name, entry := range guilds {
+				guildScopes = append(guildScopes, bot.SlashScope{
+					Name:         name,
+					LastSyncedAt: entry.SyncedAt,
+					Fingerprint:  entry.Fingerprint,
+				})
+			}
+			return gscope, guildScopes, nil
+		},
 	}
 
 	gatewayToken := cfg.Discord.DiscordGatewayToken()
@@ -1491,3 +1551,13 @@ func (ps *ProcessorService) Close() {
 
 // Ensure ProcessorService implements webhook.Processor
 var _ webhook.Processor = (*ProcessorService)(nil)
+
+// discordBotSlashDispatcher returns the slash.Dispatcher from the running
+// Discord bot, or nil when the bot is not up or slash commands are disabled.
+// Used by the BotDeps slash lifecycle closures.
+func discordBotSlashDispatcher(b *discordbot.Bot) *slash.Dispatcher {
+	if b == nil {
+		return nil
+	}
+	return b.SlashDispatcher()
+}

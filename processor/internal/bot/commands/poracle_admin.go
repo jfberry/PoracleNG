@@ -135,11 +135,6 @@ func paStubHelp(name string) func(ctx *bot.CommandContext) []bot.Reply {
 	}
 }
 
-var paSlash = &paSubgroup{
-	run:  paStubRun,
-	help: paStubHelp("slash"),
-}
-
 var paEmoji = &paSubgroup{
 	run:  paStubRun,
 	help: paStubHelp("emoji"),
