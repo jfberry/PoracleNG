@@ -797,6 +797,43 @@ func main() {
 		ReloadState: func() error {
 			return state.Load(stateMgr, database, summaryScheduleStore)
 		},
+		WebhookRate: webhookHandler.RateSnapshot,
+		AlertLimiter: proc.rateLimiter,
+		DiscordRate: func() delivery.DiscordRateSnapshot {
+			return proc.dispatcher.DiscordRateSnapshot()
+		},
+		TelegramRate: func() delivery.TelegramRateSnapshot {
+			return proc.dispatcher.TelegramRateSnapshot()
+		},
+		GeocoderStats: func() geocoding.CacheStats {
+			if proc.enricher.Geocoder == nil {
+				return geocoding.CacheStats{}
+			}
+			return proc.enricher.Geocoder.CacheStats()
+		},
+		GeocoderClear: func() int {
+			if proc.enricher.Geocoder == nil {
+				return 0
+			}
+			return proc.enricher.Geocoder.ClearCache()
+		},
+		// Reconciler and RunReconcile are closures that lazily dereference
+		// discordBot. discordBot is nil here but may be set after the Discord
+		// bot starts below. Command callers must nil-check the returned error
+		// for ErrReconciliationDisabled or handle the nil func directly.
+		Reconciler: func(userID string) error {
+			if discordBot == nil {
+				return discordbot.ErrReconciliationDisabled
+			}
+			return discordBot.ReconcileUserNow(userID)
+		},
+		RunReconcile: func() error {
+			if discordBot == nil {
+				return discordbot.ErrReconciliationDisabled
+			}
+			return discordBot.RunReconciliationNow()
+		},
+		LogBuffer: logBuf,
 	}
 
 	gatewayToken := cfg.Discord.DiscordGatewayToken()
