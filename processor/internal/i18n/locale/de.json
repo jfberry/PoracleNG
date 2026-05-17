@@ -129,6 +129,8 @@
   "cmd.fort": "Fort",
   "cmd.help": "hilfe",
   "cmd.info": "Info",
+  "cmd.info.poracle.moved": "→ Diese Ansicht ist jetzt unter `!poracle-admin status` verfügbar — bitte verwenden Sie diesen Befehl.",
+  "cmd.info.config.moved": "→ Diese Ansicht ist jetzt unter `!poracle-admin config` verfügbar — bitte verwenden Sie diesen Befehl.",
   "cmd.start": "start",
   "cmd.stop": "Stop",
   "cmd.tracked": "status",
