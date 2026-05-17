@@ -1,6 +1,9 @@
 package delivery
 
 import (
+	"sync"
+	"time"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -37,6 +40,13 @@ type Dispatcher struct {
 	ch      chan *Job
 	queue   *FairQueue
 	tracker *MessageTracker
+
+	// Pause state — protected by pauseMu / pauseCond.
+	pauseMu     sync.Mutex
+	pauseCond   *sync.Cond
+	paused      bool
+	pauseReason string
+	pausedSince time.Time
 }
 
 // NewDispatcher creates a Dispatcher with the configured senders, tracker, and queue.
@@ -62,9 +72,11 @@ func NewDispatcher(cfg DispatcherConfig) (*Dispatcher, error) {
 	}
 	ch := make(chan *Job, queueSize)
 
-	queue := NewFairQueue(ch, senders, tracker, cfg.Queue)
+	d := &Dispatcher{ch: ch, tracker: tracker}
+	d.pauseCond = sync.NewCond(&d.pauseMu)
+	d.queue = NewFairQueue(ch, senders, tracker, cfg.Queue, d)
 
-	return &Dispatcher{ch: ch, queue: queue, tracker: tracker}, nil
+	return d, nil
 }
 
 // NewDispatcherWithSenders creates a Dispatcher with externally-provided senders (for testing).
@@ -73,8 +85,10 @@ func NewDispatcherWithSenders(senders map[string]Sender, tracker *MessageTracker
 		queueSize = 1000
 	}
 	ch := make(chan *Job, queueSize)
-	queue := NewFairQueue(ch, senders, tracker, queueCfg)
-	return &Dispatcher{ch: ch, queue: queue, tracker: tracker}
+	d := &Dispatcher{ch: ch, tracker: tracker}
+	d.pauseCond = sync.NewCond(&d.pauseMu)
+	d.queue = NewFairQueue(ch, senders, tracker, queueCfg, d)
+	return d
 }
 
 // Start launches the fair queue workers.
@@ -122,4 +136,48 @@ func (d *Dispatcher) RateLimitWaiting() int64 {
 		return ds.rateLimiter.WaitingCount()
 	}
 	return 0
+}
+
+// Pause suspends outbound message delivery. Normal (non-bypass, non-edit) jobs
+// will block in the queue until Resume is called. Calling Pause while already
+// paused is a no-op — the original reason and timestamp are preserved.
+func (d *Dispatcher) Pause(reason string) {
+	d.pauseMu.Lock()
+	defer d.pauseMu.Unlock()
+	if !d.paused {
+		d.paused = true
+		d.pauseReason = reason
+		d.pausedSince = time.Now()
+	}
+}
+
+// Resume lifts a previous Pause, allowing queued and future jobs to proceed.
+// Safe to call when not paused.
+func (d *Dispatcher) Resume() {
+	d.pauseMu.Lock()
+	d.paused = false
+	d.pauseReason = ""
+	d.pausedSince = time.Time{}
+	d.pauseMu.Unlock()
+	d.pauseCond.Broadcast()
+}
+
+// PauseState returns the current pause state: whether delivery is paused, the
+// reason given when Pause was called, and the time at which Pause was called.
+// All three zero-values when not paused.
+func (d *Dispatcher) PauseState() (paused bool, reason string, since time.Time) {
+	d.pauseMu.Lock()
+	defer d.pauseMu.Unlock()
+	return d.paused, d.pauseReason, d.pausedSince
+}
+
+// waitWhilePaused blocks until the dispatcher is not paused. It is called by
+// FairQueue.processJob before the rate-limit check so that no rate-limit
+// counters increment during a pause window.
+func (d *Dispatcher) waitWhilePaused() {
+	d.pauseMu.Lock()
+	for d.paused {
+		d.pauseCond.Wait()
+	}
+	d.pauseMu.Unlock()
 }

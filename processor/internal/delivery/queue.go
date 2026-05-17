@@ -44,10 +44,11 @@ type QueueConfig struct {
 
 // FairQueue provides per-destination serialization with platform-level concurrency control.
 type FairQueue struct {
-	ch      chan *Job
-	senders map[string]Sender
-	tracker *MessageTracker
-	wg      sync.WaitGroup
+	ch         chan *Job
+	senders    map[string]Sender
+	tracker    *MessageTracker
+	dispatcher *Dispatcher
+	wg         sync.WaitGroup
 
 	// Shutdown context — cancelled when Stop() is called, aborts in-flight sends.
 	ctx    context.Context
@@ -82,7 +83,9 @@ type FairQueue struct {
 
 // NewFairQueue creates a FairQueue that reads jobs from ch and dispatches them
 // through the appropriate sender, respecting per-platform concurrency limits.
-func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTracker, cfg QueueConfig) *FairQueue {
+// d is the owning Dispatcher; it may be nil in tests that construct FairQueue
+// directly and don't need pause support.
+func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTracker, cfg QueueConfig, d *Dispatcher) *FairQueue {
 	if cfg.ConcurrentDiscord <= 0 {
 		cfg.ConcurrentDiscord = 1
 	}
@@ -102,6 +105,7 @@ func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTrack
 		ch:                ch,
 		senders:           senders,
 		tracker:           tracker,
+		dispatcher:        d,
 		ctx:               ctx,
 		cancel:            cancel,
 		discordSem:        make(chan struct{}, cfg.ConcurrentDiscord),
@@ -217,6 +221,16 @@ func (fq *FairQueue) processJob(job *Job) {
 	if job.ReplyKey != "" && job.ReplyToID == "" {
 		if msgID := fq.tracker.LookupReply(job.ReplyKey, job.Target); msgID != "" {
 			job.ReplyToID = msgID
+		}
+	}
+
+	// Pause gate. Sits BEFORE the rate-limit check so no counters increment
+	// during a pause window and no breach notifications are generated.
+	// Bypass jobs (rate-limit notifications, ban farewells) and edit jobs
+	// (mutations of already-tracked messages) skip this check entirely.
+	if !job.BypassRateLimit && job.EditKey == "" {
+		if fq.dispatcher != nil {
+			fq.dispatcher.waitWhilePaused()
 		}
 	}
 
