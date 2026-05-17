@@ -101,7 +101,7 @@ func statusReport(ctx *bot.CommandContext, verbose bool) []bot.Reply {
 	sb.WriteString("\n\n")
 	sb.WriteString(renderMySQLSection(ctx, tr))
 
-	return []bot.Reply{{Text: sb.String()}}
+	return bot.SplitTextReply(sb.String())
 }
 
 // formatHeaderTimestamp returns the timestamp line. Uses RFC3339-style
