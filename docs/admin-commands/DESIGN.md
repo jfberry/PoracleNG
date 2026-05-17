@@ -9,9 +9,9 @@
 In scope:
 
 - A new `!untrack <type>` text-command form for consistency with the slash surface (`/untrack raid id:12` works in both).
-- A new `!poracle-admin` umbrella command with subcommand groups: `slash`, `reload`, `emoji`, `reconcile`, `cache`, `ratelimit`, `summary`, `status`, `maintenance`.
-- New read-only introspection APIs on internal subsystems (webhook rate, ratelimit blocked-targets, Discord per-route rate state, geocoder cache stats) where today's state is private.
-- Convergence of the existing `!info poracle` admin subcommand with the new `status` subcommand — one canonical implementation, both names route to it.
+- A new `!poracle-admin` umbrella command with subcommand groups: `slash`, `reload`, `emoji`, `reconcile`, `cache`, `ratelimit`, `summary`, `status`, `config`, `warnings`, `maintenance`.
+- New read-only introspection APIs on internal subsystems (webhook rate, ratelimit blocked-targets, Discord per-route rate state, geocoder cache stats, log capture buffer) where today's state is private.
+- Deprecation of `!info poracle` and `!info config` admin subcommands — both print a one-line "→ moved to …" pointer. Single canonical implementation lives under `!poracle-admin`.
 
 Explicitly out of scope:
 
@@ -136,9 +136,9 @@ The generic `user:<id>` admin-override (resolved by `BuildTarget` on every comma
 
 Uses the existing `SummaryBuffer.List(humanID, alertType)` API; adds an `EnumerateUsers()` method for `list`.
 
-#### `status` — health snapshot (also reached via `!info poracle`)
+#### `status` — health snapshot
 
-This is the single-screen "is anything wrong" view. **Designed to converge with `!info poracle`** — the existing admin info path renders the same data through the same helper, so we don't end up with two divergent status views.
+This is the single-screen "is anything wrong" view. **`!info poracle` is deprecated** — it now prints a one-line redirect ("→ moved to `!poracle-admin status`") and nothing else. Single canonical implementation lives here; no aliasing, no shared helpers, no two-render-paths drift.
 
 Sections:
 
@@ -155,7 +155,38 @@ Sections:
 
 `!info poracle` keeps its existing trigger as a shortcut but renders through the new helper. Operators with muscle memory don't have to relearn anything.
 
-The status output uses sections separated by blank lines and emoji indicators (🟢 / 🟡 / 🔴) for at-a-glance scanning. Verbose mode (`!poracle-admin status -v` or `!info poracle full`) adds per-route Discord detail, per-handler webhook breakdown, and full queue contents.
+The status output uses sections separated by blank lines and emoji indicators (🟢 / 🟡 / 🔴) for at-a-glance scanning. Verbose mode (`!poracle-admin status -v`) adds per-route Discord detail, per-handler webhook breakdown, and full queue contents.
+
+#### `config` — config inspection
+
+Effective merged config with sensitive fields redacted. Replaces `!info config` (which now just prints "→ moved to `!poracle-admin config`"). Single rendering function backs the new subgroup; the deprecated `!info config` path doesn't render anything itself.
+
+| Subcommand | What it does |
+|---|---|
+| (no arg) | Print effective config with redactions, sectioned. |
+| `<section>` | Print just one section (e.g. `discord`, `geofence`, `processor`). |
+| `keys` | List section names + key counts. |
+
+Same redaction list as the existing `!info config` (tokens, secrets, DSN passwords) — extract that list into a shared helper so adding a new sensitive key automatically protects both surfaces.
+
+#### `warnings` — captured WARN/ERROR log buffer
+
+Operators routinely need to see "what's gone wrong recently" without SSH'ing to read the log file. This subgroup keeps two ring buffers in memory and renders them on demand.
+
+**Startup buffer** — captures every WARN and ERROR from process start until `log.MarkStartupComplete()` is called. The call sits in `cmd/processor/main.go` right before the HTTP server starts listening (the natural "the bot is now running" point). Bounded to 200 entries so a misconfigured deployment can't OOM the buffer.
+
+**Rolling buffer** — last 50 WARN/ERROR entries after startup, FIFO. Drops the oldest when full.
+
+Each entry records: timestamp, level (WARN/ERROR), message, source `file:line` if the logging library provides it. If startup never completes (the call never fires because main.go panicked) the rolling buffer stays at zero entries and the startup buffer holds everything — useful diagnostic state in itself.
+
+| Subcommand | What it does |
+|---|---|
+| (no arg) | Print "Startup section" (all captured warnings since process start, up to 200) + blank line + "Recent section" (last 50 rolling buffer entries, newest first). |
+| `startup` | Just the startup section. |
+| `recent` | Just the rolling buffer. |
+| `clear` | Empty the rolling buffer. Startup buffer is immutable post-startup. |
+
+Implementation: a new `internal/logbuffer/` package with a thread-safe ring + hook into the logging library. The hook fires synchronously inside the log call, so the cost per log line is one mutex acquire + one slot write — negligible against the existing log-formatting cost. Levels below WARN are not captured (no INFO or DEBUG noise).
 
 #### `maintenance` — pause/resume delivery
 
@@ -232,6 +263,31 @@ func (l *DiscordRateLimiter) Snapshot() DiscordRateSnapshot
 ```
 
 Telegram gets a smaller equivalent — it doesn't have per-route limits, just global 429 backoff.
+
+### Log capture buffer
+
+New package `internal/logbuffer/`:
+
+```go
+type Entry struct {
+    Time    time.Time
+    Level   string  // "WARN" or "ERROR"
+    Message string
+    Source  string  // "file.go:42", empty if not available
+}
+
+type Buffer struct { ... }  // thread-safe; one mutex; two ring buffers internally
+func New(startupCap, rollingCap int) *Buffer
+func (b *Buffer) Capture(level, message, source string)  // called by log hook
+func (b *Buffer) MarkStartupComplete()                   // freezes startup buffer
+func (b *Buffer) Startup() []Entry                       // snapshot (copy)
+func (b *Buffer) Recent() []Entry                        // snapshot (copy)
+func (b *Buffer) ClearRecent()
+```
+
+The log hook lives where the logger is initialised (probably `cmd/processor/main.go` or wherever the logrus/zerolog/etc. instance is set up — implementer to discover). It wraps the existing log writer; for every WARN or ERROR record, it calls `buffer.Capture(...)`. INFO and DEBUG are ignored.
+
+`MarkStartupComplete` is called from `main.go` immediately before `r.Run(":3030")` or equivalent. From that point forward, captures go into the rolling buffer and the startup buffer is sealed.
 
 ### Geocoder cache stats
 
