@@ -435,6 +435,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 		}
 
 		replies := handler.Run(ctx, remainingArgs)
+		replies = bot.ApplyMaintenanceSuffix(replies, b.Dispatcher, b.Translations.For(userLang).T("cmd.maintenance.active_suffix"))
 		b.sendReplies(chatID, threadID, m.From.ID, replies)
 	}
 }
