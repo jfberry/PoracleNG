@@ -468,6 +468,23 @@ func main() {
 	summaries.DELETE("/:id/:alertType", api.HandleSummaryDelete(summaryDeps))
 	summaries.POST("/:id/:alertType/trigger", api.HandleSummaryTrigger(summaryDeps))
 
+	// reloadDTS reloads DTS templates and returns the number of loaded entries.
+	// It is used by both the HTTP /api/dts/reload handlers and the BotDeps closure
+	// so the logic lives in exactly one place.
+	reloadDTS := func() (int, error) {
+		if proc.dtsRenderer == nil {
+			return 0, nil
+		}
+		ts := proc.dtsRenderer.Templates()
+		if err := ts.Reload(
+			filepath.Join(cfg.BaseDir, "config"),
+			filepath.Join(cfg.BaseDir, "fallbacks"),
+		); err != nil {
+			return 0, err
+		}
+		return len(ts.FilteredEntries("", "", "", "")), nil
+	}
+
 	// DTS template endpoints
 	if proc.dtsRenderer != nil {
 		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
@@ -484,16 +501,12 @@ func main() {
 		apiGroup.GET("/dts/partials", api.HandleDTSPartials(proc.dtsRenderer.Templates()))
 		apiGroup.POST("/dts/sendtest", api.HandleDTSSendTest(proc.dispatcher, proc.dtsRenderer.Templates(), proc.dtsRenderer))
 		apiGroup.POST("/dts/reload", api.HandleReload(func() error {
-			return proc.dtsRenderer.Templates().Reload(
-				filepath.Join(cfg.BaseDir, "config"),
-				filepath.Join(cfg.BaseDir, "fallbacks"),
-			)
+			_, err := reloadDTS()
+			return err
 		}))
 		apiGroup.GET("/dts/reload", api.HandleReload(func() error {
-			return proc.dtsRenderer.Templates().Reload(
-				filepath.Join(cfg.BaseDir, "config"),
-				filepath.Join(cfg.BaseDir, "fallbacks"),
-			)
+			_, err := reloadDTS()
+			return err
 		}))
 		apiGroup.GET("/dts/testdata", api.HandleDTSTestdata(
 			filepath.Join(cfg.BaseDir, "config"),
@@ -766,19 +779,7 @@ func main() {
 		SummaryDispatch:    proc.DispatchQuestSummary,
 		Scanner:            proc.scanner,
 		RecentActivity:     proc.recentActivity,
-		ReloadDTS: func() (int, error) {
-			if proc.dtsRenderer == nil {
-				return 0, nil
-			}
-			ts := proc.dtsRenderer.Templates()
-			if err := ts.Reload(
-				filepath.Join(cfg.BaseDir, "config"),
-				filepath.Join(cfg.BaseDir, "fallbacks"),
-			); err != nil {
-				return 0, err
-			}
-			return len(ts.FilteredEntries("", "", "", "")), nil
-		},
+		ReloadDTS: reloadDTS,
 		ReloadGeofence: func() error {
 			return state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence)
 		},
