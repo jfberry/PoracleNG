@@ -128,7 +128,7 @@ func renderPausedBanner(ctx *bot.CommandContext, tr translator) string {
 		reason = tr.T("cmd.poracle_admin.status.value.none")
 	}
 	d := time.Since(since).Round(time.Second)
-	return tr.Tf("cmd.poracle_admin.status.paused_banner", reason, d.String())
+	return tr.Tf("cmd.poracle_admin.status.paused_banner", reason, formatDuration(d))
 }
 
 // renderBuildSection lists version, commit, build date, uptime.
@@ -272,7 +272,7 @@ func renderDeliverySection(ctx *bot.CommandContext, tr translator, verbose bool)
 		sb.WriteString("\n  ")
 		sb.WriteString(indicator)
 		sb.WriteString(" ")
-		sb.WriteString(tr.Tf(r.labelKey, fmt.Sprintf("%d", r.inFlight)))
+		sb.WriteString(tr.Tf(r.labelKey, r.inFlight))
 	}
 
 	// Cumulative queue depth visible across all platforms — useful to
@@ -280,7 +280,7 @@ func renderDeliverySection(ctx *bot.CommandContext, tr translator, verbose bool)
 	// look fine. Capacity is internal to the dispatcher.
 	sb.WriteString("\n  ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.delivery_queue_depth",
-		fmt.Sprintf("%d", totalQueueDepth)))
+		totalQueueDepth))
 
 	return sb.String()
 }
@@ -311,18 +311,18 @@ func renderDiscordRateSection(ctx *bot.CommandContext, tr translator, verbose bo
 
 	sb.WriteString("\n  ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.discord_routes",
-		fmt.Sprintf("%d", nearLimit),
+		nearLimit,
 	))
 	sb.WriteString("\n  ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.discord_global",
-		fmt.Sprintf("%d", snap.GlobalTokens),
-		fmt.Sprintf("%d", snap.GlobalCapacity),
+		snap.GlobalTokens,
+		snap.GlobalCapacity,
 	))
 	sb.WriteString("\n  ")
 	sb.WriteString(indicator429)
 	sb.WriteString(" ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.discord_429s",
-		fmt.Sprintf("%d", snap.Recent429Count),
+		snap.Recent429Count,
 	))
 
 	if verbose && nearLimit > 0 {
@@ -363,7 +363,7 @@ func renderTelegramRateSection(ctx *bot.CommandContext, tr translator) string {
 	sb.WriteString(indicator)
 	sb.WriteString(" ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.telegram_429s",
-		fmt.Sprintf("%d", snap.Recent429Count),
+		snap.Recent429Count,
 	))
 
 	backoff := tr.T("cmd.poracle_admin.status.value.none")
@@ -415,9 +415,9 @@ func renderAlertLimitsSection(ctx *bot.CommandContext, tr translator) string {
 	sb.WriteString(indicator)
 	sb.WriteString(" ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.alert_limits_counts",
-		fmt.Sprintf("%d", alertCount),
-		fmt.Sprintf("%d", summaryCount),
-		fmt.Sprintf("%d", bannedCount),
+		alertCount,
+		summaryCount,
+		bannedCount,
 	))
 
 	return sb.String()
@@ -454,8 +454,8 @@ func renderSummaryBufferSection(ctx *bot.CommandContext, tr translator) string {
 	sb.WriteString(indicator)
 	sb.WriteString(" ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.summary_buffer_totals",
-		fmt.Sprintf("%d", totalEntries),
-		fmt.Sprintf("%d", bucketCount),
+		totalEntries,
+		bucketCount,
 	))
 
 	if len(enums) > 0 {
@@ -474,7 +474,7 @@ func renderSummaryBufferSection(ctx *bot.CommandContext, tr translator) string {
 			sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.summary_buffer_user_row",
 				e.HumanID,
 				e.AlertType,
-				fmt.Sprintf("%d", e.Count),
+				e.Count,
 			))
 		}
 	}
@@ -505,7 +505,7 @@ func renderTrackingSection(ctx *bot.CommandContext, tr translator) string {
 	total := countTrackingRules(s)
 	sb.WriteString("\n  ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.tracking_total",
-		fmt.Sprintf("%d", total)))
+		total))
 
 	monsters := 0
 	if s.Monsters != nil {
@@ -532,7 +532,7 @@ func renderTrackingSection(ctx *bot.CommandContext, tr translator) string {
 		sb.WriteString("\n    ")
 		sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.tracking_type",
 			tr.T("cmd.poracle_admin.status.tracking_type."+p.key),
-			fmt.Sprintf("%d", p.count),
+			p.count,
 		))
 	}
 
@@ -540,7 +540,7 @@ func renderTrackingSection(ctx *bot.CommandContext, tr translator) string {
 	activeHumans := len(s.Humans)
 	sb.WriteString("\n  ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.tracking_active_humans",
-		fmt.Sprintf("%d", activeHumans)))
+		activeHumans))
 
 	// Registered humans (total): query the store. Surface error
 	// explicitly rather than silently omitting the line.
@@ -551,7 +551,7 @@ func renderTrackingSection(ctx *bot.CommandContext, tr translator) string {
 			sb.WriteString(tr.T("cmd.poracle_admin.status.label.tracking_registered_humans_error"))
 		} else {
 			sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.tracking_registered_humans",
-				fmt.Sprintf("%d", len(all))))
+				len(all)))
 		}
 	}
 
@@ -591,11 +591,11 @@ func renderMySQLSection(ctx *bot.CommandContext, tr translator) string {
 	st := ctx.DB.Stats()
 	sb.WriteString("\n  ")
 	sb.WriteString(tr.Tf("cmd.poracle_admin.status.label.mysql_pool",
-		fmt.Sprintf("%d", st.OpenConnections),
-		fmt.Sprintf("%d", st.MaxOpenConnections),
-		fmt.Sprintf("%d", st.InUse),
-		fmt.Sprintf("%d", st.Idle),
-		fmt.Sprintf("%d", st.WaitCount),
+		st.OpenConnections,
+		st.MaxOpenConnections,
+		st.InUse,
+		st.Idle,
+		st.WaitCount,
 	))
 
 	return sb.String()

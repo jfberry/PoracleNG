@@ -90,7 +90,7 @@ func paMaintenancePause(ctx *bot.CommandContext, reasonArgs []string) []bot.Repl
 		d := time.Since(existingSince).Round(time.Second)
 		ts := existingSince.UTC().Format("2006-01-02 15:04:05 UTC")
 		return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.maintenance.pause.already",
-			ts, d.String(), existingReason)}}
+			ts, formatDuration(d), existingReason)}}
 	}
 
 	reason := strings.Join(reasonArgs, " ")
@@ -120,7 +120,7 @@ func paMaintenanceResume(ctx *bot.CommandContext) []bot.Reply {
 	ctx.Dispatcher.Resume()
 
 	var sb strings.Builder
-	sb.WriteString(tr.Tf("cmd.poracle_admin.maintenance.resume.success", d.String(), reason))
+	sb.WriteString(tr.Tf("cmd.poracle_admin.maintenance.resume.success", formatDuration(d), reason))
 	sb.WriteString("\n")
 	sb.WriteString(tr.T("cmd.poracle_admin.maintenance.resume.detail"))
 	return []bot.Reply{{Text: sb.String()}}
@@ -137,7 +137,7 @@ func paMaintenanceStatus(ctx *bot.CommandContext) []bot.Reply {
 
 	d := time.Since(since).Round(time.Second)
 	var sb strings.Builder
-	sb.WriteString(tr.Tf("cmd.poracle_admin.maintenance.status.paused", reason, d.String()))
+	sb.WriteString(tr.Tf("cmd.poracle_admin.maintenance.status.paused", reason, formatDuration(d)))
 
 	// Queue depth — per-platform breakdown via dispatcher accessors.
 	discord := ctx.Dispatcher.DiscordDepth()

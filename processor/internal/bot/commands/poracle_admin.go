@@ -123,25 +123,3 @@ func (c *PoracleAdminCommand) topLevelHelp(ctx *bot.CommandContext) []bot.Reply 
 	return []bot.Reply{{Text: sb.String()}}
 }
 
-// ---------------------------------------------------------------------------
-// Stub subgroup definitions — each will be replaced in a later task.
-// ---------------------------------------------------------------------------
-
-func paStubRun(ctx *bot.CommandContext, _ []string) []bot.Reply {
-	tr := ctx.Tr()
-	return []bot.Reply{{Text: tr.T("cmd.poracle_admin.stub")}}
-}
-
-func paStubHelp(name string) func(ctx *bot.CommandContext) []bot.Reply {
-	return func(ctx *bot.CommandContext) []bot.Reply {
-		tr := ctx.Tr()
-		return []bot.Reply{{Text: tr.T("cmd.poracle_admin." + name + ".help_stub")}}
-	}
-}
-
-// paEmoji is declared in poracle_admin_emoji.go.
-// paReconcile is declared in poracle_admin_reconcile.go.
-// paRatelimit is declared in poracle_admin_ratelimit.go.
-// paSummary is declared in poracle_admin_summary.go.
-
-// paMaintenance is declared in poracle_admin_maintenance.go.
