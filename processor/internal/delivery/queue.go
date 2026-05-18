@@ -355,6 +355,7 @@ func (fq *FairQueue) processJob(job *Job) {
 			SentID:   sent.ID,
 			Target:   job.Target,
 			Type:     job.Type,
+			MsgType:  job.MsgType,
 			Clean:    job.Clean,
 			ReplyKey: job.ReplyKey,
 		}, ttl)
