@@ -80,6 +80,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
+				AlertType:     "fort-update",
 				TemplateType:  "fort-update",
 				Enrichment:    enrichmentData,
 				WebhookFields: webhookFields,

@@ -128,6 +128,7 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
+				AlertType:         "invasion",
 				TemplateType:      "invasion",
 				Enrichment:        baseEnrichment,
 				PerLangEnrichment: perLang,

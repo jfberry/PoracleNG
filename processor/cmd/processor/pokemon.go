@@ -268,6 +268,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		// ReplyKey is set so enabling the flag later threads onto this send.
 		ps.renderCh <- RenderJob{
+			AlertType:         "pokemon",
 			IsPokemon:         true,
 			IsEncountered:     processed.Encountered,
 			Enrichment:        baseEnrichment,
@@ -314,6 +315,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 			return
 		}
 		ps.renderCh <- RenderJob{
+			AlertType:         "pokemon",
 			IsPokemon:         true,
 			IsEncountered:     in.isEncountered,
 			Enrichment:        in.enrichment,
@@ -335,6 +337,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	if len(in.matched) > 0 {
 		for _, users := range groupByLanguage(in.matched, ps.cfg.General.Locale) {
 			ps.renderCh <- RenderJob{
+				AlertType:         "pokemon",
 				IsPokemon:         true,
 				IsEncountered:     in.isEncountered,
 				Enrichment:        in.enrichment,
@@ -374,6 +377,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 				orig = perLangOriginal[lang]
 			}
 			ps.renderCh <- RenderJob{
+				AlertType:         "pokemon",
 				IsPokemon:         true,
 				IsChange:          true,
 				IsEncountered:     in.isEncountered,
