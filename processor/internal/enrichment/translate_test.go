@@ -284,6 +284,69 @@ func TestTranslateItemName_ZeroReturnsEmpty(t *testing.T) {
 	}
 }
 
+// --- BuildFullNameWithAlignment tests ---
+
+func TestBuildFullNameWithAlignment(t *testing.T) {
+	bundle := newTestBundleWithTranslations(t)
+	gd := newTestGameData()
+	tr := bundle.For("en")
+
+	nameKeys := gd.MonsterNameKeys(6, 0, 0)
+
+	tests := []struct {
+		name      string
+		alignment int
+		want      string
+	}{
+		{
+			name:      "alignment=0 produces no prefix",
+			alignment: 0,
+			want:      "Charizard",
+		},
+		{
+			name:      "alignment=1 produces Shadow prefix",
+			alignment: 1,
+			want:      "Shadow Charizard",
+		},
+		{
+			name:      "alignment=2 produces Purified prefix",
+			alignment: 2,
+			want:      "Purified Charizard",
+		},
+		{
+			name:      "alignment=99 unknown value produces no prefix (graceful)",
+			alignment: 99,
+			want:      "Charizard",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BuildFullNameWithAlignment(tr, nameKeys, "Charizard", "", 6, 0, tt.alignment)
+			if got != tt.want {
+				t.Errorf("BuildFullNameWithAlignment(alignment=%d) = %q, want %q", tt.alignment, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestBuildFullNameWithAlignment_NilTranslator verifies graceful handling when
+// tr is nil — the English hard-coded fallback labels are still applied.
+func TestBuildFullNameWithAlignment_NilTranslator(t *testing.T) {
+	gd := newTestGameData()
+	nameKeys := gd.MonsterNameKeys(6, 0, 0)
+
+	if got := BuildFullNameWithAlignment(nil, nameKeys, "Charizard", "", 6, 0, 1); got != "Shadow Charizard" {
+		t.Errorf("nil tr, alignment=1: got %q, want Shadow Charizard", got)
+	}
+	if got := BuildFullNameWithAlignment(nil, nameKeys, "Charizard", "", 6, 0, 2); got != "Purified Charizard" {
+		t.Errorf("nil tr, alignment=2: got %q, want Purified Charizard", got)
+	}
+	if got := BuildFullNameWithAlignment(nil, nameKeys, "Charizard", "", 6, 0, 0); got != "Charizard" {
+		t.Errorf("nil tr, alignment=0: got %q, want Charizard", got)
+	}
+}
+
 // --- isNormalForm tests ---
 
 func TestIsNormalForm(t *testing.T) {
