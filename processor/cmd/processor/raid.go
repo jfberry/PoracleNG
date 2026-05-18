@@ -7,6 +7,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -182,17 +185,93 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				return
 			}
 			webhookFields := parseWebhookFields(raw)
+			replyKey := fmt.Sprintf("raidlife:%s:%d", raid.GymID, raid.End)
+			editKey := fmt.Sprintf("raid:%s:%d", raid.GymID, raid.End)
 
-			ps.renderCh <- RenderJob{
-				TemplateType:      msgType,
-				Enrichment:        baseEnrichment,
-				PerLangEnrichment: perLang,
-				WebhookFields:     webhookFields,
-				MatchedUsers:      matched,
-				MatchedAreas:      matchedAreas,
-				TileGate:          ps.newTileGate(tilePending),
-				LogReference:      raid.GymID,
-				EditKey:           fmt.Sprintf("raid:%s:%d", raid.GymID, raid.End),
+			// Partition matched users: users who should receive the full
+			// raid/egg template vs. those who should receive the compact
+			// rsvpChanges template.
+			//
+			// rsvpChanges is used when ALL of the following hold:
+			//   - this is not the first notification (it is an RSVP update)
+			//   - the user is not in edit mode (edit always uses the full template)
+			//   - an rsvpChanges template exists for this user's platform/template/language
+			//
+			// All other users receive the full msgType template.
+			var fullUsers, rsvpUsers []webhook.MatchedUser
+			var ts *dts.TemplateStore
+			if ps.dtsRenderer != nil {
+				ts = ps.dtsRenderer.Templates()
+			}
+			for _, u := range matched {
+				if isFirstNotification || db.IsEdit(u.Clean) || ts == nil {
+					fullUsers = append(fullUsers, u)
+					continue
+				}
+				platform := delivery.PlatformFromType(u.Type)
+				lang := u.Language
+				if lang == "" {
+					lang = ps.cfg.General.Locale
+				}
+				if ts.Exists("rsvpChanges", platform, u.Template, lang) {
+					rsvpUsers = append(rsvpUsers, u)
+				} else {
+					fullUsers = append(fullUsers, u)
+				}
+			}
+
+			// Compute the latest RSVP timeslot for OverrideCleanTTH on
+			// rsvpChanges jobs (convert from milliseconds to seconds).
+			var latestTimeslotSec int64
+			for _, r := range rsvps {
+				if sec := r.Timeslot / 1000; sec > latestTimeslotSec {
+					latestTimeslotSec = sec
+				}
+			}
+			if latestTimeslotSec > 0 && latestTimeslotSec < time.Now().Unix() {
+				l.Debugf("rsvpChanges TTH override is already in the past (timeslot=%d)", latestTimeslotSec)
+			}
+
+			// tileGate is shared between up to two jobs. The gate goroutine
+			// closes gate.ready after mutating Enrichment via Apply, and
+			// chan-close happens-before ensures the mutation is visible to
+			// all readers after <-ready. Both jobs read gate.bytes after
+			// blocking on ready, which is safe.
+			gate := ps.newTileGate(tilePending)
+
+			if len(fullUsers) > 0 {
+				ps.renderCh <- RenderJob{
+					TemplateType:      msgType,
+					Enrichment:        baseEnrichment,
+					PerLangEnrichment: perLang,
+					WebhookFields:     webhookFields,
+					MatchedUsers:      fullUsers,
+					MatchedAreas:      matchedAreas,
+					TileGate:          gate,
+					LogReference:      raid.GymID,
+					EditKey:           editKey,
+					ReplyKey:          replyKey,
+				}
+			}
+			if len(rsvpUsers) > 0 {
+				tth := latestTimeslotSec
+				if tth == 0 {
+					// Defensive: fall back to raid.End if no timeslot found.
+					tth = raid.End
+				}
+				ps.renderCh <- RenderJob{
+					TemplateType:      "rsvpChanges",
+					Enrichment:        baseEnrichment,
+					PerLangEnrichment: perLang,
+					WebhookFields:     webhookFields,
+					MatchedUsers:      rsvpUsers,
+					MatchedAreas:      matchedAreas,
+					TileGate:          gate,
+					LogReference:      raid.GymID,
+					EditKey:           editKey,
+					ReplyKey:          replyKey,
+					OverrideCleanTTH:  tth,
+				}
 			}
 		} else {
 			if raid.PokemonID > 0 {
