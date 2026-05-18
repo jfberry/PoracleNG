@@ -122,6 +122,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
+				AlertType:         "quest",
 				TemplateType:      "quest",
 				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,

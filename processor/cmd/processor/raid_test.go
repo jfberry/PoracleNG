@@ -325,6 +325,51 @@ func TestPartitionRaidUsers_TemplateIDMismatch(t *testing.T) {
 	}
 }
 
+// TestPartitionRaidUsers_SameTypeRsvpChangesNotFirstVisible is the regression
+// test for the b019cf25 bug: MsgType on TrackedMessage was set from
+// RenderJob.TemplateType ("rsvpChanges") instead of the source webhook type
+// ("raid"/"egg"). A raid that had already been rendered as rsvpChanges would
+// store MsgType="rsvpChanges". The next raid webhook would find
+// prior.MsgType="rsvpChanges" != current msgType="raid" and incorrectly treat
+// the user as first-visible, routing them to the full raid template instead of
+// staying on the rsvpChanges chain.
+//
+// With the fix, RenderJob.AlertType carries "raid"/"egg" regardless of which
+// template is rendered. The tracker stores MsgType="raid", so the next webhook
+// with msgType="raid" correctly sees prior.MsgType == msgType → not first-
+// visible → rsvpChanges.
+func TestPartitionRaidUsers_SameTypeRsvpChangesNotFirstVisible(t *testing.T) {
+	for _, msgType := range []string{"raid", "egg"} {
+		t.Run(msgType, func(t *testing.T) {
+			ts := newRsvpTemplateStore(t, "discord", "")
+			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0, Template: ""}
+
+			// Simulate the tracker holding a prior message that was rendered as
+			// rsvpChanges but correctly has MsgType set to the source webhook
+			// type (msgType), not "rsvpChanges". This is the post-fix behaviour:
+			// the tracker now stores the AlertType, not the TemplateType.
+			priorWithCorrectMsgType := func(replyKey, target string) *delivery.TrackedMessage {
+				return &delivery.TrackedMessage{
+					SentID:  "msg-rsvp",
+					Target:  target,
+					Type:    "discord:user",
+					MsgType: msgType, // "raid" or "egg" — NOT "rsvpChanges"
+				}
+			}
+
+			// The next webhook for the same raid type must NOT be first-visible:
+			// prior.MsgType == msgType → route to rsvpChanges (chain continues).
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, msgType, priorWithCorrectMsgType, ts, "")
+
+			if len(full) != 0 || len(rsvp) != 1 {
+				t.Errorf("same-type rsvpChanges chain: got full=%d rsvp=%d, want full=0 rsvp=1 "+
+					"(rsvpChanges message with correct MsgType=%q must keep user on rsvpChanges chain)",
+					len(full), len(rsvp), msgType)
+			}
+		})
+	}
+}
+
 // TestPartitionRaidUsers_EggPriorTreatsRaidAsFirstVisible is the regression
 // test for the bug where an egg-typed prior tracked message caused the
 // subsequent raid job to route to rsvpChanges immediately.

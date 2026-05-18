@@ -62,6 +62,12 @@ func (ps *ProcessorService) newTileGate(pending *staticmap.TilePending) *tileGat
 // handled by a TileGate (see newTileGate) so a single goroutine writes the
 // staticMap field of Enrichment, never the render worker itself.
 type RenderJob struct {
+	// AlertType is the source webhook type (raid, egg, pokemon, etc.) —
+	// distinct from TemplateType, which is the DTS template chosen to render
+	// the message. Used by processRenderJob to populate delivery.Job.MsgType,
+	// which the raid partition's first-visible check compares against to
+	// determine whether a prior tracked message is of the same alert type.
+	AlertType         string
 	TemplateType      string
 	Enrichment        map[string]any
 	PerLangEnrichment map[string]map[string]any
@@ -193,7 +199,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				Lon:           parseCoordFloat(j.Lon),
 				EditKey:       j.EditKey,
 				ReplyKey:      job.ReplyKey,
-				MsgType:       job.TemplateType,
+				MsgType:       job.AlertType,
 				StaticMapData: job.TileImageData,
 				Language:      j.Language,
 			})
