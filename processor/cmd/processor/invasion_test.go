@@ -32,16 +32,22 @@ func TestInvasion_TemplateType_Incident(t *testing.T) {
 		t.Errorf("invasion.go: missing incident template assignment %q", wantIncident)
 	}
 
-	// AlertType must always be "invasion" (for matching / rate limiting).
-	wantAlert := `AlertType: "invasion"`
+	// AlertType must also split — incidents and grunt invasions are
+	// distinct events at the same pokestop; if either ever grows
+	// reply/edit support the tracker must distinguish them.
+	wantAlert := `alertType = "incident"`
 	if !strings.Contains(normalized, wantAlert) {
-		t.Errorf("invasion.go: AlertType must always be \"invasion\", not found: %q", wantAlert)
+		t.Errorf("invasion.go: AlertType for incidents must be %q, not found", wantAlert)
 	}
 
-	// The RenderJob must use the computed templateType variable, not a hard-coded string.
+	// The RenderJob must use the computed templateType + alertType variables.
 	wantTemplate := `TemplateType: templateType`
 	if !strings.Contains(normalized, wantTemplate) {
 		t.Errorf("invasion.go: TemplateType must reference %q variable", wantTemplate)
+	}
+	wantAlertVar := `AlertType: alertType`
+	if !strings.Contains(normalized, wantAlertVar) {
+		t.Errorf("invasion.go: AlertType must reference %q variable", wantAlertVar)
 	}
 }
 
@@ -55,9 +61,13 @@ func TestInvasion_GruntTemplateType(t *testing.T) {
 	}
 	normalized := strings.Join(strings.Fields(string(src)), " ")
 
-	// Default must be "invasion".
-	wantDefault := `templateType := "invasion"`
-	if !strings.Contains(normalized, wantDefault) {
-		t.Errorf("invasion.go: default templateType must be %q", wantDefault)
+	// Default must be "invasion" (both template and alert type).
+	wantTemplate := `templateType := "invasion"`
+	if !strings.Contains(normalized, wantTemplate) {
+		t.Errorf("invasion.go: default templateType must be %q", wantTemplate)
+	}
+	wantAlert := `alertType := "invasion"`
+	if !strings.Contains(normalized, wantAlert) {
+		t.Errorf("invasion.go: default alertType must be %q", wantAlert)
 	}
 }

@@ -130,16 +130,21 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			// Incident webhooks (Gold Pokestop, Kecleon, Showcase, …) have
 			// gruntTypeID == 0 and displayType >= 7. They get their own
 			// "incident" template type so operators can provide a simpler card
-			// without grunt/reward fields. The AlertType stays "invasion" so
-			// matching and rate-limiting are unaffected.
+			// without grunt/reward fields. AlertType also splits — incidents
+			// and grunt-invasions are logically distinct events at the same
+			// pokestop, so if either ever grows reply/edit support the
+			// tracker's first-visible-type check (MsgType comparison) needs
+			// to see them as different alert types.
 			isIncident := gruntTypeID == 0 && displayType >= 7
 			templateType := "invasion"
+			alertType := "invasion"
 			if isIncident {
 				templateType = "incident"
+				alertType = "incident"
 			}
 
 			ps.renderCh <- RenderJob{
-				AlertType:         "invasion",
+				AlertType:         alertType,
 				TemplateType:      templateType,
 				Enrichment:        baseEnrichment,
 				PerLangEnrichment: perLang,
