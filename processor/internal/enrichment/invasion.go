@@ -400,23 +400,7 @@ func (e *Enricher) translateContestEntry(ce contestEntry, gd *gamedata.GameData,
 	entry["formName"] = formName
 
 	// fullName: alignment prefix + base+form + mega wrap
-	baseFullName := buildFullName(tr, nameKeys, pokemonName, formNormalised, ce.PokemonID, ce.TempEvolution)
-	if ce.Alignment > 0 {
-		alignmentPrefix := tr.T(fmt.Sprintf("alignment_%d", ce.Alignment))
-		if alignmentPrefix == fmt.Sprintf("alignment_%d", ce.Alignment) || alignmentPrefix == "" {
-			// key missing — use hard-coded English fallback
-			switch ce.Alignment {
-			case 1:
-				alignmentPrefix = "Shadow"
-			case 2:
-				alignmentPrefix = "Purified"
-			}
-		}
-		if alignmentPrefix != "" {
-			baseFullName = alignmentPrefix + " " + baseFullName
-		}
-	}
-	entry["fullName"] = baseFullName
+	entry["fullName"] = BuildFullNameWithAlignment(tr, nameKeys, pokemonName, formNormalised, ce.PokemonID, ce.TempEvolution, ce.Alignment)
 
 	// Costume name (costume_N key from gamelocale)
 	costumeName := ""
