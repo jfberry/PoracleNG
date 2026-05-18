@@ -191,50 +191,15 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			// Partition matched users: users who should receive the full
 			// raid/egg template vs. those who should receive the compact
 			// rsvpChanges template.
-			//
-			// rsvpChanges is used when ALL of the following hold:
-			//   - this is not the first notification (it is an RSVP update)
-			//   - the user is not in edit mode (edit always uses the full template)
-			//   - an rsvpChanges template exists for this user's platform/template/language
-			//
-			// All other users receive the full msgType template.
-			var fullUsers, rsvpUsers []webhook.MatchedUser
 			var ts *dts.TemplateStore
 			if ps.dtsRenderer != nil {
 				ts = ps.dtsRenderer.Templates()
 			}
-			for _, u := range matched {
-				if isFirstNotification || db.IsEdit(u.Clean) || ts == nil {
-					fullUsers = append(fullUsers, u)
-					continue
-				}
-				platform := delivery.PlatformFromType(u.Type)
-				lang := u.Language
-				if lang == "" {
-					lang = ps.cfg.General.Locale
-				}
-				if ts.Exists("rsvpChanges", platform, u.Template, lang) {
-					rsvpUsers = append(rsvpUsers, u)
-				} else {
-					fullUsers = append(fullUsers, u)
-				}
-			}
+			fullUsers, rsvpUsers := partitionRaidUsers(matched, isFirstNotification, ts, ps.cfg.General.Locale)
 
 			// Compute the latest RSVP timeslot for OverrideCleanTTH on
-			// rsvpChanges jobs (convert from milliseconds to seconds, ceiling
-			// to match enrichment/raid.go's (r.Timeslot + 999) / 1000 pattern).
-			// Only consider future timeslots — past ones are not candidates for
-			// "latest", and picking them would fire the debug log spuriously.
-			var latestTimeslotSec int64
-			for _, r := range rsvps {
-				if r.Timeslot <= nowMs {
-					continue // past timeslots aren't candidates for "latest"
-				}
-				sec := (r.Timeslot + 999) / 1000
-				if sec > latestTimeslotSec {
-					latestTimeslotSec = sec
-				}
-			}
+			// rsvpChanges jobs.
+			latestTimeslotSec := latestFutureTimeslotSec(rsvps, nowMs)
 			if latestTimeslotSec == 0 && len(rsvps) > 0 {
 				// All known RSVP timeslots have already passed — fall back to raid.End.
 				l.Debugf("rsvpChanges: no future RSVP timeslot for raid %s; cleaning at raid.End", raid.GymID)
@@ -293,4 +258,58 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		}
 	}()
 	return nil
+}
+
+// partitionRaidUsers splits matched users into those who should receive the
+// full raid/egg template (fullUsers) vs. those who should receive the compact
+// rsvpChanges template (rsvpUsers).
+//
+// rsvpChanges is used when ALL of the following hold:
+//   - this is not the first notification (it is an RSVP update)
+//   - the user is not in edit mode (edit always uses the full template)
+//   - an rsvpChanges template exists for this user's platform/template/language
+//   - ts is non-nil (DTS renderer is wired)
+//
+// All other users receive the full msgType template.
+func partitionRaidUsers(
+	matched []webhook.MatchedUser,
+	isFirstNotification bool,
+	ts *dts.TemplateStore,
+	defaultLocale string,
+) (fullUsers, rsvpUsers []webhook.MatchedUser) {
+	for _, u := range matched {
+		if isFirstNotification || db.IsEdit(u.Clean) || ts == nil {
+			fullUsers = append(fullUsers, u)
+			continue
+		}
+		platform := delivery.PlatformFromType(u.Type)
+		lang := u.Language
+		if lang == "" {
+			lang = defaultLocale
+		}
+		if ts.Exists("rsvpChanges", platform, u.Template, lang) {
+			rsvpUsers = append(rsvpUsers, u)
+		} else {
+			fullUsers = append(fullUsers, u)
+		}
+	}
+	return
+}
+
+// latestFutureTimeslotSec returns the latest RSVP timeslot (in seconds) that
+// is in the future relative to nowMs (milliseconds). Timeslots are stored in
+// milliseconds; the ceiling ms→s conversion (ms+999)/1000 matches the pattern
+// used in enrichment/raid.go. Returns 0 if no future timeslot exists.
+func latestFutureTimeslotSec(rsvps []tracker.RaidRSVP, nowMs int64) int64 {
+	var latest int64
+	for _, r := range rsvps {
+		if r.Timeslot <= nowMs {
+			continue
+		}
+		sec := (r.Timeslot + 999) / 1000
+		if sec > latest {
+			latest = sec
+		}
+	}
+	return latest
 }
