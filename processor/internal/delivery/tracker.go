@@ -18,7 +18,8 @@ import (
 type TrackedMessage struct {
 	SentID   string `json:"sent_id"`
 	Target   string `json:"target"`
-	Type     string `json:"type"` // "discord:user", "telegram:group", etc.
+	Type     string `json:"type"`    // "discord:user", "telegram:group", etc.
+	MsgType  string `json:"msg_type,omitempty"` // alert type ("raid", "egg", "pokemon", etc.)
 	Clean    int    `json:"clean"`
 	ReplyKey string `json:"reply_key,omitempty"`
 }
