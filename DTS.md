@@ -704,7 +704,15 @@ Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are avai
 
 ## Incident (`incident`)
 
-**When it fires**: invasion webhooks where `gruntTypeID == 0 && displayType >= 7`. This covers event-only pokestop overlays such as Kecleon, Gold Pokestop, and Showcase. Regular Team Rocket grunt invasions (`gruntTypeID > 0`) continue to use the `invasion` template.
+**When it fires**: invasion webhooks where `gruntTypeID == 0 && displayType >= 7`. Per the shipped `util.json` `pokestopEvent` map (matching PoracleJS):
+
+| `displayType` | Event |
+|---|---|
+| `7` | Gold-Stop |
+| `8` | Kecleon |
+| `9` | Showcase |
+
+Regular Team Rocket grunt invasions (`gruntTypeID > 0`) continue to use the `invasion` template.
 
 The split is webhook-level: every matched user for an incident webhook gets the `incident` template; every matched user for a grunt webhook gets the `invasion` template. There is no per-user toggle.
 
@@ -717,7 +725,7 @@ These aliases are added on top of the pokestop / location / time / weather field
 | Field | Type | Description |
 |-------|------|-------------|
 | `incidentTypeName` | string | Translated display-type label (e.g. "Gold Pokéstop", "Kecleon"). Alias for `gruntName`. |
-| `displayType` | int | Numeric event identifier (e.g. 7=Showcase, 8=Kecleon, 12=Gold Pokestop). Alias for `displayTypeId`. Use for dispatch logic: `{{#if (eq displayType 8)}}Kecleon-specific text{{/if}}`. |
+| `displayType` | int | Numeric event identifier per util.json: `7`=Gold-Stop, `8`=Kecleon, `9`=Showcase. Alias for `displayTypeId`. Use for dispatch logic: `{{#if (eq displayType 8)}}Kecleon-specific text{{/if}}`. |
 | `incidentEmoji` | string | Resolved per-platform emoji for the event icon. Alias for `gruntTypeEmoji`. |
 | `color` | string | Event color hex for the Discord embed `color` field. Alias for `gruntTypeColor`. |
 

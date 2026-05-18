@@ -127,14 +127,23 @@ func (ps *ProcessorService) ProcessInvasion(raw json.RawMessage) error {
 			}
 			webhookFields := parseWebhookFields(raw)
 
-			// Incident webhooks (Gold Pokestop, Kecleon, Showcase, …) have
-			// gruntTypeID == 0 and displayType >= 7. They get their own
-			// "incident" template type so operators can provide a simpler card
-			// without grunt/reward fields. AlertType also splits — incidents
-			// and grunt-invasions are logically distinct events at the same
-			// pokestop, so if either ever grows reply/edit support the
-			// tracker's first-visible-type check (MsgType comparison) needs
-			// to see them as different alert types.
+			// Incident webhooks (Gold-Stop, Kecleon, Showcase) have
+			// gruntTypeID == 0 and displayType >= 7. This matches PoracleJS's
+			// pokestop controller and our util.json pokestopEvent map
+			// (7=Gold-Stop, 8=Kecleon, 9=Showcase). Note: Niantic's protocol
+			// constants list these values under INVASION_GENERIC/INCIDENT_*
+			// with a slightly different numbering — Golbat (or some upstream
+			// normaliser) is emitting the values that PoracleJS+PoracleNG
+			// have always used. If Golbat ever switches to the raw protocol
+			// numbering, this boundary and util.json need to align together.
+			//
+			// They get their own "incident" template type so operators can
+			// provide a simpler card without grunt/reward fields. AlertType
+			// also splits — incidents and grunt-invasions are logically
+			// distinct events at the same pokestop, so if either ever grows
+			// reply/edit support the tracker's first-visible-type check
+			// (MsgType comparison) needs to see them as different alert
+			// types.
 			isIncident := gruntTypeID == 0 && displayType >= 7
 			templateType := "invasion"
 			alertType := "invasion"
