@@ -279,14 +279,13 @@ var invasionFields = []FieldDef{
 
 // incidentFields is the trimmed surface for the "incident" template type
 // (Gold Pokestop, Kecleon, Showcase, …). Grunt/reward/gender fields are
-// absent — incidents don't have grunts. Four aliased fields are added for
-// convenience: incidentType, incidentSlug, incidentEmoji, color.
+// absent — incidents don't have grunts. Three aliased fields are added for
+// convenience: incidentType, incidentEmoji, color.
 var incidentFields = []FieldDef{
 	{Name: "pokestopName", Type: "string", Description: "Pokestop name", Category: "location", Preferred: true},
 	{Name: "pokestopUrl", Type: "string", Description: "Pokestop image URL", Category: "location"},
 	{Name: "pokestopId", Type: "string", Description: "Pokestop ID", Category: "location"},
 	{Name: "incidentType", Type: "string", Description: "Translated display-type label (e.g. \"Gold Pokéstop\", \"Kecleon\"). Alias for gruntName.", Category: "incident", Preferred: true},
-	{Name: "incidentSlug", Type: "string", Description: "Lowercase event slug for template dispatch (e.g. \"kecleon\", \"gold-stop\"). Alias for gruntType.", Category: "incident", Preferred: true},
 	{Name: "incidentEmoji", Type: "string", Description: "Resolved per-platform emoji for the event icon. Alias for gruntTypeEmoji.", Category: "incident", Preferred: true},
 	{Name: "color", Type: "string", Description: "Event color hex for the embed. Alias for gruntTypeColor.", Category: "incident", Preferred: true},
 	{Name: "displayTypeId", Type: "int", Description: "Display type ID", Category: "incident"},
@@ -299,7 +298,7 @@ var incidentSnippets = []Snippet{
 	{Label: "Incident title line", Insert: "{{{incidentEmoji}}} {{incidentType}} at {{{pokestopName}}}", Description: "Event emoji + label + pokestop name", Category: "incident"},
 	{Label: "Time remaining", Insert: "{{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)", Description: "Expiry time with TTH", Category: "incident"},
 	{Label: "Countdown", Insert: "<t:{{expirationTimestamp}}:R>", Description: "Discord relative countdown", Category: "incident", Platform: "discord"},
-	{Label: "Kecleon dispatch", Insert: "{{#if (eq incidentSlug \"kecleon\")}}🦎{{else}}✨{{/if}}", Description: "Branch on specific incident type", Category: "incident"},
+	{Label: "Kecleon dispatch", Insert: "{{#if (eq gruntType \"kecleon\")}}🦎{{else}}✨{{/if}}", Description: "Branch on specific incident type using gruntType directly", Category: "incident"},
 }
 
 var lureFields = []FieldDef{
