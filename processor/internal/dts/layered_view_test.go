@@ -848,7 +848,7 @@ func TestLayeredView_WeaknessList_HasEmojiFields(t *testing.T) {
 	assert.Equal(t, "🌿", types[0]["emoji"], "type entry emoji must be resolved")
 }
 
-// TestLayeredView_IncidentAliases verifies that the three incident-specific
+// TestLayeredView_IncidentAliases verifies that the incident-specific
 // aliases resolve correctly from the perLang / base enrichment layers when the
 // template type is "incident".
 func TestLayeredView_IncidentAliases(t *testing.T) {
@@ -863,6 +863,8 @@ func TestLayeredView_IncidentAliases(t *testing.T) {
 			// Operators use {{gruntType}} directly — no alias needed.
 			"gruntType":      "gold-stop",
 			"gruntTypeColor": "#FFD700",
+			// displayTypeId is the numeric event ID set by invasion enrichment.
+			"displayTypeId": 12,
 		}
 		// gruntTypeEmoji is resolved from the emoji layer; simulate it already
 		// resolved by putting it in perLang (as the emoji layer would after
@@ -870,10 +872,15 @@ func TestLayeredView_IncidentAliases(t *testing.T) {
 		o.perLang["gruntTypeEmoji"] = "🌟"
 	})
 
-	// incidentType → gruntName
-	v, ok := lv.GetField("incidentType")
-	require.True(t, ok, "incidentType must resolve")
-	assert.Equal(t, "Gold Pokéstop", v, "incidentType must alias gruntName")
+	// incidentTypeName → gruntName
+	v, ok := lv.GetField("incidentTypeName")
+	require.True(t, ok, "incidentTypeName must resolve")
+	assert.Equal(t, "Gold Pokéstop", v, "incidentTypeName must alias gruntName")
+
+	// displayType → displayTypeId (numeric ID)
+	v, ok = lv.GetField("displayType")
+	require.True(t, ok, "displayType must resolve")
+	assert.Equal(t, 12, v, "displayType must alias displayTypeId")
 
 	// gruntType is available directly (no incidentSlug alias)
 	v, ok = lv.GetField("gruntType")

@@ -207,7 +207,9 @@ var typeAliases = map[string][]aliasPair{
 		{"name", "pokestop_name"},
 		{"url", "pokestop_url"},
 		// The translated display-type label, e.g. "Gold Pokestop" / "Kecleon".
-		{"incidentType", "gruntName"},
+		{"incidentTypeName", "gruntName"},
+		// Numeric display-type ID — use for dispatch logic, e.g. {{#if (eq displayType 8)}}.
+		{"displayType", "displayTypeId"},
 		// Resolved per-platform emoji for the event icon.
 		{"incidentEmoji", "gruntTypeEmoji"},
 		// Color hex for the embed.
