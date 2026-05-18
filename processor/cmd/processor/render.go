@@ -88,8 +88,14 @@ type RenderJob struct {
 	// ChangeType is a human-readable label for the change dimension
 	// (species/form/gender/encountered/weather_boost). Currently used for
 	// logging only. Empty for non-change renders.
-	ChangeType    string
-	TileImageData []byte // inline tile bytes, set during tile resolution
+	ChangeType string
+	// OverrideCleanTTH, if non-zero, overrides the map-derived TTH for this
+	// job's delivery jobs. Used by rsvpChanges render jobs to clean at the
+	// latest RSVP timeslot rather than raid.End. The value is a Unix timestamp
+	// in seconds; the render pool converts it to a delivery.TTH in Task B.
+	// Zero means "use the default" (map-derived from enrichment).
+	OverrideCleanTTH int64
+	TileImageData    []byte // inline tile bytes, set during tile resolution
 }
 
 // renderWorker processes render jobs from the shared channel until it is closed.
