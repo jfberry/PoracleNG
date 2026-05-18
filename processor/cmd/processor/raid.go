@@ -323,7 +323,15 @@ func partitionRaidUsers(
 ) (fullUsers, rsvpUsers []webhook.MatchedUser) {
 	for _, u := range matched {
 		// Edit mode always uses the full template.
-		if db.IsEdit(u.Clean) || ts == nil {
+		if db.IsEdit(u.Clean) {
+			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q effectiveID=%q decision=edit",
+				replyKey, u.ID, u.Template, "")
+			fullUsers = append(fullUsers, u)
+			continue
+		}
+		if ts == nil {
+			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q effectiveID=%q decision=nil-ts",
+				replyKey, u.ID, u.Template, "")
 			fullUsers = append(fullUsers, u)
 			continue
 		}
@@ -331,6 +339,8 @@ func partitionRaidUsers(
 		// for this (replyKey, user) pair, this is the first visible message
 		// for this user — always use the full raid/egg template.
 		if lookupReply == nil || lookupReply(replyKey, u.ID) == nil {
+			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q effectiveID=%q decision=first-visible",
+				replyKey, u.ID, u.Template, "")
 			fullUsers = append(fullUsers, u)
 			continue
 		}
@@ -349,8 +359,12 @@ func partitionRaidUsers(
 		// level; the renderer's own selection chain handles language fallback
 		// if the user's locale doesn't have an exact match.
 		if ts.Exists("rsvpChanges", platform, effectiveID, "") {
+			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q effectiveID=%q decision=rsvpChanges",
+				replyKey, u.ID, u.Template, effectiveID)
 			rsvpUsers = append(rsvpUsers, u)
 		} else {
+			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q effectiveID=%q decision=no-rsvpChanges-template",
+				replyKey, u.ID, u.Template, effectiveID)
 			fullUsers = append(fullUsers, u)
 		}
 	}
