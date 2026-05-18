@@ -226,7 +226,7 @@ func (ps *ProcessorService) enrichInvasion(raw json.RawMessage, language string)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = ps.enricher.InvasionTranslate(base, gruntTypeID, inv.Lineup, language)
+		perLang = ps.enricher.InvasionTranslate(base, gruntTypeID, inv.Lineup, inv.ShowcaseRankings, language)
 	}
 
 	return &enrichResult{

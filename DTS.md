@@ -729,6 +729,75 @@ These aliases are added on top of the pokestop / location / time / weather field
 | `incidentEmoji` | string | Resolved per-platform emoji for the event icon. Alias for `gruntTypeEmoji`. |
 | `color` | string | Event color hex for the Discord embed `color` field. Alias for `gruntTypeColor`. |
 
+### Showcase fields
+
+These fields are only populated for **Showcase** incidents (`displayType == 9`). Always guard showcase blocks with `{{#if showcasePresent}}`.
+
+#### Top-level showcase fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `showcasePresent` | bool | `true` when `contest_entries` data is present; `false` for all other incident types and when the field is absent. |
+| `showcaseTotalEntries` | int | Total number of contestants in the Showcase. |
+| `showcaseLastUpdate` | int | Unix timestamp of the last leaderboard update. |
+| `showcaseLastUpdateFormatted` | string | `showcaseLastUpdate` formatted using the operator's configured time layout. |
+| `showcase` | array | Up to 3 enriched contestant entries (see per-entry fields below). Empty array when no data. |
+| `showcaseFirst` | object | Convenience alias for `showcase[0]` (the winner). `nil` when no contestants. |
+
+#### Per-entry fields (each item in `{{#each showcase}}`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rank` | int | Leaderboard position (1–3). |
+| `score` | float | Raw score value. |
+| `scoreFormatted` | string | Score rounded to 2 decimal places (`%.2f`). |
+| `pokemonId` | int | Pokemon species ID. |
+| `pokemonName` | string | Translated species name. |
+| `formId` | int | Form ID. |
+| `formName` | string | Translated form name (empty for Normal/default forms). |
+| `fullName` | string | Composed display name — alignment prefix + base + form + mega wrap (see fullName composition below). |
+| `costumeId` | int | Costume ID. |
+| `costumeName` | string | Translated costume name (`costume_N` key from gamelocale). Empty when `costumeId == 0` or the key is absent. |
+| `genderId` | int | Gender ID (0=unset, 1=male, 2=female, 3=genderless). |
+| `genderName` | string | Translated gender name. |
+| `genderEmojiKey` | string | Emoji key for per-platform gender emoji resolution. |
+| `shiny` | bool | `true` when the contestant's pokemon is shiny. |
+| `shinyEmoji` | string | `"✨"` when shiny, empty string otherwise. |
+| `tempEvolutionId` | int | Temp evolution (mega/primal) ID; `0` when not applicable. |
+| `tempEvolutionName` | string | Full display name of the mega/primal form. Empty when `tempEvolutionId == 0`. |
+| `alignment` | int | Alignment: `0`=normal, `1`=shadow, `2`=purified. |
+| `alignmentName` | string | Translated alignment label ("Shadow", "Purified"). Empty when `alignment == 0`. |
+| `badge` | int | Badge ID (raw). |
+| `background` | int | Background ID (raw; `0` when absent). |
+| `imgUrl` | string | Resolved icon URL via uicons (with form, costume, shiny, and mega evolution applied). |
+
+#### fullName composition
+
+1. Compute `base + form + mega wrap` using `buildFullName` (same function used by raids and nests): tries the `poke_{id}_e{evolution}` combo key first, falls back to applying the util.json `MegaName` format pattern.
+2. If `alignment > 0`, prefix with the translated alignment label + space.
+
+Examples:
+- `alignment=1`, mega Charizard → **"Shadow Mega Charizard X"**
+- `alignment=2`, Alolan Vulpix → **"Purified Alolan Vulpix"**
+- `alignment=0`, mega Charizard → **"Mega Charizard X"**
+- No form, no alignment, no mega → **"Pikachu"**
+
+#### Showcase template example
+
+```handlebars
+{{#if showcasePresent}}
+🏆 **Top contestants** ({{showcaseTotalEntries}} entries):
+{{#each showcase}}
+{{rank}}. {{fullName}}{{#if shiny}} ✨{{/if}}{{#if costumeName}} ({{costumeName}}){{/if}} — {{scoreFormatted}}
+{{/each}}
+{{/if}}
+```
+
+Winner-only single line:
+```handlebars
+{{#if showcasePresent}}🏆 {{showcaseFirst.fullName}} ({{showcaseFirst.scoreFormatted}}){{/if}}
+```
+
 ### Available pokestop / location / time fields
 
 | Field | Type | Description |
