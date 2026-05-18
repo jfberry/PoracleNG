@@ -206,7 +206,11 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			if ps.dtsRenderer != nil {
 				ts = ps.dtsRenderer.Templates()
 			}
-			fullUsers, rsvpUsers := partitionRaidUsers(matched, isFirstNotification, ts)
+			var lookupReply func(string, string) *delivery.TrackedMessage
+			if ps.dispatcher != nil {
+				lookupReply = ps.dispatcher.MessageTracker().LookupReplyMessage
+			}
+			fullUsers, rsvpUsers := partitionRaidUsers(matched, replyKey, lookupReply, ts)
 
 			// Compute the latest RSVP timeslot for OverrideCleanTTH on
 			// rsvpChanges jobs.
@@ -278,19 +282,35 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 // rsvpChanges template (rsvpUsers).
 //
 // rsvpChanges is used when ALL of the following hold:
-//   - this is not the first notification (it is an RSVP update)
+//   - the user has a prior tracked message for this raid lifecycle
+//     (lookupReply returns non-nil for this user — i.e. not first-visible)
 //   - the user is not in edit mode (edit always uses the full template)
 //   - an rsvpChanges template exists for this user's platform/template
 //   - ts is non-nil (DTS renderer is wired)
 //
+// "First-visible" is determined per-user via the MessageTracker reply index.
+// This fixes the rsvp_only (rsvpChanges=2) case: the duplicate cache is
+// updated on the suppressed initial webhook, so isFirstNotification would be
+// false on the first visible message. Per-user tracker lookup correctly
+// identifies that no prior message exists for this user.
+//
 // All other users receive the full msgType template.
 func partitionRaidUsers(
 	matched []webhook.MatchedUser,
-	isFirstNotification bool,
+	replyKey string,
+	lookupReply func(replyKey, target string) *delivery.TrackedMessage,
 	ts *dts.TemplateStore,
 ) (fullUsers, rsvpUsers []webhook.MatchedUser) {
 	for _, u := range matched {
-		if isFirstNotification || db.IsEdit(u.Clean) || ts == nil {
+		// Edit mode always uses the full template.
+		if db.IsEdit(u.Clean) || ts == nil {
+			fullUsers = append(fullUsers, u)
+			continue
+		}
+		// Per-user first-visible check: if the tracker has no prior message
+		// for this (replyKey, user) pair, this is the first visible message
+		// for this user — always use the full raid/egg template.
+		if lookupReply == nil || lookupReply(replyKey, u.ID) == nil {
 			fullUsers = append(fullUsers, u)
 			continue
 		}
