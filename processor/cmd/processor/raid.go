@@ -221,15 +221,23 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			}
 
 			// Compute the latest RSVP timeslot for OverrideCleanTTH on
-			// rsvpChanges jobs (convert from milliseconds to seconds).
+			// rsvpChanges jobs (convert from milliseconds to seconds, ceiling
+			// to match enrichment/raid.go's (r.Timeslot + 999) / 1000 pattern).
+			// Only consider future timeslots — past ones are not candidates for
+			// "latest", and picking them would fire the debug log spuriously.
 			var latestTimeslotSec int64
 			for _, r := range rsvps {
-				if sec := r.Timeslot / 1000; sec > latestTimeslotSec {
+				if r.Timeslot <= nowMs {
+					continue // past timeslots aren't candidates for "latest"
+				}
+				sec := (r.Timeslot + 999) / 1000
+				if sec > latestTimeslotSec {
 					latestTimeslotSec = sec
 				}
 			}
-			if latestTimeslotSec > 0 && latestTimeslotSec < time.Now().Unix() {
-				l.Debugf("rsvpChanges TTH override is already in the past (timeslot=%d)", latestTimeslotSec)
+			if latestTimeslotSec == 0 && len(rsvps) > 0 {
+				// All known RSVP timeslots have already passed — fall back to raid.End.
+				l.Debugf("rsvpChanges: no future RSVP timeslot for raid %s; cleaning at raid.End", raid.GymID)
 			}
 
 			// tileGate is shared between up to two jobs. The gate goroutine
