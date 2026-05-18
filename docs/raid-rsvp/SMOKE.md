@@ -7,7 +7,7 @@ Operator checklist for verifying the raid-rsvp feature against a real Golbat rai
 ## Pre-flight
 
 - [ ] Branch `raid-rsvp` deployed and running.
-- [ ] At least one `!raid <level>` tracking rule with `rsvp` (or `rsvp_only`) and `clean` (or `edit`) set.
+- [ ] At least one `!raid <level>` tracking rule. Optionally with `rsvp` / `rsvp_only` for RSVP-change tests. `clean` / `edit` bits are NOT required for the reply chain — every raid/egg message is tracked-for-reply automatically.
 - [ ] `examples/dts/rsvpChanges/rsvp-update.json` copied into `config/dts/` — or intentionally omitted to test fallback behavior first.
 - [ ] DTS reload performed (`!poracle-admin reload dts`) so any newly installed template is active.
 
@@ -17,7 +17,7 @@ Operator checklist for verifying the raid-rsvp feature against a real Golbat rai
 
 - [ ] Active raid arrives → full `raid` template renders. (Unchanged from before this feature.)
 - [ ] RSVP change arrives → full `raid` template renders (fallback, because no `rsvpChanges` template is present).
-- [ ] ReplyKey is still set — verify by tracking both eggs and raids (with `clean` or `edit` bit), triggering an egg → raid hand-off, and confirming the raid message arrives as a reply to the egg message in Discord/Telegram.
+- [ ] ReplyKey is still set — verify by tracking both eggs and raids (no `clean`/`edit` required), triggering an egg → raid hand-off, and confirming the raid message arrives as a reply to the egg message in Discord/Telegram.
 
 ---
 
@@ -33,9 +33,10 @@ Operator checklist for verifying the raid-rsvp feature against a real Golbat rai
 
 ## Egg → raid chain
 
-- [ ] Egg rule has `clean` or `edit` bit set; raid rule has `clean` or `edit` bit set.
+- [ ] Egg rule + raid rule both present (no `clean`/`edit` required for replies).
 - [ ] Egg arrival → standalone egg message sent.
 - [ ] Egg hatches into active raid → raid message arrives as a reply to the egg message (shared `raidlife:{gymID}:{raidEnd}` ReplyKey).
+- [ ] Optional: repeat with `clean` enabled on the egg rule → egg auto-deletes at hatch time; raid still replies (Discord shows the reply preview as "deleted message" once the egg is gone).
 
 ---
 
@@ -56,7 +57,7 @@ Operator checklist for verifying the raid-rsvp feature against a real Golbat rai
 
 ## Operator tips
 
-- If RSVP-change messages do not reply to the original raid message, confirm that the `clean` or `edit` bit is set on the raid tracking rule. Without message tracking enabled the `ReplyKey` is stored but no prior message exists to reply to.
+- If RSVP-change messages do not reply to the original raid message, check the processor log for `delivery:` errors around the time of the missing reply, and confirm the raid rule has `rsvp` or `rsvp_only` set (the RSVP-change wouldn't fire at all otherwise).
 - If the `rsvpChanges` template is installed but not being used, run `!poracle-admin reload dts` and check the processor log for template-load errors.
 - If clean-deletion fires at raid end instead of the latest RSVP timeslot, confirm you are running the `raid-rsvp` branch — the `OverrideCleanTTH` field was added in this branch.
 - To inspect the reply chain, enable `[webhookLogging]` in config and compare the `message_reference` IDs in successive deliveries for the same gym.

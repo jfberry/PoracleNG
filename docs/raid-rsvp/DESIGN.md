@@ -24,8 +24,8 @@
 ## Why "reply always" instead of "reply iff rsvp_changes != 0"
 
 - The egg → raid hand-off naturally reads as a continuation, and Discord's reply-threading makes that visible even for operators who *don't* use RSVP updates at all.
-- The threading is gated by message tracking (`clean` or `edit` bit). Without tracking → no prior message in the lookup → no thread → standalone messages as today.
-- This means: operators who don't enable `clean`/`edit` on their raid/egg rules see zero behavior change. The reply chain is *implicit* for operators who already opted into message lifecycle tracking.
+- The `MessageTracker` already stores any message whose job carries a `ReplyKey` (`wantsTracking := IsClean || IsEdit || EditKey != "" || ReplyKey != ""` in `FairQueue.processJob`). Since every raid + egg job now sets `ReplyKey`, threading works out of the box — no `clean`/`edit` prerequisite. Reply-only entries (no clean bit) sit in the tracker until natural TTL expiry; the auto-delete path remains gated on `IsClean`, so the user's messages are never deleted unintentionally.
+- Operators who don't care about threading aren't affected either way — Discord's reply UI is a small chevron indicator that doesn't disrupt the channel layout.
 
 ## ReplyKey format
 
