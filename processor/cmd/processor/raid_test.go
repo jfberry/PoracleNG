@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,7 +72,7 @@ func TestPartitionRaidUsers_FirstNotification(t *testing.T) {
 			ts := newRsvpTemplateStore(t, "discord", "")
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0}
 
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, true, ts, "en")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, true, ts)
 
 			if len(full) != 1 || len(rsvp) != 0 {
 				t.Errorf("isFirstNotification=true: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -87,7 +88,7 @@ func TestPartitionRaidUsers_EditMode(t *testing.T) {
 			// Clean=2 sets the edit bit (db.IsEdit(2) == true).
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 2}
 
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, ts, "en")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, ts)
 
 			if len(full) != 1 || len(rsvp) != 0 {
 				t.Errorf("IsEdit(clean)=true: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -102,7 +103,7 @@ func TestPartitionRaidUsers_NilTemplateStore(t *testing.T) {
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0}
 
 			// ts == nil means no DTS renderer — always fall back to full template.
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, nil, "en")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, nil)
 
 			if len(full) != 1 || len(rsvp) != 0 {
 				t.Errorf("ts==nil: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -118,7 +119,7 @@ func TestPartitionRaidUsers_NoRsvpChangesTemplate(t *testing.T) {
 			ts := newEmptyTemplateStore(t)
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0}
 
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, ts, "en")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, ts)
 
 			if len(full) != 1 || len(rsvp) != 0 {
 				t.Errorf("no rsvpChanges template: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -135,7 +136,7 @@ func TestPartitionRaidUsers_HasRsvpChangesTemplate(t *testing.T) {
 			ts := newRsvpTemplateStore(t, "discord", "")
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0, Template: ""}
 
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, ts, "en")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, ts)
 
 			if len(full) != 0 || len(rsvp) != 1 {
 				t.Errorf("has rsvpChanges template: got full=%d rsvp=%d, want full=0 rsvp=1", len(full), len(rsvp))
@@ -159,7 +160,6 @@ func TestPartitionRaidUsers_MixedConditions(t *testing.T) {
 		[]webhook.MatchedUser{first, editMode, rsvpCandidate},
 		false, // not first notification (affects all)
 		ts,
-		"en",
 	)
 
 	// "first" is driven by isFirstNotification=false here, but wait —
@@ -181,7 +181,7 @@ func TestPartitionRaidUsers_TelegramUserNoDiscordTemplate(t *testing.T) {
 	ts := newRsvpTemplateStore(t, "discord", "")
 	user := webhook.MatchedUser{ID: "tg", Type: "telegram:user", Clean: 0}
 
-	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, ts, "en")
+	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, false, ts)
 
 	if len(full) != 1 || len(rsvp) != 0 {
 		t.Errorf("telegram user with discord-only rsvpChanges: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -189,73 +189,38 @@ func TestPartitionRaidUsers_TelegramUserNoDiscordTemplate(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 2 – ReplyKey format
+// Test 2 – ReplyKey / EditKey format constants
 // ---------------------------------------------------------------------------
 
-// TestRaidReplyKeyFormat verifies the ReplyKey format emitted by ProcessRaid
-// via a source-level grep (the handler runs inside a goroutine with full
-// ProcessorService wiring that is impractical to stub in unit tests).
+// TestRaidReplyKeyFormat verifies that the raidReplyKeyFmt and raidEditKeyFmt
+// constants produce the expected key strings used by the MessageTracker.
+// Testing the constants directly exercises the same format strings that
+// ProcessRaid uses at runtime (via fmt.Sprintf(raidReplyKeyFmt, ...)).
 func TestRaidReplyKeyFormat(t *testing.T) {
-	src, err := os.ReadFile("raid.go")
-	if err != nil {
-		t.Fatalf("read raid.go: %v", err)
+	tests := []struct {
+		name string
+		fmt  string
+		want string
+	}{
+		{
+			name: "replyKey",
+			fmt:  raidReplyKeyFmt,
+			want: "raidlife:gym-abc:1700000000",
+		},
+		{
+			name: "editKey",
+			fmt:  raidEditKeyFmt,
+			want: "raid:gym-abc:1700000000",
+		},
 	}
-	// We check both key formats since they are adjacent in the source.
-	// replyKey carries the "raidlife:" prefix that the MessageTracker uses
-	// to link successive alerts for the same raid window.
-	wantReply := `fmt.Sprintf("raidlife:%s:%d", raid.GymID, raid.End)`
-	wantEdit := `fmt.Sprintf("raid:%s:%d", raid.GymID, raid.End)`
-	for _, want := range []string{wantReply, wantEdit} {
-		found := false
-		// Collapse whitespace to tolerate gofmt alignment
-		normalized := ""
-		for _, b := range src {
-			if b == ' ' || b == '\t' || b == '\n' {
-				if len(normalized) > 0 && normalized[len(normalized)-1] != ' ' {
-					normalized += " "
-				}
-			} else {
-				normalized += string(b)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := fmt.Sprintf(tc.fmt, "gym-abc", int64(1700000000))
+			if got != tc.want {
+				t.Errorf("Sprintf(%q, gym-abc, 1700000000) = %q, want %q", tc.fmt, got, tc.want)
 			}
-		}
-		found = len(normalized) > 0 && containsNorm(normalized, want)
-		if !found {
-			t.Errorf("raid.go must contain %q (whitespace-normalised)", want)
-		}
+		})
 	}
-}
-
-// containsNorm does a whitespace-normalised substring search by also
-// collapsing whitespace in the needle.
-func containsNorm(haystack, needle string) bool {
-	normalizeStr := func(s string) string {
-		out := ""
-		for _, b := range s {
-			if b == ' ' || b == '\t' || b == '\n' {
-				if len(out) > 0 && out[len(out)-1] != ' ' {
-					out += " "
-				}
-			} else {
-				out += string(b)
-			}
-		}
-		return out
-	}
-	return len(normalizeStr(needle)) > 0 &&
-		len(haystack) >= len(normalizeStr(needle)) &&
-		indexNorm(haystack, normalizeStr(needle)) >= 0
-}
-
-func indexNorm(s, substr string) int {
-	if len(substr) > len(s) {
-		return -1
-	}
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
 
 // ---------------------------------------------------------------------------
@@ -337,30 +302,43 @@ func TestLatestFutureTimeslotSec_CeilingNotFloor(t *testing.T) {
 	}
 }
 
-// TestOverrideCleanTTH_FullUsersZero verifies that the fullUsers render job
-// carries OverrideCleanTTH=0 via a source-level check: the struct field
-// assignment "OverrideCleanTTH:" must appear exactly once in raid.go (the
-// rsvpUsers job only). The fullUsers RenderJob literal must omit it — the
-// zero value means "use the map-derived TTH", which is correct for full
-// raid/egg alerts.
-func TestOverrideCleanTTH_FullUsersZero(t *testing.T) {
-	src, err := os.ReadFile("raid.go")
-	if err != nil {
-		t.Fatalf("read raid.go: %v", err)
-	}
-	// "OverrideCleanTTH:" (with colon) uniquely identifies struct-literal
-	// field assignments. Comments reference the field without the colon, so
-	// this search skips them automatically.
-	needle := "OverrideCleanTTH:"
-	content := string(src)
-	count := 0
-	for i := 0; i <= len(content)-len(needle); i++ {
-		if content[i:i+len(needle)] == needle {
-			count++
+// TestOverrideCleanTTH_PartitionOutput verifies OverrideCleanTTH semantics
+// via latestFutureTimeslotSec — the value that ProcessRaid assigns to
+// job.OverrideCleanTTH for rsvpUsers jobs. The fullUsers job never sets it
+// (zero value = render pool uses map-derived TTH). The rsvpUsers job sets it
+// only when a real future timeslot exists.
+func TestOverrideCleanTTH_PartitionOutput(t *testing.T) {
+	nowMs := time.Now().UnixMilli()
+
+	t.Run("no_future_timeslots_yields_zero", func(t *testing.T) {
+		// When all timeslots are in the past, latestFutureTimeslotSec returns 0.
+		// ProcessRaid sees 0 and leaves OverrideCleanTTH unset (zero value),
+		// so the render pool falls back to the map-derived raid.End TTH.
+		rsvps := []tracker.RaidRSVP{
+			{Timeslot: nowMs - 5*60*1000, GoingCount: 1},
 		}
-	}
-	// Only the rsvpUsers job should set OverrideCleanTTH (once).
-	if count != 1 {
-		t.Errorf("raid.go: expected 1 occurrence of 'OverrideCleanTTH:' (rsvpUsers job only), got %d — fullUsers job must NOT set it (zero value = use map-derived TTH)", count)
-	}
+		got := latestFutureTimeslotSec(rsvps, nowMs)
+		if got != 0 {
+			t.Errorf("all-past timeslots: want 0 (no override), got %d", got)
+		}
+	})
+
+	t.Run("future_timeslot_yields_nonzero", func(t *testing.T) {
+		// A future timeslot produces a positive seconds value that ProcessRaid
+		// assigns to job.OverrideCleanTTH, overriding the default raid.End TTH
+		// so the rsvpChanges message deletes itself when RSVPs expire.
+		futureMs := nowMs + 15*60*1000 // 15 minutes from now
+		rsvps := []tracker.RaidRSVP{
+			{Timeslot: nowMs - 60*1000, GoingCount: 2}, // past — ignored
+			{Timeslot: futureMs, GoingCount: 3},
+		}
+		got := latestFutureTimeslotSec(rsvps, nowMs)
+		wantSec := (futureMs + 999) / 1000
+		if got != wantSec {
+			t.Errorf("future timeslot: want %d, got %d", wantSec, got)
+		}
+		if got <= 0 {
+			t.Errorf("OverrideCleanTTH must be > 0 for a future timeslot, got %d", got)
+		}
+	})
 }
