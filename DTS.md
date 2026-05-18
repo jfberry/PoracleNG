@@ -708,16 +708,15 @@ Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are avai
 
 The split is webhook-level: every matched user for an incident webhook gets the `incident` template; every matched user for a grunt webhook gets the `invasion` template. There is no per-user toggle.
 
-A fallback `incident` entry is shipped in `fallbacks/dts.json`, so the template selection chain always finds something even if you have not yet added an `incident` entry to `config/dts/`. Customise by copying `examples/dts/incident/incident-update.json` into `config/dts/`.
+A fallback `incident` entry is shipped in `fallbacks/dts.json`, so the template selection chain always finds something even if you have not yet added an `incident` entry to `config/dts/`. To customise, copy the entry from `fallbacks/dts.json` into `config/dts/` and edit from there.
 
 ### Incident-specific fields
 
-These four aliases are added on top of the pokestop / location / time / weather fields that are shared with the invasion template:
+These three aliases are added on top of the pokestop / location / time / weather fields that are shared with the invasion template:
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `incidentType` | string | Translated display-type label (e.g. "Gold Pokéstop", "Kecleon"). Alias for `gruntName`. |
-| `incidentSlug` | string | Lowercase event slug — use for `{{#if (eq incidentSlug "kecleon")}}` dispatch in templates (e.g. "kecleon", "showcase", "gold-stop"). Alias for `gruntType`. |
 | `incidentEmoji` | string | Resolved per-platform emoji for the event icon. Alias for `gruntTypeEmoji`. |
 | `color` | string | Event color hex for the Discord embed `color` field. Alias for `gruntTypeColor`. |
 
@@ -739,7 +738,7 @@ Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are avai
 
 ### Not available for incidents
 
-Grunt and reward fields (`gruntName`, `gruntRewardsList`, `gruntLineupList`, `genderEmoji`, `gender`, etc.) are **not populated** for incidents. Use the aliased fields above (`incidentType` instead of `gruntName`, `incidentSlug` instead of `gruntType`, etc.).
+Grunt and reward fields (`gruntName`, `gruntRewardsList`, `gruntLineupList`, `genderEmoji`, `gender`, etc.) are **not populated** for incidents. Use the aliased fields above (`incidentType` instead of `gruntName`). For slug-style dispatch on the raw event identifier, use `{{gruntType}}` directly (e.g. `{{#if (eq gruntType "kecleon")}}`).
 
 ### Example
 
@@ -760,7 +759,7 @@ Grunt and reward fields (`gruntName`, `gruntRewardsList`, `gruntLineupList`, `ge
 }
 ```
 
-A richer starter template with a location field, weather, and a Telegram variant is in `examples/dts/incident/`.
+The `fallbacks/dts.json` incident entries (Discord and Telegram) serve as the starting sample — copy and customise from there.
 
 ---
 

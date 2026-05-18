@@ -208,9 +208,6 @@ var typeAliases = map[string][]aliasPair{
 		{"url", "pokestop_url"},
 		// The translated display-type label, e.g. "Gold Pokestop" / "Kecleon".
 		{"incidentType", "gruntName"},
-		// Lowercase event slug, e.g. "kecleon" / "gold-stop". Useful for
-		// {{#if (eq incidentSlug "kecleon")}} dispatch in operator templates.
-		{"incidentSlug", "gruntType"},
 		// Resolved per-platform emoji for the event icon.
 		{"incidentEmoji", "gruntTypeEmoji"},
 		// Color hex for the embed.
