@@ -7,6 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -174,11 +175,17 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 			return
 		}
 		for _, j := range jobs {
+			var tth delivery.TTH
+			if job.OverrideCleanTTH != 0 {
+				tth = tthFromUnix(job.OverrideCleanTTH)
+			} else {
+				tth = tthFromMap(j.TTH)
+			}
 			ps.dispatcher.Dispatch(&delivery.Job{
 				Target:        j.Target,
 				Type:          j.Type,
 				Message:       j.Message,
-				TTH:           tthFromMap(j.TTH),
+				TTH:           tth,
 				Clean:         j.Clean,
 				Name:          j.Name,
 				LogReference:  j.LogReference,
@@ -283,6 +290,18 @@ func tthFromMap(m map[string]any) delivery.TTH {
 		Hours:   intFromAny(m["hours"]),
 		Minutes: intFromAny(m["minutes"]),
 		Seconds: intFromAny(m["seconds"]),
+	}
+}
+
+// tthFromUnix converts a Unix-seconds timestamp into a delivery.TTH using
+// geo.ComputeTTH so the arithmetic is consistent with the enrichment layer.
+func tthFromUnix(targetUnix int64) delivery.TTH {
+	g := geo.ComputeTTH(targetUnix)
+	return delivery.TTH{
+		Days:    g.Days,
+		Hours:   g.Hours,
+		Minutes: g.Minutes,
+		Seconds: g.Seconds,
 	}
 }
 
