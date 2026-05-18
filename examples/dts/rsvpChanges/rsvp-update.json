@@ -7,7 +7,7 @@
     "description": "Compact RSVP-update card (hatched raid or egg) with timeslot table and map links",
     "template": {
       "embed": {
-        "title": "🔔 RSVP Update: {{levelName}} Raid at {{{gymName}}}{{#ex}} (Ex){{/ex}}",
+        "title": "🔔 RSVP Update: {{levelName}}{{#fullName}} ({{fullName}}){{/fullName}} at {{#if gymName}}{{{gymName}}}{{else}}an unnamed gym{{/if}}{{#ex}} (Ex){{/ex}}",
         "color": "{{gymColor}}",
         "thumbnail": {
           "url": "{{{imgUrl}}}"
