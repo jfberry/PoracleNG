@@ -19,21 +19,23 @@ import (
 // Layer priority (first match wins):
 //  1. perUser enrichment (PVP display, distance — pokemon only)
 //  2. emoji (resolved per platform)
-//  3. perLang enrichment (translated names, types, moves)
-//  4. computed fields (tthh/tthm/tths, areas, time, id, megaName)
-//  5. aliases (field name mappings)
-//  6. base enrichment (universal: weather, maps, icons, geocoding)
-//  7. dtsDictionary (user-defined config overrides)
+//  3. localOverrides (per-LayeredView resolved data, e.g. weaknessList with emoji)
+//  4. perLang enrichment (translated names, types, moves)
+//  5. computed fields (tthh/tthm/tths, areas, time, id, megaName)
+//  6. aliases (field name mappings)
+//  7. base enrichment (universal: weather, maps, icons, geocoding)
+//  8. dtsDictionary (user-defined config overrides)
 type LayeredView struct {
-	base     map[string]any
-	original map[string]any // prior-sighting snapshot exposed as {{original.X}} (pokemon-changed)
-	perLang  map[string]any
-	perUser  map[string]any
-	emoji    map[string]string // resolved emoji key → string
-	aliases  map[string]string // alias name → source field name
-	computed map[string]any    // pre-computed fields (tthh, areas, etc.)
-	webhook  map[string]any    // raw webhook fields (lowest priority, for custom DTS)
-	dtsDict  map[string]any
+	base           map[string]any
+	original       map[string]any // prior-sighting snapshot exposed as {{original.X}} (pokemon-changed)
+	perLang        map[string]any
+	perUser        map[string]any
+	emoji          map[string]string // resolved emoji key → string
+	localOverrides map[string]any    // per-LayeredView resolved fields (e.g. weaknessList with emoji filled in)
+	aliases        map[string]string // alias name → source field name
+	computed       map[string]any    // pre-computed fields (tthh, areas, etc.)
+	webhook        map[string]any    // raw webhook fields (lowest priority, for custom DTS)
+	dtsDict        map[string]any
 }
 
 // NewLayeredView creates a view from enrichment layers without copying.
@@ -92,7 +94,14 @@ func NewLayeredView(
 	// Resolve emoji keys inside weaknessList entries (per-platform) and
 	// build the flat {{weaknessEmoji}} string for templates that don't
 	// iterate weaknessList.
-	resolveWeaknessEmojis(vb.emoji, perLang, platform, lv.computed)
+	//
+	// The resolved weaknessList (with per-entry "emoji" and per-category
+	// "typeEmoji" fields) is stored in lv.localOverrides — a per-LayeredView
+	// map checked BEFORE perLang. This keeps the shared perLang enrichment
+	// map immutable: concurrent render workers fan out over the same
+	// *Enrichment without racing on weakness map writes.
+	lv.localOverrides = make(map[string]any, 2)
+	resolveWeaknessEmojis(vb.emoji, perLang, platform, lv.computed, lv.localOverrides)
 
 	// Compose weatherChange text from forecast fields (needs resolved emoji + translated names)
 	composeWeatherChange(lv.computed, base, perLang, vb.emoji, platform)
@@ -133,38 +142,46 @@ func (lv *LayeredView) GetField(name string) (any, bool) {
 		return v, true
 	}
 
-	// 3. Per-language enrichment (translations)
+	// 3. Local overrides (per-LayeredView resolved fields, e.g. weaknessList
+	// with emoji filled in). Checked before perLang so the resolved copy
+	// shadows the shared (un-resolved) perLang entry. The map is small and
+	// allocated per LayeredView, keeping shared enrichment immutable.
+	if v, ok := lv.localOverrides[name]; ok {
+		return v, true
+	}
+
+	// 4. Per-language enrichment (translations)
 	if lv.perLang != nil {
 		if v, ok := lv.perLang[name]; ok {
 			return v, true
 		}
 	}
 
-	// 4. Computed fields (tthh, areas, time, etc.)
+	// 5. Computed fields (tthh, areas, time, etc.)
 	if v, ok := lv.computed[name]; ok {
 		return v, true
 	}
 
-	// 5. Base enrichment
+	// 6. Base enrichment
 	if v, ok := lv.base[name]; ok {
 		return v, true
 	}
 
-	// 6. Aliases (check if name is an alias, resolve source from all layers)
+	// 7. Aliases (check if name is an alias, resolve source from all layers)
 	if source, ok := lv.aliases[name]; ok {
 		if v, found := lv.resolveSource(source); found {
 			return v, true
 		}
 	}
 
-	// 7. Raw webhook fields (lowest priority — supports custom DTS templates)
+	// 8. Raw webhook fields (lowest priority — supports custom DTS templates)
 	if lv.webhook != nil {
 		if v, ok := lv.webhook[name]; ok {
 			return v, true
 		}
 	}
 
-	// 8. DTS dictionary
+	// 9. DTS dictionary
 	if lv.dtsDict != nil {
 		if v, ok := lv.dtsDict[name]; ok {
 			return v, true
@@ -182,6 +199,9 @@ func (lv *LayeredView) resolveSource(name string) (any, bool) {
 		}
 	}
 	if v, ok := lv.emoji[name]; ok {
+		return v, true
+	}
+	if v, ok := lv.localOverrides[name]; ok {
 		return v, true
 	}
 	if lv.perLang != nil {
@@ -284,7 +304,14 @@ func (vb *ViewBuilder) resolveEmojiMap(base, perLang, perUser map[string]any, pl
 //
 // Resolution must happen during view construction because it requires
 // the platform for the emoji lookup.
-func resolveWeaknessEmojis(emojiLookup *EmojiLookup, perLang map[string]any, platform string, computed map[string]any) {
+//
+// The resolved weaknessList is written to localOverrides, NOT back into
+// perLang. The perLang map is shared across all render workers that
+// process the same language group; mutating it in-place causes fatal
+// "concurrent map writes" panics when two workers run concurrently (e.g.
+// raid-rsvp's fullUsers + rsvpUsers partition). localOverrides is
+// allocated fresh per LayeredView and is never shared.
+func resolveWeaknessEmojis(emojiLookup *EmojiLookup, perLang map[string]any, platform string, computed, localOverrides map[string]any) {
 	if perLang == nil || emojiLookup == nil {
 		return
 	}
@@ -297,22 +324,51 @@ func resolveWeaknessEmojis(emojiLookup *EmojiLookup, perLang map[string]any, pla
 		return
 	}
 
+	// Deep-copy the weakness list before adding emoji fields. The underlying
+	// perLang maps are shared across render workers; mutating in-place races.
+	// Building a local copy keeps all writes isolated to this LayeredView.
+	localList := make([]map[string]any, 0, len(weaknessList))
 	var flat strings.Builder
 	for _, cat := range weaknessList {
+		// Copy the category map so we can add "typeEmoji" without touching shared state.
+		catCopy := make(map[string]any, len(cat)+1)
+		for k, v := range cat {
+			catCopy[k] = v
+		}
+
 		types, _ := cat["types"].([]map[string]any)
 		var typeEmojis []string
-		for _, entry := range types {
-			if key, ok := entry["emojiKey"].(string); ok && key != "" {
-				resolved := emojiLookup.Lookup(key, platform)
-				entry["emoji"] = resolved
-				typeEmojis = append(typeEmojis, resolved)
+		if len(types) > 0 {
+			// Copy each type entry so we can add "emoji" without touching shared state.
+			typesCopy := make([]map[string]any, 0, len(types))
+			for _, entry := range types {
+				entryCopy := make(map[string]any, len(entry)+1)
+				for k, v := range entry {
+					entryCopy[k] = v
+				}
+				if key, ok := entry["emojiKey"].(string); ok && key != "" {
+					resolved := emojiLookup.Lookup(key, platform)
+					entryCopy["emoji"] = resolved
+					typeEmojis = append(typeEmojis, resolved)
+				}
+				typesCopy = append(typesCopy, entryCopy)
 			}
+			catCopy["types"] = typesCopy
 		}
+
 		joined := strings.Join(typeEmojis, "")
-		cat["typeEmoji"] = joined
+		catCopy["typeEmoji"] = joined
 		if joined != "" {
 			fmt.Fprintf(&flat, "%vx%s ", cat["value"], joined)
 		}
+		localList = append(localList, catCopy)
+	}
+
+	// Surface the resolved list in localOverrides (checked before perLang in
+	// GetField), so templates referencing {{weaknessList}} get the copy with
+	// emoji fields populated. The shared perLang["weaknessList"] is untouched.
+	if localOverrides != nil {
+		localOverrides["weaknessList"] = localList
 	}
 	if flat.Len() > 0 && computed != nil {
 		computed["weaknessEmoji"] = flat.String()
@@ -490,16 +546,18 @@ func (lv *LayeredView) Flatten() map[string]any {
 	// Start with lowest priority, overlay higher
 	result := make(map[string]any, 128)
 
-	// 8. DTS dictionary
+	// 9. DTS dictionary
 	maps.Copy(result, lv.dtsDict)
-	// 7. Raw webhook
+	// 8. Raw webhook
 	maps.Copy(result, lv.webhook)
-	// 5. Base enrichment
+	// 6. Base enrichment
 	maps.Copy(result, lv.base)
-	// 4. Computed fields
+	// 5. Computed fields
 	maps.Copy(result, lv.computed)
-	// 3. Per-language
+	// 4. Per-language
 	maps.Copy(result, lv.perLang)
+	// 3. Local overrides (resolved weaknessList etc. — shadows perLang)
+	maps.Copy(result, lv.localOverrides)
 	// 2. Emoji
 	for k, v := range lv.emoji {
 		result[k] = v
@@ -507,7 +565,7 @@ func (lv *LayeredView) Flatten() map[string]any {
 	// 1. Per-user
 	maps.Copy(result, lv.perUser)
 
-	// 6. Aliases — resolve each alias from the result (not from a separate layer)
+	// 7. Aliases — resolve each alias from the result (not from a separate layer)
 	for alias, source := range lv.aliases {
 		if _, already := result[alias]; already {
 			continue // direct field takes precedence over alias
