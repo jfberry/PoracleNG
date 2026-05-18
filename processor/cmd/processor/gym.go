@@ -124,6 +124,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
+				AlertType:         "gym",
 				TemplateType:      "gym",
 				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,

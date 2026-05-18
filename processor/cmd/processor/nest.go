@@ -88,6 +88,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
+				AlertType:         "nest",
 				TemplateType:      "nest",
 				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,
