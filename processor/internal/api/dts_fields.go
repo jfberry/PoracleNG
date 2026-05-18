@@ -277,6 +277,31 @@ var invasionFields = []FieldDef{
 	{Name: "expirationTimestamp", Type: "int", Description: "Unix expiry timestamp (for Discord <t:N:R>)", Category: "time"},
 }
 
+// incidentFields is the trimmed surface for the "incident" template type
+// (Gold Pokestop, Kecleon, Showcase, …). Grunt/reward/gender fields are
+// absent — incidents don't have grunts. Four aliased fields are added for
+// convenience: incidentType, incidentSlug, incidentEmoji, color.
+var incidentFields = []FieldDef{
+	{Name: "pokestopName", Type: "string", Description: "Pokestop name", Category: "location", Preferred: true},
+	{Name: "pokestopUrl", Type: "string", Description: "Pokestop image URL", Category: "location"},
+	{Name: "pokestopId", Type: "string", Description: "Pokestop ID", Category: "location"},
+	{Name: "incidentType", Type: "string", Description: "Translated display-type label (e.g. \"Gold Pokéstop\", \"Kecleon\"). Alias for gruntName.", Category: "incident", Preferred: true},
+	{Name: "incidentSlug", Type: "string", Description: "Lowercase event slug for template dispatch (e.g. \"kecleon\", \"gold-stop\"). Alias for gruntType.", Category: "incident", Preferred: true},
+	{Name: "incidentEmoji", Type: "string", Description: "Resolved per-platform emoji for the event icon. Alias for gruntTypeEmoji.", Category: "incident", Preferred: true},
+	{Name: "color", Type: "string", Description: "Event color hex for the embed. Alias for gruntTypeColor.", Category: "incident", Preferred: true},
+	{Name: "displayTypeId", Type: "int", Description: "Display type ID", Category: "incident"},
+	{Name: "disappearTime", Type: "string", Description: "Incident expiry time", Category: "time", Preferred: true},
+	{Name: "time", Type: "string", Description: "Expiry time (alias for disappearTime)", Category: "time", Preferred: true},
+	{Name: "expirationTimestamp", Type: "int", Description: "Unix expiry timestamp (for Discord <t:N:R>)", Category: "time"},
+}
+
+var incidentSnippets = []Snippet{
+	{Label: "Incident title line", Insert: "{{{incidentEmoji}}} {{incidentType}} at {{{pokestopName}}}", Description: "Event emoji + label + pokestop name", Category: "incident"},
+	{Label: "Time remaining", Insert: "{{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)", Description: "Expiry time with TTH", Category: "incident"},
+	{Label: "Countdown", Insert: "<t:{{expirationTimestamp}}:R>", Description: "Discord relative countdown", Category: "incident", Platform: "discord"},
+	{Label: "Kecleon dispatch", Insert: "{{#if (eq incidentSlug \"kecleon\")}}🦎{{else}}✨{{/if}}", Description: "Branch on specific incident type", Category: "incident"},
+}
+
 var lureFields = []FieldDef{
 	{Name: "pokestopName", Type: "string", Description: "Pokestop name", Category: "location", Preferred: true},
 	{Name: "lureTypeId", Type: "int", Description: "Lure type ID", Category: "lure", Preferred: true},
@@ -706,6 +731,7 @@ var fieldsByType = map[string]fieldEntry{
 	"quest":          {Fields: append(commonFields, questFields...), Snippets: append(commonSnippets, questSnippets...)},
 	"questSummary":   {Fields: append(commonFields, questSummaryFields...), BlockScopes: questSummaryBlockScopes, Snippets: append(commonSnippets, questSnippets...)},
 	"invasion":       {Fields: append(commonFields, invasionFields...), Snippets: append(commonSnippets, invasionSnippets...)},
+	"incident":       {Fields: append(commonFields, incidentFields...), Snippets: append(commonSnippets, incidentSnippets...)},
 	"lure":           {Fields: append(commonFields, lureFields...), Snippets: append(commonSnippets, lureSnippets...)},
 	"nest":           {Fields: append(commonFields, nestFields...), Snippets: commonSnippets},
 	"gym":            {Fields: append(commonFields, gymFields...), Snippets: commonSnippets},

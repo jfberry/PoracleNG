@@ -702,6 +702,68 @@ Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are avai
 
 ---
 
+## Incident (`incident`)
+
+**When it fires**: invasion webhooks where `gruntTypeID == 0 && displayType >= 7`. This covers event-only pokestop overlays such as Kecleon, Gold Pokestop, and Showcase. Regular Team Rocket grunt invasions (`gruntTypeID > 0`) continue to use the `invasion` template.
+
+The split is webhook-level: every matched user for an incident webhook gets the `incident` template; every matched user for a grunt webhook gets the `invasion` template. There is no per-user toggle.
+
+A fallback `incident` entry is shipped in `fallbacks/dts.json`, so the template selection chain always finds something even if you have not yet added an `incident` entry to `config/dts/`. Customise by copying `examples/dts/incident/incident-update.json` into `config/dts/`.
+
+### Incident-specific fields
+
+These four aliases are added on top of the pokestop / location / time / weather fields that are shared with the invasion template:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `incidentType` | string | Translated display-type label (e.g. "Gold Pokéstop", "Kecleon"). Alias for `gruntName`. |
+| `incidentSlug` | string | Lowercase event slug — use for `{{#if (eq incidentSlug "kecleon")}}` dispatch in templates (e.g. "kecleon", "showcase", "gold-stop"). Alias for `gruntType`. |
+| `incidentEmoji` | string | Resolved per-platform emoji for the event icon. Alias for `gruntTypeEmoji`. |
+| `color` | string | Event color hex for the Discord embed `color` field. Alias for `gruntTypeColor`. |
+
+### Available pokestop / location / time fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pokestopName` | string | Pokestop name (alias for `pokestop_name`) |
+| `pokestopUrl` | string | Pokestop image URL (alias for `pokestop_url`) |
+| `pokestopId` | string | Pokestop ID (alias for `pokestop_id`) |
+| `displayTypeId` | int | Raw display type ID |
+| `disappearTime` | string | Incident expiry time (formatted) |
+| `time` | string | Alias for `disappearTime` |
+| `expirationTimestamp` | int | Unix expiry timestamp (use with `<t:N:R>` in Discord) |
+
+Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) and all common fields (location, maps, weather) are also available — see the Common Fields section above.
+
+Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are available for incidents.
+
+### Not available for incidents
+
+Grunt and reward fields (`gruntName`, `gruntRewardsList`, `gruntLineupList`, `genderEmoji`, `gender`, etc.) are **not populated** for incidents. Use the aliased fields above (`incidentType` instead of `gruntName`, `incidentSlug` instead of `gruntType`, etc.).
+
+### Example
+
+```json
+{
+  "id": 1,
+  "type": "incident",
+  "platform": "discord",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "{{{incidentEmoji}}} {{incidentType}} at {{{pokestopName}}}",
+      "color": "{{color}}",
+      "description": "Ends: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\n{{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+      "thumbnail": { "url": "{{{imgUrl}}}" }
+    }
+  }
+}
+```
+
+A richer starter template with a location field, weather, and a Telegram variant is in `examples/dts/incident/`.
+
+---
+
 ## Lure (`lure`)
 
 | Field | Type | Description |
