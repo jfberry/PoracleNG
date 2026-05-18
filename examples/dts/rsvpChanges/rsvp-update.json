@@ -1,6 +1,6 @@
 [
   {
-    "id": "default",
+    "id": 1,
     "type": "rsvpChanges",
     "platform": "discord",
     "language": "en",
