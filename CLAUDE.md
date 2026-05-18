@@ -576,6 +576,16 @@ Helper functions `IsClean(clean)` and `IsEdit(clean)` test individual bits. When
 
 The encounter tracker (`internal/tracker/encounter.go`) detects species, form, gender, encountered (non-IV → IV), and weather-boost shifts. The pokemon handler (`cmd/processor/pokemon.go`) partitions matched users by prior-message-existence and dispatches per-user: prior-tracked users get a `monster` (encounter event) or `monsterChanged` (post-encounter change) render with `OriginalView` populated; new-match users get a fresh `monster` render. Every pokemon `RenderJob` carries `ReplyKey = encounterID`; `delivery.MessageTracker` keeps an O(1) reply index, and senders inject `message_reference` / `reply_to_message_id` when a prior message exists for the (replyKey, target) pair. Edit mode (clean bit 2) takes priority when set. The `monsterChanged` template gains access to the prior sighting via `{{original.X}}` — see API.md for the field set.
 
+### Raid/egg RSVP change events
+
+Every raid and egg `RenderJob` carries `ReplyKey = "raidlife:{gymID}:{raidEnd}"`. Reply threading activates naturally for any destination where a prior message is tracked (i.e. the rule has the `clean` or `edit` bit set). Egg → raid → rsvpChanges messages chain under the same key because all three share the same gym ID and raid end time.
+
+**`rsvpChanges` template type** — optional compact template for RSVP-only updates. When an RSVP-change job is dispatched in non-edit mode, the render pool selects the `rsvpChanges` template type if one is installed; otherwise falls back to the full `raid` (or `egg`) template. The same type name is used for both raid and egg RSVP updates.
+
+**Edit mode exemption** — when the `edit` bit is set on the rule, RSVP-change jobs always use the full `raid`/`egg` template and edit the original message in-place. The `rsvpChanges` template is not consulted; editing a compact message would lose the original context.
+
+**Per-job TTH override** — for `rsvpChanges` renders, the clean-deletion TTH is the latest future RSVP timeslot in the current state, not `raid.End`. `RenderJob.OverrideCleanTTH` carries this unix timestamp; the render pool honors it via `tthFromUnix` when computing the `MessageTracker` TTL for the job.
+
 ## Template System (DTS)
 
 DTS (Data Template System) templates are Handlebars templates rendered by the Go processor using `jfberry/raymond` (fork of `mailgun/raymond/v2` with `FieldResolver` interface). Templates define per-platform message formats for each alert type.
