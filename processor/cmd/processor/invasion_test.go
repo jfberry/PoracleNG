@@ -20,7 +20,8 @@ func TestInvasion_TemplateType_Incident(t *testing.T) {
 	}
 	normalized := strings.Join(strings.Fields(string(src)), " ")
 
-	// The handler must detect the incident condition.
+	// The handler must detect the incident condition. displayType >= 7
+	// matches PoracleJS and util.json (7=Gold-Stop, 8=Kecleon, 9=Showcase).
 	wantCheck := `isIncident := gruntTypeID == 0 && displayType >= 7`
 	if !strings.Contains(normalized, wantCheck) {
 		t.Errorf("invasion.go: missing incident detection %q", wantCheck)
