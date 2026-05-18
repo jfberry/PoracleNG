@@ -712,11 +712,12 @@ A fallback `incident` entry is shipped in `fallbacks/dts.json`, so the template 
 
 ### Incident-specific fields
 
-These three aliases are added on top of the pokestop / location / time / weather fields that are shared with the invasion template:
+These aliases are added on top of the pokestop / location / time / weather fields that are shared with the invasion template:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `incidentType` | string | Translated display-type label (e.g. "Gold Pokéstop", "Kecleon"). Alias for `gruntName`. |
+| `incidentTypeName` | string | Translated display-type label (e.g. "Gold Pokéstop", "Kecleon"). Alias for `gruntName`. |
+| `displayType` | int | Numeric event identifier (e.g. 7=Showcase, 8=Kecleon, 12=Gold Pokestop). Alias for `displayTypeId`. Use for dispatch logic: `{{#if (eq displayType 8)}}Kecleon-specific text{{/if}}`. |
 | `incidentEmoji` | string | Resolved per-platform emoji for the event icon. Alias for `gruntTypeEmoji`. |
 | `color` | string | Event color hex for the Discord embed `color` field. Alias for `gruntTypeColor`. |
 
@@ -738,7 +739,7 @@ Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are avai
 
 ### Not available for incidents
 
-Grunt and reward fields (`gruntName`, `gruntRewardsList`, `gruntLineupList`, `genderEmoji`, `gender`, etc.) are **not populated** for incidents. Use the aliased fields above (`incidentType` instead of `gruntName`). For slug-style dispatch on the raw event identifier, use `{{gruntType}}` directly (e.g. `{{#if (eq gruntType "kecleon")}}`).
+Grunt and reward fields (`gruntName`, `gruntRewardsList`, `gruntLineupList`, `genderEmoji`, `gender`, etc.) are **not populated** for incidents. Use the aliased fields above (`incidentTypeName` instead of `gruntName`). For numeric dispatch use `{{displayType}}`; for slug-style dispatch use `{{gruntType}}` directly (e.g. `{{#if (eq gruntType "kecleon")}}`).
 
 ### Example
 
@@ -750,7 +751,7 @@ Grunt and reward fields (`gruntName`, `gruntRewardsList`, `gruntLineupList`, `ge
   "language": "en",
   "template": {
     "embed": {
-      "title": "{{{incidentEmoji}}} {{incidentType}} at {{{pokestopName}}}",
+      "title": "{{{incidentEmoji}}} {{incidentTypeName}} at {{{pokestopName}}}",
       "color": "{{color}}",
       "description": "Ends: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\n{{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
       "thumbnail": { "url": "{{{imgUrl}}}" }
