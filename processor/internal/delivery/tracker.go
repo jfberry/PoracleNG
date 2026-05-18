@@ -18,8 +18,18 @@ import (
 type TrackedMessage struct {
 	SentID   string `json:"sent_id"`
 	Target   string `json:"target"`
-	Type     string `json:"type"`    // "discord:user", "telegram:group", etc.
-	MsgType  string `json:"msg_type,omitempty"` // alert type ("raid", "egg", "pokemon", etc.)
+	Type     string `json:"type"` // "discord:user", "telegram:group", etc.
+	// MsgType is the source webhook alert type ("raid", "egg", "pokemon", etc.)
+	// — distinct from Type, which is the destination type ("discord:user").
+	// Used by the raid handler's partitionRaidUsers first-visible check.
+	//
+	// Backward compat: entries persisted before this field existed deserialise
+	// with MsgType="". The next webhook for that user will see prior.MsgType=""
+	// != current msgType (e.g. "raid"), classify as first-visible, and emit one
+	// extra full raid card. Subsequent webhooks will have the new MsgType set
+	// and chain to rsvpChanges normally. Acceptable failure mode (one extra
+	// full card, no missed updates).
+	MsgType  string `json:"msg_type,omitempty"`
 	Clean    int    `json:"clean"`
 	ReplyKey string `json:"reply_key,omitempty"`
 }
@@ -301,6 +311,7 @@ func (mt *MessageTracker) Load() error {
 			SentID:   entry.Message.SentID,
 			Target:   entry.Message.Target,
 			Type:     entry.Message.Type,
+			MsgType:  entry.Message.MsgType,
 			Clean:    entry.Message.Clean,
 			ReplyKey: entry.Message.ReplyKey,
 		}

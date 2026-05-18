@@ -335,14 +335,14 @@ func partitionRaidUsers(
 	for _, u := range matched {
 		// Edit mode always uses the full template.
 		if db.IsEdit(u.Clean) {
-			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q effectiveID=%q decision=edit",
-				replyKey, u.ID, u.Template, "")
+			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q decision=edit",
+				replyKey, u.ID, u.Template)
 			fullUsers = append(fullUsers, u)
 			continue
 		}
 		if ts == nil {
-			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q effectiveID=%q decision=nil-ts",
-				replyKey, u.ID, u.Template, "")
+			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q decision=nil-ts",
+				replyKey, u.ID, u.Template)
 			fullUsers = append(fullUsers, u)
 			continue
 		}
@@ -363,8 +363,8 @@ func partitionRaidUsers(
 		}
 		firstVisible := prior == nil || prior.MsgType != msgType
 		if firstVisible {
-			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q effectiveID=%q decision=first-visible",
-				replyKey, u.ID, u.Template, "")
+			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q decision=first-visible",
+				replyKey, u.ID, u.Template)
 			fullUsers = append(fullUsers, u)
 			continue
 		}
