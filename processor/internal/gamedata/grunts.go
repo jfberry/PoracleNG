@@ -118,6 +118,22 @@ func categoryFromTemplate(template string) int {
 	}
 }
 
+// inferGruntTypeID returns the upstream type ID when set, otherwise
+// patches known gaps in WatWowMap's classic.json. As of the report,
+// grunt 29 (CHARACTER_METAL_GRUNT_MALE) ships with `"type": {}` —
+// the type ID is missing but the template makes the intent clear
+// (Metal grunt = Steel type). Add new template→ID rows here if more
+// upstream gaps appear.
+func inferGruntTypeID(template string, upstreamID int) int {
+	if upstreamID != 0 {
+		return upstreamID
+	}
+	if strings.Contains(template, "METAL") {
+		return 9 // Steel
+	}
+	return 0
+}
+
 // LoadGrunts parses the classic.json invasions format.
 func LoadGrunts(path string) (map[int]*Grunt, error) {
 	data, err := os.ReadFile(path)
@@ -142,7 +158,7 @@ func LoadGrunts(path string) (map[int]*Grunt, error) {
 			Template:   g.Character.Template,
 			Gender:     g.Character.Gender,
 			Boss:       g.Character.Boss,
-			TypeID:     g.Character.Type.ID,
+			TypeID:     inferGruntTypeID(g.Character.Template, g.Character.Type.ID),
 			Active:     g.Active,
 			Rewards:    g.Lineup.Rewards,
 			CategoryID: categoryFromTemplate(g.Character.Template),

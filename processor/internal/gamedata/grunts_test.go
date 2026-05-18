@@ -41,6 +41,32 @@ func TestTypeNameFromTemplate(t *testing.T) {
 	}
 }
 
+// WatWowMap's classic.json ships grunt 29 (CHARACTER_METAL_GRUNT_MALE)
+// with an empty "type": {} block, so the parsed TypeID is 0. The
+// game intends Steel (type ID 9). Patch must fill the gap without
+// overwriting a genuine upstream value.
+func TestInferGruntTypeID(t *testing.T) {
+	cases := []struct {
+		name       string
+		template   string
+		upstreamID int
+		want       int
+	}{
+		{"metal grunt with missing type → steel (9)", "CHARACTER_METAL_GRUNT_MALE", 0, 9},
+		{"metal grunt with upstream type → respected", "CHARACTER_METAL_GRUNT_MALE", 5, 5},
+		{"typed grunt with upstream type → unchanged", "CHARACTER_FIRE_GRUNT_FEMALE", 10, 10},
+		{"untyped boss → 0", "CHARACTER_GIOVANNI", 0, 0},
+		{"untyped grunt → 0", "CHARACTER_GRUNT_MALE", 0, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := inferGruntTypeID(tc.template, tc.upstreamID); got != tc.want {
+				t.Errorf("inferGruntTypeID(%q, %d) = %d, want %d", tc.template, tc.upstreamID, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCategoryFromTemplate(t *testing.T) {
 	cases := []struct {
 		template string
