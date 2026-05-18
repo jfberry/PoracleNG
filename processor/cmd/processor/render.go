@@ -193,6 +193,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				Lon:           parseCoordFloat(j.Lon),
 				EditKey:       j.EditKey,
 				ReplyKey:      job.ReplyKey,
+				MsgType:       job.TemplateType,
 				StaticMapData: job.TileImageData,
 				Language:      j.Language,
 			})
