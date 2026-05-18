@@ -528,6 +528,58 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are computed from hatch t
 
 ---
 
+## Raid/Egg RSVP Updates (`rsvpChanges`)
+
+A **single shared template type** for compact RSVP-change notifications, used for both raid and egg lifecycles. Opt-in by file presence — falls back to the full `raid` / `egg` template when not defined.
+
+### When it fires
+
+| Condition | Outcome |
+|---|---|
+| First visible message for this user / this raid lifecycle | Full `raid` or `egg` template (never `rsvpChanges`). |
+| Tracking rule has `edit` bit set | Full `raid` / `egg`, edited in-place. `rsvpChanges` is bypassed even when present. |
+| Subsequent same-type webhook AND `rsvpChanges` template exists with matching id | `rsvpChanges` renders. |
+| Subsequent webhook AND no `rsvpChanges` entry for the user's effective template id | Full `raid` / `egg` (fallback). |
+
+"Same-type" is the source webhook type (raid or egg) — tracked separately from the template chosen. An egg → raid hand-off treats the raid notification as the first raid-type visible message, so the raid uses the full template even though an egg was already sent.
+
+### Template ID matching
+
+`rsvpChanges` existence is checked with **strict equality** against the user's effective template id:
+
+- If the tracking rule has `template:dark` → looks for `rsvpChanges` with `id:dark`. No match → fallback to `raid` / `egg`.
+- If the rule has no explicit template → looks for `rsvpChanges` with id matching `[general] default_template_name`.
+
+This avoids silent template-id substitution. If you ship operators a `rsvpChanges` with `id:1`, set `default_template_name = "1"` (matches the shipped `fallbacks/dts.json`).
+
+### Reply chain
+
+Every raid + egg job carries `ReplyKey = "raidlife:{gymID}:{raidEnd}"`. The dispatcher tracks each message under that key; subsequent jobs for the same lifecycle find the prior message and post as a reply.
+
+The chain reads as one thread in Discord/Telegram:
+
+```
+egg → raid → rsvpChanges → rsvpChanges → …
+```
+
+Reply threading works without `clean`/`edit` bits — every raid/egg message is stored in the tracker when `ReplyKey` is set, even with `clean=0`. Auto-delete on TTH expiry still gates on the `clean` bit; the reply-only tracker entry self-evicts at natural TTL with no side effect on the user's message.
+
+### Cleanup TTH
+
+For `rsvpChanges` jobs with `clean` set, the auto-delete TTH is the **latest future RSVP timeslot in the rendered state** (not `raid.End`). The original raid/egg alert keeps `raid.End` cleanup; the compact RSVP cards clean shortly after the meaningful party window so they don't linger past it.
+
+If there are no future RSVP timeslots (all past at send time), the override is not applied and the message uses the default raid/end TTH.
+
+### Available fields
+
+`rsvpChanges` uses the **raid alias set** internally — every field from the `raid` table above is available (gym, RSVP, weather, boost, ex, moves, forms, etc.). When rendering for an egg-source webhook, the raid-only fields (moves, forms, pokemon name) are simply empty — operators can branch with `{{#if pokemonId}}` or `{{#if fullName}}` to handle the egg-vs-hatched case in a single template.
+
+### Example: minimal compact template
+
+See `examples/dts/rsvpChanges/rsvp-update.json` for an installable starting point.
+
+---
+
 ## Quest (`quest`)
 
 | Field | Type | Description |
