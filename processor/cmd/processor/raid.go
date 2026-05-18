@@ -16,6 +16,17 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
+// Key format strings used to build per-raid MessageTracker keys. Exported as
+// constants so tests can validate the exact format without grepping source.
+const (
+	// raidReplyKeyFmt identifies the raid window for reply threading. The
+	// "raidlife:" prefix lets the MessageTracker link successive alerts
+	// (egg → boss) for the same gym+end_time pair.
+	raidReplyKeyFmt = "raidlife:%s:%d"
+	// raidEditKeyFmt identifies a specific raid boss for edit-mode updates.
+	raidEditKeyFmt = "raid:%s:%d"
+)
+
 func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 	if ps.cfg.General.DisableRaid {
 		return nil
@@ -185,8 +196,8 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				return
 			}
 			webhookFields := parseWebhookFields(raw)
-			replyKey := fmt.Sprintf("raidlife:%s:%d", raid.GymID, raid.End)
-			editKey := fmt.Sprintf("raid:%s:%d", raid.GymID, raid.End)
+			replyKey := fmt.Sprintf(raidReplyKeyFmt, raid.GymID, raid.End)
+			editKey := fmt.Sprintf(raidEditKeyFmt, raid.GymID, raid.End)
 
 			// Partition matched users: users who should receive the full
 			// raid/egg template vs. those who should receive the compact
@@ -195,7 +206,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			if ps.dtsRenderer != nil {
 				ts = ps.dtsRenderer.Templates()
 			}
-			fullUsers, rsvpUsers := partitionRaidUsers(matched, isFirstNotification, ts, ps.cfg.General.Locale)
+			fullUsers, rsvpUsers := partitionRaidUsers(matched, isFirstNotification, ts)
 
 			// Compute the latest RSVP timeslot for OverrideCleanTTH on
 			// rsvpChanges jobs.
@@ -227,12 +238,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				}
 			}
 			if len(rsvpUsers) > 0 {
-				tth := latestTimeslotSec
-				if tth == 0 {
-					// Defensive: fall back to raid.End if no timeslot found.
-					tth = raid.End
-				}
-				ps.renderCh <- RenderJob{
+				job := RenderJob{
 					TemplateType:      "rsvpChanges",
 					Enrichment:        baseEnrichment,
 					PerLangEnrichment: perLang,
@@ -243,8 +249,15 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 					LogReference:      raid.GymID,
 					EditKey:           editKey,
 					ReplyKey:          replyKey,
-					OverrideCleanTTH:  tth,
 				}
+				// OverrideCleanTTH is only set when we have a real future
+				// timeslot. Zero means "use the render pool's default path"
+				// (raid.End from the enrichment map), which is the correct
+				// fallback when all RSVP timeslots have already passed.
+				if latestTimeslotSec > 0 {
+					job.OverrideCleanTTH = latestTimeslotSec
+				}
+				ps.renderCh <- job
 			}
 		} else {
 			if raid.PokemonID > 0 {
@@ -267,7 +280,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 // rsvpChanges is used when ALL of the following hold:
 //   - this is not the first notification (it is an RSVP update)
 //   - the user is not in edit mode (edit always uses the full template)
-//   - an rsvpChanges template exists for this user's platform/template/language
+//   - an rsvpChanges template exists for this user's platform/template
 //   - ts is non-nil (DTS renderer is wired)
 //
 // All other users receive the full msgType template.
@@ -275,7 +288,6 @@ func partitionRaidUsers(
 	matched []webhook.MatchedUser,
 	isFirstNotification bool,
 	ts *dts.TemplateStore,
-	defaultLocale string,
 ) (fullUsers, rsvpUsers []webhook.MatchedUser) {
 	for _, u := range matched {
 		if isFirstNotification || db.IsEdit(u.Clean) || ts == nil {
@@ -283,11 +295,10 @@ func partitionRaidUsers(
 			continue
 		}
 		platform := delivery.PlatformFromType(u.Type)
-		lang := u.Language
-		if lang == "" {
-			lang = defaultLocale
-		}
-		if ts.Exists("rsvpChanges", platform, u.Template, lang) {
+		// Pass "" for language — we're checking template existence at the type
+		// level; the renderer's own selection chain handles language fallback
+		// if the user's locale doesn't have an exact match.
+		if ts.Exists("rsvpChanges", platform, u.Template, "") {
 			rsvpUsers = append(rsvpUsers, u)
 		} else {
 			fullUsers = append(fullUsers, u)
