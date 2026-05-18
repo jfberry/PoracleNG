@@ -189,7 +189,7 @@ func TestInvasionTranslateGruntName(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, nil, "en")
+	m := e.InvasionTranslate(base, 44, nil, nil, "en")
 
 	if m["gruntName"] != "Grunt" {
 		t.Errorf("gruntName = %q, want %q", m["gruntName"], "Grunt")
@@ -228,7 +228,7 @@ func TestInvasionTranslateGruntNameGerman(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, nil, "de")
+	m := e.InvasionTranslate(base, 44, nil, nil, "de")
 
 	if m["gruntName"] != "Ruepel" {
 		t.Errorf("gruntName = %q, want %q", m["gruntName"], "Ruepel")
@@ -269,7 +269,7 @@ func TestInvasionTranslateGender(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 1}
-	m := e.InvasionTranslate(base, 44, nil, "en")
+	m := e.InvasionTranslate(base, 44, nil, nil, "en")
 
 	if m["genderName"] != "Male" {
 		t.Errorf("genderName = %q, want %q", m["genderName"], "Male")
@@ -323,7 +323,7 @@ func TestInvasionTranslateRewardsTwoSlots(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 1}
-	m := e.InvasionTranslate(base, 44, nil, "en")
+	m := e.InvasionTranslate(base, 44, nil, nil, "en")
 
 	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
@@ -414,7 +414,7 @@ func TestInvasionTranslateRewardsSingleSlot(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, nil, "en")
+	m := e.InvasionTranslate(base, 44, nil, nil, "en")
 
 	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
@@ -479,7 +479,7 @@ func TestInvasionTranslateRewardsThirdSlotFallback(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, nil, "en")
+	m := e.InvasionTranslate(base, 44, nil, nil, "en")
 
 	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
@@ -525,12 +525,248 @@ func TestInvasionTranslateNoGrunt(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 0, nil, "en")
+	m := e.InvasionTranslate(base, 0, nil, nil, "en")
 
 	if _, ok := m["gruntRewardsList"]; ok {
 		t.Error("gruntRewardsList should not be set when no grunt found")
 	}
 	if _, ok := m["gruntName"]; ok {
 		t.Error("gruntName should not be set when no grunt found")
+	}
+}
+
+// --- Showcase tests ---
+
+// newShowcaseGameData returns a minimal GameData with Pikachu and Charizard.
+func newShowcaseGameData() *gamedata.GameData {
+	return &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
+			{ID: 25, Form: 0}:  {PokemonID: 25, FormID: 0},
+			{ID: 6, Form: 0}:   {PokemonID: 6, FormID: 0},
+			{ID: 6, Form: 65}:  {PokemonID: 6, FormID: 65}, // Alolan Charizard (doesn't exist, just for test)
+			{ID: 6, Form: 100}: {PokemonID: 6, FormID: 100},
+		},
+		Grunts: map[int]*gamedata.Grunt{},
+		Types:  map[int]*gamedata.TypeInfo{},
+		Util: &gamedata.UtilData{
+			Genders: map[int]gamedata.GenderInfo{
+				1: {Emoji: "gender_male"},
+				2: {Emoji: "gender_female"},
+			},
+			MegaName: map[int]string{
+				1: "Mega {0}",
+				2: "Mega {0} X",
+			},
+			PokestopEvent: map[int]gamedata.EventInfo{},
+		},
+	}
+}
+
+// newShowcaseBundle returns a Bundle with the keys needed for showcase tests.
+func newShowcaseBundle(t *testing.T) *i18n.Bundle {
+	t.Helper()
+	return newInvasionBundle(t, map[string]map[string]string{
+		"en": {
+			"poke_25":       "Pikachu",
+			"poke_6":        "Charizard",
+			"form_0":        "Normal",
+			"form_65":       "Alolan",
+			"gender_1":      "Male",
+			"gender_2":      "Female",
+			"alignment_1":   "Shadow",
+			"alignment_2":   "Purified",
+			"costume_3":     "Ash",
+			"display_type_9": "Showcase",
+		},
+	})
+}
+
+// --- Test 10: Showcase missing — showcasePresent=false, empty array ---
+
+func TestShowcaseRankingsMissing(t *testing.T) {
+	gd := newShowcaseGameData()
+	bundle := newShowcaseBundle(t)
+	e := newInvasionEnricher(t, gd, bundle)
+	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0, "displayTypeId": 9}
+
+	m := e.InvasionTranslate(base, 0, nil, nil, "en")
+
+	if m["showcasePresent"] != false {
+		t.Errorf("showcasePresent = %v, want false", m["showcasePresent"])
+	}
+	showcase, ok := m["showcase"].([]map[string]any)
+	if !ok {
+		t.Fatalf("showcase is not []map[string]any: %T", m["showcase"])
+	}
+	if len(showcase) != 0 {
+		t.Errorf("showcase len = %d, want 0", len(showcase))
+	}
+	if m["showcaseFirst"] != nil {
+		t.Errorf("showcaseFirst = %v, want nil", m["showcaseFirst"])
+	}
+	if m["showcaseTotalEntries"] != 0 {
+		t.Errorf("showcaseTotalEntries = %v, want 0", m["showcaseTotalEntries"])
+	}
+}
+
+// --- Test 11: Showcase — three entries, top-level and per-entry fields ---
+
+func TestShowcaseRankingsPopulated(t *testing.T) {
+	gd := newShowcaseGameData()
+	bundle := newShowcaseBundle(t)
+	e := newInvasionEnricher(t, gd, bundle)
+	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0, "displayTypeId": 9}
+
+	rawJSON := []byte(`{
+		"total_entries": 42,
+		"last_update": 1700000000,
+		"contest_entries": [
+			{"rank": 1, "score": 9.87, "pokemon_id": 25, "form": 0, "gender": 1, "shiny": false, "costume": 0, "temp_evolution": 0, "alignment": 0, "badge": 0},
+			{"rank": 2, "score": 8.50, "pokemon_id": 25, "form": 0, "gender": 2, "shiny": true,  "costume": 3, "temp_evolution": 0, "alignment": 0, "badge": 0},
+			{"rank": 3, "score": 7.00, "pokemon_id": 6,  "form": 0, "gender": 1, "shiny": false, "costume": 0, "temp_evolution": 1, "alignment": 1, "badge": 0}
+		]
+	}`)
+
+	m := e.InvasionTranslate(base, 0, nil, rawJSON, "en")
+
+	if m["showcasePresent"] != true {
+		t.Errorf("showcasePresent = %v, want true", m["showcasePresent"])
+	}
+	if m["showcaseTotalEntries"] != 42 {
+		t.Errorf("showcaseTotalEntries = %v, want 42", m["showcaseTotalEntries"])
+	}
+
+	showcase, ok := m["showcase"].([]map[string]any)
+	if !ok {
+		t.Fatalf("showcase is not []map[string]any: %T", m["showcase"])
+	}
+	if len(showcase) != 3 {
+		t.Fatalf("showcase len = %d, want 3", len(showcase))
+	}
+
+	// Entry 0: rank 1, Pikachu, no shiny, alignment 0
+	e0 := showcase[0]
+	if e0["rank"] != 1 {
+		t.Errorf("entry[0].rank = %v, want 1", e0["rank"])
+	}
+	if e0["pokemonName"] != "Pikachu" {
+		t.Errorf("entry[0].pokemonName = %q, want Pikachu", e0["pokemonName"])
+	}
+	if e0["scoreFormatted"] != "9.87" {
+		t.Errorf("entry[0].scoreFormatted = %q, want 9.87", e0["scoreFormatted"])
+	}
+	if e0["shiny"] != false {
+		t.Errorf("entry[0].shiny = %v, want false", e0["shiny"])
+	}
+	if e0["shinyEmoji"] != "" {
+		t.Errorf("entry[0].shinyEmoji = %q, want empty", e0["shinyEmoji"])
+	}
+	if e0["fullName"] != "Pikachu" {
+		t.Errorf("entry[0].fullName = %q, want Pikachu", e0["fullName"])
+	}
+	if e0["alignmentName"] != "" {
+		t.Errorf("entry[0].alignmentName = %q, want empty (alignment=0)", e0["alignmentName"])
+	}
+
+	// Entry 1: rank 2, Pikachu, shiny, costume "Ash"
+	e1 := showcase[1]
+	if e1["shiny"] != true {
+		t.Errorf("entry[1].shiny = %v, want true", e1["shiny"])
+	}
+	if e1["shinyEmoji"] != "✨" {
+		t.Errorf("entry[1].shinyEmoji = %q, want ✨", e1["shinyEmoji"])
+	}
+	if e1["costumeName"] != "Ash" {
+		t.Errorf("entry[1].costumeName = %q, want Ash", e1["costumeName"])
+	}
+	if e1["genderName"] != "Female" {
+		t.Errorf("entry[1].genderName = %q, want Female", e1["genderName"])
+	}
+
+	// Entry 2: rank 3, Shadow Mega Charizard
+	e2 := showcase[2]
+	if e2["alignmentName"] != "Shadow" {
+		t.Errorf("entry[2].alignmentName = %q, want Shadow", e2["alignmentName"])
+	}
+	// fullName should be "Shadow Mega Charizard" (alignment prefix + mega wrap)
+	if e2["fullName"] != "Shadow Mega Charizard" {
+		t.Errorf("entry[2].fullName = %q, want Shadow Mega Charizard", e2["fullName"])
+	}
+	if e2["tempEvolutionId"] != 1 {
+		t.Errorf("entry[2].tempEvolutionId = %v, want 1", e2["tempEvolutionId"])
+	}
+
+	// showcaseFirst must be the first entry
+	first, ok := m["showcaseFirst"].(map[string]any)
+	if !ok {
+		t.Fatalf("showcaseFirst is not map[string]any: %T", m["showcaseFirst"])
+	}
+	if first["rank"] != 1 {
+		t.Errorf("showcaseFirst.rank = %v, want 1", first["rank"])
+	}
+}
+
+// --- Test 12: Bad JSON — safe zero values ---
+
+func TestShowcaseRankingsBadJSON(t *testing.T) {
+	gd := newShowcaseGameData()
+	bundle := newShowcaseBundle(t)
+	e := newInvasionEnricher(t, gd, bundle)
+	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0, "displayTypeId": 9}
+
+	m := e.InvasionTranslate(base, 0, nil, []byte(`not-valid-json`), "en")
+
+	if m["showcasePresent"] != false {
+		t.Errorf("showcasePresent = %v, want false on bad JSON", m["showcasePresent"])
+	}
+}
+
+// --- Test 13: Shadow + Mega fullName composition ---
+
+func TestShowcaseAlignmentPrefix(t *testing.T) {
+	gd := newShowcaseGameData()
+	bundle := newShowcaseBundle(t)
+	e := newInvasionEnricher(t, gd, bundle)
+	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0, "displayTypeId": 9}
+
+	rawJSON := []byte(`{
+		"total_entries": 5,
+		"last_update": 1700000000,
+		"contest_entries": [
+			{"rank": 1, "score": 9.0, "pokemon_id": 6, "form": 0, "gender": 1, "shiny": false, "costume": 0, "temp_evolution": 1, "alignment": 1, "badge": 0}
+		]
+	}`)
+
+	m := e.InvasionTranslate(base, 0, nil, rawJSON, "en")
+	showcase := m["showcase"].([]map[string]any)
+	if len(showcase) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(showcase))
+	}
+	entry := showcase[0]
+
+	// Manual trace:
+	// buildFullName: poke_6_e1 not present → "Mega Charizard"
+	// alignment prefix: "Shadow" (alignment_1 key present in bundle)
+	// result: "Shadow Mega Charizard"
+	if entry["fullName"] != "Shadow Mega Charizard" {
+		t.Errorf("fullName = %q, want Shadow Mega Charizard", entry["fullName"])
+	}
+	if entry["alignmentName"] != "Shadow" {
+		t.Errorf("alignmentName = %q, want Shadow", entry["alignmentName"])
+	}
+}
+
+// --- Test 14: No showcase_rankings on non-showcase incident ---
+
+func TestShowcaseRankingsNotPopulatedForKecleon(t *testing.T) {
+	gd := newShowcaseGameData()
+	bundle := newShowcaseBundle(t)
+	e := newInvasionEnricher(t, gd, bundle)
+	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0, "displayTypeId": 8} // Kecleon
+
+	m := e.InvasionTranslate(base, 0, nil, nil, "en")
+
+	if m["showcasePresent"] != false {
+		t.Errorf("showcasePresent should be false for Kecleon incident")
 	}
 }

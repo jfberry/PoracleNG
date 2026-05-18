@@ -222,6 +222,10 @@ type InvasionWebhook struct {
 	IncidentDisplayType     int                   `json:"incident_display_type"`
 	Confirmed               bool                  `json:"confirmed"`
 	Lineup                  []InvasionLineupEntry `json:"lineup"`
+	// ShowcaseRankings carries the top-3 contestant JSON for Showcase
+	// incidents (displayType == 9). Absent for other incident types and
+	// regular invasions.
+	ShowcaseRankings json.RawMessage `json:"showcase_rankings,omitempty"`
 }
 
 // InvasionLineupEntry is a confirmed catch from a grunt battle.

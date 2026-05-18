@@ -290,7 +290,7 @@
       "title": "{{{incidentEmoji}}} {{incidentTypeName}} at {{{pokestopName}}}",
       "url": "{{{googleMapUrl}}}",
       "color": "{{color}}",
-      "description": "Ends: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+      "description": "Ends: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}){{#if showcasePresent}}\n\n🏆 **Top contestants** ({{showcaseTotalEntries}} entries):\n{{#each showcase}}{{rank}}. {{fullName}}{{#if shiny}} ✨{{/if}}{{#if costumeName}} ({{costumeName}}){{/if}} — {{scoreFormatted}}\n{{/each}}{{/if}}",
       "thumbnail": {
         "url": "{{{imgUrl}}}"
       },
@@ -307,7 +307,7 @@
   "default": true,
   "platform": "telegram",
   "template": {
-    "content": "{{{incidentEmoji}}} {{incidentTypeName}} at {{{pokestopName}}}\nEnds: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+    "content": "{{{incidentEmoji}}} {{incidentTypeName}} at {{{pokestopName}}}\nEnds: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}){{#if showcasePresent}}\n\n🏆 Top contestants ({{showcaseTotalEntries}} entries):\n{{#each showcase}}{{rank}}. {{fullName}}{{#if shiny}} ✨{{/if}}{{#if costumeName}} ({{costumeName}}){{/if}} — {{scoreFormatted}}\n{{/each}}{{/if}}",
     "sticker": "{{{stickerUrl}}}",
     "parse_mode": "Markdown",
     "location": true,

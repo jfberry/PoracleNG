@@ -185,7 +185,7 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.InvasionTranslate(enrichmentData, gruntTypeID, inv.Lineup, target.Language),
+			target.Language: ps.enricher.InvasionTranslate(enrichmentData, gruntTypeID, inv.Lineup, inv.ShowcaseRankings, target.Language),
 		}
 	}
 
