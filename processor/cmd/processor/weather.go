@@ -218,6 +218,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			}
 
 			ps.renderCh <- RenderJob{
+				AlertType:         "weatherchange",
 				TemplateType:      "weatherchange",
 				Enrichment:        userEnrichment,
 				PerLangEnrichment: perLang,

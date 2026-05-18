@@ -235,6 +235,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 
 			if len(fullUsers) > 0 {
 				ps.renderCh <- RenderJob{
+					AlertType:         msgType,
 					TemplateType:      msgType,
 					Enrichment:        baseEnrichment,
 					PerLangEnrichment: perLang,
@@ -249,6 +250,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			}
 			if len(rsvpUsers) > 0 {
 				job := RenderJob{
+					AlertType:         msgType,
 					TemplateType:      "rsvpChanges",
 					Enrichment:        baseEnrichment,
 					PerLangEnrichment: perLang,

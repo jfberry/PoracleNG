@@ -86,6 +86,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
+				AlertType:         "lure",
 				TemplateType:      "lure",
 				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,

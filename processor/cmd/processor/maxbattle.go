@@ -106,6 +106,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
+				AlertType:         "maxbattle",
 				TemplateType:      "maxbattle",
 				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,
