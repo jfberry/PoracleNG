@@ -287,7 +287,7 @@
   "platform": "discord",
   "template": {
     "embed": {
-      "title": "{{{incidentEmoji}}} {{incidentType}} at {{{pokestopName}}}",
+      "title": "{{{incidentEmoji}}} {{incidentTypeName}} at {{{pokestopName}}}",
       "url": "{{{googleMapUrl}}}",
       "color": "{{color}}",
       "description": "Ends: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
@@ -307,7 +307,7 @@
   "default": true,
   "platform": "telegram",
   "template": {
-    "content": "{{{incidentEmoji}}} {{incidentType}} at {{{pokestopName}}}\nEnds: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+    "content": "{{{incidentEmoji}}} {{incidentTypeName}} at {{{pokestopName}}}\nEnds: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
     "sticker": "{{{stickerUrl}}}",
     "parse_mode": "Markdown",
     "location": true,
