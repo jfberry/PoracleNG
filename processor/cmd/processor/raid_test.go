@@ -71,13 +71,24 @@ const testReplyKey = "raidlife:gym-test:1700000000"
 func noPriorMessage(replyKey, target string) *delivery.TrackedMessage { return nil }
 
 // hasPriorMessage is a lookupReply stub that always returns a non-nil
-// TrackedMessage — simulates a user who has already received a full raid alert.
+// TrackedMessage with MsgType="raid" — simulates a user who has already
+// received a full raid alert.
 func hasPriorMessage(replyKey, target string) *delivery.TrackedMessage {
-	return &delivery.TrackedMessage{SentID: "msg-123", Target: target, Type: "discord:user"}
+	return &delivery.TrackedMessage{SentID: "msg-123", Target: target, Type: "discord:user", MsgType: "raid"}
+}
+
+// hasPriorMessageType returns a lookupReply stub that always returns a non-nil
+// TrackedMessage with the given MsgType — simulates a user who has already
+// received an alert of a specific type (e.g. "egg" before a raid arrives).
+func hasPriorMessageType(msgType string) func(string, string) *delivery.TrackedMessage {
+	return func(replyKey, target string) *delivery.TrackedMessage {
+		return &delivery.TrackedMessage{SentID: "msg-123", Target: target, Type: "discord:user", MsgType: msgType}
+	}
 }
 
 // perUserLookup returns a lookupReply stub that returns non-nil only for the
 // given set of user IDs, simulating selective prior-message state per user.
+// Prior messages are given MsgType="raid" (matching a raid job's msgType).
 func perUserLookup(priorIDs ...string) func(string, string) *delivery.TrackedMessage {
 	set := make(map[string]struct{}, len(priorIDs))
 	for _, id := range priorIDs {
@@ -85,7 +96,7 @@ func perUserLookup(priorIDs ...string) func(string, string) *delivery.TrackedMes
 	}
 	return func(replyKey, target string) *delivery.TrackedMessage {
 		if _, ok := set[target]; ok {
-			return &delivery.TrackedMessage{SentID: "msg-prior", Target: target, Type: "discord:user"}
+			return &delivery.TrackedMessage{SentID: "msg-prior", Target: target, Type: "discord:user", MsgType: "raid"}
 		}
 		return nil
 	}
@@ -96,8 +107,8 @@ func perUserLookup(priorIDs ...string) func(string, string) *delivery.TrackedMes
 // ---------------------------------------------------------------------------
 
 // partitionRaidUsers returns (fullUsers, rsvpUsers). We drive it for both
-// "raid" and "egg" msgTypes; the function itself is msgType-agnostic, so the
-// label is just documentation in the test name.
+// "raid" and "egg" msgTypes; the function itself is type-aware, so we pass
+// the matching msgType in each sub-test.
 func TestPartitionRaidUsers_FirstNotification(t *testing.T) {
 	for _, msgType := range []string{"raid", "egg"} {
 		t.Run(msgType, func(t *testing.T) {
@@ -105,7 +116,7 @@ func TestPartitionRaidUsers_FirstNotification(t *testing.T) {
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0}
 
 			// noPriorMessage simulates "first visible" — tracker returns nil.
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, noPriorMessage, ts, "")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, msgType, noPriorMessage, ts, "")
 
 			if len(full) != 1 || len(rsvp) != 0 {
 				t.Errorf("first-visible (no prior msg): got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -122,7 +133,7 @@ func TestPartitionRaidUsers_EditMode(t *testing.T) {
 			// Edit mode always uses the full template regardless of prior message.
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 2}
 
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, hasPriorMessage, ts, "")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, msgType, hasPriorMessage, ts, "")
 
 			if len(full) != 1 || len(rsvp) != 0 {
 				t.Errorf("IsEdit(clean)=true: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -137,7 +148,7 @@ func TestPartitionRaidUsers_NilTemplateStore(t *testing.T) {
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0}
 
 			// ts == nil means no DTS renderer — always fall back to full template.
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, hasPriorMessage, nil, "")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, msgType, hasPriorMessage, nil, "")
 
 			if len(full) != 1 || len(rsvp) != 0 {
 				t.Errorf("ts==nil: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -154,7 +165,7 @@ func TestPartitionRaidUsers_NoRsvpChangesTemplate(t *testing.T) {
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0}
 
 			// hasPriorMessage: user has a prior message, but no rsvpChanges template.
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, hasPriorMessage, ts, "")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, msgType, hasPriorMessage, ts, "")
 
 			if len(full) != 1 || len(rsvp) != 0 {
 				t.Errorf("no rsvpChanges template: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -171,8 +182,11 @@ func TestPartitionRaidUsers_HasRsvpChangesTemplate(t *testing.T) {
 			ts := newRsvpTemplateStore(t, "discord", "")
 			user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0, Template: ""}
 
-			// hasPriorMessage: user has a prior message → eligible for rsvpChanges.
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, hasPriorMessage, ts, "")
+			// hasPriorMessage returns MsgType="raid". For the "egg" sub-test,
+			// we construct a type-matched prior so this test stays focused on
+			// the rsvpChanges template existence path (not the type-mismatch path).
+			lookup := hasPriorMessageType(msgType)
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, msgType, lookup, ts, "")
 
 			if len(full) != 0 || len(rsvp) != 1 {
 				t.Errorf("has rsvpChanges template: got full=%d rsvp=%d, want full=0 rsvp=1", len(full), len(rsvp))
@@ -198,7 +212,7 @@ func TestPartitionRaidUsers_RsvpOnlyFirstVisible(t *testing.T) {
 			// noPriorMessage: tracker has no entry for this user, even though the
 			// duplicate cache may say this is not the first notification.
 			// The fix ensures this user still gets the full template.
-			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, noPriorMessage, ts, "")
+			full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, msgType, noPriorMessage, ts, "")
 
 			if len(full) != 1 || len(rsvp) != 0 {
 				t.Errorf("rsvp_only first-visible: got full=%d rsvp=%d, want full=1 rsvp=0 (user should get full raid card)", len(full), len(rsvp))
@@ -214,7 +228,7 @@ func TestPartitionRaidUsers_NilLookupFunc(t *testing.T) {
 	ts := newRsvpTemplateStore(t, "discord", "")
 	user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0, Template: ""}
 
-	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, nil, ts, "")
+	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, "raid", nil, ts, "")
 
 	if len(full) != 1 || len(rsvp) != 0 {
 		t.Errorf("nil lookupReply: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -232,12 +246,13 @@ func TestPartitionRaidUsers_MixedConditions(t *testing.T) {
 	editMode := webhook.MatchedUser{ID: "edit", Type: "discord:user", Clean: 2}
 	rsvpCandidate := webhook.MatchedUser{ID: "rsvp", Type: "discord:user", Clean: 0}
 
-	// "edit" and "rsvp" have prior messages; "first" does not.
+	// "edit" and "rsvp" have prior messages (MsgType="raid"); "first" does not.
 	lookup := perUserLookup("edit", "rsvp")
 
 	full, rsvp := partitionRaidUsers(
 		[]webhook.MatchedUser{first, editMode, rsvpCandidate},
 		testReplyKey,
+		"raid",
 		lookup,
 		ts,
 		"",
@@ -260,8 +275,8 @@ func TestPartitionRaidUsers_TelegramUserNoDiscordTemplate(t *testing.T) {
 	ts := newRsvpTemplateStore(t, "discord", "")
 	user := webhook.MatchedUser{ID: "tg", Type: "telegram:user", Clean: 0}
 
-	// hasPriorMessage: user has a prior message, but no telegram rsvpChanges template.
-	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, hasPriorMessage, ts, "")
+	// hasPriorMessage: user has a prior message (MsgType="raid"), but no telegram rsvpChanges template.
+	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, "raid", hasPriorMessage, ts, "")
 
 	if len(full) != 1 || len(rsvp) != 0 {
 		t.Errorf("telegram user with discord-only rsvpChanges: got full=%d rsvp=%d, want full=1 rsvp=0", len(full), len(rsvp))
@@ -282,9 +297,9 @@ func TestPartitionRaidUsers_DefaultTemplateResolution(t *testing.T) {
 	// Tracking rule with no explicit template (the common case)
 	user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0, Template: ""}
 
-	// User has a prior message and we're NOT in edit mode.
+	// User has a prior message (MsgType="raid") and we're NOT in edit mode.
 	// With defaultTemplateID="default", effectiveID="default" → ts.Exists hit.
-	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, hasPriorMessage, ts, "default")
+	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, "raid", hasPriorMessage, ts, "default")
 
 	if len(full) != 0 || len(rsvp) != 1 {
 		t.Errorf("default template resolution: got full=%d rsvp=%d, want full=0 rsvp=1 (should route to rsvpChanges)", len(full), len(rsvp))
@@ -301,12 +316,41 @@ func TestPartitionRaidUsers_TemplateIDMismatch(t *testing.T) {
 	// Tracking rule with an explicit non-default template.
 	user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0, Template: "dark"}
 
-	// User has a prior message. effectiveID="dark", but ts has only "default" →
+	// User has a prior message (MsgType="raid"). effectiveID="dark", but ts has only "default" →
 	// ts.Exists("rsvpChanges", "discord", "dark", "") → false → fullUsers.
-	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, hasPriorMessage, ts, "default")
+	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, "raid", hasPriorMessage, ts, "default")
 
 	if len(full) != 1 || len(rsvp) != 0 {
 		t.Errorf("template ID mismatch: got full=%d rsvp=%d, want full=1 rsvp=0 (dark template has no rsvpChanges, must not fall back to default)", len(full), len(rsvp))
+	}
+}
+
+// TestPartitionRaidUsers_EggPriorTreatsRaidAsFirstVisible is the regression
+// test for the bug where an egg-typed prior tracked message caused the
+// subsequent raid job to route to rsvpChanges immediately.
+//
+// Both egg + raid track under the same raidlife:gym:end replyKey. When the egg
+// arrives it stores a TrackedMessage with MsgType="egg". When the raid webhook
+// arrives, LookupReplyMessage finds that egg entry (non-nil). Before this fix,
+// the non-nil result was treated as "not first-visible" → rsvpChanges template
+// was sent instead of the full raid card.
+//
+// The fix: first-visible is true when the prior message's MsgType differs from
+// the current job's msgType ("egg" != "raid"), so the raid is routed to fullUsers.
+func TestPartitionRaidUsers_EggPriorTreatsRaidAsFirstVisible(t *testing.T) {
+	ts := newRsvpTemplateStore(t, "discord", "")
+	user := webhook.MatchedUser{ID: "u1", Type: "discord:user", Clean: 0, Template: ""}
+
+	// Simulate the tracker holding an "egg" entry for this replyKey+target.
+	eggPrior := hasPriorMessageType("egg")
+
+	// Current job is a raid (msgType="raid"). Prior exists but is egg-typed →
+	// MsgType mismatch → user must go to fullUsers (full raid template).
+	full, rsvp := partitionRaidUsers([]webhook.MatchedUser{user}, testReplyKey, "raid", eggPrior, ts, "")
+
+	if len(full) != 1 || len(rsvp) != 0 {
+		t.Errorf("egg prior + raid job: got full=%d rsvp=%d, want full=1 rsvp=0 "+
+			"(egg-typed prior must not suppress full raid template)", len(full), len(rsvp))
 	}
 }
 

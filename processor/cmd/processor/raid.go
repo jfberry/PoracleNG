@@ -216,7 +216,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			if ps.dispatcher != nil {
 				lookupReply = ps.dispatcher.MessageTracker().LookupReplyMessage
 			}
-			fullUsers, rsvpUsers := partitionRaidUsers(matched, replyKey, lookupReply, ts, defaultTemplateID)
+			fullUsers, rsvpUsers := partitionRaidUsers(matched, replyKey, msgType, lookupReply, ts, defaultTemplateID)
 
 			// Compute the latest RSVP timeslot for OverrideCleanTTH on
 			// rsvpChanges jobs.
@@ -290,6 +290,9 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 // rsvpChanges is used when ALL of the following hold:
 //   - the user has a prior tracked message for this raid lifecycle
 //     (lookupReply returns non-nil for this user — i.e. not first-visible)
+//   - the prior message's MsgType matches the current msgType (e.g. egg
+//     prior does not count as a prior for a raid job — first lifecycle type
+//     always uses the full template)
 //   - the user is not in edit mode (edit always uses the full template)
 //   - an rsvpChanges template exists for the user's platform AND the user's
 //     effective template ID (u.Template if set, else defaultTemplateID)
@@ -313,10 +316,16 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 // false on the first visible message. Per-user tracker lookup correctly
 // identifies that no prior message exists for this user.
 //
+// msgType is the current job's alert type ("raid" or "egg"). It is compared
+// against the prior message's MsgType so that an egg-typed prior message does
+// not suppress the full template for a subsequent raid job on the same gym
+// lifecycle key.
+//
 // All other users receive the full msgType template.
 func partitionRaidUsers(
 	matched []webhook.MatchedUser,
 	replyKey string,
+	msgType string,
 	lookupReply func(replyKey, target string) *delivery.TrackedMessage,
 	ts *dts.TemplateStore,
 	defaultTemplateID string,
@@ -335,10 +344,23 @@ func partitionRaidUsers(
 			fullUsers = append(fullUsers, u)
 			continue
 		}
-		// Per-user first-visible check: if the tracker has no prior message
-		// for this (replyKey, user) pair, this is the first visible message
-		// for this user — always use the full raid/egg template.
-		if lookupReply == nil || lookupReply(replyKey, u.ID) == nil {
+		// Per-user first-visible check: treat the user as first-visible when
+		// either:
+		//   (a) lookupReply is nil (dispatcher not yet wired), or
+		//   (b) the tracker has no prior message for this (replyKey, user) pair, or
+		//   (c) the prior message was for a different alert type (e.g. the
+		//       tracker holds an "egg" entry but the current job is "raid").
+		// Case (c) fixes the scenario where both egg + raid are tracked under
+		// the same raidlife:gym:end key: the egg notification stores its
+		// TrackedMessage with MsgType="egg"; when the raid arrives, the prior
+		// entry exists but its MsgType differs — so the raid is correctly
+		// treated as first-visible and rendered with the full raid template.
+		var prior *delivery.TrackedMessage
+		if lookupReply != nil {
+			prior = lookupReply(replyKey, u.ID)
+		}
+		firstVisible := prior == nil || prior.MsgType != msgType
+		if firstVisible {
 			log.Debugf("raid partition: replyKey=%s target=%s userTemplate=%q effectiveID=%q decision=first-visible",
 				replyKey, u.ID, u.Template, "")
 			fullUsers = append(fullUsers, u)
