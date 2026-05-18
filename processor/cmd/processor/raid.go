@@ -203,14 +203,20 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			// raid/egg template vs. those who should receive the compact
 			// rsvpChanges template.
 			var ts *dts.TemplateStore
+			var defaultTemplateID string
 			if ps.dtsRenderer != nil {
 				ts = ps.dtsRenderer.Templates()
+				// ResolveTemplate("") returns the configured default template
+				// name (e.g. "1" or "default"). Passing "" mirrors the logic
+				// the renderer uses when a user's tracking rule has no explicit
+				// template set.
+				defaultTemplateID = ps.dtsRenderer.ResolveTemplate("")
 			}
 			var lookupReply func(string, string) *delivery.TrackedMessage
 			if ps.dispatcher != nil {
 				lookupReply = ps.dispatcher.MessageTracker().LookupReplyMessage
 			}
-			fullUsers, rsvpUsers := partitionRaidUsers(matched, replyKey, lookupReply, ts)
+			fullUsers, rsvpUsers := partitionRaidUsers(matched, replyKey, lookupReply, ts, defaultTemplateID)
 
 			// Compute the latest RSVP timeslot for OverrideCleanTTH on
 			// rsvpChanges jobs.
@@ -285,8 +291,21 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 //   - the user has a prior tracked message for this raid lifecycle
 //     (lookupReply returns non-nil for this user — i.e. not first-visible)
 //   - the user is not in edit mode (edit always uses the full template)
-//   - an rsvpChanges template exists for this user's platform/template
+//   - an rsvpChanges template exists for the user's platform AND the user's
+//     effective template ID (u.Template if set, else defaultTemplateID)
 //   - ts is non-nil (DTS renderer is wired)
+//
+// The effective template ID is resolved before calling ts.Exists because
+// ts.Exists is a strict literal match — it does not apply the renderer's
+// normal resolution of an empty u.Template to the configured default. Without
+// this step, operators who install the example rsvpChanges template (id:default
+// or id:1) and use default tracking rules (Template:"") would never match, so
+// rsvpChanges would never fire.
+//
+// The rsvpChanges existence check uses strict equality on the resolved ID.
+// If the user has template:"dark" but no rsvpChanges template with id:"dark"
+// exists, the user falls through to the full raid/egg template — even if an
+// rsvpChanges template with a different ID (e.g. id:"default") exists.
 //
 // "First-visible" is determined per-user via the MessageTracker reply index.
 // This fixes the rsvp_only (rsvpChanges=2) case: the duplicate cache is
@@ -300,6 +319,7 @@ func partitionRaidUsers(
 	replyKey string,
 	lookupReply func(replyKey, target string) *delivery.TrackedMessage,
 	ts *dts.TemplateStore,
+	defaultTemplateID string,
 ) (fullUsers, rsvpUsers []webhook.MatchedUser) {
 	for _, u := range matched {
 		// Edit mode always uses the full template.
@@ -314,11 +334,21 @@ func partitionRaidUsers(
 			fullUsers = append(fullUsers, u)
 			continue
 		}
+		// Resolve the user's effective template ID: use u.Template when
+		// explicitly set, otherwise fall back to the configured default.
+		// ts.Exists is a strict literal match; without this step, tracking
+		// rules with no explicit template (Template=="") would never find
+		// an rsvpChanges entry even when one is installed under the default
+		// template ID.
+		effectiveID := u.Template
+		if effectiveID == "" {
+			effectiveID = defaultTemplateID
+		}
 		platform := delivery.PlatformFromType(u.Type)
 		// Pass "" for language — we're checking template existence at the type
 		// level; the renderer's own selection chain handles language fallback
 		// if the user's locale doesn't have an exact match.
-		if ts.Exists("rsvpChanges", platform, u.Template, "") {
+		if ts.Exists("rsvpChanges", platform, effectiveID, "") {
 			rsvpUsers = append(rsvpUsers, u)
 		} else {
 			fullUsers = append(fullUsers, u)
