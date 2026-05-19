@@ -1,6 +1,10 @@
 package db
 
-import "github.com/jmoiron/sqlx"
+import (
+	"strings"
+
+	"github.com/jmoiron/sqlx"
+)
 
 // InvasionTracking represents a row from the invasion table.
 type InvasionTracking struct {
@@ -15,6 +19,14 @@ type InvasionTracking struct {
 }
 
 // LoadInvasions loads all invasion trackings from the database.
+//
+// In-memory normalisation: rows with grunt_type='metal' (legacy
+// PoracleJS spelling, still emitted by some third-party CRUD tools)
+// are translated to 'steel' so they match the webhook-side classifier
+// in gamedata.TypeNameFromTemplate (which returns 'steel' for the
+// METAL template). The DB row is left untouched — only the in-memory
+// snapshot used by the matcher is rewritten. Drop this once the
+// known offending third-party tools have caught up.
 func LoadInvasions(db *sqlx.DB) ([]*InvasionTracking, error) {
 	var invasions []InvasionTracking
 	err := db.Select(&invasions,
@@ -27,7 +39,18 @@ func LoadInvasions(db *sqlx.DB) ([]*InvasionTracking, error) {
 
 	result := make([]*InvasionTracking, len(invasions))
 	for i := range invasions {
+		invasions[i].GruntType = normaliseInvasionGruntType(invasions[i].GruntType)
 		result[i] = &invasions[i]
 	}
 	return result, nil
+}
+
+// normaliseInvasionGruntType rewrites legacy/third-party grunt_type
+// values to the canonical name the webhook-side classifier produces.
+// Returns the input unchanged when nothing needs rewriting.
+func normaliseInvasionGruntType(s string) string {
+	if strings.EqualFold(s, "metal") {
+		return "steel"
+	}
+	return s
 }
