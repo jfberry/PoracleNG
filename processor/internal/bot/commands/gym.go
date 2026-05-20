@@ -32,6 +32,10 @@ var gymParams = []bot.ParamDef{
 func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	if reply := RouteToMuteFromType(ctx, "gym", args); reply != nil {
+		return reply
+	}
+
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 

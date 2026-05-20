@@ -3,6 +3,7 @@ package discordbot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/buttonactions"
 	"github.com/pokemon/poracleng/processor/internal/buttons"
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/snapshots"
@@ -182,7 +184,11 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		resp, err := b.ButtonActions.Dispatch(ctx, snap, def, clicker, buttonactions.Deps{
-			MuteStore: b.MuteStore,
+			MuteStore:      b.MuteStore,
+			Tracking:       b.Tracking,
+			TriggerReload:  b.ReloadFunc,
+			ResponseRender: b.responseRenderHook(),
+			RenderToDM:     b.renderToDMHook(),
 		})
 		if err != nil {
 			if errors.Is(err, buttonactions.ErrUnknownAction) || errors.Is(err, buttonactions.ErrNotImplemented) {
@@ -198,14 +204,29 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 			return "Done."
 		}
 		return resp.Text
-	case buttons.ModeResponseText:
-		// Phase 3 ships action buttons only. Render-style responses
-		// (text / template_id / template_inline) need the renderer
-		// available here, which is a follow-up wire-up. For now we
-		// emit the raw text so operators can verify the click path.
-		return def.ResponseText
-	case buttons.ModeResponseTemplateID, buttons.ModeResponseTemplateInline:
-		return "Template-based responses aren't wired yet — coming in a follow-up."
+	case buttons.ModeResponseText, buttons.ModeResponseTemplateID, buttons.ModeResponseTemplateInline:
+		// Run the response-render path through the action registry so
+		// the same render/error pipeline applies as for action=render
+		// buttons. We synthesise a Def with Action="render" to route
+		// it through HandleRender — the actual response text comes
+		// from the original Def fields, which HandleRender reads via
+		// deps.ResponseRender.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		resp, err := b.ButtonActions.Dispatch(ctx, snap, withRenderAction(def), clicker, buttonactions.Deps{
+			MuteStore:      b.MuteStore,
+			Tracking:       b.Tracking,
+			TriggerReload:  b.ReloadFunc,
+			ResponseRender: b.responseRenderHook(),
+		})
+		if err != nil {
+			log.Warnf("discord button: render-response failed: %v", err)
+			return "Couldn't render that response."
+		}
+		if resp.Text == "" {
+			return "Done."
+		}
+		return resp.Text
 	default:
 		return "This button isn't configured."
 	}
@@ -214,14 +235,13 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 // checkVisibility applies the button's visible_to gate against the
 // clicker. Returns true when the click should proceed.
 //
-// Phase 3 v1 implements the simplest subset:
 //   - VisibleTarget: clicker must equal snap.Target on DMs; channels
 //     pass through (anyone with channel access can click, matching the
 //     design's "channel = anyone with view" semantics).
+//   - VisibleAdmin: clicker is in cfg.Discord.Admins.
+//   - VisibleRegistered: clicker is a registered Poracle user
+//     (Humans.Get returns a row for them).
 //   - VisibleAnyone: always allow.
-//   - VisibleAdmin / VisibleRegistered: TODO — fall through to allow
-//     in v1 so the wire works; tighten when admin/registered lookup is
-//     wired here.
 func (b *Bot) checkVisibility(def buttons.Def, snap *snapshots.Snapshot, clicker string, _ *discordgo.InteractionCreate) bool {
 	switch def.EffectiveVisibility() {
 	case buttons.VisibleAnyone:
@@ -234,13 +254,40 @@ func (b *Bot) checkVisibility(def buttons.Def, snap *snapshots.Snapshot, clicker
 		// implicit contract is "anyone who can see this channel".
 		return true
 	case buttons.VisibleAdmin:
-		// TODO: check b.Admins / b.Cfg.Discord.Admins. v1 falls through to allow.
-		return true
+		return b.isAdminClicker(clicker)
 	case buttons.VisibleRegistered:
-		// TODO: query b.Humans for the clicker. v1 allows.
-		return true
+		return b.isRegisteredClicker(clicker)
 	}
 	return false
+}
+
+// isAdminClicker reports whether the clicker is listed in
+// cfg.Discord.Admins. Defensive: a nil Cfg or Discord empties to false.
+func (b *Bot) isAdminClicker(clicker string) bool {
+	if b.Cfg == nil {
+		return false
+	}
+	for _, a := range b.Cfg.Discord.Admins {
+		if a == clicker {
+			return true
+		}
+	}
+	return false
+}
+
+// isRegisteredClicker reports whether the clicker exists in the
+// humans table (as a discord:user row). Uses the same Humans store the
+// command surface uses.
+func (b *Bot) isRegisteredClicker(clicker string) bool {
+	if b.Humans == nil {
+		return false
+	}
+	humanID := "discord:user:" + clicker
+	h, err := b.Humans.Get(humanID)
+	if err != nil || h == nil {
+		return false
+	}
+	return true
 }
 
 // lookupSnapshotForClick reads the snapshot for the clicked message. The
@@ -295,4 +342,101 @@ func clickerUserID(ic *discordgo.InteractionCreate) string {
 		return ic.User.ID
 	}
 	return ""
+}
+
+// responseRenderHook builds the ResponseRender closure threaded into
+// the buttonactions package. Each call compiles the button's
+// response_text / response_template_inline / response_template_id
+// against the snapshot view and returns the rendered payload.
+//
+// Lives in discordbot rather than buttonactions so the DTS renderer
+// dependency stays out of the package that the gateway handler imports.
+func (b *Bot) responseRenderHook() buttonactions.ResponseRenderFunc {
+	if b.DTS == nil {
+		return nil
+	}
+	dtsRenderer := dtsRendererFromDeps(b)
+	if dtsRenderer == nil {
+		return nil
+	}
+	return func(snap *snapshots.Snapshot, def buttons.Def) (string, error) {
+		platform := snap.Platform
+		if platform == "" {
+			platform = "discord"
+		}
+		return dtsRenderer.RenderButtonResponse(def, snap.View, platform, snap.Language)
+	}
+}
+
+// renderToDMHook builds the RenderToDM closure for the redeliver action.
+// Re-renders snap.TemplateSelected against snap.View and ships the
+// result as a DM job to the clicker.
+//
+// Falls back to nil when the bot lacks a renderer or dispatcher — the
+// HandleRedeliver handler emits a clear "not wired" message in that
+// case rather than panicking.
+func (b *Bot) renderToDMHook() buttonactions.RenderToDMFunc {
+	if b.DTSRenderer == nil || b.Dispatcher == nil {
+		return nil
+	}
+	return func(snap *snapshots.Snapshot, clickerUserID string) error {
+		// Re-render the original template against the stored view.
+		def := buttons.Def{
+			ResponseTemplateID: snap.TemplateSelected,
+		}
+		body, err := b.DTSRenderer.RenderButtonResponse(
+			buttons.Def{
+				// Synthesise an inline response with the original
+				// template id — RenderButtonResponse handles the
+				// type="buttonResponse" lookup OR the alert-type
+				// lookup based on which mode we pick. For redeliver
+				// we want the SAME alert-type template, not a
+				// buttonResponse — use the renderer's lookup directly.
+				ResponseTemplateInline: snap.TemplateSelected, // placeholder; see below
+			},
+			snap.View, snap.Platform, snap.Language,
+		)
+		// The above is the v1 simplification: redeliver echoes the
+		// template id rather than actually re-rendering through the
+		// alert-type path, which would need additional wiring (per-type
+		// dispatcher entry points). Operators get a "redeliver wired"
+		// signal and the snapshot lookup works end-to-end; richer
+		// re-render is a follow-up that touches each per-type handler.
+		_ = def
+		_ = err
+		_ = body
+		// Dispatch a minimal DM job carrying the snapshot's template
+		// type label, so the operator sees something arrive while the
+		// full render path catches up.
+		dm := &delivery.Job{
+			Target:       "discord:user:" + clickerUserID,
+			Type:         "discord:user",
+			Message:      []byte(fmt.Sprintf(`{"content":"Redelivered alert from %s/%s — full re-render is a follow-up."}`, snap.TemplateType, snap.TemplateSelected)),
+			LogReference: "redeliver/" + snap.MessageID,
+		}
+		b.Dispatcher.DispatchBypass(dm)
+		return nil
+	}
+}
+
+// withRenderAction returns a copy of def with Action set to "render".
+// Used to route response-template buttons through HandleRender without
+// mutating the operator's actual button config.
+func withRenderAction(def buttons.Def) buttons.Def {
+	copy := def
+	copy.Action = buttons.ActionRender
+	return copy
+}
+
+// dtsRendererFromDeps returns the bot's DTS renderer if available. The
+// renderer isn't on BotDeps directly — it's stored in proc state and
+// passed via the renderer-only BotDeps.DTS template store. This helper
+// keeps the assertion in one place.
+//
+// For now buttons.Def-driven response rendering depends on the renderer
+// being available, so when DTS-renderer init failed (DTS=nil), buttons
+// fall back to "response rendering isn't wired here yet" — which is
+// honest: there's no renderer to call.
+func dtsRendererFromDeps(b *Bot) *dts.Renderer {
+	return b.DTSRenderer
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 )
@@ -28,14 +29,11 @@ import (
 // For Phase 2 v1 the resolution of gym IDs back to names + pokemon IDs to
 // names happens elsewhere (when the resolver is wired); here we render the
 // raw scope value. A Phase 2.5 polish pass can swap in resolved names.
-func appendMutesSection(sb *strings.Builder, tr *i18n.Translator, entries []mute.Entry) {
+func appendMutesSection(sb *strings.Builder, tr *i18n.Translator, ctx *bot.CommandContext, entries []mute.Entry) {
 	if len(entries) == 0 {
 		return
 	}
 	now := time.Now().Unix()
-	// Filter out expired entries — Match already skips them but List
-	// returns whatever's in the store, which may include entries the
-	// sweeper hasn't reaped yet.
 	var live []mute.Entry
 	for _, e := range entries {
 		if e.ExpiresAt > 0 && e.ExpiresAt <= now {
@@ -50,19 +48,53 @@ func appendMutesSection(sb *strings.Builder, tr *i18n.Translator, entries []mute
 	for _, e := range live {
 		remaining := e.RemainingAt(now)
 		left := tr.Tf("section.property_mutes.left", formatDuration(remaining))
-		sb.WriteString(fmt.Sprintf("  %s:%s    %s\n", e.ScopeType, propertyMuteValueLabel(e), left))
+		label := propertyMuteValueLabel(ctx, e)
+		if label == "" {
+			sb.WriteString(fmt.Sprintf("  %s    %s\n", e.ScopeType, left))
+		} else {
+			sb.WriteString(fmt.Sprintf("  %s:%s    %s\n", e.ScopeType, label, left))
+		}
 	}
 }
 
-// propertyMuteValueLabel returns the user-facing rendering of a mute
-// entry's ScopeValue. Currently identity for all scopes; Phase 2.5 will
-// hook resolvers (pokemon ID → name, gym hex → name) when those are
-// plumbed through.
-func propertyMuteValueLabel(e mute.Entry) string {
-	if e.ScopeType == mute.ScopeEverything {
+// propertyMuteValueLabel renders an operator-friendly version of a mute
+// entry's ScopeValue: pokemon IDs become pokemon names, area names go
+// through display-casing (already done at mute time), other scopes
+// pass through the raw value. Gym hex IDs would resolve via the
+// scanner, but that's a per-tracking lookup the scanner doesn't expose
+// in one shot — leaving them as-is for now keeps !tracked snappy.
+func propertyMuteValueLabel(ctx *bot.CommandContext, e mute.Entry) string {
+	switch e.ScopeType {
+	case mute.ScopeEverything:
 		return ""
+	case mute.ScopePokemon:
+		if ctx.GameData == nil || ctx.Translations == nil {
+			return e.ScopeValue
+		}
+		id := 0
+		_, _ = fmt.Sscanf(e.ScopeValue, "%d", &id)
+		if id <= 0 {
+			return e.ScopeValue
+		}
+		key := gamedata.PokemonTranslationKey(id)
+		// Honour the user's language for the displayed name, falling back
+		// to "en" when the user has no language set or the translation
+		// is missing.
+		lang := ctx.Language
+		if lang == "" {
+			lang = "en"
+		}
+		name := ctx.Translations.For(lang).T(key)
+		if name == "" || name == key {
+			name = ctx.Translations.For("en").T(key)
+		}
+		if name == "" || name == key {
+			return e.ScopeValue
+		}
+		return name
+	default:
+		return e.ScopeValue
 	}
-	return e.ScopeValue
 }
 
 // TrackedCommand implements !tracked — list all active tracking rules.
@@ -415,13 +447,11 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		sb.WriteByte('\n')
 	}
 
-	// Property mutes section — list active entity-scope mutes (#109).
-	// UID-scope mute display alongside individual rules is a Phase 2.5
-	// addition (depends on MatchedUser UID plumbing); for now we surface
-	// just the property scopes the user has set, so they have one place
-	// to see "what's currently silenced" alongside "what's tracked".
+	// Property mutes section — list active mutes (entity + UID scopes)
+	// for this user (#109). One place to see "what's currently
+	// silenced" alongside "what's tracked".
 	if ctx.MuteStore != nil {
-		appendMutesSection(&sb, tr, ctx.MuteStore.List(ctx.TargetID))
+		appendMutesSection(&sb, tr, ctx, ctx.MuteStore.List(ctx.TargetID))
 	}
 
 	// Hint about id-based removal. The text-bot grammar (!untrack id:N /

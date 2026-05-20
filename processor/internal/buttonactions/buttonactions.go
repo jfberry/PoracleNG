@@ -19,6 +19,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/buttons"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/snapshots"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 // Deps bundles the dependencies action handlers reach for. Set once at
@@ -26,7 +27,36 @@ import (
 // nil-check the fields they use — tests may pass a partial bag.
 type Deps struct {
 	MuteStore *mute.Store
+
+	// Tracking is the per-type CRUD aggregator. The unsubscribe action
+	// uses it to delete rows by UID. Nil disables unsubscribe — the
+	// handler returns "feature unavailable" rather than panicking.
+	Tracking *store.TrackingStores
+
+	// TriggerReload is called after destructive mutations (unsubscribe)
+	// so the in-memory state picks up the change immediately. Wired to
+	// ProcessorService.triggerReload in main.go; nil disables reload
+	// triggering (tests, etc.).
+	TriggerReload func()
+
+	// RenderToDM is the host hook the redeliver action calls to re-send
+	// a snapshot's template into the clicker's DM. nil disables the
+	// redeliver action (it returns a clear "not wired" message).
+	RenderToDM RenderToDMFunc
+
+	// ResponseRender renders a button's response template/text against
+	// the snapshot view and returns the rendered ephemeral payload.
+	// nil disables response-template buttons (the click returns "not
+	// wired").
+	ResponseRender ResponseRenderFunc
 }
+
+// ResponseRenderFunc is the host-provided render function for button
+// response messages. Takes the button definition (which carries the
+// response_template_id / response_template_inline / response_text) and
+// the snapshot, and returns the rendered ephemeral payload to send back
+// to the clicker.
+type ResponseRenderFunc func(snap *snapshots.Snapshot, def buttons.Def) (string, error)
 
 // Response is the ephemeral message returned to the clicker after a
 // successful dispatch. Text is what Discord renders in the ephemeral
@@ -121,9 +151,9 @@ var (
 // vocabulary is published but some actions trail their handlers.
 func RegisterBuiltins(r *Registry) {
 	r.Register(buttons.ActionMute, HandleMute)
-	r.Register(buttons.ActionUnsubscribe, notImplemented(buttons.ActionUnsubscribe))
-	r.Register(buttons.ActionRedeliver, notImplemented(buttons.ActionRedeliver))
-	r.Register(buttons.ActionRender, notImplemented(buttons.ActionRender))
+	r.Register(buttons.ActionUnsubscribe, HandleUnsubscribe)
+	r.Register(buttons.ActionRedeliver, HandleRedeliver)
+	r.Register(buttons.ActionRender, HandleRender)
 }
 
 func notImplemented(name string) Handler {

@@ -21,6 +21,10 @@ func (c *TrackCommand) Aliases() []string { return nil }
 func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	if reply := RouteToMuteFromType(ctx, "pokemon", args); reply != nil {
+		return reply
+	}
+
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
