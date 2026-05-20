@@ -1,0 +1,80 @@
+# Raid card in TOML form — multi-line template body with a conditional
+# PVP-details inline response button. The {{#if hasPVP}} block in the
+# response template can only render as valid JSON because the body is
+# rendered as a string (TOML multi-line) and then JSON-parsed; the same
+# block in JSON DTS would break before Handlebars even ran.
+
+[[entry]]
+id = "1"
+type = "raid"
+platform = "discord"
+language = "en"
+description = "Raid card with conditional PVP-details button (TOML form)"
+
+template = """
+{
+  "embed": {
+    "title": "{{levelName}} {{fullName}} at {{gymName}}",
+    "color": "{{gymColor}}",
+    "thumbnail": { "url": "{{{imgUrl}}}" },
+    "fields": [
+      { "name": "Time:", "value": "{{disappearTime}}", "inline": true },
+      { "name": "📍 Location:", "value": "[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})", "inline": true }
+    ]
+  }
+}
+"""
+
+  # Inline response template — only attached when the alert carries PVP
+  # data, via the show_if Handlebars predicate evaluated against the view
+  # at render time. The response template body lives right here, so all
+  # the PVP logic is in one file alongside the alert template.
+  [[entry.buttons]]
+  id = "pvp"
+  label = "Show PVP details"
+  style = "secondary"
+  show_if = "{{hasPVP}}"
+  response_template_inline = """
+  {
+    "embed": {
+      "title": "PVP rankings for {{fullName}}",
+      "color": "{{gymColor}}",
+      "fields": [
+        {{#if pvp_rankings_great_league}}
+        {
+          "name": "Great League",
+          "value": "{{#each pvp_rankings_great_league}}#{{rank}} Lvl {{levelWithCap}} CP {{cp}}\\n{{/each}}",
+          "inline": true
+        },
+        {{/if}}
+        {{#if pvp_rankings_ultra_league}}
+        {
+          "name": "Ultra League",
+          "value": "{{#each pvp_rankings_ultra_league}}#{{rank}} Lvl {{levelWithCap}} CP {{cp}}\\n{{/each}}",
+          "inline": true
+        }
+        {{/if}}
+      ]
+    }
+  }
+  """
+
+  # Action button — mute scope=gym uses the gym_id from the snapshot
+  # view. applies_to defaults to ["dm"] for mute actions, so the button
+  # won't appear on channel sends.
+  [[entry.buttons]]
+  id = "mute_gym_1h"
+  label = "Mute this gym (1h)"
+  style = "danger"
+  action = "mute"
+  scope = "gym"
+  params = { duration_min = 60 }
+
+  # Plain-text response — operator-friendly one-liner. Single-line
+  # response_text skips JSON parsing entirely; the Handlebars output
+  # goes straight to Discord as message content.
+  [[entry.buttons]]
+  id = "coords"
+  label = "Copy coordinates"
+  style = "secondary"
+  response_text = "📍 `{{latitude}}, {{longitude}}`"

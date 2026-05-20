@@ -19,18 +19,22 @@ import (
 )
 
 // DTSEntry represents a single DTS template entry from the dts.json file.
+//
+// Field tags include both `json:` (for the JSON loader / API output) and
+// `toml:` (for the TOML loader / round-trip writer). Keep them in sync
+// — adding a new field means tagging both.
 type DTSEntry struct {
-	Type         string `json:"type"`
-	ID           jsonID `json:"id"`
-	Platform     string `json:"platform"`
-	Language     string `json:"language"`
-	Default      bool   `json:"default"`
-	Hidden       bool   `json:"hidden"`
-	Readonly     bool   `json:"readonly,omitempty"`
-	Name         string `json:"name,omitempty"`
-	Description  string `json:"description,omitempty"`
-	Template     any    `json:"template"`
-	TemplateFile string `json:"templateFile,omitempty"`
+	Type         string `json:"type" toml:"type"`
+	ID           jsonID `json:"id" toml:"id"`
+	Platform     string `json:"platform" toml:"platform"`
+	Language     string `json:"language" toml:"language"`
+	Default      bool   `json:"default" toml:"default,omitempty"`
+	Hidden       bool   `json:"hidden" toml:"hidden,omitempty"`
+	Readonly     bool   `json:"readonly,omitempty" toml:"-"`
+	Name         string `json:"name,omitempty" toml:"name,omitempty"`
+	Description  string `json:"description,omitempty" toml:"description,omitempty"`
+	Template     any    `json:"template" toml:"template,omitempty"`
+	TemplateFile string `json:"templateFile,omitempty" toml:"templateFile,omitempty"`
 
 	// Buttons attached to this template (#109). Operator-authored;
 	// validated at load time via buttons.Def.Validate(). Empty when the
@@ -38,12 +42,29 @@ type DTSEntry struct {
 	// The render path skips emission entirely when [snapshots] is
 	// disabled, so operators can keep button definitions in DTS and
 	// toggle the feature via config.
-	Buttons []buttons.Def `json:"buttons,omitempty"`
+	Buttons []buttons.Def `json:"buttons,omitempty" toml:"buttons,omitempty"`
 
 	// sourceFile tracks where this entry was loaded from (not serialized).
 	// Used to remove the entry from its original file when saving elsewhere.
 	sourceFile string
+
+	// sourceFormat names the on-disk format the entry was loaded from
+	// (SourceFormatJSON or SourceFormatTOML). Not serialised — exposed
+	// to the config editor via SourceFormat() so it knows which writer
+	// to use when saving back.
+	sourceFormat string
 }
+
+// Source format constants. Tied to file extensions for now; we'll add
+// more if/when other formats appear.
+const (
+	SourceFormatJSON = "json"
+	SourceFormatTOML = "toml"
+)
+
+// SourceFormat returns the format this entry was loaded from ("json" or
+// "toml"). Empty for in-memory entries built outside the loader.
+func (e *DTSEntry) SourceFormat() string { return e.sourceFormat }
 
 // SourceFile returns the file path this entry was loaded from.
 func (e *DTSEntry) SourceFile() string { return e.sourceFile }
@@ -152,6 +173,7 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 		}
 		for i := range fallbackEntries {
 			fallbackEntries[i].sourceFile = fallbackPath
+			fallbackEntries[i].sourceFormat = SourceFormatJSON
 			fallbackEntries[i].Readonly = true
 		}
 		entries = append(entries, fallbackEntries...)
@@ -178,6 +200,7 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 		}
 		for i := range extraEntries {
 			extraEntries[i].sourceFile = path
+			extraEntries[i].sourceFormat = SourceFormatJSON
 			extraEntries[i].Readonly = true
 		}
 		entries = append(entries, extraEntries...)
@@ -194,6 +217,7 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 		}
 		for i := range configEntries {
 			configEntries[i].sourceFile = configPath
+			configEntries[i].sourceFormat = SourceFormatJSON
 		}
 		entries = append(entries, configEntries...)
 	} else if entries == nil {
@@ -202,34 +226,56 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 	}
 
 	// 3. Load additional DTS files from config/dts/ directory.
-	// Each JSON file is an array of DTSEntry objects, concatenated to the main list.
-	// Later entries override earlier ones via the template selection chain.
+	// Each JSON file is an array of DTSEntry objects; each TOML file may
+	// declare [[entry]] blocks. Concatenated to the main list — later
+	// entries override earlier ones via the selection chain.
 	dtsDir := filepath.Join(configDir, "dts")
 	dirEntries, err := os.ReadDir(dtsDir)
 	if err == nil {
 		for _, f := range dirEntries {
-			if f.IsDir() || !strings.HasSuffix(f.Name(), ".json") {
+			if f.IsDir() {
 				continue
 			}
 			extraPath := filepath.Join(dtsDir, f.Name())
-			extraData, err := os.ReadFile(extraPath)
-			if err != nil {
-				log.Warnf("dts: failed to read %s: %s", extraPath, err)
-				continue
+
+			switch {
+			case strings.HasSuffix(f.Name(), ".json"):
+				extraData, err := os.ReadFile(extraPath)
+				if err != nil {
+					log.Warnf("dts: failed to read %s: %s", extraPath, err)
+					continue
+				}
+				var extraEntries []DTSEntry
+				if err := json.Unmarshal(extraData, &extraEntries); err != nil {
+					log.Warnf("dts: failed to parse %s: %s", extraPath, err)
+					continue
+				}
+				for i := range extraEntries {
+					extraEntries[i].sourceFile = extraPath
+					extraEntries[i].sourceFormat = SourceFormatJSON
+				}
+				entries = append(entries, extraEntries...)
+				log.Debugf("dts: loaded %d entries from %s", len(extraEntries), f.Name())
+
+			case strings.HasSuffix(f.Name(), ".toml"):
+				tomlEntries, terr := loadTOMLFile(extraPath)
+				if terr != nil {
+					// loadTOMLFile already logs per-entry; only the
+					// file-level parse error needs surfacing here.
+					log.Warnf("dts: failed to parse %s: %s", extraPath, terr)
+					continue
+				}
+				for i := range tomlEntries {
+					tomlEntries[i].sourceFile = extraPath
+					tomlEntries[i].sourceFormat = SourceFormatTOML
+				}
+				entries = append(entries, tomlEntries...)
+				log.Debugf("dts: loaded %d entries from %s (toml)", len(tomlEntries), f.Name())
 			}
-			var extraEntries []DTSEntry
-			if err := json.Unmarshal(extraData, &extraEntries); err != nil {
-				log.Warnf("dts: failed to parse %s: %s", extraPath, err)
-				continue
-			}
-			for i := range extraEntries {
-				extraEntries[i].sourceFile = extraPath
-			}
-			entries = append(entries, extraEntries...)
-			log.Debugf("dts: loaded %d entries from %s", len(extraEntries), f.Name())
 		}
 	}
 
+	warnDuplicateEntries(entries)
 	validateEntryButtons(entries)
 
 	return entries, nil
@@ -1038,10 +1084,17 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 	// cleaned up, so stale copies in config/dts.json AND in differently-
 	// named files under config/dts/ are both removed — not just the first
 	// match we happen to encounter in load order.
+	//
+	// If the existing match was loaded from a TOML file, we override the
+	// JSON-derived savePath to point at the TOML file instead — this is
+	// Option C from #110: format preserved on disk, editor speaks JSON
+	// internally. The TOML-write path below re-encodes every entry that
+	// shares the file so siblings don't get clobbered.
 	incKey := entryKey(&inc)
 	isOverride := false
 	oldSources := make(map[string]struct{})
 	newIndices := make([]int, 0, 2)
+	saveFormat := SourceFormatJSON
 	for i := range ts.entries {
 		e := &ts.entries[i]
 		if entryKey(e) != incKey {
@@ -1050,6 +1103,10 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 		if e.Readonly {
 			isOverride = true
 			continue
+		}
+		if e.sourceFormat == SourceFormatTOML {
+			saveFormat = SourceFormatTOML
+			savePath = e.sourceFile
 		}
 		if e.sourceFile != "" && e.sourceFile != savePath {
 			oldSources[e.sourceFile] = struct{}{}
@@ -1097,6 +1154,22 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 	ts.sourceCache = make(map[string]string)
 	ts.tileUsage = make(map[string]bool)
 	configDir := ts.configDir
+
+	// Collect entries sharing the savePath for the TOML re-encode path.
+	// Must happen under the lock so we see the post-update state. For
+	// JSON saves this is unused.
+	var tomlSiblings []DTSEntry
+	if saveFormat == SourceFormatTOML {
+		for i := range ts.entries {
+			if ts.entries[i].sourceFile == savePath {
+				clean := ts.entries[i]
+				clean.sourceFile = ""
+				clean.sourceFormat = ""
+				clean.Readonly = false
+				tomlSiblings = append(tomlSiblings, clean)
+			}
+		}
+	}
 	ts.mu.Unlock()
 
 	// Ensure config/dts/ directory exists
@@ -1112,8 +1185,17 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 		}
 	}
 
-	// Write the entry to its own file (single-element array)
-	if err := writeEntryFile(savePath, inc); err != nil {
+	// Branch on format: TOML re-encodes the whole file (with all
+	// siblings); JSON writes the entry to its own one-element file.
+	if saveFormat == SourceFormatTOML {
+		data, err := encodeTOML(tomlSiblings)
+		if err != nil {
+			return fmt.Errorf("encode TOML: %w", err)
+		}
+		if err := os.WriteFile(savePath, data, 0644); err != nil {
+			return fmt.Errorf("write %s: %w", savePath, err)
+		}
+	} else if err := writeEntryFile(savePath, inc); err != nil {
 		return err
 	}
 

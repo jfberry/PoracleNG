@@ -570,6 +570,10 @@ func main() {
 	// 503 if [snapshots] enabled = false. See docs/buttons-and-snapshots/.
 	apiGroup.GET("/snapshots/:messageID", api.HandleSnapshotGet(proc.snapshotStore))
 
+	// Button action registry — config editor reads this to surface the
+	// dropdown of action choices + their accepted scopes/params.
+	apiGroup.GET("/dts/actions", api.HandleButtonActionsList(proc.buttonActions))
+
 	// Resolution cache — populated after bot init below
 	resolveCache := api.NewResolveCache()
 

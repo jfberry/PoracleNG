@@ -1,0 +1,41 @@
+[
+  {
+    "id": "1",
+    "type": "raid",
+    "platform": "discord",
+    "language": "en",
+    "description": "Raid card with a 1-hour mute-this-gym button (JSON form)",
+    "template": {
+      "embed": {
+        "title": "{{levelName}} {{fullName}} at {{gymName}}",
+        "color": "{{gymColor}}",
+        "thumbnail": { "url": "{{{imgUrl}}}" },
+        "fields": [
+          { "name": "Time:", "value": "{{disappearTime}}", "inline": true },
+          { "name": "📍 Location:", "value": "[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})", "inline": true }
+        ]
+      }
+    },
+    "buttons": [
+      {
+        "id": "mute_gym_1h",
+        "label": "Mute this gym (1h)",
+        "style": "danger",
+        "action": "mute",
+        "scope": "gym",
+        "params": { "duration_min": 60 },
+        "applies_to": ["dm"],
+        "visible_to": "target"
+      },
+      {
+        "id": "mute_rule",
+        "label": "Unsubscribe from this rule",
+        "style": "danger",
+        "action": "unsubscribe",
+        "scope": "tracking",
+        "applies_to": ["dm"],
+        "visible_to": "target"
+      }
+    ]
+  }
+]
