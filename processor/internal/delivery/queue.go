@@ -368,6 +368,8 @@ func (fq *FairQueue) processJob(job *Job) {
 					job.LogReference, job.Type, job.Target, err)
 			} else {
 				metrics.SnapshotWritesTotal.WithLabelValues("ok").Inc()
+				log.Debugf("%s: snapshot stored key=%s sentID=%s",
+					job.LogReference, job.SnapshotData.Key(), sent.ID)
 			}
 		}
 	}
