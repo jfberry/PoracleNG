@@ -203,11 +203,11 @@ func (fq *FairQueue) processJob(job *Job) {
 
 				// Edits overwrite the snapshot (#108 — edits write a new
 				// snapshot under the same key, so consumers always see the
-				// most-recently-rendered state). The existing message ID is
-				// reused; CreatedAt gets bumped to reflect the edit time.
+				// most-recently-rendered state). Same composite-ID
+				// extraction as the initial-send write above.
 				if fq.dispatcher != nil && job.SnapshotData != nil {
 					if store := fq.dispatcher.SnapshotStore(); store != nil {
-						job.SnapshotData.MessageID = existing.SentID
+						job.SnapshotData.MessageID = extractMessageIDForSnapshot(existing.SentID, PlatformFromType(job.Type))
 						job.SnapshotData.CreatedAt = time.Now().Unix()
 						if err := store.Write(fq.ctx, job.SnapshotData); err != nil {
 							metrics.SnapshotWritesTotal.WithLabelValues("fail").Inc()
@@ -351,7 +351,14 @@ func (fq *FairQueue) processJob(job *Job) {
 	// alert itself, so we log and continue.
 	if fq.dispatcher != nil && job.SnapshotData != nil && sent != nil {
 		if store := fq.dispatcher.SnapshotStore(); store != nil {
-			job.SnapshotData.MessageID = sent.ID
+			// The Discord sender's SentMessage.ID is a composite like
+			// "bot/channelID:discordMessageID" (used by delete/edit to
+			// remember the channel). For the snapshot lookup we need
+			// the raw Discord message ID — that's what shows up in
+			// InteractionCreate.Message.ID when a user clicks a button.
+			// Telegram SentMessage.IDs use a different shape that
+			// passes through cleanly here.
+			job.SnapshotData.MessageID = extractMessageIDForSnapshot(sent.ID, PlatformFromType(job.Type))
 			if job.SnapshotData.CreatedAt == 0 {
 				job.SnapshotData.CreatedAt = time.Now().Unix()
 			}
