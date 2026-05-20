@@ -6,6 +6,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 )
 
 // DispatcherConfig holds all configuration for the delivery dispatcher.
@@ -52,6 +54,34 @@ type Dispatcher struct {
 	// per-reply maintenance-suffix check and the per-job drop check in
 	// FairQueue.processJob). Always updated inside pauseMu alongside paused.
 	pausedAtomic atomic.Bool
+
+	// snapshotStore is the opt-in per-delivery snapshot store (#108). Nil
+	// when [snapshots] enabled = false. Wired in by SetSnapshotStore after
+	// dispatcher construction so the delivery package doesn't take a hard
+	// dependency on snapshots being initialised. Safe to read concurrently
+	// from queue workers via SnapshotStore().
+	snapshotStore atomic.Pointer[snapshots.Store]
+}
+
+// SetSnapshotStore wires the snapshot store into the dispatcher. Called by
+// ProcessorService startup after the store has been opened (if enabled).
+// Safe to call with nil to clear; subsequent snapshot writes will no-op.
+func (d *Dispatcher) SetSnapshotStore(store snapshots.Store) {
+	if store == nil {
+		d.snapshotStore.Store(nil)
+		return
+	}
+	d.snapshotStore.Store(&store)
+}
+
+// SnapshotStore returns the currently-wired snapshot store, or nil. Queue
+// workers call this and skip the write if nil.
+func (d *Dispatcher) SnapshotStore() snapshots.Store {
+	p := d.snapshotStore.Load()
+	if p == nil {
+		return nil
+	}
+	return *p
 }
 
 // NewDispatcher creates a Dispatcher with the configured senders, tracker, and queue.

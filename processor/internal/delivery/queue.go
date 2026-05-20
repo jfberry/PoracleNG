@@ -200,6 +200,23 @@ func (fq *FairQueue) processJob(job *Job) {
 				log.Infof("%s: edit: succeeded for key=%s", job.LogReference, job.EditKey)
 				metrics.DeliveryTotal.WithLabelValues(platform, "edit_ok").Inc()
 				metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
+
+				// Edits overwrite the snapshot (#108 — edits write a new
+				// snapshot under the same key, so consumers always see the
+				// most-recently-rendered state). The existing message ID is
+				// reused; CreatedAt gets bumped to reflect the edit time.
+				if fq.dispatcher != nil && job.SnapshotData != nil {
+					if store := fq.dispatcher.SnapshotStore(); store != nil {
+						job.SnapshotData.MessageID = existing.SentID
+						job.SnapshotData.CreatedAt = time.Now().Unix()
+						if err := store.Write(fq.ctx, job.SnapshotData); err != nil {
+							metrics.SnapshotWritesTotal.WithLabelValues("fail").Inc()
+							log.Warnf("%s: snapshot write on edit failed: %v", job.LogReference, err)
+						} else {
+							metrics.SnapshotWritesTotal.WithLabelValues("ok").Inc()
+						}
+					}
+				}
 				return
 			} else {
 				log.Warnf("%s: edit: failed for key=%s: %v, sending new message", job.LogReference, job.EditKey, err)
@@ -326,6 +343,27 @@ func (fq *FairQueue) processJob(job *Job) {
 
 	metrics.DeliveryTotal.WithLabelValues(platform, "ok").Inc()
 	metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
+
+	// Write the per-delivery snapshot (#108) if the store is configured and
+	// the render layer attached snapshot data to this job. The MessageID
+	// only becomes available now — fill it in from the SentMessage. Failures
+	// are non-fatal: snapshot writing is for buttons/inspection, never the
+	// alert itself, so we log and continue.
+	if fq.dispatcher != nil && job.SnapshotData != nil && sent != nil {
+		if store := fq.dispatcher.SnapshotStore(); store != nil {
+			job.SnapshotData.MessageID = sent.ID
+			if job.SnapshotData.CreatedAt == 0 {
+				job.SnapshotData.CreatedAt = time.Now().Unix()
+			}
+			if err := store.Write(fq.ctx, job.SnapshotData); err != nil {
+				metrics.SnapshotWritesTotal.WithLabelValues("fail").Inc()
+				log.Warnf("%s: snapshot write failed for %s/%s: %v",
+					job.LogReference, job.Type, job.Target, err)
+			} else {
+				metrics.SnapshotWritesTotal.WithLabelValues("ok").Inc()
+			}
+		}
+	}
 
 	// 4. Track for clean/edit/reply if needed.
 	// ReplyKey on its own (without clean/edit) is enough to want tracking —

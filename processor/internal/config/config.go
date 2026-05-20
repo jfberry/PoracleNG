@@ -34,6 +34,7 @@ type Config struct {
 	AI             AIConfig             `toml:"ai"`
 	Validation     ValidationConfig     `toml:"validation"`
 	Autocreate     AutocreateConfig     `toml:"autocreate"`
+	Snapshots      SnapshotsConfig      `toml:"snapshots"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
@@ -505,6 +506,29 @@ type WeatherConfig struct {
 	ForecastRefreshInterval int      `toml:"forecast_refresh_interval"` // hours between API calls
 	LocalFirstFetchHOD      int      `toml:"local_first_fetch_hod"`     // first fetch hour of day
 	SmartForecast           bool     `toml:"smart_forecast"`            // pull on demand if no data
+}
+
+// SnapshotsConfig controls the opt-in per-delivery snapshot store used by
+// interactive buttons and post-alert lookups. Disabled by default — no disk
+// usage and no buttons unless the operator explicitly opts in.
+//
+// See docs/buttons-and-snapshots/ and GitHub #108 for the design.
+type SnapshotsConfig struct {
+	Enabled bool `toml:"enabled"` // opt-in default
+
+	// Path defaults to <BaseDir>/config/.cache/snapshots/ when empty. May be
+	// an absolute path or relative to BaseDir.
+	Path string `toml:"path"`
+
+	// MaxAgeDays is the safety-sweep grace period: snapshots whose TTL
+	// expired more than this many days ago are deleted by the background
+	// sweeper. The normal per-message delete callback handles the steady
+	// state; this catches orphans from restart/crash timing. Default 7.
+	MaxAgeDays int `toml:"max_age_days"`
+
+	// SweepIntervalMins is the cadence at which the background sweeper
+	// runs. Not on the hot path — hourly is plenty. Default 60.
+	SweepIntervalMins int `toml:"sweep_interval_mins"`
 }
 
 type StatsConfig struct {
@@ -1002,6 +1026,20 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if cfg.Discord.ThreadKeepAliveIntervalHours > 168 {
 		cfg.Discord.ThreadKeepAliveIntervalHours = 168
+	}
+
+	// Snapshots defaults. Enabled is intentionally NOT defaulted to true —
+	// operators must opt in. The other knobs only matter when enabled.
+	if cfg.Snapshots.Path == "" {
+		cfg.Snapshots.Path = filepath.Join(cfg.BaseDir, "config", ".cache", "snapshots")
+	} else if !filepath.IsAbs(cfg.Snapshots.Path) {
+		cfg.Snapshots.Path = filepath.Join(cfg.BaseDir, cfg.Snapshots.Path)
+	}
+	if cfg.Snapshots.MaxAgeDays <= 0 {
+		cfg.Snapshots.MaxAgeDays = 7
+	}
+	if cfg.Snapshots.SweepIntervalMins <= 0 {
+		cfg.Snapshots.SweepIntervalMins = 60
 	}
 
 	// Validate autocreate config.

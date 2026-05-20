@@ -55,6 +55,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/telegrambot"
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
 	"github.com/pokemon/poracleng/processor/internal/validation"
@@ -206,6 +207,24 @@ func main() {
 		if err != nil {
 			log.Warnf("Delivery dispatcher init failed: %s", err)
 		} else {
+			// Wire the snapshot store into the dispatcher before Start so the
+			// first delivered message can record its snapshot. Safe to call
+			// with nil — the dispatcher treats nil as "snapshots disabled".
+			proc.dispatcher.SetSnapshotStore(proc.snapshotStore)
+			// Drop snapshots when their host message ages out of the
+			// tracker. The hook fires for every TTL-expired entry
+			// (clean or not) — snapshots are useless once the alert is
+			// no longer in the user's window of interest. The safety
+			// sweep is the second line of defence for snapshots that
+			// outlive a missed callback.
+			if proc.snapshotStore != nil && proc.dispatcher.MessageTracker() != nil {
+				store := proc.snapshotStore
+				proc.dispatcher.MessageTracker().SetEvictionHook(func(target, sentID string) {
+					if err := store.Delete(proc.ctx, snapshots.MakeKey(target, sentID)); err != nil {
+						log.Debugf("snapshots: delete on tracker evict %s/%s: %v", target, sentID, err)
+					}
+				})
+			}
 			proc.dispatcher.Start()
 			log.Infof("Delivery dispatcher started: discord=%d webhook=%d telegram=%d queue=%d",
 				cfg.Tuning.ConcurrentDiscordDestinations,
@@ -544,6 +563,10 @@ func main() {
 	apiGroup.POST("/config/migrate", api.HandleConfigMigrate(configDeps))
 	apiGroup.GET("/masterdata/monsters", api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations))
 	apiGroup.GET("/masterdata/grunts", api.HandleMasterdataGrunts(proc.enricher.GameData))
+
+	// Snapshot inspection — admin-only via the api_secret middleware. Returns
+	// 503 if [snapshots] enabled = false. See docs/buttons-and-snapshots/.
+	apiGroup.GET("/snapshots/:messageID", api.HandleSnapshotGet(proc.snapshotStore))
 
 	// Resolution cache — populated after bot init below
 	resolveCache := api.NewResolveCache()
@@ -1123,6 +1146,14 @@ type ProcessorService struct {
 	// natural anchor point — it's constructed once at startup and lives
 	// for the lifetime of the process.
 	procStart time.Time
+
+	// snapshotStore is the opt-in per-delivery enrichment store (#108).
+	// Nil when [snapshots] enabled = false; senders + render path check
+	// for nil and skip both the snapshot write and the button-render side
+	// of the work. snapshotSweeper is paired with the store and runs the
+	// safety sweep; both are nil together.
+	snapshotStore   snapshots.Store
+	snapshotSweeper *snapshots.Sweeper
 }
 
 // ProcessStart returns the timestamp at which this ProcessorService was
@@ -1448,7 +1479,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &ProcessorService{
+	ps := &ProcessorService{
 		cfg:          cfg,
 		stateMgr:     stateMgr,
 		database:     database,
@@ -1497,6 +1528,31 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		translations: enricher.Translations,
 		workerPool:   make(chan struct{}, cfg.Tuning.WorkerPoolSize),
 	}
+
+	// Opt-in snapshot store (#108). When disabled, both fields stay nil and
+	// every consumer takes the nil-store path (no write, no read, no button
+	// components rendered).
+	if cfg.Snapshots.Enabled {
+		store, err := snapshots.Open(cfg.Snapshots.Path)
+		if err != nil {
+			// A failed snapshot open shouldn't take down the alerter — the
+			// snapshot store is for buttons/inspection, not core delivery.
+			// Log and continue with a nil store (i.e. behave as if disabled).
+			log.Warnf("snapshots: open at %s failed: %v — continuing with snapshots disabled", cfg.Snapshots.Path, err)
+		} else {
+			ps.snapshotStore = store
+			ps.snapshotSweeper = snapshots.NewSweeper(
+				store,
+				time.Duration(cfg.Snapshots.SweepIntervalMins)*time.Minute,
+				time.Duration(cfg.Snapshots.MaxAgeDays)*24*time.Hour,
+			)
+			ps.snapshotSweeper.Start(ps.ctx)
+			log.Infof("Snapshot store enabled at %s (max_age=%dd, sweep=%dm)",
+				cfg.Snapshots.Path, cfg.Snapshots.MaxAgeDays, cfg.Snapshots.SweepIntervalMins)
+		}
+	}
+
+	return ps
 }
 
 func (ps *ProcessorService) Close() {
@@ -1525,6 +1581,21 @@ func (ps *ProcessorService) Close() {
 		log.Info("Stopping delivery dispatcher...")
 		ps.dispatcher.Stop()
 		log.Info("Delivery dispatcher stopped")
+	}
+	// Snapshot store shutdown follows the dispatcher — after Stop returns,
+	// no more sender goroutines are running, so no more snapshot writes can
+	// happen. Stop the sweeper goroutine first (releases reads), then close
+	// the pogreb handle.
+	if ps.snapshotSweeper != nil {
+		ps.snapshotSweeper.Stop()
+		log.Info("Snapshot sweeper stopped")
+	}
+	if ps.snapshotStore != nil {
+		if err := ps.snapshotStore.Close(); err != nil {
+			log.Warnf("Failed to close snapshot store: %v", err)
+		} else {
+			log.Info("Snapshot store closed")
+		}
 	}
 	if ps.enricher.StaticMap != nil {
 		ps.enricher.StaticMap.Close()

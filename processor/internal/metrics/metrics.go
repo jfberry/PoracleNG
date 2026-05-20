@@ -402,4 +402,26 @@ var (
 		Help:    "Validation hook latency",
 		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
 	})
+
+	// Snapshot store ([snapshots], opt-in per-delivery enrichment store).
+	// Metrics only surface meaningful values when [snapshots] enabled = true.
+	SnapshotWritesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_snapshot_writes_total",
+		Help: "Snapshot store write attempts by outcome (ok / fail)",
+	}, []string{"result"})
+
+	SnapshotReadsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_snapshot_reads_total",
+		Help: "Snapshot store read attempts by outcome (hit / miss / error)",
+	}, []string{"result"})
+
+	SnapshotSweepDeletionsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_snapshot_sweep_deletions_total",
+		Help: "Snapshots removed by the safety sweep (should be near-zero in healthy operation)",
+	})
+
+	SnapshotStoreEntries = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_snapshot_store_entries",
+		Help: "Approximate number of records currently in the snapshot store",
+	})
 )
