@@ -9,6 +9,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -202,6 +203,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				MsgType:       job.AlertType,
 				StaticMapData: job.TileImageData,
 				Language:      j.Language,
+				SnapshotData:  ps.buildSnapshot(job, j, tth),
 			})
 		}
 	}
@@ -326,4 +328,59 @@ func intFromAny(v any) int {
 func parseCoordFloat(s string) float64 {
 	f, _ := strconv.ParseFloat(s, 64)
 	return f
+}
+
+// buildSnapshot constructs the per-delivery Snapshot for a DeliveryJob, or
+// returns nil when the snapshot store isn't enabled. The MessageID is left
+// empty — the dispatcher's sender fills it in from the resolved SentMessage
+// after the platform API call succeeds. CreatedAt is also deferred (set on
+// write) so re-renders for an edit see a fresh timestamp.
+//
+// Phase 1 of the buttons-and-snapshots work intentionally leaves
+// TrackingUIDs and View unpopulated — Phase 3 wires them when buttons need
+// them (snapshot.View for response template rendering, TrackingUIDs for
+// scope=tracking action handlers). The Snapshot.Version field flags the
+// schema so future readers know what they're getting.
+func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, tth delivery.TTH) *snapshots.Snapshot {
+	if ps.snapshotStore == nil {
+		return nil
+	}
+	now := time.Now()
+	expires := now.Add(tth.Duration()).Unix()
+
+	areas := make([]string, 0, len(rj.MatchedAreas))
+	for _, a := range rj.MatchedAreas {
+		areas = append(areas, a.Name)
+	}
+
+	return &snapshots.Snapshot{
+		Target:       dj.Target,
+		TargetType:   snapshotTargetType(dj.Type),
+		ExpiresAt:    expires,
+		AlertType:    rj.AlertType,
+		TemplateType: rj.TemplateType,
+		// TemplateRequested / TemplateSelected: see the Phase 1 note above.
+		// Until the renderer surfaces the resolved entry id, both are left
+		// empty. Phase 3 will route them through.
+		Language:     dj.Language,
+		Platform:     delivery.PlatformFromType(dj.Type),
+		MatchedAreas: areas,
+		// TrackingUIDs and View: Phase 3 fills these in. See buildSnapshot
+		// docstring for the rationale.
+	}
+}
+
+// snapshotTargetType maps a delivery.Job.Type ("discord:user", etc.) to the
+// short noun used in Snapshot.TargetType ("dm" / "channel" / "webhook").
+func snapshotTargetType(jobType string) string {
+	switch jobType {
+	case "discord:user", "telegram:user":
+		return "dm"
+	case "discord:channel", "discord:thread", "telegram:group", "telegram:channel":
+		return "channel"
+	case "webhook":
+		return "webhook"
+	default:
+		return ""
+	}
 }

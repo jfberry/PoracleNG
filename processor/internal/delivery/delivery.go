@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 )
 
 // TTH represents time-to-hide (how long until the message should be deleted).
@@ -54,6 +56,12 @@ type Job struct {
 	// — without this, the limiter could swallow the very message telling the
 	// user they were rate-limited.
 	BypassRateLimit bool `json:"-"`
+
+	// SnapshotData is the pre-built snapshot for this delivery, missing only
+	// the platform-assigned message ID. After Send success the sender fills
+	// in MessageID and writes via SnapshotStore. Nil when [snapshots] is
+	// disabled. See processor/internal/snapshots and #108.
+	SnapshotData *snapshots.Snapshot `json:"-"`
 }
 
 // RateLimitHooks lets the delivery queue notify the host application when a
