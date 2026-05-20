@@ -53,6 +53,26 @@ type MessageTracker struct {
 	// that drives the cleanup.
 	repliesMu sync.RWMutex
 	replies   map[string]map[string]string
+
+	// onEvict is invoked on every TTL eviction (clean or not) — gives
+	// satellite stores like the snapshot pogreb a chance to drop their
+	// per-message records alongside the tracker entry. Optional; nil =
+	// no extra cleanup. Set via SetEvictionHook before Track is called.
+	onEvictMu sync.RWMutex
+	onEvict   func(target, sentID string)
+}
+
+// SetEvictionHook installs a callback invoked for every TTL-expired entry,
+// regardless of clean status. The hook receives (target, sentID) and is
+// expected to remove any satellite records keyed by the same pair (e.g. the
+// per-delivery snapshot). The hook runs synchronously inside the eviction
+// goroutine — keep it cheap; expensive work should be dispatched async.
+//
+// Safe to call before or after Track. Passing nil clears the hook.
+func (mt *MessageTracker) SetEvictionHook(fn func(target, sentID string)) {
+	mt.onEvictMu.Lock()
+	mt.onEvict = fn
+	mt.onEvictMu.Unlock()
 }
 
 // NewMessageTracker creates a new MessageTracker with TTL cache and eviction-based clean deletion.
@@ -93,6 +113,17 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 			return
 		}
 		metrics.DeliveryTrackerEvictions.Inc()
+
+		// Satellite-store cleanup hook (snapshot store, etc.). Runs for
+		// every TTL-expired entry whether the message was clean or not —
+		// snapshots have outlived their useful window either way.
+		mt.onEvictMu.RLock()
+		hook := mt.onEvict
+		mt.onEvictMu.RUnlock()
+		if hook != nil && msg.SentID != "" {
+			hook(msg.Target, msg.SentID)
+		}
+
 		if !db.IsClean(msg.Clean) {
 			return
 		}
