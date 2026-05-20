@@ -133,6 +133,7 @@
   "msg.mute.bad_duration": "Invalid duration: {0}",
   "msg.mute.id_not_supported": "`!mute id:N` / `!mute <type> id:N` aren't supported yet — entity scopes (gym, pokemon, area, pokestop, station, everything) work today. Per-rule muting by UID is a follow-up.",
   "msg.mute.bad_uid": "`{0}` isn't a valid tracking rule UID. Use `!tracked` to see your rule UIDs.",
+  "msg.mute.unknown_area": "`{0}` isn't in your available areas. Use `!area` to see what you can mute.",
   "msg.mute.no_pokemon": "I don't know a pokemon called `{0}`.",
   "msg.mute.everything_label": "everything",
   "msg.mute.added": "🔇 Muted {0} for {1}.",

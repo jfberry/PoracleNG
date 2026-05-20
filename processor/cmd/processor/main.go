@@ -800,6 +800,7 @@ func main() {
 		MuteStore:          proc.muteStore,
 		SnapshotStore:      proc.snapshotStore,
 		ButtonActions:      proc.buttonActions,
+		DTSRenderer:        proc.dtsRenderer,
 		ReloadDTS: reloadDTS,
 		EmojiReload: func() (int, error) {
 			if cmdEmoji == nil {

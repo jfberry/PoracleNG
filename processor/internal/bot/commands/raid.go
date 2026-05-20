@@ -44,6 +44,11 @@ var raidParams = []bot.ParamDef{
 func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	// Per-type mute/unmute alias: `!raid mute id:12` ≡ `!mute raid id:12`.
+	if reply := RouteToMuteFromType(ctx, "raid", args); reply != nil {
+		return reply
+	}
+
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
