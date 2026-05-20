@@ -55,6 +55,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/telegrambot"
+	"github.com/pokemon/poracleng/processor/internal/buttonactions"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -797,6 +798,8 @@ func main() {
 		Scanner:            proc.scanner,
 		RecentActivity:     proc.recentActivity,
 		MuteStore:          proc.muteStore,
+		SnapshotStore:      proc.snapshotStore,
+		ButtonActions:      proc.buttonActions,
 		ReloadDTS: reloadDTS,
 		EmojiReload: func() (int, error) {
 			if cmdEmoji == nil {
@@ -1165,6 +1168,11 @@ type ProcessorService struct {
 	// on a fixed cadence; both are nil only in tests that skip init.
 	muteStore   *mute.Store
 	muteSweeper *mute.Sweeper
+
+	// buttonActions is the dispatch registry for button-triggered state
+	// changes (#109). Always allocated and built-in handlers registered
+	// at startup; nil only in tests that skip init.
+	buttonActions *buttonactions.Registry
 }
 
 // ProcessStart returns the timestamp at which this ProcessorService was
@@ -1543,6 +1551,13 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	ps.muteSweeper = mute.NewSweeper(ps.muteStore, time.Minute)
 	ps.muteSweeper.Start(ps.ctx)
 
+	// Button action registry + built-in handlers (#109). Allocated even
+	// when snapshots are disabled — operators can keep button defs in
+	// DTS and the registry stays consistent across enable/disable
+	// transitions.
+	ps.buttonActions = buttonactions.NewRegistry()
+	buttonactions.RegisterBuiltins(ps.buttonActions)
+
 	// Opt-in snapshot store (#108). When disabled, both fields stay nil and
 	// every consumer takes the nil-store path (no write, no read, no button
 	// components rendered).
@@ -1561,7 +1576,14 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 				time.Duration(cfg.Snapshots.MaxAgeDays)*24*time.Hour,
 			)
 			ps.snapshotSweeper.Start(ps.ctx)
-			log.Infof("Snapshot store enabled at %s (max_age=%dd, sweep=%dm)",
+			// Buttons require a snapshot at click time, so we only enable
+			// component emission when the snapshot store is also up.
+			// Renderer may be nil during early init (tests / DTS load
+			// errors) — guard accordingly.
+			if ps.dtsRenderer != nil {
+				ps.dtsRenderer.SetButtonsEnabled(true)
+			}
+			log.Infof("Snapshot store enabled at %s (max_age=%dd, sweep=%dm); buttons enabled",
 				cfg.Snapshots.Path, cfg.Snapshots.MaxAgeDays, cfg.Snapshots.SweepIntervalMins)
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/backup"
+	"github.com/pokemon/poracleng/processor/internal/buttons"
 )
 
 // DTSEntry represents a single DTS template entry from the dts.json file.
@@ -30,6 +31,14 @@ type DTSEntry struct {
 	Description  string `json:"description,omitempty"`
 	Template     any    `json:"template"`
 	TemplateFile string `json:"templateFile,omitempty"`
+
+	// Buttons attached to this template (#109). Operator-authored;
+	// validated at load time via buttons.Def.Validate(). Empty when the
+	// operator hasn't opted into interactive buttons for this entry.
+	// The render path skips emission entirely when [snapshots] is
+	// disabled, so operators can keep button definitions in DTS and
+	// toggle the feature via config.
+	Buttons []buttons.Def `json:"buttons,omitempty"`
 
 	// sourceFile tracks where this entry was loaded from (not serialized).
 	// Used to remove the entry from its original file when saving elsewhere.
@@ -221,7 +230,34 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 		}
 	}
 
+	validateEntryButtons(entries)
+
 	return entries, nil
+}
+
+// validateEntryButtons walks every loaded entry and drops buttons that
+// fail buttons.Def.Validate, logging each rejection. The entry itself
+// stays valid — a single broken button shouldn't take down its
+// containing template, mirroring the policy elsewhere in the loader.
+//
+// Mutates the input slice in place. Called from loadEntries after all
+// sources have been combined.
+func validateEntryButtons(entries []DTSEntry) {
+	for i := range entries {
+		if len(entries[i].Buttons) == 0 {
+			continue
+		}
+		kept := entries[i].Buttons[:0]
+		for _, b := range entries[i].Buttons {
+			if err := b.Validate(); err != nil {
+				log.Warnf("dts: dropping invalid button %q in entry type=%s id=%s (%s): %v",
+					b.ID, entries[i].Type, entries[i].ID, entries[i].sourceFile, err)
+				continue
+			}
+			kept = append(kept, b)
+		}
+		entries[i].Buttons = kept
+	}
 }
 
 // Reload re-reads dts.json and partials.json, then clears the template cache.
@@ -292,6 +328,27 @@ func (ts *TemplateStore) Get(templateType, platform, templateID, language string
 // Exists checks whether a template with the given ID exists for the type and
 // platform. A default entry's ID also counts as valid. This does NOT fall back
 // to the default template for unknown IDs — use Get for that (rendering).
+// GetButtons returns the operator-authored button definitions attached to
+// the template that satisfies the (type, platform, id, language) lookup.
+// Uses the same selection chain as Get/Exists so the returned buttons
+// always match the template the user will see. Returns nil when there is
+// no matching entry or the entry has no buttons.
+//
+// Safe for concurrent use — the entries slice is read-only after load,
+// and we copy out the buttons slice before unlocking so the caller can
+// iterate without holding the store lock.
+func (ts *TemplateStore) GetButtons(templateType, platform, templateID, language string) []buttons.Def {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	entry := ts.selectEntry(templateType, platform, templateID, language)
+	if entry == nil || len(entry.Buttons) == 0 {
+		return nil
+	}
+	out := make([]buttons.Def, len(entry.Buttons))
+	copy(out, entry.Buttons)
+	return out
+}
+
 func (ts *TemplateStore) Exists(templateType, platform, templateID, language string) bool {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
