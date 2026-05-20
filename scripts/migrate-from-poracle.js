@@ -258,6 +258,9 @@ function buildUnifiedConfig(defaults, local) {
 		port: oldPort,
 	}
 
+	if (serverOverrides.host) {
+		unified.processor.host = serverOverrides.host
+	}
 	// Preserve api_secret from server overrides
 	if (serverOverrides.apiSecret) {
 		unified.processor.api_secret = serverOverrides.apiSecret
