@@ -70,6 +70,7 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) (immediate []webh
 			Template:  q.Template,
 			Clean:     q.Clean,
 			Ping:      q.Ping,
+			UID:       q.UID,
 		}
 		if db.IsSummary(q.Clean) {
 			bufferedTrackings = append(bufferedTrackings, td)

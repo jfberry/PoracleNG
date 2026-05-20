@@ -4,6 +4,7 @@ import "github.com/jmoiron/sqlx"
 
 // MaxbattleTracking represents a row from the maxbattle table.
 type MaxbattleTracking struct {
+	UID       int64   `db:"uid"`
 	ID        string  `db:"id"`
 	ProfileNo int     `db:"profile_no"`
 	PokemonID int     `db:"pokemon_id"`
@@ -23,7 +24,7 @@ type MaxbattleTracking struct {
 func LoadMaxbattles(db *sqlx.DB) ([]*MaxbattleTracking, error) {
 	var maxbattles []MaxbattleTracking
 	err := db.Select(&maxbattles,
-		`SELECT id, profile_no, pokemon_id, gmax, level, form, move, evolution,
+		`SELECT uid, id, profile_no, pokemon_id, gmax, level, form, move, evolution,
 		        distance, station_id, ping, clean, COALESCE(template, '') AS template
 		 FROM maxbattle`)
 	if err != nil {

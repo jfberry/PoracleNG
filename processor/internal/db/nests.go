@@ -4,6 +4,7 @@ import "github.com/jmoiron/sqlx"
 
 // NestTracking represents a row from the nests table.
 type NestTracking struct {
+	UID         int64  `db:"uid"`
 	ID          string `db:"id"`
 	ProfileNo   int    `db:"profile_no"`
 	Ping        string `db:"ping"`
@@ -19,7 +20,7 @@ type NestTracking struct {
 func LoadNests(db *sqlx.DB) ([]*NestTracking, error) {
 	var nests []NestTracking
 	err := db.Select(&nests,
-		`SELECT id, profile_no, ping, clean, distance,
+		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, pokemon_id,
 		        min_spawn_avg, COALESCE(form, 0) AS form
 		 FROM nests`)

@@ -56,6 +56,12 @@ type Event struct {
 	Area       []string // every matched area name
 	PokestopID string
 	StationID  string
+
+	// MatchedRuleUID is the database UID of the tracking rule that
+	// produced this match (per-MatchedUser). ScopeTracking mutes
+	// compare against this — when a user has muted UID N, alerts whose
+	// MatchedRuleUID is N get dropped.
+	MatchedRuleUID int64
 }
 
 // Store is the in-memory mute repository. Safe for concurrent use; the
@@ -204,10 +210,13 @@ func matchScope(e Entry, ev Event) bool {
 	case ScopeStation:
 		return e.ScopeValue != "" && e.ScopeValue == ev.StationID
 	case ScopeTracking:
-		// Reserved for Phase 2.5 — matcher integration needs MatchedUser
-		// to carry the rule UID. Treat as no-op for now so test data with
-		// stored ScopeTracking entries doesn't accidentally drop alerts.
-		return false
+		// Match when the muted rule UID equals the rule that produced
+		// this match. Skip when either side is empty so a zero-UID
+		// synthetic match doesn't accidentally trip a "0" mute entry.
+		if e.ScopeValue == "" || ev.MatchedRuleUID == 0 {
+			return false
+		}
+		return e.ScopeValue == itoa(int(ev.MatchedRuleUID))
 	default:
 		return false
 	}

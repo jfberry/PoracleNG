@@ -194,16 +194,22 @@ func TestConcurrentReadsWrites(t *testing.T) {
 	}
 }
 
-func TestTrackingScopeIsNoOp(t *testing.T) {
+func TestTrackingScopeMatchesRuleUID(t *testing.T) {
 	s := NewStore()
 	now := time.Now().Unix()
-	// Even with a tracking-scope entry in the store, Match returns false —
-	// tracking-UID enforcement is deferred to a follow-up that plumbs UID
-	// through MatchedUser. Verify the no-op behaviour so accidental writes
-	// don't silently drop alerts.
 	s.Add(Entry{HumanID: "u1", ScopeType: ScopeTracking, ScopeValue: "45", ExpiresAt: now + 60})
-	if s.Match("u1", Event{PokemonID: 25}, now) {
-		t.Errorf("ScopeTracking should be a no-op for now")
+
+	// Match when MatchedRuleUID equals the muted value.
+	if !s.Match("u1", Event{MatchedRuleUID: 45}, now) {
+		t.Errorf("ScopeTracking with MatchedRuleUID=45 should match mute on '45'")
+	}
+	// No match for a different UID.
+	if s.Match("u1", Event{MatchedRuleUID: 46}, now) {
+		t.Errorf("ScopeTracking with MatchedRuleUID=46 should not match mute on '45'")
+	}
+	// No match when MatchedRuleUID is unset (avoid accidental "0" trip).
+	if s.Match("u1", Event{}, now) {
+		t.Errorf("ScopeTracking with no MatchedRuleUID should not match")
 	}
 }
 

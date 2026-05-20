@@ -4,6 +4,7 @@ import "github.com/jmoiron/sqlx"
 
 // FortTracking represents a row from the forts table.
 type FortTracking struct {
+	UID          int64  `db:"uid"`
 	ID           string `db:"id"`
 	ProfileNo    int    `db:"profile_no"`
 	Ping         string `db:"ping"`
@@ -18,7 +19,7 @@ type FortTracking struct {
 func LoadForts(db *sqlx.DB) ([]*FortTracking, error) {
 	var forts []FortTracking
 	err := db.Select(&forts,
-		`SELECT id, profile_no, ping, distance,
+		`SELECT uid, id, profile_no, ping, distance,
 		        COALESCE(template, '') AS template,
 		        COALESCE(fort_type, 'everything') AS fort_type,
 		        COALESCE(include_empty, true) AS include_empty,

@@ -4,6 +4,7 @@ import "github.com/jmoiron/sqlx"
 
 // LureTracking represents a row from the lures table.
 type LureTracking struct {
+	UID       int64  `db:"uid"`
 	ID        string `db:"id"`
 	ProfileNo int    `db:"profile_no"`
 	Ping      string `db:"ping"`
@@ -17,7 +18,7 @@ type LureTracking struct {
 func LoadLures(db *sqlx.DB) ([]*LureTracking, error) {
 	var lures []LureTracking
 	err := db.Select(&lures,
-		`SELECT id, profile_no, ping, clean, distance,
+		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, lure_id
 		 FROM lures`)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 
 // InvasionTracking represents a row from the invasion table.
 type InvasionTracking struct {
+	UID       int64  `db:"uid"`
 	ID        string `db:"id"`
 	ProfileNo int    `db:"profile_no"`
 	Ping      string `db:"ping"`
@@ -30,7 +31,7 @@ type InvasionTracking struct {
 func LoadInvasions(db *sqlx.DB) ([]*InvasionTracking, error) {
 	var invasions []InvasionTracking
 	err := db.Select(&invasions,
-		`SELECT id, profile_no, ping, clean, distance,
+		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, gender, grunt_type
 		 FROM invasion`)
 	if err != nil {
