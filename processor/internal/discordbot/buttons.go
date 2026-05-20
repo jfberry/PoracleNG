@@ -118,6 +118,8 @@ func (b *Bot) handleButtonClick(s *discordgo.Session, ic *discordgo.InteractionC
 	tt, tid := snap.TemplateType, snap.TemplateSelected
 	def, ok := b.resolveButton(snap, actionID)
 	if !ok {
+		log.Warnf("discord button: no button %q found in DTS for type=%q platform=%q id=%q lang=%q (requested=%q)",
+			actionID, snap.TemplateType, snap.Platform, snap.TemplateSelected, snap.Language, snap.TemplateRequested)
 		metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "unavailable").Inc()
 		respondEphemeral(s, ic, "This button is no longer available.")
 		return true
