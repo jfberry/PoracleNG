@@ -291,19 +291,19 @@ func (b *Bot) isRegisteredClicker(clicker string) bool {
 }
 
 // lookupSnapshotForClick reads the snapshot for the clicked message. The
-// snapshot store is keyed by target — and we know the messageID from the
-// interaction but the target depends on whether this is a DM, a channel,
-// or a webhook delivery. Try the obvious shapes in order:
+// snapshot store key is `<target>:<messageID>` where target is the bare
+// Discord ID (user ID for DMs, channel ID for channels and threads) —
+// matching webhook.DeliveryJob.Target, which is what the render path
+// writes into the snapshot.
 //
-//  1. discord:user:<clicker> (DM directly to the clicker)
-//  2. discord:channel:<channel_id> (regular channel send)
-//  3. discord:thread:<channel_id> (thread send — ic.ChannelID is the thread)
-//  4. webhook:<endpoint> would require knowing the webhook URL; skipped
-//     in v1.
+// We don't know up front whether the click came from a DM or a channel,
+// so we try both shapes:
 //
-// Returns ErrNotFound if all shapes miss. Operators with custom target
-// schemas would extend this — a Snapshot lookup that knew about
-// secondary indexes (by messageID alone) is a follow-up improvement.
+//  1. <clicker_user_id>      (DM: snapshot was keyed by the recipient's user id)
+//  2. <ic.ChannelID>         (channel / thread: snapshot was keyed by channel id)
+//
+// Webhook deliveries aren't covered — Discord clicks don't come back to
+// webhooks anyway. Returns ErrNotFound when both shapes miss.
 func lookupSnapshotForClick(store snapshots.Store, ic *discordgo.InteractionCreate) (*snapshots.Snapshot, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -311,13 +311,10 @@ func lookupSnapshotForClick(store snapshots.Store, ic *discordgo.InteractionCrea
 	clicker := clickerUserID(ic)
 	candidates := []string{}
 	if clicker != "" {
-		candidates = append(candidates, "discord:user:"+clicker)
+		candidates = append(candidates, clicker)
 	}
-	if ic.ChannelID != "" {
-		candidates = append(candidates,
-			"discord:channel:"+ic.ChannelID,
-			"discord:thread:"+ic.ChannelID,
-		)
+	if ic.ChannelID != "" && ic.ChannelID != clicker {
+		candidates = append(candidates, ic.ChannelID)
 	}
 
 	for _, target := range candidates {
