@@ -117,6 +117,30 @@ func (r *Registry) Lookup(name string) Handler {
 	return r.handlers[name]
 }
 
+// Names returns the list of registered action names, sorted for stable
+// output. Used by the /api/dts/actions endpoint so config editors can
+// surface a dropdown of available actions to operators.
+func (r *Registry) Names() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, 0, len(r.handlers))
+	for name := range r.handlers {
+		out = append(out, name)
+	}
+	sortStrings(out)
+	return out
+}
+
+// sortStrings is a tiny inline sort to keep the package import surface
+// minimal (sort would be the only stdlib import added otherwise).
+func sortStrings(s []string) {
+	for i := 1; i < len(s); i++ {
+		for j := i; j > 0 && s[j-1] > s[j]; j-- {
+			s[j-1], s[j] = s[j], s[j-1]
+		}
+	}
+}
+
 // Dispatch resolves and invokes the handler for def.Action. Returns
 // ErrUnknownAction when no handler is registered; otherwise propagates
 // whatever the handler returns.
