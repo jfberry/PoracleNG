@@ -222,7 +222,13 @@ func main() {
 			if proc.snapshotStore != nil && proc.dispatcher.MessageTracker() != nil {
 				store := proc.snapshotStore
 				proc.dispatcher.MessageTracker().SetEvictionHook(func(target, sentID string) {
-					if err := store.Delete(proc.ctx, snapshots.MakeKey(target, sentID)); err != nil {
+					// MessageTracker stores the composite SentMessage.ID
+					// ("bot/channelID:discordMsgID"); snapshots are keyed
+					// by the bare platform message id. Extract before
+					// computing the key so clean-deletion drops the right
+					// entry.
+					msgID := delivery.ExtractMessageIDForSnapshot(sentID)
+					if err := store.Delete(proc.ctx, snapshots.MakeKey(target, msgID)); err != nil {
 						log.Debugf("snapshots: delete on tracker evict %s/%s: %v", target, sentID, err)
 					}
 				})

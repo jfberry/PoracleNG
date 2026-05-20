@@ -127,3 +127,32 @@ func splitSentID(s string) string {
 	}
 	return s[idx+1:]
 }
+
+// ExtractMessageIDForSnapshot returns the bare platform message ID for
+// snapshot storage. The Discord sender encodes SentMessage.ID as
+// "<rateLimitKey>:<discordMessageID>" so the delete/edit path can
+// remember the channel; the snapshot needs the raw ID half because
+// that's what arrives in InteractionCreate.Message.ID when a user
+// clicks a button on the message.
+//
+// MessageTracker stores the same composite under TrackedMessage.SentID,
+// so the eviction hook (called from main.go's snapshot cleanup) calls
+// this helper too — without it, clean-deletion would never find the
+// snapshot to drop because the key used at write time would differ.
+//
+// Detects by shape (colon present → composite) rather than by platform
+// argument; callers don't need to thread the platform through.
+func ExtractMessageIDForSnapshot(sentID string) string {
+	if id := splitSentID(sentID); id != "" {
+		return id
+	}
+	return sentID
+}
+
+// extractMessageIDForSnapshot is the internal call site used from
+// queue.go. Same semantics as the exported function; the platform
+// argument is kept for callers that already had it in scope, but the
+// implementation discriminates by shape.
+func extractMessageIDForSnapshot(sentID, _ string) string {
+	return ExtractMessageIDForSnapshot(sentID)
+}
