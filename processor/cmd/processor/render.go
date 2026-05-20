@@ -362,21 +362,18 @@ func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, 
 	view := mergeViewForSnapshot(rj.Enrichment, rj.PerLangEnrichment[dj.Language], rj.PerUserEnrichment[dj.Target], rj.WebhookFields)
 
 	return &snapshots.Snapshot{
-		Target:       dj.Target,
-		TargetType:   snapshotTargetType(dj.Type),
-		ExpiresAt:    expires,
-		AlertType:    rj.AlertType,
-		TemplateType: rj.TemplateType,
-		// TemplateRequested / TemplateSelected: the renderer doesn't
-		// currently surface the resolved entry id back to the render
-		// pool, so we leave these empty in v1. Consumers (redeliver,
-		// re-render-with-snapshot) fall back to the selection chain when
-		// these are empty, which Just Works for the common case.
-		Language:     dj.Language,
-		Platform:     delivery.PlatformFromType(dj.Type),
-		MatchedAreas: areas,
-		TrackingUIDs: trackingUIDs,
-		View:         view,
+		Target:            dj.Target,
+		TargetType:        snapshotTargetType(dj.Type),
+		ExpiresAt:         expires,
+		AlertType:         rj.AlertType,
+		TemplateType:      rj.TemplateType,
+		TemplateRequested: dj.TemplateRequested,
+		TemplateSelected:  dj.TemplateSelected,
+		Language:          dj.Language,
+		Platform:          delivery.PlatformFromType(dj.Type),
+		MatchedAreas:      areas,
+		TrackingUIDs:      trackingUIDs,
+		View:              view,
 	}
 }
 
