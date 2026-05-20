@@ -163,10 +163,16 @@ func loadPartials(configDir, fallbackDir string) map[string]string {
 
 func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 	var entries []DTSEntry
+	// anySourceFound flags whether ANY file was opened (parsed or empty)
+	// — used by the trailing "no DTS source" guard so a fully-missing
+	// install fails loudly, but an empty-but-present file (or an empty
+	// config/dts/ directory) doesn't.
+	anySourceFound := false
 
 	// 1. Load fallback dts.json (readonly — bundled defaults)
 	fallbackPath := filepath.Join(fallbackDir, "dts.json")
 	if data, err := os.ReadFile(fallbackPath); err == nil {
+		anySourceFound = true
 		var fallbackEntries []DTSEntry
 		if err := json.Unmarshal(data, &fallbackEntries); err != nil {
 			return nil, fmt.Errorf("parse fallback dts.json: %w", err)
@@ -208,9 +214,14 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 		return nil
 	})
 
-	// 2. Load config dts.json (user's main config, editable)
+	// 2. Load config dts.json (user's main config, editable). Optional
+	// when the operator authors only via config/dts/*.{json,toml} — the
+	// legacy "must have dts.json" check is deferred until after the
+	// per-file directory has been walked, so a TOML-only setup loads
+	// cleanly.
 	configPath := filepath.Join(configDir, "dts.json")
 	if data, err := os.ReadFile(configPath); err == nil {
+		anySourceFound = true
 		var configEntries []DTSEntry
 		if err := json.Unmarshal(data, &configEntries); err != nil {
 			return nil, fmt.Errorf("parse config dts.json: %w", err)
@@ -220,9 +231,6 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 			configEntries[i].sourceFormat = SourceFormatJSON
 		}
 		entries = append(entries, configEntries...)
-	} else if entries == nil {
-		// Neither fallback nor config found
-		return nil, fmt.Errorf("no dts.json found in %s or %s", configDir, fallbackDir)
 	}
 
 	// 3. Load additional DTS files from config/dts/ directory.
@@ -232,6 +240,7 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 	dtsDir := filepath.Join(configDir, "dts")
 	dirEntries, err := os.ReadDir(dtsDir)
 	if err == nil {
+		anySourceFound = true
 		for _, f := range dirEntries {
 			if f.IsDir() {
 				continue
@@ -255,7 +264,7 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 					extraEntries[i].sourceFormat = SourceFormatJSON
 				}
 				entries = append(entries, extraEntries...)
-				log.Debugf("dts: loaded %d entries from %s", len(extraEntries), f.Name())
+				log.Infof("dts: loaded %d entries from %s", len(extraEntries), extraPath)
 
 			case strings.HasSuffix(f.Name(), ".toml"):
 				tomlEntries, terr := loadTOMLFile(extraPath)
@@ -270,9 +279,27 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 					tomlEntries[i].sourceFormat = SourceFormatTOML
 				}
 				entries = append(entries, tomlEntries...)
-				log.Debugf("dts: loaded %d entries from %s (toml)", len(tomlEntries), f.Name())
+				// INFO rather than debug so operators dropping a TOML
+				// file into config/dts/ can see it land at default
+				// log level. Zero-entry files are surfaced as a WARN
+				// because the most likely cause is a wrong shape
+				// ("missing [[entry]] header" rather than truly empty).
+				if len(tomlEntries) == 0 {
+					log.Warnf("dts: %s parsed cleanly but produced 0 entries — check for missing [[entry]] header", extraPath)
+				} else {
+					log.Infof("dts: loaded %d entries from %s (toml)", len(tomlEntries), extraPath)
+				}
 			}
 		}
+	}
+
+	if !anySourceFound {
+		// No fallback dts.json, no config dts.json, no config/dts/ —
+		// the install is missing the DTS layout entirely. Surface
+		// loudly so misconfigured deployments fail rather than
+		// silently producing empty messages.
+		return nil, fmt.Errorf("no DTS source found: looked in %s/dts.json, %s/dts/ and %s/dts.json",
+			configDir, configDir, fallbackDir)
 	}
 
 	warnDuplicateEntries(entries)
