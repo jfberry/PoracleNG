@@ -1,0 +1,91 @@
+# Monster (pokemon) card in TOML form with a conditional PVP-details
+# inline response button. The {{#if pvpAvailable}} block in the response
+# template can render valid JSON only because the body is a TOML
+# multi-line string (rendered, then JSON-parsed) — the same block in
+# JSON DTS would break before Handlebars ran.
+#
+# Companion to fallbacks/dts.json's monster id=1 / monster-1-discord-en.json
+# in the standard layout — same field names (ivColor, fullName, atk/def/sta,
+# pvpGreat / pvpLittle / pvpUltra, hasPvp), just rendered through a
+# compact main card with a button that expands the PVP detail on click.
+
+[[entry]]
+id = "1"
+type = "monster"
+platform = "discord"
+language = "en"
+description = "Compact monster card with PVP-details button (TOML form)"
+
+template = """
+{
+  "embed": {
+    "title": "{{round iv}}% {{fullName}} cp:{{cp}} L:{{level}} {{atk}}/{{def}}/{{sta}} {{{boostWeatherEmoji}}}",
+    "color": "{{ivColor}}",
+    "thumbnail": { "url": "{{{imgUrl}}}" },
+    "description": "End: {{time}} ({{tthm}}m {{tths}}s)\\n{{{addr}}}\\nquick: {{quickMoveName}} · charge: {{chargeMoveName}}\\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+    "image": { "url": "{{{staticMap}}}" }
+  }
+}
+"""
+
+  # Inline response template — only attached when the encounter has
+  # PVP data, via show_if = "{{pvpAvailable}}" evaluated against the
+  # resolved view at render time. The response template body lives
+  # right here, so the PVP-details rendering is in one file alongside
+  # the main card.
+  [[entry.buttons]]
+  id = "pvp"
+  label = "Show PVP details"
+  style = "secondary"
+  show_if = "{{pvpAvailable}}"
+  response_template_inline = """
+  {
+    "embed": {
+      "title": "PVP rankings for {{fullName}}",
+      "color": "{{ivColor}}",
+      "fields": [
+        {{#if pvpLittle}}
+        {
+          "name": "Little league",
+          "value": "{{#each pvpLittle}}#{{rank}} {{fullName}} @{{cp}}CP (Lvl. {{levelWithCap}})\\n{{/each}}",
+          "inline": false
+        }{{#if pvpGreat}},{{/if}}{{#if pvpUltra}}{{#unless pvpGreat}},{{/unless}}{{/if}}
+        {{/if}}
+        {{#if pvpGreat}}
+        {
+          "name": "Great league",
+          "value": "{{#each pvpGreat}}#{{rank}} {{fullName}} @{{cp}}CP (Lvl. {{levelWithCap}})\\n{{/each}}",
+          "inline": false
+        }{{#if pvpUltra}},{{/if}}
+        {{/if}}
+        {{#if pvpUltra}}
+        {
+          "name": "Ultra league",
+          "value": "{{#each pvpUltra}}#{{rank}} {{fullName}} @{{cp}}CP (Lvl. {{levelWithCap}})\\n{{/each}}",
+          "inline": false
+        }
+        {{/if}}
+      ]
+    }
+  }
+  """
+
+  # Action button — mute scope=pokemon uses pokemon_id from the
+  # snapshot view. applies_to defaults to ["dm"] for mute actions,
+  # so the button won't appear on channel sends.
+  [[entry.buttons]]
+  id = "mute_species_1h"
+  label = "Mute this species (1h)"
+  style = "danger"
+  action = "mute"
+  scope = "pokemon"
+  params = { duration_min = 60 }
+
+  # Plain-text response — handy one-liner. Single-line response_text
+  # skips JSON parsing entirely; the Handlebars output goes straight
+  # to Discord as message content.
+  [[entry.buttons]]
+  id = "coords"
+  label = "Copy coordinates"
+  style = "secondary"
+  response_text = "📍 `{{latitude}}, {{longitude}}`"

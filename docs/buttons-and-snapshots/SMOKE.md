@@ -154,7 +154,7 @@ Prerequisites for every phase:
 
 ### 3.4 `show_if` evaluation
 
-- [ ] Add a "Show PVP details" response-template button to a pokemon template with `show_if = "{{hasPVP}}"`.
+- [ ] Add a "Show PVP details" response-template button to a pokemon template with `show_if = "{{pvpAvailable}}"`.
 - [ ] Fire a pokemon alert with PVP data. Confirm: button present.
 - [ ] Fire a pokemon alert without PVP data. Confirm: button absent.
 
