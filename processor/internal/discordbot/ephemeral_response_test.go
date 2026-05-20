@@ -66,4 +66,20 @@ func TestPopulateInteractionResponseData(t *testing.T) {
 			t.Errorf("Content: got %q", d.Content)
 		}
 	})
+
+	t.Run("hex color is coerced via NormalizeAndExtractImage", func(t *testing.T) {
+		// DTS templates commonly emit "#1EFF00" style colors; Discord
+		// rejects string colors and needs an int. This test pins that
+		// we run through delivery.NormalizeAndExtractImage so the
+		// coercion happens before we hand the embed to discordgo.
+		var d discordgo.InteractionResponseData
+		populateInteractionResponseData(&d, `{"embed":{"title":"x","color":"#1EFF00"}}`)
+		if len(d.Embeds) != 1 {
+			t.Fatalf("Embeds: got %d, want 1", len(d.Embeds))
+		}
+		// 0x1EFF00 = 2031360
+		if d.Embeds[0].Color != 2031360 {
+			t.Errorf("Color: got %d, want 2031360 (0x1EFF00)", d.Embeds[0].Color)
+		}
+	})
 }
