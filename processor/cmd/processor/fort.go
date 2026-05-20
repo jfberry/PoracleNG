@@ -8,6 +8,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -62,6 +63,10 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 		matched, matchedAreas := ps.fortMatcher.Match(data, st)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("fort_update", raw, matchedAreas, matched)
+		// fort_update events fire for pokestops (and gyms, when forts.fortType=gym);
+		// the pokestop scope covers the dominant case. Operators can still mute
+		// the specific id via the corresponding entity scope.
+		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokestopID: fortID})
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("fort_update").Inc()
