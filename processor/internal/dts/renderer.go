@@ -440,6 +440,7 @@ func (r *Renderer) renderForUsers(
 			LogReference:      logReference,
 			Language:          language,
 			EditKey:           editKey,
+			TemplateType:      templateType,
 			TemplateRequested: user.Template,
 			TemplateSelected:  templateID,
 		})
@@ -635,6 +636,7 @@ func (r *Renderer) renderGrouped(
 				LogReference:      logReference,
 				Language:          key.language,
 				EditKey:           editKey,
+				TemplateType:      templateType,
 				TemplateRequested: user.Template,
 				TemplateSelected:  key.templateID,
 			})
