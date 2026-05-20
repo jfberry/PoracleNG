@@ -4,6 +4,7 @@ import "github.com/jmoiron/sqlx"
 
 // GymTracking represents a row from the gym table.
 type GymTracking struct {
+	UID           int64   `db:"uid"`
 	ID            string  `db:"id"`
 	ProfileNo     int     `db:"profile_no"`
 	Ping          string  `db:"ping"`
@@ -20,7 +21,7 @@ type GymTracking struct {
 func LoadGyms(db *sqlx.DB) ([]*GymTracking, error) {
 	var gyms []GymTracking
 	err := db.Select(&gyms,
-		`SELECT id, profile_no, ping, clean, distance,
+		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, team, slot_changes,
 		        gym_id, COALESCE(battle_changes, false) AS battle_changes
 		 FROM gym`)

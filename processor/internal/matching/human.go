@@ -113,6 +113,7 @@ func ValidateHumans(
 			PVPRankingLeague:  monster.PVPRankingLeague,
 			PVPRankingWorst:   monster.PVPRankingWorst,
 			TrackDistance:     monster.Distance,
+			RuleUID:           monster.UID,
 		})
 	}
 	return result
@@ -215,6 +216,7 @@ func ValidateHumansForRaid(
 			CardinalDirection: CardinalDirection(bearing),
 			RSVPChanges:       td.RSVPChanges,
 			TrackDistance:     td.Distance,
+			RuleUID:           td.UID,
 		})
 	}
 	return result
@@ -228,6 +230,7 @@ type raidUserData struct {
 	Clean           int
 	Ping            string
 	RSVPChanges     int
+	UID             int64 // database UID of the matched raid/egg rule — surfaced on MatchedUser.RuleUID
 	IsSpecificMatch bool
 }
 

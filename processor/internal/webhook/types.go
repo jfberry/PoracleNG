@@ -199,6 +199,13 @@ type MatchedUser struct {
 	// time in the weather cell. Only populated for weather change alerts, where
 	// it drives the clean-alert TTH and the "too short to bother" drop.
 	CaresUntil int64 `json:"cares_until,omitempty"`
+
+	// RuleUID is the database UID of the tracking rule that produced this
+	// match. Used by snapshot.TrackingUIDs (#108) and by ScopeTracking
+	// mute enforcement in filterMuted (#109). Zero means "no rule UID
+	// known" — should not happen for matches built by the per-type
+	// matchers, but is the natural fallback for synthetic test matches.
+	RuleUID int64 `json:"rule_uid,omitempty"`
 }
 
 // InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.

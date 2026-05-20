@@ -90,6 +90,7 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 			Template:        mb.Template,
 			Clean:           mb.Clean,
 			Ping:            mb.Ping,
+			UID:             mb.UID,
 			IsSpecificMatch: isSpecificMatch,
 		})
 	}
