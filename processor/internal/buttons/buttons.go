@@ -74,47 +74,51 @@ const (
 // Exactly one of {Action, ResponseTemplateID, ResponseTemplateInline,
 // ResponseText} must be non-empty per the design. Validate() enforces
 // that invariant.
+//
+// Field tags include both `json:` (operator-facing JSON DTS files +
+// API I/O) and `toml:` (operator-facing TOML DTS files + round-trip
+// writer). Keep them in sync.
 type Def struct {
 	// Identity used in the click custom_id.
-	ID string `json:"id"`
+	ID string `json:"id" toml:"id"`
 
 	// Visual properties — what Discord shows.
-	Label string `json:"label"`
-	Style string `json:"style,omitempty"` // default StyleSecondary when empty
+	Label string `json:"label" toml:"label"`
+	Style string `json:"style,omitempty" toml:"style,omitempty"`
 
 	// Dispatch: pick exactly one.
-	Action                 string `json:"action,omitempty"`
-	ResponseTemplateID     string `json:"response_template_id,omitempty"`
-	ResponseTemplateInline any    `json:"response_template_inline,omitempty"`
-	ResponseText           string `json:"response_text,omitempty"`
+	Action                 string `json:"action,omitempty" toml:"action,omitempty"`
+	ResponseTemplateID     string `json:"response_template_id,omitempty" toml:"response_template_id,omitempty"`
+	ResponseTemplateInline any    `json:"response_template_inline,omitempty" toml:"response_template_inline,omitempty"`
+	ResponseText           string `json:"response_text,omitempty" toml:"response_text,omitempty"`
 
 	// Scope (action buttons only): names which Snapshot field the action
 	// handler reads to identify the target. Required when Action is
 	// "mute" or "unsubscribe"; unused by render-style buttons and the
 	// redeliver action.
-	Scope string `json:"scope,omitempty"`
+	Scope string `json:"scope,omitempty" toml:"scope,omitempty"`
 
 	// Params is a free-form bag passed verbatim to the action handler.
 	// Mute uses duration_min; render uses template_id. The DTS schema
 	// stays action-agnostic — new actions can read whatever they need
 	// without schema changes.
-	Params map[string]any `json:"params,omitempty"`
+	Params map[string]any `json:"params,omitempty" toml:"params,omitempty"`
 
 	// AppliesTo restricts the destination types this button attaches to.
 	// Empty slice defers to the action-level default (mute/unsubscribe
 	// default to ["dm"]; response-style and redeliver/render default to
 	// ["any"]).
-	AppliesTo []string `json:"applies_to,omitempty"`
+	AppliesTo []string `json:"applies_to,omitempty" toml:"applies_to,omitempty"`
 
 	// ShowIf is a Handlebars expression evaluated at render time against
 	// the resolved view. Empty means always attach. Falsy result hides
 	// the button entirely (no click-time "doesn't apply" message).
-	ShowIf string `json:"show_if,omitempty"`
+	ShowIf string `json:"show_if,omitempty" toml:"show_if,omitempty"`
 
 	// VisibleTo restricts who may click. Enforced server-side at click;
 	// Discord doesn't support per-user button visibility so the button
 	// is always physically present.
-	VisibleTo string `json:"visible_to,omitempty"` // default VisibleTarget when empty
+	VisibleTo string `json:"visible_to,omitempty" toml:"visible_to,omitempty"`
 }
 
 // Mode reports which dispatch field the button uses. Used by the render
