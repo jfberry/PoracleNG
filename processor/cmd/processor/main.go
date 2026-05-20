@@ -622,6 +622,8 @@ func main() {
 	cmdRegistry.Register(&commands.TrackCommand{})
 	cmdRegistry.Register(&commands.TrackedCommand{})
 	cmdRegistry.Register(&commands.UntrackCommand{})
+	cmdRegistry.Register(&commands.MuteCommand{})
+	cmdRegistry.Register(&commands.UnmuteCommand{})
 	cmdRegistry.Register(&commands.GymCommand{})
 	cmdRegistry.Register(&commands.InvasionCommand{})
 	cmdRegistry.Register(&commands.NestCommand{})
@@ -794,6 +796,7 @@ func main() {
 		SummaryDispatch:    proc.DispatchQuestSummary,
 		Scanner:            proc.scanner,
 		RecentActivity:     proc.recentActivity,
+		MuteStore:          proc.muteStore,
 		ReloadDTS: reloadDTS,
 		EmojiReload: func() (int, error) {
 			if cmdEmoji == nil {

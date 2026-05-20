@@ -22,6 +22,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/logbuffer"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
@@ -80,6 +81,12 @@ type BotDeps struct {
 	// used by slash autocomplete to prioritise currently-active entities.
 	// Always non-nil; populated by webhook handlers post-dedup.
 	RecentActivity *tracker.RecentActivity
+
+	// MuteStore is the in-memory per-user alert-suppression store (#109).
+	// Used by !mute / !unmute commands and the augmented !tracked output.
+	// Always non-nil at runtime; tests may pass nil and commands must
+	// handle that as "feature unavailable".
+	MuteStore *mute.Store
 
 	// Admin reload functions — wired by ProcessorService in main.go.
 	// Called directly by !poracle-admin reload subcommands; they bypass
@@ -282,6 +289,7 @@ type CommandContext struct {
 	DB            *sqlx.DB // DEPRECATED — use Humans/Tracking stores. Kept during migration.
 	Humans        store.HumanStore
 	Tracking      *store.TrackingStores
+	MuteStore     *mute.Store
 	Config        *config.Config
 	StateMgr      *state.Manager
 	GameData      *gamedata.GameData
@@ -350,6 +358,7 @@ func NewCommandContext(deps *BotDeps) *CommandContext {
 		DB:                 deps.DB,
 		Humans:             deps.Humans,
 		Tracking:           deps.Tracking,
+		MuteStore:          deps.MuteStore,
 		StateMgr:           deps.StateMgr,
 		GameData:           deps.GameData,
 		Translations:       deps.Translations,
