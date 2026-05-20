@@ -101,6 +101,11 @@ type BotDeps struct {
 	// disabled or test contexts).
 	ButtonActions *buttonactions.Registry
 
+	// DTSRenderer is the compiled-template renderer. Used by the button
+	// click handler's response-template rendering hook. nil during DTS
+	// init failure — buttons fall back to a clear "not wired" reply.
+	DTSRenderer *dts.Renderer
+
 	// Admin reload functions — wired by ProcessorService in main.go.
 	// Called directly by !poracle-admin reload subcommands; they bypass
 	// triggerReload's 500ms debouncer on purpose (operator typed it).

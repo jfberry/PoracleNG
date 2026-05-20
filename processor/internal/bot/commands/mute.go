@@ -12,6 +12,40 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/mute"
 )
 
+// RouteToMuteFromType is the helper each per-type command file (raid,
+// egg, quest, etc.) calls at the top of its Run when it sees `mute` or
+// `unmute` as the first positional arg. Returns the routed reply when
+// the reroute fires; returns nil to indicate the command should fall
+// through to its normal handling.
+//
+// Mirrors what UntrackCommand does for the `!raid remove` ≡
+// `!untrack raid` duality — the per-type form is a thin alias that
+// prepends the type and delegates to the unified !mute / !unmute
+// command.
+func RouteToMuteFromType(ctx *bot.CommandContext, typeName string, args []string) []bot.Reply {
+	if len(args) == 0 {
+		return nil
+	}
+	switch strings.ToLower(args[0]) {
+	case "mute":
+		return routeMuteOrUnmute(ctx, "cmd.mute", typeName, args[1:])
+	case "unmute":
+		return routeMuteOrUnmute(ctx, "cmd.unmute", typeName, args[1:])
+	}
+	return nil
+}
+
+func routeMuteOrUnmute(ctx *bot.CommandContext, cmdKey, typeName string, rest []string) []bot.Reply {
+	if ctx.Registry == nil {
+		return []bot.Reply{{React: "🙅"}}
+	}
+	target := ctx.Registry.Lookup(cmdKey)
+	if target == nil {
+		return []bot.Reply{{React: "🙅"}}
+	}
+	return target.Run(ctx, append([]string{typeName}, rest...))
+}
+
 // MuteCommand implements !mute. The unified parser handles every form
 // described in #109: entity scopes (gym/pokemon/area/pokestop/station),
 // the self-mute special `!mute everything`, and the positional
@@ -248,27 +282,44 @@ func runMuteGym(ctx *bot.CommandContext, args []string, duration time.Duration) 
 	}}
 }
 
-// runMuteArea: !mute area <name>.
+// runMuteArea: !mute area <name>. Validates the name against the user's
+// available areas (same set !area uses) so a typo doesn't silently
+// produce a never-matching mute.
 func runMuteArea(ctx *bot.CommandContext, args []string, duration time.Duration) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.usage_area")}}
 	}
 	raw := strings.Join(args, " ")
-	// Area names are validated against the user's permitted areas the same
-	// way !area uses them. For Phase 2 we accept any non-empty string;
-	// invalid names will simply never match an event, so the user sees no
-	// effect. A stricter check is a follow-up if operators want it.
+
+	display := raw
+	if ctx.AreaLogic != nil {
+		var isAdmin bool
+		var communities []string
+		if h := getUserHuman(ctx); h != nil {
+			communities = h.CommunityMembership
+			isAdmin = ctx.IsAdmin
+		}
+		resolved, ok := ctx.AreaLogic.ResolveAvailableArea(raw, communities, isAdmin)
+		if !ok {
+			return []bot.Reply{{
+				React: "🙅",
+				Text:  tr.Tf("msg.mute.unknown_area", raw),
+			}}
+		}
+		display = resolved
+	}
+
 	entry := mute.Entry{
 		HumanID:    ctx.TargetID,
 		ScopeType:  mute.ScopeArea,
-		ScopeValue: raw,
+		ScopeValue: display, // store the display-cased name for clean !tracked output
 		ExpiresAt:  time.Now().Add(duration).Unix(),
 	}
 	ctx.MuteStore.Add(entry)
 	return []bot.Reply{{
 		React: "🔇",
-		Text:  tr.Tf("msg.mute.added", raw, formatDuration(duration)),
+		Text:  tr.Tf("msg.mute.added", display, formatDuration(duration)),
 	}}
 }
 
