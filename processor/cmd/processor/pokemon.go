@@ -13,6 +13,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -106,6 +107,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		matched, matchedAreas := ps.pokemonMatcher.Match(processed, ps.stateMgr.Get())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
+		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokemonID: pokemon.PokemonID})
 
 		// Track when someone matches the new state OR an entry already
 		// exists (post-match changes still need diffing so prior

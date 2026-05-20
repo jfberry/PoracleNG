@@ -11,6 +11,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -89,6 +90,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		matched, buffered, matchedAreas := ps.questMatcher.Match(data, st)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("quest", raw, matchedAreas, matched)
+		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokestopID: quest.PokestopID})
 
 		// Append buffered (summary-bit) matches to the summary buffer.
 		// These users get a grouped delivery later from the summary

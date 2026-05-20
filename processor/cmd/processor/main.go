@@ -55,6 +55,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/telegrambot"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
@@ -1154,6 +1155,13 @@ type ProcessorService struct {
 	// safety sweep; both are nil together.
 	snapshotStore   snapshots.Store
 	snapshotSweeper *snapshots.Sweeper
+
+	// muteStore is the in-memory per-user alert-suppression store (#109).
+	// Always allocated — mutes are an opt-in user action regardless of
+	// whether snapshots are enabled. muteSweeper reclaims expired entries
+	// on a fixed cadence; both are nil only in tests that skip init.
+	muteStore   *mute.Store
+	muteSweeper *mute.Sweeper
 }
 
 // ProcessStart returns the timestamp at which this ProcessorService was
@@ -1527,7 +1535,10 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		),
 		translations: enricher.Translations,
 		workerPool:   make(chan struct{}, cfg.Tuning.WorkerPoolSize),
+		muteStore:    mute.NewStore(),
 	}
+	ps.muteSweeper = mute.NewSweeper(ps.muteStore, time.Minute)
+	ps.muteSweeper.Start(ps.ctx)
 
 	// Opt-in snapshot store (#108). When disabled, both fields stay nil and
 	// every consumer takes the nil-store path (no write, no read, no button
@@ -1596,6 +1607,10 @@ func (ps *ProcessorService) Close() {
 		} else {
 			log.Info("Snapshot store closed")
 		}
+	}
+	if ps.muteSweeper != nil {
+		ps.muteSweeper.Stop()
+		log.Info("Mute sweeper stopped")
 	}
 	if ps.enricher.StaticMap != nil {
 		ps.enricher.StaticMap.Close()
