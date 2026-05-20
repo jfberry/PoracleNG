@@ -3,6 +3,7 @@ package dts
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	raymond "github.com/mailgun/raymond/v2"
@@ -55,6 +56,23 @@ type Renderer struct {
 	// stable key (suitable for throttling) and the human-readable
 	// message.
 	errorNoticer ErrorNoticer
+
+	// buttonsEnabled gates Discord component emission. When false the
+	// renderer doesn't attempt to attach buttons even if the resolved
+	// entry has them — equivalent to [snapshots] disabled in the host,
+	// because buttons require a snapshot at click time.
+	buttonsEnabled bool
+}
+
+// SetButtonsEnabled toggles Discord button component emission. Buttons
+// require a snapshot at click time, so the host wires this from the
+// [snapshots] config: true only when the snapshot store is open.
+//
+// Operators can leave Buttons[] in their DTS entries when snapshots are
+// disabled — the loader still validates them, but the renderer just
+// doesn't emit the components block.
+func (r *Renderer) SetButtonsEnabled(v bool) {
+	r.buttonsEnabled = v
 }
 
 // ErrorNoticer routes renderer errors to a host-side notification sink
@@ -390,6 +408,16 @@ func (r *Renderer) renderForUsers(
 			rawMessage = appendPingToRaw(rawMessage, user.Ping)
 		}
 
+		// Attach interactive button components (#109). Only Discord
+		// supports the component shape we emit; Telegram clicks would
+		// need a different bytes path and are deferred (#112).
+		if r.buttonsEnabled && platform == "discord" {
+			defs := r.templates.GetButtons(templateType, platform, templateID, language)
+			if len(defs) > 0 {
+				rawMessage = InjectDiscordComponents(rawMessage, defs, view, deliveryTargetType(user.Type), r.evalShowIf)
+			}
+		}
+
 		emojiSlice := extractEmojiSlice(view)
 
 		// h. Compute edit key
@@ -416,6 +444,55 @@ func (r *Renderer) renderForUsers(
 	}
 
 	return jobs
+}
+
+// evalShowIf compiles and runs a button's show_if expression against the
+// resolved view. Truthy means attach the button; falsy means drop it.
+//
+// The expression is wrapped in `{{...}}` so operators can write either
+// `{{hasPVP}}` or just `hasPVP`. Output is considered truthy when
+// non-empty AND not literally "false" / "0". This matches Handlebars'
+// own truthiness model for {{#if}}.
+//
+// Errors are surfaced to the caller (InjectDiscordComponents) which
+// logs them and drops the button — silent acceptance would attach
+// buttons the operator didn't intend.
+func (r *Renderer) evalShowIf(expr string, view any) (bool, error) {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return true, nil
+	}
+	tmpl := expr
+	if !strings.HasPrefix(tmpl, "{{") {
+		tmpl = "{{" + tmpl + "}}"
+	}
+	parsed, err := raymond.Parse(tmpl)
+	if err != nil {
+		return false, fmt.Errorf("parse show_if %q: %w", expr, err)
+	}
+	out, err := safeExecWith(parsed, view, raymond.NewDataFrame())
+	if err != nil {
+		return false, fmt.Errorf("exec show_if %q: %w", expr, err)
+	}
+	out = strings.TrimSpace(out)
+	return out != "" && out != "false" && out != "0", nil
+}
+
+// deliveryTargetType maps a webhook user.Type ("discord:user", etc.) to
+// the short noun the button schema uses for applies_to: "dm" / "channel"
+// / "webhook". Mirrors the helper in cmd/processor; duplicated here to
+// avoid an import cycle.
+func deliveryTargetType(userType string) string {
+	switch userType {
+	case "discord:user", "telegram:user":
+		return "dm"
+	case "discord:channel", "discord:thread", "telegram:group", "telegram:channel":
+		return "channel"
+	case "webhook":
+		return "webhook"
+	default:
+		return ""
+	}
 }
 
 // renderGroupKey identifies a unique (template, platform, language) combination.

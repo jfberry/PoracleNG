@@ -51,6 +51,11 @@ type Bot struct {
 	// time. Lazily initialised; guarded by adminThrottleMu.
 	adminThrottleMu sync.Mutex
 	adminThrottle   map[string]time.Time
+
+	// clickCooldown tracks per-(user, message, button) click times so
+	// repeated clicks within 5 seconds get a "slow down" reply instead
+	// of double-firing the action. Always non-nil after New.
+	clickCooldown *clickCooldownMap
 }
 
 // Config holds everything needed to create a Discord bot.
@@ -85,10 +90,11 @@ func New(cfg Config) (*Bot, error) {
 	}
 
 	b := &Bot{
-		BotDeps:   cfg.BotDeps,
-		session:   session,
-		nlpParser: cfg.NLPParser,
-		stopCh:    make(chan struct{}),
+		BotDeps:       cfg.BotDeps,
+		session:       session,
+		nlpParser:     cfg.NLPParser,
+		stopCh:        make(chan struct{}),
+		clickCooldown: newClickCooldownMap(),
 	}
 
 	b.threadCache = newThreadCache(threadCachePath(cfg.Cfg.BaseDir))

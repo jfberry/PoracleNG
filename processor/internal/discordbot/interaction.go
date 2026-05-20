@@ -23,7 +23,11 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, ic *discordgo.Interactio
 		}
 		return
 	case discordgo.InteractionMessageComponent:
-		// fall through to the thread-join handler below
+		// poracle button clicks claim first dibs; if the custom_id isn't
+		// ours, fall through to the thread-join handler.
+		if b.handleButtonClick(s, ic) {
+			return
+		}
 	default:
 		return
 	}

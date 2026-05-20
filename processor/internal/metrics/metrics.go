@@ -436,4 +436,19 @@ var (
 		Name: "poracle_mute_hits_total",
 		Help: "Matched-users dropped by filterMuted, labelled by destination type",
 	}, []string{"target_type"})
+
+	// Interactive button clicks (#109). Tracks operator-visible button
+	// usage by template — the main signal for whether buttons are
+	// earning their keep.
+	ButtonClicksTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_button_clicks_total",
+		Help: "Button clicks by alert template + button + outcome (ok / expired / unavailable / unauthorized / cooldown / error)",
+	}, []string{"template_type", "template_id", "button_id", "result"})
+
+	// Action handler outcomes — separate from click outcomes because a
+	// click may pass validation but the handler still errors.
+	ButtonActionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_button_actions_total",
+		Help: "Action handler outcomes (mute / unsubscribe / etc.) by result",
+	}, []string{"action", "result"})
 )

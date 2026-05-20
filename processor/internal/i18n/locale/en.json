@@ -144,6 +144,12 @@
   "msg.unmute.usage_area": "Usage: `!unmute area <name>`",
   "section.property_mutes": "Property mutes (apply across all tracking):",
   "section.property_mutes.left": "({0} left)",
+  "msg.button.expired": "This alert has expired.",
+  "msg.button.unavailable": "This button is no longer available.",
+  "msg.button.wrong_target": "This button doesn't apply here.",
+  "msg.button.unauthorized": "This button isn't for you.",
+  "msg.button.action_failed": "Couldn't complete that action: {0}",
+  "msg.button.cooldown": "Slow down — try that again in a moment.",
 
 
   "cmd.raid": "raid",
