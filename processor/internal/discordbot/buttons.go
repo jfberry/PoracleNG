@@ -105,7 +105,11 @@ func (b *Bot) handleButtonClick(s *discordgo.Session, ic *discordgo.InteractionC
 
 	snap, target, err := lookupSnapshotForClick(b.SnapshotStore, ic)
 	if err != nil {
-		log.Warnf("discord button: snapshot read for msg=%s: %v", ic.Message.ID, err)
+		// Visible log so the operator can compare against the snapshot
+		// store contents. Lists every key we tried so a key-mismatch
+		// stands out ("we looked up X, store has Y").
+		log.Warnf("discord button: snapshot lookup failed for msg=%s clicker=%s channel=%s tried=%v: %v",
+			ic.Message.ID, clicker, ic.ChannelID, lookupKeysFor(ic), err)
 		metrics.ButtonClicksTotal.WithLabelValues("unknown", "unknown", actionID, "expired").Inc()
 		respondEphemeral(s, ic, "This alert has expired.")
 		return true
@@ -327,6 +331,26 @@ func lookupSnapshotForClick(store snapshots.Store, ic *discordgo.InteractionCrea
 		}
 	}
 	return nil, "", snapshots.ErrNotFound
+}
+
+// lookupKeysFor returns the snapshot keys lookupSnapshotForClick will
+// try, for diagnostic logging. Mirrors the actual candidate construction
+// so a mismatch between log output and the lookup logic surfaces as a
+// test failure, not a confusing log line.
+func lookupKeysFor(ic *discordgo.InteractionCreate) []string {
+	clicker := clickerUserID(ic)
+	msgID := ""
+	if ic.Message != nil {
+		msgID = ic.Message.ID
+	}
+	keys := []string{}
+	if clicker != "" {
+		keys = append(keys, snapshots.MakeKey(clicker, msgID))
+	}
+	if ic.ChannelID != "" && ic.ChannelID != clicker {
+		keys = append(keys, snapshots.MakeKey(ic.ChannelID, msgID))
+	}
+	return keys
 }
 
 // clickerUserID returns the Discord user id of whoever clicked. Discord
