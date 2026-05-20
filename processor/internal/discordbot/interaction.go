@@ -6,6 +6,8 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/delivery"
 )
 
 // onInteractionCreate routes Discord interactions. Application-command
@@ -97,32 +99,34 @@ func respondEphemeral(s *discordgo.Session, ic *discordgo.InteractionCreate, msg
 
 // populateInteractionResponseData fills data with the appropriate fields
 // from msg. JSON-shaped input (the DTS render output for embed-style
-// templates) is parsed and routed into Content + Embeds; non-JSON input
-// becomes the Content directly.
+// templates) is run through delivery.NormalizeAndExtractImage — same
+// coercion the regular alert send path uses, so hex-string colors get
+// turned into ints, singular "embed" becomes "embeds[]", and per-embed
+// limits are enforced. Non-JSON input becomes Content directly.
 func populateInteractionResponseData(data *discordgo.InteractionResponseData, msg string) {
 	trimmed := strings.TrimSpace(msg)
 	if !strings.HasPrefix(trimmed, "{") {
 		data.Content = msg
 		return
 	}
-	var parsed struct {
-		Content string             `json:"content"`
-		Embed   *discordgo.MessageEmbed   `json:"embed"`   // legacy single-embed shape
-		Embeds  []*discordgo.MessageEmbed `json:"embeds"`  // multi-embed shape
-	}
-	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+	normalized, _, err := delivery.NormalizeAndExtractImage(json.RawMessage(trimmed), false)
+	if err != nil {
 		// Not valid JSON — fall back to treating the whole string as
 		// content. Operators who meant to send an embed will see
 		// the raw text in the ephemeral and notice the missing braces.
 		data.Content = msg
 		return
 	}
-	data.Content = parsed.Content
-	if len(parsed.Embeds) > 0 {
-		data.Embeds = parsed.Embeds
-	} else if parsed.Embed != nil {
-		data.Embeds = []*discordgo.MessageEmbed{parsed.Embed}
+	var parsed struct {
+		Content string                    `json:"content"`
+		Embeds  []*discordgo.MessageEmbed `json:"embeds"`
 	}
+	if err := json.Unmarshal(normalized, &parsed); err != nil {
+		data.Content = msg
+		return
+	}
+	data.Content = parsed.Content
+	data.Embeds = parsed.Embeds
 	// If nothing parsed out (both Content and Embeds empty), keep the
 	// raw text as Content so the operator can still see something.
 	if data.Content == "" && len(data.Embeds) == 0 {
