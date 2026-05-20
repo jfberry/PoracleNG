@@ -4,12 +4,66 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 )
+
+// appendMutesSection writes the "Property mutes" block to sb when the
+// user has any active entity-scope mute entries. Empty input → no-op
+// (don't pollute the !tracked output with an empty header).
+//
+// Format mirrors the sketch in docs/buttons-and-snapshots/IMPLEMENTATION.md:
+//
+//	Property mutes (apply across all tracking):
+//	  gym:Victoria Park Entrance       (32m left)
+//	  pokemon:Pikachu                  (1h 12m left)
+//	  area:Downtown                    (2h 8m left)
+//
+// For Phase 2 v1 the resolution of gym IDs back to names + pokemon IDs to
+// names happens elsewhere (when the resolver is wired); here we render the
+// raw scope value. A Phase 2.5 polish pass can swap in resolved names.
+func appendMutesSection(sb *strings.Builder, tr *i18n.Translator, entries []mute.Entry) {
+	if len(entries) == 0 {
+		return
+	}
+	now := time.Now().Unix()
+	// Filter out expired entries — Match already skips them but List
+	// returns whatever's in the store, which may include entries the
+	// sweeper hasn't reaped yet.
+	var live []mute.Entry
+	for _, e := range entries {
+		if e.ExpiresAt > 0 && e.ExpiresAt <= now {
+			continue
+		}
+		live = append(live, e)
+	}
+	if len(live) == 0 {
+		return
+	}
+	sb.WriteString("\n" + tr.T("section.property_mutes") + "\n")
+	for _, e := range live {
+		remaining := e.RemainingAt(now)
+		left := tr.Tf("section.property_mutes.left", formatDuration(remaining))
+		sb.WriteString(fmt.Sprintf("  %s:%s    %s\n", e.ScopeType, propertyMuteValueLabel(e), left))
+	}
+}
+
+// propertyMuteValueLabel returns the user-facing rendering of a mute
+// entry's ScopeValue. Currently identity for all scopes; Phase 2.5 will
+// hook resolvers (pokemon ID → name, gym hex → name) when those are
+// plumbed through.
+func propertyMuteValueLabel(e mute.Entry) string {
+	if e.ScopeType == mute.ScopeEverything {
+		return ""
+	}
+	return e.ScopeValue
+}
 
 // TrackedCommand implements !tracked — list all active tracking rules.
 type TrackedCommand struct{}
@@ -359,6 +413,15 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 			sb.WriteString(tr.T("section.maxbattles.none"))
 		}
 		sb.WriteByte('\n')
+	}
+
+	// Property mutes section — list active entity-scope mutes (#109).
+	// UID-scope mute display alongside individual rules is a Phase 2.5
+	// addition (depends on MatchedUser UID plumbing); for now we surface
+	// just the property scopes the user has set, so they have one place
+	// to see "what's currently silenced" alongside "what's tracked".
+	if ctx.MuteStore != nil {
+		appendMutesSection(&sb, tr, ctx.MuteStore.List(ctx.TargetID))
 	}
 
 	// Hint about id-based removal. The text-bot grammar (!untrack id:N /
