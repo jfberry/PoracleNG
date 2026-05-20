@@ -8,6 +8,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -78,6 +79,10 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 		matched, matchedAreas := ps.maxbattleMatcher.Match(data, st)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("max_battle", raw, matchedAreas, matched)
+		matched = ps.filterMuted(matched, matchedAreas, mute.Event{
+			StationID: mb.ID,
+			PokemonID: mb.BattlePokemonID,
+		})
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("maxbattle").Inc()

@@ -424,4 +424,16 @@ var (
 		Name: "poracle_snapshot_store_entries",
 		Help: "Approximate number of records currently in the snapshot store",
 	})
+
+	// In-memory mute store (#109). Mutes are user-configured suppressions
+	// that filter matched-users before render/dispatch.
+	MuteEntriesActive = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_mute_entries_active",
+		Help: "Active (non-expired) mute entries across all users",
+	})
+
+	MuteHitsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_mute_hits_total",
+		Help: "Matched-users dropped by filterMuted, labelled by destination type",
+	}, []string{"target_type"})
 )

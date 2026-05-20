@@ -13,6 +13,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/validation"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -159,6 +160,44 @@ func (ps *ProcessorService) filterBlocked(matched []webhook.MatchedUser) []webho
 		if ps.rateLimiter.IsBlocked(m.ID, m.Type) {
 			metrics.RateLimitDropped.Inc()
 			log.Debugf("Rate limit pre-filter: skipping render for %s %s %s", m.Type, m.ID, m.Name)
+			continue
+		}
+		allowed = append(allowed, m)
+	}
+	return allowed
+}
+
+// filterMuted drops matched users whose in-memory mute state suppresses
+// the current event. Runs after filterValidation, before render — the
+// validator might want to refuse a delivery for its own reasons, so the
+// mute check shouldn't pre-empt those decisions, and we don't want to
+// waste enrichment work on muted users either.
+//
+// Per-user, per-scope cost: O(entries-for-this-user). Heavy-mute users
+// are still cheap because Store.Match early-exits on the first hit.
+//
+// muteEvent translates the in-flight webhook properties into the mute
+// store's Event shape — the caller (each webhook handler) knows which
+// fields are populated and passes a struct with the right ones filled.
+func (ps *ProcessorService) filterMuted(matched []webhook.MatchedUser, areas []webhook.MatchedArea, ev mute.Event) []webhook.MatchedUser {
+	if ps.muteStore == nil || len(matched) == 0 {
+		return matched
+	}
+	// Materialise area names once for the event — Match iterates over
+	// ev.Area for area-scope matches, and reusing this slice across users
+	// avoids N×Area allocations.
+	if ev.Area == nil && len(areas) > 0 {
+		ev.Area = make([]string, 0, len(areas))
+		for _, a := range areas {
+			ev.Area = append(ev.Area, a.Name)
+		}
+	}
+	now := time.Now().Unix()
+	allowed := matched[:0]
+	for _, m := range matched {
+		if ps.muteStore.Match(m.ID, ev, now) {
+			metrics.MuteHitsTotal.WithLabelValues(m.Type).Inc()
+			log.Debugf("Mute filter: dropping %s %s %s (active mute matches event)", m.Type, m.ID, m.Name)
 			continue
 		}
 		allowed = append(allowed, m)

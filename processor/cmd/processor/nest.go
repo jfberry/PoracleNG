@@ -9,6 +9,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -61,6 +62,7 @@ func (ps *ProcessorService) ProcessNest(raw json.RawMessage) error {
 		matched, matchedAreas := ps.nestMatcher.Match(data, st)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("nest", raw, matchedAreas, matched)
+		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokemonID: nest.PokemonID})
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("nest").Inc()
