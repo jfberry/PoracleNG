@@ -226,8 +226,16 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 			ResponseRender: b.responseRenderHook(),
 		})
 		if err != nil {
-			log.Warnf("discord button: render-response failed: %v", err)
-			return "Couldn't render that response."
+			log.Warnf("discord button: render-response %q failed: %v", def.ID, err)
+			// Surface the underlying error so operators iterating on
+			// a template see the parser / execution message without
+			// having to tail the log. Truncate so a verbose error
+			// doesn't blow Discord's message limit.
+			msg := err.Error()
+			if len(msg) > 300 {
+				msg = msg[:300] + "…"
+			}
+			return "Couldn't render that response: " + msg
 		}
 		if resp.Text == "" {
 			return "Done."
