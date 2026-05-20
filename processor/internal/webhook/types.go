@@ -483,6 +483,15 @@ type DeliveryJob struct {
 	LogReference string          `json:"logReference"`
 	Language     string          `json:"language"`
 
+	// TemplateType names the DTS entry type the renderer actually used
+	// (e.g. "monster", "monsterNoIv", "raid", "rsvpChanges"). Pokemon
+	// alerts choose this dynamically based on whether the alert has IV
+	// data; raid alerts may flip between "raid" and "rsvpChanges". The
+	// click handler looks buttons up under THIS type — using
+	// RenderJob.AlertType (the source webhook type) would point at the
+	// wrong entry set when the two differ.
+	TemplateType string `json:"templateType,omitempty"`
+
 	// TemplateRequested is the per-user template field as it appeared on
 	// the matched tracking rule (typically empty, meaning "use config
 	// default"). TemplateSelected is the resolved id the renderer
