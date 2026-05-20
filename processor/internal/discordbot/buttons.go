@@ -211,36 +211,30 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 		}
 		return resp.Text
 	case buttons.ModeResponseText, buttons.ModeResponseTemplateID, buttons.ModeResponseTemplateInline:
-		// Run the response-render path through the action registry so
-		// the same render/error pipeline applies as for action=render
-		// buttons. We synthesise a Def with Action="render" to route
-		// it through HandleRender — the actual response text comes
-		// from the original Def fields, which HandleRender reads via
-		// deps.ResponseRender.
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		resp, err := b.ButtonActions.Dispatch(ctx, snap, withRenderAction(def), clicker, buttonactions.Deps{
-			MuteStore:      b.MuteStore,
-			Tracking:       b.Tracking,
-			TriggerReload:  b.ReloadFunc,
-			ResponseRender: b.responseRenderHook(),
-		})
+		// Call the response render hook directly with the OPERATOR'S
+		// Def (preserving Action="" and the response_* fields). Going
+		// through the action registry with withRenderAction would
+		// overwrite Action="render" and shadow the response fields
+		// from DispatchMode — RenderButtonResponse would then see
+		// "no response payload" because every response_* check is
+		// gated by DispatchMode picking the right branch.
+		hook := b.responseRenderHook()
+		if hook == nil {
+			return "Response rendering isn't wired here."
+		}
+		out, err := hook(snap, def)
 		if err != nil {
 			log.Warnf("discord button: render-response %q failed: %v", def.ID, err)
-			// Surface the underlying error so operators iterating on
-			// a template see the parser / execution message without
-			// having to tail the log. Truncate so a verbose error
-			// doesn't blow Discord's message limit.
 			msg := err.Error()
 			if len(msg) > 300 {
 				msg = msg[:300] + "…"
 			}
 			return "Couldn't render that response: " + msg
 		}
-		if resp.Text == "" {
+		if out == "" {
 			return "Done."
 		}
-		return resp.Text
+		return out
 	default:
 		return "This button isn't configured."
 	}
@@ -448,15 +442,6 @@ func (b *Bot) renderToDMHook() buttonactions.RenderToDMFunc {
 		b.Dispatcher.DispatchBypass(dm)
 		return nil
 	}
-}
-
-// withRenderAction returns a copy of def with Action set to "render".
-// Used to route response-template buttons through HandleRender without
-// mutating the operator's actual button config.
-func withRenderAction(def buttons.Def) buttons.Def {
-	copy := def
-	copy.Action = buttons.ActionRender
-	return copy
 }
 
 // dtsRendererFromDeps returns the bot's DTS renderer if available. The
