@@ -361,12 +361,22 @@ func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, 
 	trackingUIDs := collectTrackingUIDs(rj.MatchedUsers, dj.Target)
 	view := mergeViewForSnapshot(rj.Enrichment, rj.PerLangEnrichment[dj.Language], rj.PerUserEnrichment[dj.Target], rj.WebhookFields)
 
+	// TemplateType: the renderer's per-delivery value wins over the
+	// RenderJob's because some handlers (notably pokemon) don't set
+	// rj.TemplateType — the renderer picks "monster" vs "monsterNoIv"
+	// dynamically. Without this preference the snapshot stores type=""
+	// and the click handler's GetButtons lookup misses the right entry.
+	templateType := dj.TemplateType
+	if templateType == "" {
+		templateType = rj.TemplateType
+	}
+
 	return &snapshots.Snapshot{
 		Target:            dj.Target,
 		TargetType:        snapshotTargetType(dj.Type),
 		ExpiresAt:         expires,
 		AlertType:         rj.AlertType,
-		TemplateType:      rj.TemplateType,
+		TemplateType:      templateType,
 		TemplateRequested: dj.TemplateRequested,
 		TemplateSelected:  dj.TemplateSelected,
 		Language:          dj.Language,
