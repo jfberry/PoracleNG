@@ -428,18 +428,20 @@ func (r *Renderer) renderForUsers(
 
 		// i. Build DeliveryJob
 		jobs = append(jobs, webhook.DeliveryJob{
-			Lat:          lat,
-			Lon:          lon,
-			Message:      rawMessage,
-			Target:       user.ID,
-			Type:         user.Type,
-			Name:         user.Name,
-			TTH:          tthMap,
-			Clean:        user.Clean,
-			Emoji:        emojiSlice,
-			LogReference: logReference,
-			Language:     language,
-			EditKey:      editKey,
+			Lat:               lat,
+			Lon:               lon,
+			Message:           rawMessage,
+			Target:            user.ID,
+			Type:              user.Type,
+			Name:              user.Name,
+			TTH:               tthMap,
+			Clean:             user.Clean,
+			Emoji:             emojiSlice,
+			LogReference:      logReference,
+			Language:          language,
+			EditKey:           editKey,
+			TemplateRequested: user.Template,
+			TemplateSelected:  templateID,
 		})
 	}
 
@@ -621,18 +623,20 @@ func (r *Renderer) renderGrouped(
 			}
 
 			jobs = append(jobs, webhook.DeliveryJob{
-				Lat:          lat,
-				Lon:          lon,
-				Message:      userMessage,
-				Target:       user.ID,
-				Type:         user.Type,
-				Name:         user.Name,
-				TTH:          tthMap,
-				Clean:        user.Clean,
-				Emoji:        emojiSlice,
-				LogReference: logReference,
-				Language:     key.language,
-				EditKey:      editKey,
+				Lat:               lat,
+				Lon:               lon,
+				Message:           userMessage,
+				Target:            user.ID,
+				Type:              user.Type,
+				Name:              user.Name,
+				TTH:               tthMap,
+				Clean:             user.Clean,
+				Emoji:             emojiSlice,
+				LogReference:      logReference,
+				Language:          key.language,
+				EditKey:           editKey,
+				TemplateRequested: user.Template,
+				TemplateSelected:  key.templateID,
 			})
 		}
 	}
