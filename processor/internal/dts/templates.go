@@ -458,6 +458,14 @@ func (ts *TemplateStore) ResolveEntryContent(entry DTSEntry) (any, string) {
 		return nil, resolveIncludes(strings.TrimSpace(string(data)), configDir)
 	}
 	if entry.Template != nil {
+		// String-valued template (TOML inline form, or a JSON entry that
+		// stores the template body as a raw string) gets returned in the
+		// second slot — same shape ResolveEntryContent uses for
+		// templateFile content. Lets the editor render TOML-loaded
+		// entries through the same UI path it uses for templateFile.
+		if s, ok := entry.Template.(string); ok {
+			return nil, resolveIncludes(strings.TrimSpace(s), configDir)
+		}
 		return processTemplateValue(entry.Template, configDir), ""
 	}
 	return nil, ""
@@ -698,7 +706,18 @@ func resolveTemplate(entry DTSEntry, configDir string) (string, error) {
 		return "", fmt.Errorf("entry has no template or templateFile")
 	}
 
-	// Join arrays and resolve @include directives
+	// A string-valued template (the natural TOML form: `template = """..."""`)
+	// is the Handlebars source itself — same semantics as `templateFile`,
+	// just inlined. Don't JSON-encode it; that would wrap the whole body
+	// in quotes and the rendered output would be a JSON string literal
+	// instead of an object. The Discord sender's NormalizeAndExtractImage
+	// would then fail with "cannot unmarshal string into map".
+	if s, ok := templateObj.(string); ok {
+		return resolveIncludes(strings.TrimSpace(s), configDir), nil
+	}
+
+	// Object/array template (the JSON DTS form): join arrays, resolve
+	// @include directives, then JSON-stringify the structure.
 	templateObj = processTemplateValue(templateObj, configDir)
 
 	// JSON.stringify the processed template object.
