@@ -1,6 +1,9 @@
 package discordbot
 
 import (
+	"encoding/json"
+	"strings"
+
 	"github.com/bwmarrin/discordgo"
 	log "github.com/sirupsen/logrus"
 )
@@ -72,16 +75,57 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, ic *discordgo.Interactio
 	respondEphemeral(s, ic, "✅ Joined.")
 }
 
-// respondEphemeral sends a message visible only to the interaction author.
+// respondEphemeral sends a message visible only to the interaction
+// author. When msg is a JSON object containing "embed" / "embeds" /
+// "content", those keys are parsed into the matching InteractionResponse
+// fields so a DTS-rendered button response shows up as a proper Discord
+// embed rather than a JSON blob in the text. Plain text passes through
+// as Content unchanged.
 func respondEphemeral(s *discordgo.Session, ic *discordgo.InteractionCreate, msg string) {
+	data := &discordgo.InteractionResponseData{
+		Flags: discordgo.MessageFlagsEphemeral,
+	}
+	populateInteractionResponseData(data, msg)
 	err := s.InteractionRespond(ic.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: msg,
-			Flags:   discordgo.MessageFlagsEphemeral,
-		},
+		Data: data,
 	})
 	if err != nil {
 		log.Warnf("discord bot: InteractionRespond: %v", err)
+	}
+}
+
+// populateInteractionResponseData fills data with the appropriate fields
+// from msg. JSON-shaped input (the DTS render output for embed-style
+// templates) is parsed and routed into Content + Embeds; non-JSON input
+// becomes the Content directly.
+func populateInteractionResponseData(data *discordgo.InteractionResponseData, msg string) {
+	trimmed := strings.TrimSpace(msg)
+	if !strings.HasPrefix(trimmed, "{") {
+		data.Content = msg
+		return
+	}
+	var parsed struct {
+		Content string             `json:"content"`
+		Embed   *discordgo.MessageEmbed   `json:"embed"`   // legacy single-embed shape
+		Embeds  []*discordgo.MessageEmbed `json:"embeds"`  // multi-embed shape
+	}
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		// Not valid JSON — fall back to treating the whole string as
+		// content. Operators who meant to send an embed will see
+		// the raw text in the ephemeral and notice the missing braces.
+		data.Content = msg
+		return
+	}
+	data.Content = parsed.Content
+	if len(parsed.Embeds) > 0 {
+		data.Embeds = parsed.Embeds
+	} else if parsed.Embed != nil {
+		data.Embeds = []*discordgo.MessageEmbed{parsed.Embed}
+	}
+	// If nothing parsed out (both Content and Embeds empty), keep the
+	// raw text as Content so the operator can still see something.
+	if data.Content == "" && len(data.Embeds) == 0 {
+		data.Content = msg
 	}
 }
