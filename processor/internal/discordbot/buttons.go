@@ -234,6 +234,10 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 		if out == "" {
 			return "Done."
 		}
+		// respondEphemeral detects JSON-with-embed shapes and routes
+		// them into the Embeds[] field; plain text falls through as
+		// Content. So returning `out` as-is is enough — no special-
+		// casing required at this layer.
 		return out
 	default:
 		return "This button isn't configured."
