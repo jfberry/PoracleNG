@@ -174,6 +174,11 @@ func registerComparisonHelpers() {
 		return boolResult(looseEqual(a, b), options)
 	})
 
+	// is — alias for eq (mirrors `isnt` as the alias for `ne`).
+	raymond.RegisterHelper("is", func(a, b any, options *raymond.Options) any {
+		return boolResult(looseEqual(a, b), options)
+	})
+
 	// ne — true if a != b (loose comparison, see eq).
 	raymond.RegisterHelper("ne", func(a, b any, options *raymond.Options) any {
 		return boolResult(!looseEqual(a, b), options)
