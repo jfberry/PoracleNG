@@ -53,13 +53,27 @@ function camelToSnake(str) {
 		.toLowerCase()
 }
 
+// Keys whose value is a user-defined free-form map (template variables,
+// custom locale strings, etc.) and must NOT have its inner keys
+// snake-cased. The TOML schema renames the key itself (camelCase →
+// snake_case) but the contents are pass-through. Match on the
+// snake-cased form because that's what convertKeysToSnake produces.
+const PASSTHROUGH_KEYS = new Set([
+	'dts_dictionary', // {{templateVar}} → user-defined identifier
+])
+
 function convertKeysToSnake(obj) {
 	if (obj === null || obj === undefined) return obj
 	if (Array.isArray(obj)) return obj.map(convertKeysToSnake)
 	if (typeof obj !== 'object') return obj
 	const result = {}
 	for (const [key, value] of Object.entries(obj)) {
-		result[camelToSnake(key)] = convertKeysToSnake(value)
+		const snakeKey = camelToSnake(key)
+		if (PASSTHROUGH_KEYS.has(snakeKey)) {
+			result[snakeKey] = value
+			continue
+		}
+		result[snakeKey] = convertKeysToSnake(value)
 	}
 	return result
 }
