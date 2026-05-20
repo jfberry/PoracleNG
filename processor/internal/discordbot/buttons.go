@@ -1,0 +1,298 @@
+package discordbot
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/bwmarrin/discordgo"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/buttonactions"
+	"github.com/pokemon/poracleng/processor/internal/buttons"
+	"github.com/pokemon/poracleng/processor/internal/dts"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
+)
+
+// clickCooldown is the per-(user, message, button) interval below which
+// repeated clicks are swallowed. Prevents accidental double-fires and
+// soft-limits griefing on shared channels. 5s matches the IMPLEMENTATION
+// spec — short enough that intentional retries feel responsive, long
+// enough that fat-fingered clicks don't double-act.
+const clickCooldown = 5 * time.Second
+
+// clickCooldownMap tracks the last click time per (user, message, button)
+// key. Single source of truth on this Bot instance; never persisted.
+type clickCooldownMap struct {
+	mu    sync.Mutex
+	last  map[string]time.Time
+	maxSz int
+}
+
+func newClickCooldownMap() *clickCooldownMap {
+	return &clickCooldownMap{
+		last:  make(map[string]time.Time),
+		maxSz: 4096, // bounded so a noisy channel can't OOM us
+	}
+}
+
+// allow checks the cooldown and stamps a fresh "last clicked" on success.
+// Returns true when the click should proceed, false when it's within the
+// cooldown window.
+func (c *clickCooldownMap) allow(userID, messageID, buttonID string) bool {
+	key := userID + ":" + messageID + ":" + buttonID
+	now := time.Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if last, ok := c.last[key]; ok && now.Sub(last) < clickCooldown {
+		return false
+	}
+	// Cheap eviction: when the map grows large, drop a chunk of stale
+	// entries. Not exact LRU — just enough to keep memory bounded.
+	if len(c.last) >= c.maxSz {
+		threshold := now.Add(-2 * clickCooldown)
+		for k, t := range c.last {
+			if t.Before(threshold) {
+				delete(c.last, k)
+			}
+		}
+	}
+	c.last[key] = now
+	return true
+}
+
+// handleButtonClick is the InteractionCreate path for poracle:btn:* custom
+// IDs. Returns true when the interaction was handled (so the caller skips
+// other component dispatchers), false otherwise.
+//
+// Flow:
+//  1. Parse custom_id → actionID.
+//  2. Load Snapshot via (target = bot user, messageID = ic.Message.ID).
+//     Falls back to other target shapes when not found (DMs vs channels).
+//  3. Resolve the button def from currently-loaded DTS using snapshot's
+//     TemplateType/Platform/Language/TemplateSelected.
+//  4. Apply applies_to / visible_to / cooldown checks.
+//  5. Dispatch via the action registry or render the response template.
+//  6. Respond ephemeral.
+func (b *Bot) handleButtonClick(s *discordgo.Session, ic *discordgo.InteractionCreate) bool {
+	data := ic.MessageComponentData()
+	actionID, ok := dts.SplitCustomID(data.CustomID)
+	if !ok {
+		return false
+	}
+
+	if b.SnapshotStore == nil {
+		metrics.ButtonClicksTotal.WithLabelValues("unknown", "unknown", actionID, "expired").Inc()
+		respondEphemeral(s, ic, "This alert has expired.")
+		return true
+	}
+	if ic.Message == nil || ic.Message.ID == "" {
+		metrics.ButtonClicksTotal.WithLabelValues("unknown", "unknown", actionID, "expired").Inc()
+		respondEphemeral(s, ic, "This alert has expired.")
+		return true
+	}
+
+	clicker := clickerUserID(ic)
+	if clicker == "" {
+		respondEphemeral(s, ic, "Couldn't identify you to handle that click.")
+		return true
+	}
+
+	snap, target, err := lookupSnapshotForClick(b.SnapshotStore, ic)
+	if err != nil {
+		log.Warnf("discord button: snapshot read for msg=%s: %v", ic.Message.ID, err)
+		metrics.ButtonClicksTotal.WithLabelValues("unknown", "unknown", actionID, "expired").Inc()
+		respondEphemeral(s, ic, "This alert has expired.")
+		return true
+	}
+
+	tt, tid := snap.TemplateType, snap.TemplateSelected
+	def, ok := b.resolveButton(snap, actionID)
+	if !ok {
+		metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "unavailable").Inc()
+		respondEphemeral(s, ic, "This button is no longer available.")
+		return true
+	}
+
+	if !def.AppliesToTarget(snap.TargetType) {
+		metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "wrong_target").Inc()
+		respondEphemeral(s, ic, "This button doesn't apply here.")
+		return true
+	}
+
+	if !b.checkVisibility(def, snap, clicker, ic) {
+		metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "unauthorized").Inc()
+		respondEphemeral(s, ic, "This button isn't for you.")
+		return true
+	}
+
+	if !b.clickCooldown.allow(clicker, ic.Message.ID, def.ID) {
+		metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "cooldown").Inc()
+		respondEphemeral(s, ic, "Slow down — try that again in a moment.")
+		return true
+	}
+
+	resp := b.dispatchClick(ic, snap, def, clicker)
+	metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "ok").Inc()
+	_ = target // currently unused; reserved for action handlers that need to know the target shape
+	respondEphemeral(s, ic, resp)
+	return true
+}
+
+// resolveButton looks up the operator-authored button definition for the
+// click. Uses the snapshot's resolved-template identity so the button set
+// matches what the user actually saw — even if the operator has changed
+// the default template since.
+func (b *Bot) resolveButton(snap *snapshots.Snapshot, actionID string) (buttons.Def, bool) {
+	if b.DTS == nil {
+		return buttons.Def{}, false
+	}
+	defs := b.DTS.GetButtons(snap.TemplateType, snap.Platform, snap.TemplateSelected, snap.Language)
+	for _, d := range defs {
+		if d.ID == actionID {
+			return d, true
+		}
+	}
+	// Fallback: re-resolve through the selection chain against the
+	// originally-requested template id, in case the operator removed the
+	// specific entry the user saw but a sibling now serves the same key.
+	if snap.TemplateRequested != "" && snap.TemplateRequested != snap.TemplateSelected {
+		defs = b.DTS.GetButtons(snap.TemplateType, snap.Platform, snap.TemplateRequested, snap.Language)
+		for _, d := range defs {
+			if d.ID == actionID {
+				return d, true
+			}
+		}
+	}
+	return buttons.Def{}, false
+}
+
+// dispatchClick decides between an action-handler dispatch and an
+// ephemeral response render based on the button's DispatchMode. Returns
+// the user-facing ephemeral text.
+func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Snapshot, def buttons.Def, clicker string) string {
+	switch def.DispatchMode() {
+	case buttons.ModeAction:
+		if b.ButtonActions == nil {
+			return "Button actions aren't wired here."
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		resp, err := b.ButtonActions.Dispatch(ctx, snap, def, clicker, buttonactions.Deps{
+			MuteStore: b.MuteStore,
+		})
+		if err != nil {
+			if errors.Is(err, buttonactions.ErrUnknownAction) || errors.Is(err, buttonactions.ErrNotImplemented) {
+				metrics.ButtonActionsTotal.WithLabelValues(def.Action, "unimplemented").Inc()
+				return "This action isn't available yet."
+			}
+			metrics.ButtonActionsTotal.WithLabelValues(def.Action, "error").Inc()
+			log.Warnf("discord button: action %q failed: %v", def.Action, err)
+			return "Couldn't complete that action."
+		}
+		metrics.ButtonActionsTotal.WithLabelValues(def.Action, "ok").Inc()
+		if resp.Text == "" {
+			return "Done."
+		}
+		return resp.Text
+	case buttons.ModeResponseText:
+		// Phase 3 ships action buttons only. Render-style responses
+		// (text / template_id / template_inline) need the renderer
+		// available here, which is a follow-up wire-up. For now we
+		// emit the raw text so operators can verify the click path.
+		return def.ResponseText
+	case buttons.ModeResponseTemplateID, buttons.ModeResponseTemplateInline:
+		return "Template-based responses aren't wired yet — coming in a follow-up."
+	default:
+		return "This button isn't configured."
+	}
+}
+
+// checkVisibility applies the button's visible_to gate against the
+// clicker. Returns true when the click should proceed.
+//
+// Phase 3 v1 implements the simplest subset:
+//   - VisibleTarget: clicker must equal snap.Target on DMs; channels
+//     pass through (anyone with channel access can click, matching the
+//     design's "channel = anyone with view" semantics).
+//   - VisibleAnyone: always allow.
+//   - VisibleAdmin / VisibleRegistered: TODO — fall through to allow
+//     in v1 so the wire works; tighten when admin/registered lookup is
+//     wired here.
+func (b *Bot) checkVisibility(def buttons.Def, snap *snapshots.Snapshot, clicker string, _ *discordgo.InteractionCreate) bool {
+	switch def.EffectiveVisibility() {
+	case buttons.VisibleAnyone:
+		return true
+	case buttons.VisibleTarget:
+		if snap.TargetType == "dm" {
+			return strings.HasSuffix(snap.Target, ":"+clicker) || snap.Target == clicker
+		}
+		// For channels: the target is the channel id, not a user; the
+		// implicit contract is "anyone who can see this channel".
+		return true
+	case buttons.VisibleAdmin:
+		// TODO: check b.Admins / b.Cfg.Discord.Admins. v1 falls through to allow.
+		return true
+	case buttons.VisibleRegistered:
+		// TODO: query b.Humans for the clicker. v1 allows.
+		return true
+	}
+	return false
+}
+
+// lookupSnapshotForClick reads the snapshot for the clicked message. The
+// snapshot store is keyed by target — and we know the messageID from the
+// interaction but the target depends on whether this is a DM, a channel,
+// or a webhook delivery. Try the obvious shapes in order:
+//
+//  1. discord:user:<clicker> (DM directly to the clicker)
+//  2. discord:channel:<channel_id> (regular channel send)
+//  3. discord:thread:<channel_id> (thread send — ic.ChannelID is the thread)
+//  4. webhook:<endpoint> would require knowing the webhook URL; skipped
+//     in v1.
+//
+// Returns ErrNotFound if all shapes miss. Operators with custom target
+// schemas would extend this — a Snapshot lookup that knew about
+// secondary indexes (by messageID alone) is a follow-up improvement.
+func lookupSnapshotForClick(store snapshots.Store, ic *discordgo.InteractionCreate) (*snapshots.Snapshot, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	clicker := clickerUserID(ic)
+	candidates := []string{}
+	if clicker != "" {
+		candidates = append(candidates, "discord:user:"+clicker)
+	}
+	if ic.ChannelID != "" {
+		candidates = append(candidates,
+			"discord:channel:"+ic.ChannelID,
+			"discord:thread:"+ic.ChannelID,
+		)
+	}
+
+	for _, target := range candidates {
+		snap, err := store.Read(ctx, snapshots.MakeKey(target, ic.Message.ID))
+		if err == nil {
+			return snap, target, nil
+		}
+		if !errors.Is(err, snapshots.ErrNotFound) {
+			return nil, "", err
+		}
+	}
+	return nil, "", snapshots.ErrNotFound
+}
+
+// clickerUserID returns the Discord user id of whoever clicked. Discord
+// puts it in Member.User for guild interactions and User for DM ones.
+func clickerUserID(ic *discordgo.InteractionCreate) string {
+	if ic.Member != nil && ic.Member.User != nil {
+		return ic.Member.User.ID
+	}
+	if ic.User != nil {
+		return ic.User.ID
+	}
+	return ""
+}

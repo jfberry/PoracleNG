@@ -22,8 +22,10 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/logbuffer"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
+	"github.com/pokemon/poracleng/processor/internal/buttonactions"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
@@ -87,6 +89,17 @@ type BotDeps struct {
 	// Always non-nil at runtime; tests may pass nil and commands must
 	// handle that as "feature unavailable".
 	MuteStore *mute.Store
+
+	// SnapshotStore is the opt-in per-delivery enrichment store (#108).
+	// Nil when [snapshots] enabled = false. The Discord InteractionCreate
+	// handler reads from it to resolve clicked buttons; commands that
+	// don't touch buttons can ignore it.
+	SnapshotStore snapshots.Store
+
+	// ButtonActions is the dispatch registry for button-triggered state
+	// changes (#109). Nil when buttons aren't wired (eg snapshots
+	// disabled or test contexts).
+	ButtonActions *buttonactions.Registry
 
 	// Admin reload functions — wired by ProcessorService in main.go.
 	// Called directly by !poracle-admin reload subcommands; they bypass
