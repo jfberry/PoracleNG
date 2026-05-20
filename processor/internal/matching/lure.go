@@ -50,6 +50,7 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedU
 			Template:  l.Template,
 			Clean:     l.Clean,
 			Ping:      l.Ping,
+			UID:       l.UID,
 		})
 	}
 

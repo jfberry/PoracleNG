@@ -336,11 +336,16 @@ func parseCoordFloat(s string) float64 {
 // after the platform API call succeeds. CreatedAt is also deferred (set on
 // write) so re-renders for an edit see a fresh timestamp.
 //
-// Phase 1 of the buttons-and-snapshots work intentionally leaves
-// TrackingUIDs and View unpopulated — Phase 3 wires them when buttons need
-// them (snapshot.View for response template rendering, TrackingUIDs for
-// scope=tracking action handlers). The Snapshot.Version field flags the
-// schema so future readers know what they're getting.
+// TrackingUIDs are collected from every MatchedUser sharing this user ID:
+// pokemon matching can produce multiple matches per user (basic + great +
+// ultra PVP) and snapshot.TrackingUIDs should list all of them so the
+// unsubscribe action can offer per-rule granularity.
+//
+// View is the merged enrichment + per-language + per-user maps — the same
+// data the renderer's LayeredView resolves at template time. Stored as a
+// JSON-serialisable map[string]any so consumers (button response
+// templates, redeliver action) can render against it without rebuilding
+// the layered structure.
 func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, tth delivery.TTH) *snapshots.Snapshot {
 	if ps.snapshotStore == nil {
 		return nil
@@ -353,21 +358,91 @@ func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, 
 		areas = append(areas, a.Name)
 	}
 
+	trackingUIDs := collectTrackingUIDs(rj.MatchedUsers, dj.Target)
+	view := mergeViewForSnapshot(rj.Enrichment, rj.PerLangEnrichment[dj.Language], rj.PerUserEnrichment[dj.Target], rj.WebhookFields)
+
 	return &snapshots.Snapshot{
 		Target:       dj.Target,
 		TargetType:   snapshotTargetType(dj.Type),
 		ExpiresAt:    expires,
 		AlertType:    rj.AlertType,
 		TemplateType: rj.TemplateType,
-		// TemplateRequested / TemplateSelected: see the Phase 1 note above.
-		// Until the renderer surfaces the resolved entry id, both are left
-		// empty. Phase 3 will route them through.
+		// TemplateRequested / TemplateSelected: the renderer doesn't
+		// currently surface the resolved entry id back to the render
+		// pool, so we leave these empty in v1. Consumers (redeliver,
+		// re-render-with-snapshot) fall back to the selection chain when
+		// these are empty, which Just Works for the common case.
 		Language:     dj.Language,
 		Platform:     delivery.PlatformFromType(dj.Type),
 		MatchedAreas: areas,
-		// TrackingUIDs and View: Phase 3 fills these in. See buildSnapshot
-		// docstring for the rationale.
+		TrackingUIDs: trackingUIDs,
+		View:         view,
 	}
+}
+
+// collectTrackingUIDs gathers every RuleUID from MatchedUsers that share
+// the given target. A pokemon delivery to user X may have come from
+// several matching rules (basic + PVP) — we surface them all so
+// unsubscribe buttons can act on the right subset, and so the
+// ScopeTracking mute filter has the full set to check against.
+//
+// Duplicates are deduped to keep the slice small (the unsubscribe
+// confirmation message lists them, and operators are happier with a
+// non-redundant list).
+func collectTrackingUIDs(users []webhook.MatchedUser, target string) []int64 {
+	if len(users) == 0 {
+		return nil
+	}
+	seen := make(map[int64]bool)
+	out := make([]int64, 0)
+	for _, u := range users {
+		if u.ID != target {
+			continue
+		}
+		if u.RuleUID == 0 || seen[u.RuleUID] {
+			continue
+		}
+		seen[u.RuleUID] = true
+		out = append(out, u.RuleUID)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// mergeViewForSnapshot composes the snapshot's View field from the three
+// enrichment layers the renderer's LayeredView consumes (per #108's
+// Snapshot.View design). Lower priority layers contribute keys that
+// higher-priority layers don't already own — same as LayeredView lookup
+// at render time, just frozen as a plain map for serialisation.
+//
+// Order (lowest to highest priority, later wins):
+//  1. WebhookFields (raw scanner fields, fallback for anything else)
+//  2. Base enrichment (universal computed fields)
+//  3. Per-language enrichment (translated names, etc.)
+//  4. Per-user enrichment (PVP, distance, bearing)
+//
+// Returns nil when every input is empty.
+func mergeViewForSnapshot(base, perLang, perUser, webhookFields map[string]any) map[string]any {
+	totalLen := len(base) + len(perLang) + len(perUser) + len(webhookFields)
+	if totalLen == 0 {
+		return nil
+	}
+	out := make(map[string]any, totalLen)
+	for k, v := range webhookFields {
+		out[k] = v
+	}
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range perLang {
+		out[k] = v
+	}
+	for k, v := range perUser {
+		out[k] = v
+	}
+	return out
 }
 
 // snapshotTargetType maps a delivery.Job.Type ("discord:user", etc.) to the

@@ -69,16 +69,25 @@ func (c *MuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	scopeNoun := strings.ToLower(positional[0])
+
+	// `!mute id:N` and `!mute <type> id:N` route through the tracking-UID
+	// scope. Both forms come through here: `id:N` directly, or with a
+	// tracking-type prefix that we strip before recursing into the UID
+	// parse. The tracking type itself is informational — the UID is
+	// unique across the user's tracking, so we don't need to scope to a
+	// type at the mute level. (The render-side filter still gates by
+	// MatchedRuleUID, so muting UID 12 only suppresses alerts from that
+	// specific rule.)
+	if strings.HasPrefix(scopeNoun, "id:") {
+		return runMuteTrackingUID(ctx, scopeNoun[len("id:"):], duration)
+	}
+	if isTrackingTypeToken(scopeNoun) && len(positional) >= 2 && strings.HasPrefix(strings.ToLower(positional[1]), "id:") {
+		return runMuteTrackingUID(ctx, positional[1][len("id:"):], duration)
+	}
+
 	scopeType, knownScope := muteScopeNouns[scopeNoun]
 	if !knownScope {
 		// Positional shorthand: !mute <pokemon-name> ≡ !mute pokemon <name>.
-		// Only kicks in when the first token is NOT a tracking-type name —
-		// otherwise we'd swallow `!mute id:N` / `!mute raid id:N`, which we
-		// want to reject explicitly so the user gets a clear "not yet"
-		// message rather than a silent pokemon-resolver miss.
-		if isTrackingTypeToken(scopeNoun) || strings.HasPrefix(scopeNoun, "id:") {
-			return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.id_not_supported")}}
-		}
 		scopeType = mute.ScopePokemon
 		positional = append([]string{"pokemon"}, positional...)
 	}
@@ -150,6 +159,29 @@ func isTrackingTypeToken(s string) bool {
 		return true
 	}
 	return false
+}
+
+// runMuteTrackingUID: !mute id:N. Mutes a single tracking rule by UID.
+// The filterMuted step (with mute.Event.MatchedRuleUID populated)
+// suppresses alerts whose matched rule UID equals this value.
+func runMuteTrackingUID(ctx *bot.CommandContext, raw string, duration time.Duration) []bot.Reply {
+	tr := ctx.Tr()
+	raw = strings.TrimSpace(raw)
+	uid, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || uid <= 0 {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.bad_uid", raw)}}
+	}
+	entry := mute.Entry{
+		HumanID:    ctx.TargetID,
+		ScopeType:  mute.ScopeTracking,
+		ScopeValue: strconv.FormatInt(uid, 10),
+		ExpiresAt:  time.Now().Add(duration).Unix(),
+	}
+	ctx.MuteStore.Add(entry)
+	return []bot.Reply{{
+		React: "🔇",
+		Text:  tr.Tf("msg.mute.added", fmt.Sprintf("rule id:%d", uid), formatDuration(duration)),
+	}}
 }
 
 // runMuteEverything: self-mute all alerts.
@@ -362,12 +394,18 @@ func (c *UnmuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	}
 
 	scopeNoun := first
+
+	// `!unmute id:N` / `!unmute <type> id:N`: remove the tracking-UID mute.
+	if strings.HasPrefix(scopeNoun, "id:") {
+		return runUnmuteTrackingUID(ctx, scopeNoun[len("id:"):])
+	}
+	if isTrackingTypeToken(scopeNoun) && len(args) >= 2 && strings.HasPrefix(strings.ToLower(args[1]), "id:") {
+		return runUnmuteTrackingUID(ctx, args[1][len("id:"):])
+	}
+
 	scopeType, knownScope := muteScopeNouns[scopeNoun]
 	if !knownScope {
 		// Positional shorthand: `!unmute pikachu` ≡ `!unmute pokemon pikachu`.
-		if isTrackingTypeToken(scopeNoun) || strings.HasPrefix(scopeNoun, "id:") {
-			return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.id_not_supported")}}
-		}
 		scopeType = mute.ScopePokemon
 		args = append([]string{"pokemon"}, args...)
 	}
@@ -399,6 +437,21 @@ func (c *UnmuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		React: "✅",
 		Text:  tr.Tf("msg.mute.removed", label),
 	}}
+}
+
+// runUnmuteTrackingUID: !unmute id:N. Symmetric with runMuteTrackingUID.
+func runUnmuteTrackingUID(ctx *bot.CommandContext, raw string) []bot.Reply {
+	tr := ctx.Tr()
+	raw = strings.TrimSpace(raw)
+	uid, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || uid <= 0 {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.bad_uid", raw)}}
+	}
+	label := fmt.Sprintf("rule id:%d", uid)
+	if ok := ctx.MuteStore.Remove(ctx.TargetID, mute.ScopeTracking, strconv.FormatInt(uid, 10)); !ok {
+		return []bot.Reply{{React: "👌", Text: tr.Tf("msg.mute.none_found", label)}}
+	}
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.mute.removed", label)}}
 }
 
 // resolveUnmuteValue maps the (scope, args) pair to the ScopeValue stored

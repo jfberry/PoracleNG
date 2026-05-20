@@ -44,7 +44,8 @@ type trackingUserData struct {
 	Template        string
 	Clean           int
 	Ping            string
-	IsSpecificMatch bool // set when the rule is pinned to a specific entity (gym_id, station_id, etc.) — meaning area/distance check is bypassed and a type-specific blocked-alert key is checked instead (e.g. "specificgym" or "specificstation")
+	UID             int64 // database UID of the matching tracking rule — surfaced on MatchedUser.RuleUID for snapshot/mute use
+	IsSpecificMatch bool  // set when the rule is pinned to a specific entity (gym_id, station_id, etc.) — meaning area/distance check is bypassed and a type-specific blocked-alert key is checked instead (e.g. "specificgym" or "specificstation")
 }
 
 // ValidateHumansGeneric filters matched trackings against human criteria.
@@ -135,6 +136,7 @@ func ValidateHumansGeneric(
 			Bearing:           int(math.Round(bearing)),
 			CardinalDirection: CardinalDirection(bearing),
 			TrackDistance:     td.Distance,
+			RuleUID:           td.UID,
 		})
 	}
 	return result
