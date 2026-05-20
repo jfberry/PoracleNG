@@ -482,4 +482,14 @@ type DeliveryJob struct {
 	Emoji        []string        `json:"emoji"`
 	LogReference string          `json:"logReference"`
 	Language     string          `json:"language"`
+
+	// TemplateRequested is the per-user template field as it appeared on
+	// the matched tracking rule (typically empty, meaning "use config
+	// default"). TemplateSelected is the resolved id the renderer
+	// actually used. Both surface on the snapshot so click-time
+	// re-resolution can target the same template the user saw, and so
+	// snapshot consumers can route between "exact" and "default chain"
+	// re-renders when the operator has changed DTS in between.
+	TemplateRequested string `json:"templateRequested,omitempty"`
+	TemplateSelected  string `json:"templateSelected,omitempty"`
 }
