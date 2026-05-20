@@ -450,9 +450,9 @@ func (r *Renderer) renderForUsers(
 // resolved view. Truthy means attach the button; falsy means drop it.
 //
 // The expression is wrapped in `{{...}}` so operators can write either
-// `{{hasPVP}}` or just `hasPVP`. Output is considered truthy when
-// non-empty AND not literally "false" / "0". This matches Handlebars'
-// own truthiness model for {{#if}}.
+// `{{pvpAvailable}}` or just `pvpAvailable`. Output is considered truthy
+// when non-empty AND not literally "false" / "0". This matches
+// Handlebars' own truthiness model for {{#if}}.
 //
 // Errors are surfaced to the caller (InjectDiscordComponents) which
 // logs them and drops the button — silent acceptance would attach
