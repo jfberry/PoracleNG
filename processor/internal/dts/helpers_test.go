@@ -53,6 +53,26 @@ func TestEq(t *testing.T) {
 	}
 }
 
+func TestIs(t *testing.T) {
+	ctx := map[string]any{"a": "foo", "b": "foo", "c": "bar"}
+
+	// Block mode
+	got := render(t, `{{#is a b}}same{{else}}different{{/is}}`, ctx)
+	if got != "same" {
+		t.Errorf("is block match: got %q, want %q", got, "same")
+	}
+	got = render(t, `{{#is a c}}same{{else}}different{{/is}}`, ctx)
+	if got != "different" {
+		t.Errorf("is block mismatch: got %q, want %q", got, "different")
+	}
+
+	// Subexpression mode
+	got = render(t, `{{#if (is a b)}}same{{else}}different{{/if}}`, ctx)
+	if got != "same" {
+		t.Errorf("is subexpr match: got %q, want %q", got, "same")
+	}
+}
+
 func TestIsnt(t *testing.T) {
 	ctx := map[string]any{"a": "foo", "b": "bar"}
 
