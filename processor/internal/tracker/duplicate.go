@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
@@ -9,9 +10,10 @@ import (
 
 // DuplicateCache provides deduplication for webhooks.
 type DuplicateCache struct {
-	cache     *ttlcache.Cache[string, bool]
-	raidCache *ttlcache.Cache[string, *RaidCacheResult]
-	gymBattle *ttlcache.Cache[string, bool] // battle cooldown (5 min TTL)
+	cache       *ttlcache.Cache[string, bool]
+	raidCache   *ttlcache.Cache[string, *RaidCacheResult]
+	gymBattle   *ttlcache.Cache[string, bool] // battle cooldown (5 min TTL)
+	gymBattleMu sync.Mutex
 }
 
 // NewDuplicateCache creates a new duplicate detection cache.
@@ -227,6 +229,9 @@ func (dc *DuplicateCache) CheckNest(nestID int64, pokemonID int, resetTime int64
 // cooldown before this webhook. If inBattle is true, starts/refreshes the
 // cooldown after reading the previous state.
 func (dc *DuplicateCache) GymInBattleCooldown(gymID string, inBattle bool) bool {
+	dc.gymBattleMu.Lock()
+	defer dc.gymBattleMu.Unlock()
+
 	active := dc.gymBattle.Get(gymID) != nil
 	if inBattle {
 		dc.gymBattle.Set(gymID, true, 5*time.Minute)

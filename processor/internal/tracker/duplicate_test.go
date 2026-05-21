@@ -1,6 +1,8 @@
 package tracker
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -178,6 +180,34 @@ func TestGymBattleCooldown(t *testing.T) {
 	// Different gym — no cooldown
 	if dc.GymInBattleCooldown("gym2", false) {
 		t.Error("Expected different gym to have no cooldown")
+	}
+}
+
+func TestGymBattleCooldownConcurrentFirstUpdate(t *testing.T) {
+	dc := NewDuplicateCache()
+	defer dc.Close()
+
+	const workers = 64
+	var wg sync.WaitGroup
+	var first int64
+	start := make(chan struct{})
+
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			if !dc.GymInBattleCooldown("gym-concurrent", true) {
+				atomic.AddInt64(&first, 1)
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+
+	if first != 1 {
+		t.Errorf("Expected exactly one first battle update, got %d", first)
 	}
 }
 
