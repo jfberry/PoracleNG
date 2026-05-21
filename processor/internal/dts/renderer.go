@@ -62,6 +62,13 @@ type Renderer struct {
 	// entry has them — equivalent to [snapshots] disabled in the host,
 	// because buttons require a snapshot at click time.
 	buttonsEnabled bool
+
+	// isAdminRecipient reports whether a DM-destination human ID is in
+	// the operator's admin list. Used to hide visible_to=admin buttons
+	// at render time on DMs (channel destinations can't be filtered
+	// per-viewer). Nil means "treat no one as admin" — admin buttons
+	// stay click-gated everywhere.
+	isAdminRecipient func(humanID string) bool
 }
 
 // SetButtonsEnabled toggles Discord button component emission. Buttons
@@ -73,6 +80,26 @@ type Renderer struct {
 // doesn't emit the components block.
 func (r *Renderer) SetButtonsEnabled(v bool) {
 	r.buttonsEnabled = v
+}
+
+// SetAdminRecipientCheck wires the host's admin-list predicate. The
+// renderer calls it for each DM destination to decide whether
+// visible_to=admin buttons should be emitted on that user's alert. Pass
+// nil to disable render-time admin hiding (the click-time gate still
+// fires).
+func (r *Renderer) SetAdminRecipientCheck(fn func(humanID string) bool) {
+	r.isAdminRecipient = fn
+}
+
+// recipientIsAdmin returns whether the given user is an admin. Only
+// meaningful for DM-typed destinations — channels/webhooks don't have a
+// single recipient. Returns false when no admin check is wired (the
+// click-time gate still enforces).
+func (r *Renderer) recipientIsAdmin(userType, userID string) bool {
+	if r.isAdminRecipient == nil || userType != "discord:user" {
+		return false
+	}
+	return r.isAdminRecipient(userID)
 }
 
 // ErrorNoticer routes renderer errors to a host-side notification sink
@@ -414,7 +441,7 @@ func (r *Renderer) renderForUsers(
 		if r.buttonsEnabled && platform == "discord" {
 			defs := r.templates.GetButtons(templateType, platform, templateID, language)
 			if len(defs) > 0 {
-				rawMessage = InjectDiscordComponents(rawMessage, defs, view, deliveryTargetType(user.Type), r.evalShowIf)
+				rawMessage = InjectDiscordComponents(rawMessage, defs, view, deliveryTargetType(user.Type), r.recipientIsAdmin(user.Type, user.ID), r.evalShowIf)
 			}
 		}
 

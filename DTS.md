@@ -128,7 +128,7 @@ Minimal example (JSON):
 | `params` | no | Free-form bag passed verbatim to the handler. `mute` reads `duration_min` (default 60); `render` reads `template_id`. |
 | `applies_to` | no | Destination filter: subset of `["dm", "channel", "webhook", "any"]`. Defaults to `["dm"]` for `mute`/`unsubscribe` and `["any"]` otherwise. |
 | `show_if` | no | Handlebars expression evaluated at render time; falsy ⇒ button is not attached at all. Use for conditional buttons like PVP-only. |
-| `visible_to` | no | Click-time authorization: `target` (default — only the message's intended recipient), `admin`, `registered`, `anyone`. |
+| `visible_to` | no | Access control. `anyone` (default — anyone with channel view permission can click), `admin` (clicker is in `[discord] admins`), `registered` (clicker has a Poracle account). On DMs the `admin` gate is also enforced at render time — non-admin recipients don't see the button at all. On channels and webhooks every viewer sees every button (Discord doesn't support per-viewer component visibility), so the gate is click-time only. |
 
 ### Dispatch modes
 
@@ -158,7 +158,7 @@ These all surface as ephemeral replies in Discord — operators should know what
 | `This alert has expired.` | No snapshot found for the message ID. Either `[snapshots] enabled = false`, the snapshot's TTL passed, or the safety sweep already cleaned it. |
 | `This button is no longer available.` | The DTS entry the button came from was removed or renamed since the alert was sent. |
 | `This button doesn't apply here.` | The `applies_to` set doesn't include the destination type. Shouldn't normally happen — the renderer filters at attachment time. |
-| `This button isn't for you.` | `visible_to` check failed (e.g. someone other than the alert recipient clicked a `target`-visible button). |
+| `This button isn't for you.` | `visible_to` check failed (e.g. a non-admin clicked an `admin`-only button on a channel alert). |
 | `Slow down — try that again in a moment.` | Click cooldown — same user / same button / within debounce window. |
 
 ### Show-if expressions
