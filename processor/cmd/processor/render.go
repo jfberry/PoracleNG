@@ -359,7 +359,6 @@ func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, 
 	}
 
 	trackingUIDs := collectTrackingUIDs(rj.MatchedUsers, dj.Target)
-	view := mergeViewForSnapshot(rj.Enrichment, rj.PerLangEnrichment[dj.Language], rj.PerUserEnrichment[dj.Target], rj.WebhookFields)
 
 	// TemplateType: the renderer's per-delivery value wins over the
 	// RenderJob's because some handlers (notably pokemon) don't set
@@ -383,7 +382,15 @@ func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, 
 		Platform:          delivery.PlatformFromType(dj.Type),
 		MatchedAreas:      areas,
 		TrackingUIDs:      trackingUIDs,
-		View:              view,
+		// Raw layers — click-time rendering rebuilds a LayeredView from
+		// these so aliases, computed fields, and emoji resolution work
+		// identically to the original render. PerLang is filtered to
+		// the matched user's language; PerUser to this user's id —
+		// snapshot is per-delivery, only one of each matters.
+		Enrichment:    rj.Enrichment,
+		PerLang:       rj.PerLangEnrichment[dj.Language],
+		PerUser:       rj.PerUserEnrichment[dj.Target],
+		WebhookFields: rj.WebhookFields,
 	}
 }
 
@@ -414,40 +421,6 @@ func collectTrackingUIDs(users []webhook.MatchedUser, target string) []int64 {
 	}
 	if len(out) == 0 {
 		return nil
-	}
-	return out
-}
-
-// mergeViewForSnapshot composes the snapshot's View field from the three
-// enrichment layers the renderer's LayeredView consumes (per #108's
-// Snapshot.View design). Lower priority layers contribute keys that
-// higher-priority layers don't already own — same as LayeredView lookup
-// at render time, just frozen as a plain map for serialisation.
-//
-// Order (lowest to highest priority, later wins):
-//  1. WebhookFields (raw scanner fields, fallback for anything else)
-//  2. Base enrichment (universal computed fields)
-//  3. Per-language enrichment (translated names, etc.)
-//  4. Per-user enrichment (PVP, distance, bearing)
-//
-// Returns nil when every input is empty.
-func mergeViewForSnapshot(base, perLang, perUser, webhookFields map[string]any) map[string]any {
-	totalLen := len(base) + len(perLang) + len(perUser) + len(webhookFields)
-	if totalLen == 0 {
-		return nil
-	}
-	out := make(map[string]any, totalLen)
-	for k, v := range webhookFields {
-		out[k] = v
-	}
-	for k, v := range base {
-		out[k] = v
-	}
-	for k, v := range perLang {
-		out[k] = v
-	}
-	for k, v := range perUser {
-		out[k] = v
 	}
 	return out
 }

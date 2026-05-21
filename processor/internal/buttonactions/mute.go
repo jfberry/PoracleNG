@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/buttons"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/snapshots"
 )
@@ -34,25 +36,26 @@ const muteDurationDefault = time.Hour
 // shouldn't see a "feature unavailable" string unless their config is
 // genuinely broken.
 func HandleMute(_ context.Context, snap *snapshots.Snapshot, def buttons.Def, _ string, deps Deps) (Response, error) {
+	tr := deps.Tr
 	if deps.MuteStore == nil {
 		return Response{
-			Text:     "Mute feature isn't wired here.",
+			Text:     tr.T("msg.mute.unavailable"),
 			Reaction: "🙅",
 		}, errors.New("buttonactions/mute: nil MuteStore in deps")
 	}
 	if snap == nil {
-		return Response{Text: "This alert has expired.", Reaction: "🙅"}, nil
+		return Response{Text: tr.T("msg.button.expired"), Reaction: "🙅"}, nil
 	}
 
 	scopeType := def.Scope
 	if scopeType == "" {
-		return Response{Text: "Button is missing a scope — operator config bug.", Reaction: "🙅"}, nil
+		return Response{Text: tr.T("msg.button.missing_scope"), Reaction: "🙅"}, nil
 	}
 
 	scopeValue, ok := muteScopeValue(scopeType, snap)
 	if !ok {
 		return Response{
-			Text:     fmt.Sprintf("Couldn't find a %s id on this alert to mute.", scopeType),
+			Text:     tr.Tf("msg.button.missing_target", scopeNounLabel(tr, scopeType)),
 			Reaction: "🙅",
 		}, nil
 	}
@@ -67,9 +70,17 @@ func HandleMute(_ context.Context, snap *snapshots.Snapshot, def buttons.Def, _ 
 	deps.MuteStore.Add(entry)
 
 	return Response{
-		Text:     fmt.Sprintf("🔇 Muted %s `%s` for %s.", scopeType, muteScopeLabel(scopeType, scopeValue), durationLabel(duration)),
+		Text:     tr.Tf("msg.mute.added", muteScopeLabel(tr, scopeType, scopeValue, snap), durationLabel(duration)),
 		Reaction: "🔇",
 	}, nil
+}
+
+// scopeNounLabel translates the scope type to its user-facing noun
+// ("gym", "pokemon", "area", ...). Relies on the standard per-key
+// English fallback in Translator.T — missing localisations cascade
+// to the en.json string.
+func scopeNounLabel(tr *i18n.Translator, scope string) string {
+	return tr.T("msg.mute.scope_" + scope)
 }
 
 // muteScopeValue extracts the scope identifier from the snapshot view
@@ -110,10 +121,35 @@ func muteScopeValue(scope string, snap *snapshots.Snapshot) (string, bool) {
 	}
 }
 
-func muteScopeLabel(scope, value string) string {
+// muteScopeLabel produces the display label for a mute scope.
+// Pokemon scope translates the dex id to the species name; gym /
+// pokestop / station prefer the webhook's name field over the raw id;
+// area uses the matched area name verbatim; everything uses the
+// localised everything-label.
+func muteScopeLabel(tr *i18n.Translator, scope, value string, snap *snapshots.Snapshot) string {
 	switch scope {
 	case buttons.ScopeEverything:
-		return "everything"
+		return tr.T("msg.mute.everything_label")
+	case buttons.ScopePokemon:
+		if id, err := strconv.Atoi(value); err == nil {
+			return gamedata.PokemonName(tr, id)
+		}
+		return value
+	case buttons.ScopeGym:
+		if name := viewString(snap, "gym_name"); name != "" {
+			return name
+		}
+		return value
+	case buttons.ScopePokestop:
+		if name := viewString(snap, "pokestop_name"); name != "" {
+			return name
+		}
+		return value
+	case buttons.ScopeStation:
+		if name := viewString(snap, "station_name"); name != "" {
+			return name
+		}
+		return value
 	default:
 		return value
 	}
@@ -178,27 +214,24 @@ func durationLabel(d time.Duration) string {
 	return strings.Join(parts, " ")
 }
 
-// viewString reads a string field from the snapshot view, tolerating the
-// raw map[string]any shape JSON-unmarshal produces.
+// viewString reads a string field from the snapshot's layers via the
+// LayeredView-priority walk in Snapshot.Lookup. Tolerates the raw
+// map[string]any shape JSON-unmarshal produces.
 func viewString(snap *snapshots.Snapshot, key string) string {
-	if snap == nil || snap.View == nil {
+	v, ok := snap.Lookup(key)
+	if !ok {
 		return ""
 	}
-	if v, ok := snap.View[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
+	if s, ok := v.(string); ok {
+		return s
 	}
 	return ""
 }
 
-// viewInt reads an integer-ish field from the snapshot view.
+// viewInt reads an integer-ish field from the snapshot's layers.
 // JSON unmarshal gives float64 for numbers; we coerce.
 func viewInt(snap *snapshots.Snapshot, key string) int {
-	if snap == nil || snap.View == nil {
-		return 0
-	}
-	v, ok := snap.View[key]
+	v, ok := snap.Lookup(key)
 	if !ok {
 		return 0
 	}
