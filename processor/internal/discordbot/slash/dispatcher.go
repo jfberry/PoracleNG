@@ -157,13 +157,13 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 		}
 	}
 
-	// Log DM invocations to the configured log channel for operator
-	// visibility. Mirrors the text-command DM-log path in
-	// discordbot/bot.go onMessageCreate so a slash invocation in a DM
-	// leaves the same audit trail as `!command`. Logged unconditionally
-	// (before any auth/registration check) so even rejected attempts
-	// show up — that's the audit signal admins want.
-	d.logDMInvocation(s, ic)
+	// Log every slash invocation (DM or channel) to the configured
+	// dm_log_channel_id. Slash responses are ephemeral, so channel
+	// invocations are just as private as DMs from other members' point
+	// of view — the audit log is the only place they show up. Logged
+	// unconditionally (before any auth/registration check) so even
+	// rejected attempts show up; that's the audit signal admins want.
+	d.logInvocation(s, ic)
 
 	// 2. Resolve invoked name. May be the operator-renamed/i18n variant.
 	invoked := ic.ApplicationCommandData().Name
@@ -656,19 +656,20 @@ func formatMapperError(err error, lang string, bundle *i18n.Bundle) string {
 	return "🛑 " + tr.T(me.Key)
 }
 
-// logDMInvocation posts a one-line audit entry to the configured
-// dm_log_channel_id for slash invocations that originate from a DM
-// channel (GuildID empty). No-op when the channel isn't configured.
+// logInvocation posts a one-line audit entry to the configured
+// dm_log_channel_id for every slash invocation, including those sent
+// from guild channels. No-op when the channel isn't configured.
 //
-// Mirrors the text-command path in discordbot/bot.go onMessageCreate
-// so an admin watching the log sees /slash and !text DMs side by side.
-// Channel-side slash invocations are visible to anyone with channel
-// access and don't need a separate audit trail; matches the text path
-// which also only logs DMs.
+// Slash responses are ephemeral by default — other channel members
+// don't see the invocation or the reply, so the "channel commands
+// are already public" carve-out from the text path doesn't apply here.
+// Channel-invoked entries include a <#channel-id> mention so the
+// auditor can jump straight to where the user was. DM entries omit
+// the location since there's nowhere to link to.
 //
 // Send failures are logged at WARN and don't block the dispatch.
-func (d *Dispatcher) logDMInvocation(s *discordgo.Session, ic *discordgo.InteractionCreate) {
-	if s == nil || ic == nil || ic.GuildID != "" {
+func (d *Dispatcher) logInvocation(s *discordgo.Session, ic *discordgo.InteractionCreate) {
+	if s == nil || ic == nil {
 		return
 	}
 	if d.cfgRoot == nil || d.cfgRoot.Discord.DmLogChannelID == "" {
@@ -681,10 +682,14 @@ func (d *Dispatcher) logDMInvocation(s *discordgo.Session, ic *discordgo.Interac
 	if user == nil {
 		return
 	}
-	logMsg := fmt.Sprintf("DM from %s (%s): %s", user.Username, user.ID, formatSlashInvocation(ic))
+	source := "DM"
+	if ic.GuildID != "" {
+		source = fmt.Sprintf("<#%s>", ic.ChannelID)
+	}
+	logMsg := fmt.Sprintf("Slash from %s (%s) in %s: %s", user.Username, user.ID, source, formatSlashInvocation(ic))
 	sent, err := s.ChannelMessageSend(d.cfgRoot.Discord.DmLogChannelID, logMsg)
 	if err != nil {
-		log.WithError(err).Warn("slash: failed to post DM log entry")
+		log.WithError(err).Warn("slash: failed to post invocation log entry")
 		return
 	}
 	if sent == nil || d.cfgRoot.Discord.DmLogChannelDeletionTime <= 0 {
