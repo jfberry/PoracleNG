@@ -110,15 +110,27 @@ func MigrateOverridesIntoTOML(configDir string) error {
 	// next config.Load can't unmarshal back into the Go int field.
 	NormalizeNumericValues(rawMap)
 
-	backupRel, err := backup.Save(configDir, "config.toml")
+	configBackupRel, err := backup.Save(configDir, "config.toml")
 	if err != nil {
 		return fmt.Errorf("backup config.toml: %w", err)
+	}
+	// Back up overrides.json BEFORE doing anything destructive. Even
+	// once the merged config.toml is on disk and the in-memory cfg
+	// parses cleanly, a future operator might want to audit what was
+	// folded in — having both backups under config/backups/ leaves a
+	// complete record of the pre-migration state.
+	overridesBackupRel, err := backup.Save(configDir, "overrides.json")
+	if err != nil {
+		return fmt.Errorf("backup overrides.json: %w", err)
 	}
 
 	var buf bytes.Buffer
 	buf.WriteString("# PoracleNG config — overrides.json merged in on startup.\n")
 	buf.WriteString("# Previous config.toml preserved at: ")
-	buf.WriteString(backupRel)
+	buf.WriteString(configBackupRel)
+	buf.WriteString("\n")
+	buf.WriteString("# Previous overrides.json preserved at: ")
+	buf.WriteString(overridesBackupRel)
 	buf.WriteString("\n")
 	buf.WriteString("# Comments and key ordering are not preserved across editor saves.\n")
 	buf.WriteString("# Hand-author this file directly if you need either; otherwise the\n")
@@ -126,6 +138,21 @@ func MigrateOverridesIntoTOML(configDir string) error {
 	enc := toml.NewEncoder(&buf)
 	if err := enc.Encode(rawMap); err != nil {
 		return fmt.Errorf("encode merged config.toml: %w", err)
+	}
+
+	// Verify-then-commit: parse the encoded bytes back into a *Config
+	// BEFORE renaming the temp file or deleting overrides.json. The
+	// motivating case was a number-type regression (JSON float64 →
+	// "100.0" TOML float → "can't unmarshal float into int" at next
+	// Load) where the encode SUCCEEDED but the result was unloadable,
+	// so the migration happily deleted overrides.json on its way to a
+	// fatal startup failure. The verify step catches that class of
+	// bug before any destructive operation runs — if the merged TOML
+	// doesn't round-trip, abort with overrides.json untouched and the
+	// old config.toml unchanged.
+	var verify Config
+	if _, err := toml.Decode(buf.String(), &verify); err != nil {
+		return fmt.Errorf("merged config.toml didn't round-trip into *Config (refusing to commit, overrides.json preserved): %w", err)
 	}
 
 	tmpPath := configPath + ".new"

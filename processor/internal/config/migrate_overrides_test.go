@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BurntSushi/toml"
@@ -178,6 +180,83 @@ func TestMigrate_NumericOverridesRoundTrip(t *testing.T) {
 	}
 	if dst.PVP.FilterMaxRank != 100 {
 		t.Errorf("got filter_max_rank = %d, want 100", dst.PVP.FilterMaxRank)
+	}
+}
+
+// TestMigrate_OverridesBacked — overrides.json must be backed up to
+// config/backups/ before it's removed. Operators need an audit trail
+// of what was folded in on first start.
+func TestMigrate_OverridesBacked(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[discord]\n"), 0644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+	ov := []byte(`{"discord": {"admins": ["12345"]}}`)
+	if err := os.WriteFile(filepath.Join(dir, "overrides.json"), ov, 0644); err != nil {
+		t.Fatalf("write overrides.json: %v", err)
+	}
+
+	if err := MigrateOverridesIntoTOML(dir); err != nil {
+		t.Fatalf("MigrateOverridesIntoTOML: %v", err)
+	}
+
+	// Find the backup file — its name has a timestamp so we glob.
+	entries, _ := os.ReadDir(filepath.Join(dir, "backups"))
+	var foundOverrides bool
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "overrides.json.bak.") {
+			foundOverrides = true
+			body, _ := os.ReadFile(filepath.Join(dir, "backups", e.Name()))
+			if !bytes.Equal(body, ov) {
+				t.Errorf("backup body mismatch:\nwant: %s\ngot:  %s", ov, body)
+			}
+			break
+		}
+	}
+	if !foundOverrides {
+		t.Errorf("expected overrides.json backup under config/backups/; got entries: %v", entries)
+	}
+}
+
+// TestMigrate_VerifyAbortsOnRoundTripFailure — if the encoded TOML
+// can't be parsed back into *Config, the migration must NOT rename
+// the temp file over config.toml and must NOT delete overrides.json.
+// Operator's recoverable state stays intact for next-attempt diagnosis.
+//
+// Triggers the failure by seeding overrides.json with a value whose
+// type clashes with the *Config struct definition — a string where
+// the struct expects an int. The encode succeeds (TOML happily
+// encodes whatever Go shape it's given) but the decode-back-into-
+// struct fails.
+func TestMigrate_VerifyAbortsOnRoundTripFailure(t *testing.T) {
+	dir := t.TempDir()
+	originalConfig := []byte("[pvp]\n")
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), originalConfig, 0644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+	// pvp.filter_max_rank is an int field — sending a string makes
+	// the round-trip decode fail.
+	ov := []byte(`{"pvp": {"filter_max_rank": "not-a-number"}}`)
+	if err := os.WriteFile(filepath.Join(dir, "overrides.json"), ov, 0644); err != nil {
+		t.Fatalf("write overrides.json: %v", err)
+	}
+
+	err := MigrateOverridesIntoTOML(dir)
+	if err == nil {
+		t.Fatal("expected migration to abort, got nil error")
+	}
+	if !strings.Contains(err.Error(), "round-trip") {
+		t.Errorf("expected error to mention round-trip failure; got: %v", err)
+	}
+
+	// overrides.json must still exist.
+	if _, err := os.Stat(filepath.Join(dir, "overrides.json")); err != nil {
+		t.Errorf("overrides.json must be preserved when migration aborts; stat err = %v", err)
+	}
+	// config.toml must be unchanged.
+	got, _ := os.ReadFile(filepath.Join(dir, "config.toml"))
+	if !bytes.Equal(got, originalConfig) {
+		t.Errorf("config.toml must be unchanged when migration aborts:\nwant: %q\ngot:  %q", originalConfig, got)
 	}
 }
 
