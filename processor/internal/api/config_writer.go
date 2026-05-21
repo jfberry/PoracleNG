@@ -10,6 +10,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/pokemon/poracleng/processor/internal/backup"
+	"github.com/pokemon/poracleng/processor/internal/config"
 )
 
 // writeConfigTOML rewrites config/config.toml in place with the
@@ -49,6 +50,13 @@ func writeConfigTOML(configDir string, updates map[string]any) (backupRel string
 	}
 
 	applySchemaUpdates(rawMap, updates)
+
+	// JSON unmarshal gives float64 for every number — including
+	// integer-valued ones — so the editor's POST payload arrives with
+	// int-shaped values as float64. Without normalisation the TOML
+	// encoder writes them as "100.0" and the next config.Load fails
+	// to unmarshal them into Go int fields.
+	config.NormalizeNumericValues(rawMap)
 
 	backupRel, err = backup.Save(configDir, "config.toml")
 	if err != nil {
