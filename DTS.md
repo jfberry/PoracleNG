@@ -8,14 +8,16 @@ Templates are loaded from multiple sources in this order:
 
 1. **`fallbacks/dts.json`** — bundled defaults (shipped with the code, marked **readonly**)
 2. **`config/dts.json`** — user's main configuration file
-3. **`config/dts/*.json`** — additional template files (one or more entries per file)
+3. **`config/dts/*.json`** and **`config/dts/*.toml`** — additional template files (one or more entries per file)
 
 All entries are merged into a single list. When multiple entries match the same type/platform/id/language, the **last-loaded entry wins** — so `config/dts/` overrides `config/dts.json`, which overrides `fallbacks/dts.json`. This means you can customize any bundled template by creating an entry with the same key in your config.
 
 Each entry may use:
 - Inline `template` object — JSON with `{{fieldName}}` placeholders
+- Inline `template` string — raw Handlebars body. Standard in TOML entries (multi-line `"""..."""` blocks land here without double-encoding); also valid in JSON for advanced cases.
 - `"templateFile": "dts/filename.txt"` — external file read as raw Handlebars text (allows non-JSON constructs like unquoted Handlebars expressions in value positions)
 - `"@include filename"` — include directive for shared partials
+- `buttons[]` — operator-authored Discord buttons attached to the rendered message; see the **Buttons** section.
 
 ### The `default: true` flag and help templates
 
@@ -45,6 +47,133 @@ The `POST /api/dts/templates` endpoint saves templates safely without destroying
 - **Readonly templates** (from `fallbacks/dts.json`) are never modified — saving creates an override in `config/dts/` that takes precedence via the last-match-wins loading order
 - Source files that become empty after removal are automatically deleted (except the main `config/dts.json`)
 - Templates can be reloaded from disk via `GET /api/dts/reload` without restarting the processor
+
+## TOML format
+
+`config/dts/*.toml` files are loaded alongside JSON. The wire shape is the same flat list of entries you'd see in JSON, with one TOML idiom:
+
+```toml
+[[entry]]
+id       = "1"
+type     = "monster"
+platform = "discord"
+language = "en"
+description = "Compact monster card"
+
+template = """
+{
+  "embed": {
+    "title": "{{fullName}} {{round iv}}%",
+    "color": "{{ivColor}}"
+  }
+}
+"""
+
+  [[entry.buttons]]
+  id       = "mute_species_1h"
+  label    = "Mute this species (1h)"
+  style    = "danger"
+  action   = "mute"
+  scope    = "pokemon"
+  params   = { duration_min = 60 }
+```
+
+- Each `[[entry]]` is one DTS entry. Same `(type, id, platform, language)` key as the JSON form.
+- Multi-line `"""..."""` strings keep templates readable when they contain Handlebars block helpers — JSON would force escaped newlines and quoted braces.
+- Buttons use `[[entry.buttons]]` for the inline array-of-tables syntax. Identical field names to the JSON form.
+
+**Config editor round-trip**: the editor speaks JSON to the processor. The processor remembers each entry's source format and re-encodes back to TOML on save. **TOML comments and operator-chosen key ordering are not preserved across editor saves** — the entire file is re-emitted. Each save takes a pre-write backup into `config/backups/`, so an accidental clobber is recoverable. If you hand-author elaborate TOML and want the comments preserved, edit the file directly and `POST /api/dts/reload`.
+
+A working example covering inline response templates, action buttons, and gated visibility lives at [`examples/dts/buttons/monster-with-pvp.toml`](examples/dts/buttons/monster-with-pvp.toml).
+
+## Buttons
+
+A template entry may declare a `buttons[]` array attaching Discord interactive buttons to the rendered message. Buttons are opt-in at two levels: the operator must (a) define them on the entry and (b) set `[snapshots] enabled = true` — without the snapshot store, click handlers have no resolved view to act against and buttons render as no-ops.
+
+Minimal example (JSON):
+
+```json
+{
+  "type": "raid",
+  "platform": "discord",
+  "language": "en",
+  "id": "1",
+  "template": { "embed": { "title": "{{fullName}} @ {{gymName}}" } },
+  "buttons": [
+    {
+      "id": "mute_gym_1h",
+      "label": "Mute this gym (1h)",
+      "style": "danger",
+      "action": "mute",
+      "scope": "gym",
+      "params": { "duration_min": 60 }
+    }
+  ]
+}
+```
+
+### Button fields
+
+| Field | Required | Notes |
+|---|---|---|
+| `id` | yes | Click-side identifier; used in the Discord `custom_id` (`poracle:btn:<id>`). Unique per template entry. |
+| `label` | yes | Discord button label. |
+| `style` | no | `primary` / `secondary` / `success` / `danger`. Defaults to `secondary`. |
+| **Dispatch** (exactly one) | yes | Pick one shape — see below. |
+| `action` | one of dispatch | Named handler in the action registry. |
+| `response_template_id` | one of dispatch | DTS lookup against `type="buttonResponse"`. |
+| `response_template_inline` | one of dispatch | Raw Handlebars body; rendered against the snapshot at click time. |
+| `response_text` | one of dispatch | Plain-text Handlebars (no JSON parsing). |
+| `scope` | for `action="mute"` / `"unsubscribe"` | `gym`, `pokemon`, `area`, `pokestop`, `station`, `everything`, `tracking`. Picks which snapshot field is the identifier. |
+| `params` | no | Free-form bag passed verbatim to the handler. `mute` reads `duration_min` (default 60); `render` reads `template_id`. |
+| `applies_to` | no | Destination filter: subset of `["dm", "channel", "webhook", "any"]`. Defaults to `["dm"]` for `mute`/`unsubscribe` and `["any"]` otherwise. |
+| `show_if` | no | Handlebars expression evaluated at render time; falsy ⇒ button is not attached at all. Use for conditional buttons like PVP-only. |
+| `visible_to` | no | Click-time authorization: `target` (default — only the message's intended recipient), `admin`, `registered`, `anyone`. |
+
+### Dispatch modes
+
+1. **Action** — named handler in `internal/buttonactions/`. Server-side state change (write a mute, dispatch a redeliver, etc.). The reply is a short ephemeral confirmation generated by the handler.
+
+2. **`response_template_id`** — looks up an entry where `type="buttonResponse"` using the standard selection chain. Useful when a response is shared between multiple buttons or alert types.
+
+3. **`response_template_inline`** — render the literal string (or string array, joined by newlines) as a Handlebars template against the snapshot's `LayeredView`. Same field access as alert templates — aliases, computed fields, emoji resolution all available. JSON-shaped output is parsed into ephemeral Discord embeds; otherwise it lands as plain content.
+
+4. **`response_text`** — plain-text Handlebars output. No JSON parsing. Use for one-liners (`"📍 \`{{latitude}}, {{longitude}}\`"`).
+
+### Registered actions
+
+`GET /api/dts/actions` returns the live list. As of this branch:
+
+- **`mute`** — writes a `mute.Entry` for the clicker. Scope picks the snapshot field (`gym` → `gym_id`, `pokemon` → `pokemon_id`, `area` → first `MatchedArea`, `everything` → user-wide). `params.duration_min` (int minutes, default 60).
+- **`unsubscribe`** — v1 only accepts `scope = "tracking"`; full rule-UID unsubscribe is queued behind the `MatchedUser.RuleUID` plumbing work.
+- **`redeliver`** — DM the alert to the clicker. v1 sends a stub confirmation; a full re-render is a follow-up.
+- **`render`** — render a different template id (via `params.template_id`) as the click response. Useful for "show me the PVP detail" without an inline body in the button definition.
+
+### Click-time failure messages
+
+These all surface as ephemeral replies in Discord — operators should know what they mean:
+
+| Message | Cause |
+|---|---|
+| `This alert has expired.` | No snapshot found for the message ID. Either `[snapshots] enabled = false`, the snapshot's TTL passed, or the safety sweep already cleaned it. |
+| `This button is no longer available.` | The DTS entry the button came from was removed or renamed since the alert was sent. |
+| `This button doesn't apply here.` | The `applies_to` set doesn't include the destination type. Shouldn't normally happen — the renderer filters at attachment time. |
+| `This button isn't for you.` | `visible_to` check failed (e.g. someone other than the alert recipient clicked a `target`-visible button). |
+| `Slow down — try that again in a moment.` | Click cooldown — same user / same button / within debounce window. |
+
+### Show-if expressions
+
+`show_if` is a Handlebars expression evaluated against the resolved view at render time. The button is attached only when the result is truthy.
+
+```json
+{ "id": "pvp", "label": "Show PVP details", "show_if": "{{pvpAvailable}}", "response_template_inline": "..." }
+```
+
+Use this for conditional buttons that only make sense on certain alerts — PVP details when the pokemon has rankings, RSVP for raids, etc.
+
+### Editor support
+
+`GET /api/dts/actions` returns each action's `name`, accepted `scopes`, whether `required_scope` is true, and the `params` keys the handler knows about. The PoracleWeb editor uses this to drive its button-authoring UI. See [`docs/CONFIG-EDITOR-INSTRUCTIONS.md`](docs/CONFIG-EDITOR-INSTRUCTIONS.md) for the editor-side spec.
 
 ## Poracle Fields vs Raw Webhook Fields
 
