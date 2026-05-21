@@ -53,6 +53,15 @@ func TestEncodeTOML_RoundTrip(t *testing.T) {
 	if !strings.Contains(string(encoded), "[[entry.buttons]]") {
 		t.Errorf("encoded TOML missing [[entry.buttons]] block: %q", encoded)
 	}
+	// Multi-line template bodies must use triple-quoted strings rather
+	// than single-line escaped form — operators saving via the editor
+	// shouldn't see their templates collapsed into one line of escapes.
+	if !strings.Contains(string(encoded), "template = \"\"\"") {
+		t.Errorf("multi-line template not emitted as triple-quoted block:\n%s", encoded)
+	}
+	if strings.Contains(string(encoded), `\"embed\"`) {
+		t.Errorf("multi-line template body still contains JSON-escapes (single-line form leaked):\n%s", encoded)
+	}
 
 	// Write + reload to confirm the wire format round-trips.
 	dir := t.TempDir()
@@ -72,5 +81,16 @@ func TestEncodeTOML_RoundTrip(t *testing.T) {
 	}
 	if len(reloaded[0].Buttons) != 1 || reloaded[0].Buttons[0].ID != "mute_gym_1h" {
 		t.Errorf("button lost in round-trip: %+v", reloaded[0].Buttons)
+	}
+	// Body must round-trip byte-for-byte — operators saving from the
+	// editor get back what they wrote, not the same content with
+	// trailing whitespace bolted on by the closing-fence indent.
+	originalBody := source[0].Template.(string)
+	reloadedBody, ok := reloaded[0].Template.(string)
+	if !ok {
+		t.Fatalf("reloaded template is %T, want string", reloaded[0].Template)
+	}
+	if reloadedBody != originalBody {
+		t.Errorf("template body changed across round-trip:\noriginal: %q\nreloaded: %q", originalBody, reloadedBody)
 	}
 }
