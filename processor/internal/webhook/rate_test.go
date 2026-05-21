@@ -23,7 +23,7 @@ func TestRateCounter_SingleMinute_RecordsTotal(t *testing.T) {
 	now := time.Now().Truncate(time.Minute)
 	rc := newRateCounterWithClock(fixedClock(now))
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		rc.Record("pokemon")
 	}
 
@@ -48,10 +48,10 @@ func TestRateCounter_MultipleTypes_Breakdown(t *testing.T) {
 	now := time.Now().Truncate(time.Minute)
 	rc := newRateCounterWithClock(fixedClock(now))
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		rc.Record("pokemon")
 	}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		rc.Record("raid")
 	}
 	rc.Record("quest")
@@ -79,13 +79,13 @@ func TestRateCounter_OldEventsDecay(t *testing.T) {
 
 	// Record old events with an old clock.
 	rc := newRateCounterWithClock(fixedClock(old))
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		rc.Record("pokemon")
 	}
 
 	// Advance the clock to now and record 3 new events.
 	rc.now = fixedClock(base)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		rc.Record("raid")
 	}
 
@@ -179,11 +179,11 @@ func TestRateCounter_ConcurrentRecord(t *testing.T) {
 	const goroutines = 100
 	const recordsPerGoroutine = 100
 
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for i := 0; i < recordsPerGoroutine; i++ {
+			for i := range recordsPerGoroutine {
 				rc.Record(types[i%len(types)])
 			}
 		}(g)

@@ -105,7 +105,7 @@ func TestProcessRaidDuplicateDoesNotDoubleRecord(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := ps.ProcessRaid(raw); err != nil {
 			t.Fatalf("ProcessRaid iter %d: %v", i, err)
 		}

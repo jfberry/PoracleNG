@@ -77,10 +77,3 @@ func TestResolveTemplate_ObjectValueIsJSONEncoded(t *testing.T) {
 		t.Errorf("body lost the {{name}} expression: %q", body)
 	}
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

@@ -1,6 +1,7 @@
 package discordbot
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -73,13 +74,7 @@ func TestReconcileUserNow_Routes(t *testing.T) {
 	if len(ms.Calls) == 0 {
 		t.Fatal("expected at least one store call (Get), got none")
 	}
-	found := false
-	for _, c := range ms.Calls {
-		if c == "Get" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(ms.Calls, "Get")
 	if !found {
 		t.Fatalf("expected 'Get' call in store.Calls, got %v", ms.Calls)
 	}

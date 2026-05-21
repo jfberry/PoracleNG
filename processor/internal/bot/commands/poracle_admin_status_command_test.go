@@ -61,7 +61,6 @@ func TestStatus_NoArgs_RendersReport(t *testing.T) {
 // detail when a near-limit route exists.
 func TestStatus_VerboseFlag_PassesThrough(t *testing.T) {
 	for _, flag := range []string{"-v", "--verbose", "verbose"} {
-		flag := flag
 		t.Run(flag, func(t *testing.T) {
 			ctx, routeKey := statusCtxWithRouteDetail(t)
 

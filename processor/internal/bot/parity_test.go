@@ -74,7 +74,7 @@ func TestSlashTextParity(t *testing.T) {
 // SubCommand and SubCommandGroup options are sorted to the front of the
 // returned slice so opts[0] is the sub-command (or group) for
 // sub-command-aware mappers (area, profile, untrack, summary).
-func optionsFromMap(m map[string]interface{}) []*discordgo.ApplicationCommandInteractionDataOption {
+func optionsFromMap(m map[string]any) []*discordgo.ApplicationCommandInteractionDataOption {
 	if len(m) == 0 {
 		return nil
 	}
@@ -231,7 +231,7 @@ func optionsFromMap(m map[string]interface{}) []*discordgo.ApplicationCommandInt
 
 // buildOption infers an option type from a value's Go type and produces the
 // matching discordgo option struct.
-func buildOption(name string, v interface{}) *discordgo.ApplicationCommandInteractionDataOption {
+func buildOption(name string, v any) *discordgo.ApplicationCommandInteractionDataOption {
 	opt := &discordgo.ApplicationCommandInteractionDataOption{Name: name}
 	switch val := v.(type) {
 	case bool:

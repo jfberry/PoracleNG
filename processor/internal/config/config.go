@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/BurntSushi/toml"
 	log "github.com/sirupsen/logrus"
@@ -125,7 +126,7 @@ type SummariserConfig struct {
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
-	Locale               string                   `toml:"locale"`                // default language code (e.g. "en", "pl")
+	Locale string `toml:"locale"` // default language code (e.g. "en", "pl")
 	// DefaultTimezone is the IANA timezone name used by the profile and
 	// summary schedulers when a human has lat/lon = 0/0 (no location
 	// set). Empty string means "fall back to the server's local time
@@ -285,12 +286,7 @@ func (s DiscordSlashCommands) IsEnabled(name string) bool {
 	if len(s.Enable) == 0 {
 		return true
 	}
-	for _, n := range s.Enable {
-		if n == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.Enable, name)
 }
 
 // DelegatedAdminEntry represents a [[delegated_admins]] TOML array-of-tables entry.
@@ -607,9 +603,9 @@ type CommunityConfig struct {
 }
 
 type AlertLimitsConfig struct {
-	TimingPeriod        int                  `toml:"timing_period"`
-	DMLimit             int                  `toml:"dm_limit"`
-	ChannelLimit        int                  `toml:"channel_limit"`
+	TimingPeriod int `toml:"timing_period"`
+	DMLimit      int `toml:"dm_limit"`
+	ChannelLimit int `toml:"channel_limit"`
 	// DM/Channel summary limits cap summary-mode dispatches per
 	// destination per timing_period independently of DMLimit /
 	// ChannelLimit. One fire counts as one (chunked summaries do
@@ -866,7 +862,7 @@ func Load(baseDir string) (*Config, error) {
 			IvColors:          []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"},
 			CheckRoleInterval: 6,
 			Activity:          "PoracleNG",
-			SlashCommands: DiscordSlashCommands{
+			SlashCommands:     DiscordSlashCommands{
 				// All defaults are zero-value so an operator who flips
 				// Enabled=true doesn't accidentally pollute Discord's
 				// global namespace — they have to explicitly opt in via
