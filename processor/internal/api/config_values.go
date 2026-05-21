@@ -118,7 +118,6 @@ func HandleConfigSave(deps ConfigDeps) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "save failed: " + err.Error()})
 			return
 		}
-		_ = backupRel
 
 		// Apply to in-memory config
 		config.ApplyOverrides(deps.Cfg, updates)
@@ -132,12 +131,13 @@ func HandleConfigSave(deps ConfigDeps) gin.HandlerFunc {
 		}
 
 		saved := countFields(updates)
-		log.Infof("config: saved %d field(s) via API (restart_required=%v)", saved, restartRequired)
+		log.Infof("config: saved %d field(s) via API (restart_required=%v, backup=%s)", saved, restartRequired, backupRel)
 
 		resp := gin.H{
 			"status":           "ok",
 			"saved":            saved,
 			"restart_required": restartRequired,
+			"backup":           backupRel,
 		}
 		if len(restartFields) > 0 {
 			resp["restart_fields"] = restartFields
