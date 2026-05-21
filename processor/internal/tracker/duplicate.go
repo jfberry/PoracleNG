@@ -11,7 +11,6 @@ import (
 type DuplicateCache struct {
 	cache     *ttlcache.Cache[string, bool]
 	raidCache *ttlcache.Cache[string, *RaidCacheResult]
-	gymBattle *ttlcache.Cache[string, bool] // battle cooldown (5 min TTL)
 }
 
 // NewDuplicateCache creates a new duplicate detection cache.
@@ -24,21 +23,15 @@ func NewDuplicateCache() *DuplicateCache {
 		ttlcache.WithTTL[string, *RaidCacheResult](90*time.Minute),
 		ttlcache.WithDisableTouchOnHit[string, *RaidCacheResult](),
 	)
-	gymBattle := ttlcache.New[string, bool](
-		ttlcache.WithTTL[string, bool](5*time.Minute),
-		ttlcache.WithDisableTouchOnHit[string, bool](),
-	)
 	go cache.Start()
 	go raidCache.Start()
-	go gymBattle.Start()
-	return &DuplicateCache{cache: cache, raidCache: raidCache, gymBattle: gymBattle}
+	return &DuplicateCache{cache: cache, raidCache: raidCache}
 }
 
 // Close stops all cache eviction goroutines.
 func (dc *DuplicateCache) Close() {
 	dc.cache.Stop()
 	dc.raidCache.Stop()
-	dc.gymBattle.Stop()
 }
 
 // CheckPokemon returns true if this pokemon was already seen (duplicate).
@@ -221,14 +214,4 @@ func (dc *DuplicateCache) CheckNest(nestID int64, pokemonID int, resetTime int64
 	}
 	dc.cache.Set(key, true, time.Duration(remaining)*time.Second)
 	return false
-}
-
-// GymInBattleCooldown checks if a gym is within the 5-minute battle cooldown.
-// If inBattle is true, starts/refreshes the cooldown.
-// Returns true if the gym is still in the cooldown period.
-func (dc *DuplicateCache) GymInBattleCooldown(gymID string, inBattle bool) bool {
-	if inBattle {
-		dc.gymBattle.Set(gymID, true, 5*time.Minute)
-	}
-	return dc.gymBattle.Get(gymID) != nil
 }

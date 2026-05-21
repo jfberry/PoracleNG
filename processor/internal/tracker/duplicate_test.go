@@ -151,31 +151,6 @@ func TestRaidRSVPNilToSome(t *testing.T) {
 	}
 }
 
-func TestGymBattleCooldown(t *testing.T) {
-	dc := NewDuplicateCache()
-	defer dc.Close()
-
-	// No cooldown initially
-	if dc.GymInBattleCooldown("gym1", false) {
-		t.Error("Expected no cooldown when not in battle and no prior entry")
-	}
-
-	// Start battle — sets cooldown, returns true
-	if !dc.GymInBattleCooldown("gym1", true) {
-		t.Error("Expected cooldown to be active after battle starts")
-	}
-
-	// Check again without battle — still in cooldown
-	if !dc.GymInBattleCooldown("gym1", false) {
-		t.Error("Expected cooldown to persist")
-	}
-
-	// Different gym — no cooldown
-	if dc.GymInBattleCooldown("gym2", false) {
-		t.Error("Expected different gym to have no cooldown")
-	}
-}
-
 func TestRsvpChanged(t *testing.T) {
 	tests := []struct {
 		name    string
