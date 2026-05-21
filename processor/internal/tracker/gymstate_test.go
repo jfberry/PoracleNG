@@ -1,7 +1,10 @@
 package tracker
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // TestGymStateLastOwnerEvolution mirrors PoracleJS app.js behaviour for the
@@ -86,5 +89,77 @@ func TestGymStateLastOwnerFirstSightUncontested(t *testing.T) {
 	cur = gst.gyms["gym2"]
 	if cur.LastOwnerID != 1 {
 		t.Errorf("Uncontested → Mystic cache lastOwnerID=%d, want 1", cur.LastOwnerID)
+	}
+}
+
+func TestGymStateBattleCooldown(t *testing.T) {
+	gst := NewGymStateTracker("")
+	now := time.Unix(1_700_000_000, 0)
+
+	old, cooldown := gst.UpdateWithBattleCooldown("gym1", 2, 3, true, now)
+	if old != nil {
+		t.Errorf("first battle update should have no old state, got %+v", old)
+	}
+	if cooldown {
+		t.Error("first battle update should be outside cooldown")
+	}
+
+	old, cooldown = gst.UpdateWithBattleCooldown("gym1", 2, 3, false, now.Add(time.Second))
+	if old == nil {
+		t.Fatal("second update should have old state")
+	}
+	if !cooldown {
+		t.Error("cooldown should persist after first battle update")
+	}
+
+	_, cooldown = gst.UpdateWithBattleCooldown("gym1", 2, 3, true, now.Add(2*time.Second))
+	if !cooldown {
+		t.Error("repeated battle update should be inside cooldown")
+	}
+
+	_, cooldown = gst.UpdateWithBattleCooldown("gym2", 2, 3, false, now.Add(3*time.Second))
+	if cooldown {
+		t.Error("different gym should not share cooldown")
+	}
+
+	_, cooldown = gst.UpdateWithBattleCooldown("gym1", 2, 3, false, now.Add(6*time.Minute))
+	if cooldown {
+		t.Error("cooldown should expire")
+	}
+}
+
+func TestGymStateBattleCooldownConcurrentColdGym(t *testing.T) {
+	gst := NewGymStateTracker("")
+	now := time.Unix(1_700_000_000, 0)
+
+	const workers = 64
+	var wg sync.WaitGroup
+	var first int64
+	var suppressedWithOldState int64
+	start := make(chan struct{})
+
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			<-start
+			old, cooldown := gst.UpdateWithBattleCooldown("gym-concurrent", 2, 3, true, now)
+			if !cooldown {
+				atomic.AddInt64(&first, 1)
+			}
+			if cooldown && old != nil {
+				atomic.AddInt64(&suppressedWithOldState, 1)
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+
+	if first != 1 {
+		t.Errorf("Expected exactly one first battle update, got %d", first)
+	}
+	if suppressedWithOldState != workers-1 {
+		t.Errorf("Expected %d suppressed updates with old state, got %d", workers-1, suppressedWithOldState)
 	}
 }

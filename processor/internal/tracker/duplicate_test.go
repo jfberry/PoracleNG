@@ -1,8 +1,6 @@
 package tracker
 
 import (
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -150,64 +148,6 @@ func TestRaidRSVPNilToSome(t *testing.T) {
 	}
 	if isFirst {
 		t.Error("Expected nil→some to not be first notification")
-	}
-}
-
-func TestGymBattleCooldown(t *testing.T) {
-	dc := NewDuplicateCache()
-	defer dc.Close()
-
-	// No cooldown initially
-	if dc.GymInBattleCooldown("gym1", false) {
-		t.Error("Expected no cooldown when not in battle and no prior entry")
-	}
-
-	// First battle update starts cooldown but is not itself suppressed.
-	if dc.GymInBattleCooldown("gym1", true) {
-		t.Error("Expected first battle update to be outside cooldown")
-	}
-
-	// Check again without battle — still in cooldown
-	if !dc.GymInBattleCooldown("gym1", false) {
-		t.Error("Expected cooldown to persist")
-	}
-
-	// Another battle update during cooldown is suppressed and refreshes it.
-	if !dc.GymInBattleCooldown("gym1", true) {
-		t.Error("Expected repeated battle update to be inside cooldown")
-	}
-
-	// Different gym — no cooldown
-	if dc.GymInBattleCooldown("gym2", false) {
-		t.Error("Expected different gym to have no cooldown")
-	}
-}
-
-func TestGymBattleCooldownConcurrentFirstUpdate(t *testing.T) {
-	dc := NewDuplicateCache()
-	defer dc.Close()
-
-	const workers = 64
-	var wg sync.WaitGroup
-	var first int64
-	start := make(chan struct{})
-
-	wg.Add(workers)
-	for i := 0; i < workers; i++ {
-		go func() {
-			defer wg.Done()
-			<-start
-			if !dc.GymInBattleCooldown("gym-concurrent", true) {
-				atomic.AddInt64(&first, 1)
-			}
-		}()
-	}
-
-	close(start)
-	wg.Wait()
-
-	if first != 1 {
-		t.Errorf("Expected exactly one first battle update, got %d", first)
 	}
 }
 

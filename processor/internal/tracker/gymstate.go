@@ -12,11 +12,12 @@ import (
 
 // GymState holds cached gym state for change detection.
 type GymState struct {
-	TeamID         int       `json:"team_id"`
-	SlotsAvailable int       `json:"slots_available"`
-	InBattle       bool      `json:"in_battle"`
-	LastOwnerID    int       `json:"last_owner_id"`
-	LastSeen       time.Time `json:"last_seen"`
+	TeamID              int       `json:"team_id"`
+	SlotsAvailable      int       `json:"slots_available"`
+	InBattle            bool      `json:"in_battle"`
+	LastOwnerID         int       `json:"last_owner_id"`
+	LastSeen            time.Time `json:"last_seen"`
+	BattleCooldownUntil time.Time `json:"-"`
 }
 
 // GymStateTracker tracks gym state for detecting team/slot/battle changes.
@@ -52,6 +53,27 @@ func (gst *GymStateTracker) Update(gymID string, teamID, slotsAvailable int, inB
 	gst.mu.Lock()
 	defer gst.mu.Unlock()
 
+	return gst.updateLocked(gymID, teamID, slotsAvailable, inBattle, time.Now())
+}
+
+// UpdateWithBattleCooldown stores current gym state and returns the old state
+// plus whether the gym was already inside the battle cooldown before this
+// webhook. The cooldown decision and state transition are made under the same
+// lock so concurrent first in-battle updates cannot both escape suppression.
+func (gst *GymStateTracker) UpdateWithBattleCooldown(gymID string, teamID, slotsAvailable int, inBattle bool, now time.Time) (*GymState, bool) {
+	gst.mu.Lock()
+	defer gst.mu.Unlock()
+
+	old := gst.gyms[gymID]
+	battleCooldown := old != nil && old.BattleCooldownUntil.After(now)
+	oldCopy := gst.updateLocked(gymID, teamID, slotsAvailable, inBattle, now)
+	if inBattle {
+		gst.gyms[gymID].BattleCooldownUntil = now.Add(5 * time.Minute)
+	}
+	return oldCopy, battleCooldown
+}
+
+func (gst *GymStateTracker) updateLocked(gymID string, teamID, slotsAvailable int, inBattle bool, now time.Time) *GymState {
 	old := gst.gyms[gymID]
 	var oldCopy *GymState
 
@@ -72,14 +94,14 @@ func (gst *GymStateTracker) Update(gymID string, teamID, slotsAvailable int, inB
 		old.SlotsAvailable = slotsAvailable
 		old.InBattle = inBattle
 		old.LastOwnerID = newLastOwner
-		old.LastSeen = time.Now()
+		old.LastSeen = now
 	} else {
 		gst.gyms[gymID] = &GymState{
 			TeamID:         teamID,
 			SlotsAvailable: slotsAvailable,
 			InBattle:       inBattle,
 			LastOwnerID:    newLastOwner,
-			LastSeen:       time.Now(),
+			LastSeen:       now,
 		}
 	}
 	return oldCopy

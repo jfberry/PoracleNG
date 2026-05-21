@@ -55,17 +55,14 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		// Resolve in-battle
 		inBattle := bool(gym.IsInBattle) || bool(gym.InBattle)
 
-		// Battle cooldown: during battles, Golbat sends frequent updates.
-		// GymInBattleCooldown reports the pre-existing cooldown state, then
-		// starts/refreshes it for in-battle webhooks. This keeps the first
-		// under-attack update eligible and suppresses repeated same-state ones.
-		battleCooldown := ps.duplicates.GymInBattleCooldown(gymID, inBattle)
-
 		// Update gym state and get old state.
 		// On first sight (oldState == nil), use -1 for old values to signal
 		// "unknown previous state" — this triggers team-change alerts matching
 		// the original behavior where old_team_id=-1 means "team changed".
-		oldState := ps.gymState.Update(gymID, teamID, gym.SlotsAvailable, inBattle)
+		//
+		// Battle cooldown is decided inside the same tracker transition so
+		// concurrent first in-battle updates for a cold gym cannot both alert.
+		oldState, battleCooldown := ps.gymState.UpdateWithBattleCooldown(gymID, teamID, gym.SlotsAvailable, inBattle, time.Now())
 
 		oldTeamID := -1
 		oldSlotsAvailable := -1
