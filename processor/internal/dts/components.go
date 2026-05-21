@@ -52,7 +52,14 @@ var discordButtonStyle = map[string]int{
 // view is the resolved LayeredView used to evaluate show_if expressions
 // against. Pass the same one the renderer used so the predicate sees
 // the fields the operator wrote into their template.
-func InjectDiscordComponents(messageBody json.RawMessage, defs []buttons.Def, view any, targetType string, evalShowIf ShowIfEvaluator) json.RawMessage {
+//
+// recipientIsAdmin gates render-time hiding of admin-only buttons on DM
+// destinations: when targetType=="dm" and !recipientIsAdmin, buttons
+// with visible_to="admin" are dropped here so non-admin recipients
+// never see a button they couldn't use. Channel destinations can't be
+// filtered per-viewer; the click-time gate remains the only enforcement
+// there.
+func InjectDiscordComponents(messageBody json.RawMessage, defs []buttons.Def, view any, targetType string, recipientIsAdmin bool, evalShowIf ShowIfEvaluator) json.RawMessage {
 	if len(defs) == 0 || !json.Valid(messageBody) {
 		return messageBody
 	}
@@ -67,11 +74,15 @@ func InjectDiscordComponents(messageBody json.RawMessage, defs []buttons.Def, vi
 		return messageBody
 	}
 
-	// Filter buttons by applies_to + show_if first so we know whether
-	// any survive before serialising components JSON.
+	// Filter buttons by applies_to + show_if + per-recipient visibility
+	// first so we know whether any survive before serialising
+	// components JSON.
 	var kept []buttons.Def
 	for _, def := range defs {
 		if !def.AppliesToTarget(targetType) {
+			continue
+		}
+		if targetType == "dm" && def.EffectiveVisibility() == buttons.VisibleAdmin && !recipientIsAdmin {
 			continue
 		}
 		if def.ShowIf != "" && evalShowIf != nil {

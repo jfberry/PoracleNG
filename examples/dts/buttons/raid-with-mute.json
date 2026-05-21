@@ -24,8 +24,7 @@
         "action": "mute",
         "scope": "gym",
         "params": { "duration_min": 60 },
-        "applies_to": ["dm"],
-        "visible_to": "target"
+        "applies_to": ["dm"]
       },
       {
         "id": "mute_rule",
@@ -33,8 +32,7 @@
         "style": "danger",
         "action": "unsubscribe",
         "scope": "tracking",
-        "applies_to": ["dm"],
-        "visible_to": "target"
+        "applies_to": ["dm"]
       }
     ]
   }

@@ -57,9 +57,15 @@ const (
 	AppliesToAny     = "any"
 )
 
-// VisibleTo values — controls click-time access.
+// VisibleTo values — controls click access.
+//
+// On DMs the admin gate also hides the button at render time so non-admin
+// recipients never see it. On channels and webhooks every viewer sees
+// every button (Discord doesn't support per-viewer component visibility);
+// the gate becomes click-time only. registered is click-only on all
+// destinations — DM recipients are by definition registered, so render-
+// time hiding would never fire.
 const (
-	VisibleTarget     = "target"
 	VisibleAdmin      = "admin"
 	VisibleRegistered = "registered"
 	VisibleAnyone     = "anyone"
@@ -161,10 +167,12 @@ func (d *Def) EffectiveStyle() string {
 }
 
 // EffectiveVisibility returns the visibility scope, substituting the
-// default (VisibleTarget) when the operator omits it.
+// default (VisibleAnyone) when the operator omits it. Most buttons want
+// everyone with view access to be able to click — admin and registered
+// are explicit opt-ins.
 func (d *Def) EffectiveVisibility() string {
 	if d.VisibleTo == "" {
-		return VisibleTarget
+		return VisibleAnyone
 	}
 	return d.VisibleTo
 }
@@ -209,7 +217,7 @@ var (
 	ErrUnknownAction     = errors.New("button: unknown action — must be one of mute, unsubscribe, redeliver, render")
 	ErrUnknownScope      = errors.New("button: unknown scope — must be one of gym, pokemon, area, pokestop, station, everything, tracking")
 	ErrUnknownAppliesTo  = errors.New("button: unknown applies_to value — must be one of dm, channel, webhook, any")
-	ErrUnknownVisibleTo  = errors.New("button: unknown visible_to value — must be one of target, admin, registered, anyone")
+	ErrUnknownVisibleTo  = errors.New("button: unknown visible_to value — must be one of admin, registered, anyone")
 	ErrUnknownStyle      = errors.New("button: unknown style — must be one of primary, secondary, success, danger")
 	ErrScopeRequired     = errors.New("button: scope is required for this action")
 	ErrUnsubscribeScope  = errors.New("button: unsubscribe action only supports scope=tracking")
@@ -298,7 +306,7 @@ func (d *Def) Validate() error {
 
 	if d.VisibleTo != "" {
 		switch d.VisibleTo {
-		case VisibleTarget, VisibleAdmin, VisibleRegistered, VisibleAnyone:
+		case VisibleAdmin, VisibleRegistered, VisibleAnyone:
 		default:
 			return fmt.Errorf("%w: %q", ErrUnknownVisibleTo, d.VisibleTo)
 		}
