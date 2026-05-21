@@ -13,10 +13,7 @@ import (
 // Shared by poracle_admin_status.go (uptime, rate-limit TTL) and
 // poracle_admin_warnings.go (entry timestamps).
 func formatDuration(d time.Duration) string {
-	d = d.Round(time.Second)
-	if d < 0 {
-		d = 0
-	}
+	d = max(d.Round(time.Second), 0)
 	days := int(d / (24 * time.Hour))
 	d -= time.Duration(days) * 24 * time.Hour
 	hours := int(d / time.Hour)

@@ -180,10 +180,7 @@ func paRatelimitShow(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// Window timing.
 		if !s.WindowStart.IsZero() {
 			ago := now.Sub(s.WindowStart).Round(time.Second)
-			resetsIn := s.WindowEnd.Sub(now).Round(time.Second)
-			if resetsIn < 0 {
-				resetsIn = 0
-			}
+			resetsIn := max(s.WindowEnd.Sub(now).Round(time.Second), 0)
 			sb.WriteString(tr.Tf("cmd.poracle_admin.ratelimit.show.row.window",
 				formatDuration(ago), formatDuration(resetsIn)))
 		}
@@ -202,10 +199,7 @@ func paRatelimitShow(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// Ban line.
 		if !s.BannedUntil.IsZero() {
 			timeStr := s.BannedUntil.UTC().Format("15:04 UTC")
-			remaining := s.BannedUntil.Sub(now).Round(time.Second)
-			if remaining < 0 {
-				remaining = 0
-			}
+			remaining := max(s.BannedUntil.Sub(now).Round(time.Second), 0)
 			sb.WriteString("    ")
 			sb.WriteString(tr.Tf("cmd.poracle_admin.ratelimit.show.banned_until", timeStr, formatDuration(remaining)))
 			sb.WriteString("\n")
@@ -303,17 +297,11 @@ func countBucketStats(states []ratelimit.TargetState) (breached, banned int) {
 // statusBlurb returns a short human-readable status fragment for a list row.
 func statusBlurb(s ratelimit.TargetState, now time.Time, tr interface{ Tf(string, ...any) string }) string {
 	if !s.BannedUntil.IsZero() {
-		remaining := s.BannedUntil.Sub(now).Round(time.Second)
-		if remaining < 0 {
-			remaining = 0
-		}
+		remaining := max(s.BannedUntil.Sub(now).Round(time.Second), 0)
 		return tr.Tf("cmd.poracle_admin.ratelimit.list.status.banned", formatDuration(remaining))
 	}
 	if !s.WindowEnd.IsZero() {
-		resetsIn := s.WindowEnd.Sub(now).Round(time.Second)
-		if resetsIn < 0 {
-			resetsIn = 0
-		}
+		resetsIn := max(s.WindowEnd.Sub(now).Round(time.Second), 0)
 		return tr.Tf("cmd.poracle_admin.ratelimit.list.status.breached", formatDuration(resetsIn))
 	}
 	return ""

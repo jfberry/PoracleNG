@@ -53,11 +53,11 @@ var redactedFields = map[string]bool{
 	// Geocoding / map keys
 	"geocoding.geocoding_key":         true,
 	"geocoding.static_key":            true,
-	"geocoding.google_api_key":        true,      // legacy name kept for safety
-	"geocoding.google_static_api_key": true,      // legacy name kept for safety
-	"geocoding.mapbox_token":          true,      // legacy name kept for safety
-	"geocoding.tileserver_token":      true,      // legacy name kept for safety
-	"geocoding.shlink_url":            true,      // shlink instance URL can be private
+	"geocoding.google_api_key":        true, // legacy name kept for safety
+	"geocoding.google_static_api_key": true, // legacy name kept for safety
+	"geocoding.mapbox_token":          true, // legacy name kept for safety
+	"geocoding.tileserver_token":      true, // legacy name kept for safety
+	"geocoding.shlink_url":            true, // shlink instance URL can be private
 	"geocoding.shlink_api_key":        true,
 
 	// General shortlink (mirrors geocoding.shlink_*)
@@ -305,7 +305,7 @@ type leaf struct {
 // pairs for every exported leaf field.
 func collectLeaves(v reflect.Value, path string) []leaf {
 	// Dereference pointer.
-	for v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return nil
 		}
@@ -363,7 +363,7 @@ func renderSection(sectionName string, v reflect.Value, indent string) string {
 // path is the fully-qualified dotted path for redaction lookup.
 func renderValue(sb *strings.Builder, v reflect.Value, path string, indent string) {
 	// Dereference pointer.
-	for v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return
 		}
@@ -416,7 +416,7 @@ func renderValue(sb *strings.Builder, v reflect.Value, path string, indent strin
 // We treat all exported structs that have their own toml tags as sub-blocks,
 // except that a struct with zero exported toml fields is treated as empty.
 func isNestedStruct(v reflect.Value) bool {
-	for v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return false
 		}
@@ -448,7 +448,7 @@ func renderLeaf(path string, v reflect.Value) string {
 	}
 
 	// Dereference pointer.
-	for v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return "null"
 		}
@@ -525,7 +525,7 @@ func renderLeafElem(parentPath string, v reflect.Value) string {
 		}
 		v = v.Elem()
 	}
-	for v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return "null"
 		}

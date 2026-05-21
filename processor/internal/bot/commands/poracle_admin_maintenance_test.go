@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -268,7 +269,6 @@ func TestMaintenance_NoDispatcher(t *testing.T) {
 		{"resume"},
 		{"status"},
 	} {
-		sub := sub
 		t.Run(joinOrNone(sub), func(t *testing.T) {
 			replies := runMaintenance(t, ctx, sub...)
 			out := firstReplyText(t, replies)
@@ -302,14 +302,14 @@ func joinOrNone(args []string) string {
 	if len(args) == 0 {
 		return "(no-arg)"
 	}
-	s := ""
+	var s strings.Builder
 	for i, a := range args {
 		if i > 0 {
-			s += " "
+			s.WriteString(" ")
 		}
-		s += a
+		s.WriteString(a)
 	}
-	return s
+	return s.String()
 }
 
 // Ensure the delivery import is used (NewMessageTracker and QueueConfig are

@@ -332,9 +332,7 @@ func resolveWeaknessEmojis(emojiLookup *EmojiLookup, perLang map[string]any, pla
 	for _, cat := range weaknessList {
 		// Copy the category map so we can add "typeEmoji" without touching shared state.
 		catCopy := make(map[string]any, len(cat)+1)
-		for k, v := range cat {
-			catCopy[k] = v
-		}
+		maps.Copy(catCopy, cat)
 
 		types, _ := cat["types"].([]map[string]any)
 		var typeEmojis []string
@@ -343,9 +341,7 @@ func resolveWeaknessEmojis(emojiLookup *EmojiLookup, perLang map[string]any, pla
 			typesCopy := make([]map[string]any, 0, len(types))
 			for _, entry := range types {
 				entryCopy := make(map[string]any, len(entry)+1)
-				for k, v := range entry {
-					entryCopy[k] = v
-				}
+				maps.Copy(entryCopy, entry)
 				if key, ok := entry["emojiKey"].(string); ok && key != "" {
 					resolved := emojiLookup.Lookup(key, platform)
 					entryCopy["emoji"] = resolved

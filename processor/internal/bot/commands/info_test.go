@@ -9,7 +9,6 @@ import (
 // "moved to !poracle-admin status" redirect message for any user (no admin gate).
 func TestInfo_Poracle_Redirects(t *testing.T) {
 	for _, admin := range []bool{false, true} {
-		admin := admin
 		t.Run(adminLabel(admin), func(t *testing.T) {
 			ctx, _ := testCtx(t)
 			ctx.IsAdmin = admin
@@ -32,7 +31,6 @@ func TestInfo_Poracle_Redirects(t *testing.T) {
 // "moved to !poracle-admin config" redirect message for any user (no admin gate).
 func TestInfo_Config_Redirects(t *testing.T) {
 	for _, admin := range []bool{false, true} {
-		admin := admin
 		t.Run(adminLabel(admin), func(t *testing.T) {
 			ctx, _ := testCtx(t)
 			ctx.IsAdmin = admin
