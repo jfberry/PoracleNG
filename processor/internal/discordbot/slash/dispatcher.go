@@ -3,6 +3,8 @@ package slash
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	log "github.com/sirupsen/logrus"
@@ -154,6 +156,14 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 			return
 		}
 	}
+
+	// Log DM invocations to the configured log channel for operator
+	// visibility. Mirrors the text-command DM-log path in
+	// discordbot/bot.go onMessageCreate so a slash invocation in a DM
+	// leaves the same audit trail as `!command`. Logged unconditionally
+	// (before any auth/registration check) so even rejected attempts
+	// show up — that's the audit signal admins want.
+	d.logDMInvocation(s, ic)
 
 	// 2. Resolve invoked name. May be the operator-renamed/i18n variant.
 	invoked := ic.ApplicationCommandData().Name
@@ -644,4 +654,77 @@ func formatMapperError(err error, lang string, bundle *i18n.Bundle) string {
 		return "🛑 " + tr.Tf(me.Key, me.Args...)
 	}
 	return "🛑 " + tr.T(me.Key)
+}
+
+// logDMInvocation posts a one-line audit entry to the configured
+// dm_log_channel_id for slash invocations that originate from a DM
+// channel (GuildID empty). No-op when the channel isn't configured.
+//
+// Mirrors the text-command path in discordbot/bot.go onMessageCreate
+// so an admin watching the log sees /slash and !text DMs side by side.
+// Channel-side slash invocations are visible to anyone with channel
+// access and don't need a separate audit trail; matches the text path
+// which also only logs DMs.
+//
+// Send failures are logged at WARN and don't block the dispatch.
+func (d *Dispatcher) logDMInvocation(s *discordgo.Session, ic *discordgo.InteractionCreate) {
+	if s == nil || ic == nil || ic.GuildID != "" {
+		return
+	}
+	if d.cfgRoot == nil || d.cfgRoot.Discord.DmLogChannelID == "" {
+		return
+	}
+	user := ic.User
+	if user == nil && ic.Member != nil {
+		user = ic.Member.User
+	}
+	if user == nil {
+		return
+	}
+	logMsg := fmt.Sprintf("DM from %s (%s): %s", user.Username, user.ID, formatSlashInvocation(ic))
+	sent, err := s.ChannelMessageSend(d.cfgRoot.Discord.DmLogChannelID, logMsg)
+	if err != nil {
+		log.WithError(err).Warn("slash: failed to post DM log entry")
+		return
+	}
+	if sent == nil || d.cfgRoot.Discord.DmLogChannelDeletionTime <= 0 {
+		return
+	}
+	delay := time.Duration(d.cfgRoot.Discord.DmLogChannelDeletionTime) * time.Minute
+	go func(channelID, messageID string) {
+		time.Sleep(delay)
+		s.ChannelMessageDelete(channelID, messageID) //nolint:errcheck
+	}(d.cfgRoot.Discord.DmLogChannelID, sent.ID)
+}
+
+// formatSlashInvocation reconstructs the slash command the user typed,
+// e.g. "/info pokemon name:pikachu" or "/track pokemon:pikachu iv:90".
+// Walks Options recursively so sub-commands (Type 1) and sub-command
+// groups (Type 2) render as positional tokens, while value options
+// render as key:value.
+func formatSlashInvocation(ic *discordgo.InteractionCreate) string {
+	data := ic.ApplicationCommandData()
+	var sb strings.Builder
+	sb.WriteByte('/')
+	sb.WriteString(data.Name)
+	appendSlashOptions(&sb, data.Options)
+	return sb.String()
+}
+
+func appendSlashOptions(sb *strings.Builder, opts []*discordgo.ApplicationCommandInteractionDataOption) {
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		sb.WriteByte(' ')
+		switch opt.Type {
+		case discordgo.ApplicationCommandOptionSubCommand, discordgo.ApplicationCommandOptionSubCommandGroup:
+			sb.WriteString(opt.Name)
+			appendSlashOptions(sb, opt.Options)
+		default:
+			sb.WriteString(opt.Name)
+			sb.WriteByte(':')
+			sb.WriteString(fmt.Sprintf("%v", opt.Value))
+		}
+	}
 }
