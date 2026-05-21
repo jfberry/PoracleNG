@@ -17,7 +17,10 @@ func TestEncodeOrderedTOML_SectionOrder(t *testing.T) {
 		"database":  map[string]any{"host": "localhost"},
 		"general":   map[string]any{"locale": "en"},
 		"processor": map[string]any{"port": int64(3030)},
-		// Two unknown sections to verify the tail sorts them.
+		"geofence":  map[string]any{"paths": []any{"x.json"}},
+		"locale":    map[string]any{"available_languages": map[string]any{}},
+		// Sections that fall to the alphabetical tail. "ai" / "alerter"
+		// also tail-end now — they used to be priority-listed.
 		"zzz_unknown": map[string]any{"foo": "bar"},
 		"aaa_unknown": map[string]any{"foo": "bar"},
 	}
@@ -34,14 +37,26 @@ func TestEncodeOrderedTOML_SectionOrder(t *testing.T) {
 		got = append(got, m[1])
 	}
 
-	// Expected: known-section priority, then alphabetical unknowns.
+	// Expected: SectionOrder priority first, then alphabetical tail.
 	want := []string{
-		"processor", "general", "database", "discord",
-		"ai", "alerter",
-		"aaa_unknown", "zzz_unknown",
+		"processor", "database", "geofence", "discord", "telegram",
+		"general", "locale", "logging", "webhookLogging",
+		"aaa_unknown", "ai", "alerter", "zzz_unknown",
 	}
-	if !slices.Equal(got, want) {
-		t.Errorf("section order:\ngot:  %v\nwant: %v\n\nemitted:\n%s", got, want, out)
+	// Trim want to only sections present in raw — the test inputs
+	// don't include every SectionOrder entry.
+	present := make(map[string]bool, len(raw))
+	for k := range raw {
+		present[k] = true
+	}
+	filtered := make([]string, 0, len(want))
+	for _, n := range want {
+		if present[n] {
+			filtered = append(filtered, n)
+		}
+	}
+	if !slices.Equal(got, filtered) {
+		t.Errorf("section order:\ngot:  %v\nwant: %v\n\nemitted:\n%s", got, filtered, out)
 	}
 }
 

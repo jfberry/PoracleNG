@@ -20,30 +20,14 @@ import (
 // someone decides where it belongs.
 var SectionOrder = []string{
 	"processor",
-	"general",
 	"database",
+	"geofence",
 	"discord",
 	"telegram",
-	"geofence",
-	"pvp",
-	"weather",
-	"tuning",
-	"stats",
-	"snapshots",
-	"area_security",
-	"alert_limits",
-	"tracking",
-	"summariser",
-	"geocoding",
+	"general",
 	"locale",
 	"logging",
 	"webhookLogging",
-	"fallbacks",
-	"reconciliation",
-	"autocreate",
-	"validation",
-	"ai",
-	"alerter",
 }
 
 // EncodeOrderedTOML emits rawMap as TOML with top-level sections in
