@@ -1,20 +1,33 @@
-# Monster (pokemon) card in TOML form with a conditional PVP-details
-# inline response button. The {{#if pvpAvailable}} block in the response
-# template can render valid JSON only because the body is a TOML
-# multi-line string (rendered, then JSON-parsed) — the same block in
-# JSON DTS would break before Handlebars ran.
+# Monster (pokemon) card in TOML form, demonstrating four button
+# shapes plus the visible_to access model:
+#
+#   - "Show PVP details"     — visible_to: anyone (default). Inline
+#                              JSON response, only attached when the
+#                              encounter has PVP data (show_if gate).
+#   - "Show map links"       — visible_to: registered. Address + deep
+#                              links to Google/Apple/Waze maps. Hides
+#                              precise location from random viewers
+#                              while still being one click away for
+#                              registered users.
+#   - "Copy coordinates"     — visible_to: registered. Plain-text
+#                              response with raw lat/lon for the user
+#                              to paste into another tool.
+#   - "Mute this species"    — action button. applies_to defaults to
+#                              ["dm"] for mute actions, so it only
+#                              attaches on DM destinations.
 #
 # Companion to fallbacks/dts.json's monster id=1 / monster-1-discord-en.json
 # in the standard layout — same field names (ivColor, fullName, atk/def/sta,
-# pvpGreat / pvpLittle / pvpUltra, hasPvp), just rendered through a
-# compact main card with a button that expands the PVP detail on click.
+# pvpGreat / pvpLittle / pvpUltra, pvpAvailable). The main card stays
+# lean; sensitive info (address, coordinates) lives behind clicks so
+# channel viewers only see the alert summary by default.
 
 [[entry]]
 id = "1"
 type = "monster"
 platform = "discord"
 language = "en"
-description = "Compact monster card with PVP-details button (TOML form)"
+description = "Compact monster card with PVP, map, coord and mute buttons (TOML form)"
 
 template = """
 {
@@ -22,7 +35,7 @@ template = """
     "title": "{{round iv}}% {{fullName}} cp:{{cp}} L:{{level}} {{atk}}/{{def}}/{{sta}} {{{boostWeatherEmoji}}}",
     "color": "{{ivColor}}",
     "thumbnail": { "url": "{{{imgUrl}}}" },
-    "description": "End: {{time}} ({{tthm}}m {{tths}}s)\\n{{{addr}}}\\nquick: {{quickMoveName}} · charge: {{chargeMoveName}}\\nMaps: [Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+    "description": "End: {{time}} ({{tthm}}m {{tths}}s)\\nquick: {{quickMoveName}} · charge: {{chargeMoveName}}",
     "image": { "url": "{{{staticMap}}}" }
   }
 }
@@ -76,6 +89,38 @@ template = """
 }
 """
 
+  # Map links — pulled out of the main card so channel viewers don't
+  # see exact coordinates by default. visible_to: registered means
+  # only users with a Poracle account (humans-table row) get past the
+  # click-time gate. On channel destinations every viewer sees the
+  # button; the gate fires server-side after they click. (On DMs the
+  # recipient is registered by definition, so the gate never blocks
+  # there.)
+  [[entry.buttons]]
+  id = "location"
+  label = "Show map links"
+  style = "primary"
+  visible_to = "registered"
+  response_template_inline = """
+{
+  "embed": {
+    "title": "Location",
+    "description": "{{{addr}}}\\n[Google]({{{googleMapUrl}}}) · [Apple]({{{appleMapUrl}}}) · [Waze]({{{wazeMapUrl}}})"
+  }
+}
+"""
+
+  # Plain-text response — handy one-liner. Single-line response_text
+  # skips JSON parsing entirely; the Handlebars output goes straight
+  # to Discord as message content. Also visible_to: registered since
+  # raw coordinates are sensitive in the same way map links are.
+  [[entry.buttons]]
+  id = "coords"
+  label = "Copy coordinates"
+  style = "secondary"
+  visible_to = "registered"
+  response_text = "📍 `{{latitude}}, {{longitude}}`"
+
   # Action button — mute scope=pokemon uses pokemon_id from the
   # snapshot view. applies_to defaults to ["dm"] for mute actions,
   # so the button won't appear on channel sends.
@@ -86,12 +131,3 @@ template = """
   action = "mute"
   scope = "pokemon"
   params = { duration_min = 60 }
-
-  # Plain-text response — handy one-liner. Single-line response_text
-  # skips JSON parsing entirely; the Handlebars output goes straight
-  # to Discord as message content.
-  [[entry.buttons]]
-  id = "coords"
-  label = "Copy coordinates"
-  style = "secondary"
-  response_text = "📍 `{{latitude}}, {{longitude}}`"
