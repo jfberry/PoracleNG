@@ -200,7 +200,12 @@ func writeTemplateKV2(buf *bytes.Buffer, key string, v any) error {
 		writeMultilineKV(buf, key, sb.String(), "  ")
 		return nil
 	default:
-		raw, err := json.MarshalIndent(v, "  ", "  ")
+		// Prefix is "" — the second arg to MarshalIndent is the per-line
+		// prefix, and any prefix here would silently become trailing
+		// whitespace in the parsed body on the next load (TOML preserves
+		// triple-quoted content literally). The third arg sets the
+		// nesting step.
+		raw, err := json.MarshalIndent(v, "", "  ")
 		if err != nil {
 			return fmt.Errorf("marshal response_template_inline object: %w", err)
 		}
