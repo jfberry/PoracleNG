@@ -20,6 +20,8 @@ import (
 	_ "embed"
 	"fmt"
 	"path/filepath"
+
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
 
 //go:embed util.json
@@ -242,6 +244,51 @@ func GruntTranslationKey(gruntTypeID int) string {
 // MegaEvoTranslationKey returns "poke_{id}_e{evoId}" for a mega evolution.
 func MegaEvoTranslationKey(pokemonID, tempEvoID int) string {
 	return fmt.Sprintf("poke_%d_e%d", pokemonID, tempEvoID)
+}
+
+// PokemonName returns the localised species name for the given dex id.
+// Falls back to the dex number as a string when no translation exists
+// — matches the long-standing pokemonName Handlebars helper so
+// operators get a readable last resort instead of "poke_25". Use this
+// in any non-template code that needs a user-facing pokemon name.
+func PokemonName(tr *i18n.Translator, pokemonID int) string {
+	key := PokemonTranslationKey(pokemonID)
+	name := tr.T(key)
+	if name == key {
+		return fmt.Sprintf("%d", pokemonID)
+	}
+	return name
+}
+
+// TypeName returns the localised type name (e.g. "Grass") for a type id.
+// Returns the raw translation key on miss — callers that care about
+// missing translations can compare against TypeTranslationKey(id).
+func TypeName(tr *i18n.Translator, typeID int) string {
+	return tr.T(TypeTranslationKey(typeID))
+}
+
+// MoveName returns the localised move name for a move id. Returns the
+// raw translation key on miss.
+func MoveName(tr *i18n.Translator, moveID int) string {
+	return tr.T(MoveTranslationKey(moveID))
+}
+
+// FormName returns the localised form name for a form id. Returns the
+// raw translation key on miss — existing template helpers rely on the
+// "no translation" → "key returned" signal to suppress empty form
+// labels, so we don't substitute a friendly fallback here.
+func FormName(tr *i18n.Translator, formID int) string {
+	return tr.T(FormTranslationKey(formID))
+}
+
+// ItemName returns the localised item name for an item id.
+func ItemName(tr *i18n.Translator, itemID int) string {
+	return tr.T(ItemTranslationKey(itemID))
+}
+
+// WeatherName returns the localised weather name for a weather id.
+func WeatherName(tr *i18n.Translator, weatherID int) string {
+	return tr.T(WeatherTranslationKey(weatherID))
 }
 
 // MonsterNameInfo holds the computed name components for a pokemon.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/buttons"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/dts"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/snapshots"
 )
@@ -86,24 +88,29 @@ func (b *Bot) handleButtonClick(s *discordgo.Session, ic *discordgo.InteractionC
 		return false
 	}
 
+	// Translator is resolved lazily — we don't know the user's language
+	// until we've found their snapshot. Pre-snapshot errors use the
+	// bot's configured default locale.
+	defaultTr := b.translatorFor("")
+
 	if b.SnapshotStore == nil {
 		metrics.ButtonClicksTotal.WithLabelValues("unknown", "unknown", actionID, "expired").Inc()
-		respondEphemeral(s, ic, "This alert has expired.")
+		respondEphemeral(s, ic, defaultTr.T("msg.button.expired"))
 		return true
 	}
 	if ic.Message == nil || ic.Message.ID == "" {
 		metrics.ButtonClicksTotal.WithLabelValues("unknown", "unknown", actionID, "expired").Inc()
-		respondEphemeral(s, ic, "This alert has expired.")
+		respondEphemeral(s, ic, defaultTr.T("msg.button.expired"))
 		return true
 	}
 
 	clicker := clickerUserID(ic)
 	if clicker == "" {
-		respondEphemeral(s, ic, "Couldn't identify you to handle that click.")
+		respondEphemeral(s, ic, defaultTr.T("msg.button.unidentified"))
 		return true
 	}
 
-	snap, target, err := lookupSnapshotForClick(b.SnapshotStore, ic)
+	snap, err := lookupSnapshotForClick(b.SnapshotStore, ic)
 	if err != nil {
 		// Visible log so the operator can compare against the snapshot
 		// store contents. Lists every key we tried so a key-mismatch
@@ -111,9 +118,11 @@ func (b *Bot) handleButtonClick(s *discordgo.Session, ic *discordgo.InteractionC
 		log.Warnf("discord button: snapshot lookup failed for msg=%s clicker=%s channel=%s tried=%v: %v",
 			ic.Message.ID, clicker, ic.ChannelID, lookupKeysFor(ic), err)
 		metrics.ButtonClicksTotal.WithLabelValues("unknown", "unknown", actionID, "expired").Inc()
-		respondEphemeral(s, ic, "This alert has expired.")
+		respondEphemeral(s, ic, defaultTr.T("msg.button.expired"))
 		return true
 	}
+
+	tr := b.translatorFor(snap.Language)
 
 	tt, tid := snap.TemplateType, snap.TemplateSelected
 	def, ok := b.resolveButton(snap, actionID)
@@ -121,33 +130,47 @@ func (b *Bot) handleButtonClick(s *discordgo.Session, ic *discordgo.InteractionC
 		log.Warnf("discord button: no button %q found in DTS for type=%q platform=%q id=%q lang=%q (requested=%q)",
 			actionID, snap.TemplateType, snap.Platform, snap.TemplateSelected, snap.Language, snap.TemplateRequested)
 		metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "unavailable").Inc()
-		respondEphemeral(s, ic, "This button is no longer available.")
+		respondEphemeral(s, ic, tr.T("msg.button.unavailable"))
 		return true
 	}
 
 	if !def.AppliesToTarget(snap.TargetType) {
 		metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "wrong_target").Inc()
-		respondEphemeral(s, ic, "This button doesn't apply here.")
+		respondEphemeral(s, ic, tr.T("msg.button.wrong_target"))
 		return true
 	}
 
 	if !b.checkVisibility(def, snap, clicker, ic) {
 		metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "unauthorized").Inc()
-		respondEphemeral(s, ic, "This button isn't for you.")
+		respondEphemeral(s, ic, tr.T("msg.button.unauthorized"))
 		return true
 	}
 
 	if !b.clickCooldown.allow(clicker, ic.Message.ID, def.ID) {
 		metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "cooldown").Inc()
-		respondEphemeral(s, ic, "Slow down — try that again in a moment.")
+		respondEphemeral(s, ic, tr.T("msg.button.cooldown"))
 		return true
 	}
 
-	resp := b.dispatchClick(ic, snap, def, clicker)
+	resp := b.dispatchClick(ic, snap, def, clicker, tr)
 	metrics.ButtonClicksTotal.WithLabelValues(tt, tid, actionID, "ok").Inc()
-	_ = target // currently unused; reserved for action handlers that need to know the target shape
 	respondEphemeral(s, ic, resp)
 	return true
+}
+
+// translatorFor returns a translator for the given language. Falls back
+// to the bot's configured default locale (and finally the empty
+// translator) so callers can always call .T() / .Tf() without nil
+// checks. The per-key English fallback in Translator.T already handles
+// missing keys.
+func (b *Bot) translatorFor(lang string) *i18n.Translator {
+	if b.Translations == nil {
+		return nil
+	}
+	if lang == "" && b.Cfg != nil {
+		lang = b.Cfg.General.Locale
+	}
+	return b.Translations.For(lang)
 }
 
 // resolveButton looks up the operator-authored button definition for the
@@ -181,11 +204,11 @@ func (b *Bot) resolveButton(snap *snapshots.Snapshot, actionID string) (buttons.
 // dispatchClick decides between an action-handler dispatch and an
 // ephemeral response render based on the button's DispatchMode. Returns
 // the user-facing ephemeral text.
-func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Snapshot, def buttons.Def, clicker string) string {
+func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Snapshot, def buttons.Def, clicker string, tr *i18n.Translator) string {
 	switch def.DispatchMode() {
 	case buttons.ModeAction:
 		if b.ButtonActions == nil {
-			return "Button actions aren't wired here."
+			return tr.T("msg.button.actions_not_wired")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
@@ -195,19 +218,20 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 			TriggerReload:  b.ReloadFunc,
 			ResponseRender: b.responseRenderHook(),
 			RenderToDM:     b.renderToDMHook(),
+			Tr:             tr,
 		})
 		if err != nil {
 			if errors.Is(err, buttonactions.ErrUnknownAction) || errors.Is(err, buttonactions.ErrNotImplemented) {
 				metrics.ButtonActionsTotal.WithLabelValues(def.Action, "unimplemented").Inc()
-				return "This action isn't available yet."
+				return tr.Tf("msg.button.not_implemented", def.Action)
 			}
 			metrics.ButtonActionsTotal.WithLabelValues(def.Action, "error").Inc()
 			log.Warnf("discord button: action %q failed: %v", def.Action, err)
-			return "Couldn't complete that action."
+			return tr.T("msg.button.action_failed_generic")
 		}
 		metrics.ButtonActionsTotal.WithLabelValues(def.Action, "ok").Inc()
 		if resp.Text == "" {
-			return "Done."
+			return tr.T("msg.button.done")
 		}
 		return resp.Text
 	case buttons.ModeResponseText, buttons.ModeResponseTemplateID, buttons.ModeResponseTemplateInline:
@@ -220,7 +244,7 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 		// gated by DispatchMode picking the right branch.
 		hook := b.responseRenderHook()
 		if hook == nil {
-			return "Response rendering isn't wired here."
+			return tr.T("msg.button.responses_not_wired")
 		}
 		out, err := hook(snap, def)
 		if err != nil {
@@ -229,10 +253,10 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 			if len(msg) > 300 {
 				msg = msg[:300] + "…"
 			}
-			return "Couldn't render that response: " + msg
+			return tr.Tf("msg.button.response_failed", msg)
 		}
 		if out == "" {
-			return "Done."
+			return tr.T("msg.button.done")
 		}
 		// respondEphemeral detects JSON-with-embed shapes and routes
 		// them into the Embeds[] field; plain text falls through as
@@ -240,7 +264,7 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 		// casing required at this layer.
 		return out
 	default:
-		return "This button isn't configured."
+		return tr.T("msg.button.unconfigured")
 	}
 }
 
@@ -279,12 +303,7 @@ func (b *Bot) isAdminClicker(clicker string) bool {
 	if b.Cfg == nil {
 		return false
 	}
-	for _, a := range b.Cfg.Discord.Admins {
-		if a == clicker {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(b.Cfg.Discord.Admins, clicker)
 }
 
 // isRegisteredClicker reports whether the clicker exists in the
@@ -316,7 +335,7 @@ func (b *Bot) isRegisteredClicker(clicker string) bool {
 //
 // Webhook deliveries aren't covered — Discord clicks don't come back to
 // webhooks anyway. Returns ErrNotFound when both shapes miss.
-func lookupSnapshotForClick(store snapshots.Store, ic *discordgo.InteractionCreate) (*snapshots.Snapshot, string, error) {
+func lookupSnapshotForClick(store snapshots.Store, ic *discordgo.InteractionCreate) (*snapshots.Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
@@ -332,13 +351,13 @@ func lookupSnapshotForClick(store snapshots.Store, ic *discordgo.InteractionCrea
 	for _, target := range candidates {
 		snap, err := store.Read(ctx, snapshots.MakeKey(target, ic.Message.ID))
 		if err == nil {
-			return snap, target, nil
+			return snap, nil
 		}
 		if !errors.Is(err, snapshots.ErrNotFound) {
-			return nil, "", err
+			return nil, err
 		}
 	}
-	return nil, "", snapshots.ErrNotFound
+	return nil, snapshots.ErrNotFound
 }
 
 // lookupKeysFor returns the snapshot keys lookupSnapshotForClick will
@@ -393,54 +412,27 @@ func (b *Bot) responseRenderHook() buttonactions.ResponseRenderFunc {
 		if platform == "" {
 			platform = "discord"
 		}
-		return dtsRenderer.RenderButtonResponse(def, snap.View, platform, snap.Language)
+		view := dtsRenderer.BuildLayeredViewFromSnapshot(snap)
+		return dtsRenderer.RenderButtonResponse(def, view, platform, snap.Language)
 	}
 }
 
 // renderToDMHook builds the RenderToDM closure for the redeliver action.
-// Re-renders snap.TemplateSelected against snap.View and ships the
-// result as a DM job to the clicker.
+// Ships a stub DM acknowledging the redeliver — full alert-type
+// re-render is a follow-up that needs per-type dispatcher entry points.
 //
-// Falls back to nil when the bot lacks a renderer or dispatcher — the
+// Falls back to nil when the bot lacks a dispatcher — the
 // HandleRedeliver handler emits a clear "not wired" message in that
 // case rather than panicking.
 func (b *Bot) renderToDMHook() buttonactions.RenderToDMFunc {
-	if b.DTSRenderer == nil || b.Dispatcher == nil {
+	if b.Dispatcher == nil {
 		return nil
 	}
 	return func(snap *snapshots.Snapshot, clickerUserID string) error {
-		// Re-render the original template against the stored view.
-		def := buttons.Def{
-			ResponseTemplateID: snap.TemplateSelected,
-		}
-		body, err := b.DTSRenderer.RenderButtonResponse(
-			buttons.Def{
-				// Synthesise an inline response with the original
-				// template id — RenderButtonResponse handles the
-				// type="buttonResponse" lookup OR the alert-type
-				// lookup based on which mode we pick. For redeliver
-				// we want the SAME alert-type template, not a
-				// buttonResponse — use the renderer's lookup directly.
-				ResponseTemplateInline: snap.TemplateSelected, // placeholder; see below
-			},
-			snap.View, snap.Platform, snap.Language,
-		)
-		// The above is the v1 simplification: redeliver echoes the
-		// template id rather than actually re-rendering through the
-		// alert-type path, which would need additional wiring (per-type
-		// dispatcher entry points). Operators get a "redeliver wired"
-		// signal and the snapshot lookup works end-to-end; richer
-		// re-render is a follow-up that touches each per-type handler.
-		_ = def
-		_ = err
-		_ = body
-		// Dispatch a minimal DM job carrying the snapshot's template
-		// type label, so the operator sees something arrive while the
-		// full render path catches up.
 		dm := &delivery.Job{
 			Target:       "discord:user:" + clickerUserID,
 			Type:         "discord:user",
-			Message:      []byte(fmt.Sprintf(`{"content":"Redelivered alert from %s/%s — full re-render is a follow-up."}`, snap.TemplateType, snap.TemplateSelected)),
+			Message:      fmt.Appendf(nil, `{"content":"Redelivered alert from %s/%s — full re-render is a follow-up."}`, snap.TemplateType, snap.TemplateSelected),
 			LogReference: "redeliver/" + snap.MessageID,
 		}
 		b.Dispatcher.DispatchBypass(dm)

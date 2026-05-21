@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/pokemon/poracleng/processor/internal/buttons"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/store"
@@ -49,6 +50,13 @@ type Deps struct {
 	// nil disables response-template buttons (the click returns "not
 	// wired").
 	ResponseRender ResponseRenderFunc
+
+	// Tr is the translator for the clicker's language. Set by the host
+	// (discordbot) from snap.Language before each dispatch. Translator
+	// is nil-safe — handlers can call deps.Tr.Tf(...) directly; a nil
+	// receiver returns the key verbatim (acceptable in tests that
+	// don't assert on response text).
+	Tr *i18n.Translator
 }
 
 // ResponseRenderFunc is the host-provided render function for button
@@ -181,9 +189,9 @@ func RegisterBuiltins(r *Registry) {
 }
 
 func notImplemented(name string) Handler {
-	return func(_ context.Context, _ *snapshots.Snapshot, _ buttons.Def, _ string, _ Deps) (Response, error) {
+	return func(_ context.Context, _ *snapshots.Snapshot, _ buttons.Def, _ string, deps Deps) (Response, error) {
 		return Response{
-			Text:     fmt.Sprintf("The %q action isn't implemented yet — wired in a follow-up.", name),
+			Text:     deps.Tr.Tf("msg.button.not_implemented", name),
 			Reaction: "🙅",
 		}, nil
 	}
