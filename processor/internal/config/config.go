@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"github.com/BurntSushi/toml"
-	log "github.com/sirupsen/logrus"
 )
 
 type Config struct {
@@ -754,7 +753,20 @@ func Load(baseDir string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	configPath := filepath.Join(absDir, "config", "config.toml")
+	configDir := filepath.Join(absDir, "config")
+
+	// One-time migration: fold any existing overrides.json into
+	// config.toml so the steady-state model is a single file. Runs
+	// before the config.toml parse so the subsequent read sees the
+	// merged content with no extra work. Hard-fails on error — see
+	// MigrateOverridesIntoTOML for why continuing isn't safe.
+	//
+	// No-op on installs that never had overrides.json.
+	if err := MigrateOverridesIntoTOML(configDir); err != nil {
+		return nil, fmt.Errorf("config: migrate overrides.json: %w", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.toml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", configPath, err)
@@ -954,7 +966,6 @@ func Load(baseDir string) (*Config, error) {
 	}
 
 	// Resolve relative geofence paths and cache dir relative to config directory
-	configDir := filepath.Join(cfg.BaseDir, "config")
 	for i, p := range cfg.Geofence.Paths {
 		if !filepath.IsAbs(p) && !isHTTP(p) {
 			cfg.Geofence.Paths[i] = filepath.Join(configDir, p)
@@ -964,25 +975,10 @@ func Load(baseDir string) (*Config, error) {
 		cfg.Geofence.Koji.CacheDir = filepath.Join(configDir, cfg.Geofence.Koji.CacheDir)
 	}
 
-	// Apply JSON overrides (from config editor). LoadOverrides stays silent
-	// because logging isn't set up yet — main.go logs the status afterwards.
-	overrides, status, err := LoadOverrides(configDir)
-	if err != nil {
-		log.Warnf("config: %v", err)
-	} else if overrides != nil {
-		ApplyOverrides(cfg, overrides)
-		cfg.OverrideStatus = status
-		// Re-run computed fields after overrides
-		cfg.Discord.DelegatedAdministration = DelegatedAdminConfig{
-			ChannelTracking: buildDelegatedAdmin(cfg.Discord.DelegatedAdmins),
-			WebhookTracking: buildDelegatedAdmin(cfg.Discord.WebhookAdmins),
-			UserTracking:    cfg.Discord.UserTrackingAdmins,
-		}
-		cfg.Telegram.DelegatedAdministration = TelegramDelegatedAdminConfig{
-			ChannelTracking: buildDelegatedAdmin(cfg.Telegram.DelegatedAdmins),
-			UserTracking:    cfg.Telegram.UserTrackingAdmins,
-		}
-	}
+	// overrides.json was folded into config.toml by
+	// MigrateOverridesIntoTOML at the top of Load; the values are
+	// already in cfg via the normal config.toml parse above. Nothing
+	// more to apply here.
 
 	// Conditional defaults that depend on other config values
 	if cfg.PVP.PVPQueryMaxRank == 0 {
