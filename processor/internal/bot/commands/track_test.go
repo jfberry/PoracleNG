@@ -390,3 +390,63 @@ func TestTrack_WarningNoLocation(t *testing.T) {
 	require.NotEmpty(t, replies)
 	assert.Contains(t, replies[0].Text, "location")
 }
+
+// --- Size and rarity bounds ---
+//
+// PoracleJS treats `size:N` and `rarity:N` (no range, no maxsize/maxrarity)
+// as an exact match — the chain in src/lib/poracleMessage/commands/track.js
+// is `max ?? maxsize ?? min ?? 5` and the symmetric one for rarity.
+// Match that here so a single-value filter doesn't silently include
+// everything above it.
+
+func TestTrack_SizeMinOnly_BoundsToMin(t *testing.T) {
+	ctx := trackCtx(t)
+	replies := runTrack(t, ctx, "25 size3")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Monsters.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 3, rows[0].Size, "min size should be 3 (M)")
+	assert.Equal(t, 3, rows[0].MaxSize, "max size should also be 3 (M) — exact match, not size>=3")
+}
+
+func TestTrack_SizeRange_PreservesMax(t *testing.T) {
+	ctx := trackCtx(t)
+	replies := runTrack(t, ctx, "25 size1-3")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Monsters.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 1, rows[0].Size)
+	assert.Equal(t, 3, rows[0].MaxSize, "explicit range max must be preserved")
+}
+
+func TestTrack_RarityMinOnly_BoundsToMin(t *testing.T) {
+	ctx := trackCtx(t)
+	replies := runTrack(t, ctx, "25 rarity3")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Monsters.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 3, rows[0].Rarity, "min rarity should be 3")
+	assert.Equal(t, 3, rows[0].MaxRarity, "max rarity should also be 3 — exact match, not rarity>=3")
+}
+
+func TestTrack_RarityRange_PreservesMax(t *testing.T) {
+	ctx := trackCtx(t)
+	replies := runTrack(t, ctx, "25 rarity1-3")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Monsters.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 1, rows[0].Rarity)
+	assert.Equal(t, 3, rows[0].MaxRarity, "explicit range max must be preserved")
+}

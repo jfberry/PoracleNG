@@ -420,8 +420,13 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	// Rarity
 	if r, ok := parsed.Ranges["rarity"]; ok {
 		f.rarity = r.Min
+		// Set maxRarity to Min if no Max is provided — mirrors the
+		// PoracleJS `?? ?? ?? 6` chain so `rarity:rare` means
+		// exactly Rare rather than "Rare or above".
 		if r.HasMax {
 			f.maxRarity = r.Max
+		} else {
+			f.maxRarity = r.Min
 		}
 	}
 	if v, ok := parsed.Singles["maxrarity"]; ok {
