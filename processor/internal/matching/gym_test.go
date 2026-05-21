@@ -118,7 +118,6 @@ func TestGymNoTeamChangeWithoutSlotOrBattle(t *testing.T) {
 		SlotsAvailable:    3,
 		OldSlotsAvailable: 3,
 		InBattle:          false,
-		OldInBattle:       false,
 		Latitude:          51.0, Longitude: 0.0,
 	}
 
@@ -166,12 +165,11 @@ func TestGymBattleChange(t *testing.T) {
 	matcher := &GymMatcher{}
 
 	data := &GymData{
-		GymID:       "gym1",
-		TeamID:      2,
-		OldTeamID:   2,
-		InBattle:    true,
-		OldInBattle: false, // battle started
-		Latitude:    51.0, Longitude: 0.0,
+		GymID:     "gym1",
+		TeamID:    2,
+		OldTeamID: 2,
+		InBattle:  true,
+		Latitude:  51.0, Longitude: 0.0,
 	}
 
 	matched, _ := matcher.Match(data, st)
@@ -192,12 +190,11 @@ func TestGymBattleActiveMatchesAfterPriorBattleState(t *testing.T) {
 	matcher := &GymMatcher{}
 
 	data := &GymData{
-		GymID:       "gym1",
-		TeamID:      2,
-		OldTeamID:   2,
-		InBattle:    true,
-		OldInBattle: true,
-		Latitude:    51.0, Longitude: 0.0,
+		GymID:     "gym1",
+		TeamID:    2,
+		OldTeamID: 2,
+		InBattle:  true,
+		Latitude:  51.0, Longitude: 0.0,
 	}
 
 	matched, _ := matcher.Match(data, st)

@@ -18,7 +18,6 @@ type GymData struct {
 	SlotsAvailable    int
 	OldSlotsAvailable int
 	InBattle          bool
-	OldInBattle       bool
 	Latitude          float64
 	Longitude         float64
 }

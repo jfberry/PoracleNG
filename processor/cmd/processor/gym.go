@@ -67,11 +67,9 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 		oldTeamID := -1
 		oldSlotsAvailable := -1
 		oldLastOwnerID := -1
-		var oldInBattle bool
 		if oldState != nil {
 			oldTeamID = oldState.TeamID
 			oldSlotsAvailable = oldState.SlotsAvailable
-			oldInBattle = oldState.InBattle
 			oldLastOwnerID = oldState.LastOwnerID
 		}
 
@@ -87,7 +85,6 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			SlotsAvailable:    gym.SlotsAvailable,
 			OldSlotsAvailable: oldSlotsAvailable,
 			InBattle:          inBattle,
-			OldInBattle:       oldInBattle,
 			Latitude:          gym.Latitude,
 			Longitude:         gym.Longitude,
 		}
