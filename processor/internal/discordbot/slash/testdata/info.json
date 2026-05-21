@@ -1,5 +1,68 @@
 {
   "name": "info",
   "description": "Show your bot registration info",
-  "options": null
+  "options": [
+    {
+      "type": 1,
+      "name": "pokemon",
+      "description": "Show pokemon info",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "name",
+          "description": "Pokemon name or dex id",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "rarity",
+      "description": "Show rarity tiers",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "shiny",
+      "description": "Show shiny rates",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 1,
+      "name": "weather",
+      "description": "Show current weather",
+      "channel_types": null,
+      "required": false,
+      "options": [
+        {
+          "type": 3,
+          "name": "coords",
+          "description": "lat,lon (optional)",
+          "channel_types": null,
+          "required": false,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        }
+      ],
+      "autocomplete": false,
+      "choices": null
+    }
+  ]
 }

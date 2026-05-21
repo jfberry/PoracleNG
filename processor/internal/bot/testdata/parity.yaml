@@ -40,14 +40,55 @@
   text: "!tracked"
   expected_tokens: []
 
-- name: info-no-options
-  description: /info has no options
+- name: info-pokemon
+  description: /info pokemon name:pikachu → !info pikachu (fall-through to pokemonInfo)
   command: cmd.info
   slash:
     name: info
-    options: {}
-  text: "!info"
-  expected_tokens: []
+    options:
+      pokemon.name: pikachu
+  text: "!info pikachu"
+  expected_tokens: [pikachu]
+
+- name: info-rarity
+  description: /info rarity — bare sub-command, matches msg.info.sub.rarity
+  command: cmd.info
+  slash:
+    name: info
+    options:
+      rarity: _bare
+  text: "!info rarity"
+  expected_tokens: [rarity]
+
+- name: info-shiny
+  description: /info shiny — bare sub-command, matches msg.info.sub.shiny
+  command: cmd.info
+  slash:
+    name: info
+    options:
+      shiny: _bare
+  text: "!info shiny"
+  expected_tokens: [shiny]
+
+- name: info-weather
+  description: /info weather — bare sub-command, falls back to user's saved location
+  command: cmd.info
+  slash:
+    name: info
+    options:
+      weather: _bare
+  text: "!info weather"
+  expected_tokens: [weather]
+
+- name: info-weather-coords
+  description: /info weather coords:51.5,-0.1 → !info weather 51.5,-0.1
+  command: cmd.info
+  slash:
+    name: info
+    options:
+      weather.coords: "51.5,-0.1"
+  text: "!info weather 51.5,-0.1"
+  expected_tokens: [weather, "51.5,-0.1"]
 
 - name: start-no-options
   description: /start resumes alert delivery — no options
