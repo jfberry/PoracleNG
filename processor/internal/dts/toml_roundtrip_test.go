@@ -94,3 +94,60 @@ func TestEncodeTOML_RoundTrip(t *testing.T) {
 		t.Errorf("template body changed across round-trip:\noriginal: %q\nreloaded: %q", originalBody, reloadedBody)
 	}
 }
+
+// TestEncodeTOML_ObjectInlineTemplate covers the response_template_inline
+// object-shaped path. JSON-stringified objects must not pick up a per-
+// line prefix on encode — the editor's Form mode sends an object on
+// save, and a stray prefix would silently inject leading whitespace
+// into the parsed body next load.
+func TestEncodeTOML_ObjectInlineTemplate(t *testing.T) {
+	source := []DTSEntry{
+		{
+			Type:     "monster",
+			ID:       "1",
+			Platform: "discord",
+			Language: "en",
+			Template: `{"content":"ok"}`,
+			Buttons: []buttons.Def{
+				{
+					ID:    "details",
+					Label: "Details",
+					ResponseTemplateInline: map[string]any{
+						"embed": map[string]any{
+							"title": "Details for {{name}}",
+						},
+					},
+				},
+			},
+		},
+	}
+	encoded, err := encodeTOML(source)
+	if err != nil {
+		t.Fatalf("encodeTOML: %v", err)
+	}
+	// The opening `{` of the marshalled body must be at column 0, not
+	// indented — a per-line prefix bug would push it to "  {".
+	got := string(encoded)
+	if !strings.Contains(got, "response_template_inline = \"\"\"\n{\n") {
+		t.Errorf("response_template_inline body has leading whitespace on opening brace:\n%s", got)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "monster.toml")
+	if err := os.WriteFile(path, encoded, 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	reloaded, err := loadTOMLFile(path)
+	if err != nil {
+		t.Fatalf("loadTOMLFile: %v", err)
+	}
+	body, ok := reloaded[0].Buttons[0].ResponseTemplateInline.(string)
+	if !ok {
+		t.Fatalf("reloaded inline is %T, want string", reloaded[0].Buttons[0].ResponseTemplateInline)
+	}
+	// First non-space character of the body must be `{` at column 0 —
+	// any leading space would mean the encoder prefix leaked through.
+	if !strings.HasPrefix(body, "{") {
+		t.Errorf("body has leading whitespace, indent leaked into parsed value: %q", body)
+	}
+}
