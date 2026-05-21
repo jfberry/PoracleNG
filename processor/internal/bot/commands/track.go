@@ -431,8 +431,11 @@ func (c *TrackCommand) parseFilters(ctx *bot.CommandContext, parsed *bot.ParsedA
 	// Size
 	if r, ok := parsed.Ranges["size"]; ok {
 		f.size = r.Min
+		// Set maxSize to Min, if no Max is provided
 		if r.HasMax {
 			f.maxSize = r.Max
+		} else {
+			f.maxSize = r.Min
 		}
 	}
 	if v, ok := parsed.Singles["maxsize"]; ok {
