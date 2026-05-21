@@ -180,6 +180,32 @@ func TestGymBattleChange(t *testing.T) {
 	}
 }
 
+func TestGymBattleActiveMatchesAfterPriorBattleState(t *testing.T) {
+	human := makeHuman("user1")
+	gym := &db.GymTracking{
+		ID: "user1", ProfileNo: 1, Team: 2,
+		BattleChanges: true,
+		Distance:      0, Template: "1",
+	}
+
+	st := makeGymTestState([]*db.GymTracking{gym}, map[string]*db.Human{"user1": human})
+	matcher := &GymMatcher{}
+
+	data := &GymData{
+		GymID:       "gym1",
+		TeamID:      2,
+		OldTeamID:   2,
+		InBattle:    true,
+		OldInBattle: true,
+		Latitude:    51.0, Longitude: 0.0,
+	}
+
+	matched, _ := matcher.Match(data, st)
+	if len(matched) != 1 {
+		t.Errorf("Expected 1 match for active battle, got %d", len(matched))
+	}
+}
+
 func TestGymSpecificGym(t *testing.T) {
 	human := makeHuman("user1")
 	gymID := "gym1"

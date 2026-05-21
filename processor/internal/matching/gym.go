@@ -36,7 +36,6 @@ type GymMatcher struct {
 func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackingUserData {
 	teamChanged := data.OldTeamID != data.TeamID
 	slotsChanged := data.OldSlotsAvailable != data.SlotsAvailable
-	battleChanged := data.InBattle && !data.OldInBattle
 
 	var out []trackingUserData
 	for _, g := range rules {
@@ -52,7 +51,7 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 			if slotsChanged && g.SlotChanges {
 				wantsThis = true
 			}
-			if battleChanged && g.BattleChanges {
+			if data.InBattle && g.BattleChanges {
 				wantsThis = true
 			}
 			if !wantsThis {

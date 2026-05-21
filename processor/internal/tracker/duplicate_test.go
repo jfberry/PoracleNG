@@ -160,14 +160,19 @@ func TestGymBattleCooldown(t *testing.T) {
 		t.Error("Expected no cooldown when not in battle and no prior entry")
 	}
 
-	// Start battle — sets cooldown, returns true
-	if !dc.GymInBattleCooldown("gym1", true) {
-		t.Error("Expected cooldown to be active after battle starts")
+	// First battle update starts cooldown but is not itself suppressed.
+	if dc.GymInBattleCooldown("gym1", true) {
+		t.Error("Expected first battle update to be outside cooldown")
 	}
 
 	// Check again without battle — still in cooldown
 	if !dc.GymInBattleCooldown("gym1", false) {
 		t.Error("Expected cooldown to persist")
+	}
+
+	// Another battle update during cooldown is suppressed and refreshes it.
+	if !dc.GymInBattleCooldown("gym1", true) {
+		t.Error("Expected repeated battle update to be inside cooldown")
 	}
 
 	// Different gym — no cooldown

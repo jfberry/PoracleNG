@@ -223,12 +223,13 @@ func (dc *DuplicateCache) CheckNest(nestID int64, pokemonID int, resetTime int64
 	return false
 }
 
-// GymInBattleCooldown checks if a gym is within the 5-minute battle cooldown.
-// If inBattle is true, starts/refreshes the cooldown.
-// Returns true if the gym is still in the cooldown period.
+// GymInBattleCooldown checks if a gym was already within the 5-minute battle
+// cooldown before this webhook. If inBattle is true, starts/refreshes the
+// cooldown after reading the previous state.
 func (dc *DuplicateCache) GymInBattleCooldown(gymID string, inBattle bool) bool {
+	active := dc.gymBattle.Get(gymID) != nil
 	if inBattle {
 		dc.gymBattle.Set(gymID, true, 5*time.Minute)
 	}
-	return dc.gymBattle.Get(gymID) != nil
+	return active
 }
