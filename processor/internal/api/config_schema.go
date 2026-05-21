@@ -564,6 +564,18 @@ var configSchema = []ConfigSection{
 		},
 	},
 
+	// ---- snapshots ----
+	{
+		Name:  "snapshots",
+		Title: "Snapshots (button support)",
+		Fields: []ConfigFieldDef{
+			{Name: "enabled", Type: "bool", Default: false, Description: "Master switch for the snapshot store. When false, interactive buttons configured on DTS entries are silently disabled. Required for !mute buttons, redeliver, response-template buttons, and any post-delivery action."},
+			{Name: "path", Type: "string", Default: "config/.cache/snapshots", Description: "Snapshot storage path (pogreb). Relative paths resolve against BaseDir.", Advanced: true, DependsOn: &ConfigDependency{Field: "enabled", Value: true}},
+			{Name: "max_age_days", Type: "int", Default: 7, Description: "Safety-sweep grace period beyond each snapshot's per-message TTL. Records past this age are deleted by the background sweeper even if their delete callback never fired (restart/crash recovery).", Advanced: true, DependsOn: &ConfigDependency{Field: "enabled", Value: true}},
+			{Name: "sweep_interval_mins", Type: "int", Default: 60, Description: "Background sweep cadence in minutes. Off the hot path; hourly is plenty.", Advanced: true, DependsOn: &ConfigDependency{Field: "enabled", Value: true}},
+		},
+	},
+
 	// ---- webhookLogging ----
 	{
 		Name:  "webhookLogging",
