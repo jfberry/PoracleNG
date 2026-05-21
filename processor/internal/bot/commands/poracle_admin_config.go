@@ -89,34 +89,9 @@ var sensitiveSuffixes = []string{
 	"key", "keys", // catches *_key, *_keys (geocoding_key, static_key, …)
 }
 
-// configSectionOrder controls the display order when rendering the full config.
-// Sections not in this list appear alphabetically after the listed ones.
-var configSectionOrder = []string{
-	"processor",
-	"general",
-	"database",
-	"discord",
-	"telegram",
-	"geofence",
-	"pvp",
-	"weather",
-	"tuning",
-	"stats",
-	"area_security",
-	"alert_limits",
-	"tracking",
-	"summariser",
-	"geocoding",
-	"locale",
-	"logging",
-	"webhookLogging",
-	"fallbacks",
-	"reconciliation",
-	"autocreate",
-	"validation",
-	"ai",
-	"alerter",
-}
+// configSectionOrder shares the canonical section order with the
+// on-disk TOML writer in internal/config so the !pa config display
+// and the rewritten config.toml present sections in the same order.
 
 // paConfigHelpText returns the subgroup usage listing.
 // This is the explicit help text (shown by "!poracle-admin config help").
@@ -311,7 +286,7 @@ func configSections(cfg *config.Config) []sectionEntry {
 
 	seen := make(map[string]bool)
 	// First: ordered sections.
-	for _, name := range configSectionOrder {
+	for _, name := range config.SectionOrder {
 		idx, ok := tagToIdx[name]
 		if !ok {
 			continue
