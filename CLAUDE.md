@@ -537,7 +537,7 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | DELETE | `/api/profiles/{id}/byProfileNo/{profile_no}` | Delete profile |
 | GET | `/api/snapshots/{messageID}?target={id}` | Inspect a delivered-message snapshot (admin diagnostics; 503 if `[snapshots] enabled = false`) |
 | GET | `/api/dts/actions` | List registered button actions + their scopes/params (drives the config editor's button UI) |
-| GET | `/health` | Health check |
+| GET | `/health` | Health check; returns `{status, version, capabilities}` where `capabilities` is a static feature map (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`) so clients can do explicit feature detection without probing endpoints |
 | GET | `/metrics` | Prometheus metrics |
 
 Tracking types: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle.
