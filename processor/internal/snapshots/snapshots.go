@@ -20,7 +20,12 @@ import (
 // version higher than this binary supports is treated as a read miss (the
 // consumer responds with "alert has expired") so older binaries reading
 // newer snapshots fail gracefully rather than misinterpreting them.
-const SchemaVersion = 1
+//
+// v2 (2026-05): Switched from flat View to layered Enrichment / PerLang /
+// PerUser / WebhookFields. Templates rendered against the click-time
+// LayeredView pick up aliases, computed fields, and emoji resolution —
+// the flat View couldn't carry those.
+const SchemaVersion = 2
 
 // Snapshot is the per-delivery record stored by the snapshot store. One
 // snapshot per delivered message; edits overwrite the previous record under
@@ -66,10 +71,44 @@ type Snapshot struct {
 	// Geographic context for area-scoped actions ("mute this area for an hour").
 	MatchedAreas []string `json:"matchedAreas,omitempty"`
 
-	// The fully-resolved LayeredView this user actually saw. Re-rendering a
-	// template against this view reproduces the original message (subject to
-	// the operator changing the template since).
-	View map[string]any `json:"view,omitempty"`
+	// Raw enrichment layers — the same data the renderer's LayeredView
+	// walks at render time, frozen for click-time use. Storing layered
+	// rather than pre-merged means click-time response renders go
+	// through the same LayeredView machinery as the original render
+	// (aliases, computed fields, emoji resolution all work identically).
+	//
+	// PerLang is already filtered to the matched user's language —
+	// snapshots are per-delivery, only one language matters.
+	Enrichment    map[string]any `json:"enrichment,omitempty"`
+	PerLang       map[string]any `json:"perLang,omitempty"`
+	PerUser       map[string]any `json:"perUser,omitempty"`
+	WebhookFields map[string]any `json:"webhookFields,omitempty"`
+}
+
+// Lookup walks the snapshot's layers in LayeredView's priority order
+// (perUser > perLang > enrichment > webhookFields) and returns the
+// first non-nil value for key. Convenience for action handlers that
+// need a single field (gym_id, pokemon_id, etc.) without building a
+// full LayeredView.
+//
+// Returns (nil, false) when no layer holds the key.
+func (s *Snapshot) Lookup(key string) (any, bool) {
+	if s == nil {
+		return nil, false
+	}
+	if v, ok := s.PerUser[key]; ok {
+		return v, true
+	}
+	if v, ok := s.PerLang[key]; ok {
+		return v, true
+	}
+	if v, ok := s.Enrichment[key]; ok {
+		return v, true
+	}
+	if v, ok := s.WebhookFields[key]; ok {
+		return v, true
+	}
+	return nil, false
 }
 
 // Key returns the canonical pogreb key for a snapshot: target:messageID.

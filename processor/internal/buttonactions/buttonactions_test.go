@@ -61,8 +61,8 @@ func TestRegisterPanicsOnNil(t *testing.T) {
 func TestHandleMute_Gym(t *testing.T) {
 	store := mute.NewStore()
 	snap := &snapshots.Snapshot{
-		Target: "u1",
-		View:   map[string]any{"gym_id": "gym-abc.16"},
+		Target:     "u1",
+		Enrichment: map[string]any{"gym_id": "gym-abc.16"},
 	}
 	def := buttons.Def{
 		ID:     "mute_gym",
@@ -87,8 +87,8 @@ func TestHandleMute_Gym(t *testing.T) {
 func TestHandleMute_Pokemon(t *testing.T) {
 	store := mute.NewStore()
 	snap := &snapshots.Snapshot{
-		Target: "u1",
-		View:   map[string]any{"pokemon_id": float64(25)},
+		Target:     "u1",
+		Enrichment: map[string]any{"pokemon_id": float64(25)},
 	}
 	def := buttons.Def{
 		ID:     "mute_pokemon",
@@ -150,7 +150,7 @@ func TestHandleMute_Everything(t *testing.T) {
 
 func TestHandleMute_MissingScopeValue(t *testing.T) {
 	store := mute.NewStore()
-	snap := &snapshots.Snapshot{Target: "u1", View: map[string]any{}}
+	snap := &snapshots.Snapshot{Target: "u1", Enrichment: map[string]any{}}
 	def := buttons.Def{Action: buttons.ActionMute, Scope: buttons.ScopeGym, ID: "x", Label: "y"}
 	resp, err := HandleMute(context.Background(), snap, def, "u1", Deps{MuteStore: store})
 	if err != nil {

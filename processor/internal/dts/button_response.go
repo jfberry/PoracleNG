@@ -1,6 +1,8 @@
 package dts
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -8,6 +10,8 @@ import (
 	raymond "github.com/mailgun/raymond/v2"
 
 	"github.com/pokemon/poracleng/processor/internal/buttons"
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // RenderButtonResponse compiles + executes the response payload of a
@@ -20,10 +24,12 @@ import (
 // Returns the rendered string (Discord-message JSON or plain text) ready
 // for the ephemeral interaction reply.
 //
-// Used by the host (cmd/processor) as the ResponseRender hook into
-// internal/buttonactions — the package boundary keeps buttonactions free
-// of raymond.
-func (r *Renderer) RenderButtonResponse(def buttons.Def, view map[string]any, platform, language string) (string, error) {
+// view is a *LayeredView built by the caller (typically via
+// BuildLayeredViewFromSnapshot). raymond accepts it as the data
+// argument because LayeredView implements FieldResolver — and going
+// through LayeredView means aliases, computed fields, and emoji
+// resolution work identically to the original alert render.
+func (r *Renderer) RenderButtonResponse(def buttons.Def, view *LayeredView, platform, language string) (string, error) {
 	switch def.DispatchMode() {
 	case buttons.ModeResponseText:
 		return r.renderHandlebarsString(def.ResponseText, view, platform, language)
@@ -45,7 +51,7 @@ func (r *Renderer) RenderButtonResponse(def buttons.Def, view map[string]any, pl
 	}
 }
 
-func (r *Renderer) renderHandlebarsString(raw string, view map[string]any, platform, language string) (string, error) {
+func (r *Renderer) renderHandlebarsString(raw string, view *LayeredView, platform, language string) (string, error) {
 	tmpl, err := raymond.Parse(raw)
 	if err != nil {
 		return "", fmt.Errorf("parse response template: %w", err)
@@ -53,7 +59,7 @@ func (r *Renderer) renderHandlebarsString(raw string, view map[string]any, platf
 	return r.executeTemplate(tmpl, view, platform, language)
 }
 
-func (r *Renderer) executeTemplate(tmpl *raymond.Template, view map[string]any, platform, language string) (string, error) {
+func (r *Renderer) executeTemplate(tmpl *raymond.Template, view *LayeredView, platform, language string) (string, error) {
 	df := raymond.NewDataFrame()
 	df.Set("language", language)
 	df.Set("platform", platform)
@@ -65,25 +71,77 @@ func (r *Renderer) executeTemplate(tmpl *raymond.Template, view map[string]any, 
 	return strings.TrimSpace(out), nil
 }
 
+// BuildLayeredViewFromSnapshot reconstructs a LayeredView from a click-
+// time Snapshot. Used by the host (discordbot) when wiring the
+// ResponseRender hook — we need the renderer's view machinery available
+// without holding the original render-time inputs.
+//
+// templateType comes from the snapshot rather than being inferred
+// because some webhook types (raid → rsvpChanges) use a template type
+// distinct from the alert type.
+func (r *Renderer) BuildLayeredViewFromSnapshot(snap *snapshots.Snapshot) *LayeredView {
+	if snap == nil {
+		return nil
+	}
+	areas := make([]webhook.MatchedArea, 0, len(snap.MatchedAreas))
+	for _, n := range snap.MatchedAreas {
+		areas = append(areas, webhook.MatchedArea{Name: n})
+	}
+	return NewLayeredView(
+		r.viewBuilder,
+		snap.TemplateType,
+		snap.Enrichment,
+		snap.PerLang,
+		snap.PerUser,
+		snap.WebhookFields,
+		snap.Platform,
+		areas,
+	)
+}
+
 // inlineTemplateString flattens response_template_inline into a string.
-// TOML/JSON arrays-of-strings get newline-joined (mirrors the existing
-// description handling); raw strings pass through; everything else
-// fails since we can't safely render an arbitrary nested map as a
-// Handlebars template body.
+// Mirrors the main `template` field's accepted shapes so the editor's
+// Form mode (which produces an object) round-trips through the same
+// path the alert renderer uses:
+//
+//   - string             → used as raw Handlebars source.
+//   - []any of strings   → newline-joined (same as description arrays).
+//   - map[string]any /
+//     []any of anything  → JSON-stringified with HTML escaping off so
+//                          Handlebars expressions containing `<` / `>` /
+//                          `&` survive intact.
 func inlineTemplateString(v any) (string, bool) {
 	switch t := v.(type) {
 	case string:
 		return t, true
 	case []any:
-		parts := make([]string, 0, len(t))
-		for _, e := range t {
-			s, ok := e.(string)
-			if !ok {
-				return "", false
-			}
-			parts = append(parts, s)
+		// Pure string array → join. Mixed-type array falls through to
+		// JSON-marshal below so non-string content is preserved.
+		if pureStrings, joined := joinIfAllStrings(t); pureStrings {
+			return joined, true
 		}
-		return strings.Join(parts, "\n"), true
+	case map[string]any:
+		// fallthrough to JSON marshal
+	default:
+		return "", false
 	}
-	return "", false
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(buf.String()), true
+}
+
+func joinIfAllStrings(items []any) (bool, string) {
+	parts := make([]string, 0, len(items))
+	for _, e := range items {
+		s, ok := e.(string)
+		if !ok {
+			return false, ""
+		}
+		parts = append(parts, s)
+	}
+	return true, strings.Join(parts, "\n")
 }
