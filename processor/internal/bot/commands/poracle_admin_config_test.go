@@ -232,6 +232,105 @@ func TestConfig_SectionRedactionApplied(t *testing.T) {
 	}
 }
 
+// TestConfig_SearchByPath — search "admin" should match discord.admins / telegram.admins.
+func TestConfig_SearchByPath(t *testing.T) {
+	ctx := adminCtx(t)
+	replies := paConfig.run(ctx, []string{"search", "admin"})
+
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply, got none")
+	}
+	text := collectText(replies)
+
+	for _, want := range []string{"discord.admins", "telegram.admins"} {
+		if !containsStr(text, want) {
+			t.Errorf("search 'admin' should match %q; got:\n%s", want, text)
+		}
+	}
+}
+
+// TestConfig_SearchByValue — search for the literal "127.0.0.1" should find
+// processor.host.
+func TestConfig_SearchByValue(t *testing.T) {
+	ctx := adminCtx(t)
+	replies := paConfig.run(ctx, []string{"search", "127.0.0.1"})
+
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply, got none")
+	}
+	text := collectText(replies)
+
+	if !containsStr(text, "processor.host") {
+		t.Errorf("search '127.0.0.1' should find processor.host; got:\n%s", text)
+	}
+}
+
+// TestConfig_SearchNeverLeaksSecrets — a search whose term substring-matches
+// a redacted value path must still render the value as "***", not the
+// actual secret. Belt-and-braces — renderLeaf handles this but the test
+// pins it so future refactors don't accidentally bypass redaction.
+func TestConfig_SearchNeverLeaksSecrets(t *testing.T) {
+	ctx := adminCtx(t)
+	replies := paConfig.run(ctx, []string{"search", "token"})
+
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply, got none")
+	}
+	text := collectText(replies)
+
+	for _, leak := range []string{"super-secret-discord-token", "super-secret-command-token", "super-secret-telegram-token"} {
+		if containsStr(text, leak) {
+			t.Errorf("search 'token' MUST NOT leak plain secret %q", leak)
+		}
+	}
+	if !containsStr(text, redactedLabel) {
+		t.Errorf("search 'token' should still contain the redacted label %q; got:\n%.500s", redactedLabel, text)
+	}
+}
+
+// TestConfig_SearchNoMatches — a search term that hits nothing returns the
+// no-matches text rather than an empty reply.
+func TestConfig_SearchNoMatches(t *testing.T) {
+	ctx := adminCtx(t)
+	replies := paConfig.run(ctx, []string{"search", "zzzzzzzz"})
+
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply, got none")
+	}
+	text := collectText(replies)
+	if !containsStr(text, "zzzzzzzz") {
+		t.Errorf("no-matches reply should echo the search term; got:\n%s", text)
+	}
+}
+
+// TestConfig_SearchEmptyTerm — `search` with no further args returns usage.
+func TestConfig_SearchEmptyTerm(t *testing.T) {
+	ctx := adminCtx(t)
+	replies := paConfig.run(ctx, []string{"search"})
+
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply, got none")
+	}
+	text := collectText(replies)
+	if !containsStr(text, "search") {
+		t.Errorf("usage should mention `search`; got:\n%s", text)
+	}
+}
+
+// TestConfig_SearchFindAlias — `find` is an alias for `search`.
+func TestConfig_SearchFindAlias(t *testing.T) {
+	ctx := adminCtx(t)
+	replies := paConfig.run(ctx, []string{"find", "admin"})
+
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply for `find admin`")
+	}
+	text := collectText(replies)
+	if !containsStr(text, "discord.admins") {
+		t.Errorf("`find admin` should behave like `search admin`; got:\n%s", text)
+	}
+}
+
 // TestConfig_NilConfig — nil config is handled gracefully.
 func TestConfig_NilConfig(t *testing.T) {
 	ctx, _ := testCtx(t)
