@@ -34,7 +34,7 @@ func TestLookupSnapshotForClick_KeyMatchesDeliveryTarget(t *testing.T) {
 				Message:   &discordgo.Message{ID: msgID},
 			},
 		}
-		snap, _, err := lookupSnapshotForClick(store, ic)
+		snap, err := lookupSnapshotForClick(store, ic)
 		if err != nil {
 			t.Fatalf("lookupSnapshotForClick: %v", err)
 		}
@@ -61,7 +61,7 @@ func TestLookupSnapshotForClick_KeyMatchesDeliveryTarget(t *testing.T) {
 				Message:   &discordgo.Message{ID: msgID},
 			},
 		}
-		snap, _, err := lookupSnapshotForClick(store, ic)
+		snap, err := lookupSnapshotForClick(store, ic)
 		if err != nil {
 			t.Fatalf("lookupSnapshotForClick: %v", err)
 		}
