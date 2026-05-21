@@ -487,9 +487,8 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | GET | `/api/config/poracleWeb` | Server config for web UI |
 | GET | `/api/config/schema` | Config editor schema with field metadata |
 | GET | `/api/config/values` | Current merged config values |
-| POST | `/api/config/values` | Save config changes (writes to overrides.json) |
+| POST | `/api/config/values` | Save config changes (rewrites `config/config.toml` in place; previous version backed up to `config/backups/`) |
 | POST | `/api/config/validate` | Dry-run config validation |
-| POST | `/api/config/migrate` | Move web-editable values from config.toml to overrides.json |
 | POST | `/api/dts/render` | Render a DTS template with provided data |
 | GET | `/api/dts/templates` | DTS template entries with full content (editor) |
 | POST | `/api/dts/templates` | Save DTS template entries |

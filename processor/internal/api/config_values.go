@@ -22,8 +22,11 @@ type ConfigDeps struct {
 
 // HandleConfigValues returns current merged config values along with the
 // list of fields currently overridden by config/overrides.json. The editor
-// uses the overridden list to mark fields visually so users can tell which
-// values come from config.toml vs the web editor.
+// The `overridden` field is retained in the response shape for the
+// editor's backward compatibility but is now always an empty list:
+// config.toml is the single source of truth — no overrides.json — so
+// there is no "edited via the web UI" distinction to surface. The
+// field can be removed entirely on the editor's next major bump.
 //
 // GET /api/config/values?section=discord
 func HandleConfigValues(deps ConfigDeps) gin.HandlerFunc {
@@ -32,20 +35,18 @@ func HandleConfigValues(deps ConfigDeps) gin.HandlerFunc {
 
 		values := ExtractValues(deps.Cfg, filterSection)
 
-		// List dotted paths of currently overridden fields (e.g. "discord.admins")
-		overrides, _, _ := config.LoadOverrides(deps.ConfigDir)
-		var overridden []string
-		collectOverrideFieldPaths("", overrides, &overridden)
-
 		c.JSON(http.StatusOK, gin.H{
 			"status":     "ok",
 			"values":     values,
-			"overridden": overridden,
+			"overridden": []string{},
 		})
 	}
 }
 
 // collectOverrideFieldPaths walks an override map and produces dotted field paths.
+// Retained only for the test that asserts the helper's shape; no
+// production caller after the steady-state single-file persistence
+// switch.
 func collectOverrideFieldPaths(prefix string, m map[string]any, out *[]string) {
 	for k, v := range m {
 		path := k
@@ -106,12 +107,18 @@ func HandleConfigSave(deps ConfigDeps) gin.HandlerFunc {
 		// the nested struct shape before persisting.
 		nestTableUpdates(updates)
 
-		// Save to overrides.json
-		if err := config.SaveOverrides(deps.ConfigDir, updates); err != nil {
+		// Save directly to config.toml. The previous file is backed up
+		// to config/backups/ before the rewrite. Values matching the
+		// schema default are elided (removed) rather than written
+		// literally — keeps the file lean and means a future default
+		// change follows the operator.
+		backupRel, err := writeConfigTOML(deps.ConfigDir, updates)
+		if err != nil {
 			log.Errorf("config save: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "save failed: " + err.Error()})
 			return
 		}
+		_ = backupRel
 
 		// Apply to in-memory config
 		config.ApplyOverrides(deps.Cfg, updates)

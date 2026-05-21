@@ -10,9 +10,8 @@ All endpoints require the `X-Poracle-Secret` header. All return JSON. CORS is en
 |--------|------|---------|
 | `GET` | `/api/config/schema` | Field metadata (types, defaults, descriptions, options, dependencies) |
 | `GET` | `/api/config/values?section=<name>` | Current merged values + list of overridden field paths |
-| `POST` | `/api/config/values` | Save partial updates to overrides.json |
+| `POST` | `/api/config/values` | Save partial updates by rewriting `config/config.toml`. Previous file backed up under `config/backups/`. Values matching the schema default are elided (removed from the file) rather than written explicitly. |
 | `POST` | `/api/config/validate` | Dry-run validation, returns issues without saving |
-| `POST` | `/api/config/migrate` | Slim config.toml by moving editable values to overrides.json |
 | `POST` | `/api/resolve` | Batch resolve Discord/Telegram IDs to names |
 | `GET` | `/api/geofence/all` | Used to autocomplete `geofence:area` fields |
 
@@ -137,7 +136,13 @@ You don't need to call validate on every keystroke — debounce (~500ms) or call
 
 ### 3. Save
 
-`POST /api/config/values` with only the fields that have changed. The processor merges them into `overrides.json` (deep-merging with existing overrides) and applies them in-memory.
+`POST /api/config/values` with only the fields that have changed. The processor:
+
+1. Reads the current `config/config.toml`.
+2. Applies the updates — values matching the schema default are removed from the file, others are written/updated.
+3. Backs up the previous `config.toml` to `config/backups/`.
+4. Writes the new file.
+5. Applies the updates to the in-memory config.
 
 Response:
 - `saved`: number of fields written
@@ -146,18 +151,13 @@ Response:
 
 If `restart_required: true`, show a banner: "These changes are saved but won't take effect until the processor is restarted: ..."
 
-### 4. Migrate (one-time, optional)
+**One-shot warning to surface to operators**: the first time the user saves via the editor, mention "Saving rewrites `config/config.toml`; comments and hand-authored key ordering are not preserved. The previous version is backed up to `config/backups/`." Operators who maintain elaborate commented configs should know what to expect. After the first save, you can suppress this — most don't comment heavily.
 
-After the user has been using the web editor for a while, offer a "Clean up config.toml" button somewhere in the settings. Confirm with a modal explaining:
+### 4. Legacy `overrides.json` migration
 
-- Your current `config.toml` will be backed up to `config.toml.bak.<timestamp>`
-- All editable settings will be moved into the web editor's storage (`overrides.json`)
-- `config.toml` will be rewritten to contain only database, tokens, and connection settings
-- This is reversible: delete `overrides.json` and restore from the backup
+Older PoracleNG versions stored editor saves in `config/overrides.json`. As of this release, that file is automatically merged into `config.toml` at processor startup and then deleted — no operator action required, no editor UI needed. The previous `POST /api/config/migrate` endpoint has been removed.
 
-`POST /api/config/migrate` → returns `{backup, fields_moved, fields_kept}`. Show the user what was moved and where the backup is, then refresh the values display.
-
-The migration is **idempotent** — running it twice produces the same result.
+If an operator on a freshly-upgraded install reports "where did my settings go", they're in `config.toml` now. The original (pre-merge) `config.toml` is in `config/backups/`.
 
 ## Sensitive field handling
 
@@ -207,18 +207,9 @@ Within each section, fields with `advanced: true` should be hidden behind a "Sho
 - **`select` with deprecated options** — current value visible even if deprecated, but new selections from dropdown only show non-deprecated options
 - **`dependsOn` field** — when the parent doesn't match, render greyed out with a tooltip "requires `parent_field = value`" rather than hiding entirely (so users know it exists)
 
-### Override badge
+### Override badge (legacy — can be removed)
 
-For every field whose dotted path is in the `overridden` array from `GET /values`:
-
-- Small badge next to the field label: "via web editor" or a coloured dot
-- Tooltip: "This value is in `config/overrides.json`, taking precedence over `config.toml`"
-
-This is critical for users who edit `config.toml` directly and wonder why their changes aren't being applied.
-
-### Migration UI
-
-A button at the top of the form (or in a settings menu) labelled something like "Clean up config.toml". On click, show a confirmation modal explaining the operation, then call `POST /api/config/migrate` and display the response.
+The `overridden` array in `GET /values` is retained for editor backward compatibility but is now always empty. The previous override badge UI is no longer meaningful: every saved value lives in `config.toml`, there's no two-file distinction to surface. The field can be removed entirely on the editor's next major version.
 
 ## Currently-deprecated items
 
@@ -280,7 +271,7 @@ IDs that can't be resolved are omitted (not an error). Discord/Telegram sections
 
 1. **Don't send unchanged sensitive fields as empty strings** — `""` is a real value that wipes the secret. Send `"****"` back unchanged, or omit the field entirely.
 
-2. **Don't send the entire `GET /values` response back to `POST /values`** — that would write every default into overrides.json and clobber the user's `config.toml`. Only POST fields that the user actually changed.
+2. **Don't send the entire `GET /values` response back to `POST /values`** — values matching the schema default are elided server-side, so resending the whole snapshot would silently strip any field whose current value happens to equal the default. Only POST fields the user actually changed.
 
 3. **Watch out for nested section names** — `geofence.koji` and `reconciliation.discord` look like dot notation but they're literal section identifiers in the schema. Don't try to split them as paths.
 
