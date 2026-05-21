@@ -38,7 +38,7 @@ func mkSnapshot(messageID, target string) *Snapshot {
 		TemplateType: "monster",
 		Language:     "en",
 		Platform:     "discord",
-		View:         map[string]any{"name": "Pikachu", "iv": 100},
+		Enrichment:   map[string]any{"name": "Pikachu", "iv": 100},
 	}
 }
 
@@ -74,8 +74,11 @@ func TestWriteRead(t *testing.T) {
 	if len(got.MatchedAreas) != 2 || got.MatchedAreas[0] != "Downtown" {
 		t.Errorf("MatchedAreas: got %v", got.MatchedAreas)
 	}
-	if got.View["name"] != "Pikachu" {
-		t.Errorf("View[name]: got %v want Pikachu", got.View["name"])
+	if got.Enrichment["name"] != "Pikachu" {
+		t.Errorf("Enrichment[name]: got %v want Pikachu", got.Enrichment["name"])
+	}
+	if v, ok := got.Lookup("name"); !ok || v != "Pikachu" {
+		t.Errorf("Lookup(name): got %v ok=%v want Pikachu true", v, ok)
 	}
 	// Version is set by Write — make sure it landed.
 	if got.Version != SchemaVersion {
@@ -98,13 +101,13 @@ func TestWriteOverwrites(t *testing.T) {
 	ctx := context.Background()
 
 	snap1 := mkSnapshot("abc", "discord:user:42")
-	snap1.View = map[string]any{"version": "first"}
+	snap1.Enrichment = map[string]any{"version": "first"}
 	if err := store.Write(ctx, snap1); err != nil {
 		t.Fatalf("Write first: %v", err)
 	}
 
 	snap2 := mkSnapshot("abc", "discord:user:42")
-	snap2.View = map[string]any{"version": "second"}
+	snap2.Enrichment = map[string]any{"version": "second"}
 	if err := store.Write(ctx, snap2); err != nil {
 		t.Fatalf("Write second: %v", err)
 	}
@@ -113,8 +116,8 @@ func TestWriteOverwrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if got.View["version"] != "second" {
-		t.Errorf("expected overwrite; got View=%v", got.View)
+	if got.Enrichment["version"] != "second" {
+		t.Errorf("expected overwrite; got Enrichment=%v", got.Enrichment)
 	}
 }
 
@@ -247,13 +250,13 @@ func TestConcurrentWrites(t *testing.T) {
 	const writes = 50
 
 	var wg sync.WaitGroup
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for i := 0; i < writes; i++ {
+			for i := range writes {
 				snap := mkSnapshot("msg", "discord:user:42")
-				snap.View = map[string]any{"goroutine": id, "iter": i}
+				snap.Enrichment = map[string]any{"goroutine": id, "iter": i}
 				if err := store.Write(ctx, snap); err != nil {
 					t.Errorf("Write: %v", err)
 					return
@@ -268,8 +271,8 @@ func TestConcurrentWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read after concurrent writes: %v", err)
 	}
-	if got.View == nil {
-		t.Errorf("expected non-nil View after concurrent writes")
+	if got.Enrichment == nil {
+		t.Errorf("expected non-nil Enrichment after concurrent writes")
 	}
 }
 
