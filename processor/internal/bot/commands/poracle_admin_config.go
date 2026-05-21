@@ -130,6 +130,8 @@ func paConfigHelpText(ctx *bot.CommandContext) []bot.Reply {
 	sb.WriteString(tr.T("cmd.poracle_admin.config.keys.desc"))
 	sb.WriteString("\n  **<section>** — ")
 	sb.WriteString(tr.T("cmd.poracle_admin.config.section.desc"))
+	sb.WriteString("\n  **search <term>** — ")
+	sb.WriteString(tr.T("cmd.poracle_admin.config.search.desc"))
 	sb.WriteString("\n  *(no arg)* — ")
 	sb.WriteString(tr.T("cmd.poracle_admin.config.full.desc"))
 
@@ -156,9 +158,56 @@ func paConfigRun(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return paConfigHelpText(ctx)
 	case "keys":
 		return paConfigKeys(ctx)
+	case "search", "find":
+		return paConfigSearch(ctx, args[1:])
 	default:
 		return paConfigSection(ctx, sub)
 	}
+}
+
+// paConfigSearch walks every leaf in every section and returns the ones
+// whose dotted path or rendered value contains the (lowercased) search
+// term as a substring. Redacted values are rendered as "***" before
+// matching, so secrets can't leak via a wildcard value query.
+//
+// Multi-word args are joined with spaces so `search dm log` matches the
+// literal substring "dm log" — useful for narrowing when a single word
+// is too noisy.
+func paConfigSearch(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
+
+	if len(args) == 0 {
+		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.config.search.usage")}}
+	}
+	if ctx.Config == nil {
+		return []bot.Reply{{Text: tr.T("cmd.poracle_admin.config.not_loaded")}}
+	}
+
+	term := strings.ToLower(strings.Join(args, " "))
+
+	var matches []string
+	for _, sec := range configSections(ctx.Config) {
+		for _, l := range collectLeaves(sec.value, sec.name) {
+			rendered := renderLeaf(l.path, l.value)
+			if strings.Contains(strings.ToLower(l.path), term) ||
+				strings.Contains(strings.ToLower(rendered), term) {
+				matches = append(matches, l.path+" = "+rendered)
+			}
+		}
+	}
+
+	if len(matches) == 0 {
+		return []bot.Reply{{Text: tr.Tf("cmd.poracle_admin.config.search.no_matches", term)}}
+	}
+
+	sort.Strings(matches)
+	var sb strings.Builder
+	sb.WriteString(tr.Tf("cmd.poracle_admin.config.search.header", term, len(matches)))
+	for _, m := range matches {
+		sb.WriteString("\n  ")
+		sb.WriteString(m)
+	}
+	return bot.SplitTextReply(sb.String())
 }
 
 // paConfigKeys lists all top-level section names with their key counts.
