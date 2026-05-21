@@ -298,7 +298,11 @@ After migrating, review `config/config.toml` for any incorrect ports or values, 
 
 **Tileserver templates.** The processor generates static map tiles via tileservercache. The templates are in `tileserver_templates/` at the repo root — deploy them to your tileserver. Available fields differ slightly from the JS alerter; see [TILESERVER.md](TILESERVER.md) for the full field reference.
 
-**DTS templates.** Templates have access to both pre-translated Poracle fields (recommended) and raw webhook fields. See [DTS.md](DTS.md) for the full field reference.
+**DTS templates.** Templates have access to both pre-translated Poracle fields (recommended) and raw webhook fields. Templates can be authored in JSON or TOML (`config/dts/*.json` or `*.toml`) and may declare Discord button definitions inline. See [DTS.md](DTS.md) for the full field reference, the Buttons + TOML sections, and `examples/dts/buttons/` for working samples.
+
+**Mute commands.** `!mute <gym|pokemon|area|pokestop|station> <value> [duration:1h]` and `!unmute ...` silence alerts for a time-bounded window without removing the underlying tracking rule. `!mute everything` self-mutes across all alert types. Per-type aliases work too: `!raid mute id:N` ≡ `!mute raid id:N`. Active mutes are shown by `!tracked`.
+
+**Interactive buttons.** Operators can attach Discord buttons to alerts via a `buttons[]` array on any DTS entry. Buttons can dispatch named actions (mute the gym, redeliver to DM) or render ephemeral follow-ups (PVP details, copy coordinates). Buttons require `[snapshots] enabled = true` in `config/config.toml` — the opt-in per-delivery snapshot store is what lets click handlers act on the original alert's enriched context. See [DTS.md](DTS.md#buttons) for the schema and [`docs/buttons-and-snapshots/`](docs/buttons-and-snapshots/) for the design.
 
 ## Admin Commands
 
@@ -322,6 +326,8 @@ All API endpoints are served by the processor (default port 3030). See [API.md](
 | Messages | `POST /api/deliverMessages` | Send confirmation messages to Discord/Telegram |
 | Game data | `GET /api/masterdata/*` | Pokemon and grunt master data |
 | Config | `GET /api/config/poracleWeb` | Server config for web UI |
+| DTS editor | `GET/POST /api/dts/templates`, `GET /api/dts/actions` | Template CRUD (JSON+TOML round-trip) and button-action discovery |
+| Snapshots | `GET /api/snapshots/{messageID}?target={id}` | Inspect a delivered alert's enriched view (opt-in) |
 | Test | `POST /api/test` | Test webhook simulation |
 | Health | `GET /health`, `GET /metrics` | Health check and Prometheus metrics |
 
