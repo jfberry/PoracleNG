@@ -146,6 +146,7 @@ You don't need to call validate on every keystroke — debounce (~500ms) or call
 
 Response:
 - `saved`: number of fields written
+- `backup`: path (relative to BaseDir) of the pre-save config.toml backup, e.g. `backups/config.toml.bak.2026-05-21_220130`. Surface this in the save confirmation so the operator knows where to find the previous version if they want to revert.
 - `restart_required`: bool
 - `restart_fields`: which fields require a restart (only present if `restart_required: true`)
 
