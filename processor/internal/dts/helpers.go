@@ -441,22 +441,24 @@ func registerStringHelpers() {
 // ---------------------------------------------------------------------------
 
 // eachContextWithMeta injects isFirst/isLast into the iteration context.
-// For map contexts: adds the keys directly. For non-map contexts: wraps in
-// an eachWrapper that implements FieldResolver so {{this}} still works.
+// For map contexts: returns a shallow copy with the keys added — the
+// original map is part of the enrichment layers shared across render
+// workers, so mutating in place is a concurrent-write bug (observed in
+// production under parallel renders of the same alert).
+// For non-map contexts: wraps in an eachWrapper that implements
+// FieldResolver so {{this}} still works.
 func eachContextWithMeta(ctx any, index, length int) any {
 	isFirst := index == 0
 	isLast := index == length-1
 
-	// If ctx is a map, inject directly
 	if m, ok := ctx.(map[string]any); ok {
-		m["isFirst"] = isFirst
-		m["isLast"] = isLast
-		return m
-	}
-	if m, ok := ctx.(map[string]any); ok {
-		m["isFirst"] = isFirst
-		m["isLast"] = isLast
-		return m
+		out := make(map[string]any, len(m)+2)
+		for k, v := range m {
+			out[k] = v
+		}
+		out["isFirst"] = isFirst
+		out["isLast"] = isLast
+		return out
 	}
 
 	// Wrap non-map contexts so isFirst/isLast are accessible alongside {{this}}
