@@ -142,7 +142,7 @@ func buildCommandDef(bundle *i18n.Bundle, key, canon string) *discordgo.Applicat
 	case "cmd.tracked":
 		return buildDefinition(bundle, key, canon, nil)
 	case "cmd.info":
-		return buildDefinition(bundle, key, canon, nil)
+		return buildDefinition(bundle, key, canon, infoOptions(bundle))
 	case "cmd.start":
 		return buildDefinition(bundle, key, canon, nil)
 	case "cmd.stop":
@@ -254,6 +254,24 @@ func untrackSub(bundle *i18n.Bundle, typ string) *discordgo.ApplicationCommandOp
 				Autocomplete:             true,
 			},
 		},
+	}
+}
+
+// infoOptions exposes /info pokemon, /info rarity, /info shiny, and
+// /info weather as sub-commands. The corresponding text-command sub-
+// vocabulary lives in msg.info.sub.* — the mapper translates each
+// slash invocation back into the canonical English keyword (or pokemon
+// name) that InfoCommand.Run reads. Admin-only sub-commands from the
+// text surface (translate, dts, templates) are intentionally omitted
+// here; admins still have them via the text command.
+func infoOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
+	return []*discordgo.ApplicationCommandOption{
+		subCommand(bundle, "info.pokemon", "pokemon", "Show pokemon info",
+			stringOpt(bundle, "info.pokemon.name", "name", "Pokemon name or dex id", true, false)),
+		subCommand(bundle, "info.rarity", "rarity", "Show rarity tiers"),
+		subCommand(bundle, "info.shiny", "shiny", "Show shiny rates"),
+		subCommand(bundle, "info.weather", "weather", "Show current weather",
+			stringOpt(bundle, "info.weather.coords", "coords", "lat,lon (optional)", false, false)),
 	}
 }
 
