@@ -135,10 +135,11 @@ func MigrateOverridesIntoTOML(configDir string) error {
 	buf.WriteString("# Comments and key ordering are not preserved across editor saves.\n")
 	buf.WriteString("# Hand-author this file directly if you need either; otherwise the\n")
 	buf.WriteString("# web config editor (POST /api/config/values) rewrites it on save.\n\n")
-	enc := toml.NewEncoder(&buf)
-	if err := enc.Encode(rawMap); err != nil {
+	encoded, err := EncodeOrderedTOML(rawMap)
+	if err != nil {
 		return fmt.Errorf("encode merged config.toml: %w", err)
 	}
+	buf.Write(encoded)
 
 	// Verify-then-commit: parse the encoded bytes back into a *Config
 	// BEFORE renaming the temp file or deleting overrides.json. The

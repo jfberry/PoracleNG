@@ -71,10 +71,11 @@ func writeConfigTOML(configDir string, updates map[string]any) (backupRel string
 	buf.WriteString("# Previous version: ")
 	buf.WriteString(backupRel)
 	buf.WriteString("\n\n")
-	enc := toml.NewEncoder(&buf)
-	if err := enc.Encode(rawMap); err != nil {
+	encoded, err := config.EncodeOrderedTOML(rawMap)
+	if err != nil {
 		return backupRel, fmt.Errorf("encode config.toml: %w", err)
 	}
+	buf.Write(encoded)
 
 	tmpPath := configPath + ".new"
 	if err := os.WriteFile(tmpPath, buf.Bytes(), 0644); err != nil {
