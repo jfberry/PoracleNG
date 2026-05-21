@@ -72,10 +72,10 @@ func TestScopeMatching(t *testing.T) {
 	s.Add(Entry{HumanID: "u2", ScopeType: ScopeEverything, ExpiresAt: now + 60})
 
 	cases := []struct {
-		name  string
-		user  string
-		ev    Event
-		want  bool
+		name string
+		user string
+		ev   Event
+		want bool
 	}{
 		{"gym match", "u1", Event{GymID: "g1"}, true},
 		{"gym no-match", "u1", Event{GymID: "other"}, false},
@@ -164,20 +164,18 @@ func TestConcurrentReadsWrites(t *testing.T) {
 	const iters = 200
 
 	var wg sync.WaitGroup
-	for i := 0; i < readers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < iters; j++ {
+	for range readers {
+		wg.Go(func() {
+			for range iters {
 				_ = s.Match("u1", Event{GymID: "g1"}, time.Now().Unix())
 			}
-		}()
+		})
 	}
-	for i := 0; i < writers; i++ {
+	for i := range writers {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < iters; j++ {
+			for j := range iters {
 				s.Add(Entry{
 					HumanID:    "u1",
 					ScopeType:  ScopeGym,

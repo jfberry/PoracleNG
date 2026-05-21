@@ -46,7 +46,7 @@ func TestRecentActivityRaceSafe(t *testing.T) {
 		}
 		close(done)
 	}()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		_ = r.ActiveRaidBosses()
 	}
 	<-done

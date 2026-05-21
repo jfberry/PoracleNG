@@ -26,7 +26,7 @@ func TestBuffer_StartupCaptured(t *testing.T) {
 // only the first startupCap entries; excess entries are silently dropped.
 func TestBuffer_StartupBoundedAtCap(t *testing.T) {
 	b := New(5, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		b.Capture("WARN", fmt.Sprintf("msg%d", i), "")
 	}
 
@@ -70,7 +70,7 @@ func TestBuffer_RollingRingWraps(t *testing.T) {
 	b := New(10, 3)
 	b.MarkStartupComplete()
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		b.Capture("WARN", fmt.Sprintf("msg%d", i), "")
 	}
 
@@ -156,14 +156,12 @@ func TestBuffer_ConcurrentCapture(t *testing.T) {
 	// which side each goroutine lands on.
 	startupDone := make(chan struct{})
 
-	for i := 0; i < goroutines/2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < perGoroutine; j++ {
+	for range goroutines / 2 {
+		wg.Go(func() {
+			for range perGoroutine {
 				b.Capture("WARN", "startup", "")
 			}
-		}()
+		})
 	}
 	// Wait for half the goroutines to finish their initial burst, then flip.
 	go func() {
@@ -175,14 +173,12 @@ func TestBuffer_ConcurrentCapture(t *testing.T) {
 	<-startupDone
 
 	var wg2 sync.WaitGroup
-	for i := 0; i < goroutines/2; i++ {
-		wg2.Add(1)
-		go func() {
-			defer wg2.Done()
-			for j := 0; j < perGoroutine; j++ {
+	for range goroutines / 2 {
+		wg2.Go(func() {
+			for range perGoroutine {
 				b.Capture("ERROR", "rolling", "")
 			}
-		}()
+		})
 	}
 	wg2.Wait()
 

@@ -36,8 +36,8 @@ type ParityFixture struct {
 
 // SlashInvocation captures the slash command shape used to drive the mapper.
 type SlashInvocation struct {
-	Name    string                 `yaml:"name"`
-	Options map[string]interface{} `yaml:"options"`
+	Name    string         `yaml:"name"`
+	Options map[string]any `yaml:"options"`
 }
 
 // LoadParityFixtures reads a YAML file containing a list of ParityFixture
