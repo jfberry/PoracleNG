@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -271,23 +270,14 @@ func (b *Bot) dispatchClick(ic *discordgo.InteractionCreate, snap *snapshots.Sna
 // checkVisibility applies the button's visible_to gate against the
 // clicker. Returns true when the click should proceed.
 //
-//   - VisibleTarget: clicker must equal snap.Target on DMs; channels
-//     pass through (anyone with channel access can click, matching the
-//     design's "channel = anyone with view" semantics).
-//   - VisibleAdmin: clicker is in cfg.Discord.Admins.
-//   - VisibleRegistered: clicker is a registered Poracle user
-//     (Humans.Get returns a row for them).
 //   - VisibleAnyone: always allow.
-func (b *Bot) checkVisibility(def buttons.Def, snap *snapshots.Snapshot, clicker string, _ *discordgo.InteractionCreate) bool {
+//   - VisibleAdmin: clicker is in cfg.Discord.Admins. On DMs the button
+//     is also hidden at render time (see components.go) so this gate
+//     only fires for channel clicks by non-admins.
+//   - VisibleRegistered: clicker exists in the humans table.
+func (b *Bot) checkVisibility(def buttons.Def, _ *snapshots.Snapshot, clicker string, _ *discordgo.InteractionCreate) bool {
 	switch def.EffectiveVisibility() {
 	case buttons.VisibleAnyone:
-		return true
-	case buttons.VisibleTarget:
-		if snap.TargetType == "dm" {
-			return strings.HasSuffix(snap.Target, ":"+clicker) || snap.Target == clicker
-		}
-		// For channels: the target is the channel id, not a user; the
-		// implicit contract is "anyone who can see this channel".
 		return true
 	case buttons.VisibleAdmin:
 		return b.isAdminClicker(clicker)

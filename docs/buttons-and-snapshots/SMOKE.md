@@ -178,7 +178,7 @@ Prerequisites for every phase:
 
 - [ ] **Expired:** Use a manually-fired alert with `[snapshots] max_age = "10s"`. Wait 30s. Click the button. Confirm: ephemeral `msg.button.expired`.
 - [ ] **Unavailable:** Click a button. Remove the button definition from DTS, reload. Click the button again. Confirm: ephemeral `msg.button.unavailable`.
-- [ ] **Unauthorized:** Send an alert to a channel. As a non-target user, click a button with `visible_to = "target"`. Confirm: ephemeral `msg.button.unauthorized`.
+- [ ] **Unauthorized:** Send an alert to a channel. As a non-admin user, click a button with `visible_to = "admin"`. Confirm: ephemeral `msg.button.unauthorized`. Then send the same alert to a non-admin user's DM and confirm the admin button is hidden entirely.
 - [ ] **Cooldown:** Double-click a button rapidly. Confirm: second click returns `msg.button.cooldown`.
 
 ### 3.9 Edit preserves buttons

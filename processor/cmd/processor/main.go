@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -1593,6 +1594,12 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 			// errors) — guard accordingly.
 			if ps.dtsRenderer != nil {
 				ps.dtsRenderer.SetButtonsEnabled(true)
+				// visible_to=admin buttons are also hidden at render time
+				// on DM destinations so non-admin recipients never see a
+				// button they can't use.
+				ps.dtsRenderer.SetAdminRecipientCheck(func(id string) bool {
+					return slices.Contains(cfg.Discord.Admins, id)
+				})
 			}
 			log.Infof("Snapshot store enabled at %s (max_age=%dd, sweep=%dm); buttons enabled",
 				cfg.Snapshots.Path, cfg.Snapshots.MaxAgeDays, cfg.Snapshots.SweepIntervalMins)
