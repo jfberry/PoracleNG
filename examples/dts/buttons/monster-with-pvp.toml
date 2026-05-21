@@ -30,45 +30,51 @@ template = """
 
   # Inline response template — only attached when the encounter has
   # PVP data, via show_if = "{{pvpAvailable}}" evaluated against the
-  # resolved view at render time. The response template body lives
-  # right here, so the PVP-details rendering is in one file alongside
-  # the main card.
+  # resolved view at render time.
+  #
+  # Body lines and the closing `"""` are at column 0 on purpose. TOML
+  # triple-quoted strings preserve content literally, including any
+  # whitespace before the closing fence — indenting either would
+  # silently inject leading/trailing spaces into the parsed template.
+  # The config editor's TOML writer emits in this canonical form for
+  # the same reason; matching it here means a save round-trip leaves
+  # the file unchanged.
   [[entry.buttons]]
   id = "pvp"
   label = "Show PVP details"
   style = "secondary"
   show_if = "{{pvpAvailable}}"
   response_template_inline = """
-  {
-    "embed": {
-      "title": "PVP rankings for {{fullName}}",
-      "color": "{{ivColor}}",
-      "fields": [
-        {{#if pvpLittle}}
-        {
-          "name": "Little league",
-          "value": "{{#each pvpLittle}}#{{rank}} {{fullName}} @{{cp}}CP (Lvl. {{levelWithCap}})\\n{{/each}}",
-          "inline": false
-        }{{#if pvpGreat}},{{/if}}{{#if pvpUltra}}{{#unless pvpGreat}},{{/unless}}{{/if}}
-        {{/if}}
-        {{#if pvpGreat}}
-        {
-          "name": "Great league",
-          "value": "{{#each pvpGreat}}#{{rank}} {{fullName}} @{{cp}}CP (Lvl. {{levelWithCap}})\\n{{/each}}",
-          "inline": false
-        }{{#if pvpUltra}},{{/if}}
-        {{/if}}
-        {{#if pvpUltra}}
-        {
-          "name": "Ultra league",
-          "value": "{{#each pvpUltra}}#{{rank}} {{fullName}} @{{cp}}CP (Lvl. {{levelWithCap}})\\n{{/each}}",
-          "inline": false
-        }
-        {{/if}}
-      ]
-    }
+{
+  "embed": {
+    "title": "PVP rankings for {{fullName}}",
+    "color": "{{ivColor}}",
+    "fields": [
+      {{#if pvpLittle}}
+      {
+        "name": "Little league",
+        "value": "{{#each pvpLittle}}#{{rank}} {{fullName}} @{{cp}}CP (Lvl. {{levelWithCap}})\\n{{/each}}",
+        "inline": false
+      }{{#if pvpGreat}},{{/if}}{{#if pvpUltra}}{{#unless pvpGreat}},{{/unless}}{{/if}}
+      {{/if}}
+      {{#if pvpGreat}}
+      {
+        "name": "Great league",
+        "value": "{{#each pvpGreat}}#{{rank}} {{fullName}} @{{cp}}CP (Lvl. {{levelWithCap}})\\n{{/each}}",
+        "inline": false
+      }{{#if pvpUltra}},{{/if}}
+      {{/if}}
+      {{#if pvpUltra}}
+      {
+        "name": "Ultra league",
+        "value": "{{#each pvpUltra}}#{{rank}} {{fullName}} @{{cp}}CP (Lvl. {{levelWithCap}})\\n{{/each}}",
+        "inline": false
+      }
+      {{/if}}
+    ]
   }
-  """
+}
+"""
 
   # Action button — mute scope=pokemon uses pokemon_id from the
   # snapshot view. applies_to defaults to ["dm"] for mute actions,
