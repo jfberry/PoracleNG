@@ -63,50 +63,27 @@ func getPlatform(options *raymond.Options) string {
 
 func registerPokemonHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *EmojiLookup) {
 	raymond.RegisterHelper("pokemonName", func(id any, options *raymond.Options) any {
-		pid := int(toFloat(id))
-		lang := getLang(options)
-		key := fmt.Sprintf("poke_%d", pid)
-		name := bundle.For(lang).T(key)
-		if name == key {
-			return fmt.Sprintf("%d", pid)
-		}
-		return name
+		return gamedata.PokemonName(bundle.For(getLang(options)), int(toFloat(id)))
 	})
 
 	raymond.RegisterHelper("pokemonNameEng", func(id any) any {
-		pid := int(toFloat(id))
-		key := fmt.Sprintf("poke_%d", pid)
-		name := bundle.For("en").T(key)
-		if name == key {
-			return fmt.Sprintf("%d", pid)
-		}
-		return name
+		return gamedata.PokemonName(bundle.For("en"), int(toFloat(id)))
 	})
 
 	raymond.RegisterHelper("pokemonNameAlt", func(id any, options *raymond.Options) any {
-		pid := int(toFloat(id))
-		lang := getAltLang(options)
-		key := fmt.Sprintf("poke_%d", pid)
-		name := bundle.For(lang).T(key)
-		if name == key {
-			return fmt.Sprintf("%d", pid)
-		}
-		return name
+		return gamedata.PokemonName(bundle.For(getAltLang(options)), int(toFloat(id)))
 	})
 
 	raymond.RegisterHelper("pokemonForm", func(formID any, options *raymond.Options) any {
-		fid := int(toFloat(formID))
-		return bundle.For(getLang(options)).T(fmt.Sprintf("form_%d", fid))
+		return gamedata.FormName(bundle.For(getLang(options)), int(toFloat(formID)))
 	})
 
 	raymond.RegisterHelper("pokemonFormEng", func(formID any) any {
-		fid := int(toFloat(formID))
-		return bundle.For("en").T(fmt.Sprintf("form_%d", fid))
+		return gamedata.FormName(bundle.For("en"), int(toFloat(formID)))
 	})
 
 	raymond.RegisterHelper("pokemonFormAlt", func(formID any, options *raymond.Options) any {
-		fid := int(toFloat(formID))
-		return bundle.For(getAltLang(options)).T(fmt.Sprintf("form_%d", fid))
+		return gamedata.FormName(bundle.For(getAltLang(options)), int(toFloat(formID)))
 	})
 
 	// pokemon — block helper providing rich pokemon context.
@@ -262,58 +239,54 @@ func buildFullName(name, formName, formNameEng string) string {
 // Move helpers
 // ---------------------------------------------------------------------------
 
+// lookupMove resolves a Handlebars-supplied move id (any of int / float64
+// / numeric string) to a *gamedata.Move, returning nil when gamedata is
+// absent or the id is unknown. Shared by the moveType / moveEmoji
+// helpers — both want the same "no data → empty string" semantics.
+func lookupMove(gd *gamedata.GameData, moveID any) *gamedata.Move {
+	if gd == nil {
+		return nil
+	}
+	return gd.GetMove(int(toFloat(moveID)))
+}
+
 func registerMoveHelpers(gd *gamedata.GameData, bundle *i18n.Bundle, emoji *EmojiLookup) {
 	raymond.RegisterHelper("moveName", func(moveID any, options *raymond.Options) any {
-		return bundle.For(getLang(options)).T(fmt.Sprintf("move_%d", int(toFloat(moveID))))
+		return gamedata.MoveName(bundle.For(getLang(options)), int(toFloat(moveID)))
 	})
 
 	raymond.RegisterHelper("moveNameEng", func(moveID any) any {
-		return bundle.For("en").T(fmt.Sprintf("move_%d", int(toFloat(moveID))))
+		return gamedata.MoveName(bundle.For("en"), int(toFloat(moveID)))
 	})
 
 	raymond.RegisterHelper("moveNameAlt", func(moveID any, options *raymond.Options) any {
-		return bundle.For(getAltLang(options)).T(fmt.Sprintf("move_%d", int(toFloat(moveID))))
+		return gamedata.MoveName(bundle.For(getAltLang(options)), int(toFloat(moveID)))
 	})
 
 	raymond.RegisterHelper("moveType", func(moveID any, options *raymond.Options) any {
-		if gd == nil {
-			return ""
+		if move := lookupMove(gd, moveID); move != nil {
+			return gamedata.TypeName(bundle.For(getLang(options)), move.TypeID)
 		}
-		move := gd.GetMove(int(toFloat(moveID)))
-		if move == nil {
-			return ""
-		}
-		return bundle.For(getLang(options)).T(fmt.Sprintf("poke_type_%d", move.TypeID))
+		return ""
 	})
 
 	raymond.RegisterHelper("moveTypeEng", func(moveID any) any {
-		if gd == nil {
-			return ""
+		if move := lookupMove(gd, moveID); move != nil {
+			return gamedata.TypeName(bundle.For("en"), move.TypeID)
 		}
-		move := gd.GetMove(int(toFloat(moveID)))
-		if move == nil {
-			return ""
-		}
-		return bundle.For("en").T(fmt.Sprintf("poke_type_%d", move.TypeID))
+		return ""
 	})
 
 	raymond.RegisterHelper("moveTypeAlt", func(moveID any, options *raymond.Options) any {
-		if gd == nil {
-			return ""
+		if move := lookupMove(gd, moveID); move != nil {
+			return gamedata.TypeName(bundle.For(getAltLang(options)), move.TypeID)
 		}
-		move := gd.GetMove(int(toFloat(moveID)))
-		if move == nil {
-			return ""
-		}
-		return bundle.For(getAltLang(options)).T(fmt.Sprintf("poke_type_%d", move.TypeID))
+		return ""
 	})
 
 	// moveEmoji, moveEmojiEng, moveEmojiAlt — all resolve by type emoji key + platform
 	moveEmojiFunc := func(moveID any, options *raymond.Options) any {
-		if gd == nil {
-			return ""
-		}
-		move := gd.GetMove(int(toFloat(moveID)))
+		move := lookupMove(gd, moveID)
 		if move == nil {
 			return ""
 		}

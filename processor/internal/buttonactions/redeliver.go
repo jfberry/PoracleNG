@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/pokemon/poracleng/processor/internal/buttons"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
@@ -29,27 +28,28 @@ import (
 // has a DM path) — only the host glue is missing, kept out of v1 to
 // avoid expanding the buttonactions surface before the wire is needed.
 func HandleRedeliver(_ context.Context, snap *snapshots.Snapshot, _ buttons.Def, clicker string, deps Deps) (Response, error) {
+	tr := deps.Tr
 	if snap == nil {
-		return Response{Text: "This alert has expired.", Reaction: "🙅"}, nil
+		return Response{Text: tr.T("msg.button.expired"), Reaction: "🙅"}, nil
 	}
 	if deps.RenderToDM == nil {
 		return Response{
-			Text:     "Redeliver isn't wired here yet — the host hasn't connected the render-to-DM hook.",
+			Text:     tr.T("msg.button.responses_not_wired"),
 			Reaction: "🙅",
 		}, errors.New("buttonactions/redeliver: nil RenderToDM in deps")
 	}
 	if clicker == "" {
-		return Response{Text: "Couldn't identify you to send the message.", Reaction: "🙅"}, nil
+		return Response{Text: tr.T("msg.button.no_dm_target"), Reaction: "🙅"}, nil
 	}
 
 	if err := deps.RenderToDM(snap, clicker); err != nil {
 		return Response{
-			Text:     fmt.Sprintf("Couldn't send to your DM: %v", err),
+			Text:     tr.Tf("msg.button.dm_failed", err.Error()),
 			Reaction: "🙅",
 		}, err
 	}
 	return Response{
-		Text:     "📬 Sent to your DM.",
+		Text:     tr.T("msg.button.redeliver_sent"),
 		Reaction: "📬",
 	}, nil
 }

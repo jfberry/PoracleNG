@@ -22,27 +22,28 @@ import (
 // scope values are rejected at DTS-load time by buttons.Def.Validate,
 // so we don't bother re-checking here.
 func HandleUnsubscribe(_ context.Context, snap *snapshots.Snapshot, _ buttons.Def, _ string, deps Deps) (Response, error) {
+	tr := deps.Tr
 	if deps.Tracking == nil {
-		return Response{Text: "Unsubscribe isn't wired here.", Reaction: "🙅"}, errors.New("buttonactions/unsubscribe: nil TrackingStores in deps")
+		return Response{Text: tr.T("msg.button.actions_not_wired"), Reaction: "🙅"}, errors.New("buttonactions/unsubscribe: nil TrackingStores in deps")
 	}
 	if snap == nil {
-		return Response{Text: "This alert has expired.", Reaction: "🙅"}, nil
+		return Response{Text: tr.T("msg.button.expired"), Reaction: "🙅"}, nil
 	}
 	if len(snap.TrackingUIDs) == 0 {
 		return Response{
-			Text:     "Couldn't find a tracking rule to unsubscribe from on this alert.",
+			Text:     tr.Tf("msg.button.missing_target", tr.T("msg.mute.scope_tracking")),
 			Reaction: "🙅",
 		}, nil
 	}
 
 	deleted, err := deleteTrackingByAlertType(snap.AlertType, snap.Target, snap.TrackingUIDs, deps)
 	if err != nil {
-		return Response{Text: "Couldn't unsubscribe — please try again.", Reaction: "🙅"}, err
+		return Response{Text: tr.T("msg.button.unsubscribe_failed"), Reaction: "🙅"}, err
 	}
 	if deleted == 0 {
 		// Rule(s) already removed — possibly by !untrack from another
 		// surface since the snapshot was written. Friendly soft-fail.
-		return Response{Text: "Those tracking rules were already removed.", Reaction: "👌"}, nil
+		return Response{Text: tr.T("msg.button.unsubscribe_already"), Reaction: "👌"}, nil
 	}
 
 	if deps.TriggerReload != nil {
@@ -50,7 +51,7 @@ func HandleUnsubscribe(_ context.Context, snap *snapshots.Snapshot, _ buttons.De
 	}
 
 	return Response{
-		Text:     fmt.Sprintf("✅ Unsubscribed from %d tracking rule(s).", deleted),
+		Text:     tr.Tf("msg.button.unsubscribed", deleted),
 		Reaction: "✅",
 	}, nil
 }
