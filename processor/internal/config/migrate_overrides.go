@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -11,6 +12,46 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/backup"
 )
+
+// NormalizeNumericValues walks a value recursively and coerces every
+// whole-number float64 into an int64. JSON unmarshal decodes every
+// number — including integer-valued ones — as float64. BurntSushi's
+// TOML encoder then preserves that float64-ness on the wire as
+// "1500.0", which the next config.Load can't unmarshal back into a Go
+// `int` field. Running the merged map through this normalizer before
+// encoding keeps the TOML output type-faithful to what the operator
+// actually had in mind.
+//
+// Legitimately fractional float64s pass through unchanged. Genuine
+// float64 fields that happen to receive a whole number (e.g. 1.0)
+// are coerced to int64 but BurntSushi reads `1` back into a float64
+// field gracefully, so the round-trip is safe.
+//
+// Exported because both the load-time overrides migration and the
+// editor save path need it; both write through the BurntSushi encoder.
+func NormalizeNumericValues(v any) any {
+	switch t := v.(type) {
+	case float64:
+		if math.IsInf(t, 0) || math.IsNaN(t) {
+			return t
+		}
+		if t == math.Trunc(t) && t >= math.MinInt64 && t <= math.MaxInt64 {
+			return int64(t)
+		}
+		return t
+	case map[string]any:
+		for k, val := range t {
+			t[k] = NormalizeNumericValues(val)
+		}
+		return t
+	case []any:
+		for i, val := range t {
+			t[i] = NormalizeNumericValues(val)
+		}
+		return t
+	}
+	return v
+}
 
 // MigrateOverridesIntoTOML folds any existing config/overrides.json into
 // config/config.toml as a one-time transition. After this runs:
@@ -62,6 +103,12 @@ func MigrateOverridesIntoTOML(configDir string) error {
 	// maps so the merge sees them at the right depth.
 	overrides = expandDottedKeys(overrides)
 	deepMerge(rawMap, overrides)
+
+	// Coerce JSON-decoded whole-number float64 values to int64. Without
+	// this, an integer field like pvp.filter_max_rank in overrides.json
+	// arrives as float64(100) and BurntSushi writes "100.0" — which the
+	// next config.Load can't unmarshal back into the Go int field.
+	NormalizeNumericValues(rawMap)
 
 	backupRel, err := backup.Save(configDir, "config.toml")
 	if err != nil {

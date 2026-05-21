@@ -136,6 +136,79 @@ func TestMigrate_DottedTopLevelKeys(t *testing.T) {
 	}
 }
 
+// TestMigrate_NumericOverridesRoundTrip — overrides.json contains an
+// integer that JSON unmarshal decodes as float64. The migration must
+// coerce it back to int64 so BurntSushi writes "100" (TOML int) rather
+// than "100.0" (TOML float). Otherwise the next config.Load fails to
+// unmarshal into an `int` field.
+//
+// Reproduces the fatal-startup case operators hit on first upgrade
+// when overrides.json contained any integer value.
+func TestMigrate_NumericOverridesRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	overridesPath := filepath.Join(dir, "overrides.json")
+
+	if err := os.WriteFile(configPath, []byte("[pvp]\n"), 0644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+	ov := map[string]any{
+		"pvp": map[string]any{
+			"filter_max_rank": 100,
+		},
+	}
+	ovBytes, _ := json.Marshal(ov)
+	if err := os.WriteFile(overridesPath, ovBytes, 0644); err != nil {
+		t.Fatalf("write overrides.json: %v", err)
+	}
+
+	if err := MigrateOverridesIntoTOML(dir); err != nil {
+		t.Fatalf("MigrateOverridesIntoTOML: %v", err)
+	}
+
+	// Reload the merged file into a struct whose target field is int —
+	// this is the real failure mode and the only honest pin against it.
+	var dst struct {
+		PVP struct {
+			FilterMaxRank int `toml:"filter_max_rank"`
+		} `toml:"pvp"`
+	}
+	if _, err := toml.DecodeFile(configPath, &dst); err != nil {
+		t.Fatalf("decode merged config.toml into int field: %v", err)
+	}
+	if dst.PVP.FilterMaxRank != 100 {
+		t.Errorf("got filter_max_rank = %d, want 100", dst.PVP.FilterMaxRank)
+	}
+}
+
+// TestNormalizeNumericValues — pins the coercion contract directly.
+func TestNormalizeNumericValues(t *testing.T) {
+	in := map[string]any{
+		"whole":      float64(100),
+		"fractional": float64(1.5),
+		"nested": map[string]any{
+			"whole_negative": float64(-42),
+			"array":          []any{float64(1), float64(2.5), float64(3)},
+		},
+	}
+	out := NormalizeNumericValues(in).(map[string]any)
+
+	if got := out["whole"]; got != int64(100) {
+		t.Errorf("whole: got %v (%T), want int64(100)", got, got)
+	}
+	if got := out["fractional"]; got != float64(1.5) {
+		t.Errorf("fractional: got %v (%T), want float64(1.5)", got, got)
+	}
+	nested := out["nested"].(map[string]any)
+	if got := nested["whole_negative"]; got != int64(-42) {
+		t.Errorf("whole_negative: got %v (%T), want int64(-42)", got, got)
+	}
+	arr := nested["array"].([]any)
+	if arr[0] != int64(1) || arr[1] != float64(2.5) || arr[2] != int64(3) {
+		t.Errorf("array: got %v, want [int64(1), float64(2.5), int64(3)]", arr)
+	}
+}
+
 // toFloat coerces a TOML-decoded numeric value (int64 or float64) to a
 // float64. Tiny helper for the test — production code already has its
 // own coercions in the overrides path.
