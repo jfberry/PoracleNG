@@ -86,22 +86,29 @@ func TestListTracking_Raid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTracking: %v", err)
 	}
-	if len(out) != 1 {
-		t.Fatalf("got %d choices", len(out))
+	// Two choices: the "Remove ALL" sentinel at the head, then the
+	// actual rule. The sentinel is prepended when the list is
+	// non-empty so the operator can clear everything in one click.
+	if len(out) != 2 {
+		t.Fatalf("got %d choices, want 2 (remove-all sentinel + one rule)", len(out))
 	}
+	if out[0].Value != RemoveAllSentinel {
+		t.Errorf("first choice should be remove-all sentinel; got value=%q", out[0].Value)
+	}
+	rule := out[1]
 	// The rowtext output contains the pokemon-name key (poke_150) when the
 	// gamelocale bundle isn't available in the unit-test environment; with
 	// it loaded it would be "Mewtwo". Both forms are acceptable here — we
 	// only need to prove a description was prepended to the "[id:N]" suffix.
-	if !strings.Contains(out[0].Label, "poke_150") && !strings.Contains(out[0].Label, "Mewtwo") {
-		t.Errorf("label missing pokemon name/key: %q", out[0].Label)
+	if !strings.Contains(rule.Label, "poke_150") && !strings.Contains(rule.Label, "Mewtwo") {
+		t.Errorf("label missing pokemon name/key: %q", rule.Label)
 	}
 	suffix := "[id:" + itoa(want.UID) + "]"
-	if !strings.HasSuffix(out[0].Label, suffix) {
-		t.Errorf("label suffix %q missing from %q", suffix, out[0].Label)
+	if !strings.HasSuffix(rule.Label, suffix) {
+		t.Errorf("label suffix %q missing from %q", suffix, rule.Label)
 	}
-	if out[0].Value != itoa(want.UID) {
-		t.Errorf("value=%q want %q", out[0].Value, itoa(want.UID))
+	if rule.Value != itoa(want.UID) {
+		t.Errorf("value=%q want %q", rule.Value, itoa(want.UID))
 	}
 }
 
@@ -134,19 +141,41 @@ func TestListTracking_Monster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTracking: %v", err)
 	}
-	if len(out) != 1 {
-		t.Fatalf("got %d choices", len(out))
+	// Two choices: remove-all sentinel + the seeded rule.
+	if len(out) != 2 {
+		t.Fatalf("got %d choices, want 2 (remove-all sentinel + one rule)", len(out))
 	}
+	if out[0].Value != RemoveAllSentinel {
+		t.Errorf("first choice should be remove-all sentinel; got value=%q", out[0].Value)
+	}
+	rule := out[1]
 	// See TestListTracking_Raid for why both forms are acceptable.
-	if !strings.Contains(out[0].Label, "poke_25") && !strings.Contains(out[0].Label, "Pikachu") {
-		t.Errorf("label missing pokemon name/key: %q", out[0].Label)
+	if !strings.Contains(rule.Label, "poke_25") && !strings.Contains(rule.Label, "Pikachu") {
+		t.Errorf("label missing pokemon name/key: %q", rule.Label)
 	}
 	suffix := "[id:" + itoa(want.UID) + "]"
-	if !strings.HasSuffix(out[0].Label, suffix) {
-		t.Errorf("label suffix %q missing from %q", suffix, out[0].Label)
+	if !strings.HasSuffix(rule.Label, suffix) {
+		t.Errorf("label suffix %q missing from %q", suffix, rule.Label)
 	}
-	if out[0].Value != itoa(want.UID) {
-		t.Errorf("value=%q want %q", out[0].Value, itoa(want.UID))
+	if rule.Value != itoa(want.UID) {
+		t.Errorf("value=%q want %q", rule.Value, itoa(want.UID))
+	}
+}
+
+// TestListTracking_NoRulesNoRemoveAllSentinel — when the user has no
+// rules of the requested subtype, the picker must NOT show the
+// "Remove ALL" affordance (there's nothing to remove). Avoids the
+// confusing UX of clicking it on an empty list.
+func TestListTracking_NoRulesNoRemoveAllSentinel(t *testing.T) {
+	deps, humans, _, _ := testDeps(t)
+	humans.AddHuman(&store.Human{ID: "discord:user:42"})
+
+	out, err := ListTracking(context.Background(), deps, "discord:user:42", autocomplete.UserStateHint{Subtype: "raid"})
+	if err != nil {
+		t.Fatalf("ListTracking: %v", err)
+	}
+	if len(out) != 0 {
+		t.Errorf("expected empty list (no remove-all on empty), got %d choices: %v", len(out), out)
 	}
 }
 
@@ -175,8 +204,9 @@ func TestListTracking_UnregisteredUserUsesProfileZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTracking: %v", err)
 	}
-	if len(out) != 1 {
-		t.Fatalf("got %d choices", len(out))
+	// remove-all sentinel + the seeded rule = 2 choices.
+	if len(out) != 2 {
+		t.Fatalf("got %d choices, want 2", len(out))
 	}
 }
 

@@ -4,15 +4,27 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-// Untrack maps /untrack <subtype> tracking:<uid> sub-command invocations into
-// text tokens for the underlying per-type command.
+// untrackRemoveAllSentinel mirrors listers.RemoveAllSentinel — duplicated
+// as a string literal here to avoid importing the listers package
+// (which would drag the whole user-state listing surface into the
+// mappers package). Both files name it the same way and any change
+// must keep them in lockstep.
+const untrackRemoveAllSentinel = "everything"
+
+// Untrack maps /untrack <subtype> tracking:<uid|everything> sub-command
+// invocations into text tokens for the underlying per-type command.
 //
-// Only cmd.untrack itself (the pokemon untracker) treats a bare "id:<uid>" as
-// "remove this rule". Every other per-type command (cmd.raid, cmd.egg, ...)
-// requires the explicit "remove" keyword alongside the UID; bare "id:<uid>"
-// without "remove" is just a filter token and would silently no-op. Emit the
-// keyword for the non-pokemon sub-commands so the rerouted command actually
-// deletes the row.
+// Two value shapes for the tracking option:
+//
+//   - a decimal UID (e.g. "42") — picked from the autocomplete list
+//   - the literal "everything" sentinel — emitted by the lister's
+//     "Remove ALL" affordance at the top of the picker
+//
+// Only cmd.untrack itself (the pokemon untracker) treats a bare "id:<uid>"
+// or "everything" as "remove these rules". Every other per-type command
+// (cmd.raid, cmd.egg, ...) requires the explicit "remove" keyword
+// alongside the rest of the args; emit it for the non-pokemon sub-commands
+// so the rerouted command actually deletes the rows.
 //
 // The dispatcher special-cases /untrack and rewrites cmdKey to cmd.<subtype>
 // for the non-pokemon sub-commands — see HandleCommand. The mapper does not
@@ -27,19 +39,31 @@ func Untrack(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]strin
 	if sub == nil || sub.Type != discordgo.ApplicationCommandOptionSubCommand {
 		return nil, &MapperError{Key: "error.slash.untrack.no_subcommand"}
 	}
-	var uid string
+	var value string
 	for _, o := range sub.Options {
 		if o != nil && o.Name == "tracking" {
-			uid = o.StringValue()
+			value = o.StringValue()
 		}
 	}
-	if uid == "" {
+	if value == "" {
 		return nil, &MapperError{Key: "error.slash.untrack.no_tracking"}
 	}
-	if sub.Name == "pokemon" {
-		return []string{"id:" + uid}, nil
+
+	removeAll := value == untrackRemoveAllSentinel
+	switch {
+	case sub.Name == "pokemon" && removeAll:
+		// !untrack everything — removes all pokemon tracking.
+		return []string{"everything"}, nil
+	case sub.Name == "pokemon":
+		return []string{"id:" + value}, nil
+	case removeAll:
+		// !raid remove everything (and per-type equivalents) — the
+		// command's HasKeyword("arg.everything") branch deletes all
+		// rules of that type.
+		return []string{"remove", "everything"}, nil
+	default:
+		return []string{"remove", "id:" + value}, nil
 	}
-	return []string{"remove", "id:" + uid}, nil
 }
 
 func init() { registry["untrack"] = Untrack }

@@ -534,6 +534,26 @@
   text: "!untrack id:42"
   expected_tokens: ["id:42"]
 
+- name: untrack-pokemon-remove-all
+  description: /untrack pokemon tracking:everything clears every pokemon rule
+  command: cmd.untrack
+  slash:
+    name: untrack
+    options:
+      pokemon.tracking: "everything"
+  text: "!untrack everything"
+  expected_tokens: ["everything"]
+
+- name: untrack-raid-remove-all
+  description: /untrack raid tracking:everything → !raid remove everything (all raid rules cleared)
+  command: cmd.raid
+  slash:
+    name: untrack
+    options:
+      raid.tracking: "everything"
+  text: "!raid remove everything"
+  expected_tokens: ["remove", "everything"]
+
 # /untrack <non-pokemon> is rerouted to cmd.<subtype> with the "remove"
 # keyword + UID, because each per-type command requires the explicit remove
 # token to delete (bare "id:N" without it is silently a filter).

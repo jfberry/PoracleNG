@@ -909,6 +909,8 @@
   "slash.choice.fort.fort_type.0": "Pokestop",
   "slash.choice.fort.fort_type.1": "Gym",
 
+  "slash.autocomplete.untrack.remove_all": "🗑️ Remove ALL rules of this type",
+
   "slash.opt.untrack.pokemon": "pokemon",
   "slash.opt.untrack.pokemon.desc": "Remove a pokemon tracking rule",
   "slash.opt.untrack.pokemon.tracking": "tracking",

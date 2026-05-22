@@ -83,6 +83,38 @@ func TestUntrackMapperEmitsRemoveAndIDForNonPokemon(t *testing.T) {
 	}
 }
 
+// /untrack pokemon tracking:everything → ["everything"] — the bare
+// !untrack everything path that clears every pokemon rule.
+func TestUntrackMapperPokemonRemoveAll(t *testing.T) {
+	tokens, err := Untrack([]*discordgo.ApplicationCommandInteractionDataOption{
+		subopt("pokemon", sopt("tracking", "everything")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(tokens, []string{"everything"}) {
+		t.Errorf("tokens=%v", tokens)
+	}
+}
+
+// /untrack raid tracking:everything → ["remove", "everything"] —
+// rerouted to !raid remove everything which the raid command's
+// HasKeyword("arg.everything") branch handles.
+func TestUntrackMapperNonPokemonRemoveAll(t *testing.T) {
+	for _, sub := range []string{"raid", "egg", "quest", "invasion", "lure", "nest", "gym", "fort", "maxbattle"} {
+		tokens, err := Untrack([]*discordgo.ApplicationCommandInteractionDataOption{
+			subopt(sub, sopt("tracking", "everything")),
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", sub, err)
+		}
+		want := []string{"remove", "everything"}
+		if !reflect.DeepEqual(tokens, want) {
+			t.Errorf("%s: tokens=%v, want %v", sub, tokens, want)
+		}
+	}
+}
+
 func TestLookupUntrack(t *testing.T) {
 	if Lookup("untrack") == nil {
 		t.Fatal("nil mapper for /untrack")

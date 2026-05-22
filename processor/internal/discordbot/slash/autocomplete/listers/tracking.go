@@ -48,7 +48,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.MonsterRowText(tr, toMonsterTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	case "raid":
 		rows, err := deps.Tracking.Raids.SelectByIDProfile(userID, profileNo)
@@ -60,7 +60,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.RaidRowText(tr, toRaidTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	case "egg":
 		rows, err := deps.Tracking.Eggs.SelectByIDProfile(userID, profileNo)
@@ -72,7 +72,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.EggRowText(tr, toEggTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	case "quest":
 		rows, err := deps.Tracking.Quests.SelectByIDProfile(userID, profileNo)
@@ -84,7 +84,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.QuestRowText(tr, toQuestTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	case "invasion":
 		rows, err := deps.Tracking.Invasions.SelectByIDProfile(userID, profileNo)
@@ -96,7 +96,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.InvasionRowText(tr, toInvasionTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	case "lure":
 		rows, err := deps.Tracking.Lures.SelectByIDProfile(userID, profileNo)
@@ -108,7 +108,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.LureRowText(tr, toLureTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	case "nest":
 		rows, err := deps.Tracking.Nests.SelectByIDProfile(userID, profileNo)
@@ -120,7 +120,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.NestRowText(tr, toNestTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	case "gym":
 		rows, err := deps.Tracking.Gyms.SelectByIDProfile(userID, profileNo)
@@ -132,7 +132,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.GymRowText(tr, toGymTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	case "fort":
 		rows, err := deps.Tracking.Forts.SelectByIDProfile(userID, profileNo)
@@ -144,7 +144,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.FortUpdateRowText(tr, toFortTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	case "maxbattle":
 		rows, err := deps.Tracking.Maxbattles.SelectByIDProfile(userID, profileNo)
@@ -156,7 +156,7 @@ func ListTracking(ctx context.Context, deps *bot.BotDeps, userID string, hint au
 			desc := deps.RowText.MaxbattleRowText(tr, toMaxbattleTracking(&rows[i]))
 			out = append(out, buildChoice(desc, rows[i].UID))
 		}
-		return out, nil
+		return prependRemoveAll(tr, out), nil
 
 	default:
 		return nil, nil
@@ -187,6 +187,29 @@ func buildChoice(desc string, uid int64) autocomplete.Choice {
 		Label: fmt.Sprintf("%s [id:%d]", desc, uid),
 		Value: strconv.FormatInt(uid, 10),
 	}
+}
+
+// RemoveAllSentinel is the autocomplete choice value emitted for the
+// "remove every rule of this subtype" option in /untrack. The mapper
+// recognises this exact string and rewrites it to the text-command
+// `everything` keyword so the rerouted !raid remove / !egg remove /
+// etc. handler clears the whole list.
+//
+// String value (not numeric) is intentional: UIDs are decimal
+// integers, so this can never collide with a real rule id, and the
+// mapper's "is this a uid?" check is a single string comparison.
+const RemoveAllSentinel = "everything"
+
+// prependRemoveAll inserts the "Remove ALL" sentinel at the head of
+// the choice list when there are any rules to remove. No-op on empty
+// lists — Discord shouldn't show "remove all" when nothing exists.
+func prependRemoveAll(tr *i18n.Translator, out []autocomplete.Choice) []autocomplete.Choice {
+	if len(out) == 0 {
+		return out
+	}
+	label := tr.T("slash.autocomplete.untrack.remove_all")
+	choice := autocomplete.Choice{Label: label, Value: RemoveAllSentinel}
+	return append([]autocomplete.Choice{choice}, out...)
 }
 
 // --- API -> Tracking converters (mirror the unexported ones in api/) ---
