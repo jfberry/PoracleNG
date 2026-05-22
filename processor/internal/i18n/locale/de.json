@@ -854,6 +854,7 @@
   "slash.choice.fort.clean.yes": "Ja",
   "slash.choice.fort.fort_type.0": "PokéStop",
   "slash.choice.fort.fort_type.1": "Arena",
+  "slash.autocomplete.untrack.remove_all": "🗑️ ALLE Regeln dieses Typs entfernen",
   "slash.opt.untrack.pokemon": "pokemon",
   "slash.opt.untrack.pokemon.desc": "Eine Pokémon-Tracking-Regel entfernen",
   "slash.opt.untrack.pokemon.tracking": "regel",
