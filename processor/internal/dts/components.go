@@ -133,10 +133,7 @@ func buildDiscordComponents(defs []buttons.Def) (json.RawMessage, error) {
 	const buttonsPerRow = 5
 	var rows []map[string]any
 	for i := 0; i < len(defs); i += buttonsPerRow {
-		end := i + buttonsPerRow
-		if end > len(defs) {
-			end = len(defs)
-		}
+		end := min(i+buttonsPerRow, len(defs))
 		row := map[string]any{
 			"type":       1,
 			"components": []map[string]any{},
