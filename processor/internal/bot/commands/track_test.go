@@ -74,6 +74,45 @@ func runTrack(t *testing.T, ctx *bot.CommandContext, input string) []bot.Reply {
 	return cmd.Run(ctx, args)
 }
 
+// TestTrack_PVP_RoleAllowed pins the regression: a user with
+// command_security.pvp role-gated MUST pass the check when ctx.UserRoles
+// contains a matching role. Before the fix, track.go passed nil for
+// userRoles to CheckFeaturePermission and the role match never fired.
+func TestTrack_PVP_RoleAllowed(t *testing.T) {
+	ctx := trackCtx(t)
+	ctx.Platform = "discord"
+	ctx.UserID = "u1"
+	ctx.UserRoles = []string{"role-a"}
+	ctx.Config.Discord.CommandSecurity = map[string][]string{
+		"pvp": {"role-a"}, // role allow list — must match ctx.UserRoles
+	}
+
+	replies := runTrack(t, ctx, "25 great5")
+	require.NotEmpty(t, replies)
+	if replies[0].React != "✅" {
+		t.Errorf("expected ✅ for pvp-role-allowed user, got %q (text=%q)", replies[0].React, replies[0].Text)
+	}
+}
+
+// TestTrack_PVP_RoleDenied: same config, user lacks the role → denied.
+// Without the fix this passed by accident (role list was ignored, fell
+// through to user-ID-only check), masking the role-restriction intent.
+func TestTrack_PVP_RoleDenied(t *testing.T) {
+	ctx := trackCtx(t)
+	ctx.Platform = "discord"
+	ctx.UserID = "u1"
+	ctx.UserRoles = []string{"some-other-role"}
+	ctx.Config.Discord.CommandSecurity = map[string][]string{
+		"pvp": {"role-a"},
+	}
+
+	replies := runTrack(t, ctx, "25 great5")
+	require.NotEmpty(t, replies)
+	if replies[0].React != "🙅" {
+		t.Errorf("expected 🙅 for pvp-role-denied user, got %q (text=%q)", replies[0].React, replies[0].Text)
+	}
+}
+
 // --- PVP min CP floor ---
 
 func TestTrack_PVPMinCPFloor_Great(t *testing.T) {

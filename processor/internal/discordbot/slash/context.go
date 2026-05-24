@@ -74,6 +74,10 @@ func (d *Dispatcher) buildContext(ic *discordgo.InteractionCreate, cmdKey string
 	ctx.IsSlash = true
 	ctx.Language = lang
 	ctx.IsAdmin = d.isAdmin(userID)
+	// Populate the user's role list once per dispatch so per-command
+	// feature checks (track's pvp, gym's specificgym) don't have to
+	// re-fetch. Same DM-union semantics as the text bot's fetchRoles.
+	ctx.UserRoles = d.lookupRoles(ic, userID)
 	ctx.TargetID = userID
 	ctx.TargetName = userName
 	ctx.TargetType = bot.TypeDiscordUser
