@@ -14,6 +14,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash/autocomplete"
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash/autocomplete/listers"
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash/mappers"
+	"github.com/pokemon/poracleng/processor/internal/discordroles"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
@@ -545,25 +546,39 @@ func respondAutocomplete(s *discordgo.Session, ic *discordgo.InteractionCreate, 
 // (commandSecurityName returns "") trivially passes; a command with an entry
 // requires the user's ID or one of their guild roles to be in the allow list.
 //
-// In DMs ic.Member is nil so roles come back empty — commands without a
-// security mapping still pass, restricted ones fail closed. This matches the
-// text bot's behaviour for the same code path.
+// In DM-style interactions Discord doesn't populate ic.Member, so the
+// dispatcher falls back to unioning the user's roles across every
+// configured guild — same approach the text bot uses for !commands sent
+// from a DM. Without that, role-gated command_security silently blocks
+// DM slash invocations even when the user holds the right role.
 func (d *Dispatcher) commandAllowed(ic *discordgo.InteractionCreate, cmdKey string, isAdmin bool) bool {
 	if isAdmin {
 		return true
 	}
 	userID := interactionUserID(ic)
-	return bot.CommandAllowed(d.cfgRoot, "discord", cmdKey, userID, userRoles(ic))
+	return bot.CommandAllowed(d.cfgRoot, "discord", cmdKey, userID, d.lookupRoles(ic, userID))
 }
 
-// userRoles returns the guild role IDs attached to the invoking member. In
-// DM-style interactions Member is nil and the result is nil — bot.CommandAllowed
-// handles that as "no roles, only unrestricted commands allowed".
-func userRoles(ic *discordgo.InteractionCreate) []string {
-	if ic == nil || ic.Interaction == nil || ic.Member == nil {
+// lookupRoles returns the role IDs to evaluate the user against. Two
+// code paths:
+//
+//   - Guild interaction (ic.Member non-nil): use ic.Member.Roles —
+//     Discord already populated them in the interaction payload.
+//   - DM interaction: union the user's roles across every guild in
+//     cfg.Discord.Guilds via discordroles.GetUserRoleIDs. Mirrors the
+//     text bot's fetchRoles DM branch and PoracleJS's getUserRoles.
+func (d *Dispatcher) lookupRoles(ic *discordgo.InteractionCreate, userID string) []string {
+	if ic != nil && ic.Member != nil {
+		return ic.Member.Roles
+	}
+	if d.session == nil || d.cfgRoot == nil || len(d.cfgRoot.Discord.Guilds) == 0 || userID == "" {
 		return nil
 	}
-	return ic.Member.Roles
+	roleIDs, err := discordroles.GetUserRoleIDs(d.session, d.cfgRoot.Discord.Guilds, userID)
+	if err != nil {
+		return nil
+	}
+	return roleIDs
 }
 
 // respondError edits the deferred ephemeral reply with an error message. Falls

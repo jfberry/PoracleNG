@@ -406,18 +406,23 @@ func TestCommandAllowedUserIDInAllowList(t *testing.T) {
 	}
 }
 
-func TestUserRolesNilMember(t *testing.T) {
+func TestLookupRolesDMNoGuildsConfigured(t *testing.T) {
+	d := NewDispatcher(Config{})
 	ic := buildInteraction("42", "") // DM: no Member
-	if got := userRoles(ic); got != nil {
-		t.Errorf("userRoles(DM)=%v, want nil", got)
+	// No cfgRoot wired and no session — DM branch can't fetch
+	// anything, returns nil. Standalone Dispatcher (no Attach call)
+	// pins the safe fall-through.
+	if got := d.lookupRoles(ic, "42"); got != nil {
+		t.Errorf("lookupRoles(DM, unwired)=%v, want nil", got)
 	}
 }
 
-func TestUserRolesReturnsMemberRoles(t *testing.T) {
+func TestLookupRolesGuildUsesMemberRoles(t *testing.T) {
+	d := NewDispatcher(Config{})
 	ic := buildInteractionWithRoles("42", "guild-1", []string{"r1", "r2"})
-	got := userRoles(ic)
+	got := d.lookupRoles(ic, "42")
 	if len(got) != 2 || got[0] != "r1" || got[1] != "r2" {
-		t.Errorf("userRoles=%v, want [r1 r2]", got)
+		t.Errorf("lookupRoles=%v, want [r1 r2]", got)
 	}
 }
 
