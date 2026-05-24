@@ -186,7 +186,8 @@ Enrichment is computed in three layers:
 - **Map URLs**: Google Maps, Apple Maps, Waze, RDM, ReactMap, RocketMad
 - **Icons**: Pokemon/raid/gym/weather icon URLs via uicons (with scheduled index refresh)
 - **Static map**: Tileserver tile URL (pregenerate or query params), with scanner DB stop lookups
-- **Geocoding**: Reverse geocode address via nominatim/photon/google with pogreb on-disk + ttlcache in-memory cache. Alert rendering adds per-language reverse geocoding for each matched user language (`accept-language` for Nominatim, `lang` for Photon, `language` for Google), and localized cache keys include the language code so address fields (`addr`, `city`, `streetName`, etc.) resolve in the user's locale when the provider supports it.
+- **Geocoding**: Reverse geocode address via nominatim/photon/google with pogreb on-disk + ttlcache in-memory cache.
+- **Localized addresses**: Per-language enrichment adds reverse geocoding for each matched user language (`accept-language` for Nominatim, `lang` for Photon, `language` for Google). Localized cache keys include the language code so address fields (`addr`, `city`, `streetName`, etc.) resolve in the user's locale when the provider supports it.
 
 **Per-language enrichment** (computed once per distinct language among matched users):
 - Translated pokemon/form/move/type/weather/team/generation names using pogo-translations identifier keys (`poke_1`, `move_14`, `form_46`, etc.)

@@ -1430,7 +1430,7 @@ All invasion grunt types.
 
 ## Geocoding
 
-Reverse geocoding for alert templates is locale-aware. The processor performs a base lookup as a fallback, then performs per-language lookups for the matched users' effective languages and stores those address fields in the per-language DTS layer. Existing DTS fields such as `{{addr}}`, `{{city}}`, `{{streetName}}`, and `{{formattedAddress}}` automatically resolve to the user's localized geocoder result when the provider supports it.
+Reverse geocoding for alert templates is locale-aware. The processor performs a base reverse-geocode lookup that populates the default-locale address fields, then performs per-language lookups for matched user languages that shadow those fields in the per-language DTS layer. Existing DTS fields such as `{{addr}}`, `{{city}}`, `{{streetName}}`, and `{{formattedAddress}}` automatically resolve to the user's localized geocoder result when the provider supports it.
 
 Supported reverse-geocode language parameters:
 

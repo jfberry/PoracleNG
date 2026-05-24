@@ -205,7 +205,8 @@ func (e *Enricher) RaidTranslate(base map[string]any, raid *webhook.RaidWebhook,
 		return nil
 	}
 
-	m := make(map[string]any, 15) // only translated fields; caller merges base + perLang
+	m := make(map[string]any, 25) // only translated fields; caller merges base + perLang
+	defer e.addLocalizedGeoResult(m, raid.Latitude, raid.Longitude, lang)
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)

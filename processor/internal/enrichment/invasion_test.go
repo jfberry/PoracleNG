@@ -189,7 +189,7 @@ func TestInvasionTranslateGruntName(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, nil, nil, "en")
+	m := e.InvasionTranslate(base, 0, 0, 44, nil, nil, "en")
 
 	if m["gruntName"] != "Grunt" {
 		t.Errorf("gruntName = %q, want %q", m["gruntName"], "Grunt")
@@ -228,7 +228,7 @@ func TestInvasionTranslateGruntNameGerman(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, nil, nil, "de")
+	m := e.InvasionTranslate(base, 0, 0, 44, nil, nil, "de")
 
 	if m["gruntName"] != "Ruepel" {
 		t.Errorf("gruntName = %q, want %q", m["gruntName"], "Ruepel")
@@ -269,7 +269,7 @@ func TestInvasionTranslateGender(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 1}
-	m := e.InvasionTranslate(base, 44, nil, nil, "en")
+	m := e.InvasionTranslate(base, 0, 0, 44, nil, nil, "en")
 
 	if m["genderName"] != "Male" {
 		t.Errorf("genderName = %q, want %q", m["genderName"], "Male")
@@ -323,7 +323,7 @@ func TestInvasionTranslateRewardsTwoSlots(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 1}
-	m := e.InvasionTranslate(base, 44, nil, nil, "en")
+	m := e.InvasionTranslate(base, 0, 0, 44, nil, nil, "en")
 
 	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
@@ -414,7 +414,7 @@ func TestInvasionTranslateRewardsSingleSlot(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, nil, nil, "en")
+	m := e.InvasionTranslate(base, 0, 0, 44, nil, nil, "en")
 
 	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
@@ -479,7 +479,7 @@ func TestInvasionTranslateRewardsThirdSlotFallback(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 44, nil, nil, "en")
+	m := e.InvasionTranslate(base, 0, 0, 44, nil, nil, "en")
 
 	rewardsList, ok := m["gruntRewardsList"].(map[string]any)
 	if !ok {
@@ -525,7 +525,7 @@ func TestInvasionTranslateNoGrunt(t *testing.T) {
 
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0}
-	m := e.InvasionTranslate(base, 0, nil, nil, "en")
+	m := e.InvasionTranslate(base, 0, 0, 0, nil, nil, "en")
 
 	if _, ok := m["gruntRewardsList"]; ok {
 		t.Error("gruntRewardsList should not be set when no grunt found")
@@ -567,15 +567,15 @@ func newShowcaseBundle(t *testing.T) *i18n.Bundle {
 	t.Helper()
 	return newInvasionBundle(t, map[string]map[string]string{
 		"en": {
-			"poke_25":       "Pikachu",
-			"poke_6":        "Charizard",
-			"form_0":        "Normal",
-			"form_65":       "Alolan",
-			"gender_1":      "Male",
-			"gender_2":      "Female",
-			"alignment_1":   "Shadow",
-			"alignment_2":   "Purified",
-			"costume_3":     "Ash",
+			"poke_25":        "Pikachu",
+			"poke_6":         "Charizard",
+			"form_0":         "Normal",
+			"form_65":        "Alolan",
+			"gender_1":       "Male",
+			"gender_2":       "Female",
+			"alignment_1":    "Shadow",
+			"alignment_2":    "Purified",
+			"costume_3":      "Ash",
 			"display_type_9": "Showcase",
 		},
 	})
@@ -589,7 +589,7 @@ func TestShowcaseRankingsMissing(t *testing.T) {
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0, "displayTypeId": 9}
 
-	m := e.InvasionTranslate(base, 0, nil, nil, "en")
+	m := e.InvasionTranslate(base, 0, 0, 0, nil, nil, "en")
 
 	if m["showcasePresent"] != false {
 		t.Errorf("showcasePresent = %v, want false", m["showcasePresent"])
@@ -627,7 +627,7 @@ func TestShowcaseRankingsPopulated(t *testing.T) {
 		]
 	}`)
 
-	m := e.InvasionTranslate(base, 0, nil, rawJSON, "en")
+	m := e.InvasionTranslate(base, 0, 0, 0, nil, rawJSON, "en")
 
 	if m["showcasePresent"] != true {
 		t.Errorf("showcasePresent = %v, want true", m["showcasePresent"])
@@ -714,7 +714,7 @@ func TestShowcaseRankingsBadJSON(t *testing.T) {
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0, "displayTypeId": 9}
 
-	m := e.InvasionTranslate(base, 0, nil, []byte(`not-valid-json`), "en")
+	m := e.InvasionTranslate(base, 0, 0, 0, nil, []byte(`not-valid-json`), "en")
 
 	if m["showcasePresent"] != false {
 		t.Errorf("showcasePresent = %v, want false on bad JSON", m["showcasePresent"])
@@ -737,7 +737,7 @@ func TestShowcaseAlignmentPrefix(t *testing.T) {
 		]
 	}`)
 
-	m := e.InvasionTranslate(base, 0, nil, rawJSON, "en")
+	m := e.InvasionTranslate(base, 0, 0, 0, nil, rawJSON, "en")
 	showcase := m["showcase"].([]map[string]any)
 	if len(showcase) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(showcase))
@@ -764,7 +764,7 @@ func TestShowcaseRankingsNotPopulatedForKecleon(t *testing.T) {
 	e := newInvasionEnricher(t, gd, bundle)
 	base := map[string]any{"gameWeatherId": 0, "gruntGender": 0, "displayTypeId": 8} // Kecleon
 
-	m := e.InvasionTranslate(base, 0, nil, nil, "en")
+	m := e.InvasionTranslate(base, 0, 0, 0, nil, nil, "en")
 
 	if m["showcasePresent"] != false {
 		t.Errorf("showcasePresent should be false for Kecleon incident")

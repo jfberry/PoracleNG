@@ -112,7 +112,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.GymTranslate(enrichmentData, teamID, oldTeamID, oldLastOwnerID, lang)
+					perLang[lang] = ps.enricher.GymTranslate(enrichmentData, gym.Latitude, gym.Longitude, teamID, oldTeamID, oldLastOwnerID, lang)
 				}
 			}
 

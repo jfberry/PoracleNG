@@ -330,7 +330,8 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		return nil
 	}
 
-	m := make(map[string]any, 20) // only translated fields; caller merges base + perLang
+	m := make(map[string]any, 30) // only translated fields; caller merges base + perLang
+	defer e.addLocalizedGeoResult(m, pokemon.Latitude, pokemon.Longitude, lang)
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)

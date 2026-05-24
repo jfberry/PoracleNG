@@ -64,10 +64,7 @@ type googleGeometry struct {
 
 // Reverse performs a reverse geocode lookup via Google.
 func (g *Google) Reverse(lat, lon float64, language string) (*Address, error) {
-	u, err := url.Parse("https://maps.googleapis.com/maps/api/geocode/json")
-	if err != nil {
-		return nil, fmt.Errorf("google geocode: parse URL")
-	}
+	u, _ := url.Parse("https://maps.googleapis.com/maps/api/geocode/json")
 	q := u.Query()
 	q.Set("latlng", fmt.Sprintf("%f,%f", lat, lon))
 	q.Set("key", g.randomKey())
