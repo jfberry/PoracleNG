@@ -1,6 +1,7 @@
 package geocoding
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -120,14 +121,23 @@ func unknownAddress() *Address {
 // and concurrency control. Returns an Address with all fields populated, or
 // a minimal "Unknown" address on error. Never returns nil.
 func (g *Geocoder) GetAddress(lat, lon float64) *Address {
+	return g.GetAddressForLanguage(lat, lon, "")
+}
+
+// GetAddressForLanguage performs a reverse geocode lookup in the requested
+// language when the configured provider supports language-specific results.
+// The language code is part of the cache key so localized addresses never
+// bleed across users with different locales.
+func (g *Geocoder) GetAddressForLanguage(lat, lon float64, language string) *Address {
 	if g.config.ForwardOnly {
 		return unknownAddress()
 	}
+	language = normalizeLanguage(language)
 
 	// Cache lookup
 	var cacheKey string
 	if g.cache != nil && g.config.CacheDetail > 0 {
-		cacheKey = CacheKey(lat, lon, g.config.CacheDetail)
+		cacheKey = CacheKeyForLanguage(lat, lon, g.config.CacheDetail, language)
 		if addr, ok := g.cache.Get(cacheKey); ok {
 			g.statHits.Add(1)
 			metrics.GeocodeTotal.WithLabelValues("cache_hit").Inc()
@@ -164,7 +174,7 @@ func (g *Geocoder) GetAddress(lat, lon float64) *Address {
 	defer metrics.GeocodeInFlight.Dec()
 
 	start := time.Now()
-	addr, err := g.provider.Reverse(lat, lon)
+	addr, err := g.provider.Reverse(lat, lon, language)
 	duration := time.Since(start)
 
 	metrics.GeocodeDuration.Observe(duration.Seconds())
@@ -208,6 +218,10 @@ func (g *Geocoder) GetAddress(lat, lon float64) *Address {
 
 	log.Debugf("Geocode %f,%f → %s (%dms)", lat, lon, addr.Addr, duration.Milliseconds())
 	return addr
+}
+
+func normalizeLanguage(language string) string {
+	return strings.ToLower(strings.TrimSpace(language))
 }
 
 // Forward performs a forward geocode (address search). Results are not cached.

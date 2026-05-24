@@ -160,10 +160,35 @@ func normalizeTrailingSlash(url string) string {
 // enrichment map. This should be called BEFORE addStaticMap so that static map
 // templates can reference address fields.
 func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
+	m["geocodeLatitude"] = lat
+	m["geocodeLongitude"] = lon
 	if e.Geocoder == nil {
 		return
 	}
 	addr := e.Geocoder.GetAddress(lat, lon)
+	e.addAddressFields(m, addr)
+}
+
+// LocalizedGeoFields returns address fields localized for lang using the
+// geocode coordinates captured during base enrichment. These fields live in
+// per-language enrichment so they override the base address for each user
+// without changing DTS template field names.
+func (e *Enricher) LocalizedGeoFields(base map[string]any, lang string) map[string]any {
+	if e.Geocoder == nil || base == nil || lang == "" {
+		return nil
+	}
+	lat, okLat := floatFromAny(base["geocodeLatitude"])
+	lon, okLon := floatFromAny(base["geocodeLongitude"])
+	if !okLat || !okLon {
+		return nil
+	}
+	m := make(map[string]any, 16)
+	addr := e.Geocoder.GetAddressForLanguage(lat, lon, lang)
+	e.addAddressFields(m, addr)
+	return m
+}
+
+func (e *Enricher) addAddressFields(m map[string]any, addr *geocoding.Address) {
 	if addr == nil {
 		return
 	}
@@ -180,6 +205,23 @@ func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
 	m["neighbourhood"] = addr.Neighbourhood
 	m["suburb"] = addr.Suburb
 	m["formattedAddress"] = addr.FormattedAddress
+}
+
+func floatFromAny(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case int32:
+		return float64(n), true
+	default:
+		return 0, false
+	}
 }
 
 // Tile mode constants. Defined here to avoid import cycles with cmd/processor.

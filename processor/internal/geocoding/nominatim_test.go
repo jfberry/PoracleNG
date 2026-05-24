@@ -41,7 +41,7 @@ func TestNominatimReverseOCFMT(t *testing.T) {
 	defer srv.Close()
 
 	n := NewNominatim(srv.URL, 2*time.Second, true)
-	addr, err := n.Reverse(52.517, 13.389)
+	addr, err := n.Reverse(52.517, 13.389, "")
 	if err != nil {
 		t.Fatalf("Reverse: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestNominatimReverseCountryExcluded(t *testing.T) {
 	defer srv.Close()
 
 	n := NewNominatim(srv.URL, 2*time.Second, false)
-	addr, err := n.Reverse(52.517, 13.389)
+	addr, err := n.Reverse(52.517, 13.389, "")
 	if err != nil {
 		t.Fatalf("Reverse: %v", err)
 	}
@@ -123,11 +123,29 @@ func TestNominatimFallsBackToDisplayName(t *testing.T) {
 	defer srv.Close()
 
 	n := NewNominatim(srv.URL, 2*time.Second, true)
-	addr, err := n.Reverse(0, 0)
+	addr, err := n.Reverse(0, 0, "")
 	if err != nil {
 		t.Fatalf("Reverse: %v", err)
 	}
 	if addr.FormattedAddress == "" {
 		t.Errorf("FormattedAddress should fall back to display_name when components are empty, got empty")
+	}
+}
+
+func TestNominatimReverseSendsLanguage(t *testing.T) {
+	const body = `{"lat":"0","lon":"0","display_name":"Ort","address":{"country_code":"de"}}`
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query().Get("accept-language")
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	n := NewNominatim(srv.URL, 2*time.Second, true)
+	if _, err := n.Reverse(0, 0, "de"); err != nil {
+		t.Fatalf("Reverse: %v", err)
+	}
+	if got != "de" {
+		t.Errorf("accept-language=%q, want de", got)
 	}
 }

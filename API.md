@@ -1444,6 +1444,18 @@ All invasion grunt types.
 
 ## Geocoding
 
+Reverse geocoding for alert templates is locale-aware. The processor performs a base lookup as a fallback, then performs per-language lookups for the matched users' effective languages and stores those address fields in the per-language DTS layer. Existing DTS fields such as `{{addr}}`, `{{city}}`, `{{streetName}}`, and `{{formattedAddress}}` automatically resolve to the user's localized geocoder result when the provider supports it.
+
+Supported reverse-geocode language parameters:
+
+| Provider | Parameter |
+|----------|-----------|
+| Nominatim | `accept-language` |
+| Photon | `lang` |
+| Google | `language` |
+
+Reverse geocode cache keys include the language code for localized lookups, so cached German and English address results do not overwrite each other.
+
 ### GET /api/geocode/forward?q={query}
 
 Forward geocode a location name to coordinates.

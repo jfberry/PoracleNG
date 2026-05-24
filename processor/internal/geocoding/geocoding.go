@@ -43,7 +43,7 @@ type ForwardResult struct {
 
 // Provider performs geocoding API calls.
 type Provider interface {
-	Reverse(lat, lon float64) (*Address, error)
+	Reverse(lat, lon float64, language string) (*Address, error)
 	Forward(query string) ([]ForwardResult, error)
 }
 
