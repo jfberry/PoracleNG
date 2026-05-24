@@ -105,6 +105,11 @@ type adminDisabledRequest struct {
 	State *bool `json:"state"`
 }
 
+// languageRequest is the JSON body for POST /api/humans/{id}/language.
+type languageRequest struct {
+	Language string `json:"language"`
+}
+
 // HandleAdminDisabled returns the POST /api/humans/{id}/adminDisabled handler.
 func HandleAdminDisabled(deps *TrackingDeps) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -150,6 +155,63 @@ func HandleAdminDisabled(deps *TrackingDeps) gin.HandlerFunc {
 
 		reloadState(deps)
 		trackingJSONOK(c, map[string]any{"admin_disabled": adminDisable})
+	}
+}
+
+// HandleSetLanguage returns the POST /api/humans/{id}/language handler.
+func HandleSetLanguage(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		if id == "" {
+			trackingJSONError(c, http.StatusBadRequest, "missing id parameter")
+			return
+		}
+
+		human, err := deps.Humans.Get(id)
+		if err != nil {
+			log.Errorf("Humans API: lookup human for language: %s", err)
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
+			return
+		}
+		if human == nil {
+			trackingJSONError(c, http.StatusNotFound, "User not found")
+			return
+		}
+
+		var body languageRequest
+		if err := c.ShouldBindJSON(&body); err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		language := strings.ToLower(strings.TrimSpace(body.Language))
+		if language == "" {
+			trackingJSONError(c, http.StatusBadRequest, "language is required")
+			return
+		}
+		if deps.Config != nil && len(deps.Config.General.AvailableLanguages) > 0 {
+			matched := ""
+			for code := range deps.Config.General.AvailableLanguages {
+				if strings.ToLower(code) == language {
+					matched = code
+					break
+				}
+			}
+			if matched == "" {
+				trackingJSONError(c, http.StatusBadRequest, "language is not available")
+				return
+			}
+			language = matched
+		}
+
+		if err := deps.Humans.SetLanguage(id, language); err != nil {
+			log.Errorf("Humans API: set language: %s", err)
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
+			return
+		}
+
+		reloadState(deps)
+		trackingJSONOK(c, map[string]any{"language": language})
 	}
 }
 

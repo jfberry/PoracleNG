@@ -450,6 +450,20 @@ Toggle admin disable flag.
 {"state": true}
 ```
 
+### POST /api/humans/{id}/language
+
+Set a user's alert and bot-response language. If `[general.available_languages]` is configured, `language` must be one of those configured language codes; otherwise any non-empty language code is accepted.
+
+```bash
+curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
+  http://localhost:3030/api/humans/123456789/language \
+  -d '{"language": "de"}'
+```
+
+```json
+{"status": "ok", "language": "de"}
+```
+
 ### POST /api/humans/{id}/setLocation/{lat}/{lon}
 
 Update user location. Validates against area restrictions if area security is enabled.

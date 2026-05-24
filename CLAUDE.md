@@ -521,6 +521,7 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | POST | `/api/humans/{id}/start` | Enable a user |
 | POST | `/api/humans/{id}/stop` | Disable a user |
 | POST | `/api/humans/{id}/adminDisabled` | Toggle admin disable flag |
+| POST | `/api/humans/{id}/language` | Set user locale/language |
 | POST | `/api/humans/{id}/setLocation/{lat}/{lon}` | Update user location |
 | GET | `/api/humans/{id}/checkLocation/{lat}/{lon}` | Check if location is in allowed areas |
 | POST | `/api/humans/{id}/setAreas` | Set user's selected geofence areas |

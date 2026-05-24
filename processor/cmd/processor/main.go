@@ -474,6 +474,7 @@ func main() {
 	humans.POST("/:id/start", api.HandleStartHuman(trackingDeps))
 	humans.POST("/:id/stop", api.HandleStopHuman(trackingDeps))
 	humans.POST("/:id/adminDisabled", api.HandleAdminDisabled(trackingDeps))
+	humans.POST("/:id/language", api.HandleSetLanguage(trackingDeps))
 	humans.POST("/:id/switchProfile/:profile", api.HandleSwitchProfile(trackingDeps))
 	humans.POST("/:id/setLocation/:lat/:lon", api.HandleSetLocation(trackingDeps))
 	humans.POST("/:id/setAreas", api.HandleSetAreas(trackingDeps))
