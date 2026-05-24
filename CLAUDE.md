@@ -186,7 +186,8 @@ Enrichment is computed in three layers:
 - **Map URLs**: Google Maps, Apple Maps, Waze, RDM, ReactMap, RocketMad
 - **Icons**: Pokemon/raid/gym/weather icon URLs via uicons (with scheduled index refresh)
 - **Static map**: Tileserver tile URL (pregenerate or query params), with scanner DB stop lookups
-- **Geocoding**: Reverse geocode address via nominatim/google with pogreb on-disk + ttlcache in-memory cache
+- **Geocoding**: Reverse geocode address via nominatim/photon/google with pogreb on-disk + ttlcache in-memory cache.
+- **Localized addresses**: Per-language enrichment adds reverse geocoding for each matched user language (`accept-language` for Nominatim, `lang` for Photon, `language` for Google). Localized cache keys include the language code so address fields (`addr`, `city`, `streetName`, etc.) resolve in the user's locale when the provider supports it.
 
 **Per-language enrichment** (computed once per distinct language among matched users):
 - Translated pokemon/form/move/type/weather/team/generation names using pogo-translations identifier keys (`poke_1`, `move_14`, `form_46`, etc.)
@@ -432,6 +433,9 @@ Bare `!track everything` with no meaningful filters (IV, CP, level, PVP, type, g
 - `!nest`, `!lure`, `!gym`, `!fort`, `!invasion`, `!maxbattle` — type-specific filters
 - `!tracked` — list all active tracking, shows `[id:XX]` per rule for targeted removal
 - `!untrack id:45` or `!raid remove id:12` — remove a specific tracking rule by database UID (works for all tracking types)
+- `!untrack <type> [args]` — reroute to per-type remove handler (e.g. `!untrack raid id:12`, `!untrack egg level:5`, `!untrack invasion grunt:bug`); mirrors the `/untrack <subtype>` slash form. First token is matched against the canonical English type list (`raid`, `egg`, `quest`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`); other tokens fall through to the existing pokemon-untrack path.
+- `!mute <scope> <value> [duration:1h]` / `!unmute <scope> <value>` — silence alerts for a gym, pokemon species, area, pokestop, or station for a time-bounded window. `!mute everything [duration:1h]` self-mutes the user across all alert types. Per-type aliases work too (`!raid mute id:X` ≡ `!mute raid id:X`). Mutes are listed by `!tracked`. See the "Mute Infrastructure" section for store + matcher integration.
+- `!poracle-admin <group> [subcommand] [args]` (also `!pa`) — administrative umbrella for live operations, admin-only. Groups: `slash` (slash-command lifecycle), `reload` (dts/geofence/state), `status` (health snapshot), `ratelimit` (inspect/reset alert limits), `summary` (summary buffer), `cache` (geocoder stats/clear), `maintenance` (pause/resume delivery), `emoji` (emoji config inspection), `reconcile` (Discord role sync), `config` (effective config dump), `warnings` (captured WARN/ERROR log buffer). See `docs/admin-commands/` for design and smoke-test checklist.
 - `!poracle` — register/start
 - `!profile` — switch/create/delete profiles
 - `!area` — add/remove geofence areas
@@ -484,9 +488,8 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | GET | `/api/config/poracleWeb` | Server config for web UI |
 | GET | `/api/config/schema` | Config editor schema with field metadata |
 | GET | `/api/config/values` | Current merged config values |
-| POST | `/api/config/values` | Save config changes (writes to overrides.json) |
+| POST | `/api/config/values` | Save config changes (rewrites `config/config.toml` in place; previous version backed up to `config/backups/`) |
 | POST | `/api/config/validate` | Dry-run config validation |
-| POST | `/api/config/migrate` | Move web-editable values from config.toml to overrides.json |
 | POST | `/api/dts/render` | Render a DTS template with provided data |
 | GET | `/api/dts/templates` | DTS template entries with full content (editor) |
 | POST | `/api/dts/templates` | Save DTS template entries |
@@ -519,6 +522,7 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | POST | `/api/humans/{id}/start` | Enable a user |
 | POST | `/api/humans/{id}/stop` | Disable a user |
 | POST | `/api/humans/{id}/adminDisabled` | Toggle admin disable flag |
+| POST | `/api/humans/{id}/language` | Set user locale/language |
 | POST | `/api/humans/{id}/setLocation/{lat}/{lon}` | Update user location |
 | GET | `/api/humans/{id}/checkLocation/{lat}/{lon}` | Check if location is in allowed areas |
 | POST | `/api/humans/{id}/setAreas` | Set user's selected geofence areas |
@@ -532,7 +536,9 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | POST | `/api/profiles/{id}/update` | Update profile active_hours |
 | POST | `/api/profiles/{id}/copy/{from}/{to}` | Copy tracking rules between profiles |
 | DELETE | `/api/profiles/{id}/byProfileNo/{profile_no}` | Delete profile |
-| GET | `/health` | Health check |
+| GET | `/api/snapshots/{messageID}?target={id}` | Inspect a delivered-message snapshot (admin diagnostics; 503 if `[snapshots] enabled = false`) |
+| GET | `/api/dts/actions` | List registered button actions + their scopes/params (drives the config editor's button UI) |
+| GET | `/health` | Health check; returns `{status, version, capabilities}` where `capabilities` is a static feature map (`buttons`, `snapshots`, `autocreate`, `tomlDts`, `buttonResponseObject`) so clients can do explicit feature detection without probing endpoints |
 | GET | `/metrics` | Prometheus metrics |
 
 Tracking types: pokemon, raid, egg, quest, invasion, lure, nest, gym, fort, maxbattle.
@@ -574,17 +580,31 @@ Helper functions `IsClean(clean)` and `IsEdit(clean)` test individual bits. When
 
 The encounter tracker (`internal/tracker/encounter.go`) detects species, form, gender, encountered (non-IV → IV), and weather-boost shifts. The pokemon handler (`cmd/processor/pokemon.go`) partitions matched users by prior-message-existence and dispatches per-user: prior-tracked users get a `monster` (encounter event) or `monsterChanged` (post-encounter change) render with `OriginalView` populated; new-match users get a fresh `monster` render. Every pokemon `RenderJob` carries `ReplyKey = encounterID`; `delivery.MessageTracker` keeps an O(1) reply index, and senders inject `message_reference` / `reply_to_message_id` when a prior message exists for the (replyKey, target) pair. Edit mode (clean bit 2) takes priority when set. The `monsterChanged` template gains access to the prior sighting via `{{original.X}}` — see API.md for the field set.
 
+### Raid/egg RSVP change events
+
+Every raid and egg `RenderJob` carries `ReplyKey = "raidlife:{gymID}:{raidEnd}"`. Reply threading activates naturally for any destination where a prior message is tracked (i.e. the rule has the `clean` or `edit` bit set). Egg → raid → rsvpChanges messages chain under the same key because all three share the same gym ID and raid end time.
+
+**`rsvpChanges` template type** — optional compact template for RSVP-only updates. When an RSVP-change job is dispatched in non-edit mode, the render pool selects the `rsvpChanges` template type if one is installed; otherwise falls back to the full `raid` (or `egg`) template. The same type name is used for both raid and egg RSVP updates.
+
+**Edit mode exemption** — when the `edit` bit is set on the rule, RSVP-change jobs always use the full `raid`/`egg` template and edit the original message in-place. The `rsvpChanges` template is not consulted; editing a compact message would lose the original context.
+
+**Per-job TTH override** — for `rsvpChanges` renders, the clean-deletion TTH is the latest future RSVP timeslot in the current state, not `raid.End`. `RenderJob.OverrideCleanTTH` carries this unix timestamp; the render pool honors it via `tthFromUnix` when computing the `MessageTracker` TTL for the job.
+
 ## Template System (DTS)
 
 DTS (Data Template System) templates are Handlebars templates rendered by the Go processor using `jfberry/raymond` (fork of `mailgun/raymond/v2` with `FieldResolver` interface). Templates define per-platform message formats for each alert type.
 
 ### Template Loading
 
-Templates are loaded from `config/dts.json` (or `fallbacks/dts.json` as fallback), plus additional JSON files from `config/dts/` directory. Each template entry may use:
+Templates are loaded from `config/dts.json` (or `fallbacks/dts.json` as fallback), plus additional JSON and TOML files from `config/dts/`. Each template entry may use:
 - Inline `template` object — JSON that gets stringified after processing
+- Inline `template` string — raw Handlebars source. Common in TOML entries where multi-line `"""..."""` bodies land directly in this field; not double-encoded as JSON
 - `"templateFile": "dts/fort_update.txt"` — external file read as raw Handlebars text (NOT parsed as JSON). This allows non-JSON constructs like unquoted Handlebars expressions in value positions.
 - `"@include filename"` — include directive for shared partials (resolved from `config/dts/`)
 - Array values for multi-line `description` fields — joined into strings (only arrays of all strings; arrays containing objects like `embed.fields` are preserved)
+- `buttons[]` — operator-authored Discord button definitions attached to this template; see "Buttons" below. Empty when not opted in; effectively a no-op when `[snapshots] enabled = false`.
+
+**TOML format** (`internal/dts/toml_loader.go`, `toml_writer.go`): Files under `config/dts/*.toml` are loaded via BurntSushi/toml. The wire shape is an array of `[[entry]]` blocks with TOML-native nesting for `buttons` (`[[entry.buttons]]`) and multi-line bodies via `"""..."""`. The processor preserves the source format per entry (`sourceFormat = "json"` or `"toml"`) and re-encodes back to the original on save. TOML round-trips DO NOT preserve comments or operator-chosen key ordering — every save takes a pre-write backup into `config/backups/` before rewriting. The editor speaks JSON only; the round-trip is transparent to it.
 
 **DTS Partials** (`config/partials.json` or `fallbacks/partials.json`): Named Handlebars partials loaded per-template and registered with raymond before rendering. Reloaded on DTS reload (`/api/reload`). Partials are available in templates via `{{> partialName}}`.
 
@@ -641,6 +661,69 @@ Per-platform emoji resolution uses `config/emoji.json` (or `fallbacks/emoji.json
 Templates can wrap URLs in `<S< ... >S>` markers. After rendering, the processor scans for these markers and replaces each with a shortened URL via a configured Shlink instance. If Shlink is unavailable, the original URL is preserved.
 
 Templates receive the full view object with all enriched data. Common fields: `{{name}}`, `{{iv}}`, `{{cp}}`, `{{level}}`, `{{time}}` (disappear time), `{{tthh}}:{{tthm}}:{{tths}}` (time remaining), `{{addr}}` (address), `{{mapurl}}` (Google Maps), `{{imgUrl}}` (pokemon icon), `{{staticMap}}` (map tile).
+
+## Snapshot Store
+
+`internal/snapshots/` is an opt-in pogreb-backed store of fully-resolved enrichment views, keyed per delivered message. It's the substrate for any feature that needs to act on a message after delivery — interactive buttons today, late edits and drill-down UIs later. See `docs/buttons-and-snapshots/` and GitHub #108 for the full design.
+
+**Lifecycle**:
+1. **Write** — on every successful delivery, `FairQueue.processJob` (`internal/delivery/queue.go`) hands the rendered job back to the configured `SnapshotWriter`. `buildSnapshot` (`cmd/processor/render.go`) packages the alert/template identity, target metadata, tracking-rule UIDs, matched areas, and the four raw enrichment layers (`Enrichment`, `PerLang`, `PerUser`, `WebhookFields`) into a `Snapshot` keyed by `<target>:<messageID>`.
+2. **Read** — click handlers (and `GET /api/snapshots/<msgID>?target=<id>`) read by the same composite key.
+3. **Eviction** — primary path is the message-tracker delete callback (clean-deletion ⇒ snapshot delete). Secondary safety net: `sweep.go` walks the store every `sweep_interval_mins` and deletes records older than `max_age_days`.
+
+**On-disk layout** (`v2`): raw layers are stored separately so click-time renders rebuild a `LayeredView` via `Renderer.BuildLayeredViewFromSnapshot`. This preserves aliases, computed fields, and emoji resolution that a flattened view couldn't carry. `Snapshot.Lookup(key)` walks the layers in `LayeredView` priority for single-field reads (action handlers reading e.g. `gym_id`).
+
+**Composite Discord IDs**: Discord's `SentMessage.ID` is `<rateLimitKey>:<messageID>`. `delivery.ExtractMessageIDForSnapshot` splits the bare message ID before keying — applied at write, edit, and eviction-hook sites.
+
+**Config** (`[snapshots]`):
+- `enabled` (bool, default `false`) — when false, no writes happen and buttons render as no-ops even if configured.
+- `path` (default `config/.cache/snapshots`) — pogreb directory; relative paths resolve under `BaseDir`.
+- `max_age_days` (default 7) — safety-sweep grace period beyond per-snapshot TTL.
+- `sweep_interval_mins` (default 60) — sweep cadence.
+
+The store is a separate pogreb instance from the geocoder cache — different working sets, different sweep cadences.
+
+## Mute Infrastructure
+
+`internal/mute/` is the in-memory mute store (no DB persistence; mutes are typically short-lived). Each `mute.Entry` is `(HumanID, ScopeType, ScopeValue, ExpiresAt)`. Scopes: `gym`, `pokemon`, `pokestop`, `station`, `area`, `everything`, `tracking` (Phase 2.5 — accepted by validator but matcher enforcement deferred).
+
+**Matcher integration**: every per-type matcher (`internal/matching/*.go`) calls `filterMuted(matched, store, ev)` after `ValidateHumansGeneric`. Each handler constructs a `mute.Event` carrying the scope-specific identifiers it has (e.g. `GymID` for raid, `PokemonID` for monster, `Area` shared across the whole batch); `Store.Match` returns true if any active entry for that user matches. The check is O(active mutes per user) — typical usage is single-digit; a future index can land if production telemetry shows otherwise.
+
+**Sweep**: `internal/mute/sweep.go` runs every minute, scanning each user's slice in place (`kept := list[:0]`) to drop expired entries under a single write-lock acquisition.
+
+**User-facing surface**:
+- `!mute <scope-noun> <value> [duration:1h]` / `!unmute ...` — unified parser in `internal/bot/commands/mute.go` mirroring the `!untrack` / `<type> remove` duality.
+- `!mute everything [duration:1h]` — self-mute. Special-cased keyless scope.
+- `!<type> mute ...` aliases (e.g. `!raid mute id:X`) route through `RouteToMuteFromType`.
+- `!tracked` shows the active mutes alongside tracking rules.
+- Mute buttons on alerts (see "Button actions" below) write the same `mute.Entry` shape via `buttonactions.HandleMute`.
+
+Tracking-UID mutes (`!mute id:N` / `!mute raid id:N`) are documented in the design but rejected by the v1 parser — they need `MatchedUser.RuleUID` plumbing in the matcher first.
+
+## Button Actions
+
+`internal/buttons/` defines the operator-authored `Def` schema; `internal/buttonactions/` is the dispatch registry; `internal/discordbot/buttons.go` is the click handler.
+
+**Schema** (`buttons.Def`): `id` + `label` required. Exactly one dispatch field: `action` (registry name), `response_template_id` (DTS lookup against `type="buttonResponse"`), `response_template_inline` (raw Handlebars body), or `response_text` (plain text). `scope` required for `mute`/`unsubscribe` actions; `params` is a free-form bag passed verbatim to the handler. `applies_to` defaults to `["dm"]` for `mute`/`unsubscribe` and `["any"]` for everything else. `show_if` is a Handlebars expression evaluated at render time; `visible_to` is enforced server-side at click (Discord doesn't support per-user button visibility).
+
+**Registered actions** — discoverable at `GET /api/dts/actions`:
+- `mute` — writes a `mute.Entry`. Scope picks which Snapshot field is the identifier (e.g. `scope=gym` ⇒ reads `gym_id`). `params.duration_min` (default 60).
+- `unsubscribe` — currently scope=tracking only; placeholder for rule-UID-driven unsubscribe.
+- `redeliver` — DM the rendered alert to the clicker. v1 sends a stub acknowledgement; full re-render is a follow-up that needs per-type dispatcher entry points.
+- `render` — render a different template id (via `params.template_id`) as the click response.
+
+**Render-time emission** (`internal/dts/components.go`): per-message components are built from the matching template's `buttons[]`, filtered by `applies_to` against the destination type and by `show_if` against the resolved view. Custom IDs are stateless (`poracle:btn:<actionID>`); state lookup goes through the snapshot, not the click payload.
+
+**Click pipeline** (`onInteractionCreate` → `handleButtonClick` in `internal/discordbot/{interaction,buttons}.go`):
+1. Parse the `custom_id`, look up the snapshot by `(target, messageID)` — composite Discord IDs are split via `delivery.ExtractMessageIDForSnapshot`.
+2. Resolve the button against current DTS (operator may have removed it between alert and click).
+3. Check `applies_to`, `visible_to`, click cooldown.
+4. Dispatch to either `buttonactions.Registry.Dispatch` (action mode) or `Renderer.RenderButtonResponse` (response modes). Response renders go through `BuildLayeredViewFromSnapshot` so aliases / computed fields / emoji resolution match the original render.
+5. JSON-shaped responses are routed through `delivery.NormalizeAndExtractImage` and parsed into ephemeral `Embeds[]` (hex color coercion, embed length limits applied).
+
+**Failure modes** all surface as ephemeral messages: `"This alert has expired"` (snapshot miss), `"This button is no longer available"` (DTS entry gone), `"This button doesn't apply here"` (applies_to mismatch), `"This button isn't for you"` (visibility check), `"Slow down — try that again in a moment"` (cooldown).
+
+**Editor support** (`GET /api/dts/actions`): returns each action's `name`, `scopes`, `required_scope`, and known `params` so the editor can render the right per-action UI. See `docs/CONFIG-EDITOR-INSTRUCTIONS.md`.
 
 ## Translation / i18n
 

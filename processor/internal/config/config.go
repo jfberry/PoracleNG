@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/BurntSushi/toml"
-	log "github.com/sirupsen/logrus"
 )
 
 type Config struct {
@@ -34,6 +34,7 @@ type Config struct {
 	AI             AIConfig             `toml:"ai"`
 	Validation     ValidationConfig     `toml:"validation"`
 	Autocreate     AutocreateConfig     `toml:"autocreate"`
+	Snapshots      SnapshotsConfig      `toml:"snapshots"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
@@ -124,7 +125,7 @@ type SummariserConfig struct {
 // GeneralConfig holds settings from the [general] section used by the processor
 // for map URL generation and other enrichment features.
 type GeneralConfig struct {
-	Locale               string                   `toml:"locale"`                // default language code (e.g. "en", "pl")
+	Locale string `toml:"locale"` // default language code (e.g. "en", "pl")
 	// DefaultTimezone is the IANA timezone name used by the profile and
 	// summary schedulers when a human has lat/lon = 0/0 (no location
 	// set). Empty string means "fall back to the server's local time
@@ -258,6 +259,33 @@ type DiscordConfig struct {
 
 	// Internal computed maps (populated from TOML entries after load)
 	DelegatedAdministration DelegatedAdminConfig `toml:"-"`
+
+	// SlashCommands toggles the optional Discord application-commands surface.
+	// See DiscordSlashCommands for field-by-field semantics.
+	SlashCommands DiscordSlashCommands `toml:"slash_commands"`
+}
+
+// DiscordSlashCommands configures the optional Discord slash-command surface
+// under [discord.slash_commands]. The master switch is Enabled — when false,
+// no commands are registered regardless of the other fields.
+type DiscordSlashCommands struct {
+	Enabled          bool     `toml:"enabled"`
+	RegisterGlobally bool     `toml:"register_globally"`
+	Guilds           []string `toml:"guilds"`
+	// Enable optionally restricts which slash commands register. Empty/nil =
+	// all commands this build supports. Set explicitly only when the operator
+	// wants to limit the surface to a subset. Use the master Enabled = false
+	// flag to turn slash off entirely.
+	Enable []string `toml:"enable"`
+}
+
+// IsEnabled returns true when the given short slash name should be registered.
+// An empty Enable list means "all commands enabled".
+func (s DiscordSlashCommands) IsEnabled(name string) bool {
+	if len(s.Enable) == 0 {
+		return true
+	}
+	return slices.Contains(s.Enable, name)
 }
 
 // DelegatedAdminEntry represents a [[delegated_admins]] TOML array-of-tables entry.
@@ -475,6 +503,29 @@ type WeatherConfig struct {
 	SmartForecast           bool     `toml:"smart_forecast"`            // pull on demand if no data
 }
 
+// SnapshotsConfig controls the opt-in per-delivery snapshot store used by
+// interactive buttons and post-alert lookups. Disabled by default — no disk
+// usage and no buttons unless the operator explicitly opts in.
+//
+// See docs/buttons-and-snapshots/ and GitHub #108 for the design.
+type SnapshotsConfig struct {
+	Enabled bool `toml:"enabled"` // opt-in default
+
+	// Path defaults to <BaseDir>/config/.cache/snapshots/ when empty. May be
+	// an absolute path or relative to BaseDir.
+	Path string `toml:"path"`
+
+	// MaxAgeDays is the safety-sweep grace period: snapshots whose TTL
+	// expired more than this many days ago are deleted by the background
+	// sweeper. The normal per-message delete callback handles the steady
+	// state; this catches orphans from restart/crash timing. Default 7.
+	MaxAgeDays int `toml:"max_age_days"`
+
+	// SweepIntervalMins is the cadence at which the background sweeper
+	// runs. Not on the hot path — hourly is plenty. Default 60.
+	SweepIntervalMins int `toml:"sweep_interval_mins"`
+}
+
 type StatsConfig struct {
 	MinSampleSize       int     `toml:"min_sample_size"`
 	WindowHours         int     `toml:"window_hours"`
@@ -551,9 +602,9 @@ type CommunityConfig struct {
 }
 
 type AlertLimitsConfig struct {
-	TimingPeriod        int                  `toml:"timing_period"`
-	DMLimit             int                  `toml:"dm_limit"`
-	ChannelLimit        int                  `toml:"channel_limit"`
+	TimingPeriod int `toml:"timing_period"`
+	DMLimit      int `toml:"dm_limit"`
+	ChannelLimit int `toml:"channel_limit"`
 	// DM/Channel summary limits cap summary-mode dispatches per
 	// destination per timing_period independently of DMLimit /
 	// ChannelLimit. One fire counts as one (chunked summaries do
@@ -702,7 +753,20 @@ func Load(baseDir string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	configPath := filepath.Join(absDir, "config", "config.toml")
+	configDir := filepath.Join(absDir, "config")
+
+	// One-time migration: fold any existing overrides.json into
+	// config.toml so the steady-state model is a single file. Runs
+	// before the config.toml parse so the subsequent read sees the
+	// merged content with no extra work. Hard-fails on error — see
+	// MigrateOverridesIntoTOML for why continuing isn't safe.
+	//
+	// No-op on installs that never had overrides.json.
+	if err := MigrateOverridesIntoTOML(configDir); err != nil {
+		return nil, fmt.Errorf("config: migrate overrides.json: %w", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.toml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", configPath, err)
@@ -810,6 +874,14 @@ func Load(baseDir string) (*Config, error) {
 			IvColors:          []string{"#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"},
 			CheckRoleInterval: 6,
 			Activity:          "PoracleNG",
+			SlashCommands:     DiscordSlashCommands{
+				// All defaults are zero-value so an operator who flips
+				// Enabled=true doesn't accidentally pollute Discord's
+				// global namespace — they have to explicitly opt in via
+				// register_globally=true OR a guilds list. With both at
+				// their defaults, the dispatcher logs a warning and the
+				// sync no-ops.
+			},
 		},
 		AlertLimits: AlertLimitsConfig{
 			TimingPeriod:        240,
@@ -894,7 +966,6 @@ func Load(baseDir string) (*Config, error) {
 	}
 
 	// Resolve relative geofence paths and cache dir relative to config directory
-	configDir := filepath.Join(cfg.BaseDir, "config")
 	for i, p := range cfg.Geofence.Paths {
 		if !filepath.IsAbs(p) && !isHTTP(p) {
 			cfg.Geofence.Paths[i] = filepath.Join(configDir, p)
@@ -904,25 +975,10 @@ func Load(baseDir string) (*Config, error) {
 		cfg.Geofence.Koji.CacheDir = filepath.Join(configDir, cfg.Geofence.Koji.CacheDir)
 	}
 
-	// Apply JSON overrides (from config editor). LoadOverrides stays silent
-	// because logging isn't set up yet — main.go logs the status afterwards.
-	overrides, status, err := LoadOverrides(configDir)
-	if err != nil {
-		log.Warnf("config: %v", err)
-	} else if overrides != nil {
-		ApplyOverrides(cfg, overrides)
-		cfg.OverrideStatus = status
-		// Re-run computed fields after overrides
-		cfg.Discord.DelegatedAdministration = DelegatedAdminConfig{
-			ChannelTracking: buildDelegatedAdmin(cfg.Discord.DelegatedAdmins),
-			WebhookTracking: buildDelegatedAdmin(cfg.Discord.WebhookAdmins),
-			UserTracking:    cfg.Discord.UserTrackingAdmins,
-		}
-		cfg.Telegram.DelegatedAdministration = TelegramDelegatedAdminConfig{
-			ChannelTracking: buildDelegatedAdmin(cfg.Telegram.DelegatedAdmins),
-			UserTracking:    cfg.Telegram.UserTrackingAdmins,
-		}
-	}
+	// overrides.json was folded into config.toml by
+	// MigrateOverridesIntoTOML at the top of Load; the values are
+	// already in cfg via the normal config.toml parse above. Nothing
+	// more to apply here.
 
 	// Conditional defaults that depend on other config values
 	if cfg.PVP.PVPQueryMaxRank == 0 {
@@ -962,6 +1018,20 @@ func Load(baseDir string) (*Config, error) {
 	}
 	if cfg.Discord.ThreadKeepAliveIntervalHours > 168 {
 		cfg.Discord.ThreadKeepAliveIntervalHours = 168
+	}
+
+	// Snapshots defaults. Enabled is intentionally NOT defaulted to true —
+	// operators must opt in. The other knobs only matter when enabled.
+	if cfg.Snapshots.Path == "" {
+		cfg.Snapshots.Path = filepath.Join(cfg.BaseDir, "config", ".cache", "snapshots")
+	} else if !filepath.IsAbs(cfg.Snapshots.Path) {
+		cfg.Snapshots.Path = filepath.Join(cfg.BaseDir, cfg.Snapshots.Path)
+	}
+	if cfg.Snapshots.MaxAgeDays <= 0 {
+		cfg.Snapshots.MaxAgeDays = 7
+	}
+	if cfg.Snapshots.SweepIntervalMins <= 0 {
+		cfg.Snapshots.SweepIntervalMins = 60
 	}
 
 	// Validate autocreate config.

@@ -128,7 +128,8 @@ func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.Maxbattle
 		return nil
 	}
 
-	m := make(map[string]any, 10) // only translated fields; caller merges base + perLang
+	m := make(map[string]any, 20) // only translated fields; caller merges base + perLang
+	defer e.addLocalizedGeoResult(m, mb.Latitude, mb.Longitude, lang)
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)

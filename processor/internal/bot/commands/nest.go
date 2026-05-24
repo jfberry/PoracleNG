@@ -31,6 +31,10 @@ var nestParams = []bot.ParamDef{
 func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	if reply := RouteToMuteFromType(ctx, "nest", args); reply != nil {
+		return reply
+	}
+
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
@@ -49,6 +53,16 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 		return []bot.Reply{*warn}
+	}
+
+	// `remove id:N` is unambiguous — no pokemon required. Hoist this above the
+	// pokemon-resolution below so a UID-only removal (e.g. from /untrack nest)
+	// doesn't trip the "no pokemon" reply.
+	if parsed.HasKeyword("arg.remove") && len(parsed.RemoveUIDs) > 0 {
+		return removeByUIDs(ctx, ctx.Tracking.Nests, parsed.RemoveUIDs,
+			store.NestGetUID,
+			func(r *db.NestTrackingAPI) string { return ctx.RowText.NestRowText(tr, nestAPIToTracking(r)) },
+		)
 	}
 
 	common, block := parseCommonTrackFields(ctx, parsed, "nest")

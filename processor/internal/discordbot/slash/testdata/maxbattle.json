@@ -1,0 +1,96 @@
+{
+  "name": "maxbattle",
+  "description": "Track a max (Dynamax) battle",
+  "options": [
+    {
+      "type": 3,
+      "name": "pokemon",
+      "description": "Max battle pokemon",
+      "channel_types": null,
+      "required": true,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "level",
+      "description": "Battle level (1..6)",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Level 1",
+          "value": 1
+        },
+        {
+          "name": "Level 2",
+          "value": 2
+        },
+        {
+          "name": "Level 3",
+          "value": 3
+        },
+        {
+          "name": "Level 4",
+          "value": 4
+        },
+        {
+          "name": "Level 5",
+          "value": 5
+        },
+        {
+          "name": "Level 6",
+          "value": 6
+        }
+      ]
+    },
+    {
+      "type": 5,
+      "name": "gmax",
+      "description": "Gigantamax only",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "distance",
+      "description": "Alert radius in metres",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "clean",
+      "description": "Auto-delete the alert when the battle ends",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Yes",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "type": 3,
+      "name": "template",
+      "description": "DTS template name",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    }
+  ]
+}

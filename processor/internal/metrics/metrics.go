@@ -402,4 +402,53 @@ var (
 		Help:    "Validation hook latency",
 		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5},
 	})
+
+	// Snapshot store ([snapshots], opt-in per-delivery enrichment store).
+	// Metrics only surface meaningful values when [snapshots] enabled = true.
+	SnapshotWritesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_snapshot_writes_total",
+		Help: "Snapshot store write attempts by outcome (ok / fail)",
+	}, []string{"result"})
+
+	SnapshotReadsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_snapshot_reads_total",
+		Help: "Snapshot store read attempts by outcome (hit / miss / error)",
+	}, []string{"result"})
+
+	SnapshotSweepDeletionsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_snapshot_sweep_deletions_total",
+		Help: "Snapshots removed by the safety sweep (should be near-zero in healthy operation)",
+	})
+
+	SnapshotStoreEntries = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_snapshot_store_entries",
+		Help: "Approximate number of records currently in the snapshot store",
+	})
+
+	// In-memory mute store (#109). Mutes are user-configured suppressions
+	// that filter matched-users before render/dispatch.
+	MuteEntriesActive = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_mute_entries_active",
+		Help: "Active (non-expired) mute entries across all users",
+	})
+
+	MuteHitsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_mute_hits_total",
+		Help: "Matched-users dropped by filterMuted, labelled by destination type",
+	}, []string{"target_type"})
+
+	// Interactive button clicks (#109). Tracks operator-visible button
+	// usage by template — the main signal for whether buttons are
+	// earning their keep.
+	ButtonClicksTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_button_clicks_total",
+		Help: "Button clicks by alert template + button + outcome (ok / expired / unavailable / unauthorized / cooldown / error)",
+	}, []string{"template_type", "template_id", "button_id", "result"})
+
+	// Action handler outcomes — separate from click outcomes because a
+	// click may pass validation but the handler still errors.
+	ButtonActionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "poracle_button_actions_total",
+		Help: "Action handler outcomes (mute / unsubscribe / etc.) by result",
+	}, []string{"action", "result"})
 )

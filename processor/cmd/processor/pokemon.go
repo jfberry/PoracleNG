@@ -13,6 +13,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/pvp"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -106,6 +107,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		matched, matchedAreas := ps.pokemonMatcher.Match(processed, ps.stateMgr.Get())
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("pokemon", raw, matchedAreas, matched)
+		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokemonID: pokemon.PokemonID})
 
 		// Track when someone matches the new state OR an entry already
 		// exists (post-match changes still need diffing so prior
@@ -268,6 +270,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		// ReplyKey is set so enabling the flag later threads onto this send.
 		ps.renderCh <- RenderJob{
+			AlertType:         "pokemon",
 			IsPokemon:         true,
 			IsEncountered:     processed.Encountered,
 			Enrichment:        baseEnrichment,
@@ -314,6 +317,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 			return
 		}
 		ps.renderCh <- RenderJob{
+			AlertType:         "pokemon",
 			IsPokemon:         true,
 			IsEncountered:     in.isEncountered,
 			Enrichment:        in.enrichment,
@@ -335,6 +339,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 	if len(in.matched) > 0 {
 		for _, users := range groupByLanguage(in.matched, ps.cfg.General.Locale) {
 			ps.renderCh <- RenderJob{
+				AlertType:         "pokemon",
 				IsPokemon:         true,
 				IsEncountered:     in.isEncountered,
 				Enrichment:        in.enrichment,
@@ -374,6 +379,7 @@ func (ps *ProcessorService) dispatchPokemonAlert(in pokemonDispatchInput) {
 				orig = perLangOriginal[lang]
 			}
 			ps.renderCh <- RenderJob{
+				AlertType:         "pokemon",
 				IsPokemon:         true,
 				IsChange:          true,
 				IsEncountered:     in.isEncountered,

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 
@@ -18,13 +19,19 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/logbuffer"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
+	"github.com/pokemon/poracleng/processor/internal/ratelimit"
+	"github.com/pokemon/poracleng/processor/internal/buttonactions"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
+	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
 // BotDeps holds shared dependencies needed by both Discord and Telegram bots.
@@ -55,6 +62,9 @@ type BotDeps struct {
 	// SummarySchedules backs the !summary command's CRUD operations.
 	// nil disables the command (e.g. when quest_summary_enabled=false).
 	SummarySchedules store.SummaryScheduleStore
+	// SummaryBuffer is the raw summary buffer, used by !poracle-admin summary
+	// subcommands (list/show/fire). May be nil in test contexts.
+	SummaryBuffer *tracker.SummaryBuffer
 	// SummaryBufferCount returns how many entries are currently buffered
 	// for (humanID, alertType). Used by !summary to show status.
 	// nil treated as zero by the command.
@@ -68,6 +78,125 @@ type BotDeps struct {
 	// no scanner is configured — commands check and reject `gym:`
 	// usage with a clear error.
 	Scanner scanner.Scanner
+
+	// RecentActivity tracks recently-seen pokemon/items/grunts (6h TTL)
+	// used by slash autocomplete to prioritise currently-active entities.
+	// Always non-nil; populated by webhook handlers post-dedup.
+	RecentActivity *tracker.RecentActivity
+
+	// MuteStore is the in-memory per-user alert-suppression store (#109).
+	// Used by !mute / !unmute commands and the augmented !tracked output.
+	// Always non-nil at runtime; tests may pass nil and commands must
+	// handle that as "feature unavailable".
+	MuteStore *mute.Store
+
+	// SnapshotStore is the opt-in per-delivery enrichment store (#108).
+	// Nil when [snapshots] enabled = false. The Discord InteractionCreate
+	// handler reads from it to resolve clicked buttons; commands that
+	// don't touch buttons can ignore it.
+	SnapshotStore snapshots.Store
+
+	// ButtonActions is the dispatch registry for button-triggered state
+	// changes (#109). Nil when buttons aren't wired (eg snapshots
+	// disabled or test contexts).
+	ButtonActions *buttonactions.Registry
+
+	// DTSRenderer is the compiled-template renderer. Used by the button
+	// click handler's response-template rendering hook. nil during DTS
+	// init failure — buttons fall back to a clear "not wired" reply.
+	DTSRenderer *dts.Renderer
+
+	// Admin reload functions — wired by ProcessorService in main.go.
+	// Called directly by !poracle-admin reload subcommands; they bypass
+	// triggerReload's 500ms debouncer on purpose (operator typed it).
+	ReloadDTS      func() (int, error) // returns template count
+	ReloadGeofence func() error        // calls state.LoadWithGeofences
+	ReloadState    func() error        // calls state.Load directly
+	// EmojiReload reloads config/emoji.json and returns the key count.
+	// nil when DTS renderer is not configured.
+	EmojiReload func() (int, error)
+
+	// EmojiOperation runs an emoji upload + emoji.json generation against
+	// the caller's Discord guild. With upload=false it dumps the current
+	// guild state as emoji.json (no writes). With upload+overwrite it
+	// deletes and re-uploads existing emojis. Streams progress messages
+	// directly to channelID via the gateway session; returns the final
+	// emoji.json attachment in the reply slice. nil on Telegram-only deploys
+	// or when the Discord bot is not configured.
+	EmojiOperation func(channelID, guildID string, upload, overwrite bool) []Reply
+
+	// Phase 2 introspection APIs — used by admin status/diagnostic subcommands.
+
+	// WebhookRate returns a point-in-time snapshot of webhook arrival rates.
+	// Always non-nil in production.
+	WebhookRate func() webhook.RateSnapshot
+
+	// AlertLimiter is the per-destination alert rate limiter.
+	// Always non-nil in production.
+	AlertLimiter *ratelimit.Limiter
+
+	// DiscordRate returns a point-in-time snapshot of Discord API rate-limit
+	// state. Always non-nil in production; returns a zero-value snapshot
+	// when Discord delivery is not configured.
+	DiscordRate func() delivery.DiscordRateSnapshot
+
+	// TelegramRate returns a point-in-time snapshot of Telegram API rate-limit
+	// state. Always non-nil in production; returns a zero-value snapshot
+	// when Telegram delivery is not configured.
+	TelegramRate func() delivery.TelegramRateSnapshot
+
+	// GeocoderStats returns a point-in-time snapshot of geocoder cache health.
+	// Always non-nil in production; returns a zero-value snapshot when no
+	// geocoder is configured.
+	GeocoderStats func() geocoding.CacheStats
+
+	// GeocoderClear drops all entries from the in-memory geocoder cache layer.
+	// Returns the number of entries cleared. Always non-nil in production.
+	GeocoderClear func() int
+
+	// Reconciler immediately reconciles a single Discord user's role membership.
+	// Always non-nil. Returns discordbot.ErrReconciliationDisabled when Discord
+	// reconciliation is not configured (Telegram-only deploys, or check_role=false).
+	// Use errors.Is(err, discordbot.ErrReconciliationDisabled) to detect.
+	Reconciler func(userID string) error
+
+	// RunReconcile runs the full Discord role + channel reconciliation immediately
+	// instead of waiting for the periodic timer. Always non-nil. Returns
+	// discordbot.ErrReconciliationDisabled when Discord reconciliation is not
+	// configured. Use errors.Is(err, discordbot.ErrReconciliationDisabled) to detect.
+	RunReconcile func() error
+
+	// LogBuffer holds the in-memory startup + rolling log capture.
+	// Always non-nil in production.
+	LogBuffer *logbuffer.Buffer
+
+	// ProcessStart is the time at which the processor's main service
+	// was constructed. Surfaced for uptime display in !poracle-admin status.
+	// Zero value is acceptable (uptime will be reported as 0).
+	ProcessStart time.Time
+
+	// Slash command lifecycle — used by !poracle-admin slash subcommands.
+	// All five are always non-nil in production. When slash is not
+	// configured (Discord disabled, or [discord.slash_commands] enabled=false)
+	// the closures return slash.ErrSlashNotConfigured.
+	//
+	// SlashStatus reads the on-disk fingerprint cache; all other operations
+	// mutate Discord via the slash Dispatcher.
+	SlashSync        func() error
+	SlashForceResync func() error
+	SlashClearGlobal func() error
+	SlashClearGuild  func(guildID string) error
+	SlashStatus      func() (global SlashScope, guilds []SlashScope, err error)
+}
+
+// SlashScope is a per-scope snapshot of slash registration state.
+// "global" or a specific guild ID for Name.
+// Defined here (not in internal/discordbot/slash) to avoid an import cycle:
+// the slash package already imports internal/bot.
+type SlashScope struct {
+	Name         string    // "global" or guild ID
+	LastSyncedAt time.Time // zero if never synced
+	Fingerprint  string    // first 8 chars, or empty if never synced
 }
 
 // TestTarget specifies who to deliver a test alert to.
@@ -98,6 +227,50 @@ type Command interface {
 	Run(ctx *CommandContext, args []string) []Reply
 }
 
+// AdminDeps groups the function pointers and state that only the
+// !poracle-admin subgroups (and admin-gated commands like !broadcast)
+// reach for. Keeping it as a single field on CommandContext stops the
+// ~20 admin-only entries from polluting the user-facing command surface.
+type AdminDeps struct {
+	Dispatcher   *delivery.Dispatcher
+	WebhookRate  func() webhook.RateSnapshot
+	AlertLimiter *ratelimit.Limiter
+	DiscordRate  func() delivery.DiscordRateSnapshot
+	TelegramRate func() delivery.TelegramRateSnapshot
+
+	GeocoderStats func() geocoding.CacheStats
+	GeocoderClear func() int
+
+	Reconciler   func(userID string) error
+	RunReconcile func() error
+
+	LogBuffer *logbuffer.Buffer
+
+	SlashSync        func() error
+	SlashForceResync func() error
+	SlashClearGlobal func() error
+	SlashClearGuild  func(guildID string) error
+	SlashStatus      func() (global SlashScope, guilds []SlashScope, err error)
+
+	// Admin reload functions — live-ops commands only.
+	// Each bypasses the debouncer and executes synchronously.
+	ReloadDTS      func() (int, error) // returns template count
+	ReloadGeofence func() error
+	ReloadState    func() error
+
+	// EmojiReload reloads config/emoji.json and returns the key count.
+	// nil when DTS renderer is not configured.
+	EmojiReload func() (int, error)
+
+	// EmojiOperation — see BotDeps.EmojiOperation.
+	EmojiOperation func(channelID, guildID string, upload, overwrite bool) []Reply
+
+	// ProcessStart is the time at which the processor's main service
+	// was constructed. Surfaced for uptime display in !poracle-admin status.
+	// Zero value is acceptable (uptime will be reported as 0).
+	ProcessStart time.Time
+}
+
 // CommandContext carries user info, permissions, and injected dependencies.
 // It is built fresh for each command invocation by the bot or API handler.
 type CommandContext struct {
@@ -108,11 +281,23 @@ type CommandContext struct {
 	ChannelID string
 	GuildID   string // Discord only, empty for Telegram
 	IsDM      bool
+	IsSlash   bool // Discord slash command invocation (vs. text message)
 
 	// Permissions (resolved before command runs)
 	IsAdmin          bool
 	IsCommunityAdmin bool
+	IsRegistered     bool
 	Permissions      Permissions
+
+	// UserRoles is the list of Discord role IDs the invoking user
+	// holds. Populated by the discordbot host before dispatch —
+	// channel-context messages take ic.Member.Roles; DM-context
+	// messages union roles across cfg.Discord.Guilds (matches
+	// PoracleJS's getUserRoles behaviour). Telegram leaves this nil.
+	// Used by command handlers that need role-aware permission checks
+	// beyond the top-level command_security gate (e.g. cmd.track's
+	// "pvp" feature check, cmd.gym's "specificgym" pin check).
+	UserRoles []string
 
 	// User state (loaded from DB before command runs)
 	Language    string
@@ -132,13 +317,13 @@ type CommandContext struct {
 	DB            *sqlx.DB // DEPRECATED — use Humans/Tracking stores. Kept during migration.
 	Humans        store.HumanStore
 	Tracking      *store.TrackingStores
+	MuteStore     *mute.Store
 	Config        *config.Config
 	StateMgr      *state.Manager
 	GameData      *gamedata.GameData
 	Translations  *i18n.Bundle
 	Geofence      *geofence.SpatialIndex
 	Fences        []geofence.Fence
-	Dispatcher    *delivery.Dispatcher
 	RowText       *rowtext.Generator
 	Resolver      *PokemonResolver
 	ArgMatcher    *ArgMatcher
@@ -154,6 +339,9 @@ type CommandContext struct {
 	// SummarySchedules backs the !summary command's CRUD ops. nil disables
 	// the !summary command when the feature flag is off.
 	SummarySchedules store.SummaryScheduleStore
+	// SummaryBuffer is the raw buffer used by !poracle-admin summary subcommands.
+	// May be nil in test contexts or when quest summaries are disabled.
+	SummaryBuffer *tracker.SummaryBuffer
 	// SummaryBufferCount returns buffered entry count for status display.
 	// nil treated as zero by the command.
 	SummaryBufferCount func(humanID, alertType string) int
@@ -167,6 +355,11 @@ type CommandContext struct {
 	// Reload trigger — called after tracking mutations
 	ReloadFunc func()
 
+	// Admin holds the function pointers and state that only admin subgroup
+	// commands reach for. nil in non-admin contexts or test stubs that don't
+	// exercise admin paths.
+	Admin *AdminDeps
+
 	// PostRegister, when set, is invoked after !poracle creates a new
 	// human row. The platform sets this to its single-user reconciliation
 	// hook so a freshly-registered user has their community_membership /
@@ -177,6 +370,68 @@ type CommandContext struct {
 
 	// languageHint from available_languages (set by bot when command uses a language variant)
 	languageHint string
+}
+
+// NewCommandContext returns a CommandContext seeded with every BotDeps
+// field, plus the static config pointer. Every command run on every
+// surface (text bot, slash bot, Telegram bot) is constructed through
+// here so additions to BotDeps reach all surfaces in one place.
+// Returns an empty CommandContext when deps is nil.
+func NewCommandContext(deps *BotDeps) *CommandContext {
+	if deps == nil {
+		return &CommandContext{}
+	}
+	return &CommandContext{
+		Config:             deps.Cfg,
+		DB:                 deps.DB,
+		Humans:             deps.Humans,
+		Tracking:           deps.Tracking,
+		MuteStore:          deps.MuteStore,
+		StateMgr:           deps.StateMgr,
+		GameData:           deps.GameData,
+		Translations:       deps.Translations,
+		RowText:            deps.RowText,
+		Resolver:           deps.Resolver,
+		ArgMatcher:         deps.ArgMatcher,
+		Geocoder:           deps.Geocoder,
+		StaticMap:          deps.StaticMap,
+		Weather:            deps.Weather,
+		Stats:              deps.Stats,
+		DTS:                deps.DTS,
+		Emoji:              deps.Emoji,
+		NLP:                deps.NLPParser,
+		TestProcessor:      deps.TestProcessor,
+		Registry:           deps.Registry,
+		Scanner:            deps.Scanner,
+		ReloadFunc:         deps.ReloadFunc,
+		SummarySchedules:   deps.SummarySchedules,
+		SummaryBuffer:      deps.SummaryBuffer,
+		SummaryBufferCount: deps.SummaryBufferCount,
+		SummaryDispatch:    deps.SummaryDispatch,
+		Admin: &AdminDeps{
+			Dispatcher:       deps.Dispatcher,
+			WebhookRate:      deps.WebhookRate,
+			AlertLimiter:     deps.AlertLimiter,
+			DiscordRate:      deps.DiscordRate,
+			TelegramRate:     deps.TelegramRate,
+			GeocoderStats:    deps.GeocoderStats,
+			GeocoderClear:    deps.GeocoderClear,
+			Reconciler:       deps.Reconciler,
+			RunReconcile:     deps.RunReconcile,
+			LogBuffer:        deps.LogBuffer,
+			SlashSync:        deps.SlashSync,
+			SlashForceResync: deps.SlashForceResync,
+			SlashClearGlobal: deps.SlashClearGlobal,
+			SlashClearGuild:  deps.SlashClearGuild,
+			SlashStatus:      deps.SlashStatus,
+			ReloadDTS:        deps.ReloadDTS,
+			ReloadGeofence:   deps.ReloadGeofence,
+			ReloadState:      deps.ReloadState,
+			EmojiReload:      deps.EmojiReload,
+			EmojiOperation:   deps.EmojiOperation,
+			ProcessStart:     deps.ProcessStart,
+		},
+	}
 }
 
 // DefaultTemplate returns the template to store when the user doesn't specify one.

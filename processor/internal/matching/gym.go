@@ -76,6 +76,7 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 			Template:        g.Template,
 			Clean:           g.Clean,
 			Ping:            g.Ping,
+			UID:             g.UID,
 			IsSpecificMatch: isSpecificMatch,
 		})
 	}
@@ -202,6 +203,7 @@ func validateHumansForGym(
 			Bearing:           int(math.Round(bearing)),
 			CardinalDirection: CardinalDirection(bearing),
 			TrackDistance:     td.Distance,
+			RuleUID:           td.UID,
 		})
 	}
 	return result

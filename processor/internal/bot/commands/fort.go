@@ -37,6 +37,10 @@ var fortParams = []bot.ParamDef{
 func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	if reply := RouteToMuteFromType(ctx, "fort", args); reply != nil {
+		return reply
+	}
+
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 

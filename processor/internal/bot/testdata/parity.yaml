@@ -1,0 +1,825 @@
+# Parity fixtures for slash↔text command coverage.
+#
+# Each entry pins a (slash invocation, text command, expected tokens) triple.
+# The parity test runs every fixture through the slash mapper and asserts the
+# produced token slice matches expected_tokens (order-insensitive). The
+# coverage meta-test asserts every command + option in slash.AllDefinitions
+# is exercised by at least one fixture here.
+#
+# Encoding rules for `slash.options`:
+#   foo: value             — flat top-level option
+#   sub.opt: value         — sub-command "sub" with child option "opt"
+#   sub: _bare             — bare sub-command (no children)
+#
+# Type inference (YAML native):
+#   42  → integer
+#   "x" → string
+#   true → boolean
+#
+# Keep one fixture per option (at minimum) so additions to mappers force
+# additions here.
+
+# -----------------------------------------------------------------------------
+# /version, /tracked, /info — read-only, no options
+# -----------------------------------------------------------------------------
+- name: version-no-options
+  description: /version has no options
+  command: cmd.version
+  slash:
+    name: version
+    options: {}
+  text: "!version"
+  expected_tokens: []
+
+- name: tracked-no-options
+  description: /tracked has no options
+  command: cmd.tracked
+  slash:
+    name: tracked
+    options: {}
+  text: "!tracked"
+  expected_tokens: []
+
+- name: info-pokemon
+  description: /info pokemon name:pikachu → !info pikachu (fall-through to pokemonInfo)
+  command: cmd.info
+  slash:
+    name: info
+    options:
+      pokemon.name: pikachu
+  text: "!info pikachu"
+  expected_tokens: [pikachu]
+
+- name: info-rarity
+  description: /info rarity — bare sub-command, matches msg.info.sub.rarity
+  command: cmd.info
+  slash:
+    name: info
+    options:
+      rarity: _bare
+  text: "!info rarity"
+  expected_tokens: [rarity]
+
+- name: info-shiny
+  description: /info shiny — bare sub-command, matches msg.info.sub.shiny
+  command: cmd.info
+  slash:
+    name: info
+    options:
+      shiny: _bare
+  text: "!info shiny"
+  expected_tokens: [shiny]
+
+- name: info-weather
+  description: /info weather — bare sub-command, falls back to user's saved location
+  command: cmd.info
+  slash:
+    name: info
+    options:
+      weather: _bare
+  text: "!info weather"
+  expected_tokens: [weather]
+
+- name: info-weather-coords
+  description: /info weather coords:51.5,-0.1 → !info weather 51.5,-0.1
+  command: cmd.info
+  slash:
+    name: info
+    options:
+      weather.coords: "51.5,-0.1"
+  text: "!info weather 51.5,-0.1"
+  expected_tokens: [weather, "51.5,-0.1"]
+
+- name: start-no-options
+  description: /start resumes alert delivery — no options
+  command: cmd.start
+  slash:
+    name: start
+    options: {}
+  text: "!start"
+  expected_tokens: []
+
+- name: stop-no-options
+  description: /stop pauses alert delivery — no options
+  command: cmd.stop
+  slash:
+    name: stop
+    options: {}
+  text: "!stop"
+  expected_tokens: []
+
+# -----------------------------------------------------------------------------
+# /help — optional topic
+# -----------------------------------------------------------------------------
+- name: help-no-topic
+  description: /help with no topic returns empty tokens (general help)
+  command: cmd.help
+  slash:
+    name: help
+    options: {}
+  text: "!help"
+  expected_tokens: []
+
+- name: help-with-topic
+  description: /help topic is lowercased
+  command: cmd.help
+  slash:
+    name: help
+    options:
+      topic: "Track"
+  text: "!help track"
+  expected_tokens: [track]
+
+# -----------------------------------------------------------------------------
+# /language — optional code
+# -----------------------------------------------------------------------------
+- name: language-show-current
+  description: /language with no code displays current language
+  command: cmd.language
+  slash:
+    name: language
+    options: {}
+  text: "!language"
+  expected_tokens: []
+
+- name: language-set
+  description: /language sets the chosen locale
+  command: cmd.language
+  slash:
+    name: language
+    options:
+      code: "de"
+  text: "!language de"
+  expected_tokens: [de]
+
+# -----------------------------------------------------------------------------
+# /track — pokemon is required; all other options optional
+# -----------------------------------------------------------------------------
+- name: track-pokemon-only
+  description: Minimum-viable /track invocation
+  command: cmd.track
+  slash:
+    name: track
+    options:
+      pokemon: pikachu
+  text: "!track pikachu"
+  expected_tokens: [pikachu]
+
+- name: track-pokemon-iv
+  description: /track with iv filter
+  command: cmd.track
+  slash:
+    name: track
+    options:
+      pokemon: pikachu
+      iv: "95"
+  text: "!track pikachu iv95"
+  expected_tokens: [pikachu, iv95]
+
+- name: track-all-options
+  description: /track exercising every option to keep coverage honest
+  command: cmd.track
+  slash:
+    name: track
+    options:
+      pokemon: "25"
+      iv: "100"
+      distance: 250
+      great_rank: 5
+      ultra_rank: 10
+      little_rank: 7
+      clean: true
+      template: pvp
+      form: alola
+      size: xl
+  text: "!track 25 iv100 great5 ultra10 little7 d250 clean template:pvp form:alola xl"
+  expected_tokens: ["25", iv100, great5, ultra10, little7, d250, clean, "template:pvp", "form:alola", xl]
+
+# -----------------------------------------------------------------------------
+# /raid — boss XOR level
+# -----------------------------------------------------------------------------
+- name: raid-boss
+  description: /raid with named boss
+  command: cmd.raid
+  slash:
+    name: raid
+    options:
+      boss: mewtwo
+  text: "!raid mewtwo"
+  expected_tokens: [mewtwo]
+
+- name: raid-level-all-options
+  description: /raid with level + team + distance + clean + template (covers all non-boss options)
+  command: cmd.raid
+  slash:
+    name: raid
+    options:
+      level: "5"
+      team: 1
+      distance: 500
+      clean: true
+      template: rich
+  text: "!raid 5 mystic d500 clean template:rich"
+  expected_tokens: ["5", mystic, d500, clean, "template:rich"]
+
+# -----------------------------------------------------------------------------
+# /egg — level required, plus optional team/distance/clean/template
+# -----------------------------------------------------------------------------
+- name: egg-level-only
+  description: /egg with just level
+  command: cmd.egg
+  slash:
+    name: egg
+    options:
+      level: "5"
+  text: "!egg 5"
+  expected_tokens: ["5"]
+
+- name: egg-all-options
+  description: /egg exercising team/distance/clean/template
+  command: cmd.egg
+  slash:
+    name: egg
+    options:
+      level: "5"
+      team: 2
+      distance: 750
+      clean: true
+      template: short
+  text: "!egg 5 valor d750 clean template:short"
+  expected_tokens: ["5", valor, d750, clean, "template:short"]
+
+# -----------------------------------------------------------------------------
+# /quest — mutually exclusive reward types
+# -----------------------------------------------------------------------------
+- name: quest-pokemon-reward
+  description: /quest with pokemon reward
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      pokemon: bulbasaur
+  text: "!quest bulbasaur"
+  expected_tokens: [bulbasaur]
+
+- name: quest-item-reward
+  description: /quest with item reward (bare name — matchItemName resolves it)
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      item: "golden razz berry"
+  text: "!quest golden razz berry"
+  expected_tokens: ["golden razz berry"]
+
+- name: quest-stardust-all-extras
+  description: /quest stardust + distance + clean + template (covers tail options)
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      stardust: 1000
+      distance: 500
+      clean: true
+      template: dust
+  text: "!quest stardust:1000 d500 clean template:dust"
+  expected_tokens: ["stardust:1000", d500, clean, "template:dust"]
+
+- name: quest-candy-reward
+  description: /quest with candy reward
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      candy: pikachu
+  text: "!quest candy:pikachu"
+  expected_tokens: ["candy:pikachu"]
+
+- name: quest-candy-min-amount
+  description: /quest candy + min_amount — Amount filter on the matcher (q.Amount > 0)
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      candy: pikachu
+      min_amount: 5
+  text: "!quest candy:pikachu amount:5"
+  expected_tokens: ["candy:pikachu", "amount:5"]
+
+- name: quest-mega-energy-reward
+  description: /quest with mega energy reward
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      mega_energy: charizard
+  text: "!quest energy:charizard"
+  expected_tokens: ["energy:charizard"]
+
+- name: quest-summary
+  description: /quest with the summary flag set — match buffered for batch dispatch
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      pokemon: pikachu
+      summary: "yes"
+  text: "!quest pikachu summary"
+  expected_tokens: [pikachu, summary]
+
+# xl_candy is no longer a /quest option — matching/quest.go and
+# enrichment/quest.go have no XL-candy reward type. Removed from the slash
+# surface; the parity test no longer exercises it.
+
+# -----------------------------------------------------------------------------
+# /invasion
+# -----------------------------------------------------------------------------
+- name: invasion-grunt-only
+  description: /invasion minimum (grunt_type only)
+  command: cmd.invasion
+  slash:
+    name: invasion
+    options:
+      grunt_type: fire
+  text: "!invasion fire"
+  expected_tokens: [fire]
+
+- name: invasion-all-options
+  description: /invasion with gender/distance/clean/template
+  command: cmd.invasion
+  slash:
+    name: invasion
+    options:
+      grunt_type: water
+      gender: female
+      distance: 1000
+      clean: true
+      template: short
+  text: "!invasion water female d1000 clean template:short"
+  expected_tokens: [water, female, d1000, clean, "template:short"]
+
+# -----------------------------------------------------------------------------
+# /incident — pokestop events (Kecleon, Gold Pokestop, Showcase…). Routes
+# through cmd.invasion via the cmd.incident alias on the registry.
+# -----------------------------------------------------------------------------
+- name: incident-type-only
+  description: /incident minimum (type only)
+  command: cmd.incident
+  slash:
+    name: incident
+    options:
+      type: kecleon
+  text: "!incident kecleon"
+  expected_tokens: [kecleon]
+
+- name: incident-all-options
+  description: /incident with distance/clean/template
+  command: cmd.incident
+  slash:
+    name: incident
+    options:
+      type: showcase
+      distance: 250
+      clean: true
+      template: short
+  text: "!incident showcase d250 clean template:short"
+  expected_tokens: [showcase, d250, clean, "template:short"]
+
+# -----------------------------------------------------------------------------
+# /lure
+# -----------------------------------------------------------------------------
+- name: lure-glacial
+  description: /lure minimum (lure_type only)
+  command: cmd.lure
+  slash:
+    name: lure
+    options:
+      lure_type: glacial
+  text: "!lure glacial"
+  expected_tokens: [glacial]
+
+- name: lure-all-options
+  description: /lure with distance/clean/template
+  command: cmd.lure
+  slash:
+    name: lure
+    options:
+      lure_type: rainy
+      distance: 250
+      clean: true
+      template: clean
+  text: "!lure rainy d250 clean template:clean"
+  expected_tokens: [rainy, d250, clean, "template:clean"]
+
+# -----------------------------------------------------------------------------
+# /nest
+# -----------------------------------------------------------------------------
+- name: nest-pokemon-only
+  description: /nest minimum (pokemon only)
+  command: cmd.nest
+  slash:
+    name: nest
+    options:
+      pokemon: pikachu
+  text: "!nest pikachu"
+  expected_tokens: [pikachu]
+
+- name: nest-all-options
+  description: /nest with min_spawn_avg/distance/clean/template
+  command: cmd.nest
+  slash:
+    name: nest
+    options:
+      pokemon: ditto
+      min_spawn_avg: 5
+      distance: 500
+      clean: true
+      template: rich
+  text: "!nest ditto minspawn5 d500 clean template:rich"
+  expected_tokens: [ditto, minspawn5, d500, clean, "template:rich"]
+
+# -----------------------------------------------------------------------------
+# /maxbattle
+# -----------------------------------------------------------------------------
+- name: maxbattle-pokemon-only
+  description: /maxbattle minimum (pokemon only)
+  command: cmd.maxbattle
+  slash:
+    name: maxbattle
+    options:
+      pokemon: charizard
+  text: "!maxbattle charizard"
+  expected_tokens: [charizard]
+
+- name: maxbattle-all-options
+  description: /maxbattle with level/gmax/distance/clean/template
+  command: cmd.maxbattle
+  slash:
+    name: maxbattle
+    options:
+      pokemon: charizard
+      level: 6
+      gmax: true
+      distance: 1000
+      clean: true
+      template: short
+  text: "!maxbattle charizard level6 gmax d1000 clean template:short"
+  expected_tokens: [charizard, level6, gmax, d1000, clean, "template:short"]
+
+# -----------------------------------------------------------------------------
+# /gym — no required options; everything optional
+# -----------------------------------------------------------------------------
+- name: gym-team-instinct
+  description: /gym team filter
+  command: cmd.gym
+  slash:
+    name: gym
+    options:
+      team: 3
+  text: "!gym instinct"
+  expected_tokens: [instinct]
+
+- name: gym-all-options
+  description: /gym slot_changes + battle_changes + distance + clean + template
+  command: cmd.gym
+  slash:
+    name: gym
+    options:
+      team: 0
+      slot_changes: true
+      battle_changes: true
+      distance: 250
+      clean: true
+      template: gym
+  text: "!gym harmony slot_changes battle_changes d250 clean template:gym"
+  expected_tokens: [harmony, "slot changes", "battle changes", d250, clean, "template:gym"]
+
+# -----------------------------------------------------------------------------
+# /fort
+# -----------------------------------------------------------------------------
+- name: fort-pokestop-only
+  description: /fort pokestop
+  command: cmd.fort
+  slash:
+    name: fort
+    options:
+      fort_type: 0
+  text: "!fort pokestop"
+  expected_tokens: [pokestop]
+
+- name: fort-all-options
+  description: /fort gym + include_empty + distance + clean + template
+  command: cmd.fort
+  slash:
+    name: fort
+    options:
+      fort_type: 1
+      include_empty: true
+      distance: 500
+      clean: true
+      template: short
+  text: "!fort gym include_empty d500 clean template:short"
+  expected_tokens: [gym, "include empty", d500, clean, "template:short"]
+
+# -----------------------------------------------------------------------------
+# /untrack — sub-command per tracking type, each with one "tracking" option
+# -----------------------------------------------------------------------------
+- name: untrack-pokemon
+  description: /untrack pokemon tracking:42 removes pokemon rule UID 42
+  command: cmd.untrack
+  slash:
+    name: untrack
+    options:
+      pokemon.tracking: "42"
+  text: "!untrack id:42"
+  expected_tokens: ["id:42"]
+
+- name: untrack-pokemon-remove-all
+  description: /untrack pokemon tracking:everything clears every pokemon rule
+  command: cmd.untrack
+  slash:
+    name: untrack
+    options:
+      pokemon.tracking: "everything"
+  text: "!untrack everything"
+  expected_tokens: ["everything"]
+
+- name: untrack-raid-remove-all
+  description: /untrack raid tracking:everything → !raid remove everything (all raid rules cleared)
+  command: cmd.raid
+  slash:
+    name: untrack
+    options:
+      raid.tracking: "everything"
+  text: "!raid remove everything"
+  expected_tokens: ["remove", "everything"]
+
+# /untrack <non-pokemon> is rerouted to cmd.<subtype> with the "remove"
+# keyword + UID, because each per-type command requires the explicit remove
+# token to delete (bare "id:N" without it is silently a filter).
+- name: untrack-raid
+  command: cmd.raid
+  slash:
+    name: untrack
+    options:
+      raid.tracking: "43"
+  text: "!raid remove id:43"
+  expected_tokens: ["remove", "id:43"]
+
+- name: untrack-egg
+  command: cmd.egg
+  slash:
+    name: untrack
+    options:
+      egg.tracking: "44"
+  text: "!egg remove id:44"
+  expected_tokens: ["remove", "id:44"]
+
+- name: untrack-quest
+  command: cmd.quest
+  slash:
+    name: untrack
+    options:
+      quest.tracking: "45"
+  text: "!quest remove id:45"
+  expected_tokens: ["remove", "id:45"]
+
+- name: untrack-invasion
+  command: cmd.invasion
+  slash:
+    name: untrack
+    options:
+      invasion.tracking: "46"
+  text: "!invasion remove id:46"
+  expected_tokens: ["remove", "id:46"]
+
+- name: untrack-lure
+  command: cmd.lure
+  slash:
+    name: untrack
+    options:
+      lure.tracking: "47"
+  text: "!lure remove id:47"
+  expected_tokens: ["remove", "id:47"]
+
+- name: untrack-nest
+  command: cmd.nest
+  slash:
+    name: untrack
+    options:
+      nest.tracking: "48"
+  text: "!nest remove id:48"
+  expected_tokens: ["remove", "id:48"]
+
+- name: untrack-gym
+  command: cmd.gym
+  slash:
+    name: untrack
+    options:
+      gym.tracking: "49"
+  text: "!gym remove id:49"
+  expected_tokens: ["remove", "id:49"]
+
+- name: untrack-fort
+  command: cmd.fort
+  slash:
+    name: untrack
+    options:
+      fort.tracking: "50"
+  text: "!fort remove id:50"
+  expected_tokens: ["remove", "id:50"]
+
+- name: untrack-maxbattle
+  command: cmd.maxbattle
+  slash:
+    name: untrack
+    options:
+      maxbattle.tracking: "51"
+  text: "!maxbattle remove id:51"
+  expected_tokens: ["remove", "id:51"]
+
+# -----------------------------------------------------------------------------
+# /area — sub-commands add/remove (with area option), show (bare)
+# -----------------------------------------------------------------------------
+- name: area-add
+  description: /area add london
+  command: cmd.area
+  slash:
+    name: area
+    options:
+      add.area: london
+  text: "!area add london"
+  expected_tokens: [add, london]
+
+- name: area-remove
+  description: /area remove paris
+  command: cmd.area
+  slash:
+    name: area
+    options:
+      remove.area: paris
+  text: "!area remove paris"
+  expected_tokens: [remove, paris]
+
+- name: area-show
+  description: /area show — bare sub-command, returns no tokens
+  command: cmd.area
+  slash:
+    name: area
+    options:
+      show: _bare
+  text: "!area"
+  expected_tokens: []
+
+- name: area-list
+  description: /area list — enumerate available areas (✓ for already-added)
+  command: cmd.area
+  slash:
+    name: area
+    options:
+      list: _bare
+  text: "!area list"
+  expected_tokens: [list]
+
+- name: area-overview
+  description: /area overview — map of every available area
+  command: cmd.area
+  slash:
+    name: area
+    options:
+      overview: _bare
+  text: "!area overview"
+  expected_tokens: [overview]
+
+# -----------------------------------------------------------------------------
+# /profile — sub-commands list (bare), change/create/delete (with name option)
+# -----------------------------------------------------------------------------
+- name: profile-list
+  description: /profile list — bare sub-command
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      list: _bare
+  text: "!profile list"
+  expected_tokens: [list]
+
+- name: profile-change
+  description: /profile change weekend
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      change.name: weekend
+  text: "!profile switch weekend"
+  expected_tokens: [switch, weekend]
+
+- name: profile-create
+  description: /profile create weekend
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      create.name: weekend
+  text: "!profile add weekend"
+  expected_tokens: [add, weekend]
+
+- name: profile-delete
+  description: /profile delete weekend
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      delete.name: weekend
+  text: "!profile remove weekend"
+  expected_tokens: [remove, weekend]
+
+- name: profile-settime
+  description: /profile settime — set the active-hours window verbatim
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      settime.times: "weekday07:30-18:00"
+  text: "!profile settime weekday07:30-18:00"
+  expected_tokens: [settime, "weekday07:30-18:00"]
+
+- name: profile-cleartime
+  description: /profile cleartime — drop the active-hours schedule
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      cleartime: _bare
+  text: "!profile cleartime"
+  expected_tokens: [cleartime]
+
+- name: profile-copyto
+  description: /profile copyto — copy tracking from the active profile to a target
+  command: cmd.profile
+  slash:
+    name: profile
+    options:
+      copyto.profile: holiday
+  text: "!profile copyto holiday"
+  expected_tokens: [copyto, holiday]
+
+# -----------------------------------------------------------------------------
+# /location — coordinate fast-path. Geocoding case requires BotDeps so the
+# parity runner SKIPS this fixture; it remains here so the coverage test
+# sees the `place` option as exercised. The /location mapper's own
+# unit tests cover both the coordinate and geocoding branches.
+# -----------------------------------------------------------------------------
+- name: location-coords
+  description: /location with explicit coordinates (skipped at parity runtime)
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      place: "51.28, 1.08"
+  text: "!location 51.28,1.08"
+  expected_tokens: ["51.28,1.08"]
+
+# -----------------------------------------------------------------------------
+# /summary — sub-command-group per alertType, action sub-command per CRUD verb.
+# alertType + action both fan out into separate tokens consumed by SummaryCommand.
+# -----------------------------------------------------------------------------
+- name: summary-quest-show
+  description: /summary quest show — bare-alertType status display
+  command: cmd.summary
+  slash:
+    name: summary
+    options:
+      quest.show: _bare
+  text: "!summary quest"
+  expected_tokens: [quest]
+
+- name: summary-quest-settime
+  description: /summary quest settime — install an active-hours schedule
+  command: cmd.summary
+  slash:
+    name: summary
+    options:
+      quest.settime.times: "weekday07:30-18:00"
+  text: "!summary quest settime weekday07:30-18:00"
+  expected_tokens: [quest, settime, "weekday07:30-18:00"]
+
+- name: summary-quest-cleartime
+  description: /summary quest cleartime — drop the active-hours schedule
+  command: cmd.summary
+  slash:
+    name: summary
+    options:
+      quest.cleartime: _bare
+  text: "!summary quest cleartime"
+  expected_tokens: [quest, cleartime]
+
+- name: summary-quest-now
+  description: /summary quest now — force-dispatch the buffer
+  command: cmd.summary
+  slash:
+    name: summary
+    options:
+      quest.now: _bare
+  text: "!summary quest now"
+  expected_tokens: [quest, now]

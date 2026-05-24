@@ -59,6 +59,80 @@ func runGym(t *testing.T, ctx *bot.CommandContext, input string) []bot.Reply {
 	return cmd.Run(ctx, tokens)
 }
 
+// TestGym_SpecificGym_RoleDenied — when command_security.specificgym
+// is set and the user lacks the matching role, gym:<id> must be
+// rejected before the gym row is created. PoracleJS never accepted
+// gym:<id> from the command at all; PoracleNG keeps the parsing but
+// gates it behind the same permission key the delivery-time
+// blocked_alerts check uses.
+func TestGym_SpecificGym_RoleDenied(t *testing.T) {
+	ctx := gymCtx(t)
+	ctx.Platform = "discord"
+	ctx.UserID = "u1"
+	ctx.UserRoles = []string{"some-other-role"}
+	ctx.Config.Discord.CommandSecurity = map[string][]string{
+		"specificgym": {"role-a"},
+	}
+
+	replies := runGym(t, ctx, "mystic gym:abc123")
+	if len(replies) == 0 {
+		t.Fatal("expected a reply")
+	}
+	if replies[0].React != "🙅" {
+		t.Errorf("expected 🙅 for specificgym-denied user, got %q (text=%q)", replies[0].React, replies[0].Text)
+	}
+	// And no gym row should have been created.
+	rows, _ := ctx.Tracking.Gyms.SelectByIDProfile("user1", 1)
+	if len(rows) != 0 {
+		t.Errorf("specificgym-denied user should not have a gym row stored; got %d", len(rows))
+	}
+}
+
+// TestGym_SpecificGym_RoleAllowed: same config, user has the role →
+// command proceeds (resolveGymRef runs; with a literal id it succeeds
+// and a row is stored).
+func TestGym_SpecificGym_RoleAllowed(t *testing.T) {
+	ctx := gymCtx(t)
+	ctx.Platform = "discord"
+	ctx.UserID = "u1"
+	ctx.UserRoles = []string{"role-a"}
+	ctx.Config.Discord.CommandSecurity = map[string][]string{
+		"specificgym": {"role-a"},
+	}
+
+	replies := runGym(t, ctx, "mystic gym:abc123.16")
+	if len(replies) == 0 {
+		t.Fatal("expected a reply")
+	}
+	// Past the permission gate — downstream errors (e.g. "no scanner
+	// configured" from resolveGymRef) are OK; what matters is the
+	// reply text isn't the "no permission" message.
+	if replies[0].Text == "You do not have permission to execute this command" {
+		t.Errorf("specificgym-allowed user blocked by permission gate; got %q", replies[0].Text)
+	}
+}
+
+// TestGym_SpecificGym_NoConfigUnrestricted: when command_security.specificgym
+// is not configured at all, every user can use gym:<id> (existing
+// PoracleNG behaviour preserved — the gate only activates when
+// operators opt in).
+func TestGym_SpecificGym_NoConfigUnrestricted(t *testing.T) {
+	ctx := gymCtx(t)
+	ctx.Platform = "discord"
+	ctx.UserID = "u1"
+	ctx.UserRoles = nil // no roles at all
+
+	replies := runGym(t, ctx, "mystic gym:abc123.16")
+	if len(replies) == 0 {
+		t.Fatal("expected a reply")
+	}
+	// Same pin: downstream failures (scanner not configured) are
+	// acceptable; "no permission" is not.
+	if replies[0].Text == "You do not have permission to execute this command" {
+		t.Errorf("user denied with no specificgym security configured; got %q", replies[0].Text)
+	}
+}
+
 func TestGym_DefaultTeam(t *testing.T) {
 	ctx := gymCtx(t)
 	// No team specified — defaults to team 4 (any)

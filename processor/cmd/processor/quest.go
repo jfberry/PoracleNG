@@ -11,6 +11,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -60,6 +61,24 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			rewards = append(rewards, parseQuestReward(r))
 		}
 
+		// Record reward entities for slash autocomplete recency.
+		if ps.recentActivity != nil {
+			for _, r := range rewards {
+				switch r.Type {
+				case 7: // pokemon
+					ps.recentActivity.RecordQuestPokemon(r.PokemonID)
+				case 2: // item
+					ps.recentActivity.RecordQuestItem(r.ItemID)
+				case 4: // candy
+					ps.recentActivity.RecordQuestCandy(r.PokemonID)
+				case 12: // mega energy
+					ps.recentActivity.RecordQuestMega(r.PokemonID)
+				}
+				// case 3 (stardust) has no per-entity ID to record.
+				// XL candy (when supported) would be recorded via RecordQuestXL.
+			}
+		}
+
 		data := &matching.QuestData{
 			PokestopID: quest.PokestopID,
 			Latitude:   quest.Latitude,
@@ -71,6 +90,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 		matched, buffered, matchedAreas := ps.questMatcher.Match(data, st)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("quest", raw, matchedAreas, matched)
+		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokestopID: quest.PokestopID})
 
 		// Append buffered (summary-bit) matches to the summary buffer.
 		// These users get a grouped delivery later from the summary
@@ -104,6 +124,7 @@ func (ps *ProcessorService) ProcessQuest(raw json.RawMessage) error {
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
+				AlertType:         "quest",
 				TemplateType:      "quest",
 				Enrichment:        enrichmentData,
 				PerLangEnrichment: perLang,

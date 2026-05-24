@@ -4,6 +4,7 @@ import "github.com/jmoiron/sqlx"
 
 // QuestTracking represents a row from the quest table.
 type QuestTracking struct {
+	UID        int64  `db:"uid"`
 	ID         string `db:"id"`
 	ProfileNo  int    `db:"profile_no"`
 	Ping       string `db:"ping"`
@@ -21,7 +22,7 @@ type QuestTracking struct {
 func LoadQuests(db *sqlx.DB) ([]*QuestTracking, error) {
 	var quests []QuestTracking
 	err := db.Select(&quests,
-		`SELECT id, profile_no, ping, clean, reward,
+		`SELECT uid, id, profile_no, ping, clean, reward,
 		        COALESCE(template, '') AS template, shiny, reward_type,
 		        distance, COALESCE(form, 0) AS form,
 		        COALESCE(amount, 0) AS amount

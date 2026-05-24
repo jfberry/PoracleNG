@@ -162,6 +162,29 @@ var typeAliases = map[string][]aliasPair{
 		{"hatchtime", "hatchTime"},
 		{"ex", "is_ex_raid_eligible"},
 	},
+	// rsvpChanges is a single template type used for both raid and egg RSVP
+	// updates (the raid-rsvp branch's compact card). The source webhook is
+	// either raid or egg; the payload uses the same gym_*, hatchTime, ex
+	// fields as those types. Use the raid alias set verbatim — egg aliases
+	// are a subset of raid's (no moves/forms because eggs aren't hatched),
+	// and the extras are harmless when fields aren't populated.
+	"rsvpChanges": {
+		{"gymName", "gym_name"},
+		{"gymUrl", "gym_url"},
+		{"gymColor", "gym_color"},
+		{"gymId", "gym_id"},
+		{"teamId", "team_id"},
+		{"hatchtime", "hatchTime"},
+		{"ex", "is_ex_raid_eligible"},
+		{"move1", "quickMoveName"},
+		{"move2", "chargeMoveName"},
+		{"formname", "formName"},
+		{"quickMove", "quickMoveName"},
+		{"chargeMove", "chargeMoveName"},
+		{"move1emoji", "quickMoveEmoji"},
+		{"move2emoji", "chargeMoveEmoji"},
+		{"pokemonId", "pokemon_id"},
+	},
 	"gym": {
 		{"gymName", "name"},
 		{"gymUrl", "url"},
@@ -176,6 +199,21 @@ var typeAliases = map[string][]aliasPair{
 		{"name", "pokestop_name"},
 		{"url", "pokestop_url"},
 		{"gender", "gruntGender"},
+	},
+	"incident": {
+		{"pokestopName", "pokestop_name"},
+		{"pokestopUrl", "pokestop_url"},
+		{"pokestopId", "pokestop_id"},
+		{"name", "pokestop_name"},
+		{"url", "pokestop_url"},
+		// The translated display-type label, e.g. "Gold Pokestop" / "Kecleon".
+		{"incidentTypeName", "gruntName"},
+		// Numeric display-type ID — use for dispatch logic, e.g. {{#if (eq displayType 8)}}.
+		{"displayType", "displayTypeId"},
+		// Resolved per-platform emoji for the event icon.
+		{"incidentEmoji", "gruntTypeEmoji"},
+		// Color hex for the embed.
+		{"color", "gruntTypeColor"},
 	},
 	"quest": {
 		{"pokestopName", "pokestop_name"},

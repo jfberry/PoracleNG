@@ -8,6 +8,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -62,6 +63,10 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 		matched, matchedAreas := ps.fortMatcher.Match(data, st)
 		matched = ps.filterBlocked(matched)
 		matched = ps.filterValidation("fort_update", raw, matchedAreas, matched)
+		// fort_update events fire for pokestops (and gyms, when forts.fortType=gym);
+		// the pokestop scope covers the dominant case. Operators can still mute
+		// the specific id via the corresponding entity scope.
+		matched = ps.filterMuted(matched, matchedAreas, mute.Event{PokestopID: fortID})
 
 		if len(matched) > 0 {
 			metrics.MatchedEvents.WithLabelValues("fort_update").Inc()
@@ -74,19 +79,29 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			mode := ps.tileMode("fort-update", matched)
 			enrichmentData, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort, mode)
 
+			var perLang map[string]map[string]any
+			if ps.enricher.Geocoder != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
+					perLang[lang] = ps.enricher.FortUpdateTranslate(lat, lon, lang)
+				}
+			}
+
 			if ps.renderCh == nil {
 				return
 			}
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
-				TemplateType:  "fort-update",
-				Enrichment:    enrichmentData,
-				WebhookFields: webhookFields,
-				MatchedUsers:  matched,
-				MatchedAreas:  matchedAreas,
-				TileGate:      ps.newTileGate(tilePending),
-				LogReference:  fortID,
+				AlertType:         "fort-update",
+				TemplateType:      "fort-update",
+				Enrichment:        enrichmentData,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TileGate:          ps.newTileGate(tilePending),
+				LogReference:      fortID,
 			}
 		} else {
 			l.Debugf("Fort update %s (%s, %s) and 0 humans cared",

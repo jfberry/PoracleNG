@@ -60,6 +60,7 @@ func (m *NestMatcher) Match(data *NestData, st *state.State) ([]webhook.MatchedU
 			Template:  n.Template,
 			Clean:     n.Clean,
 			Ping:      n.Ping,
+			UID:       n.UID,
 		})
 	}
 

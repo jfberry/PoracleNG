@@ -2,6 +2,7 @@ package dts
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"reflect"
 	"slices"
@@ -453,9 +454,7 @@ func eachContextWithMeta(ctx any, index, length int) any {
 
 	if m, ok := ctx.(map[string]any); ok {
 		out := make(map[string]any, len(m)+2)
-		for k, v := range m {
-			out[k] = v
-		}
+		maps.Copy(out, m)
 		out["isFirst"] = isFirst
 		out["isLast"] = isLast
 		return out

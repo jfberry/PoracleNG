@@ -27,6 +27,10 @@ var lureParams = []bot.ParamDef{
 func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	if reply := RouteToMuteFromType(ctx, "lure", args); reply != nil {
+		return reply
+	}
+
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 

@@ -375,50 +375,29 @@ func (b *Bot) handleMessage(m *models.Message) {
 			continue
 		}
 
-		ctx := &bot.CommandContext{
-			UserID:        userID,
-			UserName:      m.From.Username,
-			Platform:      "telegram",
-			ChannelID:     composeTopicChannelID(chatID, threadID),
-			IsDM:          isDM,
-			IsAdmin:       isAdmin,
-			Language:      userLang,
-			ProfileNo:     profileNo,
-			HasLocation:   hasLocation,
-			HasArea:       hasArea,
-			TargetID:      userID,
-			TargetName:    m.From.FirstName,
-			TargetType:    targetType,
-			AreaLogic:     bot.NewAreaLogic(fences, b.Cfg),
-			DB:            b.DB,
-			Humans:        b.Humans,
-			Tracking:      b.Tracking,
-			Config:        b.Cfg,
-			StateMgr:      b.StateMgr,
-			GameData:      b.GameData,
-			Translations:  b.Translations,
-			Geofence:      spatialIndex,
-			Fences:        fences,
-			Dispatcher:    b.Dispatcher,
-			RowText:       b.RowText,
-			Resolver:      b.Resolver,
-			ArgMatcher:    b.ArgMatcher,
-			Geocoder:      b.Geocoder,
-			StaticMap:     b.StaticMap,
-			Weather:       b.Weather,
-			Stats:         b.Stats,
-			DTS:           b.DTS,
-			Emoji:         b.Emoji,
-			NLP:           b.nlpParser,
-			TestProcessor:      b.TestProcessor,
-			Registry:           b.Registry,
-			ReloadFunc:         b.ReloadFunc,
-			PostRegister:       b.postRegisterHook(),
-			SummarySchedules:   b.SummarySchedules,
-			SummaryBufferCount: b.SummaryBufferCount,
-			SummaryDispatch:    b.SummaryDispatch,
-			Scanner:            b.Scanner,
-		}
+		// Wire shared BotDeps via the constructor so the dep surface stays
+		// in lockstep with the Discord text bot and slash dispatcher.
+		// Per-message fields and Telegram-specific overrides (PostRegister,
+		// AreaLogic derived from the live state fences, geofence pointers)
+		// are layered on top.
+		ctx := bot.NewCommandContext(&b.BotDeps)
+		ctx.UserID = userID
+		ctx.UserName = m.From.Username
+		ctx.Platform = "telegram"
+		ctx.ChannelID = composeTopicChannelID(chatID, threadID)
+		ctx.IsDM = isDM
+		ctx.IsAdmin = isAdmin
+		ctx.Language = userLang
+		ctx.ProfileNo = profileNo
+		ctx.HasLocation = hasLocation
+		ctx.HasArea = hasArea
+		ctx.TargetID = userID
+		ctx.TargetName = m.From.FirstName
+		ctx.TargetType = targetType
+		ctx.AreaLogic = bot.NewAreaLogic(fences, b.Cfg)
+		ctx.Geofence = spatialIndex
+		ctx.Fences = fences
+		ctx.PostRegister = b.postRegisterHook()
 
 		// Populate delegated admin permissions
 		ctx.Permissions.UserTracking = bot.CanTrackUsers(b.Cfg, "telegram", userID, nil)
@@ -456,6 +435,7 @@ func (b *Bot) handleMessage(m *models.Message) {
 		}
 
 		replies := handler.Run(ctx, remainingArgs)
+		replies = bot.ApplyMaintenanceSuffix(replies, b.Dispatcher, b.Translations.For(userLang).T("cmd.maintenance.active_suffix"))
 		b.sendReplies(chatID, threadID, m.From.ID, replies)
 	}
 }

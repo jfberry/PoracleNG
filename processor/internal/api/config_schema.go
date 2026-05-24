@@ -478,6 +478,18 @@ var configSchema = []ConfigSection{
 		},
 	},
 
+	// ---- discord.slash_commands ----
+	{
+		Name:  "discord.slash_commands",
+		Title: "Discord Slash Commands (optional surface)",
+		Fields: []ConfigFieldDef{
+			{Name: "enabled", Type: "bool", Default: false, Description: "Register Discord slash commands alongside the ! text commands. Off by default; turn on per-guild first to test."},
+			{Name: "register_globally", Type: "bool", Default: false, Description: "Single global command set across every guild. Defaults off (opt-in) so enabling slash never silently pushes commands to every server. Updates can take up to 1 hour to appear in clients; per-guild (off + a guilds list) propagates in seconds."},
+			{Name: "guilds", Type: "string[]", Default: []string{}, Description: "Guild IDs to register slash commands in. Only consulted when register_globally=false.", Resolve: "discord:guild"},
+			{Name: "enable", Type: "string[]", Default: []string{}, Description: "Optional allow-list of canonical short command names (e.g. \"track\", \"raid\"). Empty means all supported commands are registered.", Advanced: true},
+		},
+	},
+
 	// ---- reconciliation.discord ----
 	{
 		Name:  "reconciliation.discord",
@@ -549,6 +561,18 @@ var configSchema = []ConfigSection{
 			{Name: "max_age", Type: "int", Default: 7, Description: "Days to keep old rotated log files"},
 			{Name: "max_backups", Type: "int", Default: 5, Description: "Number of old rotated log files to keep"},
 			{Name: "compress", Type: "bool", Default: true, Description: "Gzip compress rotated log files to save disk space"},
+		},
+	},
+
+	// ---- snapshots ----
+	{
+		Name:  "snapshots",
+		Title: "Snapshots (button support)",
+		Fields: []ConfigFieldDef{
+			{Name: "enabled", Type: "bool", Default: false, Description: "Master switch for the snapshot store. When false, interactive buttons configured on DTS entries are silently disabled. Required for !mute buttons, redeliver, response-template buttons, and any post-delivery action."},
+			{Name: "path", Type: "string", Default: "config/.cache/snapshots", Description: "Snapshot storage path (pogreb). Relative paths resolve against BaseDir.", Advanced: true, DependsOn: &ConfigDependency{Field: "enabled", Value: true}},
+			{Name: "max_age_days", Type: "int", Default: 7, Description: "Safety-sweep grace period beyond each snapshot's per-message TTL. Records past this age are deleted by the background sweeper even if their delete callback never fired (restart/crash recovery).", Advanced: true, DependsOn: &ConfigDependency{Field: "enabled", Value: true}},
+			{Name: "sweep_interval_mins", Type: "int", Default: 60, Description: "Background sweep cadence in minutes. Off the hot path; hourly is plenty.", Advanced: true, DependsOn: &ConfigDependency{Field: "enabled", Value: true}},
 		},
 	},
 

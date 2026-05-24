@@ -21,6 +21,10 @@ func (c *TrackCommand) Aliases() []string { return nil }
 func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	if reply := RouteToMuteFromType(ctx, "pokemon", args); reply != nil {
+		return reply
+	}
+
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
@@ -81,9 +85,13 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// Resolve PVP (may return multiple leagues: "great5 ultra10" → 2 entries)
 	pvpEntries := c.parsePVP(ctx, parsed)
 
-	// Check PVP permission if PVP filters are present
+	// Check PVP permission if PVP filters are present. ctx.UserRoles is
+	// populated by the discordbot host with the user's roles (DM-union'd
+	// across configured guilds in DM context). Passing nil here used to
+	// silently bypass the role check — operators with role-gated pvp
+	// security would deny every user lacking a direct user-ID entry.
 	if len(pvpEntries) > 0 {
-		if !bot.CheckFeaturePermission(ctx.Config, ctx.Platform, "pvp", ctx.UserID, nil) {
+		if !bot.CheckFeaturePermission(ctx.Config, ctx.Platform, "pvp", ctx.UserID, ctx.UserRoles) {
 			return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
 		}
 	}

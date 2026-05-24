@@ -39,6 +39,10 @@ var eggParams = []bot.ParamDef{
 func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 
+	if reply := RouteToMuteFromType(ctx, "egg", args); reply != nil {
+		return reply
+	}
+
 	// Extract @mention pings before parsing
 	pings, args := extractPings(args)
 
@@ -54,6 +58,16 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	parsed := ctx.ArgMatcher.Match(args, eggParams, ctx.Language)
+
+	// `remove id:N` is unambiguous — no level required. Hoist this above the
+	// level-building below so a UID-only removal (e.g. from /untrack egg)
+	// doesn't trip the "no levels" reply.
+	if parsed.HasKeyword("arg.remove") && len(parsed.RemoveUIDs) > 0 {
+		return removeByUIDs(ctx, ctx.Tracking.Eggs, parsed.RemoveUIDs,
+			store.EggGetUID,
+			func(r *db.EggTrackingAPI) string { return ctx.RowText.EggRowText(tr, eggAPIToTracking(r)) },
+		)
+	}
 
 	// Collect levels from multiple sources
 	levelSet := make(map[int]bool)

@@ -8,14 +8,16 @@ Templates are loaded from multiple sources in this order:
 
 1. **`fallbacks/dts.json`** — bundled defaults (shipped with the code, marked **readonly**)
 2. **`config/dts.json`** — user's main configuration file
-3. **`config/dts/*.json`** — additional template files (one or more entries per file)
+3. **`config/dts/*.json`** and **`config/dts/*.toml`** — additional template files (one or more entries per file)
 
 All entries are merged into a single list. When multiple entries match the same type/platform/id/language, the **last-loaded entry wins** — so `config/dts/` overrides `config/dts.json`, which overrides `fallbacks/dts.json`. This means you can customize any bundled template by creating an entry with the same key in your config.
 
 Each entry may use:
 - Inline `template` object — JSON with `{{fieldName}}` placeholders
+- Inline `template` string — raw Handlebars body. Standard in TOML entries (multi-line `"""..."""` blocks land here without double-encoding); also valid in JSON for advanced cases.
 - `"templateFile": "dts/filename.txt"` — external file read as raw Handlebars text (allows non-JSON constructs like unquoted Handlebars expressions in value positions)
 - `"@include filename"` — include directive for shared partials
+- `buttons[]` — operator-authored Discord buttons attached to the rendered message; see the **Buttons** section.
 
 ### The `default: true` flag and help templates
 
@@ -45,6 +47,133 @@ The `POST /api/dts/templates` endpoint saves templates safely without destroying
 - **Readonly templates** (from `fallbacks/dts.json`) are never modified — saving creates an override in `config/dts/` that takes precedence via the last-match-wins loading order
 - Source files that become empty after removal are automatically deleted (except the main `config/dts.json`)
 - Templates can be reloaded from disk via `GET /api/dts/reload` without restarting the processor
+
+## TOML format
+
+`config/dts/*.toml` files are loaded alongside JSON. The wire shape is the same flat list of entries you'd see in JSON, with one TOML idiom:
+
+```toml
+[[entry]]
+id       = "1"
+type     = "monster"
+platform = "discord"
+language = "en"
+description = "Compact monster card"
+
+template = """
+{
+  "embed": {
+    "title": "{{fullName}} {{round iv}}%",
+    "color": "{{ivColor}}"
+  }
+}
+"""
+
+  [[entry.buttons]]
+  id       = "mute_species_1h"
+  label    = "Mute this species (1h)"
+  style    = "danger"
+  action   = "mute"
+  scope    = "pokemon"
+  params   = { duration_min = 60 }
+```
+
+- Each `[[entry]]` is one DTS entry. Same `(type, id, platform, language)` key as the JSON form.
+- Multi-line `"""..."""` strings keep templates readable when they contain Handlebars block helpers — JSON would force escaped newlines and quoted braces.
+- Buttons use `[[entry.buttons]]` for the inline array-of-tables syntax. Identical field names to the JSON form.
+
+**Config editor round-trip**: the editor speaks JSON to the processor. The processor remembers each entry's source format and re-encodes back to TOML on save. **TOML comments and operator-chosen key ordering are not preserved across editor saves** — the entire file is re-emitted. Each save takes a pre-write backup into `config/backups/`, so an accidental clobber is recoverable. If you hand-author elaborate TOML and want the comments preserved, edit the file directly and `POST /api/dts/reload`.
+
+A working example covering inline response templates, action buttons, and gated visibility lives at [`examples/dts/buttons/monster-with-pvp.toml`](examples/dts/buttons/monster-with-pvp.toml).
+
+## Buttons
+
+A template entry may declare a `buttons[]` array attaching Discord interactive buttons to the rendered message. Buttons are opt-in at two levels: the operator must (a) define them on the entry and (b) set `[snapshots] enabled = true` — without the snapshot store, click handlers have no resolved view to act against and buttons render as no-ops.
+
+Minimal example (JSON):
+
+```json
+{
+  "type": "raid",
+  "platform": "discord",
+  "language": "en",
+  "id": "1",
+  "template": { "embed": { "title": "{{fullName}} @ {{gymName}}" } },
+  "buttons": [
+    {
+      "id": "mute_gym_1h",
+      "label": "Mute this gym (1h)",
+      "style": "danger",
+      "action": "mute",
+      "scope": "gym",
+      "params": { "duration_min": 60 }
+    }
+  ]
+}
+```
+
+### Button fields
+
+| Field | Required | Notes |
+|---|---|---|
+| `id` | yes | Click-side identifier; used in the Discord `custom_id` (`poracle:btn:<id>`). Unique per template entry. |
+| `label` | yes | Discord button label. |
+| `style` | no | `primary` / `secondary` / `success` / `danger`. Defaults to `secondary`. |
+| **Dispatch** (exactly one) | yes | Pick one shape — see below. |
+| `action` | one of dispatch | Named handler in the action registry. |
+| `response_template_id` | one of dispatch | DTS lookup against `type="buttonResponse"`. |
+| `response_template_inline` | one of dispatch | Raw Handlebars body; rendered against the snapshot at click time. |
+| `response_text` | one of dispatch | Plain-text Handlebars (no JSON parsing). |
+| `scope` | for `action="mute"` / `"unsubscribe"` | `gym`, `pokemon`, `area`, `pokestop`, `station`, `everything`, `tracking`. Picks which snapshot field is the identifier. |
+| `params` | no | Free-form bag passed verbatim to the handler. `mute` reads `duration_min` (default 60); `render` reads `template_id`. |
+| `applies_to` | no | Destination filter: subset of `["dm", "channel", "webhook", "any"]`. Defaults to `["dm"]` for `mute`/`unsubscribe` and `["any"]` otherwise. |
+| `show_if` | no | Handlebars expression evaluated at render time; falsy ⇒ button is not attached at all. Use for conditional buttons like PVP-only. |
+| `visible_to` | no | Access control. `anyone` (default — anyone with channel view permission can click), `admin` (clicker is in `[discord] admins`), `registered` (clicker has a Poracle account). On DMs the `admin` gate is also enforced at render time — non-admin recipients don't see the button at all. On channels and webhooks every viewer sees every button (Discord doesn't support per-viewer component visibility), so the gate is click-time only. |
+
+### Dispatch modes
+
+1. **Action** — named handler in `internal/buttonactions/`. Server-side state change (write a mute, dispatch a redeliver, etc.). The reply is a short ephemeral confirmation generated by the handler.
+
+2. **`response_template_id`** — looks up an entry where `type="buttonResponse"` using the standard selection chain. Useful when a response is shared between multiple buttons or alert types.
+
+3. **`response_template_inline`** — render the literal string (or string array, joined by newlines) as a Handlebars template against the snapshot's `LayeredView`. Same field access as alert templates — aliases, computed fields, emoji resolution all available. JSON-shaped output is parsed into ephemeral Discord embeds; otherwise it lands as plain content.
+
+4. **`response_text`** — plain-text Handlebars output. No JSON parsing. Use for one-liners (`"📍 \`{{latitude}}, {{longitude}}\`"`).
+
+### Registered actions
+
+`GET /api/dts/actions` returns the live list. As of this branch:
+
+- **`mute`** — writes a `mute.Entry` for the clicker. Scope picks the snapshot field (`gym` → `gym_id`, `pokemon` → `pokemon_id`, `area` → first `MatchedArea`, `everything` → user-wide). `params.duration_min` (int minutes, default 60).
+- **`unsubscribe`** — v1 only accepts `scope = "tracking"`; full rule-UID unsubscribe is queued behind the `MatchedUser.RuleUID` plumbing work.
+- **`redeliver`** — DM the alert to the clicker. v1 sends a stub confirmation; a full re-render is a follow-up.
+- **`render`** — render a different template id (via `params.template_id`) as the click response. Useful for "show me the PVP detail" without an inline body in the button definition.
+
+### Click-time failure messages
+
+These all surface as ephemeral replies in Discord — operators should know what they mean:
+
+| Message | Cause |
+|---|---|
+| `This alert has expired.` | No snapshot found for the message ID. Either `[snapshots] enabled = false`, the snapshot's TTL passed, or the safety sweep already cleaned it. |
+| `This button is no longer available.` | The DTS entry the button came from was removed or renamed since the alert was sent. |
+| `This button doesn't apply here.` | The `applies_to` set doesn't include the destination type. Shouldn't normally happen — the renderer filters at attachment time. |
+| `This button isn't for you.` | `visible_to` check failed (e.g. a non-admin clicked an `admin`-only button on a channel alert). |
+| `Slow down — try that again in a moment.` | Click cooldown — same user / same button / within debounce window. |
+
+### Show-if expressions
+
+`show_if` is a Handlebars expression evaluated against the resolved view at render time. The button is attached only when the result is truthy.
+
+```json
+{ "id": "pvp", "label": "Show PVP details", "show_if": "{{pvpAvailable}}", "response_template_inline": "..." }
+```
+
+Use this for conditional buttons that only make sense on certain alerts — PVP details when the pokemon has rankings, RSVP for raids, etc.
+
+### Editor support
+
+`GET /api/dts/actions` returns each action's `name`, accepted `scopes`, whether `required_scope` is true, and the `params` keys the handler knows about. The PoracleWeb editor uses this to drive its button-authoring UI. See [`docs/CONFIG-EDITOR-INSTRUCTIONS.md`](docs/CONFIG-EDITOR-INSTRUCTIONS.md) for the editor-side spec.
 
 ## Poracle Fields vs Raw Webhook Fields
 
@@ -528,6 +657,58 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are computed from hatch t
 
 ---
 
+## Raid/Egg RSVP Updates (`rsvpChanges`)
+
+A **single shared template type** for compact RSVP-change notifications, used for both raid and egg lifecycles. Opt-in by file presence — falls back to the full `raid` / `egg` template when not defined.
+
+### When it fires
+
+| Condition | Outcome |
+|---|---|
+| First visible message for this user / this raid lifecycle | Full `raid` or `egg` template (never `rsvpChanges`). |
+| Tracking rule has `edit` bit set | Full `raid` / `egg`, edited in-place. `rsvpChanges` is bypassed even when present. |
+| Subsequent same-type webhook AND `rsvpChanges` template exists with matching id | `rsvpChanges` renders. |
+| Subsequent webhook AND no `rsvpChanges` entry for the user's effective template id | Full `raid` / `egg` (fallback). |
+
+"Same-type" is the source webhook type (raid or egg) — tracked separately from the template chosen. An egg → raid hand-off treats the raid notification as the first raid-type visible message, so the raid uses the full template even though an egg was already sent.
+
+### Template ID matching
+
+`rsvpChanges` existence is checked with **strict equality** against the user's effective template id:
+
+- If the tracking rule has `template:dark` → looks for `rsvpChanges` with `id:dark`. No match → fallback to `raid` / `egg`.
+- If the rule has no explicit template → looks for `rsvpChanges` with id matching `[general] default_template_name`.
+
+This avoids silent template-id substitution. If you ship operators a `rsvpChanges` with `id:1`, set `default_template_name = "1"` (matches the shipped `fallbacks/dts.json`).
+
+### Reply chain
+
+Every raid + egg job carries `ReplyKey = "raidlife:{gymID}:{raidEnd}"`. The dispatcher tracks each message under that key; subsequent jobs for the same lifecycle find the prior message and post as a reply.
+
+The chain reads as one thread in Discord/Telegram:
+
+```
+egg → raid → rsvpChanges → rsvpChanges → …
+```
+
+Reply threading works without `clean`/`edit` bits — every raid/egg message is stored in the tracker when `ReplyKey` is set, even with `clean=0`. Auto-delete on TTH expiry still gates on the `clean` bit; the reply-only tracker entry self-evicts at natural TTL with no side effect on the user's message.
+
+### Cleanup TTH
+
+For `rsvpChanges` jobs with `clean` set, the auto-delete TTH is the **latest future RSVP timeslot in the rendered state** (not `raid.End`). The original raid/egg alert keeps `raid.End` cleanup; the compact RSVP cards clean shortly after the meaningful party window so they don't linger past it.
+
+If there are no future RSVP timeslots (all past at send time), the override is not applied and the message uses the default raid/end TTH.
+
+### Available fields
+
+`rsvpChanges` uses the **raid alias set** internally — every field from the `raid` table above is available (gym, RSVP, weather, boost, ex, moves, forms, etc.). When rendering for an egg-source webhook, the raid-only fields (moves, forms, pokemon name) are simply empty — operators can branch with `{{#if pokemonId}}` or `{{#if fullName}}` to handle the egg-vs-hatched case in a single template.
+
+### Example: minimal compact template
+
+See `examples/dts/rsvpChanges/rsvp-update.json` for an installable starting point.
+
+---
+
 ## Quest (`quest`)
 
 | Field | Type | Description |
@@ -647,6 +828,145 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 Raw webhook fields (`pokestop_id`, `pokestop_name`, `pokestop_url`) are also available.
 
 Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are available for invasions.
+
+---
+
+## Incident (`incident`)
+
+**When it fires**: invasion webhooks where `gruntTypeID == 0 && displayType >= 7`. Per the shipped `util.json` `pokestopEvent` map (matching PoracleJS):
+
+| `displayType` | Event |
+|---|---|
+| `7` | Gold-Stop |
+| `8` | Kecleon |
+| `9` | Showcase |
+
+Regular Team Rocket grunt invasions (`gruntTypeID > 0`) continue to use the `invasion` template.
+
+The split is webhook-level: every matched user for an incident webhook gets the `incident` template; every matched user for a grunt webhook gets the `invasion` template. There is no per-user toggle.
+
+A fallback `incident` entry is shipped in `fallbacks/dts.json`, so the template selection chain always finds something even if you have not yet added an `incident` entry to `config/dts/`. To customise, copy the entry from `fallbacks/dts.json` into `config/dts/` and edit from there.
+
+### Incident-specific fields
+
+These aliases are added on top of the pokestop / location / time / weather fields that are shared with the invasion template:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `incidentTypeName` | string | Translated display-type label (e.g. "Gold Pokéstop", "Kecleon"). Alias for `gruntName`. |
+| `displayType` | int | Numeric event identifier per util.json: `7`=Gold-Stop, `8`=Kecleon, `9`=Showcase. Alias for `displayTypeId`. Use for dispatch logic: `{{#if (eq displayType 8)}}Kecleon-specific text{{/if}}`. |
+| `incidentEmoji` | string | Resolved per-platform emoji for the event icon. Alias for `gruntTypeEmoji`. |
+| `color` | string | Event color hex for the Discord embed `color` field. Alias for `gruntTypeColor`. |
+
+### Showcase fields
+
+These fields are only populated for **Showcase** incidents (`displayType == 9`). Always guard showcase blocks with `{{#if showcasePresent}}`.
+
+#### Top-level showcase fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `showcasePresent` | bool | `true` when `contest_entries` data is present; `false` for all other incident types and when the field is absent. |
+| `showcaseTotalEntries` | int | Total number of contestants in the Showcase. |
+| `showcaseLastUpdate` | int | Unix timestamp of the last leaderboard update. |
+| `showcaseLastUpdateFormatted` | string | `showcaseLastUpdate` formatted using the operator's configured time layout. |
+| `showcase` | array | Up to 3 enriched contestant entries (see per-entry fields below). Empty array when no data. |
+| `showcaseFirst` | object | Convenience alias for `showcase[0]` (the winner). `nil` when no contestants. |
+
+#### Per-entry fields (each item in `{{#each showcase}}`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rank` | int | Leaderboard position (1–3). |
+| `score` | float | Raw score value. |
+| `scoreFormatted` | string | Score rounded to 2 decimal places (`%.2f`). |
+| `pokemonId` | int | Pokemon species ID. |
+| `pokemonName` | string | Translated species name. |
+| `formId` | int | Form ID. |
+| `formName` | string | Translated form name (empty for Normal/default forms). |
+| `fullName` | string | Composed display name — alignment prefix + base + form + mega wrap (see fullName composition below). |
+| `costumeId` | int | Costume ID. |
+| `costumeName` | string | Translated costume name (`costume_N` key from gamelocale). Empty when `costumeId == 0` or the key is absent. |
+| `genderId` | int | Gender ID (0=unset, 1=male, 2=female, 3=genderless). |
+| `genderName` | string | Translated gender name. |
+| `genderEmojiKey` | string | Emoji key for per-platform gender emoji resolution. |
+| `shiny` | bool | `true` when the contestant's pokemon is shiny. |
+| `shinyEmoji` | string | `"✨"` when shiny, empty string otherwise. |
+| `tempEvolutionId` | int | Temp evolution (mega/primal) ID; `0` when not applicable. |
+| `tempEvolutionName` | string | Full display name of the mega/primal form. Empty when `tempEvolutionId == 0`. |
+| `alignment` | int | Alignment: `0`=normal, `1`=shadow, `2`=purified. |
+| `alignmentName` | string | Translated alignment label ("Shadow", "Purified"). Empty when `alignment == 0`. |
+| `badge` | int | Badge ID (raw). |
+| `background` | int | Background ID (raw; `0` when absent). |
+| `imgUrl` | string | Resolved icon URL via uicons (with form, costume, shiny, and mega evolution applied). |
+
+#### fullName composition
+
+1. Compute `base + form + mega wrap` using `buildFullName` (same function used by raids and nests): tries the `poke_{id}_e{evolution}` combo key first, falls back to applying the util.json `MegaName` format pattern.
+2. If `alignment > 0`, prefix with the translated alignment label + space.
+
+Examples:
+- `alignment=1`, mega Charizard → **"Shadow Mega Charizard X"**
+- `alignment=2`, Alolan Vulpix → **"Purified Alolan Vulpix"**
+- `alignment=0`, mega Charizard → **"Mega Charizard X"**
+- No form, no alignment, no mega → **"Pikachu"**
+
+#### Showcase template example
+
+```handlebars
+{{#if showcasePresent}}
+🏆 **Top contestants** ({{showcaseTotalEntries}} entries):
+{{#each showcase}}
+{{rank}}. {{fullName}}{{#if shiny}} ✨{{/if}}{{#if costumeName}} ({{costumeName}}){{/if}} — {{scoreFormatted}}
+{{/each}}
+{{/if}}
+```
+
+Winner-only single line:
+```handlebars
+{{#if showcasePresent}}🏆 {{showcaseFirst.fullName}} ({{showcaseFirst.scoreFormatted}}){{/if}}
+```
+
+### Available pokestop / location / time fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pokestopName` | string | Pokestop name (alias for `pokestop_name`) |
+| `pokestopUrl` | string | Pokestop image URL (alias for `pokestop_url`) |
+| `pokestopId` | string | Pokestop ID (alias for `pokestop_id`) |
+| `displayTypeId` | int | Raw display type ID |
+| `disappearTime` | string | Incident expiry time (formatted) |
+| `time` | string | Alias for `disappearTime` |
+| `expirationTimestamp` | int | Unix expiry timestamp (use with `<t:N:R>` in Discord) |
+
+Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) and all common fields (location, maps, weather) are also available — see the Common Fields section above.
+
+Weather fields (`gameWeatherId`, `gameWeatherName`, `gameWeatherEmoji`) are available for incidents.
+
+### Not available for incidents
+
+Grunt and reward fields (`gruntName`, `gruntRewardsList`, `gruntLineupList`, `genderEmoji`, `gender`, etc.) are **not populated** for incidents. Use the aliased fields above (`incidentTypeName` instead of `gruntName`). For numeric dispatch use `{{displayType}}`; for slug-style dispatch use `{{gruntType}}` directly (e.g. `{{#if (eq gruntType "kecleon")}}`).
+
+### Example
+
+```json
+{
+  "id": 1,
+  "type": "incident",
+  "platform": "discord",
+  "language": "en",
+  "template": {
+    "embed": {
+      "title": "{{{incidentEmoji}}} {{incidentTypeName}} at {{{pokestopName}}}",
+      "color": "{{color}}",
+      "description": "Ends: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\n{{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}})",
+      "thumbnail": { "url": "{{{imgUrl}}}" }
+    }
+  }
+}
+```
+
+The `fallbacks/dts.json` incident entries (Discord and Telegram) serve as the starting sample — copy and customise from there.
 
 ---
 

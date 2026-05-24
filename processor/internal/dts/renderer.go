@@ -3,6 +3,7 @@ package dts
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	raymond "github.com/mailgun/raymond/v2"
@@ -55,6 +56,50 @@ type Renderer struct {
 	// stable key (suitable for throttling) and the human-readable
 	// message.
 	errorNoticer ErrorNoticer
+
+	// buttonsEnabled gates Discord component emission. When false the
+	// renderer doesn't attempt to attach buttons even if the resolved
+	// entry has them — equivalent to [snapshots] disabled in the host,
+	// because buttons require a snapshot at click time.
+	buttonsEnabled bool
+
+	// isAdminRecipient reports whether a DM-destination human ID is in
+	// the operator's admin list. Used to hide visible_to=admin buttons
+	// at render time on DMs (channel destinations can't be filtered
+	// per-viewer). Nil means "treat no one as admin" — admin buttons
+	// stay click-gated everywhere.
+	isAdminRecipient func(humanID string) bool
+}
+
+// SetButtonsEnabled toggles Discord button component emission. Buttons
+// require a snapshot at click time, so the host wires this from the
+// [snapshots] config: true only when the snapshot store is open.
+//
+// Operators can leave Buttons[] in their DTS entries when snapshots are
+// disabled — the loader still validates them, but the renderer just
+// doesn't emit the components block.
+func (r *Renderer) SetButtonsEnabled(v bool) {
+	r.buttonsEnabled = v
+}
+
+// SetAdminRecipientCheck wires the host's admin-list predicate. The
+// renderer calls it for each DM destination to decide whether
+// visible_to=admin buttons should be emitted on that user's alert. Pass
+// nil to disable render-time admin hiding (the click-time gate still
+// fires).
+func (r *Renderer) SetAdminRecipientCheck(fn func(humanID string) bool) {
+	r.isAdminRecipient = fn
+}
+
+// recipientIsAdmin returns whether the given user is an admin. Only
+// meaningful for DM-typed destinations — channels/webhooks don't have a
+// single recipient. Returns false when no admin check is wired (the
+// click-time gate still enforces).
+func (r *Renderer) recipientIsAdmin(userType, userID string) bool {
+	if r.isAdminRecipient == nil || userType != "discord:user" {
+		return false
+	}
+	return r.isAdminRecipient(userID)
 }
 
 // ErrorNoticer routes renderer errors to a host-side notification sink
@@ -390,6 +435,16 @@ func (r *Renderer) renderForUsers(
 			rawMessage = appendPingToRaw(rawMessage, user.Ping)
 		}
 
+		// Attach interactive button components (#109). Only Discord
+		// supports the component shape we emit; Telegram clicks would
+		// need a different bytes path and are deferred (#112).
+		if r.buttonsEnabled && platform == "discord" {
+			defs := r.templates.GetButtons(templateType, platform, templateID, language)
+			if len(defs) > 0 {
+				rawMessage = InjectDiscordComponents(rawMessage, defs, view, deliveryTargetType(user.Type), r.recipientIsAdmin(user.Type, user.ID), r.evalShowIf)
+			}
+		}
+
 		emojiSlice := extractEmojiSlice(view)
 
 		// h. Compute edit key
@@ -400,22 +455,74 @@ func (r *Renderer) renderForUsers(
 
 		// i. Build DeliveryJob
 		jobs = append(jobs, webhook.DeliveryJob{
-			Lat:          lat,
-			Lon:          lon,
-			Message:      rawMessage,
-			Target:       user.ID,
-			Type:         user.Type,
-			Name:         user.Name,
-			TTH:          tthMap,
-			Clean:        user.Clean,
-			Emoji:        emojiSlice,
-			LogReference: logReference,
-			Language:     language,
-			EditKey:      editKey,
+			Lat:               lat,
+			Lon:               lon,
+			Message:           rawMessage,
+			Target:            user.ID,
+			Type:              user.Type,
+			Name:              user.Name,
+			TTH:               tthMap,
+			Clean:             user.Clean,
+			Emoji:             emojiSlice,
+			LogReference:      logReference,
+			Language:          language,
+			EditKey:           editKey,
+			TemplateType:      templateType,
+			TemplateRequested: user.Template,
+			TemplateSelected:  templateID,
 		})
 	}
 
 	return jobs
+}
+
+// evalShowIf compiles and runs a button's show_if expression against the
+// resolved view. Truthy means attach the button; falsy means drop it.
+//
+// The expression is wrapped in `{{...}}` so operators can write either
+// `{{pvpAvailable}}` or just `pvpAvailable`. Output is considered truthy
+// when non-empty AND not literally "false" / "0". This matches
+// Handlebars' own truthiness model for {{#if}}.
+//
+// Errors are surfaced to the caller (InjectDiscordComponents) which
+// logs them and drops the button — silent acceptance would attach
+// buttons the operator didn't intend.
+func (r *Renderer) evalShowIf(expr string, view any) (bool, error) {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return true, nil
+	}
+	tmpl := expr
+	if !strings.HasPrefix(tmpl, "{{") {
+		tmpl = "{{" + tmpl + "}}"
+	}
+	parsed, err := raymond.Parse(tmpl)
+	if err != nil {
+		return false, fmt.Errorf("parse show_if %q: %w", expr, err)
+	}
+	out, err := safeExecWith(parsed, view, raymond.NewDataFrame())
+	if err != nil {
+		return false, fmt.Errorf("exec show_if %q: %w", expr, err)
+	}
+	out = strings.TrimSpace(out)
+	return out != "" && out != "false" && out != "0", nil
+}
+
+// deliveryTargetType maps a webhook user.Type ("discord:user", etc.) to
+// the short noun the button schema uses for applies_to: "dm" / "channel"
+// / "webhook". Mirrors the helper in cmd/processor; duplicated here to
+// avoid an import cycle.
+func deliveryTargetType(userType string) string {
+	switch userType {
+	case "discord:user", "telegram:user":
+		return "dm"
+	case "discord:channel", "discord:thread", "telegram:group", "telegram:channel":
+		return "channel"
+	case "webhook":
+		return "webhook"
+	default:
+		return ""
+	}
 }
 
 // renderGroupKey identifies a unique (template, platform, language) combination.
@@ -544,18 +651,21 @@ func (r *Renderer) renderGrouped(
 			}
 
 			jobs = append(jobs, webhook.DeliveryJob{
-				Lat:          lat,
-				Lon:          lon,
-				Message:      userMessage,
-				Target:       user.ID,
-				Type:         user.Type,
-				Name:         user.Name,
-				TTH:          tthMap,
-				Clean:        user.Clean,
-				Emoji:        emojiSlice,
-				LogReference: logReference,
-				Language:     key.language,
-				EditKey:      editKey,
+				Lat:               lat,
+				Lon:               lon,
+				Message:           userMessage,
+				Target:            user.ID,
+				Type:              user.Type,
+				Name:              user.Name,
+				TTH:               tthMap,
+				Clean:             user.Clean,
+				Emoji:             emojiSlice,
+				LogReference:      logReference,
+				Language:          key.language,
+				EditKey:           editKey,
+				TemplateType:      templateType,
+				TemplateRequested: user.Template,
+				TemplateSelected:  key.templateID,
 			})
 		}
 	}

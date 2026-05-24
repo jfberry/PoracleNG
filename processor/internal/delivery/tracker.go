@@ -19,6 +19,17 @@ type TrackedMessage struct {
 	SentID   string `json:"sent_id"`
 	Target   string `json:"target"`
 	Type     string `json:"type"` // "discord:user", "telegram:group", etc.
+	// MsgType is the source webhook alert type ("raid", "egg", "pokemon", etc.)
+	// — distinct from Type, which is the destination type ("discord:user").
+	// Used by the raid handler's partitionRaidUsers first-visible check.
+	//
+	// Backward compat: entries persisted before this field existed deserialise
+	// with MsgType="". The next webhook for that user will see prior.MsgType=""
+	// != current msgType (e.g. "raid"), classify as first-visible, and emit one
+	// extra full raid card. Subsequent webhooks will have the new MsgType set
+	// and chain to rsvpChanges normally. Acceptable failure mode (one extra
+	// full card, no missed updates).
+	MsgType  string `json:"msg_type,omitempty"`
 	Clean    int    `json:"clean"`
 	ReplyKey string `json:"reply_key,omitempty"`
 }
@@ -42,6 +53,26 @@ type MessageTracker struct {
 	// that drives the cleanup.
 	repliesMu sync.RWMutex
 	replies   map[string]map[string]string
+
+	// onEvict is invoked on every TTL eviction (clean or not) — gives
+	// satellite stores like the snapshot pogreb a chance to drop their
+	// per-message records alongside the tracker entry. Optional; nil =
+	// no extra cleanup. Set via SetEvictionHook before Track is called.
+	onEvictMu sync.RWMutex
+	onEvict   func(target, sentID string)
+}
+
+// SetEvictionHook installs a callback invoked for every TTL-expired entry,
+// regardless of clean status. The hook receives (target, sentID) and is
+// expected to remove any satellite records keyed by the same pair (e.g. the
+// per-delivery snapshot). The hook runs synchronously inside the eviction
+// goroutine — keep it cheap; expensive work should be dispatched async.
+//
+// Safe to call before or after Track. Passing nil clears the hook.
+func (mt *MessageTracker) SetEvictionHook(fn func(target, sentID string)) {
+	mt.onEvictMu.Lock()
+	mt.onEvict = fn
+	mt.onEvictMu.Unlock()
 }
 
 // NewMessageTracker creates a new MessageTracker with TTL cache and eviction-based clean deletion.
@@ -82,6 +113,17 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 			return
 		}
 		metrics.DeliveryTrackerEvictions.Inc()
+
+		// Satellite-store cleanup hook (snapshot store, etc.). Runs for
+		// every TTL-expired entry whether the message was clean or not —
+		// snapshots have outlived their useful window either way.
+		mt.onEvictMu.RLock()
+		hook := mt.onEvict
+		mt.onEvictMu.RUnlock()
+		if hook != nil && msg.SentID != "" {
+			hook(msg.Target, msg.SentID)
+		}
+
 		if !db.IsClean(msg.Clean) {
 			return
 		}
@@ -203,8 +245,15 @@ func (mt *MessageTracker) UpdateEdit(editKey string, newSentID string) {
 	mt.cache.Set(editKey, &updated, ttlcache.DefaultTTL)
 }
 
-// Size returns the number of tracked messages.
+// Size returns the number of tracked messages. Safe to call on a nil
+// tracker (returns 0) or a tracker whose cache hasn't been initialised
+// yet — the status goroutine can hit Size before init completes during
+// a partial dispatcher setup, and crashing on a metrics read is worse
+// than reporting zero.
 func (mt *MessageTracker) Size() int {
+	if mt == nil || mt.cache == nil {
+		return 0
+	}
 	return mt.cache.Len()
 }
 
@@ -293,6 +342,7 @@ func (mt *MessageTracker) Load() error {
 			SentID:   entry.Message.SentID,
 			Target:   entry.Message.Target,
 			Type:     entry.Message.Type,
+			MsgType:  entry.Message.MsgType,
 			Clean:    entry.Message.Clean,
 			ReplyKey: entry.Message.ReplyKey,
 		}

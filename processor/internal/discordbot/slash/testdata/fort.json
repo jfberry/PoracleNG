@@ -1,0 +1,70 @@
+{
+  "name": "fort",
+  "description": "Track pokestop or gym updates",
+  "options": [
+    {
+      "type": 4,
+      "name": "fort_type",
+      "description": "Fort type to track",
+      "channel_types": null,
+      "required": true,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Pokestop",
+          "value": 0
+        },
+        {
+          "name": "Gym",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "type": 5,
+      "name": "include_empty",
+      "description": "Alert on empty/unowned forts",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "distance",
+      "description": "Alert radius in metres",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "clean",
+      "description": "Auto-delete the alert when the fort changes again",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Yes",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "type": 3,
+      "name": "template",
+      "description": "DTS template name",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    }
+  ]
+}

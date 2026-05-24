@@ -1,0 +1,136 @@
+{
+  "name": "track",
+  "description": "Track a Pokemon",
+  "options": [
+    {
+      "type": 3,
+      "name": "pokemon",
+      "description": "Pokemon to track (or 'everything')",
+      "channel_types": null,
+      "required": true,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "iv",
+      "description": "IV filter (e.g. 100, 95, 0-0)",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "distance",
+      "description": "Alert radius in metres",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "great_rank",
+      "description": "Top PVP rank in the Great League",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "ultra_rank",
+      "description": "Top PVP rank in the Ultra League",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "little_rank",
+      "description": "Top PVP rank in the Little League",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "clean",
+      "description": "Auto-delete the alert when the pokemon despawns",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Yes",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "type": 3,
+      "name": "template",
+      "description": "DTS template name",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "form",
+      "description": "Pokemon form",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "size",
+      "description": "Pokemon size class",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "All sizes",
+          "value": "all"
+        },
+        {
+          "name": "XXS",
+          "value": "xxs"
+        },
+        {
+          "name": "XS",
+          "value": "xs"
+        },
+        {
+          "name": "M",
+          "value": "m"
+        },
+        {
+          "name": "XL",
+          "value": "xl"
+        },
+        {
+          "name": "XXL",
+          "value": "xxl"
+        }
+      ]
+    }
+  ]
+}

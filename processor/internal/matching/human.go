@@ -62,6 +62,17 @@ func ValidateHumans(
 			continue
 		}
 
+		// PVP-specific blocked-alert gate. When the rule has a PVP
+		// filter (PVPRankingLeague != 0) and the user has "pvp" in
+		// blocked_alerts — typically derived from
+		// [discord.command_security] pvp by reconciliation when the
+		// user lost the required role — drop the match. Mirrors
+		// PoracleJS monster.js:102 which folds the same NOT LIKE
+		// '%pvp%' clause into the SQL on the PVP-filtered branch.
+		if monster.PVPRankingLeague != 0 && human.BlockedAlertsSet["pvp"] {
+			continue
+		}
+
 		// Lazy haversine: compute once when first needed, cache for reuse.
 		var dist int
 		distComputed := false
@@ -113,6 +124,7 @@ func ValidateHumans(
 			PVPRankingLeague:  monster.PVPRankingLeague,
 			PVPRankingWorst:   monster.PVPRankingWorst,
 			TrackDistance:     monster.Distance,
+			RuleUID:           monster.UID,
 		})
 	}
 	return result
@@ -215,6 +227,7 @@ func ValidateHumansForRaid(
 			CardinalDirection: CardinalDirection(bearing),
 			RSVPChanges:       td.RSVPChanges,
 			TrackDistance:     td.Distance,
+			RuleUID:           td.UID,
 		})
 	}
 	return result
@@ -228,6 +241,7 @@ type raidUserData struct {
 	Clean           int
 	Ping            string
 	RSVPChanges     int
+	UID             int64 // database UID of the matched raid/egg rule — surfaced on MatchedUser.RuleUID
 	IsSpecificMatch bool
 }
 

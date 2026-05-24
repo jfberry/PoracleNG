@@ -135,8 +135,8 @@ func (c *BroadcastCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 			return []bot.Reply{{Text: "You do not have a message defined for this platform"}}
 		}
 
-		if ctx.Dispatcher != nil {
-			ctx.Dispatcher.Dispatch(&delivery.Job{
+		if ctx.Admin != nil && ctx.Admin.Dispatcher != nil {
+			ctx.Admin.Dispatcher.Dispatch(&delivery.Job{
 				Target:  ctx.TargetID,
 				Type:    ctx.TargetType,
 				Name:    ctx.TargetName,
@@ -236,8 +236,8 @@ func (c *BroadcastCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 			msg = discordTemplate
 		}
 
-		if ctx.Dispatcher != nil {
-			ctx.Dispatcher.Dispatch(&delivery.Job{
+		if ctx.Admin != nil && ctx.Admin.Dispatcher != nil {
+			ctx.Admin.Dispatcher.Dispatch(&delivery.Job{
 				Target:  r.ID,
 				Type:    r.Type,
 				Name:    r.Name,

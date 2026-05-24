@@ -106,7 +106,7 @@ func newTestFairQueue(t *testing.T, senders map[string]Sender, cfg QueueConfig) 
 	ch := make(chan *Job, 100)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
-	fq := NewFairQueue(ch, senders, tracker, cfg)
+	fq := NewFairQueue(ch, senders, tracker, cfg, nil)
 	return fq, ch
 }
 
@@ -177,7 +177,7 @@ func TestFairQueueConcurrency(t *testing.T) {
 		ConcurrentDiscord:  2,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	// Send 6 jobs — with concurrency 2 and 50ms delay, they should be serialized in pairs
@@ -253,7 +253,7 @@ func TestFairQueueEditLookup(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -304,7 +304,7 @@ func TestFairQueueEditFallback(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -343,7 +343,7 @@ func TestFairQueueCleanTracking(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -388,7 +388,7 @@ func TestFairQueueSuppressesExpiredCleanMessage(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -422,7 +422,7 @@ func TestFairQueueEditOnlyExpiredStillSends(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -535,7 +535,7 @@ func TestRateLimitEditNotCounted(t *testing.T) {
 	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
-	})
+	}, nil)
 	fq.Start()
 
 	// First send establishes the tracked message under EditKey "raid:1".
@@ -584,7 +584,7 @@ func TestRateLimitFailedEditCounts(t *testing.T) {
 	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
-	})
+	}, nil)
 	fq.Start()
 
 	// First send establishes the tracked message under EditKey "raid:1".
@@ -636,7 +636,7 @@ func TestRateLimitHookDoesNotDeadlock(t *testing.T) {
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
 		RateLimitHooks:    hooks,
-	})
+	}, nil)
 	fq.Start()
 
 	// Burn the DM slot.
@@ -693,7 +693,7 @@ func TestQueueStampsReplyToID(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -747,7 +747,7 @@ func TestQueueDoesNotStampWhenEditKeyMatches(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	ch <- &Job{
@@ -794,7 +794,7 @@ func TestQueueTracksReplyKeyAfterSend(t *testing.T) {
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
-	})
+	}, nil)
 	fq.Start()
 
 	// First job: no prior, but carries ReplyKey so the send is tracked under it.
@@ -863,6 +863,161 @@ func (c *counterSender) getSendCalls() []*Job {
 	out := make([]*Job, len(c.sendCalls))
 	copy(out, c.sendCalls)
 	return out
+}
+
+// TestProcessJob_ReplyOnlyTrackerStorage proves that a job with Clean=0,
+// EditKey="", and a non-empty ReplyKey still lands in the tracker after send.
+// The entry must have Clean=0 so the auto-delete path (gated on IsClean) does
+// not fire when the TTL expires.
+func TestProcessJob_ReplyOnlyTrackerStorage(t *testing.T) {
+	mock := &queueMockSender{platform: "discord", sentID: "chan1:msg-100"}
+	senders := map[string]Sender{"discord": mock}
+
+	ch := make(chan *Job, 10)
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	}, nil)
+	fq.Start()
+
+	ch <- &Job{
+		Target:   "chan1",
+		Type:     "discord:channel",
+		Message:  json.RawMessage(`{"content":"egg"}`),
+		Clean:    0,
+		EditKey:  "",
+		ReplyKey: "raidlife:test:1700000000",
+		TTH:      TTH{Hours: 1},
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	// Tracker must have one entry (the reply-only message).
+	if got := tracker.Size(); got != 1 {
+		t.Fatalf("expected tracker.Size()=1 after reply-only send, got %d", got)
+	}
+
+	// The entry must be reachable via LookupReply.
+	sentID := tracker.LookupReply("raidlife:test:1700000000", "chan1")
+	if sentID == "" {
+		t.Fatal("expected LookupReply to return the sent message ID, got empty")
+	}
+	if sentID != "chan1:msg-100" {
+		t.Errorf("expected sentID=chan1:msg-100, got %q", sentID)
+	}
+
+	// The Clean field in the stored entry must be 0 — so auto-delete won't fire.
+	msg := tracker.LookupReplyMessage("raidlife:test:1700000000", "chan1")
+	if msg == nil {
+		t.Fatal("LookupReplyMessage returned nil")
+	}
+	if msg.Clean != 0 {
+		t.Errorf("expected stored entry Clean=0 (no auto-delete), got %d", msg.Clean)
+	}
+}
+
+// TestProcessJob_NoReplyKey_NotTracked proves that a job with Clean=0,
+// EditKey="", and ReplyKey="" is NOT added to the tracker — there is nothing
+// to index so there is no point in storing it.
+func TestProcessJob_NoReplyKey_NotTracked(t *testing.T) {
+	mock := &queueMockSender{platform: "discord", sentID: "chan1:msg-200"}
+	senders := map[string]Sender{"discord": mock}
+
+	ch := make(chan *Job, 10)
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	}, nil)
+	fq.Start()
+
+	ch <- &Job{
+		Target:   "chan1",
+		Type:     "discord:channel",
+		Message:  json.RawMessage(`{"content":"plain"}`),
+		Clean:    0,
+		EditKey:  "",
+		ReplyKey: "",
+		TTH:      TTH{Hours: 1},
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	fq.Stop()
+
+	if got := tracker.Size(); got != 0 {
+		t.Fatalf("expected tracker.Size()=0 for job with no clean/edit/reply, got %d", got)
+	}
+}
+
+// TestProcessJob_ReplyChainWithoutClean proves the end-to-end reply chain:
+// job 1 (ReplyKey="k", Clean=0) is sent → tracked; job 2 (same ReplyKey/Target)
+// is sent → tracker lookup stamps job 2's ReplyToID with job 1's SentID before
+// the platform sender receives it.
+func TestProcessJob_ReplyChainWithoutClean(t *testing.T) {
+	var n int32
+	mock := &counterSender{
+		platform: "discord",
+		next: func() string {
+			id := atomic.AddInt32(&n, 1)
+			return "chan1:msg-" + strconv.Itoa(int(id))
+		},
+	}
+	senders := map[string]Sender{"discord": mock}
+
+	ch := make(chan *Job, 10)
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+
+	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+		ConcurrentDiscord:  1,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	}, nil)
+	fq.Start()
+
+	// Job 1: egg alert — no clean, no edit, just ReplyKey.
+	ch <- &Job{
+		Target:   "chan1",
+		Type:     "discord:channel",
+		Message:  json.RawMessage(`{"content":"egg"}`),
+		Clean:    0,
+		ReplyKey: "k",
+		TTH:      TTH{Hours: 1},
+	}
+	time.Sleep(80 * time.Millisecond)
+
+	// Job 2: raid alert — same ReplyKey, same target.
+	ch <- &Job{
+		Target:   "chan1",
+		Type:     "discord:channel",
+		Message:  json.RawMessage(`{"content":"raid"}`),
+		Clean:    0,
+		ReplyKey: "k",
+		TTH:      TTH{Hours: 1},
+	}
+	time.Sleep(80 * time.Millisecond)
+	fq.Stop()
+
+	calls := mock.getSendCalls()
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 sends, got %d", len(calls))
+	}
+	// Job 1 had no prior — ReplyToID must be empty.
+	if calls[0].ReplyToID != "" {
+		t.Errorf("job 1 should have no ReplyToID, got %q", calls[0].ReplyToID)
+	}
+	// Job 2 must carry job 1's SentID so Discord threads it as a reply.
+	if calls[1].ReplyToID != "chan1:msg-1" {
+		t.Errorf("job 2 ReplyToID = %q, want chan1:msg-1", calls[1].ReplyToID)
+	}
 }
 
 func TestFairQueueStop(t *testing.T) {

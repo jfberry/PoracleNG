@@ -1,0 +1,51 @@
+{
+  "name": "incident",
+  "description": "Track a pokestop incident (Kecleon, Gold Pokestop, Showcase…)",
+  "options": [
+    {
+      "type": 3,
+      "name": "type",
+      "description": "Pokestop incident type (Kecleon, Gold Pokestop, Showcase…)",
+      "channel_types": null,
+      "required": true,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 4,
+      "name": "distance",
+      "description": "Alert radius in metres",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "clean",
+      "description": "Auto-delete the alert when the incident expires",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Yes",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "type": 3,
+      "name": "template",
+      "description": "DTS template name",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    }
+  ]
+}

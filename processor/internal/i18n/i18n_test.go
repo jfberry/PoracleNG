@@ -237,3 +237,92 @@ func TestAllKeysPresent(t *testing.T) {
 		}
 	}
 }
+
+// TestPoracleAdminI18nParity verifies that every cmd.poracle_admin.* and
+// cmd.pa key present in the English bundle is also present in the German
+// bundle. German is checked as the reference non-English locale for the
+// skeleton. Other locales may lag until later tasks add them.
+//
+// The key set is derived dynamically from en.Messages() so that new keys
+// added to en.json are automatically covered without touching this test.
+func TestPoracleAdminI18nParity(t *testing.T) {
+	b := Load("")
+	en := b.For("en")
+	de := b.For("de")
+
+	// command name and its alias are intentionally English in all locales.
+	// Pure-format keys (indentation + placeholder only, no translatable text)
+	// are also excluded from the same-value check.
+	englishOnlyKeys := map[string]bool{
+		"cmd.poracle_admin": true,
+		"cmd.pa":            true,
+		// "  {0}" is pure indentation + placeholder — no translatable text.
+		"cmd.poracle_admin.summary.list.user_header": true,
+		// "  {0}  {1}  {2} {3}" is pure format — indentation + placeholders only.
+		"cmd.poracle_admin.warnings.entry_row": true,
+		// "  {0}:" and "    {0}: {1}" are pure indentation + placeholder — no translatable text.
+		"cmd.poracle_admin.emoji.list.row.key":      true,
+		"cmd.poracle_admin.emoji.list.row.platform": true,
+	}
+
+	for key := range en.Messages() {
+		if !strings.HasPrefix(key, "cmd.poracle_admin") && key != "cmd.pa" {
+			continue
+		}
+
+		enVal := en.T(key)
+		if enVal == key {
+			t.Errorf("en: key %q not found in English bundle — add it to en.json", key)
+			continue
+		}
+
+		deVal := de.T(key)
+		if deVal == key {
+			t.Errorf("de: key %q not found (returned raw key)", key)
+			continue
+		}
+
+		if !englishOnlyKeys[key] && deVal == enVal {
+			t.Errorf("de: key %q appears to be missing a German translation (de returned same value as en: %q)", key, enVal)
+		}
+	}
+}
+
+// TestAdminAdjacentI18nParity verifies that admin-adjacent keys added during
+// the admin-commands implementation (but living outside the cmd.poracle_admin.*
+// prefix) are also present and translated in the German bundle.
+//
+// Covered key families:
+//   - cmd.info.poracle.moved / cmd.info.config.moved — stub messages added in
+//     Task 3.3 when the info and config views were redirected to poracle-admin.
+//   - cmd.maintenance.active_suffix — appended to every bot reply when delivery
+//     is paused via !poracle-admin maintenance pause.
+func TestAdminAdjacentI18nParity(t *testing.T) {
+	b := Load("")
+	en := b.For("en")
+	de := b.For("de")
+
+	keys := []string{
+		"cmd.info.poracle.moved",
+		"cmd.info.config.moved",
+		"cmd.maintenance.active_suffix",
+	}
+
+	for _, key := range keys {
+		enVal := en.T(key)
+		if enVal == key {
+			t.Errorf("en: key %q not found in English bundle — add it to en.json", key)
+			continue
+		}
+
+		deVal := de.T(key)
+		if deVal == key {
+			t.Errorf("de: key %q not found in German bundle — add it to de.json", key)
+			continue
+		}
+
+		if deVal == enVal {
+			t.Errorf("de: key %q appears to be missing a German translation (de returned same value as en: %q)", key, enVal)
+		}
+	}
+}

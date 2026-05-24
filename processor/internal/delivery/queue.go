@@ -44,10 +44,11 @@ type QueueConfig struct {
 
 // FairQueue provides per-destination serialization with platform-level concurrency control.
 type FairQueue struct {
-	ch      chan *Job
-	senders map[string]Sender
-	tracker *MessageTracker
-	wg      sync.WaitGroup
+	ch         chan *Job
+	senders    map[string]Sender
+	tracker    *MessageTracker
+	dispatcher *Dispatcher
+	wg         sync.WaitGroup
 
 	// Shutdown context — cancelled when Stop() is called, aborts in-flight sends.
 	ctx    context.Context
@@ -82,7 +83,9 @@ type FairQueue struct {
 
 // NewFairQueue creates a FairQueue that reads jobs from ch and dispatches them
 // through the appropriate sender, respecting per-platform concurrency limits.
-func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTracker, cfg QueueConfig) *FairQueue {
+// d is the owning Dispatcher; it may be nil in tests that construct FairQueue
+// directly and don't need pause support.
+func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTracker, cfg QueueConfig, d *Dispatcher) *FairQueue {
 	if cfg.ConcurrentDiscord <= 0 {
 		cfg.ConcurrentDiscord = 1
 	}
@@ -102,6 +105,7 @@ func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTrack
 		ch:                ch,
 		senders:           senders,
 		tracker:           tracker,
+		dispatcher:        d,
 		ctx:               ctx,
 		cancel:            cancel,
 		discordSem:        make(chan struct{}, cfg.ConcurrentDiscord),
@@ -196,6 +200,23 @@ func (fq *FairQueue) processJob(job *Job) {
 				log.Infof("%s: edit: succeeded for key=%s", job.LogReference, job.EditKey)
 				metrics.DeliveryTotal.WithLabelValues(platform, "edit_ok").Inc()
 				metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
+
+				// Edits overwrite the snapshot (#108 — edits write a new
+				// snapshot under the same key, so consumers always see the
+				// most-recently-rendered state). Same composite-ID
+				// extraction as the initial-send write above.
+				if fq.dispatcher != nil && job.SnapshotData != nil {
+					if store := fq.dispatcher.SnapshotStore(); store != nil {
+						job.SnapshotData.MessageID = extractMessageIDForSnapshot(existing.SentID, PlatformFromType(job.Type))
+						job.SnapshotData.CreatedAt = time.Now().Unix()
+						if err := store.Write(fq.ctx, job.SnapshotData); err != nil {
+							metrics.SnapshotWritesTotal.WithLabelValues("fail").Inc()
+							log.Warnf("%s: snapshot write on edit failed: %v", job.LogReference, err)
+						} else {
+							metrics.SnapshotWritesTotal.WithLabelValues("ok").Inc()
+						}
+					}
+				}
 				return
 			} else {
 				log.Warnf("%s: edit: failed for key=%s: %v, sending new message", job.LogReference, job.EditKey, err)
@@ -218,6 +239,18 @@ func (fq *FairQueue) processJob(job *Job) {
 		if msgID := fq.tracker.LookupReply(job.ReplyKey, job.Target); msgID != "" {
 			job.ReplyToID = msgID
 		}
+	}
+
+	// Pause gate. During maintenance, normal deliveries are DROPPED on the
+	// floor rather than buffered — buffering would balloon memory on long
+	// pauses and produce a flood of stale alerts to users on resume.
+	// Bypass jobs (rate-limit notifications, ban farewells) still send;
+	// they're administrative messages, not user alerts, and tend to be rare.
+	if !job.BypassRateLimit && fq.dispatcher != nil && fq.dispatcher.IsPaused() {
+		log.Debugf("%s: dropped — delivery paused (type=%s target=%s)",
+			job.LogReference, job.Type, job.Target)
+		metrics.DeliveryTotal.WithLabelValues(platform, "dropped_paused").Inc()
+		return
 	}
 
 	// 2b. Squash sends that ask for clean but whose TTH is already expired.
@@ -311,6 +344,36 @@ func (fq *FairQueue) processJob(job *Job) {
 	metrics.DeliveryTotal.WithLabelValues(platform, "ok").Inc()
 	metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 
+	// Write the per-delivery snapshot (#108) if the store is configured and
+	// the render layer attached snapshot data to this job. The MessageID
+	// only becomes available now — fill it in from the SentMessage. Failures
+	// are non-fatal: snapshot writing is for buttons/inspection, never the
+	// alert itself, so we log and continue.
+	if fq.dispatcher != nil && job.SnapshotData != nil && sent != nil {
+		if store := fq.dispatcher.SnapshotStore(); store != nil {
+			// The Discord sender's SentMessage.ID is a composite like
+			// "bot/channelID:discordMessageID" (used by delete/edit to
+			// remember the channel). For the snapshot lookup we need
+			// the raw Discord message ID — that's what shows up in
+			// InteractionCreate.Message.ID when a user clicks a button.
+			// Telegram SentMessage.IDs use a different shape that
+			// passes through cleanly here.
+			job.SnapshotData.MessageID = extractMessageIDForSnapshot(sent.ID, PlatformFromType(job.Type))
+			if job.SnapshotData.CreatedAt == 0 {
+				job.SnapshotData.CreatedAt = time.Now().Unix()
+			}
+			if err := store.Write(fq.ctx, job.SnapshotData); err != nil {
+				metrics.SnapshotWritesTotal.WithLabelValues("fail").Inc()
+				log.Warnf("%s: snapshot write failed for %s/%s: %v",
+					job.LogReference, job.Type, job.Target, err)
+			} else {
+				metrics.SnapshotWritesTotal.WithLabelValues("ok").Inc()
+				log.Debugf("%s: snapshot stored key=%s sentID=%s",
+					job.LogReference, job.SnapshotData.Key(), sent.ID)
+			}
+		}
+	}
+
 	// 4. Track for clean/edit/reply if needed.
 	// ReplyKey on its own (without clean/edit) is enough to want tracking —
 	// otherwise reply chains can't form because the tracker has no entry
@@ -339,6 +402,7 @@ func (fq *FairQueue) processJob(job *Job) {
 			SentID:   sent.ID,
 			Target:   job.Target,
 			Type:     job.Type,
+			MsgType:  job.MsgType,
 			Clean:    job.Clean,
 			ReplyKey: job.ReplyKey,
 		}, ttl)

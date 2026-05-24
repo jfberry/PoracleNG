@@ -1,8 +1,11 @@
 package enrichment
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
@@ -11,6 +14,29 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
+
+// contestEntry mirrors the JSON structure of a single Showcase leaderboard entry.
+type contestEntry struct {
+	Rank                  int     `json:"rank"`
+	Score                 float64 `json:"score"`
+	PokemonID             int     `json:"pokemon_id"`
+	Form                  int     `json:"form"`
+	Costume               int     `json:"costume"`
+	Gender                int     `json:"gender"`
+	Shiny                 bool    `json:"shiny"`
+	TempEvolution         int     `json:"temp_evolution"`
+	TempEvolutionFinishMs int64   `json:"temp_evolution_finish_ms"`
+	Alignment             int     `json:"alignment"`
+	Badge                 int     `json:"badge"`
+	Background            *int64  `json:"background,omitempty"`
+}
+
+// contestJSON mirrors the top-level JSON structure of the showcase_rankings field.
+type contestJSON struct {
+	TotalEntries   int            `json:"total_entries"`
+	LastUpdate     int64          `json:"last_update"`
+	ContestEntries []contestEntry `json:"contest_entries"`
+}
 
 // Invasion builds enrichment fields for an invasion webhook.
 func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, pokestopURL string, gruntTypeID, displayType, lureID int, tileMode int) (map[string]any, *staticmap.TilePending) {
@@ -136,12 +162,15 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, poke
 }
 
 // InvasionTranslate adds per-language translated fields.
-func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lineup []webhook.InvasionLineupEntry, lang string) map[string]any {
+// showcaseRaw is the raw JSON bytes of the showcase_rankings field from the
+// Golbat webhook; pass nil for non-Showcase incidents and regular invasions.
+func (e *Enricher) InvasionTranslate(base map[string]any, lat, lon float64, gruntTypeID int, lineup []webhook.InvasionLineupEntry, showcaseRaw json.RawMessage, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
 		return nil
 	}
 
-	m := make(map[string]any, 15) // only translated fields; caller merges base + perLang
+	m := make(map[string]any, 25) // only translated fields; caller merges base + perLang
+	defer e.addLocalizedGeoResult(m, lat, lon, lang)
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)
@@ -261,7 +290,178 @@ func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lineu
 		}
 	}
 
+	// Showcase rankings (displayType == 9): parse and enrich top-3 contestants.
+	e.translateShowcaseRankings(m, showcaseRaw, gd, tr, lang)
+
 	return m
+}
+
+// translateShowcaseRankings parses showcase_rankings JSON and adds enriched
+// top-level and per-entry fields to the translation map m. When the field is
+// absent, empty, or unparseable the showcase* fields are set to safe zero
+// values so templates can always {{#if showcasePresent}} guard cleanly.
+func (e *Enricher) translateShowcaseRankings(m map[string]any, showcaseRaw json.RawMessage, gd *gamedata.GameData, tr *i18n.Translator, lang string) {
+	// Safe defaults — always set so templates never see missing keys.
+	m["showcasePresent"] = false
+	m["showcaseTotalEntries"] = 0
+	m["showcaseLastUpdate"] = int64(0)
+	m["showcaseLastUpdateFormatted"] = ""
+	m["showcase"] = []map[string]any{}
+	m["showcaseFirst"] = nil
+
+	if len(showcaseRaw) == 0 {
+		return
+	}
+
+	var contest contestJSON
+	if err := json.Unmarshal(showcaseRaw, &contest); err != nil {
+		log.Debugf("showcase_rankings parse error: %v", err)
+		return
+	}
+
+	if len(contest.ContestEntries) == 0 {
+		return
+	}
+
+	m["showcasePresent"] = true
+	m["showcaseTotalEntries"] = contest.TotalEntries
+	m["showcaseLastUpdate"] = contest.LastUpdate
+
+	// Format last_update timestamp using the operator's configured time layout.
+	// The timezone is not available in InvasionTranslate (it's in base enrichment);
+	// use empty string (UTC fallback) — sufficient for display purposes.
+	if contest.LastUpdate > 0 {
+		m["showcaseLastUpdateFormatted"] = geo.FormatTime(contest.LastUpdate, "", e.TimeLayout)
+	}
+
+	entries := make([]map[string]any, 0, len(contest.ContestEntries))
+	for _, ce := range contest.ContestEntries {
+		entry := e.translateContestEntry(ce, gd, tr)
+		entries = append(entries, entry)
+	}
+
+	m["showcase"] = entries
+	if len(entries) > 0 {
+		m["showcaseFirst"] = entries[0]
+	}
+}
+
+// translateContestEntry converts a single raw contest entry into a template-ready map.
+func (e *Enricher) translateContestEntry(ce contestEntry, gd *gamedata.GameData, tr *i18n.Translator) map[string]any {
+	entry := make(map[string]any, 24)
+
+	entry["rank"] = ce.Rank
+	entry["score"] = ce.Score
+	entry["scoreFormatted"] = fmt.Sprintf("%.2f", ce.Score)
+	entry["pokemonId"] = ce.PokemonID
+	entry["formId"] = ce.Form
+	entry["costumeId"] = ce.Costume
+	entry["genderId"] = ce.Gender
+	entry["shiny"] = ce.Shiny
+	if ce.Shiny {
+		entry["shinyEmoji"] = "✨"
+	} else {
+		entry["shinyEmoji"] = ""
+	}
+	entry["tempEvolutionId"] = ce.TempEvolution
+	entry["alignment"] = ce.Alignment
+	entry["badge"] = ce.Badge
+	bgVal := int64(0)
+	if ce.Background != nil {
+		bgVal = *ce.Background
+	}
+	entry["background"] = bgVal
+
+	if gd == nil || tr == nil {
+		entry["pokemonName"] = ""
+		entry["formName"] = ""
+		entry["fullName"] = ""
+		entry["costumeName"] = ""
+		entry["genderName"] = ""
+		entry["genderEmojiKey"] = ""
+		entry["tempEvolutionName"] = ""
+		entry["alignmentName"] = ""
+		entry["imgUrl"] = ""
+		return entry
+	}
+
+	// Pokemon and form names
+	nameKeys := gd.MonsterNameKeys(ce.PokemonID, ce.Form, ce.TempEvolution)
+	pokemonName := tr.T(nameKeys.PokemonKey)
+	entry["pokemonName"] = pokemonName
+
+	formName := ""
+	formNormalised := ""
+	if nameKeys.FormKey != "" {
+		formName = tr.T(nameKeys.FormKey)
+		if formName != "" && !IsNormalForm(formName) {
+			formNormalised = formName
+		}
+	}
+	entry["formName"] = formName
+
+	// fullName: alignment prefix + base+form + mega wrap
+	entry["fullName"] = BuildFullNameWithAlignment(tr, nameKeys, pokemonName, formNormalised, ce.PokemonID, ce.TempEvolution, ce.Alignment)
+
+	// Costume name (costume_N key from gamelocale)
+	costumeName := ""
+	if ce.Costume > 0 {
+		key := fmt.Sprintf("costume_%d", ce.Costume)
+		translated := tr.T(key)
+		if translated != key {
+			costumeName = translated
+		}
+	}
+	entry["costumeName"] = costumeName
+
+	// Gender name and emoji key
+	genderName := tr.T(fmt.Sprintf("gender_%d", ce.Gender))
+	if genderName == fmt.Sprintf("gender_%d", ce.Gender) {
+		genderName = ""
+	}
+	entry["genderName"] = genderName
+	genderEmojiKey := ""
+	if gd.Util != nil {
+		if info, ok := gd.Util.Genders[ce.Gender]; ok {
+			genderEmojiKey = info.Emoji
+		}
+	}
+	entry["genderEmojiKey"] = genderEmojiKey
+
+	// Temp evolution (mega) name — use same combo-key approach as buildFullName
+	tempEvolutionName := ""
+	if ce.TempEvolution > 0 {
+		// Already reflected in fullName via buildFullName; expose raw name too.
+		tempEvolutionName = buildFullName(tr, nameKeys, pokemonName, formNormalised, ce.PokemonID, ce.TempEvolution)
+	}
+	entry["tempEvolutionName"] = tempEvolutionName
+
+	// Alignment name
+	alignmentName := ""
+	if ce.Alignment > 0 {
+		key := fmt.Sprintf("alignment_%d", ce.Alignment)
+		translated := tr.T(key)
+		if translated != key && translated != "" {
+			alignmentName = translated
+		} else {
+			switch ce.Alignment {
+			case 1:
+				alignmentName = "Shadow"
+			case 2:
+				alignmentName = "Purified"
+			}
+		}
+	}
+	entry["alignmentName"] = alignmentName
+
+	// Icon URL via primary uicons resolver
+	imgURL := ""
+	if e.ImgUicons != nil {
+		imgURL = e.ImgUicons.PokemonIcon(ce.PokemonID, ce.Form, ce.TempEvolution, ce.Gender, ce.Costume, ce.Alignment, ce.Shiny, 0)
+	}
+	entry["imgUrl"] = imgURL
+
+	return entry
 }
 
 // translateEncounterSlot translates a slice of grunt encounter entries into enrichment maps.

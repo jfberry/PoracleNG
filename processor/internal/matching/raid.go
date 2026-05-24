@@ -106,6 +106,7 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 			Clean:           r.Clean,
 			Ping:            r.Ping,
 			RSVPChanges:     r.RSVPChanges,
+			UID:             r.UID,
 			IsSpecificMatch: isSpecificMatch,
 		})
 	}
@@ -177,6 +178,7 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 			Clean:           e.Clean,
 			Ping:            e.Ping,
 			RSVPChanges:     e.RSVPChanges,
+			UID:             e.UID,
 			IsSpecificMatch: isSpecificMatch,
 		})
 	}

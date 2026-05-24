@@ -1,0 +1,123 @@
+{
+  "name": "egg",
+  "description": "Track an egg / raid level",
+  "options": [
+    {
+      "type": 3,
+      "name": "level",
+      "description": "Egg / raid level",
+      "channel_types": null,
+      "required": true,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Tier 1",
+          "value": "1"
+        },
+        {
+          "name": "Tier 3",
+          "value": "3"
+        },
+        {
+          "name": "Tier 5",
+          "value": "5"
+        },
+        {
+          "name": "Tier 6",
+          "value": "6"
+        },
+        {
+          "name": "Mega",
+          "value": "mega"
+        },
+        {
+          "name": "Legendary",
+          "value": "legendary"
+        },
+        {
+          "name": "Shadow Tier 1",
+          "value": "shadow1"
+        },
+        {
+          "name": "Shadow Tier 3",
+          "value": "shadow3"
+        },
+        {
+          "name": "Shadow Tier 5",
+          "value": "shadow5"
+        },
+        {
+          "name": "Ultra Beast",
+          "value": "ultra beast"
+        },
+        {
+          "name": "Everything",
+          "value": "everything"
+        }
+      ]
+    },
+    {
+      "type": 4,
+      "name": "team",
+      "description": "Required gym-control team",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Harmony",
+          "value": 0
+        },
+        {
+          "name": "Mystic",
+          "value": 1
+        },
+        {
+          "name": "Valor",
+          "value": 2
+        },
+        {
+          "name": "Instinct",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "type": 4,
+      "name": "distance",
+      "description": "Alert radius in metres",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "clean",
+      "description": "Auto-delete the alert when the egg hatches",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": [
+        {
+          "name": "Yes",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "type": 3,
+      "name": "template",
+      "description": "DTS template name",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    }
+  ]
+}

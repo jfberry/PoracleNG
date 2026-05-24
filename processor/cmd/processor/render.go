@@ -7,7 +7,9 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -61,6 +63,12 @@ func (ps *ProcessorService) newTileGate(pending *staticmap.TilePending) *tileGat
 // handled by a TileGate (see newTileGate) so a single goroutine writes the
 // staticMap field of Enrichment, never the render worker itself.
 type RenderJob struct {
+	// AlertType is the source webhook type (raid, egg, pokemon, etc.) —
+	// distinct from TemplateType, which is the DTS template chosen to render
+	// the message. Used by processRenderJob to populate delivery.Job.MsgType,
+	// which the raid partition's first-visible check compares against to
+	// determine whether a prior tracked message is of the same alert type.
+	AlertType         string
 	TemplateType      string
 	Enrichment        map[string]any
 	PerLangEnrichment map[string]map[string]any
@@ -69,10 +77,10 @@ type RenderJob struct {
 	MatchedUsers      []webhook.MatchedUser
 	MatchedAreas      []webhook.MatchedArea
 	TileGate          *tileGate
-	IsEncountered    bool // pokemon only
-	IsPokemon        bool // true = RenderPokemon, false = RenderAlert
-	LogReference     string
-	EditKey          string
+	IsEncountered     bool // pokemon only
+	IsPokemon         bool // true = RenderPokemon, false = RenderAlert
+	LogReference      string
+	EditKey           string
 	// ReplyKey indexes the sent message for reply chaining. Copied verbatim
 	// onto every constructed delivery.Job. For pokemon, this is the encounter
 	// ID so subsequent change events can find prior messages via the
@@ -88,8 +96,14 @@ type RenderJob struct {
 	// ChangeType is a human-readable label for the change dimension
 	// (species/form/gender/encountered/weather_boost). Currently used for
 	// logging only. Empty for non-change renders.
-	ChangeType    string
-	TileImageData []byte // inline tile bytes, set during tile resolution
+	ChangeType string
+	// OverrideCleanTTH, if non-zero, overrides the map-derived TTH for this
+	// job's delivery jobs. Used by rsvpChanges render jobs to clean at the
+	// latest RSVP timeslot rather than raid.End. The value is a Unix timestamp
+	// in seconds; the render pool converts it to a delivery.TTH in Task B.
+	// Zero means "use the default" (map-derived from enrichment).
+	OverrideCleanTTH int64
+	TileImageData    []byte // inline tile bytes, set during tile resolution
 }
 
 // renderWorker processes render jobs from the shared channel until it is closed.
@@ -168,11 +182,17 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 			return
 		}
 		for _, j := range jobs {
+			var tth delivery.TTH
+			if job.OverrideCleanTTH != 0 {
+				tth = tthFromUnix(job.OverrideCleanTTH)
+			} else {
+				tth = tthFromMap(j.TTH)
+			}
 			ps.dispatcher.Dispatch(&delivery.Job{
 				Target:        j.Target,
 				Type:          j.Type,
 				Message:       j.Message,
-				TTH:           tthFromMap(j.TTH),
+				TTH:           tth,
 				Clean:         j.Clean,
 				Name:          j.Name,
 				LogReference:  j.LogReference,
@@ -180,8 +200,10 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				Lon:           parseCoordFloat(j.Lon),
 				EditKey:       j.EditKey,
 				ReplyKey:      job.ReplyKey,
+				MsgType:       job.AlertType,
 				StaticMapData: job.TileImageData,
 				Language:      j.Language,
+				SnapshotData:  ps.buildSnapshot(job, j, tth),
 			})
 		}
 	}
@@ -280,6 +302,18 @@ func tthFromMap(m map[string]any) delivery.TTH {
 	}
 }
 
+// tthFromUnix converts a Unix-seconds timestamp into a delivery.TTH using
+// geo.ComputeTTH so the arithmetic is consistent with the enrichment layer.
+func tthFromUnix(targetUnix int64) delivery.TTH {
+	g := geo.ComputeTTH(targetUnix)
+	return delivery.TTH{
+		Days:    g.Days,
+		Hours:   g.Hours,
+		Minutes: g.Minutes,
+		Seconds: g.Seconds,
+	}
+}
+
 func intFromAny(v any) int {
 	switch n := v.(type) {
 	case int:
@@ -294,4 +328,114 @@ func intFromAny(v any) int {
 func parseCoordFloat(s string) float64 {
 	f, _ := strconv.ParseFloat(s, 64)
 	return f
+}
+
+// buildSnapshot constructs the per-delivery Snapshot for a DeliveryJob, or
+// returns nil when the snapshot store isn't enabled. The MessageID is left
+// empty — the dispatcher's sender fills it in from the resolved SentMessage
+// after the platform API call succeeds. CreatedAt is also deferred (set on
+// write) so re-renders for an edit see a fresh timestamp.
+//
+// TrackingUIDs are collected from every MatchedUser sharing this user ID:
+// pokemon matching can produce multiple matches per user (basic + great +
+// ultra PVP) and snapshot.TrackingUIDs should list all of them so the
+// unsubscribe action can offer per-rule granularity.
+//
+// View is the merged enrichment + per-language + per-user maps — the same
+// data the renderer's LayeredView resolves at template time. Stored as a
+// JSON-serialisable map[string]any so consumers (button response
+// templates, redeliver action) can render against it without rebuilding
+// the layered structure.
+func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, tth delivery.TTH) *snapshots.Snapshot {
+	if ps.snapshotStore == nil {
+		return nil
+	}
+	now := time.Now()
+	expires := now.Add(tth.Duration()).Unix()
+
+	areas := make([]string, 0, len(rj.MatchedAreas))
+	for _, a := range rj.MatchedAreas {
+		areas = append(areas, a.Name)
+	}
+
+	trackingUIDs := collectTrackingUIDs(rj.MatchedUsers, dj.Target)
+
+	// TemplateType: the renderer's per-delivery value wins over the
+	// RenderJob's because some handlers (notably pokemon) don't set
+	// rj.TemplateType — the renderer picks "monster" vs "monsterNoIv"
+	// dynamically. Without this preference the snapshot stores type=""
+	// and the click handler's GetButtons lookup misses the right entry.
+	templateType := dj.TemplateType
+	if templateType == "" {
+		templateType = rj.TemplateType
+	}
+
+	return &snapshots.Snapshot{
+		Target:            dj.Target,
+		TargetType:        snapshotTargetType(dj.Type),
+		ExpiresAt:         expires,
+		AlertType:         rj.AlertType,
+		TemplateType:      templateType,
+		TemplateRequested: dj.TemplateRequested,
+		TemplateSelected:  dj.TemplateSelected,
+		Language:          dj.Language,
+		Platform:          delivery.PlatformFromType(dj.Type),
+		MatchedAreas:      areas,
+		TrackingUIDs:      trackingUIDs,
+		// Raw layers — click-time rendering rebuilds a LayeredView from
+		// these so aliases, computed fields, and emoji resolution work
+		// identically to the original render. PerLang is filtered to
+		// the matched user's language; PerUser to this user's id —
+		// snapshot is per-delivery, only one of each matters.
+		Enrichment:    rj.Enrichment,
+		PerLang:       rj.PerLangEnrichment[dj.Language],
+		PerUser:       rj.PerUserEnrichment[dj.Target],
+		WebhookFields: rj.WebhookFields,
+	}
+}
+
+// collectTrackingUIDs gathers every RuleUID from MatchedUsers that share
+// the given target. A pokemon delivery to user X may have come from
+// several matching rules (basic + PVP) — we surface them all so
+// unsubscribe buttons can act on the right subset, and so the
+// ScopeTracking mute filter has the full set to check against.
+//
+// Duplicates are deduped to keep the slice small (the unsubscribe
+// confirmation message lists them, and operators are happier with a
+// non-redundant list).
+func collectTrackingUIDs(users []webhook.MatchedUser, target string) []int64 {
+	if len(users) == 0 {
+		return nil
+	}
+	seen := make(map[int64]bool)
+	out := make([]int64, 0)
+	for _, u := range users {
+		if u.ID != target {
+			continue
+		}
+		if u.RuleUID == 0 || seen[u.RuleUID] {
+			continue
+		}
+		seen[u.RuleUID] = true
+		out = append(out, u.RuleUID)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// snapshotTargetType maps a delivery.Job.Type ("discord:user", etc.) to the
+// short noun used in Snapshot.TargetType ("dm" / "channel" / "webhook").
+func snapshotTargetType(jobType string) string {
+	switch jobType {
+	case "discord:user", "telegram:user":
+		return "dm"
+	case "discord:channel", "discord:thread", "telegram:group", "telegram:channel":
+		return "channel"
+	case "webhook":
+		return "webhook"
+	default:
+		return ""
+	}
 }

@@ -727,3 +727,173 @@ func TestLayeredView_GymUrlAliasFromWebhook(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "https://lh3.googleusercontent.com/abc123", v)
 }
+
+// TestResolveWeaknessEmojis_DoesNotMutateInput verifies that
+// resolveWeaknessEmojis leaves the original perLang weaknessList maps
+// untouched. This locks the fix for the "concurrent map writes" panic that
+// occurred when two render workers processed different RenderJobs sharing
+// the same *Enrichment (e.g. raid-rsvp's fullUsers + rsvpUsers partition):
+// the old in-place writes raced fatally at layered_view.go:312.
+func TestResolveWeaknessEmojis_DoesNotMutateInput(t *testing.T) {
+	emojiLookup := &EmojiLookup{
+		custom: make(map[string]map[string]string),
+		defaults: map[string]string{
+			"poke_type_water":    "💧",
+			"poke_type_electric": "⚡",
+		},
+	}
+
+	// Build the shared weakness list exactly as enrichment produces it —
+	// category maps with nested type-entry maps but no "emoji"/"typeEmoji".
+	sharedWeakness := []map[string]any{
+		{
+			"value": 2.0,
+			"types": []map[string]any{
+				{"emojiKey": "poke_type_water", "name": "Water"},
+				{"emojiKey": "poke_type_electric", "name": "Electric"},
+			},
+		},
+	}
+	perLang := map[string]any{
+		"weaknessList": sharedWeakness,
+	}
+
+	// Snapshot the original state of every map we want to protect.
+	origCat := map[string]any{
+		"value": 2.0,
+		"types": []map[string]any{
+			{"emojiKey": "poke_type_water", "name": "Water"},
+			{"emojiKey": "poke_type_electric", "name": "Electric"},
+		},
+	}
+	origEntry0 := map[string]any{"emojiKey": "poke_type_water", "name": "Water"}
+	origEntry1 := map[string]any{"emojiKey": "poke_type_electric", "name": "Electric"}
+
+	computed := make(map[string]any)
+	localOverrides := make(map[string]any)
+	resolveWeaknessEmojis(emojiLookup, perLang, "discord", computed, localOverrides)
+
+	// The shared perLang map must not have gained any new keys.
+	assert.Equal(t, map[string]any{"weaknessList": sharedWeakness}, perLang,
+		"perLang must not be mutated")
+
+	// The shared category map must remain unchanged.
+	cat := sharedWeakness[0]
+	assert.Equal(t, origCat["value"], cat["value"])
+	_, hasTypeEmoji := cat["typeEmoji"]
+	assert.False(t, hasTypeEmoji, "shared category map must not have typeEmoji added")
+
+	// The shared type-entry maps must not have gained "emoji".
+	types := sharedWeakness[0]["types"].([]map[string]any)
+	assert.Equal(t, origEntry0, types[0], "shared type entry 0 must not be mutated")
+	assert.Equal(t, origEntry1, types[1], "shared type entry 1 must not be mutated")
+
+	// The resolved list must land in localOverrides, not perLang.
+	resolvedRaw, ok := localOverrides["weaknessList"]
+	require.True(t, ok, "localOverrides must contain resolved weaknessList")
+	resolved, ok := resolvedRaw.([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, resolved, 1)
+
+	// Resolved category has typeEmoji.
+	resolvedCat := resolved[0]
+	assert.Equal(t, "💧⚡", resolvedCat["typeEmoji"])
+
+	// Resolved type entries have emoji.
+	resolvedTypes := resolvedCat["types"].([]map[string]any)
+	assert.Equal(t, "💧", resolvedTypes[0]["emoji"])
+	assert.Equal(t, "⚡", resolvedTypes[1]["emoji"])
+
+	// flat weaknessEmoji lands in computed.
+	assert.Equal(t, "2x💧⚡ ", computed["weaknessEmoji"])
+}
+
+// TestLayeredView_WeaknessList_HasEmojiFields verifies that the localOverrides
+// layer (checked before perLang in GetField) supplies the resolved weaknessList
+// — the one with "emoji" on type entries and "typeEmoji" on categories. This
+// is the template-author-visible contract: {{#each weaknessList}}...{{typeEmoji}}
+// must return the platform-resolved string, not the empty string from the shared
+// un-resolved perLang copy.
+func TestLayeredView_WeaknessList_HasEmojiFields(t *testing.T) {
+	emoji := &EmojiLookup{
+		custom:   make(map[string]map[string]string),
+		defaults: map[string]string{"poke_type_grass": "🌿"},
+	}
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.emoji = emoji
+		o.perLang = map[string]any{
+			"weaknessList": []map[string]any{
+				{
+					"value": 2.0,
+					"types": []map[string]any{
+						{"emojiKey": "poke_type_grass", "name": "Grass"},
+					},
+				},
+			},
+		}
+	})
+
+	v, ok := lv.GetField("weaknessList")
+	require.True(t, ok, "weaknessList must resolve")
+	list, ok := v.([]map[string]any)
+	require.True(t, ok, "weaknessList must be []map[string]any")
+	require.Len(t, list, 1)
+
+	cat := list[0]
+	assert.Equal(t, "🌿", cat["typeEmoji"], "category typeEmoji must be resolved")
+
+	types, ok := cat["types"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, types, 1)
+	assert.Equal(t, "🌿", types[0]["emoji"], "type entry emoji must be resolved")
+}
+
+// TestLayeredView_IncidentAliases verifies that the incident-specific
+// aliases resolve correctly from the perLang / base enrichment layers when the
+// template type is "incident".
+func TestLayeredView_IncidentAliases(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.templateType = "incident"
+		o.perLang = map[string]any{
+			// gruntName is populated by InvasionTranslate for event invasions.
+			"gruntName": "Gold Pokéstop",
+		}
+		o.base = map[string]any{
+			// gruntType is the lowercase event slug from base enrichment.
+			// Operators use {{gruntType}} directly — no alias needed.
+			"gruntType":      "gold-stop",
+			"gruntTypeColor": "#FFD700",
+			// displayTypeId is the numeric event ID set by invasion enrichment.
+			"displayTypeId": 12,
+		}
+		// gruntTypeEmoji is resolved from the emoji layer; simulate it already
+		// resolved by putting it in perLang (as the emoji layer would after
+		// singleEmojiKeys resolution).
+		o.perLang["gruntTypeEmoji"] = "🌟"
+	})
+
+	// incidentTypeName → gruntName
+	v, ok := lv.GetField("incidentTypeName")
+	require.True(t, ok, "incidentTypeName must resolve")
+	assert.Equal(t, "Gold Pokéstop", v, "incidentTypeName must alias gruntName")
+
+	// displayType → displayTypeId (numeric ID)
+	v, ok = lv.GetField("displayType")
+	require.True(t, ok, "displayType must resolve")
+	assert.Equal(t, 12, v, "displayType must alias displayTypeId")
+
+	// gruntType is available directly (no incidentSlug alias)
+	v, ok = lv.GetField("gruntType")
+	require.True(t, ok, "gruntType must resolve directly")
+	assert.Equal(t, "gold-stop", v, "gruntType must be accessible directly")
+
+	// incidentEmoji → gruntTypeEmoji
+	v, ok = lv.GetField("incidentEmoji")
+	require.True(t, ok, "incidentEmoji must resolve")
+	assert.Equal(t, "🌟", v, "incidentEmoji must alias gruntTypeEmoji")
+
+	// color → gruntTypeColor
+	v, ok = lv.GetField("color")
+	require.True(t, ok, "color must resolve")
+	assert.Equal(t, "#FFD700", v, "color must alias gruntTypeColor")
+}

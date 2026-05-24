@@ -320,6 +320,45 @@ admin_channel_id = ""
 # accessible. 0 disables. Max 168 (7 days, Discord's archive ceiling).
 thread_keep_alive_interval_hours = 24
 
+# ---- Discord slash commands (optional, additive surface) ----
+#
+# When enabled, Poracle registers Discord slash commands alongside the
+# existing ! text commands. Both surfaces keep working — slash is for
+# users who prefer Discord's native autocomplete UI; ! is for users who
+# already know the text grammar.
+#
+# Recommended for testing: register_globally=false + a guilds list so
+# changes propagate to clients in seconds. Switch to register_globally=
+# true for production; global updates can take up to an hour to appear
+# in Discord clients. Switching between modes leaves stale registrations;
+# run once with `-clear-global-slash-commands` or
+# `-clear-guild-slash-commands` to clean up.
+
+[discord.slash_commands]
+# Master switch. When false, no slash commands are registered or routed.
+enabled = false
+
+# Global registration: a single set of commands available across every
+# guild the bot is in, plus DMs. Discord caches these aggressively, so
+# changes can take up to an hour to appear in users' clients. Defaults
+# off so flipping enabled=true never silently pushes commands to every
+# server the bot has ever been invited to — opt in explicitly.
+register_globally = false
+
+# Per-guild registration list. Used when register_globally is false.
+# Updates appear within seconds, which makes this the right choice for
+# testing and most single-server deployments. If both this list is empty
+# and register_globally is false, no commands are registered (the sync
+# logs a warning).
+guilds = []
+
+# Optional allow-list of canonical short names to expose. Empty = all
+# commands this build supports. Use this to hide commands rather than
+# disable categories outright. Names always reference the canonical
+# English short form regardless of any i18n renaming.
+# enable = ["track", "tracked", "raid", "untrack", "area", "profile", "location", "start", "stop"]
+enable = []
+
 # ---- Telegram ----
 
 [telegram]
@@ -628,3 +667,14 @@ max_age = 1                              # days to keep old log files
 max_backups = 12                         # number of old rotated files to keep (~12 hours at hourly rotation)
 compress = true                          # gzip compress rotated log files
 rotate_interval = 60                     # minutes between forced rotations (0 = size-based only)
+
+# Snapshots — opt-in on-disk store of per-delivery enrichment views. The
+# substrate for interactive buttons and post-alert lookups (mute commands
+# can reference rules muted via buttons, button clicks re-render templates
+# against the stored view, etc.). Disabled by default so operators get no
+# disk usage and no buttons unless they opt in.
+[snapshots]
+enabled = false
+# path                = "config/.cache/snapshots"   # relative to BaseDir
+# max_age_days        = 7                           # safety-sweep grace period
+# sweep_interval_mins = 60                          # background sweep cadence

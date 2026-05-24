@@ -226,7 +226,7 @@ func (ps *ProcessorService) enrichInvasion(raw json.RawMessage, language string)
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = ps.enricher.InvasionTranslate(base, gruntTypeID, inv.Lineup, language)
+		perLang = ps.enricher.InvasionTranslate(base, inv.Latitude, inv.Longitude, gruntTypeID, inv.Lineup, inv.ShowcaseRankings, language)
 	}
 
 	return &enrichResult{
@@ -248,7 +248,7 @@ func (ps *ProcessorService) enrichLure(raw json.RawMessage, language string) (*e
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = ps.enricher.LureTranslate(base, lure.LureID, language)
+		perLang = ps.enricher.LureTranslate(base, &lure, language)
 	}
 
 	return &enrichResult{
@@ -270,7 +270,7 @@ func (ps *ProcessorService) enrichNest(raw json.RawMessage, language string) (*e
 
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = ps.enricher.NestTranslate(base, nest.PokemonID, nest.Form, language)
+		perLang = ps.enricher.NestTranslate(base, &nest, language)
 	}
 
 	return &enrichResult{
@@ -303,7 +303,7 @@ func (ps *ProcessorService) enrichGym(raw json.RawMessage, language string) (*en
 	var perLang map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		// Editor preview has no team-change context, so suppress previousControl* fields.
-		perLang = ps.enricher.GymTranslate(base, teamID, -1, -1, language)
+		perLang = ps.enricher.GymTranslate(base, gym.Latitude, gym.Longitude, teamID, -1, -1, language)
 	}
 
 	return &enrichResult{
@@ -322,10 +322,12 @@ func (ps *ProcessorService) enrichFort(raw json.RawMessage, language string) (*e
 	}
 
 	base, tilePending := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID(), &fort, enrichment.TileModeURL)
+	perLang := ps.enricher.FortUpdateTranslate(fort.Latitude(), fort.Longitude(), language)
 
 	return &enrichResult{
 		templateType:  "fort-update",
 		base:          base,
+		perLang:       perLang,
 		webhookFields: parseWebhookFields(raw),
 		tilePending:   tilePending,
 	}, nil

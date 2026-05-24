@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -33,12 +35,14 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/discordbot"
+	"github.com/pokemon/poracleng/processor/internal/discordbot/slash"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/geocoding"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/logbuffer"
 	"github.com/pokemon/poracleng/processor/internal/logging"
 	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
@@ -52,6 +56,9 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/telegrambot"
+	"github.com/pokemon/poracleng/processor/internal/buttonactions"
+	"github.com/pokemon/poracleng/processor/internal/mute"
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
 	"github.com/pokemon/poracleng/processor/internal/validation"
@@ -60,6 +67,9 @@ import (
 
 func main() {
 	baseDir := flag.String("basedir", "..", "path to project root directory")
+	forceSyncSlash := flag.Bool("sync-slash-commands", false, "Force slash command sync regardless of cache")
+	clearGlobalSlash := flag.Bool("clear-global-slash-commands", false, "Clear all globally-registered slash commands at startup (use when switching from register_globally=true to false to remove the global duplicates)")
+	clearGuildSlash := flag.Bool("clear-guild-slash-commands", false, "Clear all guild-scoped slash commands at startup for the guilds listed in [discord.slash_commands] (use when switching from register_globally=false to true)")
 	flag.Parse()
 
 	// Register build info from version.go + Go's embedded VCS metadata
@@ -82,6 +92,15 @@ func main() {
 		MaxBackups:         cfg.Logging.MaxBackups,
 		Compress:           cfg.Logging.Compress,
 	})
+
+	// Construct the in-memory log buffer and register it as a logrus hook
+	// immediately after the logger is configured so we capture as much of
+	// startup as possible (resource downloads, DB open, migrations, …).
+	// startupCap=200 bounds the buffer against a misconfigured deployment
+	// that might otherwise flood memory; rollingCap=50 keeps the last 50
+	// WARN/ERROR events post-startup for !poracle-admin warnings.
+	logBuf := logbuffer.New(200, 50)
+	log.AddHook(logbuffer.NewHook(logBuf))
 
 	log.Infof("Poracle processor %s (commit %s, built %s)", buildVersion, buildCommit, buildDate)
 
@@ -191,6 +210,30 @@ func main() {
 		if err != nil {
 			log.Warnf("Delivery dispatcher init failed: %s", err)
 		} else {
+			// Wire the snapshot store into the dispatcher before Start so the
+			// first delivered message can record its snapshot. Safe to call
+			// with nil — the dispatcher treats nil as "snapshots disabled".
+			proc.dispatcher.SetSnapshotStore(proc.snapshotStore)
+			// Drop snapshots when their host message ages out of the
+			// tracker. The hook fires for every TTL-expired entry
+			// (clean or not) — snapshots are useless once the alert is
+			// no longer in the user's window of interest. The safety
+			// sweep is the second line of defence for snapshots that
+			// outlive a missed callback.
+			if proc.snapshotStore != nil && proc.dispatcher.MessageTracker() != nil {
+				store := proc.snapshotStore
+				proc.dispatcher.MessageTracker().SetEvictionHook(func(target, sentID string) {
+					// MessageTracker stores the composite SentMessage.ID
+					// ("bot/channelID:discordMsgID"); snapshots are keyed
+					// by the bare platform message id. Extract before
+					// computing the key so clean-deletion drops the right
+					// entry.
+					msgID := delivery.ExtractMessageIDForSnapshot(sentID)
+					if err := store.Delete(proc.ctx, snapshots.MakeKey(target, msgID)); err != nil {
+						log.Debugf("snapshots: delete on tracker evict %s/%s: %v", target, sentID, err)
+					}
+				})
+			}
 			proc.dispatcher.Start()
 			log.Infof("Delivery dispatcher started: discord=%d webhook=%d telegram=%d queue=%d",
 				cfg.Tuning.ConcurrentDiscordDestinations,
@@ -276,7 +319,7 @@ func main() {
 	webhookHandler := webhook.NewHandler(proc, webhookLogger)
 
 	// Public endpoints (no auth)
-	r.POST("/", webhookHandler)
+	r.POST("/", webhookHandler.GinHandler())
 	r.GET("/health", api.HandleHealth())
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
@@ -431,6 +474,7 @@ func main() {
 	humans.POST("/:id/start", api.HandleStartHuman(trackingDeps))
 	humans.POST("/:id/stop", api.HandleStopHuman(trackingDeps))
 	humans.POST("/:id/adminDisabled", api.HandleAdminDisabled(trackingDeps))
+	humans.POST("/:id/language", api.HandleSetLanguage(trackingDeps))
 	humans.POST("/:id/switchProfile/:profile", api.HandleSwitchProfile(trackingDeps))
 	humans.POST("/:id/setLocation/:lat/:lon", api.HandleSetLocation(trackingDeps))
 	humans.POST("/:id/setAreas", api.HandleSetAreas(trackingDeps))
@@ -465,6 +509,23 @@ func main() {
 	summaries.DELETE("/:id/:alertType", api.HandleSummaryDelete(summaryDeps))
 	summaries.POST("/:id/:alertType/trigger", api.HandleSummaryTrigger(summaryDeps))
 
+	// reloadDTS reloads DTS templates and returns the number of loaded entries.
+	// It is used by both the HTTP /api/dts/reload handlers and the BotDeps closure
+	// so the logic lives in exactly one place.
+	reloadDTS := func() (int, error) {
+		if proc.dtsRenderer == nil {
+			return 0, errors.New("DTS renderer not configured")
+		}
+		ts := proc.dtsRenderer.Templates()
+		if err := ts.Reload(
+			filepath.Join(cfg.BaseDir, "config"),
+			filepath.Join(cfg.BaseDir, "fallbacks"),
+		); err != nil {
+			return 0, err
+		}
+		return len(ts.FilteredEntries("", "", "", "")), nil
+	}
+
 	// DTS template endpoints
 	if proc.dtsRenderer != nil {
 		apiGroup.GET("/config/templates", api.HandleTemplateConfig(proc.dtsRenderer.Templates()))
@@ -481,16 +542,12 @@ func main() {
 		apiGroup.GET("/dts/partials", api.HandleDTSPartials(proc.dtsRenderer.Templates()))
 		apiGroup.POST("/dts/sendtest", api.HandleDTSSendTest(proc.dispatcher, proc.dtsRenderer.Templates(), proc.dtsRenderer))
 		apiGroup.POST("/dts/reload", api.HandleReload(func() error {
-			return proc.dtsRenderer.Templates().Reload(
-				filepath.Join(cfg.BaseDir, "config"),
-				filepath.Join(cfg.BaseDir, "fallbacks"),
-			)
+			_, err := reloadDTS()
+			return err
 		}))
 		apiGroup.GET("/dts/reload", api.HandleReload(func() error {
-			return proc.dtsRenderer.Templates().Reload(
-				filepath.Join(cfg.BaseDir, "config"),
-				filepath.Join(cfg.BaseDir, "fallbacks"),
-			)
+			_, err := reloadDTS()
+			return err
 		}))
 		apiGroup.GET("/dts/testdata", api.HandleDTSTestdata(
 			filepath.Join(cfg.BaseDir, "config"),
@@ -513,9 +570,16 @@ func main() {
 	apiGroup.GET("/config/values", api.HandleConfigValues(configDeps))
 	apiGroup.POST("/config/values", api.HandleConfigSave(configDeps))
 	apiGroup.POST("/config/validate", api.HandleConfigValidate(configDeps))
-	apiGroup.POST("/config/migrate", api.HandleConfigMigrate(configDeps))
 	apiGroup.GET("/masterdata/monsters", api.HandleMasterdataMonsters(proc.enricher.GameData, proc.enricher.Translations))
 	apiGroup.GET("/masterdata/grunts", api.HandleMasterdataGrunts(proc.enricher.GameData))
+
+	// Snapshot inspection — admin-only via the api_secret middleware. Returns
+	// 503 if [snapshots] enabled = false. See docs/buttons-and-snapshots/.
+	apiGroup.GET("/snapshots/:messageID", api.HandleSnapshotGet(proc.snapshotStore))
+
+	// Button action registry — config editor reads this to surface the
+	// dropdown of action choices + their accepted scopes/params.
+	apiGroup.GET("/dts/actions", api.HandleButtonActionsList(proc.buttonActions))
 
 	// Resolution cache — populated after bot init below
 	resolveCache := api.NewResolveCache()
@@ -570,6 +634,8 @@ func main() {
 	cmdRegistry.Register(&commands.TrackCommand{})
 	cmdRegistry.Register(&commands.TrackedCommand{})
 	cmdRegistry.Register(&commands.UntrackCommand{})
+	cmdRegistry.Register(&commands.MuteCommand{})
+	cmdRegistry.Register(&commands.UnmuteCommand{})
 	cmdRegistry.Register(&commands.GymCommand{})
 	cmdRegistry.Register(&commands.InvasionCommand{})
 	cmdRegistry.Register(&commands.NestCommand{})
@@ -599,6 +665,7 @@ func main() {
 	cmdRegistry.Register(&commands.RestoreCommand{})
 	cmdRegistry.Register(&commands.BroadcastCommand{})
 	cmdRegistry.Register(&commands.ApplyCommand{})
+	cmdRegistry.Register(&commands.PoracleAdminCommand{})
 
 	// NLP parser for !ask command and suggest_on_dm
 	var nlpParser *nlp.Parser
@@ -614,36 +681,14 @@ func main() {
 		log.Info("NLP command parser initialized")
 	}
 
-	// Command API endpoint (for testing commands without bots)
+	// cmdDTS / cmdEmoji are used both by sharedBotDeps (below) and by the
+	// /api/command endpoint that routes through it.
 	var cmdDTS *dts.TemplateStore
 	var cmdEmoji *dts.EmojiLookup
 	if proc.dtsRenderer != nil {
 		cmdDTS = proc.dtsRenderer.Templates()
 		cmdEmoji = proc.dtsRenderer.Emoji()
 	}
-	cmdDeps := &api.CommandDeps{
-		DB:            database,
-		Humans:        humanStore,
-		Tracking:      trackingStores,
-		Config:        cfg,
-		StateMgr:      stateMgr,
-		GameData:      proc.enricher.GameData,
-		Translations:  proc.enricher.Translations,
-		Dispatcher:    proc.dispatcher,
-		RowText:       trackingDeps.RowText,
-		Resolver:      cmdResolver,
-		ArgMatcher:    cmdArgMatcher,
-		Parser:        cmdParser,
-		Registry:      cmdRegistry,
-		Weather:       proc.weather,
-		Stats:         proc.stats,
-		DTS:           cmdDTS,
-		Emoji:         cmdEmoji,
-		NLPParser:     nlpParser,
-		TestProcessor: proc,
-		ReloadFunc:    proc.triggerReload,
-	}
-	apiGroup.POST("/command", api.HandleCommand(cmdDeps))
 
 	server := &http.Server{
 		Addr:    cfg.Processor.ListenAddr(),
@@ -758,9 +803,137 @@ func main() {
 		TestProcessor:      proc,
 		ReloadFunc:         proc.triggerReload,
 		SummarySchedules:   proc.SummarySchedules(),
+		SummaryBuffer:      proc.summaryBuffer,
 		SummaryBufferCount: proc.SummaryBufferCount,
 		SummaryDispatch:    proc.DispatchQuestSummary,
 		Scanner:            proc.scanner,
+		RecentActivity:     proc.recentActivity,
+		MuteStore:          proc.muteStore,
+		SnapshotStore:      proc.snapshotStore,
+		ButtonActions:      proc.buttonActions,
+		DTSRenderer:        proc.dtsRenderer,
+		ReloadDTS: reloadDTS,
+		EmojiReload: func() (int, error) {
+			if cmdEmoji == nil {
+				return 0, errors.New("emoji config not loaded (DTS renderer not configured)")
+			}
+			return cmdEmoji.Reload()
+		},
+		EmojiOperation: func(channelID, guildID string, upload, overwrite bool) []bot.Reply {
+			b := discordBotRef
+			if b == nil {
+				return []bot.Reply{{Text: "Discord bot is not configured on this deployment."}}
+			}
+			return b.RunEmojiOperation(channelID, guildID, upload, overwrite)
+		},
+		ReloadGeofence: func() error {
+			return state.LoadWithGeofences(stateMgr, database, summaryScheduleStore, cfg.Geofence)
+		},
+		ReloadState: func() error {
+			return state.Load(stateMgr, database, summaryScheduleStore)
+		},
+		WebhookRate: webhookHandler.RateSnapshot,
+		AlertLimiter: proc.rateLimiter,
+		DiscordRate:  proc.dispatcher.DiscordRateSnapshot,
+		TelegramRate: proc.dispatcher.TelegramRateSnapshot,
+		GeocoderStats: func() geocoding.CacheStats {
+			if proc.enricher.Geocoder == nil {
+				return geocoding.CacheStats{}
+			}
+			return proc.enricher.Geocoder.CacheStats()
+		},
+		GeocoderClear: func() int {
+			if proc.enricher.Geocoder == nil {
+				return 0
+			}
+			return proc.enricher.Geocoder.ClearCache()
+		},
+		// Reconciler / RunReconcile are always non-nil. When Discord is not
+		// configured, the closures return discordbot.ErrReconciliationDisabled.
+		// Command callers use errors.Is to detect.
+		Reconciler: func(userID string) error {
+			if discordBot == nil {
+				return discordbot.ErrReconciliationDisabled
+			}
+			return discordBot.ReconcileUserNow(userID)
+		},
+		RunReconcile: func() error {
+			if discordBot == nil {
+				return discordbot.ErrReconciliationDisabled
+			}
+			return discordBot.RunReconciliationNow()
+		},
+		LogBuffer:    logBuf,
+		ProcessStart: proc.ProcessStart(),
+
+		// Slash command lifecycle — always non-nil. When the Discord bot is
+		// not up or slash commands are disabled, the closures return
+		// slash.ErrSlashNotConfigured so the command handler can emit a
+		// friendly operator message.
+		SlashSync: func() error {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return slash.ErrSlashNotConfigured
+			}
+			return d.SyncCommands()
+		},
+		SlashForceResync: func() error {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return slash.ErrSlashNotConfigured
+			}
+			return d.ForceResync()
+		},
+		SlashClearGlobal: func() error {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return slash.ErrSlashNotConfigured
+			}
+			return d.ClearGlobalCommands()
+		},
+		SlashClearGuild: func(guildID string) error {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return slash.ErrSlashNotConfigured
+			}
+			// ClearGuildCommands clears all configured guilds; to target a
+			// single guild we temporarily patch the dispatcher's guild list.
+			return d.ClearSingleGuild(guildID)
+		},
+		SlashStatus: func() (bot.SlashScope, []bot.SlashScope, error) {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return bot.SlashScope{}, nil, slash.ErrSlashNotConfigured
+			}
+			global, guilds, err := d.CacheStatus()
+			if err != nil {
+				return bot.SlashScope{}, nil, err
+			}
+			gscope := bot.SlashScope{
+				Name:         "global",
+				LastSyncedAt: global.SyncedAt,
+				Fingerprint:  global.Fingerprint,
+			}
+			var guildScopes []bot.SlashScope
+			for name, entry := range guilds {
+				guildScopes = append(guildScopes, bot.SlashScope{
+					Name:         name,
+					LastSyncedAt: entry.SyncedAt,
+					Fingerprint:  entry.Fingerprint,
+				})
+			}
+			return gscope, guildScopes, nil
+		},
+	}
+
+	// /api/command — routes through the full BotDeps graph so every admin
+	// closure (WebhookRate, AlertLimiter, Reconciler, SlashSync, etc.) is
+	// populated. Parser is added on top of sharedBotDeps, matching the
+	// per-bot pattern used for Discord and Telegram below.
+	{
+		apiCmdDeps := sharedBotDeps
+		apiCmdDeps.Parser = cmdParser
+		apiGroup.POST("/command", api.HandleCommand(&apiCmdDeps))
 	}
 
 	gatewayToken := cfg.Discord.DiscordGatewayToken()
@@ -777,8 +950,11 @@ func main() {
 		}
 		log.Infof("Discord bot starting in %s mode", mode)
 		dbot, err := discordbot.New(discordbot.Config{
-			Token:   gatewayToken,
-			BotDeps: deps,
+			Token:            gatewayToken,
+			BotDeps:          deps,
+			ForceSyncSlash:   *forceSyncSlash,
+			ClearGlobalSlash: *clearGlobalSlash,
+			ClearGuildSlash:  *clearGuildSlash,
 		})
 		if err != nil {
 			// When command_token is set, treat a gateway failure as
@@ -859,6 +1035,12 @@ func main() {
 		filepath.Join(cfg.BaseDir, "config"),
 		backup.Retention,
 	)
+
+	// Freeze the startup buffer: everything logged from here on goes to
+	// the rolling buffer. MarkStartupComplete is placed right before the
+	// HTTP server starts accepting requests so all subsystem initialisation
+	// (migrations, state load, bots, …) is captured in the startup snapshot.
+	logBuf.MarkStartupComplete()
 
 	// Start server
 	go func() {
@@ -948,6 +1130,7 @@ type ProcessorService struct {
 	maxbattleMatcher *matching.MaxbattleMatcher
 	pvpCfg           *pvp.Config
 	activePokemon    *tracker.ActivePokemonTracker
+	recentActivity   *tracker.RecentActivity
 	pokemonTypes     *gamedata.PokemonTypes
 	enricher         *enrichment.Enricher
 	dtsRenderer      *dts.Renderer
@@ -976,6 +1159,41 @@ type ProcessorService struct {
 	// main can post an admin notice once the Discord bot is up. nil
 	// when DTS init succeeded.
 	dtsInitErr error
+
+	// procStart is captured in NewProcessorService and used by
+	// !poracle-admin status to report uptime. ProcessorService is the
+	// natural anchor point — it's constructed once at startup and lives
+	// for the lifetime of the process.
+	procStart time.Time
+
+	// snapshotStore is the opt-in per-delivery enrichment store (#108).
+	// Nil when [snapshots] enabled = false; senders + render path check
+	// for nil and skip both the snapshot write and the button-render side
+	// of the work. snapshotSweeper is paired with the store and runs the
+	// safety sweep; both are nil together.
+	snapshotStore   snapshots.Store
+	snapshotSweeper *snapshots.Sweeper
+
+	// muteStore is the in-memory per-user alert-suppression store (#109).
+	// Always allocated — mutes are an opt-in user action regardless of
+	// whether snapshots are enabled. muteSweeper reclaims expired entries
+	// on a fixed cadence; both are nil only in tests that skip init.
+	muteStore   *mute.Store
+	muteSweeper *mute.Sweeper
+
+	// buttonActions is the dispatch registry for button-triggered state
+	// changes (#109). Always allocated and built-in handlers registered
+	// at startup; nil only in tests that skip init.
+	buttonActions *buttonactions.Registry
+}
+
+// ProcessStart returns the timestamp at which this ProcessorService was
+// constructed. Used by !poracle-admin status for uptime display.
+func (ps *ProcessorService) ProcessStart() time.Time {
+	if ps == nil {
+		return time.Time{}
+	}
+	return ps.procStart
 }
 
 // SummaryBufferCount returns the number of buffered entries in the
@@ -1292,7 +1510,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	return &ProcessorService{
+	ps := &ProcessorService{
 		cfg:          cfg,
 		stateMgr:     stateMgr,
 		database:     database,
@@ -1302,6 +1520,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		enricher:     enricher,
 		dtsRenderer:  dtsRenderer,
 		dtsInitErr:   dtsInitErr,
+		procStart:    time.Now(),
 		scanner:      scannerInstance,
 		weather:      weatherTracker,
 		weatherCares: tracker.NewWeatherCareTracker(),
@@ -1328,6 +1547,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		maxbattleMatcher: &matching.MaxbattleMatcher{StrictLocations: cfg.Area.StrictLocations, AreaSecurityEnabled: strictAreas},
 		pvpCfg:           pvpCfg,
 		activePokemon:    activePokemon,
+		recentActivity:   tracker.NewRecentActivity(),
 		pokemonTypes:     pokemonTypes,
 		rateLimiter:      rateLimiter,
 		validator: validation.New(
@@ -1338,7 +1558,55 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		),
 		translations: enricher.Translations,
 		workerPool:   make(chan struct{}, cfg.Tuning.WorkerPoolSize),
+		muteStore:    mute.NewStore(),
 	}
+	ps.muteSweeper = mute.NewSweeper(ps.muteStore, time.Minute)
+	ps.muteSweeper.Start(ps.ctx)
+
+	// Button action registry + built-in handlers (#109). Allocated even
+	// when snapshots are disabled — operators can keep button defs in
+	// DTS and the registry stays consistent across enable/disable
+	// transitions.
+	ps.buttonActions = buttonactions.NewRegistry()
+	buttonactions.RegisterBuiltins(ps.buttonActions)
+
+	// Opt-in snapshot store (#108). When disabled, both fields stay nil and
+	// every consumer takes the nil-store path (no write, no read, no button
+	// components rendered).
+	if cfg.Snapshots.Enabled {
+		store, err := snapshots.Open(cfg.Snapshots.Path)
+		if err != nil {
+			// A failed snapshot open shouldn't take down the alerter — the
+			// snapshot store is for buttons/inspection, not core delivery.
+			// Log and continue with a nil store (i.e. behave as if disabled).
+			log.Warnf("snapshots: open at %s failed: %v — continuing with snapshots disabled", cfg.Snapshots.Path, err)
+		} else {
+			ps.snapshotStore = store
+			ps.snapshotSweeper = snapshots.NewSweeper(
+				store,
+				time.Duration(cfg.Snapshots.SweepIntervalMins)*time.Minute,
+				time.Duration(cfg.Snapshots.MaxAgeDays)*24*time.Hour,
+			)
+			ps.snapshotSweeper.Start(ps.ctx)
+			// Buttons require a snapshot at click time, so we only enable
+			// component emission when the snapshot store is also up.
+			// Renderer may be nil during early init (tests / DTS load
+			// errors) — guard accordingly.
+			if ps.dtsRenderer != nil {
+				ps.dtsRenderer.SetButtonsEnabled(true)
+				// visible_to=admin buttons are also hidden at render time
+				// on DM destinations so non-admin recipients never see a
+				// button they can't use.
+				ps.dtsRenderer.SetAdminRecipientCheck(func(id string) bool {
+					return slices.Contains(cfg.Discord.Admins, id)
+				})
+			}
+			log.Infof("Snapshot store enabled at %s (max_age=%dd, sweep=%dm); buttons enabled",
+				cfg.Snapshots.Path, cfg.Snapshots.MaxAgeDays, cfg.Snapshots.SweepIntervalMins)
+		}
+	}
+
+	return ps
 }
 
 func (ps *ProcessorService) Close() {
@@ -1368,6 +1636,25 @@ func (ps *ProcessorService) Close() {
 		ps.dispatcher.Stop()
 		log.Info("Delivery dispatcher stopped")
 	}
+	// Snapshot store shutdown follows the dispatcher — after Stop returns,
+	// no more sender goroutines are running, so no more snapshot writes can
+	// happen. Stop the sweeper goroutine first (releases reads), then close
+	// the pogreb handle.
+	if ps.snapshotSweeper != nil {
+		ps.snapshotSweeper.Stop()
+		log.Info("Snapshot sweeper stopped")
+	}
+	if ps.snapshotStore != nil {
+		if err := ps.snapshotStore.Close(); err != nil {
+			log.Warnf("Failed to close snapshot store: %v", err)
+		} else {
+			log.Info("Snapshot store closed")
+		}
+	}
+	if ps.muteSweeper != nil {
+		ps.muteSweeper.Stop()
+		log.Info("Mute sweeper stopped")
+	}
 	if ps.enricher.StaticMap != nil {
 		ps.enricher.StaticMap.Close()
 	}
@@ -1395,3 +1682,13 @@ func (ps *ProcessorService) Close() {
 
 // Ensure ProcessorService implements webhook.Processor
 var _ webhook.Processor = (*ProcessorService)(nil)
+
+// discordBotSlashDispatcher returns the slash.Dispatcher from the running
+// Discord bot, or nil when the bot is not up or slash commands are disabled.
+// Used by the BotDeps slash lifecycle closures.
+func discordBotSlashDispatcher(b *discordbot.Bot) *slash.Dispatcher {
+	if b == nil {
+		return nil
+	}
+	return b.SlashDispatcher()
+}

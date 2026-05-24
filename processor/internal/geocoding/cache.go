@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/akrylysov/pogreb"
@@ -17,6 +19,19 @@ import (
 type Cache struct {
 	mem  *ttlcache.Cache[string, *Address]
 	disk *pogreb.DB
+
+	hitsMemory atomic.Uint64
+	hitsDisk   atomic.Uint64
+	misses     atomic.Uint64
+}
+
+// CacheStats is a point-in-time snapshot of geocoder cache health.
+type CacheStats struct {
+	MemoryEntries int    // entries currently in the in-memory layer
+	DiskEntries   int    // entries in the on-disk pogreb layer
+	HitsMemory    uint64 // total memory-layer hits since process start
+	HitsDisk      uint64 // total disk-layer hits since process start
+	Misses        uint64 // total misses since process start
 }
 
 // NewCache opens or creates a two-layer cache.
@@ -55,28 +70,63 @@ func CacheKey(lat, lon float64, detail int) string {
 	return fmt.Sprintf(format, lat, lon)
 }
 
+// CacheKeyForLanguage builds a reverse geocode cache key. Blank language keeps
+// the historical coordinate-only key; localized lookups include the language
+// code so provider-localized address data stays isolated per user locale.
+func CacheKeyForLanguage(lat, lon float64, detail int, language string) string {
+	key := CacheKey(lat, lon, detail)
+	language = strings.ToLower(strings.TrimSpace(language))
+	if language == "" {
+		return key
+	}
+	return language + ":" + key
+}
+
 // Get looks up an address by key. It checks memory first, then disk.
 // On a disk hit the entry is promoted to memory.
 func (c *Cache) Get(key string) (*Address, bool) {
 	// Memory layer
 	if item := c.mem.Get(key); item != nil {
+		c.hitsMemory.Add(1)
 		return item.Value(), true
 	}
 
 	// Disk layer
 	data, err := c.disk.Get([]byte(key))
 	if err != nil || data == nil {
+		c.misses.Add(1)
 		return nil, false
 	}
 
 	var addr Address
 	if err := json.Unmarshal(data, &addr); err != nil {
+		c.misses.Add(1)
 		return nil, false
 	}
 
 	// Promote to memory
+	c.hitsDisk.Add(1)
 	c.mem.Set(key, &addr, ttlcache.DefaultTTL)
 	return &addr, true
+}
+
+// Stats returns a point-in-time snapshot of cache health metrics.
+func (c *Cache) Stats() CacheStats {
+	return CacheStats{
+		MemoryEntries: c.mem.Len(),
+		DiskEntries:   int(c.disk.Count()),
+		HitsMemory:    c.hitsMemory.Load(),
+		HitsDisk:      c.hitsDisk.Load(),
+		Misses:        c.misses.Load(),
+	}
+}
+
+// ClearMemory drops all entries from the in-memory layer. The disk layer is
+// left untouched. Returns the number of entries that were removed.
+func (c *Cache) ClearMemory() int {
+	n := c.mem.Len()
+	c.mem.DeleteAll()
+	return n
 }
 
 // Set writes an address to both memory and disk.

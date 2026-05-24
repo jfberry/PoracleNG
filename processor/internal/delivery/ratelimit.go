@@ -20,11 +20,35 @@ type DiscordRateLimiter struct {
 	targets map[string]*targetLimit
 	global  *tokenBucket
 	waiting atomic.Int64 // number of goroutines currently blocked in Wait()
+
+	// 429 ring-buffer: 60 one-minute slots covering 60 minutes.
+	// slot index = (minute % 60); each slot holds the count for that minute.
+	// slotMinute tracks which wall-clock minute each slot was last written.
+	counter429      [60]int32
+	counter429Mins  [60]int64 // Unix minute when the slot was last written
+	nowFunc         func() time.Time // injectable for tests; nil → time.Now
 }
 
 type targetLimit struct {
 	remaining int
+	limit     int // X-RateLimit-Limit (total bucket size)
 	resetAt   time.Time
+}
+
+// RouteState is a point-in-time snapshot of one Discord route's rate-limit state.
+type RouteState struct {
+	Route     string    // route key as stored internally
+	Remaining int       // X-RateLimit-Remaining
+	Limit     int       // X-RateLimit-Limit
+	ResetAt   time.Time // when the bucket replenishes
+}
+
+// DiscordRateSnapshot is the full point-in-time read of Discord rate-limit state.
+type DiscordRateSnapshot struct {
+	Routes         []RouteState // only routes where Remaining < Limit (partially consumed)
+	GlobalTokens   int          // current tokens remaining in the global 50/sec bucket
+	GlobalCapacity int          // configured capacity (typically 50)
+	Recent429Count int          // number of 429s observed in the last 5 minutes
 }
 
 type tokenBucket struct {
@@ -155,6 +179,7 @@ func (rl *DiscordRateLimiter) WaitingCount() int64 {
 //
 // Headers used:
 //   - X-RateLimit-Remaining: requests remaining in the current window
+//   - X-RateLimit-Limit: total bucket size for the route
 //   - X-RateLimit-Reset-After: seconds (float) until the window resets
 //   - X-RateLimit-Global: if "true", the limit applies to the global bucket
 func (rl *DiscordRateLimiter) Update(target string, headers http.Header) {
@@ -182,6 +207,13 @@ func (rl *DiscordRateLimiter) Update(target string, headers http.Header) {
 		return
 	}
 
+	var limit int
+	if limitStr := headers.Get("X-RateLimit-Limit"); limitStr != "" {
+		if v, err := strconv.Atoi(limitStr); err == nil {
+			limit = v
+		}
+	}
+
 	var resetAt time.Time
 	if resetAfterStr != "" {
 		if secs, err := strconv.ParseFloat(resetAfterStr, 64); err == nil {
@@ -197,7 +229,94 @@ func (rl *DiscordRateLimiter) Update(target string, headers http.Header) {
 		rl.targets[target] = tl
 	}
 	tl.remaining = remaining
+	if limit > 0 {
+		tl.limit = limit
+	}
 	tl.resetAt = resetAt
+}
+
+// now returns the current time, using the injected nowFunc when set (tests only).
+func (rl *DiscordRateLimiter) now() time.Time {
+	if rl.nowFunc != nil {
+		return rl.nowFunc()
+	}
+	return time.Now()
+}
+
+// Record429 records a 429 response in the rolling 5-minute window counter.
+// Safe to call from any goroutine.
+func (rl *DiscordRateLimiter) Record429() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	now := rl.now()
+	// Use a 60-slot ring keyed by Unix minute, giving 60 minutes of history.
+	// We only report the last 5 minutes, but extra history is free and allows
+	// future widening without a schema change.
+	currentMin := now.Unix() / 60
+	slot := int(currentMin % 60)
+	if rl.counter429Mins[slot] != currentMin {
+		// Slot belongs to a different (older) minute — reset it.
+		rl.counter429[slot] = 0
+		rl.counter429Mins[slot] = currentMin
+	}
+	rl.counter429[slot]++
+}
+
+// recent429Count sums the 429 slots covering the last 5 minutes.
+// Must be called with rl.mu held.
+func (rl *DiscordRateLimiter) recent429Count() int {
+	now := rl.now()
+	currentMin := now.Unix() / 60
+	count := 0
+	for i := range 5 {
+		targetMin := currentMin - int64(i)
+		slot := int(targetMin % 60)
+		if rl.counter429Mins[slot] == targetMin {
+			count += int(rl.counter429[slot])
+		}
+	}
+	return count
+}
+
+// Snapshot returns the current rate-limit state. Safe to call from any goroutine.
+// The returned Routes slice is value-typed — no internal references escape.
+func (rl *DiscordRateLimiter) Snapshot() DiscordRateSnapshot {
+	rl.mu.Lock()
+	var routes []RouteState
+	for key, tl := range rl.targets {
+		// Omit fully-quota'd routes (have limit info, no capacity consumed).
+		if tl.limit > 0 && tl.remaining >= tl.limit {
+			continue
+		}
+		// Omit routes with positive remaining but no limit info — not useful to surface.
+		if tl.limit == 0 && tl.remaining > 0 {
+			continue
+		}
+		// Everything else: partially-consumed (remaining < limit) or exhausted
+		// without limit info (both 0). Include.
+		routes = append(routes, RouteState{
+			Route:     key,
+			Remaining: tl.remaining,
+			Limit:     tl.limit,
+			ResetAt:   tl.resetAt,
+		})
+	}
+	count429 := rl.recent429Count()
+	rl.mu.Unlock()
+
+	// Read global bucket without holding rl.mu (it has its own lock).
+	rl.global.mu.Lock()
+	rl.global.refill()
+	globalTokens := int(rl.global.tokens)
+	globalCap := int(rl.global.maxTokens)
+	rl.global.mu.Unlock()
+
+	return DiscordRateSnapshot{
+		Routes:         routes,
+		GlobalTokens:   globalTokens,
+		GlobalCapacity: globalCap,
+		Recent429Count: count429,
+	}
 }
 
 // ParseRetryAfter converts a Retry-After value to a Duration using Dexter's heuristic:

@@ -4,6 +4,7 @@ import "github.com/jmoiron/sqlx"
 
 // MonsterTracking represents a row from the monsters table.
 type MonsterTracking struct {
+	UID              int64  `db:"uid"`
 	ID               string `db:"id"`
 	ProfileNo        int    `db:"profile_no"`
 	PokemonID        int    `db:"pokemon_id"`
@@ -80,7 +81,7 @@ func BuildMonsterIndexFromRules(monsters []MonsterTracking) *MonsterIndex {
 func LoadMonsters(db *sqlx.DB) (*MonsterIndex, error) {
 	var monsters []MonsterTracking
 	err := db.Select(&monsters,
-		`SELECT id, profile_no, pokemon_id, form, distance,
+		`SELECT uid, id, profile_no, pokemon_id, form, distance,
 		        min_iv, max_iv, min_cp, max_cp, min_level, max_level,
 		        atk, def, sta, max_atk, max_def, max_sta,
 		        gender, min_weight, max_weight, min_time,

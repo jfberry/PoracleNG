@@ -450,6 +450,20 @@ Toggle admin disable flag.
 {"state": true}
 ```
 
+### POST /api/humans/{id}/language
+
+Set a user's alert and bot-response language. If `[general.available_languages]` is configured, `language` must be one of those configured language codes; otherwise any non-empty language code is accepted.
+
+```bash
+curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
+  http://localhost:3030/api/humans/123456789/language \
+  -d '{"language": "de"}'
+```
+
+```json
+{"status": "ok", "language": "de"}
+```
+
 ### POST /api/humans/{id}/setLocation/{lat}/{lon}
 
 Update user location. Validates against area restrictions if area security is enabled.
@@ -1429,6 +1443,18 @@ All invasion grunt types.
 ---
 
 ## Geocoding
+
+Reverse geocoding for alert templates is locale-aware. The processor performs a base reverse-geocode lookup that populates the default-locale address fields, then performs per-language lookups for matched user languages that shadow those fields in the per-language DTS layer. Existing DTS fields such as `{{addr}}`, `{{city}}`, `{{streetName}}`, and `{{formattedAddress}}` automatically resolve to the user's localized geocoder result when the provider supports it.
+
+Supported reverse-geocode language parameters:
+
+| Provider | Parameter |
+|----------|-----------|
+| Nominatim | `accept-language` |
+| Photon | `lang` |
+| Google | `language` |
+
+Reverse geocode cache keys include the language code for localized lookups, so cached German and English address results do not overwrite each other.
 
 ### GET /api/geocode/forward?q={query}
 

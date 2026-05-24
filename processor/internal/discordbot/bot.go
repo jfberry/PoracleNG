@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -18,10 +19,19 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	reconcilesentinel "github.com/pokemon/poracleng/processor/internal/discordbot/reconcile"
+	"github.com/pokemon/poracleng/processor/internal/discordbot/slash"
 	"github.com/pokemon/poracleng/processor/internal/discordroles"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
 )
+
+// slashCachePath returns the on-disk fingerprint cache location for the
+// slash dispatcher. Lives next to the other startup-state caches (thread
+// cache, autocreate cache, gym state) under config/.cache/.
+func slashCachePath(baseDir string) string {
+	return filepath.Join(baseDir, "config", ".cache", "slash-fingerprint.json")
+}
 
 // Bot is the Discord bot gateway handler.
 type Bot struct {
@@ -34,16 +44,43 @@ type Bot struct {
 	autocreateSync *autocreateSyncer
 	stopKeepAlive  func()
 
+	// slash routes Discord application-command interactions when
+	// [discord.slash_commands].enabled = true. nil when disabled.
+	slash *slash.Dispatcher
+
 	// Throttle for PostAdminNoticeThrottled. Map of key → last-posted
 	// time. Lazily initialised; guarded by adminThrottleMu.
 	adminThrottleMu sync.Mutex
 	adminThrottle   map[string]time.Time
+
+	// clickCooldown tracks per-(user, message, button) click times so
+	// repeated clicks within 5 seconds get a "slow down" reply instead
+	// of double-firing the action. Always non-nil after New.
+	clickCooldown *clickCooldownMap
 }
 
 // Config holds everything needed to create a Discord bot.
 type Config struct {
 	Token string
 	bot.BotDeps
+
+	// ForceSyncSlash, when true, forces the slash dispatcher to push to
+	// Discord regardless of the fingerprint cache. Plumbed from main.go's
+	// -sync-slash-commands CLI flag. Has no effect when slash commands are
+	// disabled in TOML.
+	ForceSyncSlash bool
+
+	// ClearGlobalSlash issues an empty bulk-overwrite against the global
+	// app commands at startup. Use when switching from
+	// register_globally=true to false to remove the stale global
+	// registrations that would otherwise show up alongside the new
+	// guild-scoped ones. Plumbed from -clear-global-slash-commands.
+	ClearGlobalSlash bool
+
+	// ClearGuildSlash issues an empty bulk-overwrite against every guild
+	// in [discord.slash_commands] guilds at startup. Use when switching
+	// from register_globally=false to true.
+	ClearGuildSlash bool
 }
 
 // New creates and starts a Discord bot. Returns the bot (for shutdown) or an error.
@@ -54,10 +91,11 @@ func New(cfg Config) (*Bot, error) {
 	}
 
 	b := &Bot{
-		BotDeps:   cfg.BotDeps,
-		session:   session,
-		nlpParser: cfg.NLPParser,
-		stopCh:    make(chan struct{}),
+		BotDeps:       cfg.BotDeps,
+		session:       session,
+		nlpParser:     cfg.NLPParser,
+		stopCh:        make(chan struct{}),
+		clickCooldown: newClickCooldownMap(),
 	}
 
 	b.threadCache = newThreadCache(threadCachePath(cfg.Cfg.BaseDir))
@@ -84,11 +122,62 @@ func New(cfg Config) (*Bot, error) {
 	// Thread-join button interactions.
 	session.AddHandler(b.onInteractionCreate)
 
+	// Construct the slash dispatcher when enabled. Attach binds it to the
+	// session and shared deps; the actual ApplicationCommandBulkOverwrite
+	// happens after session.Open() so we have an appID to push under.
+	// When disabled, b.slash stays nil and onInteractionCreate skips the
+	// ApplicationCommand/Autocomplete branches.
+	if cfg.Cfg.Discord.SlashCommands.Enabled {
+		scope := "guilds=" + fmt.Sprint(cfg.Cfg.Discord.SlashCommands.Guilds)
+		if cfg.Cfg.Discord.SlashCommands.RegisterGlobally {
+			scope = "global"
+		}
+		log.Infof("slash: dispatcher enabled, %s, force_sync=%v", scope, cfg.ForceSyncSlash)
+		b.slash = slash.NewDispatcher(slash.Config{
+			Enabled:   true,
+			Global:    cfg.Cfg.Discord.SlashCommands.RegisterGlobally,
+			Guilds:    cfg.Cfg.Discord.SlashCommands.Guilds,
+			Enable:    cfg.Cfg.Discord.SlashCommands.Enable,
+			CachePath: slashCachePath(cfg.Cfg.BaseDir),
+			ForceSync: cfg.ForceSyncSlash,
+		})
+		b.slash.Attach(session, &b.BotDeps, b.Registry, b.Translations, b.Cfg)
+	} else {
+		log.Info("slash: dispatcher disabled ([discord.slash_commands] enabled=false)")
+	}
+
 	if err := session.Open(); err != nil {
 		return nil, err
 	}
 
 	log.Infof("Discord bot connected as %s", session.State.User.Username)
+
+	// Slash sync: now that the gateway is open we have an appID. The push
+	// runs unconditionally — SyncCommands is idempotent via a fingerprint
+	// cache, so a no-op startup costs only a cache read and a log line.
+	// To turn slash off entirely set [discord.slash_commands] enabled=false
+	// (above gates the dispatcher itself out).
+	if b.slash != nil && session.State != nil && session.State.User != nil {
+		b.slash.SetAppID(session.State.User.ID)
+		// Clear-purge flags run BEFORE the normal sync so the cache stays
+		// consistent: ClearGlobalSlash + the current sync (presumably
+		// guild-mode) leaves Discord with no global commands and a fresh
+		// guild set; the fingerprint cache afterwards reflects guild-only
+		// reality. Ditto in reverse for ClearGuildSlash.
+		if cfg.ClearGlobalSlash {
+			if err := b.slash.ClearGlobalCommands(); err != nil {
+				log.Errorf("slash: clear global commands failed: %v", err)
+			}
+		}
+		if cfg.ClearGuildSlash {
+			if err := b.slash.ClearGuildCommands(); err != nil {
+				log.Errorf("slash: clear guild commands failed: %v", err)
+			}
+		}
+		if err := b.slash.SyncCommands(); err != nil {
+			log.Errorf("slash sync failed: %v", err)
+		}
+	}
 
 	// Set bot activity/status
 	if activity := cfg.Cfg.Discord.Activity; activity != "" {
@@ -315,6 +404,16 @@ func (b *Bot) logGuildPresence() {
 // Used by API endpoints that need to make Discord REST calls.
 func (b *Bot) Session() *discordgo.Session {
 	return b.session
+}
+
+// SlashDispatcher returns the slash.Dispatcher when slash commands are
+// enabled, or nil when disabled. Used by main.go to wire the BotDeps
+// slash lifecycle closures without exposing the private field.
+func (b *Bot) SlashDispatcher() *slash.Dispatcher {
+	if b == nil {
+		return nil
+	}
+	return b.slash
 }
 
 // PostAdminNotice sends a short operational message to the channel
@@ -550,54 +649,36 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			continue
 		}
 
-		ctx := &bot.CommandContext{
-			UserID:        m.Author.ID,
-			UserName:      m.Author.Username,
-			Platform:      "discord",
-			ChannelID:     channelID,
-			GuildID:       guildID,
-			IsDM:          isDM,
-			IsAdmin:       isAdmin,
-			Language:      userLang,
-			ProfileNo:     profileNo,
-			HasLocation:   hasLocation,
-			HasArea:       hasArea,
-			TargetID:      m.Author.ID,
-			TargetName:    m.Author.Username,
-			TargetType:    targetType,
-			AreaLogic:     bot.NewAreaLogic(fences, b.Cfg),
-			DB:            b.DB,
-			Humans:        b.Humans,
-			Tracking:      b.Tracking,
-			Config:        b.Cfg,
-			StateMgr:      b.StateMgr,
-			GameData:      b.GameData,
-			Translations:  b.Translations,
-			Geofence:      spatialIndex,
-			Fences:        fences,
-			Dispatcher:    b.Dispatcher,
-			RowText:       b.RowText,
-			Resolver:      b.Resolver,
-			ArgMatcher:    b.ArgMatcher,
-			Geocoder:      b.Geocoder,
-			StaticMap:     b.StaticMap,
-			Weather:       b.Weather,
-			Stats:         b.Stats,
-			DTS:           b.DTS,
-			Emoji:         b.Emoji,
-			NLP:           b.nlpParser,
-			TestProcessor:      b.TestProcessor,
-			Registry:           b.Registry,
-			ReloadFunc:         b.ReloadFunc,
-			PostRegister:       b.postRegisterHook(),
-			SummarySchedules:   b.SummarySchedules,
-			SummaryBufferCount: b.SummaryBufferCount,
-			SummaryDispatch:    b.SummaryDispatch,
-			Scanner:            b.Scanner,
-		}
+		// Wire shared BotDeps via the constructor so the dep surface stays
+		// in lockstep with the slash dispatcher (and Telegram). Per-message
+		// fields and Discord-specific overrides (PostRegister, AreaLogic
+		// derived from the live state fences, geofence pointers) are layered
+		// on top.
+		ctx := bot.NewCommandContext(&b.BotDeps)
+		ctx.UserID = m.Author.ID
+		ctx.UserName = m.Author.Username
+		ctx.Platform = "discord"
+		ctx.ChannelID = channelID
+		ctx.GuildID = guildID
+		ctx.IsDM = isDM
+		ctx.IsAdmin = isAdmin
+		ctx.Language = userLang
+		ctx.ProfileNo = profileNo
+		ctx.HasLocation = hasLocation
+		ctx.HasArea = hasArea
+		ctx.TargetID = m.Author.ID
+		ctx.TargetName = m.Author.Username
+		ctx.TargetType = targetType
+		ctx.AreaLogic = bot.NewAreaLogic(fences, b.Cfg)
+		ctx.Geofence = spatialIndex
+		ctx.Fences = fences
+		ctx.PostRegister = b.postRegisterHook()
 
-		// Populate delegated admin permissions
+		// Populate delegated admin permissions + the role list itself so
+		// commands needing role-aware feature checks (pvp, specificgym)
+		// can read it without re-fetching.
 		roles := fetchRoles()
+		ctx.UserRoles = roles
 		ctx.Permissions.ChannelTracking = bot.CalculateChannelPermissions(
 			b.Cfg, m.Author.ID, roles, channelID, guildID, "")
 		ctx.Permissions.UserTracking = bot.CanTrackUsers(b.Cfg, "discord", m.Author.ID, roles)
@@ -636,6 +717,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		}
 
 		replies := handler.Run(ctx, remainingArgs)
+		replies = bot.ApplyMaintenanceSuffix(replies, b.Dispatcher, tr.T("cmd.maintenance.active_suffix"))
 		b.sendReplies(s, m, replies)
 	}
 }
@@ -925,3 +1007,35 @@ func (b *Bot) postRegisterHook() func(string) {
 		go r.ReconcileSingleUser(userID, false)
 	}
 }
+
+// ReconcileUserNow immediately re-evaluates one Discord user's role membership
+// and community/area-security state, without waiting for the periodic timer.
+// It is the public entrypoint for the !poracle-admin reconcile user <id> subcommand.
+//
+// removeInvalidUsers mirrors the operator's [reconciliation.discord] remove_invalid_users
+// config flag so on-demand behaviour is consistent with the periodic sync.
+//
+// Returns ErrReconciliationDisabled if reconciliation is not configured.
+func (b *Bot) ReconcileUserNow(userID string) error {
+	if b.reconciliation == nil {
+		return ErrReconciliationDisabled
+	}
+	b.reconciliation.ReconcileSingleUser(userID, b.Cfg.Reconciliation.Discord.RemoveInvalidUsers)
+	return nil
+}
+
+// RunReconciliationNow triggers a full Discord reconciliation cycle synchronously.
+// It is the public entrypoint for the !poracle-admin reconcile full subcommand.
+// Returns ErrReconciliationDisabled if reconciliation is not configured.
+func (b *Bot) RunReconciliationNow() error {
+	if b.reconciliation == nil {
+		return ErrReconciliationDisabled
+	}
+	b.runReconciliation()
+	return nil
+}
+
+// ErrReconciliationDisabled is returned by ReconcileUserNow when Discord
+// reconciliation has not been configured (check_role = false or no session).
+// It is an alias for reconcile.ErrDisabled — both sentinels are the same value.
+var ErrReconciliationDisabled = reconcilesentinel.ErrDisabled

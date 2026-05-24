@@ -199,6 +199,13 @@ type MatchedUser struct {
 	// time in the weather cell. Only populated for weather change alerts, where
 	// it drives the clean-alert TTH and the "too short to bother" drop.
 	CaresUntil int64 `json:"cares_until,omitempty"`
+
+	// RuleUID is the database UID of the tracking rule that produced this
+	// match. Used by snapshot.TrackingUIDs (#108) and by ScopeTracking
+	// mute enforcement in filterMuted (#109). Zero means "no rule UID
+	// known" — should not happen for matches built by the per-type
+	// matchers, but is the natural fallback for synthetic test matches.
+	RuleUID int64 `json:"rule_uid,omitempty"`
 }
 
 // InvasionWebhook mirrors Golbat's invasion/pokestop webhook message.
@@ -222,6 +229,10 @@ type InvasionWebhook struct {
 	IncidentDisplayType     int                   `json:"incident_display_type"`
 	Confirmed               bool                  `json:"confirmed"`
 	Lineup                  []InvasionLineupEntry `json:"lineup"`
+	// ShowcaseRankings carries the top-3 contestant JSON for Showcase
+	// incidents (displayType == 9). Absent for other incident types and
+	// regular invasions.
+	ShowcaseRankings json.RawMessage `json:"showcase_rankings,omitempty"`
 }
 
 // InvasionLineupEntry is a confirmed catch from a grunt battle.
@@ -471,4 +482,23 @@ type DeliveryJob struct {
 	Emoji        []string        `json:"emoji"`
 	LogReference string          `json:"logReference"`
 	Language     string          `json:"language"`
+
+	// TemplateType names the DTS entry type the renderer actually used
+	// (e.g. "monster", "monsterNoIv", "raid", "rsvpChanges"). Pokemon
+	// alerts choose this dynamically based on whether the alert has IV
+	// data; raid alerts may flip between "raid" and "rsvpChanges". The
+	// click handler looks buttons up under THIS type — using
+	// RenderJob.AlertType (the source webhook type) would point at the
+	// wrong entry set when the two differ.
+	TemplateType string `json:"templateType,omitempty"`
+
+	// TemplateRequested is the per-user template field as it appeared on
+	// the matched tracking rule (typically empty, meaning "use config
+	// default"). TemplateSelected is the resolved id the renderer
+	// actually used. Both surface on the snapshot so click-time
+	// re-resolution can target the same template the user saw, and so
+	// snapshot consumers can route between "exact" and "default chain"
+	// re-renders when the operator has changed DTS in between.
+	TemplateRequested string `json:"templateRequested,omitempty"`
+	TemplateSelected  string `json:"templateSelected,omitempty"`
 }

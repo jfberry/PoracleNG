@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -111,6 +112,39 @@ func (sb *SummaryBuffer) Append(humanID, alertType string, q BufferedQuest) {
 		q.Clean |= existing.Clean
 	}
 	bucket[key] = q
+}
+
+// SummaryEnumeration describes one (humanID, alertType) bucket: who has what queued.
+// NextFireAt is always zero for now — schedules live in the SummaryScheduler,
+// not the buffer. Callers should render "n/a" when the field is zero.
+type SummaryEnumeration struct {
+	HumanID    string
+	AlertType  string
+	Count      int
+	NextFireAt time.Time // zero when no schedule info is available at the buffer level
+}
+
+// EnumerateUsers returns one SummaryEnumeration per non-empty (humanID, alertType)
+// bucket. Order is unspecified. Used by !poracle-admin summary list.
+func (sb *SummaryBuffer) EnumerateUsers() []SummaryEnumeration {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+
+	var out []SummaryEnumeration
+	for humanID, byType := range sb.data {
+		for alertType, bucket := range byType {
+			if len(bucket) == 0 {
+				continue
+			}
+			out = append(out, SummaryEnumeration{
+				HumanID:   humanID,
+				AlertType: alertType,
+				Count:     len(bucket),
+				// NextFireAt: schedules live in the SummaryScheduler; always zero here.
+			})
+		}
+	}
+	return out
 }
 
 // Size returns the total number of entries across every (humanID,

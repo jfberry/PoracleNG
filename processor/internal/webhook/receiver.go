@@ -16,6 +16,7 @@ import (
 type Handler struct {
 	processor     Processor
 	webhookLogger io.Writer
+	rateCounter   *RateCounter
 }
 
 // Processor processes individual webhook messages.
@@ -32,14 +33,25 @@ type Processor interface {
 	ProcessMaxbattle(raw json.RawMessage) error
 }
 
-// NewHandler creates a new webhook handler that returns a Gin handler function.
+// NewHandler creates a new webhook Handler.
 // webhookLogger is optional — if non-nil, raw webhook bodies are written to it.
-func NewHandler(processor Processor, webhookLogger io.Writer) gin.HandlerFunc {
-	h := &Handler{
+func NewHandler(processor Processor, webhookLogger io.Writer) *Handler {
+	return &Handler{
 		processor:     processor,
 		webhookLogger: webhookLogger,
+		rateCounter:   NewRateCounter(),
 	}
+}
+
+// GinHandler returns the Gin handler function for registering with a router.
+func (h *Handler) GinHandler() gin.HandlerFunc {
 	return h.handle
+}
+
+// RateSnapshot returns a point-in-time snapshot of webhook arrival rates.
+// Safe to call from any goroutine.
+func (h *Handler) RateSnapshot() RateSnapshot {
+	return h.rateCounter.Snapshot()
 }
 
 // handle processes POST / with Golbat webhook payload.
@@ -73,6 +85,11 @@ func (h *Handler) handle(c *gin.Context) {
 
 		metrics.WebhooksReceived.WithLabelValues(hook.Type).Inc()
 		metrics.IntervalWebhooks.Add(1)
+		// Record by raw Golbat type. Note: "pokestop" aggregates lures and
+		// invasions here — those sub-types are determined inside routePokestop
+		// after this call, so PerType["lure"] and PerType["invasion"] are
+		// always 0. Matches the existing WebhooksReceived Prometheus counter.
+		h.rateCounter.Record(hook.Type)
 
 		switch hook.Type {
 		case "pokemon":

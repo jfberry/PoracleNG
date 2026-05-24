@@ -28,6 +28,15 @@ type RateResult struct {
 type counter struct {
 	count    int
 	windowAt time.Time // when this window started
+	// dtype records the destination type that opened this window. The
+	// counters map is keyed by ID alone (not ID+type), so if the same
+	// ID is later used with a different type within the same window,
+	// the stored dtype is NOT updated — TargetState.Type will reflect
+	// the first-write type. In practice IDs don't collide across types
+	// (Discord user IDs and channel IDs come from different snowflake
+	// namespaces), so this is a documented latent edge case rather
+	// than a triggered bug.
+	dtype string
 }
 
 type violation struct {
@@ -129,7 +138,7 @@ func (l *Limiter) Check(destinationID, destinationType string) RateResult {
 	c := l.counters[destinationID]
 	if c == nil || now.Sub(c.windowAt) >= windowDuration {
 		// Start new window
-		c = &counter{count: 0, windowAt: now}
+		c = &counter{count: 0, windowAt: now, dtype: destinationType}
 		l.counters[destinationID] = c
 	}
 
@@ -180,7 +189,7 @@ func (l *Limiter) CheckSummary(destinationID, destinationType string) RateResult
 
 	c := l.summaryCounters[destinationID]
 	if c == nil || now.Sub(c.windowAt) >= windowDuration {
-		c = &counter{count: 0, windowAt: now}
+		c = &counter{count: 0, windowAt: now, dtype: destinationType}
 		l.summaryCounters[destinationID] = c
 	}
 
@@ -282,4 +291,197 @@ func (l *Limiter) cleanup() {
 			delete(l.violations, id)
 		}
 	}
+}
+
+// TargetState is a point-in-time snapshot of one destination's limiter
+// state across either the alert or summary bucket.
+type TargetState struct {
+	ID            string    // destination id (matches what Check is called with)
+	Type          string    // destination type ("discord:user", "discord:channel", etc.)
+	Bucket        string    // "alert" or "summary"
+	Count         int       // current count within the active window
+	Limit         int       // the configured limit for this bucket+type
+	WindowStart   time.Time // when the active window opened
+	WindowEnd     time.Time // when it expires (WindowStart + timing_period seconds)
+	Violations24h int       // count of breaches in the last 24h (matters for max_limits_before_stop auto-disable)
+	BannedUntil   time.Time // zero value if not banned; otherwise the violation-window expiry when violations >= MaxLimitsBeforeStop
+}
+
+// snapshotCounter builds a TargetState for one counter entry under the lock.
+// bucket must be "alert" or "summary". violations24h and bannedUntil are
+// looked up from l.violations[id] and provided as pre-computed values.
+func (l *Limiter) snapshotCounter(id string, c *counter, bucket string, violations24h int, bannedUntil time.Time) TargetState {
+	windowDuration := time.Duration(l.cfg.TimingPeriod) * time.Second
+	var limit int
+	if bucket == "alert" {
+		limit = l.limitFor(id, c.dtype)
+	} else {
+		limit = l.summaryLimitFor(c.dtype)
+	}
+	return TargetState{
+		ID:            id,
+		Type:          c.dtype,
+		Bucket:        bucket,
+		Count:         c.count,
+		Limit:         limit,
+		WindowStart:   c.windowAt,
+		WindowEnd:     c.windowAt.Add(windowDuration),
+		Violations24h: violations24h,
+		BannedUntil:   bannedUntil,
+	}
+}
+
+// violationState returns the 24h breach count and banned-until time for a
+// destination. bannedUntil is zero when violations are below the threshold.
+// Must be called with l.mu held.
+func (l *Limiter) violationState(id string, now time.Time) (violations24h int, bannedUntil time.Time) {
+	v := l.violations[id]
+	if v == nil || now.Sub(v.windowAt) >= 24*time.Hour {
+		return 0, time.Time{}
+	}
+	violations24h = v.count
+	if v.count >= l.cfg.MaxLimitsBeforeStop {
+		bannedUntil = v.windowAt.Add(24 * time.Hour)
+	}
+	return violations24h, bannedUntil
+}
+
+// ListBlocked returns every (target, bucket) pair currently in a breached
+// or banned state. Each entry is a value copy — safe to inspect outside
+// the limiter lock.
+//
+// An entry is included when at least one of these is true within the active
+// window:
+//   - count >= limit (over its alert/summary cap), or
+//   - violations >= MaxLimitsBeforeStop (auto-disable threshold reached).
+//
+// Stale windows (WindowEnd < now) are excluded — they are not currently
+// blocking anything.
+func (l *Limiter) ListBlocked() []TargetState {
+	now := time.Now()
+	windowDuration := time.Duration(l.cfg.TimingPeriod) * time.Second
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	var result []TargetState
+
+	for id, c := range l.counters {
+		if now.Sub(c.windowAt) >= windowDuration {
+			continue // stale window
+		}
+		violations24h, bannedUntil := l.violationState(id, now)
+		limit := l.limitFor(id, c.dtype)
+		if c.count >= limit || !bannedUntil.IsZero() {
+			result = append(result, l.snapshotCounter(id, c, "alert", violations24h, bannedUntil))
+		}
+	}
+
+	for id, c := range l.summaryCounters {
+		if now.Sub(c.windowAt) >= windowDuration {
+			continue // stale window
+		}
+		violations24h, bannedUntil := l.violationState(id, now)
+		limit := l.summaryLimitFor(c.dtype)
+		if c.count >= limit || !bannedUntil.IsZero() {
+			result = append(result, l.snapshotCounter(id, c, "summary", violations24h, bannedUntil))
+		}
+	}
+
+	// Include banned targets that have no current counter activity — they
+	// were banned in a previous window whose counter was already swept.
+	seenIDs := make(map[string]bool, len(result))
+	for _, s := range result {
+		seenIDs[s.ID] = true
+	}
+	for id, v := range l.violations {
+		if seenIDs[id] {
+			continue
+		}
+		if now.Sub(v.windowAt) >= 24*time.Hour {
+			continue // violation window expired
+		}
+		if v.count < l.cfg.MaxLimitsBeforeStop {
+			continue // not yet banned
+		}
+		bannedUntil := v.windowAt.Add(24 * time.Hour)
+		// Emit a synthetic state with zero-count (counter was swept).
+		result = append(result, TargetState{
+			ID:            id,
+			Type:          "",
+			Bucket:        "alert",
+			Count:         0,
+			Limit:         0,
+			WindowStart:   time.Time{},
+			WindowEnd:     time.Time{},
+			Violations24h: v.count,
+			BannedUntil:   bannedUntil,
+		})
+	}
+
+	if result == nil {
+		return []TargetState{}
+	}
+	return result
+}
+
+// StateFor returns both bucket states for one target. Returns an empty
+// slice if the target has no recorded activity in either bucket.
+//
+// When dtype is non-empty, only counters whose recorded type matches dtype
+// are returned. Pass "" to match by id alone regardless of type.
+func (l *Limiter) StateFor(id, dtype string) []TargetState {
+	now := time.Now()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	violations24h, bannedUntil := l.violationState(id, now)
+
+	result := make([]TargetState, 0, 2)
+
+	if c, ok := l.counters[id]; ok {
+		if dtype == "" || c.dtype == dtype {
+			result = append(result, l.snapshotCounter(id, c, "alert", violations24h, bannedUntil))
+		}
+	}
+	if c, ok := l.summaryCounters[id]; ok {
+		if dtype == "" || c.dtype == dtype {
+			result = append(result, l.snapshotCounter(id, c, "summary", violations24h, bannedUntil))
+		}
+	}
+
+	return result
+}
+
+// Reset clears all counters, violation history, and bans for one target
+// across both buckets. Returns true if anything was reset.
+//
+// Reset does NOT modify admin_disable or the human record — if the user was
+// auto-disabled by the limiter previously, they still need to re-register
+// via the existing flow.
+func (l *Limiter) Reset(id, dtype string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	changed := false
+
+	if c, ok := l.counters[id]; ok {
+		if dtype == "" || c.dtype == dtype {
+			delete(l.counters, id)
+			changed = true
+		}
+	}
+	if c, ok := l.summaryCounters[id]; ok {
+		if dtype == "" || c.dtype == dtype {
+			delete(l.summaryCounters, id)
+			changed = true
+		}
+	}
+	if _, ok := l.violations[id]; ok {
+		delete(l.violations, id)
+		changed = true
+	}
+
+	return changed
 }

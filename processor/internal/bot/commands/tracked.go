@@ -4,12 +4,98 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 )
+
+// appendMutesSection writes the "Property mutes" block to sb when the
+// user has any active entity-scope mute entries. Empty input → no-op
+// (don't pollute the !tracked output with an empty header).
+//
+// Format mirrors the sketch in docs/buttons-and-snapshots/IMPLEMENTATION.md:
+//
+//	Property mutes (apply across all tracking):
+//	  gym:Victoria Park Entrance       (32m left)
+//	  pokemon:Pikachu                  (1h 12m left)
+//	  area:Downtown                    (2h 8m left)
+//
+// For Phase 2 v1 the resolution of gym IDs back to names + pokemon IDs to
+// names happens elsewhere (when the resolver is wired); here we render the
+// raw scope value. A Phase 2.5 polish pass can swap in resolved names.
+func appendMutesSection(sb *strings.Builder, tr *i18n.Translator, ctx *bot.CommandContext, entries []mute.Entry) {
+	if len(entries) == 0 {
+		return
+	}
+	now := time.Now().Unix()
+	var live []mute.Entry
+	for _, e := range entries {
+		if e.ExpiresAt > 0 && e.ExpiresAt <= now {
+			continue
+		}
+		live = append(live, e)
+	}
+	if len(live) == 0 {
+		return
+	}
+	sb.WriteString("\n" + tr.T("section.property_mutes") + "\n")
+	for _, e := range live {
+		remaining := e.RemainingAt(now)
+		left := tr.Tf("section.property_mutes.left", formatDuration(remaining))
+		label := propertyMuteValueLabel(ctx, e)
+		if label == "" {
+			sb.WriteString(fmt.Sprintf("  %s    %s\n", e.ScopeType, left))
+		} else {
+			sb.WriteString(fmt.Sprintf("  %s:%s    %s\n", e.ScopeType, label, left))
+		}
+	}
+}
+
+// propertyMuteValueLabel renders an operator-friendly version of a mute
+// entry's ScopeValue: pokemon IDs become pokemon names, area names go
+// through display-casing (already done at mute time), other scopes
+// pass through the raw value. Gym hex IDs would resolve via the
+// scanner, but that's a per-tracking lookup the scanner doesn't expose
+// in one shot — leaving them as-is for now keeps !tracked snappy.
+func propertyMuteValueLabel(ctx *bot.CommandContext, e mute.Entry) string {
+	switch e.ScopeType {
+	case mute.ScopeEverything:
+		return ""
+	case mute.ScopePokemon:
+		if ctx.GameData == nil || ctx.Translations == nil {
+			return e.ScopeValue
+		}
+		id := 0
+		_, _ = fmt.Sscanf(e.ScopeValue, "%d", &id)
+		if id <= 0 {
+			return e.ScopeValue
+		}
+		key := gamedata.PokemonTranslationKey(id)
+		// Honour the user's language for the displayed name, falling back
+		// to "en" when the user has no language set or the translation
+		// is missing.
+		lang := ctx.Language
+		if lang == "" {
+			lang = "en"
+		}
+		name := ctx.Translations.For(lang).T(key)
+		if name == "" || name == key {
+			name = ctx.Translations.For("en").T(key)
+		}
+		if name == "" || name == key {
+			return e.ScopeValue
+		}
+		return name
+	default:
+		return e.ScopeValue
+	}
+}
 
 // TrackedCommand implements !tracked — list all active tracking rules.
 type TrackedCommand struct{}
@@ -361,10 +447,24 @@ func (c *TrackedCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 		sb.WriteByte('\n')
 	}
 
-	// Hint about id-based removal
+	// Property mutes section — list active mutes (entity + UID scopes)
+	// for this user (#109). One place to see "what's currently
+	// silenced" alongside "what's tracked".
+	if ctx.MuteStore != nil {
+		appendMutesSection(&sb, tr, ctx, ctx.MuteStore.List(ctx.TargetID))
+	}
+
+	// Hint about id-based removal. The text-bot grammar (!untrack id:N /
+	// !raid remove id:M) doesn't map cleanly to slash — there is no bare
+	// /untrack id:N, the slash surface uses /untrack <type> with an
+	// autocomplete pick. Emit a surface-appropriate hint.
 	if hasAnyRules {
-		prefix := bot.CommandPrefix(ctx)
-		sb.WriteString("\n" + tr.Tf("tracking.id_hint", prefix, prefix))
+		if ctx.IsSlash {
+			sb.WriteString("\n" + tr.T("tracking.id_hint_slash"))
+		} else {
+			prefix := bot.CommandPrefix(ctx)
+			sb.WriteString("\n" + tr.Tf("tracking.id_hint", prefix, prefix))
+		}
 	}
 
 	// Summary warnings at the end

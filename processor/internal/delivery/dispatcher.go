@@ -1,7 +1,13 @@
 package delivery
 
 import (
+	"sync"
+	"sync/atomic"
+	"time"
+
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 )
 
 // DispatcherConfig holds all configuration for the delivery dispatcher.
@@ -37,6 +43,45 @@ type Dispatcher struct {
 	ch      chan *Job
 	queue   *FairQueue
 	tracker *MessageTracker
+
+	// Pause state — protected by pauseMu.
+	pauseMu     sync.Mutex
+	paused      bool
+	pauseReason string
+	pausedSince time.Time
+
+	// pausedAtomic mirrors paused for cheap lock-free reads (e.g. the
+	// per-reply maintenance-suffix check and the per-job drop check in
+	// FairQueue.processJob). Always updated inside pauseMu alongside paused.
+	pausedAtomic atomic.Bool
+
+	// snapshotStore is the opt-in per-delivery snapshot store (#108). Nil
+	// when [snapshots] enabled = false. Wired in by SetSnapshotStore after
+	// dispatcher construction so the delivery package doesn't take a hard
+	// dependency on snapshots being initialised. Safe to read concurrently
+	// from queue workers via SnapshotStore().
+	snapshotStore atomic.Pointer[snapshots.Store]
+}
+
+// SetSnapshotStore wires the snapshot store into the dispatcher. Called by
+// ProcessorService startup after the store has been opened (if enabled).
+// Safe to call with nil to clear; subsequent snapshot writes will no-op.
+func (d *Dispatcher) SetSnapshotStore(store snapshots.Store) {
+	if store == nil {
+		d.snapshotStore.Store(nil)
+		return
+	}
+	d.snapshotStore.Store(&store)
+}
+
+// SnapshotStore returns the currently-wired snapshot store, or nil. Queue
+// workers call this and skip the write if nil.
+func (d *Dispatcher) SnapshotStore() snapshots.Store {
+	p := d.snapshotStore.Load()
+	if p == nil {
+		return nil
+	}
+	return *p
 }
 
 // NewDispatcher creates a Dispatcher with the configured senders, tracker, and queue.
@@ -62,9 +107,10 @@ func NewDispatcher(cfg DispatcherConfig) (*Dispatcher, error) {
 	}
 	ch := make(chan *Job, queueSize)
 
-	queue := NewFairQueue(ch, senders, tracker, cfg.Queue)
+	d := &Dispatcher{ch: ch, tracker: tracker}
+	d.queue = NewFairQueue(ch, senders, tracker, cfg.Queue, d)
 
-	return &Dispatcher{ch: ch, queue: queue, tracker: tracker}, nil
+	return d, nil
 }
 
 // NewDispatcherWithSenders creates a Dispatcher with externally-provided senders (for testing).
@@ -73,8 +119,9 @@ func NewDispatcherWithSenders(senders map[string]Sender, tracker *MessageTracker
 		queueSize = 1000
 	}
 	ch := make(chan *Job, queueSize)
-	queue := NewFairQueue(ch, senders, tracker, queueCfg)
-	return &Dispatcher{ch: ch, queue: queue, tracker: tracker}
+	d := &Dispatcher{ch: ch, tracker: tracker}
+	d.queue = NewFairQueue(ch, senders, tracker, queueCfg, d)
+	return d
 }
 
 // Start launches the fair queue workers.
@@ -122,4 +169,73 @@ func (d *Dispatcher) RateLimitWaiting() int64 {
 		return ds.rateLimiter.WaitingCount()
 	}
 	return 0
+}
+
+// DiscordRateSnapshot returns a point-in-time snapshot of Discord rate-limit
+// state. Returns a zero-value snapshot when Discord is not configured.
+func (d *Dispatcher) DiscordRateSnapshot() DiscordRateSnapshot {
+	if ds, ok := d.queue.senders["discord"].(*DiscordSender); ok {
+		return ds.rateLimiter.Snapshot()
+	}
+	return DiscordRateSnapshot{}
+}
+
+// TelegramRateSnapshot returns a point-in-time snapshot of Telegram rate-limit
+// state. Returns a zero-value snapshot when Telegram is not configured.
+func (d *Dispatcher) TelegramRateSnapshot() TelegramRateSnapshot {
+	if ts, ok := d.queue.senders["telegram"].(*TelegramSender); ok {
+		return ts.Snapshot()
+	}
+	return TelegramRateSnapshot{}
+}
+
+// Pause suspends outbound message delivery. Normal (non-bypass) jobs are
+// DROPPED on the floor for the duration of the pause — they are not buffered.
+// This avoids OOM during long pauses and the stale-alert flood that would
+// follow a Resume. Bypass jobs (rate-limit notifications, ban farewells)
+// still send.
+//
+// Calling Pause while already paused is a no-op — the original reason and
+// timestamp are preserved.
+func (d *Dispatcher) Pause(reason string) {
+	d.pauseMu.Lock()
+	defer d.pauseMu.Unlock()
+	if !d.paused {
+		d.paused = true
+		d.pauseReason = reason
+		d.pausedSince = time.Now()
+		d.pausedAtomic.Store(true)
+		log.Infof("delivery: paused (reason: %s)", reason)
+	}
+}
+
+// Resume lifts a previous Pause. Subsequent jobs are delivered normally;
+// jobs dropped while paused are gone. Safe to call when not paused.
+func (d *Dispatcher) Resume() {
+	d.pauseMu.Lock()
+	wasPaused := d.paused
+	d.paused = false
+	d.pauseReason = ""
+	d.pausedSince = time.Time{}
+	d.pausedAtomic.Store(false)
+	d.pauseMu.Unlock()
+	if wasPaused {
+		log.Info("delivery: resumed")
+	}
+}
+
+// IsPaused returns whether delivery is currently paused. Lock-free fast path —
+// suitable for the per-reply maintenance-suffix check and the per-job drop
+// check in FairQueue.processJob.
+func (d *Dispatcher) IsPaused() bool {
+	return d.pausedAtomic.Load()
+}
+
+// PauseState returns the current pause state: whether delivery is paused, the
+// reason given when Pause was called, and the time at which Pause was called.
+// All three zero-values when not paused.
+func (d *Dispatcher) PauseState() (paused bool, reason string, since time.Time) {
+	d.pauseMu.Lock()
+	defer d.pauseMu.Unlock()
+	return d.paused, d.pauseReason, d.pausedSince
 }

@@ -130,6 +130,21 @@ func (a *AreaLogic) AddAreas(currentAreas []string, communities []string, toAdd 
 	return added, notFound, newList
 }
 
+// ResolveAvailableArea validates a single area name against the user's
+// available set. Returns the display-cased name when the area is
+// available, ("", false) when the area is unknown or not selectable for
+// this user. Used by `!mute area` and similar one-name validators that
+// don't want the full AddAreas/RemoveAreas flow.
+func (a *AreaLogic) ResolveAvailableArea(name string, communities []string, isAdmin bool) (string, bool) {
+	available := a.GetAvailableAreas(communities, isAdmin)
+	availableMap := make(map[string]string, len(available))
+	for _, ai := range available {
+		availableMap[strings.ToLower(ai.Name)] = ai.Name
+	}
+	_, displayName, ok := matchAvailableArea(availableMap, name)
+	return displayName, ok
+}
+
 // matchAvailableArea looks up a user-supplied area name against the available
 // set, trying the underscore-restored form as a fallback. The bot parser
 // converts unquoted underscores to spaces, so an area genuinely named

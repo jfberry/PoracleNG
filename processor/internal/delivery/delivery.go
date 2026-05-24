@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/pokemon/poracleng/processor/internal/snapshots"
 )
 
 // TTH represents time-to-hide (how long until the message should be deleted).
@@ -32,6 +34,7 @@ type Job struct {
 	Clean         int             `json:"clean"`        // track for deletion on TTH expiry
 	EditKey       string          `json:"editKey"`      // non-empty = track for future edits
 	ReplyKey      string          `json:"replyKey"`     // non-empty = (ReplyKey,Target) indexes the latest sent message in MessageTracker for reply chaining
+	MsgType       string          `json:"msgType"`      // alert type ("raid", "egg", "pokemon", etc.) stored in MessageTracker for per-lifecycle-type first-visible detection
 	Name          string          `json:"name"`         // human-readable destination name
 	LogReference  string          `json:"logReference"` // encounter/gym ID for tracing
 	Lat           float64         `json:"lat"`
@@ -53,6 +56,12 @@ type Job struct {
 	// — without this, the limiter could swallow the very message telling the
 	// user they were rate-limited.
 	BypassRateLimit bool `json:"-"`
+
+	// SnapshotData is the pre-built snapshot for this delivery, missing only
+	// the platform-assigned message ID. After Send success the sender fills
+	// in MessageID and writes via SnapshotStore. Nil when [snapshots] is
+	// disabled. See processor/internal/snapshots and #108.
+	SnapshotData *snapshots.Snapshot `json:"-"`
 }
 
 // RateLimitHooks lets the delivery queue notify the host application when a
@@ -117,4 +126,33 @@ func splitSentID(s string) string {
 		return ""
 	}
 	return s[idx+1:]
+}
+
+// ExtractMessageIDForSnapshot returns the bare platform message ID for
+// snapshot storage. The Discord sender encodes SentMessage.ID as
+// "<rateLimitKey>:<discordMessageID>" so the delete/edit path can
+// remember the channel; the snapshot needs the raw ID half because
+// that's what arrives in InteractionCreate.Message.ID when a user
+// clicks a button on the message.
+//
+// MessageTracker stores the same composite under TrackedMessage.SentID,
+// so the eviction hook (called from main.go's snapshot cleanup) calls
+// this helper too — without it, clean-deletion would never find the
+// snapshot to drop because the key used at write time would differ.
+//
+// Detects by shape (colon present → composite) rather than by platform
+// argument; callers don't need to thread the platform through.
+func ExtractMessageIDForSnapshot(sentID string) string {
+	if id := splitSentID(sentID); id != "" {
+		return id
+	}
+	return sentID
+}
+
+// extractMessageIDForSnapshot is the internal call site used from
+// queue.go. Same semantics as the exported function; the platform
+// argument is kept for callers that already had it in scope, but the
+// implementation discriminates by shape.
+func extractMessageIDForSnapshot(sentID, _ string) string {
+	return ExtractMessageIDForSnapshot(sentID)
 }
