@@ -18,6 +18,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/bot/commands"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
+	"github.com/pokemon/poracleng/processor/internal/discordroles"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/nlp"
 )
@@ -449,11 +450,22 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		}
 		rolesFetched = true
 		if guildID != "" {
-			// Try gateway state cache first.
+			// Channel context — use the message's current guild.
+			// Gateway state cache first, REST fallback.
 			if member, err := s.State.Member(guildID, m.Author.ID); err == nil && member != nil {
 				userRoles = member.Roles
 			} else if member, err := s.GuildMember(guildID, m.Author.ID); err == nil && member != nil {
 				userRoles = member.Roles
+			}
+		} else if len(b.Cfg.Discord.Guilds) > 0 {
+			// DM context — Discord doesn't tell us the user's guild
+			// memberships from a DM, so we walk every configured guild
+			// and union the user's roles across them. Mirrors
+			// PoracleJS's getUserRoles DM branch; without this,
+			// role-gated command_security silently blocks DM users who
+			// have the right role but trigger the command from DM.
+			if roleIDs, err := discordroles.GetUserRoleIDs(s, b.Cfg.Discord.Guilds, m.Author.ID); err == nil {
+				userRoles = roleIDs
 			}
 		}
 		return userRoles
