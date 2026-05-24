@@ -674,8 +674,11 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		ctx.Fences = fences
 		ctx.PostRegister = b.postRegisterHook()
 
-		// Populate delegated admin permissions
+		// Populate delegated admin permissions + the role list itself so
+		// commands needing role-aware feature checks (pvp, specificgym)
+		// can read it without re-fetching.
 		roles := fetchRoles()
+		ctx.UserRoles = roles
 		ctx.Permissions.ChannelTracking = bot.CalculateChannelPermissions(
 			b.Cfg, m.Author.ID, roles, channelID, guildID, "")
 		ctx.Permissions.UserTracking = bot.CanTrackUsers(b.Cfg, "discord", m.Author.ID, roles)

@@ -98,8 +98,20 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// gym. Caller must wrap multi-word names in quotes, e.g.
 	// `!gym mystic "gym:Town Hall"` so the bot parser keeps it as one
 	// token before splitParamPrefix sees it.
+	//
+	// PoracleJS never accepted gym:<id> from the command at all —
+	// specific-gym tracking was created exclusively via third-party
+	// tools (web editor, API). PoracleNG exposes the parsing for
+	// convenience but gates it behind the same command_security feature
+	// key the legacy delivery-time blocked_alerts check used:
+	// "specificgym". Without that key configured all users can use the
+	// pin (existing PoracleNG behaviour preserved); with the key set,
+	// only users in the allow list (by ID or role) can.
 	var gymIDPtr *string
 	if raw := strings.TrimSpace(parsed.Strings["gym"]); raw != "" {
+		if !bot.CheckFeaturePermission(ctx.Config, ctx.Platform, "specificgym", ctx.UserID, ctx.UserRoles) {
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_permission")}}
+		}
 		id, abort := resolveGymRef(ctx, raw)
 		if abort != nil {
 			return []bot.Reply{*abort}

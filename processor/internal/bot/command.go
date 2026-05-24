@@ -289,6 +289,16 @@ type CommandContext struct {
 	IsRegistered     bool
 	Permissions      Permissions
 
+	// UserRoles is the list of Discord role IDs the invoking user
+	// holds. Populated by the discordbot host before dispatch —
+	// channel-context messages take ic.Member.Roles; DM-context
+	// messages union roles across cfg.Discord.Guilds (matches
+	// PoracleJS's getUserRoles behaviour). Telegram leaves this nil.
+	// Used by command handlers that need role-aware permission checks
+	// beyond the top-level command_security gate (e.g. cmd.track's
+	// "pvp" feature check, cmd.gym's "specificgym" pin check).
+	UserRoles []string
+
 	// User state (loaded from DB before command runs)
 	Language    string
 	ProfileNo   int
