@@ -164,12 +164,13 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, poke
 // InvasionTranslate adds per-language translated fields.
 // showcaseRaw is the raw JSON bytes of the showcase_rankings field from the
 // Golbat webhook; pass nil for non-Showcase incidents and regular invasions.
-func (e *Enricher) InvasionTranslate(base map[string]any, gruntTypeID int, lineup []webhook.InvasionLineupEntry, showcaseRaw json.RawMessage, lang string) map[string]any {
+func (e *Enricher) InvasionTranslate(base map[string]any, lat, lon float64, gruntTypeID int, lineup []webhook.InvasionLineupEntry, showcaseRaw json.RawMessage, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
 		return nil
 	}
 
-	m := make(map[string]any, 15) // only translated fields; caller merges base + perLang
+	m := make(map[string]any, 25) // only translated fields; caller merges base + perLang
+	defer e.addLocalizedGeoResult(m, lat, lon, lang)
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)

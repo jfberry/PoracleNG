@@ -2,6 +2,7 @@ package enrichment
 
 import (
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -160,8 +161,6 @@ func normalizeTrailingSlash(url string) string {
 // enrichment map. This should be called BEFORE addStaticMap so that static map
 // templates can reference address fields.
 func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
-	m["geocodeLatitude"] = lat
-	m["geocodeLongitude"] = lon
 	if e.Geocoder == nil {
 		return
 	}
@@ -169,23 +168,17 @@ func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
 	e.addAddressFields(m, addr)
 }
 
-// LocalizedGeoFields returns address fields localized for lang using the
-// geocode coordinates captured during base enrichment. These fields live in
-// per-language enrichment so they override the base address for each user
-// without changing DTS template field names.
-func (e *Enricher) LocalizedGeoFields(base map[string]any, lang string) map[string]any {
-	if e.Geocoder == nil || base == nil || lang == "" {
-		return nil
+// addLocalizedGeoResult writes per-language address fields into m using the
+// localized reverse-geocode result. The base enrichment already fetched the
+// default-locale address, so blank/default language is a no-op.
+func (e *Enricher) addLocalizedGeoResult(m map[string]any, lat, lon float64, lang string) {
+	lang = strings.ToLower(strings.TrimSpace(lang))
+	defaultLocale := strings.ToLower(strings.TrimSpace(e.DefaultLocale))
+	if e.Geocoder == nil || lang == "" || lang == defaultLocale {
+		return
 	}
-	lat, okLat := floatFromAny(base["geocodeLatitude"])
-	lon, okLon := floatFromAny(base["geocodeLongitude"])
-	if !okLat || !okLon {
-		return nil
-	}
-	m := make(map[string]any, 16)
 	addr := e.Geocoder.GetAddressForLanguage(lat, lon, lang)
 	e.addAddressFields(m, addr)
-	return m
 }
 
 func (e *Enricher) addAddressFields(m map[string]any, addr *geocoding.Address) {
@@ -205,23 +198,6 @@ func (e *Enricher) addAddressFields(m map[string]any, addr *geocoding.Address) {
 	m["neighbourhood"] = addr.Neighbourhood
 	m["suburb"] = addr.Suburb
 	m["formattedAddress"] = addr.FormattedAddress
-}
-
-func floatFromAny(v any) (float64, bool) {
-	switch n := v.(type) {
-	case float64:
-		return n, true
-	case float32:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	case int32:
-		return float64(n), true
-	default:
-		return 0, false
-	}
 }
 
 // Tile mode constants. Defined here to avoid import cycles with cmd/processor.

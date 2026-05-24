@@ -88,12 +88,14 @@ func (e *Enricher) Lure(lure *webhook.LureWebhook, tileMode int) (map[string]any
 }
 
 // LureTranslate adds per-language translated fields.
-func (e *Enricher) LureTranslate(base map[string]any, lureID int, lang string) map[string]any {
-	if e.GameData == nil || e.Translations == nil {
+func (e *Enricher) LureTranslate(base map[string]any, lure *webhook.LureWebhook, lang string) map[string]any {
+	if e.GameData == nil || e.Translations == nil || lure == nil {
 		return nil
 	}
 
-	m := make(map[string]any, 8)
+	m := make(map[string]any, 18)
+	defer e.addLocalizedGeoResult(m, lure.Latitude, lure.Longitude, lang)
+	lureID := lure.LureID
 
 	gd := e.GameData
 	tr := e.Translations.For(lang)

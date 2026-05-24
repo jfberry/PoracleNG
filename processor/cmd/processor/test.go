@@ -185,7 +185,7 @@ func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webh
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.InvasionTranslate(enrichmentData, gruntTypeID, inv.Lineup, inv.ShowcaseRankings, target.Language),
+			target.Language: ps.enricher.InvasionTranslate(enrichmentData, inv.Latitude, inv.Longitude, gruntTypeID, inv.Lineup, inv.ShowcaseRankings, target.Language),
 		}
 	}
 
@@ -267,7 +267,7 @@ func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.M
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
 			// Test path has no team-change context, so suppress previousControl* fields.
-			target.Language: ps.enricher.GymTranslate(enrichmentData, teamID, -1, -1, target.Language),
+			target.Language: ps.enricher.GymTranslate(enrichmentData, gym.Latitude, gym.Longitude, teamID, -1, -1, target.Language),
 		}
 	}
 
@@ -301,7 +301,7 @@ func (ps *ProcessorService) processTestNest(raw json.RawMessage, target webhook.
 	var perLang map[string]map[string]any
 	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.NestTranslate(enrichmentData, nest.PokemonID, nest.Form, target.Language),
+			target.Language: ps.enricher.NestTranslate(enrichmentData, &nest, target.Language),
 		}
 	}
 
@@ -330,20 +330,24 @@ func (ps *ProcessorService) processTestFort(raw json.RawMessage, target webhook.
 	}
 
 	enrichmentData, tilePending := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID(), &fort, enrichment.TileModeURL)
+	perLang := map[string]map[string]any{
+		target.Language: ps.enricher.FortUpdateTranslate(fort.Latitude(), fort.Longitude(), target.Language),
+	}
 
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
 	webhookFields := parseWebhookFields(raw)
 	ps.renderCh <- RenderJob{
-		AlertType:     "fort-update",
-		TemplateType:  "fort-update",
-		Enrichment:    enrichmentData,
-		WebhookFields: webhookFields,
-		MatchedUsers:  []webhook.MatchedUser{target},
-		MatchedAreas:  []webhook.MatchedArea{},
-		TileGate:      ps.newTileGate(tilePending),
-		LogReference:  "test",
+		AlertType:         "fort-update",
+		TemplateType:      "fort-update",
+		Enrichment:        enrichmentData,
+		PerLangEnrichment: perLang,
+		WebhookFields:     webhookFields,
+		MatchedUsers:      []webhook.MatchedUser{target},
+		MatchedAreas:      []webhook.MatchedArea{},
+		TileGate:          ps.newTileGate(tilePending),
+		LogReference:      "test",
 	}
 	return nil
 }
@@ -402,7 +406,7 @@ func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webh
 		var perLang map[string]map[string]any
 		if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 			perLang = map[string]map[string]any{
-				target.Language: ps.enricher.LureTranslate(enrichmentData, lure.LureID, target.Language),
+				target.Language: ps.enricher.LureTranslate(enrichmentData, &lure, target.Language),
 			}
 		}
 		if ps.renderCh == nil {

@@ -203,3 +203,13 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.For
 
 	return m, pending
 }
+
+// FortUpdateTranslate adds per-language enrichment for fort update alerts.
+func (e *Enricher) FortUpdateTranslate(lat, lon float64, lang string) map[string]any {
+	m := make(map[string]any, 10)
+	e.addLocalizedGeoResult(m, lat, lon, lang)
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}

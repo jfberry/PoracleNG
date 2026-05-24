@@ -78,7 +78,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				perLang = make(map[string]map[string]any)
 				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
-					perLang[lang] = ps.enricher.LureTranslate(enrichmentData, lure.LureID, lang)
+					perLang[lang] = ps.enricher.LureTranslate(enrichmentData, &lure, lang)
 				}
 			}
 

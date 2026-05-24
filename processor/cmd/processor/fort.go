@@ -79,20 +79,29 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			mode := ps.tileMode("fort-update", matched)
 			enrichmentData, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort, mode)
 
+			var perLang map[string]map[string]any
+			if ps.enricher.Geocoder != nil {
+				perLang = make(map[string]map[string]any)
+				for _, lang := range distinctLanguages(matched, ps.cfg.General.Locale) {
+					perLang[lang] = ps.enricher.FortUpdateTranslate(lat, lon, lang)
+				}
+			}
+
 			if ps.renderCh == nil {
 				return
 			}
 			webhookFields := parseWebhookFields(raw)
 
 			ps.renderCh <- RenderJob{
-				AlertType:     "fort-update",
-				TemplateType:  "fort-update",
-				Enrichment:    enrichmentData,
-				WebhookFields: webhookFields,
-				MatchedUsers:  matched,
-				MatchedAreas:  matchedAreas,
-				TileGate:      ps.newTileGate(tilePending),
-				LogReference:  fortID,
+				AlertType:         "fort-update",
+				TemplateType:      "fort-update",
+				Enrichment:        enrichmentData,
+				PerLangEnrichment: perLang,
+				WebhookFields:     webhookFields,
+				MatchedUsers:      matched,
+				MatchedAreas:      matchedAreas,
+				TileGate:          ps.newTileGate(tilePending),
+				LogReference:      fortID,
 			}
 		} else {
 			l.Debugf("Fort update %s (%s, %s) and 0 humans cared",

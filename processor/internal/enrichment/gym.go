@@ -73,12 +73,13 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldS
 // (preserved across Uncontested gaps). Use -1 when no prior value is known
 // (first sighting). Matches PoracleJS app.js semantics: previousControl* is
 // derived from the cache, never from the webhook (Golbat doesn't send it).
-func (e *Enricher) GymTranslate(base map[string]any, teamID, oldTeamID, lastOwnerID int, lang string) map[string]any {
+func (e *Enricher) GymTranslate(base map[string]any, lat, lon float64, teamID, oldTeamID, lastOwnerID int, lang string) map[string]any {
 	if e.GameData == nil || e.Translations == nil {
 		return nil
 	}
 
-	m := make(map[string]any, 8) // only translated fields; caller merges base + perLang
+	m := make(map[string]any, 18) // only translated fields; caller merges base + perLang
+	defer e.addLocalizedGeoResult(m, lat, lon, lang)
 
 	tr := e.Translations.For(lang)
 	enTr := e.Translations.For("en")
