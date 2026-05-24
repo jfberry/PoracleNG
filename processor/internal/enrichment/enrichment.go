@@ -160,11 +160,23 @@ func normalizeTrailingSlash(url string) string {
 // addGeoResult performs a reverse geocode lookup and adds address fields to the
 // enrichment map. This should be called BEFORE addStaticMap so that static map
 // templates can reference address fields.
+//
+// Passes e.DefaultLocale as the language so the base result is genuinely the
+// operator's configured default-locale address. This pairs with
+// addLocalizedGeoResult's skip-when-lang-equals-default optimization: a user
+// whose `language` matches the operator default deliberately skips the
+// per-language lookup because the base already covers them. Without the
+// explicit default-locale here the provider's blank-language behaviour
+// kicks in (Nominatim returns the local language for the place,
+// Google falls back to server geolocation, etc.) — fine for some
+// deployments but wrong for cross-border setups (operator in DE serving
+// EN users would silently get German addresses for English users).
 func (e *Enricher) addGeoResult(m map[string]any, lat, lon float64) {
 	if e.Geocoder == nil {
 		return
 	}
-	addr := e.Geocoder.GetAddress(lat, lon)
+	lang := strings.ToLower(strings.TrimSpace(e.DefaultLocale))
+	addr := e.Geocoder.GetAddressForLanguage(lat, lon, lang)
 	e.addAddressFields(m, addr)
 }
 

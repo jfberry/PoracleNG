@@ -102,3 +102,42 @@ func TestLureTranslateSkipsLocalizedGeocodingForDefaultLocale(t *testing.T) {
 		t.Fatalf("default-locale translate should not shadow base addr, got %q", got["addr"])
 	}
 }
+
+// TestAddGeoResultPassesDefaultLocale pins the base lookup against the
+// operator's configured DefaultLocale, not blank. The per-language
+// "skip when lang == DefaultLocale" optimization in
+// addLocalizedGeoResult assumes the base entry IS the default-locale
+// result — without an explicit language on the base call the provider
+// returns whatever it picks for blank (Nominatim returns the local
+// language for the place), and a user with `language == DefaultLocale`
+// would end up with addresses in the wrong language.
+//
+// Reproduces the cross-border-deployment subtle behaviour flagged in
+// the PR #127 review: operator in DE serving EN users would see
+// German addresses for English users without this.
+func TestAddGeoResultPassesDefaultLocale(t *testing.T) {
+	var gotLanguage string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotLanguage = r.URL.Query().Get("accept-language")
+		w.Write([]byte(`{"display_name":"x","address":{"city":"x"}}`))
+	}))
+	defer srv.Close()
+
+	geocoder, err := geocoding.New(geocoding.Config{
+		Provider:    "nominatim",
+		ProviderURL: srv.URL,
+		Timeout:     int((2 * time.Second) / time.Millisecond),
+		CacheDetail: 3,
+	})
+	if err != nil {
+		t.Fatalf("geocoding.New: %v", err)
+	}
+
+	e := &Enricher{Geocoder: geocoder, DefaultLocale: "en"}
+	m := map[string]any{}
+	e.addGeoResult(m, 52.517, 13.389)
+
+	if gotLanguage != "en" {
+		t.Errorf("base geocode accept-language=%q, want %q (DefaultLocale)", gotLanguage, "en")
+	}
+}
