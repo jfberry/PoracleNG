@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -67,6 +68,18 @@ func NewCache(diskPath string, memTTL time.Duration, memMaxSize int) (*Cache, er
 func CacheKey(lat, lon float64, detail int) string {
 	format := fmt.Sprintf("%%.%df-%%.%df", detail, detail)
 	return fmt.Sprintf(format, lat, lon)
+}
+
+// CacheKeyForLanguage builds a reverse geocode cache key. Blank language keeps
+// the historical coordinate-only key; localized lookups include the language
+// code so provider-localized address data stays isolated per user locale.
+func CacheKeyForLanguage(lat, lon float64, detail int, language string) string {
+	key := CacheKey(lat, lon, detail)
+	language = strings.ToLower(strings.TrimSpace(language))
+	if language == "" {
+		return key
+	}
+	return language + ":" + key
 }
 
 // Get looks up an address by key. It checks memory first, then disk.

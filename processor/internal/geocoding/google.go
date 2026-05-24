@@ -63,11 +63,20 @@ type googleGeometry struct {
 }
 
 // Reverse performs a reverse geocode lookup via Google.
-func (g *Google) Reverse(lat, lon float64) (*Address, error) {
-	u := fmt.Sprintf("https://maps.googleapis.com/maps/api/geocode/json?latlng=%f,%f&key=%s",
-		lat, lon, g.randomKey())
+func (g *Google) Reverse(lat, lon float64, language string) (*Address, error) {
+	u, err := url.Parse("https://maps.googleapis.com/maps/api/geocode/json")
+	if err != nil {
+		return nil, fmt.Errorf("google geocode: parse URL")
+	}
+	q := u.Query()
+	q.Set("latlng", fmt.Sprintf("%f,%f", lat, lon))
+	q.Set("key", g.randomKey())
+	if language = strings.TrimSpace(language); language != "" {
+		q.Set("language", language)
+	}
+	u.RawQuery = q.Encode()
 
-	resp, err := g.client.Get(u)
+	resp, err := g.client.Get(u.String())
 	if err != nil {
 		return nil, fmt.Errorf("google geocode: request failed (key redacted)")
 	}

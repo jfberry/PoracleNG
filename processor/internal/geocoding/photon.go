@@ -65,7 +65,7 @@ type photonProperties struct {
 }
 
 // Reverse performs a reverse geocode lookup using Photon.
-func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
+func (p *Photon) Reverse(lat, lon float64, language string) (*Address, error) {
 	u, err := url.Parse(p.baseURL + "/reverse")
 	if err != nil {
 		return nil, fmt.Errorf("photon: parse URL: %w", err)
@@ -74,6 +74,9 @@ func (p *Photon) Reverse(lat, lon float64) (*Address, error) {
 	q.Set("lat", fmt.Sprintf("%f", lat))
 	q.Set("lon", fmt.Sprintf("%f", lon))
 	q.Set("radius", "10")
+	if language = strings.TrimSpace(language); language != "" {
+		q.Set("lang", language)
+	}
 	u.RawQuery = q.Encode()
 
 	resp, err := p.client.Get(u.String())

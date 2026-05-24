@@ -1,6 +1,7 @@
 package main
 
 import (
+	"maps"
 	"strconv"
 	"time"
 
@@ -77,10 +78,10 @@ type RenderJob struct {
 	MatchedUsers      []webhook.MatchedUser
 	MatchedAreas      []webhook.MatchedArea
 	TileGate          *tileGate
-	IsEncountered    bool // pokemon only
-	IsPokemon        bool // true = RenderPokemon, false = RenderAlert
-	LogReference     string
-	EditKey          string
+	IsEncountered     bool // pokemon only
+	IsPokemon         bool // true = RenderPokemon, false = RenderAlert
+	LogReference      string
+	EditKey           string
 	// ReplyKey indexes the sent message for reply chaining. Copied verbatim
 	// onto every constructed delivery.Job. For pokemon, this is the encounter
 	// ID so subsequent change events can find prior messages via the
@@ -134,6 +135,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 		metrics.RenderTotal.WithLabelValues("error").Inc()
 		return
 	}
+	ps.addLocalizedGeocoding(&job)
 
 	if job.IsPokemon {
 		if job.IsChange {
@@ -209,6 +211,42 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 	}
 
 	metrics.RenderTotal.WithLabelValues("ok").Inc()
+}
+
+func (ps *ProcessorService) addLocalizedGeocoding(job *RenderJob) {
+	if ps.enricher == nil || ps.enricher.Geocoder == nil || len(job.MatchedUsers) == 0 {
+		return
+	}
+	defaultLocale := ""
+	if ps.cfg != nil {
+		defaultLocale = ps.cfg.General.Locale
+	}
+	if job.PerLangEnrichment != nil {
+		cloned := make(map[string]map[string]any, len(job.PerLangEnrichment))
+		for lang, fields := range job.PerLangEnrichment {
+			if fields == nil {
+				continue
+			}
+			clonedFields := make(map[string]any, len(fields))
+			maps.Copy(clonedFields, fields)
+			cloned[lang] = clonedFields
+		}
+		job.PerLangEnrichment = cloned
+	}
+	for _, lang := range distinctLanguages(job.MatchedUsers, defaultLocale) {
+		fields := ps.enricher.LocalizedGeoFields(job.Enrichment, lang)
+		if len(fields) == 0 {
+			continue
+		}
+		if job.PerLangEnrichment == nil {
+			job.PerLangEnrichment = make(map[string]map[string]any)
+		}
+		if job.PerLangEnrichment[lang] == nil {
+			job.PerLangEnrichment[lang] = fields
+			continue
+		}
+		maps.Copy(job.PerLangEnrichment[lang], fields)
+	}
 }
 
 // resolveTilePending performs the synchronous tile wait that processRenderJob

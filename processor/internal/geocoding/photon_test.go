@@ -126,7 +126,7 @@ func TestPhotonReverse(t *testing.T) {
 	defer srv.Close()
 
 	p := NewPhoton(srv.URL, 2*time.Second, true)
-	addr, err := p.Reverse(52.517, 13.389)
+	addr, err := p.Reverse(52.517, 13.389, "")
 	if err != nil {
 		t.Fatalf("Reverse: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestPhotonReverseEmptyFeatures(t *testing.T) {
 	defer srv.Close()
 
 	p := NewPhoton(srv.URL, 2*time.Second, true)
-	if _, err := p.Reverse(0, 0); err == nil {
+	if _, err := p.Reverse(0, 0, ""); err == nil {
 		t.Fatal("expected error for empty features")
 	}
 }
@@ -176,7 +176,7 @@ func TestPhotonReverseServerError(t *testing.T) {
 	defer srv.Close()
 
 	p := NewPhoton(srv.URL, 2*time.Second, true)
-	if _, err := p.Reverse(0, 0); err == nil {
+	if _, err := p.Reverse(0, 0, ""); err == nil {
 		t.Fatal("expected error for 500 response")
 	}
 }
@@ -203,7 +203,7 @@ func TestPhotonReverseCountryExcluded(t *testing.T) {
 	defer srv.Close()
 
 	p := NewPhoton(srv.URL, 2*time.Second, false)
-	addr, err := p.Reverse(52.517, 13.389)
+	addr, err := p.Reverse(52.517, 13.389, "")
 	if err != nil {
 		t.Fatalf("Reverse: %v", err)
 	}
@@ -220,6 +220,24 @@ func TestPhotonReverseCountryExcluded(t *testing.T) {
 	// {{{country}}} still work; we only control FormattedAddress shape.
 	if addr.Country != "Germany" || addr.CountryCode != "DE" {
 		t.Errorf("component fields should stay populated, got Country=%q CountryCode=%q", addr.Country, addr.CountryCode)
+	}
+}
+
+func TestPhotonReverseSendsLanguage(t *testing.T) {
+	const body = `{"features":[{"geometry":{"coordinates":[0,0]},"properties":{"countrycode":"DE","country":"Deutschland"}}]}`
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query().Get("lang")
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	p := NewPhoton(srv.URL, 2*time.Second, true)
+	if _, err := p.Reverse(0, 0, "de"); err != nil {
+		t.Fatalf("Reverse: %v", err)
+	}
+	if got != "de" {
+		t.Errorf("lang=%q, want de", got)
 	}
 }
 

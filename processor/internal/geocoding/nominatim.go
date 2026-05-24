@@ -89,7 +89,7 @@ func nominatimToOCFMT(a nominatimAddress, streetName, city string) map[string]st
 }
 
 // Reverse performs a reverse geocode lookup.
-func (n *Nominatim) Reverse(lat, lon float64) (*Address, error) {
+func (n *Nominatim) Reverse(lat, lon float64, language string) (*Address, error) {
 	u, err := url.Parse(n.baseURL + "/reverse")
 	if err != nil {
 		return nil, fmt.Errorf("nominatim: parse URL: %w", err)
@@ -99,6 +99,9 @@ func (n *Nominatim) Reverse(lat, lon float64) (*Address, error) {
 	q.Set("lat", strconv.FormatFloat(lat, 'f', -1, 64))
 	q.Set("lon", strconv.FormatFloat(lon, 'f', -1, 64))
 	q.Set("addressdetails", "1")
+	if language = strings.TrimSpace(language); language != "" {
+		q.Set("accept-language", language)
+	}
 	u.RawQuery = q.Encode()
 
 	body, err := n.doGet(u.String())
