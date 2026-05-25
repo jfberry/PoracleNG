@@ -155,6 +155,41 @@ When a user loses access to an area (community-role change, manual `!area remove
 - Piggybacks on the existing `AreaLogic.ValidateAndPrune` path
 - No effect when area-security mode is off
 
+## REST API
+
+New endpoints nested under the existing `/api/humans/{id}` resource (matches the convention used by `/setLocation`, `/setAreas`, etc.):
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET`    | `/api/humans/{id}/locations`          | List all named locations + the default. Response: `{default: {latitude, longitude}, named: [{label, latitude, longitude, created_at}, ...]}` |
+| `POST`   | `/api/humans/{id}/locations`          | Create a named location. Body: `{label, latitude, longitude}` OR `{label, place}` (server geocodes). 409 if label already exists for this user |
+| `GET`    | `/api/humans/{id}/locations/{label}`  | Show one named location (label match is case-insensitive). 404 if missing |
+| `DELETE` | `/api/humans/{id}/locations/{label}`  | Remove named location. 409 with `{referencing_rules: [{type, uid, ...}]}` if any tracking rule references it; otherwise 204 |
+
+The existing `POST /api/humans/{id}/setLocation/{lat}/{lon}` continues to set the **default** location, unchanged.
+
+**Tracking-rule CRUD endpoints** (`POST /api/tracking/{type}/{id}` for all 10 types) accept the two new fields on each tracking-rule object in the request body:
+
+```json
+{
+  "uid": 123,
+  "pokemon_id": 25,
+  "distance": 500,
+  "override_location_label": "Home",   // string or null
+  "override_areas": ["berlin", "munich"], // array of lowercased area names, or null
+  ...
+}
+```
+
+Server-side validation mirrors the bot-command checks:
+- `override_location_label` set + `distance == 0` → 400 "location requires distance"
+- `override_areas` non-empty + `distance > 0` → 400 "area and distance are mutually exclusive"
+- `override_location_label` set + `override_areas` non-empty → 400 "pick one of location or area"
+- `override_location_label` references a label not in the user's saved locations → 400 "unknown location label"
+- Any `override_areas` entry not in the user's currently-permitted areas → 400 "area not permitted"
+
+`flexBool` / `flexInt` JSON coercion in `api/tracking.go` continues to apply to existing fields; the two new fields are plain string / string-array and don't need coercion.
+
 ## Slash commands
 
 - New `/location` with subcommands `add`, `list`, `show`, `remove`, `set-default`, `remove-default`
@@ -207,6 +242,10 @@ English source only as part of this PR; Crowdin picks up the rest.
   - `area:` + `location:` rejected
   - Valid combos parse and populate the right fields on the tracking row
 - `store/tracking_sql_test.go`: round-trip the new columns including NULL handling
+
+### API tests
+- `api/locations_test.go`: list/create/show/delete happy paths; 409 on duplicate label; 409 on delete-while-referenced (with referencing-rules payload); 404 on missing label; case-insensitive lookup
+- `api/tracking_test.go`: the 5 server-side override validation rules return 400 with the expected error key; valid override populates the row
 
 ### Integration
 - End-to-end webhook flow through processor with an override-set rule that should fire and one that should not
