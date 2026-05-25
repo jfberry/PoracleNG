@@ -297,16 +297,22 @@ func validateOverrideFields(
 	return "", 0
 }
 
-// normalizeOverrideAreas converts an empty slice to nil so that an incoming
-// request body with "override_areas":[] does not look different from an existing
-// NULL row in the DB when diffed. reflect.DeepEqual(nil, []string{}) is false,
-// so without this normalisation the diff would see a phantom change and create a
-// duplicate insert for every POST that includes an empty override_areas array.
+// normalizeOverrideAreas converts an empty slice to nil (so an incoming
+// "override_areas":[] round-trips identically to a NULL DB column for diff
+// purposes) and normalizes each remaining area name to lowercase with
+// underscores replaced by spaces. This matches the convention used by
+// human.Area (parseAndNormalizeAreas) and the geofence NormalizedName keys,
+// so area comparisons in the matcher's areaOverlap will always find a match
+// regardless of the original case or underscore usage in the request body.
 func normalizeOverrideAreas(in []string) []string {
 	if len(in) == 0 {
 		return nil
 	}
-	return in
+	out := make([]string, len(in))
+	for i, a := range in {
+		out[i] = strings.ToLower(strings.ReplaceAll(a, "_", " "))
+	}
+	return out
 }
 
 // DiffTracking compares two tracking structs using `diff` struct tags.

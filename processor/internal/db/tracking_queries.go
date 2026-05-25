@@ -27,13 +27,23 @@ func nullIfEmpty(s string) any {
 	return s
 }
 
-// parseOverrideAreas is called after a Select to decode the raw JSON column into []string.
+// parseOverrideAreas decodes the raw JSON column into []string and normalizes
+// each area name to lowercase with underscores replaced by spaces. This matches
+// the normalization applied to human.Area (via parseAndNormalizeAreas) and the
+// geofence NormalizedName keys produced by rtree.go, so override area comparisons
+// in the matcher's areaOverlap function will find correct matches regardless of
+// how the area name was originally stored.
 func parseOverrideAreas(raw string) []string {
 	if raw == "" {
 		return nil
 	}
 	var areas []string
-	_ = json.Unmarshal([]byte(raw), &areas)
+	if err := json.Unmarshal([]byte(raw), &areas); err != nil {
+		return nil
+	}
+	for i, a := range areas {
+		areas[i] = strings.ToLower(strings.ReplaceAll(a, "_", " "))
+	}
 	return areas
 }
 

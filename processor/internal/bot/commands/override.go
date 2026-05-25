@@ -97,7 +97,9 @@ func parseOverride(ctx *bot.CommandContext, strs map[string]string, areas []stri
 				}
 			}
 		}
-		out.Areas = append(out.Areas, areas...)
+		for _, a := range areas {
+			out.Areas = append(out.Areas, strings.ToLower(strings.ReplaceAll(a, "_", " ")))
+		}
 	}
 
 	return out, nil
