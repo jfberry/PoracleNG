@@ -6,6 +6,43 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 )
 
+func TestMonstersInsertWithOverride(t *testing.T) {
+	dbx := openTestDB(t)
+	defer dbx.Close()
+	s := NewTrackingStores(dbx)
+	uid, err := s.Monsters.Insert(&db.MonsterTrackingAPI{
+		ID: "u1", ProfileNo: 0, PokemonID: 25,
+		OverrideLocationLabel: "Home",
+		OverrideAreas:         []string{"berlin", "munich"},
+	})
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	rows, _ := s.Monsters.SelectByIDProfile("u1", 0)
+	if len(rows) != 1 || rows[0].UID != uid {
+		t.Fatalf("expected 1 row uid=%d, got %+v", uid, rows)
+	}
+	if rows[0].OverrideLocationLabel != "Home" {
+		t.Fatalf("label round-trip: got %q", rows[0].OverrideLocationLabel)
+	}
+	if len(rows[0].OverrideAreas) != 2 || rows[0].OverrideAreas[0] != "berlin" {
+		t.Fatalf("areas round-trip: got %v", rows[0].OverrideAreas)
+	}
+
+	// Insert with no override — both fields nil/empty
+	uid2, _ := s.Monsters.Insert(&db.MonsterTrackingAPI{ID: "u1", ProfileNo: 0, PokemonID: 26})
+	rows, _ = s.Monsters.SelectByIDProfile("u1", 0)
+	var got *db.MonsterTrackingAPI
+	for i := range rows {
+		if rows[i].UID == uid2 {
+			got = &rows[i]
+		}
+	}
+	if got == nil || got.OverrideLocationLabel != "" || len(got.OverrideAreas) != 0 {
+		t.Fatalf("no-override row should have empty fields; got %+v", got)
+	}
+}
+
 func TestDiffAndClassify_AllNew(t *testing.T) {
 	existing := []db.LureTrackingAPI{}
 	candidates := []db.LureTrackingAPI{
