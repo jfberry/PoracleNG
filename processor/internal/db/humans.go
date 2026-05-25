@@ -39,6 +39,7 @@ type Human struct {
 	CurrentProfileNo int
 	BlockedAlerts    string
 	BlockedAlertsSet map[string]bool // parsed from BlockedAlerts JSON
+	Locations        map[string]*UserLocation // lowercased label → location; nil if user has none
 }
 
 // SetBlockedAlerts sets both the raw BlockedAlerts string and the parsed BlockedAlertsSet.

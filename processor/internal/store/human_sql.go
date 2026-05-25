@@ -133,7 +133,7 @@ func (s *SQLHumanStore) Create(h *Human) error {
 }
 
 func (s *SQLHumanStore) Delete(id string) error {
-	for _, table := range trackingTables {
+	for _, table := range humanOwnedTables {
 		if _, err := s.db.Exec(fmt.Sprintf("DELETE FROM `%s` WHERE id = ?", table), id); err != nil {
 			return fmt.Errorf("delete %s for human %s: %w", table, id, err)
 		}
@@ -532,8 +532,22 @@ func (s *SQLHumanStore) UpdateProfileHours(id string, profileNo int, activeHours
 
 // --- Tracking tables list ---
 
+// trackingTables lists the per-profile tracking tables. Used by
+// DeleteProfile and CopyProfile which filter by (id, profile_no).
+// user_locations is intentionally excluded — it has no profile_no column.
 var trackingTables = []string{
-	"monsters", "raid", "egg", "quest", "invasion", "weather", "lures", "gym", "nests", "maxbattle", "forts",
+	"monsters", "raid", "egg", "quest", "invasion", "weather",
+	"lures", "gym", "nests", "maxbattle", "forts",
+}
+
+// humanOwnedTables lists all tables holding rows keyed by human id that
+// must be cleaned up when a human is deleted (since the DB has no FK
+// cascades). Includes per-profile tracking tables AND per-user-owned
+// helpers like user_locations.
+var humanOwnedTables = []string{
+	"monsters", "raid", "egg", "quest", "invasion", "weather",
+	"lures", "gym", "nests", "maxbattle", "forts",
+	"user_locations",
 }
 
 // --- Conversion helpers ---
