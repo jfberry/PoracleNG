@@ -61,6 +61,23 @@ type Profile struct {
 	ActiveHours string
 }
 
+// UserLocation is a per-user saved named location.
+type UserLocation struct {
+	UID       int64
+	ID        string
+	Label     string
+	Latitude  float64
+	Longitude float64
+}
+
+// ReferencingRule identifies one tracking rule that references a saved
+// location label. Returned by CountLocationReferences so the !location
+// remove command can list them.
+type ReferencingRule struct {
+	Type string // "pokemon", "raid", ..., matches the URL path on /api/tracking/<type>/
+	UID  int64
+}
+
 // HumanStore provides typed CRUD operations over the humans and profiles
 // tables. JSON marshaling is handled internally — callers work with Go types.
 type HumanStore interface {
@@ -163,4 +180,31 @@ type HumanStore interface {
 
 	// UpdateProfileHours updates the active_hours field on a profile.
 	UpdateProfileHours(id string, profileNo int, activeHours string) error
+
+	// --- Saved locations ---
+
+	// ListLocations returns every saved location for the given human id,
+	// ordered by label.
+	ListLocations(id string) ([]UserLocation, error)
+
+	// GetLocation returns one saved location by case-insensitive label,
+	// or nil if not found.
+	GetLocation(id, label string) (*UserLocation, error)
+
+	// AddLocation inserts a new saved location. Returns an error
+	// containing "duplicate" in its text if the label already exists
+	// for this human (callers test with errors.Is or strings.Contains).
+	AddLocation(loc UserLocation) (int64, error)
+
+	// DeleteLocation removes the named saved location by case-insensitive
+	// label match. Returns nil if the location did not exist
+	// (idempotent — callers should validate existence before calling if
+	// they want a "not found" response).
+	DeleteLocation(id, label string) error
+
+	// CountLocationReferences returns every tracking rule (across all 10
+	// tracking tables) whose override_location_label matches the given
+	// label for this human. Used by !location remove to refuse delete
+	// when references exist.
+	CountLocationReferences(id, label string) ([]ReferencingRule, error)
 }
