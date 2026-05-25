@@ -28,13 +28,6 @@ func TestSlashTextParity(t *testing.T) {
 		t.Run(fix.Name, func(t *testing.T) {
 			mapper := mappers.Lookup(fix.Slash.Name)
 			if mapper == nil {
-				// /location is the only mapper that requires BotDeps for
-				// geocoding; it is intentionally NOT registered in the
-				// shared registry. Parity for /location is exercised by
-				// mappers/location_test.go.
-				if fix.Slash.Name == "location" {
-					t.Skip("location mapper has BotDeps signature; covered by mappers/location_test.go")
-				}
 				t.Fatalf("no mapper for %q", fix.Slash.Name)
 			}
 			tokens, err := mapper(optionsFromMap(fix.Slash.Options))

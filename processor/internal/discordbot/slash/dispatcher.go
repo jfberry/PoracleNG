@@ -75,6 +75,7 @@ func NewDispatcher(cfg Config) *Dispatcher {
 	d.autocompleteRegistry.Register("tracking", listers.ListTracking)
 	d.autocompleteRegistry.Register("areas", listers.ListAreas)
 	d.autocompleteRegistry.Register("profiles", listers.ListProfiles)
+	d.autocompleteRegistry.Register("locations", listers.ListUserLocations)
 	return d
 }
 
@@ -211,21 +212,14 @@ func (d *Dispatcher) HandleCommand(s *discordgo.Session, ic *discordgo.Interacti
 		return
 	}
 
-	// 7. Map slash options to text-command tokens. /location has a
-	// non-standard mapper signature (it needs BotDeps for the Forward
-	// geocoder call) and is therefore not in the shared registry; we
-	// dispatch it directly.
+	// 7. Map slash options to text-command tokens.
 	var tokens []string
-	if canon == "location" {
-		tokens, err = mappers.Location(ic.ApplicationCommandData().Options, d.deps)
-	} else {
-		mapperFn := mappers.Lookup(canon)
-		if mapperFn == nil {
-			d.respondError(s, ic, "🛑 Command not implemented.")
-			return
-		}
-		tokens, err = mapperFn(ic.ApplicationCommandData().Options)
+	mapperFn := mappers.Lookup(canon)
+	if mapperFn == nil {
+		d.respondError(s, ic, "🛑 Command not implemented.")
+		return
 	}
+	tokens, err = mapperFn(ic.ApplicationCommandData().Options)
 	if err != nil {
 		d.respondError(s, ic, formatMapperError(err, ctx.Language, d.bundle))
 		return
@@ -360,6 +354,11 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 	// (copyto) selects the option name (profile), not a different list.
 	case opt == "profile" && cmd == "profile":
 		return d.userstateAutocomplete(ic, "profiles", "", focused)
+	// /location show name and /location remove name — autocomplete from
+	// the user's saved named locations. Both sub-commands use the same
+	// option name ("name"), so a single (opt, cmd) pair covers both.
+	case opt == "name" && cmd == "location":
+		return d.userstateAutocomplete(ic, "locations", "", focused)
 	// /quest reward-type options. Item is its own translated lookup;
 	// candy and mega_energy are pokemon-keyed (the reward IS for a
 	// specific species), so they reuse the pokemon autocomplete.

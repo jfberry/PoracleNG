@@ -444,12 +444,27 @@ func summaryOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	}
 }
 
-// locationOptions exposes /location with a single required "place" option
-// that accepts either "lat,lon" coordinates or a free-form place name. The
-// mapper forward-geocodes place names via deps.Geocoder when present.
+// locationOptions exposes /location with six sub-commands that mirror the
+// text command's grammar:
+//
+//	add <name> <place>  — save a named location (geocoding done by text cmd)
+//	list                — list all saved locations
+//	show <name>         — show one saved location (autocomplete)
+//	remove <name>       — remove a saved location or "default" (autocomplete)
+//	set-default         — placeholder (no place arg yet; exists for discoverability)
+//	remove-default      — clear the default lat/lon location
 func locationOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	return []*discordgo.ApplicationCommandOption{
-		stringOpt(bundle, "location.place", "place", "Coordinates (\"51.28, 1.08\") or a place name", true, false),
+		subCommand(bundle, "location.add", "add", "Save a named location",
+			stringOpt(bundle, "location.add.name", "name", "Short name for this location (e.g. Home)", true, false),
+			stringOpt(bundle, "location.add.place", "place", "Coordinates (lat,lon) or a place name", true, false)),
+		subCommand(bundle, "location.list", "list", "List your saved locations"),
+		subCommand(bundle, "location.show", "show", "Show one saved location",
+			stringOpt(bundle, "location.show.name", "name", "Saved-location name", true, true)),
+		subCommand(bundle, "location.remove", "remove", "Remove a saved location",
+			stringOpt(bundle, "location.remove.name", "name", "Saved-location name (or \"default\" to clear your default location)", true, true)),
+		subCommand(bundle, "location.set-default", "set-default", "Set your default location (use /location add first)"),
+		subCommand(bundle, "location.remove-default", "remove-default", "Clear your default location"),
 	}
 }
 

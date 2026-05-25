@@ -76,7 +76,7 @@ func testBundle(t *testing.T, opts ...bundleOpt) *i18n.Bundle {
 			"slash.cmd.profile":    "profile",
 			"slash.desc.profile":   "Manage your profiles",
 			"slash.cmd.location":   "location",
-			"slash.desc.location":  "Set your location",
+			"slash.desc.location":  "Manage your saved locations",
 			"slash.cmd.summary":    "summary",
 			"slash.desc.summary":   "Manage scheduled summary digests (e.g. quest)",
 		},

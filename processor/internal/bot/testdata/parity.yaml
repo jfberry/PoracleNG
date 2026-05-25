@@ -765,20 +765,70 @@
   expected_tokens: [copyto, holiday]
 
 # -----------------------------------------------------------------------------
-# /location — coordinate fast-path. Geocoding case requires BotDeps so the
-# parity runner SKIPS this fixture; it remains here so the coverage test
-# sees the `place` option as exercised. The /location mapper's own
-# unit tests cover both the coordinate and geocoding branches.
+# /location — six sub-commands mirroring the text command's grammar.
+# Geocoding for "add" is delegated to the text command itself, so the
+# mapper passes the place string through unchanged; no BotDeps required.
 # -----------------------------------------------------------------------------
-- name: location-coords
-  description: /location with explicit coordinates (skipped at parity runtime)
+- name: location-add
+  description: /location add — save a named location
   command: cmd.location
   slash:
     name: location
     options:
-      place: "51.28, 1.08"
-  text: "!location 51.28,1.08"
-  expected_tokens: ["51.28,1.08"]
+      add.name: Home
+      add.place: "51.28,1.08"
+  text: "!location add Home 51.28,1.08"
+  expected_tokens: [add, Home, "51.28,1.08"]
+
+- name: location-list
+  description: /location list — list saved locations
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      list: _bare
+  text: "!location list"
+  expected_tokens: [list]
+
+- name: location-show
+  description: /location show — show one saved location
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      show.name: Home
+  text: "!location show Home"
+  expected_tokens: [show, Home]
+
+- name: location-remove
+  description: /location remove — remove a named location
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      remove.name: Home
+  text: "!location remove Home"
+  expected_tokens: [remove, Home]
+
+- name: location-set-default
+  description: /location set-default — no-op placeholder
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      set-default: _bare
+  text: "!location"
+  expected_tokens: []
+
+- name: location-remove-default
+  description: /location remove-default — clear default location
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      remove-default: _bare
+  text: "!location remove default"
+  expected_tokens: [remove, default]
 
 # -----------------------------------------------------------------------------
 # /summary — sub-command-group per alertType, action sub-command per CRUD verb.
