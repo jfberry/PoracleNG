@@ -222,7 +222,7 @@ func HandleCreateMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
 				Evolution:             evolution,
 				StationID:             stationID,
 				OverrideLocationLabel: req.OverrideLocationLabel,
-				OverrideAreas:         req.OverrideAreas,
+				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 

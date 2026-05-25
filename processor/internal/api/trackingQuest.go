@@ -212,7 +212,7 @@ func HandleCreateQuest(deps *TrackingDeps) gin.HandlerFunc {
 				Shiny:                 shiny,
 				Amount:                amount,
 				OverrideLocationLabel: req.OverrideLocationLabel,
-				OverrideAreas:         req.OverrideAreas,
+				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 

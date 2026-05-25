@@ -240,7 +240,7 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 						Form:                  pf.Form,
 						Level:                 9000,
 						OverrideLocationLabel: req.OverrideLocationLabel,
-						OverrideAreas:         req.OverrideAreas,
+						OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 					})
 				}
 				continue
@@ -279,7 +279,7 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 					Form:                  form,
 					Level:                 level,
 					OverrideLocationLabel: req.OverrideLocationLabel,
-					OverrideAreas:         req.OverrideAreas,
+					OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 				})
 			}
 		}

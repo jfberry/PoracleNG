@@ -270,8 +270,19 @@ func validateOverrideFields(
 	}
 
 	if hasAreas && deps.AreaLogic != nil {
-		// API callers are already authenticated; treat as admin so all fences are visible.
-		available := deps.AreaLogic.GetAvailableAreas(nil, true)
+		// Resolve the target human's community membership and admin status to
+		// determine which areas they are permitted to reference — mirroring what
+		// HandleSetAreas does and what bot-side parseOverride does via
+		// ctx.AreaLogic.GetAvailableAreas(communities, ctx.IsAdmin).
+		human, err := deps.Humans.Get(humanID)
+		if err != nil {
+			return "database error", http.StatusInternalServerError
+		}
+		if human == nil {
+			return "user not found", http.StatusNotFound
+		}
+		admin := isAdmin(deps, humanID)
+		available := deps.AreaLogic.GetAvailableAreas(human.CommunityMembership, admin)
 		permitted := make(map[string]bool, len(available))
 		for _, a := range available {
 			permitted[strings.ToLower(a.Name)] = true
@@ -284,6 +295,18 @@ func validateOverrideFields(
 	}
 
 	return "", 0
+}
+
+// normalizeOverrideAreas converts an empty slice to nil so that an incoming
+// request body with "override_areas":[] does not look different from an existing
+// NULL row in the DB when diffed. reflect.DeepEqual(nil, []string{}) is false,
+// so without this normalisation the diff would see a phantom change and create a
+// duplicate insert for every POST that includes an empty override_areas array.
+func normalizeOverrideAreas(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	return in
 }
 
 // DiffTracking compares two tracking structs using `diff` struct tags.

@@ -213,7 +213,7 @@ func HandleCreateGym(deps *TrackingDeps) gin.HandlerFunc {
 				BattleChanges:         battleChanges,
 				GymID:                 gymID,
 				OverrideLocationLabel: req.OverrideLocationLabel,
-				OverrideAreas:         req.OverrideAreas,
+				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 
