@@ -124,6 +124,12 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		}
 	}
 
+	// Validate per-rule location:/area: overrides.
+	override, overrideReply := parseOverride(ctx, parsed.Strings, parsed.StringLists["area"], filters.distance)
+	if overrideReply != nil {
+		return []bot.Reply{*overrideReply}
+	}
+
 	// If min_iv is still default (-1) but other IV-related filters are set, default to 0
 	if filters.minIV == -1 && (filters.minCP > 0 || filters.minLevel > 0 ||
 		filters.atk > 0 || filters.def > 0 || filters.sta > 0 ||
@@ -176,11 +182,13 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 				MaxSize:          filters.maxSize,
 				Template:         filters.template,
 				Clean:            filters.clean,
-				PVPRankingLeague: pe.League,
-				PVPRankingBest:   pe.Best,
-				PVPRankingWorst:  pe.Worst,
-				PVPRankingMinCP:  pe.MinCP,
-				PVPRankingCap:    pe.Cap,
+				PVPRankingLeague:      pe.League,
+				PVPRankingBest:        pe.Best,
+				PVPRankingWorst:       pe.Worst,
+				PVPRankingMinCP:       pe.MinCP,
+				PVPRankingCap:         pe.Cap,
+				OverrideLocationLabel: override.LocationLabel,
+				OverrideAreas:         override.Areas,
 			})
 		}
 	}
@@ -256,8 +264,10 @@ func trackParams(ctx *bot.CommandContext) []bot.ParamDef {
 		{Type: bot.ParamPrefixSingle, Key: "arg.prefix.t"},
 		{Type: bot.ParamPrefixSingle, Key: "arg.prefix.gen"},
 		{Type: bot.ParamPrefixSingle, Key: "arg.prefix.cap"},
-		{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
-		{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
+		{Type: bot.ParamPrefixString,     Key: "arg.prefix.form"},
+		{Type: bot.ParamPrefixString,     Key: "arg.prefix.template"},
+		{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+		{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 		{Type: bot.ParamKeyword, Key: "arg.remove"},
 		{Type: bot.ParamKeyword, Key: "arg.clean"},
 		{Type: bot.ParamKeyword, Key: "arg.shiny"},

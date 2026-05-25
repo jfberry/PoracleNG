@@ -10,6 +10,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/stretchr/testify/assert"
@@ -488,4 +489,134 @@ func TestTrack_RarityRange_PreservesMax(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, 1, rows[0].Rarity)
 	assert.Equal(t, 3, rows[0].MaxRarity, "explicit range max must be preserved")
+}
+
+// --- Override params (location: / area:) ---
+
+// newTestTrackCtx builds a CommandContext for !track override tests.
+// It extends trackCtx with AreaLogic that permits "london" and "paris",
+// and returns the underlying MockHumanStore so callers can seed locations.
+func newTestTrackCtx(t *testing.T) (*bot.CommandContext, *store.MockHumanStore) {
+	t.Helper()
+
+	// Get the human store directly from testCtx so we can return it.
+	ctx, mock := testCtx(t)
+
+	// Apply the same config as trackCtx.
+	ctx.Config = &config.Config{
+		PVP: config.PVPConfig{
+			PVPFilterMaxRank:     100,
+			PVPFilterGreatMinCP:  1400,
+			PVPFilterUltraMinCP:  2350,
+			PVPFilterLittleMinCP: 450,
+			LevelCaps:            []int{50},
+			DisplayMaxRank:       10,
+			DisplayGreatMinCP:    1400,
+			DisplayUltraMinCP:    2350,
+			DisplayLittleMinCP:   450,
+		},
+		Area: config.AreaConfig{Enabled: false},
+	}
+
+	monsters := store.NewMockTrackingStore[db.MonsterTrackingAPI](
+		store.MonsterGetUID, store.MonsterSetUID,
+	)
+	ctx.Tracking = &store.TrackingStores{
+		Monsters: monsters,
+	}
+
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
+			{ID: 1, Form: 0}:  {PokemonID: 1, FormID: 0},
+			{ID: 25, Form: 0}: {PokemonID: 25, FormID: 0},
+		},
+		Moves: map[int]*gamedata.Move{},
+		Types: map[int]*gamedata.TypeInfo{},
+	}
+
+	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
+	ctx.Resolver = resolver
+	ctx.ArgMatcher = bot.NewArgMatcher(ctx.Translations, gd, resolver, []string{"en"})
+	ctx.GameData = gd
+	ctx.RowText = &rowtext.Generator{
+		GD:                  gd,
+		Translations:        ctx.Translations,
+		DefaultTemplateName: "1",
+	}
+	ctx.HasArea = true
+
+	// Wire up AreaLogic with london/paris as selectable fences.
+	fences := []geofence.Fence{
+		{Name: "london", Group: "UK", UserSelectable: true},
+		{Name: "paris", Group: "FR", UserSelectable: true},
+	}
+	ctx.AreaLogic = bot.NewAreaLogic(fences, ctx.Config)
+
+	return ctx, mock
+}
+
+// anyReact returns true if any reply has the given React emoji.
+func anyReact(replies []bot.Reply, want string) bool {
+	for _, r := range replies {
+		if r.React == want {
+			return true
+		}
+	}
+	return false
+}
+
+// anyContains returns true if any reply Text contains the given substring.
+func anyContains(replies []bot.Reply, sub string) bool {
+	for _, r := range replies {
+		if strings.Contains(r.Text, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestTrack_AcceptsLocationOverride(t *testing.T) {
+	ctx, mock := newTestTrackCtx(t)
+	ctx.HasLocation = true
+	if _, err := mock.AddLocation(store.UserLocation{
+		ID: ctx.TargetID, Label: "Home", Latitude: 51.5, Longitude: -0.1,
+	}); err != nil {
+		t.Fatalf("seed location: %v", err)
+	}
+
+	cmd := &TrackCommand{}
+	replies := cmd.Run(ctx, []string{"25", "iv100", "d:500", "location:Home"})
+	if anyReact(replies, "🙅") {
+		t.Fatalf("valid command rejected: %+v", replies)
+	}
+	rules, _ := ctx.Tracking.Monsters.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)
+	if len(rules) == 0 || rules[0].OverrideLocationLabel != "Home" {
+		t.Fatalf("override not stored: %+v", rules)
+	}
+}
+
+func TestTrack_RejectsLocationWithoutDistance(t *testing.T) {
+	ctx, mock := newTestTrackCtx(t)
+	if _, err := mock.AddLocation(store.UserLocation{
+		ID: ctx.TargetID, Label: "Home", Latitude: 51.5, Longitude: -0.1,
+	}); err != nil {
+		t.Fatalf("seed location: %v", err)
+	}
+
+	cmd := &TrackCommand{}
+	replies := cmd.Run(ctx, []string{"25", "iv100", "location:Home"})
+	if !anyContains(replies, "needs a `d:`") {
+		t.Fatalf("expected requires-distance rejection, got %+v", replies)
+	}
+}
+
+func TestTrack_RejectsAreaWithDistance(t *testing.T) {
+	ctx, _ := newTestTrackCtx(t)
+	ctx.HasLocation = true
+
+	cmd := &TrackCommand{}
+	replies := cmd.Run(ctx, []string{"25", "iv100", "d:500", "area:london"})
+	if !anyContains(replies, "mutually exclusive") {
+		t.Fatalf("expected a+d rejection, got %+v", replies)
+	}
 }
