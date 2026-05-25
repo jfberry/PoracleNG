@@ -64,6 +64,21 @@ func TestLureMapperAllOptions(t *testing.T) {
 	}
 }
 
+func TestLureMapperLocationAreas(t *testing.T) {
+	tokens, err := Lure([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("lure_type", "glacial"),
+		sopt("location", "Park"),
+		sopt("areas", "zone1,zone2"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"glacial", "location:Park", "area:zone1,zone2"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
 func TestLookupLure(t *testing.T) {
 	if Lookup("lure") == nil {
 		t.Fatal("nil mapper for /lure")

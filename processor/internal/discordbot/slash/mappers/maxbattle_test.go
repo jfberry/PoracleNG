@@ -87,6 +87,21 @@ func TestMaxbattleMapperAllOptions(t *testing.T) {
 	}
 }
 
+func TestMaxbattleMapperLocationAreas(t *testing.T) {
+	tokens, err := Maxbattle([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "charizard"),
+		sopt("location", "Gym"),
+		sopt("areas", "eastpark"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"charizard", "location:Gym", "area:eastpark"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
 func TestLookupMaxbattle(t *testing.T) {
 	if Lookup("maxbattle") == nil {
 		t.Fatal("nil mapper for /maxbattle")

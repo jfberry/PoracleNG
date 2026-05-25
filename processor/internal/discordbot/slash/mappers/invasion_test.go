@@ -53,6 +53,21 @@ func TestInvasionMapperAllOptions(t *testing.T) {
 	}
 }
 
+func TestInvasionMapperLocationAreas(t *testing.T) {
+	tokens, err := Invasion([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("grunt_type", "fire"),
+		sopt("location", "Home"),
+		sopt("areas", "northside"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"fire", "location:Home", "area:northside"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
 func TestLookupInvasion(t *testing.T) {
 	if Lookup("invasion") == nil {
 		t.Fatal("nil mapper for /invasion")

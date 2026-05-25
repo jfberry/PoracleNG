@@ -69,6 +69,26 @@
       "options": null,
       "autocomplete": true,
       "choices": null
+    },
+    {
+      "type": 3,
+      "name": "location",
+      "description": "Use a saved location instead of your default (requires distance:)",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
+    },
+    {
+      "type": 3,
+      "name": "areas",
+      "description": "Restrict to specific areas (comma-separated)",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": true,
+      "choices": null
     }
   ]
 }

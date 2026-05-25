@@ -228,6 +228,33 @@ func TestTrackMapperAllOptions(t *testing.T) {
 	}
 }
 
+func TestTrackMapperLocationAreas(t *testing.T) {
+	tokens, err := Track([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "25"),
+		iopt("distance", 500),
+		sopt("location", "Home"),
+		sopt("areas", "berlin,munich"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"25", "d500", "location:Home", "area:berlin,munich"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
+func TestTrackMapperLocationEmpty(t *testing.T) {
+	// Empty location option produces no token.
+	tokens, _ := Track([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "25"),
+		sopt("location", ""),
+	})
+	if !reflect.DeepEqual(tokens, []string{"25"}) {
+		t.Errorf("tokens=%v", tokens)
+	}
+}
+
 func TestLookupTrack(t *testing.T) {
 	if Lookup("track") == nil {
 		t.Fatal("nil mapper for /track")

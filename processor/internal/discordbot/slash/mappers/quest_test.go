@@ -264,6 +264,21 @@ func TestQuestMapperSummaryEmpty(t *testing.T) {
 	}
 }
 
+func TestQuestMapperLocationAreas(t *testing.T) {
+	tokens, err := Quest([]*discordgo.ApplicationCommandInteractionDataOption{
+		iopt("stardust", 500),
+		sopt("location", "Gym"),
+		sopt("areas", "downtown"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"stardust:500", "location:Gym", "area:downtown"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
 func TestLookupQuest(t *testing.T) {
 	if Lookup("quest") == nil {
 		t.Fatal("nil mapper for /quest")

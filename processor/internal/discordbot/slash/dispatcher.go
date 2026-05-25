@@ -401,8 +401,30 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 	case opt == "form" && cmd == "track":
 		pokemonValue := siblingOptionString(ic, "pokemon")
 		return autocomplete.Form(context.Background(), d.deps, pokemonValue, focused, userLang)
+	// Tracker location: autocomplete from the user's saved named locations.
+	// Used by the `location` option on all 10 tracker commands so a user can
+	// pick a saved location by name rather than typing coordinates.
+	case opt == "location" && isTrackerCommand(cmd):
+		return d.userstateAutocomplete(ic, "locations", "", focused)
+	// Tracker areas: autocomplete from the user's currently-selected areas.
+	// The `areas` option accepts a comma-separated string, so we suggest
+	// individual area names for the user to type/select.
+	case opt == "areas" && isTrackerCommand(cmd):
+		return d.userstateAutocomplete(ic, "areas", "", focused)
 	}
 	return nil
+}
+
+// isTrackerCommand reports whether cmd is one of the 10 tracker command
+// short names. Used to scope autocomplete for the shared `location` and
+// `areas` options that appear on every tracker command.
+func isTrackerCommand(cmd string) bool {
+	switch cmd {
+	case "track", "raid", "egg", "quest", "invasion", "incident",
+		"lure", "nest", "maxbattle", "gym", "fort":
+		return true
+	}
+	return false
 }
 
 // siblingOptionString returns the StringValue of the given top-level

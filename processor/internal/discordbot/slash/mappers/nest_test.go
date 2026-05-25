@@ -65,6 +65,21 @@ func TestNestMapperAllOptions(t *testing.T) {
 	}
 }
 
+func TestNestMapperLocationAreas(t *testing.T) {
+	tokens, err := Nest([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "pikachu"),
+		sopt("location", "Home"),
+		sopt("areas", "westside"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"pikachu", "location:Home", "area:westside"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
 func TestLookupNest(t *testing.T) {
 	if Lookup("nest") == nil {
 		t.Fatal("nil mapper for /nest")

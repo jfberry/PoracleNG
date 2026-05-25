@@ -120,6 +120,21 @@ func TestEggMapperAllOptions(t *testing.T) {
 	}
 }
 
+func TestEggMapperLocationAreas(t *testing.T) {
+	tokens, err := Egg([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("level", "5"),
+		sopt("location", "Home"),
+		sopt("areas", "paris,berlin"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"5", "location:Home", "area:paris,berlin"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
 func TestLookupEgg(t *testing.T) {
 	if Lookup("egg") == nil {
 		t.Fatal("nil mapper for /egg")

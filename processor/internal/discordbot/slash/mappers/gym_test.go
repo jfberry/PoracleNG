@@ -79,6 +79,21 @@ func TestGymMapperAllOptions(t *testing.T) {
 	}
 }
 
+func TestGymMapperLocationAreas(t *testing.T) {
+	tokens, err := Gym([]*discordgo.ApplicationCommandInteractionDataOption{
+		iopt("team", 1),
+		sopt("location", "Home"),
+		sopt("areas", "north,south"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"mystic", "location:Home", "area:north,south"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
 func TestLookupGym(t *testing.T) {
 	if Lookup("gym") == nil {
 		t.Fatal("nil mapper for /gym")
