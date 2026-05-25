@@ -2,11 +2,13 @@ package commands
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 type LocationCommand struct{}
@@ -42,6 +44,21 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 
 	if help := helpArgReply(ctx, args, "msg.location.usage"); help != nil {
 		return []bot.Reply{*help}
+	}
+
+	// Subcommand dispatch — checked before the bare lat/lon path so that
+	// "add" and "list" are intercepted even when no ArgMatcher is wired.
+	enTr := ctx.Translations.For("en")
+	matchSub := func(key string) bool {
+		sub := strings.ToLower(args[0])
+		return sub == strings.ToLower(tr.T(key)) || sub == strings.ToLower(enTr.T(key))
+	}
+
+	switch {
+	case matchSub("arg.add"):
+		return c.addLocation(ctx, args[1:])
+	case matchSub("arg.list"):
+		return c.listLocations(ctx)
 	}
 
 	parsed := ctx.ArgMatcher.Match(args, locationParams, ctx.Language)
@@ -93,4 +110,78 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	}
 
 	return []bot.Reply{reply}
+}
+
+// addLocation handles `!location add <name> <coords-or-place>`.
+func (c *LocationCommand) addLocation(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
+	if len(args) < 2 {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.add_usage", bot.CommandPrefix(ctx))}}
+	}
+	name := args[0]
+	placeOrCoords := strings.Join(args[1:], " ")
+
+	lat, lon, err := resolveLatLon(ctx, placeOrCoords)
+	if err != nil {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.geocode_failed", placeOrCoords)}}
+	}
+
+	if _, err := ctx.Humans.AddLocation(store.UserLocation{
+		ID: ctx.TargetID, Label: name, Latitude: lat, Longitude: lon,
+	}); err != nil {
+		if strings.Contains(err.Error(), "duplicate") {
+			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.duplicate", name, bot.CommandPrefix(ctx))}}
+		}
+		log.Errorf("location add: %s", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+	ctx.TriggerReload()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.location.added", name, lat, lon)}}
+}
+
+// listLocations handles `!location list`.
+func (c *LocationCommand) listLocations(ctx *bot.CommandContext) []bot.Reply {
+	tr := ctx.Tr()
+	locs, _ := ctx.Humans.ListLocations(ctx.TargetID)
+	human, _ := ctx.Humans.Get(ctx.TargetID)
+
+	hasDefault := human != nil && (human.Latitude != 0 || human.Longitude != 0)
+	if len(locs) == 0 && !hasDefault {
+		return []bot.Reply{{Text: tr.Tf("msg.location.list_empty", bot.CommandPrefix(ctx))}}
+	}
+
+	var sb strings.Builder
+	sb.WriteString(tr.T("msg.location.list_header") + "\n")
+	if hasDefault {
+		sb.WriteString(tr.Tf("msg.location.list_default", human.Latitude, human.Longitude) + "\n")
+	}
+	for _, l := range locs {
+		sb.WriteString(tr.Tf("msg.location.list_row", l.Label, l.Latitude, l.Longitude) + "\n")
+	}
+	return []bot.Reply{{Text: sb.String()}}
+}
+
+// resolveLatLon parses a "lat,lon" string or falls back to forward geocoding.
+// Returns an error when neither succeeds.
+func resolveLatLon(ctx *bot.CommandContext, s string) (float64, float64, error) {
+	// Try lat,lon parsing first (same regex shape as ArgMatcher.tryLatLon).
+	if idx := strings.Index(s, ","); idx != -1 {
+		latStr := strings.TrimSpace(s[:idx])
+		lonStr := strings.TrimSpace(s[idx+1:])
+		lat, err1 := strconv.ParseFloat(latStr, 64)
+		lon, err2 := strconv.ParseFloat(lonStr, 64)
+		if err1 == nil && err2 == nil {
+			return lat, lon, nil
+		}
+	}
+
+	// Fall back to forward geocoding.
+	if ctx.Geocoder != nil {
+		results, err := ctx.Geocoder.Forward(s)
+		if err == nil && len(results) > 0 {
+			return results[0].Latitude, results[0].Longitude, nil
+		}
+	}
+
+	return 0, 0, fmt.Errorf("could not resolve %q to coordinates", s)
 }
