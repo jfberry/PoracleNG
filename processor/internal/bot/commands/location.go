@@ -52,7 +52,7 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 			return []bot.Reply{{React: "🙅"}}
 		}
 		ctx.TriggerReload()
-		return []bot.Reply{{React: "✅", Text: tr.T("msg.location.removed")}}
+		return []bot.Reply{{React: "✅", Text: tr.T("msg.location.default_removed")}}
 	}
 
 	var lat, lon float64
