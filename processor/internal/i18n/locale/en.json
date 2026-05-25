@@ -342,6 +342,8 @@
   "arg.prefix.channel": "channel",
   "arg.prefix.guild": "guild",
   "arg.prefix.language": "language",
+  "arg.prefix.area": "area",
+  "arg.prefix.location": "location",
   "arg.prefix.mon": "mon",
   "arg.prefix.tue": "tue",
   "arg.prefix.wed": "wed",

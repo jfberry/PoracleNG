@@ -688,3 +688,39 @@ func equalStringSlices(a, b []string) bool {
 	}
 	return true
 }
+
+// newAreaLocationTestMatcher extends the standard test matcher with
+// arg.prefix.area and arg.prefix.location translation keys.
+func newAreaLocationTestMatcher() *ArgMatcher {
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"arg.prefix.area":     "area",
+		"arg.prefix.location": "location",
+		"arg.prefix.template": "template",
+	}))
+	return NewArgMatcher(bundle, &gamedata.GameData{Util: &gamedata.UtilData{}}, nil, []string{"en"})
+}
+
+func TestArgMatch_AreaMultiple(t *testing.T) {
+	am := newAreaLocationTestMatcher()
+	args := []string{"area:berlin", "area:munich,hamburg", "area:Frankfurt"}
+	parsed := am.Match(args, []ParamDef{
+		{Type: ParamPrefixStringList, Key: "arg.prefix.area"},
+	}, "en")
+	got := parsed.StringLists["area"]
+	want := []string{"berlin", "munich", "hamburg", "frankfurt"} // lowercased + comma-split
+	if !equalStringSlices(got, want) {
+		t.Fatalf("area list: got %v, want %v", got, want)
+	}
+}
+
+func TestArgMatch_LocationSingle(t *testing.T) {
+	am := newAreaLocationTestMatcher()
+	args := []string{"location:Home"}
+	parsed := am.Match(args, []ParamDef{
+		{Type: ParamPrefixString, Key: "arg.prefix.location"},
+	}, "en")
+	if parsed.Strings["location"] != "Home" {
+		t.Fatalf("location: got %q", parsed.Strings["location"])
+	}
+}

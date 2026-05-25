@@ -311,6 +311,7 @@ var knownPrefixKeys = []string{
 	"arg.prefix.great", "arg.prefix.greathigh", "arg.prefix.greatcp",
 	"arg.prefix.ultra", "arg.prefix.ultrahigh", "arg.prefix.ultracp",
 	"arg.prefix.little", "arg.prefix.littlehigh", "arg.prefix.littlecp",
+	"arg.prefix.area", "arg.prefix.location",
 }
 
 // knownKeywordKeys lists all arg.* keyword keys used by any command.
@@ -357,6 +358,16 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 
 	// For collecting types: match ALL unmatched tokens, not just one
 	for _, param := range params {
+		if param.Type == ParamPrefixStringList {
+			for i, tok := range tokens {
+				if consumed[i] {
+					continue
+				}
+				if am.tryPrefixStringList(tok, param.Key, lang, result) {
+					consumed[i] = true
+				}
+			}
+		}
 		if param.Type == ParamRemoveUID {
 			for i, tok := range tokens {
 				if consumed[i] {
@@ -424,6 +435,8 @@ func (am *ArgMatcher) tryMatch(tok string, param ParamDef, lang string, result *
 		return am.tryPrefixSingle(tok, param.Key, lang, result)
 	case ParamPrefixString:
 		return am.tryPrefixString(tok, param.Key, lang, result)
+	case ParamPrefixStringList:
+		return am.tryPrefixStringList(tok, param.Key, lang, result)
 	case ParamKeyword:
 		return am.tryKeyword(tok, param.Key, lang, result)
 	case ParamTeam:
@@ -588,6 +601,32 @@ func (am *ArgMatcher) tryPrefixString(tok, key, lang string, result *ParsedArgs)
 			result.Strings[shortKey] = val
 			return true
 		}
+	}
+	return false
+}
+
+// tryPrefixStringList matches patterns like "area:berlin", "area:X,Y,Z".
+// Values are comma-split and lowercased; calling this multiple times on
+// different tokens accumulates all values in result.StringLists[shortKey].
+func (am *ArgMatcher) tryPrefixStringList(tok, key, lang string, result *ParsedArgs) bool {
+	prefixes := am.cachedPrefix(key, lang)
+	for _, p := range prefixes {
+		val, ok := stripPrefix(tok, p)
+		if !ok {
+			continue
+		}
+		shortKey := strings.TrimPrefix(key, "arg.prefix.")
+		if result.StringLists == nil {
+			result.StringLists = make(map[string][]string)
+		}
+		for _, v := range strings.Split(val, ",") {
+			v = strings.TrimSpace(strings.ToLower(v))
+			if v == "" {
+				continue
+			}
+			result.StringLists[shortKey] = append(result.StringLists[shortKey], v)
+		}
+		return true
 	}
 	return false
 }
