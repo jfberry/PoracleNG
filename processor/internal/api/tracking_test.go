@@ -580,3 +580,67 @@ func TestTrackingAPI_RejectsAreaNotPermitted(t *testing.T) {
 		t.Fatalf("london should be permitted for teamcity user, got %d / %s", w2.Code, w2.Body.String())
 	}
 }
+
+// TestTrackingAPI_OverrideContextFetchedOnce verifies that a batch POST of N rows
+// with area overrides calls deps.Humans.Get exactly once — not once per row.
+// This is the regression test for the hoist introduced in Fix J.
+func TestTrackingAPI_OverrideContextFetchedOnce(t *testing.T) {
+	mock := store.NewMockHumanStore()
+	mock.AddHuman(&store.Human{
+		ID:                  "u3",
+		Type:                "discord:user",
+		Name:                "BatchUser",
+		Enabled:             true,
+		Language:            "en",
+		CurrentProfileNo:    1,
+		CommunityMembership: []string{"testcommunity"},
+	})
+
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{
+		{Name: "testcommunity", AllowedAreas: []string{"london"}},
+	}
+
+	fences := []geofence.Fence{
+		{Name: "london", UserSelectable: true},
+	}
+	areaLogic := bot.NewAreaLogic(fences, cfg)
+
+	deps := &TrackingDeps{
+		Humans:       mock,
+		Config:       cfg,
+		RowText:      &rowtext.Generator{DefaultTemplateName: "1"},
+		Translations: i18n.NewBundle(),
+		AreaLogic:    areaLogic,
+		// Tracking intentionally nil: handler will panic at the diff step after
+		// validation — but by then newOverrideContext has already run once.
+	}
+
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.POST("/api/tracking/lure/:id", HandleCreateLure(deps))
+
+	// Five rows all referencing the same permitted area.
+	body := `[
+		{"lure_id":501,"override_areas":["london"]},
+		{"lure_id":502,"override_areas":["london"]},
+		{"lure_id":503,"override_areas":["london"]},
+		{"lure_id":504,"override_areas":["london"]},
+		{"lure_id":505,"override_areas":["london"]}
+	]`
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/lure/u3", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Count how many times Get was called — must be exactly 1 (the hoist).
+	var getCount int
+	for _, call := range mock.Calls {
+		if call == "Get" {
+			getCount++
+		}
+	}
+	if getCount != 1 {
+		t.Errorf("expected Get called 1 time for 5-row batch, got %d (hoist not working)", getCount)
+	}
+}

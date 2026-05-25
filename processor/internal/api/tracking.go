@@ -227,6 +227,39 @@ func (f flexInt) isSet() bool {
 	return f.value != nil
 }
 
+// overrideContext holds per-target data pre-fetched once above the per-row
+// validation loop so that batch POSTs of N rules don't issue N×Get queries.
+// Build it with newOverrideContext before the loop, then pass it into
+// validateOverrideFields for every row.
+type overrideContext struct {
+	human     *store.Human    // nil when AreaLogic is nil (no permission check needed)
+	permitted map[string]bool // lowercase area set; nil when area security disabled
+}
+
+// newOverrideContext fetches the full human record once and pre-builds the
+// permitted-area set. It is called once per handler invocation, outside the
+// per-row loop, so that a batch POST of N rows only issues one Get query.
+// Returns an error message + HTTP status on failure.
+func newOverrideContext(deps *TrackingDeps, humanID string) (overrideContext, string, int) {
+	if deps.AreaLogic == nil {
+		return overrideContext{}, "", 0
+	}
+	human, err := deps.Humans.Get(humanID)
+	if err != nil {
+		return overrideContext{}, "database error", http.StatusInternalServerError
+	}
+	if human == nil {
+		return overrideContext{}, "user not found", http.StatusNotFound
+	}
+	admin := isAdmin(deps, humanID)
+	available := deps.AreaLogic.GetAvailableAreas(human.CommunityMembership, admin)
+	permitted := make(map[string]bool, len(available))
+	for _, a := range available {
+		permitted[strings.ToLower(a.Name)] = true
+	}
+	return overrideContext{human: human, permitted: permitted}, "", 0
+}
+
 // validateOverrideFields checks the four mutually-exclusive override
 // rules from the spec, mirroring the bot-side parseOverride logic.
 // Returns ("", 0) when valid; returns (errorMsg, httpStatus) otherwise.
@@ -236,8 +269,13 @@ func (f flexInt) isSet() bool {
 //  2. area: AND distance > 0 → mutually exclusive
 //  3. location: AND distance == 0 → location requires distance
 //  4. Otherwise valid — validate label exists and each area is permitted.
+//
+// oc is the per-target context built once by newOverrideContext before the
+// per-row loop. Passing the same oc for every row in a batch avoids
+// re-fetching the human and rebuilding the permitted-area set per row.
 func validateOverrideFields(
 	deps *TrackingDeps,
+	oc overrideContext,
 	humanID string,
 	overrideLabel string,
 	overrideAreas []string,
@@ -269,26 +307,9 @@ func validateOverrideFields(
 		}
 	}
 
-	if hasAreas && deps.AreaLogic != nil {
-		// Resolve the target human's community membership and admin status to
-		// determine which areas they are permitted to reference — mirroring what
-		// HandleSetAreas does and what bot-side parseOverride does via
-		// ctx.AreaLogic.GetAvailableAreas(communities, ctx.IsAdmin).
-		human, err := deps.Humans.Get(humanID)
-		if err != nil {
-			return "database error", http.StatusInternalServerError
-		}
-		if human == nil {
-			return "user not found", http.StatusNotFound
-		}
-		admin := isAdmin(deps, humanID)
-		available := deps.AreaLogic.GetAvailableAreas(human.CommunityMembership, admin)
-		permitted := make(map[string]bool, len(available))
-		for _, a := range available {
-			permitted[strings.ToLower(a.Name)] = true
-		}
+	if hasAreas && oc.permitted != nil {
 		for _, a := range overrideAreas {
-			if !permitted[strings.ToLower(a)] {
+			if !oc.permitted[strings.ToLower(a)] {
 				return "area not permitted: " + a, http.StatusBadRequest
 			}
 		}

@@ -212,9 +212,16 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		insert := make([]db.RaidTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
-			if msg, code := validateOverrideFields(deps, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+			if msg, code := validateOverrideFields(deps, oc, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
 				trackingJSONError(c, code, msg)
 				return
 			}

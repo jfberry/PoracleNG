@@ -263,12 +263,19 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 			return row, nil
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		// Split: rows with uid are explicit updates, without are inserts
 		var insert []db.MonsterTrackingAPI
 		var updates []db.MonsterTrackingAPI
 
 		for _, req := range insertReqs {
-			if msg, code := validateOverrideFields(deps, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+			if msg, code := validateOverrideFields(deps, oc, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
 				trackingJSONError(c, code, msg)
 				return
 			}
