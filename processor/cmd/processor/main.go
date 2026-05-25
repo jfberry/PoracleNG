@@ -473,6 +473,7 @@ func main() {
 	humans.GET("/:id/locations", api.HandleListLocations(trackingDeps))
 	humans.GET("/:id/locations/:label", api.HandleGetLocation(trackingDeps))
 	humans.POST("/:id/locations/add", api.HandleAddLocation(trackingDeps))
+	humans.POST("/:id/locations/:label/delete", api.HandleDeleteLocation(trackingDeps))
 	humans.POST("", api.HandleCreateHuman(trackingDeps))
 	humans.POST("/:id/start", api.HandleStartHuman(trackingDeps))
 	humans.POST("/:id/stop", api.HandleStopHuman(trackingDeps))

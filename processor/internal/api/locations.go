@@ -92,6 +92,37 @@ type addLocationResult struct {
 	Error string `json:"error,omitempty"`
 }
 
+// HandleDeleteLocation returns the POST /api/humans/{id}/locations/{label}/delete handler.
+// Returns 409 with referencing_rules when tracking rules still reference the location.
+func HandleDeleteLocation(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		label := c.Param("label")
+
+		refs, err := deps.Humans.CountLocationReferences(id, label)
+		if err != nil {
+			log.Errorf("api locations delete count refs: %s", err)
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
+			return
+		}
+		if len(refs) > 0 {
+			c.JSON(http.StatusConflict, map[string]any{
+				"status":            "error",
+				"error":             "location is referenced by tracking rules",
+				"referencing_rules": refs,
+			})
+			return
+		}
+		if err := deps.Humans.DeleteLocation(id, label); err != nil {
+			log.Errorf("api locations delete: %s", err)
+			trackingJSONError(c, http.StatusInternalServerError, "database error")
+			return
+		}
+		reloadState(deps)
+		trackingJSONOK(c, nil)
+	}
+}
+
 // HandleAddLocation returns the POST /api/humans/{id}/locations/add handler.
 // Accepts a single addLocationRequest object or a JSON array of them.
 // Returns per-row results so partial-success batches surface individual errors

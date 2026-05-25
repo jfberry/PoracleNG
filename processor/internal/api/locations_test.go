@@ -132,6 +132,50 @@ func TestLocations_Add_Array(t *testing.T) {
 	}
 }
 
+func TestLocations_Delete_Success(t *testing.T) {
+	deps, mock := newTestLocationDeps(t)
+	mock.AddLocation(store.UserLocation{ID: "u1", Label: "Home", Latitude: 51.5, Longitude: -0.1})
+
+	r := gin.New()
+	r.POST("/api/humans/:id/locations/:label/delete", HandleDeleteLocation(deps))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/humans/u1/locations/Home/delete", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	got, _ := mock.GetLocation("u1", "Home")
+	if got != nil {
+		t.Fatalf("location should be deleted")
+	}
+}
+
+func TestLocations_Delete_Conflict(t *testing.T) {
+	deps, mock := newTestLocationDeps(t)
+	mock.AddLocation(store.UserLocation{ID: "u1", Label: "Home", Latitude: 51.5, Longitude: -0.1})
+	mock.LocationRefs = map[string][]store.ReferencingRule{
+		"u1|home": {{Type: "pokemon", UID: 42}},
+	}
+
+	r := gin.New()
+	r.POST("/api/humans/:id/locations/:label/delete", HandleDeleteLocation(deps))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/humans/u1/locations/Home/delete", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "referencing_rules") || !strings.Contains(w.Body.String(), "pokemon") {
+		t.Fatalf("response should include referencing rules: %s", w.Body.String())
+	}
+	got, _ := mock.GetLocation("u1", "Home")
+	if got == nil {
+		t.Fatalf("location should NOT have been deleted")
+	}
+}
+
 func TestLocations_Add_DuplicateInResults(t *testing.T) {
 	deps, mock := newTestLocationDeps(t)
 	mock.AddLocation(store.UserLocation{ID: "u1", Label: "Home", Latitude: 51.5, Longitude: -0.1})
