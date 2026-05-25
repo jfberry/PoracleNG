@@ -141,3 +141,33 @@ func TestEgg_InvalidTemplate_Admin(t *testing.T) {
 	assert.Equal(t, "✅", replies[0].React, "admin should not be blocked, reply: %s", replies[0].Text)
 	assert.Contains(t, replies[0].Text, "99")
 }
+
+func TestEgg_AcceptsAreaOverride(t *testing.T) {
+	ctx, _ := newTestLocationCtx(t)
+
+	eggs := store.NewMockTrackingStore[db.EggTrackingAPI](
+		store.EggGetUID, store.EggSetUID,
+	)
+	ctx.Tracking = &store.TrackingStores{Eggs: eggs}
+
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
+		Moves:    map[int]*gamedata.Move{},
+		Types:    map[int]*gamedata.TypeInfo{},
+	}
+	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
+	ctx.Resolver = resolver
+	ctx.ArgMatcher = bot.NewArgMatcher(ctx.Translations, gd, resolver, []string{"en"})
+	ctx.GameData = gd
+	ctx.RowText = &rowtext.Generator{GD: gd, Translations: ctx.Translations, DefaultTemplateName: "1"}
+	ctx.HasArea = true
+
+	cmd := &EggCommand{}
+	replies := cmd.Run(ctx, strings.Fields("level5 area:london"))
+	require.NotEmpty(t, replies)
+	assert.NotEqual(t, "🙅", replies[0].React, "rejected: %+v", replies)
+
+	rules, _ := ctx.Tracking.Eggs.SelectByIDProfile("user1", 1)
+	require.Len(t, rules, 1)
+	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
+}

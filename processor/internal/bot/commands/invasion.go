@@ -22,6 +22,8 @@ var invasionParams = []bot.ParamDef{
 	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
+	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -55,6 +57,12 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	if block != nil {
 		return []bot.Reply{*block}
 	}
+
+	override, overrideReply := parseOverride(ctx, parsed.Strings, parsed.StringLists["area"], common.Distance)
+	if overrideReply != nil {
+		return []bot.Reply{*overrideReply}
+	}
+
 	gender := parsed.Gender
 
 	// Build valid type name set from multiple sources:
@@ -168,14 +176,16 @@ func (c *InvasionCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 	insert := make([]db.InvasionTrackingAPI, 0, len(gruntTypes))
 	for _, gt := range gruntTypes {
 		insert = append(insert, db.InvasionTrackingAPI{
-			ID:        ctx.TargetID,
-			ProfileNo: ctx.ProfileNo,
-			Ping:      pings,
-			Template:  common.Template,
-			Distance:  common.Distance,
-			Clean:     common.Clean,
-			Gender:    gender,
-			GruntType: gt,
+			ID:                    ctx.TargetID,
+			ProfileNo:             ctx.ProfileNo,
+			Ping:                  pings,
+			Template:              common.Template,
+			Distance:              common.Distance,
+			Clean:                 common.Clean,
+			Gender:                gender,
+			GruntType:             gt,
+			OverrideLocationLabel: override.LocationLabel,
+			OverrideAreas:         override.Areas,
 		})
 	}
 

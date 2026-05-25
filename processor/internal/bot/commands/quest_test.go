@@ -398,3 +398,34 @@ func TestQuest_RemoveWithoutSummary_RemovesBoth(t *testing.T) {
 	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
 	assert.Empty(t, rows, "remove without summary keyword should remove both rules")
 }
+
+func TestQuest_AcceptsAreaOverride(t *testing.T) {
+	ctx, _ := newTestLocationCtx(t)
+
+	quests := store.NewMockTrackingStore[db.QuestTrackingAPI](
+		store.QuestGetUID, store.QuestSetUID,
+	)
+	ctx.Tracking = &store.TrackingStores{Quests: quests}
+
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
+		Moves:    map[int]*gamedata.Move{},
+		Types:    map[int]*gamedata.TypeInfo{},
+		Items:    map[int]*gamedata.Item{},
+	}
+	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
+	ctx.Resolver = resolver
+	ctx.ArgMatcher = bot.NewArgMatcher(ctx.Translations, gd, resolver, []string{"en"})
+	ctx.GameData = gd
+	ctx.RowText = &rowtext.Generator{GD: gd, Translations: ctx.Translations, DefaultTemplateName: "1"}
+	ctx.HasArea = true
+
+	cmd := &QuestCommand{}
+	replies := cmd.Run(ctx, strings.Fields("stardust area:london"))
+	require.NotEmpty(t, replies)
+	assert.NotEqual(t, "🙅", replies[0].React, "rejected: %+v", replies)
+
+	rules, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rules, 1)
+	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
+}

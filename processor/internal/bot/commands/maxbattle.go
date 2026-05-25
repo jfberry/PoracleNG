@@ -22,6 +22,8 @@ var maxbattleParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.move"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.gen"},
+	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -62,6 +64,11 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 		return []bot.Reply{*block}
 	}
 
+	override, overrideReply := parseOverride(ctx, parsed.Strings, parsed.StringLists["area"], common.Distance)
+	if overrideReply != nil {
+		return []bot.Reply{*overrideReply}
+	}
+
 	gmax := 0
 	if parsed.HasKeyword("arg.gmax") {
 		gmax = 1
@@ -88,19 +95,21 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 		}
 		for _, mon := range monsterList {
 			insert = append(insert, db.MaxbattleTrackingAPI{
-				ID:        ctx.TargetID,
-				ProfileNo: ctx.ProfileNo,
-				Ping:      pings,
-				Template:  common.Template,
-				Distance:  common.Distance,
-				Clean:     common.Clean,
-				PokemonID: mon.PokemonID,
-				Form:      mon.Form,
-				Level:     90, // 90 = all levels for specific pokemon
-				Move:      move,
-				Gmax:      gmax,
-				Evolution: bot.WildcardID,
-				StationID: nil,
+				ID:                    ctx.TargetID,
+				ProfileNo:             ctx.ProfileNo,
+				Ping:                  pings,
+				Template:              common.Template,
+				Distance:              common.Distance,
+				Clean:                 common.Clean,
+				PokemonID:             mon.PokemonID,
+				Form:                  mon.Form,
+				Level:                 90, // 90 = all levels for specific pokemon
+				Move:                  move,
+				Gmax:                  gmax,
+				Evolution:             bot.WildcardID,
+				StationID:             nil,
+				OverrideLocationLabel: override.LocationLabel,
+				OverrideAreas:         override.Areas,
 			})
 		}
 	} else {
@@ -127,18 +136,20 @@ func (c *MaxbattleCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 
 		for lvl := range levelSet {
 			insert = append(insert, db.MaxbattleTrackingAPI{
-				ID:        ctx.TargetID,
-				ProfileNo: ctx.ProfileNo,
-				Ping:      pings,
-				Template:  common.Template,
-				Distance:  common.Distance,
-				Clean:     common.Clean,
-				PokemonID: bot.WildcardID, // 9000 = by level
-				Level:     lvl,
-				Move:      move,
-				Gmax:      gmax,
-				Evolution: bot.WildcardID,
-				StationID: nil,
+				ID:                    ctx.TargetID,
+				ProfileNo:             ctx.ProfileNo,
+				Ping:                  pings,
+				Template:              common.Template,
+				Distance:              common.Distance,
+				Clean:                 common.Clean,
+				PokemonID:             bot.WildcardID, // 9000 = by level
+				Level:                 lvl,
+				Move:                  move,
+				Gmax:                  gmax,
+				Evolution:             bot.WildcardID,
+				StationID:             nil,
+				OverrideLocationLabel: override.LocationLabel,
+				OverrideAreas:         override.Areas,
 			})
 		}
 	}

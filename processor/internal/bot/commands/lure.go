@@ -17,6 +17,8 @@ var lureParams = []bot.ParamDef{
 	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
+	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -56,6 +58,11 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*block}
 	}
 
+	override, overrideReply := parseOverride(ctx, parsed.Strings, parsed.StringLists["area"], common.Distance)
+	if overrideReply != nil {
+		return []bot.Reply{*overrideReply}
+	}
+
 	// Collect lure IDs
 	lureIDs := []int{}
 	if parsed.LureType != 0 || parsed.HasKeyword("arg.everything") {
@@ -84,13 +91,15 @@ func (c *LureCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	insert := make([]db.LureTrackingAPI, 0, len(lureIDs))
 	for _, id := range lureIDs {
 		insert = append(insert, db.LureTrackingAPI{
-			ID:        ctx.TargetID,
-			ProfileNo: ctx.ProfileNo,
-			Ping:      pings,
-			LureID:    id,
-			Distance:  common.Distance,
-			Template:  common.Template,
-			Clean:     common.Clean,
+			ID:                    ctx.TargetID,
+			ProfileNo:             ctx.ProfileNo,
+			Ping:                  pings,
+			LureID:                id,
+			Distance:              common.Distance,
+			Template:              common.Template,
+			Clean:                 common.Clean,
+			OverrideLocationLabel: override.LocationLabel,
+			OverrideAreas:         override.Areas,
 		})
 	}
 

@@ -144,3 +144,33 @@ func TestLure_NoType(t *testing.T) {
 	require.NotEmpty(t, replies)
 	assert.Equal(t, "🙅", replies[0].React)
 }
+
+func TestLure_AcceptsAreaOverride(t *testing.T) {
+	ctx, _ := newTestLocationCtx(t)
+
+	lures := store.NewMockTrackingStore[db.LureTrackingAPI](
+		store.LureGetUID, store.LureSetUID,
+	)
+	ctx.Tracking = &store.TrackingStores{Lures: lures}
+
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
+		Moves:    map[int]*gamedata.Move{},
+		Types:    map[int]*gamedata.TypeInfo{},
+	}
+	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
+	ctx.Resolver = resolver
+	ctx.ArgMatcher = bot.NewArgMatcher(ctx.Translations, gd, resolver, []string{"en"})
+	ctx.GameData = gd
+	ctx.RowText = &rowtext.Generator{GD: gd, Translations: ctx.Translations, DefaultTemplateName: "1"}
+	ctx.HasArea = true
+
+	cmd := &LureCommand{}
+	replies := cmd.Run(ctx, strings.Fields("everything area:london"))
+	require.NotEmpty(t, replies)
+	assert.NotEqual(t, "🙅", replies[0].React, "rejected: %+v", replies)
+
+	rules, _ := ctx.Tracking.Lures.SelectByIDProfile("user1", 1)
+	require.Len(t, rules, 1)
+	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
+}

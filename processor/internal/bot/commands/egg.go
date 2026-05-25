@@ -24,6 +24,8 @@ var eggParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.gym"},
+	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -108,6 +110,12 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if block != nil {
 		return []bot.Reply{*block}
 	}
+
+	override, overrideReply := parseOverride(ctx, parsed.Strings, parsed.StringLists["area"], common.Distance)
+	if overrideReply != nil {
+		return []bot.Reply{*overrideReply}
+	}
+
 	exclusive := parsed.HasKeyword("arg.ex")
 	team := parsed.Team
 
@@ -160,17 +168,19 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	insert := make([]db.EggTrackingAPI, 0, len(levels))
 	for _, lvl := range levels {
 		insert = append(insert, db.EggTrackingAPI{
-			ID:          ctx.TargetID,
-			ProfileNo:   ctx.ProfileNo,
-			Ping:        pings,
-			Template:    common.Template,
-			Distance:    common.Distance,
-			Team:        team,
-			Clean:       common.Clean,
-			Exclusive:   db.IntBool(exclusive),
-			GymID:       gymID,
-			RSVPChanges: rsvpChanges,
-			Level:       lvl,
+			ID:                    ctx.TargetID,
+			ProfileNo:             ctx.ProfileNo,
+			Ping:                  pings,
+			Template:              common.Template,
+			Distance:              common.Distance,
+			Team:                  team,
+			Clean:                 common.Clean,
+			Exclusive:             db.IntBool(exclusive),
+			GymID:                 gymID,
+			RSVPChanges:           rsvpChanges,
+			Level:                 lvl,
+			OverrideLocationLabel: override.LocationLabel,
+			OverrideAreas:         override.Areas,
 		})
 	}
 
