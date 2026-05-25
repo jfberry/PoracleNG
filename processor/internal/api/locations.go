@@ -1,10 +1,13 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 type locationRow struct {
@@ -74,5 +77,68 @@ func HandleGetLocation(deps *TrackingDeps) gin.HandlerFunc {
 			"latitude":  loc.Latitude,
 			"longitude": loc.Longitude,
 		})
+	}
+}
+
+type addLocationRequest struct {
+	Label     string  `json:"label"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Place     string  `json:"place,omitempty"`
+}
+
+type addLocationResult struct {
+	Label string `json:"label"`
+	Error string `json:"error,omitempty"`
+}
+
+// HandleAddLocation returns the POST /api/humans/{id}/locations/add handler.
+// Accepts a single addLocationRequest object or a JSON array of them.
+// Returns per-row results so partial-success batches surface individual errors
+// (e.g. duplicate labels) without aborting the whole request.
+func HandleAddLocation(deps *TrackingDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+
+		rawBody, err := readBody(c)
+		if err != nil {
+			trackingJSONError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		var reqs []addLocationRequest
+		if len(rawBody) > 0 && rawBody[0] == '[' {
+			if err := json.Unmarshal(rawBody, &reqs); err != nil {
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
+				return
+			}
+		} else {
+			var single addLocationRequest
+			if err := json.Unmarshal(rawBody, &single); err != nil {
+				trackingJSONError(c, http.StatusBadRequest, "invalid request body")
+				return
+			}
+			reqs = []addLocationRequest{single}
+		}
+
+		results := make([]addLocationResult, 0, len(reqs))
+		for _, r := range reqs {
+			if r.Label == "" {
+				results = append(results, addLocationResult{Label: r.Label, Error: "label required"})
+				continue
+			}
+			if r.Place != "" {
+				// Server-side place geocoding is deferred — v1 requires latitude+longitude.
+				results = append(results, addLocationResult{Label: r.Label, Error: "place geocoding not yet supported via API; send latitude+longitude"})
+				continue
+			}
+			if _, err := deps.Humans.AddLocation(store.UserLocation{ID: id, Label: r.Label, Latitude: r.Latitude, Longitude: r.Longitude}); err != nil {
+				results = append(results, addLocationResult{Label: r.Label, Error: err.Error()})
+				continue
+			}
+			results = append(results, addLocationResult{Label: r.Label})
+		}
+		reloadState(deps)
+		trackingJSONOK(c, map[string]any{"results": results})
 	}
 }

@@ -95,3 +95,58 @@ func TestLocations_GetOne_NotFound(t *testing.T) {
 		t.Fatalf("expected 404, got %d", w.Code)
 	}
 }
+
+func TestLocations_Add_Single(t *testing.T) {
+	deps, mock := newTestLocationDeps(t)
+	r := gin.New()
+	r.POST("/api/humans/:id/locations/add", HandleAddLocation(deps))
+
+	body := `{"label":"Home","latitude":51.5,"longitude":-0.1}`
+	req := httptest.NewRequest(http.MethodPost, "/api/humans/u1/locations/add", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	got, _ := mock.GetLocation("u1", "Home")
+	if got == nil {
+		t.Fatalf("location not persisted")
+	}
+}
+
+func TestLocations_Add_Array(t *testing.T) {
+	deps, mock := newTestLocationDeps(t)
+	r := gin.New()
+	r.POST("/api/humans/:id/locations/add", HandleAddLocation(deps))
+
+	body := `[{"label":"Home","latitude":51.5,"longitude":-0.1},{"label":"Work","latitude":51.6,"longitude":-0.2}]`
+	req := httptest.NewRequest(http.MethodPost, "/api/humans/u1/locations/add", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	list, _ := mock.ListLocations("u1")
+	if len(list) != 2 {
+		t.Fatalf("expected 2 locations, got %d", len(list))
+	}
+}
+
+func TestLocations_Add_DuplicateInResults(t *testing.T) {
+	deps, mock := newTestLocationDeps(t)
+	mock.AddLocation(store.UserLocation{ID: "u1", Label: "Home", Latitude: 51.5, Longitude: -0.1})
+
+	r := gin.New()
+	r.POST("/api/humans/:id/locations/add", HandleAddLocation(deps))
+
+	body := `{"label":"Home","latitude":0,"longitude":0}`
+	req := httptest.NewRequest(http.MethodPost, "/api/humans/u1/locations/add", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK { // batch endpoint reports per-row results
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "duplicate") {
+		t.Fatalf("expected duplicate report in body, got %s", w.Body.String())
+	}
+}
