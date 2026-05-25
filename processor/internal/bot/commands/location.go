@@ -131,7 +131,15 @@ func (c *LocationCommand) addLocation(ctx *bot.CommandContext, args []string) []
 		return []bot.Reply{{React: "🙅"}}
 	}
 	ctx.TriggerReload()
-	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.location.added", name, lat, lon)}}
+	reply := bot.Reply{React: "✅", Text: tr.Tf("msg.location.added", name, lat, lon)}
+	if ctx.StaticMap != nil {
+		data := map[string]any{
+			"latitude":  lat,
+			"longitude": lon,
+		}
+		reply.ImageURL = ctx.StaticMap.GetPregeneratedTileURL("location", data, "staticMap")
+	}
+	return []bot.Reply{reply}
 }
 
 // listLocations handles `!location list`.
@@ -166,7 +174,15 @@ func (c *LocationCommand) showLocation(ctx *bot.CommandContext, args []string) [
 	if loc == nil {
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.show_not_found", args[0])}}
 	}
-	return []bot.Reply{{Text: tr.Tf("msg.location.show", loc.Label, loc.Latitude, loc.Longitude)}}
+	reply := bot.Reply{Text: tr.Tf("msg.location.show", loc.Label, loc.Latitude, loc.Longitude)}
+	if ctx.StaticMap != nil {
+		data := map[string]any{
+			"latitude":  loc.Latitude,
+			"longitude": loc.Longitude,
+		}
+		reply.ImageURL = ctx.StaticMap.GetPregeneratedTileURL("location", data, "staticMap")
+	}
+	return []bot.Reply{reply}
 }
 
 // removeLocation handles `!location remove <name>` and `!location remove default`.
