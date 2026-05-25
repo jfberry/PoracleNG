@@ -2,6 +2,7 @@ package matching
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
@@ -70,14 +71,16 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 		// If g.GymID is nil, area/distance is checked by validateHumansForGym
 
 		out = append(out, trackingUserData{
-			HumanID:         g.ID,
-			ProfileNo:       g.ProfileNo,
-			Distance:        g.Distance,
-			Template:        g.Template,
-			Clean:           g.Clean,
-			Ping:            g.Ping,
-			UID:             g.UID,
-			IsSpecificMatch: isSpecificMatch,
+			HumanID:               g.ID,
+			ProfileNo:             g.ProfileNo,
+			Distance:              g.Distance,
+			Template:              g.Template,
+			Clean:                 g.Clean,
+			Ping:                  g.Ping,
+			UID:                   g.UID,
+			IsSpecificMatch:       isSpecificMatch,
+			OverrideLocationLabel: g.OverrideLocationLabel,
+			OverrideAreas:         g.OverrideAreas,
 		})
 	}
 	return out
@@ -145,12 +148,25 @@ func validateHumansForGym(
 			continue
 		}
 
+		// Resolve effective anchor location: rule override → human default
+		anchorLat, anchorLon := human.Latitude, human.Longitude
+		if td.OverrideLocationLabel != "" && human.Locations != nil {
+			if loc, ok := human.Locations[strings.ToLower(td.OverrideLocationLabel)]; ok {
+				anchorLat, anchorLon = loc.Latitude, loc.Longitude
+			}
+		}
+		// Resolve effective area set: rule override → human default
+		effectiveAreas := human.Area
+		if len(td.OverrideAreas) > 0 {
+			effectiveAreas = td.OverrideAreas
+		}
+
 		// Lazy haversine: compute once when first needed, cache for reuse.
 		var dist int
 		distComputed := false
 		haversine := func() int {
 			if !distComputed {
-				dist = HaversineDistance(human.Latitude, human.Longitude, lat, lon)
+				dist = HaversineDistance(anchorLat, anchorLon, lat, lon)
 				distComputed = true
 				haversineCount++
 			}
@@ -168,7 +184,7 @@ func validateHumansForGym(
 					continue
 				}
 			} else {
-				if !areaOverlap(human.Area, matchedAreaNames) {
+				if !areaOverlap(effectiveAreas, matchedAreaNames) {
 					continue
 				}
 			}
@@ -187,15 +203,15 @@ func validateHumansForGym(
 
 		// Reuse cached haversine (or compute now for area-based / specific-gym users).
 		actualDist := haversine()
-		bearing := Bearing(human.Latitude, human.Longitude, lat, lon)
+		bearing := Bearing(anchorLat, anchorLon, lat, lon)
 
 		result = append(result, webhook.MatchedUser{
 			ID:                human.ID,
 			Name:              human.Name,
 			Type:              human.Type,
 			Language:          human.Language,
-			Latitude:          human.Latitude,
-			Longitude:         human.Longitude,
+			Latitude:          anchorLat,
+			Longitude:         anchorLon,
 			Template:          td.Template,
 			Distance:          actualDist,
 			Clean:             td.Clean,

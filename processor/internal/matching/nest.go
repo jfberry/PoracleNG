@@ -54,13 +54,15 @@ func (m *NestMatcher) Match(data *NestData, st *state.State) ([]webhook.MatchedU
 		}
 
 		trackings = append(trackings, trackingUserData{
-			HumanID:   n.ID,
-			ProfileNo: n.ProfileNo,
-			Distance:  n.Distance,
-			Template:  n.Template,
-			Clean:     n.Clean,
-			Ping:      n.Ping,
-			UID:       n.UID,
+			HumanID:               n.ID,
+			ProfileNo:             n.ProfileNo,
+			Distance:              n.Distance,
+			Template:              n.Template,
+			Clean:                 n.Clean,
+			Ping:                  n.Ping,
+			UID:                   n.UID,
+			OverrideLocationLabel: n.OverrideLocationLabel,
+			OverrideAreas:         n.OverrideAreas,
 		})
 	}
 

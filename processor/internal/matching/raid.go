@@ -99,15 +99,17 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 		}
 
 		trackingData = append(trackingData, raidUserData{
-			HumanID:         r.ID,
-			ProfileNo:       r.ProfileNo,
-			Distance:        r.Distance,
-			Template:        r.Template,
-			Clean:           r.Clean,
-			Ping:            r.Ping,
-			RSVPChanges:     r.RSVPChanges,
-			UID:             r.UID,
-			IsSpecificMatch: isSpecificMatch,
+			HumanID:               r.ID,
+			ProfileNo:             r.ProfileNo,
+			Distance:              r.Distance,
+			Template:              r.Template,
+			Clean:                 r.Clean,
+			Ping:                  r.Ping,
+			RSVPChanges:           r.RSVPChanges,
+			UID:                   r.UID,
+			IsSpecificMatch:       isSpecificMatch,
+			OverrideLocationLabel: r.OverrideLocationLabel,
+			OverrideAreas:         r.OverrideAreas,
 		})
 	}
 
@@ -171,15 +173,17 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 		}
 
 		trackingData = append(trackingData, raidUserData{
-			HumanID:         e.ID,
-			ProfileNo:       e.ProfileNo,
-			Distance:        e.Distance,
-			Template:        e.Template,
-			Clean:           e.Clean,
-			Ping:            e.Ping,
-			RSVPChanges:     e.RSVPChanges,
-			UID:             e.UID,
-			IsSpecificMatch: isSpecificMatch,
+			HumanID:               e.ID,
+			ProfileNo:             e.ProfileNo,
+			Distance:              e.Distance,
+			Template:              e.Template,
+			Clean:                 e.Clean,
+			Ping:                  e.Ping,
+			RSVPChanges:           e.RSVPChanges,
+			UID:                   e.UID,
+			IsSpecificMatch:       isSpecificMatch,
+			OverrideLocationLabel: e.OverrideLocationLabel,
+			OverrideAreas:         e.OverrideAreas,
 		})
 	}
 

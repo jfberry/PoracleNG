@@ -84,14 +84,16 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 		}
 
 		trackings = append(trackings, trackingUserData{
-			HumanID:         mb.ID,
-			ProfileNo:       mb.ProfileNo,
-			Distance:        mb.Distance,
-			Template:        mb.Template,
-			Clean:           mb.Clean,
-			Ping:            mb.Ping,
-			UID:             mb.UID,
-			IsSpecificMatch: isSpecificMatch,
+			HumanID:               mb.ID,
+			ProfileNo:             mb.ProfileNo,
+			Distance:              mb.Distance,
+			Template:              mb.Template,
+			Clean:                 mb.Clean,
+			Ping:                  mb.Ping,
+			UID:                   mb.UID,
+			IsSpecificMatch:       isSpecificMatch,
+			OverrideLocationLabel: mb.OverrideLocationLabel,
+			OverrideAreas:         mb.OverrideAreas,
 		})
 	}
 
