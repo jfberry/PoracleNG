@@ -470,6 +470,8 @@ func main() {
 	humans.GET("/:id/roles", api.HandleGetRoles(roleDeps))
 	humans.GET("/:id/getAdministrationRoles", api.HandleGetAdministrationRoles(roleDeps))
 	humans.GET("/:id/checkLocation/:lat/:lon", api.HandleCheckLocation(trackingDeps))
+	humans.GET("/:id/locations", api.HandleListLocations(trackingDeps))
+	humans.GET("/:id/locations/:label", api.HandleGetLocation(trackingDeps))
 	humans.POST("", api.HandleCreateHuman(trackingDeps))
 	humans.POST("/:id/start", api.HandleStartHuman(trackingDeps))
 	humans.POST("/:id/stop", api.HandleStopHuman(trackingDeps))
