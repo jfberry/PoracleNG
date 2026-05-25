@@ -59,6 +59,8 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		return c.addLocation(ctx, args[1:])
 	case matchSub("arg.list"):
 		return c.listLocations(ctx)
+	case matchSub("arg.show"):
+		return c.showLocation(ctx, args[1:])
 	}
 
 	parsed := ctx.ArgMatcher.Match(args, locationParams, ctx.Language)
@@ -159,6 +161,19 @@ func (c *LocationCommand) listLocations(ctx *bot.CommandContext) []bot.Reply {
 		sb.WriteString(tr.Tf("msg.location.list_row", l.Label, l.Latitude, l.Longitude) + "\n")
 	}
 	return []bot.Reply{{Text: sb.String()}}
+}
+
+// showLocation handles `!location show <name>`.
+func (c *LocationCommand) showLocation(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
+	if len(args) == 0 {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.show_usage", bot.CommandPrefix(ctx))}}
+	}
+	loc, _ := ctx.Humans.GetLocation(ctx.TargetID, args[0])
+	if loc == nil {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.show_not_found", args[0])}}
+	}
+	return []bot.Reply{{Text: tr.Tf("msg.location.show", loc.Label, loc.Latitude, loc.Longitude)}}
 }
 
 // resolveLatLon parses a "lat,lon" string or falls back to forward geocoding.

@@ -240,3 +240,32 @@ func TestLocation_ListEmptyShowsHint(t *testing.T) {
 		t.Errorf("expected empty list hint to mention 'location', got %q", replies[0].Text)
 	}
 }
+
+// --- show subcommand ---
+
+func TestLocation_ShowCaseInsensitive(t *testing.T) {
+	ctx, mock := testCtx(t)
+	if _, err := mock.AddLocation(store.UserLocation{ID: "user1", Label: "Home", Latitude: 51.5, Longitude: -0.1}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"show", "home"})
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply")
+	}
+	if !strings.Contains(replies[0].Text, "51.5") {
+		t.Fatalf("show should be case-insensitive, got %s", replies[0].Text)
+	}
+}
+
+func TestLocation_ShowNotFound(t *testing.T) {
+	ctx, _ := testCtx(t)
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"show", "Nope"})
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply")
+	}
+	if !strings.Contains(replies[0].Text, "No saved location") {
+		t.Fatalf("expected not-found message, got %s", replies[0].Text)
+	}
+}
