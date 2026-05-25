@@ -85,19 +85,7 @@ func ValidateHumansGeneric(
 			continue
 		}
 
-		// Resolve effective anchor location: rule override → human default
-		anchorLat, anchorLon := human.Latitude, human.Longitude
-		if td.OverrideLocationLabel != "" && human.Locations != nil {
-			if loc, ok := human.Locations[strings.ToLower(td.OverrideLocationLabel)]; ok {
-				anchorLat, anchorLon = loc.Latitude, loc.Longitude
-			}
-			// else: orphaned label — silently fall through to human defaults
-		}
-		// Resolve effective area set: rule override → human default
-		effectiveAreas := human.Area
-		if len(td.OverrideAreas) > 0 {
-			effectiveAreas = td.OverrideAreas
-		}
+		anchorLat, anchorLon, effectiveAreas := resolveOverride(td.OverrideLocationLabel, td.OverrideAreas, human)
 
 		// Lazy haversine: compute once when first needed, cache for reuse.
 		var dist int
@@ -157,4 +145,23 @@ func ValidateHumansGeneric(
 		})
 	}
 	return result
+}
+
+// resolveOverride returns the effective distance anchor and area set for a rule,
+// applying per-rule overrides over the human's defaults.
+// An override_location_label that doesn't resolve in human.Locations silently
+// falls through to the human's lat/lon.
+func resolveOverride(label string, ruleAreas []string, human *db.Human) (anchorLat, anchorLon float64, effectiveAreas []string) {
+	anchorLat, anchorLon = human.Latitude, human.Longitude
+	if label != "" && human.Locations != nil {
+		if loc, ok := human.Locations[strings.ToLower(label)]; ok {
+			anchorLat, anchorLon = loc.Latitude, loc.Longitude
+		}
+		// else: orphaned label — silently fall through to human defaults
+	}
+	effectiveAreas = human.Area
+	if len(ruleAreas) > 0 {
+		effectiveAreas = ruleAreas
+	}
+	return
 }

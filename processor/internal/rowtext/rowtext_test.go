@@ -552,6 +552,94 @@ func TestRowText_MonsterShowsOverrides(t *testing.T) {
 	}
 }
 
+// TestRowText_AllTypesShowOverrides verifies that appendOverride is wired
+// correctly in every per-type RowText function. A single minimal rule per type
+// with OverrideLocationLabel = "Home" is passed; the output must contain "@ Home".
+func TestRowText_AllTypesShowOverrides(t *testing.T) {
+	g := testGenerator(t)
+	tr := g.Translations.For("en")
+
+	cases := []struct {
+		name string
+		fn   func() string
+	}{
+		{"monster", func() string {
+			return g.MonsterRowText(tr, &db.MonsterTracking{
+				PokemonID: 25, Distance: 500,
+				MinIV: -1, MaxIV: 100, MinCP: 0, MaxCP: 9000,
+				MinLevel: 0, MaxLevel: 55,
+				MaxATK: 15, MaxDEF: 15, MaxSTA: 15,
+				MaxSize: 5, MaxRarity: 6,
+				OverrideLocationLabel: "Home",
+			})
+		}},
+		{"raid", func() string {
+			return g.RaidRowText(tr, &db.RaidTracking{
+				PokemonID: 9000, Level: 5, Team: 4, Template: "1",
+				OverrideLocationLabel: "Home",
+			})
+		}},
+		{"egg", func() string {
+			return g.EggRowText(tr, &db.EggTracking{
+				Level: 5, Team: 4, Template: "1",
+				OverrideLocationLabel: "Home",
+			})
+		}},
+		{"quest", func() string {
+			return g.QuestRowText(tr, &db.QuestTracking{
+				RewardType: 3, Reward: 1000, Template: "1",
+				OverrideLocationLabel: "Home",
+			})
+		}},
+		{"invasion", func() string {
+			return g.InvasionRowText(tr, &db.InvasionTracking{
+				GruntType: "Water", Template: "1",
+				OverrideLocationLabel: "Home",
+			})
+		}},
+		{"lure", func() string {
+			return g.LureRowText(tr, &db.LureTracking{
+				LureID: 501, Template: "1",
+				OverrideLocationLabel: "Home",
+			})
+		}},
+		{"gym", func() string {
+			return g.GymRowText(tr, &db.GymTracking{
+				Team: 2, Template: "1",
+				OverrideLocationLabel: "Home",
+			})
+		}},
+		{"nest", func() string {
+			return g.NestRowText(tr, &db.NestTracking{
+				PokemonID: 25, Template: "1",
+				OverrideLocationLabel: "Home",
+			})
+		}},
+		{"fort", func() string {
+			return g.FortUpdateRowText(tr, &db.FortTracking{
+				FortType: "pokestop", Template: "1",
+				ChangeTypes:           `["name"]`,
+				OverrideLocationLabel: "Home",
+			})
+		}},
+		{"maxbattle", func() string {
+			return g.MaxbattleRowText(tr, &db.MaxbattleTracking{
+				PokemonID: 9000, Level: 3, Template: "1",
+				OverrideLocationLabel: "Home",
+			})
+		}},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := c.fn()
+			if !strings.Contains(got, "@ Home") {
+				t.Errorf("%s rowtext missing '@ Home': %s", c.name, got)
+			}
+		})
+	}
+}
+
 func TestUcFirst(t *testing.T) {
 	tests := []struct {
 		input, want string

@@ -87,8 +87,6 @@ After successful creates: `!tracked` shows the rule with `@ Home` or `in london,
 - [ ] Rules with `override_areas: ["X", "Y"]` become `["Y"]`
 - [ ] User's tracking rules continue to function with their remaining permitted areas
 
-**Note:** The `AreaLogic.PruneOverrideAreas` method exists and is unit-tested, but the call site in `discordbot/reconciliation.go` is a deferred follow-up — wiring it requires plumbing a `*sqlx.DB` into the Reconciliation type. Until that follow-up lands, prune via direct DB query or restart.
-
 ## Cascade on user delete
 
 - [ ] Delete a user via the existing delete-human routine

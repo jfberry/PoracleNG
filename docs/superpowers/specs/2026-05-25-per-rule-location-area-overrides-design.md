@@ -95,7 +95,7 @@ NULL on both = "fall through to profile, then human".
 
 ### Migration
 
-Single migration file `00000X_per_rule_overrides.up.sql` / `.down.sql`. One file because the columns are conceptually one feature; if any ALTER fails, the whole transaction rolls back. The DSN's `multiStatements=true` handles execution on fresh installs.
+Single migration file `00000X_per_rule_overrides.up.sql` / `.down.sql`. One file because the columns are conceptually one feature. MySQL implicitly commits each DDL statement, so partial-failure on the 7th of 10 ALTERs would leave the schema half-applied. Practical risk is low (all 10 ALTERs are the same shape — they pass or fail uniformly), but operators should monitor the migration log on first run. The DSN's `multiStatements=true` handles execution on fresh installs.
 
 ## Matcher integration
 
@@ -215,16 +215,23 @@ Server-side validation mirrors the bot-command checks:
 
 New keys for `!location add/list/show/remove` replies, the rejection messages, and the rowtext additions:
 
-- `msg.location.requires_distance`
-- `msg.location.conflicts_area`
-- `msg.location.area_not_permitted`
-- `msg.location.label_in_use_by_rules`
-- `msg.location.label_unknown`
-- `msg.location.label_required` (for `!location add` without `label:`)
+**`!location` command replies** (under `msg.location.*`):
 - `msg.location.added`
-- `msg.location.list_header` / `msg.location.list_row` / `msg.location.list_empty`
-- `msg.location.show_header` / `msg.location.show_coords` / `msg.location.show_address`
-- `msg.location.removed`
+- `msg.location.duplicate`
+- `msg.location.list_header` / `msg.location.list_row` / `msg.location.list_default` / `msg.location.list_empty`
+- `msg.location.show` / `msg.location.show_not_found`
+- `msg.location.removed` / `msg.location.default_removed` / `msg.location.remove_referenced`
+- `msg.location.add_usage` / `msg.location.show_usage` / `msg.location.remove_usage`
+- `msg.location.geocode_failed`
+
+**Override validation rejection messages** (under `msg.override.*` — not `msg.location.*`):
+- `msg.override.requires_distance` — `location:` used without `d:`
+- `msg.override.area_and_distance` — `area:` + `d:` are mutually exclusive
+- `msg.override.area_and_location` — `area:` + `location:` are mutually exclusive
+- `msg.override.unknown_location` — label not in user's saved locations
+- `msg.override.area_not_permitted` — area not in community's allowed areas
+
+**Rowtext display** (under `tracking.*`):
 - `tracking.override_location_fmt`
 - `tracking.override_areas_fmt`
 

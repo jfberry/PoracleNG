@@ -2,7 +2,6 @@ package matching
 
 import (
 	"math"
-	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
@@ -74,18 +73,7 @@ func ValidateHumans(
 			continue
 		}
 
-		// Resolve effective anchor location: rule override → human default
-		anchorLat, anchorLon := human.Latitude, human.Longitude
-		if monster.OverrideLocationLabel != "" && human.Locations != nil {
-			if loc, ok := human.Locations[strings.ToLower(monster.OverrideLocationLabel)]; ok {
-				anchorLat, anchorLon = loc.Latitude, loc.Longitude
-			}
-		}
-		// Resolve effective area set: rule override → human default
-		effectiveAreas := human.Area
-		if len(monster.OverrideAreas) > 0 {
-			effectiveAreas = monster.OverrideAreas
-		}
+		anchorLat, anchorLon, effectiveAreas := resolveOverride(monster.OverrideLocationLabel, monster.OverrideAreas, human)
 
 		// Lazy haversine: compute once when first needed, cache for reuse.
 		var dist int
@@ -179,18 +167,7 @@ func ValidateHumansForRaid(
 			continue
 		}
 
-		// Resolve effective anchor location: rule override → human default
-		anchorLat, anchorLon := human.Latitude, human.Longitude
-		if td.OverrideLocationLabel != "" && human.Locations != nil {
-			if loc, ok := human.Locations[strings.ToLower(td.OverrideLocationLabel)]; ok {
-				anchorLat, anchorLon = loc.Latitude, loc.Longitude
-			}
-		}
-		// Resolve effective area set: rule override → human default
-		effectiveAreas := human.Area
-		if len(td.OverrideAreas) > 0 {
-			effectiveAreas = td.OverrideAreas
-		}
+		anchorLat, anchorLon, effectiveAreas := resolveOverride(td.OverrideLocationLabel, td.OverrideAreas, human)
 
 		// Lazy haversine: compute once when first needed, cache for reuse.
 		var dist int
