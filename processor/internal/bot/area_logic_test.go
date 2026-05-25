@@ -427,3 +427,51 @@ func TestAreaFindFence_UnderscoreInName(t *testing.T) {
 		t.Errorf("underscore-form FindFence failed: %+v", f)
 	}
 }
+
+// --- filterPermittedAreas (pure in-memory logic used by PruneOverrideAreas) ---
+
+func TestFilterPermittedAreas_StripsDisallowed(t *testing.T) {
+	permitted := map[string]bool{"munich": true, "berlin": true}
+	result := filterPermittedAreas([]string{"munich", "berlin", "hamburg"}, permitted)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 kept, got %d: %v", len(result), result)
+	}
+	for _, a := range result {
+		if !permitted[a] {
+			t.Errorf("unexpected area %q in result", a)
+		}
+	}
+}
+
+func TestFilterPermittedAreas_AllDisallowed(t *testing.T) {
+	permitted := map[string]bool{"munich": true}
+	result := filterPermittedAreas([]string{"berlin", "hamburg"}, permitted)
+	if len(result) != 0 {
+		t.Fatalf("expected empty result, got %v", result)
+	}
+}
+
+func TestFilterPermittedAreas_NoneDisallowed(t *testing.T) {
+	permitted := map[string]bool{"munich": true, "berlin": true}
+	result := filterPermittedAreas([]string{"munich", "berlin"}, permitted)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 kept, got %d", len(result))
+	}
+}
+
+func TestFilterPermittedAreas_EmptyInput(t *testing.T) {
+	permitted := map[string]bool{"munich": true}
+	result := filterPermittedAreas(nil, permitted)
+	if len(result) != 0 {
+		t.Fatalf("expected empty result for nil input, got %v", result)
+	}
+}
+
+func TestFilterPermittedAreas_CaseInsensitive(t *testing.T) {
+	// Areas stored in mixed case should match lowercase permitted keys.
+	permitted := map[string]bool{"munich": true}
+	result := filterPermittedAreas([]string{"Munich", "BERLIN"}, permitted)
+	if len(result) != 1 || result[0] != "Munich" {
+		t.Fatalf("expected [Munich], got %v", result)
+	}
+}

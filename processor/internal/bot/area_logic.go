@@ -1,8 +1,11 @@
 package bot
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
 )
@@ -268,4 +271,86 @@ func (a *AreaLogic) buildAllowedSet(communities []string) map[string]bool {
 		}
 	}
 	return allowedSet
+}
+
+// filterPermittedAreas returns a new slice containing only the areas whose
+// lowercase form appears in permitted. The original case of each area name is
+// preserved. Returns nil (not an empty slice) when every area is filtered out,
+// so callers can distinguish "nothing left" from "nothing provided".
+func filterPermittedAreas(areas []string, permitted map[string]bool) []string {
+	if len(areas) == 0 {
+		return nil
+	}
+	var kept []string
+	for _, area := range areas {
+		if permitted[strings.ToLower(area)] {
+			kept = append(kept, area)
+		}
+	}
+	return kept
+}
+
+// trackingTablesWithOverrideAreas lists all tables that carry an override_areas column.
+// Mirrors humanOwnedTables in db/human_queries.go minus user_locations (no override_areas).
+var trackingTablesWithOverrideAreas = []string{
+	"monsters", "raid", "egg", "quest", "invasion",
+	"lures", "nests", "gym", "forts", "maxbattle",
+}
+
+// PruneOverrideAreas walks every tracking row for the given human and drops
+// areas no longer in permitted from the override_areas JSON column. When the
+// pruned list is empty the column is set to NULL so the rule falls back to the
+// human's own area list.
+//
+// Call this after reconciling community_membership so that per-rule area
+// overrides stay consistent with the user's new permitted set.
+//
+// Wiring note: the natural call site is reconcileAreaSecurity in
+// internal/discordbot/reconciliation.go (the "before && after" branch, after
+// community_membership is updated). Wiring is deferred because Reconciliation
+// does not currently hold a *sqlx.DB; that plumbing is a follow-up task.
+func (a *AreaLogic) PruneOverrideAreas(dbx *sqlx.DB, humanID string, permitted map[string]bool) error {
+	type row struct {
+		UID           int64  `db:"uid"`
+		OverrideAreas string `db:"override_areas"`
+	}
+
+	for _, table := range trackingTablesWithOverrideAreas {
+		var rows []row
+		q := fmt.Sprintf(
+			"SELECT uid, COALESCE(override_areas, '') AS override_areas FROM `%s` WHERE id = ? AND override_areas IS NOT NULL AND override_areas != ''",
+			table,
+		)
+		if err := dbx.Select(&rows, q, humanID); err != nil {
+			return fmt.Errorf("prune %s: %w", table, err)
+		}
+
+		for _, r := range rows {
+			var areas []string
+			if err := json.Unmarshal([]byte(r.OverrideAreas), &areas); err != nil {
+				// Malformed JSON — skip rather than corrupt the row.
+				continue
+			}
+
+			kept := filterPermittedAreas(areas, permitted)
+			if len(kept) == len(areas) {
+				continue // nothing changed
+			}
+
+			var newVal any
+			if len(kept) == 0 {
+				newVal = nil
+			} else {
+				b, _ := json.Marshal(kept)
+				newVal = string(b)
+			}
+
+			updQ := fmt.Sprintf("UPDATE `%s` SET override_areas = ? WHERE uid = ?", table)
+			if _, err := dbx.Exec(updQ, newVal, r.UID); err != nil {
+				return fmt.Errorf("update %s uid %d: %w", table, r.UID, err)
+			}
+		}
+	}
+
+	return nil
 }
