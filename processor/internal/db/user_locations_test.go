@@ -41,8 +41,8 @@ func TestLoadUserLocations_GroupsByID(t *testing.T) {
 		uid        INT PRIMARY KEY AUTO_INCREMENT,
 		id         VARCHAR(50) NOT NULL,
 		label      VARCHAR(64) NOT NULL,
-		latitude   DOUBLE NOT NULL DEFAULT 0,
-		longitude  DOUBLE NOT NULL DEFAULT 0,
+		latitude   float(14,10) NOT NULL,
+		longitude  float(14,10) NOT NULL,
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		UNIQUE KEY uniq_id_label (id, label)
 	) ENGINE=InnoDB`)

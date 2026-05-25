@@ -24,7 +24,7 @@ func LoadUserLocations(dbx *sqlx.DB) (map[string]map[string]*UserLocation, error
 	if err := dbx.Select(&rows, `SELECT uid, id, label, latitude, longitude FROM user_locations`); err != nil {
 		return nil, err
 	}
-	out := make(map[string]map[string]*UserLocation)
+	out := make(map[string]map[string]*UserLocation, len(rows))
 	for i := range rows {
 		r := &rows[i]
 		m, ok := out[r.ID]
