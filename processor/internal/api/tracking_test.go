@@ -9,7 +9,11 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/rowtext"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 func init() {
@@ -418,5 +422,54 @@ func TestQuestTrackingAPIJSON(t *testing.T) {
 	}
 	if !strings.Contains(s, `"shiny":0`) {
 		t.Errorf("shiny should be 0, got %s", s)
+	}
+}
+
+// --- Override validation tests ---
+
+// newTestTrackingDeps builds a minimal TrackingDeps suitable for override-validation tests.
+// deps.Tracking is intentionally nil: validation failures return before it is accessed.
+func newTestTrackingDeps(t *testing.T) (*TrackingDeps, *store.MockHumanStore) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	mock := store.NewMockHumanStore()
+	mock.AddHuman(&store.Human{ID: "u1", Type: "discord:user", Name: "User", Enabled: true, Language: "en", CurrentProfileNo: 1})
+	deps := &TrackingDeps{
+		Humans:       mock,
+		Config:       &config.Config{},
+		RowText:      &rowtext.Generator{DefaultTemplateName: "1"},
+		Translations: i18n.NewBundle(),
+		// Tracking intentionally nil: override validation rejects before SelectByIDProfile.
+	}
+	return deps, mock
+}
+
+func TestTrackingAPI_RejectsLocationWithoutDistance(t *testing.T) {
+	deps, _ := newTestTrackingDeps(t)
+
+	r := gin.New()
+	r.POST("/api/tracking/pokemon/:id", HandleCreateMonster(deps))
+
+	body := `[{"pokemon_id":25,"distance":0,"override_location_label":"Home"}]`
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u1", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "requires distance") {
+		t.Fatalf("expected 400/requires-distance, got %d / %s", w.Code, w.Body.String())
+	}
+}
+
+func TestTrackingAPI_RejectsUnknownLocation(t *testing.T) {
+	deps, _ := newTestTrackingDeps(t)
+
+	r := gin.New()
+	r.POST("/api/tracking/pokemon/:id", HandleCreateMonster(deps))
+
+	body := `[{"pokemon_id":25,"distance":500,"override_location_label":"Nope"}]`
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u1", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "unknown location label") {
+		t.Fatalf("expected 400/unknown-location, got %d / %s", w.Code, w.Body.String())
 	}
 }

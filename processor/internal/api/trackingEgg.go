@@ -110,14 +110,16 @@ func HandleDeleteEgg(deps *TrackingDeps) gin.HandlerFunc {
 
 // eggInsertRequest represents a single egg tracking row from the POST body.
 type eggInsertRequest struct {
-	Level       json.RawMessage `json:"level"`
-	Distance    flexInt         `json:"distance"`
-	Template    any             `json:"template"`
-	Clean       flexBool        `json:"clean"`
-	Team        flexInt         `json:"team"`
-	Exclusive   flexBool        `json:"exclusive"`
-	GymID       *string         `json:"gym_id"`
-	RSVPChanges flexInt         `json:"rsvp_changes"`
+	Level                 json.RawMessage `json:"level"`
+	Distance              flexInt         `json:"distance"`
+	Template              any             `json:"template"`
+	Clean                 flexBool        `json:"clean"`
+	Team                  flexInt         `json:"team"`
+	Exclusive             flexBool        `json:"exclusive"`
+	GymID                 *string         `json:"gym_id"`
+	RSVPChanges           flexInt         `json:"rsvp_changes"`
+	OverrideLocationLabel string          `json:"override_location_label"`
+	OverrideAreas         []string        `json:"override_areas"`
 }
 
 // HandleCreateEgg returns the POST /api/tracking/egg/{id} handler.
@@ -165,6 +167,10 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 
 		insert := make([]db.EggTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			template := defaultTemplate
 			if req.Template != nil {
 				switch v := req.Template.(type) {
@@ -208,17 +214,19 @@ func HandleCreateEgg(deps *TrackingDeps) gin.HandlerFunc {
 				}
 
 				insert = append(insert, db.EggTrackingAPI{
-					ID:          human.ID,
-					ProfileNo:   profileNo,
-					Ping:        "",
-					Template:    template,
-					Distance:    distance,
-					Team:        team,
-					Clean:       clean,
-					Exclusive:   exclusive,
-					GymID:       gymID,
-					RSVPChanges: rsvpChanges,
-					Level:       lvl,
+					ID:                    human.ID,
+					ProfileNo:             profileNo,
+					Ping:                  "",
+					Template:              template,
+					Distance:              distance,
+					Team:                  team,
+					Clean:                 clean,
+					Exclusive:             exclusive,
+					GymID:                 gymID,
+					RSVPChanges:           rsvpChanges,
+					Level:                 lvl,
+					OverrideLocationLabel: req.OverrideLocationLabel,
+					OverrideAreas:         req.OverrideAreas,
 				})
 			}
 		}

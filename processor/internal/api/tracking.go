@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
@@ -29,7 +31,8 @@ type TrackingDeps struct {
 	Config       *config.Config
 	Translations *i18n.Bundle
 	Dispatcher   *delivery.Dispatcher
-	ReloadFunc   func() // triggers debounced state reload (from ProcessorService.triggerReload)
+	AreaLogic    *bot.AreaLogic // nil-safe: area validation skipped when nil
+	ReloadFunc   func()         // triggers debounced state reload (from ProcessorService.triggerReload)
 }
 
 // lookupHuman resolves the human from the {id} path parameter and the profile_no
@@ -222,6 +225,65 @@ func (f flexInt) intValue(defaultVal int) int {
 
 func (f flexInt) isSet() bool {
 	return f.value != nil
+}
+
+// validateOverrideFields checks the four mutually-exclusive override
+// rules from the spec, mirroring the bot-side parseOverride logic.
+// Returns ("", 0) when valid; returns (errorMsg, httpStatus) otherwise.
+//
+// The four rules are:
+//  1. location: AND area: → mutually exclusive
+//  2. area: AND distance > 0 → mutually exclusive
+//  3. location: AND distance == 0 → location requires distance
+//  4. Otherwise valid — validate label exists and each area is permitted.
+func validateOverrideFields(
+	deps *TrackingDeps,
+	humanID string,
+	overrideLabel string,
+	overrideAreas []string,
+	distance int,
+) (string, int) {
+	hasLocation := overrideLabel != ""
+	hasAreas := len(overrideAreas) > 0
+
+	// Rule 1: location: and area: are mutually exclusive.
+	if hasLocation && hasAreas {
+		return "override_location_label and override_areas are mutually exclusive", http.StatusBadRequest
+	}
+	// Rule 2: area: and distance > 0 are mutually exclusive.
+	if hasAreas && distance > 0 {
+		return "override_areas and distance are mutually exclusive", http.StatusBadRequest
+	}
+	// Rule 3: location: requires distance > 0.
+	if hasLocation && distance == 0 {
+		return "override_location_label requires distance > 0", http.StatusBadRequest
+	}
+
+	if hasLocation && deps.Humans != nil {
+		loc, err := deps.Humans.GetLocation(humanID, overrideLabel)
+		if err != nil {
+			return "database error", http.StatusInternalServerError
+		}
+		if loc == nil {
+			return "unknown location label: " + overrideLabel, http.StatusBadRequest
+		}
+	}
+
+	if hasAreas && deps.AreaLogic != nil {
+		// API callers are already authenticated; treat as admin so all fences are visible.
+		available := deps.AreaLogic.GetAvailableAreas(nil, true)
+		permitted := make(map[string]bool, len(available))
+		for _, a := range available {
+			permitted[strings.ToLower(a.Name)] = true
+		}
+		for _, a := range overrideAreas {
+			if !permitted[strings.ToLower(a)] {
+				return "area not permitted: " + a, http.StatusBadRequest
+			}
+		}
+	}
+
+	return "", 0
 }
 
 // DiffTracking compares two tracking structs using `diff` struct tags.

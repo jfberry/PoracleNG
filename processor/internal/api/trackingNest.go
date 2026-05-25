@@ -106,12 +106,14 @@ func HandleDeleteNest(deps *TrackingDeps) gin.HandlerFunc {
 
 // nestInsertRequest represents a single nest tracking row from the POST body.
 type nestInsertRequest struct {
-	PokemonID   flexInt  `json:"pokemon_id"`
-	Distance    flexInt  `json:"distance"`
-	Template    any      `json:"template"`
-	Clean       flexBool `json:"clean"`
-	MinSpawnAvg flexInt  `json:"min_spawn_avg"`
-	Form        flexInt  `json:"form"`
+	PokemonID             flexInt  `json:"pokemon_id"`
+	Distance              flexInt  `json:"distance"`
+	Template              any      `json:"template"`
+	Clean                 flexBool `json:"clean"`
+	MinSpawnAvg           flexInt  `json:"min_spawn_avg"`
+	Form                  flexInt  `json:"form"`
+	OverrideLocationLabel string   `json:"override_location_label"`
+	OverrideAreas         []string `json:"override_areas"`
 }
 
 // HandleCreateNest returns the POST /api/tracking/nest/{id} handler.
@@ -159,6 +161,10 @@ func HandleCreateNest(deps *TrackingDeps) gin.HandlerFunc {
 
 		insert := make([]db.NestTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			pokemonID := req.PokemonID.intValue(0)
 			distance := req.Distance.intValue(0)
 
@@ -181,15 +187,17 @@ func HandleCreateNest(deps *TrackingDeps) gin.HandlerFunc {
 			form := req.Form.intValue(0)
 
 			insert = append(insert, db.NestTrackingAPI{
-				ID:          human.ID,
-				ProfileNo:   profileNo,
-				Ping:        "",
-				Template:    template,
-				Distance:    distance,
-				Clean:       clean,
-				PokemonID:   pokemonID,
-				MinSpawnAvg: minSpawnAvg,
-				Form:        form,
+				ID:                    human.ID,
+				ProfileNo:             profileNo,
+				Ping:                  "",
+				Template:              template,
+				Distance:              distance,
+				Clean:                 clean,
+				PokemonID:             pokemonID,
+				MinSpawnAvg:           minSpawnAvg,
+				Form:                  form,
+				OverrideLocationLabel: req.OverrideLocationLabel,
+				OverrideAreas:         req.OverrideAreas,
 			})
 		}
 

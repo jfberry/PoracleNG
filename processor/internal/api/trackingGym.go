@@ -106,13 +106,15 @@ func HandleDeleteGym(deps *TrackingDeps) gin.HandlerFunc {
 
 // gymInsertRequest represents a single gym tracking row from the POST body.
 type gymInsertRequest struct {
-	Team          flexInt  `json:"team"`
-	Distance      flexInt  `json:"distance"`
-	Template      any      `json:"template"`
-	Clean         flexBool `json:"clean"`
-	SlotChanges   flexBool `json:"slot_changes"`
-	BattleChanges flexBool `json:"battle_changes"`
-	GymID         *string  `json:"gym_id"`
+	Team                  flexInt  `json:"team"`
+	Distance              flexInt  `json:"distance"`
+	Template              any      `json:"template"`
+	Clean                 flexBool `json:"clean"`
+	SlotChanges           flexBool `json:"slot_changes"`
+	BattleChanges         flexBool `json:"battle_changes"`
+	GymID                 *string  `json:"gym_id"`
+	OverrideLocationLabel string   `json:"override_location_label"`
+	OverrideAreas         []string `json:"override_areas"`
 }
 
 // HandleCreateGym returns the POST /api/tracking/gym/{id} handler.
@@ -160,6 +162,10 @@ func HandleCreateGym(deps *TrackingDeps) gin.HandlerFunc {
 
 		insert := make([]db.GymTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			if !req.Team.isSet() {
 				trackingJSONError(c, http.StatusBadRequest, "Invalid team")
 				return
@@ -196,16 +202,18 @@ func HandleCreateGym(deps *TrackingDeps) gin.HandlerFunc {
 			}
 
 			insert = append(insert, db.GymTrackingAPI{
-				ID:            human.ID,
-				ProfileNo:     profileNo,
-				Ping:          "",
-				Template:      template,
-				Distance:      distance,
-				Team:          team,
-				Clean:         clean,
-				SlotChanges:   slotChanges,
-				BattleChanges: battleChanges,
-				GymID:         gymID,
+				ID:                    human.ID,
+				ProfileNo:             profileNo,
+				Ping:                  "",
+				Template:              template,
+				Distance:              distance,
+				Team:                  team,
+				Clean:                 clean,
+				SlotChanges:           slotChanges,
+				BattleChanges:         battleChanges,
+				GymID:                 gymID,
+				OverrideLocationLabel: req.OverrideLocationLabel,
+				OverrideAreas:         req.OverrideAreas,
 			})
 		}
 

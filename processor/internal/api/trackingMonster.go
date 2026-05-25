@@ -106,38 +106,40 @@ func HandleDeleteMonster(deps *TrackingDeps) gin.HandlerFunc {
 // monsterInsertRequest represents a single monster tracking row from the POST body.
 // The JS handler has a cleanRow function that applies defaults and validates.
 type monsterInsertRequest struct {
-	UID              flexInt  `json:"uid"`
-	PokemonID        flexInt  `json:"pokemon_id"`
-	ProfileNo        flexInt  `json:"profile_no"`
-	Distance         flexInt  `json:"distance"`
-	Template         any      `json:"template"`
-	Clean            flexBool `json:"clean"`
-	Form             flexInt  `json:"form"`
-	MinIV            flexInt  `json:"min_iv"`
-	MaxIV            flexInt  `json:"max_iv"`
-	MinCP            flexInt  `json:"min_cp"`
-	MaxCP            flexInt  `json:"max_cp"`
-	MinLevel         flexInt  `json:"min_level"`
-	MaxLevel         flexInt  `json:"max_level"`
-	ATK              flexInt  `json:"atk"`
-	DEF              flexInt  `json:"def"`
-	STA              flexInt  `json:"sta"`
-	MaxATK           flexInt  `json:"max_atk"`
-	MaxDEF           flexInt  `json:"max_def"`
-	MaxSTA           flexInt  `json:"max_sta"`
-	Gender           flexInt  `json:"gender"`
-	MinWeight        flexInt  `json:"min_weight"`
-	MaxWeight        flexInt  `json:"max_weight"`
-	MinTime          flexInt  `json:"min_time"`
-	Rarity           flexInt  `json:"rarity"`
-	MaxRarity        flexInt  `json:"max_rarity"`
-	Size             flexInt  `json:"size"`
-	MaxSize          flexInt  `json:"max_size"`
-	PVPRankingLeague flexInt  `json:"pvp_ranking_league"`
-	PVPRankingBest   flexInt  `json:"pvp_ranking_best"`
-	PVPRankingWorst  flexInt  `json:"pvp_ranking_worst"`
-	PVPRankingMinCP  flexInt  `json:"pvp_ranking_min_cp"`
-	PVPRankingCap    flexInt  `json:"pvp_ranking_cap"`
+	UID                   flexInt  `json:"uid"`
+	PokemonID             flexInt  `json:"pokemon_id"`
+	ProfileNo             flexInt  `json:"profile_no"`
+	Distance              flexInt  `json:"distance"`
+	Template              any      `json:"template"`
+	Clean                 flexBool `json:"clean"`
+	Form                  flexInt  `json:"form"`
+	MinIV                 flexInt  `json:"min_iv"`
+	MaxIV                 flexInt  `json:"max_iv"`
+	MinCP                 flexInt  `json:"min_cp"`
+	MaxCP                 flexInt  `json:"max_cp"`
+	MinLevel              flexInt  `json:"min_level"`
+	MaxLevel              flexInt  `json:"max_level"`
+	ATK                   flexInt  `json:"atk"`
+	DEF                   flexInt  `json:"def"`
+	STA                   flexInt  `json:"sta"`
+	MaxATK                flexInt  `json:"max_atk"`
+	MaxDEF                flexInt  `json:"max_def"`
+	MaxSTA                flexInt  `json:"max_sta"`
+	Gender                flexInt  `json:"gender"`
+	MinWeight             flexInt  `json:"min_weight"`
+	MaxWeight             flexInt  `json:"max_weight"`
+	MinTime               flexInt  `json:"min_time"`
+	Rarity                flexInt  `json:"rarity"`
+	MaxRarity             flexInt  `json:"max_rarity"`
+	Size                  flexInt  `json:"size"`
+	MaxSize               flexInt  `json:"max_size"`
+	PVPRankingLeague      flexInt  `json:"pvp_ranking_league"`
+	PVPRankingBest        flexInt  `json:"pvp_ranking_best"`
+	PVPRankingWorst       flexInt  `json:"pvp_ranking_worst"`
+	PVPRankingMinCP       flexInt  `json:"pvp_ranking_min_cp"`
+	PVPRankingCap         flexInt  `json:"pvp_ranking_cap"`
+	OverrideLocationLabel string   `json:"override_location_label"`
+	OverrideAreas         []string `json:"override_areas"`
 }
 
 // HandleCreateMonster returns the POST /api/tracking/pokemon/{id} handler.
@@ -266,11 +268,17 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 		var updates []db.MonsterTrackingAPI
 
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			row, err := cleanRow(req)
 			if err != nil {
 				trackingJSONError(c, http.StatusBadRequest, err.Error())
 				return
 			}
+			row.OverrideLocationLabel = req.OverrideLocationLabel
+			row.OverrideAreas = req.OverrideAreas
 			if req.UID.isSet() {
 				updates = append(updates, row)
 			} else {
