@@ -39,7 +39,7 @@ Today: profile overrides human via mutation at profile-switch time (the profile'
 |---|---|
 | `!location` | Show default location + usage *(existing)* |
 | `!location <coords-or-place>` | Set default location *(existing)* |
-| `!location add <coords-or-place> label:Home` | Save named location |
+| `!location add <name> <coords-or-place>` | Save named location. Name is the first positional arg, location string is everything after. Mirrors `!area add <name>` style. Quoted names supported: `!location add "Holiday Home" santa monica` |
 | `!location list` | List default + all named locations |
 | `!location show Home` | Show one named location's coords, address, map link |
 | `!location remove Home` | Remove named location by positional arg. Refuses if any tracking rule references it; reply lists which rules + their types |
@@ -157,16 +157,22 @@ When a user loses access to an area (community-role change, manual `!area remove
 
 ## REST API
 
-New endpoints nested under the existing `/api/humans/{id}` resource (matches the convention used by `/setLocation`, `/setAreas`, etc.):
+New endpoints nested under the existing `/api/humans/{id}` resource. Follows project verb-in-path style (matches `/api/profiles/{id}/add`, `.../update`, `.../delete`, `DELETE .../byUid/{uid}`):
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET`    | `/api/humans/{id}/locations`          | List all named locations + the default. Response: `{default: {latitude, longitude}, named: [{label, latitude, longitude, created_at}, ...]}` |
-| `POST`   | `/api/humans/{id}/locations`          | Create a named location. Body: `{label, latitude, longitude}` OR `{label, place}` (server geocodes). 409 if label already exists for this user |
-| `GET`    | `/api/humans/{id}/locations/{label}`  | Show one named location (label match is case-insensitive). 404 if missing |
-| `DELETE` | `/api/humans/{id}/locations/{label}`  | Remove named location. 409 with `{referencing_rules: [{type, uid, ...}]}` if any tracking rule references it; otherwise 204 |
+| `GET`  | `/api/humans/{id}/locations`                  | List all named locations + the default. Response envelope: `{locations: {default: {latitude, longitude}, named: [{label, latitude, longitude, created_at}, ...]}}` |
+| `POST` | `/api/humans/{id}/locations/add`              | Create one or more named locations. Body: single `{label, latitude, longitude}` OR `{label, place}` (server geocodes), or an array. 409 (in the per-row response) if a label already exists for this user. Mirrors the create-or-batch-create shape used by `POST /api/tracking/{type}/{id}` |
+| `GET`  | `/api/humans/{id}/locations/{label}`          | Show one named location. Label lookup is case-insensitive. 404 if missing |
+| `POST` | `/api/humans/{id}/locations/{label}/delete`   | Remove named location. 409 with `{referencing_rules: [{type, uid, ...}]}` body if any tracking rule references it; otherwise standard success envelope |
 
 The existing `POST /api/humans/{id}/setLocation/{lat}/{lon}` continues to set the **default** location, unchanged.
+
+**Conventions matched from the rest of the API surface:**
+- Verb-in-path (`/add`, `/delete`) rather than pure REST DELETE on the resource — matches profiles/tracking
+- Response envelope by resource name (`{locations: ...}`) — matches `{pokemon: [...]}`, `{raid: [...]}` from tracking GETs
+- Success / error responses go through the same `trackingJSONOK` / `trackingJSONError` helpers used elsewhere
+- Lookup-by-natural-key directly in the path (`{label}`) rather than a `byLabel/{label}` segment — there's no ambiguity to resolve (unlike `byUid/{uid}` which disambiguates UID from content-field POSTs)
 
 **Tracking-rule CRUD endpoints** (`POST /api/tracking/{type}/{id}` for all 10 types) accept the two new fields on each tracking-rule object in the request body:
 
