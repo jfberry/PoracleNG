@@ -431,11 +431,11 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *store.Human, nam
 			r.log.Infof("Update user %s %s with communities %v", id, name, communityList)
 		}
 
-		// When community membership shrinks, per-rule override_areas may reference
+		// When community membership changes, per-rule override_areas may reference
 		// areas no longer permitted. Prune them so rules fall back to the human's
 		// own area list rather than matching nothing.
 		if communityChanged {
-			permitted := buildPermittedSet(r.cfg.Area.Communities, communityList)
+			permitted := bot.BuildPermittedSet(r.cfg.Area.Communities, communityList)
 			if err := r.humanStore.PruneOverrideAreas(id, permitted); err != nil {
 				r.log.Errorf("prune override areas for %s: %v", id, err)
 				// best effort — don't abort reconciliation
@@ -774,22 +774,6 @@ func parseBlockedAlertsJSON(blocked *string) []string {
 // are compared as sets (order-insensitive).
 func sameBlockedAlerts(current []string, desired *string) bool {
 	return bot.HaveSameContents(current, parseBlockedAlertsJSON(desired))
-}
-
-// buildPermittedSet returns a lowercase set of all areas permitted by the given
-// community list. Used to construct the permitted map for PruneOverrideAreas.
-func buildPermittedSet(communities []config.CommunityConfig, memberOf []string) map[string]bool {
-	permitted := make(map[string]bool)
-	for _, comm := range communities {
-		for _, m := range memberOf {
-			if strings.EqualFold(comm.Name, m) {
-				for _, area := range comm.AllowedAreas {
-					permitted[strings.ToLower(area)] = true
-				}
-			}
-		}
-	}
-	return permitted
 }
 
 // stripEmojis removes common emoji characters from a display name.

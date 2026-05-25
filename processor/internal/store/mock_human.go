@@ -424,7 +424,7 @@ func (m *MockHumanStore) AddLocation(loc UserLocation) (int64, error) {
 	low := strings.ToLower(loc.Label)
 	for i := range m.Locations[loc.ID] {
 		if strings.ToLower(m.Locations[loc.ID][i].Label) == low {
-			return 0, fmt.Errorf("duplicate label %q for user %q", loc.Label, loc.ID)
+			return 0, fmt.Errorf("%w: %q for user %q", ErrDuplicateLocation, loc.Label, loc.ID)
 		}
 	}
 	if m.Locations == nil {

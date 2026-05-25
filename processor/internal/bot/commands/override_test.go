@@ -27,7 +27,7 @@ func newTestLocationCtx(t *testing.T) (*bot.CommandContext, *store.MockHumanStor
 
 func TestParseOverride_LocationRequiresDistance(t *testing.T) {
 	ctx, _ := newTestLocationCtx(t)
-	_, reply := parseOverride(ctx, map[string]string{"location": "Home"}, nil, 0)
+	_, reply := parseOverride(ctx, "Home", nil, 0)
 	if reply == nil || !strings.Contains(reply.Text, "needs a `d:`") {
 		t.Fatalf("expected requires-distance error, got %+v", reply)
 	}
@@ -35,7 +35,7 @@ func TestParseOverride_LocationRequiresDistance(t *testing.T) {
 
 func TestParseOverride_AreaAndDistanceRejected(t *testing.T) {
 	ctx, _ := newTestLocationCtx(t)
-	_, reply := parseOverride(ctx, nil, []string{"london"}, 500)
+	_, reply := parseOverride(ctx, "", []string{"london"}, 500)
 	if reply == nil || !strings.Contains(reply.Text, "mutually exclusive") {
 		t.Fatalf("expected a+d rejection, got %+v", reply)
 	}
@@ -43,7 +43,7 @@ func TestParseOverride_AreaAndDistanceRejected(t *testing.T) {
 
 func TestParseOverride_LocationAndAreaRejected(t *testing.T) {
 	ctx, _ := newTestLocationCtx(t)
-	_, reply := parseOverride(ctx, map[string]string{"location": "Home"}, []string{"london"}, 500)
+	_, reply := parseOverride(ctx, "Home", []string{"london"}, 500)
 	if reply == nil || !strings.Contains(reply.Text, "mutually exclusive") {
 		t.Fatalf("expected location+area rejection, got %+v", reply)
 	}
@@ -51,7 +51,7 @@ func TestParseOverride_LocationAndAreaRejected(t *testing.T) {
 
 func TestParseOverride_UnknownLocation(t *testing.T) {
 	ctx, _ := newTestLocationCtx(t)
-	_, reply := parseOverride(ctx, map[string]string{"location": "Nope"}, nil, 500)
+	_, reply := parseOverride(ctx, "Nope", nil, 500)
 	if reply == nil || !strings.Contains(reply.Text, "No saved location") {
 		t.Fatalf("expected unknown-location error, got %+v", reply)
 	}
@@ -60,7 +60,7 @@ func TestParseOverride_UnknownLocation(t *testing.T) {
 func TestParseOverride_AreaNotPermitted(t *testing.T) {
 	ctx, _ := newTestLocationCtx(t)
 	// "berlin" is not in the fences seeded by newTestLocationCtx (only london, paris)
-	_, reply := parseOverride(ctx, nil, []string{"berlin"}, 0)
+	_, reply := parseOverride(ctx, "", []string{"berlin"}, 0)
 	if reply == nil || !strings.Contains(reply.Text, "not in your allowed") {
 		t.Fatalf("expected permission error, got %+v", reply)
 	}
@@ -73,7 +73,7 @@ func TestParseOverride_ValidLocation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	got, reply := parseOverride(ctx, map[string]string{"location": "home"}, nil, 500)
+	got, reply := parseOverride(ctx, "home", nil, 500)
 	if reply != nil {
 		t.Fatalf("valid case rejected: %+v", reply)
 	}
@@ -84,7 +84,7 @@ func TestParseOverride_ValidLocation(t *testing.T) {
 
 func TestParseOverride_ValidAreas(t *testing.T) {
 	ctx, _ := newTestLocationCtx(t)
-	got, reply := parseOverride(ctx, nil, []string{"london"}, 0)
+	got, reply := parseOverride(ctx, "", []string{"london"}, 0)
 	if reply != nil {
 		t.Fatalf("valid case rejected: %+v", reply)
 	}

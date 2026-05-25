@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -124,7 +125,7 @@ func (c *LocationCommand) addLocation(ctx *bot.CommandContext, args []string) []
 	if _, err := ctx.Humans.AddLocation(store.UserLocation{
 		ID: ctx.TargetID, Label: name, Latitude: lat, Longitude: lon,
 	}); err != nil {
-		if strings.Contains(err.Error(), "duplicate") {
+		if errors.Is(err, store.ErrDuplicateLocation) {
 			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.duplicate", name, bot.CommandPrefix(ctx))}}
 		}
 		log.Errorf("location add: %s", err)

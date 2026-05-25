@@ -257,16 +257,24 @@ func (a *AreaLogic) ValidateAndPrune(currentAreas []string, communities []string
 
 // buildAllowedSet builds a set of lowercase area names allowed by the given communities.
 func (a *AreaLogic) buildAllowedSet(communities []string) map[string]bool {
-	allowedSet := make(map[string]bool)
+	return BuildPermittedSet(a.cfg.Area.Communities, communities)
+}
+
+// BuildPermittedSet returns a lowercase set of all areas permitted by the given
+// community list. It is a package-level function so callers without an AreaLogic
+// instance (e.g. discordbot reconciliation) can use the same logic without
+// duplicating the community-walk.
+func BuildPermittedSet(communities []config.CommunityConfig, memberOf []string) map[string]bool {
+	permitted := make(map[string]bool)
 	for _, comm := range communities {
-		for _, cc := range a.cfg.Area.Communities {
-			if strings.EqualFold(cc.Name, comm) {
-				for _, area := range cc.AllowedAreas {
-					allowedSet[strings.ToLower(area)] = true
+		for _, m := range memberOf {
+			if strings.EqualFold(comm.Name, m) {
+				for _, area := range comm.AllowedAreas {
+					permitted[strings.ToLower(area)] = true
 				}
 			}
 		}
 	}
-	return allowedSet
+	return permitted
 }
 

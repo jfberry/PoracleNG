@@ -125,7 +125,7 @@ func (c *TrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	// Validate per-rule location:/area: overrides.
-	override, overrideReply := parseOverride(ctx, parsed.Strings, parsed.StringLists["area"], filters.distance)
+	override, overrideReply := parseOverride(ctx, parsed.Strings["location"], parsed.StringLists["area"], filters.distance)
 	if overrideReply != nil {
 		return []bot.Reply{*overrideReply}
 	}

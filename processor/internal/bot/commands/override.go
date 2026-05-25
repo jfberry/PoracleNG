@@ -27,18 +27,13 @@ type Override struct {
 //  3. location: AND distance == 0 → REJECT (location requires d:)
 //  4. Otherwise valid — validate label exists and each area is permitted.
 //
-// strs should be parsed.Strings (e.g. {"location": "Home"}).
+// locationLabel should be parsed.Strings["location"] (empty = not set).
 // areas should be parsed.StringLists["area"] (may be nil).
 // distance is the already-parsed d: value (0 = not set).
-func parseOverride(ctx *bot.CommandContext, strs map[string]string, areas []string, distance int) (Override, *bot.Reply) {
+func parseOverride(ctx *bot.CommandContext, locationLabel string, areas []string, distance int) (Override, *bot.Reply) {
 	tr := ctx.Tr()
 
-	var locLabel string
-	if strs != nil {
-		locLabel = strs["location"]
-	}
-
-	hasLocation := locLabel != ""
+	hasLocation := locationLabel != ""
 	hasAreas := len(areas) > 0
 
 	// Rule 1: location: AND area: are mutually exclusive.
@@ -68,11 +63,11 @@ func parseOverride(ctx *bot.CommandContext, strs map[string]string, areas []stri
 	out := Override{}
 
 	if hasLocation {
-		loc, _ := ctx.Humans.GetLocation(ctx.TargetID, locLabel)
+		loc, _ := ctx.Humans.GetLocation(ctx.TargetID, locationLabel)
 		if loc == nil {
 			return Override{}, &bot.Reply{
 				React: "🙅",
-				Text:  tr.Tf("msg.override.unknown_location", locLabel, bot.CommandPrefix(ctx)),
+				Text:  tr.Tf("msg.override.unknown_location", locationLabel, bot.CommandPrefix(ctx)),
 			}
 		}
 		out.LocationLabel = loc.Label // normalize to stored case

@@ -2,7 +2,16 @@
 // tracking data, decoupling command logic from SQL.
 package store
 
-import "github.com/guregu/null/v6"
+import (
+	"errors"
+
+	"github.com/guregu/null/v6"
+)
+
+// ErrDuplicateLocation is returned by AddLocation when a location with the
+// same label already exists for the given human. Callers should use
+// errors.Is(err, store.ErrDuplicateLocation) to detect this condition.
+var ErrDuplicateLocation = errors.New("duplicate location label")
 
 // Human represents a complete human record with all columns.
 // JSON fields (Area, CommunityMembership, AreaRestriction, BlockedAlerts)
@@ -191,9 +200,9 @@ type HumanStore interface {
 	// or nil if not found.
 	GetLocation(id, label string) (*UserLocation, error)
 
-	// AddLocation inserts a new saved location. Returns an error
-	// containing "duplicate" in its text if the label already exists
-	// for this human (callers test with errors.Is or strings.Contains).
+	// AddLocation inserts a new saved location. Returns ErrDuplicateLocation
+	// (wrapped, detectable via errors.Is) when the label already exists for
+	// this human.
 	AddLocation(loc UserLocation) (int64, error)
 
 	// DeleteLocation removes the named saved location by case-insensitive

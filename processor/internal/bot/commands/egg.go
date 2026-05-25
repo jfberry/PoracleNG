@@ -111,7 +111,7 @@ func (c *EggCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{*block}
 	}
 
-	override, overrideReply := parseOverride(ctx, parsed.Strings, parsed.StringLists["area"], common.Distance)
+	override, overrideReply := parseOverride(ctx, parsed.Strings["location"], parsed.StringLists["area"], common.Distance)
 	if overrideReply != nil {
 		return []bot.Reply{*overrideReply}
 	}

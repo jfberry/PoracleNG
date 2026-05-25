@@ -2,9 +2,9 @@ package store
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -40,7 +40,7 @@ func (s *SQLHumanStore) AddLocation(loc UserLocation) (int64, error) {
 	if err != nil {
 		var me *mysql.MySQLError
 		if errors.As(err, &me) && me.Number == mysqlErrDuplicate {
-			return 0, fmt.Errorf("duplicate label %q for user %q", loc.Label, loc.ID)
+			return 0, fmt.Errorf("%w: %q for user %q", ErrDuplicateLocation, loc.Label, loc.ID)
 		}
 		return 0, err
 	}
@@ -88,15 +88,12 @@ func (s *SQLHumanStore) CountLocationReferences(id, label string) ([]Referencing
 }
 
 func sortReferences(refs []ReferencingRule) {
-	// inline sort to avoid pulling in sort just for this helper; few entries.
-	for i := 1; i < len(refs); i++ {
-		j := i
-		for j > 0 && (refs[j-1].Type > refs[j].Type ||
-			(refs[j-1].Type == refs[j].Type && refs[j-1].UID > refs[j].UID)) {
-			refs[j-1], refs[j] = refs[j], refs[j-1]
-			j--
+	sort.Slice(refs, func(i, j int) bool {
+		if refs[i].Type != refs[j].Type {
+			return refs[i].Type < refs[j].Type
 		}
-	}
+		return refs[i].UID < refs[j].UID
+	})
 }
 
 // trackingTablesWithOverrideAreas lists all tables that carry an override_areas column.
@@ -127,8 +124,8 @@ func (s *SQLHumanStore) PruneOverrideAreas(humanID string, permitted map[string]
 		}
 
 		for _, r := range rows {
-			var areas []string
-			if err := json.Unmarshal([]byte(r.OverrideAreas), &areas); err != nil {
+			areas := unmarshalStringSlice(r.OverrideAreas)
+			if areas == nil {
 				// Malformed JSON — skip rather than corrupt the row.
 				continue
 			}
@@ -138,13 +135,7 @@ func (s *SQLHumanStore) PruneOverrideAreas(humanID string, permitted map[string]
 				continue // nothing changed
 			}
 
-			var newVal any
-			if len(kept) == 0 {
-				newVal = nil
-			} else {
-				b, _ := json.Marshal(kept)
-				newVal = string(b)
-			}
+			newVal := nullStringSlice(kept)
 
 			updQ := fmt.Sprintf("UPDATE `%s` SET override_areas = ? WHERE uid = ?", table)
 			if _, err := s.db.Exec(updQ, newVal, r.UID); err != nil {
