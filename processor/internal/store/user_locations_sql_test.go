@@ -62,7 +62,7 @@ func openTestDB(t *testing.T) *sqlx.DB {
 		UNIQUE KEY uniq_id_label (id, label)
 	) ENGINE=InnoDB`)
 
-	// Minimal tracking tables needed by CountLocationReferences (all 10 types).
+	// Minimal tracking tables needed by CountLocationReferences and PruneOverrideAreas (all 10 types).
 	for _, tbl := range []string{"monsters", "raid", "egg", "quest", "invasion", "lures", "nests", "gym", "forts", "maxbattle"} {
 		exec(`CREATE TABLE IF NOT EXISTS ` + tbl + ` (
 			uid                     INT PRIMARY KEY AUTO_INCREMENT,
@@ -70,7 +70,8 @@ func openTestDB(t *testing.T) *sqlx.DB {
 			profile_no              INT NOT NULL DEFAULT 0,
 			pokemon_id              INT NOT NULL DEFAULT 0,
 			level                   INT NOT NULL DEFAULT 0,
-			override_location_label VARCHAR(64) NULL
+			override_location_label VARCHAR(64) NULL,
+			override_areas          TEXT NULL
 		) ENGINE=InnoDB`)
 	}
 
@@ -146,5 +147,87 @@ func TestCountLocationReferences(t *testing.T) {
 	}
 	if len(refs) != 3 {
 		t.Fatalf("expected 3 refs (2 pokemon + 1 raid), got %d: %+v", len(refs), refs)
+	}
+}
+
+// --- filterPermittedAreas (pure in-memory helper) ---
+
+func TestFilterPermittedAreas_StripsDisallowed(t *testing.T) {
+	permitted := map[string]bool{"munich": true, "berlin": true}
+	result := filterPermittedAreas([]string{"munich", "berlin", "hamburg"}, permitted)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 kept, got %d: %v", len(result), result)
+	}
+	for _, a := range result {
+		if !permitted[a] {
+			t.Errorf("unexpected area %q in result", a)
+		}
+	}
+}
+
+func TestFilterPermittedAreas_AllDisallowed(t *testing.T) {
+	permitted := map[string]bool{"munich": true}
+	result := filterPermittedAreas([]string{"berlin", "hamburg"}, permitted)
+	if len(result) != 0 {
+		t.Fatalf("expected empty result, got %v", result)
+	}
+}
+
+func TestFilterPermittedAreas_NoneDisallowed(t *testing.T) {
+	permitted := map[string]bool{"munich": true, "berlin": true}
+	result := filterPermittedAreas([]string{"munich", "berlin"}, permitted)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 kept, got %d", len(result))
+	}
+}
+
+func TestFilterPermittedAreas_EmptyInput(t *testing.T) {
+	permitted := map[string]bool{"munich": true}
+	result := filterPermittedAreas(nil, permitted)
+	if len(result) != 0 {
+		t.Fatalf("expected empty result for nil input, got %v", result)
+	}
+}
+
+func TestFilterPermittedAreas_CaseInsensitive(t *testing.T) {
+	// Areas stored in mixed case should match lowercase permitted keys.
+	permitted := map[string]bool{"munich": true}
+	result := filterPermittedAreas([]string{"Munich", "BERLIN"}, permitted)
+	if len(result) != 1 || result[0] != "Munich" {
+		t.Fatalf("expected [Munich], got %v", result)
+	}
+}
+
+// --- PruneOverrideAreas (integration test, requires PORACLENG_TEST_DSN) ---
+
+func TestPruneOverrideAreas_StripsDisallowed(t *testing.T) {
+	dbx := openTestDB(t)
+	defer dbx.Close()
+	s := &SQLHumanStore{db: dbx}
+
+	mustExec(t, dbx, `INSERT INTO monsters (id, profile_no, pokemon_id, override_areas) VALUES
+		('u1', 0, 25, '["berlin","munich"]'),
+		('u1', 0, 26, '["berlin"]')`)
+
+	permitted := map[string]bool{"munich": true}
+	if err := s.PruneOverrideAreas("u1", permitted); err != nil {
+		t.Fatalf("PruneOverrideAreas: %v", err)
+	}
+
+	var rows []struct {
+		PokemonID     int    `db:"pokemon_id"`
+		OverrideAreas string `db:"override_areas"`
+	}
+	if err := dbx.Select(&rows, `SELECT pokemon_id, COALESCE(override_areas, '') AS override_areas FROM monsters WHERE id='u1' ORDER BY pokemon_id`); err != nil {
+		t.Fatalf("select after prune: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	if rows[0].OverrideAreas != `["munich"]` {
+		t.Fatalf("pokemon 25: expected pruned to munich only, got %q", rows[0].OverrideAreas)
+	}
+	if rows[1].OverrideAreas != "" {
+		t.Fatalf("pokemon 26: expected NULL after empty pruning, got %q", rows[1].OverrideAreas)
 	}
 }

@@ -16,8 +16,9 @@ type MockHumanStore struct {
 	// Calls records method names called (for assertion).
 	Calls []string
 
-	Locations    map[string][]UserLocation
-	LocationRefs map[string][]ReferencingRule // keyed by id|lowercased-label
+	Locations       map[string][]UserLocation
+	LocationRefs    map[string][]ReferencingRule // keyed by id|lowercased-label
+	PrunedAreaCalls map[string]map[string]bool   // humanID → permitted set, for test assertions
 }
 
 // NewMockHumanStore creates a new empty MockHumanStore.
@@ -454,4 +455,15 @@ func (m *MockHumanStore) CountLocationReferences(id, label string) ([]Referencin
 	defer m.mu.RUnlock()
 	key := id + "|" + strings.ToLower(label)
 	return append([]ReferencingRule(nil), m.LocationRefs[key]...), nil
+}
+
+func (m *MockHumanStore) PruneOverrideAreas(humanID string, permitted map[string]bool) error {
+	m.record("PruneOverrideAreas")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.PrunedAreaCalls == nil {
+		m.PrunedAreaCalls = map[string]map[string]bool{}
+	}
+	m.PrunedAreaCalls[humanID] = permitted
+	return nil
 }

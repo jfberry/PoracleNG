@@ -207,4 +207,10 @@ type HumanStore interface {
 	// label for this human. Used by !location remove to refuse delete
 	// when references exist.
 	CountLocationReferences(id, label string) ([]ReferencingRule, error)
+
+	// PruneOverrideAreas walks every tracking row for the given human and
+	// drops areas no longer in `permitted` from override_areas. If the
+	// override list becomes empty, the column is NULLed so the rule falls
+	// back to the human's areas. No-op when the user has no override rows.
+	PruneOverrideAreas(humanID string, permitted map[string]bool) error
 }
