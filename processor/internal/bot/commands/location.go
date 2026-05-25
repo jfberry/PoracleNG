@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -17,7 +18,6 @@ func (c *LocationCommand) Name() string      { return "cmd.location" }
 func (c *LocationCommand) Aliases() []string { return nil }
 
 var locationParams = []bot.ParamDef{
-	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamLatLon},
 }
 
@@ -61,18 +61,11 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		return c.listLocations(ctx)
 	case matchSub("arg.show"):
 		return c.showLocation(ctx, args[1:])
+	case matchSub("arg.remove"):
+		return c.removeLocation(ctx, args[1:])
 	}
 
 	parsed := ctx.ArgMatcher.Match(args, locationParams, ctx.Language)
-
-	// Remove location
-	if parsed.HasKeyword("arg.remove") {
-		if err := ctx.Humans.SetLocation(ctx.TargetID, ctx.ProfileNo, 0, 0); err != nil {
-			return []bot.Reply{{React: "🙅"}}
-		}
-		ctx.TriggerReload()
-		return []bot.Reply{{React: "✅", Text: tr.T("msg.location.default_removed")}}
-	}
 
 	var lat, lon float64
 
@@ -174,6 +167,53 @@ func (c *LocationCommand) showLocation(ctx *bot.CommandContext, args []string) [
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.show_not_found", args[0])}}
 	}
 	return []bot.Reply{{Text: tr.Tf("msg.location.show", loc.Label, loc.Latitude, loc.Longitude)}}
+}
+
+// removeLocation handles `!location remove <name>` and `!location remove default`.
+func (c *LocationCommand) removeLocation(ctx *bot.CommandContext, args []string) []bot.Reply {
+	tr := ctx.Tr()
+	if len(args) == 0 {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.remove_usage", bot.CommandPrefix(ctx))}}
+	}
+
+	target := args[0]
+	enTr := ctx.Translations.For("en")
+	if isDefaultKeyword(target, tr, enTr) {
+		if err := ctx.Humans.SetLocation(ctx.TargetID, ctx.ProfileNo, 0, 0); err != nil {
+			return []bot.Reply{{React: "🙅"}}
+		}
+		ctx.TriggerReload()
+		return []bot.Reply{{React: "✅", Text: tr.T("msg.location.default_removed")}}
+	}
+
+	refs, err := ctx.Humans.CountLocationReferences(ctx.TargetID, target)
+	if err != nil {
+		log.Errorf("location remove count refs: %s", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+	if len(refs) > 0 {
+		var parts []string
+		for _, r := range refs {
+			parts = append(parts, fmt.Sprintf("%s id:%d", r.Type, r.UID))
+		}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.remove_referenced", target, len(refs), strings.Join(parts, ", "))}}
+	}
+
+	if err := ctx.Humans.DeleteLocation(ctx.TargetID, target); err != nil {
+		log.Errorf("location remove delete: %s", err)
+		return []bot.Reply{{React: "🙅"}}
+	}
+	ctx.TriggerReload()
+	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.location.removed", target)}}
+}
+
+// isDefaultKeyword returns true if s matches the i18n translation for "default"
+// (in the user's language), the English translation, or the literal string "default".
+func isDefaultKeyword(s string, tr, enTr *i18n.Translator) bool {
+	low := strings.ToLower(s)
+	return low == strings.ToLower(tr.T("arg.default")) ||
+		low == strings.ToLower(enTr.T("arg.default")) ||
+		low == "default"
 }
 
 // resolveLatLon parses a "lat,lon" string or falls back to forward geocoding.

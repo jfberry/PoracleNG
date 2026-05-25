@@ -269,3 +269,62 @@ func TestLocation_ShowNotFound(t *testing.T) {
 		t.Fatalf("expected not-found message, got %s", replies[0].Text)
 	}
 }
+
+// --- remove subcommand ---
+
+func TestLocation_RemoveRefusesWhenReferenced(t *testing.T) {
+	ctx, mock := testCtx(t)
+	if _, err := mock.AddLocation(store.UserLocation{ID: "user1", Label: "Home", Latitude: 51.5, Longitude: -0.1}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	mock.LocationRefs = map[string][]store.ReferencingRule{
+		"user1|home": {
+			{Type: "pokemon", UID: 42},
+			{Type: "raid", UID: 17},
+		},
+	}
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"remove", "Home"})
+	if !strings.Contains(replies[0].Text, "Cannot remove") || !strings.Contains(replies[0].Text, "2") {
+		t.Fatalf("expected refuse-with-count, got %s", replies[0].Text)
+	}
+	if loc, _ := mock.GetLocation("user1", "Home"); loc == nil {
+		t.Fatalf("location should NOT have been deleted")
+	}
+}
+
+func TestLocation_RemoveNamedSucceeds(t *testing.T) {
+	ctx, mock := testCtx(t)
+	if _, err := mock.AddLocation(store.UserLocation{ID: "user1", Label: "Home", Latitude: 51.5, Longitude: -0.1}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"remove", "Home"})
+	if !strings.Contains(replies[0].Text, "Removed") {
+		t.Fatalf("expected success, got %s", replies[0].Text)
+	}
+	if loc, _ := mock.GetLocation("user1", "Home"); loc != nil {
+		t.Fatalf("location should be deleted")
+	}
+}
+
+func TestLocation_RemoveDefault(t *testing.T) {
+	ctx, mock := testCtx(t)
+	if err := mock.SetLocation("user1", 1, 51.5, -0.1); err != nil {
+		t.Fatalf("seed default location: %v", err)
+	}
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"remove", "default"})
+	if !strings.Contains(replies[0].Text, "Cleared") {
+		t.Fatalf("expected default-cleared, got %s", replies[0].Text)
+	}
+}
+
+func TestLocation_RemoveBareErrors(t *testing.T) {
+	ctx, _ := testCtx(t)
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"remove"})
+	if !strings.Contains(replies[0].Text, "Usage:") {
+		t.Fatalf("bare remove should show usage, got %s", replies[0].Text)
+	}
+}
