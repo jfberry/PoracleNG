@@ -142,7 +142,7 @@ func (s *SQLHumanStore) Delete(id string) error {
 		return fmt.Errorf("delete profiles for human %s: %w", id, err)
 	}
 	// summary_schedules is per-(human, alert_type), not per-profile,
-	// so it's outside trackingTables. We still need to clear it on
+	// so it's outside humanOwnedTables. We still need to clear it on
 	// human delete or the row is orphaned (no FK CASCADE).
 	if _, err := s.db.Exec("DELETE FROM `summary_schedules` WHERE id = ?", id); err != nil {
 		return fmt.Errorf("delete summary_schedules for human %s: %w", id, err)
