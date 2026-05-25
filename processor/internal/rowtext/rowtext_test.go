@@ -522,6 +522,36 @@ func TestRaidRowText_WithGymID(t *testing.T) {
 	}
 }
 
+func TestRowText_MonsterShowsOverrides(t *testing.T) {
+	g := testGenerator(t)
+	tr := g.Translations.For("en")
+
+	// Override location label only.
+	rule := &db.MonsterTracking{
+		PokemonID:             25,
+		MinIV:                 -1, MaxIV: 100,
+		MinCP: 0, MaxCP: 9000,
+		MinLevel: 0, MaxLevel: 55,
+		MaxATK: 15, MaxDEF: 15, MaxSTA: 15,
+		MaxSize: 5, MaxRarity: 6,
+		Distance:              500,
+		OverrideLocationLabel: "Home",
+	}
+	got := g.MonsterRowText(tr, rule)
+	if !strings.Contains(got, "@ Home") {
+		t.Fatalf("expected '@ Home' in rowtext, got: %s", got)
+	}
+
+	// Override areas only (no distance, no label).
+	rule.OverrideLocationLabel = ""
+	rule.Distance = 0
+	rule.OverrideAreas = []string{"berlin", "munich"}
+	got = g.MonsterRowText(tr, rule)
+	if !strings.Contains(got, "in berlin, munich") {
+		t.Fatalf("expected 'in berlin, munich' in rowtext, got: %s", got)
+	}
+}
+
 func TestUcFirst(t *testing.T) {
 	tests := []struct {
 		input, want string

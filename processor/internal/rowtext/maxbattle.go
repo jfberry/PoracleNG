@@ -42,6 +42,7 @@ func (g *Generator) MaxbattleRowText(tr *i18n.Translator, maxbattle *db.Maxbattl
 			s += " " + tr.Tf("tracking.at_station_fmt", stationNameText)
 		}
 
+		s = appendOverride(tr, s, maxbattle.OverrideLocationLabel, maxbattle.OverrideAreas)
 		return s
 	}
 
@@ -64,5 +65,6 @@ func (g *Generator) MaxbattleRowText(tr *i18n.Translator, maxbattle *db.Maxbattl
 		s += " " + tr.Tf("tracking.at_station_fmt", stationNameText)
 	}
 
+	s = appendOverride(tr, s, maxbattle.OverrideLocationLabel, maxbattle.OverrideAreas)
 	return s
 }

@@ -43,5 +43,7 @@ func (g *Generator) GymRowText(tr *i18n.Translator, gym *db.GymTracking) string 
 		s += " " + tr.Tf("tracking.at_gym_fmt", gymNameText)
 	}
 
+	s = appendOverride(tr, s, gym.OverrideLocationLabel, gym.OverrideAreas)
+
 	return s
 }

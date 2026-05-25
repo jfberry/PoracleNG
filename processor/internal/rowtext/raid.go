@@ -52,6 +52,7 @@ func (g *Generator) RaidRowText(tr *i18n.Translator, raid *db.RaidTracking) stri
 		}
 
 		s += " " + rsvp
+		s = appendOverride(tr, s, raid.OverrideLocationLabel, raid.OverrideAreas)
 		return s
 	}
 
@@ -81,6 +82,7 @@ func (g *Generator) RaidRowText(tr *i18n.Translator, raid *db.RaidTracking) stri
 	}
 
 	s += " " + rsvp
+	s = appendOverride(tr, s, raid.OverrideLocationLabel, raid.OverrideAreas)
 	return s
 }
 
@@ -123,5 +125,6 @@ func (g *Generator) EggRowText(tr *i18n.Translator, egg *db.EggTracking) string 
 	}
 
 	s += " " + rsvp
+	s = appendOverride(tr, s, egg.OverrideLocationLabel, egg.OverrideAreas)
 	return s
 }

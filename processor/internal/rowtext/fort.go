@@ -20,6 +20,7 @@ func (g *Generator) FortUpdateRowText(tr *i18n.Translator, fort *db.FortTracking
 	}
 
 	s += " " + standardText(tr, fort.Template, g.DefaultTemplateName, 0)
+	s = appendOverride(tr, s, fort.OverrideLocationLabel, fort.OverrideAreas)
 
 	return s
 }
