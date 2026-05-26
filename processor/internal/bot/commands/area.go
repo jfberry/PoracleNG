@@ -21,6 +21,10 @@ func (c *AreaCommand) Name() string      { return "cmd.area" }
 func (c *AreaCommand) Aliases() []string { return nil }
 
 func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	if help := helpArgReply(ctx, args, "msg.area.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
+
 	tr := ctx.Tr()
 
 	if len(args) == 0 {

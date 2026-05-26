@@ -18,6 +18,10 @@ func (c *ProfileCommand) Name() string      { return "cmd.profile" }
 func (c *ProfileCommand) Aliases() []string { return nil }
 
 func (c *ProfileCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	if help := helpArgReply(ctx, args, "msg.profile.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
+
 	if len(args) == 0 {
 		return c.listProfiles(ctx)
 	}

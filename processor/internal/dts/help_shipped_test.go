@@ -32,6 +32,7 @@ func TestShippedHelpTemplatesLoadAndRender(t *testing.T) {
 		"area", "location", "profile", "language",
 		"start", "stop", "poracle", "unregister",
 		"enable", "disable", "broadcast", "userlist", "community",
+		"summary", "mute",
 	}
 
 	view := map[string]any{"prefix": "!"}
