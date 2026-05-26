@@ -87,7 +87,7 @@ func (c *MuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.unavailable")}}
 	}
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.usage")}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage", bot.CommandPrefix(ctx))}}
 	}
 
 	// Pull out duration:X anywhere in the args; what's left is positional.
@@ -99,7 +99,7 @@ func (c *MuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		duration = defaultMuteDuration
 	}
 	if len(positional) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.usage")}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage", bot.CommandPrefix(ctx))}}
 	}
 
 	scopeNoun := strings.ToLower(positional[0])
@@ -140,7 +140,7 @@ func (c *MuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	case mute.ScopeStation:
 		return runMuteIDScope(ctx, mute.ScopeStation, "station", positional[1:], duration)
 	default:
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.usage")}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage", bot.CommandPrefix(ctx))}}
 	}
 }
 
@@ -238,7 +238,7 @@ func runMuteEverything(ctx *bot.CommandContext, duration time.Duration) []bot.Re
 func runMutePokemon(ctx *bot.CommandContext, args []string, duration time.Duration) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.usage_pokemon")}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage_pokemon", bot.CommandPrefix(ctx))}}
 	}
 	raw := strings.Join(args, " ")
 	pokemonID, name := resolveMutePokemon(ctx, raw)
@@ -262,7 +262,7 @@ func runMutePokemon(ctx *bot.CommandContext, args []string, duration time.Durati
 func runMuteGym(ctx *bot.CommandContext, args []string, duration time.Duration) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.usage_gym")}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage_gym", bot.CommandPrefix(ctx))}}
 	}
 	raw := strings.Join(args, " ")
 	id, abort := resolveGymRef(ctx, raw)
@@ -288,7 +288,7 @@ func runMuteGym(ctx *bot.CommandContext, args []string, duration time.Duration) 
 func runMuteArea(ctx *bot.CommandContext, args []string, duration time.Duration) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.usage_area")}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage_area", bot.CommandPrefix(ctx))}}
 	}
 	raw := strings.Join(args, " ")
 
@@ -328,11 +328,11 @@ func runMuteArea(ctx *bot.CommandContext, args []string, duration time.Duration)
 func runMuteIDScope(ctx *bot.CommandContext, scope, label string, args []string, duration time.Duration) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage_id_scope", label)}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage_id_scope", bot.CommandPrefix(ctx), label)}}
 	}
 	id := strings.TrimSpace(strings.Join(args, " "))
 	if id == "" {
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage_id_scope", label)}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage_id_scope", bot.CommandPrefix(ctx), label)}}
 	}
 	entry := mute.Entry{
 		HumanID:    ctx.TargetID,
@@ -419,7 +419,7 @@ func (c *UnmuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.unavailable")}}
 	}
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.T("msg.unmute.usage")}}
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.unmute.usage", bot.CommandPrefix(ctx))}}
 	}
 
 	// Special tokens that drop everything for this user.
@@ -513,7 +513,7 @@ func resolveUnmuteValue(ctx *bot.CommandContext, scopeType string, args []string
 	switch scopeType {
 	case mute.ScopePokemon:
 		if len(args) == 0 {
-			r := bot.Reply{React: "🙅", Text: tr.T("msg.unmute.usage_pokemon")}
+			r := bot.Reply{React: "🙅", Text: tr.Tf("msg.unmute.usage_pokemon", bot.CommandPrefix(ctx))}
 			return "", "", &r
 		}
 		raw := strings.Join(args, " ")
@@ -525,7 +525,7 @@ func resolveUnmuteValue(ctx *bot.CommandContext, scopeType string, args []string
 		return strconv.Itoa(id), name, nil
 	case mute.ScopeGym:
 		if len(args) == 0 {
-			r := bot.Reply{React: "🙅", Text: tr.T("msg.unmute.usage_gym")}
+			r := bot.Reply{React: "🙅", Text: tr.Tf("msg.unmute.usage_gym", bot.CommandPrefix(ctx))}
 			return "", "", &r
 		}
 		raw := strings.Join(args, " ")
@@ -536,14 +536,14 @@ func resolveUnmuteValue(ctx *bot.CommandContext, scopeType string, args []string
 		return id, muteGymLabel(raw, id), nil
 	case mute.ScopeArea:
 		if len(args) == 0 {
-			r := bot.Reply{React: "🙅", Text: tr.T("msg.unmute.usage_area")}
+			r := bot.Reply{React: "🙅", Text: tr.Tf("msg.unmute.usage_area", bot.CommandPrefix(ctx))}
 			return "", "", &r
 		}
 		raw := strings.Join(args, " ")
 		return raw, raw, nil
 	case mute.ScopePokestop, mute.ScopeStation:
 		if len(args) == 0 {
-			r := bot.Reply{React: "🙅", Text: tr.Tf("msg.mute.usage_id_scope", scopeType)}
+			r := bot.Reply{React: "🙅", Text: tr.Tf("msg.mute.usage_id_scope", bot.CommandPrefix(ctx), scopeType)}
 			return "", "", &r
 		}
 		raw := strings.TrimSpace(strings.Join(args, " "))
