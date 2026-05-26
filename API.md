@@ -137,6 +137,32 @@ curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
 }
 ```
 
+**Per-rule location and area overrides** (all tracking types):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `override_location_label` | string or null | Label of a saved location to use as the distance anchor instead of the user's default. Requires `distance > 0`. |
+| `override_areas` | []string or null | Area names to restrict this rule to, overriding the user's default areas. Mutually exclusive with distance-based tracking. |
+
+Server-side validation rules:
+- `override_location_label` + `distance == 0` → 400 "override_location_label requires distance > 0"
+- `override_areas` + `distance > 0` → 400 "override_areas and distance are mutually exclusive"
+- `override_location_label` + `override_areas` → 400 "override_location_label and override_areas are mutually exclusive"
+- `override_location_label` references unknown saved location → 400 "unknown location label"
+- `override_areas` contains area outside user's permitted set → 400 "area not permitted"
+
+Example with override location:
+
+```json
+[{"pokemon_id": 1, "min_iv": 90, "distance": 1000, "override_location_label": "Work"}]
+```
+
+Example with override areas:
+
+```json
+[{"pokemon_id": 1, "min_iv": 90, "override_areas": ["city_centre", "park"]}]
+```
+
 ### DELETE /api/tracking/{type}/{id}/byUid/{uid}
 
 Delete a single tracking rule by its unique ID.
@@ -488,6 +514,44 @@ curl -X POST -H "X-Poracle-Secret: secret" -H "Content-Type: application/json" \
 
 ```json
 {"status": "ok", "setAreas": ["canterbury", "dover"]}
+```
+
+### GET /api/humans/{id}/locations
+
+List the user's saved locations plus the default.
+
+```json
+{"status": "ok", "locations": {"default": {"latitude": 51.28, "longitude": 1.08}, "named": [{"label": "Home", "latitude": 51.28, "longitude": 1.08}]}}
+```
+
+### GET /api/humans/{id}/locations/{label}
+
+Show one saved location by case-insensitive label. Returns 404 if the label is not found.
+
+```json
+{"status": "ok", "location": {"label": "Home", "latitude": 51.28, "longitude": 1.08}}
+```
+
+### POST /api/humans/{id}/locations/add
+
+Create one or more saved locations. Body is a single object or array of `{label, latitude, longitude}`. The `place` field is accepted but server-side geocoding is deferred — clients should resolve coordinates before calling this endpoint.
+
+```json
+[{"label": "Home", "latitude": 51.28, "longitude": 1.08}]
+```
+
+Returns per-row results:
+
+```json
+{"status": "ok", "results": [{"label": "Home", "error": null}]}
+```
+
+### POST /api/humans/{id}/locations/{label}/delete
+
+Delete a saved location by label. Returns 409 if any tracking rule currently references it, with a list of referencing rules:
+
+```json
+{"status": "conflict", "referencing_rules": [{"type": "pokemon", "uid": 42}]}
 ```
 
 ### POST /api/humans/{id}/switchProfile/{profile}
