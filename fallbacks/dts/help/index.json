@@ -18,7 +18,7 @@
         },
         {
           "name": "Your account and alerts",
-          "value": "`{{prefix}}help poracle` — register (or re-enable) your account\n`{{prefix}}help area` — choose which areas to receive alerts for\n`{{prefix}}help location` — set your home/current location\n`{{prefix}}help profile` — multiple tracking profiles (home/work/weekend)\n`{{prefix}}help language` — change bot response language\n`{{prefix}}help start` / `{{prefix}}help stop` — pause or resume alerts\n`{{prefix}}help unregister` — delete your account and all tracking"
+          "value": "`{{prefix}}help poracle` — register (or re-enable) your account\n`{{prefix}}help area` — choose which areas to receive alerts for\n`{{prefix}}help location` — set your home/current location\n`{{prefix}}help profile` — multiple tracking profiles (home/work/weekend)\n`{{prefix}}help language` — change bot response language\n`{{prefix}}help start` / `{{prefix}}help stop` — pause or resume alerts\n`{{prefix}}help mute` — silence alerts for a gym, pokemon, area, or pokestop for a while\n`{{prefix}}help unregister` — delete your account and all tracking"
         },
         {
           "name": "{{#if userIsAdmin}}Admin commands{{/if}}",

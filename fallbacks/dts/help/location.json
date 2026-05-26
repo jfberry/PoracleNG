@@ -6,27 +6,23 @@
   "template": {
     "embed": {
       "title": "!location",
-      "description": "Set your location — the point that distance filters (`d:<metres>`) measure from.",
+      "description": "Manage your default location and saved named locations. Distance filters (`d:<metres>`) measure from a location.",
       "fields": [
         {
-          "name": "By coordinates",
-          "value": "`{{prefix}}location 51.5074,-0.1278` — lat,lon"
+          "name": "Default location",
+          "value": "`{{prefix}}location` — show your current default\n`{{prefix}}location 51.5074,-0.1278` — set by lat,lon\n`{{prefix}}location 10 Downing Street, London` — set by address (requires geocoder)\n`{{prefix}}location remove default` — clear it"
         },
         {
-          "name": "By address",
-          "value": "`{{prefix}}location 10 Downing Street, London`\n\nRequires the operator to have configured a geocoder (Nominatim / Photon / Google)."
+          "name": "Saved named locations",
+          "value": "`{{prefix}}location add Home 51.5074,-0.1278` — save a named location by coords\n`{{prefix}}location add Home Canterbury` — or by address (requires geocoder)\n`{{prefix}}location add \"Holiday Home\" santa monica` — multi-word names need quotes\n`{{prefix}}location list` — list default + all saved\n`{{prefix}}location show Home` — show one (use `default` for the default location)\n`{{prefix}}location remove Home` — delete (refuses if any tracking rule references it)"
         },
         {
-          "name": "By area name",
-          "value": "`{{prefix}}location north_london` — if there's an area with that name, location is set to that area's centre point"
-        },
-        {
-          "name": "Clear",
-          "value": "`{{prefix}}location` (with no argument) — removes your location. Any tracking rule with `d:<metres>` will stop firing until you set it again."
+          "name": "Use on tracking rules",
+          "value": "`{{prefix}}track pikachu d:500 location:Home` — distance check from Home instead of your default\n`{{prefix}}track pikachu area:london,paris` — restrict to specific areas instead of your default areas\n\n`location:` requires `d:`. `area:` and `d:` are mutually exclusive. `area:` and `location:` are mutually exclusive."
         },
         {
           "name": "Related",
-          "value": "`{{prefix}}area` — set areas for area-based tracking (no distance required)"
+          "value": "`{{prefix}}area` — manage your default areas\n`{{prefix}}tracked` — see which rules use which override"
         }
       ]
     }
