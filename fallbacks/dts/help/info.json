@@ -1,0 +1,30 @@
+[{
+  "id": "info",
+  "type": "help",
+  "platform": "",
+  "language": "",
+  "template": {
+    "embed": {
+      "title": "!info",
+      "description": "Look up pokemon, items, and current game data — no tracking required.",
+      "fields": [
+        {
+          "name": "Pokemon details",
+          "value": "`{{prefix}}info <pokemon>` — by name or dex id. Returns types, base stats, generation, evolution chain, available forms, weather boost, and 100% IV CP at level 40."
+        },
+        {
+          "name": "Game data",
+          "value": "`{{prefix}}info moves` — list of moves with IDs\n`{{prefix}}info items` — list of items (berries, evolution stones, etc.) with IDs\n`{{prefix}}info weather` — current weather and boosted types\n`{{prefix}}info templates` — DTS template numbers loaded on this server (which `template:N` values your tracking rules can use)"
+        },
+        {
+          "name": "Statistics",
+          "value": "`{{prefix}}info rarity` — pokemon rarity tier breakdown (common → ultra-rare) and which species are in each tier\n`{{prefix}}info shiny` — observed shiny rates per species (sample-based, server-specific)"
+        },
+        {
+          "name": "Related",
+          "value": "`{{prefix}}tracked` — see your active tracking rules\n`{{prefix}}help track` — learn how to use the info above to build rules"
+        }
+      ]
+    }
+  }
+}]

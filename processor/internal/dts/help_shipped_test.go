@@ -28,7 +28,7 @@ func TestShippedHelpTemplatesLoadAndRender(t *testing.T) {
 		"index",
 		"track", "untrack", "raid", "egg", "quest",
 		"invasion", "incident", "lure", "nest", "gym", "fort", "maxbattle",
-		"tracked", "script",
+		"tracked", "script", "info",
 		"area", "location", "profile", "language",
 		"start", "stop", "poracle", "unregister",
 		"enable", "disable", "broadcast", "userlist", "community",
