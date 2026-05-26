@@ -520,7 +520,7 @@
 
   "msg.help.unknown_topic": "No help available for '{0}'. Use `{1}help` for general help.",
   "msg.help.no_greeting": "No help template configured. Use `{0}help <command>` for command-specific help.",
-  "msg.help.detailed_topics": "💡 Type `{0}help <topic>` for detailed help on: {1}.",
+  "msg.help.see_detailed": "💡 More detailed help is available — `{0}help {1}`",
 
   "msg.info.sub.moves": "moves",
   "msg.info.sub.items": "items",

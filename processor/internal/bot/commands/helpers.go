@@ -12,21 +12,100 @@ import (
 )
 
 // usageReply returns a usage help reply if args are empty, or nil if args are present.
+// When a help-type DTS template exists for the command (derived from usageKey),
+// the reply text gets a second line pointing at !help <command> for detailed help.
 func usageReply(ctx *bot.CommandContext, args []string, usageKey string) *bot.Reply {
 	if len(args) > 0 {
 		return nil
 	}
 	tr := ctx.Tr()
-	return &bot.Reply{Text: tr.Tf(usageKey, bot.CommandPrefix(ctx))}
+	text := tr.Tf(usageKey, bot.CommandPrefix(ctx))
+	if suffix := detailedHelpSuffix(ctx, usageKey); suffix != "" {
+		text += "\n" + suffix
+	}
+	return &bot.Reply{Text: text}
 }
 
 // helpArgReply returns a usage reply if the first argument is "help", or nil otherwise.
+// Same detailed-help suffix as usageReply when a help DTS exists.
 func helpArgReply(ctx *bot.CommandContext, args []string, usageKey string) *bot.Reply {
 	if len(args) > 0 && args[0] == "help" {
 		tr := ctx.Tr()
-		return &bot.Reply{Text: tr.Tf(usageKey, bot.CommandPrefix(ctx))}
+		text := tr.Tf(usageKey, bot.CommandPrefix(ctx))
+		if suffix := detailedHelpSuffix(ctx, usageKey); suffix != "" {
+			text += "\n" + suffix
+		}
+		return &bot.Reply{Text: text}
 	}
 	return nil
+}
+
+// helpEffectiveLanguage resolves the language to use for help template
+// lookups. Priority: language hint (from language-specific command
+// variants like !dasporacle) → ctx.Language → server default locale.
+// Without the default-locale fallback, operators whose custom help has
+// an explicit language: "en" would lose to the shipped readonly
+// fallback for any caller with ctx.Language == "" (unregistered users,
+// users who never ran !language).
+func helpEffectiveLanguage(ctx *bot.CommandContext) string {
+	if hint := ctx.GetLanguageHint(); hint != "" {
+		return hint
+	}
+	if ctx.Language != "" {
+		return ctx.Language
+	}
+	if ctx.Config != nil && ctx.Config.General.Locale != "" {
+		return ctx.Config.General.Locale
+	}
+	return "en"
+}
+
+// detailedHelpSuffix returns the i18n "More detailed help: `!help <command>`"
+// string when a help-type DTS template exists for the topic derived from
+// usageKey. Returns "" when:
+//   - The usage key isn't in the expected `msg.<topic>.usage` shape
+//   - No DTS is wired (ctx.DTS == nil)
+//   - No help template exists for the topic at the current platform+language
+func detailedHelpSuffix(ctx *bot.CommandContext, usageKey string) string {
+	if ctx.DTS == nil {
+		return ""
+	}
+	topic := topicFromUsageKey(usageKey)
+	if topic == "" {
+		return ""
+	}
+	platform := targetDTSPlatform(ctx)
+	language := helpEffectiveLanguage(ctx)
+	if ctx.DTS.Get("help", platform, topic, language) == nil {
+		return ""
+	}
+	tr := ctx.Tr()
+	// Localised command name from cmd.<topic>; fall back to the raw topic if
+	// the key isn't translated (i.e. T returns the key itself).
+	cmdKey := "cmd." + topic
+	cmdName := tr.T(cmdKey)
+	if cmdName == cmdKey {
+		cmdName = topic
+	}
+	return tr.Tf("msg.help.see_detailed", bot.CommandPrefix(ctx), cmdName)
+}
+
+// topicFromUsageKey extracts the command name from a "msg.<topic>.usage"
+// i18n key. Returns "" for any other shape, including degenerate keys like
+// "msg.usage" (where there is no topic between the prefix and suffix).
+func topicFromUsageKey(usageKey string) string {
+	const prefix = "msg."
+	const suffix = ".usage"
+	if !strings.HasPrefix(usageKey, prefix) || !strings.HasSuffix(usageKey, suffix) {
+		return ""
+	}
+	// Ensure there is at least one character between prefix and suffix.
+	start := len(prefix)
+	end := len(usageKey) - len(suffix)
+	if end <= start {
+		return ""
+	}
+	return usageKey[start:end]
 }
 
 // extractPings removes Discord @mention tokens (<@123456789> or <@!123456789>)

@@ -113,27 +113,6 @@ func TestHelpIndexHidesAdminSectionForNonAdmins(t *testing.T) {
 	}
 }
 
-// TestHelp_GeneralAppendsDiscoveryHint — the no-args !help reply should
-// always include a trailing hint telling users that !help <topic> works
-// and listing the available topics.
-func TestHelp_GeneralAppendsDiscoveryHint(t *testing.T) {
-	ts := helpTestDTS(t)
-	ctx, _ := testCtx(t)
-	ctx.DTS = ts
-	cmd := &HelpCommand{}
-	replies := cmd.Run(ctx, nil)
-	if len(replies) == 0 {
-		t.Fatal("expected at least one reply")
-	}
-	last := replies[len(replies)-1].Text
-	if !strings.Contains(last, "help <topic>") {
-		t.Fatalf("expected hint about !help <topic>, got %q", last)
-	}
-	if !strings.Contains(last, "track") {
-		t.Fatalf("hint should list track topic, got %q", last)
-	}
-}
-
 // TestHelp_TrackTopicResolves — !help track should return the
 // help/track DTS template (or cmd.track.usage fallback), not the
 // "unknown topic" error, and must not contain any mention of ping/
