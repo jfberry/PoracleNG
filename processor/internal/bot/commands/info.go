@@ -22,6 +22,10 @@ func (c *InfoCommand) Name() string      { return "cmd.info" }
 func (c *InfoCommand) Aliases() []string { return nil }
 
 func (c *InfoCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	if help := helpArgReply(ctx, args, "msg.info.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
+
 	if len(args) == 0 {
 		return c.usage(ctx)
 	}
@@ -69,10 +73,9 @@ func (c *InfoCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 func (c *InfoCommand) usage(ctx *bot.CommandContext) []bot.Reply {
 	tr := ctx.Tr()
-	prefix := bot.CommandPrefix(ctx)
-	text := tr.Tf("msg.info.usage", prefix)
+	text := inlineUsage(ctx, "msg.info.usage")
 	if ctx.IsAdmin {
-		text += "\n" + tr.Tf("msg.info.usage_admin", prefix)
+		text += "\n" + tr.Tf("msg.info.usage_admin", bot.CommandPrefix(ctx))
 	}
 	return []bot.Reply{{Text: text}}
 }

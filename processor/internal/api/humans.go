@@ -552,16 +552,6 @@ func HandleSetAreas(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
-		// Prune per-rule overrides that reference areas no longer in newAreas.
-		permitted := make(map[string]bool, len(newAreas))
-		for _, a := range newAreas {
-			permitted[strings.ToLower(a)] = true
-		}
-		if err := deps.Humans.PruneOverrideAreas(id, permitted); err != nil {
-			log.Errorf("Humans API: prune override areas: %s", err)
-			// best effort — don't fail the response
-		}
-
 		reloadState(deps)
 		trackingJSONOK(c, map[string]any{"setAreas": newAreas})
 	}

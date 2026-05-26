@@ -141,15 +141,6 @@ func (c *AreaCommand) removeAreas(ctx *bot.CommandContext, args []string) []bot.
 
 	if len(removed) > 0 {
 		setUserAreas(ctx, remaining)
-		// Prune per-rule overrides that referenced now-removed areas.
-		permitted := make(map[string]bool, len(remaining))
-		for _, a := range remaining {
-			permitted[strings.ToLower(a)] = true
-		}
-		if err := ctx.Humans.PruneOverrideAreas(ctx.TargetID, permitted); err != nil {
-			log.Errorf("prune overrides after !area remove: %s", err)
-			// best effort — don't fail the user-visible reply
-		}
 	}
 
 	var parts []string
