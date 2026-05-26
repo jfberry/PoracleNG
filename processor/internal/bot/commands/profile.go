@@ -65,7 +65,7 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	if len(profiles) == 0 {
-		return []bot.Reply{{Text: tr.T("msg.profile.none")}}
+		return []bot.Reply{{Text: tr.T("msg.profile.none") + "\n\n" + inlineUsage(ctx, "msg.profile.usage")}}
 	}
 
 	var sb strings.Builder
@@ -106,6 +106,8 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 			sb.WriteString("\n" + FormatScheduleTimezone(tr, human.Latitude, human.Longitude, ctx.Config.General.DefaultTimezone))
 		}
 	}
+	sb.WriteString("\n\n")
+	sb.WriteString(inlineUsage(ctx, "msg.profile.usage"))
 	return []bot.Reply{{Text: sb.String()}}
 }
 

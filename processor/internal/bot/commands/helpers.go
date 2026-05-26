@@ -40,6 +40,20 @@ func helpArgReply(ctx *bot.CommandContext, args []string, usageKey string) *bot.
 	return nil
 }
 
+// inlineUsage returns the localised usage text for the given key, optionally
+// followed by the "more detailed help" suffix when a help-type DTS template
+// exists for the topic derived from usageKey. Use this from commands that
+// build their usage reply inline (instead of calling usageReply / helpArgReply).
+// The returned string is the full Text body — caller wraps it in a bot.Reply.
+func inlineUsage(ctx *bot.CommandContext, usageKey string) string {
+	tr := ctx.Tr()
+	text := tr.Tf(usageKey, bot.CommandPrefix(ctx))
+	if suffix := detailedHelpSuffix(ctx, usageKey); suffix != "" {
+		text += "\n" + suffix
+	}
+	return text
+}
+
 // helpEffectiveLanguage resolves the language to use for help template
 // lookups. Priority: language hint (from language-specific command
 // variants like !dasporacle) → ctx.Language → server default locale.
