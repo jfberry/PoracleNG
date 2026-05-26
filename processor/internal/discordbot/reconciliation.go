@@ -415,8 +415,10 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *store.Human, nam
 			updates["area_restriction"] = string(areaRestrictionJSON)
 		}
 
+		communityChanged := !bot.HaveSameContents(communityList, user.CommunityMembership)
+
 		// Check community_membership changes.
-		if !bot.HaveSameContents(communityList, user.CommunityMembership) {
+		if communityChanged {
 			communityJSON, _ := json.Marshal(communityList)
 			updates["community_membership"] = string(communityJSON)
 		}
@@ -427,6 +429,17 @@ func (r *Reconciliation) reconcileAreaSecurity(id string, user *store.Human, nam
 				return
 			}
 			r.log.Infof("Update user %s %s with communities %v", id, name, communityList)
+		}
+
+		// When community membership changes, per-rule override_areas may reference
+		// areas no longer permitted. Prune them so rules fall back to the human's
+		// own area list rather than matching nothing.
+		if communityChanged {
+			permitted := bot.BuildPermittedSet(r.cfg.Area.Communities, communityList)
+			if err := r.humanStore.PruneOverrideAreas(id, permitted); err != nil {
+				r.log.Errorf("prune override areas for %s: %v", id, err)
+				// best effort — don't abort reconciliation
+			}
 		}
 	}
 }

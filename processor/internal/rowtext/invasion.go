@@ -40,6 +40,7 @@ func (g *Generator) InvasionRowText(tr *i18n.Translator, invasion *db.InvasionTr
 	s += " | " + tr.Tf("tracking.gender_fmt", genderText)
 
 	s += " " + standardText(tr, invasion.Template, g.DefaultTemplateName, invasion.Clean)
+	s = appendOverride(tr, s, invasion.OverrideLocationLabel, invasion.OverrideAreas)
 
 	return s
 }

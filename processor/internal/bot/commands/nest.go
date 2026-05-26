@@ -21,6 +21,8 @@ var nestParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.gen"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.minspawn"},
+	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -69,6 +71,12 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if block != nil {
 		return []bot.Reply{*block}
 	}
+
+	override, overrideReply := parseOverride(ctx, parsed.Strings["location"], parsed.StringLists["area"], common.Distance)
+	if overrideReply != nil {
+		return []bot.Reply{*overrideReply}
+	}
+
 	minSpawnAvg := 0
 	if ms, ok := parsed.Singles["minspawn"]; ok {
 		minSpawnAvg = ms
@@ -98,15 +106,17 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	insert := make([]db.NestTrackingAPI, 0, len(monsterList))
 	for _, mon := range monsterList {
 		insert = append(insert, db.NestTrackingAPI{
-			ID:          ctx.TargetID,
-			ProfileNo:   ctx.ProfileNo,
-			Ping:        pings,
-			Template:    common.Template,
-			Distance:    common.Distance,
-			Clean:       common.Clean,
-			PokemonID:   mon.PokemonID,
-			Form:        mon.Form,
-			MinSpawnAvg: minSpawnAvg,
+			ID:                    ctx.TargetID,
+			ProfileNo:             ctx.ProfileNo,
+			Ping:                  pings,
+			Template:              common.Template,
+			Distance:              common.Distance,
+			Clean:                 common.Clean,
+			PokemonID:             mon.PokemonID,
+			Form:                  mon.Form,
+			MinSpawnAvg:           minSpawnAvg,
+			OverrideLocationLabel: override.LocationLabel,
+			OverrideAreas:         override.Areas,
 		})
 	}
 

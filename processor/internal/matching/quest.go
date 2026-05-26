@@ -64,13 +64,15 @@ func (m *QuestMatcher) Match(data *QuestData, st *state.State) (immediate []webh
 		}
 
 		td := trackingUserData{
-			HumanID:   q.ID,
-			ProfileNo: q.ProfileNo,
-			Distance:  q.Distance,
-			Template:  q.Template,
-			Clean:     q.Clean,
-			Ping:      q.Ping,
-			UID:       q.UID,
+			HumanID:               q.ID,
+			ProfileNo:             q.ProfileNo,
+			Distance:              q.Distance,
+			Template:              q.Template,
+			Clean:                 q.Clean,
+			Ping:                  q.Ping,
+			UID:                   q.UID,
+			OverrideLocationLabel: q.OverrideLocationLabel,
+			OverrideAreas:         q.OverrideAreas,
 		}
 		if db.IsSummary(q.Clean) {
 			bufferedTrackings = append(bufferedTrackings, td)

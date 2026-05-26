@@ -74,6 +74,16 @@ func Load(manager *Manager, database *sqlx.DB, scheduleStore store.SummarySchedu
 		return fmt.Errorf("load database: %w", err)
 	}
 
+	locs, err := db.LoadUserLocations(database)
+	if err != nil {
+		return fmt.Errorf("load user locations: %w", err)
+	}
+	for id, h := range data.Humans {
+		if m, ok := locs[id]; ok {
+			h.Locations = m
+		}
+	}
+
 	schedules := loadSummarySchedules(scheduleStore)
 
 	// Reuse existing geofence data from current state
@@ -129,6 +139,16 @@ func LoadWithGeofences(manager *Manager, database *sqlx.DB, scheduleStore store.
 	metrics.StateDBQueryDuration.Observe(time.Since(dbStart).Seconds())
 	if err != nil {
 		return fmt.Errorf("load database: %w", err)
+	}
+
+	locs, err := db.LoadUserLocations(database)
+	if err != nil {
+		return fmt.Errorf("load user locations: %w", err)
+	}
+	for id, h := range data.Humans {
+		if m, ok := locs[id]; ok {
+			h.Locations = m
+		}
 	}
 
 	schedules := loadSummarySchedules(scheduleStore)

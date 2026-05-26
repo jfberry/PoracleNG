@@ -16,7 +16,8 @@ const (
 	ParamRaidLevelName ParamType = iota // legendary, mega, shadow, ultra beast
 	ParamPVPLeague     ParamType = iota // great5, ultra10-50, greathigh3, greatcp1400
 	ParamLatLon        ParamType = iota // 51.28,1.08
-	ParamRemoveUID     ParamType = iota // id:45, id:46 — tracking UID for removal
+	ParamRemoveUID        ParamType = iota // id:45, id:46 — tracking UID for removal
+	ParamPrefixStringList ParamType = iota // area:berlin, area:X,Y,Z — comma-split, lowercased, accumulates across repeated tokens
 )
 
 // ParamDef defines a parameter that a command accepts.
@@ -79,6 +80,9 @@ type ParsedArgs struct {
 	RemoveUIDs []int64
 	// Parsed coordinates
 	Coords *LatLon
+	// StringLists from PrefixStringList params: "area" → ["berlin", "munich"]
+	// Values are comma-split and lowercased; repeated tokens append.
+	StringLists map[string][]string
 	// Tokens that matched nothing
 	Unrecognized []string
 }

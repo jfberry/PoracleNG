@@ -9,7 +9,13 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/rowtext"
+	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
 func init() {
@@ -418,5 +424,223 @@ func TestQuestTrackingAPIJSON(t *testing.T) {
 	}
 	if !strings.Contains(s, `"shiny":0`) {
 		t.Errorf("shiny should be 0, got %s", s)
+	}
+}
+
+// --- Override validation tests ---
+
+// newTestTrackingDeps builds a minimal TrackingDeps suitable for override-validation tests.
+// deps.Tracking is intentionally nil: validation failures return before it is accessed.
+func newTestTrackingDeps(t *testing.T) (*TrackingDeps, *store.MockHumanStore) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	mock := store.NewMockHumanStore()
+	mock.AddHuman(&store.Human{ID: "u1", Type: "discord:user", Name: "User", Enabled: true, Language: "en", CurrentProfileNo: 1})
+	deps := &TrackingDeps{
+		Humans:       mock,
+		Config:       &config.Config{},
+		RowText:      &rowtext.Generator{DefaultTemplateName: "1"},
+		Translations: i18n.NewBundle(),
+		// Tracking intentionally nil: override validation rejects before SelectByIDProfile.
+	}
+	return deps, mock
+}
+
+func TestTrackingAPI_RejectsLocationWithoutDistance(t *testing.T) {
+	deps, _ := newTestTrackingDeps(t)
+
+	r := gin.New()
+	r.POST("/api/tracking/pokemon/:id", HandleCreateMonster(deps))
+
+	body := `[{"pokemon_id":25,"distance":0,"override_location_label":"Home"}]`
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u1", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "requires distance") {
+		t.Fatalf("expected 400/requires-distance, got %d / %s", w.Code, w.Body.String())
+	}
+}
+
+func TestTrackingAPI_RejectsUnknownLocation(t *testing.T) {
+	deps, _ := newTestTrackingDeps(t)
+
+	r := gin.New()
+	r.POST("/api/tracking/pokemon/:id", HandleCreateMonster(deps))
+
+	body := `[{"pokemon_id":25,"distance":500,"override_location_label":"Nope"}]`
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u1", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "unknown location label") {
+		t.Fatalf("expected 400/unknown-location, got %d / %s", w.Code, w.Body.String())
+	}
+}
+
+// TestTrackingAPI_RejectsAreaWithDistance verifies that combining override_areas
+// and a non-zero distance is rejected (they are mutually exclusive modes).
+func TestTrackingAPI_RejectsAreaWithDistance(t *testing.T) {
+	deps, _ := newTestTrackingDeps(t)
+
+	r := gin.New()
+	r.POST("/api/tracking/pokemon/:id", HandleCreateMonster(deps))
+
+	body := `[{"pokemon_id":25,"distance":500,"override_areas":["london"]}]`
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u1", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "mutually exclusive") {
+		t.Fatalf("expected 400/mutually-exclusive, got %d / %s", w.Code, w.Body.String())
+	}
+}
+
+// TestTrackingAPI_RejectsLocationWithArea verifies that combining
+// override_location_label and override_areas is rejected.
+func TestTrackingAPI_RejectsLocationWithArea(t *testing.T) {
+	deps, mock := newTestTrackingDeps(t)
+	// Seed the location so label validation passes; the area+location conflict
+	// is checked first, so it would still reject, but seeding keeps the test
+	// independent of validation ordering.
+	mock.AddLocation(store.UserLocation{ID: "u1", Label: "Home", Latitude: 1, Longitude: 2})
+
+	r := gin.New()
+	r.POST("/api/tracking/pokemon/:id", HandleCreateMonster(deps))
+
+	body := `[{"pokemon_id":25,"distance":500,"override_location_label":"Home","override_areas":["london"]}]`
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u1", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "mutually exclusive") {
+		t.Fatalf("expected 400/mutually-exclusive, got %d / %s", w.Code, w.Body.String())
+	}
+}
+
+// TestTrackingAPI_RejectsAreaNotPermitted verifies that when a target user has
+// limited community membership, override_areas referencing an out-of-scope area
+// is rejected. This test would have caught the privilege-escalation bug in Fix C
+// where the API treated every caller as admin regardless of community membership.
+func TestTrackingAPI_RejectsAreaNotPermitted(t *testing.T) {
+	mock := store.NewMockHumanStore()
+	// User u2 belongs to community "teamcity" — only "london" is in that community.
+	mock.AddHuman(&store.Human{
+		ID:                  "u2",
+		Type:                "discord:user",
+		Name:                "LimitedUser",
+		Enabled:             true,
+		Language:            "en",
+		CurrentProfileNo:    1,
+		CommunityMembership: []string{"teamcity"},
+	})
+
+	// Build area_security config with "teamcity" community that only has "london".
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{
+		{
+			Name:         "teamcity",
+			AllowedAreas: []string{"london"},
+		},
+	}
+
+	// Build AreaLogic with two fences: london (in teamcity) and berlin (not in teamcity).
+	fences := []geofence.Fence{
+		{Name: "london", UserSelectable: true},
+		{Name: "berlin", UserSelectable: true},
+	}
+	areaLogic := bot.NewAreaLogic(fences, cfg)
+
+	deps := &TrackingDeps{
+		Humans:       mock,
+		Config:       cfg,
+		RowText:      &rowtext.Generator{DefaultTemplateName: "1"},
+		Translations: i18n.NewBundle(),
+		AreaLogic:    areaLogic,
+	}
+
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.POST("/api/tracking/pokemon/:id", HandleCreateMonster(deps))
+
+	// u2 requests override_areas:["berlin"] — not in their community's allowed areas.
+	body := `[{"pokemon_id":25,"override_areas":["berlin"]}]`
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u2", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "not permitted") {
+		t.Fatalf("expected 400/not-permitted, got %d / %s", w.Code, w.Body.String())
+	}
+
+	// Confirm that "london" (in their community) is accepted through validation
+	// (will fail later at nil Tracking store, but with a different error — not a permission error).
+	body2 := `[{"pokemon_id":25,"override_areas":["london"]}]`
+	req2 := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u2", strings.NewReader(body2))
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	// Must NOT be rejected as "not permitted" — london is in the user's community.
+	if w2.Code == http.StatusBadRequest && strings.Contains(w2.Body.String(), "not permitted") {
+		t.Fatalf("london should be permitted for teamcity user, got %d / %s", w2.Code, w2.Body.String())
+	}
+}
+
+// TestTrackingAPI_OverrideContextFetchedOnce verifies that a batch POST of N rows
+// with area overrides calls deps.Humans.Get exactly once — not once per row.
+// This is the regression test for the hoist introduced in Fix J.
+func TestTrackingAPI_OverrideContextFetchedOnce(t *testing.T) {
+	mock := store.NewMockHumanStore()
+	mock.AddHuman(&store.Human{
+		ID:                  "u3",
+		Type:                "discord:user",
+		Name:                "BatchUser",
+		Enabled:             true,
+		Language:            "en",
+		CurrentProfileNo:    1,
+		CommunityMembership: []string{"testcommunity"},
+	})
+
+	cfg := &config.Config{}
+	cfg.Area.Enabled = true
+	cfg.Area.Communities = []config.CommunityConfig{
+		{Name: "testcommunity", AllowedAreas: []string{"london"}},
+	}
+
+	fences := []geofence.Fence{
+		{Name: "london", UserSelectable: true},
+	}
+	areaLogic := bot.NewAreaLogic(fences, cfg)
+
+	deps := &TrackingDeps{
+		Humans:       mock,
+		Config:       cfg,
+		RowText:      &rowtext.Generator{DefaultTemplateName: "1"},
+		Translations: i18n.NewBundle(),
+		AreaLogic:    areaLogic,
+		// Tracking intentionally nil: handler will panic at the diff step after
+		// validation — but by then newOverrideContext has already run once.
+	}
+
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.POST("/api/tracking/lure/:id", HandleCreateLure(deps))
+
+	// Five rows all referencing the same permitted area.
+	body := `[
+		{"lure_id":501,"override_areas":["london"]},
+		{"lure_id":502,"override_areas":["london"]},
+		{"lure_id":503,"override_areas":["london"]},
+		{"lure_id":504,"override_areas":["london"]},
+		{"lure_id":505,"override_areas":["london"]}
+	]`
+	req := httptest.NewRequest(http.MethodPost, "/api/tracking/lure/u3", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Count how many times Get was called — must be exactly 1 (the hoist).
+	var getCount int
+	for _, call := range mock.Calls {
+		if call == "Get" {
+			getCount++
+		}
+	}
+	if getCount != 1 {
+		t.Errorf("expected Get called 1 time for 5-row batch, got %d (hoist not working)", getCount)
 	}
 }

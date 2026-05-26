@@ -27,6 +27,8 @@ var raidParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.gym"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.gen"},
+	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -73,6 +75,12 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if block != nil {
 		return []bot.Reply{*block}
 	}
+
+	override, overrideReply := parseOverride(ctx, parsed.Strings["location"], parsed.StringLists["area"], common.Distance)
+	if overrideReply != nil {
+		return []bot.Reply{*overrideReply}
+	}
+
 	exclusive := parsed.HasKeyword("arg.ex")
 	team := parsed.Team
 
@@ -117,21 +125,23 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// Track specific pokemon
 		for _, mon := range parsed.Pokemon {
 			insert = append(insert, db.RaidTrackingAPI{
-				ID:          ctx.TargetID,
-				ProfileNo:   ctx.ProfileNo,
-				Ping:        pings,
-				PokemonID:   mon.PokemonID,
-				Form:        mon.Form,
-				Level:       bot.WildcardID,
-				Team:        team,
-				Exclusive:   db.IntBool(exclusive),
-				Move:        move,
-				Evolution:   bot.WildcardID,
-				GymID:       gymID,
-				Distance:    common.Distance,
-				Template:    common.Template,
-				Clean:       common.Clean,
-				RSVPChanges: rsvpChanges,
+				ID:                    ctx.TargetID,
+				ProfileNo:             ctx.ProfileNo,
+				Ping:                  pings,
+				PokemonID:             mon.PokemonID,
+				Form:                  mon.Form,
+				Level:                 bot.WildcardID,
+				Team:                  team,
+				Exclusive:             db.IntBool(exclusive),
+				Move:                  move,
+				Evolution:             bot.WildcardID,
+				GymID:                 gymID,
+				Distance:              common.Distance,
+				Template:              common.Template,
+				Clean:                 common.Clean,
+				RSVPChanges:           rsvpChanges,
+				OverrideLocationLabel: override.LocationLabel,
+				OverrideAreas:         override.Areas,
 			})
 		}
 	} else {
@@ -166,20 +176,22 @@ func (c *RaidCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 		for lvl := range levelSet {
 			insert = append(insert, db.RaidTrackingAPI{
-				ID:          ctx.TargetID,
-				ProfileNo:   ctx.ProfileNo,
-				Ping:        pings,
-				PokemonID:   bot.WildcardID,
-				Level:       lvl,
-				Team:        team,
-				Exclusive:   db.IntBool(exclusive),
-				Move:        move,
-				Evolution:   bot.WildcardID,
-				GymID:       gymID,
-				Distance:    common.Distance,
-				Template:    common.Template,
-				Clean:       common.Clean,
-				RSVPChanges: rsvpChanges,
+				ID:                    ctx.TargetID,
+				ProfileNo:             ctx.ProfileNo,
+				Ping:                  pings,
+				PokemonID:             bot.WildcardID,
+				Level:                 lvl,
+				Team:                  team,
+				Exclusive:             db.IntBool(exclusive),
+				Move:                  move,
+				Evolution:             bot.WildcardID,
+				GymID:                 gymID,
+				Distance:              common.Distance,
+				Template:              common.Template,
+				Clean:                 common.Clean,
+				RSVPChanges:           rsvpChanges,
+				OverrideLocationLabel: override.LocationLabel,
+				OverrideAreas:         override.Areas,
 			})
 		}
 	}

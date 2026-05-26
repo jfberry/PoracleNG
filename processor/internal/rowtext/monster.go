@@ -105,6 +105,7 @@ func (g *Generator) MonsterRowText(tr *i18n.Translator, monster *db.MonsterTrack
 	}
 
 	s += " " + standardText(tr, monster.Template, g.DefaultTemplateName, monster.Clean)
+	s = appendOverride(tr, s, monster.OverrideLocationLabel, monster.OverrideAreas)
 
 	return s
 }

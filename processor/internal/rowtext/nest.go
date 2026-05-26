@@ -25,6 +25,7 @@ func (g *Generator) NestRowText(tr *i18n.Translator, nest *db.NestTracking) stri
 	}
 
 	s += " " + standardText(tr, nest.Template, g.DefaultTemplateName, nest.Clean)
+	s = appendOverride(tr, s, nest.OverrideLocationLabel, nest.OverrideAreas)
 
 	return s
 }

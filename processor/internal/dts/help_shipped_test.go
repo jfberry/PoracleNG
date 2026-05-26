@@ -1,8 +1,11 @@
 package dts
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -28,10 +31,11 @@ func TestShippedHelpTemplatesLoadAndRender(t *testing.T) {
 		"index",
 		"track", "untrack", "raid", "egg", "quest",
 		"invasion", "incident", "lure", "nest", "gym", "fort", "maxbattle",
-		"tracked", "script",
+		"tracked", "script", "info",
 		"area", "location", "profile", "language",
 		"start", "stop", "poracle", "unregister",
 		"enable", "disable", "broadcast", "userlist", "community",
+		"summary", "mute",
 	}
 
 	view := map[string]any{"prefix": "!"}
@@ -52,6 +56,75 @@ func TestShippedHelpTemplatesLoadAndRender(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestShippedHelpTemplatesRespectDiscordFieldLimits — every Discord embed field
+// value in every shipped help template must be at most 1024 characters.
+// Discord silently drops longer values, which caused a regression with
+// the !help summary template. This test fails the build before deployment.
+func TestShippedHelpTemplatesRespectDiscordFieldLimits(t *testing.T) {
+	const maxFieldLen = 1024
+
+	_, thisFile, _, _ := runtime.Caller(0)
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+	fallbackDir := filepath.Join(repoRoot, "fallbacks")
+
+	ts, err := LoadTemplates(t.TempDir(), fallbackDir)
+	if err != nil {
+		t.Fatalf("LoadTemplates: %v", err)
+	}
+
+	// Discover help IDs from disk so this list stays in sync automatically.
+	entries, err := os.ReadDir(filepath.Join(fallbackDir, "dts", "help"))
+	if err != nil {
+		t.Fatalf("ReadDir fallbacks/dts/help: %v", err)
+	}
+	var helpIDs []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
+			helpIDs = append(helpIDs, strings.TrimSuffix(e.Name(), ".json"))
+		}
+	}
+	if len(helpIDs) == 0 {
+		t.Fatal("no help JSON files found in fallbacks/dts/help/")
+	}
+
+	view := map[string]any{"prefix": "!"}
+
+	type embedShape struct {
+		Embed struct {
+			Fields []struct {
+				Name  string `json:"name"`
+				Value string `json:"value"`
+			} `json:"fields"`
+		} `json:"embed"`
+	}
+
+	for _, id := range helpIDs {
+		t.Run(id, func(t *testing.T) {
+			tmpl := ts.Get("help", "discord", id, "en")
+			if tmpl == nil {
+				// Some IDs may only exist for telegram or not at all yet.
+				t.Skipf("no discord template for help/%s", id)
+				return
+			}
+			rendered, err := tmpl.Exec(view)
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			var parsed embedShape
+			if err := json.Unmarshal([]byte(rendered), &parsed); err != nil {
+				// Not an embed-shaped template — skip length check.
+				return
+			}
+			for i, f := range parsed.Embed.Fields {
+				if len(f.Value) > maxFieldLen {
+					t.Errorf("field %d (%q) value is %d chars, exceeds Discord %d-char limit",
+						i, f.Name, len(f.Value), maxFieldLen)
+				}
+			}
+		})
 	}
 }
 

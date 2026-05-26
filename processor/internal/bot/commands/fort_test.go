@@ -203,3 +203,33 @@ func TestFort_Station(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, "station", rows[0].FortType)
 }
+
+func TestFort_AcceptsAreaOverride(t *testing.T) {
+	ctx, _ := newTestLocationCtx(t)
+
+	forts := store.NewMockTrackingStore[db.FortTrackingAPI](
+		store.FortGetUID, store.FortSetUID,
+	)
+	ctx.Tracking = &store.TrackingStores{Forts: forts}
+
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
+		Moves:    map[int]*gamedata.Move{},
+		Types:    map[int]*gamedata.TypeInfo{},
+	}
+	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
+	ctx.Resolver = resolver
+	ctx.ArgMatcher = bot.NewArgMatcher(ctx.Translations, gd, resolver, []string{"en"})
+	ctx.GameData = gd
+	ctx.RowText = &rowtext.Generator{GD: gd, Translations: ctx.Translations, DefaultTemplateName: "1"}
+	ctx.HasArea = true
+
+	cmd := &FortCommand{}
+	replies := cmd.Run(ctx, strings.Fields("everything area:london"))
+	require.NotEmpty(t, replies)
+	assert.NotEqual(t, "🙅", replies[0].React, "rejected: %+v", replies)
+
+	rules, _ := ctx.Tracking.Forts.SelectByIDProfile("user1", 1)
+	require.Len(t, rules, 1)
+	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
+}

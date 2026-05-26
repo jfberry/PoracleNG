@@ -1,54 +1,76 @@
 package mappers
 
 import (
-	"fmt"
-	"regexp"
-	"strings"
-
 	"github.com/bwmarrin/discordgo"
-
-	"github.com/pokemon/poracleng/processor/internal/bot"
 )
 
-// coordsRe matches "lat,lon" pairs with optional surrounding whitespace.
-// Reuses the same shape as bot/argmatch.go's latLonRe but tolerates a single
-// space after the comma — slash users frequently paste coordinates from
-// Google Maps which include one ("51.28, 1.08").
-var coordsRe = regexp.MustCompile(`^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$`)
-
-// Location maps /location to text-command tokens. Accepts either a coordinate
-// pair (passed through unchanged in the `lat,lon` form the text bot expects)
-// or a free-form place name that we forward-geocode via deps.Geocoder.
+// Location maps /location sub-command invocations to the text-command tokens
+// read by LocationCommand in processor/internal/bot/commands/location.go.
 //
-// Unlike every other mapper, Location takes BotDeps because resolving a place
-// name requires a live geocoder call. The dispatcher special-cases this in
-// HandleCommand and routes here directly; Location does NOT register in the
-// shared mapper registry because the registry's func type is options-only.
+// Sub-commands:
 //
-// When the geocoder is not configured, a coordinate input still works (the
-// fast path doesn't touch deps); a place-name input surfaces a clean error
-// telling the operator they need to enable geocoding. The text bot has the
-// same constraint — see internal/bot/commands/location.go — so behaviour is
-// consistent across surfaces.
-func Location(opts []*discordgo.ApplicationCommandInteractionDataOption, deps *bot.BotDeps) ([]string, error) {
-	o := flattenOptions(opts)
-	raw := strings.TrimSpace(getString(o["place"]))
-	if raw == "" {
-		return nil, &MapperError{Key: "error.slash.location.empty"}
+//	add <name> <place>     → ["add", name, place]   (geocoding done by text cmd)
+//	list                   → ["list"]
+//	show <name>            → ["show", name]
+//	remove <name>          → ["remove", name]
+//	set-default <place>    → [place]                (bare !location <place> sets default)
+//	remove-default         → ["remove", "default"]
+func Location(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, error) {
+	if len(opts) == 0 {
+		return nil, &MapperError{Key: "error.slash.location.no_subcommand"}
 	}
-
-	if m := coordsRe.FindStringSubmatch(raw); m != nil {
-		// Re-pack in the text-bot canonical form "lat,lon" with no spaces
-		// so latLonRe in argmatch.go matches it on the first try.
-		return []string{m[1] + "," + m[2]}, nil
+	sub := opts[0]
+	if sub == nil || sub.Type != discordgo.ApplicationCommandOptionSubCommand {
+		return nil, &MapperError{Key: "error.slash.location.no_subcommand"}
 	}
-
-	if deps == nil || deps.Geocoder == nil {
-		return nil, &MapperError{Key: "error.slash.location.no_geocoder"}
+	switch sub.Name {
+	case "add":
+		o := flattenOptions(sub.Options)
+		name := getString(o["name"])
+		place := getString(o["place"])
+		if name == "" {
+			return nil, &MapperError{Key: "error.slash.location.no_name"}
+		}
+		if place == "" {
+			return nil, &MapperError{Key: "error.slash.location.empty"}
+		}
+		return []string{"add", name, place}, nil
+	case "list":
+		return []string{"list"}, nil
+	case "show":
+		if len(sub.Options) == 0 || sub.Options[0] == nil {
+			return nil, &MapperError{Key: "error.slash.location.no_name"}
+		}
+		name := sub.Options[0].StringValue()
+		if name == "" {
+			return nil, &MapperError{Key: "error.slash.location.no_name"}
+		}
+		return []string{"show", name}, nil
+	case "remove":
+		if len(sub.Options) == 0 || sub.Options[0] == nil {
+			return nil, &MapperError{Key: "error.slash.location.no_name"}
+		}
+		name := sub.Options[0].StringValue()
+		if name == "" {
+			return nil, &MapperError{Key: "error.slash.location.no_name"}
+		}
+		return []string{"remove", name}, nil
+	case "set-default":
+		var place string
+		for _, o := range sub.Options {
+			if o.Name == "place" {
+				place = o.StringValue()
+			}
+		}
+		if place == "" {
+			return nil, &MapperError{Key: "error.slash.location.empty"}
+		}
+		// The bare !location <place> form sets the default — translate to that.
+		return []string{place}, nil
+	case "remove-default":
+		return []string{"remove", "default"}, nil
 	}
-	results, err := deps.Geocoder.Forward(raw)
-	if err != nil || len(results) == 0 {
-		return nil, &MapperError{Key: "error.slash.location.geocode_failed", Args: []any{raw}}
-	}
-	return []string{fmt.Sprintf("%g,%g", results[0].Latitude, results[0].Longitude)}, nil
+	return nil, &MapperError{Key: "error.slash.location.unknown_subcommand"}
 }
+
+func init() { registry["location"] = Location }

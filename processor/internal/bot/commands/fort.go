@@ -20,6 +20,8 @@ var fortParams = []bot.ParamDef{
 	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
+	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.pokestop"},
@@ -65,6 +67,12 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if block != nil {
 		return []bot.Reply{*block}
 	}
+
+	override, overrideReply := parseOverride(ctx, parsed.Strings["location"], parsed.StringLists["area"], common.Distance)
+	if overrideReply != nil {
+		return []bot.Reply{*overrideReply}
+	}
+
 	includeEmpty := parsed.HasKeyword("arg.include_empty")
 
 	// Determine fort_type. Per Golbat webhooks-reference, fort_update
@@ -131,14 +139,16 @@ func (c *FortCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	}
 
 	insert := []db.FortTrackingAPI{{
-		ID:           ctx.TargetID,
-		ProfileNo:    ctx.ProfileNo,
-		Ping:         pings,
-		Template:     common.Template,
-		Distance:     common.Distance,
-		FortType:     fortType,
-		IncludeEmpty: db.IntBool(includeEmpty),
-		ChangeTypes:  changeTypesStr,
+		ID:                    ctx.TargetID,
+		ProfileNo:             ctx.ProfileNo,
+		Ping:                  pings,
+		Template:              common.Template,
+		Distance:              common.Distance,
+		FortType:              fortType,
+		IncludeEmpty:          db.IntBool(includeEmpty),
+		ChangeTypes:           changeTypesStr,
+		OverrideLocationLabel: override.LocationLabel,
+		OverrideAreas:         override.Areas,
 	}}
 
 	tracked, err := ctx.Tracking.Forts.SelectByIDProfile(ctx.TargetID, ctx.ProfileNo)

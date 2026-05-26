@@ -139,6 +139,21 @@ func TestRaidMapperAllOptions(t *testing.T) {
 	}
 }
 
+func TestRaidMapperLocationAreas(t *testing.T) {
+	tokens, err := Raid([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("boss", "mewtwo"),
+		sopt("location", "Work"),
+		sopt("areas", "london"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"mewtwo", "location:Work", "area:london"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
 func TestLookupRaid(t *testing.T) {
 	if Lookup("raid") == nil {
 		t.Fatal("nil mapper for /raid")

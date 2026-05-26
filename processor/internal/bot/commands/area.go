@@ -21,12 +21,15 @@ func (c *AreaCommand) Name() string      { return "cmd.area" }
 func (c *AreaCommand) Aliases() []string { return nil }
 
 func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
+	if help := helpArgReply(ctx, args, "msg.area.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
+
 	tr := ctx.Tr()
 
 	if len(args) == 0 {
 		// Show current areas + usage hint
 		currentAreas := humanAreas(getUserHuman(ctx))
-		prefix := bot.CommandPrefix(ctx)
 		var text string
 		if len(currentAreas) > 0 {
 			displayNames := ctx.AreaLogic.ResolveDisplayNames(currentAreas)
@@ -34,7 +37,7 @@ func (c *AreaCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		} else {
 			text = tr.T("status.no_areas")
 		}
-		text += "\n\n" + tr.Tf("msg.area.usage", prefix)
+		text += "\n\n" + inlineUsage(ctx, "msg.area.usage")
 		return []bot.Reply{{Text: text}}
 	}
 

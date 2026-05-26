@@ -107,6 +107,7 @@ func Quest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 	if v, ok := o["template"]; ok && v.StringValue() != "" {
 		tokens = append(tokens, "template:"+v.StringValue())
 	}
+	appendLocationArea(&tokens, o)
 	return tokens, nil
 }
 

@@ -141,3 +141,35 @@ func TestNest_WithDistance(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, 500, rows[0].Distance)
 }
+
+func TestNest_AcceptsAreaOverride(t *testing.T) {
+	ctx, _ := newTestLocationCtx(t)
+
+	nests := store.NewMockTrackingStore[db.NestTrackingAPI](
+		store.NestGetUID, store.NestSetUID,
+	)
+	ctx.Tracking = &store.TrackingStores{Nests: nests}
+
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
+			{ID: 25, Form: 0}: {PokemonID: 25, FormID: 0},
+		},
+		Moves: map[int]*gamedata.Move{},
+		Types: map[int]*gamedata.TypeInfo{},
+	}
+	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
+	ctx.Resolver = resolver
+	ctx.ArgMatcher = bot.NewArgMatcher(ctx.Translations, gd, resolver, []string{"en"})
+	ctx.GameData = gd
+	ctx.RowText = &rowtext.Generator{GD: gd, Translations: ctx.Translations, DefaultTemplateName: "1"}
+	ctx.HasArea = true
+
+	cmd := &NestCommand{}
+	replies := cmd.Run(ctx, strings.Fields("25 area:london"))
+	require.NotEmpty(t, replies)
+	assert.NotEqual(t, "🙅", replies[0].React, "rejected: %+v", replies)
+
+	rules, _ := ctx.Tracking.Nests.SelectByIDProfile("user1", 1)
+	require.Len(t, rules, 1)
+	assert.Len(t, rules[0].OverrideAreas, 1, "override not stored: %+v", rules[0])
+}

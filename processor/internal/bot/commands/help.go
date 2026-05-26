@@ -77,26 +77,6 @@ func (c *HelpCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	return c.renderHelpTemplate(ctx, "greeting", "", platform, view)
 }
 
-// helpEffectiveLanguage resolves the language to use for help template
-// lookups. Priority: language hint (from language-specific command
-// variants like !dasporacle) → ctx.Language → server default locale.
-// Without the default-locale fallback, operators whose custom help has
-// an explicit language: "en" would lose to the shipped readonly
-// fallback for any caller with ctx.Language == "" (unregistered users,
-// users who never ran !language).
-func helpEffectiveLanguage(ctx *bot.CommandContext) string {
-	if hint := ctx.GetLanguageHint(); hint != "" {
-		return hint
-	}
-	if ctx.Language != "" {
-		return ctx.Language
-	}
-	if ctx.Config != nil && ctx.Config.General.Locale != "" {
-		return ctx.Config.General.Locale
-	}
-	return "en"
-}
-
 func (c *HelpCommand) renderHelpTemplate(ctx *bot.CommandContext, templateType, templateID, platform string, view map[string]any) []bot.Reply {
 	if ctx.DTS == nil {
 		// No DTS system — fall back to i18n text

@@ -106,11 +106,13 @@ func HandleDeleteInvasion(deps *TrackingDeps) gin.HandlerFunc {
 
 // invasionInsertRequest represents a single invasion tracking row from the POST body.
 type invasionInsertRequest struct {
-	GruntType *string  `json:"grunt_type"`
-	Distance  flexInt  `json:"distance"`
-	Template  any      `json:"template"`
-	Clean     flexBool `json:"clean"`
-	Gender    flexInt  `json:"gender"`
+	GruntType             *string  `json:"grunt_type"`
+	Distance              flexInt  `json:"distance"`
+	Template              any      `json:"template"`
+	Clean                 flexBool `json:"clean"`
+	Gender                flexInt  `json:"gender"`
+	OverrideLocationLabel string   `json:"override_location_label"`
+	OverrideAreas         []string `json:"override_areas"`
 }
 
 // HandleCreateInvasion returns the POST /api/tracking/invasion/{id} handler.
@@ -156,8 +158,19 @@ func HandleCreateInvasion(deps *TrackingDeps) gin.HandlerFunc {
 			defaultTemplate = "1"
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		insert := make([]db.InvasionTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, oc, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			if req.GruntType == nil || *req.GruntType == "" {
 				trackingJSONError(c, http.StatusBadRequest, "Grunt type mandatory")
 				return
@@ -183,14 +196,16 @@ func HandleCreateInvasion(deps *TrackingDeps) gin.HandlerFunc {
 			gender := req.Gender.intValue(0)
 
 			insert = append(insert, db.InvasionTrackingAPI{
-				ID:        human.ID,
-				ProfileNo: profileNo,
-				Ping:      "",
-				Template:  template,
-				Distance:  distance,
-				Clean:     clean,
-				Gender:    gender,
-				GruntType: *req.GruntType,
+				ID:                    human.ID,
+				ProfileNo:             profileNo,
+				Ping:                  "",
+				Template:              template,
+				Distance:              distance,
+				Clean:                 clean,
+				Gender:                gender,
+				GruntType:             *req.GruntType,
+				OverrideLocationLabel: req.OverrideLocationLabel,
+				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 

@@ -72,9 +72,7 @@ func resolveTargets(ctx *bot.CommandContext, args []string, allowUserFallback bo
 }
 
 func (c *CommunityCommand) usageReply(ctx *bot.CommandContext) []bot.Reply {
-	prefix := bot.CommandPrefix(ctx)
-	tr := ctx.Tr()
-	return []bot.Reply{{Text: tr.Tf("msg.community.usage", prefix)}}
+	return []bot.Reply{{Text: inlineUsage(ctx, "msg.community.usage")}}
 }
 
 func (c *CommunityCommand) runList(ctx *bot.CommandContext) []bot.Reply {

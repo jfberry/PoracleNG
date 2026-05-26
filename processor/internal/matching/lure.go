@@ -44,13 +44,15 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedU
 		}
 
 		trackings = append(trackings, trackingUserData{
-			HumanID:   l.ID,
-			ProfileNo: l.ProfileNo,
-			Distance:  l.Distance,
-			Template:  l.Template,
-			Clean:     l.Clean,
-			Ping:      l.Ping,
-			UID:       l.UID,
+			HumanID:               l.ID,
+			ProfileNo:             l.ProfileNo,
+			Distance:              l.Distance,
+			Template:              l.Template,
+			Clean:                 l.Clean,
+			Ping:                  l.Ping,
+			UID:                   l.UID,
+			OverrideLocationLabel: l.OverrideLocationLabel,
+			OverrideAreas:         l.OverrideAreas,
 		})
 	}
 

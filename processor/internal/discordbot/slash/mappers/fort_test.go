@@ -87,6 +87,21 @@ func TestLookupFort(t *testing.T) {
 	}
 }
 
+func TestFortMapperLocationAreas(t *testing.T) {
+	tokens, err := Fort([]*discordgo.ApplicationCommandInteractionDataOption{
+		iopt("fort_type", 0),
+		sopt("location", "Work"),
+		sopt("areas", "midtown"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"pokestop", "location:Work", "area:midtown"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
 func TestFortTypeName(t *testing.T) {
 	cases := map[int]string{
 		0:   "pokestop",

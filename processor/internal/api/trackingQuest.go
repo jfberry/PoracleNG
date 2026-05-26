@@ -110,14 +110,16 @@ func HandleDeleteQuest(deps *TrackingDeps) gin.HandlerFunc {
 
 // questInsertRequest represents a single quest tracking row from the POST body.
 type questInsertRequest struct {
-	RewardType flexInt  `json:"reward_type"`
-	Reward     flexInt  `json:"reward"`
-	Distance   flexInt  `json:"distance"`
-	Template   any      `json:"template"`
-	Clean      flexBool `json:"clean"`
-	Form       flexInt  `json:"form"`
-	Shiny      flexBool `json:"shiny"`
-	Amount     flexInt  `json:"amount"`
+	RewardType            flexInt  `json:"reward_type"`
+	Reward                flexInt  `json:"reward"`
+	Distance              flexInt  `json:"distance"`
+	Template              any      `json:"template"`
+	Clean                 flexBool `json:"clean"`
+	Form                  flexInt  `json:"form"`
+	Shiny                 flexBool `json:"shiny"`
+	Amount                flexInt  `json:"amount"`
+	OverrideLocationLabel string   `json:"override_location_label"`
+	OverrideAreas         []string `json:"override_areas"`
 }
 
 // HandleCreateQuest returns the POST /api/tracking/quest/{id} handler.
@@ -163,8 +165,19 @@ func HandleCreateQuest(deps *TrackingDeps) gin.HandlerFunc {
 			defaultTemplate = "1"
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		insert := make([]db.QuestTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, oc, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			rewardType := req.RewardType.intValue(0)
 			if !validRewardTypes[rewardType] {
 				trackingJSONError(c, http.StatusBadRequest, "Unrecognised reward_type value")
@@ -194,17 +207,19 @@ func HandleCreateQuest(deps *TrackingDeps) gin.HandlerFunc {
 			amount := req.Amount.intValue(0)
 
 			insert = append(insert, db.QuestTrackingAPI{
-				ID:         human.ID,
-				ProfileNo:  profileNo,
-				Ping:       "",
-				Template:   template,
-				Distance:   distance,
-				Clean:      clean,
-				RewardType: rewardType,
-				Reward:     reward,
-				Form:       form,
-				Shiny:      shiny,
-				Amount:     amount,
+				ID:                    human.ID,
+				ProfileNo:             profileNo,
+				Ping:                  "",
+				Template:              template,
+				Distance:              distance,
+				Clean:                 clean,
+				RewardType:            rewardType,
+				Reward:                reward,
+				Form:                  form,
+				Shiny:                 shiny,
+				Amount:                amount,
+				OverrideLocationLabel: req.OverrideLocationLabel,
+				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 

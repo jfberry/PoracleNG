@@ -157,7 +157,8 @@ The handler creates a `matching.*Data` struct and calls the matcher. All matcher
    - Human exists, is enabled, not admin-disabled
    - Alert type not in `blocked_alerts`
    - Profile number matches
-   - Distance check (haversine) if distance > 0, else area overlap check
+   - Distance check (haversine) if distance > 0, else area overlap check. Location anchor resolution order: rule `override_location_label` → profile location → human default location.
+   - Area overlap check uses rule `override_areas` if set, else profile areas, else human default areas.
    - Strict area restriction (if configured)
 4. Returns `[]MatchedUser` with destination info (id, type, template, clean, ping, distance)
 
@@ -526,6 +527,10 @@ All API endpoints are accessed via the processor (port 3030). The processor hand
 | POST | `/api/humans/{id}/setLocation/{lat}/{lon}` | Update user location |
 | GET | `/api/humans/{id}/checkLocation/{lat}/{lon}` | Check if location is in allowed areas |
 | POST | `/api/humans/{id}/setAreas` | Set user's selected geofence areas |
+| GET | `/api/humans/{id}/locations` | List saved locations + default |
+| GET | `/api/humans/{id}/locations/{label}` | Show one saved location by label |
+| POST | `/api/humans/{id}/locations/add` | Create one or more saved locations |
+| POST | `/api/humans/{id}/locations/{label}/delete` | Delete a saved location (409 if referenced by a rule) |
 | POST | `/api/humans/{id}/switchProfile/{profile}` | Switch active profile |
 | GET | `/api/humans/{id}/roles` | List Discord roles across guilds |
 | POST | `/api/humans/{id}/roles/add/{roleId}` | Add a Discord role to a user |
@@ -782,8 +787,9 @@ MySQL (or MariaDB). Key tables:
 - `forts` — fort update tracking (fort_type, include_empty, change_types)
 - `maxbattle` — max battle tracking (pokemon_id, level, gmax, move)
 - `profiles` — user profiles (profile_no, name, pokemon/raid/egg/invasion area overrides)
+- `user_locations` — per-user saved named locations (label → lat/lon) referenced by per-rule `override_location_label`
 
-All tracking tables have: `id` (FK to humans), `profile_no`, `distance`, `template`, `clean`, `ping`.
+All tracking tables have: `id` (FK to humans), `profile_no`, `distance`, `template`, `clean`, `ping`, `override_location_label` (nullable string), `override_areas` (nullable JSON array).
 
 Migrations in `processor/internal/db/migrations/` (SQL files, run on processor startup). The DSN includes `multiStatements=true` to support multi-statement migration files on fresh installations.
 

@@ -105,8 +105,9 @@ func emitFlag(opt *discordgo.ApplicationCommandInteractionDataOption, keyword st
 	return ""
 }
 
-// appendCommonTail emits the distance / clean / template tokens that every
-// tracking-style mapper accepts as its tail. Equivalent to the inline block
+// appendCommonTail emits the distance / clean / template / location / areas
+// tokens that every tracking-style mapper accepts as its tail. Equivalent
+// to the inline block
 //
 //	appendDistance(&tokens, o["distance"])
 //	if tok := emitFlag(o["clean"], "clean"); tok != "" {
@@ -115,9 +116,11 @@ func emitFlag(opt *discordgo.ApplicationCommandInteractionDataOption, keyword st
 //	if v, ok := o["template"]; ok && v.StringValue() != "" {
 //	    tokens = append(tokens, "template:"+v.StringValue())
 //	}
+//	appendLocationArea(&tokens, o)
 //
 // Mappers with extra interleaved options (e.g. /quest's `summary` between
-// `clean` and `template`) emit those inline rather than using this helper.
+// `clean` and `template`) emit those inline rather than using this helper
+// but must still call appendLocationArea themselves.
 func appendCommonTail(tokens *[]string, o map[string]*discordgo.ApplicationCommandInteractionDataOption) {
 	appendDistance(tokens, o["distance"])
 	if tok := emitFlag(o["clean"], "clean"); tok != "" {
@@ -126,6 +129,7 @@ func appendCommonTail(tokens *[]string, o map[string]*discordgo.ApplicationComma
 	if v, ok := o["template"]; ok && v.StringValue() != "" {
 		*tokens = append(*tokens, "template:"+v.StringValue())
 	}
+	appendLocationArea(tokens, o)
 }
 
 // fortTypeName maps the /fort fort_type choice integer to the canonical
@@ -139,4 +143,18 @@ func fortTypeName(v int) string {
 		return "gym"
 	}
 	return ""
+}
+
+// appendLocationArea emits `location:<name>` and `area:<value>` tokens for
+// the shared tracker options. Non-empty location values pass through
+// unchanged to the text-command parser's `location:` keyword. The `areas`
+// option accepts a comma-separated string that the text parser already
+// handles as a single `area:X,Y` token.
+func appendLocationArea(tokens *[]string, o map[string]*discordgo.ApplicationCommandInteractionDataOption) {
+	if v, ok := o["location"]; ok && v.StringValue() != "" {
+		*tokens = append(*tokens, "location:"+v.StringValue())
+	}
+	if v, ok := o["areas"]; ok && v.StringValue() != "" {
+		*tokens = append(*tokens, "area:"+v.StringValue())
+	}
 }

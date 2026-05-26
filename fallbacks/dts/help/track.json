@@ -30,7 +30,7 @@
         },
         {
           "name": "Message flags",
-          "value": "`clean` — auto-delete the alert when the pokemon despawns\n`edit` — keep one message and edit it in place as the pokemon's data changes\n`ping` — @-mention you when the alert fires\n`template:2` — use a specific DTS template (see `{{prefix}}info templates`)"
+          "value": "`clean` — auto-delete the alert when the pokemon despawns\n`edit` — keep one message and edit it in place as the pokemon's data changes\n`template:2` — use a specific DTS template (see `{{prefix}}info templates`)"
         },
         {
           "name": "Remove tracking",

@@ -21,6 +21,8 @@ var gymParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.d"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.gym"},
+	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
@@ -60,6 +62,12 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if block != nil {
 		return []bot.Reply{*block}
 	}
+
+	override, overrideReply := parseOverride(ctx, parsed.Strings["location"], parsed.StringLists["area"], common.Distance)
+	if overrideReply != nil {
+		return []bot.Reply{*overrideReply}
+	}
+
 	slotChanges := parsed.HasKeyword("arg.slot_changes")
 
 	battleChanges := false
@@ -122,16 +130,18 @@ func (c *GymCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	insert := make([]db.GymTrackingAPI, 0, len(teams))
 	for _, team := range teams {
 		insert = append(insert, db.GymTrackingAPI{
-			ID:            ctx.TargetID,
-			ProfileNo:     ctx.ProfileNo,
-			Ping:          pings,
-			Template:      common.Template,
-			Distance:      common.Distance,
-			Team:          team,
-			Clean:         common.Clean,
-			SlotChanges:   db.IntBool(slotChanges),
-			BattleChanges: db.IntBool(battleChanges),
-			GymID:         gymIDPtr,
+			ID:                    ctx.TargetID,
+			ProfileNo:             ctx.ProfileNo,
+			Ping:                  pings,
+			Template:              common.Template,
+			Distance:              common.Distance,
+			Team:                  team,
+			Clean:                 common.Clean,
+			SlotChanges:           db.IntBool(slotChanges),
+			BattleChanges:         db.IntBool(battleChanges),
+			GymID:                 gymIDPtr,
+			OverrideLocationLabel: override.LocationLabel,
+			OverrideAreas:         override.Areas,
 		})
 	}
 

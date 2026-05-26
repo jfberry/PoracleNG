@@ -83,6 +83,32 @@ func TestInfo_Config_NoReact(t *testing.T) {
 	}
 }
 
+// TestInfo_HelpArgReturnsUsage verifies that "!info help" returns usage text
+// rather than interpreting "help" as a pokemon name lookup.
+func TestInfo_HelpArgReturnsUsage(t *testing.T) {
+	ctx, _ := testCtx(t)
+
+	cmd := &InfoCommand{}
+	replies := cmd.Run(ctx, []string{"help"})
+
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply, got none")
+	}
+	text := replies[0].Text
+	// The usage message contains "info" as the command name and subcommand hints.
+	if !strings.Contains(text, "info") {
+		t.Errorf("expected usage text containing 'info', got: %q", text)
+	}
+	// Must NOT return the pokemon-not-found error for "help".
+	if strings.Contains(text, "not found") || strings.Contains(text, "pokemon_not_found") {
+		t.Errorf("!info help should return usage, not pokemon-not-found: %q", text)
+	}
+	// Must NOT have a block react
+	if replies[0].React == "🙅" {
+		t.Error("!info help should not return a 🙅 react")
+	}
+}
+
 func adminLabel(admin bool) string {
 	if admin {
 		return "admin"

@@ -1,12 +1,51 @@
 package db
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/guregu/null/v6"
 	"github.com/jmoiron/sqlx"
 )
+
+// marshalOverrideAreas encodes []string to a JSON string for DB storage.
+// Returns nil when areas is empty so the DB column stays NULL.
+func marshalOverrideAreas(areas []string) any {
+	if len(areas) == 0 {
+		return nil
+	}
+	b, _ := json.Marshal(areas)
+	return string(b)
+}
+
+// nullIfEmpty converts an empty string to nil (DB NULL), otherwise returns the string.
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// parseOverrideAreas decodes the raw JSON column into []string and normalizes
+// each area name to lowercase with underscores replaced by spaces. This matches
+// the normalization applied to human.Area (via parseAndNormalizeAreas) and the
+// geofence NormalizedName keys produced by rtree.go, so override area comparisons
+// in the matcher's areaOverlap function will find correct matches regardless of
+// how the area name was originally stored.
+func parseOverrideAreas(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var areas []string
+	if err := json.Unmarshal([]byte(raw), &areas); err != nil {
+		return nil
+	}
+	for i, a := range areas {
+		areas[i] = strings.ToLower(strings.ReplaceAll(a, "_", " "))
+	}
+	return areas
+}
 
 // DeleteByUID deletes a single row from a tracking table by id and uid.
 func DeleteByUID(db *sqlx.DB, table, id string, uid int64) error {
@@ -47,14 +86,20 @@ func DeleteByUIDs(db *sqlx.DB, table, id string, uids []int64) error {
 //   - diff:"update" updatable fields (if ALL diffs are here → update in place)
 //   - (no tag)      regular field (any diff → new insert)
 type LureTrackingAPI struct {
-	UID       int64  `db:"uid"        json:"uid"        diff:"-"`
-	ID        string `db:"id"         json:"id"         diff:"-"`
-	ProfileNo int    `db:"profile_no" json:"profile_no" diff:"-"`
-	Ping      string `db:"ping"       json:"ping"`
-	Clean     int    `db:"clean"      json:"clean"      diff:"update"`
-	Distance  int    `db:"distance"   json:"distance"   diff:"update"`
-	Template  string `db:"template"   json:"template"   diff:"update"`
-	LureID    int    `db:"lure_id"    json:"lure_id"    diff:"match"`
+	UID                   int64    `db:"uid"                    json:"uid"                    diff:"-"`
+	ID                    string   `db:"id"                     json:"id"                     diff:"-"`
+	ProfileNo             int      `db:"profile_no"             json:"profile_no"             diff:"-"`
+	Ping                  string   `db:"ping"                   json:"ping"`
+	Clean                 int      `db:"clean"                  json:"clean"                  diff:"update"`
+	Distance              int      `db:"distance"               json:"distance"               diff:"update"`
+	Template              string   `db:"template"               json:"template"               diff:"update"`
+	LureID                int      `db:"lure_id"                json:"lure_id"                diff:"match"`
+	// Override fields participate in the default (non-match, non-update)
+	// diff path: any change creates a new insert; the old row stays until
+	// removed explicitly. Same semantics as template/distance.
+	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:""`
 }
 
 // SelectLuresByIDProfile returns all lure trackings for a given human and profile.
@@ -62,10 +107,15 @@ func SelectLuresByIDProfile(db *sqlx.DB, id string, profileNo int) ([]LureTracki
 	var lures []LureTrackingAPI
 	err := db.Select(&lures,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '') AS template, lure_id
+		        COALESCE(template, '') AS template, lure_id,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM lures WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select lures for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range lures {
+		lures[i].OverrideAreas = parseOverrideAreas(lures[i].OverrideAreasRaw)
 	}
 	return lures, nil
 }
@@ -73,10 +123,12 @@ func SelectLuresByIDProfile(db *sqlx.DB, id string, profileNo int) ([]LureTracki
 // InsertLure inserts a single lure tracking row and returns the new uid.
 func InsertLure(db *sqlx.DB, lure *LureTrackingAPI) (int64, error) {
 	result, err := db.Exec(
-		`INSERT INTO lures (id, profile_no, ping, clean, distance, template, lure_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO lures (id, profile_no, ping, clean, distance, template, lure_id,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		lure.ID, lure.ProfileNo, lure.Ping, lure.Clean, lure.Distance,
-		lure.Template, lure.LureID)
+		lure.Template, lure.LureID,
+		nullIfEmpty(lure.OverrideLocationLabel), marshalOverrideAreas(lure.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert lure: %w", err)
 	}
@@ -89,15 +141,18 @@ func InsertLure(db *sqlx.DB, lure *LureTrackingAPI) (int64, error) {
 
 // FortTrackingAPI represents a fort tracking row for API operations.
 type FortTrackingAPI struct {
-	UID          int64   `db:"uid"           json:"uid"           diff:"-"`
-	ID           string  `db:"id"            json:"id"            diff:"-"`
-	ProfileNo    int     `db:"profile_no"    json:"profile_no"    diff:"-"`
-	Ping         string  `db:"ping"          json:"ping"`
-	Distance     int     `db:"distance"      json:"distance"      diff:"update"`
-	Template     string  `db:"template"      json:"template"      diff:"update"`
-	FortType     string  `db:"fort_type"     json:"fort_type"     diff:"match"`
-	IncludeEmpty IntBool `db:"include_empty" json:"include_empty"`
-	ChangeTypes  string  `db:"change_types"  json:"change_types"`
+	UID                   int64   `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string  `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int     `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string  `db:"ping"                    json:"ping"`
+	Distance              int     `db:"distance"                json:"distance"               diff:"update"`
+	Template              string  `db:"template"                json:"template"               diff:"update"`
+	FortType              string  `db:"fort_type"               json:"fort_type"              diff:"match"`
+	IncludeEmpty          IntBool `db:"include_empty"           json:"include_empty"`
+	ChangeTypes           string  `db:"change_types"            json:"change_types"`
+	OverrideLocationLabel string  `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string  `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string `db:"-"                     json:"override_areas"          diff:""`
 }
 
 // SelectFortsByIDProfile returns all fort trackings for a given human and profile.
@@ -108,10 +163,15 @@ func SelectFortsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]FortTracki
 		        COALESCE(template, '') AS template,
 		        COALESCE(fort_type, 'everything') AS fort_type,
 		        COALESCE(include_empty, true) AS include_empty,
-		        COALESCE(change_types, '[]') AS change_types
+		        COALESCE(change_types, '[]') AS change_types,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM forts WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select forts for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range forts {
+		forts[i].OverrideAreas = parseOverrideAreas(forts[i].OverrideAreasRaw)
 	}
 	return forts, nil
 }
@@ -119,10 +179,12 @@ func SelectFortsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]FortTracki
 // InsertFort inserts a single fort tracking row and returns the new uid.
 func InsertFort(db *sqlx.DB, fort *FortTrackingAPI) (int64, error) {
 	result, err := db.Exec(
-		`INSERT INTO forts (id, profile_no, ping, distance, template, fort_type, include_empty, change_types)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO forts (id, profile_no, ping, distance, template, fort_type, include_empty, change_types,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		fort.ID, fort.ProfileNo, fort.Ping, fort.Distance,
-		fort.Template, fort.FortType, fort.IncludeEmpty, fort.ChangeTypes)
+		fort.Template, fort.FortType, fort.IncludeEmpty, fort.ChangeTypes,
+		nullIfEmpty(fort.OverrideLocationLabel), marshalOverrideAreas(fort.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert fort: %w", err)
 	}
@@ -135,15 +197,18 @@ func InsertFort(db *sqlx.DB, fort *FortTrackingAPI) (int64, error) {
 
 // InvasionTrackingAPI represents an invasion tracking row for API operations.
 type InvasionTrackingAPI struct {
-	UID       int64  `db:"uid"        json:"uid"        diff:"-"`
-	ID        string `db:"id"         json:"id"         diff:"-"`
-	ProfileNo int    `db:"profile_no" json:"profile_no" diff:"-"`
-	Ping      string `db:"ping"       json:"ping"`
-	Clean     int    `db:"clean"      json:"clean"      diff:"update"`
-	Distance  int    `db:"distance"   json:"distance"   diff:"update"`
-	Template  string `db:"template"   json:"template"   diff:"update"`
-	Gender    int    `db:"gender"     json:"gender"`
-	GruntType string `db:"grunt_type" json:"grunt_type"  diff:"match"`
+	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string   `db:"ping"                    json:"ping"`
+	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
+	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
+	Template              string   `db:"template"                json:"template"               diff:"update"`
+	Gender                int      `db:"gender"                  json:"gender"`
+	GruntType             string   `db:"grunt_type"              json:"grunt_type"             diff:"match"`
+	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:""`
 }
 
 // SelectInvasionsByIDProfile returns all invasion trackings for a given human and profile.
@@ -151,10 +216,15 @@ func SelectInvasionsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Invasi
 	var invasions []InvasionTrackingAPI
 	err := db.Select(&invasions,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '') AS template, gender, grunt_type
+		        COALESCE(template, '') AS template, gender, grunt_type,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM invasion WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select invasions for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range invasions {
+		invasions[i].OverrideAreas = parseOverrideAreas(invasions[i].OverrideAreasRaw)
 	}
 	return invasions, nil
 }
@@ -162,10 +232,12 @@ func SelectInvasionsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Invasi
 // InsertInvasion inserts a single invasion tracking row and returns the new uid.
 func InsertInvasion(db *sqlx.DB, inv *InvasionTrackingAPI) (int64, error) {
 	result, err := db.Exec(
-		`INSERT INTO invasion (id, profile_no, ping, clean, distance, template, gender, grunt_type)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO invasion (id, profile_no, ping, clean, distance, template, gender, grunt_type,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		inv.ID, inv.ProfileNo, inv.Ping, inv.Clean, inv.Distance,
-		inv.Template, inv.Gender, inv.GruntType)
+		inv.Template, inv.Gender, inv.GruntType,
+		nullIfEmpty(inv.OverrideLocationLabel), marshalOverrideAreas(inv.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert invasion: %w", err)
 	}
@@ -178,16 +250,19 @@ func InsertInvasion(db *sqlx.DB, inv *InvasionTrackingAPI) (int64, error) {
 
 // NestTrackingAPI represents a nest tracking row for API operations.
 type NestTrackingAPI struct {
-	UID         int64  `db:"uid"           json:"uid"           diff:"-"`
-	ID          string `db:"id"            json:"id"            diff:"-"`
-	ProfileNo   int    `db:"profile_no"    json:"profile_no"    diff:"-"`
-	Ping        string `db:"ping"          json:"ping"`
-	Clean       int    `db:"clean"         json:"clean"         diff:"update"`
-	Distance    int    `db:"distance"      json:"distance"      diff:"update"`
-	Template    string `db:"template"      json:"template"      diff:"update"`
-	PokemonID   int    `db:"pokemon_id"    json:"pokemon_id"    diff:"match"`
-	MinSpawnAvg int    `db:"min_spawn_avg" json:"min_spawn_avg"`
-	Form        int    `db:"form"          json:"form"          diff:"match"`
+	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string   `db:"ping"                    json:"ping"`
+	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
+	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
+	Template              string   `db:"template"                json:"template"               diff:"update"`
+	PokemonID             int      `db:"pokemon_id"              json:"pokemon_id"             diff:"match"`
+	MinSpawnAvg           int      `db:"min_spawn_avg"           json:"min_spawn_avg"`
+	Form                  int      `db:"form"                    json:"form"                   diff:"match"`
+	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:""`
 }
 
 // SelectNestsByIDProfile returns all nest trackings for a given human and profile.
@@ -196,10 +271,15 @@ func SelectNestsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]NestTracki
 	err := db.Select(&nests,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, pokemon_id,
-		        min_spawn_avg, COALESCE(form, 0) AS form
+		        min_spawn_avg, COALESCE(form, 0) AS form,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM nests WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select nests for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range nests {
+		nests[i].OverrideAreas = parseOverrideAreas(nests[i].OverrideAreasRaw)
 	}
 	return nests, nil
 }
@@ -207,10 +287,12 @@ func SelectNestsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]NestTracki
 // InsertNest inserts a single nest tracking row and returns the new uid.
 func InsertNest(db *sqlx.DB, nest *NestTrackingAPI) (int64, error) {
 	result, err := db.Exec(
-		`INSERT INTO nests (id, profile_no, ping, clean, distance, template, pokemon_id, min_spawn_avg, form)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO nests (id, profile_no, ping, clean, distance, template, pokemon_id, min_spawn_avg, form,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		nest.ID, nest.ProfileNo, nest.Ping, nest.Clean, nest.Distance,
-		nest.Template, nest.PokemonID, nest.MinSpawnAvg, nest.Form)
+		nest.Template, nest.PokemonID, nest.MinSpawnAvg, nest.Form,
+		nullIfEmpty(nest.OverrideLocationLabel), marshalOverrideAreas(nest.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert nest: %w", err)
 	}
@@ -223,18 +305,21 @@ func InsertNest(db *sqlx.DB, nest *NestTrackingAPI) (int64, error) {
 
 // QuestTrackingAPI represents a quest tracking row for API operations.
 type QuestTrackingAPI struct {
-	UID        int64   `db:"uid"         json:"uid"         diff:"-"`
-	ID         string  `db:"id"          json:"id"          diff:"-"`
-	ProfileNo  int     `db:"profile_no"  json:"profile_no"  diff:"-"`
-	Ping       string  `db:"ping"        json:"ping"`
-	Clean      int     `db:"clean"       json:"clean"       diff:"update"`
-	Distance   int     `db:"distance"    json:"distance"    diff:"update"`
-	Template   string  `db:"template"    json:"template"    diff:"update"`
-	RewardType int     `db:"reward_type" json:"reward_type"  diff:"match"`
-	Reward     int     `db:"reward"      json:"reward"       diff:"match"`
-	Form       int     `db:"form"        json:"form"         diff:"match"`
-	Shiny      IntBool `db:"shiny"       json:"shiny"`
-	Amount     int     `db:"amount"      json:"amount"`
+	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string   `db:"ping"                    json:"ping"`
+	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
+	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
+	Template              string   `db:"template"                json:"template"               diff:"update"`
+	RewardType            int      `db:"reward_type"             json:"reward_type"            diff:"match"`
+	Reward                int      `db:"reward"                  json:"reward"                 diff:"match"`
+	Form                  int      `db:"form"                    json:"form"                   diff:"match"`
+	Shiny                 IntBool  `db:"shiny"                   json:"shiny"`
+	Amount                int      `db:"amount"                  json:"amount"`
+	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:""`
 }
 
 // SelectQuestsByIDProfile returns all quest trackings for a given human and profile.
@@ -244,10 +329,15 @@ func SelectQuestsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]QuestTrac
 		`SELECT uid, id, profile_no, ping, clean, reward,
 		        COALESCE(template, '') AS template, shiny, reward_type,
 		        distance, COALESCE(form, 0) AS form,
-		        COALESCE(amount, 0) AS amount
+		        COALESCE(amount, 0) AS amount,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM quest WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select quests for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range quests {
+		quests[i].OverrideAreas = parseOverrideAreas(quests[i].OverrideAreasRaw)
 	}
 	return quests, nil
 }
@@ -255,10 +345,12 @@ func SelectQuestsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]QuestTrac
 // InsertQuest inserts a single quest tracking row and returns the new uid.
 func InsertQuest(db *sqlx.DB, quest *QuestTrackingAPI) (int64, error) {
 	result, err := db.Exec(
-		`INSERT INTO quest (id, profile_no, ping, clean, distance, template, reward_type, reward, form, shiny, amount)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO quest (id, profile_no, ping, clean, distance, template, reward_type, reward, form, shiny, amount,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		quest.ID, quest.ProfileNo, quest.Ping, quest.Clean, quest.Distance,
-		quest.Template, quest.RewardType, quest.Reward, quest.Form, quest.Shiny, quest.Amount)
+		quest.Template, quest.RewardType, quest.Reward, quest.Form, quest.Shiny, quest.Amount,
+		nullIfEmpty(quest.OverrideLocationLabel), marshalOverrideAreas(quest.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert quest: %w", err)
 	}
@@ -272,40 +364,43 @@ func InsertQuest(db *sqlx.DB, quest *QuestTrackingAPI) (int64, error) {
 // MonsterTrackingAPI represents a monster tracking row for API operations.
 // Monster uses no diff:"match" — it compares against ALL existing rows.
 type MonsterTrackingAPI struct {
-	UID              int64  `db:"uid"               json:"uid"               diff:"-"`
-	ID               string `db:"id"                json:"id"                diff:"-"`
-	ProfileNo        int    `db:"profile_no"        json:"profile_no"        diff:"-"`
-	Ping             string `db:"ping"              json:"ping"`
-	Clean            int    `db:"clean"             json:"clean"             diff:"update"`
-	Distance         int    `db:"distance"          json:"distance"          diff:"update"`
-	Template         string `db:"template"          json:"template"          diff:"update"`
-	PokemonID        int    `db:"pokemon_id"        json:"pokemon_id"`
-	Form             int    `db:"form"              json:"form"`
-	MinIV            int    `db:"min_iv"            json:"min_iv"            diff:"update"`
-	MaxIV            int    `db:"max_iv"            json:"max_iv"`
-	MinCP            int    `db:"min_cp"            json:"min_cp"`
-	MaxCP            int    `db:"max_cp"            json:"max_cp"`
-	MinLevel         int    `db:"min_level"         json:"min_level"`
-	MaxLevel         int    `db:"max_level"         json:"max_level"`
-	ATK              int    `db:"atk"               json:"atk"`
-	DEF              int    `db:"def"               json:"def"`
-	STA              int    `db:"sta"               json:"sta"`
-	MaxATK           int    `db:"max_atk"           json:"max_atk"`
-	MaxDEF           int    `db:"max_def"           json:"max_def"`
-	MaxSTA           int    `db:"max_sta"           json:"max_sta"`
-	Gender           int    `db:"gender"            json:"gender"`
-	MinWeight        int    `db:"min_weight"        json:"min_weight"`
-	MaxWeight        int    `db:"max_weight"        json:"max_weight"`
-	MinTime          int    `db:"min_time"          json:"min_time"`
-	Rarity           int    `db:"rarity"            json:"rarity"`
-	MaxRarity        int    `db:"max_rarity"        json:"max_rarity"`
-	Size             int    `db:"size"              json:"size"`
-	MaxSize          int    `db:"max_size"          json:"max_size"`
-	PVPRankingLeague int    `db:"pvp_ranking_league" json:"pvp_ranking_league"`
-	PVPRankingBest   int    `db:"pvp_ranking_best"   json:"pvp_ranking_best"`
-	PVPRankingWorst  int    `db:"pvp_ranking_worst"  json:"pvp_ranking_worst"`
-	PVPRankingMinCP  int    `db:"pvp_ranking_min_cp" json:"pvp_ranking_min_cp"`
-	PVPRankingCap    int    `db:"pvp_ranking_cap"    json:"pvp_ranking_cap"`
+	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string   `db:"ping"                    json:"ping"`
+	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
+	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
+	Template              string   `db:"template"                json:"template"               diff:"update"`
+	PokemonID             int      `db:"pokemon_id"              json:"pokemon_id"`
+	Form                  int      `db:"form"                    json:"form"`
+	MinIV                 int      `db:"min_iv"                  json:"min_iv"                 diff:"update"`
+	MaxIV                 int      `db:"max_iv"                  json:"max_iv"`
+	MinCP                 int      `db:"min_cp"                  json:"min_cp"`
+	MaxCP                 int      `db:"max_cp"                  json:"max_cp"`
+	MinLevel              int      `db:"min_level"               json:"min_level"`
+	MaxLevel              int      `db:"max_level"               json:"max_level"`
+	ATK                   int      `db:"atk"                     json:"atk"`
+	DEF                   int      `db:"def"                     json:"def"`
+	STA                   int      `db:"sta"                     json:"sta"`
+	MaxATK                int      `db:"max_atk"                 json:"max_atk"`
+	MaxDEF                int      `db:"max_def"                 json:"max_def"`
+	MaxSTA                int      `db:"max_sta"                 json:"max_sta"`
+	Gender                int      `db:"gender"                  json:"gender"`
+	MinWeight             int      `db:"min_weight"              json:"min_weight"`
+	MaxWeight             int      `db:"max_weight"              json:"max_weight"`
+	MinTime               int      `db:"min_time"                json:"min_time"`
+	Rarity                int      `db:"rarity"                  json:"rarity"`
+	MaxRarity             int      `db:"max_rarity"              json:"max_rarity"`
+	Size                  int      `db:"size"                    json:"size"`
+	MaxSize               int      `db:"max_size"                json:"max_size"`
+	PVPRankingLeague      int      `db:"pvp_ranking_league"      json:"pvp_ranking_league"`
+	PVPRankingBest        int      `db:"pvp_ranking_best"        json:"pvp_ranking_best"`
+	PVPRankingWorst       int      `db:"pvp_ranking_worst"       json:"pvp_ranking_worst"`
+	PVPRankingMinCP       int      `db:"pvp_ranking_min_cp"      json:"pvp_ranking_min_cp"`
+	PVPRankingCap         int      `db:"pvp_ranking_cap"         json:"pvp_ranking_cap"`
+	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:""`
 }
 
 // SelectMonstersByIDProfile returns all monster trackings for a given human and profile.
@@ -319,10 +414,15 @@ func SelectMonstersByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Monster
 		        gender, min_weight, max_weight, min_time,
 		        rarity, max_rarity, size, max_size,
 		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
-		        pvp_ranking_min_cp, pvp_ranking_cap
+		        pvp_ranking_min_cp, pvp_ranking_cap,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM monsters WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select monsters for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range monsters {
+		monsters[i].OverrideAreas = parseOverrideAreas(monsters[i].OverrideAreasRaw)
 	}
 	return monsters, nil
 }
@@ -336,15 +436,17 @@ func InsertMonster(db *sqlx.DB, m *MonsterTrackingAPI) (int64, error) {
 		        gender, min_weight, max_weight, min_time,
 		        rarity, max_rarity, size, max_size,
 		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
-		        pvp_ranking_min_cp, pvp_ranking_cap)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        pvp_ranking_min_cp, pvp_ranking_cap,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID, m.ProfileNo, m.Ping, m.Clean, m.Distance, m.Template,
 		m.PokemonID, m.Form, m.MinIV, m.MaxIV, m.MinCP, m.MaxCP, m.MinLevel, m.MaxLevel,
 		m.ATK, m.DEF, m.STA, m.MaxATK, m.MaxDEF, m.MaxSTA,
 		m.Gender, m.MinWeight, m.MaxWeight, m.MinTime,
 		m.Rarity, m.MaxRarity, m.Size, m.MaxSize,
 		m.PVPRankingLeague, m.PVPRankingBest, m.PVPRankingWorst,
-		m.PVPRankingMinCP, m.PVPRankingCap)
+		m.PVPRankingMinCP, m.PVPRankingCap,
+		nullIfEmpty(m.OverrideLocationLabel), marshalOverrideAreas(m.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert monster: %w", err)
 	}
@@ -364,7 +466,8 @@ func UpdateMonsterByUID(db *sqlx.DB, m *MonsterTrackingAPI) error {
 		        gender=?, min_weight=?, max_weight=?, min_time=?,
 		        rarity=?, max_rarity=?, size=?, max_size=?,
 		        pvp_ranking_league=?, pvp_ranking_best=?, pvp_ranking_worst=?,
-		        pvp_ranking_min_cp=?, pvp_ranking_cap=?
+		        pvp_ranking_min_cp=?, pvp_ranking_cap=?,
+		        override_location_label=?, override_areas=?
 		 WHERE uid = ?`,
 		m.Ping, m.Clean, m.Distance, m.Template,
 		m.PokemonID, m.Form, m.MinIV, m.MaxIV, m.MinCP, m.MaxCP,
@@ -373,6 +476,7 @@ func UpdateMonsterByUID(db *sqlx.DB, m *MonsterTrackingAPI) error {
 		m.Rarity, m.MaxRarity, m.Size, m.MaxSize,
 		m.PVPRankingLeague, m.PVPRankingBest, m.PVPRankingWorst,
 		m.PVPRankingMinCP, m.PVPRankingCap,
+		nullIfEmpty(m.OverrideLocationLabel), marshalOverrideAreas(m.OverrideAreas),
 		m.UID)
 	if err != nil {
 		return fmt.Errorf("update monster uid %d: %w", m.UID, err)
@@ -382,22 +486,25 @@ func UpdateMonsterByUID(db *sqlx.DB, m *MonsterTrackingAPI) error {
 
 // RaidTrackingAPI represents a raid tracking row for API operations.
 type RaidTrackingAPI struct {
-	UID         int64       `db:"uid"          json:"uid"          diff:"-"`
-	ID          string      `db:"id"           json:"id"           diff:"-"`
-	ProfileNo   int         `db:"profile_no"   json:"profile_no"   diff:"-"`
-	Ping        string      `db:"ping"         json:"ping"`
-	Clean       int         `db:"clean"        json:"clean"        diff:"update"`
-	Distance    int         `db:"distance"     json:"distance"     diff:"update"`
-	Template    string      `db:"template"     json:"template"     diff:"update"`
-	Team        int         `db:"team"         json:"team"         diff:"match"`
-	PokemonID   int         `db:"pokemon_id"   json:"pokemon_id"`
-	Form        int         `db:"form"         json:"form"`
-	Level       int         `db:"level"        json:"level"`
-	Exclusive   IntBool     `db:"exclusive"    json:"exclusive"`
-	Move        int         `db:"move"         json:"move"`
-	Evolution   int         `db:"evolution"    json:"evolution"`
-	GymID       null.String `db:"gym_id"       json:"gym_id"`
-	RSVPChanges int         `db:"rsvp_changes" json:"rsvp_changes"`
+	UID                   int64       `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string      `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int         `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string      `db:"ping"                    json:"ping"`
+	Clean                 int         `db:"clean"                   json:"clean"                  diff:"update"`
+	Distance              int         `db:"distance"                json:"distance"               diff:"update"`
+	Template              string      `db:"template"                json:"template"               diff:"update"`
+	Team                  int         `db:"team"                    json:"team"                   diff:"match"`
+	PokemonID             int         `db:"pokemon_id"              json:"pokemon_id"`
+	Form                  int         `db:"form"                    json:"form"`
+	Level                 int         `db:"level"                   json:"level"`
+	Exclusive             IntBool     `db:"exclusive"               json:"exclusive"`
+	Move                  int         `db:"move"                    json:"move"`
+	Evolution             int         `db:"evolution"               json:"evolution"`
+	GymID                 null.String `db:"gym_id"                  json:"gym_id"`
+	RSVPChanges           int         `db:"rsvp_changes"            json:"rsvp_changes"`
+	OverrideLocationLabel string      `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string      `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string    `db:"-"                      json:"override_areas"         diff:""`
 }
 
 // SelectRaidsByIDProfile returns all raid trackings for a given human and profile.
@@ -406,10 +513,15 @@ func SelectRaidsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]RaidTracki
 	err := db.Select(&raids,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, team, pokemon_id, form,
-		        level, exclusive, move, evolution, gym_id, rsvp_changes
+		        level, exclusive, move, evolution, gym_id, rsvp_changes,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM raid WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select raids for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range raids {
+		raids[i].OverrideAreas = parseOverrideAreas(raids[i].OverrideAreasRaw)
 	}
 	return raids, nil
 }
@@ -418,11 +530,13 @@ func SelectRaidsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]RaidTracki
 func InsertRaid(db *sqlx.DB, raid *RaidTrackingAPI) (int64, error) {
 	result, err := db.Exec(
 		`INSERT INTO raid (id, profile_no, ping, clean, distance, template,
-		        team, pokemon_id, form, level, exclusive, move, evolution, gym_id, rsvp_changes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        team, pokemon_id, form, level, exclusive, move, evolution, gym_id, rsvp_changes,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		raid.ID, raid.ProfileNo, raid.Ping, raid.Clean, raid.Distance, raid.Template,
 		raid.Team, raid.PokemonID, raid.Form, raid.Level, raid.Exclusive,
-		raid.Move, raid.Evolution, raid.GymID, raid.RSVPChanges)
+		raid.Move, raid.Evolution, raid.GymID, raid.RSVPChanges,
+		nullIfEmpty(raid.OverrideLocationLabel), marshalOverrideAreas(raid.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert raid: %w", err)
 	}
@@ -435,18 +549,21 @@ func InsertRaid(db *sqlx.DB, raid *RaidTrackingAPI) (int64, error) {
 
 // EggTrackingAPI represents an egg tracking row for API operations.
 type EggTrackingAPI struct {
-	UID         int64       `db:"uid"          json:"uid"          diff:"-"`
-	ID          string      `db:"id"           json:"id"           diff:"-"`
-	ProfileNo   int         `db:"profile_no"   json:"profile_no"   diff:"-"`
-	Ping        string      `db:"ping"         json:"ping"`
-	Clean       int         `db:"clean"        json:"clean"        diff:"update"`
-	Distance    int         `db:"distance"     json:"distance"     diff:"update"`
-	Template    string      `db:"template"     json:"template"     diff:"update"`
-	Team        int         `db:"team"         json:"team"         diff:"match"`
-	Level       int         `db:"level"        json:"level"`
-	Exclusive   IntBool     `db:"exclusive"    json:"exclusive"`
-	GymID       null.String `db:"gym_id"       json:"gym_id"`
-	RSVPChanges int         `db:"rsvp_changes" json:"rsvp_changes"`
+	UID                   int64       `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string      `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int         `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string      `db:"ping"                    json:"ping"`
+	Clean                 int         `db:"clean"                   json:"clean"                  diff:"update"`
+	Distance              int         `db:"distance"                json:"distance"               diff:"update"`
+	Template              string      `db:"template"                json:"template"               diff:"update"`
+	Team                  int         `db:"team"                    json:"team"                   diff:"match"`
+	Level                 int         `db:"level"                   json:"level"`
+	Exclusive             IntBool     `db:"exclusive"               json:"exclusive"`
+	GymID                 null.String `db:"gym_id"                  json:"gym_id"`
+	RSVPChanges           int         `db:"rsvp_changes"            json:"rsvp_changes"`
+	OverrideLocationLabel string      `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string      `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string    `db:"-"                      json:"override_areas"         diff:""`
 }
 
 // SelectEggsByIDProfile returns all egg trackings for a given human and profile.
@@ -455,10 +572,15 @@ func SelectEggsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]EggTracking
 	err := db.Select(&eggs,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, team, level, exclusive,
-		        gym_id, rsvp_changes
+		        gym_id, rsvp_changes,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM egg WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select eggs for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range eggs {
+		eggs[i].OverrideAreas = parseOverrideAreas(eggs[i].OverrideAreasRaw)
 	}
 	return eggs, nil
 }
@@ -467,10 +589,12 @@ func SelectEggsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]EggTracking
 func InsertEgg(db *sqlx.DB, egg *EggTrackingAPI) (int64, error) {
 	result, err := db.Exec(
 		`INSERT INTO egg (id, profile_no, ping, clean, distance, template,
-		        team, level, exclusive, gym_id, rsvp_changes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        team, level, exclusive, gym_id, rsvp_changes,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		egg.ID, egg.ProfileNo, egg.Ping, egg.Clean, egg.Distance, egg.Template,
-		egg.Team, egg.Level, egg.Exclusive, egg.GymID, egg.RSVPChanges)
+		egg.Team, egg.Level, egg.Exclusive, egg.GymID, egg.RSVPChanges,
+		nullIfEmpty(egg.OverrideLocationLabel), marshalOverrideAreas(egg.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert egg: %w", err)
 	}
@@ -483,17 +607,20 @@ func InsertEgg(db *sqlx.DB, egg *EggTrackingAPI) (int64, error) {
 
 // GymTrackingAPI represents a gym tracking row for API operations.
 type GymTrackingAPI struct {
-	UID           int64   `db:"uid"            json:"uid"            diff:"-"`
-	ID            string  `db:"id"             json:"id"             diff:"-"`
-	ProfileNo     int     `db:"profile_no"     json:"profile_no"     diff:"-"`
-	Ping          string  `db:"ping"           json:"ping"`
-	Clean         int     `db:"clean"          json:"clean"          diff:"update"`
-	Distance      int     `db:"distance"       json:"distance"       diff:"update"`
-	Template      string  `db:"template"       json:"template"       diff:"update"`
-	Team          int     `db:"team"           json:"team"           diff:"match"`
-	SlotChanges   IntBool `db:"slot_changes"   json:"slot_changes"   diff:"update"`
-	BattleChanges IntBool `db:"battle_changes" json:"battle_changes" diff:"update"`
-	GymID         *string `db:"gym_id"         json:"gym_id"`
+	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string   `db:"ping"                    json:"ping"`
+	Clean                 int      `db:"clean"                   json:"clean"                  diff:"update"`
+	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
+	Template              string   `db:"template"                json:"template"               diff:"update"`
+	Team                  int      `db:"team"                    json:"team"                   diff:"match"`
+	SlotChanges           IntBool  `db:"slot_changes"            json:"slot_changes"           diff:"update"`
+	BattleChanges         IntBool  `db:"battle_changes"          json:"battle_changes"         diff:"update"`
+	GymID                 *string  `db:"gym_id"                  json:"gym_id"`
+	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:""`
 }
 
 // SelectGymsByIDProfile returns all gym trackings for a given human and profile.
@@ -502,10 +629,15 @@ func SelectGymsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]GymTracking
 	err := db.Select(&gyms,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, team, slot_changes,
-		        gym_id, COALESCE(battle_changes, false) AS battle_changes
+		        gym_id, COALESCE(battle_changes, false) AS battle_changes,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM gym WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select gyms for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range gyms {
+		gyms[i].OverrideAreas = parseOverrideAreas(gyms[i].OverrideAreasRaw)
 	}
 	return gyms, nil
 }
@@ -514,10 +646,12 @@ func SelectGymsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]GymTracking
 func InsertGym(db *sqlx.DB, gym *GymTrackingAPI) (int64, error) {
 	result, err := db.Exec(
 		`INSERT INTO gym (id, profile_no, ping, clean, distance, template,
-		        team, slot_changes, battle_changes, gym_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        team, slot_changes, battle_changes, gym_id,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		gym.ID, gym.ProfileNo, gym.Ping, gym.Clean, gym.Distance, gym.Template,
-		gym.Team, gym.SlotChanges, gym.BattleChanges, gym.GymID)
+		gym.Team, gym.SlotChanges, gym.BattleChanges, gym.GymID,
+		nullIfEmpty(gym.OverrideLocationLabel), marshalOverrideAreas(gym.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert gym: %w", err)
 	}
@@ -531,20 +665,23 @@ func InsertGym(db *sqlx.DB, gym *GymTrackingAPI) (int64, error) {
 // MaxbattleTrackingAPI represents a maxbattle tracking row for API operations.
 // Maxbattle in JS always inserts (no diff logic), so no diff:"match" tags.
 type MaxbattleTrackingAPI struct {
-	UID       int64   `db:"uid"        json:"uid"        diff:"-"`
-	ID        string  `db:"id"         json:"id"         diff:"-"`
-	ProfileNo int     `db:"profile_no" json:"profile_no" diff:"-"`
-	Ping      string  `db:"ping"       json:"ping"`
-	Clean     int     `db:"clean"      json:"clean"`
-	Distance  int     `db:"distance"   json:"distance"`
-	Template  string  `db:"template"   json:"template"`
-	PokemonID int     `db:"pokemon_id" json:"pokemon_id"`
-	Form      int     `db:"form"       json:"form"`
-	Level     int     `db:"level"      json:"level"`
-	Move      int     `db:"move"       json:"move"`
-	Gmax      int     `db:"gmax"       json:"gmax"`
-	Evolution int     `db:"evolution"  json:"evolution"`
-	StationID *string `db:"station_id" json:"station_id"`
+	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string   `db:"ping"                    json:"ping"`
+	Clean                 int      `db:"clean"                   json:"clean"`
+	Distance              int      `db:"distance"                json:"distance"`
+	Template              string   `db:"template"                json:"template"`
+	PokemonID             int      `db:"pokemon_id"              json:"pokemon_id"`
+	Form                  int      `db:"form"                    json:"form"`
+	Level                 int      `db:"level"                   json:"level"`
+	Move                  int      `db:"move"                    json:"move"`
+	Gmax                  int      `db:"gmax"                    json:"gmax"`
+	Evolution             int      `db:"evolution"               json:"evolution"`
+	StationID             *string  `db:"station_id"              json:"station_id"`
+	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
+	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:""`
 }
 
 // SelectMaxbattlesByIDProfile returns all maxbattle trackings for a given human and profile.
@@ -553,10 +690,15 @@ func SelectMaxbattlesByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Maxba
 	err := db.Select(&maxbattles,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, pokemon_id, form,
-		        level, move, gmax, evolution, station_id
+		        level, move, gmax, evolution, station_id,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM maxbattle WHERE id = ? AND profile_no = ?`, id, profileNo)
 	if err != nil {
 		return nil, fmt.Errorf("select maxbattles for %s profile %d: %w", id, profileNo, err)
+	}
+	for i := range maxbattles {
+		maxbattles[i].OverrideAreas = parseOverrideAreas(maxbattles[i].OverrideAreasRaw)
 	}
 	return maxbattles, nil
 }
@@ -565,10 +707,12 @@ func SelectMaxbattlesByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Maxba
 func InsertMaxbattle(db *sqlx.DB, mb *MaxbattleTrackingAPI) (int64, error) {
 	result, err := db.Exec(
 		`INSERT INTO maxbattle (id, profile_no, ping, clean, distance, template,
-		        pokemon_id, form, level, move, gmax, evolution, station_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		        pokemon_id, form, level, move, gmax, evolution, station_id,
+		        override_location_label, override_areas)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		mb.ID, mb.ProfileNo, mb.Ping, mb.Clean, mb.Distance, mb.Template,
-		mb.PokemonID, mb.Form, mb.Level, mb.Move, mb.Gmax, mb.Evolution, mb.StationID)
+		mb.PokemonID, mb.Form, mb.Level, mb.Move, mb.Gmax, mb.Evolution, mb.StationID,
+		nullIfEmpty(mb.OverrideLocationLabel), marshalOverrideAreas(mb.OverrideAreas))
 	if err != nil {
 		return 0, fmt.Errorf("insert maxbattle: %w", err)
 	}
@@ -594,10 +738,15 @@ func SelectMonstersByID(db *sqlx.DB, id string) ([]MonsterTrackingAPI, error) {
 		        gender, min_weight, max_weight, min_time,
 		        rarity, max_rarity, size, max_size,
 		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
-		        pvp_ranking_min_cp, pvp_ranking_cap
+		        pvp_ranking_min_cp, pvp_ranking_cap,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM monsters WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select monsters for %s: %w", id, err)
+	}
+	for i := range monsters {
+		monsters[i].OverrideAreas = parseOverrideAreas(monsters[i].OverrideAreasRaw)
 	}
 	return monsters, nil
 }
@@ -608,10 +757,15 @@ func SelectRaidsByID(db *sqlx.DB, id string) ([]RaidTrackingAPI, error) {
 	err := db.Select(&raids,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, team, pokemon_id, form,
-		        level, exclusive, move, evolution, gym_id, rsvp_changes
+		        level, exclusive, move, evolution, gym_id, rsvp_changes,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM raid WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select raids for %s: %w", id, err)
+	}
+	for i := range raids {
+		raids[i].OverrideAreas = parseOverrideAreas(raids[i].OverrideAreasRaw)
 	}
 	return raids, nil
 }
@@ -622,10 +776,15 @@ func SelectEggsByID(db *sqlx.DB, id string) ([]EggTrackingAPI, error) {
 	err := db.Select(&eggs,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, team, level, exclusive,
-		        gym_id, rsvp_changes
+		        gym_id, rsvp_changes,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM egg WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select eggs for %s: %w", id, err)
+	}
+	for i := range eggs {
+		eggs[i].OverrideAreas = parseOverrideAreas(eggs[i].OverrideAreasRaw)
 	}
 	return eggs, nil
 }
@@ -637,10 +796,15 @@ func SelectQuestsByID(db *sqlx.DB, id string) ([]QuestTrackingAPI, error) {
 		`SELECT uid, id, profile_no, ping, clean, reward,
 		        COALESCE(template, '') AS template, shiny, reward_type,
 		        distance, COALESCE(form, 0) AS form,
-		        COALESCE(amount, 0) AS amount
+		        COALESCE(amount, 0) AS amount,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM quest WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select quests for %s: %w", id, err)
+	}
+	for i := range quests {
+		quests[i].OverrideAreas = parseOverrideAreas(quests[i].OverrideAreasRaw)
 	}
 	return quests, nil
 }
@@ -650,10 +814,15 @@ func SelectInvasionsByID(db *sqlx.DB, id string) ([]InvasionTrackingAPI, error) 
 	var invasions []InvasionTrackingAPI
 	err := db.Select(&invasions,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '') AS template, gender, grunt_type
+		        COALESCE(template, '') AS template, gender, grunt_type,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM invasion WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select invasions for %s: %w", id, err)
+	}
+	for i := range invasions {
+		invasions[i].OverrideAreas = parseOverrideAreas(invasions[i].OverrideAreasRaw)
 	}
 	return invasions, nil
 }
@@ -663,10 +832,15 @@ func SelectLuresByID(db *sqlx.DB, id string) ([]LureTrackingAPI, error) {
 	var lures []LureTrackingAPI
 	err := db.Select(&lures,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '') AS template, lure_id
+		        COALESCE(template, '') AS template, lure_id,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM lures WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select lures for %s: %w", id, err)
+	}
+	for i := range lures {
+		lures[i].OverrideAreas = parseOverrideAreas(lures[i].OverrideAreasRaw)
 	}
 	return lures, nil
 }
@@ -677,10 +851,15 @@ func SelectNestsByID(db *sqlx.DB, id string) ([]NestTrackingAPI, error) {
 	err := db.Select(&nests,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, pokemon_id,
-		        min_spawn_avg, COALESCE(form, 0) AS form
+		        min_spawn_avg, COALESCE(form, 0) AS form,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM nests WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select nests for %s: %w", id, err)
+	}
+	for i := range nests {
+		nests[i].OverrideAreas = parseOverrideAreas(nests[i].OverrideAreasRaw)
 	}
 	return nests, nil
 }
@@ -691,10 +870,15 @@ func SelectGymsByID(db *sqlx.DB, id string) ([]GymTrackingAPI, error) {
 	err := db.Select(&gyms,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, team, slot_changes,
-		        gym_id, COALESCE(battle_changes, false) AS battle_changes
+		        gym_id, COALESCE(battle_changes, false) AS battle_changes,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM gym WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select gyms for %s: %w", id, err)
+	}
+	for i := range gyms {
+		gyms[i].OverrideAreas = parseOverrideAreas(gyms[i].OverrideAreasRaw)
 	}
 	return gyms, nil
 }
@@ -705,10 +889,15 @@ func SelectMaxbattlesByID(db *sqlx.DB, id string) ([]MaxbattleTrackingAPI, error
 	err := db.Select(&maxbattles,
 		`SELECT uid, id, profile_no, ping, clean, distance,
 		        COALESCE(template, '') AS template, pokemon_id, form,
-		        level, move, gmax, evolution, station_id
+		        level, move, gmax, evolution, station_id,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM maxbattle WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select maxbattles for %s: %w", id, err)
+	}
+	for i := range maxbattles {
+		maxbattles[i].OverrideAreas = parseOverrideAreas(maxbattles[i].OverrideAreasRaw)
 	}
 	return maxbattles, nil
 }
@@ -721,10 +910,15 @@ func SelectFortsByID(db *sqlx.DB, id string) ([]FortTrackingAPI, error) {
 		        COALESCE(template, '') AS template,
 		        COALESCE(fort_type, 'everything') AS fort_type,
 		        COALESCE(include_empty, true) AS include_empty,
-		        COALESCE(change_types, '[]') AS change_types
+		        COALESCE(change_types, '[]') AS change_types,
+		        COALESCE(override_location_label, '') AS override_location_label,
+		        COALESCE(override_areas, '') AS override_areas
 		 FROM forts WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("select forts for %s: %w", id, err)
+	}
+	for i := range forts {
+		forts[i].OverrideAreas = parseOverrideAreas(forts[i].OverrideAreasRaw)
 	}
 	return forts, nil
 }

@@ -2,6 +2,7 @@ package matching
 
 import (
 	"math"
+	"strings"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
@@ -38,14 +39,16 @@ func boolToInt(b bool) int {
 
 // trackingUserData holds common tracking fields for human validation.
 type trackingUserData struct {
-	HumanID         string
-	ProfileNo       int
-	Distance        int
-	Template        string
-	Clean           int
-	Ping            string
-	UID             int64 // database UID of the matching tracking rule — surfaced on MatchedUser.RuleUID for snapshot/mute use
-	IsSpecificMatch bool  // set when the rule is pinned to a specific entity (gym_id, station_id, etc.) — meaning area/distance check is bypassed and a type-specific blocked-alert key is checked instead (e.g. "specificgym" or "specificstation")
+	HumanID               string
+	ProfileNo             int
+	Distance              int
+	Template              string
+	Clean                 int
+	Ping                  string
+	UID                   int64 // database UID of the matching tracking rule — surfaced on MatchedUser.RuleUID for snapshot/mute use
+	IsSpecificMatch       bool  // set when the rule is pinned to a specific entity (gym_id, station_id, etc.) — meaning area/distance check is bypassed and a type-specific blocked-alert key is checked instead (e.g. "specificgym" or "specificstation")
+	OverrideLocationLabel string
+	OverrideAreas         []string
 }
 
 // ValidateHumansGeneric filters matched trackings against human criteria.
@@ -82,12 +85,14 @@ func ValidateHumansGeneric(
 			continue
 		}
 
+		anchorLat, anchorLon, effectiveAreas := resolveOverride(td.OverrideLocationLabel, td.OverrideAreas, human)
+
 		// Lazy haversine: compute once when first needed, cache for reuse.
 		var dist int
 		distComputed := false
 		haversine := func() int {
 			if !distComputed {
-				dist = HaversineDistance(human.Latitude, human.Longitude, lat, lon)
+				dist = HaversineDistance(anchorLat, anchorLon, lat, lon)
 				distComputed = true
 				haversineCount++
 			}
@@ -99,8 +104,8 @@ func ValidateHumansGeneric(
 			if haversine() > td.Distance {
 				continue
 			}
-		} else {
-			if !areaOverlap(human.Area, matchedAreaNames) {
+		} else if !td.IsSpecificMatch {
+			if !areaOverlap(effectiveAreas, matchedAreaNames) {
 				continue
 			}
 		}
@@ -120,15 +125,15 @@ func ValidateHumansGeneric(
 
 		// Reuse cached haversine (or compute now for area-based users).
 		actualDist := haversine()
-		bearing := Bearing(human.Latitude, human.Longitude, lat, lon)
+		bearing := Bearing(anchorLat, anchorLon, lat, lon)
 
 		result = append(result, webhook.MatchedUser{
 			ID:                human.ID,
 			Name:              human.Name,
 			Type:              human.Type,
 			Language:          human.Language,
-			Latitude:          human.Latitude,
-			Longitude:         human.Longitude,
+			Latitude:          anchorLat,
+			Longitude:         anchorLon,
 			Template:          td.Template,
 			Distance:          actualDist,
 			Clean:             td.Clean,
@@ -140,4 +145,23 @@ func ValidateHumansGeneric(
 		})
 	}
 	return result
+}
+
+// resolveOverride returns the effective distance anchor and area set for a rule,
+// applying per-rule overrides over the human's defaults.
+// An override_location_label that doesn't resolve in human.Locations silently
+// falls through to the human's lat/lon.
+func resolveOverride(label string, ruleAreas []string, human *db.Human) (anchorLat, anchorLon float64, effectiveAreas []string) {
+	anchorLat, anchorLon = human.Latitude, human.Longitude
+	if label != "" && human.Locations != nil {
+		if loc, ok := human.Locations[strings.ToLower(label)]; ok {
+			anchorLat, anchorLon = loc.Latitude, loc.Longitude
+		}
+		// else: orphaned label — silently fall through to human defaults
+	}
+	effectiveAreas = human.Area
+	if len(ruleAreas) > 0 {
+		effectiveAreas = ruleAreas
+	}
+	return
 }

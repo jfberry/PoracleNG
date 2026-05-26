@@ -247,6 +247,57 @@ func TestListAreas_UnregisteredUserNil(t *testing.T) {
 	}
 }
 
+func TestListUserLocationsIncludesDefault(t *testing.T) {
+	deps, humans, _, _ := testDeps(t)
+	humans.AddHuman(&store.Human{ID: "discord:user:42"})
+	// Seed one named location.
+	if _, err := deps.Humans.AddLocation(store.UserLocation{
+		ID: "discord:user:42", Label: "Home", Latitude: 51.5, Longitude: -0.1,
+	}); err != nil {
+		t.Fatalf("AddLocation: %v", err)
+	}
+
+	out, err := ListUserLocations(context.Background(), deps, "discord:user:42", autocomplete.UserStateHint{})
+	if err != nil {
+		t.Fatalf("ListUserLocations: %v", err)
+	}
+	// "default" must be the first entry.
+	if len(out) == 0 || out[0].Value != "default" {
+		t.Fatalf("expected 'default' as first choice, got %v", out)
+	}
+	if len(out) != 2 {
+		t.Fatalf("expected 2 choices (default + Home), got %d: %v", len(out), out)
+	}
+}
+
+func TestListUserLocationsDefaultFilteredByPartial(t *testing.T) {
+	deps, humans, _, _ := testDeps(t)
+	humans.AddHuman(&store.Human{ID: "discord:user:42"})
+
+	// partial "def" should match "default".
+	out, err := ListUserLocations(context.Background(), deps, "discord:user:42", autocomplete.UserStateHint{Focused: "def"})
+	if err != nil {
+		t.Fatalf("ListUserLocations: %v", err)
+	}
+	if len(out) != 1 || out[0].Value != "default" {
+		t.Errorf("partial 'def' should match 'default', got %v", out)
+	}
+}
+
+func TestListUserLocationsDefaultNotInTrackerContext(t *testing.T) {
+	// partial "xyz" should not match "default", returning nil (no choices).
+	deps, humans, _, _ := testDeps(t)
+	humans.AddHuman(&store.Human{ID: "discord:user:42"})
+
+	out, err := ListUserLocations(context.Background(), deps, "discord:user:42", autocomplete.UserStateHint{Focused: "xyz"})
+	if err != nil {
+		t.Fatalf("ListUserLocations: %v", err)
+	}
+	if len(out) != 0 {
+		t.Errorf("partial 'xyz' should produce no matches, got %v", out)
+	}
+}
+
 func TestListProfiles(t *testing.T) {
 	deps, humans, _, _ := testDeps(t)
 	humans.AddHuman(&store.Human{ID: "discord:user:42"})

@@ -765,20 +765,70 @@
   expected_tokens: [copyto, holiday]
 
 # -----------------------------------------------------------------------------
-# /location — coordinate fast-path. Geocoding case requires BotDeps so the
-# parity runner SKIPS this fixture; it remains here so the coverage test
-# sees the `place` option as exercised. The /location mapper's own
-# unit tests cover both the coordinate and geocoding branches.
+# /location — six sub-commands mirroring the text command's grammar.
+# Geocoding for "add" is delegated to the text command itself, so the
+# mapper passes the place string through unchanged; no BotDeps required.
 # -----------------------------------------------------------------------------
-- name: location-coords
-  description: /location with explicit coordinates (skipped at parity runtime)
+- name: location-add
+  description: /location add — save a named location
   command: cmd.location
   slash:
     name: location
     options:
-      place: "51.28, 1.08"
+      add.name: Home
+      add.place: "51.28,1.08"
+  text: "!location add Home 51.28,1.08"
+  expected_tokens: [add, Home, "51.28,1.08"]
+
+- name: location-list
+  description: /location list — list saved locations
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      list: _bare
+  text: "!location list"
+  expected_tokens: [list]
+
+- name: location-show
+  description: /location show — show one saved location
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      show.name: Home
+  text: "!location show Home"
+  expected_tokens: [show, Home]
+
+- name: location-remove
+  description: /location remove — remove a named location
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      remove.name: Home
+  text: "!location remove Home"
+  expected_tokens: [remove, Home]
+
+- name: location-set-default
+  description: /location set-default — set default location
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      set-default.place: "51.28,1.08"
   text: "!location 51.28,1.08"
   expected_tokens: ["51.28,1.08"]
+
+- name: location-remove-default
+  description: /location remove-default — clear default location
+  command: cmd.location
+  slash:
+    name: location
+    options:
+      remove-default: _bare
+  text: "!location remove default"
+  expected_tokens: [remove, default]
 
 # -----------------------------------------------------------------------------
 # /summary — sub-command-group per alertType, action sub-command per CRUD verb.
@@ -823,3 +873,141 @@
       quest.now: _bare
   text: "!summary quest now"
   expected_tokens: [quest, now]
+
+# -----------------------------------------------------------------------------
+# location + areas options on tracker commands (Task 22)
+# Each tracker command exposes these two shared optional options; one fixture
+# per command exercises both so the coverage meta-test stays green.
+# -----------------------------------------------------------------------------
+- name: track-location-areas
+  description: /track with location override and area filter
+  command: cmd.track
+  slash:
+    name: track
+    options:
+      pokemon: pikachu
+      distance: 500
+      location: Home
+      areas: "berlin,munich"
+  text: "!track pikachu d500 location:Home area:berlin,munich"
+  expected_tokens: [pikachu, d500, "location:Home", "area:berlin,munich"]
+
+- name: raid-location-areas
+  description: /raid with location override and area filter
+  command: cmd.raid
+  slash:
+    name: raid
+    options:
+      boss: mewtwo
+      location: Work
+      areas: london
+  text: "!raid mewtwo location:Work area:london"
+  expected_tokens: [mewtwo, "location:Work", "area:london"]
+
+- name: egg-location-areas
+  description: /egg with location override and area filter
+  command: cmd.egg
+  slash:
+    name: egg
+    options:
+      level: "5"
+      location: Home
+      areas: "paris,berlin"
+  text: "!egg 5 location:Home area:paris,berlin"
+  expected_tokens: ["5", "location:Home", "area:paris,berlin"]
+
+- name: quest-location-areas
+  description: /quest with location override and area filter
+  command: cmd.quest
+  slash:
+    name: quest
+    options:
+      stardust: 500
+      location: Gym
+      areas: downtown
+  text: "!quest stardust:500 location:Gym area:downtown"
+  expected_tokens: ["stardust:500", "location:Gym", "area:downtown"]
+
+- name: invasion-location-areas
+  description: /invasion with location override and area filter
+  command: cmd.invasion
+  slash:
+    name: invasion
+    options:
+      grunt_type: fire
+      location: Home
+      areas: northside
+  text: "!invasion fire location:Home area:northside"
+  expected_tokens: [fire, "location:Home", "area:northside"]
+
+- name: incident-location-areas
+  description: /incident with location override and area filter
+  command: cmd.incident
+  slash:
+    name: incident
+    options:
+      type: kecleon
+      location: Home
+      areas: city
+  text: "!incident kecleon location:Home area:city"
+  expected_tokens: [kecleon, "location:Home", "area:city"]
+
+- name: lure-location-areas
+  description: /lure with location override and area filter
+  command: cmd.lure
+  slash:
+    name: lure
+    options:
+      lure_type: glacial
+      location: Park
+      areas: "zone1,zone2"
+  text: "!lure glacial location:Park area:zone1,zone2"
+  expected_tokens: [glacial, "location:Park", "area:zone1,zone2"]
+
+- name: nest-location-areas
+  description: /nest with location override and area filter
+  command: cmd.nest
+  slash:
+    name: nest
+    options:
+      pokemon: pikachu
+      location: Home
+      areas: westside
+  text: "!nest pikachu location:Home area:westside"
+  expected_tokens: [pikachu, "location:Home", "area:westside"]
+
+- name: maxbattle-location-areas
+  description: /maxbattle with location override and area filter
+  command: cmd.maxbattle
+  slash:
+    name: maxbattle
+    options:
+      pokemon: charizard
+      location: Gym
+      areas: eastpark
+  text: "!maxbattle charizard location:Gym area:eastpark"
+  expected_tokens: [charizard, "location:Gym", "area:eastpark"]
+
+- name: gym-location-areas
+  description: /gym with location override and area filter
+  command: cmd.gym
+  slash:
+    name: gym
+    options:
+      team: 1
+      location: Home
+      areas: "north,south"
+  text: "!gym mystic location:Home area:north,south"
+  expected_tokens: [mystic, "location:Home", "area:north,south"]
+
+- name: fort-location-areas
+  description: /fort with location override and area filter
+  command: cmd.fort
+  slash:
+    name: fort
+    options:
+      fort_type: 0
+      location: Work
+      areas: midtown
+  text: "!fort pokestop location:Work area:midtown"
+  expected_tokens: [pokestop, "location:Work", "area:midtown"]

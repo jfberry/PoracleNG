@@ -26,6 +26,7 @@ func (g *Generator) LureRowText(tr *i18n.Translator, lure *db.LureTracking) stri
 	}
 
 	s += " " + standardText(tr, lure.Template, g.DefaultTemplateName, lure.Clean)
+	s = appendOverride(tr, s, lure.OverrideLocationLabel, lure.OverrideAreas)
 
 	return s
 }

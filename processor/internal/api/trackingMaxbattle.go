@@ -105,16 +105,18 @@ func HandleDeleteMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
 
 // maxbattleInsertRequest represents a single maxbattle tracking row from the POST body.
 type maxbattleInsertRequest struct {
-	PokemonID flexInt  `json:"pokemon_id"`
-	Level     flexInt  `json:"level"`
-	Distance  flexInt  `json:"distance"`
-	Template  any      `json:"template"`
-	Clean     flexBool `json:"clean"`
-	Form      flexInt  `json:"form"`
-	Move      flexInt  `json:"move"`
-	Gmax      flexBool `json:"gmax"`
-	Evolution flexInt  `json:"evolution"`
-	StationID *string  `json:"station_id"`
+	PokemonID             flexInt  `json:"pokemon_id"`
+	Level                 flexInt  `json:"level"`
+	Distance              flexInt  `json:"distance"`
+	Template              any      `json:"template"`
+	Clean                 flexBool `json:"clean"`
+	Form                  flexInt  `json:"form"`
+	Move                  flexInt  `json:"move"`
+	Gmax                  flexBool `json:"gmax"`
+	Evolution             flexInt  `json:"evolution"`
+	StationID             *string  `json:"station_id"`
+	OverrideLocationLabel string   `json:"override_location_label"`
+	OverrideAreas         []string `json:"override_areas"`
 }
 
 // HandleCreateMaxbattle returns the POST /api/tracking/maxbattle/{id} handler.
@@ -161,8 +163,19 @@ func HandleCreateMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
 			defaultTemplate = "1"
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		insert := make([]db.MaxbattleTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, oc, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			pokemonID := req.PokemonID.intValue(9000)
 
 			level := 9000
@@ -202,19 +215,21 @@ func HandleCreateMaxbattle(deps *TrackingDeps) gin.HandlerFunc {
 			}
 
 			insert = append(insert, db.MaxbattleTrackingAPI{
-				ID:        human.ID,
-				ProfileNo: profileNo,
-				Ping:      "",
-				Template:  template,
-				Distance:  distance,
-				Clean:     clean,
-				PokemonID: pokemonID,
-				Form:      form,
-				Level:     level,
-				Move:      move,
-				Gmax:      gmax,
-				Evolution: evolution,
-				StationID: stationID,
+				ID:                    human.ID,
+				ProfileNo:             profileNo,
+				Ping:                  "",
+				Template:              template,
+				Distance:              distance,
+				Clean:                 clean,
+				PokemonID:             pokemonID,
+				Form:                  form,
+				Level:                 level,
+				Move:                  move,
+				Gmax:                  gmax,
+				Evolution:             evolution,
+				StationID:             stationID,
+				OverrideLocationLabel: req.OverrideLocationLabel,
+				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 

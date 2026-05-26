@@ -111,11 +111,13 @@ func HandleDeleteFort(deps *TrackingDeps) gin.HandlerFunc {
 
 // fortInsertRequest represents a single fort tracking row from the POST body.
 type fortInsertRequest struct {
-	FortType     *string  `json:"fort_type"`
-	Distance     flexInt  `json:"distance"`
-	Template     any      `json:"template"`
-	IncludeEmpty flexBool `json:"include_empty"`
-	ChangeTypes  any      `json:"change_types"`
+	FortType              *string  `json:"fort_type"`
+	Distance              flexInt  `json:"distance"`
+	Template              any      `json:"template"`
+	IncludeEmpty          flexBool `json:"include_empty"`
+	ChangeTypes           any      `json:"change_types"`
+	OverrideLocationLabel string   `json:"override_location_label"`
+	OverrideAreas         []string `json:"override_areas"`
 }
 
 // HandleCreateFort returns the POST /api/tracking/fort/{id} handler.
@@ -161,8 +163,19 @@ func HandleCreateFort(deps *TrackingDeps) gin.HandlerFunc {
 			defaultTemplate = "1"
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		insert := make([]db.FortTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, oc, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			fortType := "everything"
 			if req.FortType != nil && *req.FortType != "" {
 				fortType = *req.FortType
@@ -202,14 +215,16 @@ func HandleCreateFort(deps *TrackingDeps) gin.HandlerFunc {
 			}
 
 			insert = append(insert, db.FortTrackingAPI{
-				ID:           human.ID,
-				ProfileNo:    profileNo,
-				Ping:         "",
-				Template:     template,
-				Distance:     distance,
-				FortType:     fortType,
-				IncludeEmpty: includeEmpty,
-				ChangeTypes:  changeTypes,
+				ID:                    human.ID,
+				ProfileNo:             profileNo,
+				Ping:                  "",
+				Template:              template,
+				Distance:              distance,
+				FortType:              fortType,
+				IncludeEmpty:          includeEmpty,
+				ChangeTypes:           changeTypes,
+				OverrideLocationLabel: req.OverrideLocationLabel,
+				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 

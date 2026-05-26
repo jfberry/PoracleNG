@@ -107,19 +107,21 @@ func HandleDeleteRaid(deps *TrackingDeps) gin.HandlerFunc {
 // raidInsertRequest represents a single raid tracking row from the POST body.
 // Supports pokemon_form array expansion and level array expansion.
 type raidInsertRequest struct {
-	PokemonID   flexInt           `json:"pokemon_id"`
-	PokemonForm []pokemonFormPair `json:"pokemon_form"`
-	Level       json.RawMessage   `json:"level"`
-	Distance    flexInt           `json:"distance"`
-	Template    any               `json:"template"`
-	Clean       flexBool          `json:"clean"`
-	Team        flexInt           `json:"team"`
-	Exclusive   flexBool          `json:"exclusive"`
-	Form        flexInt           `json:"form"`
-	Move        flexInt           `json:"move"`
-	Evolution   flexInt           `json:"evolution"`
-	GymID       *string           `json:"gym_id"`
-	RSVPChanges flexInt           `json:"rsvp_changes"`
+	PokemonID             flexInt           `json:"pokemon_id"`
+	PokemonForm           []pokemonFormPair `json:"pokemon_form"`
+	Level                 json.RawMessage   `json:"level"`
+	Distance              flexInt           `json:"distance"`
+	Template              any               `json:"template"`
+	Clean                 flexBool          `json:"clean"`
+	Team                  flexInt           `json:"team"`
+	Exclusive             flexBool          `json:"exclusive"`
+	Form                  flexInt           `json:"form"`
+	Move                  flexInt           `json:"move"`
+	Evolution             flexInt           `json:"evolution"`
+	GymID                 *string           `json:"gym_id"`
+	RSVPChanges           flexInt           `json:"rsvp_changes"`
+	OverrideLocationLabel string            `json:"override_location_label"`
+	OverrideAreas         []string          `json:"override_areas"`
 }
 
 type pokemonFormPair struct {
@@ -210,29 +212,42 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 			return
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		insert := make([]db.RaidTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, oc, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			tmpl, dist, team, clean, excl, move, evo, gymID, rsvp := buildRaidCommon(req)
 
 			// pokemon_form expansion
 			if len(req.PokemonForm) > 0 {
 				for _, pf := range req.PokemonForm {
 					insert = append(insert, db.RaidTrackingAPI{
-						ID:          human.ID,
-						ProfileNo:   profileNo,
-						Ping:        "",
-						Template:    tmpl,
-						Distance:    dist,
-						Team:        team,
-						Clean:       clean,
-						Exclusive:   excl,
-						Move:        move,
-						Evolution:   evo,
-						GymID:       gymID,
-						RSVPChanges: rsvp,
-						PokemonID:   pf.PokemonID,
-						Form:        pf.Form,
-						Level:       9000,
+						ID:                    human.ID,
+						ProfileNo:             profileNo,
+						Ping:                  "",
+						Template:              tmpl,
+						Distance:              dist,
+						Team:                  team,
+						Clean:                 clean,
+						Exclusive:             excl,
+						Move:                  move,
+						Evolution:             evo,
+						GymID:                 gymID,
+						RSVPChanges:           rsvp,
+						PokemonID:             pf.PokemonID,
+						Form:                  pf.Form,
+						Level:                 9000,
+						OverrideLocationLabel: req.OverrideLocationLabel,
+						OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 					})
 				}
 				continue
@@ -255,21 +270,23 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 				}
 
 				insert = append(insert, db.RaidTrackingAPI{
-					ID:          human.ID,
-					ProfileNo:   profileNo,
-					Ping:        "",
-					Template:    tmpl,
-					Distance:    dist,
-					Team:        team,
-					Clean:       clean,
-					Exclusive:   excl,
-					Move:        move,
-					Evolution:   evo,
-					GymID:       gymID,
-					RSVPChanges: rsvp,
-					PokemonID:   pokemonID,
-					Form:        form,
-					Level:       level,
+					ID:                    human.ID,
+					ProfileNo:             profileNo,
+					Ping:                  "",
+					Template:              tmpl,
+					Distance:              dist,
+					Team:                  team,
+					Clean:                 clean,
+					Exclusive:             excl,
+					Move:                  move,
+					Evolution:             evo,
+					GymID:                 gymID,
+					RSVPChanges:           rsvp,
+					PokemonID:             pokemonID,
+					Form:                  form,
+					Level:                 level,
+					OverrideLocationLabel: req.OverrideLocationLabel,
+					OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 				})
 			}
 		}

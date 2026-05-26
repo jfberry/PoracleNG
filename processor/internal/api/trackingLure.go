@@ -120,10 +120,12 @@ func HandleDeleteLure(deps *TrackingDeps) gin.HandlerFunc {
 
 // lureInsertRequest represents a single lure tracking row from the POST body.
 type lureInsertRequest struct {
-	LureID   flexInt  `json:"lure_id"`
-	Distance flexInt  `json:"distance"`
-	Template any      `json:"template"`
-	Clean    flexBool `json:"clean"`
+	LureID                flexInt  `json:"lure_id"`
+	Distance              flexInt  `json:"distance"`
+	Template              any      `json:"template"`
+	Clean                 flexBool `json:"clean"`
+	OverrideLocationLabel string   `json:"override_location_label"`
+	OverrideAreas         []string `json:"override_areas"`
 }
 
 // HandleCreateLure returns the POST /api/tracking/lure/{id} handler.
@@ -171,9 +173,20 @@ func HandleCreateLure(deps *TrackingDeps) gin.HandlerFunc {
 			defaultTemplate = "1"
 		}
 
+		// Pre-fetch override context once so per-row validation doesn't re-query.
+		oc, ocMsg, ocCode := newOverrideContext(deps, human.ID)
+		if ocMsg != "" {
+			trackingJSONError(c, ocCode, ocMsg)
+			return
+		}
+
 		// Build normalized insert rows
 		insert := make([]db.LureTrackingAPI, 0, len(insertReqs))
 		for _, req := range insertReqs {
+			if msg, code := validateOverrideFields(deps, oc, human.ID, req.OverrideLocationLabel, req.OverrideAreas, req.Distance.intValue(0)); msg != "" {
+				trackingJSONError(c, code, msg)
+				return
+			}
 			lureID := req.LureID.intValue(0)
 			if !validLureIDs[lureID] {
 				trackingJSONError(c, http.StatusBadRequest, "Unrecognised lure_id value")
@@ -199,13 +212,15 @@ func HandleCreateLure(deps *TrackingDeps) gin.HandlerFunc {
 			clean := req.Clean.intValue(0)
 
 			insert = append(insert, db.LureTrackingAPI{
-				ID:        human.ID,
-				ProfileNo: profileNo,
-				Ping:      "",
-				Template:  template,
-				Distance:  distance,
-				Clean:     clean,
-				LureID:    lureID,
+				ID:                    human.ID,
+				ProfileNo:             profileNo,
+				Ping:                  "",
+				Template:              template,
+				Distance:              distance,
+				Clean:                 clean,
+				LureID:                lureID,
+				OverrideLocationLabel: req.OverrideLocationLabel,
+				OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
 			})
 		}
 

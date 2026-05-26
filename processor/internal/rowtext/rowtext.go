@@ -4,6 +4,7 @@ package rowtext
 
 import (
 	"fmt"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -121,6 +122,20 @@ func rsvpText(tr *i18n.Translator, rsvpChanges int) string {
 	default:
 		return ""
 	}
+}
+
+// appendOverride appends per-rule location/area override summary to a row
+// text. "@ <label>" is shown when the rule carries an override location label;
+// "in <area1>, <area2>" is shown when the rule carries override areas. Empty
+// fields are no-ops.
+func appendOverride(tr *i18n.Translator, s, label string, areas []string) string {
+	if label != "" {
+		s += " | " + tr.Tf("tracking.override_location_fmt", label)
+	}
+	if len(areas) > 0 {
+		s += " | " + tr.Tf("tracking.override_areas_fmt", strings.Join(areas, ", "))
+	}
+	return s
 }
 
 // ucFirst returns s with its first rune uppercased.
