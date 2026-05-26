@@ -16,6 +16,12 @@ import (
 // !help <command> renders the "help" DTS template with id=<command>.
 type HelpCommand struct{}
 
+// detailedHelpTopics lists the topics for which a cmd.<topic>.usage i18n
+// key (or help-type DTS) exists. Users see this list at the end of !help
+// so they know what !help <topic> will recognise. Keep in sync with the
+// cmd.*.usage keys in i18n/locale/en.json.
+var detailedHelpTopics = []string{"track", "location", "mute"}
+
 // adminOnlyHelpTopics — non-admins asking "!help enable" get the 🙅
 // unknown-topic reply rather than the admin command surface.
 var adminOnlyHelpTopics = map[string]bool{
@@ -68,13 +74,21 @@ func (c *HelpCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	// and level #4 requires entry-language="" — both fail when the
 	// query is "" and the entry is "en". Falling back to the server
 	// default gives the user's "en" entry a chance to match at level 3.
+	var replies []bot.Reply
 	if ctx.DTS != nil {
 		language := helpEffectiveLanguage(ctx)
 		if ctx.DTS.Get("help", platform, "index", language) != nil {
-			return c.renderHelpTemplate(ctx, "help", "index", platform, view)
+			replies = c.renderHelpTemplate(ctx, "help", "index", platform, view)
 		}
 	}
-	return c.renderHelpTemplate(ctx, "greeting", "", platform, view)
+	if replies == nil {
+		replies = c.renderHelpTemplate(ctx, "greeting", "", platform, view)
+	}
+	// Append the discovery hint so users know !help <topic> works.
+	tr := ctx.Tr()
+	hint := tr.Tf("msg.help.detailed_topics", bot.CommandPrefix(ctx), strings.Join(detailedHelpTopics, ", "))
+	replies = append(replies, bot.Reply{Text: hint})
+	return replies
 }
 
 // helpEffectiveLanguage resolves the language to use for help template

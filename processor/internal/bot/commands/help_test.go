@@ -113,6 +113,59 @@ func TestHelpIndexHidesAdminSectionForNonAdmins(t *testing.T) {
 	}
 }
 
+// TestHelp_GeneralAppendsDiscoveryHint — the no-args !help reply should
+// always include a trailing hint telling users that !help <topic> works
+// and listing the available topics.
+func TestHelp_GeneralAppendsDiscoveryHint(t *testing.T) {
+	ts := helpTestDTS(t)
+	ctx, _ := testCtx(t)
+	ctx.DTS = ts
+	cmd := &HelpCommand{}
+	replies := cmd.Run(ctx, nil)
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply")
+	}
+	last := replies[len(replies)-1].Text
+	if !strings.Contains(last, "help <topic>") {
+		t.Fatalf("expected hint about !help <topic>, got %q", last)
+	}
+	if !strings.Contains(last, "track") {
+		t.Fatalf("hint should list track topic, got %q", last)
+	}
+}
+
+// TestHelp_TrackTopicResolves — !help track should return the
+// help/track DTS template (or cmd.track.usage fallback), not the
+// "unknown topic" error, and must not contain any mention of ping/
+// @-mention (that's an admin-configured channel concept, not a user
+// filter).
+func TestHelp_TrackTopicResolves(t *testing.T) {
+	ts := helpTestDTS(t)
+	ctx, _ := testCtx(t)
+	ctx.DTS = ts
+	cmd := &HelpCommand{}
+	replies := cmd.Run(ctx, []string{"track"})
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply")
+	}
+	// Flatten both Embed and Text into a single string for substring
+	// checks — the Discord path returns an Embed, Telegram returns Text.
+	var body strings.Builder
+	if replies[0].Embed != nil {
+		body.Write(replies[0].Embed)
+	}
+	for _, r := range replies {
+		body.WriteString(r.Text)
+	}
+	got := body.String()
+	if !strings.Contains(got, "track") || strings.Contains(got, "unknown topic") {
+		t.Fatalf("!help track should render the track help content, got %q", got)
+	}
+	if strings.Contains(strings.ToLower(got), "ping") {
+		t.Fatalf("!help track must not mention ping (admin concern, not user-facing): %q", got)
+	}
+}
+
 // TestHelpPicksUserCustomWhenCallerHasEmptyLanguage simulates the
 // reported end-user scenario: operator has a custom help entry shaped
 // {"type":"help","id":"1","default":true,"language":"en","platform":"discord"},
