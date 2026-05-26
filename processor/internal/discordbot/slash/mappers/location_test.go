@@ -110,16 +110,42 @@ func TestLocationMapperRemove(t *testing.T) {
 	}
 }
 
-func TestLocationMapperSetDefaultIsNoop(t *testing.T) {
-	// set-default has no place option yet; returns nil, nil intentionally.
+func TestLocationMapperSetDefault(t *testing.T) {
 	tokens, err := Location([]*discordgo.ApplicationCommandInteractionDataOption{
-		subopt("set-default"),
+		subopt("set-default", sopt("place", "51.5,-0.1")),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if tokens != nil {
-		t.Errorf("expected nil tokens for set-default, got %v", tokens)
+	want := []string{"51.5,-0.1"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("got %v want %v", tokens, want)
+	}
+}
+
+func TestLocationMapperSetDefaultPlaceName(t *testing.T) {
+	tokens, err := Location([]*discordgo.ApplicationCommandInteractionDataOption{
+		subopt("set-default", sopt("place", "London")),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"London"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("got %v want %v", tokens, want)
+	}
+}
+
+func TestLocationMapperSetDefaultMissingPlace(t *testing.T) {
+	_, err := Location([]*discordgo.ApplicationCommandInteractionDataOption{
+		subopt("set-default"),
+	})
+	me, ok := err.(*MapperError)
+	if !ok {
+		t.Fatalf("expected MapperError, got %T", err)
+	}
+	if me.Key != "error.slash.location.empty" {
+		t.Errorf("key=%q", me.Key)
 	}
 }
 

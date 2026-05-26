@@ -465,7 +465,7 @@ func summaryOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 //	list                — list all saved locations
 //	show <name>         — show one saved location (autocomplete)
 //	remove <name>       — remove a saved location or "default" (autocomplete)
-//	set-default         — placeholder (no place arg yet; exists for discoverability)
+//	set-default <place> — set the default location (coords or address)
 //	remove-default      — clear the default lat/lon location
 func locationOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 	return []*discordgo.ApplicationCommandOption{
@@ -477,7 +477,8 @@ func locationOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption 
 			stringOpt(bundle, "location.show.name", "name", "Saved-location name", true, true)),
 		subCommand(bundle, "location.remove", "remove", "Remove a saved location",
 			stringOpt(bundle, "location.remove.name", "name", "Saved-location name (or \"default\" to clear your default location)", true, true)),
-		subCommand(bundle, "location.set-default", "set-default", "Set your default location (use /location add first)"),
+		subCommand(bundle, "location.set-default", "set-default", "Set your default location",
+			stringOpt(bundle, "location.set-default.place", "place", "Coordinates (lat,lon) or address to set as your default location", true, false)),
 		subCommand(bundle, "location.remove-default", "remove-default", "Clear your default location"),
 	}
 }

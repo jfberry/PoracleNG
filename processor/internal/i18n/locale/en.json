@@ -1045,7 +1045,9 @@
   "slash.opt.location.remove.name": "name",
   "slash.opt.location.remove.name.desc": "Saved-location name (or \"default\" to clear your default location)",
   "slash.opt.location.set-default": "set-default",
-  "slash.opt.location.set-default.desc": "Set your default location (use /location add first)",
+  "slash.opt.location.set-default.desc": "Set your default location",
+  "slash.opt.location.set-default.place": "place",
+  "slash.opt.location.set-default.place.desc": "Coordinates (lat,lon) or address to set as your default location",
   "slash.opt.location.remove-default": "remove-default",
   "slash.opt.location.remove-default.desc": "Clear your default location",
 

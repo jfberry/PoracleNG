@@ -13,7 +13,7 @@ import (
 //	list                   → ["list"]
 //	show <name>            → ["show", name]
 //	remove <name>          → ["remove", name]
-//	set-default            → nil (no-op: needs a separate place arg not yet in UX)
+//	set-default <place>    → [place]                (bare !location <place> sets default)
 //	remove-default         → ["remove", "default"]
 func Location(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, error) {
 	if len(opts) == 0 {
@@ -56,10 +56,17 @@ func Location(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]stri
 		}
 		return []string{"remove", name}, nil
 	case "set-default":
-		// No place option on this sub-command yet — expose for discoverability
-		// in the slash menu but take no action. The !location <lat,lon> text
-		// form remains the primary way to set a default location.
-		return nil, nil
+		var place string
+		for _, o := range sub.Options {
+			if o.Name == "place" {
+				place = o.StringValue()
+			}
+		}
+		if place == "" {
+			return nil, &MapperError{Key: "error.slash.location.empty"}
+		}
+		// The bare !location <place> form sets the default — translate to that.
+		return []string{place}, nil
 	case "remove-default":
 		return []string{"remove", "default"}, nil
 	}

@@ -811,14 +811,14 @@
   expected_tokens: [remove, Home]
 
 - name: location-set-default
-  description: /location set-default — no-op placeholder
+  description: /location set-default — set default location
   command: cmd.location
   slash:
     name: location
     options:
-      set-default: _bare
-  text: "!location"
-  expected_tokens: []
+      set-default.place: "51.28,1.08"
+  text: "!location 51.28,1.08"
+  expected_tokens: ["51.28,1.08"]
 
 - name: location-remove-default
   description: /location remove-default — clear default location

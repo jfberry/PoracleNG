@@ -88,10 +88,21 @@
     {
       "type": 1,
       "name": "set-default",
-      "description": "Set your default location (use /location add first)",
+      "description": "Set your default location",
       "channel_types": null,
       "required": false,
-      "options": null,
+      "options": [
+        {
+          "type": 3,
+          "name": "place",
+          "description": "Coordinates (lat,lon) or address to set as your default location",
+          "channel_types": null,
+          "required": true,
+          "options": null,
+          "autocomplete": false,
+          "choices": null
+        }
+      ],
       "autocomplete": false,
       "choices": null
     },
