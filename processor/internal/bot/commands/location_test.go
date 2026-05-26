@@ -324,7 +324,7 @@ func TestLocation_RemoveBareErrors(t *testing.T) {
 	ctx, _ := testCtx(t)
 	cmd := &LocationCommand{}
 	replies := cmd.Run(ctx, []string{"remove"})
-	if !strings.Contains(replies[0].Text, "Usage:") {
+	if !strings.Contains(replies[0].Text, "Valid commands are") {
 		t.Fatalf("bare remove should show usage, got %s", replies[0].Text)
 	}
 }
