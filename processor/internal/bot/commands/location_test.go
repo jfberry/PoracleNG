@@ -328,3 +328,64 @@ func TestLocation_RemoveBareErrors(t *testing.T) {
 		t.Fatalf("bare remove should show usage, got %s", replies[0].Text)
 	}
 }
+
+// --- UX fixes: uniform list rows, show default, addresses ---
+
+// TestLocation_ListUsesUniformRowFormat verifies that both the default and
+// named entries in `!location list` use backtick-quoted labels.
+func TestLocation_ListUsesUniformRowFormat(t *testing.T) {
+	ctx, mock := testCtx(t)
+	if err := mock.SetLocation("user1", 1, 51.5, -0.1); err != nil {
+		t.Fatalf("seed default location: %v", err)
+	}
+	if _, err := mock.AddLocation(store.UserLocation{
+		ID: "user1", Label: "Home", Latitude: 51.6, Longitude: -0.2,
+	}); err != nil {
+		t.Fatalf("seed named location: %v", err)
+	}
+
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"list"})
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply")
+	}
+	body := replies[0].Text
+	if !strings.Contains(body, "`default`") {
+		t.Errorf("expected backtick-quoted `default` row: %s", body)
+	}
+	if !strings.Contains(body, "`Home`") {
+		t.Errorf("expected backtick-quoted `Home` row: %s", body)
+	}
+}
+
+// TestLocation_ShowDefault verifies that `!location show default` returns the
+// user's default location coordinates.
+func TestLocation_ShowDefault(t *testing.T) {
+	ctx, mock := testCtx(t)
+	if err := mock.SetLocation("user1", 1, 51.5, -0.1); err != nil {
+		t.Fatalf("seed default location: %v", err)
+	}
+
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"show", "default"})
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply")
+	}
+	if !strings.Contains(replies[0].Text, "51.5") {
+		t.Fatalf("expected coords in show-default reply, got %s", replies[0].Text)
+	}
+}
+
+// TestLocation_ShowDefault_NoneSet verifies that `!location show default` when
+// no default location is set returns a friendly error.
+func TestLocation_ShowDefault_NoneSet(t *testing.T) {
+	ctx, _ := testCtx(t)
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"show", "default"})
+	if len(replies) == 0 {
+		t.Fatal("expected at least one reply")
+	}
+	if !strings.Contains(replies[0].Text, "No default") {
+		t.Fatalf("expected no-default error, got %s", replies[0].Text)
+	}
+}

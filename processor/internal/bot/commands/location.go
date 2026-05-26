@@ -157,29 +157,66 @@ func (c *LocationCommand) listLocations(ctx *bot.CommandContext) []bot.Reply {
 	var sb strings.Builder
 	sb.WriteString(tr.T("msg.location.list_header") + "\n")
 	if hasDefault {
-		sb.WriteString(tr.Tf("msg.location.list_default", human.Latitude, human.Longitude) + "\n")
+		sb.WriteString(formatLocationRow(ctx, tr, "default", human.Latitude, human.Longitude) + "\n")
 	}
 	for _, l := range locs {
-		sb.WriteString(tr.Tf("msg.location.list_row", l.Label, l.Latitude, l.Longitude) + "\n")
+		sb.WriteString(formatLocationRow(ctx, tr, l.Label, l.Latitude, l.Longitude) + "\n")
 	}
 	return []bot.Reply{{Text: sb.String()}}
 }
 
-// showLocation handles `!location show <name>`.
+// formatLocationRow renders a single list row, with reverse-geocoded address
+// appended when the geocoder is configured and lookup succeeds.
+func formatLocationRow(ctx *bot.CommandContext, tr *i18n.Translator, label string, lat, lon float64) string {
+	if ctx.Geocoder != nil {
+		if a := ctx.Geocoder.GetAddress(lat, lon); a != nil && a.FormattedAddress != "" {
+			return tr.Tf("msg.location.list_row_with_addr", label, lat, lon, a.FormattedAddress)
+		}
+	}
+	return tr.Tf("msg.location.list_row", label, lat, lon)
+}
+
+// showLocation handles `!location show <name>` and `!location show default`.
 func (c *LocationCommand) showLocation(ctx *bot.CommandContext, args []string) []bot.Reply {
 	tr := ctx.Tr()
 	if len(args) == 0 {
 		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.show_usage", bot.CommandPrefix(ctx))}}
 	}
-	loc, _ := ctx.Humans.GetLocation(ctx.TargetID, args[0])
-	if loc == nil {
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.show_not_found", args[0])}}
+
+	target := args[0]
+	enTr := ctx.Translations.For("en")
+	if isDefaultKeyword(target, tr, enTr) {
+		human, _ := ctx.Humans.Get(ctx.TargetID)
+		if human == nil || (human.Latitude == 0 && human.Longitude == 0) {
+			return []bot.Reply{{React: "🙅", Text: tr.T("msg.location.no_default")}}
+		}
+		return formatShowReply(ctx, tr, "default", human.Latitude, human.Longitude)
 	}
-	reply := bot.Reply{Text: tr.Tf("msg.location.show", loc.Label, loc.Latitude, loc.Longitude)}
+
+	loc, _ := ctx.Humans.GetLocation(ctx.TargetID, target)
+	if loc == nil {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.location.show_not_found", target)}}
+	}
+	return formatShowReply(ctx, tr, loc.Label, loc.Latitude, loc.Longitude)
+}
+
+// formatShowReply builds a show-location reply with optional geocoded address
+// and optional static map tile.
+func formatShowReply(ctx *bot.CommandContext, tr *i18n.Translator, label string, lat, lon float64) []bot.Reply {
+	var text string
+	if ctx.Geocoder != nil {
+		if a := ctx.Geocoder.GetAddress(lat, lon); a != nil && a.FormattedAddress != "" {
+			text = tr.Tf("msg.location.show_with_addr", label, lat, lon, a.FormattedAddress)
+		}
+	}
+	if text == "" {
+		text = tr.Tf("msg.location.show", label, lat, lon)
+	}
+	reply := bot.Reply{Text: text}
 	if ctx.StaticMap != nil {
 		data := map[string]any{
-			"latitude":  loc.Latitude,
-			"longitude": loc.Longitude,
+			"latitude":  lat,
+			"longitude": lon,
 		}
 		reply.ImageURL = ctx.StaticMap.GetPregeneratedTileURL("location", data, "staticMap")
 	}
