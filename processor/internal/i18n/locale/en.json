@@ -176,6 +176,7 @@
   "msg.mute.scope_pokestop": "pokestop",
   "msg.mute.scope_station": "station",
   "msg.mute.scope_tracking": "tracking rule",
+  "cmd.mute.usage": "**{0}mute** — silence alerts for a specific gym, pokemon, area, pokestop, station, or everything for a time-bounded window.\n\n• `{0}mute everything [duration:1h]` — silence ALL alerts for the given duration\n• `{0}mute gym <name-or-id> [duration:1h]` — silence alerts for one gym\n• `{0}mute pokemon <name-or-id> [duration:1h]` — silence alerts for one pokemon species\n• `{0}mute area <name> [duration:1h]` — silence alerts in one area\n• `{0}mute pokestop <id> [duration:1h]` — silence alerts for one pokestop\n• `{0}mute station <id> [duration:1h]` — silence alerts for one station\n\nDuration defaults to 1h if omitted. Use `{0}unmute <scope> <value>` to remove a mute early, or `{0}tracked` to see active mutes.",
 
 
   "cmd.raid": "raid",
@@ -443,7 +444,7 @@
   "msg.fort.usage": "Valid commands are e.g. `{0}fort pokestop`, `{0}fort everything`, `{0}fort remove pokestop`",
 
   "msg.location.removed": "✅ Removed saved location `{0}`.",
-  "msg.location.usage": "Usage: `{0}location` shows your current default. Set with `{0}location <coords-or-address>`. Manage saved locations with `{0}location add <name> <coords-or-address>` | `{0}location list` | `{0}location show <name>` | `{0}location remove <name>` | `{0}location remove default`",
+  "msg.location.usage": "Valid commands are `{0}location <coords-or-address>`, `{0}location add <name> <coords-or-address>`, `{0}location list`, `{0}location show <name>`, `{0}location remove <name>`, `{0}location remove default`",
   "msg.location.specify": "Please specify coordinates or an address",
   "msg.location.set": "Location set to {0},{1}",
   "msg.location.current": "Your current location is {0},{1}",
@@ -463,6 +464,7 @@
   "msg.location.show_usage": "Usage: `{0}location show <name>`",
   "msg.location.remove_usage": "Usage: `{0}location remove <name>` or `{0}location remove default`",
   "msg.location.geocode_failed": "🙅 Couldn't find a place matching `{0}`.",
+  "cmd.location.usage": "**{0}location** — manage your default location and saved named locations.\n\n• `{0}location` — show your current default location\n• `{0}location <coords-or-address>` — set your default location\n• `{0}location add <name> <coords-or-address>` — save a named location (referenced later as `location:<name>` on tracking rules)\n• `{0}location list` — list all your saved locations\n• `{0}location show <name>` — show one saved location's coords + address (use `default` for your default)\n• `{0}location remove <name>` — delete a saved location (refuses if any tracking rule references it)\n• `{0}location remove default` — clear your default location",
 
   "msg.override.requires_distance": "🙅 `location:` needs a `d:` distance — e.g. `location:Home d:500`.",
   "msg.override.area_and_distance": "🙅 `area:` and `d:` are mutually exclusive (area-mode vs distance-mode). Pick one.",
