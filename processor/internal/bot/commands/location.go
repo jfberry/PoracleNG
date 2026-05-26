@@ -39,7 +39,7 @@ func (c *LocationCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 				})
 			}
 		}
-		replies = append(replies, bot.Reply{Text: tr.Tf("msg.location.usage", bot.CommandPrefix(ctx))})
+		replies = append(replies, bot.Reply{Text: inlineUsage(ctx, "msg.location.usage")})
 		return replies
 	}
 

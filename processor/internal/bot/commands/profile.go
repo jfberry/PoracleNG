@@ -23,7 +23,14 @@ func (c *ProfileCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	}
 
 	if len(args) == 0 {
-		return c.listProfiles(ctx)
+		replies := c.listProfiles(ctx)
+		// Append usage hint only for the bare-call path; explicit `list`
+		// subcommand doesn't get it since the user has already proven they
+		// know !profile syntax.
+		if len(replies) > 0 {
+			replies[len(replies)-1].Text += "\n\n" + inlineUsage(ctx, "msg.profile.usage")
+		}
+		return replies
 	}
 
 	subcommand := args[0]
@@ -65,7 +72,7 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 	}
 
 	if len(profiles) == 0 {
-		return []bot.Reply{{Text: tr.T("msg.profile.none") + "\n\n" + inlineUsage(ctx, "msg.profile.usage")}}
+		return []bot.Reply{{Text: tr.T("msg.profile.none")}}
 	}
 
 	var sb strings.Builder
@@ -106,8 +113,6 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 			sb.WriteString("\n" + FormatScheduleTimezone(tr, human.Latitude, human.Longitude, ctx.Config.General.DefaultTimezone))
 		}
 	}
-	sb.WriteString("\n\n")
-	sb.WriteString(inlineUsage(ctx, "msg.profile.usage"))
 	return []bot.Reply{{Text: sb.String()}}
 }
 

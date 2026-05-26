@@ -86,8 +86,11 @@ func (c *MuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	if ctx.MuteStore == nil {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.unavailable")}}
 	}
+	if help := helpArgReply(ctx, args, "msg.mute.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage", bot.CommandPrefix(ctx))}}
+		return []bot.Reply{{React: "🙅", Text: inlineUsage(ctx, "msg.mute.usage")}}
 	}
 
 	// Pull out duration:X anywhere in the args; what's left is positional.
@@ -99,7 +102,7 @@ func (c *MuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		duration = defaultMuteDuration
 	}
 	if len(positional) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage", bot.CommandPrefix(ctx))}}
+		return []bot.Reply{{React: "🙅", Text: inlineUsage(ctx, "msg.mute.usage")}}
 	}
 
 	scopeNoun := strings.ToLower(positional[0])
@@ -140,7 +143,7 @@ func (c *MuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	case mute.ScopeStation:
 		return runMuteIDScope(ctx, mute.ScopeStation, "station", positional[1:], duration)
 	default:
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.mute.usage", bot.CommandPrefix(ctx))}}
+		return []bot.Reply{{React: "🙅", Text: inlineUsage(ctx, "msg.mute.usage")}}
 	}
 }
 
@@ -418,8 +421,11 @@ func (c *UnmuteCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply 
 	if ctx.MuteStore == nil {
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.mute.unavailable")}}
 	}
+	if help := helpArgReply(ctx, args, "msg.unmute.usage"); help != nil {
+		return []bot.Reply{*help}
+	}
 	if len(args) == 0 {
-		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.unmute.usage", bot.CommandPrefix(ctx))}}
+		return []bot.Reply{{React: "🙅", Text: inlineUsage(ctx, "msg.unmute.usage")}}
 	}
 
 	// Special tokens that drop everything for this user.
