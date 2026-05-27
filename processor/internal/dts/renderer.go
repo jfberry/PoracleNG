@@ -2,6 +2,7 @@ package dts
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -403,7 +404,7 @@ func (r *Renderer) renderForUsers(
 			result, err := safeExecWith(tmpl, view, df)
 			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
-				log.Errorf("dts: render %s for user %s: %v", templateType, user.ID, err)
+				log.Errorf("[%s] dts: render %s for user %s: %v", logReference, templateType, user.ID, err)
 				r.notice(
 					fmt.Sprintf("dts.render:%s:%s:%s:%s", templateType, platform, language, templateID),
 					fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` render error: %v — falling back to default message.", templateType, platform, language, templateID, err),
@@ -422,7 +423,7 @@ func (r *Renderer) renderForUsers(
 		// Validate rendered JSON
 		rawMessage := json.RawMessage(rendered)
 		if !json.Valid(rawMessage) {
-			log.Errorf("dts: invalid rendered JSON for user %s (raw: %.200s)", user.ID, rendered)
+			logInvalidRenderedJSON(logReference, fmt.Sprintf("user %s", user.ID), rendered)
 			r.notice(
 				fmt.Sprintf("dts.invalid:%s:%s:%s:%s", templateType, platform, language, templateID),
 				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` produced invalid JSON — falling back to default message.", templateType, platform, language, templateID),
@@ -609,7 +610,7 @@ func (r *Renderer) renderGrouped(
 			result, err := safeExecWith(tmpl, view, df)
 			metrics.TemplateDuration.WithLabelValues(templateType).Observe(time.Since(tStart).Seconds())
 			if err != nil {
-				log.Errorf("dts: render %s for group (%s/%s/%s): %v", templateType, key.platform, key.templateID, key.language, err)
+				log.Errorf("[%s] dts: render %s for group (%s/%s/%s): %v", logReference, templateType, key.platform, key.templateID, key.language, err)
 				r.notice(
 					fmt.Sprintf("dts.render:%s:%s:%s:%s", templateType, key.platform, key.language, key.templateID),
 					fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` render error: %v — falling back to default message.", templateType, key.platform, key.language, key.templateID, err),
@@ -626,7 +627,7 @@ func (r *Renderer) renderGrouped(
 
 		rawMessage := json.RawMessage(rendered)
 		if !json.Valid(rawMessage) {
-			log.Errorf("dts: invalid rendered JSON for group (%s/%s/%s) (raw: %.200s)", key.platform, key.templateID, key.language, rendered)
+			logInvalidRenderedJSON(logReference, fmt.Sprintf("group (%s/%s/%s)", key.platform, key.templateID, key.language), rendered)
 			r.notice(
 				fmt.Sprintf("dts.invalid:%s:%s:%s:%s", templateType, key.platform, key.language, key.templateID),
 				fmt.Sprintf(":warning: DTS template `%s/%s/%s/%s` produced invalid JSON — falling back to default message.", templateType, key.platform, key.language, key.templateID),
@@ -844,4 +845,32 @@ func safeExecWith(tmpl *raymond.Template, ctx any, df *raymond.DataFrame) (resul
 		}
 	}()
 	return tmpl.ExecWith(ctx, df)
+}
+
+// logInvalidRenderedJSON emits an error log for a template that produced
+// invalid JSON. When json.Unmarshal returns a *json.SyntaxError we include
+// the byte offset of the parse failure and a 50-char window around it so
+// the cause is visible at a glance without scrolling through KB of output.
+// The full raw output is always appended for context.
+//
+// who is the target identifier (user ID for per-user renders, "group ..."
+// for the group renderer). logReference correlates the failure with the
+// originating webhook event (encounter_id, gym_id, etc.).
+func logInvalidRenderedJSON(logReference, who, rendered string) {
+	var syntaxErr *json.SyntaxError
+	if err := json.Unmarshal([]byte(rendered), &struct{}{}); errors.As(err, &syntaxErr) {
+		offset := int(syntaxErr.Offset)
+		lo := offset - 50
+		if lo < 0 {
+			lo = 0
+		}
+		hi := offset + 50
+		if hi > len(rendered) {
+			hi = len(rendered)
+		}
+		log.Errorf("[%s] dts: invalid rendered JSON for %s — parse error at byte %d: %q (full raw: %s)",
+			logReference, who, offset, rendered[lo:hi], rendered)
+		return
+	}
+	log.Errorf("[%s] dts: invalid rendered JSON for %s (raw: %s)", logReference, who, rendered)
 }
