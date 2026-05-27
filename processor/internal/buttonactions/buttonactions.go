@@ -173,26 +173,12 @@ var (
 
 // RegisterBuiltins wires the v1 action handlers into a registry:
 //   - "mute"        → mute store write
-//   - "unsubscribe" → not yet (returns ErrNotImplemented)
-//   - "redeliver"   → not yet
-//   - "render"      → not yet
-//
-// The non-implemented stubs are registered (rather than left absent) so
-// operators get a clear "not yet implemented" message instead of the
-// generic "unknown action" — important during the rollout where the DTS
-// vocabulary is published but some actions trail their handlers.
+//   - "unsubscribe" → unsubscribe handler
+//   - "redeliver"   → redeliver handler
+//   - "render"      → render handler
 func RegisterBuiltins(r *Registry) {
 	r.Register(buttons.ActionMute, HandleMute)
 	r.Register(buttons.ActionUnsubscribe, HandleUnsubscribe)
 	r.Register(buttons.ActionRedeliver, HandleRedeliver)
 	r.Register(buttons.ActionRender, HandleRender)
-}
-
-func notImplemented(name string) Handler {
-	return func(_ context.Context, _ *snapshots.Snapshot, _ buttons.Def, _ string, deps Deps) (Response, error) {
-		return Response{
-			Text:     deps.Tr.Tf("msg.button.not_implemented", name),
-			Reaction: "🙅",
-		}, nil
-	}
 }
