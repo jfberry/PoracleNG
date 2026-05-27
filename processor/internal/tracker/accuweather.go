@@ -190,7 +190,7 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 		if hourTS >= currentHour {
 			pogoWeather := mapPoGoWeather(f)
 			aw.tracker.SetHourWeather(cellID, hourTS, pogoWeather)
-			logString.WriteString(fmt.Sprintf("%s=%d ", time.Unix(hourTS, 0).UTC().Format("15:04"), pogoWeather))
+			fmt.Fprintf(&logString, "%s=%d ", time.Unix(hourTS, 0).UTC().Format("15:04"), pogoWeather)
 		}
 	}
 	log.Infof("AccuWeather: cell %s forecast [UTC] %s", cellID, logString.String())

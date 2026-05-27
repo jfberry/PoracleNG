@@ -47,7 +47,7 @@ func (b *Bot) handleIDExport(s *discordgo.Session, m *discordgo.MessageCreate, a
 		if e.Animated {
 			prefix = "a"
 		}
-		sb.WriteString(fmt.Sprintf("  \"%s\":\"<%s:%s:%s>\"\n", e.Name, prefix, e.Name, e.ID))
+		fmt.Fprintf(&sb, "  \"%s\":\"<%s:%s:%s>\"\n", e.Name, prefix, e.Name, e.ID)
 	}
 
 	sb.WriteString("\n\n")
@@ -61,7 +61,7 @@ func (b *Bot) handleIDExport(s *discordgo.Session, m *discordgo.MessageCreate, a
 		}
 	}
 	for _, r := range roles {
-		sb.WriteString(fmt.Sprintf("  \"%s\":\"%s\"\n", r.Name, r.ID))
+		fmt.Fprintf(&sb, "  \"%s\":\"%s\"\n", r.Name, r.ID)
 	}
 
 	_, err = s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{

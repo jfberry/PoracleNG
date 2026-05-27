@@ -209,10 +209,7 @@ func TestDispatcher_PausedAllowsBypassJob(t *testing.T) {
 
 	// Bypass job must arrive within 200ms without needing Resume.
 	deadline := time.After(200 * time.Millisecond)
-	for {
-		if len(mock.getSendCalls()) == 1 {
-			break
-		}
+	for len(mock.getSendCalls()) != 1 {
 		select {
 		case <-deadline:
 			t.Fatalf("bypass job did not send within 200ms while paused (sends=%d)", len(mock.getSendCalls()))

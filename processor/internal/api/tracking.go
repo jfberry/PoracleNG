@@ -175,10 +175,6 @@ func (f flexBool) intValue(defaultVal int) int {
 	return *f.value
 }
 
-func (f flexBool) isSet() bool {
-	return f.value != nil
-}
-
 // flexInt is a JSON type that accepts numbers, booleans, and strings,
 // coercing all to an integer value. Handles ReactMap sending booleans
 // for fields like slot_changes, battle_changes.

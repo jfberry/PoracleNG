@@ -760,16 +760,3 @@ func normalizeTelegramParseMode(mode string) string {
 	}
 }
 
-// parseTelegramSentID parses "chatID:messageID" into its components.
-func parseTelegramSentID(sentID string) (string, int, error) {
-	idx := strings.LastIndex(sentID, ":")
-	if idx < 0 {
-		return "", 0, fmt.Errorf("invalid telegram sentID format: %s", sentID)
-	}
-	chatID := sentID[:idx]
-	msgID, err := strconv.Atoi(sentID[idx+1:])
-	if err != nil {
-		return "", 0, fmt.Errorf("invalid message ID in sentID %s: %w", sentID, err)
-	}
-	return chatID, msgID, nil
-}

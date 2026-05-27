@@ -16,9 +16,6 @@ import (
 // [processor.status] config section is deferred to a later task; these
 // defaults match thresholds already used elsewhere in the processor.
 const (
-	// webhookFloorMinutes controls the "active install just stopped
-	// receiving" trigger: Per60Min > 0 but Per5Min == 0.
-	webhookFloorMinutes = 5
 	// renderQueueWarnPercent matches the existing tile-skip threshold
 	// in render.go (80% full → start skipping tile generation).
 	renderQueueWarnPercent = 80
@@ -214,7 +211,7 @@ func renderWebhooksSection(ctx *bot.CommandContext, tr translator, verbose bool)
 		}
 		for i := 0; i < limit; i++ {
 			sb.WriteString("\n    ")
-			sb.WriteString(fmt.Sprintf("%s: %d", entries[i].name, entries[i].count))
+			fmt.Fprintf(&sb, "%s: %d", entries[i].name, entries[i].count)
 		}
 	}
 
@@ -331,10 +328,10 @@ func renderDiscordRateSection(ctx *bot.CommandContext, tr translator, verbose bo
 		for _, r := range snap.Routes {
 			if r.Limit > 0 && r.Remaining < r.Limit {
 				sb.WriteString("\n    ")
-				sb.WriteString(fmt.Sprintf("%s: %d/%d (reset %s)",
+				fmt.Fprintf(&sb, "%s: %d/%d (reset %s)",
 					r.Route, r.Remaining, r.Limit,
 					r.ResetAt.UTC().Format("15:04:05"),
-				))
+				)
 			}
 		}
 	}

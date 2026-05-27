@@ -64,7 +64,7 @@ func FormatNLPSuggestion(result nlp.ParseResult, prefix string) string {
 		sb.WriteString("Did you mean:\n")
 		for i, opt := range result.Options {
 			cmd := replacePrefix(opt.Command, prefix)
-			sb.WriteString(fmt.Sprintf("%d. %s: `%s`\n", i+1, opt.Label, cmd))
+			fmt.Fprintf(&sb, "%d. %s: `%s`\n", i+1, opt.Label, cmd)
 		}
 		sb.WriteString("\nCopy and paste the command you want.")
 		return sb.String()

@@ -39,7 +39,7 @@ func (m *LureMatcher) Match(data *LureData, st *state.State) ([]webhook.MatchedU
 
 	for _, l := range st.Lures {
 		// lure_id match OR lure_id==0 (any)
-		if !(l.LureID == data.LureID || l.LureID == 0) {
+		if l.LureID != data.LureID && l.LureID != 0 {
 			continue
 		}
 

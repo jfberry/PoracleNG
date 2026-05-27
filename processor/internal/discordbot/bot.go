@@ -922,15 +922,15 @@ func (b *Bot) onThreadDelete(s *discordgo.Session, ev *discordgo.ThreadDelete) {
 	}
 	res, err := b.DB.Exec(
 		`UPDATE humans SET admin_disable = 1, disabled_date = NOW() WHERE id = ? AND type = 'discord:thread'`,
-		ev.Channel.ID)
+		ev.ID)
 	if err != nil {
-		log.Warnf("discord bot: disable deleted thread %s: %v", ev.Channel.ID, err)
+		log.Warnf("discord bot: disable deleted thread %s: %v", ev.ID, err)
 		return
 	}
 	if rows, _ := res.RowsAffected(); rows > 0 {
 		b.PostAdminNotice(fmt.Sprintf(
 			":wastebasket: Discord thread `%s` (`%s`) was deleted — auto-disabled the registered tracking row.",
-			ev.Channel.Name, ev.Channel.ID,
+			ev.Name, ev.ID,
 		))
 	}
 }

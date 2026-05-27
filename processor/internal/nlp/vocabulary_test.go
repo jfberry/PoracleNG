@@ -1,6 +1,7 @@
 package nlp
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/i18n"
@@ -93,8 +94,12 @@ func TestVocabularyPokemonLookup(t *testing.T) {
 
 func TestVocabularyPokemonAliases(t *testing.T) {
 	tr := testTranslator()
-	// Use real baseDir to load fallbacks/pokemonAlias.json
-	v := BuildVocabularies(tr, "/Users/james/GolandProjects/PoracleNG")
+	// Resolve repo root from the test file's location so this works on any
+	// checkout (CI, contributors with the repo elsewhere). From
+	// processor/internal/nlp/ → up three levels gets to the repo root,
+	// which contains fallbacks/pokemonAlias.json.
+	baseDir := filepath.Join("..", "..", "..")
+	v := BuildVocabularies(tr, baseDir)
 
 	// Single-ID aliases from pokemonAlias.json
 	tests := []struct {

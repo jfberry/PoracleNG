@@ -155,14 +155,10 @@ func assembleLure(isRemove bool, result *MatchResult) []string {
 	}
 
 	// Lure type names (from unmatched or types)
-	for _, t := range result.Types {
-		parts = append(parts, t)
-	}
+	parts = append(parts, result.Types...)
 
 	// Unmatched tokens might be lure type names
-	for _, u := range result.Unmatched {
-		parts = append(parts, u)
-	}
+	parts = append(parts, result.Unmatched...)
 
 	parts = append(parts, result.Filters...)
 

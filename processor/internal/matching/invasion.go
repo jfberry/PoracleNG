@@ -49,13 +49,13 @@ func (m *InvasionMatcher) Match(data *InvasionData, st *state.State) ([]webhook.
 		// grunt_type match OR 'everything' OR 'boss' (when this invasion is a
 		// boss encounter; see Grunt.Boss in grunts.go).
 		invGrunt := strings.ToLower(inv.GruntType)
-		if !(invGrunt == gruntType ||
-			invGrunt == "everything" ||
-			(invGrunt == "boss" && data.Boss)) {
+		if invGrunt != gruntType &&
+			invGrunt != "everything" &&
+			(invGrunt != "boss" || !data.Boss) {
 			continue
 		}
 		// gender match OR 0 (any)
-		if !(inv.Gender == data.Gender || inv.Gender == 0) {
+		if inv.Gender != data.Gender && inv.Gender != 0 {
 			continue
 		}
 

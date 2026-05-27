@@ -177,7 +177,7 @@ func (m *PokemonMatcher) matchMonsters(
 	var results []*db.MonsterTracking
 	for _, monster := range monsters {
 		// Pokemon ID check
-		if !(monster.PokemonID == targetPokemonID || (includeEverything && monster.PokemonID == 0)) {
+		if monster.PokemonID != targetPokemonID && (!includeEverything || monster.PokemonID != 0) {
 			continue
 		}
 		// Form check (0 = any).

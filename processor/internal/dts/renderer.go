@@ -823,17 +823,6 @@ func fallbackMessageRaw(templateType, platform, templateID, language string) jso
 	return b
 }
 
-func mapKeys(m map[string]map[string]any) []string {
-	if m == nil {
-		return nil
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
 // safeExecWith wraps raymond Template.ExecWith with panic recovery.
 // Malformed templates can cause panics in raymond (e.g. nil Options in helpers).
 // This converts those panics into errors so a bad template doesn't crash the process.

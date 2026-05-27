@@ -219,34 +219,9 @@ func MergeApplyGroups(cmds []ParsedCommand) []ParsedCommand {
 	return result
 }
 
-// splitByPipe splits args by the "|" token into groups.
-// Each group gets its own command invocation.
-func splitByPipe(args []string) [][]string {
-	if len(args) == 0 {
-		return nil
-	}
-	var groups [][]string
-	current := make([]string, 0)
-	for _, a := range args {
-		if a == "|" {
-			if len(current) > 0 {
-				groups = append(groups, current)
-			}
-			current = make([]string, 0)
-		} else {
-			current = append(current, a)
-		}
-	}
-	if len(current) > 0 {
-		groups = append(groups, current)
-	}
-	return groups
-}
-
 // splitByPipePaired splits args + rawArgs in lockstep so the index of each
 // group in the lowercased slice matches the corresponding group in the
-// raw-case slice. Pipe positions are detected on the lowercased side
-// (matches the existing splitByPipe behaviour).
+// raw-case slice. Pipe positions are detected on the lowercased side.
 func splitByPipePaired(args, rawArgs []string) (groups, rawGroups [][]string) {
 	if len(args) == 0 {
 		return nil, nil

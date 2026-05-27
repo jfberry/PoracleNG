@@ -1064,7 +1064,9 @@ func main() {
 	// 1. Stop accepting new requests — no more webhooks enter the pipeline
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server.Shutdown(ctx)
+	if err := server.Shutdown(ctx); err != nil {
+		log.Warnf("HTTP server shutdown: %v", err)
+	}
 	log.Infof("HTTP server stopped")
 
 	// 2. Stop bots (no more command processing)
@@ -1255,13 +1257,13 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 	log.Infof("Game data loaded: %d monsters, %d moves, %d types", len(gd.Monsters), len(gd.Moves), len(gd.Types))
 
 	// Initialize weather type boost from util.json (replaces hardcoded fallback)
-	if gd != nil && gd.Util != nil {
+	if gd.Util != nil {
 		gamedata.InitWeatherTypeBoost(gd.Util)
 	}
 
 	var activePokemon *tracker.ActivePokemonTracker
 	var pokemonTypes *gamedata.PokemonTypes
-	if cfg.Weather.ShowAlteredPokemon && gd != nil {
+	if cfg.Weather.ShowAlteredPokemon {
 		pokemonTypes = gamedata.PokemonTypesFromGameData(gd.Monsters)
 		activePokemon = tracker.NewActivePokemonTracker(50)
 		log.Info("Active pokemon tracking enabled (from game data)")

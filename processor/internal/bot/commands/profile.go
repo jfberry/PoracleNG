@@ -83,7 +83,7 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		if p.ProfileNo == ctx.ProfileNo {
 			activeMarker = "*"
 		}
-		sb.WriteString(fmt.Sprintf("%d%s. %s", p.ProfileNo, activeMarker, ctx.EscapeForReply(p.Name)))
+		fmt.Fprintf(&sb, "%d%s. %s", p.ProfileNo, activeMarker, ctx.EscapeForReply(p.Name))
 
 		if len(p.Area) > 0 && ctx.AreaLogic != nil {
 			displayNames := ctx.AreaLogic.ResolveDisplayNames(p.Area)
@@ -93,7 +93,7 @@ func (c *ProfileCommand) listProfiles(ctx *bot.CommandContext) []bot.Reply {
 		}
 
 		if p.Latitude != 0 || p.Longitude != 0 {
-			sb.WriteString(fmt.Sprintf(" - location: %.5f,%.5f", p.Latitude, p.Longitude))
+			fmt.Fprintf(&sb, " - location: %.5f,%.5f", p.Latitude, p.Longitude)
 		}
 		sb.WriteByte('\n')
 
@@ -344,7 +344,7 @@ func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Re
 		}
 		nameMatch := false
 		for _, v := range valid {
-			if strings.ToLower(v) == strings.ToLower(p.Name) {
+			if strings.EqualFold(v, p.Name) {
 				nameMatch = true
 				break
 			}

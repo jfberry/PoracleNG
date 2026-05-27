@@ -43,24 +43,6 @@ func HandleConfigValues(deps ConfigDeps) gin.HandlerFunc {
 	}
 }
 
-// collectOverrideFieldPaths walks an override map and produces dotted field paths.
-// Retained only for the test that asserts the helper's shape; no
-// production caller after the steady-state single-file persistence
-// switch.
-func collectOverrideFieldPaths(prefix string, m map[string]any, out *[]string) {
-	for k, v := range m {
-		path := k
-		if prefix != "" {
-			path = prefix + "." + k
-		}
-		if sub, ok := v.(map[string]any); ok {
-			collectOverrideFieldPaths(path, sub, out)
-			continue
-		}
-		*out = append(*out, path)
-	}
-}
-
 // HandleConfigSave saves config changes to overrides.json.
 // POST /api/config/values
 func HandleConfigSave(deps ConfigDeps) gin.HandlerFunc {

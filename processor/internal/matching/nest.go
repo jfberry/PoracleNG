@@ -41,11 +41,11 @@ func (m *NestMatcher) Match(data *NestData, st *state.State) ([]webhook.MatchedU
 
 	for _, n := range st.Nests {
 		// pokemon_id match OR pokemon_id==0 (any)
-		if !(n.PokemonID == data.PokemonID || n.PokemonID == 0) {
+		if n.PokemonID != data.PokemonID && n.PokemonID != 0 {
 			continue
 		}
 		// form match OR form==0 (any)
-		if !(n.Form == data.Form || n.Form == 0) {
+		if n.Form != data.Form && n.Form != 0 {
 			continue
 		}
 		// min_spawn_avg check

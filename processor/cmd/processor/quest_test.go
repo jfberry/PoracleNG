@@ -31,10 +31,14 @@ func TestBuildQuestRewardsKey_SameFlagSameRewardsCollide(t *testing.T) {
 		{Type: 7, Info: map[string]any{"pokemon_id": float64(25)}},
 	}
 
-	if buildQuestRewardsKey(false, rewards) != buildQuestRewardsKey(false, rewards) {
+	key1 := buildQuestRewardsKey(false, rewards)
+	key2 := buildQuestRewardsKey(false, rewards)
+	if key1 != key2 {
 		t.Errorf("identical (withAR=false, rewards) inputs must produce identical keys")
 	}
-	if buildQuestRewardsKey(true, rewards) != buildQuestRewardsKey(true, rewards) {
+	key3 := buildQuestRewardsKey(true, rewards)
+	key4 := buildQuestRewardsKey(true, rewards)
+	if key3 != key4 {
 		t.Errorf("identical (withAR=true, rewards) inputs must produce identical keys")
 	}
 }

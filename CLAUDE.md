@@ -879,3 +879,15 @@ The legacy `[alerter]` section is still read for backward-compatible `api_secret
 - Build and run: `cd processor && go build ./cmd/processor && ./poracle-processor -basedir ..`
 - Config paths resolve relative to project root via `-basedir` flag
 - Cache files (clean-cache, geofence cache, gym-state) resolve relative to `getConfigDir()` — the `config/` directory
+
+### Pre-commit gate (mandatory before any commit)
+
+Every commit MUST pass these four checks from `processor/`:
+
+```bash
+go build ./... && go vet ./... && go test -count=1 ./... && golangci-lint run ./...
+```
+
+The same four run as a required check on every push and PR via `.github/workflows/ci.yml`. Failing CI blocks merge. Don't paper over a lint failure with `//nolint:foo` unless the suppression has a clear comment justifying why the rule doesn't apply (e.g. "intentional determinism check — see `quest_test.go:34`").
+
+Lint config lives at `.golangci.yml` (repo root). It silences two conventional Go patterns: `defer X.Close()` errcheck and test-only `Write` errcheck. Anything not on the exclusion list is real and must be fixed, not suppressed.

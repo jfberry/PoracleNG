@@ -47,7 +47,7 @@ func (m *MaxbattleMatcher) Match(data *MaxbattleData, st *state.State) ([]webhoo
 		// Pokemon match: exact pokemon_id, or 9000 (level-based) with level match
 		if mb.PokemonID == 9000 {
 			// Level-based tracking: level must match or be 90 (all levels)
-			if !(mb.Level == data.Level || mb.Level == 90) {
+			if mb.Level != data.Level && mb.Level != 90 {
 				continue
 			}
 		} else {

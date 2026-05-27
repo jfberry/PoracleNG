@@ -47,7 +47,6 @@ func DiffAndClassify[T any](
 	var result DiffResult[T]
 
 	for i := len(candidates) - 1; i >= 0; i-- {
-		classified := false
 		for j := range existing {
 			noMatch, isDup, uid, isUpd := db.DiffTracking(&existing[j], &candidates[i])
 			if noMatch {
@@ -56,7 +55,6 @@ func DiffAndClassify[T any](
 			if isDup {
 				result.AlreadyPresent = append(result.AlreadyPresent, candidates[i])
 				candidates = append(candidates[:i], candidates[i+1:]...)
-				classified = true
 				break
 			}
 			if isUpd {
@@ -64,15 +62,12 @@ func DiffAndClassify[T any](
 				setUID(&update, uid)
 				result.Updates = append(result.Updates, update)
 				candidates = append(candidates[:i], candidates[i+1:]...)
-				classified = true
 				break
 			}
 		}
-		if !classified {
-			// Stays in candidates — will be a new insert
-		}
 	}
 
+	// Unmatched candidates stay in the slice and become new inserts.
 	result.Inserts = candidates
 	return result
 }

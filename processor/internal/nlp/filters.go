@@ -460,13 +460,7 @@ func matchPVP(tokens []string, intent string, result *FilterResult) {
 		if !strings.Contains(phrase, " ") {
 			continue
 		}
-		for {
-			if allTokensConsumed(tokens, phrase, result) {
-				break
-			}
-			if !strings.Contains(currentJoined(tokens, result), phrase) {
-				break
-			}
+		for !allTokensConsumed(tokens, phrase, result) && strings.Contains(currentJoined(tokens, result), phrase) {
 			addLeague(lg)
 			markMultiWordConsumed(tokens, phrase, result)
 		}

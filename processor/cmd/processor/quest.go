@@ -153,15 +153,15 @@ func buildQuestRewardsKey(withAR bool, rewards []webhook.QuestReward) string {
 		key.WriteString("std:")
 	}
 	for _, r := range rewards {
-		key.WriteString(fmt.Sprintf("%d:", r.Type))
+		fmt.Fprintf(&key, "%d:", r.Type)
 		if info, ok := r.Info["pokemon_id"]; ok {
-			key.WriteString(fmt.Sprintf("p%v", info))
+			fmt.Fprintf(&key, "p%v", info)
 		}
 		if info, ok := r.Info["item_id"]; ok {
-			key.WriteString(fmt.Sprintf("i%v", info))
+			fmt.Fprintf(&key, "i%v", info)
 		}
 		if info, ok := r.Info["amount"]; ok {
-			key.WriteString(fmt.Sprintf("a%v", info))
+			fmt.Fprintf(&key, "a%v", info)
 		}
 		key.WriteString(";")
 	}

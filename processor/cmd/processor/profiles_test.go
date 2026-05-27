@@ -258,7 +258,7 @@ func TestNextScheduleTime(t *testing.T) {
 			if got.Second() != 0 || got.Nanosecond() != 0 {
 				t.Errorf("nextScheduleTime should return zero seconds, got %s", got.Format("15:04:05.000000000"))
 			}
-			if !got.After(tt.now) && !(got.Equal(tt.now) && tt.now.Second() == 0 && tt.now.Nanosecond() == 0) {
+			if !got.After(tt.now) && (!got.Equal(tt.now) || tt.now.Second() != 0 || tt.now.Nanosecond() != 0) {
 				t.Errorf("nextScheduleTime(%s) = %s, should be after now",
 					tt.now.Format("15:04:05.000"), got.Format("15:04:05"))
 			}

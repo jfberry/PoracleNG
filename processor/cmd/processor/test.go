@@ -52,7 +52,7 @@ func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage,
 	case "pokemon":
 		return ps.processTestPokemon(raw, matchedUser)
 	case "raid", "egg":
-		return ps.processTestRaid(raw, matchedUser, webhookType)
+		return ps.processTestRaid(raw, matchedUser)
 	case "invasion":
 		return ps.processTestInvasion(raw, matchedUser)
 	case "quest":
@@ -117,13 +117,14 @@ func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webho
 	return nil
 }
 
-func (ps *ProcessorService) processTestRaid(raw json.RawMessage, target webhook.MatchedUser, msgType string) error {
+func (ps *ProcessorService) processTestRaid(raw json.RawMessage, target webhook.MatchedUser) error {
 	var raid webhook.RaidWebhook
 	if err := json.Unmarshal(raw, &raid); err != nil {
 		return fmt.Errorf("parse raid: %w", err)
 	}
 
 	// Always determine type from webhook data — test data uses "raid" for both
+	var msgType string
 	if raid.PokemonID > 0 {
 		msgType = "raid"
 	} else {
