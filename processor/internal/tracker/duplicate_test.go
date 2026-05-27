@@ -60,10 +60,13 @@ func TestDuplicateCacheRaid(t *testing.T) {
 		t.Error("Expected first notification to be false")
 	}
 
-	// Different pokemon - not duplicate
+	// Different pokemon - not duplicate, first sighting (new cache key)
 	isDup, isFirst = dc.CheckRaid("gym1", end, 151, nil)
 	if isDup {
 		t.Error("Expected different pokemon to not be duplicate")
+	}
+	if !isFirst {
+		t.Error("Expected different pokemon to be first notification (new key)")
 	}
 }
 
@@ -82,10 +85,13 @@ func TestRaidRSVPChangeDetection(t *testing.T) {
 		t.Error("Expected first raid to not be duplicate and be first notification")
 	}
 
-	// Same RSVPs — duplicate
+	// Same RSVPs — duplicate, not first
 	isDup, isFirst = dc.CheckRaid("gym2", end, 100, rsvps1)
 	if !isDup {
 		t.Error("Expected same RSVPs to be duplicate")
+	}
+	if isFirst {
+		t.Error("Expected duplicate to not be first notification")
 	}
 
 	// Changed going_count — not duplicate, not first
@@ -98,14 +104,17 @@ func TestRaidRSVPChangeDetection(t *testing.T) {
 		t.Error("Expected changed RSVP to not be first notification")
 	}
 
-	// Changed maybe_count — not duplicate
+	// Changed maybe_count — not duplicate, not first (re-notification with changes)
 	rsvps3 := []RaidRSVP{{Timeslot: ts, GoingCount: 5, MaybeCount: 3}}
 	isDup, isFirst = dc.CheckRaid("gym2", end, 100, rsvps3)
 	if isDup {
 		t.Error("Expected changed maybe_count to not be duplicate")
 	}
+	if isFirst {
+		t.Error("Expected changed maybe_count to not be first notification")
+	}
 
-	// New timeslot added — not duplicate
+	// New timeslot added — not duplicate, not first (re-notification with changes)
 	rsvps4 := []RaidRSVP{
 		{Timeslot: ts, GoingCount: 5, MaybeCount: 3},
 		{Timeslot: ts + 3600000, GoingCount: 1, MaybeCount: 0},
@@ -113,6 +122,9 @@ func TestRaidRSVPChangeDetection(t *testing.T) {
 	isDup, isFirst = dc.CheckRaid("gym2", end, 100, rsvps4)
 	if isDup {
 		t.Error("Expected new timeslot to not be duplicate")
+	}
+	if isFirst {
+		t.Error("Expected new timeslot to not be first notification")
 	}
 
 	// Same as last — duplicate again
