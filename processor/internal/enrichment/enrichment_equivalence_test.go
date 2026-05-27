@@ -180,7 +180,11 @@ func loadTestData(t *testing.T) ([]testCase, *gamedata.GameData, *i18n.Bundle) {
 
 	gd, err := gamedata.Load(baseDir)
 	if err != nil {
-		t.Fatalf("load game data: %v", err)
+		// resources/rawdata/ is gitignored — downloaded at processor startup.
+		// Tests skip cleanly on a fresh checkout (e.g. CI) where the data
+		// hasn't been bootstrapped. The same path is used for the missing
+		// testdata/expected.json case above.
+		t.Skipf("load game data: %v (run the processor once to populate resources/)", err)
 	}
 
 	tr := i18n.Load(baseDir)
