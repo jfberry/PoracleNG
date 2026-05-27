@@ -127,14 +127,14 @@ func (b *Bot) handleWebhookCreate(s *discordgo.Session, m *discordgo.MessageCrea
 	}
 
 	for _, hook := range hooks {
-		if hook.Name == bot.PoracleWebhookName {
+		if hook.Name == name {
 			url := fmt.Sprintf("https://discord.com/api/webhooks/%s/%s", hook.ID, hook.Token)
-			s.ChannelMessageSend(dmCh.ID, fmt.Sprintf("There is an existing Poracle webhook %s", url))
+			s.ChannelMessageSend(dmCh.ID, fmt.Sprintf("There is an existing %s webhook %s", name, url))
 			return
 		}
 	}
 
-	wh, err := s.WebhookCreate(m.ChannelID, bot.PoracleWebhookName, "")
+	wh, err := s.WebhookCreate(m.ChannelID, name, "")
 	if err != nil {
 		log.Warnf("discord bot: create webhook in %s: %v", m.ChannelID, err)
 		s.ChannelMessageSend(m.ChannelID, "Failed to create webhook")
