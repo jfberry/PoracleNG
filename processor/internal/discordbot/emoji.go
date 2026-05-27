@@ -197,7 +197,7 @@ func (b *Bot) RunEmojiOperation(channelID, guildID string, upload, overwrite boo
 		} else {
 			sb.WriteString(",")
 		}
-		sb.WriteString(fmt.Sprintf("\n    \"%s\":\"<:%s:%s>\"", poracleName, details.name, details.id))
+		fmt.Fprintf(&sb, "\n    \"%s\":\"<:%s:%s>\"", poracleName, details.name, details.id)
 	}
 	sb.WriteString("\n  }\n}\n")
 

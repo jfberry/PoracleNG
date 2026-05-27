@@ -765,7 +765,7 @@ func appendSlashOptions(sb *strings.Builder, opts []*discordgo.ApplicationComman
 		default:
 			sb.WriteString(opt.Name)
 			sb.WriteByte(':')
-			sb.WriteString(fmt.Sprintf("%v", opt.Value))
+			fmt.Fprintf(sb, "%v", opt.Value)
 		}
 	}
 }

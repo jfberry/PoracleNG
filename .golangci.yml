@@ -1,0 +1,33 @@
+version: "2"
+linters:
+  default: standard
+  exclusions:
+    rules:
+      # Convention: defer X.Close() — errors from deferred close are rarely actionable.
+      - linters: [errcheck]
+        text: "Error return value of `.*\\.Close` is not checked"
+      # Test files: Write, json.Unmarshal, rows.Scan, etc. — setup failures crash the test anyway.
+      - linters: [errcheck]
+        path: "_test\\.go"
+      # io.Copy(io.Discard, ...) — draining a response body; return value is never useful.
+      - linters: [errcheck]
+        text: "Error return value of `io\\.Copy` is not checked"
+      # Discord fire-and-forget sends/reactions/deletes — no recovery path when the bot is online.
+      - linters: [errcheck]
+        text: "Error return value of `.*\\.(MessageReactionAdd|ChannelMessageSend|ChannelMessageSendComplex|ChannelMessageDelete)` is not checked"
+      # os.Remove on temp files during cleanup — failure is not actionable.
+      - linters: [errcheck]
+        text: "Error return value of `os\\.Remove` is not checked"
+      # fmt.Sscanf already gated by a prior regex match; failed parse leaves vars at zero.
+      - linters: [errcheck]
+        text: "Error return value of `fmt\\.Sscanf` is not checked"
+      # Best-effort JSON parse of DB fields — failure returns nil/zero which is the right fallback.
+      - linters: [errcheck]
+        text: "Error return value of `json\\.Unmarshal` is not checked"
+      # DB.Get for existence checks — count stays 0 on error, which is the safe fallback.
+      - linters: [errcheck]
+        text: "Error return value of `.*\\.DB\\.Get` is not checked"
+      # filepath.WalkDir over optional/missing directories — WalkDir already handles missing dirs
+      # by passing the error to the callback which returns nil.
+      - linters: [errcheck]
+        text: "Error return value of `filepath\\.WalkDir` is not checked"

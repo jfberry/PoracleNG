@@ -207,9 +207,9 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 			typeEmoji = emoji.Lookup(ti.Emoji, platform)
 		}
 		if typeEmoji != "" {
-			sb.WriteString(fmt.Sprintf("  %s %s\n", typeEmoji, typeName))
+			fmt.Fprintf(&sb, "  %s %s\n", typeEmoji, typeName)
 		} else {
-			sb.WriteString(fmt.Sprintf("  %s\n", typeName))
+			fmt.Fprintf(&sb, "  %s\n", typeName)
 		}
 
 		// Boosted by weather
@@ -228,7 +228,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 					weatherParts = append(weatherParts, wName)
 				}
 			}
-			sb.WriteString(fmt.Sprintf("  %s\n", tr.Tf("msg.info.boosted_by", strings.Join(weatherParts, ", "))))
+			fmt.Fprintf(&sb, "  %s\n", tr.Tf("msg.info.boosted_by", strings.Join(weatherParts, ", ")))
 		}
 
 		// Super effective against: find which types have this type in their Weaknesses
@@ -249,7 +249,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		}
 		if len(effectiveAgainst) > 0 {
 			sort.Strings(effectiveAgainst)
-			sb.WriteString(fmt.Sprintf("  %s %s\n", tr.T("msg.info.super_effective"), strings.Join(effectiveAgainst, ", ")))
+			fmt.Fprintf(&sb, "  %s %s\n", tr.T("msg.info.super_effective"), strings.Join(effectiveAgainst, ", "))
 		}
 	}
 
@@ -285,7 +285,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 					typeParts = append(typeParts, tName)
 				}
 			}
-			sb.WriteString(fmt.Sprintf("%s %s\n", tr.T(label), strings.Join(typeParts, ", ")))
+			fmt.Fprintf(&sb, "%s %s\n", tr.T(label), strings.Join(typeParts, ", "))
 		}
 	}
 
@@ -324,7 +324,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		shinyStats := ctx.Stats.ExportShinyStats()
 		if s, ok := shinyStats[pokemonID]; ok {
 			sb.WriteByte('\n')
-			sb.WriteString(fmt.Sprintf("%s: %d/%d  (1:%.0f)\n", ctx.Bold(tr.T("msg.info.shiny_rate")), s.Seen, s.Total, s.Ratio))
+			fmt.Fprintf(&sb, "%s: %d/%d  (1:%.0f)\n", ctx.Bold(tr.T("msg.info.shiny_rate")), s.Seen, s.Total, s.Ratio)
 		}
 	}
 
@@ -336,7 +336,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 		levelLabels := []string{"L15", "L20", "L25", "L40", "L50", "L51"}
 		for i, level := range levels {
 			cp := calculateCP(ctx.GameData, mon.Attack, mon.Defense, mon.Stamina, 15, 15, 15, level)
-			sb.WriteString(fmt.Sprintf("  %s: %d\n", levelLabels[i], cp))
+			fmt.Fprintf(&sb, "  %s: %d\n", levelLabels[i], cp)
 		}
 	}
 
@@ -530,7 +530,7 @@ func (c *InfoCommand) listMoves(ctx *bot.CommandContext) []bot.Reply {
 	var sb strings.Builder
 	for _, e := range entries {
 		if e.typeName != "" {
-			sb.WriteString(fmt.Sprintf("%s (%s)\n", e.name, e.typeName))
+			fmt.Fprintf(&sb, "%s (%s)\n", e.name, e.typeName)
 		} else {
 			sb.WriteString(e.name + "\n")
 		}
@@ -633,7 +633,7 @@ func (c *InfoCommand) shinyStats(ctx *bot.CommandContext) []bot.Reply {
 
 	for _, e := range entries {
 		pokeName := tr.T(gamedata.PokemonTranslationKey(e.id))
-		sb.WriteString(fmt.Sprintf("%s: %s %d - %s 1:%.0f\n", ctx.EscapeForReply(pokeName), tr.T("msg.info.shiny_seen"), e.stat.Total, tr.T("msg.info.shiny_ratio"), e.stat.Ratio))
+		fmt.Fprintf(&sb, "%s: %s %d - %s 1:%.0f\n", ctx.EscapeForReply(pokeName), tr.T("msg.info.shiny_seen"), e.stat.Total, tr.T("msg.info.shiny_ratio"), e.stat.Ratio)
 	}
 
 	return bot.SplitTextReply(sb.String())
@@ -670,7 +670,7 @@ func (c *InfoCommand) rarityStats(ctx *bot.CommandContext) []bot.Reply {
 		}
 
 		groupName := tr.T(fmt.Sprintf("rarity_%d", g))
-		sb.WriteString(fmt.Sprintf("**%s** (%d):\n", groupName, len(ids)))
+		fmt.Fprintf(&sb, "**%s** (%d):\n", groupName, len(ids))
 
 		sort.Ints(ids)
 		names := make([]string, 0, len(ids))
@@ -726,7 +726,7 @@ func (c *InfoCommand) weatherInfo(ctx *bot.CommandContext, args []string) []bot.
 
 	var sb strings.Builder
 	sb.WriteString(tr.Tf("msg.info.weather_location", fmt.Sprintf("%.4f", lat), fmt.Sprintf("%.4f", lon)) + "\n")
-	sb.WriteString(fmt.Sprintf("S2 Cell: %s\n", cellID))
+	fmt.Fprintf(&sb, "S2 Cell: %s\n", cellID)
 
 	if forecast.Current > 0 {
 		weatherName := tr.T(gamedata.WeatherTranslationKey(forecast.Current))
@@ -766,12 +766,12 @@ func (c *InfoCommand) translateDebug(ctx *bot.CommandContext, args []string) []b
 	tr := ctx.Tr()
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**Translate debug for: %s** (language: %s)\n\n", word, ctx.Language))
+	fmt.Fprintf(&sb, "**Translate debug for: %s** (language: %s)\n\n", word, ctx.Language)
 
 	// Forward lookup: try the word as a key
 	result := tr.T(word)
 	if result != word {
-		sb.WriteString(fmt.Sprintf("Key `%s` -> `%s`\n", word, result))
+		fmt.Fprintf(&sb, "Key `%s` -> `%s`\n", word, result)
 	}
 
 	// Reverse lookup: find keys whose value matches the word
@@ -784,9 +784,9 @@ func (c *InfoCommand) translateDebug(ctx *bot.CommandContext, args []string) []b
 	}
 	if len(reverseMatches) > 0 {
 		sort.Strings(reverseMatches)
-		sb.WriteString(fmt.Sprintf("\nValue `%s` found in keys:\n", word))
+		fmt.Fprintf(&sb, "\nValue `%s` found in keys:\n", word)
 		for _, key := range reverseMatches {
-			sb.WriteString(fmt.Sprintf("  `%s`\n", key))
+			fmt.Fprintf(&sb, "  `%s`\n", key)
 		}
 	}
 
@@ -802,7 +802,7 @@ func (c *InfoCommand) translateDebug(ctx *bot.CommandContext, args []string) []b
 		if len(partialMatches) > 20 {
 			partialMatches = partialMatches[:20]
 		}
-		sb.WriteString(fmt.Sprintf("\nPartial matches (%d, showing max 20):\n", len(partialMatches)))
+		fmt.Fprintf(&sb, "\nPartial matches (%d, showing max 20):\n", len(partialMatches))
 		for _, m := range partialMatches {
 			sb.WriteString(m + "\n")
 		}
@@ -858,7 +858,7 @@ func (c *InfoCommand) dtsInfo(ctx *bot.CommandContext) []bot.Reply {
 			sort.Strings(ids)
 			parts = append(parts, fmt.Sprintf("%s(%d): %s", p, len(ids), strings.Join(ids, ", ")))
 		}
-		sb.WriteString(fmt.Sprintf("**%s**\n  %s\n", t, strings.Join(parts, "\n  ")))
+		fmt.Fprintf(&sb, "**%s**\n  %s\n", t, strings.Join(parts, "\n  "))
 	}
 
 	return bot.SplitTextReply(sb.String())
@@ -906,7 +906,7 @@ func (c *InfoCommand) templateList(ctx *bot.CommandContext) []bot.Reply {
 	sort.Strings(types)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("**Available templates (%s):**\n\n", platform))
+	fmt.Fprintf(&sb, "**Available templates (%s):**\n\n", platform)
 
 	for _, t := range types {
 		templates := byType[t]
@@ -914,16 +914,16 @@ func (c *InfoCommand) templateList(ctx *bot.CommandContext) []bot.Reply {
 		if displayName == "" {
 			displayName = t
 		}
-		sb.WriteString(fmt.Sprintf("**%s**\n", displayName))
+		fmt.Fprintf(&sb, "**%s**\n", displayName)
 
 		for _, tmpl := range templates {
-			sb.WriteString(fmt.Sprintf("  `%s`", tmpl.ID))
+			fmt.Fprintf(&sb, "  `%s`", tmpl.ID)
 			if tmpl.Name != "" {
-				sb.WriteString(fmt.Sprintf(" — %s", tmpl.Name))
+				fmt.Fprintf(&sb, " — %s", tmpl.Name)
 			}
 			sb.WriteByte('\n')
 			if tmpl.Description != "" {
-				sb.WriteString(fmt.Sprintf("    %s\n", tmpl.Description))
+				fmt.Fprintf(&sb, "    %s\n", tmpl.Description)
 			}
 		}
 		sb.WriteByte('\n')

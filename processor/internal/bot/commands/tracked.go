@@ -50,9 +50,9 @@ func appendMutesSection(sb *strings.Builder, tr *i18n.Translator, ctx *bot.Comma
 		left := tr.Tf("section.property_mutes.left", formatDuration(remaining))
 		label := propertyMuteValueLabel(ctx, e)
 		if label == "" {
-			sb.WriteString(fmt.Sprintf("  %s    %s\n", e.ScopeType, left))
+			fmt.Fprintf(sb, "  %s    %s\n", e.ScopeType, left)
 		} else {
-			sb.WriteString(fmt.Sprintf("  %s:%s    %s\n", e.ScopeType, label, left))
+			fmt.Fprintf(sb, "  %s:%s    %s\n", e.ScopeType, label, left)
 		}
 	}
 }

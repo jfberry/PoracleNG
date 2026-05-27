@@ -1064,7 +1064,9 @@ func main() {
 	// 1. Stop accepting new requests — no more webhooks enter the pipeline
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	server.Shutdown(ctx)
+	if err := server.Shutdown(ctx); err != nil {
+		log.Warnf("HTTP server shutdown: %v", err)
+	}
 	log.Infof("HTTP server stopped")
 
 	// 2. Stop bots (no more command processing)

@@ -76,10 +76,11 @@ func (h *Handler) handle(c *gin.Context) {
 		// Log each individual webhook as one line: 2026-04-11T16:57:03Z {"type":"pokemon","message":{...}}
 		if h.webhookLogger != nil {
 			if line, err := json.Marshal(hook); err == nil {
-				h.webhookLogger.Write([]byte(time.Now().UTC().Format(time.RFC3339)))
-				h.webhookLogger.Write([]byte(" "))
-				h.webhookLogger.Write(line)
-				h.webhookLogger.Write([]byte("\n"))
+				entry := append([]byte(time.Now().UTC().Format(time.RFC3339)+" "), line...)
+				entry = append(entry, '\n')
+				if _, err := h.webhookLogger.Write(entry); err != nil {
+					log.Warnf("webhook log write: %v", err)
+				}
 			}
 		}
 

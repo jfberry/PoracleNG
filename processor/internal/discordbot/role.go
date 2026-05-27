@@ -107,7 +107,7 @@ func (b *Bot) handleRoleList(s *discordgo.Session, m *discordgo.MessageCreate,
 	sb.WriteString(":\n")
 
 	for _, guild := range guilds {
-		sb.WriteString(fmt.Sprintf("**%s**\n", guild.Name))
+		fmt.Fprintf(&sb, "**%s**\n", guild.Name)
 
 		// Exclusive role sets
 		for _, exSet := range guild.Roles.Exclusive {
@@ -117,9 +117,9 @@ func (b *Bot) handleRoleList(s *discordgo.Session, m *discordgo.MessageCreate,
 				}
 				displayName := strings.ReplaceAll(role.Description, " ", "_")
 				if role.Set {
-					sb.WriteString(fmt.Sprintf("   %s  ☑️\n", displayName))
+					fmt.Fprintf(&sb, "   %s  ☑️\n", displayName)
 				} else {
-					sb.WriteString(fmt.Sprintf("   %s\n", displayName))
+					fmt.Fprintf(&sb, "   %s\n", displayName)
 				}
 			}
 			if !membershipOnly {
@@ -134,9 +134,9 @@ func (b *Bot) handleRoleList(s *discordgo.Session, m *discordgo.MessageCreate,
 			}
 			displayName := strings.ReplaceAll(role.Description, " ", "_")
 			if role.Set {
-				sb.WriteString(fmt.Sprintf("   %s  ☑️\n", displayName))
+				fmt.Fprintf(&sb, "   %s  ☑️\n", displayName)
 			} else {
-				sb.WriteString(fmt.Sprintf("   %s\n", displayName))
+				fmt.Fprintf(&sb, "   %s\n", displayName)
 			}
 		}
 		sb.WriteByte('\n')

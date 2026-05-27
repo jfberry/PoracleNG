@@ -62,11 +62,11 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 
 	for _, r := range st.Raids {
 		// pokemon_id match OR (pokemon_id==9000 AND (level matches OR level==90))
-		if !(r.PokemonID == raid.PokemonID || (r.PokemonID == 9000 && (r.Level == raid.Level || r.Level == 90))) {
+		if r.PokemonID != raid.PokemonID && (r.PokemonID != 9000 || (r.Level != raid.Level && r.Level != 90)) {
 			continue
 		}
 		// team match OR team==4 (any)
-		if !(r.Team == raid.TeamID || r.Team == 4) {
+		if r.Team != raid.TeamID && r.Team != 4 {
 			continue
 		}
 		// exclusive match OR exclusive==0 (any)
@@ -74,19 +74,19 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 		if r.Exclusive {
 			rExVal = 1
 		}
-		if !(rExVal == exVal || rExVal == 0) {
+		if rExVal != exVal && rExVal != 0 {
 			continue
 		}
 		// form match OR form==0 (any)
-		if !(r.Form == raid.Form || r.Form == 0) {
+		if r.Form != raid.Form && r.Form != 0 {
 			continue
 		}
 		// evolution match
-		if !(r.Evolution == 9000 || r.Evolution == raid.Evolution) {
+		if r.Evolution != 9000 && r.Evolution != raid.Evolution {
 			continue
 		}
 		// move match
-		if !(r.Move == 9000 || r.Move == raid.Move1 || r.Move == raid.Move2) {
+		if r.Move != 9000 && r.Move != raid.Move1 && r.Move != raid.Move2 {
 			continue
 		}
 
@@ -149,11 +149,11 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 
 	for _, e := range st.Eggs {
 		// level match OR level==90 (any)
-		if !(e.Level == egg.Level || e.Level == 90) {
+		if e.Level != egg.Level && e.Level != 90 {
 			continue
 		}
 		// team match OR team==4 (any)
-		if !(e.Team == egg.TeamID || e.Team == 4) {
+		if e.Team != egg.TeamID && e.Team != 4 {
 			continue
 		}
 		// exclusive match OR exclusive==0 (any)
@@ -161,7 +161,7 @@ func (m *RaidMatcher) MatchEgg(egg *EggData, st *state.State) ([]webhook.Matched
 		if e.Exclusive {
 			eExVal = 1
 		}
-		if !(eExVal == exVal || eExVal == 0) {
+		if eExVal != exVal && eExVal != 0 {
 			continue
 		}
 

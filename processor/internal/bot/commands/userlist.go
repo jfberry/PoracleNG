@@ -109,14 +109,14 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 		}
 
 		if h.Type == "webhook" {
-			sb.WriteString(fmt.Sprintf("webhook • %s%s\n", h.Name, status))
+			fmt.Fprintf(&sb, "webhook • %s%s\n", h.Name, status)
 		} else {
 			displayName := h.Name
 			if displayName == "" {
 				displayName = h.ID
 			}
-			sb.WriteString(fmt.Sprintf("%s • %s | (%s) %s%s\n",
-				h.Type, displayName, h.ID, area, status))
+			fmt.Fprintf(&sb, "%s • %s | (%s) %s%s\n",
+				h.Type, displayName, h.ID, area, status)
 		}
 	}
 
