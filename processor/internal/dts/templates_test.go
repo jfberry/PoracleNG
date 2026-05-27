@@ -138,8 +138,8 @@ func TestTemplateSelectionChain(t *testing.T) {
 
 	// No match at all
 	tmpl = ts2.Get("raid", "discord", "1", "en")
-	if tmpl == nil {
-		// This is expected to be nil since there's no discord entry
+	if tmpl != nil {
+		t.Fatalf("expected nil tmpl for missing discord entry, got %+v", tmpl)
 	}
 }
 
