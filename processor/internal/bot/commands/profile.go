@@ -344,7 +344,7 @@ func (c *ProfileCommand) copyTo(ctx *bot.CommandContext, args []string) []bot.Re
 		}
 		nameMatch := false
 		for _, v := range valid {
-			if strings.ToLower(v) == strings.ToLower(p.Name) {
+			if strings.EqualFold(v, p.Name) {
 				nameMatch = true
 				break
 			}

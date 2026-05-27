@@ -43,7 +43,7 @@ func (m *FortMatcher) Match(data *FortData, st *state.State) ([]webhook.MatchedU
 	for _, f := range st.Forts {
 		// fort_type match OR 'everything'
 		ft := strings.ToLower(f.FortType)
-		if !(ft == strings.ToLower(data.FortType) || ft == "everything") {
+		if ft != strings.ToLower(data.FortType) && ft != "everything" {
 			continue
 		}
 

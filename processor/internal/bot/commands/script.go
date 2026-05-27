@@ -271,9 +271,10 @@ func (c *ScriptCommand) invasionToScript(prefix string, inv *db.InvasionTracking
 	} else {
 		parts = append(parts, "everything")
 	}
-	if inv.Gender == 1 {
+	switch inv.Gender {
+	case 1:
 		parts = append(parts, "male")
-	} else if inv.Gender == 2 {
+	case 2:
 		parts = append(parts, "female")
 	}
 	if inv.Distance > 0 {

@@ -115,14 +115,14 @@ func optionsFromMap(m map[string]any) []*discordgo.ApplicationCommandInteraction
 			isBare = true
 		}
 		dots := strings.Count(k, ".")
-		switch {
-		case dots == 0:
+		switch dots {
+		case 0:
 			if isBare {
 				bareSubs[k] = true
 			} else {
 				flat = append(flat, buildOption(k, v))
 			}
-		case dots == 1:
+		case 1:
 			parts := strings.SplitN(k, ".", 2)
 			topName, child := parts[0], parts[1]
 			if groupNames[topName] {

@@ -430,10 +430,7 @@ func (c *QuestCommand) removeQuests(ctx *bot.CommandContext, targets []db.QuestT
 	// untouched. When the user did NOT type `summary` we don't filter
 	// on Clean (the historic behaviour — removes regardless of clean /
 	// edit / ping bits).
-	requireSummary := false
-	if len(targets) > 0 && db.IsSummary(targets[0].Clean) {
-		requireSummary = true
-	}
+	requireSummary := len(targets) > 0 && db.IsSummary(targets[0].Clean)
 
 	var uids []int64
 	var removed []db.QuestTrackingAPI

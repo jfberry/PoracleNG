@@ -177,7 +177,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	sb.WriteByte('\n')
 
 	// Pokedex ID
-	sb.WriteString(fmt.Sprintf("%s #%d\n", tr.T("msg.info.pokedex_id"), pokemonID))
+	fmt.Fprintf(&sb, "%s #%d\n", tr.T("msg.info.pokedex_id"), pokemonID)
 
 	// Base stats
 	sb.WriteString(tr.Tf("msg.info.base_stats",
@@ -416,7 +416,7 @@ func (c *InfoCommand) availableForms(ctx *bot.CommandContext, pokemonID int) []s
 	}
 	var entries []formEntry
 
-	for key, _ := range ctx.GameData.Monsters {
+	for key := range ctx.GameData.Monsters {
 		if key.ID != pokemonID {
 			continue
 		}

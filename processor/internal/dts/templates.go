@@ -1022,7 +1022,7 @@ func (ts *TemplateStore) FilteredEntries(filterType, filterPlatform, filterLangu
 		if filterLanguage != "" && e.Language != filterLanguage {
 			continue
 		}
-		if filterID != "" && strings.ToLower(e.ID.String()) != strings.ToLower(filterID) {
+		if filterID != "" && !strings.EqualFold(e.ID.String(), filterID) {
 			continue
 		}
 		result = append(result, e)

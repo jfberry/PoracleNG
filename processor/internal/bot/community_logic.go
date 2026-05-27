@@ -67,9 +67,10 @@ func CalculateLocationRestrictions(cfg *config.Config, communities []string) []s
 func FindCommunityForChannel(cfg *config.Config, platform, channelID string) string {
 	for _, cc := range cfg.Area.Communities {
 		var channels []string
-		if platform == "discord" {
+		switch platform {
+		case "discord":
 			channels = cc.Discord.Channels
-		} else if platform == "telegram" {
+		case "telegram":
 			channels = cc.Telegram.Channels
 		}
 		if slices.Contains(channels, channelID) {
@@ -85,9 +86,10 @@ func IsRegistrationChannel(cfg *config.Config, platform, channelID string) bool 
 		return FindCommunityForChannel(cfg, platform, channelID) != ""
 	}
 	var channels []string
-	if platform == "discord" {
+	switch platform {
+	case "discord":
 		channels = cfg.Discord.Channels
-	} else if platform == "telegram" {
+	case "telegram":
 		channels = cfg.Telegram.Channels
 	}
 	return slices.Contains(channels, channelID)

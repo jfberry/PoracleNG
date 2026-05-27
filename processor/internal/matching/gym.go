@@ -39,7 +39,7 @@ func (m *GymMatcher) matchGyms(data *GymData, rules []*db.GymTracking) []trackin
 	var out []trackingUserData
 	for _, g := range rules {
 		// team match OR team==4 (any)
-		if !(g.Team == data.TeamID || g.Team == 4) {
+		if g.Team != data.TeamID && g.Team != 4 {
 			continue
 		}
 
