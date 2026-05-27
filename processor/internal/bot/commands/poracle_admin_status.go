@@ -16,9 +16,6 @@ import (
 // [processor.status] config section is deferred to a later task; these
 // defaults match thresholds already used elsewhere in the processor.
 const (
-	// webhookFloorMinutes controls the "active install just stopped
-	// receiving" trigger: Per60Min > 0 but Per5Min == 0.
-	webhookFloorMinutes = 5
 	// renderQueueWarnPercent matches the existing tile-skip threshold
 	// in render.go (80% full → start skipping tile generation).
 	renderQueueWarnPercent = 80
