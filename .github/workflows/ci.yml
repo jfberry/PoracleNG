@@ -1,0 +1,53 @@
+name: CI
+
+# Runs on every push (any branch) and every PR. Catches build, lint, and
+# test regressions before merge — required-status-check candidate for
+# branch protection rules on develop and main.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+# Cancel previous in-progress runs for the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-lint:
+    name: build / test / vet / lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: processor
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: processor/go.mod
+          cache: true
+          cache-dependency-path: processor/go.sum
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race -count=1 ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          working-directory: processor
+          # Config is .golangci.yml at repo root.
+          args: --config=${{ github.workspace }}/.golangci.yml ./...
