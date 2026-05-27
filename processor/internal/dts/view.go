@@ -292,6 +292,17 @@ func escapeUserContentLayered(computed map[string]any, layers ...map[string]any)
 		"description",
 		"oldName", "newName",
 		"oldDescription", "newDescription",
+		// Geocoded address fields — values come from external geocoder APIs
+		// (Nominatim, Photon, Google) which legitimately return strings
+		// with ", \, or newline characters. The geocoder runs EscapeAddress
+		// before caching, but defence-in-depth here ensures any address
+		// value reaching the render layer (including via webhook fields or
+		// alternative enrichment paths) is sanitised before being
+		// interpolated into a JSON-emitting template.
+		"addr", "formattedAddress", "displayName",
+		"streetName", "streetNumber",
+		"city", "state", "country",
+		"neighbourhood", "county", "suburb", "town", "village", "zipcode",
 	}
 	for _, field := range fields {
 		for _, layer := range layers {
