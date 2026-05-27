@@ -13,6 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/logref"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
@@ -80,19 +81,19 @@ func (ds *DiscordSender) Platform() string { return "discord" }
 func (ds *DiscordSender) Send(ctx context.Context, job *Job) (*SentMessage, error) {
 	switch job.Type {
 	case "discord:user":
-		channelID, err := ds.ensureDMChannel(ctx, job.Target)
+		channelID, err := ds.ensureDMChannel(ctx, job.Target, job.LogReference)
 		if err != nil {
 			return nil, err
 		}
-		return ds.postMessage(ctx, channelID, job.Message, job.StaticMapData, job.ReplyToID)
+		return ds.postMessage(ctx, channelID, job.Message, job.StaticMapData, job.ReplyToID, job.LogReference)
 	case "discord:channel", "discord:thread":
-		return ds.postMessage(ctx, job.Target, job.Message, job.StaticMapData, job.ReplyToID)
+		return ds.postMessage(ctx, job.Target, job.Message, job.StaticMapData, job.ReplyToID, job.LogReference)
 	case "webhook":
 		// Discord webhooks cannot post replies — message_reference is
 		// rejected by the webhook endpoint. Drop ReplyToID silently for
 		// webhook deliveries; a missing reply chain is strictly
 		// preferable to a refused alert.
-		return ds.postWebhook(ctx, job.Target, job.Message, job.StaticMapData)
+		return ds.postWebhook(ctx, job.Target, job.Message, job.StaticMapData, job.LogReference)
 	default:
 		return nil, fmt.Errorf("unsupported discord job type: %s", job.Type)
 	}
@@ -204,7 +205,7 @@ func (ds *DiscordSender) resolveMessageURL(sentID string) (url string, auth bool
 }
 
 // ensureDMChannel gets or creates a DM channel for the given user.
-func (ds *DiscordSender) ensureDMChannel(ctx context.Context, userID string) (string, error) {
+func (ds *DiscordSender) ensureDMChannel(ctx context.Context, userID, logRef string) (string, error) {
 	if cached, ok := ds.dmChannels.Load(userID); ok {
 		return cached.(string), nil
 	}
@@ -237,7 +238,7 @@ func (ds *DiscordSender) ensureDMChannel(ctx context.Context, userID string) (st
 	}
 
 	ds.dmChannels.Store(userID, result.ID)
-	log.Infof("discord: created DM channel %s for user %s", result.ID, userID)
+	logref.Infof(logRef, "discord: created DM channel %s for user %s", result.ID, userID)
 	return result.ID, nil
 }
 
@@ -247,7 +248,7 @@ func (ds *DiscordSender) WaitForRateLimit(target string) {
 }
 
 // postMessage sends a message to a Discord channel via the bot API.
-func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage, staticMapData []byte, replyToID string) (*SentMessage, error) {
+func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, message json.RawMessage, staticMapData []byte, replyToID, logRef string) (*SentMessage, error) {
 	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
@@ -267,7 +268,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 
 	if len(staticMapData) > 0 && imageURL != "" {
 		// Inline tile: bytes already available, skip download
-		log.Debugf("discord: using inline tile for bot/%s (%d bytes)", channelID, len(staticMapData))
+		logref.Debugf(logRef, "discord: using inline tile for bot/%s (%d bytes)", channelID, len(staticMapData))
 		normalized = ReplaceEmbedImageURL(normalized)
 		buf, ct, err := BuildMultipartMessage(normalized, staticMapData, "files[0]")
 		if err == nil {
@@ -275,7 +276,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 			contentType = ct
 		}
 	} else if imageURL != "" {
-		log.Debugf("discord: uploading embed image for bot/%s", channelID)
+		logref.Debugf(logRef, "discord: uploading embed image for bot/%s", channelID)
 		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
 			buf, ct, err := BuildMultipartMessage(normalized, imageData, "files[0]")
@@ -284,7 +285,7 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 				contentType = ct
 			}
 		} else {
-			log.Warnf("discord: image download failed for %s (%s), sending without image: %v", channelID, imageURL, err)
+			logref.Warnf(logRef, "discord: image download failed for %s (%s), sending without image: %v", channelID, imageURL, err)
 		}
 	}
 
@@ -294,11 +295,11 @@ func (ds *DiscordSender) postMessage(ctx context.Context, channelID string, mess
 	}
 
 	url := ds.baseURL + "/channels/" + channelID + "/messages"
-	return ds.sendWithRetry(ctx, url, reqBody, contentType, true, channelID)
+	return ds.sendWithRetry(ctx, url, reqBody, contentType, true, channelID, logRef)
 }
 
 // postWebhook sends a message via a Discord webhook URL.
-func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, message json.RawMessage, staticMapData []byte) (*SentMessage, error) {
+func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, message json.RawMessage, staticMapData []byte, logRef string) (*SentMessage, error) {
 	normalized, imageURL, err := NormalizeAndExtractImage(message, ds.uploadImages)
 	if err != nil {
 		return nil, fmt.Errorf("normalizing message: %w", err)
@@ -309,7 +310,7 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 
 	if len(staticMapData) > 0 && imageURL != "" {
 		// Inline tile: bytes already available, skip download
-		log.Debugf("discord: using inline tile for webhook/%s (%d bytes)", webhookURL, len(staticMapData))
+		logref.Debugf(logRef, "discord: using inline tile for webhook/%s (%d bytes)", webhookURL, len(staticMapData))
 		normalized = ReplaceEmbedImageURL(normalized)
 		buf, ct, err := BuildMultipartMessage(normalized, staticMapData, "file")
 		if err == nil {
@@ -317,7 +318,7 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 			contentType = ct
 		}
 	} else if imageURL != "" {
-		log.Debugf("discord: uploading embed image for webhook/%s", webhookURL)
+		logref.Debugf(logRef, "discord: uploading embed image for webhook/%s", webhookURL)
 		if imageData, err := DownloadImage(ds.client, ds.rewriteTileURL(imageURL)); err == nil {
 			normalized = ReplaceEmbedImageURL(normalized)
 			buf, ct, err := BuildMultipartMessage(normalized, imageData, "file")
@@ -326,7 +327,7 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 				contentType = ct
 			}
 		} else {
-			log.Warnf("discord: image download failed for webhook %s (%s), sending without image: %v", webhookURL, imageURL, err)
+			logref.Warnf(logRef, "discord: image download failed for webhook %s (%s), sending without image: %v", webhookURL, imageURL, err)
 		}
 	}
 
@@ -336,18 +337,18 @@ func (ds *DiscordSender) postWebhook(ctx context.Context, webhookURL string, mes
 	}
 
 	url := webhookURL + "?wait=true"
-	return ds.sendWithRetry(ctx, url, reqBody, contentType, false, webhookURL)
+	return ds.sendWithRetry(ctx, url, reqBody, contentType, false, webhookURL, logRef)
 }
 
 // sendWithRetry sends a Discord request with retry logic for 429 and 5xx.
-func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.Reader, contentType string, auth bool, rateLimitKey string) (*SentMessage, error) {
+func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.Reader, contentType string, auth bool, rateLimitKey, logRef string) (*SentMessage, error) {
 	// Buffer the body so we can replay on retry.
 	bodyBytes, err := io.ReadAll(body)
 	if err != nil {
 		return nil, fmt.Errorf("reading request body: %w", err)
 	}
 
-	log.Debugf("discord: sending to %s", rateLimitKey)
+	logref.Debugf(logRef, "discord: sending to %s", rateLimitKey)
 
 	const maxRetries = 5
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -361,7 +362,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 
 		resp, err := ds.doRequest(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes), contentType, auth)
 		if err != nil {
-			log.Warnf("discord: send to %s failed (attempt %d/%d): %v", rateLimitKey, attempt+1, maxRetries+1, err)
+			logref.Warnf(logRef, "discord: send to %s failed (attempt %d/%d): %v", rateLimitKey, attempt+1, maxRetries+1, err)
 			if attempt < maxRetries {
 				time.Sleep(time.Duration(attempt+1) * time.Second)
 				continue
@@ -384,7 +385,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 			if err := json.Unmarshal(respBody, &result); err != nil {
 				return nil, fmt.Errorf("decoding response: %w", err)
 			}
-			log.Debugf("discord: delivered to %s (msg %s)", rateLimitKey, result.ID)
+			logref.Debugf(logRef, "discord: delivered to %s (msg %s)", rateLimitKey, result.ID)
 			return &SentMessage{ID: rateLimitKey + ":" + result.ID}, nil
 		}
 
@@ -396,7 +397,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 			d := ParseRetryAfter(rateLimitResp.RetryAfter)
 			metrics.DeliveryRateLimited.WithLabelValues("discord").Inc()
 			ds.rateLimiter.Record429()
-			log.Warnf("discord: 429 rate limited for %s, retry_after=%.1fs (attempt %d/%d)", rateLimitKey, rateLimitResp.RetryAfter, attempt+1, maxRetries+1)
+			logref.Warnf(logRef, "discord: 429 rate limited for %s, retry_after=%.1fs (attempt %d/%d)", rateLimitKey, rateLimitResp.RetryAfter, attempt+1, maxRetries+1)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -407,7 +408,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 
 		code := extractErrorCode(respBody)
 		if code == 50007 || code == 10003 || code == 10013 {
-			log.Warnf("discord: permanent error for %s: %s (code: %d)", rateLimitKey, truncate(string(respBody), 200), code)
+			logref.Warnf(logRef, "discord: permanent error for %s: %s (code: %d)", rateLimitKey, truncate(string(respBody), 200), code)
 			return nil, &PermanentError{
 				Err:    fmt.Errorf("discord error %d: %s", code, respBody),
 				Reason: fmt.Sprintf("discord error code %d", code),
@@ -415,7 +416,7 @@ func (ds *DiscordSender) sendWithRetry(ctx context.Context, url string, body io.
 		}
 
 		if resp.StatusCode >= 500 && attempt < maxRetries {
-			log.Warnf("discord: send to %s failed (attempt %d/%d): status=%d %s", rateLimitKey, attempt+1, maxRetries+1, resp.StatusCode, truncate(string(respBody), 200))
+			logref.Warnf(logRef, "discord: send to %s failed (attempt %d/%d): status=%d %s", rateLimitKey, attempt+1, maxRetries+1, resp.StatusCode, truncate(string(respBody), 200))
 			time.Sleep(time.Duration(attempt+1) * time.Second)
 			continue
 		}

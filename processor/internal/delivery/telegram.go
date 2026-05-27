@@ -13,8 +13,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
+	"github.com/pokemon/poracleng/processor/internal/logref"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
@@ -177,7 +176,7 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 
 	sanitizeTelegramMessage(&msg)
 
-	log.Debugf("[telegram] Send to %s: location=%v lat=%.6f lon=%.6f content_len=%d sticker=%q photo=%q send_order=%v",
+	logref.Debugf(job.LogReference, "[telegram] Send to %s: location=%v lat=%.6f lon=%.6f content_len=%d sticker=%q photo=%q send_order=%v",
 		job.Target, msg.Location, job.Lat, job.Lon, len(msg.Content), msg.Sticker, msg.Photo, msg.SendOrder)
 
 	parseMode := normalizeTelegramParseMode(msg.ParseMode)
@@ -208,25 +207,25 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 			if msg.Sticker == "" {
 				continue
 			}
-			msgID, err = ts.sendSticker(ctx, chatID, topicID, msg.Sticker, job.ReplyToID)
+			msgID, err = ts.sendSticker(ctx, chatID, topicID, msg.Sticker, job.ReplyToID, job.LogReference)
 
 		case "photo":
 			if msg.Photo == "" {
 				continue
 			}
-			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo, job.ReplyToID)
+			msgID, err = ts.sendPhoto(ctx, chatID, topicID, msg.Photo, job.ReplyToID, job.LogReference)
 
 		case "text":
 			if msg.Content == "" {
 				continue
 			}
-			msgID, err = ts.sendMessage(ctx, chatID, topicID, msg.Content, parseMode, msg.WebpagePreview, job.ReplyToID)
+			msgID, err = ts.sendMessage(ctx, chatID, topicID, msg.Content, parseMode, msg.WebpagePreview, job.ReplyToID, job.LogReference)
 
 		case "location":
 			if !msg.Location || (job.Lat == 0 && job.Lon == 0) {
 				continue
 			}
-			msgID, err = ts.sendLocation(ctx, chatID, topicID, job.Lat, job.Lon)
+			msgID, err = ts.sendLocation(ctx, chatID, topicID, job.Lat, job.Lon, job.LogReference)
 
 		case "venue":
 			if msg.Venue == nil || msg.Venue.Title == "" || msg.Venue.Address == "" {
@@ -234,7 +233,7 @@ func (ts *TelegramSender) Send(ctx context.Context, job *Job) (*SentMessage, err
 			}
 			// disable_notification if text follows later in the send order
 			hasTextFollowing := ts.hasStepAfter(sendOrder, i, "text") && msg.Content != ""
-			msgID, err = ts.sendVenue(ctx, chatID, topicID, job.Lat, job.Lon, msg.Venue.Title, msg.Venue.Address, hasTextFollowing)
+			msgID, err = ts.sendVenue(ctx, chatID, topicID, job.Lat, job.Lon, msg.Venue.Title, msg.Venue.Address, hasTextFollowing, job.LogReference)
 
 		default:
 			continue
@@ -452,7 +451,7 @@ func applyReplyTo(body map[string]any, replyToID string) {
 }
 
 // sendMessage sends a text message.
-func (ts *TelegramSender) sendMessage(ctx context.Context, chatID string, topicID int, text, parseMode string, webpagePreview bool, replyToID string) (int, error) {
+func (ts *TelegramSender) sendMessage(ctx context.Context, chatID string, topicID int, text, parseMode string, webpagePreview bool, replyToID, logRef string) (int, error) {
 	body := map[string]any{
 		"chat_id":                  chatID,
 		"text":                     text,
@@ -461,11 +460,11 @@ func (ts *TelegramSender) sendMessage(ctx context.Context, chatID string, topicI
 	}
 	applyTopic(body, topicID)
 	applyReplyTo(body, replyToID)
-	return ts.callWithRetry(ctx, "sendMessage", body)
+	return ts.callWithRetry(ctx, "sendMessage", body, logRef)
 }
 
 // sendSticker sends a sticker.
-func (ts *TelegramSender) sendSticker(ctx context.Context, chatID string, topicID int, stickerID, replyToID string) (int, error) {
+func (ts *TelegramSender) sendSticker(ctx context.Context, chatID string, topicID int, stickerID, replyToID, logRef string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"sticker":              stickerID,
@@ -473,11 +472,11 @@ func (ts *TelegramSender) sendSticker(ctx context.Context, chatID string, topicI
 	}
 	applyTopic(body, topicID)
 	applyReplyTo(body, replyToID)
-	return ts.callWithRetry(ctx, "sendSticker", body)
+	return ts.callWithRetry(ctx, "sendSticker", body, logRef)
 }
 
 // sendPhoto sends a photo by URL.
-func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID int, photoURL, replyToID string) (int, error) {
+func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID int, photoURL, replyToID, logRef string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"photo":                photoURL,
@@ -485,11 +484,11 @@ func (ts *TelegramSender) sendPhoto(ctx context.Context, chatID string, topicID 
 	}
 	applyTopic(body, topicID)
 	applyReplyTo(body, replyToID)
-	return ts.callWithRetry(ctx, "sendPhoto", body)
+	return ts.callWithRetry(ctx, "sendPhoto", body, logRef)
 }
 
 // sendLocation sends a location.
-func (ts *TelegramSender) sendLocation(ctx context.Context, chatID string, topicID int, lat, lon float64) (int, error) {
+func (ts *TelegramSender) sendLocation(ctx context.Context, chatID string, topicID int, lat, lon float64, logRef string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"latitude":             lat,
@@ -497,11 +496,11 @@ func (ts *TelegramSender) sendLocation(ctx context.Context, chatID string, topic
 		"disable_notification": true,
 	}
 	applyTopic(body, topicID)
-	return ts.callWithRetry(ctx, "sendLocation", body)
+	return ts.callWithRetry(ctx, "sendLocation", body, logRef)
 }
 
 // sendVenue sends a venue.
-func (ts *TelegramSender) sendVenue(ctx context.Context, chatID string, topicID int, lat, lon float64, title, address string, disableNotification bool) (int, error) {
+func (ts *TelegramSender) sendVenue(ctx context.Context, chatID string, topicID int, lat, lon float64, title, address string, disableNotification bool, logRef string) (int, error) {
 	body := map[string]any{
 		"chat_id":              chatID,
 		"latitude":             lat,
@@ -511,11 +510,11 @@ func (ts *TelegramSender) sendVenue(ctx context.Context, chatID string, topicID 
 		"disable_notification": disableNotification,
 	}
 	applyTopic(body, topicID)
-	return ts.callWithRetry(ctx, "sendVenue", body)
+	return ts.callWithRetry(ctx, "sendVenue", body, logRef)
 }
 
 // callWithRetry posts to a Telegram API method with retry logic.
-func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body map[string]any) (int, error) {
+func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body map[string]any, logRef string) (int, error) {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return 0, fmt.Errorf("marshaling request body: %w", err)
@@ -552,13 +551,13 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 				return 0, fmt.Errorf("decoding telegram response: %w", err)
 			}
 			if tgResp.OK {
-				log.Debugf("telegram: %s to %s ok (msg %d)", method, body["chat_id"], tgResp.Result.MessageID)
+				logref.Debugf(logRef, "telegram: %s to %s ok (msg %d)", method, body["chat_id"], tgResp.Result.MessageID)
 				return tgResp.Result.MessageID, nil
 			}
 		}
 
 		if resp.StatusCode == http.StatusForbidden {
-			log.Warnf("telegram: permanent error for %s %s: %s", method, body["chat_id"], respBody)
+			logref.Warnf(logRef, "telegram: permanent error for %s %s: %s", method, body["chat_id"], respBody)
 			return 0, &PermanentError{
 				Err:    fmt.Errorf("telegram %s: forbidden (status 403): %s", method, respBody),
 				Reason: "user blocked bot or bot was removed",
@@ -576,10 +575,10 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 			ts.Record429()
 			// Cap retry to 60 seconds — values like 23501s indicate a permanent block
 			if retryAfter > 60 {
-				log.Warnf("telegram: 429 rate limited for %s %s, retry_after=%ds is excessive — capping to 60s and giving up (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
+				logref.Warnf(logRef, "telegram: 429 rate limited for %s %s, retry_after=%ds is excessive — capping to 60s and giving up (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
 				return 0, fmt.Errorf("telegram rate limit too long: %ds", retryAfter)
 			}
-			log.Warnf("telegram: 429 rate limited for %s %s, retry_after=%ds (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
+			logref.Warnf(logRef, "telegram: 429 rate limited for %s %s, retry_after=%ds (attempt %d/%d)", method, body["chat_id"], retryAfter, attempt+1, maxRetries+1)
 			backoffUntil := ts.now().Add(time.Duration(retryAfter) * time.Second)
 			ts.setBackoffUntil(backoffUntil)
 			select {
@@ -591,7 +590,7 @@ func (ts *TelegramSender) callWithRetry(ctx context.Context, method string, body
 		}
 
 		if attempt < maxRetries {
-			log.Warnf("telegram: %s to %s failed (attempt %d/%d): status=%d", method, body["chat_id"], attempt+1, maxRetries+1, resp.StatusCode)
+			logref.Warnf(logRef, "telegram: %s to %s failed (attempt %d/%d): status=%d", method, body["chat_id"], attempt+1, maxRetries+1, resp.StatusCode)
 			time.Sleep(time.Second)
 			continue
 		}
