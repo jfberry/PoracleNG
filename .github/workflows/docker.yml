@@ -50,6 +50,22 @@ jobs:
         id: img
         run: echo "name=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
+      # Version metadata baked into the binary via Dockerfile build args ->
+      # ldflags. .git is not in the Docker build context, so Go can't embed
+      # VCS info itself; we inject the commit SHA and an ISO-8601 build date here.
+      - name: Resolve build metadata
+        id: ver
+        run: |
+          echo "commit=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          # Branch name only for branch pushes; on tag/release builds leave it
+          # empty so the version shows clean (e.g. 5.1.0, not 5.1.0-v5.1.0).
+          if [ "${{ github.ref_type }}" = "branch" ]; then
+            echo "branch=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=" >> "$GITHUB_OUTPUT"
+          fi
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -67,6 +83,10 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
+          build-args: |
+            VERSION_COMMIT=${{ steps.ver.outputs.commit }}
+            VERSION_BRANCH=${{ steps.ver.outputs.branch }}
+            VERSION_DATE=${{ steps.ver.outputs.date }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ steps.img.outputs.name }},push-by-digest=true,name-canonical=true
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}

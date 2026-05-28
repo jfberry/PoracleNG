@@ -6,7 +6,21 @@ COPY processor/go.mod processor/go.sum ./
 RUN go mod download
 
 COPY processor/ ./
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o poracle-processor ./cmd/processor
+
+# Git metadata for the !version command. Go can't auto-embed VCS info here
+# because .git is not in the build context (it lives at the repo root and is
+# .dockerignore'd), so inject it via ldflags from build args. The CI workflow
+# passes the commit SHA and build date; bare `docker build` falls back to the
+# "unknown" defaults below, leaving the static version.go constant intact.
+ARG VERSION_COMMIT=""
+ARG VERSION_BRANCH=""
+ARG VERSION_DATE=""
+RUN CGO_ENABLED=0 go build -trimpath \
+    -ldflags="-s -w \
+      -X github.com/pokemon/poracleng/processor.Commit=${VERSION_COMMIT} \
+      -X github.com/pokemon/poracleng/processor.Branch=${VERSION_BRANCH} \
+      -X github.com/pokemon/poracleng/processor.Date=${VERSION_DATE}" \
+    -o poracle-processor ./cmd/processor
 
 # ---- Stage 2: Runtime image ----
 FROM alpine:3
