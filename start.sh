@@ -21,7 +21,8 @@ fi
 # Processor binary
 if [ ! -x "$PROCESSOR_BIN" ]; then
 	echo "[start] Processor binary not found, building..."
-	(cd "$ROOT/processor" && go build -o poracle-processor ./cmd/processor) || fail "Failed to build processor"
+	LDFLAGS="$("$ROOT/scripts/goldflags.sh")"
+	(cd "$ROOT/processor" && go build -ldflags="$LDFLAGS" -o poracle-processor ./cmd/processor) || fail "Failed to build processor"
 	echo "[start] Processor built"
 fi
 

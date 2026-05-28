@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -821,4 +825,62 @@ func containsHelper(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// TestLogInvalidRenderedJSON verifies the helper emits a log entry that
+// includes the logReference prefix and (when the parse error has a known
+// offset) the byte offset + a window around it. Captures the logrus
+// output via the test hook.
+func TestLogInvalidRenderedJSON(t *testing.T) {
+	t.Run("with syntax error offset", func(t *testing.T) {
+		hook := test.NewGlobal()
+		t.Cleanup(hook.Reset)
+
+		// Invalid JSON: missing closing quote on "desc". The parse failure
+		// lands a few bytes past the unescaped " in "name".
+		bad := `{"name":"oops " inside","desc":"more"}`
+		logInvalidRenderedJSON("enc-abc-123", "user discord:42", bad)
+
+		entries := hook.AllEntries()
+		if len(entries) != 1 {
+			t.Fatalf("expected 1 log entry, got %d", len(entries))
+		}
+		e := entries[0]
+		if e.Level != logrus.ErrorLevel {
+			t.Errorf("expected ErrorLevel, got %v", e.Level)
+		}
+		if !strings.Contains(e.Message, "[enc-abc-123]") {
+			t.Errorf("log missing logReference prefix: %q", e.Message)
+		}
+		if !strings.Contains(e.Message, "user discord:42") {
+			t.Errorf("log missing target identifier: %q", e.Message)
+		}
+		if !strings.Contains(e.Message, "parse error at byte") {
+			t.Errorf("expected parse-error-at-byte detail: %q", e.Message)
+		}
+		if !strings.Contains(e.Message, "full raw:") {
+			t.Errorf("expected full raw payload in log: %q", e.Message)
+		}
+	})
+
+	t.Run("non-syntax error falls back to raw", func(t *testing.T) {
+		hook := test.NewGlobal()
+		t.Cleanup(hook.Reset)
+
+		// Empty input — Unmarshal yields an io.EOF style error, not a
+		// SyntaxError. Helper should still emit a single Error log with
+		// the prefix.
+		logInvalidRenderedJSON("enc-xyz", "group (discord/default/en)", "")
+
+		entries := hook.AllEntries()
+		if len(entries) != 1 {
+			t.Fatalf("expected 1 log entry, got %d", len(entries))
+		}
+		if !strings.Contains(entries[0].Message, "[enc-xyz]") {
+			t.Errorf("log missing logReference prefix: %q", entries[0].Message)
+		}
+		if !strings.Contains(entries[0].Message, "group (discord/default/en)") {
+			t.Errorf("log missing group identifier: %q", entries[0].Message)
+		}
+	})
 }

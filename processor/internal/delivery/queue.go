@@ -176,7 +176,7 @@ func (fq *FairQueue) processJob(job *Job) {
 	}()
 	sender, ok := fq.senders[platform]
 	if !ok {
-		log.Warnf("delivery: no sender for platform %q (type=%s)", platform, job.Type)
+		log.Warnf("%s: delivery: no sender for platform %q (type=%s target=%s)", job.LogReference, platform, job.Type, job.Target)
 		return
 	}
 
@@ -326,11 +326,11 @@ func (fq *FairQueue) processJob(job *Job) {
 	if err != nil {
 		var permErr *PermanentError
 		if errors.As(err, &permErr) {
-			log.Warnf("delivery: permanent error for %s/%s: %s", job.Type, job.Target, permErr.Reason)
+			log.Warnf("%s: delivery: permanent error for %s/%s: %s", job.LogReference, job.Type, job.Target, permErr.Reason)
 			metrics.DeliveryTotal.WithLabelValues(platform, "permanent_error").Inc()
 			fq.recordFailure(job.Target, job.Name, job.Type)
 		} else {
-			log.Errorf("delivery: send failed for %s/%s: %v", job.Type, job.Target, err)
+			log.Errorf("%s: delivery: send failed for %s/%s: %v", job.LogReference, job.Type, job.Target, err)
 			metrics.DeliveryTotal.WithLabelValues(platform, "error").Inc()
 			fq.recordFailure(job.Target, job.Name, job.Type)
 		}

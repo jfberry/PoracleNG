@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -72,10 +71,14 @@ func main() {
 	clearGuildSlash := flag.Bool("clear-guild-slash-commands", false, "Clear all guild-scoped slash commands at startup for the guilds listed in [discord.slash_commands] (use when switching from register_globally=false to true)")
 	flag.Parse()
 
-	// Register build info from version.go + Go's embedded VCS metadata
-	buildVersion, buildCommit, buildDate := readBuildInfo()
+	// Register build info from version.go + ldflag-injected / VCS metadata
+	buildVersion, buildCommit, buildBranch, buildDate := readBuildInfo()
 	metrics.BuildInfo.WithLabelValues(buildVersion, buildCommit, buildDate).Set(1)
 	api.Version = buildVersion
+	displayVersion := buildVersion
+	if buildBranch != "" {
+		displayVersion += "-" + buildBranch
+	}
 
 	cfg, err := config.Load(*baseDir)
 	if err != nil {
@@ -102,7 +105,7 @@ func main() {
 	logBuf := logbuffer.New(200, 50)
 	log.AddHook(logbuffer.NewHook(logBuf))
 
-	log.Infof("Poracle processor %s (commit %s, built %s)", buildVersion, buildCommit, buildDate)
+	log.Infof("Poracle processor %s (commit %s, built %s)", displayVersion, buildCommit, buildDate)
 
 	// Now that logging is set up, report any override layering. The status
 	// was computed during config.Load() but couldn't be logged before
@@ -1086,31 +1089,10 @@ func main() {
 	log.Infof("Shutdown complete")
 }
 
-func readBuildInfo() (version, commit, date string) {
-	// Static version from version.go (bumped per release).
-	// Commit and build date come from Go's embedded VCS info.
-	version, commit, date = processor.Version, "unknown", "unknown"
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return
-	}
-	for _, s := range info.Settings {
-		switch s.Key {
-		case "vcs.revision":
-			if len(s.Value) > 8 {
-				commit = s.Value[:8]
-			} else {
-				commit = s.Value
-			}
-		case "vcs.time":
-			date = s.Value
-		case "vcs.modified":
-			if s.Value == "true" {
-				commit += "-dirty"
-			}
-		}
-	}
-	return
+func readBuildInfo() (version, commit, branch, date string) {
+	// Single source of truth: ldflag-injected build vars (Docker / local build
+	// scripts) with a fallback to Go's embedded VCS metadata. See processor.BuildInfo.
+	return processor.BuildInfo()
 }
 
 // ProcessorService ties together all matching/tracking components.
