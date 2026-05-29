@@ -531,7 +531,12 @@ shame_channel = ""                       # name and shame stopped/disabled users
 everything_flag_permissions = "allow-any"
 default_distance = 0                     # default distance for distance-only tracking (no areas)
 max_distance = 0                         # max tracking circle radius (0 = no limit)
-enable_gym_battle = false                # allow "battle_changes" option in !gym
+# enable_gym_battle - allow the "battle_changes" keyword on !gym tracking.
+# Off by default: a gym emits an in-battle webhook whenever it's attacked, so
+# battle tracking can be very chatty. While false, "!gym battle_changes" is
+# rejected with "Battle changes tracking is not enabled". (Note: the tracking
+# API / web editor sets battle_changes directly and is not gated by this flag.)
+enable_gym_battle = false
 default_user_tracking_level_cap = 0      # default pvp tracking level cap (0 = all levels)
 # Pokemon change tracking — when on, post-encounter changes (form, species,
 # gender, weather-boost shift) and the non-IV → IV transition for users with
