@@ -146,8 +146,8 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 
 		// Build weather change message
 		msg, _ := json.Marshal(change)
-		mode := ps.tileMode("weatherchange", matched)
-		baseEnrichment, baseTilePending := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap, mode)
+		mode := ps.tileMode("weatherchange", matched, change.S2CellID)
+		baseEnrichment, baseTilePending := ps.enricher.Weather(change.Latitude, change.Longitude, change.GameplayCondition, change.Coords, ps.cfg.Weather.ShowAlteredPokemonStaticMap, mode, change.S2CellID)
 
 		// Per-user: each gets their own render job with per-language enrichment and tile
 		if ps.renderCh == nil {
@@ -169,7 +169,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 			var userTilePending *staticmap.TilePending
 			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
 				var langEnrichment map[string]any
-				userMode := ps.tileMode("weatherchange", []webhook.MatchedUser{user})
+				userMode := ps.tileMode("weatherchange", []webhook.MatchedUser{user}, change.S2CellID)
 				langEnrichment, userTilePending = ps.enricher.WeatherTranslate(
 					baseEnrichment,
 					change.OldGameplayCondition,
@@ -178,6 +178,7 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 					lang,
 					ps.cfg.Weather.ShowAlteredPokemonStaticMap,
 					userMode,
+					change.S2CellID,
 				)
 				perLang = map[string]map[string]any{lang: langEnrichment}
 			}

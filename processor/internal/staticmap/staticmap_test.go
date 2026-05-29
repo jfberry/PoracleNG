@@ -252,7 +252,7 @@ func TestRampardosProviderAliasesTileserverCache(t *testing.T) {
 				},
 			})
 			target := map[string]any{}
-			url, pending := r.GetStaticMapURLAsync("monster", map[string]any{"latitude": 51.28, "longitude": 1.08}, nil, nil, target)
+			url, pending := r.GetStaticMapURLAsync("monster", map[string]any{"latitude": 51.28, "longitude": 1.08}, nil, nil, target, "")
 			if pending == nil {
 				t.Fatalf("provider %q: expected pregen pending, got nil (provider was treated as instant)", provider)
 			}

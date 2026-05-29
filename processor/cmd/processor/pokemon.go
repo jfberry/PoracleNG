@@ -219,7 +219,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 
 		enrichStart := time.Now()
 		allRecipients := slices.Concat(matched, priorOnlyUsers)
-		mode := ps.tileMode("monster", allRecipients)
+		mode := ps.tileMode("monster", allRecipients, pokemon.EncounterID)
 		baseEnrichment, tilePending := ps.enricher.Pokemon(&pokemon, processed, mode)
 
 		var perLang map[string]map[string]any

@@ -51,7 +51,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldS
 		"slotsAvailable": slotsAvailable,
 		"inBattle":       inBattle,
 		"ex":             ex,
-	}, tileMode)
+	}, tileMode, gymID)
 
 	// Game data enrichment
 	if e.GameData != nil {

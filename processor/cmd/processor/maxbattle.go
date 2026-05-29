@@ -93,7 +93,7 @@ func (ps *ProcessorService) ProcessMaxbattle(raw json.RawMessage) error {
 				mb.BattleLevel, ps.pokemonName(mb.BattlePokemonID, mb.BattlePokemonForm),
 				mb.Name, mb.Latitude, mb.Longitude, areaNames(matchedAreas), len(matched))
 
-			mode := ps.tileMode("maxbattle", matched)
+			mode := ps.tileMode("maxbattle", matched, mb.ID)
 			enrichmentData, tilePending := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb, mode)
 
 			// Compute per-language translated enrichment

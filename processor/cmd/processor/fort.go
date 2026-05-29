@@ -76,7 +76,7 @@ func (ps *ProcessorService) ProcessFortUpdate(raw json.RawMessage) error {
 			l.Infof("Fort update %s (%s, %s) areas(%s) and %d humans cared",
 				fort.FortName(), fort.FortType(), fort.ChangeType, areaNames(matchedAreas), len(matched))
 
-			mode := ps.tileMode("fort-update", matched)
+			mode := ps.tileMode("fort-update", matched, fortID)
 			enrichmentData, tilePending := ps.enricher.FortUpdate(lat, lon, fortID, &fort, mode)
 
 			var perLang map[string]map[string]any

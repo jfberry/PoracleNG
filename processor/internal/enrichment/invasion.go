@@ -108,7 +108,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, poke
 	if lureID != 0 {
 		tileFields["lureTypeId"] = lureID
 	}
-	pending := e.addStaticMap(m, "pokestop", lat, lon, tileFields, tileMode)
+	pending := e.addStaticMap(m, "pokestop", lat, lon, tileFields, tileMode, pokestopID)
 
 	// Grunt data
 	if e.GameData != nil {
@@ -291,7 +291,9 @@ func (e *Enricher) InvasionTranslate(base map[string]any, lat, lon float64, grun
 	}
 
 	// Showcase rankings (displayType == 9): parse and enrich top-3 contestants.
-	e.translateShowcaseRankings(m, showcaseRaw, gd, tr, lang)
+	// pokestop_id (set by the base Invasion enrichment) is the per-event ref.
+	pokestopID, _ := base["pokestop_id"].(string)
+	e.translateShowcaseRankings(m, showcaseRaw, gd, tr, lang, pokestopID)
 
 	return m
 }
@@ -300,7 +302,7 @@ func (e *Enricher) InvasionTranslate(base map[string]any, lat, lon float64, grun
 // top-level and per-entry fields to the translation map m. When the field is
 // absent, empty, or unparseable the showcase* fields are set to safe zero
 // values so templates can always {{#if showcasePresent}} guard cleanly.
-func (e *Enricher) translateShowcaseRankings(m map[string]any, showcaseRaw json.RawMessage, gd *gamedata.GameData, tr *i18n.Translator, lang string) {
+func (e *Enricher) translateShowcaseRankings(m map[string]any, showcaseRaw json.RawMessage, gd *gamedata.GameData, tr *i18n.Translator, lang, pokestopID string) {
 	// Safe defaults — always set so templates never see missing keys.
 	m["showcasePresent"] = false
 	m["showcaseTotalEntries"] = 0
@@ -315,7 +317,7 @@ func (e *Enricher) translateShowcaseRankings(m map[string]any, showcaseRaw json.
 
 	var contest contestJSON
 	if err := json.Unmarshal(showcaseRaw, &contest); err != nil {
-		log.Debugf("showcase_rankings parse error: %v", err)
+		log.Debugf("[%s] showcase_rankings parse error: %v", pokestopID, err)
 		return
 	}
 

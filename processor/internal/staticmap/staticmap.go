@@ -20,10 +20,20 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/logref"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
 	"github.com/pokemon/poracleng/processor/internal/uicons"
 )
+
+// reflog returns a logger bound to the per-event correlation reference
+// (encounter_id, gym_id, pokestop_id, etc.) so tile log lines carry the
+// same "[ref] message" prefix as the webhook handler that triggered them.
+// An empty ref (e.g. synchronous tile-API callers that have no event)
+// falls back to the unprefixed standard logger so we never emit "[] message".
+func reflog(ref string) log.FieldLogger {
+	return logref.WithOptional(ref)
+}
 
 // TileTypeConfig holds per-tile-type configuration for tileservercache.
 // Boolean fields use *bool so that empty/absent config sections don't
@@ -167,6 +177,7 @@ type tileRequest struct {
 	maptype       string
 	data          map[string]any
 	staticMapType string
+	ref           string // per-event correlation reference for log lines
 }
 
 // Resolver generates static map URLs for different providers.
@@ -347,7 +358,7 @@ func (r *Resolver) rewriteToPublicBase(u string) string {
 // SubmitTile queues an async tile generation request and returns a TilePending.
 // The caller should NOT block on the result — the sender will resolve it.
 // For non-pregenerate or non-tileservercache providers, returns nil (URL set synchronously).
-func (r *Resolver) SubmitTile(maptype string, data map[string]any, staticMapType string, target map[string]any) *TilePending {
+func (r *Resolver) SubmitTile(maptype string, data map[string]any, staticMapType string, target map[string]any, ref string) *TilePending {
 	pending := &TilePending{
 		Result:   make(chan string, 1),
 		Deadline: time.Now().Add(r.TileDeadline()),
@@ -356,13 +367,13 @@ func (r *Resolver) SubmitTile(maptype string, data map[string]any, staticMapType
 	}
 
 	select {
-	case r.tileQueue <- tileRequest{pending: pending, maptype: maptype, data: data, staticMapType: staticMapType}:
+	case r.tileQueue <- tileRequest{pending: pending, maptype: maptype, data: data, staticMapType: staticMapType, ref: ref}:
 		metrics.TileQueueDepth.Set(float64(len(r.tileQueue)))
 	default:
 		// queue full, resolve immediately with fallback
 		pending.Result <- r.config.FallbackURL
 		metrics.TileTotal.WithLabelValues("queue_full").Inc()
-		log.Warnf("staticmap: tile queue full, using fallback for %s", maptype)
+		reflog(ref).Warnf("staticmap: tile queue full, using fallback for %s", maptype)
 	}
 
 	return pending
@@ -376,7 +387,7 @@ func (r *Resolver) SubmitTile(maptype string, data map[string]any, staticMapType
 // the URL is still delivered and ResultImg receives nil — Discord-upload
 // destinations then fall back to per-destination URL fetch (today's
 // behaviour) rather than breaking the send.
-func (r *Resolver) SubmitTileBoth(maptype string, data map[string]any, staticMapType string, target map[string]any) *TilePending {
+func (r *Resolver) SubmitTileBoth(maptype string, data map[string]any, staticMapType string, target map[string]any, ref string) *TilePending {
 	pending := &TilePending{
 		Result:    make(chan string, 1),
 		ResultImg: make(chan []byte, 1),
@@ -387,7 +398,7 @@ func (r *Resolver) SubmitTileBoth(maptype string, data map[string]any, staticMap
 	}
 
 	select {
-	case r.tileQueue <- tileRequest{pending: pending, maptype: maptype, data: data, staticMapType: staticMapType}:
+	case r.tileQueue <- tileRequest{pending: pending, maptype: maptype, data: data, staticMapType: staticMapType, ref: ref}:
 		metrics.TileQueueDepth.Set(float64(len(r.tileQueue)))
 	default:
 		// queue full — fall back to the url-only shape so Telegram still
@@ -395,14 +406,14 @@ func (r *Resolver) SubmitTileBoth(maptype string, data map[string]any, staticMap
 		pending.Result <- r.config.FallbackURL
 		pending.ResultImg <- nil
 		metrics.TileTotal.WithLabelValues("queue_full").Inc()
-		log.Warnf("staticmap: tile queue full, using fallback for %s (both mode)", maptype)
+		reflog(ref).Warnf("staticmap: tile queue full, using fallback for %s (both mode)", maptype)
 	}
 
 	return pending
 }
 
 // SubmitTileInline queues an inline tile request that returns image bytes.
-func (r *Resolver) SubmitTileInline(maptype string, data map[string]any, staticMapType string, target map[string]any) *TilePending {
+func (r *Resolver) SubmitTileInline(maptype string, data map[string]any, staticMapType string, target map[string]any, ref string) *TilePending {
 	pending := &TilePending{
 		ResultImg: make(chan []byte, 1),
 		Inline:    true,
@@ -412,12 +423,12 @@ func (r *Resolver) SubmitTileInline(maptype string, data map[string]any, staticM
 	}
 
 	select {
-	case r.tileQueue <- tileRequest{pending: pending, maptype: maptype, data: data, staticMapType: staticMapType}:
+	case r.tileQueue <- tileRequest{pending: pending, maptype: maptype, data: data, staticMapType: staticMapType, ref: ref}:
 		metrics.TileQueueDepth.Set(float64(len(r.tileQueue)))
 	default:
 		pending.ResultImg <- nil
 		metrics.TileTotal.WithLabelValues("queue_full").Inc()
-		log.Warnf("staticmap: tile queue full, skipping inline tile for %s", maptype)
+		reflog(ref).Warnf("staticmap: tile queue full, skipping inline tile for %s", maptype)
 	}
 
 	return pending
@@ -441,7 +452,7 @@ func (r *Resolver) tileWorker() {
 				// Step 1: pregenerate. The tileserver returns an ID (or, rarely,
 				// a full URL). Format the public URL from the ID using
 				// ProviderURL — that URL is what goes in the rendered message.
-				result, mapPath := r.pregenerateID(req.maptype, req.data, req.staticMapType)
+				result, mapPath := r.pregenerateID(req.maptype, req.data, req.staticMapType, req.ref)
 				if result == "" {
 					req.pending.Result <- req.pending.Fallback
 					req.pending.ResultImg <- nil
@@ -462,14 +473,14 @@ func (r *Resolver) tileWorker() {
 				req.pending.Result <- publicURL
 				// Step 2: download the bytes internally. Nil on failure is OK
 				// — Discord-upload destinations fall back to URL fetch.
-				req.pending.ResultImg <- r.downloadTileBytes(fetchURL)
+				req.pending.ResultImg <- r.downloadTileBytes(fetchURL, req.ref)
 			case req.pending.Inline:
 				if time.Now().After(req.pending.Deadline) {
 					req.pending.ResultImg <- nil
 					metrics.TileTotal.WithLabelValues("deadline").Inc()
 					continue
 				}
-				imgData := r.GenerateInlineTile(req.maptype, req.data, req.staticMapType)
+				imgData := r.GenerateInlineTile(req.maptype, req.data, req.staticMapType, req.ref)
 				req.pending.ResultImg <- imgData
 			default:
 				if time.Now().After(req.pending.Deadline) {
@@ -477,7 +488,7 @@ func (r *Resolver) tileWorker() {
 					metrics.TileTotal.WithLabelValues("deadline").Inc()
 					continue
 				}
-				url := r.generatePregenTile(req.maptype, req.data, req.staticMapType)
+				url := r.generatePregenTile(req.maptype, req.data, req.staticMapType, req.ref)
 				if url == "" {
 					url = req.pending.Fallback
 				}
@@ -544,7 +555,7 @@ func (r *Resolver) GetStaticMapURL(maptype string, data map[string]any, keys, pr
 // For instant providers (google, osm, mapbox, non-pregen tileservercache), returns (url, nil).
 // For pregenerate tileservercache, returns ("", pending) — the sender resolves the pending.
 // target is the enrichment map where staticMap/staticmap will be written by the pending.
-func (r *Resolver) GetStaticMapURLAsync(maptype string, data map[string]any, keys, pregenKeys []string, target map[string]any) (string, *TilePending) {
+func (r *Resolver) GetStaticMapURLAsync(maptype string, data map[string]any, keys, pregenKeys []string, target map[string]any, ref string) (string, *TilePending) {
 	provider := strings.ToLower(r.config.Provider)
 
 	if !isTileserverCacheProvider(provider) {
@@ -552,12 +563,12 @@ func (r *Resolver) GetStaticMapURLAsync(maptype string, data map[string]any, key
 		return r.GetStaticMapURL(maptype, data, keys, pregenKeys), nil
 	}
 
-	return r.tileserverCacheAsync(maptype, data, keys, pregenKeys, target)
+	return r.tileserverCacheAsync(maptype, data, keys, pregenKeys, target, ref)
 }
 
 // tileserverCacheAsync handles async tile generation for tileservercache pregenerate mode.
 // Does NOT mutate the input data map — nearby stops are added to the filtered copy.
-func (r *Resolver) tileserverCacheAsync(maptype string, data map[string]any, keys, pregenKeys []string, target map[string]any) (string, *TilePending) {
+func (r *Resolver) tileserverCacheAsync(maptype string, data map[string]any, keys, pregenKeys []string, target map[string]any, ref string) (string, *TilePending) {
 	tileOpts := r.getConfigForTileType(maptype)
 
 	if tileOpts.Type == "" || tileOpts.Type == "none" {
@@ -573,9 +584,9 @@ func (r *Resolver) tileserverCacheAsync(maptype string, data map[string]any, key
 	filtered := filterFields(data, pregenKeys)
 
 	// Fetch nearby stops into the filtered copy (not the shared data map)
-	r.addNearbyStops(filtered, data, tileOpts)
+	r.addNearbyStops(filtered, data, tileOpts, ref)
 
-	return "", r.SubmitTile(maptype, filtered, tileOpts.Type, target)
+	return "", r.SubmitTile(maptype, filtered, tileOpts.Type, target, ref)
 }
 
 // tileserverCache handles the tileservercache provider (synchronous, for API endpoints).
@@ -590,18 +601,19 @@ func (r *Resolver) tileserverCache(maptype string, data map[string]any, lat, lon
 	if !boolVal(tileOpts.Pregenerate) {
 		return r.GetTileURL(maptype, filterFields(data, keys), tileOpts.Type)
 	}
+	// Synchronous API path has no per-event reference; "" → unprefixed log.
 
 	// Pregenerate: filter to pregen keys
 	filtered := filterFields(data, pregenKeys)
 
 	// Fetch nearby stops into the filtered copy (not the shared data map)
-	r.addNearbyStops(filtered, data, tileOpts)
+	r.addNearbyStops(filtered, data, tileOpts, "")
 
 	return r.GetPregeneratedTileURL(maptype, filtered, tileOpts.Type)
 }
 
 // addNearbyStops fetches nearby stops from the scanner DB and adds them to the target map.
-func (r *Resolver) addNearbyStops(target, data map[string]any, tileOpts TileTypeConfig) {
+func (r *Resolver) addNearbyStops(target, data map[string]any, tileOpts TileTypeConfig, ref string) {
 	if !boolVal(tileOpts.IncludeStops) || r.config.Scanner == nil {
 		return
 	}
@@ -611,7 +623,7 @@ func (r *Resolver) addNearbyStops(target, data map[string]any, tileOpts TileType
 	bounds := limits(lat, lon, tileOpts.Width, tileOpts.Height, tileOpts.Zoom)
 	stops, err := r.config.Scanner.GetStopData(bounds[0], bounds[1], bounds[2], bounds[3])
 	if err != nil {
-		log.Warnf("staticmap: failed to get stop data: %s", err)
+		reflog(ref).Warnf("staticmap: failed to get stop data: %s", err)
 		return
 	}
 
@@ -733,7 +745,8 @@ func (r *Resolver) GetTileURL(maptype string, data map[string]any, staticMapType
 // Used by tile API endpoints that need a blocking result.
 // For webhook enrichment, use SubmitTile instead (async via tile worker pool).
 func (r *Resolver) GetPregeneratedTileURL(maptype string, data map[string]any, staticMapType string) string {
-	return r.generatePregenTile(maptype, data, staticMapType)
+	// Synchronous API path has no per-event reference.
+	return r.generatePregenTile(maptype, data, staticMapType, "")
 }
 
 // pregenerateID submits a pregenerate request to the tileserver (via
@@ -744,7 +757,8 @@ func (r *Resolver) GetPregeneratedTileURL(maptype string, data map[string]any, s
 // where the tileserver returns a full URL, result is that URL (already
 // contains the base) and mapPath is still filled but unused by callers.
 // Returns "", "" on any error (circuit-breaker, HTTP failure, invalid response).
-func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapType string) (result, mapPath string) {
+func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapType, ref string) (result, mapPath string) {
+	l := reflog(ref)
 	// Circuit breaker check
 	r.mu.Lock()
 	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
@@ -753,7 +767,7 @@ func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapT
 		if elapsed < cooldown {
 			r.mu.Unlock()
 			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
-			log.Debugf("staticmap: circuit breaker open for %s, skipping tile", maptype)
+			l.Debugf("staticmap: circuit breaker open for %s, skipping tile", maptype)
 			return "", ""
 		}
 		// Half-open: allow exactly one probe request
@@ -792,12 +806,12 @@ func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapT
 
 	body, err := json.Marshal(data)
 	if err != nil {
-		log.Warnf("staticmap: marshal data: %s", err)
+		l.Warnf("staticmap: marshal data: %s", err)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		return "", ""
 	}
 
-	log.Debugf("staticmap: POST %s type=%s%s body=%s", reqURL, templateType, maptype, string(body))
+	l.Debugf("staticmap: POST %s type=%s%s body=%s", reqURL, templateType, maptype, string(body))
 
 	resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -805,7 +819,7 @@ func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapT
 		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		log.Warnf("staticmap: pregenerate request failed: %s", err)
+		l.Warnf("staticmap: pregenerate request failed: %s", err)
 		return "", ""
 	}
 	defer resp.Body.Close()
@@ -816,7 +830,7 @@ func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapT
 		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		log.Warnf("staticmap: read pregenerate response: %s", err)
+		l.Warnf("staticmap: read pregenerate response: %s", err)
 		return "", ""
 	}
 
@@ -825,7 +839,7 @@ func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapT
 		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		log.Warnf("staticmap: pregenerate %s got status %d: %s (sent fields: %v)", reqURL, resp.StatusCode, string(respBody), mapKeys(data))
+		l.Warnf("staticmap: pregenerate %s got status %d: %s (sent fields: %v)", reqURL, resp.StatusCode, string(respBody), mapKeys(data))
 		return "", ""
 	}
 
@@ -835,7 +849,7 @@ func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapT
 		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		log.Warnf("staticmap: pregenerate got invalid response: %s", result)
+		l.Warnf("staticmap: pregenerate got invalid response: %s", result)
 		return "", ""
 	}
 
@@ -858,8 +872,8 @@ func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapT
 // generatePregenTile does the actual HTTP POST to the tileserver.
 // Called by both the synchronous GetPregeneratedTileURL and the async tile workers.
 // Returns the public URL callers should embed in messages.
-func (r *Resolver) generatePregenTile(maptype string, data map[string]any, staticMapType string) string {
-	result, mapPath := r.pregenerateID(maptype, data, staticMapType)
+func (r *Resolver) generatePregenTile(maptype string, data map[string]any, staticMapType, ref string) string {
+	result, mapPath := r.pregenerateID(maptype, data, staticMapType, ref)
 	if result == "" {
 		return ""
 	}
@@ -868,46 +882,48 @@ func (r *Resolver) generatePregenTile(maptype string, data map[string]any, stati
 	// landed on, which Discord/Telegram clients can't reach.
 	if strings.HasPrefix(result, "http") {
 		publicURL := r.rewriteToPublicBase(result)
-		log.Debugf("staticmap: tile generated %s", publicURL)
+		reflog(ref).Debugf("staticmap: tile generated %s", publicURL)
 		return publicURL
 	}
 	// Otherwise construct the public URL from the tileserver base + pregenerated path.
 	tileURL := fmt.Sprintf("%s/%s/pregenerated/%s", r.config.ProviderURL, mapPath, result)
-	log.Debugf("staticmap: tile generated %s", tileURL)
+	reflog(ref).Debugf("staticmap: tile generated %s", tileURL)
 	return tileURL
 }
 
 // downloadTileBytes fetches a tile's bytes from the given URL. Intended for
 // internal use (e.g. SubmitTileBoth downloading the bytes via internalBase
 // after pregenerate). Returns nil on any failure.
-func (r *Resolver) downloadTileBytes(fetchURL string) []byte {
+func (r *Resolver) downloadTileBytes(fetchURL, ref string) []byte {
+	l := reflog(ref)
 	resp, err := r.client.Get(fetchURL)
 	if err != nil {
-		log.Warnf("staticmap: download tile bytes from %s: %s", fetchURL, err)
+		l.Warnf("staticmap: download tile bytes from %s: %s", fetchURL, err)
 		return nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Warnf("staticmap: download tile bytes from %s: status %d", fetchURL, resp.StatusCode)
+		l.Warnf("staticmap: download tile bytes from %s: status %d", fetchURL, resp.StatusCode)
 		return nil
 	}
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Warnf("staticmap: read tile bytes from %s: %s", fetchURL, err)
+		l.Warnf("staticmap: read tile bytes from %s: %s", fetchURL, err)
 		return nil
 	}
 	// Diagnostic: log size, content-type, and the first 8 magic bytes so we
 	// can tell valid image responses from error-page bodies. A valid PNG
 	// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
 	prefixLen := min(len(b), 8)
-	log.Debugf("staticmap: downloaded %d bytes from %s (ct=%s, first=%x)",
+	l.Debugf("staticmap: downloaded %d bytes from %s (ct=%s, first=%x)",
 		len(b), fetchURL, resp.Header.Get("Content-Type"), b[:prefixLen])
 	return b
 }
 
 // GenerateInlineTile POSTs to the tileserver without pregenerate=true,
 // receiving the rendered PNG bytes directly. No file is stored on disk.
-func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, staticMapType string) []byte {
+func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, staticMapType, ref string) []byte {
+	l := reflog(ref)
 	// Circuit breaker check
 	r.mu.Lock()
 	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
@@ -956,12 +972,12 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 
 	body, err := json.Marshal(data)
 	if err != nil {
-		log.Warnf("staticmap: marshal inline data: %s", err)
+		l.Warnf("staticmap: marshal inline data: %s", err)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		return nil
 	}
 
-	log.Debugf("staticmap: POST inline %s type=%s%s body=%s", reqURL, templateType, maptype, string(body))
+	l.Debugf("staticmap: POST inline %s type=%s%s body=%s", reqURL, templateType, maptype, string(body))
 
 	resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -969,7 +985,7 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		log.Warnf("staticmap: inline request failed: %s", err)
+		l.Warnf("staticmap: inline request failed: %s", err)
 		return nil
 	}
 	defer resp.Body.Close()
@@ -980,7 +996,7 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 		r.statErrors.Add(1)
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		log.Warnf("staticmap: read inline response: %s", err)
+		l.Warnf("staticmap: read inline response: %s", err)
 		return nil
 	}
 
@@ -990,7 +1006,7 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 		metrics.TileTotal.WithLabelValues("error").Inc()
 		metrics.TileDuration.Observe(time.Since(start).Seconds())
 		truncLen := min(len(respBody), 200)
-		log.Warnf("staticmap: inline %s got status %d: %s", reqURL, resp.StatusCode, string(respBody[:truncLen]))
+		l.Warnf("staticmap: inline %s got status %d: %s", reqURL, resp.StatusCode, string(respBody[:truncLen]))
 		return nil
 	}
 
@@ -1011,7 +1027,7 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 	// can tell valid image responses from error-page bodies. A valid PNG
 	// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
 	prefixLen := min(len(respBody), 8)
-	log.Debugf("staticmap: inline %d bytes from %s (ct=%s, first=%x) in %dms",
+	l.Debugf("staticmap: inline %d bytes from %s (ct=%s, first=%x) in %dms",
 		len(respBody), reqURL, resp.Header.Get("Content-Type"), respBody[:prefixLen], duration.Milliseconds())
 
 	return respBody
@@ -1019,9 +1035,9 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 
 // AddNearbyStops fetches nearby stops from the scanner DB and adds them to the target map.
 // Exported wrapper for use by inline tile generation in the enrichment layer.
-func (r *Resolver) AddNearbyStops(target, data map[string]any, maptype string) {
+func (r *Resolver) AddNearbyStops(target, data map[string]any, maptype, ref string) {
 	tileOpts := r.getConfigForTileType(maptype)
-	r.addNearbyStops(target, data, tileOpts)
+	r.addNearbyStops(target, data, tileOpts, ref)
 }
 
 // GetStaticMapType returns the tileserver template type for the given alert type.

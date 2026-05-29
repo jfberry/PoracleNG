@@ -75,7 +75,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID, pokestopURL string, rewar
 	e.addGeoResult(m, lat, lon)
 
 	// Static map tile
-	pending := e.addStaticMap(m, "quest", lat, lon, nil, tileMode)
+	pending := e.addStaticMap(m, "quest", lat, lon, nil, tileMode, pokestopID)
 
 	// Future event check
 	if e.EventChecker != nil {

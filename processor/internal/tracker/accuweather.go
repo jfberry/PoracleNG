@@ -13,6 +13,7 @@ import (
 	"github.com/golang/geo/s2"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/logref"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
@@ -137,9 +138,9 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 	locationKey, err := aw.getLocationKey(cellID)
 	if err != nil {
 		if isQuotaExhaustedErr(err) {
-			log.Warnf("AccuWeather: cannot get location for cell %s: %v", cellID, err)
+			logref.Warnf(cellID, "AccuWeather: cannot get location: %v", err)
 		} else {
-			log.Errorf("AccuWeather: failed to get location for cell %s: %v", cellID, err)
+			logref.Errorf(cellID, "AccuWeather: failed to get location: %v", err)
 		}
 		return
 	}
@@ -157,12 +158,12 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 
 	// Fetch 12-hour forecast
 	url := fmt.Sprintf("https://dataservice.accuweather.com/forecasts/v1/hourly/12hour/%s?apikey=%s&details=true&metric=true", locationKey, apiKey)
-	log.Debugf("AccuWeather: fetching forecast for cell %s", cellID)
+	logref.Debugf(cellID, "AccuWeather: fetching forecast")
 
 	resp, err := aw.client.Get(url)
 	if err != nil {
 		metrics.AccuWeatherRequests.WithLabelValues("forecast", "error").Inc()
-		log.Errorf("AccuWeather: forecast request failed for cell %s: %v", cellID, err)
+		logref.Errorf(cellID, "AccuWeather: forecast request failed: %v", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -171,7 +172,7 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 
 	if resp.StatusCode != 200 {
 		metrics.AccuWeatherRequests.WithLabelValues("forecast", fmt.Sprintf("http_%d", resp.StatusCode)).Inc()
-		log.Errorf("AccuWeather: forecast request returned %d for cell %s", resp.StatusCode, cellID)
+		logref.Errorf(cellID, "AccuWeather: forecast request returned %d", resp.StatusCode)
 		return
 	}
 
@@ -179,7 +180,7 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 
 	var forecasts []accuWeatherHourlyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&forecasts); err != nil {
-		log.Errorf("AccuWeather: failed to decode forecast for cell %s: %v", cellID, err)
+		logref.Errorf(cellID, "AccuWeather: failed to decode forecast: %v", err)
 		return
 	}
 
@@ -193,7 +194,7 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 			fmt.Fprintf(&logString, "%s=%d ", time.Unix(hourTS, 0).UTC().Format("15:04"), pogoWeather)
 		}
 	}
-	log.Infof("AccuWeather: cell %s forecast [UTC] %s", cellID, logString.String())
+	logref.Infof(cellID, "AccuWeather: forecast [UTC] %s", logString.String())
 
 	// Calculate next refresh timeout
 	forecastTimeout := aw.calculateForecastTimeout(currentHour)
@@ -231,7 +232,7 @@ func (aw *AccuWeatherClient) getLocationKey(cellID string) (string, error) {
 	}
 
 	url := fmt.Sprintf("https://dataservice.accuweather.com/locations/v1/cities/geoposition/search?apikey=%s&q=%f%%2C%f", apiKey, lat, lon)
-	log.Debugf("AccuWeather: fetching location for cell %s (%f, %f)", cellID, lat, lon)
+	logref.Debugf(cellID, "AccuWeather: fetching location (%f, %f)", lat, lon)
 
 	resp, err := aw.client.Get(url)
 	if err != nil {

@@ -127,7 +127,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 		"teamId":     raid.TeamID,
 		"evolution":  raid.Evolution,
 		"costume":    raid.Costume,
-	}, tileMode)
+	}, tileMode, raid.GymID)
 
 	// Game data enrichment
 	if e.GameData != nil {

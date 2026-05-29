@@ -104,7 +104,7 @@ func (ps *ProcessorService) ProcessGym(raw json.RawMessage) error {
 			l.Infof("Gym %s changed %s -> %s areas(%s) and %d humans cared",
 				gym.Name, ps.teamName(oldTeamID), ps.teamName(teamID), areaNames(matchedAreas), len(matched))
 
-			mode := ps.tileMode("gym", matched)
+			mode := ps.tileMode("gym", matched, gymID)
 			enrichmentData, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, oldTeamID, gym.SlotsAvailable, oldSlotsAvailable, inBattle, false, gymID, mode)
 
 			// Compute per-language translated enrichment

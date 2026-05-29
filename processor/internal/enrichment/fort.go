@@ -197,7 +197,7 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.For
 		webhookFields["map_latitude"] = position.Latitude
 		webhookFields["map_longitude"] = position.Longitude
 	}
-	pending := e.addStaticMap(m, "fort-update", mapLat, mapLon, webhookFields, tileMode)
+	pending := e.addStaticMap(m, "fort-update", mapLat, mapLon, webhookFields, tileMode, fortID)
 
 	e.setFallbackImg(m, e.FallbackImgPokestop)
 

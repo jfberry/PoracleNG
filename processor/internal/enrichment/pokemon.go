@@ -199,7 +199,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 		"confirmedTime":      pokemon.DisappearTimeVerified || pokemon.Verified,
 		"weather":            weather,
 		"seen_type":          pokemon.SeenType,
-	}, tileMode)
+	}, tileMode, pokemon.EncounterID)
 
 	e.setFallbackImg(m, e.FallbackImgURL)
 	return m, pending

@@ -84,7 +84,7 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	pending := e.addStaticMap(m, "maxbattle", lat, lon, map[string]any{
 		"battle_level":      mb.BattleLevel,
 		"battle_pokemon_id": mb.BattlePokemonID,
-	}, tileMode)
+	}, tileMode, mb.ID)
 
 	m["color"] = "D000C0" // hardcoded maxbattle color (matches alerter)
 

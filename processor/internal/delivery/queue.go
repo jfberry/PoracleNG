@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/logref"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/ratelimit"
 	log "github.com/sirupsen/logrus"
@@ -176,7 +177,7 @@ func (fq *FairQueue) processJob(job *Job) {
 	}()
 	sender, ok := fq.senders[platform]
 	if !ok {
-		log.Warnf("%s: delivery: no sender for platform %q (type=%s target=%s)", job.LogReference, platform, job.Type, job.Target)
+		logref.Warnf(job.LogReference, "delivery: no sender for platform %q (type=%s target=%s)", platform, job.Type, job.Target)
 		return
 	}
 
@@ -195,9 +196,9 @@ func (fq *FairQueue) processJob(job *Job) {
 	if job.EditKey != "" {
 		existing := fq.tracker.LookupEdit(job.EditKey)
 		if existing != nil {
-			log.Infof("%s: edit: found tracked message for key=%s, attempting edit", job.LogReference, job.EditKey)
+			logref.Infof(job.LogReference, "edit: found tracked message for key=%s, attempting edit", job.EditKey)
 			if err := sender.Edit(fq.ctx, existing.SentID, job.Message, job.StaticMapData); err == nil {
-				log.Infof("%s: edit: succeeded for key=%s", job.LogReference, job.EditKey)
+				logref.Infof(job.LogReference, "edit: succeeded for key=%s", job.EditKey)
 				metrics.DeliveryTotal.WithLabelValues(platform, "edit_ok").Inc()
 				metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 
@@ -211,7 +212,7 @@ func (fq *FairQueue) processJob(job *Job) {
 						job.SnapshotData.CreatedAt = time.Now().Unix()
 						if err := store.Write(fq.ctx, job.SnapshotData); err != nil {
 							metrics.SnapshotWritesTotal.WithLabelValues("fail").Inc()
-							log.Warnf("%s: snapshot write on edit failed: %v", job.LogReference, err)
+							logref.Warnf(job.LogReference, "snapshot write on edit failed: %v", err)
 						} else {
 							metrics.SnapshotWritesTotal.WithLabelValues("ok").Inc()
 						}
@@ -219,10 +220,10 @@ func (fq *FairQueue) processJob(job *Job) {
 				}
 				return
 			} else {
-				log.Warnf("%s: edit: failed for key=%s: %v, sending new message", job.LogReference, job.EditKey, err)
+				logref.Warnf(job.LogReference, "edit: failed for key=%s: %v, sending new message", job.EditKey, err)
 			}
 		} else {
-			log.Debugf("%s: edit: no tracked message for key=%s, will send new and track", job.LogReference, job.EditKey)
+			logref.Debugf(job.LogReference, "edit: no tracked message for key=%s, will send new and track", job.EditKey)
 		}
 	}
 
@@ -247,8 +248,8 @@ func (fq *FairQueue) processJob(job *Job) {
 	// Bypass jobs (rate-limit notifications, ban farewells) still send;
 	// they're administrative messages, not user alerts, and tend to be rare.
 	if !job.BypassRateLimit && fq.dispatcher != nil && fq.dispatcher.IsPaused() {
-		log.Debugf("%s: dropped — delivery paused (type=%s target=%s)",
-			job.LogReference, job.Type, job.Target)
+		logref.Debugf(job.LogReference, "dropped — delivery paused (type=%s target=%s)",
+			job.Type, job.Target)
 		metrics.DeliveryTotal.WithLabelValues(platform, "dropped_paused").Inc()
 		return
 	}
@@ -262,8 +263,8 @@ func (fq *FairQueue) processJob(job *Job) {
 	// edit whose original has already expired in the tracker falls back to
 	// a new send which may still want to be visible.
 	if db.IsClean(job.Clean) && job.TTH.Duration() <= 0 {
-		log.Warnf("%s: clean message suppressed — TTL already expired before send (clean=%d type=%s target=%s)",
-			job.LogReference, job.Clean, job.Type, job.Target)
+		logref.Warnf(job.LogReference, "clean message suppressed — TTL already expired before send (clean=%d type=%s target=%s)",
+			job.Clean, job.Type, job.Target)
 		metrics.DeliveryTotal.WithLabelValues(platform, "suppressed_expired").Inc()
 		return
 	}
@@ -283,8 +284,8 @@ func (fq *FairQueue) processJob(job *Job) {
 			if result.JustBreached {
 				metrics.RateLimitBreaches.Inc()
 				metrics.RateLimitDropped.Inc()
-				log.Infof("%s: rate limit reached for %s %s %s (%d messages in %ds)",
-					job.LogReference, job.Type, job.Target, job.Name, result.Limit, result.ResetSeconds)
+				logref.Infof(job.LogReference, "rate limit reached for %s %s %s (%d messages in %ds)",
+					job.Type, job.Target, job.Name, result.Limit, result.ResetSeconds)
 				if fq.rateLimitHooks != nil {
 					// Hooks dispatch bypass jobs back into the same channel.
 					// Calling them synchronously here would block this worker
@@ -301,16 +302,16 @@ func (fq *FairQueue) processJob(job *Job) {
 						hooks.OnBreach(target, typ, name, lang, limit, reset)
 						if banned {
 							metrics.RateLimitDisabled.Inc()
-							log.Infof("%s: rate limit: banning %s %s %s (too many violations)",
-								ref, typ, target, name)
+							logref.Infof(ref, "rate limit: banning %s %s %s (too many violations)",
+								typ, target, name)
 							hooks.OnBan(target, typ, name, lang)
 						}
 					}()
 				}
 			} else {
 				metrics.RateLimitDropped.Inc()
-				log.Debugf("%s: rate limited: dropping message for %s %s %s",
-					job.LogReference, job.Type, job.Target, job.Name)
+				logref.Debugf(job.LogReference, "rate limited: dropping message for %s %s %s",
+					job.Type, job.Target, job.Name)
 			}
 			return
 		}
@@ -320,17 +321,17 @@ func (fq *FairQueue) processJob(job *Job) {
 	if destKind == "" {
 		destKind = strings.ToUpper(job.Type)
 	}
-	log.Infof("%s: -> %s %s %s Sending %s message", job.LogReference, job.Name, job.Target, destKind, platform)
+	logref.Infof(job.LogReference, "-> %s %s %s Sending %s message", job.Name, job.Target, destKind, platform)
 
 	sent, err := sender.Send(fq.ctx, job)
 	if err != nil {
 		var permErr *PermanentError
 		if errors.As(err, &permErr) {
-			log.Warnf("%s: delivery: permanent error for %s/%s: %s", job.LogReference, job.Type, job.Target, permErr.Reason)
+			logref.Warnf(job.LogReference, "delivery: permanent error for %s/%s: %s", job.Type, job.Target, permErr.Reason)
 			metrics.DeliveryTotal.WithLabelValues(platform, "permanent_error").Inc()
 			fq.recordFailure(job.Target, job.Name, job.Type)
 		} else {
-			log.Errorf("%s: delivery: send failed for %s/%s: %v", job.LogReference, job.Type, job.Target, err)
+			logref.Errorf(job.LogReference, "delivery: send failed for %s/%s: %v", job.Type, job.Target, err)
 			metrics.DeliveryTotal.WithLabelValues(platform, "error").Inc()
 			fq.recordFailure(job.Target, job.Name, job.Type)
 		}
@@ -364,12 +365,12 @@ func (fq *FairQueue) processJob(job *Job) {
 			}
 			if err := store.Write(fq.ctx, job.SnapshotData); err != nil {
 				metrics.SnapshotWritesTotal.WithLabelValues("fail").Inc()
-				log.Warnf("%s: snapshot write failed for %s/%s: %v",
-					job.LogReference, job.Type, job.Target, err)
+				logref.Warnf(job.LogReference, "snapshot write failed for %s/%s: %v",
+					job.Type, job.Target, err)
 			} else {
 				metrics.SnapshotWritesTotal.WithLabelValues("ok").Inc()
-				log.Debugf("%s: snapshot stored key=%s sentID=%s",
-					job.LogReference, job.SnapshotData.Key(), sent.ID)
+				logref.Debugf(job.LogReference, "snapshot stored key=%s sentID=%s",
+					job.SnapshotData.Key(), sent.ID)
 			}
 		}
 	}
@@ -380,13 +381,13 @@ func (fq *FairQueue) processJob(job *Job) {
 	// to find on the next change event.
 	wantsTracking := db.IsClean(job.Clean) || db.IsEdit(job.Clean) || job.EditKey != "" || job.ReplyKey != ""
 	if wantsTracking && sent == nil {
-		log.Warnf("%s: clean/edit/reply tracking skipped — sender returned no SentMessage (clean=%d editKey=%q replyKey=%q)", job.LogReference, job.Clean, job.EditKey, job.ReplyKey)
+		logref.Warnf(job.LogReference, "clean/edit/reply tracking skipped — sender returned no SentMessage (clean=%d editKey=%q replyKey=%q)", job.Clean, job.EditKey, job.ReplyKey)
 		return
 	}
 	if sent != nil && wantsTracking {
 		ttl := job.TTH.Duration()
 		if ttl <= 0 {
-			log.Warnf("%s: clean/edit/reply tracking skipped — TTL already expired (clean=%d)", job.LogReference, job.Clean)
+			logref.Warnf(job.LogReference, "clean/edit/reply tracking skipped — TTL already expired (clean=%d)", job.Clean)
 			return
 		}
 
@@ -406,7 +407,7 @@ func (fq *FairQueue) processJob(job *Job) {
 			Clean:    job.Clean,
 			ReplyKey: job.ReplyKey,
 		}, ttl)
-		log.Debugf("%s: tracked message key=%s sentID=%s ttl=%v clean=%d replyKey=%q", job.LogReference, key, sent.ID, ttl, job.Clean, job.ReplyKey)
+		logref.Debugf(job.LogReference, "tracked message key=%s sentID=%s ttl=%v clean=%d replyKey=%q", key, sent.ID, ttl, job.Clean, job.ReplyKey)
 	}
 }
 

@@ -226,7 +226,7 @@ const (
 // directly and returns nil.
 // tileMode controls whether to skip (0), generate inline bytes (1), or generate
 // a fetchable URL (2).
-func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any, tileMode int) *staticmap.TilePending {
+func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float64, webhookFields map[string]any, tileMode int, ref string) *staticmap.TilePending {
 	if e.StaticMap == nil || tileMode == TileModeSkip {
 		return nil
 	}
@@ -258,8 +258,8 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 		// Inline mode POSTs without pregenerate=true — the tileserver returns
 		// image bytes directly. Assumes tileservercache with POST-body support.
 		filtered := filterFields(merged, pregenKeys)
-		e.StaticMap.AddNearbyStops(filtered, merged, maptype)
-		return e.StaticMap.SubmitTileInline(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m)
+		e.StaticMap.AddNearbyStops(filtered, merged, maptype, ref)
+		return e.StaticMap.SubmitTileInline(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m, ref)
 	}
 
 	if tileMode == TileModeURLWithBytes {
@@ -268,12 +268,12 @@ func (e *Enricher) addStaticMap(m map[string]any, maptype string, lat, lon float
 		// the bytes once via internal_url so Discord-upload destinations in
 		// the same batch don't each re-fetch the public URL.
 		filtered := filterFields(merged, pregenKeys)
-		e.StaticMap.AddNearbyStops(filtered, merged, maptype)
-		return e.StaticMap.SubmitTileBoth(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m)
+		e.StaticMap.AddNearbyStops(filtered, merged, maptype, ref)
+		return e.StaticMap.SubmitTileBoth(maptype, filtered, e.StaticMap.GetStaticMapType(maptype), m, ref)
 	}
 
 	// TileModeURL — current flow
-	url, pending := e.StaticMap.GetStaticMapURLAsync(maptype, merged, keys, pregenKeys, m)
+	url, pending := e.StaticMap.GetStaticMapURLAsync(maptype, merged, keys, pregenKeys, m, ref)
 	if pending != nil {
 		// Tile will be resolved async by the sender
 		return pending

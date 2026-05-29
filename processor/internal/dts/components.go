@@ -59,7 +59,7 @@ var discordButtonStyle = map[string]int{
 // never see a button they couldn't use. Channel destinations can't be
 // filtered per-viewer; the click-time gate remains the only enforcement
 // there.
-func InjectDiscordComponents(messageBody json.RawMessage, defs []buttons.Def, view any, targetType string, recipientIsAdmin bool, evalShowIf ShowIfEvaluator) json.RawMessage {
+func InjectDiscordComponents(messageBody json.RawMessage, defs []buttons.Def, view any, targetType string, recipientIsAdmin bool, evalShowIf ShowIfEvaluator, logReference string) json.RawMessage {
 	if len(defs) == 0 || !json.Valid(messageBody) {
 		return messageBody
 	}
@@ -87,7 +87,7 @@ func InjectDiscordComponents(messageBody json.RawMessage, defs []buttons.Def, vi
 		}
 		if def.ShowIf != "" && evalShowIf != nil {
 			if ok, err := evalShowIf(def.ShowIf, view); err != nil {
-				log.Warnf("dts: show_if eval for button %q: %v — dropping", def.ID, err)
+				log.Warnf("[%s] dts: show_if eval for button %q: %v — dropping", logReference, def.ID, err)
 				continue
 			} else if !ok {
 				continue
@@ -95,7 +95,7 @@ func InjectDiscordComponents(messageBody json.RawMessage, defs []buttons.Def, vi
 		}
 		kept = append(kept, def)
 		if len(kept) >= MaxButtonsPerMessage {
-			log.Warnf("dts: button list exceeds Discord's per-message cap (%d); truncating", MaxButtonsPerMessage)
+			log.Warnf("[%s] dts: button list exceeds Discord's per-message cap (%d); truncating", logReference, MaxButtonsPerMessage)
 			break
 		}
 	}
@@ -105,14 +105,14 @@ func InjectDiscordComponents(messageBody json.RawMessage, defs []buttons.Def, vi
 
 	components, err := buildDiscordComponents(kept)
 	if err != nil {
-		log.Warnf("dts: build components: %v — sending without buttons", err)
+		log.Warnf("[%s] dts: build components: %v — sending without buttons", logReference, err)
 		return messageBody
 	}
 
 	top["components"] = components
 	out, err := json.Marshal(top)
 	if err != nil {
-		log.Warnf("dts: marshal message with components: %v — sending without buttons", err)
+		log.Warnf("[%s] dts: marshal message with components: %v — sending without buttons", logReference, err)
 		return messageBody
 	}
 	return out

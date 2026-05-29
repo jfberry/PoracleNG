@@ -51,3 +51,15 @@ func Debugf(ref, format string, args ...any) {
 func With(ref string) *log.Entry {
 	return log.WithField("ref", ref)
 }
+
+// WithOptional returns a logger bound to "ref", or the unprefixed standard
+// logger when ref is empty. Use on shared code paths that sometimes run
+// with a per-event reference (webhook enrichment) and sometimes without
+// (synchronous tile-API callers), so the latter don't emit a stray
+// "[] message" prefix.
+func WithOptional(ref string) log.FieldLogger {
+	if ref == "" {
+		return log.StandardLogger()
+	}
+	return log.WithField("ref", ref)
+}

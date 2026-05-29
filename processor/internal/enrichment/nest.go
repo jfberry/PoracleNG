@@ -50,7 +50,7 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any
 	if nest.PolyPath != "" {
 		var rawPolygons [][][2]float64
 		if err := json.Unmarshal([]byte(nest.PolyPath), &rawPolygons); err != nil {
-			log.Debugf("nest: failed to parse poly_path: %s", err)
+			log.Debugf("[%d] nest: failed to parse poly_path: %s", nest.NestID, err)
 		} else {
 			var polygons [][]staticmap.LatLon
 			for _, rawPoly := range rawPolygons {
@@ -93,7 +93,7 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any
 		"pokemon_id":      nest.PokemonID,
 		"form":            nest.Form,
 		"pokemonSpawnAvg": nest.PokemonAvg,
-	}, tileMode)
+	}, tileMode, strconv.FormatInt(nest.NestID, 10))
 
 	// Pokemon identity
 	m["pokemonId"] = nest.PokemonID

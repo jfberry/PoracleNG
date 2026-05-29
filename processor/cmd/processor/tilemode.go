@@ -1,10 +1,9 @@
 package main
 
 import (
-	log "github.com/sirupsen/logrus"
-
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/enrichment"
+	"github.com/pokemon/poracleng/processor/internal/logref"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
@@ -19,7 +18,8 @@ import (
 // through this helper because BuildQuestSummaryView builds the URL
 // synchronously, but tileMode handles "questSummary" correctly if a
 // future caller does pre-resolve summary tiles.
-func (ps *ProcessorService) tileMode(templateType string, matched []webhook.MatchedUser) int {
+func (ps *ProcessorService) tileMode(templateType string, matched []webhook.MatchedUser, ref string) int {
+	l := logref.WithOptional(ref)
 	if ps.dtsRenderer == nil {
 		return enrichment.TileModeSkip
 	}
@@ -56,19 +56,19 @@ func (ps *ProcessorService) tileMode(templateType string, matched []webhook.Matc
 
 	switch {
 	case !anyNeedsTile:
-		log.Debugf("tileMode: %s → skip (no template uses staticMap)", templateType)
+		l.Debugf("tileMode: %s → skip (no template uses staticMap)", templateType)
 		metrics.TileModeTotal.WithLabelValues("skip").Inc()
 		return enrichment.TileModeSkip
 	case anyNeedsURL && anyDiscordUpload:
-		log.Debugf("tileMode: %s → url_with_bytes (%d users, mixed URL-needers + Discord upload)", templateType, len(matched))
+		l.Debugf("tileMode: %s → url_with_bytes (%d users, mixed URL-needers + Discord upload)", templateType, len(matched))
 		metrics.TileModeTotal.WithLabelValues("url_with_bytes").Inc()
 		return enrichment.TileModeURLWithBytes
 	case anyNeedsURL:
-		log.Debugf("tileMode: %s → url (%d users, at least one needs fetchable URL)", templateType, len(matched))
+		l.Debugf("tileMode: %s → url (%d users, at least one needs fetchable URL)", templateType, len(matched))
 		metrics.TileModeTotal.WithLabelValues("url").Inc()
 		return enrichment.TileModeURL
 	default:
-		log.Debugf("tileMode: %s → inline (%d users, all support upload)", templateType, len(matched))
+		l.Debugf("tileMode: %s → inline (%d users, all support upload)", templateType, len(matched))
 		metrics.TileModeTotal.WithLabelValues("inline").Inc()
 		return enrichment.TileModeInline
 	}

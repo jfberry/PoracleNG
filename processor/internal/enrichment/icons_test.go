@@ -329,7 +329,7 @@ func TestWeatherIconURLs(t *testing.T) {
 	e.Translations = newTestBundle()
 	e.GameData = newTestGameData()
 
-	base, _ := e.Weather(52.5, 13.4, 3, nil, false, TileModeURL)
+	base, _ := e.Weather(52.5, 13.4, 3, nil, false, TileModeURL, "")
 	// WeatherTranslate returns only translated fields; imgUrl is in base enrichment
 	_ = e // suppress unused warning for translate call
 
@@ -349,8 +349,8 @@ func TestWeatherIconURLs_NilUicons(t *testing.T) {
 		Translations:    newTestBundle(),
 		GameData:        newTestGameData(),
 	}
-	base, _ := e.Weather(52.5, 13.4, 3, nil, false, TileModeURL)
-	m, _ := e.WeatherTranslate(base, 1, 3, nil, "en", false, TileModeURL)
+	base, _ := e.Weather(52.5, 13.4, 3, nil, false, TileModeURL, "")
+	m, _ := e.WeatherTranslate(base, 1, 3, nil, "en", false, TileModeURL, "")
 
 	if _, ok := m["imgUrl"]; ok {
 		t.Error("expected no imgUrl when ImgUicons is nil")

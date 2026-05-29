@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/golang/geo/s2"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/geo"
+	"github.com/pokemon/poracleng/processor/internal/logref"
 )
 
 // WeatherChange represents a detected weather change event.
@@ -89,8 +89,8 @@ func (wt *WeatherTracker) UpdateFromWebhook(cellID string, condition int, timest
 	isNew := !hasCurrentHour || existingWeather != condition || cd.lastCurrentWeatherCheck < hourTimestamp
 	changed := hasPrevious && previousWeather != condition && isNew
 
-	log.Debugf("Weather webhook cell=%s condition=%d hour=%d prevHour=%d hasPrev=%v prevWeather=%d hasCurrentHour=%v existingWeather=%d isNew=%v changed=%v",
-		cellID, condition, hourTimestamp, previousHourTimestamp, hasPrevious, previousWeather, hasCurrentHour, existingWeather, isNew, changed)
+	logref.Debugf(cellID, "Weather webhook condition=%d hour=%d prevHour=%d hasPrev=%v prevWeather=%d hasCurrentHour=%v existingWeather=%d isNew=%v changed=%v",
+		condition, hourTimestamp, previousHourTimestamp, hasPrevious, previousWeather, hasCurrentHour, existingWeather, isNew, changed)
 
 	cd.hourWeather[hourTimestamp] = condition
 	cd.lastCurrentWeatherCheck = timestamp
@@ -300,7 +300,7 @@ func (wt *WeatherTracker) CheckWeatherOnMonster(cellID string, lat, lon float64,
 			if oldWeather == 0 || oldWeather == monsterWeather {
 				local.currentHourTimestamp = currentHour
 				local.monsterWeather = monsterWeather
-				log.Infof("Weather inferred in cell %s as %d (no prior data or unchanged, no alert)", cellID, monsterWeather)
+				logref.Infof(cellID, "Weather inferred as %d (no prior data or unchanged, no alert)", monsterWeather)
 				return
 			}
 
@@ -308,7 +308,7 @@ func (wt *WeatherTracker) CheckWeatherOnMonster(cellID string, lat, lon float64,
 				local.currentHourTimestamp = currentHour
 				local.monsterWeather = monsterWeather
 
-				log.Infof("Boosted Pokemon! Force update of weather in cell %s with weather %d", cellID, monsterWeather)
+				logref.Infof(cellID, "Boosted Pokemon! Force update of weather with weather %d", monsterWeather)
 
 				// Use cell center instead of pokemon spawn point
 				centerLat, centerLon := geo.GetCellCenter(lat, lon, 10)

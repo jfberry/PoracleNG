@@ -70,7 +70,7 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 			l.Infof("%s at %s [%.3f,%.3f] areas(%s) and %d humans cared",
 				ps.lureName(lure.LureID), lure.Name, lure.Latitude, lure.Longitude, areaNames(matchedAreas), len(matched))
 
-			mode := ps.tileMode("lure", matched)
+			mode := ps.tileMode("lure", matched, lure.PokestopID)
 			enrichmentData, tilePending := ps.enricher.Lure(&lure, mode)
 
 			// Compute per-language translated enrichment

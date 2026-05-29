@@ -442,7 +442,7 @@ func (r *Renderer) renderForUsers(
 		if r.buttonsEnabled && platform == "discord" {
 			defs := r.templates.GetButtons(templateType, platform, templateID, language)
 			if len(defs) > 0 {
-				rawMessage = InjectDiscordComponents(rawMessage, defs, view, deliveryTargetType(user.Type), r.recipientIsAdmin(user.Type, user.ID), r.evalShowIf)
+				rawMessage = InjectDiscordComponents(rawMessage, defs, view, deliveryTargetType(user.Type), r.recipientIsAdmin(user.Type, user.ID), r.evalShowIf, logReference)
 			}
 		}
 
