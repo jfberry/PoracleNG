@@ -542,7 +542,9 @@ func resolveGymRef(ctx *bot.CommandContext, raw string) (string, *bot.Reply) {
 	b.WriteString(tr.Tf("msg.gym_lookup.multiple", rawEsc, len(matches)))
 	b.WriteString("\n")
 	for _, g := range matches {
-		b.WriteString("  - ")
+		// Flat list: leading spaces make Discord treat items 2..n as a nested
+		// sub-list under item 1 (first bullet •, rest ○). No indent → all siblings.
+		b.WriteString("- ")
 		b.WriteString(ctx.EscapeForReply(g.Name))
 		b.WriteString(" (")
 		b.WriteString(ctx.Code(g.ID))
