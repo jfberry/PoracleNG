@@ -134,6 +134,13 @@ func readBody(c *gin.Context) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("empty request body")
 	}
+	// Diagnostic: log the exact JSON every tracking mutation receives. This is
+	// the chokepoint for all tracking POST handlers (gym, raid, monster, ...),
+	// so enabling debug logging captures the raw payloads third-party clients
+	// like ReactMap send — useful for diffing what the UI sends against what the
+	// handler parses (e.g. a field sent under an unexpected key). Grep "tracking
+	// POST body". Debug level: off in normal operation.
+	log.Debugf("tracking POST body: %s %s %s", c.Request.Method, c.Request.URL.Path, string(data))
 	return data, nil
 }
 
