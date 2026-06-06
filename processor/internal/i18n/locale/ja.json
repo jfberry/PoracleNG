@@ -114,6 +114,7 @@
   "tracking.warn_template_not_found": "タイプ {1}/{2} のテンプレート \"{0}\" が見つかりません。追跡は保存されましたがアラートが描画されない可能性があります。",
   "tracking.id_hint": "特定の項目を削除するには id を使用してください — 例: `{0}untrack id:45` または `{0}raid remove id:12`",
   "tracking.id_hint_slash": "To remove a specific entry, run `/untrack <type>` (e.g. `/untrack raid`) and pick it from the list.",
+  "tracking.list_attached": "Your tracking list is long ({0} rules) — attached as a file.",
   "tracking.removed_prefix": "削除: ",
   "tracking.uid_not_found": "id:{0} が見つかりません",
   "tracking.override_location_fmt": "@ {0}",
