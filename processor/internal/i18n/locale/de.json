@@ -114,6 +114,7 @@
   "tracking.warn_template_not_found": "Template \"{0}\" für Typ {1}/{2} nicht gefunden. Tracking gespeichert, aber Benachrichtigungen können nicht angezeigt werden.",
   "tracking.id_hint": "Um einen bestimmten Eintrag zu entfernen, verwende seine ID - z.B. `{0}unbeobachte id:45` oder `{0}raid entfernen id:12`",
   "tracking.id_hint_slash": "Um einen bestimmten Eintrag zu entfernen, verwende `/unbeobachte <typ>` (z.B. `/unbeobachte raid`) und wähle den Typ aus der Liste.",
+  "tracking.list_attached": "Your tracking list is long ({0} rules) — attached as a file.",
   "tracking.removed_prefix": "Entfernt: ",
   "tracking.uid_not_found": "id:{0} nicht gefunden",
   "tracking.override_location_fmt": "@ {0}",
