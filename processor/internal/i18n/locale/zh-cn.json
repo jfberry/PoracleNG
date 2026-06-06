@@ -114,6 +114,7 @@
   "tracking.warn_template_not_found": "类型 {1}/{2} 找不到模板 \"{0}\"。追踪已保存但提醒可能无法渲染。",
   "tracking.id_hint": "要移除特定条目，请使用其 id — 例如 `{0}untrack id:45` 或 `{0}raid remove id:12`",
   "tracking.id_hint_slash": "To remove a specific entry, run `/untrack <type>` (e.g. `/untrack raid`) and pick it from the list.",
+  "tracking.list_attached": "Your tracking list is long ({0} rules) — attached as a file.",
   "tracking.removed_prefix": "已移除：",
   "tracking.uid_not_found": "未找到 id:{0}",
   "tracking.override_location_fmt": "@ {0}",
