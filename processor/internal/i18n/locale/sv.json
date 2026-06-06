@@ -114,6 +114,7 @@
   "tracking.warn_template_not_found": "Mall \"{0}\" hittades inte för typ {1}/{2}. Spårning sparad men aviseringar kanske inte skapas.",
   "tracking.id_hint": "För att ta bort en specifik post, använd dess id — t.ex. `{0}untrack id:45` eller `{0}raid remove id:12`",
   "tracking.id_hint_slash": "To remove a specific entry, run `/untrack <type>` (e.g. `/untrack raid`) and pick it from the list.",
+  "tracking.list_attached": "Your tracking list is long ({0} rules) — attached as a file.",
   "tracking.removed_prefix": "Borttagen: ",
   "tracking.uid_not_found": "id:{0} hittades inte",
   "tracking.override_location_fmt": "@ {0}",
