@@ -79,6 +79,7 @@ type Enricher struct {
 	RequestShinyImages bool                // Whether to request shiny icon variants
 	StaticMap          *staticmap.Resolver // Static map tile resolver (nil = disabled)
 	Geocoder           *geocoding.Geocoder // Reverse geocoder (nil = disabled)
+	Intersection       *geocoding.Intersection // Get nearest street intersection
 
 	// Fallback icon URLs when uicons are not configured or fail
 	FallbackImgURL      string
@@ -210,6 +211,13 @@ func (e *Enricher) addAddressFields(m map[string]any, addr *geocoding.Address) {
 	m["neighbourhood"] = addr.Neighbourhood
 	m["suburb"] = addr.Suburb
 	m["formattedAddress"] = addr.FormattedAddress
+}
+
+func (e *Enricher) addIntersection(m map[string]any, lat, lon float64) {
+	if e.Intersection == nil {
+		return
+	}
+	m["intersection"] = e.Intersection.GetIntersection(lat, lon)
 }
 
 // Tile mode constants. Defined here to avoid import cycles with cmd/processor.

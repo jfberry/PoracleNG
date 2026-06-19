@@ -1505,6 +1505,11 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		}
 	}
 
+	if len(cfg.Geocoding.IntersectionUsers) > 0 {
+		enricher.Intersection = geocoding.NewIntersection(cfg.Geocoding.IntersectionUsers)
+		log.Infof("GeoNames intersection lookups enabled (%d users)", len(cfg.Geocoding.IntersectionUsers))
+	}
+
 	// Stats tracker (rarity + shiny, shared rolling window)
 	statsTracker := tracker.NewStatsTracker(tracker.StatsConfig{
 		MinSampleSize:       cfg.Stats.MinSampleSize,

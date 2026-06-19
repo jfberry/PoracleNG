@@ -73,6 +73,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID, pokestopURL string, rewar
 
 	// Reverse geocoding
 	e.addGeoResult(m, lat, lon)
+	e.addIntersection(m, lat, lon)
 
 	// Static map tile
 	pending := e.addStaticMap(m, "quest", lat, lon, nil, tileMode, pokestopID)

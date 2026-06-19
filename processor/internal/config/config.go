@@ -647,6 +647,7 @@ type GeocodingConfig struct {
 	// Static map tile provider
 	StaticProvider    string `toml:"static_provider"`
 	StaticProviderURL string `toml:"static_provider_url"`
+	IntersectionUsers []string `toml:"intersection_users"`
 	// Optional private URL the processor uses for its own tileserver HTTP
 	// (render, pregenerate POST, upload-images prefetch). If unset,
 	// StaticProviderURL is used for everything. Useful when

@@ -118,6 +118,7 @@ func (e *Enricher) Raid(raid *webhook.RaidWebhook, firstNotification bool, tileM
 
 	// Reverse geocoding
 	e.addGeoResult(m, raid.Latitude, raid.Longitude)
+	e.addIntersection(m, raid.Latitude, raid.Longitude)
 
 	// Static map tile
 	pending := e.addStaticMap(m, "raid", raid.Latitude, raid.Longitude, map[string]any{

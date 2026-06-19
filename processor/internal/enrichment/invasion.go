@@ -92,6 +92,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, poke
 
 	// Reverse geocoding
 	e.addGeoResult(m, lat, lon)
+	e.addIntersection(m, lat, lon)
 
 	// Grunt and display type IDs for DTS templates
 	m["gruntTypeId"] = gruntTypeID

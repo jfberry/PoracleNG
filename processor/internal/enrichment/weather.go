@@ -40,6 +40,7 @@ func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, coords [][2]
 
 	// Reverse geocoding
 	e.addGeoResult(m, lat, lon)
+	e.addIntersection(m, lat, lon)
 
 	// Generate base weather tile (used when showAlteredPokemonStaticMap is false)
 	var pending *staticmap.TilePending
