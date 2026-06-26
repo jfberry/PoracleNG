@@ -8,12 +8,12 @@ require (
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-sql-driver/mysql v1.10.0
-	github.com/go-telegram/bot v1.20.0
+	github.com/go-telegram/bot v1.21.0
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/golang/geo v0.0.0-20260512202753-e3c51de6d1b6
 	github.com/google/uuid v1.6.0
 	github.com/guregu/null/v6 v6.0.0
-	github.com/jellydator/ttlcache/v3 v3.4.0
+	github.com/jellydator/ttlcache/v3 v3.4.1
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/kixorz/suncalc v1.0.0
 	github.com/mailgun/raymond/v2 v2.0.48
