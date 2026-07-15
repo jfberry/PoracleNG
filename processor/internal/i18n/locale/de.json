@@ -1280,5 +1280,16 @@
   "cmd.poracle_admin.warnings.startup.desc": "`startup` - nur den Startup-Puffer anzeigen (nach dem Start eingefroren)",
   "cmd.poracle_admin.warnings.recent.desc": "`recent` - nur den Rolling-Puffer anzeigen (letzte 50 Einträge)",
   "cmd.poracle_admin.warnings.clear.desc": "`clear` - Rolling-Puffer leeren",
-  "cmd.maintenance.active_suffix": "🔧 Wartungsmodus aktiv - Meldungen werden nicht ausgeliefert."
+  "cmd.maintenance.active_suffix": "🔧 Wartungsmodus aktiv - Meldungen werden nicht ausgeliefert.",
+  "showcase_focus_pokemon": "Pokémon",
+  "showcase_focus_type": "Type",
+  "showcase_focus_alignment": "Alignment",
+  "showcase_focus_class": "Class",
+  "showcase_focus_family": "Family",
+  "showcase_focus_buddy": "Buddy",
+  "showcase_focus_generation": "Generation",
+  "showcase_focus_hatched": "Hatched",
+  "showcase_focus_mega": "Mega",
+  "showcase_focus_shiny": "Shiny",
+  "showcase_class_ultra_beast": "Ultra Beast"
 }
