@@ -99,7 +99,7 @@ All three operations share one envelope shape. Fields marked *omitted when empty
 | `tracking_uids` | int[] | *Omitted when empty.* Database UIDs of the tracking rules that matched. Stable identifiers the receiver can use to offer "stop tracking this" against the v2 tracking API. |
 | `areas` | string[] | *Omitted when empty.* Geofence area names containing the alert. |
 | `media.static_map` | string | *Omitted when absent.* Public URL of a pre-generated static map tile. **Only present when a tile was generated for this render.** Poracle generates a tile only if some template in the batch references it, so a receiver that never wants tiles simply gets a template with no `{{staticMap}}` and this key never appears. |
-| `payload` | object | The rendered alert content. Shape is entirely operator-defined by the DTS template — see §1.7. Always a JSON object, never a string or array. |
+| `payload` | object | The rendered alert content, in the canonical schema of §1.7. Always a JSON object, never a string or array. |
 
 ### `op: "edit"`
 
@@ -172,11 +172,128 @@ Poracle never blocks the alert pipeline on a slow receiver; a destination that i
 
 In short: act on `delete` when it arrives; fall back to `expires_at` when it doesn't.
 
-## 1.7 Alert types and payload shape
+## 1.7 Canonical payload schema
 
-`payload` is produced by a Handlebars template that the **operator** writes, not the third party and not Poracle. The receiver and operator must agree on its shape. Poracle guarantees only that it is a valid JSON object.
+`payload` is produced by a Handlebars template. Mechanically the template is operator-owned, but **Poracle proposes the canonical schema below and the third party agrees to it** — that agreed schema is what the shipped `config/dts/api.toml` emits. An operator may add extra keys; the receiver MUST ignore keys it does not recognise. Removing or renaming a canonical key is a breaking change requiring re-agreement.
 
-The recommended convention is a shared partial that emits a common core in every alert type, with type-specific fields added around it:
+The schema is derived from Poracle's curated template-field registry, which is served live at `GET /api/dts/fields/{type}` and is the authoritative list of what is available. Every key below maps to exactly one registry field, so the mapping is auditable against a running server.
+
+### 1.7.1 Sanitisation rules
+
+The registry is filtered by these rules before becoming payload keys:
+
+| Rule | Rationale |
+|---|---|
+| Exclude fields flagged `deprecated` | They are aliases kept for legacy Discord templates (`staticmap`, `mapurl`, `applemap`, `distime`). |
+| Exclude fields flagged `rawWebhook` | Raw scanner field names (`individual_attack`, `move_1`, `gym_name`) duplicate a preferred field and follow the scanner's naming, not ours. |
+| Exclude every emoji field | `*Emoji`, `flag`, `bearingEmoji`, `emoji` are per-platform *presentation* resolved from `emoji.json`. A JSON consumer wants the underlying value. |
+| Exclude operator-instance map links | `rdmUrl`, `reactMapUrl`, `rocketMadUrl`, `diademUrl`, `wazeMapUrl`, `campfireUrl` point at whatever the operator happens to run. The receiver has the coordinates and can build its own links. |
+| Prefer machine values over formatted strings | Where the registry offers both a unix timestamp and a locale-formatted string, the timestamp is the primary key (`despawn_at`) and the formatted string is kept alongside with a `_display` suffix. |
+| Prefer English arrays for enumerable values | `types` uses the English `typeNameEng` array so the receiver can switch on it; the localised joined string is available as `types_display`. |
+| Keys are `snake_case` | Matches the envelope. The template performs the rename, so `payload.pokemon_id` comes from `{{pokemonId}}`. |
+
+### 1.7.2 Common block — present in every payload
+
+Emitted by the `apiCommon` partial. Note that latitude, longitude, `areas` and `expires_at` are **not** repeated here — they are envelope fields (§1.3). The address lives in the payload rather than the envelope because it is geocoded per language, and the payload is the language-dependent half.
+
+| Payload key | Type | Registry field |
+|---|---|---|
+| `address.formatted` | string | `addr` |
+| `address.street_number` | string | `streetNumber` |
+| `address.street_name` | string | `streetName` |
+| `address.neighbourhood` | string | `neighbourhood` |
+| `address.suburb` | string | `suburb` |
+| `address.city` | string | `city` |
+| `address.state` | string | `state` |
+| `address.postcode` | string | `zipcode` |
+| `address.country` | string | `country` |
+| `address.country_code` | string | `countryCode` |
+| `address.intersection` | string | `intersection` |
+| `icon_url` | string | `imgUrl` |
+| `map_urls.google` | string | `googleMapUrl` |
+| `map_urls.apple` | string | `appleMapUrl` |
+| `time_remaining.days` | int | `tthd` |
+| `time_remaining.hours` | int | `tthh` |
+| `time_remaining.minutes` | int | `tthm` |
+| `time_remaining.seconds` | int | `tths` |
+| `sun.sunrise_display` | string | `sunriseTime` |
+| `sun.sunset_display` | string | `sunsetTime` |
+| `sun.is_night` | bool | `isNight` |
+| `sun.is_dawn` | bool | `isDawn` |
+| `sun.is_dusk` | bool | `isDusk` |
+
+**`distance_m` and `bearing_deg` are emitted for `pokemon` and `monsterChanged` only.** Every other alert type is rendered once per `(template, platform, language)` group and shared across matching users, so no per-user value exists — the renderer's per-user enrichment layer is nil for those types. Emitting them elsewhere would produce empty values, so they are deliberately absent. The receiver can compute distance itself from the envelope's `location` and its own record of the user's position.
+
+### 1.7.3 `pokemon` (and `monsterChanged`)
+
+```json
+{
+  "pokemon_id": 25,
+  "form_id": 0,
+  "name": "Pikachu",
+  "full_name": "Pikachu",
+  "name_en": "Pikachu",
+  "form_name": "",
+  "costume_name": "",
+  "gender": "Male",
+  "generation": 1,
+  "rarity": "Common",
+  "size": "Normal",
+  "shiny_possible": true,
+  "encountered": true,
+  "iv": 100, "atk": 15, "def": 15, "sta": 15,
+  "cp": 842, "level": 25,
+  "weight": "6.42", "height": "0.42",
+  "base_stats": { "baseAttack": 112, "baseDefense": 96, "baseStamina": 111 },
+  "types": ["Electric"],
+  "types_display": "Electric",
+  "color": "#F2D94E",
+  "quick_move": "Thunder Shock", "quick_move_en": "Thunder Shock", "quick_move_id": 214,
+  "charge_move": "Wild Charge",  "charge_move_en": "Wild Charge",  "charge_move_id": 102,
+  "despawn_at": 1770001800,
+  "despawn_display": "18:30:00",
+  "despawn_verified": true,
+  "weather": { "boosted": false, "boost_name": "Rain", "current": "Clear" },
+  "pvp": { "great": [], "ultra": [], "little": [] },
+  "weaknesses": [ { "multiplier": 1.6, "types": ["Ground"] } ],
+  "pokestop_name": "Nearby Stop",
+  "distance_m": 1240,
+  "bearing_deg": 315,
+  "address": { }, "icon_url": "", "map_urls": { }, "time_remaining": { }, "sun": { }
+}
+```
+
+Registry sources: `pokemonId`, `formId`, `name`, `fullName`, `nameEng`, `formName`, `costumeName`, `genderName`, `generation`, `rarityName`, `sizeName`, `shinyPossible`, `encountered`, `iv`, `atk`, `def`, `sta`, `cp`, `level`, `weight`, `height`, `baseStats`, `typeNameEng`, `typeName`, `color`, `quickMoveName`, `quickMoveNameEng`, `quickMoveId`, `chargeMoveName`, `chargeMoveNameEng`, `chargeMoveId`, `despawnTimestamp`, `time`, `confirmedTime`, `boosted`, `boostWeatherName`, `gameWeatherName`, `pvpGreat`, `pvpUltra`, `pvpLittle`, `weaknessList`, `pokestopName`, `distance`, `bearing`.
+
+PVP entries are sanitised to: `rank`, `cp`, `level`, `cap`, `capped`, `percentage`, `pokemon_id` (`pokemon`), `form_id` (`form`), `evolution`, `name`, `full_name`, `name_en`.
+
+`monsterChanged` uses this same schema plus a `previous` object holding the pre-change values of `pokemon_id`, `form_id`, `full_name`, `gender`, `iv`, `cp`, `level` and `weather.boosted`, sourced from the renderer's `{{original.*}}` scope.
+
+### 1.7.4 Remaining types
+
+| Type | Payload keys → registry fields |
+|---|---|
+| `raid` | `level`←`level`, `level_name`←`levelName`, `boss.pokemon_id`←`pokemonId`, `boss.name`←`name`, `boss.full_name`←`fullName`, `boss.name_en`←`nameEng`, `boss.form_name`←`formName`, `boss.costume_name`←`costumeName`, `boss.types`←`typeNameEng`, `boss.color`←`color`, `boss.cp20`←`cp20`, `boss.cp25`←`cp25`, `boss.quick_move`←`quickMoveName`, `boss.charge_move`←`chargeMoveName`, `boss.shiny_possible`←`shinyPossible`, `boss.weaknesses`←`weaknessList`, `gym.name`←`gymName`, `gym.image_url`←`gymUrl`, `gym.team`←`teamName`, `gym.ex`←`ex`, `hatch_at`←`hatchTimestamp`, `end_at`←`endTimestamp`, `hatch_display`←`hatchTime`, `end_display`←`time`, `rsvps[]`←`rsvps` |
+| `egg` | `level`, `level_name`, `gym.*` (as raid), `hatch_at`←`hatchTimestamp`, `end_at`←`endTimestamp`, `hatch_display`←`time`, `rsvps[]` |
+| `rsvpChanges` | Identical to `raid`, with updated `rsvps[]`. Sent only when an `rsvpChanges` template exists; otherwise the full `raid` payload is sent. |
+| `quest` | `pokestop_name`, `quest`←`questString`, `reward`←`rewardString`, `conditions`←`conditionString`, `conditions_en`←`conditionStringEng`, `condition_list[]`←`conditionList`, `reward_detail.{dust_amount, item_name, item_amount, monster_name, monster_full_name, energy_amount, energy_monster_name, candy_amount, candy_monster_name, xl_candy_amount, xl_candy_monster_name, shiny}` |
+| `invasion` | `pokestop_name`, `grunt_name`←`gruntName`, `grunt_type`←`gruntType`, `grunt_type_name`←`gruntTypeName`, `grunt_type_id`←`gruntTypeId`, `display_type_id`←`displayTypeId`, `gender`←`genderName`, `color`←`gruntTypeColor`, `expires_display`←`time`, `rewards`←`gruntRewardsList`, `lineup[]`←`gruntLineupList` |
+| `incident` | `pokestop_name`, `pokestop_id`←`pokestopId`, `pokestop_image_url`←`pokestopUrl`, `display_type`←`displayType`, `incident_type_name`←`incidentTypeName`, `color`, `expires_display`←`disappearTime`. For Showcase incidents, additionally `showcase.{present, total_entries, last_update, focus_type, focus_category, focus_name, entries[]}` ← `showcasePresent`, `showcaseTotalEntries`, `showcaseLastUpdate`, `showcaseFocusType`, `showcaseFocusCategory`, `showcaseFocusName`, `showcase` |
+| `lure` | `pokestop_name`, `lure_type_id`←`lureTypeId`, `lure_type_name`←`lureTypeName`, `color`←`lureTypeColor`, `expires_display`←`time` |
+| `nest` | `nest_name`←`nest_name`, `pokemon_id`←`pokemonId`, `name`, `full_name`←`fullName`, `name_en`←`nameEng`, `form_name`←`formName`, `types`←`typeNameEng`, `color`, `spawn_avg`←`pokemonSpawnAvg`, `pokemon_count`←`pokemonCount`, `shiny_possible`←`shinyPossible` |
+| `gym` | `gym_name`←`gymName`, `image_url`←`gymUrl`, `team`←`teamName`, `old_team`←`oldTeamName`, `slots_available`←`slotsAvailable`, `old_slots_available`←`oldSlotsAvailable`, `in_battle`←`inBattle`, `ex`, `color`←`gymColor`, `previous_control_name`←`previousControlName` |
+| `fort` | `fort_id`←`id`, `fort_type`←`fortType`, `name`, `change_type`←`changeType`, `change_type_text`←`changeTypeText`, `edit_types[]`←`editTypesList`, `is_edit_name`, `is_edit_location`, `is_edit_image`, `is_empty`←`isEmpty`, `new_name`, `old_name`, `new_description`, `old_description`, `new_image_url`, `old_image_url` |
+| `maxbattle` | `pokemon_id`←`pokemonId`, `name`, `full_name`←`fullName`, `costume_name`←`costumeName`, `level`, `gmax`, `pokestop_name`, `types`←`typeNameEng`, `color`, `quick_move`←`quickMoveName`, `charge_move`←`chargeMoveName`, `end_at`←`endTimestamp`, `end_display`←`time`, `total_stationed`←`totalStationedPokemon`, `total_stationed_gmax`←`totalStationedGmax` |
+| `weatherchange` | `weather`←`weatherName`, `old_weather`←`oldWeatherName`, `change_in.{hours, minutes, seconds}`←`weatherTthh`/`weatherTthm`/`weatherTths`, `affected_pokemon[]`←`enrichedActivePokemons` |
+| `questSummary` | A digest, not a single alert. `reward` (the group descriptor, as `quest.reward`) plus `entries[]` of `{pokestop_name, latitude, longitude, expires_at}`. The envelope's `location` and `media.static_map` refer to the multi-pin overview. Exact entry shape to be confirmed against the summary renderer during implementation. |
+
+### 1.7.5 Template selection
+
+A destination only receives types it has tracking rules for.
+
+If the operator has not written an `api` template for a type, template selection falls back only to entries with `platform = ""` (the platform wildcard). **An `api` destination will never be sent a Discord- or Telegram-specific template**, so it can never receive Discord embed markup or Telegram MarkdownV2. If neither an `api` nor a wildcard entry exists for the type, no message is sent.
+
+The shipped file looks like this — the rename from registry field to payload key happens in the template, which is what makes the canonical schema auditable:
 
 ```toml
 # config/dts/api.toml
@@ -188,38 +305,22 @@ id = "default"
 template = """
 {
   {{> apiCommon}},
-  "pokemon_id": {{pokemon_id}},
+  "pokemon_id": {{pokemonId}},
+  "form_id": {{formId}},
   "name": "{{name}}",
+  "full_name": "{{fullName}}",
+  "name_en": "{{nameEng}}",
   "iv": {{iv}},
   "cp": {{cp}},
   "level": {{level}},
-  "gender": {{gender}}
-}
-"""
-
-[[entry]]
-type = "raid"
-platform = "api"
-id = "default"
-template = """
-{
-  {{> apiCommon}},
-  "level": {{level}},
-  "boss": "{{name}}",
-  "gym_name": "{{gymName}}",
-  "start": {{start}},
-  "end": {{end}}
+  "despawn_at": {{despawnTimestamp}},
+  "despawn_display": "{{time}}",
+  "despawn_verified": {{confirmedTime}},
+  "distance_m": {{distance}},
+  "bearing_deg": {{bearing}}
 }
 """
 ```
-
-Alert types Poracle will send, matching the DTS type names:
-
-`pokemon` · `monsterChanged` · `raid` · `egg` · `rsvpChanges` · `quest` · `questSummary` · `invasion` · `incident` · `lure` · `nest` · `gym` · `fort` · `maxbattle` · `weatherchange`
-
-A destination only receives types it has tracking rules for.
-
-If the operator has not written an `api` template for a type, template selection falls back only to entries with `platform = ""` (the platform wildcard). **An `api` destination will never be sent a Discord- or Telegram-specific template**, so it can never receive Discord embed markup or Telegram MarkdownV2. If neither an `api` nor a wildcard entry exists for the type, no message is sent.
 
 ## 1.8 Managing destinations
 
@@ -405,7 +506,15 @@ Reply chaining reuses the existing machinery unchanged: `Job.ReplyKey` is alread
 
 ## 2.7 Rendering
 
-`config/dts/api.toml` ships one `[[entry]]` per alert type with `platform = "api"`, plus an `apiCommon` partial in `config/partials.json` providing the shared core fields. This satisfies "one file, consistent body" while keeping the standard selection chain intact — per-type overrides, per-language variants and `template:X` on a tracking rule all continue to work.
+`config/dts/api.toml` ships one `[[entry]]` per alert type with `platform = "api"`, plus an `apiCommon` partial in `config/partials.json` providing the common block of §1.7.2. This satisfies "one file, consistent body" while keeping the standard selection chain intact — per-type overrides, per-language variants and `template:X` on a tracking rule all continue to work.
+
+These templates are **the canonical payload schema of §1.7 in executable form** — they are authored by us and agreed with the receiver, not left to the operator. They are shipped as user entries under `config/dts/`, not as readonly fallbacks, so an operator who needs an extra field can add one without patching the binary; the agreement is that canonical keys are not removed or renamed.
+
+**Field selection is derived from `internal/api/dts_fields.go`**, the curated registry already served at `GET /api/dts/fields/{type}`, filtered by the §1.7.1 rules (drop `deprecated`, drop `rawWebhook`, drop emoji, drop operator-instance map links, prefer timestamps over formatted strings). Building the templates by hand from that registry — rather than emitting the registry programmatically — keeps the wire schema stable when the registry gains fields.
+
+**Per-user fields are pokemon-only.** `Renderer.renderForUsers` delegates to `renderGrouped` whenever `perUserEnrichment == nil`, which is every type except pokemon and monsterChanged. `renderGrouped` populates the per-user layer with `userDistanceTrack` alone, so `{{distance}}` and `{{bearing}}` resolve to nothing in grouped renders. The api templates therefore emit `distance_m` / `bearing_deg` only for pokemon and monsterChanged, as documented in §1.7.2.
+
+> Note: `CLAUDE.md` currently states that in group rendering "only per-user fields (distance, bearing) are patched afterwards". No such patching exists in `renderGrouped` — the group key merely includes `distanceTrack`. That line should be corrected as part of this work.
 
 One behavioural exception: **`ping` is not appended for platform `api`.** A Discord mention string is meaningless in a JSON payload and would corrupt it. The renderer's ping-append step is skipped when the resolved platform is `api`.
 
@@ -418,6 +527,8 @@ Render output that is not valid JSON is dropped with a warning, matching current
 - Rate-limit test: `api:user` draws `dm_limit`, `api:channel` draws `channel_limit`.
 - Tile-mode test: an api-only batch whose template omits `{{staticMap}}` yields `TileModeSkip`; a mixed batch with a Discord template that uses it yields a URL and the api envelope carries `media.static_map`.
 - Type-validation tests on both create endpoints.
+- **Payload schema conformance**: a golden test that renders every shipped `api` template against the existing `testdata.json` fixtures and asserts the output validates against a JSON Schema generated from §1.7. This is what stops a future enrichment change from silently breaking the third party's contract, and it fails loudly if a canonical key is renamed or dropped.
+- A test asserting `distance_m` / `bearing_deg` appear in the pokemon payload and are absent from a grouped type (e.g. raid), pinning the `renderGrouped` behaviour documented in §2.7.
 - Regenerate `api/testdata/openapi.golden.json`.
 - End-to-end: `!poracle-test pokemon,<id>` against an `api:user` destination, with `log_only = true`, produces a well-formed envelope in the log.
 
