@@ -174,7 +174,7 @@ In short: act on `delete` when it arrives; fall back to `expires_at` when it doe
 
 ## 1.7 Canonical payload schema
 
-`payload` is produced by a Handlebars template. Mechanically the template is operator-owned, but **Poracle proposes the canonical schema below and the third party agrees to it** — that agreed schema is what the shipped `config/dts/api.toml` emits. An operator may add extra keys; the receiver MUST ignore keys it does not recognise. Removing or renaming a canonical key is a breaking change requiring re-agreement.
+`payload` is produced by a Handlebars template. **Poracle proposes the canonical schema below and the receiver agrees to it**; that agreed schema is then shipped as a self-contained partner template pack (§1.7.5) which operators install as a single file. An operator may add extra keys, so the receiver MUST ignore keys it does not recognise. Removing or renaming a canonical key is a breaking change requiring re-agreement.
 
 The schema is derived from Poracle's curated template-field registry, which is served live at `GET /api/dts/fields/{type}` and is the authoritative list of what is available. Every key below maps to exactly one registry field, so the mapping is auditable against a running server.
 
@@ -194,7 +194,7 @@ The registry is filtered by these rules before becoming payload keys:
 
 ### 1.7.2 Common block — present in every payload
 
-Emitted by the `apiCommon` partial. Note that latitude, longitude, `areas` and `expires_at` are **not** repeated here — they are envelope fields (§1.3). The address lives in the payload rather than the envelope because it is geocoded per language, and the payload is the language-dependent half.
+Repeated inline in every entry — see §1.7.5 for why there is no partial. Note that latitude, longitude, `areas` and `expires_at` are **not** repeated here — they are envelope fields (§1.3). The address lives in the payload rather than the envelope because it is geocoded per language, and the payload is the language-dependent half.
 
 | Payload key | Type | Registry field |
 |---|---|---|
@@ -222,7 +222,12 @@ Emitted by the `apiCommon` partial. Note that latitude, longitude, `areas` and `
 | `sun.is_dawn` | bool | `isDawn` |
 | `sun.is_dusk` | bool | `isDusk` |
 
-**`distance_m` and `bearing_deg` are emitted for `pokemon` and `monsterChanged` only.** Every other alert type is rendered once per `(template, platform, language)` group and shared across matching users, so no per-user value exists — the renderer's per-user enrichment layer is nil for those types. Emitting them elsewhere would produce empty values, so they are deliberately absent. The receiver can compute distance itself from the envelope's `location` and its own record of the user's position.
+| `distance_m` | int | `distance` |
+| `bearing_deg` | int | `bearing` |
+
+`distance_m` is the metres between the alert and the user's effective location anchor (per-rule override → profile location → account default); `bearing_deg` is the compass bearing from that anchor, `0` = north. Both are `0` for destinations tracking by area rather than distance.
+
+> **Depends on a prerequisite fix.** Today the renderer only surfaces these two fields for pokemon alerts; every other type is group-rendered and the per-user values, though computed by the matcher, never reach the template. That is a pre-existing defect affecting Discord and Telegram equally, and is fixed separately before this work — see `2026-07-19-per-user-distance-bearing-design.md`. This schema assumes the fix has landed.
 
 ### 1.7.3 `pokemon` (and `monsterChanged`)
 
@@ -287,40 +292,93 @@ PVP entries are sanitised to: `rank`, `cp`, `level`, `cap`, `capped`, `percentag
 | `weatherchange` | `weather`←`weatherName`, `old_weather`←`oldWeatherName`, `change_in.{hours, minutes, seconds}`←`weatherTthh`/`weatherTthm`/`weatherTths`, `affected_pokemon[]`←`enrichedActivePokemons` |
 | `questSummary` | A digest, not a single alert. `reward` (the group descriptor, as `quest.reward`) plus `entries[]` of `{pokestop_name, latitude, longitude, expires_at}`. The envelope's `location` and `media.static_map` refer to the multi-pin overview. Exact entry shape to be confirmed against the summary renderer during implementation. |
 
-### 1.7.5 Template selection
+### 1.7.5 The partner template pack
 
-A destination only receives types it has tracking rules for.
+Each partner integration is distributed as **one self-contained file** containing one `[[entry]]` per alert type. The first is Diadem:
 
-If the operator has not written an `api` template for a type, template selection falls back only to entries with `platform = ""` (the platform wildcard). **An `api` destination will never be sent a Discord- or Telegram-specific template**, so it can never receive Discord embed markup or Telegram MarkdownV2. If neither an `api` nor a wildcard entry exists for the type, no message is sent.
+```
+fallbacks/dts/diadem.toml     # shipped with Poracle, readonly
+config/dts/diadem.toml        # operator's copy, overrides the shipped one
+```
 
-The shipped file looks like this — the rename from registry field to payload key happens in the template, which is what makes the canonical schema auditable:
+**Self-contained means no partials.** DTS partials are loaded from a single global `config/partials.json`, so a partner pack could not ship its own without merging into a file the operator also owns. The common block of §1.7.2 is therefore repeated verbatim in every entry. That is the deliberate cost of a single drop-in artefact: once the schema is agreed, the file can be handed to any operator, or shipped in `fallbacks/`, with no other installation step and no dependency on anything else in their config.
+
+**Partner identity is the template ID.** Entries use `platform = "api"` with `id = "diadem"`. The operator points api destinations at the pack with `[api_delivery] template = "diadem"`; a second partner ships `id = "partnerB"` and coexists in the same install without collision. Because DTS selection already keys on `(type, platform, id, language)`, this needs no new mechanism — and a per-rule `template:diadem` still works for anyone who wants it per tracking rule.
+
+**Overriding.** Shipped packs are readonly. Template selection runs user entries first and falls back to readonly entries only if nothing matched, so an operator who needs an extra field copies `fallbacks/dts/diadem.toml` to `config/dts/` and edits it there — the same pattern the bundled help and info templates already use.
+
+**Authoring rule — guard every numeric interpolation.** A field with no value renders as an empty string, so a bare `"cp": {{cp}}` produces `"cp": ` and invalid JSON. The renderer detects this (`json.Valid`) and substitutes a fallback message, meaning the receiver silently gets the wrong body. Numeric fields must be written `"cp": {{#if cp}}{{cp}}{{else}}0{{/if}}` or equivalent. This matters most for `iv`/`cp`/`level` on unencountered pokemon and for `distance_m`/`bearing_deg`.
+
+A complete entry, showing the inline common block:
 
 ```toml
-# config/dts/api.toml
+# fallbacks/dts/diadem.toml
 
 [[entry]]
 type = "pokemon"
 platform = "api"
-id = "default"
+id = "diadem"
 template = """
 {
-  {{> apiCommon}},
   "pokemon_id": {{pokemonId}},
-  "form_id": {{formId}},
+  "form_id": {{#if formId}}{{formId}}{{else}}0{{/if}},
   "name": "{{name}}",
   "full_name": "{{fullName}}",
   "name_en": "{{nameEng}}",
-  "iv": {{iv}},
-  "cp": {{cp}},
-  "level": {{level}},
+  "form_name": "{{formName}}",
+  "costume_name": "{{costumeName}}",
+  "gender": "{{genderName}}",
+  "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}},
+  "encountered": {{#if encountered}}true{{else}}false{{/if}},
+  "iv": {{#if iv}}{{iv}}{{else}}null{{/if}},
+  "cp": {{#if cp}}{{cp}}{{else}}null{{/if}},
+  "level": {{#if level}}{{level}}{{else}}null{{/if}},
+  "types": [{{#each typeNameEng}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}],
+  "color": "{{color}}",
   "despawn_at": {{despawnTimestamp}},
   "despawn_display": "{{time}}",
-  "despawn_verified": {{confirmedTime}},
-  "distance_m": {{distance}},
-  "bearing_deg": {{bearing}}
+  "despawn_verified": {{#if confirmedTime}}true{{else}}false{{/if}},
+  "distance_m": {{#if distance}}{{distance}}{{else}}0{{/if}},
+  "bearing_deg": {{#if bearing}}{{bearing}}{{else}}0{{/if}},
+  "address": {
+    "formatted": "{{addr}}",
+    "street_number": "{{streetNumber}}",
+    "street_name": "{{streetName}}",
+    "neighbourhood": "{{neighbourhood}}",
+    "suburb": "{{suburb}}",
+    "city": "{{city}}",
+    "state": "{{state}}",
+    "postcode": "{{zipcode}}",
+    "country": "{{country}}",
+    "country_code": "{{countryCode}}",
+    "intersection": "{{intersection}}"
+  },
+  "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "time_remaining": {
+    "days": {{#if tthd}}{{tthd}}{{else}}0{{/if}},
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}},
+    "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}",
+    "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
 }
 """
 ```
+
+Unencountered pokemon emit `null` for `iv`/`cp`/`level` rather than `0`, so the receiver can distinguish "not scanned" from "genuinely zero".
+
+### 1.7.6 Template selection
+
+A destination only receives types it has tracking rules for.
+
+If no `api` entry exists for a type, template selection falls back only to entries with `platform = ""` (the platform wildcard). **An `api` destination will never be sent a Discord- or Telegram-specific template**, so it can never receive Discord embed markup or Telegram MarkdownV2. If neither an `api` nor a wildcard entry exists for the type, no message is sent.
 
 ## 1.8 Managing destinations
 
@@ -417,6 +475,7 @@ endpoint      = "https://third.party/poracle"
 secret        = "s3cr3t"
 secret_header = "X-Poracle-Secret"   # e.g. "Authorization"
 secret_prefix = ""                    # e.g. "Bearer "
+template      = "diadem"              # DTS template id for the partner pack
 timeout_ms    = 10000
 max_retries   = 3
 concurrency   = 4
@@ -467,6 +526,8 @@ Derived from a full audit of platform/type branching.
 | 7 | `store/human.go` (new) | Add `ValidHumanTypes` allow-list and enforce it in v1 `POST /api/humans` and v2 `POST /api/v2/humans`, returning `422`. See §2.5. |
 | 8 | `config/config.go`, `config/toml_encode.go:25`, `api/config_values.go:274` | New `[api_delivery]` section, section ordering, and the `api_delivery_` prefix nesting for the config editor. |
 | 9 | `api/testdata/openapi.golden.json` | Regenerate; the human `type` doc strings enumerate the known types. |
+| 10 | `dts/templates.go:194` | The `fallbacks/dts/` walker matches `.json` only. Extend to `.toml` through the existing TOML loader so partner packs ship as readable TOML. |
+| 11 | `dts/renderer.go` `ResolveTemplate` | Takes a platform argument; an empty rule template resolves to `[api_delivery] template` for `api` destinations instead of `[general] default_template_name`. Callers in `cmd/processor/tilemode.go:34` and the render paths update accordingly. |
 
 ## 2.4 Existing behaviour that already does the right thing
 
@@ -506,15 +567,23 @@ Reply chaining reuses the existing machinery unchanged: `Job.ReplyKey` is alread
 
 ## 2.7 Rendering
 
-`config/dts/api.toml` ships one `[[entry]]` per alert type with `platform = "api"`, plus an `apiCommon` partial in `config/partials.json` providing the common block of §1.7.2. This satisfies "one file, consistent body" while keeping the standard selection chain intact — per-type overrides, per-language variants and `template:X` on a tracking rule all continue to work.
+`fallbacks/dts/diadem.toml` ships one `[[entry]]` per alert type with `platform = "api"` and `id = "diadem"`. This satisfies "one file, consistent body" while keeping the standard selection chain intact — per-language variants and `template:X` on a tracking rule continue to work.
 
-These templates are **the canonical payload schema of §1.7 in executable form** — they are authored by us and agreed with the receiver, not left to the operator. They are shipped as user entries under `config/dts/`, not as readonly fallbacks, so an operator who needs an extra field can add one without patching the binary; the agreement is that canonical keys are not removed or renamed.
+These templates are **the canonical payload schema of §1.7 in executable form** — authored by us and agreed with the receiver, not left to the operator.
 
-**Field selection is derived from `internal/api/dts_fields.go`**, the curated registry already served at `GET /api/dts/fields/{type}`, filtered by the §1.7.1 rules (drop `deprecated`, drop `rawWebhook`, drop emoji, drop operator-instance map links, prefer timestamps over formatted strings). Building the templates by hand from that registry — rather than emitting the registry programmatically — keeps the wire schema stable when the registry gains fields.
+**Shipped as a readonly fallback, not a config file.** `LoadTemplates` already walks `fallbacks/dts/` and marks everything readonly (`templates.go:192`), and the two-pass selection prefers user entries, so an operator who needs an extra field copies the file into `config/dts/` and edits it there. This is the same distribution model the bundled help and info templates already use, and it means a Poracle upgrade ships schema updates automatically to operators who haven't customised.
 
-**Per-user fields are pokemon-only.** `Renderer.renderForUsers` delegates to `renderGrouped` whenever `perUserEnrichment == nil`, which is every type except pokemon and monsterChanged. `renderGrouped` populates the per-user layer with `userDistanceTrack` alone, so `{{distance}}` and `{{bearing}}` resolve to nothing in grouped renders. The api templates therefore emit `distance_m` / `bearing_deg` only for pokemon and monsterChanged, as documented in §1.7.2.
+**One loader change needed:** the `fallbacks/dts/` walker accepts `.json` only (`templates.go:194`), while `config/dts/` takes both `.json` and `.toml`. Extend the fallback walker to `.toml` via the existing TOML loader, so the partner pack can be authored with readable `"""` multi-line bodies and so the copy-to-`config/dts/` path is format-symmetric.
 
-> Note: `CLAUDE.md` currently states that in group rendering "only per-user fields (distance, bearing) are patched afterwards". No such patching exists in `renderGrouped` — the group key merely includes `distanceTrack`. That line should be corrected as part of this work.
+**No partials.** DTS partials load from a single global `config/partials.json`, so a partner pack cannot ship one without merging into a file the operator also owns. The common block of §1.7.2 is repeated verbatim in all fifteen entries. The schema conformance test in §2.8 is what catches drift between the copies — that is the mitigation for the duplication, and it is why the test is not optional.
+
+**Partner identity is the template ID.** `id = "diadem"`, selected via `[api_delivery] template = "diadem"`. A second partner ships `id = "partnerB"` and coexists. This reuses the existing `(type, platform, id, language)` selection key rather than inventing a mechanism, and composes with the reserved named-endpoint syntax of §2.1.
+
+**Template resolution needs a per-platform default.** Tracking rules store an empty template and the renderer resolves it to `[general] default_template_name`. That default names a Discord template. `ResolveTemplate` gains a platform argument so `api` destinations resolve an empty rule template to `[api_delivery] template` instead.
+
+**Field selection is derived from `internal/api/dts_fields.go`**, the curated registry served at `GET /api/dts/fields/{type}`, filtered by the §1.7.1 rules. Building the templates by hand from that registry — rather than emitting it programmatically — keeps the wire schema stable when the registry gains fields.
+
+**Numeric guards are mandatory.** An absent field renders as an empty string, so a bare `"cp": {{cp}}` yields invalid JSON; the renderer's `json.Valid` check then substitutes the fallback message and the receiver silently gets the wrong body. Every numeric interpolation in the pack is guarded (§1.7.5).
 
 One behavioural exception: **`ping` is not appended for platform `api`.** A Discord mention string is meaningless in a JSON payload and would corrupt it. The renderer's ping-append step is skipped when the resolved platform is `api`.
 
@@ -527,8 +596,10 @@ Render output that is not valid JSON is dropped with a warning, matching current
 - Rate-limit test: `api:user` draws `dm_limit`, `api:channel` draws `channel_limit`.
 - Tile-mode test: an api-only batch whose template omits `{{staticMap}}` yields `TileModeSkip`; a mixed batch with a Discord template that uses it yields a URL and the api envelope carries `media.static_map`.
 - Type-validation tests on both create endpoints.
-- **Payload schema conformance**: a golden test that renders every shipped `api` template against the existing `testdata.json` fixtures and asserts the output validates against a JSON Schema generated from §1.7. This is what stops a future enrichment change from silently breaking the third party's contract, and it fails loudly if a canonical key is renamed or dropped.
-- A test asserting `distance_m` / `bearing_deg` appear in the pokemon payload and are absent from a grouped type (e.g. raid), pinning the `renderGrouped` behaviour documented in §2.7.
+- **Payload schema conformance**: a golden test that renders every entry in the shipped partner pack against the existing `testdata.json` fixtures and asserts the output validates against a JSON Schema generated from §1.7. This does three jobs: it stops a future enrichment change from silently breaking the receiver's contract, it fails loudly if a canonical key is renamed or dropped, and — because the common block is duplicated across fifteen entries with no partial — it is the only thing that catches drift between those copies.
+- A rendering test per entry asserting valid JSON when every optional field is absent (unencountered pokemon, no geocoding, no PVP data), pinning the numeric-guard requirement of §1.7.5. An unguarded interpolation is invisible until a sparse webhook arrives in production.
+- A test that `[api_delivery] template` is what an empty rule template resolves to for `api` destinations, and that `[general] default_template_name` still wins for Discord and Telegram.
+- Fallback loader test: a `.toml` file in `fallbacks/dts/` loads, is marked readonly, and is overridden by a same-`(type, platform, id, language)` entry in `config/dts/`.
 - Regenerate `api/testdata/openapi.golden.json`.
 - End-to-end: `!poracle-test pokemon,<id>` against an `api:user` destination, with `log_only = true`, produces a well-formed envelope in the log.
 
