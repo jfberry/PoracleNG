@@ -16,6 +16,8 @@ Two destination types exist: `api:user` and `api:channel`. They behave exactly l
 
 # Part 1 — Receiver Specification
 
+> **Canonical hand-off document:** the self-contained receiver contract is [docs/api-delivery-receiver-spec.md](../../api-delivery-receiver-spec.md). Part 1 below is retained as design context; the standalone doc is what a partner implements against. Keep the two in sync — the envelope and response tables must match.
+
 This part is the contract. A receiver that implements it correctly will work with PoracleNG without further coordination.
 
 ## 1.1 Endpoint
