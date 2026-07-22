@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,7 +42,11 @@ type APISender struct {
 	rlMu         sync.Mutex
 	backoffUntil time.Time
 	nowFunc      func() time.Time // injectable for tests; nil → time.Now
+
+	retryBaseDur time.Duration // per-attempt backoff multiplier; NewAPISender defaults to 500ms, tests set 0
 }
+
+var _ Sender = (*APISender)(nil)
 
 // NewAPISender constructs an APISender. Timeout/MaxRetries fall back to sane
 // values if unset so tests and misconfigurations don't hang or spin.
@@ -55,8 +61,9 @@ func NewAPISender(cfg APIConfig) *APISender {
 		cfg.MaxRetries = 0
 	}
 	return &APISender{
-		cfg:    cfg,
-		client: &http.Client{Timeout: time.Duration(cfg.TimeoutMs) * time.Millisecond},
+		cfg:          cfg,
+		client:       &http.Client{Timeout: time.Duration(cfg.TimeoutMs) * time.Millisecond},
+		retryBaseDur: 500 * time.Millisecond,
 	}
 }
 
@@ -65,6 +72,13 @@ func (s *APISender) now() time.Time {
 		return s.nowFunc()
 	}
 	return time.Now()
+}
+
+// retryBase returns the per-attempt backoff multiplier. NewAPISender seeds
+// this to 500ms; tests set it to 0 (via newAPISenderForTest) so retry loops
+// don't actually sleep.
+func (s *APISender) retryBase() time.Duration {
+	return s.retryBaseDur
 }
 
 // Platform identifies the sender.
@@ -153,6 +167,55 @@ func (s *APISender) Send(ctx context.Context, job *Job) (*SentMessage, error) {
 	return &SentMessage{ID: sentID}, nil
 }
 
+// --- Edit / Delete ------------------------------------------------------------
+
+// splitAPISentID parses "<dest>:<messageID>[:<providerID>]".
+func splitAPISentID(sentID string) (dest, messageID, providerID string) {
+	parts := strings.SplitN(sentID, ":", 3)
+	switch len(parts) {
+	case 3:
+		return parts[0], parts[1], parts[2]
+	case 2:
+		return parts[0], parts[1], ""
+	default:
+		return sentID, "", ""
+	}
+}
+
+// Edit POSTs an op:"edit" replacement. revision stays 0 in this plan
+// (monotonic revision is a follow-up); the receiver keys on message_id.
+func (s *APISender) Edit(ctx context.Context, sentID string, message json.RawMessage, _ []byte) error {
+	dest, messageID, providerID := splitAPISentID(sentID)
+	env := apiEnvelope{
+		Version:           apiEnvelopeVersion,
+		Op:                "edit",
+		MessageID:         messageID,
+		Revision:          0,
+		SentAt:            s.now().Unix(),
+		Destination:       apiDestination{ID: dest},
+		ProviderMessageID: providerID,
+		Payload:           json.RawMessage(message),
+	}
+	_, err := s.do(ctx, env, "edit")
+	return err
+}
+
+// Delete POSTs an op:"delete". A 404 is treated as success (already gone).
+func (s *APISender) Delete(ctx context.Context, sentID string) error {
+	dest, messageID, providerID := splitAPISentID(sentID)
+	env := apiEnvelope{
+		Version:           apiEnvelopeVersion,
+		Op:                "delete",
+		MessageID:         messageID,
+		Revision:          0,
+		SentAt:            s.now().Unix(),
+		Destination:       apiDestination{ID: dest},
+		ProviderMessageID: providerID,
+	}
+	_, err := s.do(ctx, env, "delete")
+	return err
+}
+
 // WaitForRateLimit blocks until any backoff learned from a prior 429 elapses.
 // Called before the platform semaphore is acquired (Sender interface contract).
 func (s *APISender) WaitForRateLimit(target string) {
@@ -162,7 +225,7 @@ func (s *APISender) WaitForRateLimit(target string) {
 	if until.IsZero() {
 		return
 	}
-	if d := time.Until(until); d > 0 {
+	if d := until.Sub(s.now()); d > 0 {
 		time.Sleep(d)
 	}
 }
@@ -174,8 +237,14 @@ type apiResponse struct {
 
 var providerIDRe = regexp.MustCompile(`^[A-Za-z0-9._~-]{1,128}$`)
 
-// do POSTs the envelope. Task 3 stub: happy-path + basic non-2xx handling.
-// Task 4 replaces this with full retry/backoff/status classification.
+// do POSTs the envelope with retry/backoff and status classification.
+//
+// Return contract (matches FairQueue.processJob expectations):
+//   - 2xx                → (*apiResponse, nil)
+//   - 404/410            → (nil, *PermanentError)   [counts → auto-disable]; but for op=="delete", 404 → (&apiResponse{}, nil) (already gone)
+//   - 401/403/other 4xx  → (nil, nil)               [drop, do NOT count]
+//   - 429                → honour Retry-After, retry up to MaxRetries
+//   - 5xx / network      → backoff retry up to MaxRetries, then (nil, error) [counts]
 func (s *APISender) do(ctx context.Context, env apiEnvelope, op string) (*apiResponse, error) {
 	body, err := json.Marshal(env)
 	if err != nil {
@@ -185,26 +254,78 @@ func (s *APISender) do(ctx context.Context, env apiEnvelope, op string) (*apiRes
 		log.Infof("api-delivery[log_only]: %s %s", op, string(body))
 		return &apiResponse{}, nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.Endpoint, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set(s.cfg.SecretHeader, s.cfg.SecretPrefix+s.cfg.Secret)
-	req.Header.Set("X-Poracle-Op", op)
-	req.Header.Set("X-Poracle-Message-Id", env.MessageID)
-	req.Header.Set("User-Agent", "PoracleNG/"+s.cfg.Version)
 
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt <= s.cfg.MaxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * s.retryBase())
+		}
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.Endpoint, bytes.NewReader(body))
+		if rerr != nil {
+			return nil, rerr
+		}
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
+		req.Header.Set(s.cfg.SecretHeader, s.cfg.SecretPrefix+s.cfg.Secret)
+		req.Header.Set("X-Poracle-Op", op)
+		req.Header.Set("X-Poracle-Message-Id", env.MessageID)
+		req.Header.Set("User-Agent", "PoracleNG/"+s.cfg.Version)
+
+		resp, derr := s.client.Do(req)
+		if derr != nil {
+			lastErr = derr
+			continue // transient: retry
+		}
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+		retryAfter := resp.Header.Get("Retry-After")
+		status := resp.StatusCode
+		resp.Body.Close()
+
+		switch {
+		case status >= 200 && status < 300:
+			return &apiResponse{providerID: parseProviderID(respBody)}, nil
+		case status == http.StatusNotFound || status == http.StatusGone:
+			if op == "delete" {
+				return &apiResponse{}, nil // already gone → success
+			}
+			return nil, &PermanentError{Err: fmt.Errorf("api endpoint %d", status), Reason: fmt.Sprintf("destination gone (%d)", status)}
+		case status == http.StatusTooManyRequests:
+			s.applyBackoff(retryAfter)
+			lastErr = fmt.Errorf("api endpoint 429")
+			continue
+		case status >= 400 && status < 500:
+			// 401/403/other 4xx: log and drop WITHOUT counting a failure.
+			log.Errorf("api-delivery: %s dropped, endpoint returned %d (check secret/payload): %s", op, status, truncateForLog(respBody))
+			return nil, nil
+		default: // 5xx
+			lastErr = fmt.Errorf("api endpoint %d", status)
+			continue
+		}
 	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return &apiResponse{providerID: parseProviderID(respBody)}, nil
+	if lastErr == nil {
+		lastErr = fmt.Errorf("api endpoint: retries exhausted")
 	}
-	return nil, fmt.Errorf("api endpoint returned %d", resp.StatusCode)
+	return nil, lastErr
+}
+
+// applyBackoff records a Retry-After deadline so WaitForRateLimit can honour it.
+func (s *APISender) applyBackoff(retryAfter string) {
+	d := 1 * time.Second
+	if retryAfter != "" {
+		if secs, err := strconv.Atoi(strings.TrimSpace(retryAfter)); err == nil && secs > 0 {
+			d = time.Duration(secs) * time.Second
+		}
+	}
+	s.rlMu.Lock()
+	s.backoffUntil = s.now().Add(d)
+	s.rlMu.Unlock()
+}
+
+func truncateForLog(b []byte) string {
+	const max = 300
+	if len(b) > max {
+		return string(b[:max]) + "…"
+	}
+	return string(b)
 }
 
 // parseProviderID extracts a colon-free {"id":...} from a 2xx response body.
