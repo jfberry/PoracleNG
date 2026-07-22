@@ -804,6 +804,71 @@ func TestRenderAlertNoDeduplication(t *testing.T) {
 	}
 }
 
+func TestRenderAlertPerUserDistance(t *testing.T) {
+	entries := []DTSEntry{
+		{Type: "raid", ID: "1", Platform: "discord", Default: true,
+			Template: map[string]any{"content": "{{gymName}} {{distance}}m"}},
+	}
+	r := newTestRenderer(t, entries)
+
+	enrichment := map[string]any{
+		"gymName":   "Gym A",
+		"latitude":  1.0,
+		"longitude": 2.0,
+		"tth":       map[string]any{"totalSeconds": 600},
+	}
+	users := []webhook.MatchedUser{
+		{ID: "u1", Type: "discord:user", Template: "1", Language: "en", Distance: 500, Bearing: 90, CardinalDirection: "east", TrackDistance: 1000},
+		{ID: "u2", Type: "discord:user", Template: "1", Language: "en", Distance: 1200, Bearing: 270, CardinalDirection: "west", TrackDistance: 2000},
+	}
+
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "ref", "")
+	if len(jobs) != 2 {
+		t.Fatalf("expected 2 jobs, got %d", len(jobs))
+	}
+	got := map[string]string{}
+	for _, j := range jobs {
+		msg := parseMessage(t, j.Message)
+		got[j.Target], _ = msg["content"].(string)
+	}
+	if got["u1"] != "Gym A 500m" {
+		t.Errorf("u1 content = %q, want %q", got["u1"], "Gym A 500m")
+	}
+	if got["u2"] != "Gym A 1200m" {
+		t.Errorf("u2 content = %q, want %q", got["u2"], "Gym A 1200m")
+	}
+}
+
+func TestRenderAlertGroupedWithoutDistance(t *testing.T) {
+	entries := []DTSEntry{
+		{Type: "raid", ID: "1", Platform: "discord", Default: true,
+			Template: map[string]any{"content": "{{gymName}} raid"}},
+	}
+	r := newTestRenderer(t, entries)
+
+	enrichment := map[string]any{
+		"gymName":   "Gym A",
+		"latitude":  1.0,
+		"longitude": 2.0,
+		"tth":       map[string]any{"totalSeconds": 600},
+	}
+	users := []webhook.MatchedUser{
+		{ID: "u1", Type: "discord:user", Template: "1", Language: "en", Distance: 500},
+		{ID: "u2", Type: "discord:user", Template: "1", Language: "en", Distance: 1200},
+	}
+
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "ref", "")
+	if len(jobs) != 2 {
+		t.Fatalf("expected 2 jobs, got %d", len(jobs))
+	}
+	for _, j := range jobs {
+		msg := parseMessage(t, j.Message)
+		if c, _ := msg["content"].(string); c != "Gym A raid" {
+			t.Errorf("target %s content = %q, want %q", j.Target, c, "Gym A raid")
+		}
+	}
+}
+
 // parseMessage unmarshals a json.RawMessage into map[string]any for test assertions.
 func parseMessage(t *testing.T, raw json.RawMessage) map[string]any {
 	t.Helper()

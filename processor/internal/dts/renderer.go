@@ -330,6 +330,27 @@ func (r *Renderer) isBelowMinAlertTime(enrichment map[string]any) bool {
 // renderForUsers is the shared rendering loop that produces DeliveryJobs for each user.
 // The original parameter (nil for non-change renders) is the prior-sighting snapshot
 // installed onto each LayeredView so templates can reference {{original.X}}.
+// positionalPerUser builds a per-user enrichment map carrying only the
+// location-relative fields the matcher computes for every alert type.
+// Unlike enrichment.PokemonPerUser it has no PVP dependency, so it applies
+// to raids, quests, invasions and every other grouped type. Key names
+// mirror PokemonPerUser exactly (internal/enrichment/peruser.go:58-64) so
+// the LayeredView resolves {{distance}}, {{bearing}} and {{bearingEmoji}}
+// identically on both paths.
+func positionalPerUser(users []webhook.MatchedUser) map[string]map[string]any {
+	m := make(map[string]map[string]any, len(users))
+	for _, u := range users {
+		m[u.ID] = map[string]any{
+			"distance":          u.Distance,
+			"bearing":           u.Bearing,
+			"bearingEmojiKey":   u.CardinalDirection,
+			"userDistanceTrack": u.TrackDistance > 0,
+			"userTrackDistance": u.TrackDistance,
+		}
+	}
+	return m
+}
+
 func (r *Renderer) renderForUsers(
 	templateType string,
 	enrichment map[string]any,
@@ -357,7 +378,34 @@ func (r *Renderer) renderForUsers(
 	// enrichment, users with the same (template, platform, language) get identical
 	// rendered output. Render once per group and clone the result.
 	if perUserEnrichment == nil {
-		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, original, users, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)
+		// Split users by whether their resolved (template, platform,
+		// language) references per-user positional fields. Templates that
+		// don't (the common case) keep the group-render fast path;
+		// templates that do render per-user so {{distance}}/{{bearing}}
+		// resolve to each user's own value.
+		var groupedUsers, perUserUsers []webhook.MatchedUser
+		for _, user := range users {
+			platform := delivery.PlatformFromType(user.Type)
+			language := user.Language
+			if language == "" {
+				language = r.locale
+			}
+			templateID := r.resolveTemplate(user.Template)
+			if r.templates.UsesPerUserFields(templateType, platform, templateID, language) {
+				perUserUsers = append(perUserUsers, user)
+			} else {
+				groupedUsers = append(groupedUsers, user)
+			}
+		}
+
+		var jobs []webhook.DeliveryJob
+		if len(groupedUsers) > 0 {
+			jobs = append(jobs, r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, original, groupedUsers, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)...)
+		}
+		if len(perUserUsers) > 0 {
+			jobs = append(jobs, r.renderPerUser(templateType, enrichment, perLangEnrichment, positionalPerUser(perUserUsers), webhookFields, original, perUserUsers, areas, logReference, editKeyBase, tthMap, lat, lon, shlinkCache)...)
+		}
+		return jobs
 	}
 
 	return r.renderPerUser(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, original, users, areas, logReference, editKeyBase, tthMap, lat, lon, shlinkCache)
