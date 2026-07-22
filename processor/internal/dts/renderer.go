@@ -327,9 +327,6 @@ func (r *Renderer) isBelowMinAlertTime(enrichment map[string]any) bool {
 	return r.minAlertSec > 0 && tthSeconds > 0 && tthSeconds < r.minAlertSec
 }
 
-// renderForUsers is the shared rendering loop that produces DeliveryJobs for each user.
-// The original parameter (nil for non-change renders) is the prior-sighting snapshot
-// installed onto each LayeredView so templates can reference {{original.X}}.
 // positionalPerUser builds a per-user enrichment map carrying only the
 // location-relative fields the matcher computes for every alert type.
 // Unlike enrichment.PokemonPerUser it has no PVP dependency, so it applies
@@ -351,6 +348,9 @@ func positionalPerUser(users []webhook.MatchedUser) map[string]map[string]any {
 	return m
 }
 
+// renderForUsers is the shared rendering loop that produces DeliveryJobs for each user.
+// The original parameter (nil for non-change renders) is the prior-sighting snapshot
+// installed onto each LayeredView so templates can reference {{original.X}}.
 func (r *Renderer) renderForUsers(
 	templateType string,
 	enrichment map[string]any,
