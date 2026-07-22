@@ -218,11 +218,14 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 			var defaultTemplateID string
 			if ps.dtsRenderer != nil {
 				ts = ps.dtsRenderer.Templates()
-				// ResolveTemplate("") returns the configured default template
-				// name (e.g. "1" or "default"). Passing "" mirrors the logic
-				// the renderer uses when a user's tracking rule has no explicit
-				// template set.
-				defaultTemplateID = ps.dtsRenderer.ResolveTemplate("")
+				// ResolveTemplate("", "") returns the configured default
+				// template name (e.g. "1" or "default"). Passing an empty
+				// platform mirrors the pre-api-delivery behavior: this
+				// defaultTemplateID is a single value shared across all
+				// matched users (of any platform) inside partitionRaidUsers,
+				// so it can't reflect a per-platform (e.g. api) default —
+				// only the [general] default_template_name applies here.
+				defaultTemplateID = ps.dtsRenderer.ResolveTemplate("", "")
 			}
 			var lookupReply func(string, string) *delivery.TrackedMessage
 			if ps.dispatcher != nil {

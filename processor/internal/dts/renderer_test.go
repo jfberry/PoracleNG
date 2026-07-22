@@ -635,6 +635,28 @@ func TestRenderAlertBasicRaid(t *testing.T) {
 	}
 }
 
+func TestRenderAlertAPINoPing(t *testing.T) {
+	entries := []DTSEntry{
+		{Type: "raid", ID: "default", Platform: "api",
+			Template: map[string]any{"gym": "{{gymName}}"}},
+	}
+	r := newTestRenderer(t, entries)
+	enrichment := map[string]any{"gymName": "Gym A", "latitude": 1.0, "longitude": 2.0, "tth": map[string]any{"totalSeconds": 600}}
+	users := []webhook.MatchedUser{
+		{ID: "u-1", Type: "api:user", Template: "default", Language: "en", Ping: "<@123>"},
+	}
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "ref", "")
+	if len(jobs) != 1 {
+		t.Fatalf("want 1 job, got %d", len(jobs))
+	}
+	// Ping must NOT be appended for api destinations — the message stays valid JSON with no mention.
+	msg := parseMessage(t, jobs[0].Message)
+	if _, hasContent := msg["content"]; hasContent {
+		// appendPingToRaw writes into "content"; api output must be untouched.
+		t.Errorf("api job should not have ping-injected content: %v", msg)
+	}
+}
+
 func TestRenderAlertNoPerLangEnrichment(t *testing.T) {
 	// Fort updates have no per-language enrichment
 	entries := []DTSEntry{

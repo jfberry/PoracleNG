@@ -39,16 +39,17 @@ type RendererConfig struct {
 // Renderer ties together templates, enrichment, emoji, and URL shortening
 // to produce DeliveryJobs from matched webhook data.
 type Renderer struct {
-	templates       *TemplateStore
-	viewBuilder     *ViewBuilder
-	shortener       *ShlinkShortener // nil if not configured
-	gd              *gamedata.GameData
-	bundle          *i18n.Bundle
-	emoji           *EmojiLookup
-	locale          string
-	defaultTemplate string // config default_template_name, used when tracking has no explicit template
-	altLanguage     string
-	minAlertSec     int
+	templates          *TemplateStore
+	viewBuilder        *ViewBuilder
+	shortener          *ShlinkShortener // nil if not configured
+	gd                 *gamedata.GameData
+	bundle             *i18n.Bundle
+	emoji              *EmojiLookup
+	locale             string
+	defaultTemplate    string // config default_template_name, used when tracking has no explicit template
+	apiDefaultTemplate string // config [api_delivery] template; used to resolve empty template for api destinations
+	altLanguage        string
+	minAlertSec        int
 
 	// errorNoticer is an optional callback the renderer fires when a
 	// template render fails (per-user, per-group, or by template panic).
@@ -82,6 +83,10 @@ type Renderer struct {
 func (r *Renderer) SetButtonsEnabled(v bool) {
 	r.buttonsEnabled = v
 }
+
+// SetAPIDefaultTemplate records the [api_delivery] template id used to resolve
+// an empty tracking-rule template for api destinations.
+func (r *Renderer) SetAPIDefaultTemplate(id string) { r.apiDefaultTemplate = id }
 
 // SetAdminRecipientCheck wires the host's admin-list predicate. The
 // renderer calls it for each DM destination to decide whether
@@ -175,25 +180,29 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 
 // resolveTemplate returns the template ID to use for DTS lookup.
 // If the tracking rule has no explicit template (empty string), the
-// configured default_template_name is used first. If that is also empty,
-// an empty string is returned which causes Get() to fall through to
-// the DTS entry marked as default.
-func (r *Renderer) resolveTemplate(trackingTemplate string) string {
+// configured default_template_name is used first — except for api
+// destinations, which prefer the [api_delivery] default template when one
+// is configured. If that is also empty, an empty string is returned which
+// causes Get() to fall through to the DTS entry marked as default.
+func (r *Renderer) resolveTemplate(platform, trackingTemplate string) string {
 	if trackingTemplate != "" {
 		return trackingTemplate
+	}
+	if platform == "api" && r.apiDefaultTemplate != "" {
+		return r.apiDefaultTemplate
 	}
 	return r.defaultTemplate
 }
 
 // ResolveTemplate returns the template ID to use, applying the default if empty.
-func (r *Renderer) ResolveTemplate(trackingTemplate string) string {
-	return r.resolveTemplate(trackingTemplate)
+func (r *Renderer) ResolveTemplate(platform, trackingTemplate string) string {
+	return r.resolveTemplate(platform, trackingTemplate)
 }
 
 // CheckTemplate validates that a template can be found for the given parameters.
 // Returns nil if a template exists, or an error describing what's missing.
 func (r *Renderer) CheckTemplate(templateType, platform, templateID, language string) error {
-	resolvedID := r.resolveTemplate(templateID)
+	resolvedID := r.resolveTemplate(platform, templateID)
 	tmpl := r.templates.Get(templateType, platform, resolvedID, language)
 	if tmpl != nil {
 		return nil
@@ -390,7 +399,7 @@ func (r *Renderer) renderForUsers(
 			if language == "" {
 				language = r.locale
 			}
-			templateID := r.resolveTemplate(user.Template)
+			templateID := r.resolveTemplate(platform, user.Template)
 			if r.templates.UsesPerUserFields(templateType, platform, templateID, language) {
 				perUserUsers = append(perUserUsers, user)
 			} else {
@@ -457,7 +466,7 @@ func (r *Renderer) renderPerUser(
 		view.original = original
 
 		// f. Get template (with monsterNoIv -> monster fallback)
-		templateID := r.resolveTemplate(user.Template)
+		templateID := r.resolveTemplate(platform, user.Template)
 		tmpl := r.templates.Get(templateType, platform, templateID, language)
 		if tmpl == nil && templateType == "monsterNoIv" {
 			tmpl = r.templates.Get("monster", platform, templateID, language)
@@ -504,7 +513,7 @@ func (r *Renderer) renderPerUser(
 		}
 
 		// Append ping to content
-		if user.Ping != "" {
+		if user.Ping != "" && platform != "api" {
 			rawMessage = appendPingToRaw(rawMessage, user.Ping)
 		}
 
@@ -631,7 +640,7 @@ func (r *Renderer) renderGrouped(
 			language = r.locale
 		}
 		key := renderGroupKey{
-			templateID:    r.resolveTemplate(user.Template),
+			templateID:    r.resolveTemplate(platform, user.Template),
 			platform:      platform,
 			language:      language,
 			distanceTrack: user.TrackDistance > 0,
@@ -705,7 +714,7 @@ func (r *Renderer) renderGrouped(
 			// json.RawMessage is a []byte — shared safely when no ping.
 			// For users with a ping, parse+modify+re-serialize.
 			userMessage := rawMessage
-			if user.Ping != "" {
+			if user.Ping != "" && key.platform != "api" {
 				userMessage = appendPingToRaw(rawMessage, user.Ping)
 			}
 

@@ -28,18 +28,18 @@ func (ps *ProcessorService) tileMode(templateType string, matched []webhook.Matc
 	var anyNeedsTile, anyNeedsURL, anyDiscordUpload bool
 
 	for _, u := range matched {
+		platform := delivery.PlatformFromType(u.Type)
+
 		// Resolve the template ID the same way the renderer does
 		tmplID := u.Template
 		if tmplID == "" {
-			tmplID = ps.dtsRenderer.ResolveTemplate("")
+			tmplID = ps.dtsRenderer.ResolveTemplate(platform, "")
 		}
 
 		lang := u.Language
 		if lang == "" {
 			lang = ps.cfg.General.Locale
 		}
-
-		platform := delivery.PlatformFromType(u.Type)
 
 		if !ts.UsesTile(templateType, platform, tmplID, lang) {
 			continue // this user's template doesn't use staticMap

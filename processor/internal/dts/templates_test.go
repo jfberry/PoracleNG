@@ -621,6 +621,28 @@ func TestFallbackDtsSubdir(t *testing.T) {
 	}
 }
 
+func TestFallbackTomlPackLoads(t *testing.T) {
+	configDir := t.TempDir()
+	fallbackDir := t.TempDir()
+	// minimal dts.json so LoadTemplates has a source
+	writeTestDTS(t, configDir, []DTSEntry{{Type: "raid", ID: "default", Platform: "discord", Template: map[string]any{"c": "x"}}})
+	// a .toml pack in fallbacks/dts/
+	if err := os.MkdirAll(filepath.Join(fallbackDir, "dts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	toml := "[[entry]]\ntype = \"raid\"\nplatform = \"api\"\nid = \"default\"\ntemplate = \"\"\"{\"gym\":\"{{gymName}}\"}\"\"\"\n"
+	if err := os.WriteFile(filepath.Join(fallbackDir, "dts", "api.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts, err := LoadTemplates(configDir, fallbackDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tmpl := ts.Get("raid", "api", "default", "en"); tmpl == nil {
+		t.Error("expected the fallback api.toml raid/api/default template to load")
+	}
+}
+
 func TestSourceUsesPerUserFields(t *testing.T) {
 	cases := []struct {
 		name string

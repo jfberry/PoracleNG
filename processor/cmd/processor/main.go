@@ -1691,6 +1691,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		dtsRenderer = nil
 		dtsInitErr = err
 	} else {
+		dtsRenderer.SetAPIDefaultTemplate(cfg.APIDelivery.Template)
 		dtsRenderer.Templates().LogSummary()
 	}
 

@@ -210,6 +210,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				StaticMapData: tileBytesForMessage(j.Message, job.TileImageData, tileURL),
 				Language:      j.Language,
 				Template:      j.TemplateRequested,
+				TemplateID:    j.TemplateSelected,
 				SnapshotData:  ps.buildSnapshot(job, j, tth),
 			})
 		}

@@ -188,32 +188,49 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 		entries = append(entries, fallbackEntries...)
 	}
 
-	// 1b. Load fallback dts/**/*.json (readonly — bundled help, info,
-	// info sub-topic files; kept out of the monolithic fallbacks/dts.json
-	// so each topic is one small file that operators can copy verbatim
-	// into config/dts/ to customise).
+	// 1b. Load fallback dts/**/*.{json,toml} (readonly — bundled help,
+	// info, info sub-topic files, and platform packs like the api DTS
+	// pack; kept out of the monolithic fallbacks/dts.json so each topic
+	// is one small file that operators can copy verbatim into
+	// config/dts/ to customise).
 	fallbackDtsDir := filepath.Join(fallbackDir, "dts")
 	filepath.WalkDir(fallbackDtsDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".json") {
+		if err != nil || d.IsDir() {
 			return nil
 		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			log.Warnf("dts: failed to read %s: %s", path, err)
-			return nil
+		switch {
+		case strings.HasSuffix(path, ".json"):
+			data, err := os.ReadFile(path)
+			if err != nil {
+				log.Warnf("dts: failed to read %s: %s", path, err)
+				return nil
+			}
+			var extraEntries []DTSEntry
+			if err := json.Unmarshal(data, &extraEntries); err != nil {
+				log.Warnf("dts: failed to parse %s: %s", path, err)
+				return nil
+			}
+			for i := range extraEntries {
+				extraEntries[i].sourceFile = path
+				extraEntries[i].sourceFormat = SourceFormatJSON
+				extraEntries[i].Readonly = true
+			}
+			entries = append(entries, extraEntries...)
+			log.Debugf("dts: loaded %d fallback entries from %s", len(extraEntries), path)
+		case strings.HasSuffix(path, ".toml"):
+			tomlEntries, terr := loadTOMLFile(path)
+			if terr != nil {
+				log.Warnf("dts: failed to parse %s: %s", path, terr)
+				return nil
+			}
+			for i := range tomlEntries {
+				tomlEntries[i].sourceFile = path
+				tomlEntries[i].sourceFormat = SourceFormatTOML
+				tomlEntries[i].Readonly = true
+			}
+			entries = append(entries, tomlEntries...)
+			log.Debugf("dts: loaded %d fallback entries from %s (toml)", len(tomlEntries), path)
 		}
-		var extraEntries []DTSEntry
-		if err := json.Unmarshal(data, &extraEntries); err != nil {
-			log.Warnf("dts: failed to parse %s: %s", path, err)
-			return nil
-		}
-		for i := range extraEntries {
-			extraEntries[i].sourceFile = path
-			extraEntries[i].sourceFormat = SourceFormatJSON
-			extraEntries[i].Readonly = true
-		}
-		entries = append(entries, extraEntries...)
-		log.Debugf("dts: loaded %d fallback entries from %s", len(extraEntries), path)
 		return nil
 	})
 
