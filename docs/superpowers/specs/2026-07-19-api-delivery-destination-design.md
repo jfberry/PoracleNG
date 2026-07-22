@@ -48,7 +48,7 @@ All three operations share one envelope shape. Fields marked *omitted when empty
 {
   "version": 1,
   "op": "send",
-  "message_id": "01JQ8ZK3M4N5P6Q7R8S9T0V1W2",
+  "message_id": "7c9e6a1f-4b2d-4c8a-9f3e-1a2b3c4d5e6f",
   "revision": 0,
   "sent_at": 1770000000,
   "alert_type": "pokemon",
@@ -62,7 +62,7 @@ All three operations share one envelope shape. Fields marked *omitted when empty
   "location": { "lat": 51.5074, "lon": -0.1278 },
   "expires_at": 1770001800,
   "lifecycle": { "clean": true, "editable": false },
-  "in_reply_to": "01JQ8ZJ9X8Y7Z6W5V4U3T2S1R0",
+  "in_reply_to": "a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
   "tracking_uids": [45, 46],
   "areas": ["london", "city"],
   "media": { "static_map": "https://tiles.example/abc.png" },
@@ -82,7 +82,7 @@ All three operations share one envelope shape. Fields marked *omitted when empty
 |---|---|---|
 | `version` | int | Envelope version. `1` for this specification. Incremented only for breaking changes; additive fields do not bump it. Receivers MUST reject unknown major versions rather than guess. |
 | `op` | string | `send` \| `edit` \| `delete`. |
-| `message_id` | string | Poracle-minted ULID identifying the **logical message**, not the request. Constant across the original send, every subsequent edit, and the eventual delete. Matches `^[0-9A-HJKMNP-TV-Z]{26}$` and is therefore always colon-free. |
+| `message_id` | string | Poracle-minted UUIDv4 identifying the **logical message**, not the request. Constant across the original send, every subsequent edit, and the eventual delete. Matches `^[0-9a-f-]{36}$` (lowercase hex + hyphens) and is therefore always colon-free. |
 | `revision` | int | Monotonically increasing per logical message: `0` for the send, `1`, `2`, … for each edit, and the delete carries the revision after the last edit. Together with `message_id` it forms the idempotency key — see §1.5. |
 | `sent_at` | int | Unix seconds at which Poracle issued the request. |
 | `alert_type` | string | One of the DTS alert types — see §1.7. |
@@ -117,7 +117,7 @@ Identical to `send`, plus:
 {
   "version": 1,
   "op": "delete",
-  "message_id": "01JQ8ZK3M4N5P6Q7R8S9T0V1W2",
+  "message_id": "7c9e6a1f-4b2d-4c8a-9f3e-1a2b3c4d5e6f",
   "revision": 1,
   "provider_message_id": "abc123",
   "sent_at": 1770001800,
@@ -411,10 +411,10 @@ POST /poracle HTTP/1.1
 Host: third.party
 X-Poracle-Secret: s3cr3t
 X-Poracle-Op: send
-X-Poracle-Message-Id: 01JQ8ZK3M4N5P6Q7R8S9T0V1W2
+X-Poracle-Message-Id: 7c9e6a1f-4b2d-4c8a-9f3e-1a2b3c4d5e6f
 Content-Type: application/json
 
-{"version":1,"op":"send","message_id":"01JQ8ZK3M4N5P6Q7R8S9T0V1W2","revision":0,
+{"version":1,"op":"send","message_id":"7c9e6a1f-4b2d-4c8a-9f3e-1a2b3c4d5e6f","revision":0,
  "sent_at":1770000000,"alert_type":"pokemon","template_id":"default",
  "destination":{"id":"u-42","type":"api:user","name":"James","language":"en"},
  "location":{"lat":51.5074,"lon":-0.1278},
@@ -437,9 +437,9 @@ Content-Type: application/json
 ```http
 POST /poracle HTTP/1.1
 X-Poracle-Op: delete
-X-Poracle-Message-Id: 01JQ8ZK3M4N5P6Q7R8S9T0V1W2
+X-Poracle-Message-Id: 7c9e6a1f-4b2d-4c8a-9f3e-1a2b3c4d5e6f
 
-{"version":1,"op":"delete","message_id":"01JQ8ZK3M4N5P6Q7R8S9T0V1W2","revision":0,
+{"version":1,"op":"delete","message_id":"7c9e6a1f-4b2d-4c8a-9f3e-1a2b3c4d5e6f","revision":0,
  "provider_message_id":"abc123","sent_at":1770001800,
  "destination":{"id":"u-42","type":"api:user","name":"James","language":"en"}}
 ```
@@ -559,7 +559,7 @@ This is a targeted fix to a real gap the new destination type exposes, not gener
 
 `MessageTracker.SentID` for `api` is `<destinationID>:<messageID>[:<providerID>]`, deliberately mirroring Discord's `<rateLimitKey>:<messageID>`.
 
-All three components are guaranteed colon-free — `destinationID` by §2.5 validation, `messageID` by the ULID alphabet, `providerID` by the §1.4 response validation. This means `splitSentID` (which splits on the *last* colon) and `ExtractMessageIDForSnapshot` keep working without a platform-specific branch: they yield the provider ID when one exists and the Poracle message ID otherwise, which is exactly what an addressing key should be.
+All three components are guaranteed colon-free — `destinationID` by §2.5 validation, `messageID` by the UUID hex-and-hyphen alphabet, `providerID` by the §1.4 response validation. This means `splitSentID` (which splits on the *last* colon) and `ExtractMessageIDForSnapshot` keep working without a platform-specific branch: they yield the provider ID when one exists and the Poracle message ID otherwise, which is exactly what an addressing key should be.
 
 Embedding the destination ID is what lets `Sender.Delete(ctx, sentID)` — which receives no `Job` and therefore no target — reconstruct the `destination` block for the delete envelope.
 
