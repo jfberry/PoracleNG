@@ -4,6 +4,8 @@ package store
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
 
 	"github.com/guregu/null/v6"
 )
@@ -20,6 +22,35 @@ var ErrDuplicateLocation = errors.New("duplicate location label")
 // telegram:channel, telegram:group). LookupWebhookByName resolves against
 // exactly this set. Keep in sync with the apply.go named-target query.
 var NamedTargetTypes = []string{"webhook", "discord:channel", "telegram:channel", "telegram:group"}
+
+// ValidHumanTypes is the canonical allow-list of human destination types.
+// Human.type is a free-form varchar in the DB, but create endpoints validate
+// against this set so a typo (e.g. "api:users") can't produce a human whose
+// jobs are silently dropped at delivery for having no registered sender.
+var ValidHumanTypes = []string{
+	"discord:user", "discord:channel", "discord:thread",
+	"telegram:user", "telegram:group", "telegram:channel", "telegram:topic",
+	"webhook", "api:user", "api:channel",
+}
+
+var apiDestinationIDRe = regexp.MustCompile(`^[A-Za-z0-9._~-]{1,128}$`)
+
+// ValidateHumanType returns an error if t is not a known destination type.
+func ValidateHumanType(t string) error {
+	for _, v := range ValidHumanTypes {
+		if t == v {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid human type %q", t)
+}
+
+// ValidAPIDestinationID reports whether id is a legal api:* destination ID.
+// api SentIDs are composed as "<id>:<messageID>:<providerID>", so the ID must
+// be colon-free (and bounded); the charset matches the envelope spec §1.3.
+func ValidAPIDestinationID(id string) bool {
+	return apiDestinationIDRe.MatchString(id)
+}
 
 // ErrLocationNotFound is returned by UpdateLocation when no saved location with
 // the given label exists for the human (so no row was updated). Callers should
