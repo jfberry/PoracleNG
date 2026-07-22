@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,6 +39,8 @@ type APIConfig struct {
 type APISender struct {
 	cfg    APIConfig
 	client *http.Client
+
+	inFly atomic.Int64 // wire calls currently in flight (for [Status]/depth reporting)
 
 	rlMu         sync.Mutex
 	backoffUntil time.Time
@@ -80,6 +83,9 @@ func (s *APISender) now() time.Time {
 func (s *APISender) retryBase() time.Duration {
 	return s.retryBaseDur
 }
+
+// APIInFlight reports current concurrent wire calls (for the [Status] log).
+func (s *APISender) APIInFlight() int { return int(s.inFly.Load()) }
 
 // Platform identifies the sender.
 func (s *APISender) Platform() string { return "api" }
@@ -270,7 +276,9 @@ func (s *APISender) do(ctx context.Context, env apiEnvelope, op string) (*apiRes
 		req.Header.Set("X-Poracle-Message-Id", env.MessageID)
 		req.Header.Set("User-Agent", "PoracleNG/"+s.cfg.Version)
 
+		s.inFly.Add(1)
 		resp, derr := s.client.Do(req)
+		s.inFly.Add(-1)
 		if derr != nil {
 			lastErr = derr
 			continue // transient: retry

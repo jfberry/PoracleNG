@@ -41,6 +41,7 @@ type QueueConfig struct {
 	ConcurrentDiscord  int
 	ConcurrentWebhook  int
 	ConcurrentTelegram int
+	ConcurrentAPI      int
 	FailThreshold      int // consecutive failures before disabling (0 = default 10)
 	// PerRouteBuffer is the buffered capacity of each destination's lane
 	// (from [tuning] delivery_queue_size). <=0 defaults to 200.
@@ -571,6 +572,15 @@ func (fq *FairQueue) WebhookDepth() int {
 func (fq *FairQueue) TelegramDepth() int {
 	if ts, ok := fq.senders["telegram"].(*TelegramSender); ok {
 		return ts.TelegramInFlight()
+	}
+	return 0
+}
+
+// APIDepth returns api wire calls in flight (sender-level counter, matching
+// the Discord/Telegram pattern under per-destination lanes).
+func (fq *FairQueue) APIDepth() int {
+	if as, ok := fq.senders["api"].(*APISender); ok {
+		return as.APIInFlight()
 	}
 	return 0
 }
