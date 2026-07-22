@@ -36,3 +36,6 @@ backups/
 .idea/
 **/.idea/
 *.iml
+
+# Claude Code worktrees
+.claude/worktrees/
