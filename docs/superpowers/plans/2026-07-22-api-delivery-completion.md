@@ -16,7 +16,7 @@
   - `revision` stays **reserved (always 0)** — the "apply every edit" idempotency model is already correct; do NOT implement monotonic revision.
   - The static map URL lives in the **payload** (`static_map` in the common block), NOT an envelope `media` field. There is no envelope `media` field; remove it from the spec.
   - Envelope gains `tracking_uids`, `areas`, `in_reply_to` (all `omitempty`, never `null`).
-- The canonical pack is `fallbacks/dts/api.toml`, entries `platform = "api"`, `id = "default"` (matches the `[api_delivery] template` default of `"default"`). It is a readonly fallback; operators copy it into `config/dts/` to customise.
+- **Partner-named packs from the start.** The reference partner pack is `fallbacks/dts/diadem.toml`, entries `platform = "api"`, `id = "diadem"`, selected via `[api_delivery] template = "diadem"` — which becomes the shipped config default (changed from `"default"`). A second partner ships `fallbacks/dts/<partner>.toml` with `id = "<partner>"` and the operator sets `template = "<partner>"`; DTS selection already keys on `id`, so no other mechanism is needed. Packs are readonly fallbacks; operators copy one into `config/dts/` to customise. This replaces the 2-type starter `fallbacks/dts/api.toml`/`id="default"` shipped by the core plan (delete it).
 - Numeric interpolations MUST be guarded so a sparse webhook yields valid JSON. For the unencountered `iv = -1` sentinel, use `{{#if (gte iv 0)}}{{iv}}{{else}}null{{/if}}` (the `-1` is truthy under a bare `{{#if iv}}`).
 - Canonical payload schema is design doc `docs/superpowers/specs/2026-07-19-api-delivery-destination-design.md` §1.7 (common block §1.7.2, pokemon §1.7.3, all types §1.7.4). That table is the authoritative field list the pack transcribes.
 
@@ -26,7 +26,11 @@
 - Modify: `processor/internal/delivery/api.go` — emit `tracking_uids`/`areas`/`in_reply_to`.
 - Modify: `processor/cmd/processor/render.go` — populate the two new Job fields.
 - Modify: `processor/internal/delivery/api_test.go` — envelope-field tests.
-- Modify: `fallbacks/dts/api.toml` — all 15 alert-type entries.
+- Rename+rewrite: `fallbacks/dts/api.toml` → `fallbacks/dts/diadem.toml` — all 15 alert-type entries, `id="diadem"`.
+- Modify: `processor/internal/config/config.go` — `[api_delivery] template` default `"default"` → `"diadem"`.
+- Modify: `processor/internal/config/config_test.go` — `TestAPIDeliveryDefaults` expects `"diadem"`.
+- Modify: `processor/internal/dts/api_render_test.go` — `TestAPIStarterPackSparsePokemonValidJSON` loads `diadem.toml`, template `"diadem"`.
+- Modify: `config/config.example.toml` — `template` comment shows `"diadem"`.
 - Create: `processor/internal/dts/api_pack_conformance_test.go` — per-type render + canonical-key conformance.
 - Modify: `docs/api-delivery-receiver-spec.md`, `docs/superpowers/specs/2026-07-19-api-delivery-destination-design.md` — re-sync.
 - Modify: `processor/internal/delivery/dispatcher.go` — remove dead `APIConcurrency` field.
@@ -182,30 +186,63 @@ git commit -m "feat(delivery): emit tracking_uids/areas/in_reply_to in api envel
 
 ---
 
-### Task 2: Full 15-type canonical payload pack
+### Task 2: Full 15-type partner pack (`diadem.toml`)
 
-Replace the 2-type starter `fallbacks/dts/api.toml` with all 15 alert types, transcribing design doc §1.7. Each entry inlines the common block (§1.7.2) and adds the type-specific fields (§1.7.3/§1.7.4). No partials (self-contained pack). Every numeric interpolation guarded.
+Replace the 2-type starter `fallbacks/dts/api.toml` with a partner-named pack `fallbacks/dts/diadem.toml` (`id="diadem"`) covering all 15 alert types, transcribing design doc §1.7. Each entry inlines the common block (§1.7.2) and adds the type-specific fields (§1.7.3/§1.7.4). No partials (self-contained pack). Every numeric interpolation guarded.
 
 **Files:**
-- Modify: `fallbacks/dts/api.toml`
+- Delete: `fallbacks/dts/api.toml`; Create: `fallbacks/dts/diadem.toml`
+- Modify: `processor/internal/config/config.go`, `processor/internal/config/config_test.go`, `processor/internal/dts/api_render_test.go`, `config/config.example.toml`
 
 **Interfaces:**
-- Produces: `platform="api"`, `id="default"` entries for: `pokemon`, `monsterChanged`, `raid`, `egg`, `rsvpChanges`, `quest`, `questSummary`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`, `weatherchange`. Consumed/validated by Task 3.
+- Produces: `platform="api"`, `id="diadem"` entries for: `pokemon`, `monsterChanged`, `raid`, `egg`, `rsvpChanges`, `quest`, `questSummary`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`, `weatherchange`. Consumed/validated by Task 3.
+
+- [ ] **Step 0a: Change the shipped default template to `"diadem"`**
+
+In `processor/internal/config/config.go`, `applyAPIDeliveryDefaults`, change the template default:
+
+```go
+	if cfg.APIDelivery.Template == "" {
+		cfg.APIDelivery.Template = "diadem"
+	}
+```
+
+In `processor/internal/config/config_test.go`, update `TestAPIDeliveryDefaults`'s assertion:
+
+```go
+	if cfg.APIDelivery.Template != "diadem" {
+		t.Errorf("Template default = %q, want diadem", cfg.APIDelivery.Template)
+	}
+```
+
+In `config/config.example.toml`, change the commented template line under `[api_delivery]` to show the partner id:
+
+```toml
+# template      = "diadem"                         # partner pack id (fallbacks/dts/<partner>.toml)
+```
+
+- [ ] **Step 0b: Rename the shipped starter and repoint its test**
+
+`git rm fallbacks/dts/api.toml` (the core plan's 2-type starter). The new `fallbacks/dts/diadem.toml` is created below.
+
+In `processor/internal/dts/api_render_test.go`, `TestAPIStarterPackSparsePokemonValidJSON` loads the shipped file and renders with template `"default"`. Repoint it: load `fallbacks/dts/diadem.toml` (same `fallbacks` fallbackDir; the walker finds `diadem.toml`) and render the pokemon entry with `Template: "diadem"` via `ts.Get("pokemon", "api", "diadem", "en")` / a user with `Template: "diadem"`. Keep the assertion (valid JSON with fields absent). Rename the test to `TestDiademPackSparsePokemonValidJSON` if you like; either way it must load the real `diadem.toml`.
 
 - [ ] **Step 1: Write the common-block-bearing pokemon and raid entries**
+
+All entries use `id = "diadem"`. Use these two as the pattern (`id="diadem"`):
 
 Use exactly these two entries as the pattern. The common block (address / static_map / icon_url / map_urls / time_remaining / sun) is inlined; `static_map` in the payload triggers tile generation via `UsesTile`.
 
 ```toml
-# Canonical api-platform payload pack (id="default"). Self-contained: the
-# common block is repeated inline in every entry (no partials). Numeric
-# interpolations are guarded so a sparse webhook yields valid JSON.
+# Diadem partner pack (id="diadem"). Self-contained: the common block is
+# repeated inline in every entry (no partials). Numeric interpolations are
+# guarded so a sparse webhook yields valid JSON.
 # Payload schema: docs/superpowers/specs/2026-07-19-api-delivery-destination-design.md §1.7.
 
 [[entry]]
 type = "pokemon"
 platform = "api"
-id = "default"
+id = "diadem"
 template = """
 {
   "pokemon_id": {{#if pokemonId}}{{pokemonId}}{{else}}0{{/if}},
@@ -262,7 +299,7 @@ template = """
 [[entry]]
 type = "raid"
 platform = "api"
-id = "default"
+id = "diadem"
 template = """
 {
   "level": {{#if level}}{{level}}{{else}}0{{/if}},
@@ -302,7 +339,7 @@ template = """
 
 - [ ] **Step 2: Add the remaining entries per §1.7.4**
 
-Add one `[[entry]]` (`platform="api"`, `id="default"`) for each remaining type, transcribing its payload-key ← registry-field row from design doc **§1.7.4** and applying the guard rules (string fields `"{{x}}"`, bool `{{#if x}}true{{else}}false{{/if}}`, numeric `{{#if x}}{{x}}{{else}}0{{/if}}`, arrays via the `{{#each}}…{{#unless @last}},{{/unless}}` pattern). Include the common block (address/static_map/icon_url/map_urls/time_remaining/sun) where the type has a location:
+Add one `[[entry]]` (`platform="api"`, `id="diadem"`) for each remaining type, transcribing its payload-key ← registry-field row from design doc **§1.7.4** and applying the guard rules (string fields `"{{x}}"`, bool `{{#if x}}true{{else}}false{{/if}}`, numeric `{{#if x}}{{x}}{{else}}0{{/if}}`, arrays via the `{{#each}}…{{#unless @last}},{{/unless}}` pattern). Include the common block (address/static_map/icon_url/map_urls/time_remaining/sun) where the type has a location:
 
 - `egg`, `monsterChanged`, `rsvpChanges` — per Step 1 notes.
 - `quest` — `pokestop_name`, `quest`←`questString`, `reward`←`rewardString`, `conditions`←`conditionString`, `condition_list`←`conditionList`, `reward_detail.{dust_amount,item_name,item_amount,monster_name,energy_amount,candy_amount,xl_candy_amount,shiny}`.
@@ -316,16 +353,20 @@ Add one `[[entry]]` (`platform="api"`, `id="default"`) for each remaining type, 
 - `maxbattle` — `pokemon_id`, `name`, `full_name`, `costume_name`, `level`, `gmax`, `pokestop_name`, `types`←`typeNameEng`, `color`, `quick_move`, `charge_move`, `end_at`←`endTimestamp`, `end_display`←`time`, `total_stationed`, `total_stationed_gmax`.
 - `weatherchange` — `weather`←`weatherName`, `old_weather`←`oldWeatherName`, `change_in.{hours,minutes,seconds}`←`weatherTthh/m/s`, `affected_pokemon`←`enrichedActivePokemons`.
 
-- [ ] **Step 3: Sanity-render each entry**
+- [ ] **Step 3: Sanity-render each entry + run the config/renderer tests**
 
-There is no automated check in this task (Task 3 adds it), but before committing, eyeball each entry for balanced braces and trailing commas. Run `go test ./internal/dts/ -run TestFallbackTomlPackLoads` to confirm the pack still parses and loads.
+Eyeball each entry for balanced braces and trailing commas. Then run the tests touched by the rename + default change:
+
+Run: `cd processor && go test -count=1 ./internal/config/ ./internal/dts/ -run 'TestAPIDelivery|TestFallbackTomlPackLoads|TestDiademPackSparsePokemonValidJSON|TestAPIStarterPackSparsePokemonValidJSON'`
+Expected: PASS (config default is now `"diadem"`; the sparse-pokemon test loads `diadem.toml`).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd processor && go build ./... && go test ./internal/dts/ -run 'TestFallbackTomlPackLoads|TestAPIStarterPackSparsePokemonValidJSON'
-git add ../fallbacks/dts/api.toml
-git commit -m "feat(dts): full 15-type canonical api payload pack"
+cd processor && go build ./... && go vet ./... && go test -count=1 ./... && golangci-lint run ./...
+cd /Users/james/GolandProjects/PoracleNG/.claude/worktrees/api-delivery
+git add fallbacks/dts/api.toml fallbacks/dts/diadem.toml processor/internal/config/config.go processor/internal/config/config_test.go processor/internal/dts/api_render_test.go config/config.example.toml
+git commit -m "feat(dts): full 15-type diadem partner pack; default template=diadem"
 ```
 
 ---
@@ -339,7 +380,7 @@ Pin every pack entry: it must render to valid JSON, and emit the canonical requi
 
 - [ ] **Step 1: Write the conformance test**
 
-For each type, a representative enrichment map and the set of required top-level payload keys. The test loads the real `fallbacks/dts/api.toml`, renders each type through `RenderAlert` (or `RenderPokemon` for pokemon), and asserts (a) valid JSON and (b) every required key present.
+For each type, a representative enrichment map and the set of required top-level payload keys. The test loads the real `fallbacks/dts/diadem.toml`, renders each type through `RenderAlert` (or `RenderPokemon` for pokemon) with a `Template: "diadem"` user, and asserts (a) valid JSON and (b) every required key present.
 
 ```go
 package dts
@@ -376,7 +417,7 @@ func renderAPIType(t *testing.T, r *Renderer, c apiPackConformanceCase, user web
 
 func newRealPackRenderer(t *testing.T) *Renderer {
 	t.Helper()
-	// fallbackDir points at the repo-root fallbacks/ so the real api.toml loads.
+	// fallbackDir points at the repo-root fallbacks/ so the real diadem.toml loads.
 	fallbackDir, err := filepath.Abs(filepath.Join("..", "..", "..", "fallbacks"))
 	if err != nil {
 		t.Fatal(err)
@@ -392,7 +433,7 @@ func newRealPackRenderer(t *testing.T) *Renderer {
 
 func TestAPIPackConformance(t *testing.T) {
 	r := newRealPackRenderer(t)
-	user := webhook.MatchedUser{ID: "u-1", Type: "api:user", Template: "default", Language: "en"}
+	user := webhook.MatchedUser{ID: "u-1", Type: "api:user", Template: "diadem", Language: "en"}
 
 	cases := []apiPackConformanceCase{
 		{
@@ -453,9 +494,9 @@ Expected: every subtest PASS. If a subtest fails with invalid JSON or a missing 
 ```bash
 cd processor && go build ./... && go vet ./... && go test -count=1 ./... && golangci-lint run ./...
 git add internal/dts/api_pack_conformance_test.go
-# plus any fallbacks/dts/api.toml fixes the test forced
-git add ../fallbacks/dts/api.toml
-git commit -m "test(dts): api pack conformance — valid JSON + canonical keys per type"
+# plus any fallbacks/dts/diadem.toml fixes the test forced
+git add ../fallbacks/dts/diadem.toml
+git commit -m "test(dts): diadem pack conformance — valid JSON + canonical keys per type"
 ```
 
 ---
@@ -474,9 +515,9 @@ In BOTH docs, the envelope tables (`docs/api-delivery-receiver-spec.md` §3.1, d
 
 In `docs/api-delivery-receiver-spec.md`, the version note (added after the §3.1 table) currently says `in_reply_to`, `tracking_uids`, `areas`, and `media` are not emitted. Update it: these three (`in_reply_to`, `tracking_uids`, `areas`) ARE now emitted; drop `media` (moved to payload). Keep only `revision` described as reserved. Adjust the design doc's Part 2 "deferred" list (§2.9 / wherever it enumerates deferrals) to remove these three and `media` — leaving `revision` monotonicity as the sole envelope-level deferral.
 
-- [ ] **Step 3: Confirm the payload schema reference points at the complete pack**
+- [ ] **Step 3: Confirm the payload schema reference matches the shipped partner pack**
 
-In receiver spec §8 and design doc §1.7.5, ensure the wording matches the shipped reality: the canonical pack is `fallbacks/dts/api.toml`, entries `id="default"`, all 15 types, and it is validated by the conformance test (Task 3). If §1.7.5 still says `fallbacks/dts/diadem.toml` / `id="diadem"` / `[api_delivery] template="diadem"`, correct it to `api.toml` / `id="default"` / the default `template="default"`, and note per-partner packs (other ids) remain an optional future pattern.
+In receiver spec §8 and design doc §1.7.5, ensure the wording matches the shipped reality: the reference partner pack is `fallbacks/dts/diadem.toml`, entries `id="diadem"`, selected via `[api_delivery] template="diadem"` (the shipped default), all 15 types, validated by the conformance test (Task 3). §1.7.5 already describes this diadem/`id="diadem"`/`template="diadem"` model — confirm it still reads correctly and that it presents per-partner packs (`<partner>.toml` / `id="<partner>"`) as the standard multi-partner pattern, not a future aside. Do NOT rename anything to `id="default"`.
 
 - [ ] **Step 4: Commit**
 
