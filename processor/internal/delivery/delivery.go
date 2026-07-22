@@ -35,6 +35,7 @@ type Job struct {
 	EditKey       string          `json:"editKey"`      // non-empty = track for future edits
 	ReplyKey      string          `json:"replyKey"`     // non-empty = (ReplyKey,Target) indexes the latest sent message in MessageTracker for reply chaining
 	MsgType       string          `json:"msgType"`      // alert type ("raid", "egg", "pokemon", etc.) stored in MessageTracker for per-lifecycle-type first-visible detection
+	TemplateID    string          `json:"templateId"`   // resolved DTS template id used for this render; consumed by APISender's envelope (full plumbing lands in a later task)
 	Name          string          `json:"name"`         // human-readable destination name
 	LogReference  string          `json:"logReference"` // encounter/gym ID for tracing
 	Lat           float64         `json:"lat"`
