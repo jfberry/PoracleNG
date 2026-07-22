@@ -35,6 +35,7 @@ type Config struct {
 	Validation     ValidationConfig     `toml:"validation"`
 	Autocreate     AutocreateConfig     `toml:"autocreate"`
 	Snapshots      SnapshotsConfig      `toml:"snapshots"`
+	APIDelivery    APIDeliveryConfig    `toml:"api_delivery"`
 
 	// BaseDir is the directory containing the config file, used to resolve relative paths.
 	BaseDir string `toml:"-"`
@@ -531,6 +532,22 @@ type SnapshotsConfig struct {
 	SweepIntervalMins int `toml:"sweep_interval_mins"`
 }
 
+// APIDeliveryConfig configures the generic HTTP "api" delivery platform:
+// api:user / api:channel destinations POST a rendered envelope to a single
+// operator-configured endpoint. See docs/superpowers/specs/2026-07-19-api-delivery-destination-design.md.
+type APIDeliveryConfig struct {
+	Enabled      bool   `toml:"enabled"`
+	Endpoint     string `toml:"endpoint"`
+	Secret       string `toml:"secret"`
+	SecretHeader string `toml:"secret_header"` // default "X-Poracle-Secret"
+	SecretPrefix string `toml:"secret_prefix"` // e.g. "Bearer " when SecretHeader="Authorization"
+	Template     string `toml:"template"`      // DTS template id for the partner pack; default "default"
+	TimeoutMs    int    `toml:"timeout_ms"`    // default 10000
+	MaxRetries   int    `toml:"max_retries"`   // default 3
+	Concurrency  int    `toml:"concurrency"`   // default 4
+	LogOnly      bool   `toml:"log_only"`      // dry-run: log the envelope instead of POSTing
+}
+
 type StatsConfig struct {
 	MinSampleSize       int     `toml:"min_sample_size"`
 	WindowHours         int     `toml:"window_hours"`
@@ -753,6 +770,33 @@ func validateAutocreateRules(cfg *Config) error {
 		if len(r.Params) == 0 {
 			return fmt.Errorf("[[autocreate.rules]] %s: params must contain at least one element", r.Name)
 		}
+	}
+	return nil
+}
+
+// applyAPIDeliveryDefaults fills unset [api_delivery] fields.
+func applyAPIDeliveryDefaults(cfg *Config) {
+	if cfg.APIDelivery.SecretHeader == "" {
+		cfg.APIDelivery.SecretHeader = "X-Poracle-Secret"
+	}
+	if cfg.APIDelivery.Template == "" {
+		cfg.APIDelivery.Template = "default"
+	}
+	if cfg.APIDelivery.TimeoutMs <= 0 {
+		cfg.APIDelivery.TimeoutMs = 10000
+	}
+	if cfg.APIDelivery.MaxRetries <= 0 {
+		cfg.APIDelivery.MaxRetries = 3
+	}
+	if cfg.APIDelivery.Concurrency <= 0 {
+		cfg.APIDelivery.Concurrency = 4
+	}
+}
+
+// validateAPIDelivery rejects an enabled api_delivery block with no endpoint.
+func validateAPIDelivery(cfg *Config) error {
+	if cfg.APIDelivery.Enabled && cfg.APIDelivery.Endpoint == "" {
+		return fmt.Errorf("[api_delivery] enabled = true but endpoint is empty")
 	}
 	return nil
 }
@@ -1043,8 +1087,17 @@ func Load(baseDir string) (*Config, error) {
 		cfg.Snapshots.SweepIntervalMins = 60
 	}
 
+	// API delivery defaults. Enabled is intentionally NOT defaulted to
+	// true — operators must opt in and provide an endpoint.
+	applyAPIDeliveryDefaults(cfg)
+
 	// Validate autocreate config.
 	if err := validateAutocreateRules(cfg); err != nil {
+		return nil, err
+	}
+
+	// Validate API delivery config.
+	if err := validateAPIDelivery(cfg); err != nil {
 		return nil, err
 	}
 
