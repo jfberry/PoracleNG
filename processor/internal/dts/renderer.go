@@ -360,6 +360,30 @@ func (r *Renderer) renderForUsers(
 		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, original, users, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)
 	}
 
+	return r.renderPerUser(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, original, users, areas, logReference, editKeyBase, tthMap, lat, lon, shlinkCache)
+}
+
+// renderPerUser renders one DeliveryJob per user, building a fresh
+// LayeredView per user so per-user enrichment (PVP display, distance,
+// bearing) resolves to that user's own values. This is the non-grouped
+// path: it is used for pokemon (which always has per-user PVP data) and,
+// via Task 3, for any grouped type whose template references per-user
+// positional fields.
+func (r *Renderer) renderPerUser(
+	templateType string,
+	enrichment map[string]any,
+	perLangEnrichment map[string]map[string]any,
+	perUserEnrichment map[string]map[string]any,
+	webhookFields map[string]any,
+	original map[string]any,
+	users []webhook.MatchedUser,
+	areas []webhook.MatchedArea,
+	logReference string,
+	editKeyBase string,
+	tthMap map[string]any,
+	lat, lon string,
+	shlinkCache map[string]string,
+) []webhook.DeliveryJob {
 	var jobs []webhook.DeliveryJob
 
 	for _, user := range users {
