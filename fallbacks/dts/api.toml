@@ -1,0 +1,32 @@
+# Minimal starter api-platform templates. The full partner pack (all alert
+# types, one self-contained file per partner) lands in the follow-up plan.
+
+[[entry]]
+type = "raid"
+platform = "api"
+id = "default"
+template = """
+{
+  "level": {{#if level}}{{level}}{{else}}0{{/if}},
+  "boss": "{{name}}",
+  "gym_name": "{{gymName}}",
+  "types": [{{#each typeNameEng}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}],
+  "end_at": {{#if endTimestamp}}{{endTimestamp}}{{else}}0{{/if}}
+}
+"""
+
+[[entry]]
+type = "pokemon"
+platform = "api"
+id = "default"
+template = """
+{
+  "pokemon_id": {{pokemonId}},
+  "name": "{{name}}",
+  "iv": {{#if iv}}{{iv}}{{else}}null{{/if}},
+  "cp": {{#if cp}}{{cp}}{{else}}null{{/if}},
+  "level": {{#if level}}{{level}}{{else}}null{{/if}},
+  "distance_m": {{#if distance}}{{distance}}{{else}}0{{/if}},
+  "despawn_at": {{#if despawnTimestamp}}{{despawnTimestamp}}{{else}}0{{/if}}
+}
+"""

@@ -657,6 +657,31 @@ func TestRenderAlertAPINoPing(t *testing.T) {
 	}
 }
 
+// TestRenderAlertAPINoPingPerUser mirrors TestRenderAlertAPINoPing but forces
+// the renderPerUser path instead of renderGrouped: the template references
+// {{distance}}, so UsesPerUserFields routes the user through renderPerUser
+// (renderer.go:403). The api-platform ping skip (renderer.go:516) must hold
+// on that path too, not just the group-render fast path.
+func TestRenderAlertAPINoPingPerUser(t *testing.T) {
+	entries := []DTSEntry{
+		{Type: "raid", ID: "default", Platform: "api",
+			Template: map[string]any{"gym": "{{gymName}}", "d": "{{#if distance}}{{distance}}{{else}}0{{/if}}"}},
+	}
+	r := newTestRenderer(t, entries)
+	enrichment := map[string]any{"gymName": "Gym A", "latitude": 1.0, "longitude": 2.0, "tth": map[string]any{"totalSeconds": 600}}
+	users := []webhook.MatchedUser{
+		{ID: "u-1", Type: "api:user", Template: "default", Language: "en", Ping: "<@1>", Distance: 500},
+	}
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "ref", "")
+	if len(jobs) != 1 {
+		t.Fatalf("want 1 job, got %d", len(jobs))
+	}
+	msg := parseMessage(t, jobs[0].Message)
+	if _, hasContent := msg["content"]; hasContent {
+		t.Errorf("api job (per-user path) should not have ping-injected content: %v", msg)
+	}
+}
+
 func TestRenderAlertNoPerLangEnrichment(t *testing.T) {
 	// Fort updates have no per-language enrichment
 	entries := []DTSEntry{
