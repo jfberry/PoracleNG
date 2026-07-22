@@ -85,7 +85,7 @@ All three operations share one envelope shape. Fields marked *omitted when empty
 | `version` | int | Envelope version. `1` for this specification. Incremented only for breaking changes; additive fields do not bump it. Receivers MUST reject unknown major versions rather than guess. |
 | `op` | string | `send` \| `edit` \| `delete`. |
 | `message_id` | string | Poracle-minted UUIDv4 identifying the **logical message**, not the request. Constant across the original send, every subsequent edit, and the eventual delete. Matches `^[0-9a-f-]{36}$` (lowercase hex + hyphens) and is therefore always colon-free. |
-| `revision` | int | Monotonically increasing per logical message: `0` for the send, `1`, `2`, … for each edit, and the delete carries the revision after the last edit. Together with `message_id` it forms the idempotency key — see §1.5. |
+| `revision` | int | **Reserved — always `0` in the current implementation.** The intended future contract is monotonic (`0` send, `1`,`2`,… edits, delete carrying the last revision), forming a richer idempotency key with `message_id`. Until monotonic revisions ship, receivers must not key on it — see §1.5. |
 | `sent_at` | int | Unix seconds at which Poracle issued the request. |
 | `alert_type` | string | One of the DTS alert types — see §1.7. |
 | `template_id` | string | The DTS template identifier that produced `payload`. Lets the receiver switch on operator-defined template variants. |
@@ -111,7 +111,7 @@ Identical to `send`, plus:
 |---|---|---|
 | `provider_message_id` | string | *Omitted when the receiver returned no `id` for the original send.* The receiver's own identifier for the message being edited. |
 
-`payload` carries the full new content — edits are replacements, not patches. `message_id` is the same value as the original send, which is how a receiver that ignored `provider_message_id` can still locate the message. `revision` increments with each edit.
+`payload` carries the full new content — edits are replacements, not patches. `message_id` is the same value as the original send, which is how a receiver that ignored `provider_message_id` can still locate the message. `revision` stays `0` in the current implementation (monotonic revisions are a future addition).
 
 ### `op: "delete"`
 
@@ -120,7 +120,7 @@ Identical to `send`, plus:
   "version": 1,
   "op": "delete",
   "message_id": "7c9e6a1f-4b2d-4c8a-9f3e-1a2b3c4d5e6f",
-  "revision": 1,
+  "revision": 0,
   "provider_message_id": "abc123",
   "sent_at": 1770001800,
   "destination": { "id": "u-42", "type": "api:user", "name": "James", "language": "en" }
@@ -161,8 +161,10 @@ Poracle never blocks the alert pipeline on a slow receiver; a destination that i
 
 ## 1.5 Idempotency and ordering
 
-- The idempotency key is the pair **`(message_id, revision)`**. It is stable across network retries of the same request and unique across distinct requests, including successive edits of the same message. A receiver that has already processed a given pair SHOULD return `200` and do nothing.
-- Poracle holds a per-destination mutex, so **at most one request is in flight per `destination.id` at a time** and requests for a single destination arrive in order. There is no ordering guarantee across different destinations.
+- Poracle holds a per-destination mutex, so **at most one request is in flight per `destination.id` at a time**, requests for a single destination arrive in order, and a failed request's retries complete before the next operation to that destination. There is no ordering guarantee across different destinations. These guarantees make the rules below safe.
+- **Network retries carry an identical body** (same `op`, same payload); `5xx`/`429`/connection errors are retried this way. Processing an identical retry twice must be harmless; deduplicating them is optional.
+- **`op: "send"`** uses a fresh `message_id` each time, so a receiver may dedupe sends by `message_id`.
+- **`op: "edit"`** replaces the message content in full; **apply every edit** (replacement is idempotent and edits arrive in order, so last-write-wins is correct). Do not key on `revision` — it is always `0` in the current implementation. When monotonic revisions ship, `(message_id, revision)` becomes the precise idempotency key.
 - A `delete` may legitimately arrive for a `message_id` the receiver never saw (e.g. the original send failed after Poracle recorded it). Respond `404` or `200`; both are safe.
 
 ## 1.6 Message lifecycle and expiry
@@ -455,7 +457,7 @@ HTTP/1.1 204 No Content
 - [ ] One `POST` route, dispatching on `op`.
 - [ ] Constant-time comparison of the secret; reject with `401`.
 - [ ] Reject `version` values you do not understand.
-- [ ] Dedupe on the pair `(message_id, revision)`.
+- [ ] Apply every `edit` (full replacement); dedupe only identical network retries. Do not key on `revision` (always `0` today).
 - [ ] Store the mapping `message_id → your record` so `edit` and `delete` resolve even when you return no `id`.
 - [ ] Return `{"id": "..."}` only if the value is colon-free and matches `^[A-Za-z0-9._~-]{1,128}$`.
 - [ ] Return `202` fast; do rendering and fan-out asynchronously.

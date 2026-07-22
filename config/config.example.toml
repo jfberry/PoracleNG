@@ -721,3 +721,19 @@ enabled = false
 # path                = "config/.cache/snapshots"   # relative to BaseDir
 # max_age_days        = 7                           # safety-sweep grace period
 # sweep_interval_mins = 60                          # background sweep cadence
+
+# API delivery: deliver alerts to a third-party HTTP endpoint (the "api"
+# platform). Destinations use human types api:user / api:channel, created
+# and managed via the v2 REST API. The receiver contract is documented in
+# docs/api-delivery-receiver-spec.md.
+[api_delivery]
+enabled = false
+# endpoint      = "https://example.com/poracle"   # required when enabled; the POST target
+# secret        = ""                               # shared secret sent in secret_header
+# secret_header = "X-Poracle-Secret"               # e.g. "Authorization"
+# secret_prefix = ""                               # e.g. "Bearer " when using Authorization
+# template      = "default"                        # DTS template id for the api partner pack
+# timeout_ms    = 10000                            # per-request HTTP timeout
+# max_retries   = 3                                # retries on 429/5xx/network before dropping
+# concurrency   = 4                                # max concurrent api deliveries
+# log_only      = false                            # dry-run: log the envelope instead of POSTing
