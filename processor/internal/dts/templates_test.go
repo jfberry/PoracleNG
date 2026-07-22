@@ -620,3 +620,46 @@ func TestFallbackDtsSubdir(t *testing.T) {
 		t.Error("fallbacks/dts/help/track.json entry should load for telegram (platform wildcard)")
 	}
 }
+
+func TestSourceUsesPerUserFields(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want bool
+	}{
+		{"distance", `{"content":"{{distance}}m"}`, true},
+		{"triple-stache bearing", `{"content":"{{{bearing}}}"}`, true},
+		{"bearingEmoji", `{"content":"{{bearingEmoji}}"}`, true},
+		{"distance subexpression", `{"content":"{{fmtDist (distance)}}"}`, true},
+		{"userDistanceTrack flag only", `{"content":"{{#if userDistanceTrack}}near{{/if}}"}`, false},
+		{"userTrackDistance only", `{"content":"{{userTrackDistance}}"}`, false},
+		{"unrelated fields", `{"content":"{{name}} {{iv}}%"}`, false},
+		{"prose distance not in braces", `{"content":"distance to travel"}`, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := sourceUsesPerUserFields(c.src); got != c.want {
+				t.Errorf("sourceUsesPerUserFields(%q) = %v, want %v", c.src, got, c.want)
+			}
+		})
+	}
+}
+
+func TestUsesPerUserFields(t *testing.T) {
+	configDir := t.TempDir()
+	fallbackDir := t.TempDir()
+	writeTestDTS(t, configDir, []DTSEntry{
+		{Type: "raid", ID: "dist", Platform: "discord", Template: map[string]any{"content": "{{gymName}} {{distance}}m"}},
+		{Type: "raid", ID: "plain", Platform: "discord", Template: map[string]any{"content": "{{gymName}} raid"}},
+	})
+	ts, err := LoadTemplates(configDir, fallbackDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ts.UsesPerUserFields("raid", "discord", "dist", "en") {
+		t.Error("expected UsesPerUserFields true for template with {{distance}}")
+	}
+	if ts.UsesPerUserFields("raid", "discord", "plain", "en") {
+		t.Error("expected UsesPerUserFields false for template without positional fields")
+	}
+}
