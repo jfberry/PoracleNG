@@ -583,19 +583,10 @@ func (r *Renderer) evalShowIf(expr string, view any) (bool, error) {
 
 // deliveryTargetType maps a webhook user.Type ("discord:user", etc.) to
 // the short noun the button schema uses for applies_to: "dm" / "channel"
-// / "webhook". Mirrors the helper in cmd/processor; duplicated here to
-// avoid an import cycle.
+// / "webhook". Delegates to delivery.TargetClass, the single source of
+// truth shared with cmd/processor's snapshotTargetType.
 func deliveryTargetType(userType string) string {
-	switch userType {
-	case "discord:user", "telegram:user":
-		return "dm"
-	case "discord:channel", "discord:thread", "telegram:group", "telegram:channel":
-		return "channel"
-	case "webhook":
-		return "webhook"
-	default:
-		return ""
-	}
+	return delivery.TargetClass(userType)
 }
 
 // renderGroupKey identifies a unique (template, platform, language) combination.

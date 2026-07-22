@@ -248,11 +248,11 @@ func (l *Limiter) incrementViolation(destinationID string, now time.Time) bool {
 }
 
 // isUserType returns true for destination types that should use the DM limit.
-// All other types (discord:channel, telegram:channel, telegram:group, webhook)
-// use the channel limit — they are multi-user destinations where higher
-// throughput is expected.
+// All other types (discord:channel, telegram:channel, telegram:group,
+// api:channel, webhook) use the channel limit — they are multi-user
+// destinations where higher throughput is expected.
 func isUserType(t string) bool {
-	return t == "discord:user" || t == "telegram:user"
+	return t == "discord:user" || t == "telegram:user" || t == "api:user"
 }
 
 // cleanupLoop removes expired counters and violations periodically.

@@ -462,14 +462,5 @@ func collectTrackingUIDs(users []webhook.MatchedUser, target string) []int64 {
 // snapshotTargetType maps a delivery.Job.Type ("discord:user", etc.) to the
 // short noun used in Snapshot.TargetType ("dm" / "channel" / "webhook").
 func snapshotTargetType(jobType string) string {
-	switch jobType {
-	case "discord:user", "telegram:user":
-		return "dm"
-	case "discord:channel", "discord:thread", "telegram:group", "telegram:channel":
-		return "channel"
-	case "webhook":
-		return "webhook"
-	default:
-		return ""
-	}
+	return delivery.TargetClass(jobType)
 }
