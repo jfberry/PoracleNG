@@ -21,8 +21,8 @@ func TestAPIDeliveryDefaults(t *testing.T) {
 	if cfg.APIDelivery.Concurrency != 4 {
 		t.Errorf("Concurrency default = %d, want 4", cfg.APIDelivery.Concurrency)
 	}
-	if cfg.APIDelivery.Template != "default" {
-		t.Errorf("Template default = %q, want default", cfg.APIDelivery.Template)
+	if cfg.APIDelivery.Template != "diadem" {
+		t.Errorf("Template default = %q, want diadem", cfg.APIDelivery.Template)
 	}
 }
 

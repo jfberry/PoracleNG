@@ -1,0 +1,653 @@
+# Diadem partner pack (id="diadem"). Self-contained: the common block is
+# repeated inline in every entry (no partials). Numeric interpolations are
+# guarded so a sparse webhook yields valid JSON.
+# Payload schema: docs/superpowers/specs/2026-07-19-api-delivery-destination-design.md §1.7.
+#
+# NOTE on the pokemon entry's `type`: the design doc's §1.7.3/§1.7.5 examples
+# write `type = "pokemon"`, but the actual DTS lookup key the renderer queries
+# for a live pokemon webhook is "monster" (RenderPokemon always calls
+# renderForUsers("monster"/"monsterNoIv", ...) regardless of platform — see
+# internal/dts/renderer.go). An entry literally typed "pokemon" is never
+# selected by real delivery and falls through to "no template" for api
+# destinations. This entry ships as type = "monster" so it actually renders;
+# the "monsterNoIv" case falls back to this same "monster" entry (see
+# renderer.go's `if tmpl == nil && templateType == "monsterNoIv"` fallback),
+# so a second entry isn't needed. See task-2-report.md for the full rationale.
+
+[[entry]]
+type = "monster"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "pokemon_id": {{#if pokemonId}}{{pokemonId}}{{else}}0{{/if}},
+  "form_id": {{#if formId}}{{formId}}{{else}}0{{/if}},
+  "name": "{{name}}",
+  "full_name": "{{fullName}}",
+  "name_en": "{{nameEng}}",
+  "form_name": "{{formName}}",
+  "costume_name": "{{costumeName}}",
+  "gender": "{{genderName}}",
+  "generation": {{#if generation}}{{generation}}{{else}}0{{/if}},
+  "rarity": "{{rarityName}}",
+  "size": "{{sizeName}}",
+  "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}},
+  "encountered": {{#if encountered}}true{{else}}false{{/if}},
+  "iv": {{#if (gte iv 0)}}{{iv}}{{else}}null{{/if}},
+  "atk": {{#if (gte atk 0)}}{{atk}}{{else}}null{{/if}},
+  "def": {{#if (gte def 0)}}{{def}}{{else}}null{{/if}},
+  "sta": {{#if (gte sta 0)}}{{sta}}{{else}}null{{/if}},
+  "cp": {{#if cp}}{{cp}}{{else}}null{{/if}},
+  "level": {{#if level}}{{level}}{{else}}null{{/if}},
+  "types": [{{#each typeNameEng}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}],
+  "color": "{{color}}",
+  "quick_move": "{{quickMoveName}}",
+  "charge_move": "{{chargeMoveName}}",
+  "despawn_at": {{#if despawnTimestamp}}{{despawnTimestamp}}{{else}}0{{/if}},
+  "despawn_display": "{{time}}",
+  "despawn_verified": {{#if confirmedTime}}true{{else}}false{{/if}},
+  "distance_m": {{#if distance}}{{distance}}{{else}}0{{/if}},
+  "bearing_deg": {{#if bearing}}{{bearing}}{{else}}0{{/if}},
+  "pokestop_name": "{{pokestopName}}",
+  "static_map": "{{staticMap}}",
+  "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "street_number": "{{streetNumber}}", "street_name": "{{streetName}}",
+    "neighbourhood": "{{neighbourhood}}", "suburb": "{{suburb}}", "city": "{{city}}",
+    "state": "{{state}}", "postcode": "{{zipcode}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}", "intersection": "{{intersection}}"
+  },
+  "time_remaining": {
+    "days": {{#if tthd}}{{tthd}}{{else}}0{{/if}}, "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}},
+    "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}}, "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+# monsterChanged = the pokemon entry above plus a "previous" object holding
+# the pre-change sighting (renderer's {{original.*}} scope, always populated
+# for a real monsterChanged event — see internal/dts/original_view.go).
+[[entry]]
+type = "monsterChanged"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "pokemon_id": {{#if pokemonId}}{{pokemonId}}{{else}}0{{/if}},
+  "form_id": {{#if formId}}{{formId}}{{else}}0{{/if}},
+  "name": "{{name}}",
+  "full_name": "{{fullName}}",
+  "name_en": "{{nameEng}}",
+  "form_name": "{{formName}}",
+  "costume_name": "{{costumeName}}",
+  "gender": "{{genderName}}",
+  "generation": {{#if generation}}{{generation}}{{else}}0{{/if}},
+  "rarity": "{{rarityName}}",
+  "size": "{{sizeName}}",
+  "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}},
+  "encountered": {{#if encountered}}true{{else}}false{{/if}},
+  "iv": {{#if (gte iv 0)}}{{iv}}{{else}}null{{/if}},
+  "atk": {{#if (gte atk 0)}}{{atk}}{{else}}null{{/if}},
+  "def": {{#if (gte def 0)}}{{def}}{{else}}null{{/if}},
+  "sta": {{#if (gte sta 0)}}{{sta}}{{else}}null{{/if}},
+  "cp": {{#if cp}}{{cp}}{{else}}null{{/if}},
+  "level": {{#if level}}{{level}}{{else}}null{{/if}},
+  "types": [{{#each typeNameEng}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}],
+  "color": "{{color}}",
+  "quick_move": "{{quickMoveName}}",
+  "charge_move": "{{chargeMoveName}}",
+  "despawn_at": {{#if despawnTimestamp}}{{despawnTimestamp}}{{else}}0{{/if}},
+  "despawn_display": "{{time}}",
+  "despawn_verified": {{#if confirmedTime}}true{{else}}false{{/if}},
+  "distance_m": {{#if distance}}{{distance}}{{else}}0{{/if}},
+  "bearing_deg": {{#if bearing}}{{bearing}}{{else}}0{{/if}},
+  "pokestop_name": "{{pokestopName}}",
+  "previous": {
+    "pokemon_id": {{#if original.pokemonId}}{{original.pokemonId}}{{else}}0{{/if}},
+    "full_name": "{{original.fullName}}",
+    "iv": {{#if (gte original.iv 0)}}{{original.iv}}{{else}}null{{/if}},
+    "cp": {{#if original.cp}}{{original.cp}}{{else}}0{{/if}},
+    "level": {{#if original.level}}{{original.level}}{{else}}0{{/if}}
+  },
+  "static_map": "{{staticMap}}",
+  "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "street_number": "{{streetNumber}}", "street_name": "{{streetName}}",
+    "neighbourhood": "{{neighbourhood}}", "suburb": "{{suburb}}", "city": "{{city}}",
+    "state": "{{state}}", "postcode": "{{zipcode}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}", "intersection": "{{intersection}}"
+  },
+  "time_remaining": {
+    "days": {{#if tthd}}{{tthd}}{{else}}0{{/if}}, "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}},
+    "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}}, "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+[[entry]]
+type = "raid"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "level": {{#if level}}{{level}}{{else}}0{{/if}},
+  "level_name": "{{levelName}}",
+  "boss": {
+    "pokemon_id": {{#if pokemonId}}{{pokemonId}}{{else}}0{{/if}},
+    "name": "{{name}}", "full_name": "{{fullName}}", "name_en": "{{nameEng}}",
+    "form_name": "{{formName}}", "costume_name": "{{costumeName}}",
+    "types": [{{#each typeNameEng}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}],
+    "color": "{{color}}",
+    "cp20": {{#if cp20}}{{cp20}}{{else}}0{{/if}}, "cp25": {{#if cp25}}{{cp25}}{{else}}0{{/if}},
+    "quick_move": "{{quickMoveName}}", "charge_move": "{{chargeMoveName}}",
+    "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}}
+  },
+  "gym": {
+    "name": "{{gymName}}", "image_url": "{{gymUrl}}", "team": "{{teamName}}",
+    "ex": {{#if ex}}true{{else}}false{{/if}}
+  },
+  "hatch_at": {{#if hatchTimestamp}}{{hatchTimestamp}}{{else}}0{{/if}},
+  "end_at": {{#if endTimestamp}}{{endTimestamp}}{{else}}0{{/if}},
+  "hatch_display": "{{hatchTime}}", "end_display": "{{time}}",
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  }
+}
+"""
+
+# rsvpChanges = the raid entry verbatim (same fields; the rsvp timeslots ride
+# the same view — see design doc §1.7.4).
+[[entry]]
+type = "rsvpChanges"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "level": {{#if level}}{{level}}{{else}}0{{/if}},
+  "level_name": "{{levelName}}",
+  "boss": {
+    "pokemon_id": {{#if pokemonId}}{{pokemonId}}{{else}}0{{/if}},
+    "name": "{{name}}", "full_name": "{{fullName}}", "name_en": "{{nameEng}}",
+    "form_name": "{{formName}}", "costume_name": "{{costumeName}}",
+    "types": [{{#each typeNameEng}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}],
+    "color": "{{color}}",
+    "cp20": {{#if cp20}}{{cp20}}{{else}}0{{/if}}, "cp25": {{#if cp25}}{{cp25}}{{else}}0{{/if}},
+    "quick_move": "{{quickMoveName}}", "charge_move": "{{chargeMoveName}}",
+    "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}}
+  },
+  "gym": {
+    "name": "{{gymName}}", "image_url": "{{gymUrl}}", "team": "{{teamName}}",
+    "ex": {{#if ex}}true{{else}}false{{/if}}
+  },
+  "hatch_at": {{#if hatchTimestamp}}{{hatchTimestamp}}{{else}}0{{/if}},
+  "end_at": {{#if endTimestamp}}{{endTimestamp}}{{else}}0{{/if}},
+  "hatch_display": "{{hatchTime}}", "end_display": "{{time}}",
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  }
+}
+"""
+
+# egg = the raid entry minus the "boss" object, keyed on level/level_name/gym/hatch.
+# No "end_display": eggFields has no formatted end-of-window string distinct
+# from hatch_display (only hatchTimestamp/endTimestamp as raw unix fields).
+[[entry]]
+type = "egg"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "level": {{#if level}}{{level}}{{else}}0{{/if}},
+  "level_name": "{{levelName}}",
+  "gym": {
+    "name": "{{gymName}}", "image_url": "{{gymUrl}}", "team": "{{teamName}}",
+    "ex": {{#if ex}}true{{else}}false{{/if}}
+  },
+  "hatch_at": {{#if hatchTimestamp}}{{hatchTimestamp}}{{else}}0{{/if}},
+  "end_at": {{#if endTimestamp}}{{endTimestamp}}{{else}}0{{/if}},
+  "hatch_display": "{{time}}",
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  }
+}
+"""
+
+# quest — reward_detail sources itemNames/monsterNames (joined display strings)
+# rather than the registry's itemName/monsterName/monsterFullName, which are
+# never populated as scalars (quest enrichment only ever produces the
+# plural/array/joined-string forms — see internal/enrichment/quest.go). Top
+# reward "shiny" flag is isShiny (registry lists "shiny", but the enrichment
+# key is isShiny). xl_candy_amount is dropped entirely: this codebase's quest
+# reward model has no XL-candy category (Candy and XL Candy aren't
+# distinguished anywhere in QuestRewardData).
+[[entry]]
+type = "quest"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "pokestop_name": "{{pokestopName}}",
+  "quest": "{{questString}}",
+  "reward": "{{rewardString}}",
+  "conditions": "{{conditionString}}",
+  "condition_list": [{{#each conditionList}}{"type": {{#if type}}{{type}}{{else}}0{{/if}}, "name": "{{name}}", "formatted": "{{formatted}}"}{{#unless @last}},{{/unless}}{{/each}}],
+  "reward_detail": {
+    "dust_amount": {{#if dustAmount}}{{dustAmount}}{{else}}0{{/if}},
+    "item_name": "{{itemNames}}",
+    "item_amount": {{#if itemAmount}}{{itemAmount}}{{else}}0{{/if}},
+    "monster_name": "{{monsterNames}}",
+    "energy_amount": {{#if energyAmount}}{{energyAmount}}{{else}}0{{/if}},
+    "candy_amount": {{#if candyAmount}}{{candyAmount}}{{else}}0{{/if}},
+    "shiny": {{#if isShiny}}true{{else}}false{{/if}}
+  },
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+# questSummary — a digest, not a single alert (see design doc §1.7.4). Each
+# entries[] row is a full per-pokestop quest view (BuildQuestSummaryView
+# collects the same merged base+perLang maps the "quest" type above uses), so
+# the same reward_detail substitutions apply per-row.
+[[entry]]
+type = "questSummary"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "reward_type": {{#if rewardType}}{{rewardType}}{{else}}0{{/if}},
+  "reward_id": {{#if reward}}{{reward}}{{else}}0{{/if}},
+  "reward_form": {{#if rewardForm}}{{rewardForm}}{{else}}0{{/if}},
+  "reward_name": "{{rewardName}}",
+  "count": {{#if count}}{{count}}{{else}}0{{/if}},
+  "chunk": {{#if chunk}}{{chunk}}{{else}}0{{/if}},
+  "chunks": {{#if chunks}}{{chunks}}{{else}}0{{/if}},
+  "static_map": "{{staticMap}}",
+  "entries": [{{#each quests}}{
+    "pokestop_name": "{{pokestopName}}",
+    "latitude": {{#if latitude}}{{latitude}}{{else}}0{{/if}},
+    "longitude": {{#if longitude}}{{longitude}}{{else}}0{{/if}},
+    "quest": "{{questString}}",
+    "reward": "{{rewardString}}",
+    "reward_detail": {
+      "dust_amount": {{#if dustAmount}}{{dustAmount}}{{else}}0{{/if}},
+      "item_name": "{{itemNames}}",
+      "item_amount": {{#if itemAmount}}{{itemAmount}}{{else}}0{{/if}},
+      "monster_name": "{{monsterNames}}",
+      "energy_amount": {{#if energyAmount}}{{energyAmount}}{{else}}0{{/if}},
+      "candy_amount": {{#if candyAmount}}{{candyAmount}}{{else}}0{{/if}},
+      "shiny": {{#if isShiny}}true{{else}}false{{/if}}
+    }
+  }{{#unless @last}},{{/unless}}{{/each}}]
+}
+"""
+
+[[entry]]
+type = "invasion"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "pokestop_name": "{{pokestopName}}",
+  "grunt_name": "{{gruntName}}",
+  "grunt_type": "{{gruntType}}",
+  "grunt_type_name": "{{gruntTypeName}}",
+  "grunt_type_id": {{#if gruntTypeId}}{{gruntTypeId}}{{else}}0{{/if}},
+  "display_type_id": {{#if displayTypeId}}{{displayTypeId}}{{else}}0{{/if}},
+  "gender": "{{genderName}}",
+  "color": "{{gruntTypeColor}}",
+  "expires_display": "{{time}}",
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+# incident — showcase.* always present, guarded by "present"; only actually
+# populated when the pokestop event is a Showcase (translateShowcaseRankings
+# sets safe false/zero/empty defaults otherwise, so this never breaks JSON).
+[[entry]]
+type = "incident"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "pokestop_name": "{{pokestopName}}",
+  "pokestop_id": "{{pokestopId}}",
+  "pokestop_image_url": "{{pokestopUrl}}",
+  "display_type": {{#if displayType}}{{displayType}}{{else}}0{{/if}},
+  "incident_type_name": "{{incidentTypeName}}",
+  "color": "{{color}}",
+  "expires_display": "{{disappearTime}}",
+  "showcase": {
+    "present": {{#if showcasePresent}}true{{else}}false{{/if}},
+    "total_entries": {{#if showcaseTotalEntries}}{{showcaseTotalEntries}}{{else}}0{{/if}},
+    "focus_category": "{{showcaseFocusCategory}}",
+    "focus_name": "{{showcaseFocusName}}",
+    "entries": [{{#each showcase}}{
+      "rank": {{#if rank}}{{rank}}{{else}}0{{/if}}, "full_name": "{{fullName}}",
+      "shiny": {{#if shiny}}true{{else}}false{{/if}}, "score": {{#if score}}{{score}}{{else}}0{{/if}}
+    }{{#unless @last}},{{/unless}}{{/each}}]
+  },
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+[[entry]]
+type = "lure"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "pokestop_name": "{{pokestopName}}",
+  "lure_type_id": {{#if lureTypeId}}{{lureTypeId}}{{else}}0{{/if}},
+  "lure_type_name": "{{lureTypeName}}",
+  "color": "{{lureTypeColor}}",
+  "expires_display": "{{time}}",
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+[[entry]]
+type = "nest"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "nest_name": "{{nest_name}}",
+  "pokemon_id": {{#if pokemonId}}{{pokemonId}}{{else}}0{{/if}},
+  "name": "{{name}}",
+  "full_name": "{{fullName}}",
+  "name_en": "{{nameEng}}",
+  "form_name": "{{formName}}",
+  "types": [{{#each typeNameEng}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}],
+  "color": "{{color}}",
+  "spawn_avg": {{#if pokemonSpawnAvg}}{{pokemonSpawnAvg}}{{else}}0{{/if}},
+  "pokemon_count": {{#if pokemonCount}}{{pokemonCount}}{{else}}0{{/if}},
+  "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}},
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+[[entry]]
+type = "gym"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "gym_name": "{{gymName}}",
+  "image_url": "{{gymUrl}}",
+  "team": "{{teamName}}",
+  "old_team": "{{oldTeamName}}",
+  "slots_available": {{#if slotsAvailable}}{{slotsAvailable}}{{else}}0{{/if}},
+  "old_slots_available": {{#if oldSlotsAvailable}}{{oldSlotsAvailable}}{{else}}0{{/if}},
+  "in_battle": {{#if inBattle}}true{{else}}false{{/if}},
+  "ex": {{#if ex}}true{{else}}false{{/if}},
+  "color": "{{gymColor}}",
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+# fort-update — the DTS type name is "fort-update" (hyphenated; see
+# cmd/processor/fort.go's TemplateType and dts_fields.go's fieldsByType key),
+# not the bare "fort" used as shorthand in the task's type list. edit_types[]
+# is dropped: the registry's editTypesList is never populated by enrichment
+# (internal/enrichment/fort.go has no such key — the underlying data is only
+# the individual isEdit* booleans, which don't safely reduce to a
+# comma-correct JSON array in Handlebars alone). is_edit_image sources from
+# isEditImageUrl, the real key fort.go sets (isEditImage does not exist).
+# fort_id/fort_type/change_type are Type "string" in the registry — quoted.
+[[entry]]
+type = "fort-update"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "fort_id": "{{id}}",
+  "fort_type": "{{fortType}}",
+  "name": "{{name}}",
+  "change_type": "{{changeType}}",
+  "change_type_text": "{{changeTypeText}}",
+  "is_edit_name": {{#if isEditName}}true{{else}}false{{/if}},
+  "is_edit_location": {{#if isEditLocation}}true{{else}}false{{/if}},
+  "is_edit_image": {{#if isEditImageUrl}}true{{else}}false{{/if}},
+  "is_empty": {{#if isEmpty}}true{{else}}false{{/if}},
+  "new_name": "{{newName}}",
+  "old_name": "{{oldName}}",
+  "new_description": "{{newDescription}}",
+  "old_description": "{{oldDescription}}",
+  "new_image_url": "{{newImageUrl}}",
+  "old_image_url": "{{oldImageUrl}}",
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+# maxbattle — pokestop_name sources gymName (max battles happen at gyms, not
+# pokestops; the registry's own "pokestopName" is never set for this type).
+# quick_move/charge_move are dropped: Max Battles use a "Max Moves" mechanic
+# this codebase does not model as quick/charge moves (quickMoveName /
+# chargeMoveName are never populated for maxbattle). total_stationed(_gmax)
+# source the raw snake_case webhook keys (total_stationed_pokemon /
+# total_stationed_gmax) — the camelCase registry names are never set and
+# have no alias for this type.
+[[entry]]
+type = "maxbattle"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "pokemon_id": {{#if pokemonId}}{{pokemonId}}{{else}}0{{/if}},
+  "name": "{{name}}",
+  "full_name": "{{fullName}}",
+  "costume_name": "{{costumeName}}",
+  "level": {{#if level}}{{level}}{{else}}0{{/if}},
+  "gmax": {{#if gmax}}true{{else}}false{{/if}},
+  "pokestop_name": "{{gymName}}",
+  "types": [{{#each typeNameEng}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}],
+  "color": "{{color}}",
+  "end_at": {{#if endTimestamp}}{{endTimestamp}}{{else}}0{{/if}},
+  "end_display": "{{time}}",
+  "total_stationed": {{#if total_stationed_pokemon}}{{total_stationed_pokemon}}{{else}}0{{/if}},
+  "total_stationed_gmax": {{#if total_stationed_gmax}}{{total_stationed_gmax}}{{else}}0{{/if}},
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+# weatherchange — change_in.{hours,minutes,seconds} sources the common
+# tthh/tthm/tths fields, not the registry's weatherTthh/weatherTthm/
+# weatherTths (never populated — weather.go only sets a "weatherTth" geo.TTH
+# struct, never flattened under those names). cmd/processor/weather.go sets
+# the base "tth" enrichment key from the same weather-change target
+# (cleanUntil), so tthh/tthm/tths correctly carry the weather-change
+# countdown here via the same generic computed-field flattening every other
+# type uses (internal/dts/layered_view.go buildComputedFields).
+[[entry]]
+type = "weatherchange"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "weather": "{{weatherName}}",
+  "old_weather": "{{oldWeatherName}}",
+  "change_in": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "affected_pokemon": [{{#each enrichedActivePokemons}}{
+    "pokemon_id": {{#if pokemon_id}}{{pokemon_id}}{{else}}0{{/if}},
+    "full_name": "{{fullName}}",
+    "iv": {{#if (gte iv 0)}}{{iv}}{{else}}null{{/if}},
+    "cp": {{#if cp}}{{cp}}{{else}}0{{/if}},
+    "latitude": {{#if latitude}}{{latitude}}{{else}}0{{/if}},
+    "longitude": {{#if longitude}}{{longitude}}{{else}}0{{/if}}
+  }{{#unless @last}},{{/unless}}{{/each}}],
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""

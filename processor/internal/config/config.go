@@ -780,7 +780,7 @@ func applyAPIDeliveryDefaults(cfg *Config) {
 		cfg.APIDelivery.SecretHeader = "X-Poracle-Secret"
 	}
 	if cfg.APIDelivery.Template == "" {
-		cfg.APIDelivery.Template = "default"
+		cfg.APIDelivery.Template = "diadem"
 	}
 	if cfg.APIDelivery.TimeoutMs <= 0 {
 		cfg.APIDelivery.TimeoutMs = 10000
