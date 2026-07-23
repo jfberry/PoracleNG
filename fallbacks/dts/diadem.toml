@@ -138,6 +138,19 @@ template = """
 }
 """
 
+# Fix pass (see task-2-report.md "Fix pass" section):
+# - rsvps[] added — internal/enrichment/raid.go:110 sets m["rsvps"] (only
+#   when len(raid.RSVPs) > 0, so a totally-absent key is the normal shape
+#   for a raid with no RSVPs; {{#each}} on an absent key renders `[]`).
+#   Entry shape confirmed at raid.go:100-108: time, timeslot/timeSlot,
+#   going_count/goingCount, maybe_count/maybeCount (both cases set; the
+#   registry's rsvpEntryFields at internal/api/dts_fields.go:489 matches).
+# - boss.weaknesses added — base Raid() sets weaknessList (raid.go:169) as
+#   []gamedata.WeaknessCategory, but RaidTranslate (raid.go:300-302)
+#   overwrites it per-language with []map[string]any via
+#   TranslateWeaknessCategories: {value, types:[{typeId,name,emojiKey?}],
+#   typeName, typeEmojiKeys}. perLang outranks base in LayeredView priority,
+#   so the translated shape is what actually renders.
 [[entry]]
 type = "raid"
 platform = "api"
@@ -154,7 +167,12 @@ template = """
     "color": "{{color}}",
     "cp20": {{#if cp20}}{{cp20}}{{else}}0{{/if}}, "cp25": {{#if cp25}}{{cp25}}{{else}}0{{/if}},
     "quick_move": "{{quickMoveName}}", "charge_move": "{{chargeMoveName}}",
-    "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}}
+    "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}},
+    "weaknesses": [{{#each weaknessList}}{
+      "value": {{#if value}}{{value}}{{else}}0{{/if}},
+      "type_name": "{{typeName}}",
+      "types": [{{#each types}}{"type_id": {{#if typeId}}{{typeId}}{{else}}0{{/if}}, "name": "{{name}}"}{{#unless @last}},{{/unless}}{{/each}}]
+    }{{#unless @last}},{{/unless}}{{/each}}]
   },
   "gym": {
     "name": "{{gymName}}", "image_url": "{{gymUrl}}", "team": "{{teamName}}",
@@ -163,6 +181,12 @@ template = """
   "hatch_at": {{#if hatchTimestamp}}{{hatchTimestamp}}{{else}}0{{/if}},
   "end_at": {{#if endTimestamp}}{{endTimestamp}}{{else}}0{{/if}},
   "hatch_display": "{{hatchTime}}", "end_display": "{{time}}",
+  "rsvps": [{{#each rsvps}}{
+    "time": "{{time}}",
+    "timeslot": {{#if timeslot}}{{timeslot}}{{else}}0{{/if}},
+    "going_count": {{#if goingCount}}{{goingCount}}{{else}}0{{/if}},
+    "maybe_count": {{#if maybeCount}}{{maybeCount}}{{else}}0{{/if}}
+  }{{#unless @last}},{{/unless}}{{/each}}],
   "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
   "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
   "address": {
@@ -178,6 +202,10 @@ template = """
 
 # rsvpChanges = the raid entry verbatim (same fields; the rsvp timeslots ride
 # the same view — see design doc §1.7.4).
+#
+# rsvps[] and boss.weaknesses fixed alongside raid (see the raid entry's
+# comment above it for the source verification — both entries render off the
+# same enrichment map shape).
 [[entry]]
 type = "rsvpChanges"
 platform = "api"
@@ -194,7 +222,12 @@ template = """
     "color": "{{color}}",
     "cp20": {{#if cp20}}{{cp20}}{{else}}0{{/if}}, "cp25": {{#if cp25}}{{cp25}}{{else}}0{{/if}},
     "quick_move": "{{quickMoveName}}", "charge_move": "{{chargeMoveName}}",
-    "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}}
+    "shiny_possible": {{#if shinyPossible}}true{{else}}false{{/if}},
+    "weaknesses": [{{#each weaknessList}}{
+      "value": {{#if value}}{{value}}{{else}}0{{/if}},
+      "type_name": "{{typeName}}",
+      "types": [{{#each types}}{"type_id": {{#if typeId}}{{typeId}}{{else}}0{{/if}}, "name": "{{name}}"}{{#unless @last}},{{/unless}}{{/each}}]
+    }{{#unless @last}},{{/unless}}{{/each}}]
   },
   "gym": {
     "name": "{{gymName}}", "image_url": "{{gymUrl}}", "team": "{{teamName}}",
@@ -203,6 +236,12 @@ template = """
   "hatch_at": {{#if hatchTimestamp}}{{hatchTimestamp}}{{else}}0{{/if}},
   "end_at": {{#if endTimestamp}}{{endTimestamp}}{{else}}0{{/if}},
   "hatch_display": "{{hatchTime}}", "end_display": "{{time}}",
+  "rsvps": [{{#each rsvps}}{
+    "time": "{{time}}",
+    "timeslot": {{#if timeslot}}{{timeslot}}{{else}}0{{/if}},
+    "going_count": {{#if goingCount}}{{goingCount}}{{else}}0{{/if}},
+    "maybe_count": {{#if maybeCount}}{{maybeCount}}{{else}}0{{/if}}
+  }{{#unless @last}},{{/unless}}{{/each}}],
   "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
   "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
   "address": {
@@ -219,6 +258,9 @@ template = """
 # egg = the raid entry minus the "boss" object, keyed on level/level_name/gym/hatch.
 # No "end_display": eggFields has no formatted end-of-window string distinct
 # from hatch_display (only hatchTimestamp/endTimestamp as raw unix fields).
+# rsvps[] added — Raid() (internal/enrichment/raid.go) services both raid and
+# egg webhooks through the same function; the rsvps-building block (line 92)
+# isn't gated on raid.PokemonID, so eggs get the same m["rsvps"] shape.
 [[entry]]
 type = "egg"
 platform = "api"
@@ -234,6 +276,12 @@ template = """
   "hatch_at": {{#if hatchTimestamp}}{{hatchTimestamp}}{{else}}0{{/if}},
   "end_at": {{#if endTimestamp}}{{endTimestamp}}{{else}}0{{/if}},
   "hatch_display": "{{time}}",
+  "rsvps": [{{#each rsvps}}{
+    "time": "{{time}}",
+    "timeslot": {{#if timeslot}}{{timeslot}}{{else}}0{{/if}},
+    "going_count": {{#if goingCount}}{{goingCount}}{{else}}0{{/if}},
+    "maybe_count": {{#if maybeCount}}{{maybeCount}}{{else}}0{{/if}}
+  }{{#unless @last}},{{/unless}}{{/each}}],
   "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
   "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
   "address": {
@@ -255,6 +303,9 @@ template = """
 # key is isShiny). xl_candy_amount is dropped entirely: this codebase's quest
 # reward model has no XL-candy category (Candy and XL Candy aren't
 # distinguished anywhere in QuestRewardData).
+# Fix pass: conditions_en added — quest.go:358 sets m["conditionStringEng"]
+# alongside conditionString (joined English condition text; both plain
+# strings, no guard needed per the string-field convention).
 [[entry]]
 type = "quest"
 platform = "api"
@@ -265,6 +316,7 @@ template = """
   "quest": "{{questString}}",
   "reward": "{{rewardString}}",
   "conditions": "{{conditionString}}",
+  "conditions_en": "{{conditionStringEng}}",
   "condition_list": [{{#each conditionList}}{"type": {{#if type}}{{type}}{{else}}0{{/if}}, "name": "{{name}}", "formatted": "{{formatted}}"}{{#unless @last}},{{/unless}}{{/each}}],
   "reward_detail": {
     "dust_amount": {{#if dustAmount}}{{dustAmount}}{{else}}0{{/if}},
@@ -318,6 +370,7 @@ template = """
     "longitude": {{#if longitude}}{{longitude}}{{else}}0{{/if}},
     "quest": "{{questString}}",
     "reward": "{{rewardString}}",
+    "conditions_en": "{{conditionStringEng}}",
     "reward_detail": {
       "dust_amount": {{#if dustAmount}}{{dustAmount}}{{else}}0{{/if}},
       "item_name": "{{itemNames}}",
@@ -331,6 +384,19 @@ template = """
 }
 """
 
+# Fix pass: rewards/lineup added — internal/enrichment/invasion.go:269 sets
+# m["gruntRewardsList"] as a map keyed by slot name ("first"/"second"/
+# "third", only as many keys as reward slots exist), each value
+# {chance, monsters:[{id,formId,name,formName,fullName}]}. Rendered via
+# {{#each gruntRewardsList}} (raymond's each helper iterates map keys/values
+# directly — see helper.go eachHelper's reflect.Map case — and exposes
+# {{@key}} as the slot name), so no slot-name guessing is needed and an
+# absent/empty map renders `[]` safely (eachHelper's `!IsTrue(context)` early
+# return). gruntLineupList (invasion.go:288) is a single map
+# {confirmed, monsters:[...]} — accessed via dotted-path (gruntLineupList.X),
+# the same pattern already shipped in the monsterChanged entry's `original.*`
+# fields; verified safe for a totally-absent gruntLineupList key by the
+# throwaway test (see task-2-report.md).
 [[entry]]
 type = "invasion"
 platform = "api"
@@ -346,6 +412,15 @@ template = """
   "gender": "{{genderName}}",
   "color": "{{gruntTypeColor}}",
   "expires_display": "{{time}}",
+  "rewards": [{{#each gruntRewardsList}}{
+    "slot": "{{@key}}",
+    "chance": {{#if chance}}{{chance}}{{else}}0{{/if}},
+    "monsters": [{{#each monsters}}{"id": {{#if id}}{{id}}{{else}}0{{/if}}, "name": "{{name}}", "form_name": "{{formName}}", "full_name": "{{fullName}}"}{{#unless @last}},{{/unless}}{{/each}}]
+  }{{#unless @last}},{{/unless}}{{/each}}],
+  "lineup": {
+    "confirmed": {{#if gruntLineupList.confirmed}}true{{else}}false{{/if}},
+    "monsters": [{{#each gruntLineupList.monsters}}{"id": {{#if id}}{{id}}{{else}}0{{/if}}, "name": "{{name}}", "form_name": "{{formName}}", "full_name": "{{fullName}}"}{{#unless @last}},{{/unless}}{{/each}}]
+  },
   "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
   "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
   "address": {
@@ -380,6 +455,65 @@ template = """
   "display_type": {{#if displayType}}{{displayType}}{{else}}0{{/if}},
   "incident_type_name": "{{incidentTypeName}}",
   "color": "{{color}}",
+  "expires_display": "{{disappearTime}}",
+  "showcase": {
+    "present": {{#if showcasePresent}}true{{else}}false{{/if}},
+    "total_entries": {{#if showcaseTotalEntries}}{{showcaseTotalEntries}}{{else}}0{{/if}},
+    "focus_category": "{{showcaseFocusCategory}}",
+    "focus_name": "{{showcaseFocusName}}",
+    "entries": [{{#each showcase}}{
+      "rank": {{#if rank}}{{rank}}{{else}}0{{/if}}, "full_name": "{{fullName}}",
+      "shiny": {{#if shiny}}true{{else}}false{{/if}}, "score": {{#if score}}{{score}}{{else}}0{{/if}}
+    }{{#unless @last}},{{/unless}}{{/each}}]
+  },
+  "static_map": "{{staticMap}}", "icon_url": "{{imgUrl}}",
+  "map_urls": { "google": "{{googleMapUrl}}", "apple": "{{appleMapUrl}}" },
+  "address": {
+    "formatted": "{{addr}}", "city": "{{city}}", "country": "{{country}}",
+    "country_code": "{{countryCode}}"
+  },
+  "time_remaining": {
+    "hours": {{#if tthh}}{{tthh}}{{else}}0{{/if}}, "minutes": {{#if tthm}}{{tthm}}{{else}}0{{/if}},
+    "seconds": {{#if tths}}{{tths}}{{else}}0{{/if}}
+  },
+  "sun": {
+    "sunrise_display": "{{sunriseTime}}", "sunset_display": "{{sunsetTime}}",
+    "is_night": {{#if isNight}}true{{else}}false{{/if}},
+    "is_dawn": {{#if isDawn}}true{{else}}false{{/if}},
+    "is_dusk": {{#if isDusk}}true{{else}}false{{/if}}
+  }
+}
+"""
+
+# showcase (16th entry) — real Showcase webhooks render via the dedicated
+# "showcase" DTS template type, not "incident". Verified in
+# cmd/processor/showcase.go: ProcessShowcase builds RenderJob with
+# TemplateType: "showcase" (AlertType stays "incident" for tracking/
+# rate-limit/mute purposes, but template SELECTION uses "showcase"). Without
+# this entry, api-platform Showcase alerts fall through the whole selection
+# chain (no wildcard-language fallback exists either) and nothing is sent.
+#
+# Base enrichment is Invasion() + InvasionTranslate() + ShowcaseFocusTranslate()
+# — the same functions the invasion/incident entries use — so pokestop_name/
+# pokestop_id/pokestop_image_url/display_type/expires_display/showcase.* all
+# come from the exact same keys verified above for "incident". The dedicated
+# "showcase" alias table in internal/dts/view.go (pokestopName, pokestopUrl,
+# pokestopId, name, url, displayType) intentionally omits incidentTypeName/
+# color — grunt/reward fields don't apply to a Showcase — so those two
+# incident-only fields are dropped here rather than shipped permanently
+# empty. showcaseFocusCategory/showcaseFocusName come from
+# ShowcaseFocusTranslate (internal/enrichment/showcase.go), merged into the
+# per-language map by ProcessShowcase alongside InvasionTranslate's output.
+[[entry]]
+type = "showcase"
+platform = "api"
+id = "diadem"
+template = """
+{
+  "pokestop_name": "{{pokestopName}}",
+  "pokestop_id": "{{pokestopId}}",
+  "pokestop_image_url": "{{pokestopUrl}}",
+  "display_type": {{#if displayType}}{{displayType}}{{else}}0{{/if}},
   "expires_display": "{{disappearTime}}",
   "showcase": {
     "present": {{#if showcasePresent}}true{{else}}false{{/if}},
@@ -476,6 +610,10 @@ template = """
 }
 """
 
+# Fix pass: previous_control_name added — gym.go:98 sets
+# m["previousControlName"] from the cached last-owner team (only when a
+# prior controlling team is known and resolves against Util.Teams; plain
+# string field, safe unguarded per the string-field convention).
 [[entry]]
 type = "gym"
 platform = "api"
@@ -486,6 +624,7 @@ template = """
   "image_url": "{{gymUrl}}",
   "team": "{{teamName}}",
   "old_team": "{{oldTeamName}}",
+  "previous_control_name": "{{previousControlName}}",
   "slots_available": {{#if slotsAvailable}}{{slotsAvailable}}{{else}}0{{/if}},
   "old_slots_available": {{#if oldSlotsAvailable}}{{oldSlotsAvailable}}{{else}}0{{/if}},
   "in_battle": {{#if inBattle}}true{{else}}false{{/if}},
@@ -519,6 +658,13 @@ template = """
 # comma-correct JSON array in Handlebars alone). is_edit_image sources from
 # isEditImageUrl, the real key fort.go sets (isEditImage does not exist).
 # fort_id/fort_type/change_type are Type "string" in the registry — quoted.
+# Fix pass: change_type was {{changeType}}, which is never set anywhere —
+# internal/enrichment/fort.go only ever computes a local `changeType`
+# variable, never stores it to the map under "changeType" or "change_type"
+# (only the derived isEdit/isNew/isRemoval booleans and the display string
+# m["changeTypeText"] are stored — see fort.go:56-69). Repointed to
+# {{changeTypeText}} so the field is actually populated ("Edit"/"Removal"/
+# "New"), matching change_type_text below (same source, both real).
 [[entry]]
 type = "fort-update"
 platform = "api"
@@ -528,7 +674,7 @@ template = """
   "fort_id": "{{id}}",
   "fort_type": "{{fortType}}",
   "name": "{{name}}",
-  "change_type": "{{changeType}}",
+  "change_type": "{{changeTypeText}}",
   "change_type_text": "{{changeTypeText}}",
   "is_edit_name": {{#if isEditName}}true{{else}}false{{/if}},
   "is_edit_location": {{#if isEditLocation}}true{{else}}false{{/if}},
@@ -559,14 +705,23 @@ template = """
 }
 """
 
-# maxbattle — pokestop_name sources gymName (max battles happen at gyms, not
-# pokestops; the registry's own "pokestopName" is never set for this type).
-# quick_move/charge_move are dropped: Max Battles use a "Max Moves" mechanic
-# this codebase does not model as quick/charge moves (quickMoveName /
-# chargeMoveName are never populated for maxbattle). total_stationed(_gmax)
-# source the raw snake_case webhook keys (total_stationed_pokemon /
+# maxbattle — Fix pass: pokestop_name was {{gymName}}, which is never set
+# for this type (max battles have no gym_name/gym_url webhook fields, and
+# maxbattle's alias table in internal/dts/view.go maps gymName->gym_name,
+# a key nothing populates). The real location field is m["station_name"]
+# (internal/enrichment/maxbattle.go:42, station_id/station_name are set
+# directly from mb.ID/mb.Name). Note {{name}} below is NOT the station name
+# either — MaxbattleTranslate calls TranslateMonsterNamesEng which sets
+# "name" to the translated BOSS pokemon name (perLang layer outranks the raw
+# webhook fallback layer that would otherwise expose the station's raw
+# "name" field), so station identity is only reachable via station_name.
+# quick_move/charge_move added — MaxbattleTranslate (maxbattle.go:205) DOES
+# call addMoveFields(..., mb.BattlePokemonMove1, mb.BattlePokemonMove2),
+# which sets quickMoveName/chargeMoveName (translate.go:389-390) whenever a
+# battle pokemon is present. total_stationed(_gmax) already correctly source
+# the raw snake_case webhook keys (total_stationed_pokemon /
 # total_stationed_gmax) — the camelCase registry names are never set and
-# have no alias for this type.
+# have no alias for this type; left unchanged.
 [[entry]]
 type = "maxbattle"
 platform = "api"
@@ -579,9 +734,11 @@ template = """
   "costume_name": "{{costumeName}}",
   "level": {{#if level}}{{level}}{{else}}0{{/if}},
   "gmax": {{#if gmax}}true{{else}}false{{/if}},
-  "pokestop_name": "{{gymName}}",
+  "pokestop_name": "{{station_name}}",
   "types": [{{#each typeNameEng}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}],
   "color": "{{color}}",
+  "quick_move": "{{quickMoveName}}",
+  "charge_move": "{{chargeMoveName}}",
   "end_at": {{#if endTimestamp}}{{endTimestamp}}{{else}}0{{/if}},
   "end_display": "{{time}}",
   "total_stationed": {{#if total_stationed_pokemon}}{{total_stationed_pokemon}}{{else}}0{{/if}},
