@@ -59,7 +59,6 @@ All three operations share one JSON shape. Fields marked *omitted when empty* ar
   "in_reply_to": "a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
   "tracking_uids": [45, 46],
   "areas": ["london", "city"],
-  "media": { "static_map": "https://tiles.example/abc.png" },
   "payload": { "…rendered alert content…" }
 }
 ```
@@ -84,10 +83,9 @@ All three operations share one JSON shape. Fields marked *omitted when empty* ar
 | `in_reply_to` | string | *Omitted when empty.* The identifier of an earlier message to the same destination that this one continues (e.g. egg → raid on the same gym). Its value is the `id` you returned for that earlier message, or that message's `message_id` if you returned none. |
 | `tracking_uids` | int[] | *Omitted when empty.* IDs of the tracking rules that matched — stable handles you can use to offer "stop tracking this" via the management API (§7). |
 | `areas` | string[] | *Omitted when empty.* Geofence area names containing the alert. |
-| `media.static_map` | string | *Omitted when absent.* Public URL of a map image. Only present when the template asked for one. |
 | `payload` | object | The rendered alert content (§8). Always a JSON object. |
 
-> **Version note.** In this version Poracle does not yet emit `in_reply_to`, `tracking_uids`, `areas`, or `media`; they are documented here so the envelope is forward-compatible and will begin appearing without a breaking change. Build your receiver to **ignore fields that are absent** (they already follow the *omitted when empty* rule) and you need do nothing when they arrive later. `revision` is likewise reserved (always `0`) — see §3.1 and §5.
+> **Version note.** `in_reply_to`, `tracking_uids`, and `areas` are emitted whenever they have a value, following the *omitted when empty* rule above — build your receiver to read them today, not as a future capability. `revision` is the sole reserved field in this version: always `0`. A future version may make it monotonic as a richer idempotency key, but do not key on it today (see §3.1 and §5). The static map URL is not an envelope field at all — see §8, `payload.static_map`.
 
 ### 3.2 `op: "edit"`
 
@@ -189,7 +187,9 @@ You choose `destination.id` at creation; it must match `^[A-Za-z0-9._~-]{1,128}$
 
 `alert_type` is one of: `pokemon`, `monsterChanged`, `raid`, `egg`, `rsvpChanges`, `quest`, `questSummary`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort`, `maxbattle`, `weatherchange`.
 
-Every payload carries a common block (address, icon URL, map URLs, time-remaining, sun times) plus per-type fields. The full field-by-field schema is delivered with your partner pack and validated by an automated conformance test on the Poracle side, so what you receive always matches what was agreed.
+Every payload carries a common block (address, icon URL, map URLs, static map URL, time-remaining, sun times) plus per-type fields. The static map URL is the payload field `static_map`, alongside `icon_url` and `map_urls` — it is **not** an envelope field. It is present only when the template that produced this payload references it; a partner pack that never wants tiles simply omits `{{staticMap}}` from its templates and the key never appears. The full field-by-field schema is delivered with your partner pack and validated by an automated conformance test on the Poracle side, so what you receive always matches what was agreed.
+
+Poracle's own reference implementation of this contract is the `diadem` partner pack — shipped at `fallbacks/dts/diadem.toml` with `id="diadem"`, selected as the default via `[api_delivery] template="diadem"`. It ships 16 template entries — one per `alert_type` above, plus a dedicated `showcase` entry that renders Showcase-flavoured `incident` alerts (the envelope's `alert_type` still reads `"incident"` for these; `showcase` only distinguishes which template rendered `payload`). It is validated on every change by a real-enrichment conformance test (`processor/cmd/processor/api_pack_conformance_test.go`) that renders each entry and asserts the output matches this schema. Each additional partner integration follows the same pattern: its own self-contained `<partner>.toml` with `id="<partner>"`, coexisting with `diadem` in the same install.
 
 *(The complete canonical field mapping lives in the PoracleNG design document `docs/superpowers/specs/2026-07-19-api-delivery-destination-design.md` §1.7; your partner pack is that schema in executable form.)*
 

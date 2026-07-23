@@ -67,7 +67,6 @@ All three operations share one envelope shape. Fields marked *omitted when empty
   "in_reply_to": "a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
   "tracking_uids": [45, 46],
   "areas": ["london", "city"],
-  "media": { "static_map": "https://tiles.example/abc.png" },
   "payload": {
     "title": "Pikachu 100%",
     "pokemon_id": 25,
@@ -100,8 +99,9 @@ All three operations share one envelope shape. Fields marked *omitted when empty
 | `in_reply_to` | string | *Omitted when empty.* Identifier of a previously delivered message to the same destination that this one continues — e.g. an egg alert followed by the raid alert for the same gym. Its value is the `id` the receiver returned for that earlier message, or that message's `message_id` if the receiver returned none. |
 | `tracking_uids` | int[] | *Omitted when empty.* Database UIDs of the tracking rules that matched. Stable identifiers the receiver can use to offer "stop tracking this" against the v2 tracking API. |
 | `areas` | string[] | *Omitted when empty.* Geofence area names containing the alert. |
-| `media.static_map` | string | *Omitted when absent.* Public URL of a pre-generated static map tile. **Only present when a tile was generated for this render.** Poracle generates a tile only if some template in the batch references it, so a receiver that never wants tiles simply gets a template with no `{{staticMap}}` and this key never appears. |
 | `payload` | object | The rendered alert content, in the canonical schema of §1.7. Always a JSON object, never a string or array. |
+
+`in_reply_to`, `tracking_uids`, and `areas` are populated on every send where they have a value — there is no staged rollout for these three. The static map URL is **not** an envelope field: it is the payload field `static_map` (§1.7.2), present only when the template that produced `payload` references `{{staticMap}}`. `revision` (above) is the only envelope field that remains reserved/unimplemented in this version — see §1.5.
 
 ### `op: "edit"`
 
@@ -216,6 +216,7 @@ Repeated inline in every entry — see §1.7.5 for why there is no partial. Note
 | `icon_url` | string | `imgUrl` |
 | `map_urls.google` | string | `googleMapUrl` |
 | `map_urls.apple` | string | `appleMapUrl` |
+| `static_map` | string | `staticMap` |
 | `time_remaining.days` | int | `tthd` |
 | `time_remaining.hours` | int | `tthh` |
 | `time_remaining.minutes` | int | `tthm` |
@@ -230,6 +231,8 @@ Repeated inline in every entry — see §1.7.5 for why there is no partial. Note
 | `bearing_deg` | int | `bearing` |
 
 `distance_m` is the metres between the alert and the user's effective location anchor (per-rule override → profile location → account default); `bearing_deg` is the compass bearing from that anchor, `0` = north. Both are `0` for destinations tracking by area rather than distance.
+
+`static_map` is the public URL of a pre-generated static map tile. It is a **payload** field, not an envelope field. Poracle generates a tile only if some template in the render batch references `{{staticMap}}`, so a partner pack that never wants tiles simply omits it from its templates and the key never appears in that payload.
 
 > **Depends on a prerequisite fix.** Today the renderer only surfaces these two fields for pokemon alerts; every other type is group-rendered and the per-user values, though computed by the matcher, never reach the template. That is a pre-existing defect affecting Discord and Telegram equally, and is fixed separately before this work — see `2026-07-19-per-user-distance-bearing-design.md`. This schema assumes the fix has landed.
 
@@ -294,11 +297,11 @@ PVP entries are sanitised to: `rank`, `cp`, `level`, `cap`, `capped`, `percentag
 | `fort` | `fort_id`←`id`, `fort_type`←`fortType`, `name`, `change_type`←`changeType`, `change_type_text`←`changeTypeText`, `edit_types[]`←`editTypesList`, `is_edit_name`, `is_edit_location`, `is_edit_image`, `is_empty`←`isEmpty`, `new_name`, `old_name`, `new_description`, `old_description`, `new_image_url`, `old_image_url` |
 | `maxbattle` | `pokemon_id`←`pokemonId`, `name`, `full_name`←`fullName`, `costume_name`←`costumeName`, `level`, `gmax`, `pokestop_name`, `types`←`typeNameEng`, `color`, `quick_move`←`quickMoveName`, `charge_move`←`chargeMoveName`, `end_at`←`endTimestamp`, `end_display`←`time`, `total_stationed`←`totalStationedPokemon`, `total_stationed_gmax`←`totalStationedGmax` |
 | `weatherchange` | `weather`←`weatherName`, `old_weather`←`oldWeatherName`, `change_in.{hours, minutes, seconds}`←`weatherTthh`/`weatherTthm`/`weatherTths`, `affected_pokemon[]`←`enrichedActivePokemons` |
-| `questSummary` | A digest, not a single alert. Top-level from `BuildQuestSummaryView` (`dts/quest_summary.go:106`): `reward_type`←`rewardType`, `reward_id`←`reward`, `reward_form`←`rewardForm`, `reward_name`←`rewardName`, `count`←`count` (total stops across the whole reward group, not just this chunk), `chunk`←`chunk`, `chunks`←`chunks` (1-indexed pagination for oversized groups; both `1` when unsplit). `entries[]`←`quests`, each entry a per-pokestop quest view carrying `pokestop_name`, `latitude`, `longitude` plus the same reward/quest keys as the `quest` type above. The envelope's `location` and `media.static_map` refer to the multi-pin overview map for this chunk, whose pins are exactly `entries[]`. No per-user `distance_m`/`bearing_deg` — a digest spans many locations. |
+| `questSummary` | A digest, not a single alert. Top-level from `BuildQuestSummaryView` (`dts/quest_summary.go:106`): `reward_type`←`rewardType`, `reward_id`←`reward`, `reward_form`←`rewardForm`, `reward_name`←`rewardName`, `count`←`count` (total stops across the whole reward group, not just this chunk), `chunk`←`chunk`, `chunks`←`chunks` (1-indexed pagination for oversized groups; both `1` when unsplit). `entries[]`←`quests`, each entry a per-pokestop quest view carrying `pokestop_name`, `latitude`, `longitude` plus the same reward/quest keys as the `quest` type above. The envelope's `location` and the payload's `static_map` refer to the multi-pin overview map for this chunk, whose pins are exactly `entries[]`. No per-user `distance_m`/`bearing_deg` — a digest spans many locations. |
 
 ### 1.7.5 The partner template pack
 
-Each partner integration is distributed as **one self-contained file** containing one `[[entry]]` per alert type. The first is Diadem:
+Each partner integration is distributed as **one self-contained file**. The first is Diadem, shipping sixteen `[[entry]]` blocks — one per `alert_type` in §1.7, plus a dedicated `showcase` entry that renders Showcase-flavoured `incident` alerts (see §1.7.4):
 
 ```
 fallbacks/dts/diadem.toml     # shipped with Poracle, readonly
@@ -310,6 +313,8 @@ config/dts/diadem.toml        # operator's copy, overrides the shipped one
 **Partner identity is the template ID.** Entries use `platform = "api"` with `id = "diadem"`. The operator points api destinations at the pack with `[api_delivery] template = "diadem"`; a second partner ships `id = "partnerB"` and coexists in the same install without collision. Because DTS selection already keys on `(type, platform, id, language)`, this needs no new mechanism — and a per-rule `template:diadem` still works for anyone who wants it per tracking rule.
 
 **Overriding.** Shipped packs are readonly. Template selection runs user entries first and falls back to readonly entries only if nothing matched, so an operator who needs an extra field copies `fallbacks/dts/diadem.toml` to `config/dts/` and edits it there — the same pattern the bundled help and info templates already use.
+
+**Validated by an automated conformance test.** `processor/cmd/processor/api_pack_conformance_test.go` (§2.8) renders every entry in the shipped Diadem pack through real enrichment — not stubs — against the bundled `fallbacks/testdata.json` fixtures, and asserts each rendered payload is valid JSON with every documented key present and non-empty. Because the common block of §1.7.2 is duplicated across all sixteen entries with no partial, this test is what catches drift between those copies as the schema or enrichment evolves — it is not optional.
 
 **Authoring rule — guard every numeric interpolation.** A field with no value renders as an empty string, so a bare `"cp": {{cp}}` produces `"cp": ` and invalid JSON. The renderer detects this (`json.Valid`) and substitutes a fallback message, meaning the receiver silently gets the wrong body. Numeric fields must be written `"cp": {{#if cp}}{{cp}}{{else}}0{{/if}}` or equivalent. This matters most for `iv`/`cp`/`level` on unencountered pokemon and for `distance_m`/`bearing_deg`.
 
@@ -507,11 +512,11 @@ log_only      = false                 # dry-run: log the envelope instead of POS
 | `Platform` | `"api"`. |
 | `WaitForRateLimit` | Blocks until any deadline learned from the last `429` has passed. Called before the semaphore is acquired, per the interface contract. |
 
-Envelope construction reads from the existing `delivery.Job`: `Target`, `Type`, `Name`, `Language`, `Lat`, `Lon`, `TTH` (→ `expires_at`), `Clean` (→ `lifecycle` via `db.IsClean`/`db.IsEdit`), `ReplyToID` (→ `in_reply_to`), `MsgType` (→ `alert_type`), `Message` (→ `payload`).
+Envelope construction reads from the existing `delivery.Job`: `Target`, `Type`, `Name`, `Language`, `Lat`, `Lon`, `TTH` (→ `expires_at`), `Clean` (→ `lifecycle` via `db.IsClean`/`db.IsEdit`), `ReplyToID` (→ `in_reply_to`), `MsgType` (→ `alert_type`), `Message` (→ `payload`), plus `TemplateID` (→ `template_id`), `TrackingUIDs` (→ `tracking_uids`), and `Areas` (→ `areas`).
 
-`revision` is derived from the `MessageTracker` entry: `0` on first send, incremented on each edit and carried into the delete.
+`revision` is hardcoded to `0` on every `send`, `edit`, and `delete` — the reserved-field decision (§1.3) has no code path that increments it.
 
-Four values the envelope needs are not currently on `Job`: `template_id`, `tracking_uids`, `areas`, and the resolved public tile URL (`Job` today carries only `StaticMapData` bytes, which api destinations do not use). The first three are already assembled on `RenderJob` for `buildSnapshot`; the tile URL is known to the render pool after pregeneration. All four become new `Job` fields, populated in `cmd/processor/render.go` alongside the existing conversion.
+`TemplateID`, `TrackingUIDs`, and `Areas` are populated in `cmd/processor/render.go` from the same values `buildSnapshot` already assembles on `RenderJob`. The static map URL needs no equivalent `Job` field: it flows through the render pipeline as an ordinary template variable (`{{staticMap}}`) into `payload.static_map` (§1.7.2), the same as `icon_url` or any other rendered field.
 
 Registered in `NewDispatcher` when `cfg.APIEndpoint != ""`, alongside the existing Discord and Telegram registrations.
 
@@ -579,7 +584,7 @@ These templates are **the canonical payload schema of §1.7 in executable form**
 
 **One loader change needed:** the `fallbacks/dts/` walker accepts `.json` only (`templates.go:194`), while `config/dts/` takes both `.json` and `.toml`. Extend the fallback walker to `.toml` via the existing TOML loader, so the partner pack can be authored with readable `"""` multi-line bodies and so the copy-to-`config/dts/` path is format-symmetric.
 
-**No partials.** DTS partials load from a single global `config/partials.json`, so a partner pack cannot ship one without merging into a file the operator also owns. The common block of §1.7.2 is repeated verbatim in all fifteen entries. The schema conformance test in §2.8 is what catches drift between the copies — that is the mitigation for the duplication, and it is why the test is not optional.
+**No partials.** DTS partials load from a single global `config/partials.json`, so a partner pack cannot ship one without merging into a file the operator also owns. The common block of §1.7.2 is repeated verbatim in all sixteen entries. The schema conformance test in §2.8 is what catches drift between the copies — that is the mitigation for the duplication, and it is why the test is not optional.
 
 **Partner identity is the template ID.** `id = "diadem"`, selected via `[api_delivery] template = "diadem"`. A second partner ships `id = "partnerB"` and coexists. This reuses the existing `(type, platform, id, language)` selection key rather than inventing a mechanism, and composes with the reserved named-endpoint syntax of §2.1.
 
@@ -598,9 +603,9 @@ Render output that is not valid JSON is dropped with a warning, matching current
 - Unit tests for `APISender`: envelope construction per op, `revision` sequencing across send → edit → edit → delete, SentID composition and parsing, provider-ID validation and rejection, status-code classification (2xx/429/401/403/404/410/other 4xx/5xx), `Retry-After` parsing, retry-and-backoff, `404`-on-delete-is-success, `log_only` mode.
 - Queue tests: `api` gets its own semaphore and does not consume Discord's; `PermanentError` from `APISender` drives the existing auto-disable path.
 - Rate-limit test: `api:user` draws `dm_limit`, `api:channel` draws `channel_limit`.
-- Tile-mode test: an api-only batch whose template omits `{{staticMap}}` yields `TileModeSkip`; a mixed batch with a Discord template that uses it yields a URL and the api envelope carries `media.static_map`.
+- Tile-mode test: an api-only batch whose template omits `{{staticMap}}` yields `TileModeSkip`; a mixed batch with a Discord template that uses it yields a URL and the api payload carries `static_map`.
 - Type-validation tests on both create endpoints.
-- **Payload schema conformance**: a golden test that renders every entry in the shipped partner pack against the existing `testdata.json` fixtures and asserts the output validates against a JSON Schema generated from §1.7. This does three jobs: it stops a future enrichment change from silently breaking the receiver's contract, it fails loudly if a canonical key is renamed or dropped, and — because the common block is duplicated across fifteen entries with no partial — it is the only thing that catches drift between those copies.
+- **Payload schema conformance**: a golden test that renders every entry in the shipped partner pack against the existing `testdata.json` fixtures and asserts the output validates against a JSON Schema generated from §1.7. This does three jobs: it stops a future enrichment change from silently breaking the receiver's contract, it fails loudly if a canonical key is renamed or dropped, and — because the common block is duplicated across sixteen entries with no partial — it is the only thing that catches drift between those copies. Implemented as `TestAPIPackConformance` in `processor/cmd/processor/api_pack_conformance_test.go`.
 - A rendering test per entry asserting valid JSON when every optional field is absent (unencountered pokemon, no geocoding, no PVP data), pinning the numeric-guard requirement of §1.7.5. An unguarded interpolation is invisible until a sparse webhook arrives in production.
 - A test that `[api_delivery] template` is what an empty rule template resolves to for `api` destinations, and that `[general] default_template_name` still wins for Discord and Telegram.
 - Fallback loader test: a `.toml` file in `fallbacks/dts/` loads, is marked readonly, and is overridden by a same-`(type, platform, id, language)` entry in `config/dts/`.
@@ -616,4 +621,4 @@ Render output that is not valid JSON is dropped with a warning, matching current
 | Multiple named receivers | One endpoint now. The `api:<name>:user` type syntax and `[api_delivery.endpoints.<name>]` config shape are reserved so a second receiver needs no wire-format or schema change. |
 | Batched delivery | The `FairQueue` per-destination mutex is what guarantees ordering; batching would break it. Receivers batch internally. |
 | Chat commands for `api` destinations | Managed entirely through the v2 API by design. |
-| Inline image bytes | URL only. Adding `media.static_map_data` later is additive. |
+| Inline image bytes | URL only (`payload.static_map`). Adding a sibling `payload.static_map_data` with raw bytes later is additive. |
