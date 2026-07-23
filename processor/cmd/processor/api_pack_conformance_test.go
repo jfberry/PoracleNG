@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/dts"
-	"github.com/pokemon/poracleng/processor/internal/enrichment"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -75,19 +74,6 @@ func TestAPIPackConformance(t *testing.T) {
 			var jobs []webhook.DeliveryJob
 
 			switch tc.dtsType {
-			case "showcase":
-				// "showcase" is the one DTS type Task 1's enrich* unification
-				// didn't cover — there is no ps.enrichShowcase /
-				// enrichForType("showcase", ...) case (enrich.go's switch has
-				// no "showcase" arm even though dtsmap declares it as a
-				// non-Derived alias). The live test path
-				// (processTestShowcase, cmd/processor/test.go) still builds
-				// its enrichment inline. Mirroring those exact calls here
-				// keeps this subtest on REAL enrichment instead of a
-				// hand-built map; see this test's package doc and the task
-				// report for the follow-up this gap deserves.
-				base, perLang, webhookFields := enrichShowcaseForConformance(t, ps, raw, "en")
-				jobs = r.RenderAlert("showcase", base, map[string]map[string]any{"en": perLang}, webhookFields, []webhook.MatchedUser{user}, nil, "ref", "")
 			case "monster":
 				res, err := ps.enrichForType(tc.dtsType, raw, "en", true)
 				if err != nil {
@@ -152,35 +138,6 @@ func perUserMapFor(userID string, perUser map[string]any) map[string]map[string]
 		return nil
 	}
 	return map[string]map[string]any{userID: perUser}
-}
-
-// enrichShowcaseForConformance mirrors processTestShowcase's enrichment
-// (cmd/processor/test.go) verbatim — same Enricher calls, same field
-// overrides — so the "showcase" subtest above renders against real
-// enrichment output despite showcase not having gone through the enrich*/
-// enrichForType unification (see the case comment above for why).
-func enrichShowcaseForConformance(t *testing.T, ps *ProcessorService, raw json.RawMessage, language string) (base, perLang, webhookFields map[string]any) {
-	t.Helper()
-
-	var sc webhook.ShowcaseWebhook
-	if err := json.Unmarshal(raw, &sc); err != nil {
-		t.Fatalf("parse showcase: %v", err)
-	}
-
-	base, _ = ps.enricher.Invasion(
-		sc.Latitude, sc.Longitude, sc.ShowcaseExpiry, sc.PokestopID, sc.URL,
-		0, showcaseDisplayType, 0, enrichment.TileModeURL)
-	base["pokestop_name"] = sc.Name
-
-	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = ps.enricher.InvasionTranslate(base, sc.Latitude, sc.Longitude, 0, nil, sc.ShowcaseRankings, language)
-		for k, v := range ps.enricher.ShowcaseFocusTranslate(sc.ShowcaseFocus, language) {
-			perLang[k] = v
-		}
-	}
-
-	webhookFields = parseWebhookFields(raw)
-	return base, perLang, webhookFields
 }
 
 // apiPackNavigate walks a dotted path ("boss.name", "showcase.present")
