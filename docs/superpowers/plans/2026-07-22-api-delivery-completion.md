@@ -371,16 +371,14 @@ git commit -m "feat(dts): full 15-type diadem partner pack; default template=dia
 
 ---
 
-### Task 3: Pack conformance test
+### Task 3: Pack conformance test (real enrichment)
 
-Pin every pack entry: it must render to valid JSON, and emit the canonical required keys for its type, for both a fully-populated and a sparse (all-optional-absent) enrichment map.
+**Upgraded from the original hand-built-map design.** A hand-built enrichment map is written to match the template, so it cannot catch the highest-risk defect class — a payload field that renders EMPTY because the template's field name doesn't match what enrichment actually produces (exactly the maxbattle/fort-update bugs the Task 2 review found). This task instead renders the real `diadem.toml` against REAL enrichment output (via `ProcessorService.enrichForType` on `fallbacks/testdata.json` fixtures) and asserts required fields are NON-EMPTY — the only form that guards the empty-field class going forward. See the authored brief `.superpowers/sdd/task-3-brief.md` for the full spec (harness `newEnrichParityService` + `loadTestdataSample` + `enrichForType`, both live in `cmd/processor/*_test.go`; the test lives in package `main`).
 
 **Files:**
-- Create: `processor/internal/dts/api_pack_conformance_test.go`
+- Create: `processor/cmd/processor/api_pack_conformance_test.go`
 
-- [ ] **Step 1: Write the conformance test**
-
-For each type, a representative enrichment map and the set of required top-level payload keys. The test loads the real `fallbacks/dts/diadem.toml`, renders each type through `RenderAlert` (or `RenderPokemon` for pokemon) with a `Template: "diadem"` user, and asserts (a) valid JSON and (b) every required key present.
+The test: for each api alert type, load its testdata sample → `enrichForType` → render the diadem api entry → assert valid JSON + per-type required NON-EMPTY keys.
 
 ```go
 package dts
