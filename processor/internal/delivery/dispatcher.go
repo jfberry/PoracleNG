@@ -37,7 +37,6 @@ type DispatcherConfig struct {
 	APISecretPrefix string
 	APITimeoutMs    int
 	APIMaxRetries   int
-	APIConcurrency  int
 	APILogOnly      bool
 	Version         string // PoracleNG version for API User-Agent
 }
