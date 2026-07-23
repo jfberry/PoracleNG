@@ -117,6 +117,9 @@ type apiEnvelope struct {
 	SentAt            int64           `json:"sent_at"`
 	AlertType         string          `json:"alert_type,omitempty"`
 	TemplateID        string          `json:"template_id,omitempty"`
+	TrackingUIDs      []int64         `json:"tracking_uids,omitempty"`
+	Areas             []string        `json:"areas,omitempty"`
+	InReplyTo         string          `json:"in_reply_to,omitempty"`
 	Destination       apiDestination  `json:"destination"`
 	Location          *apiLocation    `json:"location,omitempty"`
 	ExpiresAt         int64           `json:"expires_at,omitempty"`
@@ -144,6 +147,16 @@ func (s *APISender) buildSendEnvelope(job *Job, messageID string) apiEnvelope {
 	}
 	if d := job.TTH.Duration(); d > 0 {
 		env.ExpiresAt = s.now().Add(d).Unix()
+	}
+	env.TrackingUIDs = job.TrackingUIDs
+	env.Areas = job.Areas
+	if job.ReplyToID != "" {
+		_, mid, pid := splitAPISentID(job.ReplyToID)
+		if pid != "" {
+			env.InReplyTo = pid
+		} else {
+			env.InReplyTo = mid
+		}
 	}
 	return env
 }

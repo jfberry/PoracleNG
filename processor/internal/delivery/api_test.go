@@ -88,6 +88,58 @@ func TestAPISendEnvelopeAndSentID(t *testing.T) {
 	}
 }
 
+func TestAPISendEnvelopeExtraFields(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	s := newAPISenderForTest(srv.URL)
+	job := &Job{
+		Target: "u-42", Type: "api:user", Message: json.RawMessage(`{}`),
+		TrackingUIDs: []int64{45, 46},
+		Areas:        []string{"london", "city"},
+		ReplyToID:    "u-42:7c9e6a1f-0000-4000-8000-000000000000:abc123", // prior message SentID
+	}
+	if _, err := s.Send(context.Background(), job); err != nil {
+		t.Fatalf("Send err = %v", err)
+	}
+	uids, _ := body["tracking_uids"].([]any)
+	if len(uids) != 2 || uids[0].(float64) != 45 {
+		t.Errorf("tracking_uids = %v, want [45 46]", body["tracking_uids"])
+	}
+	areas, _ := body["areas"].([]any)
+	if len(areas) != 2 || areas[0].(string) != "london" {
+		t.Errorf("areas = %v, want [london city]", body["areas"])
+	}
+	// in_reply_to = the provider id half of the prior SentID
+	if body["in_reply_to"] != "abc123" {
+		t.Errorf("in_reply_to = %v, want abc123", body["in_reply_to"])
+	}
+}
+
+func TestAPISendInReplyToFallsBackToMessageID(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	s := newAPISenderForTest(srv.URL)
+	// prior message had no provider id (2-part SentID) → in_reply_to is the message id
+	job := &Job{Target: "u-1", Type: "api:user", Message: json.RawMessage(`{}`),
+		ReplyToID: "u-1:7c9e6a1f-0000-4000-8000-000000000000"}
+	if _, err := s.Send(context.Background(), job); err != nil {
+		t.Fatal(err)
+	}
+	if body["in_reply_to"] != "7c9e6a1f-0000-4000-8000-000000000000" {
+		t.Errorf("in_reply_to = %v, want the message id", body["in_reply_to"])
+	}
+}
+
 func TestAPISendNoProviderID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted) // 202, empty body

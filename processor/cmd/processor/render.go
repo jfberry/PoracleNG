@@ -211,6 +211,8 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				Language:      j.Language,
 				Template:      j.TemplateRequested,
 				TemplateID:    j.TemplateSelected,
+				TrackingUIDs:  collectTrackingUIDs(job.MatchedUsers, j.Target),
+				Areas:         collectAreaNames(job.MatchedAreas),
 				SnapshotData:  ps.buildSnapshot(job, j, tth),
 			})
 		}
@@ -456,6 +458,21 @@ func collectTrackingUIDs(users []webhook.MatchedUser, target string) []int64 {
 	}
 	if len(out) == 0 {
 		return nil
+	}
+	return out
+}
+
+// collectAreaNames extracts the geofence area names from matched areas (for
+// the api envelope's areas field). Mirrors the inline slice buildSnapshot
+// builds. Named distinctly from helpers.go's areaNames, which returns a
+// comma-joined string for log lines rather than a []string.
+func collectAreaNames(areas []webhook.MatchedArea) []string {
+	if len(areas) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(areas))
+	for _, a := range areas {
+		out = append(out, a.Name)
 	}
 	return out
 }
