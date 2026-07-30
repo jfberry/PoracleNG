@@ -199,6 +199,13 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 					expiresAt = time.Now().Add(d).Unix()
 				}
 			}
+			// Per-delivery template type: the renderer's value wins over the
+			// RenderJob's (same preference as buildSnapshot — pokemon picks
+			// monster vs monsterNoIv dynamically).
+			templateType := j.TemplateType
+			if templateType == "" {
+				templateType = job.TemplateType
+			}
 			ps.dispatcher.Dispatch(&delivery.Job{
 				Target:        j.Target,
 				Type:          j.Type,
@@ -212,6 +219,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				EditKey:       j.EditKey,
 				ReplyKey:      job.ReplyKey,
 				MsgType:       job.AlertType,
+				TemplateType:  templateType,
 				StaticMapData: tileBytesForMessage(j.Message, job.TileImageData, tileURL),
 				Language:      j.Language,
 				Template:      j.TemplateRequested,

@@ -42,13 +42,14 @@ func TestAPISendEnvelopeAndSentID(t *testing.T) {
 
 	s := newAPISenderForTest(srv.URL)
 	job := &Job{
-		Target:   "u-42",
-		Type:     "api:user",
-		Name:     "James",
-		Language: "en",
-		MsgType:  "pokemon",
-		Message:  json.RawMessage(`{"iv":100}`),
-		Lat:      51.5, Lon: -0.1,
+		Target:       "u-42",
+		Type:         "api:user",
+		Name:         "James",
+		Language:     "en",
+		MsgType:      "pokemon",
+		TemplateType: "monsterChanged", // template type ≠ alert type for change events
+		Message:      json.RawMessage(`{"iv":100}`),
+		Lat:          51.5, Lon: -0.1,
 		Clean: 1, // clean bit
 	}
 	sent, err := s.Send(context.Background(), job)
@@ -70,6 +71,9 @@ func TestAPISendEnvelopeAndSentID(t *testing.T) {
 	}
 	if gotBody["alert_type"] != "pokemon" {
 		t.Errorf("alert_type = %v", gotBody["alert_type"])
+	}
+	if gotBody["template_type"] != "monsterChanged" {
+		t.Errorf("template_type = %v, want monsterChanged", gotBody["template_type"])
 	}
 	life := gotBody["lifecycle"].(map[string]any)
 	if life["clean"] != true {

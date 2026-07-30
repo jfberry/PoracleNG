@@ -116,6 +116,7 @@ type apiEnvelope struct {
 	Revision          int             `json:"revision"`
 	SentAt            int64           `json:"sent_at"`
 	AlertType         string          `json:"alert_type,omitempty"`
+	TemplateType      string          `json:"template_type,omitempty"`
 	TemplateID        string          `json:"template_id,omitempty"`
 	TrackingUIDs      []int64         `json:"tracking_uids,omitempty"`
 	Areas             []string        `json:"areas,omitempty"`
@@ -131,16 +132,17 @@ type apiEnvelope struct {
 // buildSendEnvelope constructs the op:"send" envelope for a job.
 func (s *APISender) buildSendEnvelope(job *Job, messageID string) apiEnvelope {
 	env := apiEnvelope{
-		Version:     apiEnvelopeVersion,
-		Op:          "send",
-		MessageID:   messageID,
-		Revision:    0,
-		SentAt:      s.now().Unix(),
-		AlertType:   job.MsgType,
-		TemplateID:  job.TemplateID,
-		Destination: apiDestination{ID: job.Target, Type: job.Type, Name: job.Name, Language: job.Language},
-		Lifecycle:   &apiLifecycle{Clean: db.IsClean(job.Clean), Editable: db.IsEdit(job.Clean)},
-		Payload:     json.RawMessage(job.Message),
+		Version:      apiEnvelopeVersion,
+		Op:           "send",
+		MessageID:    messageID,
+		Revision:     0,
+		SentAt:       s.now().Unix(),
+		AlertType:    job.MsgType,
+		TemplateType: job.TemplateType,
+		TemplateID:   job.TemplateID,
+		Destination:  apiDestination{ID: job.Target, Type: job.Type, Name: job.Name, Language: job.Language},
+		Lifecycle:    &apiLifecycle{Clean: db.IsClean(job.Clean), Editable: db.IsEdit(job.Clean)},
+		Payload:      json.RawMessage(job.Message),
 	}
 	if job.Lat != 0 || job.Lon != 0 {
 		env.Location = &apiLocation{Lat: job.Lat, Lon: job.Lon}

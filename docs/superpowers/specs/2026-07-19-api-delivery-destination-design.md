@@ -54,7 +54,8 @@ All three operations share one envelope shape. Fields marked *omitted when empty
   "revision": 0,
   "sent_at": 1770000000,
   "alert_type": "pokemon",
-  "template_id": "default",
+  "template_type": "monster",
+  "template_id": "diadem",
   "destination": {
     "id": "u-42",
     "type": "api:user",
@@ -86,8 +87,9 @@ All three operations share one envelope shape. Fields marked *omitted when empty
 | `message_id` | string | Poracle-minted UUIDv4 identifying the **logical message**, not the request. Constant across the original send, every subsequent edit, and the eventual delete. Matches `^[0-9a-f-]{36}$` (lowercase hex + hyphens) and is therefore always colon-free. |
 | `revision` | int | **Reserved — always `0` in the current implementation.** The intended future contract is monotonic (`0` send, `1`,`2`,… edits, delete carrying the last revision), forming a richer idempotency key with `message_id`. Until monotonic revisions ship, receivers must not key on it — see §1.5. |
 | `sent_at` | int | Unix seconds at which Poracle issued the request. |
-| `alert_type` | string | One of the DTS alert types — see §1.7. |
-| `template_id` | string | The DTS template identifier that produced `payload`. Lets the receiver switch on operator-defined template variants. |
+| `alert_type` | string | The **source** alert type (`pokemon`, `raid`, `egg`, `quest`, `questSummary`, `invasion`, `incident`, `lure`, `nest`, `gym`, `fort-update`, `maxbattle`, `weatherchange`, or `system`). Stable across a message's lifecycle — a monsterChanged render still carries `alert_type: "pokemon"`. |
+| `template_type` | string | The DTS template **type** that rendered `payload` (`monster`, `monsterNoIv`, `monsterChanged`, `rsvpChanges`, `showcase`, or equal to `alert_type`). This is what keys the receiver's payload schema — receivers parse on this, not `alert_type`. |
+| `template_id` | string | The DTS template **pack** identifier that produced `payload` (e.g. `diadem`). Lets the receiver switch on operator-defined template variants. |
 | `destination.id` | string | The Poracle human ID. Chosen by the third party at creation time. Constrained to `^[A-Za-z0-9._~-]{1,128}$`. |
 | `destination.type` | string | `api:user` or `api:channel`. |
 | `destination.name` | string | Human-readable label. Display only. |
@@ -155,13 +157,15 @@ A receiver that has no meaningful identifier of its own should return an empty b
 | `404`, `410` | This destination no longer exists | Treated as permanent. Increments the destination's consecutive-failure counter; once the operator-configured threshold is reached (default 10) the human is disabled, exactly as when a Discord user blocks the bot. On `op: "delete"` only, `404` is treated as **success** — the message is already gone. |
 | `401`, `403` | Auth rejected | Logged at ERROR with a distinct message naming the misconfigured secret, then dropped. Not retried and not failure-counted, because a wrong secret is an operator problem, not a destination problem — silently disabling every destination would be the wrong cure. |
 | Other `4xx` | Bad request | Logged with the response body and dropped. No retry, no failure counting. This is the correct response for a payload the receiver cannot understand. |
-| `5xx`, timeout, connection error | Transient | Retried up to `max_retries` times (default 3) with exponential backoff and jitter, then dropped. |
+| `5xx`, timeout, connection error | Transient | Retried up to `max_retries` times (default 3) with backoff, then dropped. **Never failure-counted** — every api destination shares one endpoint, so transient failures are correlated; counting them would mass-disable all destinations during a receiver outage. |
+
+`404`/`410` are the only responses that escalate toward disabling a destination. **Edits referencing a message the receiver no longer has** must be answered `2xx` (ignore or apply as fresh) — a `404` on an edit means the *destination* is gone and counts toward disabling it.
 
 Poracle never blocks the alert pipeline on a slow receiver; a destination that is failing gets its messages dropped rather than backing up the queue.
 
 ## 1.5 Idempotency and ordering
 
-- Poracle holds a per-destination mutex, so **at most one request is in flight per `destination.id` at a time**, requests for a single destination arrive in order, and a failed request's retries complete before the next operation to that destination. There is no ordering guarantee across different destinations. These guarantees make the rules below safe.
+- Poracle holds a per-destination mutex for **sends and edits**: at most one send/edit is in flight per `destination.id`, they arrive in order, and a failed request's retries complete before the next send/edit. One exception: an expiry-triggered `delete` fires from the message tracker's eviction timer, outside the queue's destination lock, and may overlap an in-flight send/edit near expiry — receivers treat a delete as final. There is no ordering guarantee across different destinations. These guarantees make the rules below safe.
 - **Network retries carry an identical body** (same `op`, same payload); `5xx`/`429`/connection errors are retried this way. Processing an identical retry twice must be harmless; deduplicating them is optional.
 - **`op: "send"`** uses a fresh `message_id` each time, so a receiver may dedupe sends by `message_id`.
 - **`op: "edit"`** replaces the message content in full; **apply every edit** (replacement is idempotent and edits arrive in order, so last-write-wins is correct). Do not key on `revision` — it is always `0` in the current implementation. When monotonic revisions ship, `(message_id, revision)` becomes the precise idempotency key.
@@ -175,6 +179,10 @@ Poracle never blocks the alert pipeline on a slow receiver; a destination that i
 - `lifecycle.clean = true` — Poracle intends to send `op: "delete"` at `expires_at`. Poracle's tracker persists to disk across restarts, so this is reliable in normal operation, but **the receiver should still treat `expires_at` as the backstop**: a lost tracker file or a long outage means the delete never comes.
 
 In short: act on `delete` when it arrives; fall back to `expires_at` when it doesn't.
+
+### 1.6.1 Delivery guarantees & system messages
+
+Delivery is best-effort: per-destination alert limits (`[alert_limits]` — `api:user` draws `dm_limit`, `api:channel` draws `channel_limit`) drop over-limit alerts at match time, and extreme backpressure sheds work. Operational notifications (rate-limit breach, disable notices) are delivered as ordinary `op: "send"` envelopes with `alert_type: "system"` and the fixed payload `{"content": "<text>"}` — they bypass the alert limits, are never edited or deleted, and never carry the partner-pack schema. This is the `dispatchMessage`/`dispatchBypass` path in `cmd/processor/helpers.go`, which stamps `MsgType: "system"`.
 
 ## 1.7 Canonical payload schema
 
@@ -391,7 +399,9 @@ If no `api` entry exists for a type, template selection falls back only to entri
 
 ## 1.8 Managing destinations
 
-There is no chat-command surface for `api` destinations. The third party creates and configures them over the existing v2 REST API using the same `X-Poracle-Secret` header.
+There is no chat-command surface for `api` destinations. The third party creates and configures them over the existing v2 REST API.
+
+**Two distinct credentials:** requests *to* the management API carry the operator's `[processor] api_secret` in `X-Poracle-Secret`; the secret Poracle presents *to the receiver* on deliveries is `[api_delivery] secret`. They are only equal if the operator configures them so.
 
 ```
 POST /api/v2/humans

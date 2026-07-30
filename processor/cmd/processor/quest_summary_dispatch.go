@@ -240,6 +240,11 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 					Lon:          parseCoordFloat(j.Lon),
 					EditKey:      j.EditKey,
 					Language:     j.Language,
+					// api envelope identity — without these a summary
+					// delivered to an api destination had no alert_type.
+					MsgType:      "questSummary",
+					TemplateType: "questSummary",
+					TemplateID:   j.TemplateSelected,
 				})
 			}
 		}
