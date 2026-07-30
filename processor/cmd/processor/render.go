@@ -189,10 +189,15 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 		tileURL, _ := job.Enrichment["staticMap"].(string)
 		for _, j := range jobs {
 			var tth delivery.TTH
+			var expiresAt int64
 			if job.OverrideCleanTTH != 0 {
 				tth = tthFromUnix(job.OverrideCleanTTH)
+				expiresAt = job.OverrideCleanTTH
 			} else {
 				tth = tthFromMap(j.TTH)
+				if d := tth.Duration(); d > 0 {
+					expiresAt = time.Now().Add(d).Unix()
+				}
 			}
 			ps.dispatcher.Dispatch(&delivery.Job{
 				Target:        j.Target,
@@ -213,6 +218,7 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				TemplateID:    j.TemplateSelected,
 				TrackingUIDs:  collectTrackingUIDs(job.MatchedUsers, j.Target),
 				Areas:         collectAreaNames(job.MatchedAreas),
+				ExpiresAt:     expiresAt,
 				SnapshotData:  ps.buildSnapshot(job, j, tth),
 			})
 		}
@@ -385,6 +391,12 @@ func parseCoordFloat(s string) float64 {
 // the layered structure.
 func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, tth delivery.TTH) *snapshots.Snapshot {
 	if ps.snapshotStore == nil {
+		return nil
+	}
+	// Snapshots exist to serve click-time renders for interactive buttons,
+	// which are Discord-only. Writing them for api deliveries is pure pogreb
+	// churn with no consumer — skip.
+	if delivery.PlatformFromType(dj.Type) == "api" {
 		return nil
 	}
 	now := time.Now()

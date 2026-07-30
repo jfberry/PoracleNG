@@ -65,6 +65,7 @@ func TestAPIPackConformance(t *testing.T) {
 		{"fort-update", "fort_update", "edit", []string{"change_type", "fort_type"}},
 		{"maxbattle", "max_battle", "level1", []string{"pokestop_name", "name", "quick_move"}},
 		{"weatherchange", "weatherchange", "rain", []string{"weather"}},
+		{"nest", "nest", "park", []string{"nest_name", "name", "pokemon_id", "spawn_avg"}},
 	}
 
 	for _, tc := range cases {
@@ -115,15 +116,6 @@ func TestAPIPackConformance(t *testing.T) {
 		})
 	}
 
-	// nest has no bundled fixture in fallbacks/testdata.json (see
-	// TestEnrichNest in enrich_test.go, which hand-rolls its own payload for
-	// the same reason). Recorded as its own subtest so it shows up
-	// (skipped, not silently absent) in `go test -v` output; the nest
-	// entry's correctness rests on the Task 2 review instead of this
-	// conformance guard.
-	t.Run("nest", func(t *testing.T) {
-		t.Skip("no nest fixture in fallbacks/testdata.json — not conformance-covered by this test; see Task 2 review")
-	})
 }
 
 // perUserMapFor wraps a flat per-user enrichment map (enrichResult.perUser)

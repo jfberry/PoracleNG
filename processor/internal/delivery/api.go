@@ -145,7 +145,11 @@ func (s *APISender) buildSendEnvelope(job *Job, messageID string) apiEnvelope {
 	if job.Lat != 0 || job.Lon != 0 {
 		env.Location = &apiLocation{Lat: job.Lat, Lon: job.Lon}
 	}
-	if d := job.TTH.Duration(); d > 0 {
+	if job.ExpiresAt > 0 {
+		// Absolute expiry stamped at render time — immune to queue latency
+		// between render and send.
+		env.ExpiresAt = job.ExpiresAt
+	} else if d := job.TTH.Duration(); d > 0 {
 		env.ExpiresAt = s.now().Add(d).Unix()
 	}
 	env.TrackingUIDs = job.TrackingUIDs

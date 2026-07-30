@@ -213,6 +213,21 @@ func (c *BroadcastCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 		results = filtered
 	}
 
+	// Exclude api destinations: they are machine endpoints with an agreed
+	// payload schema, and broadcast only carries Discord/Telegram-shaped
+	// bodies — sweeping api:user into the (default) Discord bucket would
+	// POST a Discord embed to the partner endpoint.
+	{
+		var nonAPI []humanResult
+		for _, r := range results {
+			if delivery.PlatformFromType(r.Type) == "api" {
+				continue
+			}
+			nonAPI = append(nonAPI, r)
+		}
+		results = nonAPI
+	}
+
 	// Check all platforms have templates
 	for _, r := range results {
 		var msg json.RawMessage

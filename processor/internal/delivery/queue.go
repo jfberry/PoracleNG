@@ -451,8 +451,30 @@ func (fq *FairQueue) processJob(job *Job) {
 		} else {
 			logref.Errorf(job.LogReference, "delivery: send failed for %s/%s: %v", job.Type, job.Target, err)
 			metrics.DeliveryTotal.WithLabelValues(platform, "error").Inc()
-			fq.recordFailure(job.Target, job.Name, job.Type)
+			// Transient failures (5xx / timeout / exhausted retries) do NOT
+			// count toward auto-disable for the api platform: every api
+			// destination shares one endpoint, so transient failures are
+			// perfectly correlated — counting them would mass-disable every
+			// destination during a receiver outage, each needing a manual
+			// re-enable afterwards. Only PermanentError (404/410, a genuinely
+			// per-destination signal) escalates for api. Discord/Telegram
+			// keep the existing behaviour, where repeated failure usually
+			// means that specific user/channel is gone.
+			if platform != "api" {
+				fq.recordFailure(job.Target, job.Name, job.Type)
+			}
 		}
+		metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
+		return
+	}
+
+	if sent == nil {
+		// The sender handled the job without a send and without an error —
+		// APISender's drop contract for 401/403/other-4xx responses. Surface
+		// as "dropped" rather than "ok" so a misconfigured secret is visible
+		// in metrics, and don't treat it as evidence of destination health
+		// (no failure-counter reset).
+		metrics.DeliveryTotal.WithLabelValues(platform, "dropped").Inc()
 		metrics.DeliveryDuration.WithLabelValues(platform).Observe(time.Since(start).Seconds())
 		return
 	}

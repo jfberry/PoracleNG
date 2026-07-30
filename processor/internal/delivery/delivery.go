@@ -40,6 +40,7 @@ type Job struct {
 	LogReference  string          `json:"logReference"`           // encounter/gym ID for tracing
 	TrackingUIDs  []int64         `json:"trackingUids,omitempty"` // matched tracking-rule UIDs (api envelope tracking_uids)
 	Areas         []string        `json:"areas,omitempty"`        // matched geofence area names (api envelope areas)
+	ExpiresAt     int64           `json:"expiresAt,omitempty"`    // absolute unix expiry stamped at render time (api envelope expires_at); 0 = derive from TTH at send time. Absolute so queue latency between render and send doesn't shift the reported expiry late.
 	Lat           float64         `json:"lat"`
 	Lon           float64         `json:"lon"`
 	StaticMapData []byte          `json:"-"` // inline tile image bytes

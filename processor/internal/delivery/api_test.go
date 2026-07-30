@@ -231,3 +231,29 @@ func TestAPISend5xxRetriesThenFails(t *testing.T) {
 		t.Errorf("server calls = %d, want 3 (1 initial + 2 retries)", calls)
 	}
 }
+
+// TestAPISendAbsoluteExpiresAt pins that the envelope's expires_at uses the
+// render-time absolute expiry (Job.ExpiresAt) when set, so queue latency
+// between render and send cannot shift the reported expiry late. The TTH
+// fallback (Job.ExpiresAt == 0) is covered by TestAPISendEnvelopeAndSentID.
+func TestAPISendAbsoluteExpiresAt(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	s := newAPISenderForTest(srv.URL)
+	job := &Job{
+		Target: "u-1", Type: "api:user", Message: json.RawMessage(`{}`),
+		ExpiresAt: 1770009999,
+		TTH:       TTH{Hours: 1}, // must be ignored in favour of the absolute stamp
+	}
+	if _, err := s.Send(context.Background(), job); err != nil {
+		t.Fatalf("Send err = %v", err)
+	}
+	if got, _ := body["expires_at"].(float64); int64(got) != 1770009999 {
+		t.Errorf("expires_at = %v, want 1770009999 (absolute Job.ExpiresAt)", body["expires_at"])
+	}
+}

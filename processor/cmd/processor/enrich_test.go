@@ -206,8 +206,9 @@ func TestEnrichTypes_TemplateTypeAndNonEmptyBase(t *testing.T) {
 	}
 }
 
-// TestEnrichNest hand-rolls a minimal NestWebhook payload since fallbacks/
-// testdata.json (as of this writing) has no bundled "nest" sample.
+// TestEnrichNest hand-rolls a minimal NestWebhook payload so this unit test
+// stays independent of fallbacks/testdata.json (which also ships a "nest"
+// sample — nest/park — used by TestAPIPackConformance).
 func TestEnrichNest(t *testing.T) {
 	ps := newEnrichParityService(t)
 	raw := json.RawMessage(`{

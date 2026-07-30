@@ -288,6 +288,12 @@ func (ps *ProcessorService) dispatchMessage(target, typ, name, content, logRef s
 		Message:      msgJSON,
 		TTH:          delivery.TTH{Hours: 1},
 		LogReference: logRef,
+		// MsgType "system" gives api destinations a documented alert_type
+		// for operational notifications (rate-limit breach, disable notice,
+		// ...) whose payload is {"content": text} rather than an alert
+		// schema. Inert for Discord/Telegram (MsgType is only read by the
+		// MessageTracker, and these jobs are never tracked).
+		MsgType: "system",
 	})
 }
 
@@ -306,6 +312,7 @@ func (ps *ProcessorService) dispatchBypass(target, typ, name, content, logRef st
 		Message:      msgJSON,
 		TTH:          delivery.TTH{Hours: 1},
 		LogReference: logRef,
+		MsgType:      "system", // see dispatchMessage — documented alert_type for api system messages
 	})
 }
 
