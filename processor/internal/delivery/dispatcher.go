@@ -125,6 +125,9 @@ func NewDispatcher(cfg DispatcherConfig) (*Dispatcher, error) {
 	if ts, ok := senders["telegram"].(*TelegramSender); ok {
 		ts.SetConcurrency(cfg.Queue.ConcurrentTelegram)
 	}
+	if as, ok := senders["api"].(*APISender); ok {
+		as.SetConcurrency(cfg.Queue.ConcurrentAPI)
+	}
 
 	tracker := NewMessageTracker(cfg.CacheDir, senders)
 
@@ -181,6 +184,9 @@ func NewDispatcherWithSenders(senders map[string]Sender, tracker *MessageTracker
 	}
 	if ts, ok := senders["telegram"].(*TelegramSender); ok {
 		ts.SetConcurrency(queueCfg.ConcurrentTelegram)
+	}
+	if as, ok := senders["api"].(*APISender); ok {
+		as.SetConcurrency(queueCfg.ConcurrentAPI)
 	}
 	d := &Dispatcher{tracker: tracker}
 	d.queue = NewFairQueue(senders, tracker, queueCfg, d)

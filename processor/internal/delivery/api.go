@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/metrics"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -40,6 +41,12 @@ type APISender struct {
 	cfg    APIConfig
 	client *http.Client
 
+	// sem is the wire-call concurrency semaphore (nil = unlimited until
+	// SetConcurrency is called; the Dispatcher always calls it at wiring
+	// time). A slot is held only for the duration of one HTTP round trip —
+	// retry backoff runs slot-free, matching the Discord/Telegram senders
+	// under per-destination lanes.
+	sem   chan struct{}
 	inFly atomic.Int64 // wire calls currently in flight (for [Status]/depth reporting)
 
 	rlMu         sync.Mutex
@@ -86,6 +93,46 @@ func (s *APISender) retryBase() time.Duration {
 
 // APIInFlight reports current concurrent wire calls (for the [Status] log).
 func (s *APISender) APIInFlight() int { return int(s.inFly.Load()) }
+
+// SetConcurrency sizes the wire-call semaphore. n<=0 is clamped to 1 (never
+// unlimited) — a configured sender always caps at >=1, matching the
+// Discord/Telegram convention. Call once at wiring time, before traffic.
+func (s *APISender) SetConcurrency(n int) {
+	if n <= 0 {
+		n = 1
+	}
+	s.sem = makeSem(n)
+}
+
+// roundTrip executes ONE api HTTP request while holding the wire-call
+// concurrency slot, and releases the slot before returning — so the caller's
+// retry backoff runs slot-free. Returns the (limited) response body, status,
+// and Retry-After header.
+func (s *APISender) roundTrip(ctx context.Context, req *http.Request) (respBody []byte, status int, retryAfter string, err error) {
+	if s.sem != nil {
+		select {
+		case s.sem <- struct{}{}:
+			defer func() { <-s.sem }()
+		case <-ctx.Done():
+			return nil, 0, "", ctx.Err()
+		}
+	}
+	s.inFly.Add(1)
+	metrics.DeliveryInFlight.WithLabelValues("api").Inc()
+	defer func() {
+		s.inFly.Add(-1)
+		metrics.DeliveryInFlight.WithLabelValues("api").Dec()
+	}()
+	resp, derr := s.client.Do(req)
+	if derr != nil {
+		return nil, 0, "", derr
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	ra := resp.Header.Get("Retry-After")
+	st := resp.StatusCode
+	resp.Body.Close()
+	return body, st, ra, nil
+}
 
 // Platform identifies the sender.
 func (s *APISender) Platform() string { return "api" }
@@ -295,17 +342,14 @@ func (s *APISender) do(ctx context.Context, env apiEnvelope, op string) (*apiRes
 		req.Header.Set("X-Poracle-Message-Id", env.MessageID)
 		req.Header.Set("User-Agent", "PoracleNG/"+s.cfg.Version)
 
-		s.inFly.Add(1)
-		resp, derr := s.client.Do(req)
-		s.inFly.Add(-1)
+		respBody, status, retryAfter, derr := s.roundTrip(ctx, req)
 		if derr != nil {
+			if ctx.Err() != nil {
+				return nil, derr // shutting down — don't spin the retry loop
+			}
 			lastErr = derr
 			continue // transient: retry
 		}
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-		retryAfter := resp.Header.Get("Retry-After")
-		status := resp.StatusCode
-		resp.Body.Close()
 
 		switch {
 		case status >= 200 && status < 300:

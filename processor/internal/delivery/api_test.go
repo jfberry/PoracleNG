@@ -7,7 +7,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -259,5 +262,50 @@ func TestAPISendAbsoluteExpiresAt(t *testing.T) {
 	}
 	if got, _ := body["expires_at"].(float64); int64(got) != 1770009999 {
 		t.Errorf("expires_at = %v, want 1770009999 (absolute Job.ExpiresAt)", body["expires_at"])
+	}
+}
+
+// TestAPISenderConcurrencyCap pins the sender-level wire-call cap under
+// per-destination lanes: with SetConcurrency(2), six parallel Sends never
+// exceed two in-flight HTTP requests, regardless of how many lanes are
+// draining simultaneously.
+func TestAPISenderConcurrencyCap(t *testing.T) {
+	var inFlight, peak atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cur := inFlight.Add(1)
+		for {
+			p := peak.Load()
+			if cur <= p || peak.CompareAndSwap(p, cur) {
+				break
+			}
+		}
+		time.Sleep(30 * time.Millisecond) // hold the slot so overlap is observable
+		inFlight.Add(-1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	s := newAPISenderForTest(srv.URL)
+	s.SetConcurrency(2)
+
+	var wg sync.WaitGroup
+	for i := range 6 {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			_, _ = s.Send(context.Background(), &Job{
+				Target:  "u-" + strconv.Itoa(n),
+				Type:    "api:user",
+				Message: json.RawMessage(`{}`),
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	if got := peak.Load(); got > 2 {
+		t.Errorf("peak concurrent wire calls = %d, want <= 2 (SetConcurrency cap)", got)
+	}
+	if s.APIInFlight() != 0 {
+		t.Errorf("APIInFlight = %d after all sends done, want 0", s.APIInFlight())
 	}
 }
