@@ -1734,6 +1734,16 @@
             "$ref": "#/components/schemas/PoracleWebAdmins",
             "description": "Discord/Telegram admin id lists"
           },
+          "availableLanguages": {
+            "description": "Language codes this server accepts for a user's alert language (sorted). null means unrestricted — every language is allowed — so clients should offer their full menu. A non-null array is the exact allow-list enforced by the set-language endpoints.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "channelNotesContainsCategory": {
             "description": "Whether channel notes carry the category (check_role + update_channel_notes)",
             "type": "boolean"
@@ -1848,6 +1858,7 @@
         "required": [
           "addressFormat",
           "admins",
+          "availableLanguages",
           "channelNotesContainsCategory",
           "defaultDistance",
           "defaultPvpCap",

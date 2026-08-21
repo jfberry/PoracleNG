@@ -368,3 +368,126 @@ func assertProblemJSON(t *testing.T, w *httptest.ResponseRecorder) {
 		t.Errorf("problem+json body must contain title: %v", got)
 	}
 }
+
+// --- #194: available_languages must be readable ----------------------------
+
+// available_languages gates POST /humans/{id}/setLanguage but was exposed
+// nowhere, so a client had no way to build an accurate language menu.
+func TestHumaConfigPoracleWeb_AvailableLanguages(t *testing.T) {
+	r, api := newConfigTestAPI(t)
+	cfg := &config.Config{}
+	cfg.General.AvailableLanguages = map[string]config.LanguageEntry{
+		"fr": {}, "de": {Poracle: "dasporacle"}, "en": {},
+	}
+	RegisterConfigPoracleWeb(api, cfg)
+
+	w := getJSON(t, r, "/api/config/poracleWeb")
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	raw, present := got["availableLanguages"]
+	if !present {
+		t.Fatalf("availableLanguages missing from response: %v", got)
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		t.Fatalf("availableLanguages = %v, want an array", raw)
+	}
+	want := []string{"de", "en", "fr"} // sorted for a stable menu
+	if len(list) != len(want) {
+		t.Fatalf("availableLanguages = %v, want %v", list, want)
+	}
+	for i, code := range want {
+		if list[i] != code {
+			t.Errorf("availableLanguages[%d] = %v, want %s (sorted)", i, list[i], code)
+		}
+	}
+}
+
+// Unset means "every language allowed" (the write path only validates when
+// the map is non-empty). The key must be present but null so a client can
+// tell "no restriction" from "an empty allow-list" and still offer its full
+// menu — returning [] here would make clients offer nothing.
+func TestHumaConfigPoracleWeb_AvailableLanguagesUnsetIsNull(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  map[string]config.LanguageEntry
+	}{
+		{"unset", nil},
+		{"empty", map[string]config.LanguageEntry{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, api := newConfigTestAPI(t)
+			cfg := &config.Config{}
+			cfg.General.AvailableLanguages = tc.cfg
+			RegisterConfigPoracleWeb(api, cfg)
+
+			w := getJSON(t, r, "/api/config/poracleWeb")
+			var got map[string]any
+			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			raw, present := got["availableLanguages"]
+			if !present {
+				t.Fatalf("availableLanguages key must always be present: %v", got)
+			}
+			if raw != nil {
+				t.Errorf("availableLanguages = %v, want null when unrestricted", raw)
+			}
+		})
+	}
+}
+
+// --- #195: disabledHooks accuracy ------------------------------------------
+
+// disable_fort_update gates the webhook handler, the !fort command and the
+// !tracked section, but was missing from disabledHooks — clients concluded
+// fort changes were enabled when they weren't.
+func TestHumaConfigPoracleWeb_DisabledHooksIncludesFort(t *testing.T) {
+	r, api := newConfigTestAPI(t)
+	cfg := &config.Config{}
+	cfg.General.DisableFortUpdate = true
+	RegisterConfigPoracleWeb(api, cfg)
+
+	w := getJSON(t, r, "/api/config/poracleWeb")
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	hooks, _ := got["disabledHooks"].([]any)
+	found := false
+	for _, h := range hooks {
+		if h == "fort" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("disabledHooks = %v, want to contain \"fort\"", hooks)
+	}
+}
+
+// disable_pokestop enforces nothing anywhere in the processor (its last real
+// use — the !tracked fort sections — moved to disable_fort_update in
+// fa9b4912). Reporting it as a disabled hook tells clients a lie, so it must
+// not appear even when set.
+func TestHumaConfigPoracleWeb_DisabledHooksOmitsVestigialPokestop(t *testing.T) {
+	r, api := newConfigTestAPI(t)
+	cfg := &config.Config{}
+	// Deliberately setting the deprecated flag: the whole point of this test
+	// is that setting it changes nothing in the response.
+	cfg.General.DisablePokestop = true //nolint:staticcheck // SA1019: asserting the deprecated flag is ignored
+	RegisterConfigPoracleWeb(api, cfg)
+
+	w := getJSON(t, r, "/api/config/poracleWeb")
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	hooks, _ := got["disabledHooks"].([]any)
+	for _, h := range hooks {
+		if h == "pokestop" {
+			t.Errorf("disabledHooks = %v, must not contain vestigial \"pokestop\"", hooks)
+		}
+	}
+}

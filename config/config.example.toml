@@ -219,7 +219,7 @@ role_check_mode = "ignore"
 # disable_* - disable individual hook processing for particular webhook types
 disable_pokemon = false
 disable_raid = false
-disable_pokestop = false                 # also disables invasion processing for RDM/Golbat
+disable_pokestop = false                 # DEPRECATED no-op — nothing reads it; use disable_lure / disable_invasion / disable_quest
 disable_invasion = false
 disable_lure = false
 disable_quest = false
