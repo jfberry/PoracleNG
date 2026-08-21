@@ -341,6 +341,17 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 	// tokens the same way "razz_berry" / "move:hyper_beam" would.
 	tokens = am.collapseMultiWord(tokens)
 
+	// Same idea for coordinate pairs typed with spaces around the comma
+	// ("51.28, 1.08" — the shape Google Maps copies to the clipboard).
+	// Only for commands that asked for coordinates, so no other command's
+	// tokens can be merged.
+	for _, p := range params {
+		if p.Type == ParamLatLon {
+			tokens = collapseLatLon(tokens)
+			break
+		}
+	}
+
 	result := NewParsedArgs()
 	consumed := make([]bool, len(tokens))
 
@@ -875,6 +886,41 @@ func tryRemoveUID(tok string, result *ParsedArgs) bool {
 }
 
 var latLonRe = regexp.MustCompile(`^(-?\d+\.?\d*),(-?\d+\.?\d*)$`)
+
+// collapseLatLon merges a coordinate pair split across tokens by spaces
+// around the comma — "51.28, 1.08" (2 tokens) and "51.28 , 1.08" (3) both
+// become "51.28,1.08" — so tryLatLon's single-token regex sees them.
+// Without this the tokens match nothing, and the location command falls
+// through to forward geocoding, which resolves the coordinate text as an
+// address and silently sets an unrelated place.
+//
+// A window is joined only when the result is itself a valid lat,lon, so
+// tokens that merely sit next to each other are never merged.
+func collapseLatLon(tokens []string) []string {
+	out := make([]string, 0, len(tokens))
+	for i := 0; i < len(tokens); {
+		joined := ""
+		// Longest window first: "lat , lon" before "lat, lon".
+		for n := 3; n >= 2; n-- {
+			if i+n > len(tokens) {
+				continue
+			}
+			candidate := strings.Join(tokens[i:i+n], "")
+			if latLonRe.MatchString(candidate) {
+				joined = candidate
+				i += n
+				break
+			}
+		}
+		if joined == "" {
+			out = append(out, tokens[i])
+			i++
+			continue
+		}
+		out = append(out, joined)
+	}
+	return out
+}
 
 // tryLatLon matches coordinate pairs like "51.28,1.08".
 func (am *ArgMatcher) tryLatLon(tok string, result *ParsedArgs) bool {
