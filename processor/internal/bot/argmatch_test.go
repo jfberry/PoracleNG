@@ -798,3 +798,63 @@ func TestPrefixDoesNotSwallowKnownPokemon(t *testing.T) {
 		}
 	})
 }
+
+// A coordinate pair typed with spaces around the comma is the natural
+// form (and what Google Maps copies). All three spacings must reach
+// tryLatLon as one token.
+func TestArgMatchLatLonWithSpaces(t *testing.T) {
+	am := newTestArgMatcher()
+	params := []ParamDef{{Type: ParamLatLon}}
+
+	cases := []struct {
+		name   string
+		tokens []string
+	}{
+		{"no space", []string{"40.738707,-73.997920"}},
+		{"space after comma", []string{"40.738707,", "-73.997920"}},
+		{"spaces both sides", []string{"40.738707", ",", "-73.997920"}},
+		{"space before comma", []string{"40.738707", ",-73.997920"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := am.Match(tc.tokens, params, "en")
+			if result.Coords == nil {
+				t.Fatalf("Coords not parsed from %q (unrecognized: %v)", tc.tokens, result.Unrecognized)
+			}
+			if result.Coords.Lat != 40.738707 || result.Coords.Lon != -73.997920 {
+				t.Errorf("Coords = %v, want 40.738707,-73.997920", *result.Coords)
+			}
+			if len(result.Unrecognized) != 0 {
+				t.Errorf("unrecognized = %v, want none", result.Unrecognized)
+			}
+		})
+	}
+}
+
+// Only genuine coordinate pairs are joined — adjacent tokens that don't
+// concatenate into a valid lat,lon must be left alone.
+func TestArgMatchLatLonDoesNotMergeUnrelatedTokens(t *testing.T) {
+	am := newTestArgMatcher()
+	params := []ParamDef{{Type: ParamLatLon}}
+
+	result := am.Match([]string{"51.28,1.08", "2.0"}, params, "en")
+	if result.Coords == nil || result.Coords.Lat != 51.28 || result.Coords.Lon != 1.08 {
+		t.Fatalf("Coords = %v, want 51.28,1.08", result.Coords)
+	}
+	if len(result.Unrecognized) != 1 || result.Unrecognized[0] != "2.0" {
+		t.Errorf("unrecognized = %v, want [2.0] left intact", result.Unrecognized)
+	}
+}
+
+// The collapse is scoped to commands declaring ParamLatLon: a command
+// without it (e.g. !track) must see its tokens exactly as before, so
+// "!track 25, 26" is unaffected.
+func TestArgMatchLatLonCollapseScopedToLatLonCommands(t *testing.T) {
+	am := newTestArgMatcher()
+	params := []ParamDef{{Type: ParamKeyword, Key: "arg.clean"}}
+
+	result := am.Match([]string{"25,", "26"}, params, "en")
+	if len(result.Unrecognized) != 2 {
+		t.Fatalf("unrecognized = %v, want both tokens unmerged", result.Unrecognized)
+	}
+}

@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pokemon/poracleng/processor/internal/bot"
+	"github.com/pokemon/poracleng/processor/internal/config"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -387,5 +390,61 @@ func TestLocation_ShowDefault_NoneSet(t *testing.T) {
 	}
 	if !strings.Contains(replies[0].Text, "No default") {
 		t.Fatalf("expected no-default error, got %s", replies[0].Text)
+	}
+}
+
+// locationCoordCtx builds a context with an ArgMatcher wired so the bare
+// `!location <coords>` path can be exercised.
+func locationCoordCtx(t *testing.T) (*bot.CommandContext, *store.MockHumanStore) {
+	t.Helper()
+	ctx, humans := testCtx(t)
+	ctx.Config = &config.Config{}
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
+		Moves:    map[int]*gamedata.Move{},
+		Types:    map[int]*gamedata.TypeInfo{},
+	}
+	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
+	ctx.Resolver = resolver
+	ctx.ArgMatcher = bot.NewArgMatcher(ctx.Translations, gd, resolver, []string{"en"})
+	ctx.GameData = gd
+	return ctx, humans
+}
+
+// A space after the comma is the natural way to type a coordinate pair
+// (and what Google Maps copies to the clipboard). It must set exactly the
+// given coordinates — not fall through to forward geocoding, which
+// silently resolves the coordinate text to an unrelated place.
+func TestLocation_SetCoordsWithSpaceAfterComma(t *testing.T) {
+	ctx, humans := locationCoordCtx(t)
+
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"40.738707,", "-73.997920"})
+
+	if len(replies) == 0 || replies[0].React != "✅" {
+		t.Fatalf("expected success, got %+v", replies)
+	}
+	h, err := humans.Get("user1")
+	if err != nil || h == nil {
+		t.Fatalf("get human: %v", err)
+	}
+	if h.Latitude != 40.738707 || h.Longitude != -73.997920 {
+		t.Fatalf("location = %v,%v; want 40.738707,-73.997920", h.Latitude, h.Longitude)
+	}
+}
+
+// The no-space form must keep working.
+func TestLocation_SetCoordsWithoutSpace(t *testing.T) {
+	ctx, humans := locationCoordCtx(t)
+
+	cmd := &LocationCommand{}
+	replies := cmd.Run(ctx, []string{"40.738707,-73.997920"})
+
+	if len(replies) == 0 || replies[0].React != "✅" {
+		t.Fatalf("expected success, got %+v", replies)
+	}
+	h, _ := humans.Get("user1")
+	if h.Latitude != 40.738707 || h.Longitude != -73.997920 {
+		t.Fatalf("location = %v,%v; want 40.738707,-73.997920", h.Latitude, h.Longitude)
 	}
 }
