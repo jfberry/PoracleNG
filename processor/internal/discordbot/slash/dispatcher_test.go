@@ -2,6 +2,8 @@ package slash
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash/mappers"
+	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
@@ -888,5 +891,48 @@ func TestRouteAutocomplete_RaidForm_BoostsRecentForBoss(t *testing.T) {
 	out := d.routeAutocomplete("raid", "form", "", "en", ic)
 	if len(out) == 0 || out[0].Name != "Winter 2023" {
 		t.Errorf("/raid form empty focused: first=%+v, want Winter 2023 (recent raid form)", firstName(out))
+	}
+}
+
+// The (help, topic) tuple must be routed. Before this, the option declared
+// Autocomplete:true but no case matched, so Discord received an empty
+// response and showed "no options" no matter what the user typed.
+func TestRouteAutocompleteHelpTopicIsRouted(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "dts.json"), []byte(`[
+		{"type":"help","id":"track","platform":"","language":"","template":{"x":1}},
+		{"type":"help","id":"area","platform":"","language":"","template":{"x":1}}
+	]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	fb := filepath.Join(dir, "fb")
+	if err := os.MkdirAll(fb, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fb, "dts.json"), []byte(`[]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ts, err := dts.LoadTemplates(dir, fb)
+	if err != nil {
+		t.Fatalf("LoadTemplates: %v", err)
+	}
+
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = &bot.BotDeps{DTS: ts}
+
+	got := d.routeAutocomplete("help", "topic", "", "en", nil)
+	if len(got) == 0 {
+		t.Fatal("help/topic returned no choices — the route is not wired")
+	}
+	var found bool
+	for _, c := range got {
+		if c.Value == "track" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected the 'track' help topic, got %v", got)
 	}
 }

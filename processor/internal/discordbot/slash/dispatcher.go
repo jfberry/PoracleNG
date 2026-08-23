@@ -367,6 +367,11 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 		return base
 	case opt == "template":
 		return autocomplete.Template(context.Background(), d.deps, focused, dtsTypeFor(cmd), "discord", userLang)
+	// /help topic — the installed "help" DTS entry ids. The option has
+	// always declared Autocomplete:true, but without a route here Discord
+	// got an empty response and showed "no options" forever.
+	case opt == "topic" && cmd == "help":
+		return autocomplete.HelpTopic(d.deps, focused, "discord", d.isAdmin(interactionUserID(ic)))
 	case opt == "tracking" && cmd == "untrack":
 		subtype := findUntrackSubtype(ic)
 		return d.userstateAutocomplete(ic, "tracking", subtype, focused)
