@@ -1347,6 +1347,12 @@
   "cmd.poracle_admin.slash.status.header": "**Slash command registration status:**",
   "cmd.poracle_admin.slash.status.scope_row": "  **{0}**: last synced {1} · fingerprint `{2}`",
   "cmd.poracle_admin.slash.status.never_synced": "never",
+  "cmd.poracle_admin.slash.list.desc": "list registered commands as clickable mentions plus copyable `</name:id>` syntax",
+  "cmd.poracle_admin.slash.list.scope_header": "**Slash commands — {0}** ({1})",
+  "cmd.poracle_admin.slash.list.scope_empty": "  _none registered_",
+  "cmd.poracle_admin.slash.list.none": "❌ No slash commands are registered. Run `!poracle-admin slash sync` first.",
+  "cmd.poracle_admin.slash.list.error": "❌ Listing slash commands failed: {0}",
+  "cmd.poracle_admin.slash.list.attached": "**Slash commands** — {0} entries attached (clickable mention + copyable syntax).",
   "cmd.poracle_admin.slash.status.ago": "{0} ago",
   "cmd.poracle_admin.slash.status.error": "❌ Status read failed: {0}",
 

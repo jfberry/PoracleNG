@@ -93,7 +93,7 @@ Run from Discord first, then repeat from Telegram to confirm platform parity.
 
 This group manages Discord slash command registration. All subcommands must refuse gracefully on Telegram.
 
-- [ ] `!poracle-admin slash` (no sub, Discord admin) — shows the `slash` subgroup help listing all subcommands (`sync`, `force-resync`, `clear-global`, `clear-guild`, `status`).
+- [ ] `!poracle-admin slash` (no sub, Discord admin) — shows the `slash` subgroup help listing all subcommands (`sync`, `force-resync`, `clear-global`, `clear-guild`, `status`, `list`).
 - [ ] `!poracle-admin slash` (Telegram admin) — reply: "Discord slash commands not available — this command must be run from a deployment with the Discord side enabled." (or equivalent i18n text).
 - [ ] `!poracle-admin slash status` (Discord, slash enabled) — shows last sync timestamp + short fingerprint per scope (global + each configured guild). "never synced" for any scope not yet synced.
 - [ ] `!poracle-admin slash sync` (Discord, slash enabled) — syncs commands; reply includes elapsed-ms.
@@ -101,6 +101,9 @@ This group manages Discord slash command registration. All subcommands must refu
 - [ ] `!poracle-admin slash clear-global` (Discord) — clears globally-registered commands; reply confirms success.
 - [ ] `!poracle-admin slash clear-guild` (Discord, no arg) — reply: argument required (guild ID missing).
 - [ ] `!poracle-admin slash clear-guild <guild_id>` (Discord) — clears guild-scoped commands for the specified guild; reply confirms success.
+- [ ] `!poracle-admin slash list` (Discord, after a sync) — one row per invocable command: a rendered clickable mention followed by the same `</name:id>` syntax in backticks. Clicking a rendered mention should open that command; the fenced copy is what you paste into an announcement or DTS template. Subcommands appear at full path (`</untrack raid:…>`, `</summary quest settime:…>`) and bare parents (`untrack`, `summary`) must NOT be listed. A full command set exceeds the message limit and arrives as `slash-commands.txt`.
+- [ ] `!poracle-admin slash list` run inside a guild with guild-scoped registration — that guild's scope is listed with its own ids, which differ from the global ones.
+- [ ] `!poracle-admin slash list` before any sync — reports nothing registered rather than erroring.
 - [ ] After `!poracle-admin slash sync`, open Discord in a test guild — slash commands appear in the command picker within a few seconds (guild-scoped) or up to 1 hour (global).
 
 ---
