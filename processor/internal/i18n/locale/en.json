@@ -9,6 +9,7 @@
   "msg.settime.err_time_out_of_range": "time out of range",
   "msg.settime.err_end_before_start": "end time must be after start time (cross-midnight not supported)",
   "msg.settime.err_step_out_of_range": "step must be between 1 and 23 hours",
+  "msg.settime.err_unrecognised_spec": "\"{0}\" is not a valid time — try `07:30`, `weekday07:00-18:00` or `every08:00-20:00/2`",
   "rate_limit.banned_soft": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, use {0}start to resume",
   "rate_limit.banned_hard": "You have breached the rate limit too many times in the last 24 hours. Your messages are now stopped, contact an administrator to resume",
   "rate_limit.shame": "<@{0}> has had their Poracle tracking disabled for exceeding the rate limit too many times!",

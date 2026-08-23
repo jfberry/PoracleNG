@@ -28,6 +28,11 @@ var (
 	errTimeOutOfRange        = errors.New("time out of range")
 	errEndBeforeOrEqualStart = errors.New("end time must be after start time (cross-midnight not supported)")
 	errStepOutOfRange        = errors.New("step must be 1..23 hours")
+	// errUnrecognisedSpec covers input matching neither the range nor the
+	// single-fire form. This used to return (nil, nil), which callers read
+	// as "no schedule given" — so a malformed spec was silently dropped and
+	// the user got usage help instead of being told what was wrong.
+	errUnrecognisedSpec = errors.New("not a recognised time spec")
 )
 
 // settimeError carries an unknown-prefix sentinel plus the offending
@@ -40,7 +45,10 @@ type settimeError struct {
 }
 
 func (e *settimeError) Error() string {
-	if e.err == errUnknownDayPrefix {
+	// Both of these carry the offending text — the bad prefix, or the whole
+	// unrecognised spec — so name it rather than making the user guess which
+	// element of a list was wrong.
+	if e.err == errUnknownDayPrefix || e.err == errUnrecognisedSpec {
 		return fmt.Sprintf("%s %q", e.err.Error(), e.prefix)
 	}
 	return e.err.Error()
@@ -54,10 +62,11 @@ func (e *settimeError) Unwrap() error { return e.err }
 //
 // i18n keys used:
 //
-//	msg.settime.err_unknown_prefix  ({0} = bad prefix)
+//	msg.settime.err_unknown_prefix    ({0} = bad prefix)
 //	msg.settime.err_time_out_of_range
 //	msg.settime.err_end_before_start
 //	msg.settime.err_step_out_of_range
+//	msg.settime.err_unrecognised_spec ({0} = the offending spec)
 func SettimeErrorMessage(tr *i18n.Translator, err error) string {
 	if err == nil {
 		return ""
@@ -75,6 +84,8 @@ func SettimeErrorMessage(tr *i18n.Translator, err error) string {
 		return tr.T("msg.settime.err_end_before_start")
 	case errStepOutOfRange:
 		return tr.T("msg.settime.err_step_out_of_range")
+	case errUnrecognisedSpec:
+		return tr.Tf("msg.settime.err_unrecognised_spec", se.prefix)
 	}
 	return err.Error()
 }
@@ -203,7 +214,41 @@ func ParseSettimeArg(arg string, dayPrefixes map[string][]int) ([]db.ActiveHourE
 		}
 		return out, nil
 	}
-	return nil, nil
+	return nil, &settimeError{err: errUnrecognisedSpec, prefix: arg}
+}
+
+// settimeSeparators splits a settime argument into individual specs. Commas
+// are the documented slash-surface separator; whitespace is accepted too
+// since a quoted slash value can carry it and the text bot's own tokeniser
+// would have split there anyway.
+func settimeSeparators(r rune) bool {
+	return r == ',' || r == ' ' || r == '\t' || r == '\n'
+}
+
+// ParseSettimeArgs parses every spec across all args, accepting
+// comma- and whitespace-separated lists within a single arg.
+//
+// The slash surface passes the whole `times` option as ONE token, so
+// "mon07:30,weekday09-17/2" arrived here as a single string that matched
+// neither form and was silently discarded. Blank elements are skipped so
+// trailing separators are harmless; a bad element names itself in the error
+// rather than failing the whole input anonymously.
+func ParseSettimeArgs(args []string, dayPrefixes map[string][]int) ([]db.ActiveHourEntry, error) {
+	var entries []db.ActiveHourEntry
+	for _, arg := range args {
+		for _, spec := range strings.FieldsFunc(arg, settimeSeparators) {
+			spec = strings.TrimSpace(spec)
+			if spec == "" {
+				continue
+			}
+			parsed, err := ParseSettimeArg(spec, dayPrefixes)
+			if err != nil {
+				return nil, err
+			}
+			entries = append(entries, parsed...)
+		}
+	}
+	return entries, nil
 }
 
 // activeHoursDayKeys maps ISO weekday (1=Mon ... 7=Sun) to the i18n

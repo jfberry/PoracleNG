@@ -216,15 +216,11 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 	}
 
 	dayPrefixes := buildDayPrefixMap(ctx)
-	var entries []db.ActiveHourEntry
-	for _, arg := range args {
-		parsed, err := ParseSettimeArg(arg, dayPrefixes)
-		if err != nil {
-			// Matched a known form (range) but failed validation
-			// — surface the reason instead of silently dropping.
-			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", arg, SettimeErrorMessage(tr, err))}}
-		}
-		entries = append(entries, parsed...)
+	// Accepts several specs in one go, comma- or space-separated:
+	// the slash surface sends the whole `times` option as one token.
+	entries, err := ParseSettimeArgs(args, dayPrefixes)
+	if err != nil {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", strings.Join(args, " "), SettimeErrorMessage(tr, err))}}
 	}
 
 	if len(entries) == 0 {
