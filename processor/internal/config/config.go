@@ -159,8 +159,12 @@ type GeneralConfig struct {
 	AvailableLanguages   map[string]LanguageEntry `toml:"available_languages"`       // lang code → {poracle, help}
 
 	// Webhook type disable flags — used by /api/config/poracleWeb to report disabledHooks.
-	DisablePokemon    bool `toml:"disable_pokemon"`
-	DisableRaid       bool `toml:"disable_raid"`
+	DisablePokemon bool `toml:"disable_pokemon"`
+	DisableRaid    bool `toml:"disable_raid"`
+	// Deprecated: no-op. Nothing reads this — its last use (the !tracked fort
+	// sections) moved to DisableFortUpdate in fa9b4912, and lures/invasions/
+	// quests each have their own flag. Kept so existing configs still parse;
+	// excluded from the poracleWeb disabledHooks array (#195).
 	DisablePokestop   bool `toml:"disable_pokestop"`
 	DisableInvasion   bool `toml:"disable_invasion"`
 	DisableLure       bool `toml:"disable_lure"`

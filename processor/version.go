@@ -4,7 +4,7 @@ package processor
 import "runtime/debug"
 
 // Version is the PoracleNG processor version. Bump on each release.
-const Version = "5.2.0"
+const Version = "5.2.1"
 
 // Commit, Branch, and Date are overridden at build time via
 // -ldflags "-X github.com/pokemon/poracleng/processor.Commit=... -X ...Branch=... -X ...Date=...".
@@ -68,7 +68,7 @@ func BuildInfo() (version, commit, branch, date string) {
 }
 
 // DisplayVersion returns the version with the branch suffix appended when a
-// branch is known, e.g. "5.2.0-develop" (or just "5.2.0" on a tag/release
+// branch is known, e.g. "5.2.1-develop" (or just "5.2.1" on a tag/release
 // build where no branch is injected).
 func DisplayVersion() string {
 	version, _, branch, _ := BuildInfo()

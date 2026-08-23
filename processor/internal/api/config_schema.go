@@ -96,7 +96,7 @@ var configSchema = []ConfigSection{
 			{Name: "dts_dictionary", Type: "map", Default: nil, Description: "Custom key-value pairs available in DTS templates via the dtsDict layer", HotReload: true},
 			{Name: "disable_pokemon", Type: "bool", Default: false, Description: "Disable pokemon webhook processing entirely", HotReload: false},
 			{Name: "disable_raid", Type: "bool", Default: false, Description: "Disable raid webhook processing", HotReload: false},
-			{Name: "disable_pokestop", Type: "bool", Default: false, Description: "Disable pokestop/invasion processing from scanner", HotReload: false},
+			{Name: "disable_pokestop", Type: "bool", Default: false, Description: "DEPRECATED — no effect. Use disable_lure, disable_invasion or disable_quest instead", HotReload: false},
 			{Name: "disable_invasion", Type: "bool", Default: false, Description: "Disable invasion webhook processing", HotReload: false},
 			{Name: "disable_lure", Type: "bool", Default: false, Description: "Disable lure webhook processing", HotReload: false},
 			{Name: "disable_quest", Type: "bool", Default: false, Description: "Disable quest webhook processing", HotReload: false},

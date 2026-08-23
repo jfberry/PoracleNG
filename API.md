@@ -758,6 +758,13 @@ Get weather data for a specific S2 cell.
 
 Server configuration for the web UI (locale, prefix, PVP settings, admin lists, etc.).
 
+Two fields client authors most often need:
+
+| Field | Meaning |
+|-------|---------|
+| `availableLanguages` | The allow-list enforced by the set-language endpoints, sorted. **`null` means unrestricted** — the server accepts any language, so offer your full menu. A non-null array is exhaustive: anything outside it is rejected with 400. |
+| `disabledHooks` | Alert types disabled on this server, named to match the tracking-type names (`pokemon`, `raid`, `fort`, `invasion`, `lure`, `quest`, `weather`, `nest`, `gym`, `maxbattle`). Only flags the processor actually enforces appear; `disable_pokestop` is a deprecated no-op and is never reported. |
+
 ### GET /api/config/templates
 
 Available DTS templates by platform, type, and language (metadata only, no template content).

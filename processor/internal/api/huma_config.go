@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/danielgtaylor/huma/v2"
 	log "github.com/sirupsen/logrus"
@@ -26,6 +27,7 @@ type poracleWebAdmins struct {
 type poracleWebResponse struct {
 	AddressFormat                string           `json:"addressFormat" doc:"Geocoding address format string"`
 	Admins                       poracleWebAdmins `json:"admins" doc:"Discord/Telegram admin id lists"`
+	AvailableLanguages           []string         `json:"availableLanguages" doc:"Language codes this server accepts for a user's alert language (sorted). null means unrestricted — every language is allowed — so clients should offer their full menu. A non-null array is the exact allow-list enforced by the set-language endpoints."`
 	ChannelNotesContainsCategory bool             `json:"channelNotesContainsCategory" doc:"Whether channel notes carry the category (check_role + update_channel_notes)"`
 	DefaultDistance              int              `json:"defaultDistance" doc:"Default tracking distance (m)"`
 	DefaultPvpCap                int              `json:"defaultPvpCap" doc:"Default user PVP level cap"`
@@ -279,10 +281,16 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 		Name    string
 		Disable bool
 	}
+	// One entry per flag the processor actually enforces, named after the
+	// tracking type. disable_pokestop is deliberately absent: nothing reads
+	// it (its last real use — the !tracked fort sections — moved to
+	// disable_fort_update in fa9b4912), so reporting it as a disabled hook
+	// told clients a lie about lures/invasions/quests, which have their own
+	// flags. See #195.
 	hookTypes := []hookFlag{
 		{"pokemon", cfg.General.DisablePokemon},
 		{"raid", cfg.General.DisableRaid},
-		{"pokestop", cfg.General.DisablePokestop},
+		{"fort", cfg.General.DisableFortUpdate},
 		{"invasion", cfg.General.DisableInvasion},
 		{"lure", cfg.General.DisableLure},
 		{"quest", cfg.General.DisableQuest},
@@ -296,6 +304,20 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 		if h.Disable {
 			disabledHooks = append(disabledHooks, h.Name)
 		}
+	}
+
+	// Sorted allow-list of language codes, or nil when the server imposes no
+	// restriction. The set-language endpoints only validate when the map is
+	// non-empty, so unset and empty are the same thing to the server — both
+	// report null rather than [], which a client would read as "offer
+	// nothing" on the most common (unconfigured) setup. See #194.
+	var availableLanguages []string
+	if len(cfg.General.AvailableLanguages) > 0 {
+		availableLanguages = make([]string, 0, len(cfg.General.AvailableLanguages))
+		for code := range cfg.General.AvailableLanguages {
+			availableLanguages = append(availableLanguages, code)
+		}
+		sort.Strings(availableLanguages)
 	}
 
 	defaultTemplateName := "1"
@@ -343,6 +365,7 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 		DefaultPvpCap:                cfg.Tracking.DefaultUserTrackingLevelCap,
 		DefaultTemplateName:          defaultTemplateName,
 		ChannelNotesContainsCategory: channelNotesContainsCategory,
+		AvailableLanguages:           availableLanguages,
 		Admins: poracleWebAdmins{
 			Discord:  discordAdmins,
 			Telegram: telegramAdmins,
