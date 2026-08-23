@@ -34,7 +34,10 @@ func (h *Hook) Levels() []log.Level {
 func (h *Hook) Fire(entry *log.Entry) error {
 	level := mapLevel(entry.Level)
 	source := ""
-	if entry.HasCaller() && entry.Caller != nil {
+	// logrus 1.10 deprecated Entry.HasCaller in favour of this check — its
+	// body had become exactly `entry.Caller != nil`, which this condition
+	// already repeated.
+	if entry.Caller != nil {
 		source = fmt.Sprintf("%s:%d", entry.Caller.File, entry.Caller.Line)
 	}
 	h.buf.Capture(level, entry.Message, source)
