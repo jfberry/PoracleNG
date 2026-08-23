@@ -338,6 +338,10 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 		return autocomplete.Pokemon(context.Background(), d.deps, focused, userLang)
 	case opt == "iv":
 		return autocomplete.IVRange(focused)
+	// /profile settime and /summary … settime share the `times` option and
+	// the same settime grammar, so one route covers both.
+	case opt == "times":
+		return autocomplete.TimeSpec(focused, d.autocompleteTranslator(userLang))
 	case opt == "boss" && cmd == "raid":
 		return autocomplete.RaidBoss(context.Background(), d.deps, focused, userLang)
 	// /raid costume is a flat, non-species-scoped list, same shape as
@@ -581,6 +585,16 @@ func findUntrackSubtype(ic *discordgo.InteractionCreate) string {
 //
 // The DTS types come from fallbacks/dts.json: monster, raid, egg, quest,
 // invasion, lure, nest, gym, fort-update, maxbattle.
+// autocompleteTranslator resolves a translator for autocomplete suggestions,
+// returning nil when no bundle is wired (tests) so callers fall back to their
+// English defaults rather than panicking.
+func (d *Dispatcher) autocompleteTranslator(lang string) *i18n.Translator {
+	if d == nil || d.bundle == nil {
+		return nil
+	}
+	return d.bundle.For(lang)
+}
+
 func dtsTypeFor(cmd string) string {
 	switch cmd {
 	case "track":

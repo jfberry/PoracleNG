@@ -890,3 +890,27 @@ func TestRouteAutocomplete_RaidForm_BoostsRecentForBoss(t *testing.T) {
 		t.Errorf("/raid form empty focused: first=%+v, want Winter 2023 (recent raid form)", firstName(out))
 	}
 }
+
+// Both /profile settime and /summary … settime expose `times`, so the single
+// route must answer for either command.
+func TestRouteAutocompleteTimesIsRouted(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+
+	for _, cmd := range []string{"profile", "summary"} {
+		got := d.routeAutocomplete(cmd, "times", "wee", "en", nil)
+		if len(got) == 0 {
+			t.Fatalf("/%s times returned no choices — route not wired", cmd)
+		}
+		var weekday bool
+		for _, c := range got {
+			if v, _ := c.Value.(string); strings.HasPrefix(v, "weekday") {
+				weekday = true
+			}
+		}
+		if !weekday {
+			t.Errorf("/%s times: expected a weekday completion, got %v", cmd, got)
+		}
+	}
+}
