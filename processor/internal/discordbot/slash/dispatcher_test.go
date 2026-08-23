@@ -894,6 +894,30 @@ func TestRouteAutocomplete_RaidForm_BoostsRecentForBoss(t *testing.T) {
 	}
 }
 
+// Both /profile settime and /summary … settime expose `times`, so the single
+// route must answer for either command.
+func TestRouteAutocompleteTimesIsRouted(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+
+	for _, cmd := range []string{"profile", "summary"} {
+		got := d.routeAutocomplete(cmd, "times", "wee", "en", nil)
+		if len(got) == 0 {
+			t.Fatalf("/%s times returned no choices — route not wired", cmd)
+		}
+		var weekday bool
+		for _, c := range got {
+			if v, _ := c.Value.(string); strings.HasPrefix(v, "weekday") {
+				weekday = true
+			}
+		}
+		if !weekday {
+			t.Errorf("/%s times: expected a weekday completion, got %v", cmd, got)
+		}
+	}
+}
+
 // The (help, topic) tuple must be routed. Before this, the option declared
 // Autocomplete:true but no case matched, so Discord received an empty
 // response and showed "no options" no matter what the user typed.
@@ -935,4 +959,5 @@ func TestRouteAutocompleteHelpTopicIsRouted(t *testing.T) {
 	if !found {
 		t.Errorf("expected the 'track' help topic, got %v", got)
 	}
+
 }

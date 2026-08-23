@@ -9,6 +9,7 @@
   "msg.settime.err_time_out_of_range": "Zeit außerhalb des Bereichs",
   "msg.settime.err_end_before_start": "Endzeit muss nach der Startzeit (und vor Mitternacht) sein",
   "msg.settime.err_step_out_of_range": "Wert muss zwischen 1 und 23 Stunden liegen",
+  "msg.settime.err_unrecognised_spec": "\"{0}\" ist keine gültige Zeitangabe — versuche `07:30`, `weekday07:00-18:00` oder `every08:00-20:00/2`",
   "rate_limit.banned_soft": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, nutze {0}start um diese wieder zu aktivieren",
   "rate_limit.banned_hard": "24 Std. Nachrichtenlimit wurde überschritten. Benachrichtigungen sind nun deaktiviert, kontaktiere einen Administrator um diese wieder zu aktivieren",
   "rate_limit.shame": "<@{0}> wurde wegen zu häufiger Überschreitung des Nachrichtenlimits deaktiviert!",

@@ -25,9 +25,11 @@ import (
 // English forms are used unconditionally because the text parser does an
 // English-fallback lookup against `arg.*` regardless of the user's language.
 //
-// Note on settime: the text bot's ParseSettimeArg tokenises a single
-// comma-separated argument internally (`"mon07:30,weekday09-17/2"`), so we
-// pass the whole `times` string verbatim as one token rather than splitting.
+// Note on settime: the whole `times` string is passed verbatim as one token.
+// ParseSettimeArgs splits it on commas and whitespace, so
+// `"mon07:30,weekday09-17/2"` sets both. (Until the split existed this
+// comment was aspirational — a single ParseSettimeArg call matched neither
+// form and silently set nothing.)
 func Profile(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, error) {
 	if len(opts) == 0 {
 		return nil, &MapperError{Key: "error.slash.profile.no_subcommand"}

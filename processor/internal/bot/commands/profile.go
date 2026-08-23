@@ -202,45 +202,11 @@ func (c *ProfileCommand) switchProfile(ctx *bot.CommandContext, args []string) [
 }
 
 // buildDayPrefixMap creates a map from translated + English day prefixes to ISO day numbers.
+// buildDayPrefixMap returns the day prefixes the settime grammar accepts.
+// The canonical table lives in the bot package so the slash autocomplete can
+// offer exactly what this parser will accept (see bot.DayPrefixMap).
 func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
-	m := map[string][]int{
-		// English always accepted
-		"mon": {1}, "tue": {2}, "wed": {3}, "thu": {4},
-		"fri": {5}, "sat": {6}, "sun": {7},
-		"weekday":  {1, 2, 3, 4, 5},
-		"weekend":  {6, 7},
-		"every":    {1, 2, 3, 4, 5, 6, 7},
-		"everyday": {1, 2, 3, 4, 5, 6, 7},
-	}
-
-	// Add translated day abbreviations from i18n
-	// Uses arg.prefix.mon through arg.prefix.sun and arg.prefix.weekday/weekend
-	dayKeys := []struct {
-		key  string
-		days []int
-	}{
-		{"arg.prefix.mon", []int{1}},
-		{"arg.prefix.tue", []int{2}},
-		{"arg.prefix.wed", []int{3}},
-		{"arg.prefix.thu", []int{4}},
-		{"arg.prefix.fri", []int{5}},
-		{"arg.prefix.sat", []int{6}},
-		{"arg.prefix.sun", []int{7}},
-		{"arg.prefix.weekday", []int{1, 2, 3, 4, 5}},
-		{"arg.prefix.weekend", []int{6, 7}},
-		{"arg.prefix.every", []int{1, 2, 3, 4, 5, 6, 7}},
-		{"arg.prefix.everyday", []int{1, 2, 3, 4, 5, 6, 7}},
-	}
-
-	tr := ctx.Tr()
-	for _, dk := range dayKeys {
-		translated := strings.ToLower(tr.T(dk.key))
-		if translated != dk.key && translated != "" {
-			m[translated] = dk.days
-		}
-	}
-
-	return m
+	return bot.DayPrefixMap(ctx.Tr())
 }
 
 func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.Reply {
@@ -250,15 +216,11 @@ func (c *ProfileCommand) setTime(ctx *bot.CommandContext, args []string) []bot.R
 	}
 
 	dayPrefixes := buildDayPrefixMap(ctx)
-	var entries []db.ActiveHourEntry
-	for _, arg := range args {
-		parsed, err := ParseSettimeArg(arg, dayPrefixes)
-		if err != nil {
-			// Matched a known form (range) but failed validation
-			// — surface the reason instead of silently dropping.
-			return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", arg, SettimeErrorMessage(tr, err))}}
-		}
-		entries = append(entries, parsed...)
+	// Accepts several specs in one go, comma- or space-separated:
+	// the slash surface sends the whole `times` option as one token.
+	entries, err := ParseSettimeArgs(args, dayPrefixes)
+	if err != nil {
+		return []bot.Reply{{React: "🙅", Text: tr.Tf("msg.profile.settime_invalid", strings.Join(args, " "), SettimeErrorMessage(tr, err))}}
 	}
 
 	if len(entries) == 0 {
