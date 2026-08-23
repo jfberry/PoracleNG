@@ -6,11 +6,24 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-type fakeSession struct{ called []string }
+type fakeSession struct {
+	called []string
+	// registered is what ApplicationCommands reads back, keyed by guild id
+	// ("" = global), so list tests can seed a scope.
+	registered map[string][]*discordgo.ApplicationCommand
+	listErr    error
+}
 
 func (f *fakeSession) ApplicationCommandBulkOverwrite(appID, guildID string, cmds []*discordgo.ApplicationCommand, opts ...discordgo.RequestOption) ([]*discordgo.ApplicationCommand, error) {
 	f.called = append(f.called, guildID)
 	return cmds, nil
+}
+
+func (f *fakeSession) ApplicationCommands(appID, guildID string, opts ...discordgo.RequestOption) ([]*discordgo.ApplicationCommand, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.registered[guildID], nil
 }
 
 func TestSyncGlobal(t *testing.T) {
