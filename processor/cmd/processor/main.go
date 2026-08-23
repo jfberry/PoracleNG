@@ -1051,6 +1051,42 @@ func main() {
 			}
 			return gscope, guildScopes, nil
 		},
+		SlashList: func(guildID string) ([]bot.SlashScopeCommands, error) {
+			d := discordBotSlashDispatcher(discordBot)
+			if d == nil {
+				return nil, slash.ErrSlashNotConfigured
+			}
+			// Which scopes to read: the configured ones, plus the guild the
+			// command was invoked from. Guild-scoped registrations get
+			// different ids per guild, so an operator running this inside a
+			// guild must see that guild's ids even if it isn't in [guilds].
+			var scopes []string
+			if d.IsGlobal() {
+				scopes = append(scopes, "")
+			}
+			scopes = append(scopes, d.ConfiguredGuilds()...)
+			if guildID != "" && !slices.Contains(scopes, guildID) {
+				scopes = append(scopes, guildID)
+			}
+
+			out := make([]bot.SlashScopeCommands, 0, len(scopes))
+			for _, scope := range scopes {
+				mentions, err := d.ListRegistered(scope)
+				if err != nil {
+					return nil, err
+				}
+				name := scope
+				if name == "" {
+					name = "global"
+				}
+				cmds := make([]bot.SlashCommandMention, 0, len(mentions))
+				for _, m := range mentions {
+					cmds = append(cmds, bot.SlashCommandMention{Path: m.Path, ID: m.ID})
+				}
+				out = append(out, bot.SlashScopeCommands{Name: name, Commands: cmds})
+			}
+			return out, nil
+		},
 	}
 
 	// /api/command — routes through the full BotDeps graph so every admin
