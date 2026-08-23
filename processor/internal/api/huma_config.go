@@ -36,6 +36,7 @@ type poracleWebResponse struct {
 	Locale                       string           `json:"locale" doc:"Default server locale"`
 	MaxDistance                  int              `json:"maxDistance" doc:"Maximum allowed tracking distance (m)"`
 	Prefix                       string           `json:"prefix" doc:"Discord command prefix"`
+	Provider                     string           `json:"provider" doc:"Geocoding provider type (nominatim || photon)"`
 	ProviderURL                  string           `json:"providerURL" doc:"Geocoding provider URL"`
 	PvpCaps                      []int            `json:"pvpCaps" doc:"Configured PVP level caps"`
 	PvpFilterGreatMinCP          int              `json:"pvpFilterGreatMinCP" doc:"Minimum CP floor for great-league PVP filters"`
@@ -330,6 +331,7 @@ func buildPoracleWebResponse(cfg *config.Config) poracleWebResponse {
 		Version:                      Version,
 		Locale:                       cfg.General.Locale,
 		Prefix:                       cfg.Discord.Prefix,
+		Provider:                     cfg.Geocoding.Provider,
 		ProviderURL:                  cfg.Geocoding.ProviderURL,
 		AddressFormat:                cfg.Locale.AddressFormat,
 		StaticKey:                    staticKeys,

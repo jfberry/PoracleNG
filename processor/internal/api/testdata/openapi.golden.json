@@ -1783,6 +1783,10 @@
             "description": "Discord command prefix",
             "type": "string"
           },
+          "provider": {
+            "description": "Geocoding provider type (nominatim || photon)",
+            "type": "string"
+          },
           "providerURL": {
             "description": "Geocoding provider URL",
             "type": "string"
@@ -1858,6 +1862,7 @@
           "locale",
           "maxDistance",
           "prefix",
+          "provider",
           "providerURL",
           "pvpCaps",
           "pvpFilterGreatMinCP",
