@@ -243,10 +243,7 @@ func TestDuplicateCacheMemoryPerEntry(t *testing.T) {
 	var after runtime.MemStats
 	runtime.ReadMemStats(&after)
 
-	growth := int64(after.HeapAlloc) - int64(before.HeapAlloc)
-	if growth < 0 {
-		growth = 0
-	}
+	growth := max(int64(after.HeapAlloc)-int64(before.HeapAlloc), 0)
 	perEntry := float64(growth) / entries
 
 	// ttlcache measured ~233 B/entry; a hash set measures ~25 B. 60 B is well

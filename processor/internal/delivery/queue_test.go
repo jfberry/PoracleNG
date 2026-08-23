@@ -831,11 +831,11 @@ func TestQueueDoesNotStampWhenEditKeyMatches(t *testing.T) {
 func TestQueueTracksReplyKeyAfterSend(t *testing.T) {
 	// Sender returns deterministic incrementing sentIDs so we can verify the
 	// second job picks up the first job's id.
-	var counter int32
+	var counter atomic.Int32
 	mock := &counterSender{
 		platform: "discord",
 		next: func() string {
-			n := atomic.AddInt32(&counter, 1)
+			n := counter.Add(1)
 			return "chan1:msg-" + strconv.Itoa(int(n))
 		},
 	}
@@ -1014,11 +1014,11 @@ func TestProcessJob_NoReplyKey_NotTracked(t *testing.T) {
 // is sent → tracker lookup stamps job 2's ReplyToID with job 1's SentID before
 // the platform sender receives it.
 func TestProcessJob_ReplyChainWithoutClean(t *testing.T) {
-	var n int32
+	var n atomic.Int32
 	mock := &counterSender{
 		platform: "discord",
 		next: func() string {
-			id := atomic.AddInt32(&n, 1)
+			id := n.Add(1)
 			return "chan1:msg-" + strconv.Itoa(int(id))
 		},
 	}

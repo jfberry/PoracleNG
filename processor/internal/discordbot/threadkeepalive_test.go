@@ -48,7 +48,7 @@ func TestCleanupDeadThreadsUnder(t *testing.T) {
 	}
 
 	b := &Bot{
-		BotDeps:        bot.BotDeps{Humans: humans, Cfg: &config.Config{BaseDir: tmpDir}},
+		Humans: humans, Cfg: &config.Config{BaseDir: tmpDir},
 		threadCache:    tc,
 		autocreateSync: as,
 	}

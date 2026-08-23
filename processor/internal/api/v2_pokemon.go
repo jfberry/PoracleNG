@@ -205,9 +205,6 @@ func pokemonRowToRule(row *db.MonsterTrackingAPI) v2PokemonRule {
 	}
 }
 
-// ptr returns a pointer to v (response builder helper).
-func ptr[T any](v T) *T { return &v }
-
 // ptrUnless is the response-projection helper that hides a wildcard/default value
 // as JSON null (Part B of #138). It returns nil when v equals wildcard (the
 // documented "match-any"/default sentinel for that field) so the envelope emits

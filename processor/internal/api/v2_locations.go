@@ -238,11 +238,9 @@ func newLocationRefsConflict(refs []store.ReferencingRule) *v2LocationReferenced
 		mapped = append(mapped, v2RefRule{Type: r.Type, UID: r.UID})
 	}
 	return &v2LocationReferencedError{
-		ErrorModel: huma.ErrorModel{
-			Status: 409,
-			Title:  "Conflict",
-			Detail: "location is referenced by one or more tracking rules",
-		},
+		Status:           409,
+		Title:            "Conflict",
+		Detail:           "location is referenced by one or more tracking rules",
 		ReferencingRules: mapped,
 	}
 }

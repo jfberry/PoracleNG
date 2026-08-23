@@ -4,7 +4,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
@@ -42,7 +41,7 @@ func minimalConfig() *config.Config {
 // ErrReconciliationDisabled when the Bot was created without reconciliation.
 func TestReconcileUserNow_Disabled(t *testing.T) {
 	b := &Bot{
-		BotDeps:        bot.BotDeps{Cfg: minimalConfig()},
+		Cfg:            minimalConfig(),
 		reconciliation: nil, // explicitly nil
 	}
 
@@ -61,7 +60,7 @@ func TestReconcileUserNow_Routes(t *testing.T) {
 	ms := store.NewMockHumanStore()
 
 	b := &Bot{
-		BotDeps:        bot.BotDeps{Cfg: cfg},
+		Cfg:            cfg,
 		reconciliation: newTestReconciliation(ms, cfg),
 	}
 

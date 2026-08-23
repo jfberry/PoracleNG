@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -46,8 +47,8 @@ func (c *BroadcastCommand) Run(ctx *bot.CommandContext, args []string) []bot.Rep
 	test := false
 	var remaining []string
 
-	for i := len(args) - 1; i >= 0; i-- {
-		arg := args[i]
+	for _, arg := range slices.Backward(args) {
+
 		if m := broadcastAreaRe.FindStringSubmatch(arg); m != nil {
 			areas = append(areas, m[1])
 		} else if m := broadcastDRe.FindStringSubmatch(arg); m != nil {

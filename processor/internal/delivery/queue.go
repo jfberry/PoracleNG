@@ -442,8 +442,7 @@ func (fq *FairQueue) processJob(job *Job) {
 
 	sent, err := sender.Send(fq.ctx, job)
 	if err != nil {
-		var permErr *PermanentError
-		if errors.As(err, &permErr) {
+		if permErr, ok := errors.AsType[*PermanentError](err); ok {
 			logref.Warnf(job.LogReference, "delivery: permanent error for %s/%s: %s", job.Type, job.Target, permErr.Reason)
 			metrics.DeliveryTotal.WithLabelValues(platform, "permanent_error").Inc()
 			fq.recordFailure(job.Target, job.Name, job.Type)
