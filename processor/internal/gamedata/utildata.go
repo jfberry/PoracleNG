@@ -33,9 +33,14 @@ type UtilData struct {
 	MaxbattleLevels  map[int]struct{}   // valid max-battle level IDs (display via max_battle_N)
 	Lures            map[int]LureInfo
 	PokestopEvent    map[int]EventInfo
-	PowerUpCost      map[string]PowerUpCostEntry // level string → {stardust, candy, xlCandy}
-	CpMultipliers    map[string]float64          // level string → CP multiplier
-	Emojis           map[string]string           // emoji key → unicode
+	// ShowcaseFocus enumerates the game's contest focus classes (pokemon, type,
+	// alignment, class, family, buddy, generation, hatched, mega, shiny). Keyed
+	// by the focus-type string Golbat emits; the display name comes from i18n
+	// showcase_focus_{type}, not util.json (emoji lives here for theming).
+	ShowcaseFocus map[string]ShowcaseFocusInfo
+	PowerUpCost   map[string]PowerUpCostEntry // level string → {stardust, candy, xlCandy}
+	CpMultipliers map[string]float64          // level string → CP multiplier
+	Emojis        map[string]string           // emoji key → unicode
 }
 
 // PowerUpCostEntry holds the cost to power up one half-level.
@@ -56,6 +61,12 @@ type GenderInfo struct {
 type TeamInfo struct {
 	Color string `json:"color"`
 	Emoji string `json:"emoji"` // emoji key (e.g. "team-mystic")
+}
+
+// ShowcaseFocusInfo holds showcase-focus display metadata. The display name
+// comes from i18n showcase_focus_{type}, not util.json.
+type ShowcaseFocusInfo struct {
+	Emoji string `json:"emoji"` // emoji key (optional)
 }
 
 // TypeDisplay holds type display data from util.json types section.
@@ -187,6 +198,14 @@ func ParseUtilData(data []byte) (*UtilData, error) {
 
 	// PokestopEvent: {"7": {...}, ...}
 	u.PokestopEvent = parseIntKeyMap[EventInfo](raw["pokestopEvent"])
+
+	// ShowcaseFocus: {"type": {...}, "buddy": {...}, ...} — string-keyed.
+	if raw["showcaseFocus"] != nil {
+		var sf map[string]ShowcaseFocusInfo
+		if err := json.Unmarshal(raw["showcaseFocus"], &sf); err == nil {
+			u.ShowcaseFocus = sf
+		}
+	}
 
 	// CpMultipliers: {"1": 0.094, "1.5": 0.135, ...}
 	if raw["cpMultipliers"] != nil {

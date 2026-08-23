@@ -59,8 +59,10 @@ func translateMonsterName(tr *i18n.Translator, gd *gamedata.GameData, pokemonID,
 		// Translation key returned as-is means no translation found
 		formName = ""
 	} else if form == 0 && enrichment.IsNormalForm(formName) {
-		formName = ""
-	} else if enrichment.IsNormalForm(formName) {
+		// form 0 = "any form": suppress a default "Normal"/"Unset" label so the
+		// row reads as the whole species. An explicitly-tracked form
+		// (form != 0) keeps its name — including "Normal" — so distinct form
+		// trackings stay distinguishable in !tracked.
 		formName = ""
 	}
 

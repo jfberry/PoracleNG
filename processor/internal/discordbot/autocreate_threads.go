@@ -202,6 +202,20 @@ func (c *threadCache) removeThreadByLabel(masterID, label string) string {
 	return ""
 }
 
+// removeMaster drops the entire cache section for masterID — used when the
+// master channel is confirmed gone in Discord (HTTP 404), so every thread
+// under it is dead and can never be revived. Returns true if a section was
+// removed (so the caller knows whether a save() is worthwhile).
+func (c *threadCache) removeMaster(masterID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.masters[masterID]; !ok {
+		return false
+	}
+	delete(c.masters, masterID)
+	return true
+}
+
 func (c *threadCache) master(masterID string) (*threadCacheMaster, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

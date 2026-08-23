@@ -20,6 +20,7 @@ type QuestRewardData struct {
 	Monsters       []QuestMonsterReward
 	Items          []QuestItemReward
 	DustAmount     int
+	PokecoinAmount int
 	EnergyMonsters []QuestEnergyReward
 	Candy          []QuestCandyReward
 }
@@ -72,7 +73,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID, pokestopURL string, rewar
 	e.addQuestIconURLs(m, rewards)
 
 	// Reverse geocoding
-	e.addGeoResult(m, lat, lon)
+	e.addLocationFields(m, lat, lon)
 
 	// Static map tile
 	pending := e.addStaticMap(m, "quest", lat, lon, nil, tileMode, pokestopID)
@@ -91,6 +92,7 @@ func (e *Enricher) Quest(lat, lon float64, pokestopID, pokestopURL string, rewar
 	// Structure reward data for per-language enrichment
 	rewardData := buildQuestRewardData(rewards)
 	m["dustAmount"] = rewardData.DustAmount
+	m["pokecoinAmount"] = rewardData.PokecoinAmount
 	if len(rewardData.Items) > 0 {
 		m["itemAmount"] = rewardData.Items[0].Amount
 	}
@@ -142,6 +144,8 @@ func buildQuestRewardData(rewards []matching.QuestRewardData) QuestRewardData {
 			result.Items = append(result.Items, QuestItemReward{ID: r.ItemID, Amount: r.Amount})
 		case 3: // Stardust
 			result.DustAmount = r.Amount
+		case 8: // Pokecoins
+			result.PokecoinAmount = r.Amount
 		case 4: // Candy
 			result.Candy = append(result.Candy, QuestCandyReward{PokemonID: r.PokemonID, Amount: r.Amount})
 		case 7: // Pokemon encounter
@@ -185,7 +189,7 @@ func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebho
 		monsterList := make([]map[string]any, len(rewardData.Monsters))
 		for i, mon := range rewardData.Monsters {
 			nameInfo := make(map[string]any)
-			TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, mon.PokemonID, mon.FormID, 0)
+			TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, mon.PokemonID, mon.FormID, 0, 0)
 			monsterList[i] = map[string]any{
 				"pokemonId":   mon.PokemonID,
 				"formId":      mon.FormID,
@@ -244,6 +248,17 @@ func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebho
 	m["dustText"] = dustText
 	m["dustTextEng"] = dustTextEng
 
+	// Pokecoins
+	var pokecoinText, pokecoinTextEng string
+	if rewardData.PokecoinAmount > 0 {
+		coinName := tr.T("quest_reward_8")
+		coinNameEng := enTr.T("quest_reward_8")
+		pokecoinText = fmt.Sprintf("%d %s", rewardData.PokecoinAmount, coinName)
+		pokecoinTextEng = fmt.Sprintf("%d %s", rewardData.PokecoinAmount, coinNameEng)
+	}
+	m["pokecoinText"] = pokecoinText
+	m["pokecoinTextEng"] = pokecoinTextEng
+
 	// Mega energy names + energyMonsters array
 	var energyNames, energyNamesEng []string
 	energyList := make([]map[string]any, 0, len(rewardData.EnergyMonsters))
@@ -288,12 +303,12 @@ func (e *Enricher) QuestTranslate(base map[string]any, quest *webhook.QuestWebho
 
 	// Reward string (join all non-empty reward parts)
 	var rewardParts, rewardPartsEng []string
-	for _, s := range []string{strings.Join(monsterNames, ", "), dustText, strings.Join(itemNames, ", "), strings.Join(energyNames, ", "), strings.Join(candyNames, ", ")} {
+	for _, s := range []string{strings.Join(monsterNames, ", "), dustText, pokecoinText, strings.Join(itemNames, ", "), strings.Join(energyNames, ", "), strings.Join(candyNames, ", ")} {
 		if s != "" {
 			rewardParts = append(rewardParts, s)
 		}
 	}
-	for _, s := range []string{strings.Join(monsterNamesEng, ", "), dustTextEng, strings.Join(itemNamesEng, ", "), strings.Join(energyNamesEng, ", "), strings.Join(candyNamesEng, ", ")} {
+	for _, s := range []string{strings.Join(monsterNamesEng, ", "), dustTextEng, pokecoinTextEng, strings.Join(itemNamesEng, ", "), strings.Join(energyNamesEng, ", "), strings.Join(candyNamesEng, ", ")} {
 		if s != "" {
 			rewardPartsEng = append(rewardPartsEng, s)
 		}
@@ -467,7 +482,7 @@ func joinIDList(v any) string {
 }
 
 // addQuestIconURLs resolves icon URLs based on the quest reward type.
-// Reward types: 2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy
+// Reward types: 2=item, 3=stardust, 4=candy, 7=pokemon, 8=pokecoins, 12=mega energy
 func (e *Enricher) addQuestIconURLs(m map[string]any, rewards []matching.QuestRewardData) {
 	if len(rewards) == 0 {
 		return
@@ -505,6 +520,16 @@ func (e *Enricher) addQuestIconURLs(m map[string]any, rewards []matching.QuestRe
 		}
 		if e.StickerUicons != nil {
 			m["stickerUrl"] = e.StickerUicons.RewardStardustIcon(r.Amount)
+		}
+	case r.Type == 8: // Pokecoins reward
+		if e.ImgUicons != nil {
+			m["imgUrl"] = e.ImgUicons.RewardPokecoinIcon(r.Amount)
+		}
+		if e.ImgUiconsAlt != nil {
+			m["imgUrlAlt"] = e.ImgUiconsAlt.RewardPokecoinIcon(r.Amount)
+		}
+		if e.StickerUicons != nil {
+			m["stickerUrl"] = e.StickerUicons.RewardPokecoinIcon(r.Amount)
 		}
 	case r.Type == 12 && r.PokemonID > 0: // Mega energy reward
 		if e.ImgUicons != nil {

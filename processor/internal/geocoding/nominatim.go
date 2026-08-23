@@ -111,7 +111,7 @@ func (n *Nominatim) Reverse(lat, lon float64, language string) (*Address, error)
 
 	var result nominatimReverseResult
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("nominatim: unmarshal: %w", err)
+		return nil, fmt.Errorf("nominatim: unmarshal reverse response (%s): %w", bodySnippet(body), err)
 	}
 	if result.Error != "" {
 		return nil, fmt.Errorf("nominatim: %s", result.Error)
@@ -183,7 +183,7 @@ func (n *Nominatim) Forward(query string) ([]ForwardResult, error) {
 
 	var results []nominatimForwardResult
 	if err := json.Unmarshal(body, &results); err != nil {
-		return nil, fmt.Errorf("nominatim: unmarshal: %w", err)
+		return nil, fmt.Errorf("nominatim: unmarshal search response (%s): %w", bodySnippet(body), err)
 	}
 
 	out := make([]ForwardResult, 0, len(results))

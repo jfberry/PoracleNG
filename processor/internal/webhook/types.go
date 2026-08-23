@@ -171,6 +171,24 @@ type ActivePokemonEntry struct {
 	DisappearTime int64   `json:"disappear_time"`
 }
 
+// WeatherChangeWebhook is the synthesized "weatherchange" derived-type shape
+// used by the DTS editor preview and !poracle-test — not a raw Golbat wire
+// type (weather changes are detected internally by tracker.WeatherTracker
+// from a stream of plain WeatherWebhook updates, see
+// cmd/processor/weather.go's consumeWeatherChanges). It carries the
+// old/new gameplay condition for the cell plus a short list of pokemon
+// affected by the transition (boosted/unboosted), mirroring the
+// tracker.WeatherChange event shape and webhook.MatchedUser.ActivePokemons.
+type WeatherChangeWebhook struct {
+	S2CellID             string               `json:"s2_cell_id"`
+	Latitude             float64              `json:"latitude"`
+	Longitude            float64              `json:"longitude"`
+	Coords               [][2]float64         `json:"coords,omitempty"`
+	GameplayCondition    int                  `json:"gameplay_condition"`
+	OldGameplayCondition int                  `json:"old_gameplay_condition"`
+	Affected             []ActivePokemonEntry `json:"affected,omitempty"`
+}
+
 // MatchedUser represents a user who matched an alert.
 type MatchedUser struct {
 	ID                string  `json:"id"`
@@ -300,6 +318,35 @@ type LureWebhook struct {
 	GruntType           int `json:"grunt_type"`
 	DisplayType         int `json:"display_type"`
 	IncidentDisplayType int `json:"incident_display_type"`
+}
+
+// ShowcaseWebhook mirrors the showcase slice of a Golbat pokestop webhook.
+//
+// Showcases (pokéstop contests) arrive on the `pokestop` envelope — the same
+// snapshot that carries lures and power-ups — with NO display_type. The
+// authoritative "is this active" signal is showcase_expiry (unix seconds when
+// the contest ends); Golbat never clears these fields on expiry, so a stale
+// showcase lingers on the snapshot and must be gated on showcase_expiry > now.
+// URL is the pokéstop photo URL (Golbat emits it as `url`, same as the lure
+// envelope). Name is `name` (NOT `pokestop_name`, which the invasion envelope
+// uses).
+type ShowcaseWebhook struct {
+	PokestopID string  `json:"pokestop_id"`
+	Name       string  `json:"name"`
+	URL        string  `json:"url"`
+	Latitude   float64 `json:"latitude"`
+	Longitude  float64 `json:"longitude"`
+	Updated    int64   `json:"updated"`
+	// ShowcaseExpiry is unix seconds when the contest ends. 0 / absent = no
+	// showcase. Nullable in Golbat (null.Int) — JSON null decodes to 0.
+	ShowcaseExpiry int64 `json:"showcase_expiry"`
+	// ShowcaseFocus / ShowcaseRankings are raw JSON objects (not encoded
+	// strings). Focus describes WHAT is featured (Phase 2 enrichment);
+	// rankings is the top-3 leaderboard consumed by translateShowcaseRankings.
+	ShowcaseFocus    json.RawMessage `json:"showcase_focus,omitempty"`
+	ShowcaseRankings json.RawMessage `json:"showcase_rankings,omitempty"`
+	// ShowcaseRankingStandard is the ranking metric enum (1=MIN, 2=MAX).
+	ShowcaseRankingStandard int `json:"showcase_ranking_standard"`
 }
 
 // GymWebhook mirrors Golbat's gym/gym_details webhook message.

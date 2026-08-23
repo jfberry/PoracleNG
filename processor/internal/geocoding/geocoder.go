@@ -1,13 +1,14 @@
 package geocoding
 
 import (
+	"errors"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/breaker"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
@@ -41,14 +42,8 @@ type Geocoder struct {
 	provider Provider
 	cache    *Cache
 	config   Config
-	addrTmpl *AddressTemplate // compiled once from config.AddressFormat
-	sem      chan struct{}    // concurrency limiter
-
-	// Circuit breaker state
-	consecutiveErrors   int
-	circuitOpenSince    time.Time
-	halfOpenProbeActive bool
-	mu                  sync.Mutex
+	addrTmpl *AddressTemplate           // compiled once from config.AddressFormat
+	breaker  *breaker.Breaker[*Address] // circuit breaker + concurrency limiter
 
 	// Stats counters for periodic logging
 	statCalls         atomic.Int64
@@ -57,6 +52,10 @@ type Geocoder struct {
 	statHits          atomic.Int64
 	statCircuitBreaks atomic.Int64
 }
+
+// errNilAddress marks a provider returning (nil, nil) — treated as a failure
+// so it counts toward the circuit breaker.
+var errNilAddress = errors.New("geocode: provider returned nil address")
 
 // New creates a new Geocoder from the given config.
 func New(config Config) (*Geocoder, error) {
@@ -103,13 +102,27 @@ func New(config Config) (*Geocoder, error) {
 		log.Warnf("Geocoder: %s — falling back to formattedAddress", err)
 	}
 
-	return &Geocoder{
+	g := &Geocoder{
 		provider: provider,
 		cache:    cache,
 		config:   config,
 		addrTmpl: addrTmpl,
-		sem:      make(chan struct{}, config.Concurrency),
-	}, nil
+	}
+	g.breaker = breaker.New[*Address](breaker.Config{
+		Name:             "geocoder-" + config.Provider,
+		FailureThreshold: config.FailureThreshold,
+		Cooldown:         time.Duration(config.CooldownMs) * time.Millisecond,
+		Concurrency:      config.Concurrency,
+		OnHealthChange: func(healthy bool) {
+			if healthy {
+				metrics.GeocodeCircuitHealthy.Set(1)
+			} else {
+				metrics.GeocodeCircuitHealthy.Set(0)
+			}
+		},
+	})
+	metrics.GeocodeCircuitHealthy.Set(1) // start healthy (gobreaker fires OnStateChange only on transition)
+	return g, nil
 }
 
 // unknownAddress returns a minimal Address for error/skip cases.
@@ -145,68 +158,55 @@ func (g *Geocoder) GetAddressForLanguage(lat, lon float64, language string) *Add
 		}
 	}
 
-	// Circuit breaker check
-	g.mu.Lock()
-	if g.consecutiveErrors >= g.config.FailureThreshold {
-		cooldown := time.Duration(g.config.CooldownMs) * time.Millisecond
-		if time.Since(g.circuitOpenSince) < cooldown {
-			g.mu.Unlock()
-			g.statCircuitBreaks.Add(1)
-			metrics.GeocodeTotal.WithLabelValues("circuit_break").Inc()
-			return unknownAddress()
+	// Reverse geocode behind the circuit breaker (which also bounds
+	// concurrency). The breaker trips on consecutive provider failures.
+	addr, err := g.breaker.Do(func() (*Address, error) {
+		metrics.GeocodeInFlight.Inc()
+		defer metrics.GeocodeInFlight.Dec()
+
+		start := time.Now()
+		a, rerr := g.provider.Reverse(lat, lon, language)
+		duration := time.Since(start)
+		metrics.GeocodeDuration.Observe(duration.Seconds())
+
+		if rerr != nil || a == nil {
+			g.statErrors.Add(1)
+			metrics.GeocodeTotal.WithLabelValues("error").Inc()
+			// Log only a genuine provider error; a (nil, nil) "no address found"
+			// was silent before the refactor — keep it silent to avoid flooding
+			// the warn log in high-volume unresolvable areas. It still trips the
+			// breaker (parity with the old recordError path) via errNilAddress.
+			if rerr != nil {
+				log.Warnf("Geocode %f,%f failed: %s", lat, lon, rerr)
+			} else {
+				rerr = errNilAddress
+			}
+			return nil, rerr
 		}
-		// Half-open: allow exactly one probe request
-		if g.halfOpenProbeActive {
-			g.mu.Unlock()
-			g.statCircuitBreaks.Add(1)
-			metrics.GeocodeTotal.WithLabelValues("circuit_break").Inc()
-			return unknownAddress()
-		}
-		g.halfOpenProbeActive = true
-	}
-	g.mu.Unlock()
 
-	// Acquire concurrency slot
-	g.sem <- struct{}{}
-	defer func() { <-g.sem }()
+		g.statCalls.Add(1)
+		g.statTotalMs.Add(duration.Milliseconds())
+		metrics.GeocodeTotal.WithLabelValues("success").Inc()
+		return a, nil
+	})
 
-	metrics.GeocodeInFlight.Inc()
-	defer metrics.GeocodeInFlight.Dec()
-
-	start := time.Now()
-	addr, err := g.provider.Reverse(lat, lon, language)
-	duration := time.Since(start)
-
-	metrics.GeocodeDuration.Observe(duration.Seconds())
-
-	if err != nil || addr == nil {
-		g.statErrors.Add(1)
-		metrics.GeocodeTotal.WithLabelValues("error").Inc()
-		g.recordError()
-		if err != nil {
-			log.Warnf("Geocode %f,%f failed: %s", lat, lon, err)
-		}
+	if errors.Is(err, breaker.ErrOpen) {
+		g.statCircuitBreaks.Add(1)
+		metrics.GeocodeTotal.WithLabelValues("circuit_break").Inc()
 		return unknownAddress()
 	}
-
-	// Success — reset circuit breaker
-	g.mu.Lock()
-	g.consecutiveErrors = 0
-	g.halfOpenProbeActive = false
-	g.mu.Unlock()
-	metrics.GeocodeCircuitHealthy.Set(1)
-
-	g.statCalls.Add(1)
-	g.statTotalMs.Add(duration.Milliseconds())
-	metrics.GeocodeTotal.WithLabelValues("success").Inc()
+	if err != nil {
+		// Provider error — already counted and logged inside the breaker fn.
+		return unknownAddress()
+	}
 
 	// Add flag and formatted address (template rendered via raymond so
 	// operators get {{#if}}/{{#unless}}/helpers for conditional layout).
 	addr.Flag = CountryFlag(addr.CountryCode)
 	addr.Addr = g.addrTmpl.Render(*addr)
 
-	log.Debugf("Geocode %.4f,%.4f → street=%q number=%q city=%q addr=%q (%dms)",
-		lat, lon, addr.StreetName, addr.StreetNumber, addr.City, addr.Addr, duration.Milliseconds())
+	log.Debugf("Geocode %.4f,%.4f → street=%q number=%q city=%q addr=%q",
+		lat, lon, addr.StreetName, addr.StreetNumber, addr.City, addr.Addr)
 
 	// Escape special characters
 	EscapeAddress(addr)
@@ -216,7 +216,7 @@ func (g *Geocoder) GetAddressForLanguage(lat, lon float64, language string) *Add
 		g.cache.Set(cacheKey, addr)
 	}
 
-	log.Debugf("Geocode %f,%f → %s (%dms)", lat, lon, addr.Addr, duration.Milliseconds())
+	log.Debugf("Geocode %f,%f → %s", lat, lon, addr.Addr)
 	return addr
 }
 
@@ -225,8 +225,23 @@ func normalizeLanguage(language string) string {
 }
 
 // Forward performs a forward geocode (address search). Results are not cached.
+//
+// Failures and empty result sets are logged at WARN. Forward geocoding is
+// user-initiated and low-frequency (the !location command and the
+// /api/geocode/forward endpoint), and the bot surfaces only a generic "could
+// not understand the location" to the user — so this log is the only place the
+// real cause (unreachable URL, HTTP status, unfinished import, out-of-region
+// query) is visible to an operator.
 func (g *Geocoder) Forward(query string) ([]ForwardResult, error) {
-	return g.provider.Forward(query)
+	results, err := g.provider.Forward(query)
+	if err != nil {
+		log.Warnf("Forward geocode %q failed: %s", query, err)
+		return results, err
+	}
+	if len(results) == 0 {
+		log.Warnf("Forward geocode %q returned no results — provider reachable but no match; check the import has finished and the query falls within the imported area", query)
+	}
+	return results, nil
 }
 
 // GetStats returns the current geocoder statistics.
@@ -258,6 +273,13 @@ func (g *Geocoder) CacheStats() CacheStats {
 	return g.cache.Stats()
 }
 
+// Cache returns the geocoder's two-layer cache so other geocoding features
+// (e.g. intersection lookups) can share the same pogreb DB. Returns nil when
+// no cache is configured.
+func (g *Geocoder) Cache() *Cache {
+	return g.cache
+}
+
 // ClearCache drops all entries from the in-memory cache layer.
 // Returns the number of entries cleared. Safe to call when no cache is configured.
 func (g *Geocoder) ClearCache() int {
@@ -273,17 +295,4 @@ func (g *Geocoder) Close() error {
 		return g.cache.Close()
 	}
 	return nil
-}
-
-// recordError increments the consecutive error counter and opens the circuit
-// if the threshold is reached.
-func (g *Geocoder) recordError() {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.consecutiveErrors++
-	g.halfOpenProbeActive = false
-	if g.consecutiveErrors >= g.config.FailureThreshold {
-		g.circuitOpenSince = time.Now()
-		metrics.GeocodeCircuitHealthy.Set(0)
-	}
 }

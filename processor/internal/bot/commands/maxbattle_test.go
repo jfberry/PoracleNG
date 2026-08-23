@@ -57,6 +57,23 @@ func runMaxbattle(t *testing.T, ctx *bot.CommandContext, input string) []bot.Rep
 	return cmd.Run(ctx, args)
 }
 
+func TestMaxbattle_Remove_FormRejected(t *testing.T) {
+	ctx := maxbattleCtx(t)
+	runMaxbattle(t, ctx, "25")
+	rows, _ := ctx.Tracking.Maxbattles.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+
+	// Pokemon remove (!untrack) treats form: as unrecognized; maxbattle
+	// remove must do the same rather than silently removing every form.
+	replies := runMaxbattle(t, ctx, "remove 25 form:burn")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "🙅", replies[0].React, "reply: %s", replies[0].Text)
+	assert.Contains(t, replies[0].Text, "form:burn")
+
+	rows, _ = ctx.Tracking.Maxbattles.SelectByIDProfile("user1", 1)
+	assert.Len(t, rows, 1, "rejected remove must not delete anything")
+}
+
 func TestMaxbattle_BasicPokemon(t *testing.T) {
 	ctx := maxbattleCtx(t)
 	replies := runMaxbattle(t, ctx, "25")

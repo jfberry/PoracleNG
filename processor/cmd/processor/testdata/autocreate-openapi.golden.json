@@ -1,0 +1,467 @@
+{
+  "components": {
+    "schemas": {
+      "AutocreateDeleteOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "backup": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "backup"
+        ],
+        "type": "object"
+      },
+      "AutocreateRunInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "dry_run": {
+            "type": "boolean"
+          },
+          "force": {
+            "type": "boolean"
+          },
+          "removals": {
+            "type": "boolean"
+          },
+          "reset": {
+            "type": "boolean"
+          },
+          "rule": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AutocreateSchemaOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "schema": {
+            "$ref": "#/components/schemas/ChannelTemplatesEnums"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "schema"
+        ],
+        "type": "object"
+      },
+      "ChannelTemplatesEnums": {
+        "additionalProperties": false,
+        "properties": {
+          "backupNamePrefix": {
+            "type": "string"
+          },
+          "buttonStyles": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "channelTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "controlTypes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "permissionFlags": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionFlag"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "placeholderHelp": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "channelTypes",
+          "controlTypes",
+          "buttonStyles",
+          "permissionFlags",
+          "placeholderHelp",
+          "backupNamePrefix"
+        ],
+        "type": "object"
+      },
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "location": {
+            "description": "Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id'",
+            "type": "string"
+          },
+          "message": {
+            "description": "Error message text",
+            "type": "string"
+          },
+          "value": {
+            "description": "The value at the given location"
+          }
+        },
+        "type": "object"
+      },
+      "ErrorModel": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "description": "A human-readable explanation specific to this occurrence of the problem.",
+            "examples": [
+              "Property foo is required but is missing."
+            ],
+            "type": "string"
+          },
+          "errors": {
+            "description": "Optional list of individual error details",
+            "items": {
+              "$ref": "#/components/schemas/ErrorDetail"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "instance": {
+            "description": "A URI reference that identifies the specific occurrence of the problem.",
+            "examples": [
+              "https://example.com/error-log/abc123"
+            ],
+            "format": "uri",
+            "type": "string"
+          },
+          "status": {
+            "description": "HTTP status code",
+            "examples": [
+              400
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "A short, human-readable summary of the problem type. This value should not change between occurrences of the error.",
+            "examples": [
+              "Bad Request"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "default": "about:blank",
+            "description": "A URI reference to human-readable documentation for the error.",
+            "examples": [
+              "https://example.com/errors/example"
+            ],
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PermissionFlag": {
+        "additionalProperties": false,
+        "properties": {
+          "group": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "group"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "poracleSecret": {
+        "in": "header",
+        "name": "X-Poracle-Secret",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "title": "PoracleNG API",
+    "version": "test"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/autocreate/run": {
+      "post": {
+        "description": "Syncs one or all autocreate rules. The response body is left open (freeform): {status, rules:[]SyncOneRuleResult} where each result carries per-fence created/reused/orphan/removed/skipped logs and a free-form errors list, so it has no fixed schema.",
+        "operationId": "post-autocreate-run",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutocreateRunInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Run autocreate rule sync",
+        "tags": [
+          "autocreate"
+        ]
+      }
+    },
+    "/autocreate/templates": {
+      "get": {
+        "operationId": "get-autocreate-templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Get channel templates",
+        "tags": [
+          "autocreate"
+        ]
+      },
+      "post": {
+        "operationId": "post-autocreate-templates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Save channel templates",
+        "tags": [
+          "autocreate"
+        ]
+      }
+    },
+    "/autocreate/templates/schema": {
+      "get": {
+        "operationId": "get-autocreate-templates-schema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutocreateSchemaOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Get channel templates schema",
+        "tags": [
+          "autocreate"
+        ]
+      }
+    },
+    "/autocreate/templates/validate": {
+      "post": {
+        "operationId": "post-autocreate-templates-validate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Validate channel templates",
+        "tags": [
+          "autocreate"
+        ]
+      }
+    },
+    "/autocreate/templates/{name}": {
+      "delete": {
+        "operationId": "delete-autocreate-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutocreateDeleteOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Delete a channel template",
+        "tags": [
+          "autocreate"
+        ]
+      }
+    }
+  }
+}

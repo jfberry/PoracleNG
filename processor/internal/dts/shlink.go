@@ -3,6 +3,8 @@ package dts
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -11,25 +13,28 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/breaker"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 )
 
 // ShlinkShortener shortens URLs via a Shlink (https://shlink.io/) instance.
 type ShlinkShortener struct {
-	url    string
-	apiKey string
-	domain string
-	client *http.Client
+	url     string
+	apiKey  string
+	domain  string
+	client  *http.Client
+	breaker *breaker.Gate
 }
 
 // NewShlinkShortener creates a ShlinkShortener pointing at the given Shlink server.
 // If url or apiKey is empty, Shorten will always return the original URL.
 func NewShlinkShortener(url, apiKey, domain string) *ShlinkShortener {
 	return &ShlinkShortener{
-		url:    url,
-		apiKey: apiKey,
-		domain: domain,
-		client: &http.Client{Timeout: 10 * time.Second},
+		url:     url,
+		apiKey:  apiKey,
+		domain:  domain,
+		client:  &http.Client{Timeout: 10 * time.Second},
+		breaker: breaker.NewGate(breaker.Config{Name: "shlink"}),
 	}
 }
 
@@ -50,6 +55,13 @@ type shlinkResponse struct {
 func (s *ShlinkShortener) Shorten(longURL string) string {
 	if s == nil || s.url == "" || s.apiKey == "" {
 		metrics.ShlinkTotal.WithLabelValues("disabled").Inc()
+		return longURL
+	}
+
+	// Open circuit: skip the marshal/request build entirely and fall back to the
+	// long URL. (Half-open returns false so the single probe still runs.)
+	if s.breaker.IsOpen() {
+		metrics.ShlinkTotal.WithLabelValues("circuit_break").Inc()
 		return longURL
 	}
 	start := time.Now()
@@ -77,43 +89,58 @@ func (s *ShlinkShortener) Shorten(longURL string) string {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", s.apiKey)
 
-	resp, err := s.client.Do(req)
-	if err != nil {
-		log.Warnf("shlink: request failed: %v", err)
-		metrics.ShlinkTotal.WithLabelValues("error").Inc()
+	// Guard the Shlink call with a circuit breaker so an outage doesn't make
+	// every rendered message wait out the 10s timeout. The original URL is the
+	// safe fallback for both an open circuit and any call failure.
+	short := longURL
+	berr := s.breaker.Do(func() error {
+		resp, err := s.client.Do(req)
+		if err != nil {
+			log.Warnf("shlink: request failed: %v", err)
+			metrics.ShlinkTotal.WithLabelValues("error").Inc()
+			metrics.ShlinkDuration.Observe(time.Since(start).Seconds())
+			return err
+		}
+		defer resp.Body.Close()
+
 		metrics.ShlinkDuration.Observe(time.Since(start).Seconds())
-		return longURL
-	}
-	defer resp.Body.Close()
 
-	metrics.ShlinkDuration.Observe(time.Since(start).Seconds())
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			log.Warnf("shlink: unexpected status %d for %s", resp.StatusCode, longURL)
+			metrics.ShlinkTotal.WithLabelValues("error").Inc()
+			return fmt.Errorf("shlink: status %d", resp.StatusCode)
+		}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Warnf("shlink: unexpected status %d for %s", resp.StatusCode, longURL)
-		metrics.ShlinkTotal.WithLabelValues("error").Inc()
-		return longURL
-	}
+		// Past this point Shlink responded with a 2xx — it is reachable. A bad
+		// body just means we fall back to the long URL for this call; it is NOT
+		// a connectivity failure, so return nil and don't let it trip the
+		// breaker (which would suppress shortening globally for 30s).
+		respBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Warnf("shlink: read response: %v", err)
+			metrics.ShlinkTotal.WithLabelValues("error").Inc()
+			return nil
+		}
 
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Warnf("shlink: read response: %v", err)
-		metrics.ShlinkTotal.WithLabelValues("error").Inc()
-		return longURL
-	}
+		var result shlinkResponse
+		if err := json.Unmarshal(respBytes, &result); err != nil {
+			log.Warnf("shlink: parse response: %v", err)
+			metrics.ShlinkTotal.WithLabelValues("error").Inc()
+			return nil
+		}
 
-	var result shlinkResponse
-	if err := json.Unmarshal(respBytes, &result); err != nil {
-		log.Warnf("shlink: parse response: %v", err)
-		metrics.ShlinkTotal.WithLabelValues("error").Inc()
-		return longURL
+		if result.ShortURL == "" {
+			metrics.ShlinkTotal.WithLabelValues("error").Inc()
+			return nil
+		}
+		metrics.ShlinkTotal.WithLabelValues("ok").Inc()
+		short = result.ShortURL
+		return nil
+	})
+	if errors.Is(berr, breaker.ErrOpen) {
+		metrics.ShlinkTotal.WithLabelValues("circuit_break").Inc()
 	}
-
-	if result.ShortURL == "" {
-		metrics.ShlinkTotal.WithLabelValues("error").Inc()
-		return longURL
-	}
-	metrics.ShlinkTotal.WithLabelValues("ok").Inc()
-	return result.ShortURL
+	return short
 }
 
 // shortenMarkerRe matches <S< ... >S> markers wrapping URLs to be shortened.

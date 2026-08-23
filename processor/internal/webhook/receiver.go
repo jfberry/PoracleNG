@@ -31,6 +31,7 @@ type Processor interface {
 	ProcessNest(raw json.RawMessage) error
 	ProcessFortUpdate(raw json.RawMessage) error
 	ProcessMaxbattle(raw json.RawMessage) error
+	ProcessShowcase(raw json.RawMessage) error
 }
 
 // NewHandler creates a new webhook Handler.
@@ -142,17 +143,27 @@ func (h *Handler) handle(c *gin.Context) {
 
 // routePokestop inspects a pokestop webhook to determine if it's an invasion or lure.
 func (h *Handler) routePokestop(raw json.RawMessage) error {
-	// Peek at fields to determine type
+	// Peek at fields to determine type. A pokestop webhook is a snapshot that
+	// multiplexes independent event classes (lure, invasion/incident, showcase),
+	// so each is dispatched independently — a stop can host several at once.
 	var peek struct {
 		LureExpiration     int64 `json:"lure_expiration"`
 		IncidentExpiration int64 `json:"incident_expiration"`
 		IncidentGruntType  int   `json:"incident_grunt_type"`
+		ShowcaseExpiry     int64 `json:"showcase_expiry"`
 	}
 	if err := json.Unmarshal(raw, &peek); err != nil {
 		return err
 	}
 
-	// A pokestop can have both a lure and an invasion — process both
+	// Showcase — carried only on the pokestop envelope (no display_type). Gated
+	// on showcase_expiry > now inside ProcessShowcase (fields linger stale).
+	if peek.ShowcaseExpiry > 0 {
+		if err := h.processor.ProcessShowcase(raw); err != nil {
+			return err
+		}
+	}
+
 	if peek.LureExpiration > 0 {
 		if err := h.processor.ProcessLure(raw); err != nil {
 			return err
@@ -162,8 +173,10 @@ func (h *Handler) routePokestop(raw json.RawMessage) error {
 		return h.processor.ProcessInvasion(raw)
 	}
 
-	// If neither lure nor invasion was detected, try as invasion (legacy fallback)
-	if peek.LureExpiration <= 0 {
+	// If none of lure / invasion / showcase was detected, try as invasion
+	// (legacy fallback). A showcase-only stop is already handled above, so
+	// don't double-dispatch it here.
+	if peek.LureExpiration <= 0 && peek.ShowcaseExpiry <= 0 {
 		return h.processor.ProcessInvasion(raw)
 	}
 	return nil

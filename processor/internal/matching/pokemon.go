@@ -23,6 +23,7 @@ const (
 type ProcessedPokemon struct {
 	PokemonID   int
 	Form        int
+	Costume     int
 	IV          float64 // -1 if not encountered
 	CP          int
 	Level       int
@@ -72,6 +73,7 @@ func ProcessPokemonWebhook(pokemon *webhook.PokemonWebhook, rarityGroup int, pvp
 	return &ProcessedPokemon{
 		PokemonID:   pokemon.PokemonID,
 		Form:        form,
+		Costume:     pokemon.Costume,
 		IV:          iv,
 		CP:          cp,
 		Level:       level,
@@ -191,6 +193,10 @@ func (m *PokemonMatcher) matchMonsters(
 			formToCheck = targetForm
 		}
 		if monster.Form != 0 && monster.Form != formToCheck {
+			continue
+		}
+		// Costume check: 9000 = any; any other value (incl. 0 = no costume) is exact.
+		if monster.Costume != 9000 && monster.Costume != data.Costume {
 			continue
 		}
 		// PVP league filters

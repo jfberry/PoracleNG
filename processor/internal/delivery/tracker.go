@@ -16,9 +16,9 @@ import (
 
 // TrackedMessage represents a sent message being tracked for clean deletion or editing.
 type TrackedMessage struct {
-	SentID   string `json:"sent_id"`
-	Target   string `json:"target"`
-	Type     string `json:"type"` // "discord:user", "telegram:group", etc.
+	SentID string `json:"sent_id"`
+	Target string `json:"target"`
+	Type   string `json:"type"` // "discord:user", "telegram:group", etc.
 	// MsgType is the source webhook alert type ("raid", "egg", "pokemon", etc.)
 	// — distinct from Type, which is the destination type ("discord:user").
 	// Used by the raid handler's partitionRaidUsers first-visible check.
@@ -32,6 +32,14 @@ type TrackedMessage struct {
 	MsgType  string `json:"msg_type,omitempty"`
 	Clean    int    `json:"clean"`
 	ReplyKey string `json:"reply_key,omitempty"`
+	// Template is the source tracking rule's requested template (raw value,
+	// "" = config default). Change-event dispatch reads it back to rebuild a
+	// prior-only recipient's MatchedUser with the same template so the
+	// monsterChanged follow-up uses the same template name, not the default.
+	// Backward compat: entries persisted before this field existed
+	// deserialise with Template="" (config default) — same graceful fallback
+	// as the pre-existing behaviour.
+	Template string `json:"template,omitempty"`
 }
 
 // MessageTracker manages sent messages with TTL-based expiry and clean
@@ -60,6 +68,49 @@ type MessageTracker struct {
 	// no extra cleanup. Set via SetEvictionHook before Track is called.
 	onEvictMu sync.RWMutex
 	onEvict   func(target, sentID string)
+
+	// cleanDeleteHook, when set, routes a clean-deletion through it — the
+	// Dispatcher wires it to enqueue a delete Job onto the FairQueue so the
+	// delete is serialised per destination and rate-limited like a send,
+	// rather than firing an unbounded goroutine per eviction (which 429s under
+	// a burst). Nil when the tracker runs without a queue (some tests): those
+	// fall back to the direct-Delete goroutine.
+	cleanDeleteMu   sync.RWMutex
+	cleanDeleteHook func(msg *TrackedMessage)
+}
+
+// SetCleanDeleteHook installs the callback that clean-deletion is routed
+// through (the FairQueue enqueue). Set once by the Dispatcher before Track is
+// called. Passing nil restores the direct-Delete fallback.
+func (mt *MessageTracker) SetCleanDeleteHook(fn func(msg *TrackedMessage)) {
+	mt.cleanDeleteMu.Lock()
+	mt.cleanDeleteHook = fn
+	mt.cleanDeleteMu.Unlock()
+}
+
+// cleanDelete routes one clean-deletion: through the queue hook when set,
+// otherwise via a direct best-effort Delete goroutine (no queue wired).
+func (mt *MessageTracker) cleanDelete(msg *TrackedMessage) {
+	mt.cleanDeleteMu.RLock()
+	hook := mt.cleanDeleteHook
+	mt.cleanDeleteMu.RUnlock()
+	if hook != nil {
+		hook(msg)
+		return
+	}
+	platform := PlatformFromType(msg.Type)
+	sender, ok := mt.senders[platform]
+	if !ok {
+		log.Warnf("delivery: clean delete skipped — no sender for platform %q (type=%s target=%s sentID=%s)", platform, msg.Type, msg.Target, msg.SentID)
+		return
+	}
+	go func() {
+		if err := sender.Delete(context.Background(), msg.SentID); err != nil {
+			log.Warnf("delivery: clean delete failed for %s: %v", msg.SentID, err)
+		} else {
+			metrics.DeliveryCleanTotal.Inc()
+		}
+	}()
 }
 
 // SetEvictionHook installs a callback invoked for every TTL-expired entry,
@@ -127,20 +178,8 @@ func NewMessageTracker(cacheDir string, senders map[string]Sender) *MessageTrack
 		if !db.IsClean(msg.Clean) {
 			return
 		}
-		platform := PlatformFromType(msg.Type)
-		sender, ok := mt.senders[platform]
-		if !ok {
-			log.Warnf("delivery: clean delete skipped — no sender for platform %q (type=%s target=%s sentID=%s)", platform, msg.Type, msg.Target, msg.SentID)
-			return
-		}
 		log.Infof("delivery: clean delete %s/%s sentID=%s", msg.Type, msg.Target, msg.SentID)
-		go func() {
-			if err := sender.Delete(context.Background(), msg.SentID); err != nil {
-				log.Warnf("delivery: clean delete failed for %s: %v", msg.SentID, err)
-			} else {
-				metrics.DeliveryCleanTotal.Inc()
-			}
-		}()
+		mt.cleanDelete(msg)
 	})
 
 	go cache.Start()
@@ -317,20 +356,10 @@ func (mt *MessageTracker) Load() error {
 			// Expired entry
 			if db.IsClean(entry.Message.Clean) {
 				expiredClean++
+				// Route through the queue hook (if wired) so recovery-time
+				// cleans are serialised + rate-limited like live ones.
 				msg := entry.Message
-				platform := PlatformFromType(msg.Type)
-				sender, ok := mt.senders[platform]
-				if !ok {
-					log.Warnf("delivery: clean delete on load skipped — no sender for platform %q (type=%s target=%s sentID=%s)", platform, msg.Type, msg.Target, msg.SentID)
-					continue
-				}
-				go func() {
-					if err := sender.Delete(context.Background(), msg.SentID); err != nil {
-						log.Warnf("delivery: clean delete on load failed for %s: %v", msg.SentID, err)
-					} else {
-						metrics.DeliveryCleanTotal.Inc()
-					}
-				}()
+				mt.cleanDelete(&msg)
 			}
 			// Discard expired non-clean entries
 			continue
@@ -338,15 +367,11 @@ func (mt *MessageTracker) Load() error {
 
 		active++
 		remaining := entry.ExpiresAt.Sub(now)
-		msg := &TrackedMessage{
-			SentID:   entry.Message.SentID,
-			Target:   entry.Message.Target,
-			Type:     entry.Message.Type,
-			MsgType:  entry.Message.MsgType,
-			Clean:    entry.Message.Clean,
-			ReplyKey: entry.Message.ReplyKey,
-		}
-		mt.cache.Set(entry.Key, msg, remaining)
+		// Copy the persisted struct wholesale — a field-by-field rebuild
+		// here silently drops any field added to TrackedMessage later
+		// (Template was lost this way once).
+		msg := entry.Message
+		mt.cache.Set(entry.Key, &msg, remaining)
 		if msg.ReplyKey != "" {
 			// Cache OnEviction is already live, so the reverse-index
 			// write must be guarded.

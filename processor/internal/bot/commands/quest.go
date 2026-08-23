@@ -59,7 +59,7 @@ func (c *QuestCommand) matchItemName(ctx *bot.CommandContext, parsed *bot.Parsed
 	return 0
 }
 
-// QuestCommand implements !quest — track quest rewards (pokemon, stardust, items, candy, energy).
+// QuestCommand implements !quest — track quest rewards (pokemon, stardust, pokecoins, items, candy, energy).
 type QuestCommand struct{}
 
 func (c *QuestCommand) Name() string      { return "cmd.quest" }
@@ -71,17 +71,21 @@ var questParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.template"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.stardust"}, // stardust:1000 (min amount)
+	{Type: bot.ParamPrefixString, Key: "arg.prefix.pokecoin"}, // pokecoins:10 (min amount)
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.energy"},   // energy:charizard (pokemon)
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.candy"},    // candy:pikachu (pokemon)
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.amount"},   // amount:N (min amount for item/candy/mega_energy quests)
-	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixString, Key: "arg.prefix.location"},
 	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
+	{Type: bot.ParamKeyword, Key: "arg.all_pokemon"}, // all pokemon (reward_type 7, wildcard reward=0)
+	{Type: bot.ParamKeyword, Key: "arg.all_items"},   // all items (reward_type 2, wildcard reward=0)
 	{Type: bot.ParamKeyword, Key: "arg.clean"},
 	{Type: bot.ParamKeyword, Key: "arg.summary"},
 	{Type: bot.ParamKeyword, Key: "arg.shiny"},
 	{Type: bot.ParamKeyword, Key: "arg.stardust"}, // bare "stardust" keyword (any amount)
+	{Type: bot.ParamKeyword, Key: "arg.pokecoin"}, // bare "pokecoins" keyword (any amount)
 	{Type: bot.ParamKeyword, Key: "arg.energy"},   // bare "energy" keyword (any pokemon)
 	{Type: bot.ParamKeyword, Key: "arg.candy"},    // bare "candy" keyword (any pokemon)
 	{Type: bot.ParamPokemonName},
@@ -155,6 +159,23 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		amountVal = questParseInt(amountStr)
 	}
 
+	// Bulk wildcard keywords (everything / all pokemon / all items) are
+	// gated behind everything_flag_permissions for non-admins, mirroring
+	// PoracleJS. "all pokemon" → reward_type 7 wildcard (reward=0);
+	// "all items" → reward_type 2 wildcard (reward=0). Both combine with
+	// each other and with the reward-specific keywords below.
+	wantsAllPokemon := parsed.HasKeyword("arg.all_pokemon")
+	wantsAllItems := parsed.HasKeyword("arg.all_items")
+	if (wantsAllPokemon || wantsAllItems || parsed.HasKeyword("arg.everything")) && !questBulkAllowed(ctx) {
+		return []bot.Reply{{React: "🙅", Text: tr.T("msg.quest.bulk_not_permitted")}}
+	}
+	if wantsAllPokemon {
+		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 7, 0, 0, 0))
+	}
+	if wantsAllItems {
+		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 2, 0, 0, amountVal))
+	}
+
 	if stardustVal, ok := parsed.Strings["stardust"]; ok {
 		// Explicit stardust:N wins over a peer amount:N — the explicit
 		// form is unambiguous about which column to fill.
@@ -166,6 +187,16 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// column (the stardust grammar's own min-amount slot). bare
 		// "stardust" alone means "any amount".
 		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 3, amountVal, 0, 0))
+	} else if pokecoinVal, ok := parsed.Strings["pokecoin"]; ok {
+		// pokecoins:N — min amount lives in Reward, mirroring stardust.
+		_ = amountSet
+		amount := questParseInt(pokecoinVal)
+		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 8, amount, 0, 0))
+	} else if parsed.HasKeyword("arg.pokecoin") {
+		// bare "pokecoins" + amount:N — route amount into Reward
+		// (pokecoins' own min-amount slot). bare "pokecoins" alone means
+		// "any amount".
+		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 8, amountVal, 0, 0))
 	} else if energyVal, ok := parsed.Strings["energy"]; ok {
 		// energy:charizard — resolve pokemon name
 		resolved := ctx.Resolver.Resolve(energyVal, ctx.Language)
@@ -213,6 +244,7 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		//	candy / mega / item — q.Amount > 0 filter (the natural slot)
 		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 7, 0, 0, 0))
 		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 3, amountVal, 0, 0))
+		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 8, amountVal, 0, 0))
 		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 12, 0, 0, amountVal))
 		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 4, 0, 0, amountVal))
 		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 2, 0, 0, amountVal))
@@ -247,7 +279,9 @@ func (c *QuestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 		// Consume matched item tokens from Unrecognized
 		parsed.Unrecognized = nil
 		insert = append(insert, c.makeQuest(ctx, common, override, shiny, pings, 2, itemID, 0, amountVal))
-	} else {
+	} else if len(insert) == 0 {
+		// No reward-specific branch matched and no bulk wildcard was
+		// pre-appended above — nothing to track.
 		return []bot.Reply{{React: "🙅", Text: tr.T("msg.no_quest_type")}}
 	}
 
@@ -334,8 +368,22 @@ func (c *QuestCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.Pars
 	return applyFormFilter(ctx, parsed.Pokemon, parsed)
 }
 
+// questBulkAllowed reports whether the user may use bulk wildcard keywords
+// (everything / all pokemon / all items). Mirrors PoracleJS: gated behind
+// everything_flag_permissions for non-admins, always allowed for admins.
+func questBulkAllowed(ctx *bot.CommandContext) bool {
+	if ctx.IsAdmin {
+		return true
+	}
+	return strings.ToLower(ctx.Config.Tracking.EverythingFlagPermissions) != "deny"
+}
+
 // handleRemove handles !quest remove variants. Must be called before reward type detection.
 func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedArgs, common *commonTrackFields, shiny bool, pings string) []bot.Reply {
+	if reply := rejectFormOnRemove(ctx, parsed); reply != nil {
+		return []bot.Reply{*reply}
+	}
+
 	if len(parsed.RemoveUIDs) > 0 {
 		tr := ctx.Tr()
 		return removeByUIDs(ctx, ctx.Tracking.Quests, parsed.RemoveUIDs,
@@ -349,14 +397,27 @@ func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedA
 	noOverride := Override{}
 	if parsed.HasKeyword("arg.everything") {
 		// remove everything — match all reward types
-		for _, rt := range []int{7, 3, 12, 4, 2} {
+		for _, rt := range []int{7, 3, 8, 12, 4, 2} {
 			targets = append(targets, c.makeQuest(ctx, common, noOverride, shiny, pings, rt, 0, 0, 0))
+		}
+	} else if parsed.HasKeyword("arg.all_pokemon") || parsed.HasKeyword("arg.all_items") {
+		// remove the "all pokemon" / "all items" wildcard rows (reward=0)
+		if parsed.HasKeyword("arg.all_pokemon") {
+			targets = append(targets, c.makeQuest(ctx, common, noOverride, shiny, pings, 7, 0, 0, 0))
+		}
+		if parsed.HasKeyword("arg.all_items") {
+			targets = append(targets, c.makeQuest(ctx, common, noOverride, shiny, pings, 2, 0, 0, 0))
 		}
 	} else if stardustVal, ok := parsed.Strings["stardust"]; ok {
 		amount := questParseInt(stardustVal)
 		targets = append(targets, c.makeQuest(ctx, common, noOverride, shiny, pings, 3, amount, 0, 0))
 	} else if parsed.HasKeyword("arg.stardust") {
 		targets = append(targets, c.makeQuest(ctx, common, noOverride, shiny, pings, 3, 0, 0, 0))
+	} else if pokecoinVal, ok := parsed.Strings["pokecoin"]; ok {
+		amount := questParseInt(pokecoinVal)
+		targets = append(targets, c.makeQuest(ctx, common, noOverride, shiny, pings, 8, amount, 0, 0))
+	} else if parsed.HasKeyword("arg.pokecoin") {
+		targets = append(targets, c.makeQuest(ctx, common, noOverride, shiny, pings, 8, 0, 0, 0))
 	} else if energyVal, ok := parsed.Strings["energy"]; ok {
 		resolved := ctx.Resolver.Resolve(energyVal, ctx.Language)
 		if len(resolved) > 0 {
@@ -407,7 +468,7 @@ func (c *QuestCommand) handleRemove(ctx *bot.CommandContext, parsed *bot.ParsedA
 		targets = append(targets, c.makeQuest(ctx, common, noOverride, shiny, pings, 2, itemID, 0, 0))
 	} else {
 		// No specific type — remove everything
-		for _, rt := range []int{7, 3, 12, 4, 2} {
+		for _, rt := range []int{7, 3, 8, 12, 4, 2} {
 			targets = append(targets, c.makeQuest(ctx, common, noOverride, shiny, pings, rt, 0, 0, 0))
 		}
 	}

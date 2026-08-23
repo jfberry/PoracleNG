@@ -177,13 +177,13 @@ func (k *threadKeepAlive) revivePrivateArchived(ctx context.Context, parentID st
 		page, err := k.bot.session.ThreadsPrivateArchived(parentID, before, pageLimit)
 		if err != nil {
 			// Parent gone? Discord returns 404 (Unknown Channel, code 10003).
-			// Disable every managed thread under this parent so we stop
-			// trying to deliver to them, and post an admin notice so the
-			// operator knows. Reconciliation will eventually clean up the
-			// rows; the immediate disable just stops alert delivery NOW.
+			// A 404 here is permanent — the threads under this parent can
+			// never be revived — so delete the orphaned thread rows and
+			// purge them from both caches. Leaving them would make the
+			// sweeper re-walk this dead parent (and re-warn) every pass.
 			if restErr, ok := err.(*discordgo.RESTError); ok && restErr.Response != nil && restErr.Response.StatusCode == 404 {
-				k.disableThreadsUnder(parentID, parents, managed)
-				log.Warnf("thread keep-alive: parent channel %s is gone (HTTP 404); disabled affected threads", parentID)
+				k.cleanupDeadThreadsUnder(parentID, parents, managed)
+				log.Warnf("thread keep-alive: parent channel %s is gone (HTTP 404); cleaned up affected threads", parentID)
 				return
 			}
 			log.Warnf("thread keep-alive: ThreadsPrivateArchived(%s): %v", parentID, err)
@@ -213,26 +213,55 @@ func (k *threadKeepAlive) revivePrivateArchived(ctx context.Context, parentID st
 	}
 }
 
-// disableThreadsUnder finds every managed thread whose recorded parent
-// is parentID, sets admin_disable on its humans row so the matcher /
-// dispatcher stop targeting it, and posts an admin notice listing the
-// affected threads.
-func (k *threadKeepAlive) disableThreadsUnder(parentID string, parents map[string]string, managed map[string]bool) {
-	var disabled []string
+// cleanupDeadThreadsUnder finds every managed thread whose recorded parent
+// is parentID — a channel confirmed gone in Discord (HTTP 404) — deletes
+// its humans row and tracking, purges it from both in-process caches, and
+// posts an admin notice listing what was removed.
+//
+// A 404 (Unknown Channel) is permanent: the parent is gone, so its threads
+// can never be revived. The previous behaviour only set admin_disable and
+// deferred cleanup to "reconciliation next pass", but reconciliation only
+// scans enabled discord:channel rows — it never saw the disabled
+// discord:thread rows, so the rows lingered forever and the sweeper
+// re-warned every interval. Deleting here makes the cleanup actually happen
+// and stops the recurring notice (the rows and cache entries are gone, so
+// the dead parent is no longer walked on subsequent sweeps).
+func (k *threadKeepAlive) cleanupDeadThreadsUnder(parentID string, parents map[string]string, managed map[string]bool) {
+	var deleted []string
 	for tid, pid := range parents {
 		if pid != parentID || !managed[tid] {
 			continue
 		}
-		if err := k.bot.Humans.SetAdminDisable(tid, true); err != nil {
-			log.Warnf("thread keep-alive: SetAdminDisable(%s): %v", tid, err)
+		if err := k.bot.Humans.Delete(tid); err != nil {
+			log.Warnf("thread keep-alive: delete dead thread %s: %v", tid, err)
 			continue
 		}
-		disabled = append(disabled, tid)
+		deleted = append(deleted, tid)
 	}
-	if len(disabled) > 0 {
-		k.bot.PostAdminNotice(fmt.Sprintf(
-			":warning: Thread keep-alive: master channel `%s` is gone in Discord (HTTP 404). Disabled %d managed thread(s) under it: `%s`. Reconciliation will tidy up the rows next pass.",
-			parentID, len(disabled), strings.Join(disabled, "`, `"),
-		))
+	if len(deleted) == 0 {
+		return
 	}
+
+	// Purge the dead threads from both caches so the next sweep doesn't
+	// resurrect the parent walk and the on-disk cache files reflect reality.
+	// threadCache keys threads under the master channel (== parentID in the
+	// picker flow); the autocreate-sync cache keys them under their host
+	// channel. Each purge is a no-op for threads it doesn't own.
+	if k.bot.threadCache != nil && k.bot.threadCache.removeMaster(parentID) {
+		if err := k.bot.threadCache.save(); err != nil {
+			log.Warnf("thread keep-alive: save thread cache after purge: %v", err)
+		}
+	}
+	if k.bot.autocreateSync != nil {
+		if n, err := k.bot.autocreateSync.purgeThreadsUnderParent(parentID, syncCachePath(k.bot.Cfg.BaseDir)); err != nil {
+			log.Warnf("thread keep-alive: purge autocreate cache for parent %s: %v", parentID, err)
+		} else if n > 0 {
+			log.Infof("thread keep-alive: purged %d autocreate-cache thread(s) under dead parent %s", n, parentID)
+		}
+	}
+
+	k.bot.PostAdminNotice(fmt.Sprintf(
+		":wastebasket: Thread keep-alive: master channel `%s` is gone in Discord (HTTP 404). Deleted %d orphaned managed thread(s) and their tracking: `%s`.",
+		parentID, len(deleted), strings.Join(deleted, "`, `"),
+	))
 }

@@ -2,6 +2,10 @@
 
 All API endpoints are available through the processor (default port 3030). The processor handles all endpoints directly.
 
+> **Live OpenAPI docs.** This surface is now also documented live via an OpenAPI 3.1 spec at `GET /openapi.json` with interactive docs at `GET /docs` (both public, no secret). The `/api/*` read/feature endpoints are served by [huma](https://github.com/danielgtaylor/huma), and errors on the huma surface are returned as RFC 9457 `application/problem+json` (`status`, `title`, `detail`, `errors[]`) rather than the legacy `{status:"error",message}` shape shown under [Response Format](#response-format).
+>
+> **New strict `/api/v2` API.** A clean, strict, typed `/api/v2` surface (human-scoped tracking — including the new `incident` type — plus discrete humans/profiles action endpoints) is the **recommended API for new clients**. The v1 endpoints documented below are **frozen and deprecated-but-supported** (no sunset date yet); migrate to `/api/v2` to access new tracking types and the cleaner contract. See the [v1 → v2 migration guide](docs/v1-to-v2-migration-guide.md) for the endpoint/field mapping, and [`docs/v2-api-design.md`](docs/v2-api-design.md) and `/docs` for v2 details.
+
 ## Contents
 
 - [Authentication](#authentication)
@@ -329,8 +333,8 @@ Use `level: 90` for all levels.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `reward_type` | int | required | Reward type (2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy) |
-| `reward` | int | 0 | Reward ID (pokemon ID, item ID, or stardust amount) |
+| `reward_type` | int | required | Reward type (2=item, 3=stardust, 4=candy, 7=pokemon, 8=pokecoins, 12=mega energy) |
+| `reward` | int | 0 | Reward ID (pokemon ID, item ID, or stardust/pokecoin amount) |
 | `form` | int | 0 | Form ID (for pokemon rewards) |
 | `shiny` | bool | false | Shiny only |
 | `amount` | int | 0 | Minimum reward amount |
@@ -754,6 +758,13 @@ Get weather data for a specific S2 cell.
 
 Server configuration for the web UI (locale, prefix, PVP settings, admin lists, etc.).
 
+Two fields client authors most often need:
+
+| Field | Meaning |
+|-------|---------|
+| `availableLanguages` | The allow-list enforced by the set-language endpoints, sorted. **`null` means unrestricted** — the server accepts any language, so offer your full menu. A non-null array is exhaustive: anything outside it is rejected with 400. |
+| `disabledHooks` | Alert types disabled on this server, named to match the tracking-type names (`pokemon`, `raid`, `fort`, `invasion`, `lure`, `quest`, `weather`, `nest`, `gym`, `maxbattle`). Only flags the processor actually enforces appear; `disable_pokestop` is a deprecated no-op and is never reported. |
+
 ### GET /api/config/templates
 
 Available DTS templates by platform, type, and language (metadata only, no template content).
@@ -1041,7 +1052,7 @@ Returns test webhook scenarios from `testdata.json`. The editor can use these as
 }
 ```
 
-Available test scenarios: boring, hundo, great-rank1, great-rank9, ultra1, unencountered, boosted, shiny (pokemon); egg1, level1, egg5, level5, egg6, level3 (raid); invasion, lure, giovanni, kecleon, goldstop, goldlure, showcase, pokemoncontest (pokestop); teamchange (gym); level1, level3 (max_battle); quest-item, quest-stardust, quest-pokemon, quest-energy (quest); edit, new, remove, etc. (fort_update).
+Available test scenarios: boring, hundo, great-rank1, great-rank9, ultra1, unencountered, boosted, shiny (pokemon); egg1, level1, egg5, level5, egg6, level3 (raid); invasion, lure, giovanni, kecleon, goldstop, goldlure, showcase, pokemoncontest (pokestop); teamchange (gym); level1, level3 (max_battle); quest-item, quest-stardust, quest-pokecoins, quest-pokemon, quest-energy (quest); edit, new, remove, etc. (fort_update).
 
 ### GET/POST /api/dts/reload
 

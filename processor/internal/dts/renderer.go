@@ -849,14 +849,8 @@ func logInvalidRenderedJSON(logReference, who, rendered string) {
 	var syntaxErr *json.SyntaxError
 	if err := json.Unmarshal([]byte(rendered), &struct{}{}); errors.As(err, &syntaxErr) {
 		offset := int(syntaxErr.Offset)
-		lo := offset - 50
-		if lo < 0 {
-			lo = 0
-		}
-		hi := offset + 50
-		if hi > len(rendered) {
-			hi = len(rendered)
-		}
+		lo := max(offset-50, 0)
+		hi := min(offset+50, len(rendered))
 		log.Errorf("[%s] dts: invalid rendered JSON for %s — parse error at byte %d: %q (full raw: %s)",
 			logReference, who, offset, rendered[lo:hi], rendered)
 		return

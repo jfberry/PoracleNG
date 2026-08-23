@@ -7,6 +7,7 @@ package staticmap
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -20,6 +21,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/pokemon/poracleng/processor/internal/breaker"
 	"github.com/pokemon/poracleng/processor/internal/logref"
 	"github.com/pokemon/poracleng/processor/internal/metrics"
 	"github.com/pokemon/poracleng/processor/internal/scanner"
@@ -188,11 +190,12 @@ type Resolver struct {
 	done      chan struct{}    // signals tile workers to stop
 	wg        sync.WaitGroup   // tracks tile worker goroutines
 
-	// Circuit breaker state
-	consecutiveErrors   int
-	circuitOpenSince    time.Time
-	halfOpenProbeActive bool // true when a half-open probe request is in flight
-	mu                  sync.Mutex
+	// breaker guards tileserver POSTs (pregenerate + inline). It has no
+	// concurrency limit — matching the prior hand-rolled breaker. The async
+	// tile path is bounded by the worker pool, but synchronous callers (tile
+	// API, !location/!area, quest summary) are not, so this is not a global
+	// concurrency cap.
+	breaker *breaker.Gate
 
 	// Stats counters for periodic logging
 	statCalls   atomic.Int64
@@ -293,6 +296,19 @@ func New(config Config) *Resolver {
 		tileQueue: make(chan tileRequest, config.TileQueueSize),
 		done:      make(chan struct{}),
 	}
+	r.breaker = breaker.NewGate(breaker.Config{
+		Name:             "tileserver",
+		FailureThreshold: config.TileserverFailureThreshold,
+		Cooldown:         time.Duration(config.TileserverCooldownMs) * time.Millisecond,
+		OnHealthChange: func(healthy bool) {
+			if healthy {
+				metrics.TileCircuitHealthy.Set(1)
+			} else {
+				metrics.TileCircuitHealthy.Set(0)
+			}
+		},
+	})
+	metrics.TileCircuitHealthy.Set(1) // start healthy (gobreaker fires OnStateChange only on transition)
 
 	// Start tile worker goroutines
 	for range config.TileserverConcurrency {
@@ -759,30 +775,15 @@ func (r *Resolver) GetPregeneratedTileURL(maptype string, data map[string]any, s
 // Returns "", "" on any error (circuit-breaker, HTTP failure, invalid response).
 func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapType, ref string) (result, mapPath string) {
 	l := reflog(ref)
-	// Circuit breaker check
-	r.mu.Lock()
-	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
-		elapsed := time.Since(r.circuitOpenSince)
-		cooldown := time.Duration(r.config.TileserverCooldownMs) * time.Millisecond
-		if elapsed < cooldown {
-			r.mu.Unlock()
-			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
-			l.Debugf("staticmap: circuit breaker open for %s, skipping tile", maptype)
-			return "", ""
-		}
-		// Half-open: allow exactly one probe request
-		if r.halfOpenProbeActive {
-			r.mu.Unlock()
-			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
-			return "", ""
-		}
-		r.halfOpenProbeActive = true
-	}
-	r.mu.Unlock()
 
-	metrics.TileInFlight.Inc()
-	defer metrics.TileInFlight.Dec()
-	start := time.Now()
+	// Open circuit: skip URL building and the (potentially large) enrichment-map
+	// marshal entirely — Do would only throw them away. Half-open returns false
+	// so the single probe still proceeds.
+	if r.breaker.IsOpen() {
+		metrics.TileTotal.WithLabelValues("circuit_break").Inc()
+		l.Debugf("staticmap: circuit breaker open for %s, skipping tile", maptype)
+		return "", ""
+	}
 
 	mapPath = "staticmap"
 	templateType := ""
@@ -804,6 +805,8 @@ func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapT
 	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s?%s",
 		r.internalBase(), mapPath, templateType, maptype, pregenQuery)
 
+	// Marshal failures are local (not a tileserver fault), so they stay outside
+	// the breaker and don't count toward tripping it.
 	body, err := json.Marshal(data)
 	if err != nil {
 		l.Warnf("staticmap: marshal data: %s", err)
@@ -813,59 +816,63 @@ func (r *Resolver) pregenerateID(maptype string, data map[string]any, staticMapT
 
 	l.Debugf("staticmap: POST %s type=%s%s body=%s", reqURL, templateType, maptype, string(body))
 
-	resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
-	if err != nil {
-		r.recordError()
-		r.statErrors.Add(1)
-		metrics.TileTotal.WithLabelValues("error").Inc()
-		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		l.Warnf("staticmap: pregenerate request failed: %s", err)
+	berr := r.breaker.Do(func() error {
+		metrics.TileInFlight.Inc()
+		defer metrics.TileInFlight.Dec()
+		start := time.Now()
+
+		resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			r.statErrors.Add(1)
+			metrics.TileTotal.WithLabelValues("error").Inc()
+			metrics.TileDuration.Observe(time.Since(start).Seconds())
+			l.Warnf("staticmap: pregenerate request failed: %s", err)
+			return err
+		}
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			r.statErrors.Add(1)
+			metrics.TileTotal.WithLabelValues("error").Inc()
+			metrics.TileDuration.Observe(time.Since(start).Seconds())
+			l.Warnf("staticmap: read pregenerate response: %s", err)
+			return err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			r.statErrors.Add(1)
+			metrics.TileTotal.WithLabelValues("error").Inc()
+			metrics.TileDuration.Observe(time.Since(start).Seconds())
+			l.Warnf("staticmap: pregenerate %s got status %d: %s (sent fields: %v)", reqURL, resp.StatusCode, string(respBody), mapKeys(data))
+			return fmt.Errorf("staticmap: pregenerate status %d", resp.StatusCode)
+		}
+
+		result = strings.TrimSpace(string(respBody))
+		if result == "" || strings.Contains(result, "<") {
+			r.statErrors.Add(1)
+			metrics.TileTotal.WithLabelValues("error").Inc()
+			metrics.TileDuration.Observe(time.Since(start).Seconds())
+			l.Warnf("staticmap: pregenerate got invalid response: %s", result)
+			return fmt.Errorf("staticmap: pregenerate invalid response")
+		}
+
+		duration := time.Since(start)
+		metrics.TileDuration.Observe(duration.Seconds())
+		metrics.TileTotal.WithLabelValues("success").Inc()
+		r.statCalls.Add(1)
+		r.statTotalMs.Add(duration.Milliseconds())
+		return nil
+	})
+
+	if errors.Is(berr, breaker.ErrOpen) {
+		metrics.TileTotal.WithLabelValues("circuit_break").Inc()
+		l.Debugf("staticmap: circuit breaker open for %s, skipping tile", maptype)
 		return "", ""
 	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		r.recordError()
-		r.statErrors.Add(1)
-		metrics.TileTotal.WithLabelValues("error").Inc()
-		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		l.Warnf("staticmap: read pregenerate response: %s", err)
+	if berr != nil {
 		return "", ""
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		r.recordError()
-		r.statErrors.Add(1)
-		metrics.TileTotal.WithLabelValues("error").Inc()
-		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		l.Warnf("staticmap: pregenerate %s got status %d: %s (sent fields: %v)", reqURL, resp.StatusCode, string(respBody), mapKeys(data))
-		return "", ""
-	}
-
-	result = strings.TrimSpace(string(respBody))
-	if result == "" || strings.Contains(result, "<") {
-		r.recordError()
-		r.statErrors.Add(1)
-		metrics.TileTotal.WithLabelValues("error").Inc()
-		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		l.Warnf("staticmap: pregenerate got invalid response: %s", result)
-		return "", ""
-	}
-
-	duration := time.Since(start)
-	metrics.TileDuration.Observe(duration.Seconds())
-	metrics.TileTotal.WithLabelValues("success").Inc()
-	r.statCalls.Add(1)
-	r.statTotalMs.Add(duration.Milliseconds())
-
-	// Reset circuit breaker on success
-	r.mu.Lock()
-	r.consecutiveErrors = 0
-	r.halfOpenProbeActive = false
-	r.mu.Unlock()
-	metrics.TileCircuitHealthy.Set(1)
-
 	return result, mapPath
 }
 
@@ -924,28 +931,13 @@ func (r *Resolver) downloadTileBytes(fetchURL, ref string) []byte {
 // receiving the rendered PNG bytes directly. No file is stored on disk.
 func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, staticMapType, ref string) []byte {
 	l := reflog(ref)
-	// Circuit breaker check
-	r.mu.Lock()
-	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
-		elapsed := time.Since(r.circuitOpenSince)
-		cooldown := time.Duration(r.config.TileserverCooldownMs) * time.Millisecond
-		if elapsed < cooldown {
-			r.mu.Unlock()
-			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
-			return nil
-		}
-		if r.halfOpenProbeActive {
-			r.mu.Unlock()
-			metrics.TileTotal.WithLabelValues("circuit_break").Inc()
-			return nil
-		}
-		r.halfOpenProbeActive = true
-	}
-	r.mu.Unlock()
 
-	metrics.TileInFlight.Inc()
-	defer metrics.TileInFlight.Dec()
-	start := time.Now()
+	// Open circuit: skip URL building and the enrichment-map marshal entirely.
+	// Half-open returns false so the single probe still proceeds.
+	if r.breaker.IsOpen() {
+		metrics.TileTotal.WithLabelValues("circuit_break").Inc()
+		return nil
+	}
 
 	mapPath := "staticmap"
 	templateType := ""
@@ -970,6 +962,8 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 	reqURL := fmt.Sprintf("%s/%s/poracle-%s%s%s",
 		r.internalBase(), mapPath, templateType, maptype, query)
 
+	// Marshal failures are local (not a tileserver fault), so they stay outside
+	// the breaker and don't count toward tripping it.
 	body, err := json.Marshal(data)
 	if err != nil {
 		l.Warnf("staticmap: marshal inline data: %s", err)
@@ -979,57 +973,64 @@ func (r *Resolver) GenerateInlineTile(maptype string, data map[string]any, stati
 
 	l.Debugf("staticmap: POST inline %s type=%s%s body=%s", reqURL, templateType, maptype, string(body))
 
-	resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
-	if err != nil {
-		r.recordError()
-		r.statErrors.Add(1)
-		metrics.TileTotal.WithLabelValues("error").Inc()
-		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		l.Warnf("staticmap: inline request failed: %s", err)
+	var respBody []byte
+	berr := r.breaker.Do(func() error {
+		metrics.TileInFlight.Inc()
+		defer metrics.TileInFlight.Dec()
+		start := time.Now()
+
+		resp, err := r.client.Post(reqURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			r.statErrors.Add(1)
+			metrics.TileTotal.WithLabelValues("error").Inc()
+			metrics.TileDuration.Observe(time.Since(start).Seconds())
+			l.Warnf("staticmap: inline request failed: %s", err)
+			return err
+		}
+		defer resp.Body.Close()
+
+		b, err := io.ReadAll(resp.Body)
+		if err != nil {
+			r.statErrors.Add(1)
+			metrics.TileTotal.WithLabelValues("error").Inc()
+			metrics.TileDuration.Observe(time.Since(start).Seconds())
+			l.Warnf("staticmap: read inline response: %s", err)
+			return err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			r.statErrors.Add(1)
+			metrics.TileTotal.WithLabelValues("error").Inc()
+			metrics.TileDuration.Observe(time.Since(start).Seconds())
+			truncLen := min(len(b), 200)
+			l.Warnf("staticmap: inline %s got status %d: %s", reqURL, resp.StatusCode, string(b[:truncLen]))
+			return fmt.Errorf("staticmap: inline status %d", resp.StatusCode)
+		}
+
+		duration := time.Since(start)
+		metrics.TileTotal.WithLabelValues("inline_ok").Inc()
+		metrics.TileDuration.Observe(duration.Seconds())
+		r.statCalls.Add(1)
+		r.statTotalMs.Add(duration.Milliseconds())
+
+		// Diagnostic: log size, content-type, and the first 8 magic bytes so we
+		// can tell valid image responses from error-page bodies. A valid PNG
+		// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
+		prefixLen := min(len(b), 8)
+		l.Debugf("staticmap: inline %d bytes from %s (ct=%s, first=%x) in %dms",
+			len(b), reqURL, resp.Header.Get("Content-Type"), b[:prefixLen], duration.Milliseconds())
+
+		respBody = b
+		return nil
+	})
+
+	if errors.Is(berr, breaker.ErrOpen) {
+		metrics.TileTotal.WithLabelValues("circuit_break").Inc()
 		return nil
 	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		r.recordError()
-		r.statErrors.Add(1)
-		metrics.TileTotal.WithLabelValues("error").Inc()
-		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		l.Warnf("staticmap: read inline response: %s", err)
+	if berr != nil {
 		return nil
 	}
-
-	if resp.StatusCode != http.StatusOK {
-		r.recordError()
-		r.statErrors.Add(1)
-		metrics.TileTotal.WithLabelValues("error").Inc()
-		metrics.TileDuration.Observe(time.Since(start).Seconds())
-		truncLen := min(len(respBody), 200)
-		l.Warnf("staticmap: inline %s got status %d: %s", reqURL, resp.StatusCode, string(respBody[:truncLen]))
-		return nil
-	}
-
-	// Reset circuit breaker on success
-	r.mu.Lock()
-	r.consecutiveErrors = 0
-	r.halfOpenProbeActive = false
-	r.mu.Unlock()
-	metrics.TileCircuitHealthy.Set(1)
-
-	duration := time.Since(start)
-	metrics.TileTotal.WithLabelValues("inline_ok").Inc()
-	metrics.TileDuration.Observe(duration.Seconds())
-	r.statCalls.Add(1)
-	r.statTotalMs.Add(duration.Milliseconds())
-
-	// Diagnostic: log size, content-type, and the first 8 magic bytes so we
-	// can tell valid image responses from error-page bodies. A valid PNG
-	// starts with 89504e470d0a1a0a; JPEG with ffd8ff.
-	prefixLen := min(len(respBody), 8)
-	l.Debugf("staticmap: inline %d bytes from %s (ct=%s, first=%x) in %dms",
-		len(respBody), reqURL, resp.Header.Get("Content-Type"), respBody[:prefixLen], duration.Milliseconds())
-
 	return respBody
 }
 
@@ -1043,18 +1044,6 @@ func (r *Resolver) AddNearbyStops(target, data map[string]any, maptype, ref stri
 // GetStaticMapType returns the tileserver template type for the given alert type.
 func (r *Resolver) GetStaticMapType(maptype string) string {
 	return r.getConfigForTileType(maptype).Type
-}
-
-// recordError increments the consecutive error counter and opens the circuit if threshold reached.
-func (r *Resolver) recordError() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.consecutiveErrors++
-	r.halfOpenProbeActive = false
-	if r.consecutiveErrors >= r.config.TileserverFailureThreshold {
-		r.circuitOpenSince = time.Now()
-		metrics.TileCircuitHealthy.Set(0)
-	}
 }
 
 // limits converts pixel coordinates to lat/lon using the Web Mercator projection.

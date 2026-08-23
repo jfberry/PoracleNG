@@ -436,6 +436,21 @@ func (m *MockHumanStore) AddLocation(loc UserLocation) (int64, error) {
 	return loc.UID, nil
 }
 
+func (m *MockHumanStore) UpdateLocation(id, label string, lat, lon float64) error {
+	m.record("UpdateLocation")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	low := strings.ToLower(label)
+	for i := range m.Locations[id] {
+		if strings.ToLower(m.Locations[id][i].Label) == low {
+			m.Locations[id][i].Latitude = lat
+			m.Locations[id][i].Longitude = lon
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %q for user %q", ErrLocationNotFound, label, id)
+}
+
 func (m *MockHumanStore) DeleteLocation(id, label string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -96,7 +96,6 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		if view == nil {
 			continue
 		}
-		view["withAR"] = r.WithAR
 		k := groupKey{r.RewardType, r.Reward, r.Form}
 		if _, exists := groups[k]; !exists {
 			order = append(order, k)
@@ -173,7 +172,6 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		}
 	}
 
-	tr := ps.translations.For(lang)
 	maxPerMessage := ps.cfg.Summariser.MaxPerMessage
 	for _, k := range order {
 		all := groups[k]
@@ -200,15 +198,7 @@ func (ps *ProcessorService) DispatchQuestSummary(humanID, alertType string) {
 		ttlSecs := max(meta.latestExpiresAt-time.Now().Unix(), 0)
 
 		for _, chunk := range chunkPerMessage(all, maxPerMessage) {
-			view := dts.BuildQuestSummaryView(dts.QuestSummaryGroup{
-				RewardType: k.Type,
-				RewardID:   k.Reward,
-				RewardForm: k.Form,
-				Quests:     chunk.entries,
-				TotalCount: len(all),
-				Chunk:      chunk.index,
-				Chunks:     chunk.total,
-			}, ps.enricher.StaticMap, tr)
+			view := ps.buildQuestSummaryGroupView(k.Type, k.Reward, k.Form, chunk.entries, len(all), chunk.index, chunk.total, lang)
 
 			jobs := ps.dtsRenderer.RenderQuestSummary(
 				view,
@@ -352,5 +342,39 @@ func (ps *ProcessorService) questEnrichOne(raw []byte, lang string) map[string]a
 	if _, ok := out["pokestop_id"]; !ok {
 		out["pokestop_id"] = qw.PokestopID
 	}
+	// withAR flags whether this stop's quest requires AR — the per-row
+	// {{withAR}} boolean templates read inside the summary's
+	// {{#each quests}} block (questSummaryBlockScopes in dts_fields.go).
+	// Previously the DispatchQuestSummary caller set this from the
+	// buffered tracker.BufferedQuest row's own WithAR field; that value is
+	// always identical to qw.WithAR (both are derived from the very same
+	// source webhook — see bufferQuestMatches), so setting it here instead
+	// means every caller of questEnrichOne gets it for free, including the
+	// derived "questSummary" DTS test/editor-preview path (enrichQuestSummary),
+	// which has no buffered row to read it from at all.
+	if _, ok := out["withAR"]; !ok {
+		out["withAR"] = qw.WithAR
+	}
 	return out
+}
+
+// buildQuestSummaryGroupView renders one questSummary message body for a
+// slice of already-enriched per-pokestop quest views (from questEnrichOne)
+// sharing the same (rewardType, reward, form) group key. This is the
+// group→view construction shared by the live scheduler
+// (DispatchQuestSummary, chunked per config's MaxPerMessage) and the derived
+// "questSummary" DTS test/editor-preview path (enrichQuestSummary, which
+// only ever renders a single un-chunked group) — both call this so the
+// resulting fields are built identically.
+func (ps *ProcessorService) buildQuestSummaryGroupView(rewardType, rewardID, rewardForm int, quests []map[string]any, totalCount, chunk, chunks int, lang string) map[string]any {
+	tr := ps.translations.For(lang)
+	return dts.BuildQuestSummaryView(dts.QuestSummaryGroup{
+		RewardType: rewardType,
+		RewardID:   rewardID,
+		RewardForm: rewardForm,
+		Quests:     quests,
+		TotalCount: totalCount,
+		Chunk:      chunk,
+		Chunks:     chunks,
+	}, ps.enricher.StaticMap, tr)
 }

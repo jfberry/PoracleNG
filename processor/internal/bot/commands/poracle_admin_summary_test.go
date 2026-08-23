@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -89,19 +90,19 @@ func TestSummary_ListPopulated(t *testing.T) {
 	if len(replies) == 0 {
 		t.Fatal("expected at least one reply, got none")
 	}
-	text := ""
+	var text strings.Builder
 	for _, r := range replies {
-		text += r.Text
+		text.WriteString(r.Text)
 	}
-	if !containsStr(text, "discord:user/111") {
-		t.Errorf("list output missing first user, got:\n%s", text)
+	if !containsStr(text.String(), "discord:user/111") {
+		t.Errorf("list output missing first user, got:\n%s", text.String())
 	}
-	if !containsStr(text, "discord:user/222") {
-		t.Errorf("list output missing second user, got:\n%s", text)
+	if !containsStr(text.String(), "discord:user/222") {
+		t.Errorf("list output missing second user, got:\n%s", text.String())
 	}
 	// Should show total entry count.
-	if !containsStr(text, "3") {
-		t.Errorf("list output should show total entry count, got:\n%s", text)
+	if !containsStr(text.String(), "3") {
+		t.Errorf("list output should show total entry count, got:\n%s", text.String())
 	}
 }
 
@@ -121,16 +122,16 @@ func TestSummary_ShowKnownUser(t *testing.T) {
 	if len(replies) == 0 {
 		t.Fatal("expected at least one reply, got none")
 	}
-	text := ""
+	var text strings.Builder
 	for _, r := range replies {
-		text += r.Text
+		text.WriteString(r.Text)
 	}
-	if !containsStr(text, "discord:user/123") {
-		t.Errorf("show output missing user ID, got:\n%s", text)
+	if !containsStr(text.String(), "discord:user/123") {
+		t.Errorf("show output missing user ID, got:\n%s", text.String())
 	}
 	// Should list the alertType.
-	if !containsStr(text, "quest") {
-		t.Errorf("show output missing 'quest' alertType, got:\n%s", text)
+	if !containsStr(text.String(), "quest") {
+		t.Errorf("show output missing 'quest' alertType, got:\n%s", text.String())
 	}
 }
 

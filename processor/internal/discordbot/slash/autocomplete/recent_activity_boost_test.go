@@ -224,3 +224,94 @@ func choiceNames(c []*discordgo.ApplicationCommandOptionChoice) []string {
 	}
 	return out
 }
+
+func firstName(c []*discordgo.ApplicationCommandOptionChoice) string {
+	if len(c) == 0 {
+		return "<empty>"
+	}
+	return c[0].Name
+}
+
+func costumeFormBoostDeps(t *testing.T) *bot.BotDeps {
+	t.Helper()
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"poke_25":   "Pikachu",
+		"costume_1": "Holiday 2016",
+		"costume_8": "Flying",
+		"form_598":  "Normal",
+		"form_680":  "Winter 2023",
+	}))
+	bundle.LinkFallbacks()
+	gd := &gamedata.GameData{
+		Costumes: map[int]gamedata.CostumeInfo{
+			1: {ID: 1, Name: "Holiday 2016"},
+			8: {ID: 8, Name: "Flying"},
+		},
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
+			{ID: 25, Form: 598}: {PokemonID: 25},
+			{ID: 25, Form: 680}: {PokemonID: 25},
+		},
+	}
+	return &bot.BotDeps{Translations: bundle, GameData: gd, Cfg: &config.Config{}}
+}
+
+func TestPrependRecentCostumes_BoostsFirstAndDedups(t *testing.T) {
+	deps := costumeFormBoostDeps(t)
+	base := Costume(context.Background(), deps, "", "en")
+	// Use id 1 ("Holiday 2016"), which sorts AFTER "Flying" alphabetically, so
+	// seeing it first proves the boost (not just alphabetical order).
+	out := PrependRecentCostumes(base, deps, []int{1}, "en")
+	if len(out) == 0 || out[0].Name != "Holiday 2016" {
+		t.Fatalf("first = %+v, want Holiday 2016 (recent id 1 prepended)", firstName(out))
+	}
+	count := 0
+	for _, c := range out {
+		if c.Value == "1" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("costume 1 appears %d times, want 1 (dedup against base)", count)
+	}
+}
+
+func TestPrependRecentCostumes_EmptyFallsThrough(t *testing.T) {
+	deps := costumeFormBoostDeps(t)
+	base := Costume(context.Background(), deps, "", "en")
+	out := PrependRecentCostumes(base, deps, nil, "en")
+	if len(out) != len(base) {
+		t.Errorf("len(out)=%d, len(base)=%d — nil recency should pass through", len(out), len(base))
+	}
+}
+
+func TestPrependRecentForms_BoostsFirstAndDedups(t *testing.T) {
+	deps := costumeFormBoostDeps(t)
+	base := Form(context.Background(), deps, "pikachu", "", "en")
+	out := PrependRecentForms(base, deps, []int{680}, "en")
+	if len(out) == 0 || out[0].Name != "Winter 2023" {
+		t.Fatalf("first = %+v, want Winter 2023 (recent form 680 prepended)", firstName(out))
+	}
+	count := 0
+	for _, c := range out {
+		if c.Value == "winter 2023" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("form 'winter 2023' appears %d times, want 1 (dedup against base)", count)
+	}
+}
+
+func TestResolvePokemonID(t *testing.T) {
+	deps := costumeFormBoostDeps(t)
+	if got := ResolvePokemonID(deps, "pikachu"); got != 25 {
+		t.Errorf("ResolvePokemonID(pikachu) = %d, want 25", got)
+	}
+	if got := ResolvePokemonID(deps, "25"); got != 25 {
+		t.Errorf("ResolvePokemonID(\"25\") = %d, want 25", got)
+	}
+	if got := ResolvePokemonID(deps, ""); got != 0 {
+		t.Errorf("ResolvePokemonID(\"\") = %d, want 0", got)
+	}
+}

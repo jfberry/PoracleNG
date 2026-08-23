@@ -965,5 +965,17 @@
 			"color": "03AEB6",
 			"emoji": "incident-showcase"
 		}
+	},
+	"showcaseFocus": {
+		"pokemon": { "emoji": "" },
+		"type": { "emoji": "" },
+		"alignment": { "emoji": "" },
+		"class": { "emoji": "" },
+		"family": { "emoji": "" },
+		"buddy": { "emoji": "" },
+		"generation": { "emoji": "" },
+		"hatched": { "emoji": "" },
+		"mega": { "emoji": "" },
+		"shiny": { "emoji": "" }
 	}
 }

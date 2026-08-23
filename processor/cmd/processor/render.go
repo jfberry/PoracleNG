@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -181,6 +182,11 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 			metrics.RenderTotal.WithLabelValues("error").Inc()
 			return
 		}
+		// tileURL is what {{staticMap}} resolved to for this batch (the real
+		// pregen URL in URL/URLWithBytes mode, the fallback URL in inline mode).
+		// The inline tile bytes must only replace a message whose embed image IS
+		// that tile — see tileBytesForMessage.
+		tileURL, _ := job.Enrichment["staticMap"].(string)
 		for _, j := range jobs {
 			var tth delivery.TTH
 			if job.OverrideCleanTTH != 0 {
@@ -201,14 +207,42 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				EditKey:       j.EditKey,
 				ReplyKey:      job.ReplyKey,
 				MsgType:       job.AlertType,
-				StaticMapData: job.TileImageData,
+				StaticMapData: tileBytesForMessage(j.Message, job.TileImageData, tileURL),
 				Language:      j.Language,
+				Template:      j.TemplateRequested,
 				SnapshotData:  ps.buildSnapshot(job, j, tth),
 			})
 		}
 	}
 
 	metrics.RenderTotal.WithLabelValues("ok").Inc()
+}
+
+// tileBytesForMessage decides whether this rendered message should carry the
+// batch's inline tile bytes. The bytes are the poracle staticMap tile; the
+// delivery layer, when it sees non-empty StaticMapData plus any embed image
+// URL, uploads the bytes and rewrites the embed image to attachment://map.png.
+// That is only correct when the embed image actually IS the tile.
+//
+// A single event fans out to many templates: some render {{staticMap}} (image
+// URL == tileURL — attach bytes), others set a static image URL or a
+// hand-built tileserver URL (image URL != tileURL — must keep their own
+// image). The hand-built case is why we can't rely on tileMode/UsesTile alone:
+// UsesTile matches the substring "staticmap", so a URL like
+// ".../staticmap/poracle-monster?imgUrl=..." trips it and the batch generates
+// bytes even though that template renders its own URL. Returning nil here makes
+// delivery download the message's real image instead of overwriting it with
+// the tile.
+func tileBytesForMessage(msg json.RawMessage, tileBytes []byte, tileURL string) []byte {
+	if len(tileBytes) == 0 || tileURL == "" {
+		return tileBytes
+	}
+	// Reuse delivery's exact extraction so the URL we compare is identical to
+	// the one the sender's short-circuit would test.
+	if _, imgURL, err := delivery.NormalizeAndExtractImage(msg, true); err == nil && imgURL != tileURL {
+		return nil
+	}
+	return tileBytes
 }
 
 // resolveTilePending performs the synchronous tile wait that processRenderJob

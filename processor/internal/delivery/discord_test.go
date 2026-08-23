@@ -6,9 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func newTestDiscordSender(serverURL string) *DiscordSender {
@@ -404,6 +407,60 @@ func TestDiscordRateLimit429(t *testing.T) {
 	}
 }
 
+// TestDiscordDelete_RetriesOn429 covers the reported clean-delete bug: a burst
+// of expiring alerts 429s the DELETE route, and previously the delete failed
+// with "discord delete returned status 429" (no retry), leaving the expired
+// message in the channel. Delete must now back off on 429 (Retry-After) and
+// retry — sharing the same rate-limit handling as posts.
+func TestDiscordDelete_RetriesOn429(t *testing.T) {
+	var attempts int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`{"retry_after":0.01}`)) //nolint:errcheck
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	ds := newTestDiscordSender(server.URL)
+	if err := ds.Delete(context.Background(), "channel123:msg456"); err != nil {
+		t.Fatalf("Delete should succeed after a 429 retry, got: %v", err)
+	}
+	if got := atomic.LoadInt32(&attempts); got < 2 {
+		t.Errorf("expected the delete to retry after 429 (>=2 attempts), got %d", got)
+	}
+}
+
+// TestDiscordEdit_RetriesOn429 — edits bypassed the send path's retry too, so a
+// 429 on an in-place update (e.g. RSVP change) used to fail without retry.
+func TestDiscordEdit_RetriesOn429(t *testing.T) {
+	var attempts int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&attempts, 1)
+		w.Header().Set("Content-Type", "application/json")
+		if n == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`{"retry_after":0.01}`)) //nolint:errcheck
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"id":"msg456"}`)) //nolint:errcheck
+	}))
+	defer server.Close()
+
+	ds := newTestDiscordSender(server.URL)
+	if err := ds.Edit(context.Background(), "channel123:msg456", json.RawMessage(`{"content":"edited"}`), nil); err != nil {
+		t.Fatalf("Edit should succeed after a 429 retry, got: %v", err)
+	}
+	if got := atomic.LoadInt32(&attempts); got < 2 {
+		t.Errorf("expected the edit to retry after 429 (>=2 attempts), got %d", got)
+	}
+}
+
 func TestDiscordPermanentError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -548,5 +605,137 @@ func TestDiscordWebhookSkipsMessageReference(t *testing.T) {
 
 	if strings.Contains(string(gotBody), "message_reference") {
 		t.Errorf("webhook body should NOT contain message_reference, got: %s", gotBody)
+	}
+}
+
+// TestDiscord_SemaphoreReleasedDuring429Backoff proves the wire-call
+// concurrency slot is released while a request is backing off from a 429 —
+// not held for the duration of the retry sleep. With SetConcurrency(1,1),
+// target "a" 429s once and backs off ~0.4s; if the slot were held across
+// that backoff (the pre-fix behaviour), a concurrent request to a different
+// target "b" would be starved until "a" finishes.
+func TestDiscord_SemaphoreReleasedDuring429Backoff(t *testing.T) {
+	// srv: target "a" 429s once (retry_after 0.4s) then 204s; target "b" 204s immediately.
+	var aHits atomic.Int32
+	bDone := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/channels/a/"):
+			if aHits.Add(1) == 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = w.Write([]byte(`{"retry_after":0.4}`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"1"}`))
+		case strings.Contains(r.URL.Path, "/channels/b/"):
+			close(bDone)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"2"}`))
+		}
+	}))
+	defer srv.Close()
+
+	ds := NewDiscordSender("tok", false, 0)
+	ds.baseURL = srv.URL
+	ds.SetConcurrency(1, 1) // ONE discord slot
+
+	// Start the "a" send (it will 429 and back off ~0.4s).
+	go func() {
+		_, _ = ds.postMessage(context.Background(), "a", json.RawMessage(`{"content":"a"}`), nil, "", "")
+	}()
+
+	// Give "a" a head start so it wins the single slot and hits its 429
+	// before "b" tries to acquire the slot — otherwise this wouldn't exercise
+	// the backoff-release behavior at all.
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		_, _ = ds.postMessage(context.Background(), "b", json.RawMessage(`{"content":"b"}`), nil, "", "")
+	}()
+
+	// "b" must acquire the single slot while "a" is backing off (slot released).
+	select {
+	case <-bDone:
+		// pass: b reached the wire during a's backoff
+	case <-time.After(300 * time.Millisecond):
+		t.Fatal("target b never reached the wire — a's 429 backoff pinned the only slot")
+	}
+}
+
+// TestDiscord_GlobalConcurrencyCap proves the wire-call concurrency semaphore
+// is a genuine cross-target cap, not an artifact of the FairQueue's
+// per-destination lanes (each target's single lane drainer serializes
+// same-target jobs to 1 regardless of the configured concurrency — see
+// TestFairQueueConcurrency, which only ever hits target "user1" and so never
+// exercises this). Calling postMessage
+// directly against 8 distinct channel targets, with no FairQueue involved,
+// isolates the sender's own discordSem: with SetConcurrency(2, 2), at most 2
+// requests may be on the wire at once even though every request targets a
+// different channel.
+func TestDiscord_GlobalConcurrencyCap(t *testing.T) {
+	var cur, max atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c := cur.Add(1)
+		for {
+			m := max.Load()
+			if c <= m || max.CompareAndSwap(m, c) {
+				break
+			}
+		}
+		time.Sleep(40 * time.Millisecond) // hold the slot
+		cur.Add(-1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"1"}`))
+	}))
+	defer srv.Close()
+
+	ds := NewDiscordSender("tok", false, 0)
+	ds.baseURL = srv.URL
+	ds.SetConcurrency(2, 2)
+
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, _ = ds.postMessage(context.Background(), "chan"+strconv.Itoa(i), json.RawMessage(`{"content":"x"}`), nil, "", "")
+		}(i)
+	}
+	wg.Wait()
+
+	if m := max.Load(); m > 2 {
+		t.Errorf("expected at most 2 concurrent discord wire calls, got %d", m)
+	}
+	if m := max.Load(); m == 0 {
+		t.Error("expected some concurrency, got 0")
+	}
+}
+
+// TestDiscord_SetConcurrencyClampsToOne guards against a real 429-storm
+// regression: an operator setting concurrent_discord_destinations = 0 (a
+// plausible "off/default" idiom) must NOT produce unbounded Discord
+// concurrency. makeSem(n) returns nil (unlimited) for n<=0, so
+// SetConcurrency must clamp 0 (and negative values) to 1 before calling it.
+func TestDiscord_SetConcurrencyClampsToOne(t *testing.T) {
+	ds := NewDiscordSender("tok", false, 0)
+	ds.SetConcurrency(0, 0)
+	if ds.discordSem == nil {
+		t.Fatal("discordSem is nil (unlimited) after SetConcurrency(0, 0) — expected clamp to 1")
+	}
+	if cap(ds.discordSem) != 1 {
+		t.Errorf("discordSem cap = %d, want 1", cap(ds.discordSem))
+	}
+	if ds.webhookSem == nil {
+		t.Fatal("webhookSem is nil (unlimited) after SetConcurrency(0, 0) — expected clamp to 1")
+	}
+	if cap(ds.webhookSem) != 1 {
+		t.Errorf("webhookSem cap = %d, want 1", cap(ds.webhookSem))
+	}
+
+	ds2 := NewDiscordSender("tok", false, 0)
+	ds2.SetConcurrency(-5, -5)
+	if cap(ds2.discordSem) != 1 || cap(ds2.webhookSem) != 1 {
+		t.Errorf("negative concurrency not clamped: discordSem cap=%d webhookSem cap=%d, want 1/1", cap(ds2.discordSem), cap(ds2.webhookSem))
 	}
 }

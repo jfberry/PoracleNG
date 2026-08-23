@@ -112,6 +112,20 @@ func TestListTracking_Raid(t *testing.T) {
 	}
 }
 
+// TestToRaidTracking_PreservesCostume ensures the local toRaidTracking
+// converter copies Costume from RaidTrackingAPI through to RaidTracking.
+// Without this, every raid rule rendered via /untrack raid autocomplete
+// descriptions would show Costume as Go-zero 0, and rowtext.RaidRowText
+// treats anything other than 9000 as a specific costume filter, so a rule
+// with no costume restriction (9000) would wrongly render "no costume".
+func TestToRaidTracking_PreservesCostume(t *testing.T) {
+	for _, c := range []int{9000, 0, 5} {
+		if got := toRaidTracking(&db.RaidTrackingAPI{Costume: c}); got.Costume != c {
+			t.Errorf("toRaidTracking dropped Costume: got %d want %d", got.Costume, c)
+		}
+	}
+}
+
 func TestListTracking_Monster(t *testing.T) {
 	deps, humans, _, monsterStore := testDeps(t)
 	humans.AddHuman(&store.Human{ID: "discord:user:42", CurrentProfileNo: 0})

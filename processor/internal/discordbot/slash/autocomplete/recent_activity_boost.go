@@ -1,6 +1,7 @@
 package autocomplete
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -169,6 +170,90 @@ func PrependActiveGrunts(base []*discordgo.ApplicationCommandOptionChoice, deps 
 			continue
 		}
 		if add(typeName+" Grunt", canonical) {
+			return out
+		}
+	}
+	for _, c := range base {
+		v, _ := c.Value.(string)
+		if add(c.Name, v) {
+			return out
+		}
+	}
+	return out
+}
+
+// PrependRecentCostumes prepends the costumes recently seen on the selected
+// pokemon (from RecentActivity.RecentCostumes) to the flat costume choice list
+// on /track costume. Label = translated costume name, Value = costume id as a
+// string (matching autocomplete.Costume). Caps the boost at 10, dedups by
+// Value, and stops at Discord's 25-choice limit — same contract as
+// PrependActiveItems.
+func PrependRecentCostumes(base []*discordgo.ApplicationCommandOptionChoice, deps *bot.BotDeps, costumeIDs []int, userLang string) []*discordgo.ApplicationCommandOptionChoice {
+	if deps == nil || len(costumeIDs) == 0 || deps.Translations == nil {
+		return base
+	}
+	out := make([]*discordgo.ApplicationCommandOptionChoice, 0, 25)
+	seen := map[string]bool{}
+	add := func(name, value string) bool {
+		if seen[value] {
+			return false
+		}
+		seen[value] = true
+		out = append(out, &discordgo.ApplicationCommandOptionChoice{Name: name, Value: value})
+		return len(out) >= 25
+	}
+	enTr := deps.Translations.For("en")
+	userTr := deps.Translations.For(userLang)
+	for i, id := range costumeIDs {
+		if i >= 10 {
+			break
+		}
+		label := costumeLabel(enTr, userTr, id)
+		if label == "" {
+			continue
+		}
+		if add(label, strconv.Itoa(id)) {
+			return out
+		}
+	}
+	for _, c := range base {
+		v, _ := c.Value.(string)
+		if add(c.Name, v) {
+			return out
+		}
+	}
+	return out
+}
+
+// PrependRecentForms prepends the forms recently seen on the selected pokemon
+// (from RecentActivity.RecentForms) to autocomplete.Form's alphabetical list on
+// /track form. Label/Value follow formLabel (translated name / lowercased
+// name). Same 10/25/dedup contract as PrependRecentCostumes.
+func PrependRecentForms(base []*discordgo.ApplicationCommandOptionChoice, deps *bot.BotDeps, formIDs []int, userLang string) []*discordgo.ApplicationCommandOptionChoice {
+	if deps == nil || len(formIDs) == 0 || deps.Translations == nil {
+		return base
+	}
+	out := make([]*discordgo.ApplicationCommandOptionChoice, 0, 25)
+	seen := map[string]bool{}
+	add := func(name, value string) bool {
+		if seen[value] {
+			return false
+		}
+		seen[value] = true
+		out = append(out, &discordgo.ApplicationCommandOptionChoice{Name: name, Value: value})
+		return len(out) >= 25
+	}
+	enTr := deps.Translations.For("en")
+	userTr := deps.Translations.For(userLang)
+	for i, id := range formIDs {
+		if i >= 10 {
+			break
+		}
+		label, value := formLabel(enTr, userTr, id)
+		if value == "" {
+			continue
+		}
+		if add(label, value) {
 			return out
 		}
 	}

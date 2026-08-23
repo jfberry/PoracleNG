@@ -86,14 +86,14 @@ func DeleteByUIDs(db *sqlx.DB, table, id string, uids []int64) error {
 //   - diff:"update" updatable fields (if ALL diffs are here → update in place)
 //   - (no tag)      regular field (any diff → new insert)
 type LureTrackingAPI struct {
-	UID                   int64    `db:"uid"                    json:"uid"                    diff:"-"`
-	ID                    string   `db:"id"                     json:"id"                     diff:"-"`
-	ProfileNo             int      `db:"profile_no"             json:"profile_no"             diff:"-"`
-	Ping                  string   `db:"ping"                   json:"ping"`
-	Clean                 int      `db:"clean"                  json:"clean"                  diff:"update"`
-	Distance              int      `db:"distance"               json:"distance"               diff:"update"`
-	Template              string   `db:"template"               json:"template"               diff:"update"`
-	LureID                int      `db:"lure_id"                json:"lure_id"                diff:"match"`
+	UID       int64  `db:"uid"                    json:"uid"                    diff:"-"`
+	ID        string `db:"id"                     json:"id"                     diff:"-"`
+	ProfileNo int    `db:"profile_no"             json:"profile_no"             diff:"-"`
+	Ping      string `db:"ping"                   json:"ping"`
+	Clean     int    `db:"clean"                  json:"clean"                  diff:"update"`
+	Distance  int    `db:"distance"               json:"distance"               diff:"update"`
+	Template  string `db:"template"               json:"template"               diff:"update"`
+	LureID    int    `db:"lure_id"                json:"lure_id"                diff:"match"`
 	// Override fields participate in the default (non-match, non-update)
 	// diff path: any change creates a new insert; the old row stays until
 	// removed explicitly. Same semantics as template/distance.
@@ -141,17 +141,17 @@ func InsertLure(db *sqlx.DB, lure *LureTrackingAPI) (int64, error) {
 
 // FortTrackingAPI represents a fort tracking row for API operations.
 type FortTrackingAPI struct {
-	UID                   int64   `db:"uid"                     json:"uid"                    diff:"-"`
-	ID                    string  `db:"id"                      json:"id"                     diff:"-"`
-	ProfileNo             int     `db:"profile_no"              json:"profile_no"             diff:"-"`
-	Ping                  string  `db:"ping"                    json:"ping"`
-	Distance              int     `db:"distance"                json:"distance"               diff:"update"`
-	Template              string  `db:"template"                json:"template"               diff:"update"`
-	FortType              string  `db:"fort_type"               json:"fort_type"              diff:"match"`
-	IncludeEmpty          IntBool `db:"include_empty"           json:"include_empty"`
-	ChangeTypes           string  `db:"change_types"            json:"change_types"`
-	OverrideLocationLabel string  `db:"override_location_label" json:"override_location_label" diff:""`
-	OverrideAreasRaw      string  `db:"override_areas"         json:"-"                      diff:"-"`
+	UID                   int64    `db:"uid"                     json:"uid"                    diff:"-"`
+	ID                    string   `db:"id"                      json:"id"                     diff:"-"`
+	ProfileNo             int      `db:"profile_no"              json:"profile_no"             diff:"-"`
+	Ping                  string   `db:"ping"                    json:"ping"`
+	Distance              int      `db:"distance"                json:"distance"               diff:"update"`
+	Template              string   `db:"template"                json:"template"               diff:"update"`
+	FortType              string   `db:"fort_type"               json:"fort_type"              diff:"match"`
+	IncludeEmpty          IntBool  `db:"include_empty"           json:"include_empty"`
+	ChangeTypes           string   `db:"change_types"            json:"change_types"`
+	OverrideLocationLabel string   `db:"override_location_label" json:"override_location_label" diff:""`
+	OverrideAreasRaw      string   `db:"override_areas"         json:"-"                      diff:"-"`
 	OverrideAreas         []string `db:"-"                     json:"override_areas"          diff:""`
 }
 
@@ -373,6 +373,7 @@ type MonsterTrackingAPI struct {
 	Template              string   `db:"template"                json:"template"               diff:"update"`
 	PokemonID             int      `db:"pokemon_id"              json:"pokemon_id"`
 	Form                  int      `db:"form"                    json:"form"`
+	Costume               int      `db:"costume"                 json:"costume"`
 	MinIV                 int      `db:"min_iv"                  json:"min_iv"                 diff:"update"`
 	MaxIV                 int      `db:"max_iv"                  json:"max_iv"`
 	MinCP                 int      `db:"min_cp"                  json:"min_cp"`
@@ -404,12 +405,37 @@ type MonsterTrackingAPI struct {
 	OverrideAreas         []string `db:"-"                      json:"override_areas"         diff:""`
 }
 
+// UnmarshalJSON pre-seeds Costume to the 9000 wildcard ("any") before decoding,
+// so a body that omits "costume" yields 9000 rather than the Go zero-value 0
+// ("no costume") — otherwise a v1 client that doesn't know about costumes would
+// silently create no-costume rules. Present values pass through verbatim.
+//
+// This is a defence-in-depth guard, NOT the live default: no production code
+// unmarshals JSON directly into MonsterTrackingAPI. The authoritative
+// absent-costume defaults live at the actual decode sites —
+//   - v1: cleanRow's req.Costume.intValue(9000) (internal/api/trackingMonster.go)
+//   - v2: translateV2Pokemon's valueOr(req.Costume, 9000) (internal/api/v2_pokemon.go)
+//
+// If you change the absent-costume behaviour, change those. Because this struct's
+// fields are plain int/string (no flexInt/flexBool), this method must NOT be
+// repurposed as the primary v1 parse path — it would drop the lenient
+// numeric/bool coercion ReactMap/PoracleWeb rely on.
+func (m *MonsterTrackingAPI) UnmarshalJSON(data []byte) error {
+	type alias MonsterTrackingAPI
+	tmp := alias{Costume: 9000}
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return err
+	}
+	*m = MonsterTrackingAPI(tmp)
+	return nil
+}
+
 // SelectMonstersByIDProfile returns all monster trackings for a given human and profile.
 func SelectMonstersByIDProfile(db *sqlx.DB, id string, profileNo int) ([]MonsterTrackingAPI, error) {
 	var monsters []MonsterTrackingAPI
 	err := db.Select(&monsters,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '') AS template, pokemon_id, form,
+		        COALESCE(template, '') AS template, pokemon_id, form, costume,
 		        min_iv, max_iv, min_cp, max_cp, min_level, max_level,
 		        atk, def, sta, max_atk, max_def, max_sta,
 		        gender, min_weight, max_weight, min_time,
@@ -432,16 +458,16 @@ func SelectMonstersByIDProfile(db *sqlx.DB, id string, profileNo int) ([]Monster
 func InsertMonster(db *sqlx.DB, m *MonsterTrackingAPI) (int64, error) {
 	result, err := db.Exec(
 		`INSERT INTO monsters (id, profile_no, ping, clean, distance, template,
-		        pokemon_id, form, min_iv, max_iv, min_cp, max_cp, min_level, max_level,
+		        pokemon_id, form, costume, min_iv, max_iv, min_cp, max_cp, min_level, max_level,
 		        atk, def, sta, max_atk, max_def, max_sta,
 		        gender, min_weight, max_weight, min_time,
 		        rarity, max_rarity, size, max_size,
 		        pvp_ranking_league, pvp_ranking_best, pvp_ranking_worst,
 		        pvp_ranking_min_cp, pvp_ranking_cap, pvp_ranking_evolution,
 		        override_location_label, override_areas)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID, m.ProfileNo, m.Ping, m.Clean, m.Distance, m.Template,
-		m.PokemonID, m.Form, m.MinIV, m.MaxIV, m.MinCP, m.MaxCP, m.MinLevel, m.MaxLevel,
+		m.PokemonID, m.Form, m.Costume, m.MinIV, m.MaxIV, m.MinCP, m.MaxCP, m.MinLevel, m.MaxLevel,
 		m.ATK, m.DEF, m.STA, m.MaxATK, m.MaxDEF, m.MaxSTA,
 		m.Gender, m.MinWeight, m.MaxWeight, m.MinTime,
 		m.Rarity, m.MaxRarity, m.Size, m.MaxSize,
@@ -462,7 +488,7 @@ func InsertMonster(db *sqlx.DB, m *MonsterTrackingAPI) (int64, error) {
 func UpdateMonsterByUID(db *sqlx.DB, m *MonsterTrackingAPI) error {
 	_, err := db.Exec(
 		`UPDATE monsters SET ping=?, clean=?, distance=?, template=?,
-		        pokemon_id=?, form=?, min_iv=?, max_iv=?, min_cp=?, max_cp=?,
+		        pokemon_id=?, form=?, costume=?, min_iv=?, max_iv=?, min_cp=?, max_cp=?,
 		        min_level=?, max_level=?, atk=?, def=?, sta=?, max_atk=?, max_def=?, max_sta=?,
 		        gender=?, min_weight=?, max_weight=?, min_time=?,
 		        rarity=?, max_rarity=?, size=?, max_size=?,
@@ -471,7 +497,7 @@ func UpdateMonsterByUID(db *sqlx.DB, m *MonsterTrackingAPI) error {
 		        override_location_label=?, override_areas=?
 		 WHERE uid = ?`,
 		m.Ping, m.Clean, m.Distance, m.Template,
-		m.PokemonID, m.Form, m.MinIV, m.MaxIV, m.MinCP, m.MaxCP,
+		m.PokemonID, m.Form, m.Costume, m.MinIV, m.MaxIV, m.MinCP, m.MaxCP,
 		m.MinLevel, m.MaxLevel, m.ATK, m.DEF, m.STA, m.MaxATK, m.MaxDEF, m.MaxSTA,
 		m.Gender, m.MinWeight, m.MaxWeight, m.MinTime,
 		m.Rarity, m.MaxRarity, m.Size, m.MaxSize,
@@ -497,6 +523,7 @@ type RaidTrackingAPI struct {
 	Team                  int         `db:"team"                    json:"team"                   diff:"match"`
 	PokemonID             int         `db:"pokemon_id"              json:"pokemon_id"`
 	Form                  int         `db:"form"                    json:"form"`
+	Costume               int         `db:"costume"                 json:"costume"`
 	Level                 int         `db:"level"                   json:"level"`
 	Exclusive             IntBool     `db:"exclusive"               json:"exclusive"`
 	Move                  int         `db:"move"                    json:"move"`
@@ -513,7 +540,7 @@ func SelectRaidsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]RaidTracki
 	var raids []RaidTrackingAPI
 	err := db.Select(&raids,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '') AS template, team, pokemon_id, form,
+		        COALESCE(template, '') AS template, team, pokemon_id, form, costume,
 		        level, exclusive, move, evolution, gym_id, rsvp_changes,
 		        COALESCE(override_location_label, '') AS override_location_label,
 		        COALESCE(override_areas, '') AS override_areas
@@ -531,11 +558,11 @@ func SelectRaidsByIDProfile(db *sqlx.DB, id string, profileNo int) ([]RaidTracki
 func InsertRaid(db *sqlx.DB, raid *RaidTrackingAPI) (int64, error) {
 	result, err := db.Exec(
 		`INSERT INTO raid (id, profile_no, ping, clean, distance, template,
-		        team, pokemon_id, form, level, exclusive, move, evolution, gym_id, rsvp_changes,
+		        team, pokemon_id, form, costume, level, exclusive, move, evolution, gym_id, rsvp_changes,
 		        override_location_label, override_areas)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		raid.ID, raid.ProfileNo, raid.Ping, raid.Clean, raid.Distance, raid.Template,
-		raid.Team, raid.PokemonID, raid.Form, raid.Level, raid.Exclusive,
+		raid.Team, raid.PokemonID, raid.Form, raid.Costume, raid.Level, raid.Exclusive,
 		raid.Move, raid.Evolution, raid.GymID, raid.RSVPChanges,
 		nullIfEmpty(raid.OverrideLocationLabel), marshalOverrideAreas(raid.OverrideAreas))
 	if err != nil {
@@ -733,7 +760,7 @@ func SelectMonstersByID(db *sqlx.DB, id string) ([]MonsterTrackingAPI, error) {
 	var monsters []MonsterTrackingAPI
 	err := db.Select(&monsters,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '') AS template, pokemon_id, form,
+		        COALESCE(template, '') AS template, pokemon_id, form, costume,
 		        min_iv, max_iv, min_cp, max_cp, min_level, max_level,
 		        atk, def, sta, max_atk, max_def, max_sta,
 		        gender, min_weight, max_weight, min_time,
@@ -757,7 +784,7 @@ func SelectRaidsByID(db *sqlx.DB, id string) ([]RaidTrackingAPI, error) {
 	var raids []RaidTrackingAPI
 	err := db.Select(&raids,
 		`SELECT uid, id, profile_no, ping, clean, distance,
-		        COALESCE(template, '') AS template, team, pokemon_id, form,
+		        COALESCE(template, '') AS template, team, pokemon_id, form, costume,
 		        level, exclusive, move, evolution, gym_id, rsvp_changes,
 		        COALESCE(override_location_label, '') AS override_location_label,
 		        COALESCE(override_areas, '') AS override_areas

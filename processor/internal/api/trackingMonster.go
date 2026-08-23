@@ -113,6 +113,7 @@ type monsterInsertRequest struct {
 	Template              any      `json:"template"`
 	Clean                 flexBool `json:"clean"`
 	Form                  flexInt  `json:"form"`
+	Costume               flexInt  `json:"costume"`
 	MinIV                 flexInt  `json:"min_iv"`
 	MaxIV                 flexInt  `json:"max_iv"`
 	MinCP                 flexInt  `json:"min_cp"`
@@ -222,37 +223,45 @@ func HandleCreateMonster(deps *TrackingDeps) gin.HandlerFunc {
 			}
 
 			row := db.MonsterTrackingAPI{
-				ID:               human.ID,
-				ProfileNo:        pNo,
-				Ping:             "",
-				Template:         template,
-				PokemonID:        pokemonID,
-				Distance:         distance,
-				MinIV:            req.MinIV.intValue(-1),
-				MaxIV:            req.MaxIV.intValue(100),
-				MinCP:            req.MinCP.intValue(0),
-				MaxCP:            req.MaxCP.intValue(9000),
-				MinLevel:         req.MinLevel.intValue(0),
-				MaxLevel:         req.MaxLevel.intValue(55),
-				ATK:              req.ATK.intValue(0),
-				DEF:              req.DEF.intValue(0),
-				STA:              req.STA.intValue(0),
-				MaxATK:           req.MaxATK.intValue(15),
-				MaxDEF:           req.MaxDEF.intValue(15),
-				MaxSTA:           req.MaxSTA.intValue(15),
-				Gender:           req.Gender.intValue(0),
-				Form:             req.Form.intValue(0),
-				Clean:            req.Clean.intValue(0),
-				MinWeight:        req.MinWeight.intValue(0),
-				MaxWeight:        req.MaxWeight.intValue(9000000),
-				MinTime:          req.MinTime.intValue(0),
-				Rarity:           req.Rarity.intValue(-1),
-				MaxRarity:        req.MaxRarity.intValue(6),
-				Size:             req.Size.intValue(-1),
-				MaxSize:          req.MaxSize.intValue(5),
-				PVPRankingLeague: req.PVPRankingLeague.intValue(0),
-				PVPRankingBest:   req.PVPRankingBest.intValue(1),
-				PVPRankingWorst:  req.PVPRankingWorst.intValue(4096),
+				ID:        human.ID,
+				ProfileNo: pNo,
+				Ping:      "",
+				Template:  template,
+				PokemonID: pokemonID,
+				Distance:  distance,
+				MinIV:     req.MinIV.intValue(-1),
+				MaxIV:     req.MaxIV.intValue(100),
+				MinCP:     req.MinCP.intValue(0),
+				MaxCP:     req.MaxCP.intValue(9000),
+				MinLevel:  req.MinLevel.intValue(0),
+				MaxLevel:  req.MaxLevel.intValue(55),
+				ATK:       req.ATK.intValue(0),
+				DEF:       req.DEF.intValue(0),
+				STA:       req.STA.intValue(0),
+				MaxATK:    req.MaxATK.intValue(15),
+				MaxDEF:    req.MaxDEF.intValue(15),
+				MaxSTA:    req.MaxSTA.intValue(15),
+				Gender:    req.Gender.intValue(0),
+				Form:      req.Form.intValue(0),
+				// Costume defaults to 9000 (the "any costume" wildcard) when absent
+				// from the request body, so v1 clients that don't send costume
+				// (ReactMap/PoracleWeb, pre-costume-feature scripts) diff cleanly
+				// against existing 9000-backfilled rows instead of being classified
+				// as new inserts (Costume has no `diff` tag — see db.MonsterTrackingAPI).
+				// This is the AUTHORITATIVE v1 absent-costume default (the
+				// MonsterTrackingAPI.UnmarshalJSON guard is defence-in-depth only).
+				Costume:             req.Costume.intValue(9000),
+				Clean:               req.Clean.intValue(0),
+				MinWeight:           req.MinWeight.intValue(0),
+				MaxWeight:           req.MaxWeight.intValue(9000000),
+				MinTime:             req.MinTime.intValue(0),
+				Rarity:              req.Rarity.intValue(-1),
+				MaxRarity:           req.MaxRarity.intValue(6),
+				Size:                req.Size.intValue(-1),
+				MaxSize:             req.MaxSize.intValue(5),
+				PVPRankingLeague:    req.PVPRankingLeague.intValue(0),
+				PVPRankingBest:      req.PVPRankingBest.intValue(1),
+				PVPRankingWorst:     req.PVPRankingWorst.intValue(4096),
 				PVPRankingMinCP:     req.PVPRankingMinCP.intValue(0),
 				PVPRankingCap:       req.PVPRankingCap.intValue(0),
 				PVPRankingEvolution: req.PVPRankingEvolution.intValue(0),
@@ -464,6 +473,7 @@ func toMonsterTracking(api *db.MonsterTrackingAPI) *db.MonsterTracking {
 		Template:         api.Template,
 		PokemonID:        api.PokemonID,
 		Form:             api.Form,
+		Costume:          api.Costume,
 		MinIV:            api.MinIV,
 		MaxIV:            api.MaxIV,
 		MinCP:            api.MinCP,

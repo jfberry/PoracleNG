@@ -126,6 +126,61 @@ func TestCacheStats_DiskHitIncrements(t *testing.T) {
 	}
 }
 
+func TestCache_Intersection_RoundTrip(t *testing.T) {
+	c := newTestCache(t)
+	key := IntersectionCacheKey(52.5, 13.4, 4)
+
+	// Miss before anything is stored.
+	if _, ok := c.GetIntersection(key); ok {
+		t.Fatal("expected intersection miss on fresh cache")
+	}
+
+	c.SetIntersection(key, "Main St & 2nd Ave")
+	got, ok := c.GetIntersection(key)
+	if !ok || got != "Main St & 2nd Ave" {
+		t.Fatalf("GetIntersection after Set: got (%q, %v), want (%q, true)", got, ok, "Main St & 2nd Ave")
+	}
+}
+
+// A negative result ("no intersection here") is a stable fact and must be
+// cached so we don't re-query GeoNames forever for rural stops. The empty
+// string must round-trip as a HIT, distinct from a never-stored MISS.
+func TestCache_Intersection_NegativeCaches(t *testing.T) {
+	c := newTestCache(t)
+	key := IntersectionCacheKey(0, 0, 4)
+
+	c.SetIntersection(key, "")
+	got, ok := c.GetIntersection(key)
+	if !ok {
+		t.Fatal("cached empty intersection should be a HIT, not a miss")
+	}
+	if got != "" {
+		t.Fatalf("GetIntersection: got %q, want empty string", got)
+	}
+}
+
+// Intersection entries share the pogreb DB with addresses but live under a
+// distinct key namespace, so an address key and an intersection key derived
+// from the same coordinates never collide.
+func TestCache_Intersection_NamespaceIsolation(t *testing.T) {
+	c := newTestCache(t)
+	addrKey := CacheKey(52.5, 13.4, 4)
+	isectKey := IntersectionCacheKey(52.5, 13.4, 4)
+	if addrKey == isectKey {
+		t.Fatalf("intersection key %q must differ from address key %q", isectKey, addrKey)
+	}
+
+	c.Set(addrKey, testAddr)
+	c.SetIntersection(isectKey, "A & B")
+
+	if _, ok := c.GetIntersection(addrKey); ok {
+		t.Error("address key should not resolve as an intersection")
+	}
+	if a, ok := c.Get(addrKey); !ok || a.City != "Berlin" {
+		t.Error("address lookup broken by intersection write")
+	}
+}
+
 func TestCache_ClearMemory_Empties(t *testing.T) {
 	c := newTestCache(t)
 

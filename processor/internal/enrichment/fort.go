@@ -176,7 +176,7 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.For
 	}
 
 	// Reverse geocoding
-	e.addGeoResult(m, lat, lon)
+	e.addLocationFields(m, lat, lon)
 
 	// Static map tile — use autopositioned center if available, else original coords
 	mapLat, mapLon := lat, lon

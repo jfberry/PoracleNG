@@ -789,3 +789,37 @@ func TestParsePVP_MegaKeywords(t *testing.T) {
 		}
 	}
 }
+
+// --- everything + costume ---
+
+// `!track everything costume:N` is a genuinely narrowing filter (matching
+// supports costume constraints on the ID-0 catch-all rule), so the bare-
+// everything guard must count it — it used to consult only
+// Singles/Ranges/Types/Gender/PVP and reject the command for non-admins.
+func TestTrack_EverythingWithCostume_Allowed(t *testing.T) {
+	ctx := trackCtx(t)
+	ctx.Config.Tracking.EverythingFlagPermissions = "allow-any"
+	ctx.IsAdmin = false
+
+	replies := runTrack(t, ctx, "everything costume:5")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Monsters.SelectByIDProfile("user1", 1)
+	require.NotEmpty(t, rows)
+	assert.Equal(t, 5, rows[0].Costume, "costume filter should be stored")
+}
+
+// Bare `!track everything` (no narrowing filters) must still be rejected
+// for non-admins.
+func TestTrack_EverythingBare_StillRejected(t *testing.T) {
+	ctx := trackCtx(t)
+	ctx.Config.Tracking.EverythingFlagPermissions = "allow-any"
+	ctx.IsAdmin = false
+
+	replies := runTrack(t, ctx, "everything")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "🙅", replies[0].React, "bare everything should be rejected: %s", replies[0].Text)
+}

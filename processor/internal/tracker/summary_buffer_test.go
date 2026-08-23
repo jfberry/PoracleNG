@@ -203,7 +203,7 @@ func TestSummaryBuffer_SweepExpired_MaxAgeSafetyNet(t *testing.T) {
 	// even though both surviving entries are arbitrarily old.
 	sb2 := NewSummaryBuffer("")
 	sb2.Append("user-1", "quest", BufferedQuest{PokestopID: "ancient", ExpiresAt: 1 << 40, CreatedAt: 1})
-	if removed := sb2.SweepExpired(1 << 30, 0); removed != 0 {
+	if removed := sb2.SweepExpired(1<<30, 0); removed != 0 {
 		t.Errorf("maxAge=0 should disable CreatedAt sweep, got %d removed", removed)
 	}
 }

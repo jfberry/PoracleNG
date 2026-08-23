@@ -13,6 +13,7 @@ type RaidData struct {
 	GymID     string
 	PokemonID int
 	Form      int
+	Costume   int
 	Level     int
 	TeamID    int
 	Ex        bool
@@ -83,6 +84,10 @@ func (m *RaidMatcher) MatchRaid(raid *RaidData, st *state.State) ([]webhook.Matc
 		}
 		// evolution match
 		if r.Evolution != 9000 && r.Evolution != raid.Evolution {
+			continue
+		}
+		// costume match — 9000 = any; else exact (incl. 0 = no costume)
+		if r.Costume != 9000 && r.Costume != raid.Costume {
 			continue
 		}
 		// move match

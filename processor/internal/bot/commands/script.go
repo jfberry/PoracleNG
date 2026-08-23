@@ -347,6 +347,12 @@ func (c *ScriptCommand) questToScript(ctx *bot.CommandContext, prefix string, q 
 		} else {
 			parts = append(parts, "stardust")
 		}
+	case 8: // pokecoins — minimum amount stored in Reward field
+		if q.Reward > 0 {
+			parts = append(parts, fmt.Sprintf("pokecoins:%d", q.Reward))
+		} else {
+			parts = append(parts, "pokecoins")
+		}
 	case 4: // candy
 		if q.Reward > 0 {
 			parts = append(parts, "candy:"+c.pokemonName(ctx, q.Reward))

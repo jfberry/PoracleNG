@@ -61,8 +61,8 @@ func TestSyncRule_PreservesMultiWordParam(t *testing.T) {
 		t.Fatalf("expected 2 fences to create, got %d", len(res.toCreate))
 	}
 	wantArgs := map[string][]string{
-		"Altamont_NY":        {"New York", "Altamont_NY"},
-		"AlbanyDowntown_NY":  {"New York", "AlbanyDowntown_NY"},
+		"Altamont_NY":       {"New York", "Altamont_NY"},
+		"AlbanyDowntown_NY": {"New York", "AlbanyDowntown_NY"},
 	}
 	for _, c := range res.toCreate {
 		want, ok := wantArgs[c.fence.Name]

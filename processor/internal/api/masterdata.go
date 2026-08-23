@@ -1,92 +1,12 @@
 package api
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
-	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
-
-// HandleMasterdataMonsters returns a handler for GET /api/masterdata/monsters.
-// It builds the poracle-v2 format that PoracleWeb expects from the processor's
-// raw masterfile data and translations.
-func HandleMasterdataMonsters(gd *gamedata.GameData, translations *i18n.Bundle) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if gd == nil {
-			c.JSON(http.StatusOK, []any{})
-			return
-		}
-		locale := c.Query("locale")
-		if locale == "" {
-			locale = "en"
-		}
-		tr := translations.For(locale)
-
-		// Collect pokemon names (from form-0 entries).
-		nameMap := make(map[int]string)
-		for key := range gd.Monsters {
-			if _, ok := nameMap[key.ID]; !ok {
-				nameMap[key.ID] = tr.T(fmt.Sprintf("poke_%d", key.ID))
-			}
-		}
-
-		// Build the result keyed by "pokemonID_formID" matching poracle-v2 format.
-		result := make(map[string]*poracle2Monster, len(gd.Monsters))
-		for key, mon := range gd.Monsters {
-			types := make([]poracle2TypeEntry, len(mon.Types))
-			for i, tid := range mon.Types {
-				types[i] = poracle2TypeEntry{
-					ID:   tid,
-					Name: tr.T(fmt.Sprintf("poke_type_%d", tid)),
-				}
-			}
-
-			formName := ""
-			if key.Form != 0 {
-				formName = tr.T(fmt.Sprintf("form_%d", key.Form))
-				// If translation returns the key itself, fall back to empty.
-				if formName == fmt.Sprintf("form_%d", key.Form) {
-					formName = ""
-				}
-			}
-
-			evolutions := make([]poracle2Evo, len(mon.Evolutions))
-			for i, evo := range mon.Evolutions {
-				evolutions[i] = poracle2Evo{
-					EvoID:     evo.PokemonID,
-					ID:        evo.FormID,
-					CandyCost: evo.CandyCost,
-				}
-			}
-
-			mapKey := strconv.Itoa(key.ID) + "_" + strconv.Itoa(key.Form)
-			result[mapKey] = &poracle2Monster{
-				Name:  nameMap[key.ID],
-				ID:    key.ID,
-				Types: types,
-				Form: poracle2FormEntry{
-					Name: formName,
-					ID:   key.Form,
-				},
-				Stats: poracle2Stats{
-					BaseAttack:  mon.Attack,
-					BaseDefense: mon.Defense,
-					BaseStamina: mon.Stamina,
-				},
-				Evolutions: evolutions,
-			}
-		}
-
-		c.JSON(http.StatusOK, result)
-	}
-}
 
 // poracle2Monster matches the poracle-v2 monsters.json format that PoracleWeb expects.
 type poracle2Monster struct {
@@ -118,19 +38,6 @@ type poracle2Evo struct {
 	EvoID     int `json:"evoId"`
 	ID        int `json:"id"`
 	CandyCost int `json:"candyCost"`
-}
-
-// HandleMasterdataGrunts returns a handler for GET /api/masterdata/grunts.
-// It builds the poracle-v2 format that PoracleWeb expects from the processor's
-// classic.json grunt data.
-func HandleMasterdataGrunts(gd *gamedata.GameData) gin.HandlerFunc {
-	// Build the response once since game data is loaded at startup.
-	result := buildGruntsResponse(gd)
-	body, _ := json.Marshal(result)
-
-	return func(c *gin.Context) {
-		c.Data(http.StatusOK, "application/json", body)
-	}
 }
 
 // buildGruntsResponse converts processor Grunt data to the poracle-v2 grunts.json format.

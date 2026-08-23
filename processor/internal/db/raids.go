@@ -17,6 +17,7 @@ type RaidTracking struct {
 	Team                  int            `db:"team"`
 	Exclusive             bool           `db:"exclusive"`
 	Form                  int            `db:"form"`
+	Costume               int            `db:"costume"`
 	Evolution             int            `db:"evolution"`
 	Move                  int            `db:"move"`
 	GymID                 sql.NullString `db:"gym_id"`
@@ -53,7 +54,7 @@ type EggTracking struct {
 func LoadRaids(db *sqlx.DB) ([]*RaidTracking, error) {
 	var raids []RaidTracking
 	err := db.Select(&raids,
-		`SELECT uid, id, profile_no, pokemon_id, level, team, exclusive, form, evolution,
+		`SELECT uid, id, profile_no, pokemon_id, level, team, exclusive, form, costume, evolution,
 		        move, gym_id, distance, COALESCE(template, '') AS template, clean, ping, rsvp_changes,
 		        COALESCE(override_location_label, '') AS override_location_label,
 		        COALESCE(override_areas, '') AS override_areas

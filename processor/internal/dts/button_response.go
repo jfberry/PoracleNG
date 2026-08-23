@@ -108,8 +108,8 @@ func (r *Renderer) BuildLayeredViewFromSnapshot(snap *snapshots.Snapshot) *Layer
 //   - []any of strings   → newline-joined (same as description arrays).
 //   - map[string]any /
 //     []any of anything  → JSON-stringified with HTML escaping off so
-//                          Handlebars expressions containing `<` / `>` /
-//                          `&` survive intact.
+//     Handlebars expressions containing `<` / `>` /
+//     `&` survive intact.
 func inlineTemplateString(v any) (string, bool) {
 	switch t := v.(type) {
 	case string:

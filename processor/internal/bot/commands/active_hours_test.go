@@ -126,9 +126,9 @@ func TestParseSettime_Range(t *testing.T) {
 
 func TestParseSettime_RangeErrors(t *testing.T) {
 	cases := []struct {
-		name   string
-		in     string
-		errIs  string // substring expected in error
+		name  string
+		in    string
+		errIs string // substring expected in error
 	}{
 		{"cross-midnight rejected", "9-5/2", "cross-midnight"},
 		{"equal start/end rejected", "9-9/2", "after start"},

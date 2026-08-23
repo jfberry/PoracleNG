@@ -215,12 +215,32 @@ var typeAliases = map[string][]aliasPair{
 		// Color hex for the embed.
 		{"color", "gruntTypeColor"},
 	},
+	// Showcases render via their own template type. They only need pokestop
+	// identity aliases (the title hardcodes "Showcase"; grunt/reward fields
+	// don't apply). Note: the showcase webhook carries the name in `name`,
+	// which ProcessShowcase copies into `pokestop_name` on the base layer.
+	"showcase": {
+		{"pokestopName", "pokestop_name"},
+		{"pokestopUrl", "pokestop_url"},
+		{"pokestopId", "pokestop_id"},
+		{"name", "pokestop_name"},
+		{"url", "pokestop_url"},
+		{"displayType", "displayTypeId"},
+	},
 	"quest": {
 		{"pokestopName", "pokestop_name"},
 		{"pokestopUrl", "pokestop_url"},
 		{"pokestopId", "pokestop_id"},
 		{"name", "pokestop_name"},
 		{"url", "pokestop_url"},
+		// Legacy PoracleJS snake_case field names. The translated objective,
+		// rewards, and conditions are computed under questString / rewardString
+		// / conditionString; alias the old names so ported PoracleJS quest
+		// templates keep resolving. Aliases outrank the raw webhook layer, so
+		// any scanner-provided quest_task is overridden by our translation.
+		{"quest_task", "questString"},
+		{"quest_reward", "rewardString"},
+		{"quest_conditions", "conditionString"},
 	},
 	"lure": {
 		{"pokestopName", "pokestop_name"},

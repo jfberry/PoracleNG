@@ -4,12 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/pokemon/poracleng/processor/internal/bot"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
-	"github.com/pokemon/poracleng/processor/internal/enrichment"
-	"github.com/pokemon/poracleng/processor/internal/matching"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
@@ -55,8 +51,18 @@ func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage,
 		return ps.processTestRaid(raw, matchedUser)
 	case "invasion":
 		return ps.processTestInvasion(raw, matchedUser)
+	case "incident":
+		return ps.processTestIncident(raw, matchedUser)
+	case "weatherchange":
+		return ps.processTestWeatherChange(raw, matchedUser)
+	case "monster_changed":
+		return ps.processTestMonsterChanged(raw, matchedUser)
 	case "quest":
 		return ps.processTestQuest(raw, matchedUser)
+	case "quest_summary":
+		return ps.processTestQuestSummary(raw, matchedUser)
+	case "rsvp_changes":
+		return ps.processTestRsvpChanges(raw, matchedUser)
 	case "gym":
 		return ps.processTestGym(raw, matchedUser)
 	case "nest":
@@ -67,323 +73,321 @@ func (ps *ProcessorService) ProcessTest(webhookType string, raw json.RawMessage,
 		return ps.processTestMaxbattle(raw, matchedUser)
 	case "pokestop":
 		return ps.processTestPokestop(raw, matchedUser)
+	case "showcase":
+		return ps.processTestShowcase(raw, matchedUser)
 	default:
 		return fmt.Errorf("unsupported test webhook type: %s", webhookType)
 	}
 }
 
-func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webhook.MatchedUser) error {
-	var pokemon webhook.PokemonWebhook
-	if err := json.Unmarshal(raw, &pokemon); err != nil {
-		return fmt.Errorf("parse pokemon: %w", err)
-	}
-
-	rarityGroup := ps.stats.GetRarityGroup(pokemon.PokemonID)
-	processed := matching.ProcessPokemonWebhook(&pokemon, rarityGroup, ps.pvpCfg)
-	enrichmentData, tilePending := ps.enricher.Pokemon(&pokemon, processed, enrichment.TileModeURL)
-
+// renderJobFromEnrich wraps a shared enrichResult into a delivery RenderJob for
+// a single test target. perUser is computed here with the REAL target user
+// (unlike the editor's synthetic user). raw is unused today (enrichment
+// already parsed it) but kept in the signature for symmetry with the
+// enrich* functions and for future derived-type handling (raid RSVP, etc.).
+func (ps *ProcessorService) renderJobFromEnrich(r *enrichResult, target webhook.MatchedUser, alertType string, raw json.RawMessage, isPokemon, isEncountered bool) RenderJob {
 	matched := []webhook.MatchedUser{target}
-	var perLang map[string]map[string]any
-	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.PokemonTranslate(enrichmentData, &pokemon, target.Language),
-		}
+	perLang := map[string]map[string]any{}
+	if r.perLang != nil {
+		perLang[target.Language] = r.perLang
 	}
-
 	var perUser map[string]map[string]any
-	if ps.enricher.PVPDisplay != nil && perLang != nil {
+	if isPokemon && ps.enricher.PVPDisplay != nil && r.perLang != nil {
 		perUser = ps.enricher.PokemonPerUser(perLang, matched)
 	}
+	return RenderJob{
+		AlertType:         alertType,
+		TemplateType:      r.templateType,
+		IsPokemon:         isPokemon,
+		IsEncountered:     isEncountered,
+		Enrichment:        r.base,
+		PerLangEnrichment: perLang,
+		PerUserEnrichment: perUser,
+		WebhookFields:     r.webhookFields,
+		MatchedUsers:      matched,
+		MatchedAreas:      []webhook.MatchedArea{},
+		TileGate:          ps.newTileGate(r.tilePending),
+		LogReference:      "test",
+	}
+}
 
-	log.Infof("[Test] Pokemon %d at [%.3f,%.3f] → %s %s", pokemon.PokemonID, pokemon.Latitude, pokemon.Longitude, target.Type, target.ID)
-
+func (ps *ProcessorService) processTestPokemon(raw json.RawMessage, target webhook.MatchedUser) error {
+	r, err := ps.enrichPokemon(raw, target.Language, false)
+	if err != nil {
+		return err
+	}
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
-	webhookFields := parseWebhookFields(raw)
-	ps.renderCh <- RenderJob{
-		AlertType:         "pokemon",
-		IsPokemon:         true,
-		IsEncountered:     processed.Encountered,
-		Enrichment:        enrichmentData,
-		PerLangEnrichment: perLang,
-		PerUserEnrichment: perUser,
-		WebhookFields:     webhookFields,
-		MatchedUsers:      matched,
-		MatchedAreas:      []webhook.MatchedArea{},
-		TileGate:          ps.newTileGate(tilePending),
-		LogReference:      "test",
+	isEncountered := false
+	if v, ok := r.extras["encountered"].(bool); ok {
+		isEncountered = v
 	}
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "pokemon", raw, true, isEncountered)
 	return nil
 }
 
 func (ps *ProcessorService) processTestRaid(raw json.RawMessage, target webhook.MatchedUser) error {
-	var raid webhook.RaidWebhook
-	if err := json.Unmarshal(raw, &raid); err != nil {
-		return fmt.Errorf("parse raid: %w", err)
+	// isEgg=false: the actual type is always determined by raid.PokemonID
+	// inside enrichRaid (isEgg only forces "egg" for the explicit /api/test
+	// "egg" webhookType passthrough, which this test path never uses since
+	// both "raid" and "egg" webhookType route here and let the payload decide).
+	// freshenStaleTime=false: preserves this path's pre-existing behaviour of
+	// never bumping a stale Start/End window (see enrichRaid's doc comment).
+	r, err := ps.enrichRaid(raw, target.Language, false, false)
+	if err != nil {
+		return err
 	}
-
-	// Always determine type from webhook data — test data uses "raid" for both
-	var msgType string
-	if raid.PokemonID > 0 {
-		msgType = "raid"
-	} else {
-		msgType = "egg"
-	}
-
-	enrichmentData, tilePending := ps.enricher.Raid(&raid, true, enrichment.TileModeURL)
-	matched := []webhook.MatchedUser{target}
-
-	var perLang map[string]map[string]any
-	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.RaidTranslate(enrichmentData, &raid, target.Language),
-		}
-	}
-
-	log.Infof("[Test] %s level %d at [%.3f,%.3f] → %s %s", msgType, raid.Level, raid.Latitude, raid.Longitude, target.Type, target.ID)
-
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
-	webhookFields := parseWebhookFields(raw)
-	ps.renderCh <- RenderJob{
-		AlertType:         msgType,
-		TemplateType:      msgType,
-		Enrichment:        enrichmentData,
-		PerLangEnrichment: perLang,
-		WebhookFields:     webhookFields,
-		MatchedUsers:      matched,
-		MatchedAreas:      []webhook.MatchedArea{},
-		TileGate:          ps.newTileGate(tilePending),
-		LogReference:      "test",
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, r.templateType, raw, false, false)
+	return nil
+}
+
+// processTestRsvpChanges handles !poracle-test rsvp-changes,<id> (wire type
+// "rsvp_changes" — see resolveDTSTypeFromRaw). Mirrors the compact
+// rsvpChanges RenderJob ProcessRaid constructs (cmd/processor/raid.go) for
+// prior-tracked users who should get the RSVP-only update instead of the
+// full raid/egg template: TemplateType "rsvpChanges", OverrideCleanTTH set
+// to the latest future RSVP timeslot (computed by enrichRsvpChanges), and
+// the same raidlife EditKey/ReplyKey convention so a test send lines up with
+// any live raid/egg message already tracked for the same gym+end lifecycle.
+// freshenStaleTime=false mirrors processTestRaid's pre-existing convention
+// of never bumping a stale Start/End window on the live /api/test path (see
+// enrichRaid's doc comment for the full rationale).
+func (ps *ProcessorService) processTestRsvpChanges(raw json.RawMessage, target webhook.MatchedUser) error {
+	r, err := ps.enrichRsvpChanges(raw, target.Language, false)
+	if err != nil {
+		return err
 	}
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+
+	var raid webhook.RaidWebhook
+	if err := json.Unmarshal(raw, &raid); err != nil {
+		return fmt.Errorf("parse rsvp changes: %w", err)
+	}
+
+	job := ps.renderJobFromEnrich(r, target, "raid", raw, false, false)
+	job.TemplateType = "rsvpChanges"
+	job.EditKey = fmt.Sprintf(raidEditKeyFmt, raid.GymID, raid.End)
+	job.ReplyKey = fmt.Sprintf(raidReplyKeyFmt, raid.GymID, raid.End)
+	// OverrideCleanTTH is only set when we have a real future timeslot —
+	// mirrors ProcessRaid's own "0 means use the default path" convention
+	// (see enrichRsvpChanges's doc comment).
+	if tth, ok := r.extras["overrideCleanTTH"].(int64); ok && tth > 0 {
+		job.OverrideCleanTTH = tth
+	}
+
+	ps.renderCh <- job
 	return nil
 }
 
 func (ps *ProcessorService) processTestInvasion(raw json.RawMessage, target webhook.MatchedUser) error {
-	var inv webhook.InvasionWebhook
-	if err := json.Unmarshal(raw, &inv); err != nil {
-		return fmt.Errorf("parse invasion: %w", err)
+	// freshenStaleTime=false: preserves this path's pre-existing behaviour of
+	// never bumping a stale IncidentExpiration (see enrichInvasion's doc comment).
+	r, err := ps.enrichInvasion(raw, target.Language, false)
+	if err != nil {
+		return err
 	}
-
-	expiration := inv.IncidentExpiration
-	if expiration == 0 {
-		expiration = inv.IncidentExpireTimestamp
-	}
-	gruntTypeID := inv.IncidentGruntType
-	if gruntTypeID == 0 {
-		gruntTypeID = inv.GruntType
-	}
-
-	displayType := inv.DisplayType
-	if displayType == 0 {
-		displayType = inv.IncidentDisplayType
-	}
-	enrichmentData, tilePending := ps.enricher.Invasion(inv.Latitude, inv.Longitude, expiration, inv.PokestopID, inv.URL, gruntTypeID, displayType, 0, enrichment.TileModeURL)
-	matched := []webhook.MatchedUser{target}
-
-	var perLang map[string]map[string]any
-	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.InvasionTranslate(enrichmentData, inv.Latitude, inv.Longitude, gruntTypeID, inv.Lineup, inv.ShowcaseRankings, target.Language),
-		}
-	}
-
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
-	webhookFields := parseWebhookFields(raw)
-	ps.renderCh <- RenderJob{
-		AlertType:         "invasion",
-		TemplateType:      "invasion",
-		Enrichment:        enrichmentData,
-		PerLangEnrichment: perLang,
-		WebhookFields:     webhookFields,
-		MatchedUsers:      matched,
-		MatchedAreas:      []webhook.MatchedArea{},
-		TileGate:          ps.newTileGate(tilePending),
-		LogReference:      "test",
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "invasion", raw, false, false)
+	return nil
+}
+
+func (ps *ProcessorService) processTestIncident(raw json.RawMessage, target webhook.MatchedUser) error {
+	// freshenStaleTime=false: mirrors processTestInvasion's pre-existing
+	// behaviour of never bumping a stale IncidentExpiration/ExpireTimestamp
+	// (see enrichInvasion's doc comment; enrichIncident shares the same flag).
+	r, err := ps.enrichIncident(raw, target.Language, false)
+	if err != nil {
+		return err
 	}
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "incident", raw, false, false)
+	return nil
+}
+
+// processTestWeatherChange handles !poracle-test weatherchange,<id>. Like
+// processTestIncident, freshenStaleTime=false preserves this path's
+// pre-existing convention of never bumping stale timestamps in the live test
+// path (see enrichPokemon's doc comment for the full rationale); the
+// per-affected-pokemon disappear_time freshening !poracle-test needs instead
+// happens in bot/commands/poracletest.go before ProcessTest is even called
+// (mirroring how it freshens disappear_time/start/end for the other types).
+func (ps *ProcessorService) processTestWeatherChange(raw json.RawMessage, target webhook.MatchedUser) error {
+	r, err := ps.enrichWeatherChange(raw, target.Language, false)
+	if err != nil {
+		return err
+	}
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "weatherchange", raw, false, false)
+	return nil
+}
+
+// processTestMonsterChanged handles !poracle-test monster-changed,<id> (wire
+// type "monster_changed" — see resolveDTSTypeFromRaw). Unlike the live path
+// (dispatchPokemonAlert in cmd/processor/pokemon.go), which buckets
+// prior-only users into a monsterChanged render only after
+// tracker.EncounterTracker.Track detects a real diff between two sightings
+// of the same encounter_id, this renders the testdata partial's
+// already-distinct old/new pair straight through: enrichMonsterChanged
+// builds the `new` state (base/perLang, same as a plain pokemon test send)
+// plus the {{original.X}} view from `old`. The resulting RenderJob carries
+// IsChange=true / OriginalView so it goes through
+// dtsRenderer.RenderPokemonChanged exactly like a live change notification
+// would (see processRenderJob's IsChange branch).
+func (ps *ProcessorService) processTestMonsterChanged(raw json.RawMessage, target webhook.MatchedUser) error {
+	// freshenStaleTime=false: mirrors processTestPokemon's pre-existing
+	// convention of never bumping a stale DisappearTime on the live
+	// /api/test path (see enrichPokemon's doc comment).
+	r, err := ps.enrichMonsterChanged(raw, target.Language, false)
+	if err != nil {
+		return err
+	}
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+
+	var partial monsterChangedPartial
+	if err := json.Unmarshal(raw, &partial); err != nil {
+		return fmt.Errorf("parse monster changed: %w", err)
+	}
+	// Peek encounter_id off `new` for ReplyKey — mirrors the live path,
+	// where every pokemon RenderJob carries ReplyKey = encounterID so a
+	// later change can find the prior message via the reply index.
+	var newPeek struct {
+		EncounterID string `json:"encounter_id"`
+	}
+	_ = json.Unmarshal(partial.New, &newPeek) // best-effort; empty ReplyKey just skips reply-threading
+
+	isEncountered := false
+	if v, ok := r.extras["encountered"].(bool); ok {
+		isEncountered = v
+	}
+
+	job := ps.renderJobFromEnrich(r, target, "pokemon", partial.New, true, isEncountered)
+	job.IsChange = true
+	job.TemplateType = "monsterChanged"
+	// ChangeType is logging-only (see RenderJob.ChangeType doc). Prefer the
+	// bucket enrichMonsterChanged computed from old/new (extras["changeType"]);
+	// fall back to the "test" placeholder if it's ever missing.
+	job.ChangeType = "test"
+	if ct, ok := r.extras["changeType"].(string); ok && ct != "" {
+		job.ChangeType = ct
+	}
+	job.ReplyKey = newPeek.EncounterID
+	if original, ok := r.extras["original"].(map[string]any); ok {
+		job.OriginalView = original
+	}
+
+	ps.renderCh <- job
+	return nil
+}
+
+func (ps *ProcessorService) processTestShowcase(raw json.RawMessage, target webhook.MatchedUser) error {
+	// Shares the exact enrichment core with the editor's /api/dts/enrich path
+	// (enrichForType -> enrichShowcase). AlertType is "incident" — showcases
+	// are tracked, rate-limited and blocked as incidents — while the
+	// enrichResult's templateType is the dedicated "showcase" display model.
+	r, err := ps.enrichShowcase(raw, target.Language, false)
+	if err != nil {
+		return err
+	}
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "incident", raw, false, false)
 	return nil
 }
 
 func (ps *ProcessorService) processTestQuest(raw json.RawMessage, target webhook.MatchedUser) error {
-	var quest webhook.QuestWebhook
-	if err := json.Unmarshal(raw, &quest); err != nil {
-		return fmt.Errorf("parse quest: %w", err)
+	r, err := ps.enrichQuest(raw, target.Language)
+	if err != nil {
+		return err
 	}
-
-	rewards := make([]matching.QuestRewardData, 0, len(quest.Rewards))
-	for _, r := range quest.Rewards {
-		rewards = append(rewards, parseQuestReward(r))
-	}
-	enrichmentData, tilePending := ps.enricher.Quest(quest.Latitude, quest.Longitude, quest.PokestopID, quest.URL, rewards, enrichment.TileModeURL)
-
-	var perLang map[string]map[string]any
-	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.QuestTranslate(enrichmentData, &quest, rewards, target.Language),
-		}
-	}
-
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
-	webhookFields := parseWebhookFields(raw)
-	ps.renderCh <- RenderJob{
-		AlertType:         "quest",
-		TemplateType:      "quest",
-		Enrichment:        enrichmentData,
-		PerLangEnrichment: perLang,
-		WebhookFields:     webhookFields,
-		MatchedUsers:      []webhook.MatchedUser{target},
-		MatchedAreas:      []webhook.MatchedArea{},
-		TileGate:          ps.newTileGate(tilePending),
-		LogReference:      "test",
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "quest", raw, false, false)
+	return nil
+}
+
+// processTestQuestSummary handles !poracle-test quest-summary,<id> (wire
+// type "quest_summary" — see resolveDTSTypeFromRaw). Unlike the live
+// scheduler (DispatchQuestSummary), which pulls buffered quests from the
+// SummaryBuffer, groups them by (rewardType, reward, form), and dispatches
+// one questSummary message per group via DispatchBypass, this test path
+// renders exactly the single already-grouped reward the testdata partial
+// supplies (see enrichQuestSummary) through the standard renderCh/RenderAlert
+// pipeline used by every other !poracle-test handler — so a test digest
+// goes through the normal render pool and rate limiting like any other test
+// alert, rather than bypassing it the way a real scheduled summary does.
+func (ps *ProcessorService) processTestQuestSummary(raw json.RawMessage, target webhook.MatchedUser) error {
+	r, err := ps.enrichQuestSummary(raw, target.Language, false)
+	if err != nil {
+		return err
 	}
+	if ps.renderCh == nil {
+		return fmt.Errorf("render queue not available")
+	}
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, AlertTypeQuest, raw, false, false)
 	return nil
 }
 
 func (ps *ProcessorService) processTestGym(raw json.RawMessage, target webhook.MatchedUser) error {
-	var gym webhook.GymWebhook
-	if err := json.Unmarshal(raw, &gym); err != nil {
-		return fmt.Errorf("parse gym: %w", err)
+	r, err := ps.enrichGym(raw, target.Language)
+	if err != nil {
+		return err
 	}
-
-	gymID := gym.GymID
-	if gymID == "" {
-		gymID = gym.ID
-	}
-	teamID := gym.TeamID
-	if teamID == 0 {
-		teamID = gym.Team
-	}
-
-	inBattle := bool(gym.IsInBattle) || bool(gym.InBattle)
-	enrichmentData, tilePending := ps.enricher.Gym(gym.Latitude, gym.Longitude, teamID, 0, gym.SlotsAvailable, -1, inBattle, false, gymID, enrichment.TileModeURL)
-	matched := []webhook.MatchedUser{target}
-
-	var perLang map[string]map[string]any
-	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = map[string]map[string]any{
-			// Test path has no team-change context, so suppress previousControl* fields.
-			target.Language: ps.enricher.GymTranslate(enrichmentData, gym.Latitude, gym.Longitude, teamID, -1, -1, target.Language),
-		}
-	}
-
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
-	webhookFields := parseWebhookFields(raw)
-	ps.renderCh <- RenderJob{
-		AlertType:         "gym",
-		TemplateType:      "gym",
-		Enrichment:        enrichmentData,
-		PerLangEnrichment: perLang,
-		WebhookFields:     webhookFields,
-		MatchedUsers:      matched,
-		MatchedAreas:      []webhook.MatchedArea{},
-		TileGate:          ps.newTileGate(tilePending),
-		LogReference:      "test",
-	}
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "gym", raw, false, false)
 	return nil
 }
 
 func (ps *ProcessorService) processTestNest(raw json.RawMessage, target webhook.MatchedUser) error {
-	var nest webhook.NestWebhook
-	if err := json.Unmarshal(raw, &nest); err != nil {
-		return fmt.Errorf("parse nest: %w", err)
+	r, err := ps.enrichNest(raw, target.Language)
+	if err != nil {
+		return err
 	}
-
-	enrichmentData, tilePending := ps.enricher.Nest(&nest, enrichment.TileModeURL)
-	matched := []webhook.MatchedUser{target}
-
-	var perLang map[string]map[string]any
-	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.NestTranslate(enrichmentData, &nest, target.Language),
-		}
-	}
-
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
-	webhookFields := parseWebhookFields(raw)
-	ps.renderCh <- RenderJob{
-		AlertType:         "nest",
-		TemplateType:      "nest",
-		Enrichment:        enrichmentData,
-		PerLangEnrichment: perLang,
-		WebhookFields:     webhookFields,
-		MatchedUsers:      matched,
-		MatchedAreas:      []webhook.MatchedArea{},
-		TileGate:          ps.newTileGate(tilePending),
-		LogReference:      "test",
-	}
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "nest", raw, false, false)
 	return nil
 }
 
 func (ps *ProcessorService) processTestFort(raw json.RawMessage, target webhook.MatchedUser) error {
-	var fort webhook.FortWebhook
-	if err := json.Unmarshal(raw, &fort); err != nil {
-		return fmt.Errorf("parse fort: %w", err)
+	r, err := ps.enrichFort(raw, target.Language)
+	if err != nil {
+		return err
 	}
-
-	enrichmentData, tilePending := ps.enricher.FortUpdate(fort.Latitude(), fort.Longitude(), fort.FortID(), &fort, enrichment.TileModeURL)
-	perLang := map[string]map[string]any{
-		target.Language: ps.enricher.FortUpdateTranslate(fort.Latitude(), fort.Longitude(), target.Language),
-	}
-
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
-	webhookFields := parseWebhookFields(raw)
-	ps.renderCh <- RenderJob{
-		AlertType:         "fort-update",
-		TemplateType:      "fort-update",
-		Enrichment:        enrichmentData,
-		PerLangEnrichment: perLang,
-		WebhookFields:     webhookFields,
-		MatchedUsers:      []webhook.MatchedUser{target},
-		MatchedAreas:      []webhook.MatchedArea{},
-		TileGate:          ps.newTileGate(tilePending),
-		LogReference:      "test",
-	}
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "fort-update", raw, false, false)
 	return nil
 }
 
 func (ps *ProcessorService) processTestMaxbattle(raw json.RawMessage, target webhook.MatchedUser) error {
-	var mb webhook.MaxbattleWebhook
-	if err := json.Unmarshal(raw, &mb); err != nil {
-		return fmt.Errorf("parse maxbattle: %w", err)
+	r, err := ps.enrichMaxbattle(raw, target.Language)
+	if err != nil {
+		return err
 	}
-
-	enrichmentData, tilePending := ps.enricher.Maxbattle(mb.Latitude, mb.Longitude, mb.BattleEnd, &mb, enrichment.TileModeURL)
-	matched := []webhook.MatchedUser{target}
-
-	var perLang map[string]map[string]any
-	if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-		perLang = map[string]map[string]any{
-			target.Language: ps.enricher.MaxbattleTranslate(enrichmentData, &mb, target.Language),
-		}
-	}
-
 	if ps.renderCh == nil {
 		return fmt.Errorf("render queue not available")
 	}
-	webhookFields := parseWebhookFields(raw)
-	ps.renderCh <- RenderJob{
-		AlertType:         "maxbattle",
-		TemplateType:      "maxbattle",
-		Enrichment:        enrichmentData,
-		PerLangEnrichment: perLang,
-		WebhookFields:     webhookFields,
-		MatchedUsers:      matched,
-		MatchedAreas:      []webhook.MatchedArea{},
-		TileGate:          ps.newTileGate(tilePending),
-		LogReference:      "test",
-	}
+	ps.renderCh <- ps.renderJobFromEnrich(r, target, "maxbattle", raw, false, false)
 	return nil
 }
 
@@ -398,33 +402,14 @@ func (ps *ProcessorService) processTestPokestop(raw json.RawMessage, target webh
 	}
 
 	if peek.LureExpiration > 0 {
-		var lure webhook.LureWebhook
-		if err := json.Unmarshal(raw, &lure); err != nil {
-			return fmt.Errorf("parse lure: %w", err)
-		}
-		enrichmentData, tilePending := ps.enricher.Lure(&lure, enrichment.TileModeURL)
-		matched := []webhook.MatchedUser{target}
-		var perLang map[string]map[string]any
-		if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-			perLang = map[string]map[string]any{
-				target.Language: ps.enricher.LureTranslate(enrichmentData, &lure, target.Language),
-			}
+		r, err := ps.enrichLure(raw, target.Language)
+		if err != nil {
+			return err
 		}
 		if ps.renderCh == nil {
 			return fmt.Errorf("render queue not available")
 		}
-		webhookFields := parseWebhookFields(raw)
-		ps.renderCh <- RenderJob{
-			AlertType:         "lure",
-			TemplateType:      "lure",
-			Enrichment:        enrichmentData,
-			PerLangEnrichment: perLang,
-			WebhookFields:     webhookFields,
-			MatchedUsers:      matched,
-			MatchedAreas:      []webhook.MatchedArea{},
-			TileGate:          ps.newTileGate(tilePending),
-			LogReference:      "test",
-		}
+		ps.renderCh <- ps.renderJobFromEnrich(r, target, "lure", raw, false, false)
 		return nil
 	}
 
@@ -459,6 +444,14 @@ func resolveDTSTypeFromRaw(webhookType string, raw json.RawMessage) string {
 		return "fort-update"
 	case "max_battle":
 		return "maxbattle"
+	case "showcase":
+		return "showcase"
+	case "quest_summary":
+		return "questSummary"
+	case "monster_changed":
+		return "monsterChanged"
+	case "rsvp_changes":
+		return "rsvpChanges"
 	default:
 		return webhookType
 	}

@@ -33,6 +33,16 @@
       "choices": null
     },
     {
+      "type": 4,
+      "name": "pokecoins",
+      "description": "Pokecoin reward (minimum amount)",
+      "channel_types": null,
+      "required": false,
+      "options": null,
+      "autocomplete": false,
+      "choices": null
+    },
+    {
       "type": 3,
       "name": "candy",
       "description": "Candy reward pokemon",

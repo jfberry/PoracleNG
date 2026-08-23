@@ -43,7 +43,7 @@ func (e *Enricher) Gym(lat, lon float64, teamID, oldTeamID, slotsAvailable, oldS
 	e.addMapURLs(m, lat, lon, "gyms", gymID)
 
 	// Reverse geocoding
-	e.addGeoResult(m, lat, lon)
+	e.addLocationFields(m, lat, lon)
 
 	// Static map tile
 	pending := e.addStaticMap(m, "gym", lat, lon, map[string]any{

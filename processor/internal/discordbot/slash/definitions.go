@@ -498,6 +498,7 @@ func trackOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		cleanOpt(bundle, "track", "Auto-delete the alert when the pokemon despawns"),
 		templateOpt(bundle, "track"),
 		stringOpt(bundle, "track.form", "form", "Pokemon form", false, true),
+		stringOpt(bundle, "track.costume", "costume", "Pokemon costume", false, true),
 		{
 			Type:                     discordgo.ApplicationCommandOptionString,
 			Name:                     sizeName,
@@ -539,6 +540,8 @@ func raidOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		distanceOpt(bundle, "raid"),
 		cleanOpt(bundle, "raid", "Auto-delete the alert when the raid expires"),
 		templateOpt(bundle, "raid"),
+		stringOpt(bundle, "raid.form", "form", "Raid boss form", false, true),
+		stringOpt(bundle, "raid.costume", "costume", "Raid boss costume", false, true),
 	}
 	return append(opts, trackerLocationAreaOpts(bundle)...)
 }
@@ -588,6 +591,7 @@ func questOptions(bundle *i18n.Bundle) []*discordgo.ApplicationCommandOption {
 		stringOpt(bundle, "quest.pokemon", "pokemon", "Pokemon reward", false, true),
 		stringOpt(bundle, "quest.item", "item", "Item reward (e.g. golden razz berry)", false, true),
 		intOpt(bundle, "quest.stardust", "stardust", "Stardust reward (minimum amount)", false),
+		intOpt(bundle, "quest.pokecoins", "pokecoins", "Pokecoin reward (minimum amount)", false),
 		stringOpt(bundle, "quest.candy", "candy", "Candy reward pokemon", false, true),
 		stringOpt(bundle, "quest.mega_energy", "mega_energy", "Mega energy reward pokemon", false, true),
 		// xl_candy intentionally omitted — matching/quest.go and

@@ -66,7 +66,7 @@ func paCacheStats(ctx *bot.CommandContext) []bot.Reply {
 	total := s.HitsMemory + s.HitsDisk + s.Misses
 	var hitRate int
 	if total > 0 {
-		hitRate = int((s.HitsMemory+s.HitsDisk)*100 / total)
+		hitRate = int((s.HitsMemory + s.HitsDisk) * 100 / total)
 	}
 
 	var sb strings.Builder

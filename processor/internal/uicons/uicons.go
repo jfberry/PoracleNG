@@ -32,6 +32,7 @@ type Index struct {
 	Egg            map[string]bool
 	RewardItem     map[string]bool
 	RewardStardust map[string]bool
+	RewardPokecoin map[string]bool
 	RewardCandy    map[string]bool
 	RewardXlCandy  map[string]bool
 	RewardMega     map[string]bool
@@ -123,6 +124,7 @@ func (u *Uicons) fetchIndex() {
 		Reward *struct {
 			Item     []string `json:"item"`
 			Stardust []string `json:"stardust"`
+			Pokecoin []string `json:"pokecoin"`
 			Candy    []string `json:"candy"`
 			XlCandy  []string `json:"xl_candy"`
 			Mega     []string `json:"mega_resource"`
@@ -150,12 +152,14 @@ func (u *Uicons) fetchIndex() {
 	if raw.Reward != nil {
 		idx.RewardItem = toSet(raw.Reward.Item)
 		idx.RewardStardust = toSet(raw.Reward.Stardust)
+		idx.RewardPokecoin = toSet(raw.Reward.Pokecoin)
 		idx.RewardCandy = toSet(raw.Reward.Candy)
 		idx.RewardXlCandy = toSet(raw.Reward.XlCandy)
 		idx.RewardMega = toSet(raw.Reward.Mega)
 	} else {
 		idx.RewardItem = map[string]bool{}
 		idx.RewardStardust = map[string]bool{}
+		idx.RewardPokecoin = map[string]bool{}
 		idx.RewardCandy = map[string]bool{}
 		idx.RewardXlCandy = map[string]bool{}
 		idx.RewardMega = map[string]bool{}
@@ -276,6 +280,15 @@ func (u *Uicons) RewardStardustIcon(amount int) string {
 		return u.url + "/reward/stardust/" + file
 	}
 	return fmt.Sprintf("%s/rewards/reward_stardust.%s", u.url, u.imageType)
+}
+
+// RewardPokecoinIcon resolves the URL for a pokecoin reward icon.
+func (u *Uicons) RewardPokecoinIcon(amount int) string {
+	if idx := u.index.Load(); idx != nil {
+		file := resolveItemIcon(idx.RewardPokecoin, u.imageType, amount, 0)
+		return u.url + "/reward/pokecoin/" + file
+	}
+	return fmt.Sprintf("%s/rewards/reward_pokecoin.%s", u.url, u.imageType)
 }
 
 // RewardCandyIcon resolves the URL for a candy reward icon.

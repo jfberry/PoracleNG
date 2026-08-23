@@ -116,6 +116,7 @@ type raidInsertRequest struct {
 	Team                  flexInt           `json:"team"`
 	Exclusive             flexBool          `json:"exclusive"`
 	Form                  flexInt           `json:"form"`
+	Costume               flexInt           `json:"costume"`
 	Move                  flexInt           `json:"move"`
 	Evolution             flexInt           `json:"evolution"`
 	GymID                 *string           `json:"gym_id"`
@@ -227,6 +228,11 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 			}
 			tmpl, dist, team, clean, excl, move, evo, gymID, rsvp := buildRaidCommon(req)
 
+			// Costume defaults to 9000 (the "any costume" wildcard) when absent,
+			// so v1 clients that don't send it never create no-costume rules and
+			// re-submits diff cleanly (Costume has no `diff` tag).
+			costume := req.Costume.intValue(9000)
+
 			// pokemon_form expansion
 			if len(req.PokemonForm) > 0 {
 				for _, pf := range req.PokemonForm {
@@ -245,6 +251,7 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 						RSVPChanges:           rsvp,
 						PokemonID:             pf.PokemonID,
 						Form:                  pf.Form,
+						Costume:               costume,
 						Level:                 9000,
 						OverrideLocationLabel: req.OverrideLocationLabel,
 						OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
@@ -284,6 +291,7 @@ func HandleCreateRaid(deps *TrackingDeps) gin.HandlerFunc {
 					RSVPChanges:           rsvp,
 					PokemonID:             pokemonID,
 					Form:                  form,
+					Costume:               costume,
 					Level:                 level,
 					OverrideLocationLabel: req.OverrideLocationLabel,
 					OverrideAreas:         normalizeOverrideAreas(req.OverrideAreas),
@@ -479,6 +487,7 @@ func toRaidTracking(api *db.RaidTrackingAPI) *db.RaidTracking {
 		Team:        api.Team,
 		PokemonID:   api.PokemonID,
 		Form:        api.Form,
+		Costume:     api.Costume,
 		Level:       api.Level,
 		Exclusive:   bool(api.Exclusive),
 		Move:        api.Move,

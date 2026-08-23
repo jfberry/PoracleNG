@@ -966,6 +966,15 @@ func (ts *TemplateStore) LogSummary() {
 		}
 	}
 	for key := range seen {
+		// Platform-agnostic types (help) are selected by topic id
+		// (help/fort, help/track, …), not via the per-platform
+		// default-template fallback, so having no default is expected — not a
+		// misconfiguration. Warning here is noise (the render-time
+		// "no DTS template found … no default template configured" error in
+		// renderForUsers remains the real safety net for alert types).
+		if IsPlatformAgnosticType(key.typ) {
+			continue
+		}
 		if !hasDefault[key] {
 			log.Warnf("DTS: no default template for type=%q platform=%q", key.typ, key.platform)
 		}
@@ -1057,6 +1066,22 @@ func entryKey(e *DTSEntry) string {
 	return e.Type + "|" + e.Platform + "|" + e.Language + "|" + strings.ToLower(e.ID.String())
 }
 
+// platformAgnosticTypes are DTS template types whose bundled fallbacks carry
+// an empty platform ("") — they render the same regardless of destination
+// platform, so a user override should stay platform-agnostic too. Keeping an
+// override agnostic makes its entryKey match the fallback's, so the override
+// cleanly shadows the fallback instead of appearing as a second entry. Today
+// only "help" (per-command help text, loaded from fallbacks/dts/help/*.json)
+// is agnostic; add future agnostic types here.
+var platformAgnosticTypes = map[string]bool{"help": true}
+
+// IsPlatformAgnosticType reports whether a DTS type is platform-agnostic and
+// may therefore be saved with an empty platform. Non-agnostic types (monster,
+// raid, …) still require a concrete platform on save.
+func IsPlatformAgnosticType(dtsType string) bool {
+	return platformAgnosticTypes[dtsType]
+}
+
 // dedupEntriesPreferLast returns a slice containing each entry keyed by
 // entryKey, keeping only the last occurrence. Load order is
 // fallback → config/dts.json → config/dts/*.json, so the "last" entry is
@@ -1098,13 +1123,18 @@ func dedupEntriesPreferLast(entries []DTSEntry) []DTSEntry {
 }
 
 // entryFilename generates a filename for saving an entry to config/dts/.
-// Format: {type}-{id}-{platform}[-{lang}].json
+// Format: {type}-{id}[-{platform}][-{lang}].json. The platform segment is
+// omitted for platform-agnostic entries (empty platform) so they get a clean
+// "help-fort.json" rather than a trailing-dash "help-fort-.json".
 func entryFilename(e *DTSEntry) string {
 	id := strings.ToLower(e.ID.String())
 	if id == "" {
 		id = "default"
 	}
-	name := e.Type + "-" + id + "-" + e.Platform
+	name := e.Type + "-" + id
+	if e.Platform != "" {
+		name += "-" + e.Platform
+	}
 	if e.Language != "" {
 		name += "-" + e.Language
 	}
@@ -1265,23 +1295,37 @@ func (ts *TemplateStore) DeleteEntry(filterType, filterPlatform, filterLanguage,
 	target := DTSEntry{Type: filterType, Platform: filterPlatform, Language: filterLanguage, ID: jsonID(filterID)}
 	targetKey := entryKey(&target)
 
+	// Prefer the last non-readonly match: a user override shares its key
+	// with the readonly fallback it shadows (the documented workflow for
+	// platform-agnostic types), so a forward first-match scan would bail
+	// with "readonly" before ever reaching the override. Only report
+	// readonly when every matching entry is a fallback.
 	var sourceFile string
 	found := false
-	for i := range ts.entries {
+	readonlyMatch := (*DTSEntry)(nil)
+	for i := len(ts.entries) - 1; i >= 0; i-- {
 		e := &ts.entries[i]
-		if entryKey(e) == targetKey {
-			if e.Readonly {
-				ts.mu.Unlock()
-				return fmt.Errorf("template %s/%s/%s/%s is readonly", e.Type, e.Platform, e.ID, e.Language)
-			}
-			sourceFile = e.sourceFile
-			ts.entries = append(ts.entries[:i], ts.entries[i+1:]...)
-			ts.cache = make(map[string]*raymond.Template)
-			ts.sourceCache = make(map[string]string)
-			ts.tileUsage = make(map[string]bool)
-			found = true
-			break
+		if entryKey(e) != targetKey {
+			continue
 		}
+		if e.Readonly {
+			if readonlyMatch == nil {
+				readonlyMatch = e
+			}
+			continue
+		}
+		sourceFile = e.sourceFile
+		ts.entries = append(ts.entries[:i], ts.entries[i+1:]...)
+		ts.cache = make(map[string]*raymond.Template)
+		ts.sourceCache = make(map[string]string)
+		ts.tileUsage = make(map[string]bool)
+		found = true
+		break
+	}
+	if !found && readonlyMatch != nil {
+		e := readonlyMatch
+		ts.mu.Unlock()
+		return fmt.Errorf("template %s/%s/%s/%s is readonly", e.Type, e.Platform, e.ID, e.Language)
 	}
 
 	configDir := ts.configDir

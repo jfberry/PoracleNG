@@ -31,3 +31,13 @@ linters:
       # by passing the error to the callback which returns nil.
       - linters: [errcheck]
         text: "Error return value of `filepath\\.WalkDir` is not checked"
+
+# Enforce gofmt formatting on every `golangci-lint run` (and CI) so unformatted
+# code fails the gate. `gofmt` here matches `go fmt` (no -s simplify), so the
+# check stays consistent with the standard `go fmt ./...` sweep.
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      simplify: false

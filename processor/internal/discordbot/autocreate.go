@@ -105,7 +105,6 @@ type applyAutocreateResult struct {
 	ChannelsCreated       int // channel had to be created (not reused)
 	ChannelsReused        int // channel was found and reused as-is
 	ChannelsReset         int // channel was reused with tracking reset (interactive / reset keyword)
-	ChannelsMoved         int // channel adopted from another category and moved into the canonical one
 	ThreadsCreated        int // thread had to be created (or would-be in dry-run)
 	ThreadsReused         int // thread was found and reused as-is
 	ThreadsReset          int // thread was reused with tracking reset
@@ -460,36 +459,14 @@ func (b *Bot) applyAutocreate(
 		// tweaked tracking is preserved.
 		var channel *discordgo.Channel
 		var channelReused bool
-		// Look in the chosen category first; if the channel exists somewhere
-		// else in the guild (stranded under a stale category from a previous
-		// run, or moved by an admin), adopt it and move it into the canonical
-		// category rather than creating a duplicate.
+		// Reuse a channel only when it already lives UNDER THIS CATEGORY, so a
+		// re-run of !autocreate is idempotent. We deliberately do NOT adopt a
+		// same-named channel from elsewhere in the guild: channels routinely
+		// share names across categories (e.g. City 1/100 and City 2/100), so a
+		// guild-wide name match would relocate an unrelated channel into this
+		// category. When the name isn't found under this category, create anew.
 		existingID := snap.findChannel(categoryID, channelName)
-		var movedFromParent string
-		if existingID == "" {
-			if anyID, otherParent := snap.findChannelAnyParent(channelName); anyID != "" && otherParent != categoryID {
-				existingID = anyID
-				movedFromParent = otherParent
-			}
-		}
 		if existingID != "" {
-			if movedFromParent != "" {
-				result.ChannelsMoved++
-				if opts.DryRun {
-					rep.Info(fmt.Sprintf(">> [dry-run] Would move existing channel %s into category %s", channelName, categoryID))
-					snap.removeChannel(existingID, movedFromParent, channelName)
-					snap.addChannel(existingID, categoryID, channelName)
-				} else {
-					if _, err := s.ChannelEditComplex(existingID, &discordgo.ChannelEdit{ParentID: categoryID}); err != nil {
-						rep.Warn(fmt.Sprintf("Failed to move channel %s into %s: %v", channelName, categoryID, err))
-						result.Errors = append(result.Errors, err)
-					} else {
-						rep.Info(fmt.Sprintf(">> Moved existing channel %s into %s", channelName, categoryID))
-						snap.removeChannel(existingID, movedFromParent, channelName)
-						snap.addChannel(existingID, categoryID, channelName)
-					}
-				}
-			}
 			if opts.ResetOnReuse {
 				result.ChannelsReset++
 				rep.Info(fmt.Sprintf(">> Reusing existing channel %s — resetting tracking", channelName))
@@ -670,11 +647,30 @@ func (b *Bot) applyAutocreate(
 	return result
 }
 
+// reportCommandFailures surfaces failed command replies (🙅 react) through
+// the reporter. Both autocreate paths need this: the bulk runner discards
+// replies entirely, and the interactive path's synthetic reply message has
+// no message ID, so the failure react can never be attached. Without this
+// a broken command in a template (typo, unrecognized filter) runs silently.
+func reportCommandFailures(rep reporter, expanded string, replies []bot.Reply) {
+	for _, r := range replies {
+		if r.React != "🙅" {
+			continue
+		}
+		text := r.Text
+		if text == "" {
+			text = "command failed"
+		}
+		rep.Warn(fmt.Sprintf("❌ %s: %s", expanded, text))
+	}
+}
+
 // runOneAutocreateCommand parses one !-prefixed command string and
 // executes it through the shared registry as the named target. Used by
 // both the per-channel and per-thread command-execution loops.
-// rep is used to surface unknown-command warnings in both interactive and
-// bulk paths (the bulk path has no Discord channel to send to directly).
+// rep is used to surface unknown-command and failed-command warnings in
+// both interactive and bulk paths (the bulk path has no Discord channel
+// to send to directly).
 func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, actor *autocreateActor, rep reporter, guildID, targetID, targetName, targetType, expanded string) {
 	parsed := b.Parser.Parse(b.Cfg.Discord.Prefix + expanded)
 	for _, pc := range parsed {
@@ -695,37 +691,37 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, actor *autocreateAct
 		}
 
 		ctx := &bot.CommandContext{
-			UserID:        actor.UserID,
-			UserName:      actor.UserName,
-			Platform:      "discord",
-			ChannelID:     actor.ChannelID,
-			GuildID:       guildID,
-			IsDM:          false,
-			IsAdmin:       true,
-			Language:      b.Cfg.General.Locale,
-			ProfileNo:     1,
-			TargetID:      targetID,
-			TargetName:    targetName,
-			TargetType:    targetType,
-			HasArea:       hasArea,
-			HasLocation:   hasLocation,
-			DB:            b.DB,
-			Humans:        b.Humans,
-			Tracking:      b.Tracking,
-			Config:        b.Cfg,
-			StateMgr:      b.StateMgr,
-			GameData:      b.GameData,
-			Translations:  b.Translations,
-			RowText:       b.RowText,
-			Resolver:      b.Resolver,
-			ArgMatcher:    b.ArgMatcher,
-			Geocoder:      b.Geocoder,
-			StaticMap:     b.StaticMap,
-			Weather:       b.Weather,
-			Stats:         b.Stats,
-			DTS:           b.DTS,
-			Emoji:         b.Emoji,
-			NLP:           b.nlpParser,
+			UserID:             actor.UserID,
+			UserName:           actor.UserName,
+			Platform:           "discord",
+			ChannelID:          actor.ChannelID,
+			GuildID:            guildID,
+			IsDM:               false,
+			IsAdmin:            true,
+			Language:           b.Cfg.General.Locale,
+			ProfileNo:          1,
+			TargetID:           targetID,
+			TargetName:         targetName,
+			TargetType:         targetType,
+			HasArea:            hasArea,
+			HasLocation:        hasLocation,
+			DB:                 b.DB,
+			Humans:             b.Humans,
+			Tracking:           b.Tracking,
+			Config:             b.Cfg,
+			StateMgr:           b.StateMgr,
+			GameData:           b.GameData,
+			Translations:       b.Translations,
+			RowText:            b.RowText,
+			Resolver:           b.Resolver,
+			ArgMatcher:         b.ArgMatcher,
+			Geocoder:           b.Geocoder,
+			StaticMap:          b.StaticMap,
+			Weather:            b.Weather,
+			Stats:              b.Stats,
+			DTS:                b.DTS,
+			Emoji:              b.Emoji,
+			NLP:                b.nlpParser,
 			TestProcessor:      b.TestProcessor,
 			Registry:           b.Registry,
 			ReloadFunc:         b.ReloadFunc,
@@ -745,16 +741,29 @@ func (b *Bot) runOneAutocreateCommand(s *discordgo.Session, actor *autocreateAct
 		}
 
 		replies := handler.Run(ctx, pc.Args)
-		// For the interactive path (actor has a ChannelID) send replies back
-		// to the originating channel. For the bulk path (no ChannelID) there
-		// is no Discord message to reference, so replies are discarded here —
-		// the reporter collects all user-visible output instead.
+		reportCommandFailures(rep, expanded, replies)
+		// For the interactive path (actor has a ChannelID) send the
+		// remaining (non-failure) replies back to the originating channel —
+		// failures were already surfaced with command context via the
+		// reporter above. For the bulk path (no ChannelID) there is no
+		// Discord message to reference, so replies are discarded here — the
+		// reporter collects all user-visible output instead.
 		if actor.ChannelID != "" {
+			var rest []bot.Reply
+			for _, r := range replies {
+				if r.React == "🙅" {
+					continue
+				}
+				rest = append(rest, r)
+			}
+			if len(rest) == 0 {
+				continue
+			}
 			synth := &discordgo.MessageCreate{Message: &discordgo.Message{
 				ChannelID: actor.ChannelID,
 				Author:    &discordgo.User{ID: actor.UserID, Username: actor.UserName},
 			}}
-			b.sendReplies(s, synth, replies)
+			b.sendReplies(s, synth, rest)
 		}
 	}
 }
@@ -1349,9 +1358,9 @@ func formatSyncSummary(r SyncOneRuleResult) string {
 	if r.CategoriesCreated > 0 {
 		fmt.Fprintf(&b, "Categories: %d created\n", r.CategoriesCreated)
 	}
-	if r.ChannelsCreated+r.ChannelsMoved+r.ChannelsReset+r.ChannelsRemoved+r.ChannelsTemplateOrphan > 0 {
-		fmt.Fprintf(&b, "Channels: %d created, %d moved, %d reset, %d removed, %d reused\n",
-			r.ChannelsCreated, r.ChannelsMoved, r.ChannelsReset, r.ChannelsRemoved, r.ChannelsReused)
+	if r.ChannelsCreated+r.ChannelsReset+r.ChannelsRemoved+r.ChannelsTemplateOrphan > 0 {
+		fmt.Fprintf(&b, "Channels: %d created, %d reset, %d removed, %d reused\n",
+			r.ChannelsCreated, r.ChannelsReset, r.ChannelsRemoved, r.ChannelsReused)
 		if r.ChannelsTemplateOrphan > 0 {
 			fmt.Fprintf(&b, "  (%d cached channel(s) no longer in template — re-run with `removals` to delete; rule.remove_missing must also be true)\n",
 				r.ChannelsTemplateOrphan)

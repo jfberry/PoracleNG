@@ -340,6 +340,31 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 		return autocomplete.IVRange(focused)
 	case opt == "boss" && cmd == "raid":
 		return autocomplete.RaidBoss(context.Background(), d.deps, focused, userLang)
+	// /raid costume is a flat, non-species-scoped list, same shape as
+	// /track costume. On empty focused with a resolvable sibling `boss`
+	// (raid has no `pokemon` option), it boosts that boss's recently-seen
+	// raid costumes to the top.
+	case opt == "costume" && cmd == "raid":
+		base := autocomplete.Costume(context.Background(), d.deps, focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			if pid := autocomplete.ResolvePokemonID(d.deps, siblingOptionString(ic, "boss")); pid > 0 {
+				base = autocomplete.PrependRecentCostumes(base, d.deps, d.deps.RecentActivity.RecentRaidCostumes(pid), userLang)
+			}
+		}
+		return base
+	// /raid form cascades from the sibling `boss` option (raid has no
+	// `pokemon` option), same shape as /track form. On empty focused with a
+	// resolvable boss, it boosts that boss's recently-seen raid forms to the
+	// top via the raid-specific RecentRaidForms bucket (not the spawn
+	// RecentForms bucket).
+	case opt == "form" && cmd == "raid":
+		base := autocomplete.Form(context.Background(), d.deps, siblingOptionString(ic, "boss"), focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			if pid := autocomplete.ResolvePokemonID(d.deps, siblingOptionString(ic, "boss")); pid > 0 {
+				base = autocomplete.PrependRecentForms(base, d.deps, d.deps.RecentActivity.RecentRaidForms(pid), userLang)
+			}
+		}
+		return base
 	case opt == "template":
 		return autocomplete.Template(context.Background(), d.deps, focused, dtsTypeFor(cmd), "discord", userLang)
 	case opt == "tracking" && cmd == "untrack":
@@ -397,10 +422,30 @@ func (d *Dispatcher) routeAutocomplete(cmd, opt, focused, userLang string, ic *d
 	case opt == "type" && cmd == "incident":
 		return autocomplete.IncidentType(context.Background(), d.deps, focused, userLang)
 	// /track form cascades from the user's currently-selected pokemon
-	// option in the same interaction.
+	// option in the same interaction. On empty focused, also boosts the
+	// forms recently seen on that pokemon (RecentActivity.RecentForms) to
+	// the top of the list.
 	case opt == "form" && cmd == "track":
 		pokemonValue := siblingOptionString(ic, "pokemon")
-		return autocomplete.Form(context.Background(), d.deps, pokemonValue, focused, userLang)
+		base := autocomplete.Form(context.Background(), d.deps, pokemonValue, focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			if pid := autocomplete.ResolvePokemonID(d.deps, pokemonValue); pid > 0 {
+				base = autocomplete.PrependRecentForms(base, d.deps, d.deps.RecentActivity.RecentForms(pid), userLang)
+			}
+		}
+		return base
+	// /track costume is a flat, non-species-scoped list (unlike form), so
+	// it doesn't cascade from the selected pokemon option for filtering.
+	// On empty focused with a resolvable sibling pokemon, it does
+	// optionally boost that pokemon's recently-seen costumes to the top.
+	case opt == "costume" && cmd == "track":
+		base := autocomplete.Costume(context.Background(), d.deps, focused, userLang)
+		if focused == "" && d.deps != nil && d.deps.RecentActivity != nil {
+			if pid := autocomplete.ResolvePokemonID(d.deps, siblingOptionString(ic, "pokemon")); pid > 0 {
+				base = autocomplete.PrependRecentCostumes(base, d.deps, d.deps.RecentActivity.RecentCostumes(pid), userLang)
+			}
+		}
+		return base
 	// Tracker location: autocomplete from the user's saved named locations.
 	// Used by the `location` option on all 10 tracker commands so a user can
 	// pick a saved location by name rather than typing coordinates.

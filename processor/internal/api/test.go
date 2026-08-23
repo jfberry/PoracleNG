@@ -2,10 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"net/http"
-
-	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
 )
@@ -37,40 +33,5 @@ func (t testTargetJSON) toBotTarget() bot.TestTarget {
 		Template:  t.Template,
 		Latitude:  t.Latitude,
 		Longitude: t.Longitude,
-	}
-}
-
-// HandleTest returns a handler for POST /api/test.
-// The test endpoint accepts a webhook + target, runs it through the normal
-// enrichment pipeline (skipping matching/dedup), and sends the enriched
-// result for the specified target user via the render pipeline.
-func HandleTest(proc bot.TestProcessor) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		body, err := c.GetRawData()
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read body"})
-			return
-		}
-
-		var req TestRequest
-		if err := json.Unmarshal(body, &req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
-			return
-		}
-
-		if req.Type == "" || req.Webhook == nil || req.Target.ID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "type, webhook, and target.id are required"})
-			return
-		}
-
-		log.Infof("[Test] Processing %s test for %s %s", req.Type, req.Target.Type, req.Target.ID)
-
-		if err := proc.ProcessTest(req.Type, req.Webhook, req.Target.toBotTarget()); err != nil {
-			log.Errorf("[Test] Failed to process %s test: %s", req.Type, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	}
 }

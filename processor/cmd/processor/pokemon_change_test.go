@@ -317,20 +317,29 @@ func TestRebuildMatchedUserForChange_InheritsClean(t *testing.T) {
 	})
 	ps.humans = humans
 
-	got := ps.rebuildMatchedUserForChange("user-1", 1)
+	got := ps.rebuildMatchedUserForChange("user-1", 1, "5")
 	if got == nil {
 		t.Fatalf("rebuildMatchedUserForChange returned nil for a registered enabled human")
 	}
 	if got.Clean != 1 {
 		t.Errorf("Clean = %d, want 1 (inherited from prior tracked message)", got.Clean)
 	}
+	if got.Template != "5" {
+		t.Errorf("Template = %q, want 5 (inherited so monsterChanged uses the same template, not the default)", got.Template)
+	}
 	if got.ID != "user-1" || got.Type != "discord:user" || got.Name != "Tester" {
 		t.Errorf("identity fields wrong: %+v", *got)
 	}
 
+	// Empty template (user was on config default) stays empty → resolves to
+	// default at render time, same as the original alert did.
+	if got := ps.rebuildMatchedUserForChange("user-1", 1, ""); got == nil || got.Template != "" {
+		t.Errorf("empty template should be preserved as empty, got %+v", got)
+	}
+
 	// Disabled humans drop out so their reply-index entry expires naturally.
 	humans.AddHuman(&store.Human{ID: "user-2", Enabled: false})
-	if got := ps.rebuildMatchedUserForChange("user-2", 1); got != nil {
+	if got := ps.rebuildMatchedUserForChange("user-2", 1, "5"); got != nil {
 		t.Errorf("disabled human should produce nil MatchedUser, got %+v", *got)
 	}
 }

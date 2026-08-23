@@ -11,17 +11,19 @@ import (
 // TranslateMonsterNames adds translated pokemon/form names to the enrichment map.
 // Uses pogo-translations identifier keys: poke_{id}, form_{formId}.
 // Also sets *Eng fields using the English translator from the bundle.
-func TranslateMonsterNames(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, pokemonID, form, evolution int) {
-	translateMonsterNamesWithEng(m, gd, tr, nil, pokemonID, form, evolution)
+// costume is woven into fullName/fullNameEng when > 0 — pass 0 for hypothetical
+// entries (PVP ranks, evolutions, disguises) that aren't the spawned pokemon.
+func TranslateMonsterNames(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, pokemonID, form, evolution, costume int) {
+	translateMonsterNamesWithEng(m, gd, tr, nil, pokemonID, form, evolution, costume)
 }
 
 // TranslateMonsterNamesEng is like TranslateMonsterNames but also sets *Eng
 // fields using the English translator from the bundle.
-func TranslateMonsterNamesEng(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, bundle *i18n.Bundle, pokemonID, form, evolution int) {
-	translateMonsterNamesWithEng(m, gd, tr, bundle, pokemonID, form, evolution)
+func TranslateMonsterNamesEng(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, bundle *i18n.Bundle, pokemonID, form, evolution, costume int) {
+	translateMonsterNamesWithEng(m, gd, tr, bundle, pokemonID, form, evolution, costume)
 }
 
-func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, bundle *i18n.Bundle, pokemonID, form, evolution int) {
+func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i18n.Translator, bundle *i18n.Bundle, pokemonID, form, evolution, costume int) {
 	nameKeys := gd.MonsterNameKeys(pokemonID, form, evolution)
 
 	// Translated name
@@ -45,7 +47,7 @@ func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i
 	// "Mega Charizard X") since that gives a fully localised mega name.
 	// Fall back to the util.json format pattern for species without a
 	// dedicated translation.
-	m["fullName"] = buildFullName(tr, nameKeys, name, formNormalised, pokemonID, evolution)
+	m["fullName"] = buildFullName(tr, nameKeys, name, formNormalised, pokemonID, evolution, costume)
 
 	// English names for templates that show both translated + English
 	if bundle != nil {
@@ -65,28 +67,58 @@ func translateMonsterNamesWithEng(m map[string]any, gd *gamedata.GameData, tr *i
 		m["nameEng"] = enName
 		m["formNameEng"] = enFormName
 		m["formNormalisedEng"] = enFormNormalised
-		m["fullNameEng"] = buildFullName(enTr, nameKeys, enName, enFormNormalised, pokemonID, evolution)
+		m["fullNameEng"] = buildFullName(enTr, nameKeys, enName, enFormNormalised, pokemonID, evolution, costume)
 	}
 }
 
 // buildFullName constructs a pokemon's localized display name. For mega/primal
 // evolutions it first tries the combo key poke_{id}_e{evolution} and falls
 // back to applying the util.json MegaName format pattern to the base+form name.
-func buildFullName(tr *i18n.Translator, nameKeys gamedata.MonsterNameInfo, name, formNormalised string, pokemonID, evolution int) string {
+//
+// costume, when > 0, appends the translated costume name in parentheses (e.g.
+// "Pikachu (Holiday 2016)"). Pass 0 for hypothetical entries (PVP ranks,
+// evolutions, disguises, previous evolutions) that aren't the spawned pokemon
+// actually wearing the costume.
+func buildFullName(tr *i18n.Translator, nameKeys gamedata.MonsterNameInfo, name, formNormalised string, pokemonID, evolution, costume int) string {
+	var fullName string
 	if evolution > 0 && tr != nil {
 		comboKey := fmt.Sprintf("poke_%d_e%d", pokemonID, evolution)
 		if translated := tr.T(comboKey); translated != comboKey && translated != "" {
-			return translated
+			fullName = translated
 		}
 	}
-	fullName := name
-	if formNormalised != "" {
-		fullName = name + " " + formNormalised
+	if fullName == "" {
+		fullName = name
+		if formNormalised != "" {
+			fullName = name + " " + formNormalised
+		}
+		if evolution > 0 {
+			fullName = i18n.Format(nameKeys.MegaNamePattern, fullName)
+		}
 	}
-	if evolution > 0 {
-		fullName = i18n.Format(nameKeys.MegaNamePattern, fullName)
+	if costume > 0 && tr != nil {
+		costumeKey := gamedata.CostumeTranslationKey(costume)
+		if cn := tr.T(costumeKey); cn != "" && cn != costumeKey {
+			fullName = fullName + " (" + cn + ")"
+		}
 	}
 	return fullName
+}
+
+// costumeDisplayName returns the translated costume name for a costume id (via
+// costume_{id}), or "" when the id is ≤ 0 (no costume) or the key doesn't
+// resolve. Used to populate the standalone costumeName field consistently
+// across pokemon/raid/maxbattle enrichment (fullName already appends it inline
+// via buildFullName).
+func costumeDisplayName(tr *i18n.Translator, costume int) string {
+	if costume <= 0 || tr == nil {
+		return ""
+	}
+	key := gamedata.CostumeTranslationKey(costume)
+	if cn := tr.T(key); cn != "" && cn != key {
+		return cn
+	}
+	return ""
 }
 
 // BuildFullNameWithAlignment composes a localised pokemon display name
@@ -103,8 +135,11 @@ func buildFullName(tr *i18n.Translator, nameKeys gamedata.MonsterNameInfo, name,
 //	alignment=0 → "Mega Charizard X"
 //	alignment=1 → "Shadow Mega Charizard X"
 //	alignment=2 → "Purified Alolan Vulpix"
-func BuildFullNameWithAlignment(tr *i18n.Translator, nameKeys gamedata.MonsterNameInfo, name, formNormalised string, pokemonID, evolution, alignment int) string {
-	base := buildFullName(tr, nameKeys, name, formNormalised, pokemonID, evolution)
+//
+// costume is passed through to buildFullName unchanged (see its doc for when
+// to pass a non-zero value).
+func BuildFullNameWithAlignment(tr *i18n.Translator, nameKeys gamedata.MonsterNameInfo, name, formNormalised string, pokemonID, evolution, alignment, costume int) string {
+	base := buildFullName(tr, nameKeys, name, formNormalised, pokemonID, evolution, costume)
 	if alignment <= 0 {
 		return base
 	}

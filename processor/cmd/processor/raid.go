@@ -76,6 +76,12 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 		// Record the boss for slash autocomplete recency (no-op when ID is 0/egg).
 		if ps.recentActivity != nil {
 			ps.recentActivity.RecordRaidBoss(raid.PokemonID)
+			if raid.Costume > 0 {
+				ps.recentActivity.RecordRaidCostume(raid.PokemonID, raid.Costume)
+			}
+			if raid.Form > 0 {
+				ps.recentActivity.RecordRaidForm(raid.PokemonID, raid.Form)
+			}
 		}
 
 		// ignore_long_raids: skip raids/eggs with > 47 minutes remaining
@@ -99,6 +105,7 @@ func (ps *ProcessorService) ProcessRaid(raw json.RawMessage) error {
 				GymID:     raid.GymID,
 				PokemonID: raid.PokemonID,
 				Form:      raid.Form,
+				Costume:   raid.Costume,
 				Level:     raid.Level,
 				TeamID:    raid.TeamID,
 				Ex:        ex,

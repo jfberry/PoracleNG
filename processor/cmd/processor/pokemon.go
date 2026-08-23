@@ -53,6 +53,14 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		ivScanned := pokemon.IndividualAttack != nil
 		isShiny := pokemon.Shiny != nil && *pokemon.Shiny
 		ps.stats.RecordSighting(pokemon.PokemonID, ivScanned, isShiny)
+		if ps.recentActivity != nil {
+			if pokemon.Costume > 0 {
+				ps.recentActivity.RecordCostume(pokemon.PokemonID, pokemon.Costume)
+			}
+			if pokemon.Form > 0 {
+				ps.recentActivity.RecordForm(pokemon.PokemonID, pokemon.Form)
+			}
+		}
 
 		// Duplicate check
 		verified := pokemon.Verified || pokemon.DisappearTimeVerified
@@ -69,31 +77,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 		}
 
 		// Encounter tracking (change detection)
-		atk, def, sta := 0, 0, 0
-		if pokemon.IndividualAttack != nil {
-			atk = *pokemon.IndividualAttack
-		}
-		if pokemon.IndividualDefense != nil {
-			def = *pokemon.IndividualDefense
-		}
-		if pokemon.IndividualStamina != nil {
-			sta = *pokemon.IndividualStamina
-		}
-		weather := pokemon.Weather
-		if pokemon.BoostedWeather > 0 {
-			weather = pokemon.BoostedWeather
-		}
-		encounterState := tracker.EncounterState{
-			PokemonID:     pokemon.PokemonID,
-			Form:          pokemon.Form,
-			Gender:        pokemon.Gender,
-			Weather:       weather,
-			CP:            pokemon.CP,
-			ATK:           atk,
-			DEF:           def,
-			STA:           sta,
-			DisappearTime: pokemon.DisappearTime,
-		}
+		encounterState := tracker.EncounterStateFromPokemon(&pokemon)
 
 		// Get rarity group
 		rarityGroup := ps.stats.GetRarityGroup(pokemon.PokemonID)
@@ -211,7 +195,7 @@ func (ps *ProcessorService) ProcessPokemon(raw json.RawMessage) error {
 					// Prior already TTL-evicted; original is gone, nothing to reply to.
 					continue
 				}
-				if u := ps.rebuildMatchedUserForChange(targetID, prior.Clean); u != nil {
+				if u := ps.rebuildMatchedUserForChange(targetID, prior.Clean, prior.Template); u != nil {
 					priorOnlyUsers = append(priorOnlyUsers, *u)
 				}
 			}
@@ -416,13 +400,23 @@ func changeTypeBucket(t tracker.ChangeType) string {
 	return "species"
 }
 
+// changeTypeText resolves the translated changeTypeText string for a given
+// bucket ("stats"/"species") in the given language. Shared by the live
+// per-language change-notification path (perLangWithChangeFields) and the
+// monsterChanged derived test/editor-preview path (enrichMonsterChanged in
+// enrich.go), so the "change_type_text_" + bucket translation-key
+// convention lives in exactly one place.
+func (ps *ProcessorService) changeTypeText(lang, bucket string) string {
+	return ps.translatorFor(lang).T("change_type_text_" + bucket)
+}
+
 // perLangWithChangeFields returns a per-language enrichment map that
 // adds `changeType` and `changeTypeText` to the slot for `lang`,
 // leaving other languages shared by reference. Used only for
 // monsterChanged RenderJobs so the fields don't leak into `monster`
 // jobs that share the upstream perLang map.
 func (ps *ProcessorService) perLangWithChangeFields(perLang map[string]map[string]any, lang, bucket string) map[string]map[string]any {
-	text := ps.translatorFor(lang).T("change_type_text_" + bucket)
+	text := ps.changeTypeText(lang, bucket)
 
 	if perLang == nil {
 		return map[string]map[string]any{
@@ -445,12 +439,13 @@ func (ps *ProcessorService) perLangWithChangeFields(perLang map[string]map[strin
 
 // rebuildMatchedUserForChange synthesises a MatchedUser for a target
 // that had a prior alert for this encounter but no longer matches.
-// Clean is inherited from the prior tracked message so the
-// monsterChanged reply follows the same auto-delete behaviour as
-// the original. Template / Ping / Distance stay at zero values —
-// the T1 tracking rule isn't known here. Returns nil for unknown
-// or disabled humans; their reply-index entry expires on its own.
-func (ps *ProcessorService) rebuildMatchedUserForChange(targetID string, clean int) *webhook.MatchedUser {
+// Clean and Template are inherited from the prior tracked message so the
+// monsterChanged reply follows the same auto-delete behaviour AND uses the
+// same DTS template name as the original alert (rather than falling back to
+// the default). Ping / Distance stay at zero values — the T1 tracking rule
+// isn't known here. Returns nil for unknown or disabled humans; their
+// reply-index entry expires on its own.
+func (ps *ProcessorService) rebuildMatchedUserForChange(targetID string, clean int, template string) *webhook.MatchedUser {
 	if ps.humans == nil {
 		return nil
 	}
@@ -467,6 +462,7 @@ func (ps *ProcessorService) rebuildMatchedUserForChange(targetID string, clean i
 		Name:     human.Name,
 		Language: effectiveLanguage(webhook.MatchedUser{Language: human.Language}, ps.cfg.General.Locale),
 		Clean:    clean,
+		Template: template,
 	}
 }
 

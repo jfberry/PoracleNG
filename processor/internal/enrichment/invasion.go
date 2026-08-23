@@ -91,7 +91,7 @@ func (e *Enricher) Invasion(lat, lon float64, expiration int64, pokestopID, poke
 	e.addMapURLs(m, lat, lon, "pokestops", pokestopID)
 
 	// Reverse geocoding
-	e.addGeoResult(m, lat, lon)
+	e.addLocationFields(m, lat, lon)
 
 	// Grunt and display type IDs for DTS templates
 	m["gruntTypeId"] = gruntTypeID
@@ -276,7 +276,7 @@ func (e *Enricher) InvasionTranslate(base map[string]any, lat, lon float64, grun
 		lineupMonsters := make([]map[string]any, 0, len(lineup))
 		for _, entry := range lineup {
 			nameInfo := make(map[string]any)
-			TranslateMonsterNames(nameInfo, gd, tr, entry.PokemonID, entry.Form, 0)
+			TranslateMonsterNames(nameInfo, gd, tr, entry.PokemonID, entry.Form, 0, 0)
 			lineupMonsters = append(lineupMonsters, map[string]any{
 				"id":       entry.PokemonID,
 				"formId":   entry.Form,
@@ -404,7 +404,7 @@ func (e *Enricher) translateContestEntry(ce contestEntry, gd *gamedata.GameData,
 	entry["formName"] = formName
 
 	// fullName: alignment prefix + base+form + mega wrap
-	entry["fullName"] = BuildFullNameWithAlignment(tr, nameKeys, pokemonName, formNormalised, ce.PokemonID, ce.TempEvolution, ce.Alignment)
+	entry["fullName"] = BuildFullNameWithAlignment(tr, nameKeys, pokemonName, formNormalised, ce.PokemonID, ce.TempEvolution, ce.Alignment, 0)
 
 	// Costume name (costume_N key from gamelocale)
 	costumeName := ""
@@ -435,7 +435,7 @@ func (e *Enricher) translateContestEntry(ce contestEntry, gd *gamedata.GameData,
 	tempEvolutionName := ""
 	if ce.TempEvolution > 0 {
 		// Already reflected in fullName via buildFullName; expose raw name too.
-		tempEvolutionName = buildFullName(tr, nameKeys, pokemonName, formNormalised, ce.PokemonID, ce.TempEvolution)
+		tempEvolutionName = buildFullName(tr, nameKeys, pokemonName, formNormalised, ce.PokemonID, ce.TempEvolution, 0)
 	}
 	entry["tempEvolutionName"] = tempEvolutionName
 
@@ -472,7 +472,7 @@ func (e *Enricher) translateEncounterSlot(entries []gamedata.GruntEncounterEntry
 	result := make([]map[string]any, len(entries))
 	for i, enc := range entries {
 		nameInfo := make(map[string]any)
-		TranslateMonsterNames(nameInfo, gd, tr, enc.ID, enc.FormID, 0)
+		TranslateMonsterNames(nameInfo, gd, tr, enc.ID, enc.FormID, 0, 0)
 		result[i] = map[string]any{
 			"id":       enc.ID,
 			"formId":   enc.FormID,

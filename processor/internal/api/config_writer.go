@@ -49,6 +49,8 @@ func writeConfigTOML(configDir string, updates map[string]any) (backupRel string
 		return "", fmt.Errorf("parse config.toml: %w", err)
 	}
 
+	migrateLegacyLoggingKeys(rawMap)
+
 	applySchemaUpdates(rawMap, updates)
 
 	// JSON unmarshal gives float64 for every number — including
@@ -86,6 +88,45 @@ func writeConfigTOML(configDir string, updates map[string]any) (backupRel string
 	}
 
 	return backupRel, nil
+}
+
+// migrateLegacyLoggingKeys collapses the legacy Winston-era logging keys
+// (`log_level`, `console_log_level`) into the canonical `level` before the
+// file is rewritten. Those keys aren't in the schema, so without this they'd
+// be preserved verbatim on every save — accumulating contradictory shadow
+// entries (e.g. level="debug" alongside log_level="info"), which is exactly
+// how the web editor left operator files.
+//
+// Precedence mirrors the load-time fallback (config.go): an explicit `level`
+// wins; otherwise the value migrates from `log_level`, then
+// `console_log_level`, so a save that doesn't touch the logging section can't
+// silently drop the setting. Runs before applySchemaUpdates so the editor's
+// own `level` value (and its default-elision) still has the final say.
+func migrateLegacyLoggingKeys(rawMap map[string]any) {
+	logging, ok := rawMap["logging"].(map[string]any)
+	if !ok {
+		return
+	}
+	_, hasLog := logging["log_level"]
+	_, hasConsole := logging["console_log_level"]
+	if !hasLog && !hasConsole {
+		return
+	}
+
+	level, _ := logging["level"].(string)
+	if level == "" {
+		if lv, _ := logging["log_level"].(string); lv != "" {
+			level = lv
+		} else if lv, _ := logging["console_log_level"].(string); lv != "" {
+			level = lv
+		}
+	}
+
+	delete(logging, "log_level")
+	delete(logging, "console_log_level")
+	if level != "" {
+		logging["level"] = level
+	}
 }
 
 // applySchemaUpdates walks the updates and applies them to rawMap.

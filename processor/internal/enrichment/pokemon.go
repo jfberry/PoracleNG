@@ -185,7 +185,7 @@ func (e *Enricher) Pokemon(pokemon *webhook.PokemonWebhook, processed *matching.
 	}
 
 	// Reverse geocoding
-	e.addGeoResult(m, pokemon.Latitude, pokemon.Longitude)
+	e.addLocationFields(m, pokemon.Latitude, pokemon.Longitude)
 
 	// Static map tile
 	weather := pokemon.BoostedWeather
@@ -344,8 +344,12 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 		return m
 	}
 
-	// Pokemon name, form name, full name
-	TranslateMonsterNamesEng(m, gd, tr, e.Translations, pokemon.PokemonID, pokemon.Form, 0)
+	// Pokemon name, form name, full name — costume is woven into fullName here
+	// since this is the spawned pokemon itself (not a hypothetical rank/evolution).
+	TranslateMonsterNamesEng(m, gd, tr, e.Translations, pokemon.PokemonID, pokemon.Form, 0, pokemon.Costume)
+
+	// Costume name — empty when unset (0) or the translation key doesn't resolve.
+	m["costumeName"] = costumeDisplayName(tr, pokemon.Costume)
 
 	// Type names
 	TranslateTypeNames(m, tr, enTr, monster.Types)
@@ -429,7 +433,7 @@ func (e *Enricher) PokemonTranslate(base map[string]any, pokemon *webhook.Pokemo
 	if dpID, ok := base["disguisePokemonId"].(int); ok {
 		dpForm, _ := base["disguiseFormId"].(int)
 		disguiseM := make(map[string]any)
-		TranslateMonsterNames(disguiseM, gd, tr, dpID, dpForm, 0)
+		TranslateMonsterNames(disguiseM, gd, tr, dpID, dpForm, 0, 0)
 		m["disguisePokemonName"] = disguiseM["name"]
 		m["disguiseFormName"] = disguiseM["formName"]
 	}
@@ -505,7 +509,7 @@ func (e *Enricher) enrichPvpRankings(m map[string]any, gd *gamedata.GameData, tr
 			mon := gd.GetMonster(rank.Pokemon, formID)
 			if mon != nil {
 				nameInfo := make(map[string]any)
-				TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, rank.Pokemon, formID, rank.Evolution)
+				TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, rank.Pokemon, formID, rank.Evolution, 0)
 				entry["name"] = nameInfo["name"]
 				entry["fullName"] = nameInfo["fullName"]
 				entry["formName"] = nameInfo["formName"]
@@ -572,7 +576,7 @@ func (e *Enricher) buildEvolutions(gd *gamedata.GameData, tr *i18n.Translator, p
 			}
 
 			nameInfo := make(map[string]any)
-			TranslateMonsterNames(nameInfo, gd, tr, evo.PokemonID, evo.FormID, 0)
+			TranslateMonsterNames(nameInfo, gd, tr, evo.PokemonID, evo.FormID, 0, 0)
 			TranslateTypeNames(nameInfo, tr, nil, evoMon.Types)
 			nameInfo["id"] = evo.PokemonID
 			nameInfo["form"] = evo.FormID
@@ -658,7 +662,7 @@ func (e *Enricher) buildPrevEvolutions(gd *gamedata.GameData, tr *i18n.Translato
 			}
 
 			info := make(map[string]any)
-			TranslateMonsterNames(info, gd, tr, prev.PokemonID, prev.FormID, 0)
+			TranslateMonsterNames(info, gd, tr, prev.PokemonID, prev.FormID, 0, 0)
 			info["id"] = prev.PokemonID
 			info["form"] = prev.FormID
 			info["evolutionRequirement"] = gamedata.EvolutionRequirementText(tr, prev.Evolution)

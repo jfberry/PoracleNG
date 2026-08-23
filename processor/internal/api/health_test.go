@@ -23,10 +23,10 @@ func TestHandleHealthReturnsCapabilities(t *testing.T) {
 	}
 
 	var got struct {
-		Status       string            `json:"status"`
-		Version      string            `json:"version"`
-		Capabilities map[string]bool   `json:"capabilities"`
-		Raw          map[string]any    `json:"-"`
+		Status       string          `json:"status"`
+		Version      string          `json:"version"`
+		Capabilities map[string]bool `json:"capabilities"`
+		Raw          map[string]any  `json:"-"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -43,7 +43,7 @@ func TestHandleHealthReturnsCapabilities(t *testing.T) {
 
 	// Every capability documented in the Capabilities struct should
 	// appear in the response. New keys land here automatically.
-	expected := []string{"buttons", "snapshots", "autocreate", "tomlDts", "buttonResponseObject"}
+	expected := []string{"buttons", "snapshots", "autocreate", "tomlDts", "buttonResponseObject", "derivedDtsTypes"}
 	for _, k := range expected {
 		v, ok := got.Capabilities[k]
 		if !ok {

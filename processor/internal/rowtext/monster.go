@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/pokemon/poracleng/processor/internal/db"
+	"github.com/pokemon/poracleng/processor/internal/gamedata"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 )
 
@@ -62,6 +63,24 @@ func (g *Generator) MonsterRowText(tr *i18n.Translator, monster *db.MonsterTrack
 	}
 
 	s := fmt.Sprintf("**%s** %s", name, formName)
+
+	// Costume: 9000 (the default/wildcard) matches any costume and is
+	// omitted; 0 is the explicit "no costume" filter; N>0 shows the
+	// translated costume name, falling back to the raw masterfile name if the
+	// costume_<id> gamelocale key is missing (mirrors info.go's costumeName).
+	if monster.Costume != 9000 {
+		costumeName := tr.T("msg.no_costume")
+		if monster.Costume != 0 {
+			key := gamedata.CostumeTranslationKey(monster.Costume)
+			costumeName = tr.T(key)
+			if costumeName == key && g.GD != nil {
+				if info, ok := g.GD.Costumes[monster.Costume]; ok && info.Name != "" {
+					costumeName = info.Name
+				}
+			}
+		}
+		s += " | " + costumeName
+	}
 
 	if monster.Distance != 0 {
 		s += " | " + tr.Tf("tracking.distance_fmt", monster.Distance)

@@ -443,8 +443,8 @@ func TestRaidReplyKeyFormat(t *testing.T) {
 func TestLatestFutureTimeslotSec_FutureSlots(t *testing.T) {
 	nowMs := time.Now().UnixMilli()
 
-	past1 := nowMs - 5*60*1000 // 5 minutes ago
-	past2 := nowMs - 1*60*1000 // 1 minute ago
+	past1 := nowMs - 5*60*1000   // 5 minutes ago
+	past2 := nowMs - 1*60*1000   // 1 minute ago
 	future := nowMs + 10*60*1000 // 10 minutes from now
 
 	rsvps := []tracker.RaidRSVP{

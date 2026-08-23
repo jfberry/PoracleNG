@@ -209,4 +209,3 @@ func (c *SummaryCommand) now(ctx *bot.CommandContext, alertType string) []bot.Re
 	}
 	return []bot.Reply{{React: "✅", Text: tr.Tf("msg.summary.delivered", alertType)}}
 }
-

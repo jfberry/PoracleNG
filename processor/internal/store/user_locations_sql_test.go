@@ -12,6 +12,11 @@ import (
 // openTestDB connects to the test MySQL instance via PORACLENG_TEST_DSN and
 // creates the tables needed for user-location tests. Skips the test if the
 // env var is unset or the connection fails.
+//
+// Callers must NOT `defer db.Close()`: deferred closes run before
+// t.Cleanup callbacks, so the row-deleting cleanup registered here would
+// silently fail against a closed connection and leak rows into the next
+// test. The cleanup closes the connection itself.
 func openTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 	dsn := os.Getenv("PORACLENG_TEST_DSN")
@@ -100,7 +105,6 @@ func mustExec(t *testing.T, db *sqlx.DB, query string, args ...any) {
 
 func TestUserLocationsSQL_RoundTrip(t *testing.T) {
 	dbx := openTestDB(t)
-	defer dbx.Close()
 	s := &SQLHumanStore{db: dbx}
 
 	if _, err := s.AddLocation(UserLocation{ID: "u1", Label: "Home", Latitude: 51.5, Longitude: -0.1}); err != nil {
@@ -135,7 +139,6 @@ func TestUserLocationsSQL_RoundTrip(t *testing.T) {
 
 func TestCountLocationReferences(t *testing.T) {
 	dbx := openTestDB(t)
-	defer dbx.Close()
 	s := &SQLHumanStore{db: dbx}
 
 	mustExec(t, dbx, `INSERT INTO monsters (id, profile_no, pokemon_id, override_location_label) VALUES ('u1', 0, 25, 'Home'), ('u1', 0, 26, 'Home')`)
@@ -202,7 +205,6 @@ func TestFilterPermittedAreas_CaseInsensitive(t *testing.T) {
 
 func TestPruneOverrideAreas_StripsDisallowed(t *testing.T) {
 	dbx := openTestDB(t)
-	defer dbx.Close()
 	s := &SQLHumanStore{db: dbx}
 
 	mustExec(t, dbx, `INSERT INTO monsters (id, profile_no, pokemon_id, override_areas) VALUES
@@ -229,5 +231,28 @@ func TestPruneOverrideAreas_StripsDisallowed(t *testing.T) {
 	}
 	if rows[1].OverrideAreas != "" {
 		t.Fatalf("pokemon 26: expected NULL after empty pruning, got %q", rows[1].OverrideAreas)
+	}
+}
+
+// A PUT that re-submits a location's current coordinates must succeed.
+// MySQL reports rows *changed* (not matched) for UPDATE without
+// CLIENT_FOUND_ROWS, so a no-op update affects zero rows even though the
+// row exists — which UpdateLocation used to misread as not-found (404).
+func TestUserLocationsSQL_UpdateUnchangedCoordinates(t *testing.T) {
+	dbx := openTestDB(t)
+	s := NewSQLHumanStore(dbx)
+
+	if _, err := s.AddLocation(UserLocation{ID: "u1", Label: "PutNoop", Latitude: 51.5, Longitude: -0.12}); err != nil {
+		t.Fatalf("AddLocation: %v", err)
+	}
+
+	// Same coordinates — zero rows changed, but the row exists.
+	if err := s.UpdateLocation("u1", "putnoop", 51.5, -0.12); err != nil {
+		t.Fatalf("UpdateLocation with unchanged coordinates should succeed, got: %v", err)
+	}
+
+	// A genuinely missing label must still report not-found.
+	if err := s.UpdateLocation("u1", "nowhere", 1, 2); err == nil {
+		t.Fatal("UpdateLocation on missing label should fail")
 	}
 }

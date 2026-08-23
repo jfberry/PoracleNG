@@ -14,7 +14,11 @@ func (g *Generator) QuestRowText(tr *i18n.Translator, quest *db.QuestTracking) s
 
 	switch quest.RewardType {
 	case 7:
-		// Pokemon reward
+		// Pokemon reward (reward==0 is the "all pokemon" wildcard)
+		if quest.Reward == 0 {
+			rewardThing = tr.T("tracking.reward_any_pokemon")
+			break
+		}
 		mon := g.GD.GetMonster(quest.Reward, quest.Form)
 		if mon != nil {
 			rewardThing = tr.T(gamedata.PokemonTranslationKey(quest.Reward))
@@ -36,8 +40,20 @@ func (g *Generator) QuestRowText(tr *i18n.Translator, quest *db.QuestTracking) s
 			rewardThing = tr.T("tracking.reward_stardust")
 		}
 
+	case 8:
+		// Pokecoins reward
+		if quest.Reward > 0 {
+			rewardThing = tr.Tf("tracking.reward_pokecoin_min_fmt", quest.Reward)
+		} else {
+			rewardThing = tr.T("tracking.reward_pokecoin")
+		}
+
 	case 2:
-		// Item reward
+		// Item reward (reward==0 is the "all items" wildcard)
+		if quest.Reward == 0 {
+			rewardThing = tr.T("tracking.reward_any_item")
+			break
+		}
 		item := g.GD.GetItem(quest.Reward)
 		if item != nil {
 			rewardThing = tr.T(gamedata.ItemTranslationKey(quest.Reward))

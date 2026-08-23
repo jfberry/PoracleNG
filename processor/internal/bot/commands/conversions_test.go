@@ -187,6 +187,20 @@ func TestConverters_AllTypesPreserveOverrides(t *testing.T) {
 	})
 }
 
+// TestRaidAPIToTracking_PreservesCostume ensures raidAPIToTracking copies the
+// Costume field through from RaidTrackingAPI to RaidTracking. Without this,
+// every raid rule rendered via !tracked / !raid confirmations would show
+// Costume as Go-zero 0 instead of the actual value, and rowtext.RaidRowText
+// treats anything other than 9000 as a specific costume filter, so a rule
+// with no costume restriction (9000) would wrongly render "no costume".
+func TestRaidAPIToTracking_PreservesCostume(t *testing.T) {
+	for _, c := range []int{9000, 0, 5} {
+		if got := raidAPIToTracking(&db.RaidTrackingAPI{Costume: c}); got.Costume != c {
+			t.Errorf("raidAPIToTracking dropped Costume: got %d want %d", got.Costume, c)
+		}
+	}
+}
+
 func slicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

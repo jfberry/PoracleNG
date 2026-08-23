@@ -312,6 +312,12 @@ Operators can manage the processor from within Discord or Telegram using `!porac
 
 All API endpoints are served by the processor (default port 3030). See [API.md](API.md) for the full reference with request/response examples.
 
+### OpenAPI docs & the v2 API
+
+The processor serves a live **OpenAPI 3.1** specification at `GET /openapi.json` with interactive documentation at `GET /docs` (both public, no secret required). The whole `/api/*` and `/api/v2/*` surface is documented there. Errors on this surface are returned as RFC 9457 `application/problem+json`.
+
+A new strict **`/api/v2`** API (tracking + humans/profiles) is the recommended surface for new integrations: typed request bodies, enforced required fields, no lenient coercion, and human-scoped tracking paths (`/api/v2/humans/{id}/tracking/{type}`). v2 adds the new **`incident`** tracking type (e.g. Showcases) and completes saved-location CRUD with `PUT …/locations/{label}`. The v1 `/api/tracking/*`, `/api/humans/*`, and `/api/profiles/*` endpoints are frozen and fully supported, but deprecated — clients are encouraged to migrate to `/api/v2` on their own schedule. A complete endpoint-by-endpoint and field-by-field mapping is in the [v1 → v2 migration guide](docs/v1-to-v2-migration-guide.md).
+
 | Category | Endpoints | Description |
 |----------|-----------|-------------|
 | Webhooks | `POST /` | Receive Golbat webhooks |

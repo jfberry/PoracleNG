@@ -2,6 +2,7 @@ package commands
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/bot"
@@ -62,19 +63,19 @@ func TestEmoji_ListPopulated(t *testing.T) {
 	}
 
 	// Combine all reply text (output may be chunked for large configs).
-	combined := ""
+	var combined strings.Builder
 	for _, r := range replies {
-		combined += r.Text
+		combined.WriteString(r.Text)
 	}
 
 	for _, want := range []string{"emojiWeather", "emojiTeam", "emojiItem"} {
-		if !containsStr(combined, want) {
-			t.Errorf("emoji list missing key %q, got:\n%s", want, combined)
+		if !containsStr(combined.String(), want) {
+			t.Errorf("emoji list missing key %q, got:\n%s", want, combined.String())
 		}
 	}
 	// Key count must appear.
-	if !containsStr(combined, "3") {
-		t.Errorf("expected key count '3' in list header, got:\n%s", combined)
+	if !containsStr(combined.String(), "3") {
+		t.Errorf("expected key count '3' in list header, got:\n%s", combined.String())
 	}
 }
 

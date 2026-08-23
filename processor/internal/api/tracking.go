@@ -16,6 +16,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/delivery"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/mute"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/store"
@@ -31,8 +32,17 @@ type TrackingDeps struct {
 	Config       *config.Config
 	Translations *i18n.Bundle
 	Dispatcher   *delivery.Dispatcher
-	AreaLogic    *bot.AreaLogic // nil-safe: area validation skipped when nil
-	ReloadFunc   func()         // triggers debounced state reload (from ProcessorService.triggerReload)
+	AreaLogic    *bot.AreaLogic             // nil-safe: area validation skipped when nil
+	Summaries    store.SummaryScheduleStore // nil-safe: snapshot summaries omitted when nil
+	Mutes        *mute.Store                // in-memory mute store (v2 mutes endpoints + snapshot mutes; nil-safe in snapshot, required by RegisterV2Mutes)
+	ReloadFunc   func()                     // triggers debounced state reload (from ProcessorService.triggerReload)
+
+	// v2SnapshotProviders is the per-instance registry of type-erased snapshot
+	// providers, appended by registerV2Tracking when each type registers. The
+	// full-snapshot endpoint (GET /v2/humans/{id}/tracking) iterates it to build
+	// the "tracking" map. Instance-scoped (not a package global): a freshly built
+	// TrackingDeps starts empty, so tests never leak providers across instances.
+	v2SnapshotProviders []v2SnapshotProvider
 }
 
 // lookupHuman resolves the human from the {id} path parameter and the profile_no

@@ -219,7 +219,7 @@ role_check_mode = "ignore"
 # disable_* - disable individual hook processing for particular webhook types
 disable_pokemon = false
 disable_raid = false
-disable_pokestop = false                 # also disables invasion processing for RDM/Golbat
+disable_pokestop = false                 # DEPRECATED no-op — nothing reads it; use disable_lure / disable_invasion / disable_quest
 disable_invasion = false
 disable_lure = false
 disable_quest = false
@@ -228,6 +228,7 @@ disable_nest = false
 disable_gym = false
 disable_fort_update = false
 disable_max_battle = false
+disable_showcase = false                 # disable Showcase (pokestop contest) processing
 process_confirmed_invasion_lineups = false
 disable_unconfirmed_invasion = false
 
@@ -269,6 +270,34 @@ channels = [""]
 user_role = [""]
 # admins - IDs of admins (can add channels with !channel add and perform other admin functions)
 admins = [""]
+prefix = "!"                             # prefix for poracle commands
+# iv_colors - 6 color codes for pokemon IV rankings
+iv_colors = ["#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"]
+dm_log_channel_id = ""                   # channel ID to log all poracle commands to
+dm_log_channel_deletion_time = 0         # time to clean up after (minutes) - 0 = don't delete
+message_delete_delay = 0                 # extra time (ms) to add to a message 'clean'
+unrecognised_command_message = ""        # reply to unrecognised commands in DM
+unregistered_user_message = ""           # reply to unregistered users (empty = shrug)
+lost_role_message = ""                   # message when user loses role-based access
+
+# admin_channel_id: discord channel ID for operator-facing notices —
+# auto-disable events (delivery failure, rate-limit ban), thread keep-alive
+# 404s, DTS render errors, state-reload failures. Empty = disabled.
+admin_channel_id = ""
+
+# thread_keep_alive_interval_hours: cadence (in hours) of the background
+# sweeper that unarchives Poracle-managed Discord threads so they stay
+# accessible. 0 disables. Max 168 (7 days, Discord's archive ceiling).
+thread_keep_alive_interval_hours = 24
+
+# ---------------------------------------------------------------------------
+# Sub-tables of [discord] — KEEP THESE AT THE END of the [discord] section.
+# A TOML table / array-of-tables header ([discord.x] / [[discord.x]]) captures
+# every key below it until the next header. If you uncomment one of these while
+# plain [discord] scalars (prefix, iv_colors, ...) are still below it, those
+# scalars get pulled into the sub-table and your config silently breaks.
+# ---------------------------------------------------------------------------
+#
 # delegated_admins - grant users admin over specific channels/guilds/categories
 #   target = channel, guild, or category ID
 #   admins = array of user/role IDs who can admin that target
@@ -299,31 +328,24 @@ admins = [""]
 #   { "color-red" = "919255733592289341", "color-blue" = "919255750948323340" },
 # ]
 #
-# command_security - restrict commands to specific users/roles
-#   valid commands: monster, pvp, gym, invasion, lure, nest, quest, egg,
-#   raid, fort, area, location, profile, tracked, script, start, language
+# command_security - restrict commands to specific users or roles.
+#   Discord only (Telegram has no role-based command security). A key with a
+#   non-empty list restricts that command to the listed role IDs and/or user
+#   IDs; everyone else gets a shrug. Absent key or empty list = unrestricted.
+#
+#   Gateable whole-command keys:
+#     monster (!track), raid, egg, quest, gym, lure,
+#     invasion (covers !invasion and !incident), nest, maxbattle,
+#     poracle_admin (!poracle-admin)
+#   Feature keys (restrict a feature inside a command):
+#     pvp         - using PVP filters in !track
+#     specificgym - tracking a specific gym in !gym
+#   Any other name (area, location, profile, tracked, ...) is NOT gateable
+#   here and is silently ignored.
 # [discord.command_security]
-# monster = ["userid", "roleid"]
-# pvp = ["roleid"]
-prefix = "!"                             # prefix for poracle commands
-# iv_colors - 6 color codes for pokemon IV rankings
-iv_colors = ["#9D9D9D", "#FFFFFF", "#1EFF00", "#0070DD", "#A335EE", "#FF8000"]
-dm_log_channel_id = ""                   # channel ID to log all poracle commands to
-dm_log_channel_deletion_time = 0         # time to clean up after (minutes) - 0 = don't delete
-message_delete_delay = 0                 # extra time (ms) to add to a message 'clean'
-unrecognised_command_message = ""        # reply to unrecognised commands in DM
-unregistered_user_message = ""           # reply to unregistered users (empty = shrug)
-lost_role_message = ""                   # message when user loses role-based access
-
-# admin_channel_id: discord channel ID for operator-facing notices —
-# auto-disable events (delivery failure, rate-limit ban), thread keep-alive
-# 404s, DTS render errors, state-reload failures. Empty = disabled.
-admin_channel_id = ""
-
-# thread_keep_alive_interval_hours: cadence (in hours) of the background
-# sweeper that unarchives Poracle-managed Discord threads so they stay
-# accessible. 0 disables. Max 168 (7 days, Discord's archive ceiling).
-thread_keep_alive_interval_hours = 24
+# raid = ["role_id_1", "user_id_2"]
+# poracle_admin = ["role_id_1"]
+# pvp = ["role_id_1"]
 
 # ---- Discord slash commands (optional, additive surface) ----
 #
@@ -413,6 +435,16 @@ provider_url = ""                               # nominatim or photon URL, e.g. 
 # own template like "{{{streetName}}} {{streetNumber}}, {{{city}}}".
 forward_only = false                     # when true, disable reverse geocoding lookup
 cache_detail = 3                         # decimal places of lon/lat for caching (3 or 4 for 100x more detail)
+# intersection_users - list of GeoNames usernames (https://www.geonames.org)
+#   used to populate the {{intersection}} DTS field with the nearest street
+#   intersection. One is picked at random per uncached lookup to spread credit
+#   usage. Empty disables the feature. Results share the geocoding cache above,
+#   but each uncached lookup spends a GeoNames credit, so caching/credits apply.
+#   GeoNames is a separate service from the reverse-geocode provider, so it gets
+#   its own concurrency limiter and circuit breaker (both sized from the
+#   [tuning] geocoding_* values). Peak outbound to external geo services can
+#   therefore reach 2x geocoding_concurrency when both are busy.
+intersection_users = []
 # Styles for different times of day using tileservercache
 # Use style: "#(style)" in templates to utilize these
 day_style = ""
@@ -494,7 +526,7 @@ tileserver_failure_threshold = 5         # consecutive errors before circuit bre
 tileserver_cooldown_ms = 30000           # how long circuit breaker stays open before retrying (ms)
 render_pool_size = 8                             # concurrent render goroutines
 render_queue_size = 100                          # max buffered render jobs
-delivery_queue_size = 200                        # max buffered delivery jobs
+delivery_queue_size = 200                        # per-destination lane buffer (memory scales with active destinations)
 # Alerter tuning
 max_database_connections = 15            # max database connections (per worker)
 concurrent_matched_processors = 10       # pre-matched payloads processed concurrently
@@ -649,11 +681,12 @@ suggest_on_dm = false                    # when true, DMs that don't match a com
 
 
 # ---- Logging ----
-# Log levels: silly, debug, verbose, info, warn
-# Suggestion: start at verbose; info is a bit less logging; debug has more detail
+# Log levels (most to least verbose): trace, debug, info, warn
+# Suggestion: start at info; debug adds hot-path detail; trace is everything.
+# Legacy names are still accepted: "verbose" maps to info, "silly" to trace.
 
 [logging]
-level = "verbose"                        # log level: debug, verbose, info, warn
+level = "info"                           # log level: trace, debug, info, warn
 file_logging_enabled = true              # write logs to file
 filename = "logs/processor.log"          # log file path
 max_size = 50                            # max log file size in megabytes

@@ -12,8 +12,8 @@ func TestNormaliseInvasionGruntType(t *testing.T) {
 		{"metal", "steel"},
 		{"Metal", "steel"}, // case-insensitive — third-party tools vary
 		{"METAL", "steel"},
-		{"steel", "steel"},  // canonical → unchanged
-		{"fire", "fire"},    // typed grunt unchanged
+		{"steel", "steel"}, // canonical → unchanged
+		{"fire", "fire"},   // typed grunt unchanged
 		{"giovanni", "giovanni"},
 		{"everything", "everything"},
 		{"boss", "boss"},

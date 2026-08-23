@@ -31,7 +31,7 @@ type ArgMatcher struct {
 	// need to type underscores or quotes for known multi-word names.
 	// See collapseMultiWord.
 	bareMultiWord     map[string]bool            // items + pokemon names (multi-word entries only)
-	prefixedMultiWord map[string]map[string]bool // "move" → multi-word move names, "form" → form names
+	prefixedMultiWord map[string]map[string]bool // "move" → multi-word move names, "form" → form names, "costume" → costume names
 }
 
 // NewArgMatcher builds the pre-computed lookup tables for argument matching.
@@ -76,10 +76,10 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 
 		// Lure types — accept pogo-translations keys lure_501..lure_506
 		// (resources/gamelocale/) in addition to the legacy arg.* keys.
-		// The lure_N values are added last so they take precedence over
-		// arg.normal if they ever collide in the user's language.
+		// "normal" is the plain Lure Module (501); 0 is reserved for the
+		// "any lure" DB sentinel and must never come from a name match.
 		lures := make(map[string]int)
-		lures[strings.ToLower(tr.T("arg.normal"))] = 0
+		lures[strings.ToLower(tr.T("arg.normal"))] = 501
 		lures[strings.ToLower(tr.T("arg.glacial"))] = 502
 		lures[strings.ToLower(tr.T("arg.mossy"))] = 503
 		lures[strings.ToLower(tr.T("arg.magnetic"))] = 504
@@ -167,8 +167,9 @@ func NewArgMatcher(bundle *i18n.Bundle, gd *gamedata.GameData, resolver *Pokemon
 func (am *ArgMatcher) buildMultiWordVocabularies(languages []string) {
 	am.bareMultiWord = make(map[string]bool)
 	am.prefixedMultiWord = map[string]map[string]bool{
-		"move": {},
-		"form": {},
+		"move":    {},
+		"form":    {},
+		"costume": {},
 	}
 
 	if am.gameData != nil {
@@ -199,6 +200,9 @@ func (am *ArgMatcher) buildMultiWordVocabularies(languages []string) {
 			}
 			for id := range formIDs {
 				add(am.prefixedMultiWord["form"], tr, gamedata.FormTranslationKey(id))
+			}
+			for id := range am.gameData.Costumes {
+				add(am.prefixedMultiWord["costume"], tr, gamedata.CostumeTranslationKey(id))
 			}
 		}
 	}
@@ -239,23 +243,25 @@ func (am *ArgMatcher) collapseMultiWord(tokens []string) []string {
 				continue
 			}
 			if prefix != "" {
-				joined := remainder
+				var joined strings.Builder
+				joined.WriteString(remainder)
 				for j := 1; j < window; j++ {
-					joined += " " + tokens[i+j]
+					joined.WriteString(" " + tokens[i+j])
 				}
-				if am.prefixedMultiWord[prefix][joined] {
-					out = append(out, prefix+":"+joined)
+				if am.prefixedMultiWord[prefix][joined.String()] {
+					out = append(out, prefix+":"+joined.String())
 					i += window
 					matched = true
 					break
 				}
 			} else {
-				joined := tokens[i]
+				var joined strings.Builder
+				joined.WriteString(tokens[i])
 				for j := 1; j < window; j++ {
-					joined += " " + tokens[i+j]
+					joined.WriteString(" " + tokens[i+j])
 				}
-				if am.bareMultiWord[joined] {
-					out = append(out, joined)
+				if am.bareMultiWord[joined.String()] {
+					out = append(out, joined.String())
 					i += window
 					matched = true
 					break
@@ -304,9 +310,9 @@ var knownPrefixKeys = []string{
 	"arg.prefix.rarity", "arg.prefix.maxrarity",
 	"arg.prefix.size", "arg.prefix.maxsize",
 	"arg.prefix.d", "arg.prefix.t", "arg.prefix.gen", "arg.prefix.cap", "arg.prefix.mega",
-	"arg.prefix.form", "arg.prefix.template", "arg.prefix.move", "arg.prefix.language",
+	"arg.prefix.form", "arg.prefix.costume", "arg.prefix.template", "arg.prefix.move", "arg.prefix.language",
 	"arg.prefix.gym",
-	"arg.prefix.stardust", "arg.prefix.energy", "arg.prefix.candy",
+	"arg.prefix.stardust", "arg.prefix.pokecoin", "arg.prefix.energy", "arg.prefix.candy",
 	"arg.prefix.minspawn",
 	"arg.prefix.great", "arg.prefix.greathigh", "arg.prefix.greatcp",
 	"arg.prefix.ultra", "arg.prefix.ultrahigh", "arg.prefix.ultracp",
@@ -317,11 +323,12 @@ var knownPrefixKeys = []string{
 // knownKeywordKeys lists all arg.* keyword keys used by any command.
 var knownKeywordKeys = []string{
 	"arg.remove", "arg.everything", "arg.individually",
+	"arg.all_pokemon", "arg.all_items",
 	"arg.clean", "arg.edit", "arg.summary", "arg.shiny", "arg.ex",
 	"arg.rsvp", "arg.no_rsvp", "arg.rsvp_only",
 	"arg.gmax", "arg.mega",
 	"arg.pokestop", "arg.gym", "arg.station", "arg.location", "arg.new", "arg.removal", "arg.photo", "arg.name", "arg.description", "arg.include_empty",
-	"arg.stardust", "arg.energy", "arg.candy",
+	"arg.stardust", "arg.pokecoin", "arg.energy", "arg.candy",
 	"arg.slot_changes", "arg.battle_changes",
 }
 
@@ -333,6 +340,17 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 	// or "!raid move:hyper beam" reach the per-param matchers as single
 	// tokens the same way "razz_berry" / "move:hyper_beam" would.
 	tokens = am.collapseMultiWord(tokens)
+
+	// Same idea for coordinate pairs typed with spaces around the comma
+	// ("51.28, 1.08" — the shape Google Maps copies to the clipboard).
+	// Only for commands that asked for coordinates, so no other command's
+	// tokens can be merged.
+	for _, p := range params {
+		if p.Type == ParamLatLon {
+			tokens = collapseLatLon(tokens)
+			break
+		}
+	}
 
 	result := NewParsedArgs()
 	consumed := make([]bool, len(tokens))
@@ -374,6 +392,16 @@ func (am *ArgMatcher) Match(tokens []string, params []ParamDef, lang string) *Pa
 					continue
 				}
 				if tryRemoveUID(tok, result) {
+					consumed[i] = true
+				}
+			}
+		}
+		if param.Type == ParamLureType {
+			for i, tok := range tokens {
+				if consumed[i] {
+					continue
+				}
+				if am.tryLureType(tok, lang, result) {
 					consumed[i] = true
 				}
 			}
@@ -423,8 +451,8 @@ var matchPriorities = []ParamType{
 	ParamKeyword,
 	ParamTeam,
 	ParamGender,
-	ParamLureType,
-	// ParamTypeName and ParamPokemonName handled separately (collect all matches)
+	// ParamLureType, ParamTypeName and ParamPokemonName handled separately
+	// (collect all matches)
 }
 
 func (am *ArgMatcher) tryMatch(tok string, param ParamDef, lang string, result *ParsedArgs) bool {
@@ -621,6 +649,38 @@ func (am *ArgMatcher) tryPrefixString(tok, key, lang string, result *ParsedArgs)
 	return false
 }
 
+// ResolveCostume resolves the raw value captured from a `costume:` token
+// (parsed.Strings["costume"]) to a costume ID. Numeric values ("0", "5")
+// are returned as-is. Otherwise the name is lowercase-matched against
+// costume_{id} translations in the user's language, then English —
+// mirroring filterByForm's translation lookup for form names
+// (internal/bot/commands/helpers.go). Returns (0, false) when nothing
+// matches.
+func (am *ArgMatcher) ResolveCostume(name, lang string) (int, bool) {
+	if n, err := strconv.Atoi(name); err == nil {
+		return n, true
+	}
+	if am.gameData == nil || am.bundle == nil {
+		return 0, false
+	}
+	lower := strings.ToLower(name)
+	for _, tryLang := range []string{lang, "en"} {
+		if tryLang == "" {
+			continue
+		}
+		tr := am.bundle.For(tryLang)
+		if tr == nil {
+			continue
+		}
+		for id := range am.gameData.Costumes {
+			if strings.ToLower(tr.T(gamedata.CostumeTranslationKey(id))) == lower {
+				return id, true
+			}
+		}
+	}
+	return 0, false
+}
+
 // tryPrefixStringList matches patterns like "area:berlin", "area:X,Y,Z".
 // Values are comma-split and lowercased; calling this multiple times on
 // different tokens accumulates all values in result.StringLists[shortKey].
@@ -638,7 +698,7 @@ func (am *ArgMatcher) tryPrefixStringList(tok, key, lang string, result *ParsedA
 		if result.StringLists == nil {
 			result.StringLists = make(map[string][]string)
 		}
-		for _, v := range strings.Split(val, ",") {
+		for v := range strings.SplitSeq(val, ",") {
 			v = strings.TrimSpace(strings.ToLower(v))
 			if v == "" {
 				continue
@@ -689,10 +749,10 @@ func (am *ArgMatcher) tryGender(tok, lang string, result *ParsedArgs) bool {
 	return false
 }
 
-// tryLureType matches lure type names.
+// tryLureType matches a lure type name and adds its ID to result.LureTypes.
 func (am *ArgMatcher) tryLureType(tok, lang string, result *ParsedArgs) bool {
 	if id, ok := am.lookupInLangMaps(tok, lang, am.lureMap); ok {
-		result.LureType = id
+		result.LureTypes = append(result.LureTypes, id)
 		return true
 	}
 	return false
@@ -826,6 +886,41 @@ func tryRemoveUID(tok string, result *ParsedArgs) bool {
 }
 
 var latLonRe = regexp.MustCompile(`^(-?\d+\.?\d*),(-?\d+\.?\d*)$`)
+
+// collapseLatLon merges a coordinate pair split across tokens by spaces
+// around the comma — "51.28, 1.08" (2 tokens) and "51.28 , 1.08" (3) both
+// become "51.28,1.08" — so tryLatLon's single-token regex sees them.
+// Without this the tokens match nothing, and the location command falls
+// through to forward geocoding, which resolves the coordinate text as an
+// address and silently sets an unrelated place.
+//
+// A window is joined only when the result is itself a valid lat,lon, so
+// tokens that merely sit next to each other are never merged.
+func collapseLatLon(tokens []string) []string {
+	out := make([]string, 0, len(tokens))
+	for i := 0; i < len(tokens); {
+		joined := ""
+		// Longest window first: "lat , lon" before "lat, lon".
+		for n := 3; n >= 2; n-- {
+			if i+n > len(tokens) {
+				continue
+			}
+			candidate := strings.Join(tokens[i:i+n], "")
+			if latLonRe.MatchString(candidate) {
+				joined = candidate
+				i += n
+				break
+			}
+		}
+		if joined == "" {
+			out = append(out, tokens[i])
+			i++
+			continue
+		}
+		out = append(out, joined)
+	}
+	return out
+}
 
 // tryLatLon matches coordinate pairs like "51.28,1.08".
 func (am *ArgMatcher) tryLatLon(tok string, result *ParsedArgs) bool {

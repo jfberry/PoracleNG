@@ -552,3 +552,29 @@ func TestRaidMatchDedup(t *testing.T) {
 		t.Errorf("Expected 1 match (deduped), got %d", len(matched))
 	}
 }
+
+func TestRaidMatchCostume(t *testing.T) {
+	human := makeHuman("user1")
+	mk := func(costume int) *db.RaidTracking {
+		return &db.RaidTracking{
+			ID: "user1", ProfileNo: 1, PokemonID: 25, Level: 5,
+			Team: 4, Exclusive: false, Form: 0, Costume: costume, Evolution: 9000,
+			Move: 9000, Distance: 0, Template: "1",
+		}
+	}
+	data := &RaidData{
+		GymID: "gym1", PokemonID: 25, Form: 0, Costume: 1, Level: 5,
+		TeamID: 1, Evolution: 0, Move1: 100, Move2: 200, Latitude: 51.0, Longitude: 0.0,
+	}
+	matcher := &RaidMatcher{}
+	check := func(costume, wantN int) {
+		st := makeRaidTestState([]*db.RaidTracking{mk(costume)}, nil, map[string]*db.Human{"user1": human})
+		if got, _ := matcher.MatchRaid(data, st); len(got) != wantN {
+			t.Errorf("costume=%d: got %d matches, want %d", costume, len(got), wantN)
+		}
+	}
+	check(9000, 1) // any matches the costume-1 boss
+	check(1, 1)    // exact match
+	check(2, 0)    // different costume: no match
+	check(0, 0)    // "no costume" filter: costumed boss must not match
+}

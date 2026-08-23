@@ -3,12 +3,10 @@ package api
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/gin-gonic/gin"
 	gotgbot "github.com/go-telegram/bot"
 	"github.com/jellydator/ttlcache/v3"
 
@@ -39,113 +37,6 @@ func NewResolveCache() *ttlcache.Cache[string, any] {
 	)
 	go cache.Start()
 	return cache
-}
-
-// HandleResolve batch-resolves Discord/Telegram IDs to names.
-// POST /api/resolve
-//
-// The "destinations" array is for IDs of unknown type — the resolver tries
-// each one as a Discord user, channel, role, guild, and Telegram chat,
-// returning a flat map of "best match" results. Used by the alert_limits
-// overrides editor where the target could be any kind of destination.
-func HandleResolve(deps ResolveDeps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req struct {
-			Discord *struct {
-				Users    []string `json:"users"`
-				Roles    []string `json:"roles"`
-				Channels []string `json:"channels"`
-				Guilds   []string `json:"guilds"`
-			} `json:"discord"`
-			Telegram *struct {
-				Chats []string `json:"chats"`
-			} `json:"telegram"`
-			Destinations []string `json:"destinations"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
-			return
-		}
-
-		result := gin.H{"status": "ok"}
-
-		// Resolve unknown-type destinations by trying every category in turn
-		if len(req.Destinations) > 0 {
-			destinations := make(map[string]any)
-			for _, id := range req.Destinations {
-				if resolved := resolveAnyDestination(c.Request.Context(), deps, id); resolved != nil {
-					destinations[id] = resolved
-				}
-			}
-			result["destinations"] = destinations
-		}
-
-		// Discord resolution
-		if req.Discord != nil && deps.DiscordSession != nil {
-			discord := make(map[string]any)
-
-			if len(req.Discord.Users) > 0 {
-				users := make(map[string]any)
-				for _, id := range req.Discord.Users {
-					if resolved := resolveDiscordUser(deps, id); resolved != nil {
-						users[id] = resolved
-					}
-				}
-				discord["users"] = users
-			}
-
-			if len(req.Discord.Roles) > 0 {
-				roles := make(map[string]any)
-				for _, id := range req.Discord.Roles {
-					if resolved := resolveDiscordRole(deps, id); resolved != nil {
-						roles[id] = resolved
-					}
-				}
-				discord["roles"] = roles
-			}
-
-			if len(req.Discord.Channels) > 0 {
-				channels := make(map[string]any)
-				for _, id := range req.Discord.Channels {
-					if resolved := resolveDiscordChannel(deps, id); resolved != nil {
-						channels[id] = resolved
-					}
-				}
-				discord["channels"] = channels
-			}
-
-			if len(req.Discord.Guilds) > 0 {
-				guilds := make(map[string]any)
-				for _, id := range req.Discord.Guilds {
-					if resolved := resolveDiscordGuild(deps, id); resolved != nil {
-						guilds[id] = resolved
-					}
-				}
-				discord["guilds"] = guilds
-			}
-
-			result["discord"] = discord
-		}
-
-		// Telegram resolution
-		if req.Telegram != nil && deps.TelegramAPI != nil {
-			telegram := make(map[string]any)
-
-			if len(req.Telegram.Chats) > 0 {
-				chats := make(map[string]any)
-				for _, id := range req.Telegram.Chats {
-					if resolved := resolveTelegramChat(c.Request.Context(), deps, id); resolved != nil {
-						chats[id] = resolved
-					}
-				}
-				telegram["chats"] = chats
-			}
-
-			result["telegram"] = telegram
-		}
-
-		c.JSON(http.StatusOK, result)
-	}
 }
 
 // resolveAnyDestination tries to identify a destination ID across every

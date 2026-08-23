@@ -16,7 +16,7 @@ import (
 
 // validRewardTypes defines the set of valid reward_type values.
 var validRewardTypes = map[int]bool{
-	2: true, 3: true, 4: true, 7: true, 12: true,
+	2: true, 3: true, 4: true, 7: true, 8: true, 12: true,
 }
 
 // HandleGetQuest returns the GET /api/tracking/quest/{id} handler.

@@ -187,4 +187,3 @@ func runSlashStatus(ctx *bot.CommandContext, tr *i18n.Translator) []bot.Reply {
 
 	return []bot.Reply{{Text: sb.String()}}
 }
-

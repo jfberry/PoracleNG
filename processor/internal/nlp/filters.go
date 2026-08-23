@@ -57,6 +57,8 @@ var synonyms = contextSynonyms{
 		"shiny":       "shiny",
 		"shinies":     "shiny",
 		"stardust":    "stardust",
+		"pokecoins":   "pokecoins",
+		"pokecoin":    "pokecoins",
 		"energy":      "energy",
 		"mega energy": "energy",
 		"candy":       "candy",
@@ -151,7 +153,7 @@ var poracleFilterRe = regexp.MustCompile(
 		`|new` +
 		`|ex` +
 		`|shiny` +
-		`|stardust|energy|candy` +
+		`|stardust|pokecoins|energy|candy` +
 		`)$`,
 )
 

@@ -5,6 +5,7 @@ import (
 	"io"
 	stdlog "log"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -23,12 +24,27 @@ type Config struct {
 	Compress           bool   `toml:"compress"`
 }
 
+// resolveLevel maps a configured level string to a logrus level. It accepts
+// this project's legacy Winston-style names (inherited from PoracleJS) as
+// aliases: logrus has no level between Debug and Info, so "verbose" collapses
+// to Info and "silly" to Trace. Any name logrus already understands passes
+// through. Empty or unrecognised input falls back to Info.
+func resolveLevel(s string) log.Level {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "verbose":
+		return log.InfoLevel
+	case "silly":
+		return log.TraceLevel
+	}
+	if lvl, err := log.ParseLevel(s); err == nil {
+		return lvl
+	}
+	return log.InfoLevel
+}
+
 // Setup initialises the logger matching Golbat's logging pattern.
 func Setup(cfg Config) {
-	logLevel, err := log.ParseLevel(cfg.Level)
-	if err != nil {
-		logLevel = log.InfoLevel
-	}
+	logLevel := resolveLevel(cfg.Level)
 
 	lumberjackLogger = &lumberjack.Logger{
 		Filename:   cfg.Filename,

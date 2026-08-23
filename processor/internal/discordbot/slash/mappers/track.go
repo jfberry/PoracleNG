@@ -20,6 +20,7 @@ import (
 //	clean         (bool)                           — auto-delete on expiry
 //	template      (string, autocomplete)           — DTS template name
 //	form          (string, autocomplete)           — pokemon form (cascades)
+//	costume       (string, autocomplete)           — pokemon costume ID
 //	size          (string, choices)                — xxs/xs/m/xl/xxl ("all" omits)
 //
 // Output tokens are lowercase and follow the text bot's argument grammar.
@@ -48,6 +49,10 @@ func Track(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 
 	if v, ok := o["form"]; ok && v.StringValue() != "" {
 		tokens = append(tokens, "form:"+v.StringValue())
+	}
+
+	if v, ok := o["costume"]; ok && v.StringValue() != "" {
+		tokens = append(tokens, "costume:"+v.StringValue())
 	}
 
 	if v, ok := o["size"]; ok {

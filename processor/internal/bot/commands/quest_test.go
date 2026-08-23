@@ -10,6 +10,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/stretchr/testify/assert"
@@ -30,12 +31,21 @@ func questCtx(t *testing.T) *bot.CommandContext {
 
 	gd := &gamedata.GameData{
 		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
-			{ID: 25, Form: 0}: {PokemonID: 25, FormID: 0},
+			{ID: 25, Form: 0}:    {PokemonID: 25, FormID: 0},
+			{ID: 649, Form: 0}:   {PokemonID: 649, FormID: 0},
+			{ID: 649, Form: 917}: {PokemonID: 649, FormID: 917},
 		},
 		Moves: map[int]*gamedata.Move{},
 		Types: map[int]*gamedata.TypeInfo{},
 		Items: map[int]*gamedata.Item{},
 	}
+
+	// The resolver indexes poke_{id} names at construction, so name and
+	// form translations must land in the bundle first.
+	ctx.Translations.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"poke_649": "Genesect",
+		"form_917": "Burn",
+	}))
 
 	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
 	ctx.Resolver = resolver
@@ -97,6 +107,32 @@ func TestQuest_BareStardust(t *testing.T) {
 	assert.Equal(t, 0, rows[0].Reward, "bare stardust = any amount")
 }
 
+func TestQuest_Pokecoins(t *testing.T) {
+	ctx := questCtx(t)
+	replies := runQuest(t, ctx, "pokecoins:10")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 8, rows[0].RewardType, "pokecoins reward type")
+	assert.Equal(t, 10, rows[0].Reward, "pokecoins min amount stored in Reward")
+}
+
+func TestQuest_BarePokecoins(t *testing.T) {
+	ctx := questCtx(t)
+	replies := runQuest(t, ctx, "pokecoins")
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 8, rows[0].RewardType, "pokecoins reward type")
+	assert.Equal(t, 0, rows[0].Reward, "bare pokecoins = any amount")
+}
+
 func TestQuest_Duplicate(t *testing.T) {
 	ctx := questCtx(t)
 	replies1 := runQuest(t, ctx, "25")
@@ -106,6 +142,23 @@ func TestQuest_Duplicate(t *testing.T) {
 	replies2 := runQuest(t, ctx, "25")
 	require.NotEmpty(t, replies2)
 	assert.Equal(t, "👌", replies2[0].React, "duplicate should be 👌, reply: %s", replies2[0].Text)
+}
+
+func TestQuest_Remove_FormRejected(t *testing.T) {
+	ctx := questCtx(t)
+	runQuest(t, ctx, "genesect form:burn")
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+
+	// Pokemon remove (!untrack) treats form: as unrecognized; quest remove
+	// must do the same rather than silently removing every form.
+	replies := runQuest(t, ctx, "remove genesect form:burn")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "🙅", replies[0].React, "reply: %s", replies[0].Text)
+	assert.Contains(t, replies[0].Text, "form:burn")
+
+	rows, _ = ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	assert.Len(t, rows, 1, "rejected remove must not delete anything")
 }
 
 func TestQuest_Remove(t *testing.T) {
@@ -153,8 +206,55 @@ func TestQuest_Everything(t *testing.T) {
 	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
 
 	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
-	// everything creates: pokemon(7), stardust(3), energy(12), candy(4), item(2)
-	assert.Len(t, rows, 5, "everything should create 5 reward types")
+	// everything creates: pokemon(7), stardust(3), pokecoins(8), energy(12), candy(4), item(2)
+	assert.Len(t, rows, 6, "everything should create 6 reward types")
+}
+
+// !quest all_pokemon → single "all pokemon" token after underscore
+// replacement → wildcard pokemon rule (reward_type 7, reward 0).
+func TestQuest_AllPokemon(t *testing.T) {
+	ctx := questCtx(t)
+	cmd := &QuestCommand{}
+	replies := cmd.Run(ctx, []string{"all pokemon"})
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 7, rows[0].RewardType, "pokemon quest reward type")
+	assert.Equal(t, 0, rows[0].Reward, "all pokemon = wildcard reward 0")
+}
+
+// !quest all_items → wildcard item rule (reward_type 2, reward 0).
+func TestQuest_AllItems(t *testing.T) {
+	ctx := questCtx(t)
+	cmd := &QuestCommand{}
+	replies := cmd.Run(ctx, []string{"all items"})
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "✅", replies[0].React, "reply: %s", replies[0].Text)
+
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+	assert.Equal(t, 2, rows[0].RewardType, "item quest reward type")
+	assert.Equal(t, 0, rows[0].Reward, "all items = wildcard reward 0")
+}
+
+// Non-admins are blocked from bulk wildcards when everything_flag_permissions
+// is "deny".
+func TestQuest_AllPokemon_DeniedForNonAdmin(t *testing.T) {
+	ctx := questCtx(t)
+	ctx.Config.Tracking.EverythingFlagPermissions = "deny"
+	ctx.IsAdmin = false
+	cmd := &QuestCommand{}
+	replies := cmd.Run(ctx, []string{"all pokemon"})
+
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "🙅", replies[0].React)
+
+	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
+	assert.Empty(t, rows, "denied bulk wildcard should track nothing")
 }
 
 func TestQuest_SummaryKeyword(t *testing.T) {
@@ -228,8 +328,8 @@ func TestQuest_RemoveSummary_OnlyTargetsSummaryRules(t *testing.T) {
 	// add a non-summary rule for a DIFFERENT reward to confirm the
 	// summary filter doesn't sweep it up.
 	mock := ctx.Tracking.Quests.(*store.MockTrackingStore[db.QuestTrackingAPI])
-	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 0, Clean: 4})  // summary Pikachu
-	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 65, Clean: 4}) // summary Alolan Pikachu
+	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 0, Clean: 4})    // summary Pikachu
+	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 65, Clean: 4})   // summary Alolan Pikachu
 	_, _ = mock.Insert(&db.QuestTrackingAPI{ID: "user1", ProfileNo: 1, RewardType: 7, Reward: 25, Form: 1290, Clean: 0}) // immediate cosplay Pikachu
 	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
 	require.Len(t, rows, 3, "seed should produce 3 rules across distinct forms")
@@ -366,7 +466,7 @@ func TestQuest_EverythingWithAmountRoutesPerRewardType(t *testing.T) {
 	assert.Equal(t, "✅", replies[0].React, "should accept everything + amount:N, reply: %s", replies[0].Text)
 
 	rows, _ := ctx.Tracking.Quests.SelectByIDProfile("user1", 1)
-	require.Len(t, rows, 5, "everything inserts one row per reward type")
+	require.Len(t, rows, 6, "everything inserts one row per reward type")
 
 	byType := map[int]db.QuestTrackingAPI{}
 	for _, r := range rows {
@@ -376,6 +476,8 @@ func TestQuest_EverythingWithAmountRoutesPerRewardType(t *testing.T) {
 	assert.Equal(t, 0, byType[7].Reward, "pokemon: no reward filter")
 	assert.Equal(t, 25, byType[3].Reward, "stardust: amount routes into Reward")
 	assert.Equal(t, 0, byType[3].Amount, "stardust: Amount unused")
+	assert.Equal(t, 25, byType[8].Reward, "pokecoins: amount routes into Reward")
+	assert.Equal(t, 0, byType[8].Amount, "pokecoins: Amount unused")
 	assert.Equal(t, 25, byType[12].Amount, "mega energy: amount → Amount")
 	assert.Equal(t, 25, byType[4].Amount, "candy: amount → Amount")
 	assert.Equal(t, 25, byType[2].Amount, "item: amount → Amount")

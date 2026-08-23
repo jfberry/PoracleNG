@@ -233,4 +233,3 @@ func TestSummaryCommand_Now_FiresDispatch(t *testing.T) {
 		t.Errorf("dispatch called with id=%s type=%s, want user1/quest", lastID, lastType)
 	}
 }
-

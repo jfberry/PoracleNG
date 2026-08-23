@@ -173,6 +173,108 @@ func TestWriteConfigTOML_IntCoercedRoundTrip(t *testing.T) {
 	}
 }
 
+// TestMigrateLegacyLoggingKeys_ExplicitLevelWins — when an explicit `level`
+// is set, it survives and both legacy keys are dropped (they were inert).
+func TestMigrateLegacyLoggingKeys_ExplicitLevelWins(t *testing.T) {
+	raw := map[string]any{"logging": map[string]any{
+		"level": "debug", "log_level": "info", "console_log_level": "info",
+	}}
+	migrateLegacyLoggingKeys(raw)
+	logging := raw["logging"].(map[string]any)
+	if logging["level"] != "debug" {
+		t.Errorf("level = %v, want debug", logging["level"])
+	}
+	if _, ok := logging["log_level"]; ok {
+		t.Error("log_level should be removed")
+	}
+	if _, ok := logging["console_log_level"]; ok {
+		t.Error("console_log_level should be removed")
+	}
+}
+
+// TestMigrateLegacyLoggingKeys_FallbackWhenLevelEmpty — when `level` is absent,
+// the value migrates from log_level (matching the load-time precedence) so the
+// setting is not lost.
+func TestMigrateLegacyLoggingKeys_FallbackWhenLevelEmpty(t *testing.T) {
+	raw := map[string]any{"logging": map[string]any{"log_level": "warn"}}
+	migrateLegacyLoggingKeys(raw)
+	logging := raw["logging"].(map[string]any)
+	if logging["level"] != "warn" {
+		t.Errorf("level = %v, want warn (migrated from log_level)", logging["level"])
+	}
+	if _, ok := logging["log_level"]; ok {
+		t.Error("log_level should be removed")
+	}
+}
+
+// TestMigrateLegacyLoggingKeys_ConsoleFallback — console_log_level is the last
+// resort when neither level nor log_level is set.
+func TestMigrateLegacyLoggingKeys_ConsoleFallback(t *testing.T) {
+	raw := map[string]any{"logging": map[string]any{"console_log_level": "warn"}}
+	migrateLegacyLoggingKeys(raw)
+	logging := raw["logging"].(map[string]any)
+	if logging["level"] != "warn" {
+		t.Errorf("level = %v, want warn (migrated from console_log_level)", logging["level"])
+	}
+}
+
+// TestMigrateLegacyLoggingKeys_NoLegacyNoOp — a section with no legacy keys is
+// left untouched.
+func TestMigrateLegacyLoggingKeys_NoLegacyNoOp(t *testing.T) {
+	raw := map[string]any{"logging": map[string]any{"level": "debug"}}
+	migrateLegacyLoggingKeys(raw)
+	if raw["logging"].(map[string]any)["level"] != "debug" {
+		t.Errorf("level should be unchanged")
+	}
+}
+
+// TestWriteConfigTOML_StripsLegacyLoggingKeys — the exact three-key file the
+// web editor produced: after any save the legacy shadow keys are gone and the
+// effective level (`level`) is the single source of truth.
+func TestWriteConfigTOML_StripsLegacyLoggingKeys(t *testing.T) {
+	dir := t.TempDir()
+	seed := "[logging]\nconsole_log_level = \"info\"\nlevel = \"debug\"\nlog_level = \"info\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(seed), 0644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	updates := map[string]any{"logging": map[string]any{"level": "debug"}}
+	if _, err := writeConfigTOML(dir, updates); err != nil {
+		t.Fatalf("writeConfigTOML: %v", err)
+	}
+	logging, _ := readTOML(t, filepath.Join(dir, "config.toml"))["logging"].(map[string]any)
+	if logging["level"] != "debug" {
+		t.Errorf("level = %v, want debug", logging["level"])
+	}
+	if _, ok := logging["log_level"]; ok {
+		t.Error("log_level should be stripped from disk")
+	}
+	if _, ok := logging["console_log_level"]; ok {
+		t.Error("console_log_level should be stripped from disk")
+	}
+}
+
+// TestWriteConfigTOML_MigratesLegacyOnUnrelatedSave — saving an unrelated
+// section must still clean up legacy logging keys without dropping the level
+// they carried (partial-save safety).
+func TestWriteConfigTOML_MigratesLegacyOnUnrelatedSave(t *testing.T) {
+	dir := t.TempDir()
+	seed := "[logging]\nlog_level = \"warn\"\n\n[general]\nlocale = \"en\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(seed), 0644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	updates := map[string]any{"general": map[string]any{"locale": "de"}}
+	if _, err := writeConfigTOML(dir, updates); err != nil {
+		t.Fatalf("writeConfigTOML: %v", err)
+	}
+	logging, _ := readTOML(t, filepath.Join(dir, "config.toml"))["logging"].(map[string]any)
+	if logging == nil || logging["level"] != "warn" {
+		t.Errorf("level = %v, want warn (migrated, not lost)", logging)
+	}
+	if _, ok := logging["log_level"]; ok {
+		t.Error("log_level should be stripped even on an unrelated save")
+	}
+}
+
 func readTOML(t *testing.T, path string) map[string]any {
 	t.Helper()
 	data, err := os.ReadFile(path)

@@ -2,13 +2,9 @@ package api
 
 import (
 	"fmt"
-	"net/http"
 	"reflect"
 	"sort"
 	"strings"
-
-	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/pokemon/poracleng/processor/internal/config"
 )
@@ -18,114 +14,6 @@ type ConfigDeps struct {
 	Cfg       *config.Config
 	ConfigDir string
 	ReloadFn  func() // called after hot-reloadable settings change
-}
-
-// HandleConfigValues returns current merged config values along with the
-// list of fields currently overridden by config/overrides.json. The editor
-// The `overridden` field is retained in the response shape for the
-// editor's backward compatibility but is now always an empty list:
-// config.toml is the single source of truth — no overrides.json — so
-// there is no "edited via the web UI" distinction to surface. The
-// field can be removed entirely on the editor's next major bump.
-//
-// GET /api/config/values?section=discord
-func HandleConfigValues(deps ConfigDeps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		filterSection := c.Query("section")
-
-		values := ExtractValues(deps.Cfg, filterSection)
-
-		c.JSON(http.StatusOK, gin.H{
-			"status":     "ok",
-			"values":     values,
-			"overridden": []string{},
-		})
-	}
-}
-
-// HandleConfigSave saves config changes to overrides.json.
-// POST /api/config/values
-func HandleConfigSave(deps ConfigDeps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var updates map[string]any
-		if err := c.ShouldBindJSON(&updates); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid request body: " + err.Error()})
-			return
-		}
-
-		if len(updates) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "no changes provided"})
-			return
-		}
-
-		// Validate that all sections/fields exist in schema
-		if err := validateUpdates(updates); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
-			return
-		}
-
-		// Per-field value validation (colour format, array length, paths)
-		issues := validateConfigValues(updates, deps.ConfigDir)
-		var errorIssues []ValidationIssue
-		for _, iss := range issues {
-			if iss.Severity == "error" {
-				errorIssues = append(errorIssues, iss)
-			}
-		}
-		if len(errorIssues) > 0 {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"status":  "error",
-				"message": "validation failed",
-				"issues":  errorIssues,
-			})
-			return
-		}
-
-		// Strip masked sensitive values ("****") so the editor can resubmit
-		// a form without wiping secrets the user didn't touch.
-		stripMaskedSensitiveValues(updates)
-
-		// Convert flat table-row fields (discord_channels etc.) back into
-		// the nested struct shape before persisting.
-		nestTableUpdates(updates)
-
-		// Save directly to config.toml. The previous file is backed up
-		// to config/backups/ before the rewrite. Values matching the
-		// schema default are elided (removed) rather than written
-		// literally — keeps the file lean and means a future default
-		// change follows the operator.
-		backupRel, err := writeConfigTOML(deps.ConfigDir, updates)
-		if err != nil {
-			log.Errorf("config save: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "save failed: " + err.Error()})
-			return
-		}
-
-		// Apply to in-memory config
-		config.ApplyOverrides(deps.Cfg, updates)
-
-		// Check if restart is required
-		restartRequired, restartFields := checkRestartRequired(updates)
-
-		// Trigger hot-reload if applicable
-		if !restartRequired && deps.ReloadFn != nil {
-			deps.ReloadFn()
-		}
-
-		saved := countFields(updates)
-		log.Infof("config: saved %d field(s) via API (restart_required=%v, backup=%s)", saved, restartRequired, backupRel)
-
-		resp := gin.H{
-			"status":           "ok",
-			"saved":            saved,
-			"restart_required": restartRequired,
-			"backup":           backupRel,
-		}
-		if len(restartFields) > 0 {
-			resp["restart_fields"] = restartFields
-		}
-		c.JSON(http.StatusOK, resp)
-	}
 }
 
 // ExtractValues reads config fields that are in the schema (web-editable only).

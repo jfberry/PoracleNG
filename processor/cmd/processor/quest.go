@@ -237,6 +237,8 @@ func (ps *ProcessorService) bufferQuestMatches(
 			reward = rewards[0].ItemID
 		case 3: // stardust → amount
 			reward = rewards[0].Amount
+		case 8: // pokecoins → amount
+			reward = rewards[0].Amount
 		}
 	}
 

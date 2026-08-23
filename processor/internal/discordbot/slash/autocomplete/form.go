@@ -129,6 +129,14 @@ func resolvePokemonID(deps *bot.BotDeps, name string) int {
 	return 0
 }
 
+// ResolvePokemonID exposes resolvePokemonID to the dispatcher package so
+// per-species recency boosts (RecentCostumes/RecentForms) can key on the
+// sibling pokemon option. Accepts the canonical English name or a numeric id;
+// returns 0 when unresolved.
+func ResolvePokemonID(deps *bot.BotDeps, name string) int {
+	return resolvePokemonID(deps, name)
+}
+
 // formLabel produces the user-facing label and value for a named form.
 // Form 0 is the species' "any form" placeholder and is filtered out by
 // the caller — the user achieves that semantic by not picking a form.
@@ -150,4 +158,3 @@ func formLabel(enTr, userTr interface{ T(string) string }, formID int) (label, v
 	}
 	return name, strings.ToLower(name)
 }
-

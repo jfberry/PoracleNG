@@ -24,7 +24,7 @@ func openTestDB(t *testing.T) *sqlx.DB {
 }
 
 // mustExec runs a SQL statement and fatals on error.
-func mustExec(t *testing.T, db *sqlx.DB, query string, args ...interface{}) {
+func mustExec(t *testing.T, db *sqlx.DB, query string, args ...any) {
 	t.Helper()
 	if _, err := db.Exec(query, args...); err != nil {
 		t.Fatalf("mustExec(%q): %v", query, err)

@@ -16,6 +16,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// laneIdleTimeout is how long a destination's drainer waits with an empty lane
+// before reaping itself. Deliberately a const — not exposed as config.
+const laneIdleTimeout = 60 * time.Second
+
+// lane is one destination's bounded queue + (implicitly) its single drainer.
+type lane struct {
+	ch     chan *Job
+	target string
+	// pending counts queued + in-flight + about-to-be-enqueued jobs. Guarded by
+	// FairQueue.lanesMu. It exists so the reaper never deletes a lane that has
+	// work or an in-flight enqueue (the counter-under-lock reap-safety pattern).
+	pending int
+}
+
 // failRecord tracks consecutive failures and when the block was applied.
 type failRecord struct {
 	count     atomic.Int32
@@ -28,6 +42,9 @@ type QueueConfig struct {
 	ConcurrentWebhook  int
 	ConcurrentTelegram int
 	FailThreshold      int // consecutive failures before disabling (0 = default 10)
+	// PerRouteBuffer is the buffered capacity of each destination's lane
+	// (from [tuning] delivery_queue_size). <=0 defaults to 200.
+	PerRouteBuffer int
 	// OnDisabled is invoked when a target hits the failure threshold.
 	// Implementation should: disable the user in DB, notify them, post shame.
 	OnDisabled func(target, name, jobType string)
@@ -45,7 +62,6 @@ type QueueConfig struct {
 
 // FairQueue provides per-destination serialization with platform-level concurrency control.
 type FairQueue struct {
-	ch         chan *Job
 	senders    map[string]Sender
 	tracker    *MessageTracker
 	dispatcher *Dispatcher
@@ -55,18 +71,18 @@ type FairQueue struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// Per-platform concurrency semaphores
-	discordSem  chan struct{}
-	webhookSem  chan struct{}
-	telegramSem chan struct{}
+	// Per-destination lanes. Each lane has one drainer goroutine; lanes spawn on
+	// first job for a target and reap after idleTimeout idle. lanesMu guards
+	// the map, each lane's pending, and stopped.
+	lanesMu     sync.Mutex
+	lanes       map[string]*lane
+	stopped     bool
+	perRouteBuf int
 
-	// Per-destination locks ensure max 1 in-flight send per target
-	destLocks sync.Map // target string → *sync.Mutex
-
-	// Per-platform in-flight counters for metrics
-	discordInFlight  atomic.Int64
-	webhookInFlight  atomic.Int64
-	telegramInFlight atomic.Int64
+	// idleTimeout defaults to laneIdleTimeout; it's a per-instance field (not a
+	// mutable global) solely so tests can shorten it without racing live
+	// drainers on shared state — never wired to config.
+	idleTimeout time.Duration
 
 	// Per-destination consecutive failure tracking. After failThreshold
 	// consecutive errors, the destination is disabled via onDisabled
@@ -80,38 +96,38 @@ type FairQueue struct {
 
 	rateLimiter    *ratelimit.Limiter
 	rateLimitHooks RateLimitHooks
+
+	// backpressure counts send enqueues that blocked on a full lane.
+	// lastBackpressureLog throttles the corresponding warn log to once per 5s
+	// (unix nanoseconds, read/written via CompareAndSwap).
+	backpressure        atomic.Int64
+	lastBackpressureLog atomic.Int64
 }
 
-// NewFairQueue creates a FairQueue that reads jobs from ch and dispatches them
-// through the appropriate sender, respecting per-platform concurrency limits.
-// d is the owning Dispatcher; it may be nil in tests that construct FairQueue
-// directly and don't need pause support.
-func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTracker, cfg QueueConfig, d *Dispatcher) *FairQueue {
-	if cfg.ConcurrentDiscord <= 0 {
-		cfg.ConcurrentDiscord = 1
-	}
-	if cfg.ConcurrentWebhook <= 0 {
-		cfg.ConcurrentWebhook = 1
-	}
-	if cfg.ConcurrentTelegram <= 0 {
-		cfg.ConcurrentTelegram = 1
-	}
-
+// NewFairQueue creates a FairQueue that dispatches jobs through the
+// appropriate sender, respecting per-platform concurrency limits. Jobs are
+// routed to per-destination lanes via enqueue; each lane spawns its own
+// drainer goroutine on first use. d is the owning Dispatcher; it may be nil
+// in tests that construct FairQueue directly and don't need pause support.
+func NewFairQueue(senders map[string]Sender, tracker *MessageTracker, cfg QueueConfig, d *Dispatcher) *FairQueue {
 	ctx, cancel := context.WithCancel(context.Background())
 	failThreshold := cfg.FailThreshold
 	if failThreshold <= 0 {
 		failThreshold = 10
 	}
+	perRouteBuf := cfg.PerRouteBuffer
+	if perRouteBuf <= 0 {
+		perRouteBuf = 200
+	}
 	return &FairQueue{
-		ch:                ch,
 		senders:           senders,
 		tracker:           tracker,
 		dispatcher:        d,
 		ctx:               ctx,
 		cancel:            cancel,
-		discordSem:        make(chan struct{}, cfg.ConcurrentDiscord),
-		webhookSem:        make(chan struct{}, cfg.ConcurrentWebhook),
-		telegramSem:       make(chan struct{}, cfg.ConcurrentTelegram),
+		lanes:             make(map[string]*lane),
+		perRouteBuf:       perRouteBuf,
+		idleTimeout:       laneIdleTimeout,
 		failThreshold:     failThreshold,
 		failBlockDuration: 5 * time.Minute,
 		onDisabled:        cfg.OnDisabled,
@@ -120,64 +136,165 @@ func NewFairQueue(ch chan *Job, senders map[string]Sender, tracker *MessageTrack
 	}
 }
 
-// Start launches worker goroutines (one per concurrency slot) that drain the job channel.
-func (fq *FairQueue) Start() {
-	total := cap(fq.discordSem) + cap(fq.webhookSem) + cap(fq.telegramSem)
-	for range total {
+// enqueue routes a job to its destination lane, spawning the lane + drainer on
+// first use. block=true (sends) applies backpressure: it blocks until the lane
+// has room. block=false (clean-deletes) drops on a full lane and returns false.
+// Returns false if the queue is stopping or the job was dropped.
+func (fq *FairQueue) enqueue(job *Job, block bool) bool {
+	fq.lanesMu.Lock()
+	if fq.stopped {
+		fq.lanesMu.Unlock()
+		return false
+	}
+	l, ok := fq.lanes[job.Target]
+	if !ok {
+		l = &lane{ch: make(chan *Job, fq.perRouteBuf), target: job.Target}
+		fq.lanes[job.Target] = l
 		fq.wg.Add(1)
-		go fq.worker()
+		go fq.runLane(l)
+		metrics.DeliveryLaneSpawned.Inc()
+	}
+	l.pending++ // reserve BEFORE releasing the lock so the reaper can't drop us
+	fq.lanesMu.Unlock()
+
+	// A concurrent Stop() can close l.ch after we passed the stopped check and
+	// released the lock; sending on a closed channel panics. Recover so a
+	// shutdown race drops the job (returns false) instead of crashing the
+	// caller. A channel send is the only panic source below this point, so this
+	// masks nothing else.
+	defer func() { _ = recover() }()
+
+	if block {
+		select {
+		case l.ch <- job:
+			return true
+		default:
+			// Lane full — record + throttle-log backpressure, then block.
+			fq.recordBackpressure(l.target)
+			l.ch <- job
+			return true
+		}
+	}
+	select {
+	case l.ch <- job:
+		return true
+	default:
+		fq.lanesMu.Lock()
+		l.pending--
+		fq.lanesMu.Unlock()
+		fq.recordCleanDropped(l.target)
+		return false
 	}
 }
 
-// Stop closes the job channel, waits for workers to drain remaining jobs,
-// then cancels the context. Channel is closed first so queued jobs are still
-// delivered before shutdown. The Dispatcher owns channel creation; FairQueue
-// closes it here as part of the coordinated shutdown sequence.
+// recordBackpressure is called when a send blocks on a full lane. It counts the
+// event and logs at most once per 5s per queue (naming the target), so a hot
+// lane doesn't flood the log.
+func (fq *FairQueue) recordBackpressure(target string) {
+	metrics.DeliveryLaneBackpressure.Inc()
+	fq.backpressure.Add(1)
+	now := time.Now().UnixNano()
+	last := fq.lastBackpressureLog.Load()
+	if now-last > int64(5*time.Second) && fq.lastBackpressureLog.CompareAndSwap(last, now) {
+		log.Warnf("delivery: lane full, applying backpressure to sends for %s", target)
+	}
+}
+
+// recordCleanDropped is called when a clean-delete is dropped on a full lane.
+func (fq *FairQueue) recordCleanDropped(target string) {
+	metrics.DeliveryCleanDeleteDropped.Inc()
+}
+
+// BackpressureCount returns the cumulative count of send enqueues that blocked
+// on a full lane. Used by the [Status] reporter to detect a developing backlog.
+func (fq *FairQueue) BackpressureCount() int64 { return fq.backpressure.Load() }
+
+// runLane is one destination's drainer: it processes jobs FIFO and reaps itself
+// after idleTimeout with an empty lane and no pending work.
+func (fq *FairQueue) runLane(l *lane) {
+	defer fq.wg.Done()
+	idle := time.NewTimer(fq.idleTimeout)
+	defer idle.Stop()
+	for {
+		select {
+		case job, ok := <-l.ch:
+			if !ok {
+				return // channel closed on shutdown
+			}
+			if !idle.Stop() {
+				select {
+				case <-idle.C:
+				default:
+				}
+			}
+			fq.processJob(job)
+			fq.lanesMu.Lock()
+			l.pending--
+			fq.lanesMu.Unlock()
+			idle.Reset(fq.idleTimeout)
+		case <-idle.C:
+			fq.lanesMu.Lock()
+			if l.pending == 0 {
+				delete(fq.lanes, l.target)
+				fq.lanesMu.Unlock()
+				metrics.DeliveryLaneReaped.Inc()
+				return // reap: no work, no in-flight enqueue
+			}
+			fq.lanesMu.Unlock()
+			idle.Reset(fq.idleTimeout)
+		}
+	}
+}
+
+// Start is retained for API compatibility. Lanes spawn on demand in enqueue, so
+// there is no worker pool to launch here.
+func (fq *FairQueue) Start() {}
+
+// Stop marks the queue stopped (new enqueues rejected), closes every live lane
+// so its drainer finishes buffered jobs and exits, waits for all drainers, then
+// cancels the context. Buffered jobs are still delivered before shutdown.
 func (fq *FairQueue) Stop() {
-	close(fq.ch)
-	log.Info("delivery: waiting for queue workers to drain...")
+	fq.lanesMu.Lock()
+	fq.stopped = true
+	for _, l := range fq.lanes {
+		close(l.ch)
+	}
+	fq.lanesMu.Unlock()
+
+	log.Info("delivery: waiting for delivery lanes to drain...")
 	fq.wg.Wait()
-	log.Info("delivery: queue workers drained")
+	log.Info("delivery: delivery lanes drained")
 	fq.cancel()
 }
 
-func (fq *FairQueue) worker() {
-	defer fq.wg.Done()
-	for job := range fq.ch {
-		fq.processJob(job)
-	}
-}
-
 func (fq *FairQueue) processJob(job *Job) {
-	// 1. Acquire per-destination lock (ensures max 1 send per target)
-	lockI, _ := fq.destLocks.LoadOrStore(job.Target, &sync.Mutex{})
-	destLock := lockI.(*sync.Mutex)
-	destLock.Lock()
-	defer destLock.Unlock()
-
-	// 2. Wait for rate limits BEFORE acquiring semaphore so that
-	//    rate-limited goroutines don't hold concurrency slots.
+	// 1. Wait for rate limits. Per-platform wire concurrency is now enforced
+	//    by the sender itself (see DiscordSender/TelegramSender.roundTrip),
+	//    acquired per HTTP call rather than held across this whole job.
 	platform := PlatformFromType(job.Type)
 	if sender, ok := fq.senders[platform]; ok {
 		sender.WaitForRateLimit(job.Target)
 	}
 
-	// 3. Acquire platform semaphore (limits global concurrency per platform)
-	sem := fq.semaphoreFor(job.Type)
-	sem <- struct{}{}
-	defer func() { <-sem }()
-
-	// Track per-platform in-flight count
-	counter := fq.counterFor(job.Type)
-	counter.Add(1)
-	metrics.DeliveryInFlight.WithLabelValues(platform).Inc()
-	defer func() {
-		counter.Add(-1)
-		metrics.DeliveryInFlight.WithLabelValues(platform).Dec()
-	}()
 	sender, ok := fq.senders[platform]
 	if !ok {
 		logref.Warnf(job.LogReference, "delivery: no sender for platform %q (type=%s target=%s)", platform, job.Type, job.Target)
+		return
+	}
+
+	// Clean-delete job (routed here from the tracker's TTL eviction). This
+	// job's lane drainer serialises it with other deletes and sends to this
+	// target (one drainer per target) — the fix for a burst of expiring
+	// alerts firing concurrent DELETEs that 429 each other into failure.
+	// Sender.Delete carries its own 429 Retry-After backoff and acquires its
+	// own wire-call concurrency slot. No alert-limit accounting, tracking,
+	// snapshot, or failure-disable: a delete is cleanup, not a send.
+	if job.DeleteSentID != "" {
+		if err := sender.Delete(fq.ctx, job.DeleteSentID); err != nil {
+			logref.Warnf(job.LogReference, "delivery: clean delete failed for %s: %v", job.DeleteSentID, err)
+		} else {
+			metrics.DeliveryCleanTotal.Inc()
+		}
 		return
 	}
 
@@ -254,7 +371,7 @@ func (fq *FairQueue) processJob(job *Job) {
 		return
 	}
 
-	// 2b. Squash sends that ask for clean but whose TTH is already expired.
+	// 1b. Squash sends that ask for clean but whose TTH is already expired.
 	// The tracker can't schedule a deletion for a past TTL, so sending would
 	// leave the message in the channel forever. This commonly hits alerts
 	// about events that expired before enrichment ran (Golbat flush delay,
@@ -269,13 +386,13 @@ func (fq *FairQueue) processJob(job *Job) {
 		return
 	}
 
-	// 3. Send new message — skip if target has been disabled from repeated failures
+	// 2. Send new message — skip if target has been disabled from repeated failures
 	if fq.isTargetDisabled(job.Target) {
 		metrics.DeliveryTotal.WithLabelValues(platform, "stopped").Inc()
 		return
 	}
 
-	// 3b. Authoritative rate-limit count. Bypass jobs (rate-limit
+	// 2b. Authoritative rate-limit count. Bypass jobs (rate-limit
 	//     notifications, ban farewells) skip the check entirely so the
 	//     limiter can never swallow the very message reporting on itself.
 	if fq.rateLimiter != nil && !job.BypassRateLimit {
@@ -287,13 +404,13 @@ func (fq *FairQueue) processJob(job *Job) {
 				logref.Infof(job.LogReference, "rate limit reached for %s %s %s (%d messages in %ds)",
 					job.Type, job.Target, job.Name, result.Limit, result.ResetSeconds)
 				if fq.rateLimitHooks != nil {
-					// Hooks dispatch bypass jobs back into the same channel.
-					// Calling them synchronously here would block this worker
-					// while it still holds the per-destination mutex — and if
-					// the channel is full of further jobs to the same target
-					// (the very condition that produced the breach) those
-					// jobs cannot drain because we hold their lock. Fire and
-					// forget instead, so the worker can release the dest lock
+					// Hooks dispatch bypass jobs back into the same lane.
+					// Calling them synchronously here would block this job
+					// while its lane drainer is busy — and if the lane is
+					// full of further jobs to the same target (the very
+					// condition that produced the breach) those jobs cannot
+					// drain because the drainer is stuck in the hook. Fire
+					// and forget instead, so the drainer can move on
 					// promptly while the hook completes asynchronously.
 					hooks := fq.rateLimitHooks
 					target, typ, name, lang := job.Target, job.Type, job.Name, job.Language
@@ -375,7 +492,7 @@ func (fq *FairQueue) processJob(job *Job) {
 		}
 	}
 
-	// 4. Track for clean/edit/reply if needed.
+	// 3. Track for clean/edit/reply if needed.
 	// ReplyKey on its own (without clean/edit) is enough to want tracking —
 	// otherwise reply chains can't form because the tracker has no entry
 	// to find on the next change event.
@@ -406,45 +523,57 @@ func (fq *FairQueue) processJob(job *Job) {
 			MsgType:  job.MsgType,
 			Clean:    job.Clean,
 			ReplyKey: job.ReplyKey,
+			Template: job.Template,
 		}, ttl)
 		logref.Debugf(job.LogReference, "tracked message key=%s sentID=%s ttl=%v clean=%d replyKey=%q", key, sent.ID, ttl, job.Clean, job.ReplyKey)
 	}
 }
 
-func (fq *FairQueue) semaphoreFor(jobType string) chan struct{} {
-	if jobType == "webhook" {
-		return fq.webhookSem
+// LaneStats walks the lane map once under lanesMu. Returns total buffered jobs,
+// active lane count, deepest single-lane depth, that lane's target, and the
+// count of lanes at/over 80% of perRouteBuf. Pure read — sets no metrics.
+func (fq *FairQueue) LaneStats() (totalQueued, active, maxDepth int, deepestTarget string, nearCap int) {
+	fq.lanesMu.Lock()
+	defer fq.lanesMu.Unlock()
+	active = len(fq.lanes)
+	threshold := fq.perRouteBuf * 8 / 10
+	for target, l := range fq.lanes {
+		d := len(l.ch)
+		totalQueued += d
+		if d > maxDepth {
+			maxDepth = d
+			deepestTarget = target
+		}
+		if threshold > 0 && d >= threshold {
+			nearCap++
+		}
 	}
-	platform := PlatformFromType(jobType)
-	switch platform {
-	case "telegram":
-		return fq.telegramSem
-	default:
-		return fq.discordSem
-	}
+	return
 }
 
-func (fq *FairQueue) counterFor(jobType string) *atomic.Int64 {
-	if jobType == "webhook" {
-		return &fq.webhookInFlight
+// DiscordDepth returns discord bot (channel/DM/thread) wire calls in flight.
+func (fq *FairQueue) DiscordDepth() int {
+	if ds, ok := fq.senders["discord"].(*DiscordSender); ok {
+		return ds.DiscordInFlight()
 	}
-	platform := PlatformFromType(jobType)
-	switch platform {
-	case "telegram":
-		return &fq.telegramInFlight
-	default:
-		return &fq.discordInFlight
-	}
+	return 0
 }
 
-// DiscordDepth returns the number of discord jobs currently in-flight.
-func (fq *FairQueue) DiscordDepth() int { return int(fq.discordInFlight.Load()) }
+// WebhookDepth returns discord webhook wire calls in flight.
+func (fq *FairQueue) WebhookDepth() int {
+	if ds, ok := fq.senders["discord"].(*DiscordSender); ok {
+		return ds.WebhookInFlight()
+	}
+	return 0
+}
 
-// WebhookDepth returns the number of webhook jobs currently in-flight.
-func (fq *FairQueue) WebhookDepth() int { return int(fq.webhookInFlight.Load()) }
-
-// TelegramDepth returns the number of telegram jobs currently in-flight.
-func (fq *FairQueue) TelegramDepth() int { return int(fq.telegramInFlight.Load()) }
+// TelegramDepth returns telegram wire calls in flight.
+func (fq *FairQueue) TelegramDepth() int {
+	if ts, ok := fq.senders["telegram"].(*TelegramSender); ok {
+		return ts.TelegramInFlight()
+	}
+	return 0
+}
 
 // recordFailure increments the consecutive failure counter for a target.
 // When the threshold is reached, invokes the onDisabled callback and

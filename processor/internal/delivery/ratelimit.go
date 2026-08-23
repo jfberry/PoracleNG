@@ -24,9 +24,9 @@ type DiscordRateLimiter struct {
 	// 429 ring-buffer: 60 one-minute slots covering 60 minutes.
 	// slot index = (minute % 60); each slot holds the count for that minute.
 	// slotMinute tracks which wall-clock minute each slot was last written.
-	counter429      [60]int32
-	counter429Mins  [60]int64 // Unix minute when the slot was last written
-	nowFunc         func() time.Time // injectable for tests; nil → time.Now
+	counter429     [60]int32
+	counter429Mins [60]int64        // Unix minute when the slot was last written
+	nowFunc        func() time.Time // injectable for tests; nil → time.Now
 }
 
 type targetLimit struct {

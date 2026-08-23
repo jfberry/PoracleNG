@@ -2,14 +2,11 @@ package api
 
 import (
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/gin-gonic/gin"
 )
 
 // ValidationIssue describes a problem with a single config field value.
@@ -19,28 +16,6 @@ type ValidationIssue struct {
 	Field    string `json:"field"`    // dotted path, e.g. "geofence.paths[0]"
 	Severity string `json:"severity"` // "error" or "warning"
 	Message  string `json:"message"`
-}
-
-// HandleConfigValidate runs the same validation pass as POST /api/config/values
-// but doesn't save anything. Used by the editor to live-preview validation
-// state (path existence checks, colour format, array length, etc.) before
-// the user submits.
-//
-// POST /api/config/validate
-func HandleConfigValidate(deps ConfigDeps) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var updates map[string]any
-		if err := c.ShouldBindJSON(&updates); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid request body: " + err.Error()})
-			return
-		}
-
-		issues := validateConfigValues(updates, deps.ConfigDir)
-		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
-			"issues": issues,
-		})
-	}
 }
 
 // validateConfigValues runs all per-field validators and returns the list

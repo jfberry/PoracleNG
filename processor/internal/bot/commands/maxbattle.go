@@ -22,7 +22,7 @@ var maxbattleParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.move"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.gen"},
-	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixString, Key: "arg.prefix.location"},
 	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
@@ -208,6 +208,10 @@ func (c *MaxbattleCommand) resolveMonsters(ctx *bot.CommandContext, parsed *bot.
 }
 
 func (c *MaxbattleCommand) removeMaxbattles(ctx *bot.CommandContext, parsed *bot.ParsedArgs) []bot.Reply {
+	if reply := rejectFormOnRemove(ctx, parsed); reply != nil {
+		return []bot.Reply{*reply}
+	}
+
 	if len(parsed.RemoveUIDs) > 0 {
 		tr := ctx.Tr()
 		return removeByUIDs(ctx, ctx.Tracking.Maxbattles, parsed.RemoveUIDs,

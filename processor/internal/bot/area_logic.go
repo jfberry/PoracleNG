@@ -277,4 +277,3 @@ func BuildPermittedSet(communities []config.CommunityConfig, memberOf []string) 
 	}
 	return permitted
 }
-

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -106,6 +107,61 @@ func TestShortenInvalidResponse(t *testing.T) {
 	s := NewShlinkShortener(server.URL, "key", "")
 	result := s.Shorten("https://example.com/original")
 	assert.Equal(t, "https://example.com/original", result)
+}
+
+// A reachable Shlink returning 2xx with a body we can't use (bad JSON, empty
+// short URL) must NOT trip the breaker — it's responding, just unhelpfully, so
+// every call should keep hitting it and falling back per-call.
+func TestShortenBadBodyDoesNotTripBreaker(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("not json"))
+	}))
+	defer server.Close()
+
+	s := NewShlinkShortener(server.URL, "key", "")
+	for i := range 8 {
+		if got := s.Shorten("https://example.com/original"); got != "https://example.com/original" {
+			t.Fatalf("call %d: got %q, want fallback", i, got)
+		}
+	}
+	if s.breaker.IsOpen() {
+		t.Error("breaker opened on reachable bad-body responses; it should stay closed")
+	}
+	if c := calls.Load(); c != 8 {
+		t.Errorf("server hit %d times, want 8 (breaker must not short-circuit)", c)
+	}
+}
+
+// A genuinely failing Shlink (5xx) SHOULD trip the breaker and stop the calls.
+func TestShortenServerErrorTripsBreaker(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	s := NewShlinkShortener(server.URL, "key", "")
+	// Default threshold is 5 consecutive failures.
+	for range 5 {
+		s.Shorten("https://example.com/original")
+	}
+	if !s.breaker.IsOpen() {
+		t.Fatal("breaker should be open after 5 server errors")
+	}
+	hits := calls.Load()
+	// Further calls short-circuit — server not contacted.
+	for range 3 {
+		if got := s.Shorten("https://example.com/original"); got != "https://example.com/original" {
+			t.Fatalf("expected fallback during circuit break, got %q", got)
+		}
+	}
+	if extra := calls.Load() - hits; extra != 0 {
+		t.Errorf("circuit open but server hit %d more times", extra)
+	}
 }
 
 func TestShortenEmptyShortURL(t *testing.T) {

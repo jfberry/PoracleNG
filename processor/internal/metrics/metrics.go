@@ -307,6 +307,40 @@ var (
 		Help: "Current telegram delivery queue depth",
 	})
 
+	// Per-destination lane metrics (aggregate — no per-target labels).
+	DeliveryActiveLanes = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_active_lanes",
+		Help: "Live per-destination delivery lanes (spawned minus reaped)",
+	})
+	DeliveryLaneQueued = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_lane_queued",
+		Help: "Total buffered delivery jobs across all lanes",
+	})
+	DeliveryLaneMaxDepth = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_lane_max_depth",
+		Help: "Deepest single lane's buffered depth (head-of-line signal)",
+	})
+	DeliveryLanesNearCapacity = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "poracle_delivery_lanes_near_capacity",
+		Help: "Lanes at or above 80% of the per-route buffer",
+	})
+	DeliveryLaneBackpressure = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_delivery_lane_backpressure_total",
+		Help: "Send enqueues that blocked on a full lane",
+	})
+	DeliveryCleanDeleteDropped = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_delivery_clean_delete_dropped_total",
+		Help: "Clean-deletes dropped on a full or shutting-down lane (not recovered on next load)",
+	})
+	DeliveryLaneSpawned = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_delivery_lane_spawned_total",
+		Help: "Delivery lanes spawned",
+	})
+	DeliveryLaneReaped = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "poracle_delivery_lane_reaped_total",
+		Help: "Delivery lanes reaped after idle",
+	})
+
 	// Per-platform in-flight (concurrency saturation)
 	DeliveryInFlight = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "poracle_delivery_in_flight",

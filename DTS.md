@@ -210,6 +210,7 @@ These fields are available in every template:
 | `neighbourhood` | string | Neighbourhood name |
 | `suburb` | string | Suburb name |
 | `flag` | string | Country flag emoji |
+| `intersection` | string | Nearest street intersection (`Street1 & Street2`) from GeoNames; empty when disabled (`[geocoding] intersection_users`) or none nearby |
 | `staticMap` | string | Static map tile image URL |
 | `staticmap` | string | *Deprecated* — alias for `staticMap` |
 | `imgUrl` | string | Primary icon URL |
@@ -420,8 +421,11 @@ Time-remaining fields (`tthd`, `tthh`, `tthm`, `tths`) are in the Common Fields 
 | `megaEvolutions` | array | Mega evolution entries |
 | `hasMegaEvolutions` | bool | Has mega evolutions |
 | `pokestopName` | string | Nearby pokestop name (if applicable) |
+| `costumeName` | string | Translated costume name (empty when no costume, i.e. `costume == 0` or the `costume_N` translation key is absent). |
 
 `distance`, `bearing`, `bearingEmoji`, `userDistanceTrack`, `userTrackDistance` are documented in Common Fields.
+
+**Note:** `fullName` already includes the costume, parenthesised, when the pokemon is wearing one — e.g. `"Pikachu (Holiday 2016)"`. `costumeName` is provided separately for templates that want to style or place the costume text independently of `fullName`.
 
 ### seenType values
 
@@ -719,13 +723,17 @@ See `examples/dts/rsvpChanges/rsvp-update.json` for an installable starting poin
 | `pokestopUrl` | string | Pokestop image URL (alias for `pokestop_url`) |
 | `questString` | string | Translated quest objective |
 | `questStringEng` | string | English quest objective |
+| `quest_task` | string | Legacy PoracleJS alias for `questString` (translated objective) |
 | `rewardString` | string | All rewards as text (translated) |
 | `rewardStringEng` | string | English rewards text |
+| `quest_reward` | string | Legacy PoracleJS alias for `rewardString` |
 | `conditionString` | string | Comma-joined completion conditions, translated, e.g. "Excellent Throw, Curve Ball" |
 | `conditionStringEng` | string | English copy of `conditionString` |
+| `quest_conditions` | string | Legacy PoracleJS alias for `conditionString` |
 | `conditionList` | array | Per-condition objects: `{type, name, formatted}` where `name` is the bare label ("Throw Type") and `formatted` includes the payload ("Excellent Throw"). Falls back to bare name when the webhook payload doesn't carry the data needed for the formatted variant. |
 | `conditionListEng` | array | English copy of `conditionList` |
 | `dustAmount` | int | Stardust reward amount |
+| `pokecoinAmount` | int | Pokecoin reward amount |
 | `itemAmount` | int | Item reward amount |
 | `energyAmount` | int | Mega energy amount (first reward) |
 | `candyAmount` | int | Candy amount (first reward) |
@@ -757,6 +765,8 @@ These are flat top-level strings, not nested under a `rewardData` object:
 | `itemNamesEng` | string | English item names |
 | `dustText` | string | Translated stardust text (e.g. "500 Stardust") |
 | `dustTextEng` | string | English stardust text |
+| `pokecoinText` | string | Translated pokecoin text (e.g. "10 Pokécoins") |
+| `pokecoinTextEng` | string | English pokecoin text |
 | `energyMonstersNames` | string | Mega energy reward text (translated) |
 | `energyMonstersNamesEng` | string | English energy reward text |
 | `candyMonstersNames` | string | Candy reward text (translated) |
@@ -777,7 +787,7 @@ The view passed to `questSummary` is shaped differently from a regular `quest` t
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `rewardType` | int | Reward type ID (2=item, 3=stardust, 4=candy, 7=pokemon, 12=mega energy) |
+| `rewardType` | int | Reward type ID (2=item, 3=stardust, 4=candy, 7=pokemon, 8=pokecoins, 12=mega energy) |
 | `reward` | int | Reward ID (item ID for type 2, dust amount for type 3, pokemon ID for types 4/7/12) |
 | `rewardForm` | int | Pokemon form ID for `rewardType == 7` (so e.g. two different Spinda forms group separately). `0` for all other reward types. |
 | `rewardName` | string | Translated reward name for the group header. Formatted to match the per-row reward strings from regular `quest` enrichment, **with amounts stripped** for types 2/4/12 because amounts vary across stops within a group. Examples: `"Spinda 01"` (type 7 + form, matches per-row `fullName`), `"Lapras Candy"` (type 4), `"Charizard Mega Energy"` (type 12), `"Razz Berry"` (type 2), `"1500 Stardust"` (type 3 — amount is included because it's part of the group key). |
@@ -862,7 +872,11 @@ These aliases are added on top of the pokestop / location / time / weather field
 
 ### Showcase fields
 
-These fields are only populated for **Showcase** incidents (`displayType == 9`). Always guard showcase blocks with `{{#if showcasePresent}}`.
+**Showcases render via their own `type: "showcase"` template** — a specialised display model (focus + leaderboard), distinct from the plain `incident` card used by Gold-Stop / Kecleon. A bundled default `showcase` template ships in `fallbacks/dts.json`; operators can override it like any other type. (Showcases are still *tracked* as incidents — a `grunt_type="showcase"` incident rule — only the rendered template differs.)
+
+The `showcase` type resolves the pokestop-identity / time / `displayType` fields (shared with `incident`) **plus** the showcase fields below. It does **not** carry the incident-only aliases `incidentTypeName`, `incidentEmoji`, or `color` — the bundled template hardcodes its title/emoji/colour, so those render empty if used in a showcase template.
+
+Always guard the leaderboard with `{{#if showcasePresent}}` and the focus line with `{{#if showcaseFocusPresent}}`.
 
 #### Top-level showcase fields
 
@@ -874,6 +888,13 @@ These fields are only populated for **Showcase** incidents (`displayType == 9`).
 | `showcaseLastUpdateFormatted` | string | `showcaseLastUpdate` formatted using the operator's configured time layout. |
 | `showcase` | array | Up to 3 enriched contestant entries (see per-entry fields below). Empty array when no data. |
 | `showcaseFirst` | object | Convenience alias for `showcase[0]` (the winner). `nil` when no contestants. |
+| `showcaseFocusPresent` | bool | `true` when the contest's featured focus was decoded. Guard focus blocks with `{{#if showcaseFocusPresent}}`. |
+| `showcaseFocusType` | string | Raw focus class: `pokemon`, `type`, `alignment`, `class`, `family`, `buddy`, `generation`, `hatched`, `mega`, `shiny`. |
+| `showcaseFocusCategory` | string | Translated focus category label, e.g. `Type`, `Buddy`. |
+| `showcaseFocusName` | string | Translated featured value, e.g. `Steel` (type focus) or `3+` (buddy focus). Empty for flag focuses (`hatched`/`shiny`/`mega`) — the category conveys it. |
+| `showcaseFocusEmoji` | string | Optional emoji key for the focus category (from `util.json` `showcaseFocus`). |
+
+The focus tells you *what the contest is featuring* (e.g. "Type: Steel"), separate from the `showcase` leaderboard of *who is winning*. Example: `{{#if showcaseFocusPresent}}Featuring {{showcaseFocusCategory}}: {{showcaseFocusName}}{{/if}}`.
 
 #### Per-entry fields (each item in `{{#each showcase}}`)
 

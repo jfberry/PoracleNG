@@ -2,7 +2,10 @@ package staticmap
 
 import (
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -297,31 +300,41 @@ func TestGetTileURLMulti(t *testing.T) {
 }
 
 func TestCircuitBreaker(t *testing.T) {
+	// Tileserver that always fails; after the failure threshold the breaker
+	// should open and stop hitting it.
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
 	r := New(Config{
 		Provider:                   "tileservercache",
-		ProviderURL:                "https://tiles.example.com",
+		ProviderURL:                srv.URL,
 		TileserverFailureThreshold: 3,
-		TileserverCooldownMs:       100, // short for testing
+		TileserverCooldownMs:       60000, // long so the circuit stays open in-test
 	})
 
-	// Record errors to open circuit
-	r.recordError()
-	r.recordError()
-	r.recordError()
-
-	r.mu.Lock()
-	if r.consecutiveErrors < 3 {
-		t.Errorf("expected >= 3 consecutive errors, got %d", r.consecutiveErrors)
+	// Three failing POSTs trip the breaker.
+	for i := range 3 {
+		if got := r.GetPregeneratedTileURL("monster", map[string]any{}, "staticMap"); got != "" {
+			t.Fatalf("call %d: expected empty on tileserver 500, got %q", i, got)
+		}
 	}
-	if r.circuitOpenSince.IsZero() {
-		t.Error("expected circuit to be open")
+	hits := calls.Load()
+	if hits != 3 {
+		t.Fatalf("expected 3 tileserver hits before open, got %d", hits)
 	}
-	r.mu.Unlock()
 
-	// Pregenerate should return empty during cooldown
-	result := r.GetPregeneratedTileURL("monster", map[string]any{}, "staticMap")
-	if result != "" {
-		t.Errorf("expected empty during circuit break, got %q", result)
+	// Further calls are short-circuited — the tileserver is not contacted.
+	for range 3 {
+		if got := r.GetPregeneratedTileURL("monster", map[string]any{}, "staticMap"); got != "" {
+			t.Fatalf("expected empty during circuit break, got %q", got)
+		}
+	}
+	if extra := calls.Load() - hits; extra != 0 {
+		t.Errorf("circuit open but tileserver hit %d more times", extra)
 	}
 }
 

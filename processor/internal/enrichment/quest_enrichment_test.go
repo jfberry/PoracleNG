@@ -193,6 +193,40 @@ func TestQuestTranslateStardustReward(t *testing.T) {
 	}
 }
 
+// --- Test 5b: Pokecoins reward ---
+
+func TestQuestTranslatePokecoinsReward(t *testing.T) {
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
+	}
+
+	e := newQuestEnricher(t, gd, map[string]map[string]string{
+		"en": {
+			"quest_reward_8": "Pokécoins",
+		},
+	})
+
+	quest := &webhook.QuestWebhook{
+		Title:  "some_quest",
+		Target: 1,
+	}
+
+	rewards := []matching.QuestRewardData{{Type: 8, Amount: 10}}
+	base := map[string]any{"pokecoinAmount": 10}
+
+	m := e.QuestTranslate(base, quest, rewards, "en")
+
+	rewardString, _ := m["rewardString"].(string)
+	if !strings.Contains(rewardString, "10 Pokécoins") {
+		t.Errorf("rewardString = %q, want to contain %q", rewardString, "10 Pokécoins")
+	}
+
+	pokecoinText, _ := m["pokecoinText"].(string)
+	if pokecoinText != "10 Pokécoins" {
+		t.Errorf("pokecoinText = %q, want %q", pokecoinText, "10 Pokécoins")
+	}
+}
+
 // --- Test 6: Mega energy reward ---
 
 func TestQuestTranslateMegaEnergyReward(t *testing.T) {

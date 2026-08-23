@@ -625,5 +625,40 @@
         ]
       }
     }
+  },
+  {
+    "id": 1,
+    "language": "en",
+    "type": "showcase",
+    "default": true,
+    "platform": "discord",
+    "template": {
+      "embed": {
+        "title": "\ud83c\udfaa Showcase at {{{pokestopName}}}",
+        "url": "{{{googleMapUrl}}}",
+        "color": "03AEB6",
+        "description": "Ends: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}){{#if showcaseFocusPresent}}\n\n\ud83c\udfaf **Featuring {{showcaseFocusCategory}}**{{#if showcaseFocusName}}: {{showcaseFocusName}}{{/if}}{{/if}}{{#if showcasePresent}}\n\n\ud83c\udfc6 **Top contestants** ({{showcaseTotalEntries}} entries):\n{{#each showcase}}{{rank}}. {{fullName}}{{#if shiny}} \u2728{{/if}}{{#if costumeName}} ({{costumeName}}){{/if}} \u2014 {{scoreFormatted}}\n{{/each}}{{/if}}",
+        "thumbnail": {
+          "url": "{{{imgUrl}}}"
+        },
+        "image": {
+          "url": "{{{staticMap}}}"
+        }
+      }
+    }
+  },
+  {
+    "id": 1,
+    "language": "en",
+    "type": "showcase",
+    "default": true,
+    "platform": "telegram",
+    "template": {
+      "content": "\ud83c\udfaa Showcase at {{{pokestopName}}}\nEnds: {{disappearTime}} ({{#if tthh}}{{tthh}}h {{/if}}{{tthm}}m {{tths}}s)\nAddress: {{{addr}}}\n[Google]({{{googleMapUrl}}}) | [Apple]({{{appleMapUrl}}}){{#if showcaseFocusPresent}}\n\n\ud83c\udfaf Featuring {{showcaseFocusCategory}}{{#if showcaseFocusName}}: {{showcaseFocusName}}{{/if}}{{/if}}{{#if showcasePresent}}\n\n\ud83c\udfc6 Top contestants ({{showcaseTotalEntries}} entries):\n{{#each showcase}}{{rank}}. {{fullName}}{{#if shiny}} \u2728{{/if}}{{#if costumeName}} ({{costumeName}}){{/if}} \u2014 {{scoreFormatted}}\n{{/each}}{{/if}}",
+      "sticker": "{{{stickerUrl}}}",
+      "parse_mode": "Markdown",
+      "location": true,
+      "webpage_preview": true
+    }
   }
 ]

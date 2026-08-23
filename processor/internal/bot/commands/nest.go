@@ -21,7 +21,7 @@ var nestParams = []bot.ParamDef{
 	{Type: bot.ParamPrefixString, Key: "arg.prefix.form"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.gen"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.minspawn"},
-	{Type: bot.ParamPrefixString,     Key: "arg.prefix.location"},
+	{Type: bot.ParamPrefixString, Key: "arg.prefix.location"},
 	{Type: bot.ParamPrefixStringList, Key: "arg.prefix.area"},
 	{Type: bot.ParamKeyword, Key: "arg.remove"},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
@@ -55,6 +55,12 @@ func (c *NestCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 		return []bot.Reply{*warn}
+	}
+
+	if parsed.HasKeyword("arg.remove") {
+		if reply := rejectFormOnRemove(ctx, parsed); reply != nil {
+			return []bot.Reply{*reply}
+		}
 	}
 
 	// `remove id:N` is unambiguous — no pokemon required. Hoist this above the

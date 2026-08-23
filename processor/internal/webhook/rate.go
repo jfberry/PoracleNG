@@ -12,6 +12,10 @@ import (
 // and one for per-minute per-type maps. The slot index is (unix/60 % 60), so
 // each slot covers exactly one calendar minute. Slots are overwritten when a
 // new minute arrives, giving automatic O(1) decay with no background goroutine.
+//
+// tracker.StatsTracker runs the same mechanism over a configurable window for
+// per-species counts. The wrap-recycling and stale-slot invariants are shared,
+// so a boundary bug found here is almost certainly present there too.
 type RateCounter struct {
 	mu sync.Mutex
 

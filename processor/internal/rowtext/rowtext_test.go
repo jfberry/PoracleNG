@@ -528,8 +528,8 @@ func TestRowText_MonsterShowsOverrides(t *testing.T) {
 
 	// Override location label only.
 	rule := &db.MonsterTracking{
-		PokemonID:             25,
-		MinIV:                 -1, MaxIV: 100,
+		PokemonID: 25,
+		MinIV:     -1, MaxIV: 100,
 		MinCP: 0, MaxCP: 9000,
 		MinLevel: 0, MaxLevel: 55,
 		MaxATK: 15, MaxDEF: 15, MaxSTA: 15,
@@ -653,6 +653,32 @@ func TestMonsterRowText_MegaMode(t *testing.T) {
 	}
 }
 
+func TestRaidRowText_Costume(t *testing.T) {
+	tr := i18n.NewTranslator("en", map[string]string{
+		"poke_25":        "Pikachu",
+		"costume_1":      "Holiday 2016",
+		"msg.no_costume": "no costume",
+	})
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{{ID: 25, Form: 0}: {PokemonID: 25}},
+		Costumes: map[int]gamedata.CostumeInfo{1: {ID: 1, Name: "Holiday 2016"}},
+	}
+	g := &Generator{GD: gd, DefaultTemplateName: "1"}
+
+	// costume N -> shows the name
+	if got := g.RaidRowText(tr, &db.RaidTracking{PokemonID: 25, Level: 5, Costume: 1, Move: 9000, Evolution: 9000, Template: "1"}); !strings.Contains(got, "Holiday 2016") {
+		t.Errorf("costume 1 row should contain the costume name, got: %q", got)
+	}
+	// costume 0 -> "no costume"
+	if got := g.RaidRowText(tr, &db.RaidTracking{PokemonID: 25, Level: 5, Costume: 0, Move: 9000, Evolution: 9000, Template: "1"}); !strings.Contains(got, "no costume") {
+		t.Errorf("costume 0 row should contain 'no costume', got: %q", got)
+	}
+	// costume 9000 (any) -> nothing costume-related
+	if got := g.RaidRowText(tr, &db.RaidTracking{PokemonID: 25, Level: 5, Costume: 9000, Move: 9000, Evolution: 9000, Template: "1"}); strings.Contains(got, "Holiday 2016") || strings.Contains(got, "no costume") {
+		t.Errorf("costume 9000 row should not mention costume, got: %q", got)
+	}
+}
+
 func TestUcFirst(t *testing.T) {
 	tests := []struct {
 		input, want string
@@ -667,5 +693,48 @@ func TestUcFirst(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("ucFirst(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+// TestTranslateMonsterName_FormSuppression covers the Rattata scenario: an
+// explicitly-tracked "Normal" form (form 45, non-zero) must show its name in
+// !tracked so it's distinguishable from the "any form" (form 0) tracking and
+// from other named forms (Alola, form 46). Only form 0 suppresses a
+// Normal/Unset label.
+func TestTranslateMonsterName_FormSuppression(t *testing.T) {
+	gd := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
+			{ID: 19, Form: 0}:  {PokemonID: 19, FormID: 0},
+			{ID: 19, Form: 45}: {PokemonID: 19, FormID: 45},
+			{ID: 19, Form: 46}: {PokemonID: 19, FormID: 46},
+		},
+	}
+	// form_45 → "Normal" and form_46 → "Alola" come from gamelocale in
+	// production; inject them directly since i18n.Load("") skips gamelocale.
+	tr := i18n.NewTranslator("en", map[string]string{
+		"poke_19": "Rattata",
+		"form_45": "Normal",
+		"form_46": "Alola",
+	})
+
+	tests := []struct {
+		name     string
+		form     int
+		wantForm string
+	}{
+		{"explicit normal form shows Normal", 45, "Normal"},
+		{"named form shows its name", 46, "Alola"},
+		{"any form (0) stays blank", 0, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotName, gotForm := translateMonsterName(tr, gd, 19, tt.form)
+			if gotName != "Rattata" {
+				t.Errorf("name = %q, want %q", gotName, "Rattata")
+			}
+			if gotForm != tt.wantForm {
+				t.Errorf("form %d: formName = %q, want %q", tt.form, gotForm, tt.wantForm)
+			}
+		})
 	}
 }

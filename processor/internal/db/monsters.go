@@ -13,6 +13,7 @@ type MonsterTracking struct {
 	ProfileNo             int      `db:"profile_no"`
 	PokemonID             int      `db:"pokemon_id"`
 	Form                  int      `db:"form"`
+	Costume               int      `db:"costume"`
 	Distance              int      `db:"distance"`
 	MinIV                 int      `db:"min_iv"`
 	MaxIV                 int      `db:"max_iv"`
@@ -89,7 +90,7 @@ func BuildMonsterIndexFromRules(monsters []MonsterTracking) *MonsterIndex {
 func LoadMonsters(db *sqlx.DB) (*MonsterIndex, error) {
 	var monsters []MonsterTracking
 	err := db.Select(&monsters,
-		`SELECT uid, id, profile_no, pokemon_id, form, distance,
+		`SELECT uid, id, profile_no, pokemon_id, form, costume, distance,
 		        min_iv, max_iv, min_cp, max_cp, min_level, max_level,
 		        atk, def, sta, max_atk, max_def, max_sta,
 		        gender, min_weight, max_weight, min_time,

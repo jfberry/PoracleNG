@@ -28,7 +28,7 @@ func TestValidateHumans_PVPBlockedAlert(t *testing.T) {
 
 	// Two rules: a basic one (no PVP filter) and a PVP-filtered one.
 	rules := []*db.MonsterTracking{
-		{ID: "u1", UID: 1, PokemonID: 25, ProfileNo: 0}, // basic — should fire
+		{ID: "u1", UID: 1, PokemonID: 25, ProfileNo: 0},                         // basic — should fire
 		{ID: "u1", UID: 2, PokemonID: 25, ProfileNo: 0, PVPRankingLeague: 1500}, // PVP — should be dropped
 	}
 

@@ -9,8 +9,8 @@ import "testing"
 // compares != nil but panics on the first method call (nil receiver
 // derefs s.db). The dial-failure traceback was
 //
-//   scanner.(*GolbatScanner).GetStopData(0x0, ...)
-//     scanner/golbat.go:50 +0x14a
+//	scanner.(*GolbatScanner).GetStopData(0x0, ...)
+//	  scanner/golbat.go:50 +0x14a
 //
 // — the 0x0 receiver is the smoking gun. This test guards against a
 // future signature regression that would re-introduce the panic.

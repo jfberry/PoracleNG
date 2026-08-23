@@ -21,6 +21,47 @@ type EncounterState struct {
 	InsertedAt    int64 // unix timestamp when this entry was first created
 }
 
+// EncounterStateFromPokemon converts a parsed pokemon webhook into an
+// EncounterState snapshot. This is the exact mapping ProcessPokemon
+// (cmd/processor/pokemon.go) applies to every live wild/encounter webhook
+// before calling Track — factored out here so callers that need the same
+// snapshot from an arbitrary PokemonWebhook (e.g. the monsterChanged derived
+// DTS test type's `old` sample, which never passes through Track at all)
+// don't have to re-derive it.
+//
+// BoostedWeather, when set, wins over the raw Weather cell ID — this is the
+// live weather-boost detection ProcessPokemon relies on to notice a CP shift
+// caused by a boosted-weather change rather than a real re-roll. Individual
+// stat pointers are nil-safe: unencountered wild sightings report CP 0 and
+// nil IV pointers, which collapse to 0 here.
+func EncounterStateFromPokemon(pokemon *webhook.PokemonWebhook) EncounterState {
+	atk, def, sta := 0, 0, 0
+	if pokemon.IndividualAttack != nil {
+		atk = *pokemon.IndividualAttack
+	}
+	if pokemon.IndividualDefense != nil {
+		def = *pokemon.IndividualDefense
+	}
+	if pokemon.IndividualStamina != nil {
+		sta = *pokemon.IndividualStamina
+	}
+	weather := pokemon.Weather
+	if pokemon.BoostedWeather > 0 {
+		weather = pokemon.BoostedWeather
+	}
+	return EncounterState{
+		PokemonID:     pokemon.PokemonID,
+		Form:          pokemon.Form,
+		Gender:        pokemon.Gender,
+		Weather:       weather,
+		CP:            pokemon.CP,
+		ATK:           atk,
+		DEF:           def,
+		STA:           sta,
+		DisappearTime: pokemon.DisappearTime,
+	}
+}
+
 // EncounterChange holds old and new state when a change is detected.
 //
 // OldWebhook carries the prior sighting's already-parsed PokemonWebhook

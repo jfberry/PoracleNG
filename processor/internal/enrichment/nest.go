@@ -80,7 +80,7 @@ func (e *Enricher) Nest(nest *webhook.NestWebhook, tileMode int) (map[string]any
 	e.addMapURLs(m, nest.Lat, nest.Lon, "nests", strconv.FormatInt(nest.NestID, 10))
 
 	// Reverse geocoding
-	e.addGeoResult(m, nest.Lat, nest.Lon)
+	e.addLocationFields(m, nest.Lat, nest.Lon)
 
 	// Static map tile — use autopositioned center if available, else original coords
 	mapLat, mapLon := nest.Lat, nest.Lon
@@ -136,7 +136,7 @@ func (e *Enricher) NestTranslate(base map[string]any, nest *webhook.NestWebhook,
 	form := nest.Form
 
 	tr := e.Translations.For(lang)
-	TranslateMonsterNamesEng(m, e.GameData, tr, e.Translations, pokemonID, form, 0)
+	TranslateMonsterNamesEng(m, e.GameData, tr, e.Translations, pokemonID, form, 0, 0)
 
 	monster := e.GameData.GetMonster(pokemonID, form)
 	if monster != nil {

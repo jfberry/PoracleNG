@@ -10,6 +10,7 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
 	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/stretchr/testify/assert"
@@ -30,11 +31,20 @@ func nestCtx(t *testing.T) *bot.CommandContext {
 
 	gd := &gamedata.GameData{
 		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
-			{ID: 25, Form: 0}: {PokemonID: 25, FormID: 0},
+			{ID: 25, Form: 0}:    {PokemonID: 25, FormID: 0},
+			{ID: 649, Form: 0}:   {PokemonID: 649, FormID: 0},
+			{ID: 649, Form: 917}: {PokemonID: 649, FormID: 917},
 		},
 		Moves: map[int]*gamedata.Move{},
 		Types: map[int]*gamedata.TypeInfo{},
 	}
+
+	// The resolver indexes poke_{id} names at construction, so name and
+	// form translations must land in the bundle first.
+	ctx.Translations.AddTranslator(i18n.NewTranslator("en", map[string]string{
+		"poke_649": "Genesect",
+		"form_917": "Burn",
+	}))
 
 	resolver := bot.NewPokemonResolver(gd, ctx.Translations, []string{"en"}, nil)
 	ctx.Resolver = resolver
@@ -55,6 +65,23 @@ func runNest(t *testing.T, ctx *bot.CommandContext, input string) []bot.Reply {
 	cmd := &NestCommand{}
 	args := strings.Fields(input)
 	return cmd.Run(ctx, args)
+}
+
+func TestNest_Remove_FormRejected(t *testing.T) {
+	ctx := nestCtx(t)
+	runNest(t, ctx, "genesect form:burn")
+	rows, _ := ctx.Tracking.Nests.SelectByIDProfile("user1", 1)
+	require.Len(t, rows, 1)
+
+	// Pokemon remove (!untrack) treats form: as unrecognized; nest remove
+	// must do the same rather than silently removing every form.
+	replies := runNest(t, ctx, "remove genesect form:burn")
+	require.NotEmpty(t, replies)
+	assert.Equal(t, "🙅", replies[0].React, "reply: %s", replies[0].Text)
+	assert.Contains(t, replies[0].Text, "form:burn")
+
+	rows, _ = ctx.Tracking.Nests.SelectByIDProfile("user1", 1)
+	assert.Len(t, rows, 1, "rejected remove must not delete anything")
 }
 
 func TestNest_BasicPokemon(t *testing.T) {

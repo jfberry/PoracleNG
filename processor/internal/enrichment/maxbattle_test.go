@@ -1,6 +1,7 @@
 package enrichment
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
@@ -20,6 +21,8 @@ func maxbattleTestEnricher() *Enricher {
 		"poke_type_4":  "Fire",
 		"poke_type_12": "Grass",
 		"weather_1":    "Clear",
+		"form_65":      "Alolan",
+		"costume_3":    "Winter 2023",
 	}))
 	gd := &gamedata.GameData{
 		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{
@@ -94,5 +97,29 @@ func TestMaxbattleTranslate_SetsGenerationName(t *testing.T) {
 	}
 	if _, ok := m["boostWeatherNameEng"]; !ok {
 		t.Errorf("boostWeatherNameEng should be emitted")
+	}
+}
+
+// TestMaxbattleTranslate_BossIncludesFormAndCostume locks the fix: the
+// max-battle boss's webhook form + costume must reach fullName and megaName
+// (which now equals the full display name), plus a standalone costumeName.
+func TestMaxbattleTranslate_BossIncludesFormAndCostume(t *testing.T) {
+	e := maxbattleTestEnricher()
+	mb := &webhook.MaxbattleWebhook{
+		ID: "station1", Latitude: 52.5, Longitude: 13.4,
+		BattleLevel: 6, BattlePokemonID: 6, BattlePokemonForm: 65, BattlePokemonCostume: 3,
+	}
+	base, _ := e.Maxbattle(52.5, 13.4, 0, mb, TileModeSkip)
+	m := e.MaxbattleTranslate(base, mb, "en")
+
+	fullName, _ := m["fullName"].(string)
+	if !strings.Contains(fullName, "Alolan") || !strings.Contains(fullName, "Winter 2023") {
+		t.Errorf("fullName = %q, want it to contain the form (Alolan) and costume (Winter 2023)", fullName)
+	}
+	if mega, _ := m["megaName"].(string); mega != fullName {
+		t.Errorf("megaName = %q, want it to equal fullName %q", mega, fullName)
+	}
+	if got := m["costumeName"]; got != "Winter 2023" {
+		t.Errorf("costumeName = %v, want \"Winter 2023\"", got)
 	}
 }

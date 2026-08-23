@@ -29,8 +29,8 @@ func TestBestLeagueRankScalarsBaseOnly(t *testing.T) {
 	processed := &matching.ProcessedPokemon{
 		PVPBestRank: map[int][]pvp.LeagueRank{
 			1500: {
-				{Rank: 50, CP: 1450, Evolution: 0, Caps: []int{50}},  // base form
-				{Rank: 1, CP: 2900, Evolution: 2, Caps: []int{50}},   // Mega X — must not win
+				{Rank: 50, CP: 1450, Evolution: 0, Caps: []int{50}}, // base form
+				{Rank: 1, CP: 2900, Evolution: 2, Caps: []int{50}},  // Mega X — must not win
 			},
 		},
 	}

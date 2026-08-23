@@ -9,7 +9,6 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash"
 )
 
-
 // stubSlashDeps wires all 5 slash closures on ctx using the provided stubs.
 // Pass nil for any closure to leave it nil (simulates unconfigured).
 func stubSlashDeps(ctx *bot.CommandContext,
@@ -55,7 +54,7 @@ func TestSlash_SyncSuccess(t *testing.T) {
 	ctx, _ := testCtx(t)
 	ctx.IsAdmin = true
 	stubSlashDeps(ctx,
-		func() error { return nil },     // sync OK
+		func() error { return nil }, // sync OK
 		nil, nil, nil, nil,
 	)
 

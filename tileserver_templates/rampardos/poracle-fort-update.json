@@ -20,7 +20,7 @@
                 "height": 48,
                 "y_offset": -24
             },
-    {{ else if nearbyStops != nil }}
+    {{ else if isset(nearbyStops) }}
         {{ range i, stop := nearbyStops }}
         {
             {{ if stop.type == "gym" }}

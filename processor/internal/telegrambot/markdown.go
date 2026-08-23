@@ -6,12 +6,13 @@ import "strings"
 // for sending with parse_mode=HTML.
 //
 // Supported constructs:
-//   **bold**           → <b>bold</b>
-//   _italic_           → <i>italic</i>
-//   `code`             → <code>code</code>      (literal contents, only \ and ` are special)
-//   ```pre```          → <pre>pre</pre>         (same)
-//   [text](url)        → <a href="url">text</a>
-//   \X                 → literal X (Markdown backslash escape)
+//
+//	**bold**           → <b>bold</b>
+//	_italic_           → <i>italic</i>
+//	`code`             → <code>code</code>      (literal contents, only \ and ` are special)
+//	```pre```          → <pre>pre</pre>         (same)
+//	[text](url)        → <a href="url">text</a>
+//	\X                 → literal X (Markdown backslash escape)
 //
 // Literal <, >, and & are HTML-escaped to &lt; &gt; &amp; everywhere
 // they appear as text — including inside <code>/<pre> spans and inside

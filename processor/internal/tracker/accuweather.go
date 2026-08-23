@@ -39,6 +39,16 @@ type AccuWeatherClient struct {
 	cellMutexes   map[string]*sync.Mutex
 	cellLocations map[string]string // cellID -> AccuWeather location key
 	cellForecasts map[string]*forecastState
+	// pendingEvict holds cells the sweep asked to reclaim while a request
+	// was using them. WeatherTracker names a cell exactly once, when it
+	// deletes it, so a deferred eviction is never offered again and has to
+	// be completed here instead.
+	pendingEvict map[string]struct{}
+	// inFlight counts forecast requests currently working on a cell.
+	// EnsureForecast releases aw.mu and then blocks, first on the per-cell
+	// mutex and then on an HTTP call, before re-reading the cell's state.
+	// Eviction must not remove that state underneath it.
+	inFlight map[string]int
 }
 
 type forecastState struct {
@@ -77,6 +87,89 @@ func NewAccuWeatherClient(cfg AccuWeatherConfig, tracker *WeatherTracker) *AccuW
 		cellMutexes:   make(map[string]*sync.Mutex),
 		cellLocations: make(map[string]string),
 		cellForecasts: make(map[string]*forecastState),
+		inFlight:      make(map[string]int),
+		pendingEvict:  make(map[string]struct{}),
+	}
+}
+
+// ForgetCells releases all per-cell state for the given cells. Wired to
+// WeatherTracker's eviction callback: these maps share the tracker's cell
+// keyspace, so without this a shifted scan area strands one mutex, one
+// location key and one forecastState per abandoned S2 cell for the life of
+// the process.
+func (aw *AccuWeatherClient) ForgetCells(cellIDs []string) {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+	for _, cellID := range cellIDs {
+		if aw.inFlight[cellID] > 0 {
+			// A request is mid-flight on this cell. It will re-read the
+			// forecast state after its HTTP call, and a second caller would
+			// find an empty mutex slot and start a concurrent request for the
+			// same cell. Defer the reclaim to whoever releases the last hold.
+			aw.pendingEvict[cellID] = struct{}{}
+			continue
+		}
+		aw.forget(cellID)
+	}
+}
+
+// forget drops every per-cell map entry. Caller must hold aw.mu.
+func (aw *AccuWeatherClient) forget(cellID string) {
+	delete(aw.cellMutexes, cellID)
+	delete(aw.cellLocations, cellID)
+	delete(aw.cellForecasts, cellID)
+	delete(aw.pendingEvict, cellID)
+}
+
+// markInFlight records that a forecast request is working on a cell, holding
+// its state against eviction. Caller must hold aw.mu.
+func (aw *AccuWeatherClient) markInFlight(cellID string) {
+	aw.inFlight[cellID]++
+}
+
+// doneInFlight releases the hold taken by markInFlight.
+// doneInFlight releases the hold taken by markInFlight, completing any
+// eviction that was deferred while the request ran.
+//
+// A deferred eviction can go stale: a successful fetch calls SetHourWeather,
+// which recreates the tracker cell, and a plain webhook can do the same. The
+// tracker is therefore re-checked before reclaiming, so state the request just
+// paid AccuWeather for is not thrown away for a cell that is demonstrably
+// active. Reclaiming it would cost a location lookup and a 12-hour forecast on
+// the next alert, against a 500/day default quota.
+//
+// Reading the tracker here is the same lock order EnsureForecast already uses
+// (aw.mu then wt.mu via hasHourWeather); WeatherTracker never calls into this
+// client while holding wt.mu, since evict releases it before invoking onEvict.
+func (aw *AccuWeatherClient) doneInFlight(cellID string) {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+
+	if aw.inFlight[cellID] > 1 {
+		aw.inFlight[cellID]--
+		return
+	}
+	delete(aw.inFlight, cellID)
+
+	if _, deferred := aw.pendingEvict[cellID]; !deferred {
+		return
+	}
+	delete(aw.pendingEvict, cellID)
+	if aw.tracker != nil && aw.tracker.hasCell(cellID) {
+		// Came back while the request ran; the eviction no longer applies.
+		return
+	}
+	aw.forget(cellID)
+}
+
+// storeForecastTimeout records when this cell's forecast next needs
+// refreshing. A nil entry means the cell was evicted while the request was in
+// flight, which is legitimate rather than exceptional.
+func (aw *AccuWeatherClient) storeForecastTimeout(cellID string, forecastTimeout int64) {
+	aw.mu.Lock()
+	defer aw.mu.Unlock()
+	if fs := aw.cellForecasts[cellID]; fs != nil {
+		fs.forecastTimeout = forecastTimeout
 	}
 }
 
@@ -114,6 +207,10 @@ func (aw *AccuWeatherClient) EnsureForecast(cellID string) {
 		cellMu = &sync.Mutex{}
 		aw.cellMutexes[cellID] = cellMu
 	}
+	// Taken before releasing aw.mu so an eviction sweep cannot slip in and
+	// delete this cell's state between here and the re-read below.
+	aw.markInFlight(cellID)
+	defer aw.doneInFlight(cellID)
 	aw.mu.Unlock()
 
 	// Serialize requests per cell
@@ -123,6 +220,13 @@ func (aw *AccuWeatherClient) EnsureForecast(cellID string) {
 	// Double-check after acquiring lock
 	aw.mu.Lock()
 	fs = aw.cellForecasts[cellID]
+	if fs == nil {
+		// Belt and braces: the in-flight hold should keep this alive, so a
+		// nil here means some other path removed it. Abandon rather than
+		// dereference.
+		aw.mu.Unlock()
+		return
+	}
 	if fs.lastForecastLoad == currentHour {
 		aw.mu.Unlock()
 		return
@@ -199,10 +303,7 @@ func (aw *AccuWeatherClient) fetchForecast(cellID string, currentHour int64) {
 	// Calculate next refresh timeout
 	forecastTimeout := aw.calculateForecastTimeout(currentHour)
 
-	aw.mu.Lock()
-	fs := aw.cellForecasts[cellID]
-	fs.forecastTimeout = forecastTimeout
-	aw.mu.Unlock()
+	aw.storeForecastTimeout(cellID, forecastTimeout)
 }
 
 func (aw *AccuWeatherClient) getLocationKey(cellID string) (string, error) {

@@ -1,11 +1,5 @@
 package api
 
-import (
-	"net/http"
-
-	"github.com/gin-gonic/gin"
-)
-
 // ConfigFieldDef describes a single config field for the editor.
 type ConfigFieldDef struct {
 	Name        string `json:"name"`
@@ -102,7 +96,7 @@ var configSchema = []ConfigSection{
 			{Name: "dts_dictionary", Type: "map", Default: nil, Description: "Custom key-value pairs available in DTS templates via the dtsDict layer", HotReload: true},
 			{Name: "disable_pokemon", Type: "bool", Default: false, Description: "Disable pokemon webhook processing entirely", HotReload: false},
 			{Name: "disable_raid", Type: "bool", Default: false, Description: "Disable raid webhook processing", HotReload: false},
-			{Name: "disable_pokestop", Type: "bool", Default: false, Description: "Disable pokestop/invasion processing from scanner", HotReload: false},
+			{Name: "disable_pokestop", Type: "bool", Default: false, Description: "DEPRECATED — no effect. Use disable_lure, disable_invasion or disable_quest instead", HotReload: false},
 			{Name: "disable_invasion", Type: "bool", Default: false, Description: "Disable invasion webhook processing", HotReload: false},
 			{Name: "disable_lure", Type: "bool", Default: false, Description: "Disable lure webhook processing", HotReload: false},
 			{Name: "disable_quest", Type: "bool", Default: false, Description: "Disable quest webhook processing", HotReload: false},
@@ -111,6 +105,7 @@ var configSchema = []ConfigSection{
 			{Name: "disable_gym", Type: "bool", Default: false, Description: "Disable gym webhook processing", HotReload: false},
 			{Name: "disable_max_battle", Type: "bool", Default: false, Description: "Disable max battle webhook processing", HotReload: false},
 			{Name: "disable_fort_update", Type: "bool", Default: false, Description: "Disable fort update webhook processing", HotReload: false},
+			{Name: "disable_showcase", Type: "bool", Default: false, Description: "Disable Showcase (pokestop contest) webhook processing", HotReload: false},
 		},
 	},
 
@@ -322,11 +317,12 @@ var configSchema = []ConfigSection{
 			{Name: "provider_url", Type: "string", Default: "", Description: "Nominatim instance URL for address lookups", DependsOn: &ConfigDependency{Field: "provider", Value: "nominatim"}},
 			{Name: "geocoding_key", Type: "string[]", Default: []string{}, Description: "Google Geocoding API keys (rotated through array)", Sensitive: true, HotReload: true, DependsOn: &ConfigDependency{Field: "provider", Value: "google"}},
 			{Name: "cache_detail", Type: "int", Default: 3, Description: "Decimal places of lat/lon for geocoding cache key rounding (3 or 4 for 100x more detail)"},
+			{Name: "intersection_users", Type: "string[]", Default: []string{}, Description: "GeoNames usernames for the {{intersection}} field (nearest street intersection). Empty disables it. Shares the geocoding cache; uses GeoNames credits per uncached lookup. Requires a restart to take effect", HotReload: false},
 			{Name: "forward_only", Type: "bool", Default: false, Description: "Disable reverse geocoding — only forward lookups will be performed"},
 			{Name: "static_provider", Type: "select", Default: "none", Description: "Static map tile provider for generating map images in alerts", Options: []ConfigSelectOption{
 				{Value: "none", Label: "None", Description: "Disable static map tiles"},
 				{Value: "tileservercache", Label: "TileserverCache", Description: "SwiftTileserverCache (recommended, self-hosted)"},
-					{Value: "rampardos", Label: "Rampardos", Description: "Rampardos — improved tileserver written by Unown (recommended)"},
+				{Value: "rampardos", Label: "Rampardos", Description: "Rampardos — improved tileserver written by Unown (recommended)"},
 				{Value: "google", Label: "Google", Description: "Google Static Maps API"},
 				{Value: "osm", Label: "OSM", Description: "OpenStreetMap tile rendering"},
 				{Value: "mapbox", Label: "Mapbox", Description: "Mapbox Static Images API"},
@@ -402,7 +398,7 @@ var configSchema = []ConfigSection{
 			{Name: "concurrent_discord_destinations", Type: "int", Default: 10, Description: "Concurrent Discord DM/channel sends per bot", Advanced: true},
 			{Name: "concurrent_telegram_destinations", Type: "int", Default: 10, Description: "Concurrent Telegram sends per bot", Advanced: true},
 			{Name: "concurrent_discord_webhooks", Type: "int", Default: 10, Description: "Concurrent Discord webhook sends", Advanced: true},
-			{Name: "delivery_queue_size", Type: "int", Default: 200, Description: "Maximum buffered delivery jobs", Advanced: true},
+			{Name: "delivery_queue_size", Type: "int", Default: 200, Description: "Max buffered delivery jobs PER destination lane", Advanced: true},
 			{Name: "validation_timeout_ms", Type: "int", Default: 1500, Description: "External validation hook: per-call HTTP timeout in milliseconds", Advanced: true},
 			{Name: "validation_max_concurrent", Type: "int", Default: 16, Description: "External validation hook: cap on parallel validator calls per webhook event", Advanced: true},
 		},
@@ -549,10 +545,10 @@ var configSchema = []ConfigSection{
 		Name:  "logging",
 		Title: "Logging",
 		Fields: []ConfigFieldDef{
-			{Name: "level", Type: "select", Default: "verbose", Description: "Log verbosity level", Options: []ConfigSelectOption{
-				{Value: "debug", Label: "Debug", Description: "Most verbose — includes internal debug details"},
-				{Value: "verbose", Label: "Verbose", Description: "Recommended starting point — detailed operational logging"},
-				{Value: "info", Label: "Info", Description: "Standard operational messages only"},
+			{Name: "level", Type: "select", Default: "info", Description: "Log verbosity level. (Legacy 'verbose' maps to info, 'silly' to trace.)", Options: []ConfigSelectOption{
+				{Value: "trace", Label: "Trace", Description: "Most verbose — every internal step, very noisy"},
+				{Value: "debug", Label: "Debug", Description: "Detailed debug output, including hot-path details"},
+				{Value: "info", Label: "Info", Description: "Recommended — standard operational messages"},
 				{Value: "warn", Label: "Warn", Description: "Warnings and errors only"},
 			}},
 			{Name: "file_logging_enabled", Type: "bool", Default: true, Description: "Write log output to a file in addition to console"},
@@ -624,12 +620,4 @@ var configSchema = []ConfigSection{
 			},
 		},
 	},
-}
-
-// HandleConfigSchema returns the config schema for the editor UI.
-// GET /api/config/schema
-func HandleConfigSchema() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "sections": configSchema})
-	}
 }

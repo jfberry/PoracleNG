@@ -13,6 +13,15 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/webhook"
 )
 
+// hasActiveLure reports whether a pokestop webhook represents a genuine,
+// currently-active lure. Valid lure IDs are 501+ (util.json lures 501–506);
+// lure_id 0 means "no lure". An active lure expires in the future. Golbat's
+// unified pokestop webhook can carry a stale lure_id + past lure_expiration on
+// incident/showcase stops, so both conditions must hold to alert.
+func hasActiveLure(lureID int, lureExpiration, now int64) bool {
+	return lureID > 500 && lureExpiration > now
+}
+
 func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 	if ps.cfg.General.DisableLure {
 		return nil
@@ -41,6 +50,15 @@ func (ps *ProcessorService) ProcessLure(raw json.RawMessage) error {
 		}
 
 		l := log.WithField("ref", lure.PokestopID)
+
+		// Only alert on a genuine, currently-active lure. Golbat's pokestop
+		// webhook is a unified object: incident/showcase stops can carry a
+		// leftover lure_id and an already-passed lure_expiration. Without this
+		// gate, `!lure everything` (lure_id 0 = match any) fires on them.
+		if !hasActiveLure(lure.LureID, lure.LureExpiration, time.Now().Unix()) {
+			l.Debugf("Skipping non-lure/expired pokestop: lure_id=%d expiration=%d", lure.LureID, lure.LureExpiration)
+			return
+		}
 
 		// Duplicate check
 		if lure.LureExpiration > 0 && ps.duplicates.CheckLure(lure.PokestopID, lure.LureExpiration) {

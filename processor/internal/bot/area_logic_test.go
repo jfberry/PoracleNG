@@ -427,4 +427,3 @@ func TestAreaFindFence_UnderscoreInName(t *testing.T) {
 		t.Errorf("underscore-form FindFence failed: %+v", f)
 	}
 }
-

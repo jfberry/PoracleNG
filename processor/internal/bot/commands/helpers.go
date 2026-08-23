@@ -389,6 +389,19 @@ func parseCommonTrackFields(ctx *bot.CommandContext, parsed *bot.ParsedArgs, dts
 	return f, nil
 }
 
+// rejectFormOnRemove mirrors pokemon untrack, which treats form: as an
+// unrecognized argument on removal: removes are species-wide, so silently
+// accepting the token would delete rules for every form. Per-form rules
+// are removed via id:N. Returns nil when no form argument is present.
+func rejectFormOnRemove(ctx *bot.CommandContext, parsed *bot.ParsedArgs) *bot.Reply {
+	formName, ok := parsed.Strings["form"]
+	if !ok || formName == "" {
+		return nil
+	}
+	tr := ctx.Tr()
+	return &bot.Reply{React: "🙅", Text: tr.Tf("msg.unrecognized", "form:"+formName)}
+}
+
 // applyFormFilter applies parsed["form"] to monsters. Returns a
 // helpful reply when the form filter rejects every input — e.g.
 // `!track sinistea form:incorrect` should not silently degrade into

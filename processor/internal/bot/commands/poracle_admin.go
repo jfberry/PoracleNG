@@ -122,4 +122,3 @@ func (c *PoracleAdminCommand) topLevelHelp(ctx *bot.CommandContext) []bot.Reply 
 
 	return []bot.Reply{{Text: sb.String()}}
 }
-

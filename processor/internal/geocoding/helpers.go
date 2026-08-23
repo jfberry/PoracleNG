@@ -7,6 +7,23 @@ import (
 	"github.com/mailgun/raymond/v2"
 )
 
+// bodySnippet returns a single-line, truncated view of an HTTP response body
+// for inclusion in error messages. Providers wrap it around the raw bytes when
+// a response fails to unmarshal, so a non-JSON reply (e.g. an HTML error page
+// from a Nominatim instance whose import hasn't finished) shows up in logs
+// instead of collapsing into an opaque "invalid character '<'" JSON error.
+func bodySnippet(body []byte) string {
+	const max = 200
+	s := strings.Join(strings.Fields(string(body)), " ") // collapse whitespace/newlines
+	if s == "" {
+		return "empty body"
+	}
+	if r := []rune(s); len(r) > max {
+		return string(r[:max]) + "…"
+	}
+	return s
+}
+
 var helpersOnce sync.Once
 
 // registerAddressHelpers registers the raymond helpers address_format

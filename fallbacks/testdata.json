@@ -66,6 +66,73 @@
   },
   {
     "type": "pokemon",
+    "test": "costume",
+    "location": "current",
+    "webhook": {
+      "spawnpoint_id": "47decbc1f19",
+      "pokestop_id": "None",
+      "pokestop_name": null,
+      "encounter_id": "4387497020362672221",
+      "pokemon_id": 25,
+      "latitude": 51.274644760338,
+      "longitude": 1.0592872653170444,
+      "disappear_time": 1775478965,
+      "disappear_time_verified": true,
+      "first_seen": 1775475471,
+      "last_modified_time": 1775475472,
+      "gender": 1,
+      "cp": 718,
+      "form": 598,
+      "costume": 1,
+      "individual_attack": 3,
+      "individual_defense": 1,
+      "individual_stamina": 5,
+      "pokemon_level": 18,
+      "move_1": 219,
+      "move_2": 45,
+      "weight": 5.309950828552246,
+      "size": 3,
+      "height": 0.3768548369407654,
+      "weather": 0,
+      "capture_1": 0,
+      "capture_2": 0,
+      "capture_3": 0,
+      "shiny": false,
+      "display_pokemon_id": null,
+      "display_pokemon_form": null,
+      "is_event": 0,
+      "seen_type": "encounter",
+      "pvp": {
+        "great": [
+          {
+            "pokemon": 25,
+            "form": 598,
+            "cap": 50,
+            "value": 1695271,
+            "level": 45.5,
+            "cp": 1496,
+            "percentage": 0.94663,
+            "rank": 2154,
+            "capped": true
+          }
+        ],
+        "ultra": [
+          {
+            "pokemon": 25,
+            "form": 598,
+            "cap": 50,
+            "value": 1833475,
+            "level": 50,
+            "cp": 1580,
+            "percentage": 0.78296,
+            "rank": 3941
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "pokemon",
     "test": "hundo",
     "location": "current",
     "webhook": {
@@ -1148,7 +1215,7 @@
     }
   },
   {
-    "type": "pokestop",
+    "type": "incident",
     "test": "kecleon",
     "location": "current",
     "webhook": {
@@ -1170,7 +1237,7 @@
     }
   },
   {
-    "type": "pokestop",
+    "type": "incident",
     "test": "goldstop",
     "location": "current",
     "webhook": {
@@ -1192,7 +1259,7 @@
     }
   },
   {
-    "type": "pokestop",
+    "type": "incident",
     "test": "pokemoncontest",
     "location": "current",
     "webhook": {
@@ -1248,6 +1315,49 @@
       "enabled": true,
       "id": "6287513096386229372",
       "incident_expire_timestamp": 1689184800
+    }
+  },
+  {
+    "type": "showcase",
+    "test": "type",
+    "location": "current",
+    "webhook": {
+      "pokestop_id": "showcase-type-test.16",
+      "latitude": 51.28,
+      "longitude": 1.08,
+      "name": "Contest Hall",
+      "url": "http://lh3.googleusercontent.com/showcase-type",
+      "updated": 1784062072,
+      "showcase_focus": { "type": "type", "pokemon_type_1": 9 },
+      "showcase_pokemon_type_id": 9,
+      "showcase_ranking_standard": 2,
+      "showcase_expiry": 1784084400,
+      "showcase_rankings": {
+        "total_entries": 3,
+        "last_update": 1784062072,
+        "contest_entries": [
+          { "rank": 1, "score": 1032.54, "pokemon_id": 679, "form": 3042, "costume": 0, "gender": 1, "shiny": false, "temp_evolution": 0, "temp_evolution_finish_ms": 0, "alignment": 0, "badge": 0 },
+          { "rank": 2, "score": 1032.2, "pokemon_id": 51, "form": 62, "costume": 0, "gender": 1, "shiny": false, "temp_evolution": 0, "temp_evolution_finish_ms": 0, "alignment": 0, "badge": 0 },
+          { "rank": 3, "score": 789.8, "pokemon_id": 809, "form": 0, "costume": 0, "gender": 3, "shiny": true, "temp_evolution": 0, "temp_evolution_finish_ms": 0, "alignment": 0, "badge": 0 }
+        ]
+      }
+    }
+  },
+  {
+    "type": "showcase",
+    "test": "buddy",
+    "location": "current",
+    "webhook": {
+      "pokestop_id": "showcase-buddy-test.16",
+      "latitude": 51.29,
+      "longitude": 1.09,
+      "name": "Buddy Contest",
+      "url": "http://lh3.googleusercontent.com/showcase-buddy",
+      "updated": 1784062072,
+      "showcase_focus": { "type": "buddy", "min_level": 3 },
+      "showcase_ranking_standard": 2,
+      "showcase_expiry": 1784084400,
+      "showcase_rankings": { "total_entries": 0, "last_update": 1784062072, "contest_entries": [] }
     }
   },
   {
@@ -1512,6 +1622,31 @@
   },
   {
     "type": "quest",
+    "test": "quest-pokecoins",
+    "location": "current",
+    "webhook": {
+      "pokestop_id": "4273655acfdc4b5380f3d217232367ff.16",
+      "latitude": 33.774889,
+      "longitude": -118.192531,
+      "pokestop_name": "Street Art",
+      "type": 4,
+      "target": 3,
+      "template": "challenge_catch_easy",
+      "title": "quest_catch_pokemon_plural",
+      "conditions": [],
+      "rewards": [
+        {
+          "info": {
+            "amount": 10
+          },
+          "type": 8
+        }
+      ],
+      "updated": 1774471518
+    }
+  },
+  {
+    "type": "quest",
     "test": "quest-pokemon",
     "location": "current",
     "webhook": {
@@ -1574,6 +1709,256 @@
         }
       ],
       "updated": 1774471518
+    }
+  },
+  {
+    "type": "quest_summary",
+    "test": "stardust",
+    "location": "current",
+    "webhook": {
+      "reward": {
+        "type": 3,
+        "reward": 1500,
+        "form": 0
+      },
+      "quests": [
+        {
+          "pokestop_id": "e1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1.16",
+          "latitude": 34.052235,
+          "longitude": -118.243683,
+          "pokestop_name": "Pershing Square Fountain",
+          "type": 4,
+          "target": 10,
+          "template": "challenge_catch_easy",
+          "title": "quest_catch_pokemon_plural",
+          "conditions": [],
+          "rewards": [
+            {
+              "info": {
+                "amount": 1500
+              },
+              "type": 3
+            }
+          ],
+          "with_ar": false,
+          "updated": 1774471518
+        },
+        {
+          "pokestop_id": "e2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2.16",
+          "latitude": 34.055100,
+          "longitude": -118.246200,
+          "pokestop_name": "Angels Flight Railway",
+          "type": 4,
+          "target": 5,
+          "template": "challenge_catch_easy",
+          "title": "quest_catch_pokemon_plural",
+          "conditions": [],
+          "rewards": [
+            {
+              "info": {
+                "amount": 1500
+              },
+              "type": 3
+            }
+          ],
+          "with_ar": false,
+          "updated": 1774471518
+        },
+        {
+          "pokestop_id": "e3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3.16",
+          "latitude": 34.049500,
+          "longitude": -118.250700,
+          "pokestop_name": "Grand Central Market Entrance",
+          "type": 13,
+          "target": 3,
+          "template": "challenge_berry_moderate",
+          "title": "quest_catch_feed_plural",
+          "conditions": [],
+          "rewards": [
+            {
+              "info": {
+                "amount": 1500
+              },
+              "type": 3
+            }
+          ],
+          "with_ar": true,
+          "updated": 1774471518
+        }
+      ]
+    }
+  },
+  {
+    "type": "weatherchange",
+    "test": "rain",
+    "location": "current",
+    "webhook": {
+      "s2_cell_id": "5222463073676417024",
+      "latitude": 51.5,
+      "longitude": -0.1,
+      "gameplay_condition": 2,
+      "old_gameplay_condition": 1,
+      "coords": [
+        [51.4995, -0.1005],
+        [51.4995, -0.0995],
+        [51.5005, -0.0995],
+        [51.5005, -0.1005]
+      ],
+      "affected": [
+        {
+          "pokemon_id": 129,
+          "form": 0,
+          "iv": 100,
+          "cp": 979,
+          "latitude": 51.5001,
+          "longitude": -0.0998,
+          "disappear_time": 1751900000
+        },
+        {
+          "pokemon_id": 7,
+          "form": 0,
+          "iv": 82.22,
+          "cp": 612,
+          "latitude": 51.4998,
+          "longitude": -0.1002,
+          "disappear_time": 1751900300
+        },
+        {
+          "pokemon_id": 25,
+          "form": 0,
+          "iv": 91.11,
+          "cp": 450,
+          "latitude": 51.5003,
+          "longitude": -0.0996,
+          "disappear_time": 1751900600
+        }
+      ]
+    }
+  },
+  {
+    "type": "monster_changed",
+    "test": "ditto-reveal",
+    "location": "keep",
+    "webhook": {
+      "old": {
+        "spawnpoint_id": "47decbc1f19",
+        "pokestop_id": "None",
+        "pokestop_name": null,
+        "encounter_id": "9912873645123456789",
+        "pokemon_id": 590,
+        "latitude": 51.274644760338,
+        "longitude": 1.0592872653170444,
+        "disappear_time": 1775478000,
+        "disappear_time_verified": true,
+        "first_seen": 1775475000,
+        "last_modified_time": 1775475000,
+        "gender": 1,
+        "cp": null,
+        "form": 0,
+        "costume": 0,
+        "individual_attack": null,
+        "individual_defense": null,
+        "individual_stamina": null,
+        "pokemon_level": null,
+        "move_1": null,
+        "move_2": null,
+        "weight": null,
+        "size": null,
+        "height": null,
+        "weather": 0,
+        "capture_1": 0,
+        "capture_2": 0,
+        "capture_3": 0,
+        "shiny": null,
+        "display_pokemon_id": null,
+        "display_pokemon_form": null,
+        "is_event": 0,
+        "seen_type": "wild",
+        "pvp": null
+      },
+      "new": {
+        "spawnpoint_id": "47decbc1f19",
+        "pokestop_id": "None",
+        "pokestop_name": null,
+        "encounter_id": "9912873645123456789",
+        "pokemon_id": 132,
+        "latitude": 51.274644760338,
+        "longitude": 1.0592872653170444,
+        "disappear_time": 1775478965,
+        "disappear_time_verified": true,
+        "first_seen": 1775475000,
+        "last_modified_time": 1775478100,
+        "gender": 3,
+        "cp": 654,
+        "form": 0,
+        "costume": 0,
+        "individual_attack": 15,
+        "individual_defense": 14,
+        "individual_stamina": 13,
+        "pokemon_level": 20,
+        "move_1": 221,
+        "move_2": 48,
+        "weight": 4.0,
+        "size": 3,
+        "height": 0.3,
+        "weather": 0,
+        "capture_1": 0,
+        "capture_2": 0,
+        "capture_3": 0,
+        "shiny": false,
+        "display_pokemon_id": null,
+        "display_pokemon_form": null,
+        "is_event": 0,
+        "seen_type": "encounter",
+        "pvp": null
+      }
+    }
+  },
+  {
+    "type": "rsvp_changes",
+    "test": "level5",
+    "location": "current",
+    "webhook": {
+      "gym_id": "c3a1f2ea8d03748fdbc7fa72c6a15772.16",
+      "gym_name": "RSVP Test Gym",
+      "gym_url": "https://lh3.googleusercontent.com/G_JAaxOS90g-hVniIQuF9Tr5H1IIsrh_G3PDQI5Tm560YsKCu6u9V5UucRTr6vZnDgkANFp2QYvw_7ZF-2XA-Lgo9A",
+      "latitude": 51.189153,
+      "longitude": 0.892118,
+      "team_id": 1,
+      "spawn": 1775471928,
+      "start": 1775475528,
+      "end": 1775478228,
+      "level": 5,
+      "pokemon_id": 895,
+      "cp": 28624,
+      "gender": 3,
+      "form": 3215,
+      "alignment": 0,
+      "costume": 0,
+      "evolution": 0,
+      "move_1": 202,
+      "move_2": 82,
+      "ex_raid_eligible": 0,
+      "is_exclusive": 0,
+      "sponsor_id": 0,
+      "partner_id": "",
+      "power_up_points": 10,
+      "power_up_level": 0,
+      "power_up_end_timestamp": 0,
+      "ar_scan_eligible": 0,
+      "rsvps": [
+        {
+          "timeslot": 4102444800000,
+          "going_count": 4,
+          "maybe_count": 2
+        },
+        {
+          "timeslot": 4102448400000,
+          "going_count": 7,
+          "maybe_count": 1
+        }
+      ],
+      "raid_seed": "5845571837887094592"
     }
   }
 ]

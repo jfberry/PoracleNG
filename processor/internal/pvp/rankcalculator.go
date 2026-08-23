@@ -136,8 +136,15 @@ func calculateLeague(league int, leagueData []webhook.PVPRankEntry, capsConsider
 			}
 		}
 
-		// Cross-species evolution direct tracking — unchanged (base entries only)
-		if stats.Evolution == 0 && cfg.PVPEvolutionDirectTracking && stats.Rank > 0 && stats.CP > 0 &&
+		// Cross-species evolution direct tracking. Each qualifying entry for a
+		// DIFFERENT pokemon (stats.Pokemon != pokemonID) is recorded under that
+		// evolved species so a rule on it can fire on this pre-evolution. Mega /
+		// temporary-evolution entries are INCLUDED, tagged with their Evolution,
+		// so a `mega` rule on the evolved species (e.g. track Mega Charizard, get
+		// Charmander alerts) matches via the matcher's evolution discriminator;
+		// base rules still only see base (evolution 0) entries unless the server
+		// include_mega_evolution default is on.
+		if cfg.PVPEvolutionDirectTracking && stats.Rank > 0 && stats.CP > 0 &&
 			stats.Pokemon != pokemonID && stats.Rank <= cfg.PVPFilterMaxRank && stats.CP >= minCP {
 			var evoCaps []int
 			if stats.Capped {
@@ -153,7 +160,7 @@ func calculateLeague(league int, leagueData []webhook.PVPRankEntry, capsConsider
 					}
 				}
 			}
-			evoRank := LeagueRank{Rank: stats.Rank, CP: stats.CP, Caps: evoCaps, Form: stats.Form}
+			evoRank := LeagueRank{Rank: stats.Rank, CP: stats.CP, Caps: evoCaps, Form: stats.Form, Evolution: stats.Evolution}
 			if _, ok := evoData[stats.Pokemon]; !ok {
 				evoData[stats.Pokemon] = make(map[int][]LeagueRank)
 			}

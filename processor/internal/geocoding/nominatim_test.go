@@ -132,6 +132,69 @@ func TestNominatimFallsBackToDisplayName(t *testing.T) {
 	}
 }
 
+// TestNominatimForwardParsesResults covers the forward-search happy path
+// (previously untested) and asserts the query reaches /search.
+func TestNominatimForwardParsesResults(t *testing.T) {
+	const body = `[{"lat":"51.5074","lon":"-0.1278","display_name":"London, UK","address":{"city":"London","country":"United Kingdom"}}]`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/search") {
+			t.Errorf("expected /search, got %s", r.URL.Path)
+		}
+		if q := r.URL.Query().Get("q"); q != "London" {
+			t.Errorf("q=%q, want London", q)
+		}
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	n := NewNominatim(srv.URL, 2*time.Second, true)
+	results, err := n.Forward("London")
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("want 1 result, got %d", len(results))
+	}
+	if results[0].Latitude == 0 || results[0].City != "London" {
+		t.Errorf("unexpected result: %+v", results[0])
+	}
+}
+
+// TestNominatimForwardSnippetOnNonJSON — when the server replies with a
+// non-JSON body (e.g. an HTML error page from an instance whose import hasn't
+// finished), the error must carry a snippet of that body so the operator can
+// see what actually came back instead of an opaque JSON parse error.
+func TestNominatimForwardSnippetOnNonJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html><body>Error: database is not ready yet</body></html>"))
+	}))
+	defer srv.Close()
+
+	n := NewNominatim(srv.URL, 2*time.Second, true)
+	if _, err := n.Forward("London"); err == nil {
+		t.Fatal("expected error for non-JSON response")
+	} else if !strings.Contains(err.Error(), "database is not ready") {
+		t.Errorf("error should include a snippet of the response body, got %q", err.Error())
+	}
+}
+
+// TestNominatimForwardHTTPError — a 5xx from the server surfaces the status in
+// the error rather than being masked as an empty result.
+func TestNominatimForwardHTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	n := NewNominatim(srv.URL, 2*time.Second, true)
+	if _, err := n.Forward("London"); err == nil {
+		t.Fatal("expected error for HTTP 500")
+	} else if !strings.Contains(err.Error(), "500") {
+		t.Errorf("error should mention the HTTP status, got %q", err.Error())
+	}
+}
+
 func TestNominatimReverseSendsLanguage(t *testing.T) {
 	const body = `{"lat":"0","lon":"0","display_name":"Ort","address":{"country_code":"de"}}`
 	var got string

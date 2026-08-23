@@ -85,7 +85,7 @@ func TestTranslateMonsterNamesEng_BasicPokemon(t *testing.T) {
 	tr := bundle.For("de")
 
 	m := make(map[string]any)
-	TranslateMonsterNamesEng(m, gd, tr, bundle, 6, 0, 0)
+	TranslateMonsterNamesEng(m, gd, tr, bundle, 6, 0, 0, 0)
 
 	// Translated name should be German
 	name, ok := m["name"].(string)
@@ -117,7 +117,7 @@ func TestTranslateMonsterNamesEng_WithForm(t *testing.T) {
 	tr := bundle.For("de")
 
 	m := make(map[string]any)
-	TranslateMonsterNamesEng(m, gd, tr, bundle, 6, 65, 0)
+	TranslateMonsterNamesEng(m, gd, tr, bundle, 6, 65, 0, 0)
 
 	name := m["name"].(string)
 	if name != "Glurak" {
@@ -152,7 +152,7 @@ func TestTranslateMonsterNamesEng_NormalFormSuppressed(t *testing.T) {
 
 	m := make(map[string]any)
 	// form_0 translates to "Normal", which should be suppressed as the normalised form
-	TranslateMonsterNamesEng(m, gd, tr, bundle, 25, 0, 0)
+	TranslateMonsterNamesEng(m, gd, tr, bundle, 25, 0, 0, 0)
 
 	if m["formNormalised"] != "" {
 		t.Errorf("formNormalised = %q, want empty string for Normal form", m["formNormalised"])
@@ -166,7 +166,7 @@ func TestTranslateMonsterNames_NoBundleNoEngFields(t *testing.T) {
 
 	m := make(map[string]any)
 	// TranslateMonsterNames (without Eng) should not set nameEng/fullNameEng
-	TranslateMonsterNames(m, gd, tr, 6, 0, 0)
+	TranslateMonsterNames(m, gd, tr, 6, 0, 0, 0)
 
 	if _, ok := m["nameEng"]; ok {
 		t.Error("TranslateMonsterNames should not set nameEng (no bundle)")
@@ -322,7 +322,7 @@ func TestBuildFullNameWithAlignment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildFullNameWithAlignment(tr, nameKeys, "Charizard", "", 6, 0, tt.alignment)
+			got := BuildFullNameWithAlignment(tr, nameKeys, "Charizard", "", 6, 0, tt.alignment, 0)
 			if got != tt.want {
 				t.Errorf("BuildFullNameWithAlignment(alignment=%d) = %q, want %q", tt.alignment, got, tt.want)
 			}
@@ -336,13 +336,13 @@ func TestBuildFullNameWithAlignment_NilTranslator(t *testing.T) {
 	gd := newTestGameData()
 	nameKeys := gd.MonsterNameKeys(6, 0, 0)
 
-	if got := BuildFullNameWithAlignment(nil, nameKeys, "Charizard", "", 6, 0, 1); got != "Shadow Charizard" {
+	if got := BuildFullNameWithAlignment(nil, nameKeys, "Charizard", "", 6, 0, 1, 0); got != "Shadow Charizard" {
 		t.Errorf("nil tr, alignment=1: got %q, want Shadow Charizard", got)
 	}
-	if got := BuildFullNameWithAlignment(nil, nameKeys, "Charizard", "", 6, 0, 2); got != "Purified Charizard" {
+	if got := BuildFullNameWithAlignment(nil, nameKeys, "Charizard", "", 6, 0, 2, 0); got != "Purified Charizard" {
 		t.Errorf("nil tr, alignment=2: got %q, want Purified Charizard", got)
 	}
-	if got := BuildFullNameWithAlignment(nil, nameKeys, "Charizard", "", 6, 0, 0); got != "Charizard" {
+	if got := BuildFullNameWithAlignment(nil, nameKeys, "Charizard", "", 6, 0, 0, 0); got != "Charizard" {
 		t.Errorf("nil tr, alignment=0: got %q, want Charizard", got)
 	}
 }

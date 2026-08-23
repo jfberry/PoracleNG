@@ -164,12 +164,12 @@ func TestTrackNoChangeOnIdenticalState(t *testing.T) {
 // Wild re-scan after a weather shift must not downgrade the
 // encountered state. Real webhook sequence from production:
 //
-//   W1 wild      CP=0    weather=0  → first sighting
-//   W2 encounter CP=153  weather=0  IVs=15/15/15  → ChangeEncountered
-//   W3 wild      CP=0    weather=4  → must NOT overwrite state
-//   W4 encounter CP=280  weather=4  IVs=13/13/12  → must fire
-//                                                   ChangeWeatherBoost
-//                                                   against W2's stats
+//	W1 wild      CP=0    weather=0  → first sighting
+//	W2 encounter CP=153  weather=0  IVs=15/15/15  → ChangeEncountered
+//	W3 wild      CP=0    weather=4  → must NOT overwrite state
+//	W4 encounter CP=280  weather=4  IVs=13/13/12  → must fire
+//	                                                ChangeWeatherBoost
+//	                                                against W2's stats
 //
 // Without the wild-rescan guard, W3 zeroed prev.state.CP and W4 then
 // triggered a second ChangeEncountered, which the dispatcher skips

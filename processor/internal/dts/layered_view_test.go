@@ -51,6 +51,33 @@ func TestLayeredView_PerUserWins(t *testing.T) {
 	assert.Equal(t, "PerUser", v)
 }
 
+// TestLayeredView_ShowcaseAliases verifies the showcase template type resolves
+// the pokéstop identity aliases. Regression for the empty-title bug: the
+// showcase webhook carries the name in `name` (surfaced as pokestop_name on the
+// base layer by ProcessShowcase), and without a showcase alias table
+// {{pokestopName}} rendered empty.
+func TestLayeredView_ShowcaseAliases(t *testing.T) {
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.templateType = "showcase"
+		o.base = map[string]any{
+			"pokestop_name": "Contest Hall",
+			"pokestop_url":  "http://img",
+			"pokestop_id":   "abc.16",
+			"displayTypeId": 9,
+		}
+	})
+	name, ok := lv.GetField("pokestopName")
+	require.True(t, ok)
+	assert.Equal(t, "Contest Hall", name)
+
+	dt, ok := lv.GetField("displayType")
+	require.True(t, ok)
+	assert.Equal(t, 9, dt)
+
+	url, _ := lv.GetField("pokestopUrl")
+	assert.Equal(t, "http://img", url)
+}
+
 func TestLayeredView_PerLangOverBase(t *testing.T) {
 	lv := newTestView(t, func(o *testViewOpts) {
 		o.base = map[string]any{"name": "Base"}
@@ -310,6 +337,26 @@ func TestLayeredView_RaidAliases(t *testing.T) {
 	assert.Equal(t, "Central Gym", v)
 	v, _ = lv.GetField("gymUrl")
 	assert.Equal(t, "http://example.com/gym", v)
+}
+
+func TestLayeredView_QuestLegacyAliases(t *testing.T) {
+	// Legacy PoracleJS snake_case names resolve to the translated
+	// questString / rewardString / conditionString computed by enrichment.
+	lv := newTestView(t, func(o *testViewOpts) {
+		o.templateType = "quest"
+		o.base = map[string]any{
+			"questString":     "Catch 5 Pokémon",
+			"rewardString":    "500 Stardust",
+			"conditionString": "Excellent Throw",
+		}
+	})
+	v, ok := lv.GetField("quest_task")
+	require.True(t, ok)
+	assert.Equal(t, "Catch 5 Pokémon", v)
+	v, _ = lv.GetField("quest_reward")
+	assert.Equal(t, "500 Stardust", v)
+	v, _ = lv.GetField("quest_conditions")
+	assert.Equal(t, "Excellent Throw", v)
 }
 
 func TestLayeredView_GymAliases(t *testing.T) {

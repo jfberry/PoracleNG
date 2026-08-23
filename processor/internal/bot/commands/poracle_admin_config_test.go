@@ -389,21 +389,21 @@ func TestShouldRedact_Heuristic(t *testing.T) {
 		expect bool
 	}{
 		{"discord.token", true},
-		{"discord.command_token", true},           // HasSuffix("command_token","token")
+		{"discord.command_token", true}, // HasSuffix("command_token","token")
 		{"telegram.token", true},
 		{"database.password", true},
 		{"processor.api_secret", true},
-		{"geocoding.geocoding_key", true},         // explicit map + HasSuffix("geocoding_key","key")
-		{"geocoding.static_key", true},            // explicit map + HasSuffix("static_key","key")
-		{"weather.accuweather_api_keys", true},    // explicit map + HasSuffix("accuweather_api_keys","keys")
+		{"geocoding.geocoding_key", true},      // explicit map + HasSuffix("geocoding_key","key")
+		{"geocoding.static_key", true},         // explicit map + HasSuffix("static_key","key")
+		{"weather.accuweather_api_keys", true}, // explicit map + HasSuffix("accuweather_api_keys","keys")
 		{"geofence.koji.bearer_token", true},
-		{"some.unknown.api_key", true},            // heuristic: exact "api_key"
-		{"some.unknown.secret", true},             // heuristic: exact "secret"
-		{"some.unknown.geocoding_key", true},      // heuristic: HasSuffix(*,"key")
-		{"some.unknown.static_key", true},         // heuristic: HasSuffix(*,"key")
-		{"some.unknown.api_keys", true},           // heuristic: HasSuffix(*,"keys")
-		{"discord.admins", false},                 // explicit not-redacted
-		{"discord.prefix", false},                 // not sensitive
+		{"some.unknown.api_key", true},       // heuristic: exact "api_key"
+		{"some.unknown.secret", true},        // heuristic: exact "secret"
+		{"some.unknown.geocoding_key", true}, // heuristic: HasSuffix(*,"key")
+		{"some.unknown.static_key", true},    // heuristic: HasSuffix(*,"key")
+		{"some.unknown.api_keys", true},      // heuristic: HasSuffix(*,"keys")
+		{"discord.admins", false},            // explicit not-redacted
+		{"discord.prefix", false},            // not sensitive
 		{"general.locale", false},
 	}
 

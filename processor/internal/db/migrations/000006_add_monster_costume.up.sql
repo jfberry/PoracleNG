@@ -1,0 +1,2 @@
+ALTER TABLE `monsters`
+  ADD COLUMN `costume` INT NOT NULL DEFAULT 9000;

@@ -10,7 +10,24 @@ var finder tzf.F
 
 func init() {
 	var err error
-	finder, err = tzf.NewFullFinder()
+	// NewDefaultFinder, not NewFullFinder: both wrap the same preindex tile
+	// fast path, but Full decodes tzf-dist's 18 MB full-precision polygon set
+	// where Default decodes the 6.5 MB topology-simplified one. That cost
+	// 140.96 MB of live heap at init in production, 4.44% of the total.
+	//
+	// The trade is real, not free. Upstream bounds the simplified boundaries
+	// to ~111 m of the true border, but a neighbouring zone is not always on
+	// the same wall clock: India/Nepal differ by 15 min, the Arizona line by
+	// an hour for half the year, and China's western border by up to 2.5 h.
+	// A scan of the India/Nepal border alone finds ~65 points inside the band
+	// where the two finders disagree on the offset.
+	//
+	// A spawn or saved user location inside such a band therefore renders
+	// despawn and hatch times, and profile/summary schedules, off by that
+	// offset. The band is ~111 m wide against S2 level-10 weather cells and
+	// typical scan areas, so this is accepted rather than unnoticed: see
+	// TestGetTimezone_SimplifiedBoundaryOffsets for a pinned example.
+	finder, err = tzf.NewDefaultFinder()
 	if err != nil {
 		panic("failed to initialize timezone finder: " + err.Error())
 	}

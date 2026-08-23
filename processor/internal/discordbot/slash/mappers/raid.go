@@ -16,6 +16,8 @@ import (
 //	distance  (int)                  — alert radius in metres
 //	clean     (bool)                  — auto-delete on expiry
 //	template  (string, autocomplete) — DTS template name
+//	costume   (string, autocomplete) — raid boss costume (RecentActivity-boosted)
+//	form      (string, autocomplete) — raid boss form (RecentActivity-boosted)
 //
 // Validation: exactly one of boss or level must be set. The text bot
 // distinguishes these in the same argument position, but slash users would
@@ -45,6 +47,14 @@ func Raid(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, 
 		if name := teamNameForValue(int(v.IntValue())); name != "" {
 			tokens = append(tokens, name)
 		}
+	}
+
+	if costume := getString(o["costume"]); costume != "" {
+		tokens = append(tokens, "costume:"+costume)
+	}
+
+	if form := getString(o["form"]); form != "" {
+		tokens = append(tokens, "form:"+form)
 	}
 
 	appendCommonTail(&tokens, o)

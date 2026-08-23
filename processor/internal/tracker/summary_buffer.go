@@ -21,7 +21,7 @@ import (
 // Form is only meaningful for pokemon-encounter rewards (type 7) where
 // different forms of the same species (Spinda 01 vs 08, Unown, costumes)
 // must NOT collapse into one group — they have distinct icons and
-// distinct rewardName labels. For item/stardust/candy/mega-energy
+// distinct rewardName labels. For item/stardust/pokecoins/candy/mega-energy
 // rewards Form is always 0.
 type BufferedQuest struct {
 	RewardType int    `json:"reward_type"`

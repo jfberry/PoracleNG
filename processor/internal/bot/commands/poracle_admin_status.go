@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pokemon/poracleng/processor/internal/bot"
 	processor "github.com/pokemon/poracleng/processor"
+	"github.com/pokemon/poracleng/processor/internal/bot"
 )
 
 // Hard-coded indicator thresholds for the status snapshot. A
@@ -597,7 +597,6 @@ func renderMySQLSection(ctx *bot.CommandContext, tr translator) string {
 
 	return sb.String()
 }
-
 
 // typeCount is a (name, count) pair used to sort webhook breakdown
 // entries by count descending.

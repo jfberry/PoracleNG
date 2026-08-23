@@ -81,7 +81,7 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	}
 
 	if mb == nil {
-		e.addGeoResult(m, lat, lon)
+		e.addLocationFields(m, lat, lon)
 		return m, nil
 	}
 
@@ -89,7 +89,7 @@ func (e *Enricher) Maxbattle(lat, lon float64, battleEnd int64, mb *webhook.Maxb
 	e.addMapURLs(m, lat, lon, "stations", mb.ID)
 
 	// Reverse geocoding
-	e.addGeoResult(m, lat, lon)
+	e.addLocationFields(m, lat, lon)
 
 	// Static map tile
 	pending := e.addStaticMap(m, "maxbattle", lat, lon, map[string]any{
@@ -182,13 +182,17 @@ func (e *Enricher) MaxbattleTranslate(base map[string]any, mb *webhook.Maxbattle
 	}
 
 	if mb.BattlePokemonID > 0 {
-		TranslateMonsterNamesEng(m, gd, tr, e.Translations, mb.BattlePokemonID, mb.BattlePokemonForm, 0)
+		// Thread the boss's costume (maxbattle webhooks carry it — already used
+		// for the icon) so fullName/fullNameEng include it parenthesised.
+		TranslateMonsterNamesEng(m, gd, tr, e.Translations, mb.BattlePokemonID, mb.BattlePokemonForm, 0, mb.BattlePokemonCostume)
+		m["costumeName"] = costumeDisplayName(tr, mb.BattlePokemonCostume)
 		addGenerationFields(m, gd, tr, e.Translations.For("en"), mb.BattlePokemonID, mb.BattlePokemonForm)
 		addGenderFields(m, gd, tr, e.Translations.For("en"), mb.BattlePokemonGender)
-		// megaName: max-battle bosses are never mega/evolved, so it's the base
-		// name (mirrors raid's not-evolved branch).
-		if n, ok := m["name"].(string); ok {
-			m["megaName"] = n
+		// megaName is the full display name: base name + form + costume
+		// (== fullName). Max-battle bosses are never mega, but they can be
+		// formed/costumed, so megaName no longer drops those.
+		if fn, ok := m["fullName"].(string); ok {
+			m["megaName"] = fn
 		}
 		monster := gd.GetMonster(mb.BattlePokemonID, mb.BattlePokemonForm)
 		if monster != nil {

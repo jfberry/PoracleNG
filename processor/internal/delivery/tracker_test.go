@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -126,6 +127,37 @@ func TestTrackerCleanOnExpiry(t *testing.T) {
 	}
 	if deleted[0] != "msg-clean-1" {
 		t.Errorf("expected deleted msg-clean-1, got %s", deleted[0])
+	}
+}
+
+// TestTracker_CleanDeleteRoutesThroughHook verifies that when a clean-delete
+// hook is installed (the Dispatcher wires it to enqueue onto the FairQueue),
+// TTL eviction routes the delete through the hook instead of firing the
+// direct-Delete fallback goroutine.
+func TestTracker_CleanDeleteRoutesThroughHook(t *testing.T) {
+	mt, mock := newTestTracker(t)
+
+	var hookCalls atomic.Int32
+	var gotSentID atomic.Value
+	mt.SetCleanDeleteHook(func(msg *TrackedMessage) {
+		hookCalls.Add(1)
+		gotSentID.Store(msg.SentID)
+	})
+
+	mt.Track("clean:discord:channel:chan-1:msg-hooked", &TrackedMessage{
+		SentID: "msg-hooked", Target: "chan-1", Type: "discord:channel", Clean: 1,
+	}, 50*time.Millisecond)
+
+	time.Sleep(200 * time.Millisecond)
+
+	if got := hookCalls.Load(); got != 1 {
+		t.Fatalf("expected clean-delete to route through the hook once, got %d", got)
+	}
+	if got, _ := gotSentID.Load().(string); got != "msg-hooked" {
+		t.Errorf("hook got sentID %q, want msg-hooked", got)
+	}
+	if d := mock.getDeleted(); len(d) != 0 {
+		t.Errorf("hook path must not call the sender's Delete directly, but got %v", d)
 	}
 }
 
@@ -269,7 +301,7 @@ func TestLookupReplyMessage_ReturnsFullPrior(t *testing.T) {
 
 	mt.Track("edit-clean", &TrackedMessage{
 		SentID: "msg-clean", Target: "userA", Type: "discord:user",
-		Clean: 1, ReplyKey: "enc-x",
+		Clean: 1, ReplyKey: "enc-x", Template: "5",
 	}, time.Hour)
 
 	got := mt.LookupReplyMessage("enc-x", "userA")
@@ -281,6 +313,9 @@ func TestLookupReplyMessage_ReturnsFullPrior(t *testing.T) {
 	}
 	if got.Clean != 1 {
 		t.Errorf("Clean = %d, want 1 (inherited by monsterChanged dispatch)", got.Clean)
+	}
+	if got.Template != "5" {
+		t.Errorf("Template = %q, want 5 (monsterChanged reuses the original template name)", got.Template)
 	}
 	if got.Type != "discord:user" {
 		t.Errorf("Type = %q, want discord:user", got.Type)
@@ -410,5 +445,46 @@ func TestTrackerSize(t *testing.T) {
 
 	if mt.Size() != 3 {
 		t.Errorf("expected Size() = 3, got %d", mt.Size())
+	}
+}
+
+// Load must restore every persisted TrackedMessage field. Template was
+// persisted by Save but dropped by Load's field-by-field reconstruction,
+// silently downgrading post-restart monsterChanged follow-ups to the
+// default template.
+func TestTrackerSaveLoadPreservesTemplate(t *testing.T) {
+	dir := t.TempDir()
+	senders := map[string]Sender{"discord": &mockSender{}}
+
+	mt1 := NewMessageTracker(dir, senders)
+	mt1.Track("edit:tpl", &TrackedMessage{
+		SentID:   "s1",
+		Target:   "t1",
+		Type:     "discord:user",
+		MsgType:  "pokemon",
+		Clean:    1,
+		ReplyKey: "enc1",
+		Template: "compact",
+	}, 5*time.Minute)
+	if err := mt1.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	mt1.cache.Stop()
+
+	mt2 := NewMessageTracker(dir, senders)
+	if err := mt2.Load(); err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	defer mt2.cache.Stop()
+
+	got := mt2.LookupEdit("edit:tpl")
+	if got == nil {
+		t.Fatal("expected edit:tpl to be restored, got nil")
+	}
+	if got.Template != "compact" {
+		t.Errorf("Template lost across Save/Load: got %q, want %q", got.Template, "compact")
+	}
+	if got.MsgType != "pokemon" || got.ReplyKey != "enc1" || got.Clean != 1 {
+		t.Errorf("other fields lost across Save/Load: %+v", got)
 	}
 }

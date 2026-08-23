@@ -207,8 +207,8 @@ func buildDayPrefixMap(ctx *bot.CommandContext) map[string][]int {
 		// English always accepted
 		"mon": {1}, "tue": {2}, "wed": {3}, "thu": {4},
 		"fri": {5}, "sat": {6}, "sun": {7},
-		"weekday": {1, 2, 3, 4, 5},
-		"weekend": {6, 7},
+		"weekday":  {1, 2, 3, 4, 5},
+		"weekend":  {6, 7},
 		"every":    {1, 2, 3, 4, 5, 6, 7},
 		"everyday": {1, 2, 3, 4, 5, 6, 7},
 	}

@@ -21,6 +21,11 @@ var ErrDuplicateLocation = errors.New("duplicate location label")
 // exactly this set. Keep in sync with the apply.go named-target query.
 var NamedTargetTypes = []string{"webhook", "discord:channel", "telegram:channel", "telegram:group"}
 
+// ErrLocationNotFound is returned by UpdateLocation when no saved location with
+// the given label exists for the human (so no row was updated). Callers should
+// use errors.Is(err, store.ErrLocationNotFound) to detect this condition.
+var ErrLocationNotFound = errors.New("location not found")
+
 // Human represents a complete human record with all columns.
 // JSON fields (Area, CommunityMembership, AreaRestriction, BlockedAlerts)
 // are stored as JSON arrays in the database but exposed here as Go slices.
@@ -214,6 +219,11 @@ type HumanStore interface {
 	// (wrapped, detectable via errors.Is) when the label already exists for
 	// this human.
 	AddLocation(loc UserLocation) (int64, error)
+
+	// UpdateLocation overwrites the latitude/longitude of an existing saved
+	// location, matched by case-insensitive label. Returns ErrLocationNotFound
+	// (wrapped, detectable via errors.Is) when no row matched.
+	UpdateLocation(id, label string, lat, lon float64) error
 
 	// DeleteLocation removes the named saved location by case-insensitive
 	// label match. Returns nil if the location did not exist

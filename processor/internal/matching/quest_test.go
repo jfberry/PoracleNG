@@ -94,6 +94,24 @@ func TestSingleRewardMatchesPokemon(t *testing.T) {
 			&QuestRewardData{Type: 7, PokemonID: 25, Shiny: true},
 			true,
 		},
+		{
+			"all pokemon wildcard (reward=0) matches any pokemon",
+			&db.QuestTracking{RewardType: 7, Reward: 0},
+			&QuestRewardData{Type: 7, PokemonID: 25},
+			true,
+		},
+		{
+			"all pokemon wildcard (reward=0) matches a different pokemon",
+			&db.QuestTracking{RewardType: 7, Reward: 0},
+			&QuestRewardData{Type: 7, PokemonID: 566},
+			true,
+		},
+		{
+			"all pokemon wildcard still honours shiny filter",
+			&db.QuestTracking{RewardType: 7, Reward: 0, Shiny: true},
+			&QuestRewardData{Type: 7, PokemonID: 25, Shiny: false},
+			false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -157,6 +175,18 @@ func TestSingleRewardMatchesItem(t *testing.T) {
 			&QuestRewardData{Type: 2, ItemID: 701, Amount: 3},
 			true,
 		},
+		{
+			"all items wildcard (reward=0) matches any item",
+			&db.QuestTracking{RewardType: 2, Reward: 0},
+			&QuestRewardData{Type: 2, ItemID: 701, Amount: 3},
+			true,
+		},
+		{
+			"all items wildcard still honours amount filter",
+			&db.QuestTracking{RewardType: 2, Reward: 0, Amount: 5},
+			&QuestRewardData{Type: 2, ItemID: 701, Amount: 3},
+			false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -198,6 +228,49 @@ func TestSingleRewardMatchesStardust(t *testing.T) {
 			"stardust reward=0 matches any amount",
 			&db.QuestTracking{RewardType: 3, Reward: 0},
 			&QuestRewardData{Type: 3, Amount: 200},
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := singleRewardMatches(tt.tracking, tt.reward)
+			if got != tt.expected {
+				t.Errorf("singleRewardMatches() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSingleRewardMatchesPokecoins(t *testing.T) {
+	tests := []struct {
+		name     string
+		tracking *db.QuestTracking
+		reward   *QuestRewardData
+		expected bool
+	}{
+		{
+			"pokecoins exact match",
+			&db.QuestTracking{RewardType: 8, Reward: 10},
+			&QuestRewardData{Type: 8, Amount: 10},
+			true,
+		},
+		{
+			"pokecoins exceeds minimum",
+			&db.QuestTracking{RewardType: 8, Reward: 5},
+			&QuestRewardData{Type: 8, Amount: 10},
+			true,
+		},
+		{
+			"pokecoins below minimum",
+			&db.QuestTracking{RewardType: 8, Reward: 15},
+			&QuestRewardData{Type: 8, Amount: 10},
+			false,
+		},
+		{
+			"pokecoins reward=0 matches any amount",
+			&db.QuestTracking{RewardType: 8, Reward: 0},
+			&QuestRewardData{Type: 8, Amount: 10},
 			true,
 		},
 	}

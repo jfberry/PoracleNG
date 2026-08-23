@@ -101,13 +101,12 @@ func (m *queueMockSender) getEditCalls() []string {
 	return result
 }
 
-func newTestFairQueue(t *testing.T, senders map[string]Sender, cfg QueueConfig) (*FairQueue, chan *Job) {
+func newTestFairQueue(t *testing.T, senders map[string]Sender, cfg QueueConfig) (*FairQueue, func(*Job)) {
 	t.Helper()
-	ch := make(chan *Job, 100)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
-	fq := NewFairQueue(ch, senders, tracker, cfg, nil)
-	return fq, ch
+	fq := NewFairQueue(senders, tracker, cfg, nil)
+	return fq, func(j *Job) { fq.enqueue(j, true) }
 }
 
 func TestFairQueueRouting(t *testing.T) {
@@ -118,17 +117,17 @@ func TestFairQueueRouting(t *testing.T) {
 		"telegram": telegramMock,
 	}
 
-	fq, ch := newTestFairQueue(t, senders, QueueConfig{
+	fq, enq := newTestFairQueue(t, senders, QueueConfig{
 		ConcurrentDiscord:  2,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	})
 	fq.Start()
 
-	ch <- &Job{Target: "user1", Type: "discord:user", Message: json.RawMessage(`{}`)}
-	ch <- &Job{Target: "chan1", Type: "discord:channel", Message: json.RawMessage(`{}`)}
-	ch <- &Job{Target: "tg1", Type: "telegram:user", Message: json.RawMessage(`{}`)}
-	ch <- &Job{Target: "wh1", Type: "webhook", Message: json.RawMessage(`{}`)}
+	enq(&Job{Target: "user1", Type: "discord:user", Message: json.RawMessage(`{}`)})
+	enq(&Job{Target: "chan1", Type: "discord:channel", Message: json.RawMessage(`{}`)})
+	enq(&Job{Target: "tg1", Type: "telegram:user", Message: json.RawMessage(`{}`)})
+	enq(&Job{Target: "wh1", Type: "webhook", Message: json.RawMessage(`{}`)})
 
 	// Give workers time to process
 	time.Sleep(100 * time.Millisecond)
@@ -168,25 +167,26 @@ func TestFairQueueConcurrency(t *testing.T) {
 		maxConcurrent: &maxConcurrent,
 	}}
 
-	ch := make(chan *Job, 100)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
 	// Only 2 concurrent discord slots
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  2,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	// Send 6 jobs — with concurrency 2 and 50ms delay, they should be serialized in pairs
+	// Send 6 jobs — all to the same target, so the lane drainer serializes
+	// them regardless of platform concurrency; see the relaxed assertions
+	// below (max <= 2, max != 0).
 	for range 6 {
-		ch <- &Job{
+		fq.enqueue(&Job{
 			Target:  "user1",
 			Type:    "discord:user",
 			Message: json.RawMessage(`{}`),
-		}
+		}, true)
 	}
 
 	// Wait for all to finish
@@ -237,7 +237,6 @@ func TestFairQueueEditLookup(t *testing.T) {
 	discordMock := &queueMockSender{platform: "discord"}
 	senders := map[string]Sender{"discord": discordMock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
@@ -249,19 +248,19 @@ func TestFairQueueEditLookup(t *testing.T) {
 		Clean:  0,
 	}, 5*time.Minute)
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:  "user1",
 		Type:    "discord:user",
 		Message: json.RawMessage(`{"content":"updated"}`),
 		EditKey: "edit:pokemon:user1",
-	}
+	}, true)
 
 	time.Sleep(100 * time.Millisecond)
 	fq.Stop()
@@ -288,7 +287,6 @@ func TestFairQueueEditFallback(t *testing.T) {
 	}
 	senders := map[string]Sender{"discord": discordMock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
@@ -300,20 +298,20 @@ func TestFairQueueEditFallback(t *testing.T) {
 		Clean:  0,
 	}, 5*time.Minute)
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:  "user1",
 		Type:    "discord:user",
 		Message: json.RawMessage(`{"content":"fallback"}`),
 		EditKey: "edit:pokemon:user1",
 		TTH:     TTH{Minutes: 10},
-	}
+	}, true)
 
 	time.Sleep(100 * time.Millisecond)
 	fq.Stop()
@@ -331,28 +329,95 @@ func TestFairQueueEditFallback(t *testing.T) {
 	}
 }
 
+// deleteTrackingSender records max Delete concurrency + delete/send counts.
+type deleteTrackingSender struct {
+	concurrent    atomic.Int32
+	maxConcurrent atomic.Int32
+	deletes       atomic.Int32
+	sends         atomic.Int32
+}
+
+func (s *deleteTrackingSender) Send(_ context.Context, job *Job) (*SentMessage, error) {
+	s.sends.Add(1)
+	return &SentMessage{ID: "sent-" + job.Target}, nil
+}
+
+func (s *deleteTrackingSender) Delete(_ context.Context, _ string) error {
+	cur := s.concurrent.Add(1)
+	for {
+		old := s.maxConcurrent.Load()
+		if cur <= old || s.maxConcurrent.CompareAndSwap(old, cur) {
+			break
+		}
+	}
+	time.Sleep(5 * time.Millisecond) // hold the slot to expose any concurrency
+	s.concurrent.Add(-1)
+	s.deletes.Add(1)
+	return nil
+}
+
+func (s *deleteTrackingSender) Edit(_ context.Context, _ string, _ json.RawMessage, _ []byte) error {
+	return nil
+}
+func (s *deleteTrackingSender) WaitForRateLimit(string) {}
+func (s *deleteTrackingSender) Platform() string        { return "discord" }
+
+// TestFairQueue_CleanDeleteSerializedPerTarget proves the fix for the reported
+// 429 storm: many clean-deletes to the SAME channel are serialised (max 1
+// in-flight) by the destination's lane drainer — instead of firing
+// concurrently and 429-ing each other into failure. ConcurrentDiscord=8 would
+// otherwise allow 8 at once. A delete job must also never trigger a Send.
+func TestFairQueue_CleanDeleteSerializedPerTarget(t *testing.T) {
+	sender := &deleteTrackingSender{}
+	senders := map[string]Sender{"discord": sender}
+	tracker := NewMessageTracker(t.TempDir(), senders)
+	t.Cleanup(func() { tracker.cache.Stop() })
+
+	fq := NewFairQueue(senders, tracker, QueueConfig{
+		ConcurrentDiscord:  8,
+		ConcurrentWebhook:  1,
+		ConcurrentTelegram: 1,
+	}, nil)
+	fq.Start()
+
+	const n = 20
+	for i := range n {
+		fq.enqueue(&Job{Type: "discord:channel", Target: "chan1", DeleteSentID: "chan1:msg" + strconv.Itoa(i)}, false)
+	}
+	fq.Stop() // closes every lane and drains all drainers
+
+	if got := sender.deletes.Load(); got != n {
+		t.Errorf("expected %d deletes, got %d", n, got)
+	}
+	if got := sender.maxConcurrent.Load(); got != 1 {
+		t.Errorf("clean-deletes to the same target must serialise (max 1 concurrent), got %d — the concurrency bug", got)
+	}
+	if got := sender.sends.Load(); got != 0 {
+		t.Errorf("a delete job must not trigger a Send, got %d", got)
+	}
+}
+
 func TestFairQueueCleanTracking(t *testing.T) {
 	discordMock := &queueMockSender{platform: "discord", sentID: "chan1:msg-42"}
 	senders := map[string]Sender{"discord": discordMock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:  "chan1",
 		Type:    "discord:channel",
 		Message: json.RawMessage(`{"content":"hello"}`),
 		Clean:   1,
 		TTH:     TTH{Minutes: 5},
-	}
+	}, true)
 
 	time.Sleep(100 * time.Millisecond)
 	fq.Stop()
@@ -380,24 +445,23 @@ func TestFairQueueSuppressesExpiredCleanMessage(t *testing.T) {
 	discordMock := &queueMockSender{platform: "discord", sentID: "chan1:msg-99"}
 	senders := map[string]Sender{"discord": discordMock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:  "chan1",
 		Type:    "discord:channel",
 		Message: json.RawMessage(`{"content":"late"}`),
 		Clean:   1,
 		TTH:     TTH{}, // all zero — event already expired at enrichment
-	}
+	}, true)
 
 	time.Sleep(100 * time.Millisecond)
 	fq.Stop()
@@ -414,24 +478,23 @@ func TestFairQueueEditOnlyExpiredStillSends(t *testing.T) {
 	discordMock := &queueMockSender{platform: "discord", sentID: "chan1:msg-100"}
 	senders := map[string]Sender{"discord": discordMock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:  "chan1",
 		Type:    "discord:channel",
 		Message: json.RawMessage(`{"content":"edit-only"}`),
 		Clean:   2, // edit bit, no clean bit
 		TTH:     TTH{},
-	}
+	}, true)
 
 	time.Sleep(100 * time.Millisecond)
 	fq.Stop()
@@ -450,7 +513,7 @@ func TestRateLimitAtDelivery(t *testing.T) {
 	limiter := ratelimit.New(ratelimit.Config{TimingPeriod: 60, DMLimit: 2, ChannelLimit: 5, MaxLimitsBeforeStop: 10})
 	defer limiter.Close()
 
-	fq, ch := newTestFairQueue(t, senders, QueueConfig{
+	fq, enq := newTestFairQueue(t, senders, QueueConfig{
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
 		RateLimitHooks:    hooks,
@@ -458,7 +521,7 @@ func TestRateLimitAtDelivery(t *testing.T) {
 	fq.Start()
 
 	for range 5 {
-		ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+		enq(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)})
 	}
 	time.Sleep(300 * time.Millisecond)
 	fq.Stop()
@@ -476,31 +539,30 @@ func TestRateLimitAtDelivery(t *testing.T) {
 // of the limit and do not consume budget that would otherwise apply to other
 // jobs to the same destination.
 //
-// Order-independence note: NewFairQueue spins one worker per platform
-// (Discord/Webhook/Telegram) by default, so three workers race to drain the
-// channel. Jobs to the same target serialize on a destLock but pop off the
-// channel in scheduler-dependent order — meaning the bypass send may land
-// before or after the non-bypass send. We assert on counts, not positions.
+// All three jobs target the same destination, so they land in the same lane
+// and are drained FIFO by that lane's single drainer — order is deterministic
+// here, but we still assert on counts (not positions) since that's the
+// property under test.
 func TestRateLimitBypass(t *testing.T) {
 	mock := &queueMockSender{platform: "discord"}
 	senders := map[string]Sender{"discord": mock}
 	limiter := ratelimit.New(ratelimit.Config{TimingPeriod: 60, DMLimit: 1, ChannelLimit: 5})
 	defer limiter.Close()
 
-	fq, ch := newTestFairQueue(t, senders, QueueConfig{
+	fq, enq := newTestFairQueue(t, senders, QueueConfig{
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
 	})
 	fq.Start()
 
 	// Burn the only DM slot
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	enq(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)})
 	// Bypass job — must still be delivered even though u1 is now over limit
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`), BypassRateLimit: true}
+	enq(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`), BypassRateLimit: true})
 	// Non-bypass job — must be dropped
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	enq(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)})
 
-	fq.Stop() // Stop closes the channel and waits for all queued jobs to drain.
+	fq.Stop() // Stop closes every lane and waits for all queued jobs to drain.
 
 	calls := mock.getSendCalls()
 	if len(calls) != 2 {
@@ -531,29 +593,28 @@ func TestRateLimitEditNotCounted(t *testing.T) {
 
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
-	ch := make(chan *Job, 10)
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
 	}, nil)
 	fq.Start()
 
 	// First send establishes the tracked message under EditKey "raid:1".
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
-		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}
+	fq.enqueue(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
+		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}, true)
 	time.Sleep(80 * time.Millisecond)
 
 	// Edit reuses the existing message — must not count.
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
-		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}
+	fq.enqueue(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
+		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}, true)
 	time.Sleep(80 * time.Millisecond)
 
 	// Second new send — would only succeed if the edit didn't consume the budget.
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	fq.enqueue(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}, true)
 	time.Sleep(80 * time.Millisecond)
 
 	// Third new send — over the DMLimit of 2; must be dropped.
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	fq.enqueue(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}, true)
 	time.Sleep(80 * time.Millisecond)
 	fq.Stop()
 
@@ -580,27 +641,26 @@ func TestRateLimitFailedEditCounts(t *testing.T) {
 
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
-	ch := make(chan *Job, 10)
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
 	}, nil)
 	fq.Start()
 
 	// First send establishes the tracked message under EditKey "raid:1".
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
-		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}
+	fq.enqueue(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
+		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}, true)
 	time.Sleep(80 * time.Millisecond)
 
 	// Edit attempt fails (mock.editErr). Falls through to a new Send — which
 	// MUST count, because it produced a real wire delivery.
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
-		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}
+	fq.enqueue(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`),
+		EditKey: "raid:1", Clean: 2, TTH: TTH{Hours: 1}}, true)
 	time.Sleep(80 * time.Millisecond)
 
 	// Limit is 1 and we have already counted two real sends — this third one
 	// must be dropped.
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	fq.enqueue(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}, true)
 	time.Sleep(80 * time.Millisecond)
 	fq.Stop()
 
@@ -612,11 +672,10 @@ func TestRateLimitFailedEditCounts(t *testing.T) {
 	}
 }
 
-// TestRateLimitHookDoesNotDeadlock proves the worker does not deadlock when
-// the breach hook tries to dispatch a bypass job into a full channel where
-// other jobs target the same destination as the breaching one. Hooks are
-// fire-and-forget, so the worker must release the per-destination mutex even
-// if the hook's bypass dispatch is still pending channel space.
+// TestRateLimitHookDoesNotDeadlock proves the lane drainer does not deadlock
+// when the breach hook fires for a destination that has more jobs queued
+// behind the breaching one. Hooks are fire-and-forget (their own goroutine),
+// so the drainer must move on to the next job without waiting on the hook.
 func TestRateLimitHookDoesNotDeadlock(t *testing.T) {
 	mock := &queueMockSender{platform: "discord"}
 	senders := map[string]Sender{"discord": mock}
@@ -624,15 +683,13 @@ func TestRateLimitHookDoesNotDeadlock(t *testing.T) {
 	defer limiter.Close()
 
 	// Hook that itself tries to dispatch — but we route its dispatch through
-	// the same (small) channel to simulate the deadlock-prone scenario.
+	// this signal channel to simulate the deadlock-prone scenario.
 	hookCalled := make(chan struct{}, 1)
 	hooks := dispatchingHooks{onBreach: func() { hookCalled <- struct{}{} }}
 
-	// Tiny channel so it fills fast.
-	ch := make(chan *Job, 2)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord: 1,
 		RateLimiter:       limiter,
 		RateLimitHooks:    hooks,
@@ -640,17 +697,17 @@ func TestRateLimitHookDoesNotDeadlock(t *testing.T) {
 	fq.Start()
 
 	// Burn the DM slot.
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	fq.enqueue(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}, true)
 	// Trigger the breach.
-	ch <- &Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}
+	fq.enqueue(&Job{Target: "u1", Type: "discord:user", Message: json.RawMessage(`{}`)}, true)
 
-	// Hook should fire promptly even though processJob holds the dest lock,
-	// because it runs in its own goroutine.
+	// Hook should fire promptly even though processJob runs on this
+	// destination's lane drainer, because the hook runs in its own goroutine.
 	select {
 	case <-hookCalled:
 		// good
 	case <-time.After(2 * time.Second):
-		t.Fatal("OnBreach hook did not fire — likely deadlocked under dest mutex")
+		t.Fatal("OnBreach hook did not fire — likely deadlocked in the lane drainer")
 	}
 
 	fq.Stop()
@@ -677,7 +734,6 @@ func TestQueueStampsReplyToID(t *testing.T) {
 	discordMock := &queueMockSender{platform: "discord", sentID: "chan1:msg-new"}
 	senders := map[string]Sender{"discord": discordMock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
@@ -689,19 +745,19 @@ func TestQueueStampsReplyToID(t *testing.T) {
 		ReplyKey: "rk1",
 	}, 5*time.Minute)
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:   "chan1",
 		Type:     "discord:channel",
 		Message:  json.RawMessage(`{"content":"changed"}`),
 		ReplyKey: "rk1",
-	}
+	}, true)
 
 	time.Sleep(100 * time.Millisecond)
 	fq.Stop()
@@ -723,7 +779,6 @@ func TestQueueDoesNotStampWhenEditKeyMatches(t *testing.T) {
 	discordMock := &queueMockSender{platform: "discord"}
 	senders := map[string]Sender{"discord": discordMock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
@@ -743,20 +798,20 @@ func TestQueueDoesNotStampWhenEditKeyMatches(t *testing.T) {
 		ReplyKey: "rk-x",
 	}, 5*time.Minute)
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:   "user1",
 		Type:     "discord:user",
 		Message:  json.RawMessage(`{"content":"updated"}`),
 		EditKey:  "edit:raid:1",
 		ReplyKey: "rk-x",
-	}
+	}, true)
 
 	time.Sleep(100 * time.Millisecond)
 	fq.Stop()
@@ -786,11 +841,10 @@ func TestQueueTracksReplyKeyAfterSend(t *testing.T) {
 	}
 	senders := map[string]Sender{"discord": mock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
@@ -798,25 +852,25 @@ func TestQueueTracksReplyKeyAfterSend(t *testing.T) {
 	fq.Start()
 
 	// First job: no prior, but carries ReplyKey so the send is tracked under it.
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:   "chan1",
 		Type:     "discord:channel",
 		Message:  json.RawMessage(`{"content":"first"}`),
 		ReplyKey: "rk-chain",
 		// Need TTH > 0 so post-send tracking inserts into cache.
 		TTH: TTH{Hours: 1},
-	}
+	}, true)
 	time.Sleep(80 * time.Millisecond)
 
 	// Second job with same ReplyKey/Target — must get ReplyToID stamped to
 	// the first job's SentID.
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:   "chan1",
 		Type:     "discord:channel",
 		Message:  json.RawMessage(`{"content":"second"}`),
 		ReplyKey: "rk-chain",
 		TTH:      TTH{Hours: 1},
-	}
+	}, true)
 	time.Sleep(80 * time.Millisecond)
 	fq.Stop()
 
@@ -855,8 +909,8 @@ func (c *counterSender) Delete(_ context.Context, _ string) error { return nil }
 func (c *counterSender) Edit(_ context.Context, _ string, _ json.RawMessage, _ []byte) error {
 	return nil
 }
-func (c *counterSender) Platform() string             { return c.platform }
-func (c *counterSender) WaitForRateLimit(_ string)    {}
+func (c *counterSender) Platform() string          { return c.platform }
+func (c *counterSender) WaitForRateLimit(_ string) {}
 func (c *counterSender) getSendCalls() []*Job {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -873,18 +927,17 @@ func TestProcessJob_ReplyOnlyTrackerStorage(t *testing.T) {
 	mock := &queueMockSender{platform: "discord", sentID: "chan1:msg-100"}
 	senders := map[string]Sender{"discord": mock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:   "chan1",
 		Type:     "discord:channel",
 		Message:  json.RawMessage(`{"content":"egg"}`),
@@ -892,7 +945,7 @@ func TestProcessJob_ReplyOnlyTrackerStorage(t *testing.T) {
 		EditKey:  "",
 		ReplyKey: "raidlife:test:1700000000",
 		TTH:      TTH{Hours: 1},
-	}
+	}, true)
 
 	time.Sleep(100 * time.Millisecond)
 	fq.Stop()
@@ -928,18 +981,17 @@ func TestProcessJob_NoReplyKey_NotTracked(t *testing.T) {
 	mock := &queueMockSender{platform: "discord", sentID: "chan1:msg-200"}
 	senders := map[string]Sender{"discord": mock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
 	}, nil)
 	fq.Start()
 
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:   "chan1",
 		Type:     "discord:channel",
 		Message:  json.RawMessage(`{"content":"plain"}`),
@@ -947,7 +999,7 @@ func TestProcessJob_NoReplyKey_NotTracked(t *testing.T) {
 		EditKey:  "",
 		ReplyKey: "",
 		TTH:      TTH{Hours: 1},
-	}
+	}, true)
 
 	time.Sleep(100 * time.Millisecond)
 	fq.Stop()
@@ -972,11 +1024,10 @@ func TestProcessJob_ReplyChainWithoutClean(t *testing.T) {
 	}
 	senders := map[string]Sender{"discord": mock}
 
-	ch := make(chan *Job, 10)
 	tracker := NewMessageTracker(t.TempDir(), senders)
 	t.Cleanup(func() { tracker.cache.Stop() })
 
-	fq := NewFairQueue(ch, senders, tracker, QueueConfig{
+	fq := NewFairQueue(senders, tracker, QueueConfig{
 		ConcurrentDiscord:  1,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
@@ -984,25 +1035,25 @@ func TestProcessJob_ReplyChainWithoutClean(t *testing.T) {
 	fq.Start()
 
 	// Job 1: egg alert — no clean, no edit, just ReplyKey.
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:   "chan1",
 		Type:     "discord:channel",
 		Message:  json.RawMessage(`{"content":"egg"}`),
 		Clean:    0,
 		ReplyKey: "k",
 		TTH:      TTH{Hours: 1},
-	}
+	}, true)
 	time.Sleep(80 * time.Millisecond)
 
 	// Job 2: raid alert — same ReplyKey, same target.
-	ch <- &Job{
+	fq.enqueue(&Job{
 		Target:   "chan1",
 		Type:     "discord:channel",
 		Message:  json.RawMessage(`{"content":"raid"}`),
 		Clean:    0,
 		ReplyKey: "k",
 		TTH:      TTH{Hours: 1},
-	}
+	}, true)
 	time.Sleep(80 * time.Millisecond)
 	fq.Stop()
 
@@ -1024,7 +1075,7 @@ func TestFairQueueStop(t *testing.T) {
 	discordMock := &queueMockSender{platform: "discord"}
 	senders := map[string]Sender{"discord": discordMock}
 
-	fq, ch := newTestFairQueue(t, senders, QueueConfig{
+	fq, enq := newTestFairQueue(t, senders, QueueConfig{
 		ConcurrentDiscord:  2,
 		ConcurrentWebhook:  1,
 		ConcurrentTelegram: 1,
@@ -1033,11 +1084,11 @@ func TestFairQueueStop(t *testing.T) {
 
 	// Enqueue some jobs then immediately stop
 	for range 5 {
-		ch <- &Job{
+		enq(&Job{
 			Target:  "user1",
 			Type:    "discord:user",
 			Message: json.RawMessage(`{}`),
-		}
+		})
 	}
 
 	// Stop should drain remaining jobs and return
@@ -1058,4 +1109,278 @@ func TestFairQueueStop(t *testing.T) {
 	if len(sendCalls) != 5 {
 		t.Errorf("expected all 5 jobs to be processed on stop, got %d", len(sendCalls))
 	}
+}
+
+// laneMockSender is a minimal Sender for lane-isolation/reap/shutdown tests.
+// It hooks BOTH Send and Delete so tests can park either path (clean-deletes
+// invoke Delete, not Send).
+type laneMockSender struct {
+	onSend   func(*Job)
+	onDelete func(sentID string)
+}
+
+func (m *laneMockSender) Send(_ context.Context, job *Job) (*SentMessage, error) {
+	if m.onSend != nil {
+		m.onSend(job)
+	}
+	return &SentMessage{ID: "sent-" + job.Target}, nil
+}
+func (m *laneMockSender) Delete(_ context.Context, sentID string) error {
+	if m.onDelete != nil {
+		m.onDelete(sentID)
+	}
+	return nil
+}
+func (m *laneMockSender) Edit(_ context.Context, _ string, _ json.RawMessage, _ []byte) error {
+	return nil
+}
+func (m *laneMockSender) WaitForRateLimit(string) {}
+func (m *laneMockSender) Platform() string        { return "discord" }
+
+// waitFor polls cond until true or the deadline; fails the test on timeout.
+func waitFor(t *testing.T, cond func() bool, d time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatalf("condition not met within %v", d)
+}
+
+// TestLanes_SlowTargetDoesNotBlockFreeTarget proves the headline property of
+// per-destination lanes (Phase 2): a target parked mid-send does not delay
+// delivery to an unrelated target. Before Phase 2 (shared channel + worker
+// pool), a parked worker could starve other destinations under a saturated
+// pool; with one lane + drainer per target, "free" delivers immediately
+// while "slow" sits blocked in its own goroutine.
+func TestLanes_SlowTargetDoesNotBlockFreeTarget(t *testing.T) {
+	release := make(chan struct{})
+	freeDone := make(chan struct{})
+	sender := &laneMockSender{
+		onSend: func(job *Job) {
+			if job.Target == "slow" {
+				<-release // park the slow lane
+			} else {
+				close(freeDone)
+			}
+		},
+	}
+	senders := map[string]Sender{"discord": sender}
+	fq, enq := newTestFairQueue(t, senders, QueueConfig{ConcurrentDiscord: 4})
+	fq.Start()
+	defer func() { close(release); fq.Stop() }()
+
+	enq(&Job{Type: "discord:channel", Target: "slow", Message: json.RawMessage(`{}`)})
+	enq(&Job{Type: "discord:channel", Target: "free", Message: json.RawMessage(`{}`)})
+
+	select {
+	case <-freeDone:
+		// pass: free lane delivered while slow lane parked
+	case <-time.After(time.Second):
+		t.Fatal("free target blocked behind a parked slow target — lanes not isolated")
+	}
+}
+
+// TestLanes_ReuseAfterDrainDelivers proves a target's lane can be fully
+// drained and then reused without losing jobs. This test does NOT force a
+// real reap (the lane's drainer is likely still alive and idle, waiting out
+// idleTimeout, when the second wave arrives) — it only proves that draining
+// a lane to empty and then enqueuing more to the same target still delivers
+// everything, whether the lane is reused live or respawned fresh. The actual
+// reap path (idle timer fires, lane map entry deleted, drainer goroutine
+// exits) is covered by TestLanes_ReapsIdleLane below. The counter-under-lock
+// invariant (lane.pending guarded by lanesMu) is what makes reap-vs-enqueue
+// races safe in general; that invariant is exercised structurally here and
+// in the shutdown-drain test below, and directly raced in
+// TestLanes_ReapEnqueueRace.
+func TestLanes_ReuseAfterDrainDelivers(t *testing.T) {
+	var delivered atomic.Int32
+	sender := &laneMockSender{onSend: func(*Job) { delivered.Add(1) }}
+	senders := map[string]Sender{"discord": sender}
+	fq, enq := newTestFairQueue(t, senders, QueueConfig{ConcurrentDiscord: 2})
+	fq.Start()
+	defer fq.Stop()
+
+	for range 50 {
+		enq(&Job{Type: "discord:channel", Target: "t", Message: json.RawMessage(`{}`)})
+	}
+	waitFor(t, func() bool { return delivered.Load() == 50 }, time.Second)
+
+	for range 50 {
+		enq(&Job{Type: "discord:channel", Target: "t", Message: json.RawMessage(`{}`)})
+	}
+	waitFor(t, func() bool { return delivered.Load() == 100 }, time.Second)
+}
+
+// TestLanes_ReapsIdleLane proves the actual reap path: with idleTimeout
+// shortened, a lane that finishes all its work and sits idle gets deleted
+// from fq.lanes (LaneStats active hits 0) and its drainer goroutine exits.
+// idleTimeout is set BEFORE the first enqueue — the drainer that reads it
+// doesn't exist yet, so there is no concurrent read to race the write. After
+// the reap is observed, a second wave to the same target proves reap-then-
+// recreate works: the lane is respawned on demand and still delivers.
+func TestLanes_ReapsIdleLane(t *testing.T) {
+	var delivered atomic.Int32
+	sender := &laneMockSender{onSend: func(*Job) { delivered.Add(1) }}
+	senders := map[string]Sender{"discord": sender}
+	fq, enq := newTestFairQueue(t, senders, QueueConfig{ConcurrentDiscord: 2})
+	fq.idleTimeout = 5 * time.Millisecond // set before any enqueue — no drainer yet to race
+	fq.Start()
+	defer fq.Stop()
+
+	for range 5 {
+		enq(&Job{Type: "discord:channel", Target: "t", Message: json.RawMessage(`{}`)})
+	}
+	waitFor(t, func() bool { return delivered.Load() == 5 }, time.Second)
+
+	// Prove the lane actually reaped: active lane count drops to 0.
+	waitFor(t, func() bool {
+		_, active, _, _, _ := fq.LaneStats()
+		return active == 0
+	}, time.Second)
+
+	// Reap-then-recreate: a fresh wave to the same target must still deliver.
+	for range 5 {
+		enq(&Job{Type: "discord:channel", Target: "t", Message: json.RawMessage(`{}`)})
+	}
+	waitFor(t, func() bool { return delivered.Load() == 10 }, time.Second)
+}
+
+// TestLanes_ReapEnqueueRace races enqueue against the reap timer under a tiny
+// idleTimeout: several goroutines hammer a small set of targets with short
+// sleeps between bursts (giving lanes a chance to drain and reap between
+// bursts), while enqueue may concurrently be spawning a fresh lane for a
+// target whose old lane is mid-reap. The counter-under-lock invariant
+// (lane.pending incremented under lanesMu before the lock is released, and
+// the reaper only deletes when pending==0 under the same lock) means every
+// enqueued job must still be delivered — none may be silently lost to a
+// reap racing the enqueue — and no send-on-closed-channel panic may occur.
+// This is the core risk the spec calls out; it's only meaningful run with
+// -race and repeated (-count=10+).
+func TestLanes_ReapEnqueueRace(t *testing.T) {
+	var delivered atomic.Int64
+	sender := &laneMockSender{onSend: func(*Job) { delivered.Add(1) }}
+	senders := map[string]Sender{"discord": sender}
+	fq, enq := newTestFairQueue(t, senders, QueueConfig{ConcurrentDiscord: 8})
+	fq.idleTimeout = 2 * time.Millisecond // set before any enqueue — no drainer yet to race
+	fq.Start()
+	defer fq.Stop() // drains anything still buffered
+
+	const goroutines = 8
+	const perGoroutine = 50
+	const targets = 4
+
+	var wg sync.WaitGroup
+	for g := range goroutines {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for j := range perGoroutine {
+				target := "t" + strconv.Itoa((g+j)%targets)
+				enq(&Job{Type: "discord:channel", Target: target, Message: json.RawMessage(`{}`)})
+				if j%5 == 0 {
+					// Give lanes a chance to drain + reap between bursts, so
+					// enqueue has a real chance of racing a reap in flight.
+					time.Sleep(3 * time.Millisecond)
+				}
+			}
+		}(g)
+	}
+	wg.Wait()
+
+	waitFor(t, func() bool { return delivered.Load() == goroutines*perGoroutine }, 5*time.Second)
+
+	if got := delivered.Load(); got != goroutines*perGoroutine {
+		t.Fatalf("expected %d delivered (no job lost to a reap race), got %d", goroutines*perGoroutine, got)
+	}
+}
+
+// TestLanes_ShutdownDrainsAllLanes proves Stop() blocks until every buffered
+// job across every lane has been delivered, not just until the drainers
+// exit. Ten lanes are pre-loaded with five jobs apiece (each Send taking
+// 1ms), then Stop() is called with none of them consumed yet; Stop must not
+// return until all 50 have gone through processJob.
+func TestLanes_ShutdownDrainsAllLanes(t *testing.T) {
+	var delivered atomic.Int32
+	sender := &laneMockSender{onSend: func(*Job) {
+		time.Sleep(time.Millisecond)
+		delivered.Add(1)
+	}}
+	senders := map[string]Sender{"discord": sender}
+	fq, enq := newTestFairQueue(t, senders, QueueConfig{ConcurrentDiscord: 4})
+	fq.Start()
+
+	const lanes, per = 10, 5
+	for l := range lanes {
+		for range per {
+			enq(&Job{Type: "discord:channel", Target: "t" + strconv.Itoa(l), Message: json.RawMessage(`{}`)})
+		}
+	}
+	fq.Stop() // must block until every buffered job is delivered
+
+	if got := delivered.Load(); got != lanes*per {
+		t.Errorf("expected %d delivered before Stop returned, got %d", lanes*per, got)
+	}
+}
+
+// TestLanes_CleanDeleteDropsOnFullLane proves overflow policy D5's drop side:
+// enqueue(job, false) (clean-deletes) DROP on a full lane and return false,
+// rather than blocking like sends do. The drainer is parked on Delete (clean-
+// deletes invoke Sender.Delete, not Send) so the tiny two-slot buffer fills;
+// "enqueue until one drops" is timing-robust regardless of exactly when the
+// drainer picks up the first job. A different target's lane must stay
+// unaffected by the full "t" lane.
+func TestLanes_CleanDeleteDropsOnFullLane(t *testing.T) {
+	release := make(chan struct{})
+	sender := &laneMockSender{onDelete: func(string) { <-release }} // park the drainer
+	senders := map[string]Sender{"discord": sender}
+	fq, _ := newTestFairQueue(t, senders, QueueConfig{ConcurrentDiscord: 1, PerRouteBuffer: 2})
+	fq.Start()
+	defer func() { close(release); fq.Stop() }()
+
+	accepted, dropped := 0, 0
+	for i := range 20 {
+		if fq.enqueue(&Job{Type: "discord:channel", Target: "t", DeleteSentID: "t:" + strconv.Itoa(i)}, false) {
+			accepted++
+		} else {
+			dropped++
+		}
+	}
+	if accepted == 0 {
+		t.Fatal("expected some clean-deletes to be accepted")
+	}
+	if dropped == 0 {
+		t.Error("expected some clean-deletes to be dropped on the full lane (drainer parked, buffer=2)")
+	}
+
+	// A different target's lane is unaffected.
+	if !fq.enqueue(&Job{Type: "discord:channel", Target: "other", DeleteSentID: "other:1"}, false) {
+		t.Error("a different target's lane should accept the clean-delete")
+	}
+}
+
+// TestLaneStats proves LaneStats reports real per-lane aggregates: one lane
+// parked in-flight (the drainer's onSend blocks on release) plus six more
+// buffered behind it in the same lane's channel yields depth 6 (the in-flight
+// job isn't in the channel anymore), active lane count 1, and the deepest
+// target name.
+func TestLaneStats(t *testing.T) {
+	release := make(chan struct{})
+	sender := &laneMockSender{onSend: func(*Job) { <-release }}
+	senders := map[string]Sender{"discord": sender}
+	fq, _ := newTestFairQueue(t, senders, QueueConfig{ConcurrentDiscord: 1, PerRouteBuffer: 10})
+	fq.Start()
+	defer func() { close(release); fq.Stop() }()
+
+	// One lane parked in-flight + 6 buffered => depth 6, active 1.
+	for range 7 {
+		fq.enqueue(&Job{Type: "discord:channel", Target: "t", Message: json.RawMessage(`{}`)}, true)
+	}
+	waitFor(t, func() bool {
+		total, active, maxDepth, target, _ := fq.LaneStats()
+		return active == 1 && total == 6 && maxDepth == 6 && target == "t"
+	}, time.Second)
 }

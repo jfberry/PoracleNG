@@ -47,6 +47,34 @@ func (s *SQLHumanStore) AddLocation(loc UserLocation) (int64, error) {
 	return res.LastInsertId()
 }
 
+func (s *SQLHumanStore) UpdateLocation(id, label string, lat, lon float64) error {
+	res, err := s.db.Exec(
+		`UPDATE user_locations SET latitude = ?, longitude = ? WHERE id = ? AND LOWER(label) = LOWER(?)`,
+		lat, lon, id, label)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		// MySQL reports rows *changed*, not matched (the DSN doesn't set
+		// CLIENT_FOUND_ROWS): re-submitting the current coordinates affects
+		// zero rows even though the row exists. Distinguish the no-op update
+		// from a genuinely missing label before reporting not-found.
+		var exists int
+		if err := s.db.Get(&exists,
+			`SELECT COUNT(*) FROM user_locations WHERE id = ? AND LOWER(label) = LOWER(?)`, id, label); err != nil {
+			return err
+		}
+		if exists == 0 {
+			return fmt.Errorf("%w: %q for user %q", ErrLocationNotFound, label, id)
+		}
+	}
+	return nil
+}
+
 func (s *SQLHumanStore) DeleteLocation(id, label string) error {
 	_, err := s.db.Exec(
 		`DELETE FROM user_locations WHERE id = ? AND LOWER(label) = LOWER(?)`, id, label)

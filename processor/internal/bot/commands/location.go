@@ -274,9 +274,9 @@ func isDefaultKeyword(s string, tr, enTr *i18n.Translator) bool {
 // Returns an error when neither succeeds.
 func resolveLatLon(ctx *bot.CommandContext, s string) (float64, float64, error) {
 	// Try lat,lon parsing first (same regex shape as ArgMatcher.tryLatLon).
-	if idx := strings.Index(s, ","); idx != -1 {
-		latStr := strings.TrimSpace(s[:idx])
-		lonStr := strings.TrimSpace(s[idx+1:])
+	if before, after, ok := strings.Cut(s, ","); ok {
+		latStr := strings.TrimSpace(before)
+		lonStr := strings.TrimSpace(after)
 		lat, err1 := strconv.ParseFloat(latStr, 64)
 		lon, err2 := strconv.ParseFloat(lonStr, 64)
 		if err1 == nil && err2 == nil {

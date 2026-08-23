@@ -159,8 +159,12 @@ type GeneralConfig struct {
 	AvailableLanguages   map[string]LanguageEntry `toml:"available_languages"`       // lang code → {poracle, help}
 
 	// Webhook type disable flags — used by /api/config/poracleWeb to report disabledHooks.
-	DisablePokemon    bool `toml:"disable_pokemon"`
-	DisableRaid       bool `toml:"disable_raid"`
+	DisablePokemon bool `toml:"disable_pokemon"`
+	DisableRaid    bool `toml:"disable_raid"`
+	// Deprecated: no-op. Nothing reads this — its last use (the !tracked fort
+	// sections) moved to DisableFortUpdate in fa9b4912, and lures/invasions/
+	// quests each have their own flag. Kept so existing configs still parse;
+	// excluded from the poracleWeb disabledHooks array (#195).
 	DisablePokestop   bool `toml:"disable_pokestop"`
 	DisableInvasion   bool `toml:"disable_invasion"`
 	DisableLure       bool `toml:"disable_lure"`
@@ -170,6 +174,7 @@ type GeneralConfig struct {
 	DisableGym        bool `toml:"disable_gym"`
 	DisableMaxBattle  bool `toml:"disable_max_battle"`
 	DisableFortUpdate bool `toml:"disable_fort_update"`
+	DisableShowcase   bool `toml:"disable_showcase"`
 }
 
 // LanguageEntry defines the command aliases for a language variant.
@@ -643,6 +648,10 @@ type GeocodingConfig struct {
 	GeocodingKey []string `toml:"geocoding_key"` // google API keys
 	CacheDetail  int      `toml:"cache_detail"`  // decimal places for cache key rounding (default 3)
 	ForwardOnly  bool     `toml:"forward_only"`  // if true, skip reverse geocoding
+	// IntersectionUsers is a pool of GeoNames usernames for nearest-street-
+	// intersection lookups (the {{intersection}} DTS field). Empty disables
+	// the feature. Results share the reverse-geocode pogreb cache.
+	IntersectionUsers []string `toml:"intersection_users"`
 
 	// Static map tile provider
 	StaticProvider    string `toml:"static_provider"`

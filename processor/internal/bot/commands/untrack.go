@@ -47,6 +47,7 @@ var untrackParams = []bot.ParamDef{
 	{Type: bot.ParamRemoveUID},
 	{Type: bot.ParamKeyword, Key: "arg.everything"},
 	{Type: bot.ParamPrefixSingle, Key: "arg.prefix.gen"},
+	{Type: bot.ParamPrefixString, Key: "arg.prefix.costume"},
 	{Type: bot.ParamTypeName},
 	{Type: bot.ParamPokemonName},
 }
@@ -75,6 +76,26 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 
 	if warn := bot.ReportUnrecognized(parsed, tr); warn != nil {
 		return []bot.Reply{*warn}
+	}
+
+	// Costume filter: when present, narrows removal to rules with this
+	// exact costume ID, in addition to whatever pokemon/gen/type/everything
+	// selection matched below. Unlike form (which untrack treats as
+	// species-wide — see rejectFormOnRemove for the other tracking types),
+	// costume participates directly in the match so
+	// `!untrack pikachu costume:1` removes only the costume-1 rule.
+	var costumeFilter *int
+	if costumeArg, ok := parsed.Strings["costume"]; ok {
+		id, resolved := ctx.ArgMatcher.ResolveCostume(costumeArg, ctx.Language)
+		if !resolved {
+			return []bot.Reply{{
+				React: "🙅",
+				Text: tr.Tf("msg.costume_not_found",
+					ctx.EscapeForCode(costumeArg),
+					bot.CommandPrefix(ctx)),
+			}}
+		}
+		costumeFilter = &id
 	}
 
 	// Direct UID removal — bypasses pokemon/gen/type matching
@@ -146,10 +167,14 @@ func (c *UntrackCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply
 	var uidsToDelete []int64
 	var removed []db.MonsterTrackingAPI
 	for _, existing := range tracked {
-		if removeIDs[existing.PokemonID] {
-			uidsToDelete = append(uidsToDelete, existing.UID)
-			removed = append(removed, existing)
+		if !removeIDs[existing.PokemonID] {
+			continue
 		}
+		if costumeFilter != nil && existing.Costume != *costumeFilter {
+			continue
+		}
+		uidsToDelete = append(uidsToDelete, existing.UID)
+		removed = append(removed, existing)
 	}
 
 	if len(uidsToDelete) == 0 {

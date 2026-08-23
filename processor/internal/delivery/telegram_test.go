@@ -9,7 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type telegramCall struct {
@@ -461,6 +463,32 @@ func TestTelegramRateLimit429(t *testing.T) {
 	}
 }
 
+// TestTelegramDelete_RetriesOn429 — the clean-delete path bypassed
+// callWithRetry, so a 429 used to fail the delete without retry. deleteMessage
+// now backs off on Retry-After via doPostWithRetry.
+func TestTelegramDelete_RetriesOn429(t *testing.T) {
+	attempt := 0
+	server, sender, calls := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
+		attempt++
+		if attempt == 1 {
+			return http.StatusTooManyRequests, map[string]any{
+				"ok":          false,
+				"description": "Too Many Requests: retry after 1",
+				"parameters":  map[string]any{"retry_after": 1},
+			}
+		}
+		return http.StatusOK, map[string]any{"ok": true, "result": true}
+	})
+	defer server.Close()
+
+	if err := sender.Delete(context.Background(), "444|text=77"); err != nil {
+		t.Fatalf("Delete should succeed after a 429 retry, got: %v", err)
+	}
+	if c := *calls; len(c) != 2 {
+		t.Fatalf("expected 2 calls (1 retry after 429), got %d", len(c))
+	}
+}
+
 func TestTelegramPermanentError(t *testing.T) {
 	server, sender, _ := setupTelegramServer(t, func(method string, body map[string]any) (int, any) {
 		return http.StatusForbidden, map[string]any{
@@ -591,5 +619,80 @@ func TestTelegramSendWithoutReplyToID(t *testing.T) {
 	}
 	if _, ok := c[0].Body["allow_sending_without_reply"]; ok {
 		t.Errorf("expected no allow_sending_without_reply when ReplyToID empty, got body: %v", c[0].Body)
+	}
+}
+
+// TestTelegram_SemaphoreReleasedDuring429Backoff — under SetConcurrency(1), a
+// 429 for chat_a must free the wire-call slot for chat_b's request while
+// chat_a is sleeping out its Retry-After backoff. chat_b's send is gated on
+// aStarted (closed when chat_a's first request lands) so it can only reach
+// the wire during chat_a's backoff window, not before chat_a even starts —
+// that's what makes the assertion below mean something.
+func TestTelegram_SemaphoreReleasedDuring429Backoff(t *testing.T) {
+	aStarted := make(chan struct{})
+	bDone := make(chan struct{})
+	var aHits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		isA := strings.Contains(string(body), `"chat_a"`)
+		w.Header().Set("Content-Type", "application/json")
+		if isA && aHits.Add(1) == 1 {
+			close(aStarted)
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"ok":false,"parameters":{"retry_after":1}}`))
+			return
+		}
+		if !isA {
+			close(bDone)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1}}`))
+	}))
+	defer srv.Close()
+
+	ts := NewTelegramSender("tok")
+	ts.baseURL = srv.URL
+	ts.SetConcurrency(1)
+
+	go func() {
+		_, _ = ts.sendMessage(context.Background(), "chat_a", 0, "hi", "HTML", false, "", "")
+	}()
+
+	select {
+	case <-aStarted:
+	case <-time.After(time.Second):
+		t.Fatal("chat_a never reached the wire")
+	}
+
+	go func() {
+		_, _ = ts.sendMessage(context.Background(), "chat_b", 0, "hi", "HTML", false, "", "")
+	}()
+
+	select {
+	case <-bDone:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("chat_b never reached the wire — chat_a's 429 backoff pinned the only slot")
+	}
+}
+
+// TestTelegram_SetConcurrencyClampsToOne guards against a real 429-storm
+// regression: an operator setting concurrent_telegram_destinations = 0 (a
+// plausible "off/default" idiom) must NOT produce unbounded Telegram
+// concurrency. makeSem(n) returns nil (unlimited) for n<=0, so
+// SetConcurrency must clamp 0 (and negative values) to 1 before calling it.
+func TestTelegram_SetConcurrencyClampsToOne(t *testing.T) {
+	ts := NewTelegramSender("tok")
+	ts.SetConcurrency(0)
+	if ts.sem == nil {
+		t.Fatal("sem is nil (unlimited) after SetConcurrency(0) — expected clamp to 1")
+	}
+	if cap(ts.sem) != 1 {
+		t.Errorf("sem cap = %d, want 1", cap(ts.sem))
+	}
+
+	ts2 := NewTelegramSender("tok")
+	ts2.SetConcurrency(-3)
+	if cap(ts2.sem) != 1 {
+		t.Errorf("negative concurrency not clamped: sem cap=%d, want 1", cap(ts2.sem))
 	}
 }

@@ -131,6 +131,7 @@ func BuildQuestSummaryView(g QuestSummaryGroup, sm *staticmap.Resolver, tr *i18n
 //     it's deliberately omitted from the group header).
 //   - Type 3 (stardust): "<amount> <Stardust>" — amount IS the group key
 //     so it's stable across the group.
+//   - Type 8 (pokecoins): "<amount> <Pokécoins>" — same shape as stardust.
 //
 // The lookups stay simple identifier-key translations because pulling
 // in `enrichment` directly would create an enrichment → dts import
@@ -147,6 +148,12 @@ func questSummaryRewardName(rewardType, rewardID, formID int, tr *i18n.Translato
 		}
 	case 3: // Stardust — rewardID is the dust amount
 		label := tr.T("quest_reward_3")
+		if rewardID > 0 {
+			return fmt.Sprintf("%d %s", rewardID, label)
+		}
+		return label
+	case 8: // Pokecoins — rewardID is the pokecoin amount
+		label := tr.T("quest_reward_8")
 		if rewardID > 0 {
 			return fmt.Sprintf("%d %s", rewardID, label)
 		}

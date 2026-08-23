@@ -34,13 +34,12 @@ type DispatcherConfig struct {
 // rate-limit notification and ban farewell.
 func (d *Dispatcher) DispatchBypass(job *Job) {
 	job.BypassRateLimit = true
-	d.ch <- job
+	d.queue.enqueue(job, true)
 }
 
 // Dispatcher is the top-level entry point for message delivery.
-// It owns the job channel, fair queue, and message tracker.
+// It owns the fair queue and message tracker.
 type Dispatcher struct {
-	ch      chan *Job
 	queue   *FairQueue
 	tracker *MessageTracker
 
@@ -96,31 +95,74 @@ func NewDispatcher(cfg DispatcherConfig) (*Dispatcher, error) {
 		senders["telegram"] = NewTelegramSender(cfg.TelegramToken)
 	}
 
+	if ds, ok := senders["discord"].(*DiscordSender); ok {
+		ds.SetConcurrency(cfg.Queue.ConcurrentDiscord, cfg.Queue.ConcurrentWebhook)
+	}
+	if ts, ok := senders["telegram"].(*TelegramSender); ok {
+		ts.SetConcurrency(cfg.Queue.ConcurrentTelegram)
+	}
+
 	tracker := NewMessageTracker(cfg.CacheDir, senders)
+
+	queueCfg := cfg.Queue
+	queueCfg.PerRouteBuffer = cfg.QueueSize // delivery_queue_size => per-route lane buffer
+
+	d := &Dispatcher{tracker: tracker}
+	d.queue = NewFairQueue(senders, tracker, queueCfg, d)
+	// Route clean-deletion through the queue (serialised per destination +
+	// rate-limited). Set BEFORE Load so recovery-time cleans also route
+	// through it. Enqueued jobs sit in their destination lane's buffer until
+	// a drainer picks them up (lanes spawn on demand, no Start() needed).
+	tracker.SetCleanDeleteHook(d.enqueueCleanDelete)
+
 	if err := tracker.Load(); err != nil {
 		log.Warnf("delivery: failed to load tracker cache: %v", err)
 	}
 
-	queueSize := cfg.QueueSize
-	if queueSize <= 0 {
-		queueSize = 1000
-	}
-	ch := make(chan *Job, queueSize)
-
-	d := &Dispatcher{ch: ch, tracker: tracker}
-	d.queue = NewFairQueue(ch, senders, tracker, cfg.Queue, d)
-
 	return d, nil
+}
+
+// enqueueCleanDelete is the tracker's clean-delete hook: it enqueues a delete
+// Job onto the FairQueue so the delete lands on the same destination lane as
+// sends, serialising deletes with each other and with sends to the same
+// target (instead of firing concurrent DELETEs that 429 each other). A full
+// lane (or a queue that's already stopping) drops the delete rather than
+// blocking (block=false). This drop is NOT recovered on the next load: the
+// message reached this hook because it was just evicted from the tracker's
+// ttlcache, so MessageTracker.Save() — which only persists still-live
+// entries — never writes it, and Load() has nothing left to re-clean.
+// (Contrast with messages still tracked at shutdown: those ARE persisted and
+// re-cleaned on next load — see MessageTracker.Save/Load.) This is accepted
+// rather than guarded against: per-route lane buffering makes drops far less
+// likely than the old shared-buffer design, and blocking here would stall
+// the tracker's single eviction goroutine. Panic safety for a mid-shutdown
+// lane close now lives in FairQueue.enqueue, which covers every caller.
+func (d *Dispatcher) enqueueCleanDelete(msg *TrackedMessage) {
+	job := &Job{
+		Type:         msg.Type,
+		Target:       msg.Target,
+		DeleteSentID: msg.SentID,
+		LogReference: msg.SentID,
+	}
+	if !d.queue.enqueue(job, false) {
+		log.Warnf("delivery: clean-delete dropped for %s:%s (lane full or shutting down; message may remain until manually cleared)", msg.Target, msg.SentID)
+	}
 }
 
 // NewDispatcherWithSenders creates a Dispatcher with externally-provided senders (for testing).
 func NewDispatcherWithSenders(senders map[string]Sender, tracker *MessageTracker, queueSize int, queueCfg QueueConfig) *Dispatcher {
-	if queueSize <= 0 {
-		queueSize = 1000
+	queueCfg.PerRouteBuffer = queueSize
+	if ds, ok := senders["discord"].(*DiscordSender); ok {
+		ds.SetConcurrency(queueCfg.ConcurrentDiscord, queueCfg.ConcurrentWebhook)
 	}
-	ch := make(chan *Job, queueSize)
-	d := &Dispatcher{ch: ch, tracker: tracker}
-	d.queue = NewFairQueue(ch, senders, tracker, queueCfg, d)
+	if ts, ok := senders["telegram"].(*TelegramSender); ok {
+		ts.SetConcurrency(queueCfg.ConcurrentTelegram)
+	}
+	d := &Dispatcher{tracker: tracker}
+	d.queue = NewFairQueue(senders, tracker, queueCfg, d)
+	if tracker != nil { // some tests construct a dispatcher without a tracker
+		tracker.SetCleanDeleteHook(d.enqueueCleanDelete)
+	}
 	return d
 }
 
@@ -130,11 +172,10 @@ func (d *Dispatcher) Start() {
 }
 
 // Dispatch enqueues a job for delivery.
-func (d *Dispatcher) Dispatch(job *Job) {
-	d.ch <- job
-}
+func (d *Dispatcher) Dispatch(job *Job) { d.queue.enqueue(job, true) }
 
-// Stop closes the job channel, drains remaining jobs, and persists tracker state.
+// Stop closes every destination lane, drains remaining jobs, and persists
+// tracker state.
 func (d *Dispatcher) Stop() {
 	log.Info("delivery: stopping dispatcher...")
 	d.queue.Stop()
@@ -142,8 +183,22 @@ func (d *Dispatcher) Stop() {
 	log.Info("delivery: dispatcher stopped")
 }
 
-// QueueDepth returns the number of jobs waiting in the channel.
-func (d *Dispatcher) QueueDepth() int { return len(d.ch) }
+// QueueDepth returns the total number of jobs buffered across all destination lanes.
+func (d *Dispatcher) QueueDepth() int {
+	total, _, _, _, _ := d.queue.LaneStats()
+	return total
+}
+
+// LaneStats exposes per-lane aggregates for the [Status] reporter.
+func (d *Dispatcher) LaneStats() (totalQueued, active, maxDepth int, deepestTarget string, nearCap int) {
+	return d.queue.LaneStats()
+}
+
+// BackpressureCount exposes the cumulative full-lane backpressure count.
+func (d *Dispatcher) BackpressureCount() int64 { return d.queue.BackpressureCount() }
+
+// PerRouteBuffer is the configured per-lane buffer size (for near-capacity math).
+func (d *Dispatcher) PerRouteBuffer() int { return d.queue.perRouteBuf }
 
 // TrackerSize returns the number of messages being tracked.
 func (d *Dispatcher) TrackerSize() int { return d.tracker.Size() }

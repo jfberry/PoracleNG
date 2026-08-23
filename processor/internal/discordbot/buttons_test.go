@@ -77,7 +77,7 @@ type fakeStore struct {
 	data map[string]*snapshots.Snapshot
 }
 
-func newFakeStore() *fakeStore                              { return &fakeStore{data: map[string]*snapshots.Snapshot{}} }
+func newFakeStore() *fakeStore                                   { return &fakeStore{data: map[string]*snapshots.Snapshot{}} }
 func (s *fakeStore) Put(key string, v *snapshots.Snapshot) error { s.data[key] = v; return nil }
 func (s *fakeStore) Write(_ context.Context, v *snapshots.Snapshot) error {
 	s.data[v.Key()] = v
@@ -89,6 +89,6 @@ func (s *fakeStore) Read(_ context.Context, key string) (*snapshots.Snapshot, er
 	}
 	return nil, snapshots.ErrNotFound
 }
-func (s *fakeStore) Delete(_ context.Context, key string) error          { delete(s.data, key); return nil }
-func (s *fakeStore) Sweep(_ context.Context, _ int64) (int, error)       { return 0, nil }
-func (s *fakeStore) Close() error                                        { return nil }
+func (s *fakeStore) Delete(_ context.Context, key string) error    { delete(s.data, key); return nil }
+func (s *fakeStore) Sweep(_ context.Context, _ int64) (int, error) { return 0, nil }
+func (s *fakeStore) Close() error                                  { return nil }

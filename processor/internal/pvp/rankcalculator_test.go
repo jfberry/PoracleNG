@@ -63,6 +63,38 @@ func TestCalculateBasic(t *testing.T) {
 	}
 }
 
+// TestCalculate_EvolutionDataIncludesMega ensures cross-species evolution
+// direct tracking captures mega/temporary-evolution entries (tagged with their
+// Evolution), so a `mega` rule on the evolved species can fire on a
+// pre-evolution. A Charmander (4) spawns; its great-league PVP lists the evolved
+// Charizard (6) as base (evo 0) and Mega X (evo 2).
+func TestCalculate_EvolutionDataIncludesMega(t *testing.T) {
+	pokemon := &webhook.PokemonWebhook{
+		PokemonID: 4,
+		Form:      0,
+		PVP: map[string][]webhook.PVPRankEntry{
+			"great": {
+				{Pokemon: 6, Form: 178, Rank: 50, CP: 1500, Cap: 50, Capped: true, Evolution: 0}, // base Charizard
+				{Pokemon: 6, Form: 178, Rank: 3, CP: 1480, Cap: 50, Capped: true, Evolution: 2},  // Mega Charizard X
+			},
+		},
+	}
+	cfg := &Config{LevelCaps: []int{50}, PVPFilterMaxRank: 100, PVPEvolutionDirectTracking: true}
+	result := Calculate(pokemon, cfg)
+
+	evo := result.EvolutionData[6][1500]
+	got := map[int]int{} // evolution -> rank
+	for _, r := range evo {
+		got[r.Evolution] = r.Rank
+	}
+	if got[0] != 50 {
+		t.Errorf("expected base Charizard (evo 0) rank 50 in EvolutionData[6]; got %#v", got)
+	}
+	if got[2] != 3 {
+		t.Errorf("expected Mega Charizard X (evo 2) rank 3 in EvolutionData[6]; got %#v", got)
+	}
+}
+
 func TestCalculateMultipleCaps(t *testing.T) {
 	pokemon := &webhook.PokemonWebhook{
 		PokemonID: 25,

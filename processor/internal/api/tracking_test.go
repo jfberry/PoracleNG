@@ -628,6 +628,89 @@ func TestCreateMonster_PersistsPVPRankingEvolution(t *testing.T) {
 	}
 }
 
+// TestCreateMonster_CostumeDefaultIsIdempotent is the regression guard for the
+// costume-tracking dup-row bug: monsters.costume defaults (DB + backfill) to
+// 9000 ("any costume"), but cleanRow (the v1 POST /api/tracking/pokemon parse
+// path) built db.MonsterTrackingAPI without setting Costume, leaving it at the
+// Go zero-value 0. Since Costume carries no `diff` tag, db.DiffTracking
+// (via store.DiffAndClassify) treated that as a plain field diff against an
+// existing Costume:9000 row and classified the candidate as a brand-new
+// insert — duplicating the rule on every re-track/re-submit.
+//
+// This test re-POSTs the identical body (no "costume" key, mirroring a v1
+// client — ReactMap/PoracleWeb/!track — that doesn't send costume) against an
+// already-tracked row and asserts the second submission is recognized as the
+// same rule (alreadyPresent==1, insert==0, row count stays 1) rather than
+// creating a duplicate.
+func TestCreateMonster_CostumeDefaultIsIdempotent(t *testing.T) {
+	mock := store.NewMockHumanStore()
+	mock.AddHuman(&store.Human{ID: "u1", Type: "discord:user", Name: "User", Enabled: true, Language: "en", CurrentProfileNo: 1})
+
+	mockMonsters := store.NewMockTrackingStore(store.MonsterGetUID, store.MonsterSetUID)
+
+	minGD := &gamedata.GameData{
+		Monsters: map[gamedata.MonsterKey]*gamedata.Monster{},
+		Util:     &gamedata.UtilData{},
+	}
+
+	deps := &TrackingDeps{
+		Humans: mock,
+		Tracking: &store.TrackingStores{
+			Monsters: mockMonsters,
+		},
+		Config:       &config.Config{},
+		RowText:      &rowtext.Generator{DefaultTemplateName: "1", GD: minGD},
+		Translations: i18n.NewBundle(),
+	}
+
+	r := gin.New()
+	r.POST("/api/tracking/pokemon/:id", HandleCreateMonster(deps))
+
+	body := `{"pokemon_id":25}`
+
+	// First POST creates the row via cleanRow, which must default the absent
+	// costume to 9000 (matching the DB column default / migration backfill).
+	req1 := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u1", strings.NewReader(body))
+	w1 := httptest.NewRecorder()
+	r.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first POST: expected 200, got %d: %s", w1.Code, w1.Body.String())
+	}
+
+	rows := mockMonsters.AllRows()
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row after first POST, got %d", len(rows))
+	}
+	if rows[0].Costume != 9000 {
+		t.Fatalf("expected Costume=9000 from cleanRow's v1 default, got %d", rows[0].Costume)
+	}
+
+	// Re-POST the identical body — same as a user re-running !track pikachu or
+	// a client re-submitting the rule. Before the fix this created a duplicate.
+	req2 := httptest.NewRequest(http.MethodPost, "/api/tracking/pokemon/u1", strings.NewReader(body))
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second POST: expected 200, got %d: %s", w2.Code, w2.Body.String())
+	}
+
+	rows = mockMonsters.AllRows()
+	if len(rows) != 1 {
+		t.Fatalf("regression: expected still 1 row after idempotent re-POST, got %d (duplicate created)", len(rows))
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w2.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if insertCount, _ := resp["insert"].(float64); insertCount != 0 {
+		t.Errorf("expected insert=0 on re-POST, got %v (regression: classified as new insert)", resp["insert"])
+	}
+	if alreadyPresent, _ := resp["alreadyPresent"].(float64); alreadyPresent != 1 {
+		t.Errorf("expected alreadyPresent=1 on re-POST, got %v", resp["alreadyPresent"])
+	}
+}
+
 // TestTrackingAPI_OverrideContextFetchedOnce verifies that a batch POST of N rows
 // with area overrides calls deps.Humans.Get exactly once — not once per row.
 // This is the regression test for the hoist introduced in Fix J.
@@ -689,5 +772,41 @@ func TestTrackingAPI_OverrideContextFetchedOnce(t *testing.T) {
 	}
 	if getCount != 1 {
 		t.Errorf("expected Get called 1 time for 5-row batch, got %d (hoist not working)", getCount)
+	}
+}
+
+func TestCreateRaid_CostumeDefaultIsIdempotent(t *testing.T) {
+	mock := store.NewMockHumanStore()
+	mock.AddHuman(&store.Human{ID: "u1", Type: "discord:user", Name: "User", Enabled: true, Language: "en", CurrentProfileNo: 1})
+
+	mockRaids := store.NewMockTrackingStore(store.RaidGetUID, store.RaidSetUID)
+	minGD := &gamedata.GameData{Monsters: map[gamedata.MonsterKey]*gamedata.Monster{}, Util: &gamedata.UtilData{}}
+
+	deps := &TrackingDeps{
+		Humans:       mock,
+		Tracking:     &store.TrackingStores{Raids: mockRaids},
+		Config:       &config.Config{},
+		RowText:      &rowtext.Generator{DefaultTemplateName: "1", GD: minGD},
+		Translations: i18n.NewBundle(),
+	}
+
+	r := gin.New()
+	r.POST("/api/tracking/raid/:id", HandleCreateRaid(deps))
+
+	body := `{"pokemon_id":25}`
+	for i, want := range []int{1, 1} { // both POSTs => still 1 row
+		req := httptest.NewRequest(http.MethodPost, "/api/tracking/raid/u1", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("POST %d: expected 200, got %d: %s", i, w.Code, w.Body.String())
+		}
+		rows := mockRaids.AllRows()
+		if len(rows) != want {
+			t.Fatalf("after POST %d: expected %d row(s), got %d (dup?)", i, want, len(rows))
+		}
+		if rows[0].Costume != 9000 {
+			t.Fatalf("expected Costume=9000 from v1 default, got %d", rows[0].Costume)
+		}
 	}
 }

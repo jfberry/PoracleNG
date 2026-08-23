@@ -38,7 +38,7 @@ type Human struct {
 	Language         string
 	CurrentProfileNo int
 	BlockedAlerts    string
-	BlockedAlertsSet map[string]bool // parsed from BlockedAlerts JSON
+	BlockedAlertsSet map[string]bool          // parsed from BlockedAlerts JSON
 	Locations        map[string]*UserLocation // lowercased label → location; nil if user has none
 }
 

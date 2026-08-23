@@ -229,3 +229,38 @@ func TestRemainingAt(t *testing.T) {
 		t.Errorf("RemainingAt for ExpiresAt=0: got %v, want 0", got)
 	}
 }
+
+func TestListActive(t *testing.T) {
+	s := NewStore()
+	now := time.Now().Unix()
+
+	// Empty store: nil.
+	if got := s.ListActive("u1", now); got != nil {
+		t.Fatalf("empty store: expected nil, got %v", got)
+	}
+
+	s.Add(Entry{HumanID: "u1", ScopeType: ScopeGym, ScopeValue: "gym1", ExpiresAt: now + 60})
+	s.Add(Entry{HumanID: "u1", ScopeType: ScopePokemon, ScopeValue: "25", ExpiresAt: now - 5}) // expired, unswept
+	s.Add(Entry{HumanID: "u1", ScopeType: ScopeEverything, ScopeValue: "", ExpiresAt: 0})      // never expires
+
+	got := s.ListActive("u1", now)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 active entries (expired filtered), got %d: %v", len(got), got)
+	}
+	for _, e := range got {
+		if e.ScopeType == ScopePokemon {
+			t.Fatalf("expired pokemon entry leaked into ListActive: %v", got)
+		}
+	}
+
+	// Snapshot semantics: mutating the result must not affect the store.
+	got[0].ScopeValue = "tampered"
+	if s.Match("u1", Event{GymID: "gym1"}, now) != true {
+		t.Fatalf("store affected by mutating ListActive result")
+	}
+
+	// Other users unaffected.
+	if got := s.ListActive("u2", now); got != nil {
+		t.Fatalf("u2: expected nil, got %v", got)
+	}
+}

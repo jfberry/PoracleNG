@@ -184,6 +184,27 @@ func TestTrackMapperForm(t *testing.T) {
 	}
 }
 
+func TestTrackMapperCostume(t *testing.T) {
+	tokens, _ := Track([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "25"),
+		sopt("costume", "1"),
+	})
+	want := []string{"25", "costume:1"}
+	if !reflect.DeepEqual(tokens, want) {
+		t.Errorf("tokens=%v want %v", tokens, want)
+	}
+}
+
+func TestTrackMapperCostumeEmptyOmitted(t *testing.T) {
+	tokens, _ := Track([]*discordgo.ApplicationCommandInteractionDataOption{
+		sopt("pokemon", "25"),
+		sopt("costume", ""),
+	})
+	if !reflect.DeepEqual(tokens, []string{"25"}) {
+		t.Errorf("tokens=%v", tokens)
+	}
+}
+
 func TestTrackMapperSize(t *testing.T) {
 	tokens, _ := Track([]*discordgo.ApplicationCommandInteractionDataOption{
 		sopt("pokemon", "25"),
@@ -217,12 +238,13 @@ func TestTrackMapperAllOptions(t *testing.T) {
 		bopt("clean", true),
 		sopt("template", "pvp"),
 		sopt("form", "alola"),
+		sopt("costume", "1"),
 		sopt("size", "xl"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"25", "iv95", "great5", "ultra10", "little7", "d250", "clean", "template:pvp", "form:alola", "xl"}
+	want := []string{"25", "iv95", "great5", "ultra10", "little7", "d250", "clean", "template:pvp", "form:alola", "costume:1", "xl"}
 	if !reflect.DeepEqual(tokens, want) {
 		t.Errorf("tokens=%v want %v", tokens, want)
 	}

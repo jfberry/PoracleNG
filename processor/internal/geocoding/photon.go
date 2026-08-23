@@ -99,7 +99,7 @@ func (p *Photon) Reverse(lat, lon float64, language string) (*Address, error) {
 
 	var result photonResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("photon: unmarshal: %w", err)
+		return nil, fmt.Errorf("photon: unmarshal reverse response (%s): %w", bodySnippet(body), err)
 	}
 	if len(result.Features) == 0 {
 		return nil, fmt.Errorf("photon: no results")
@@ -275,7 +275,7 @@ func (p *Photon) Forward(query string) ([]ForwardResult, error) {
 
 	var result photonResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("photon: unmarshal: %w", err)
+		return nil, fmt.Errorf("photon: unmarshal search response (%s): %w", bodySnippet(body), err)
 	}
 
 	out := make([]ForwardResult, 0, len(result.Features))

@@ -14,6 +14,7 @@ import (
 //	pokemon     (string, autocomplete) — pokemon name/ID for pokemon-reward quests
 //	item        (string, autocomplete) — item name (golden razz, etc.)
 //	stardust    (int)                  — minimum stardust amount
+//	pokecoins   (int)                  — minimum pokecoin amount
 //	candy       (string, autocomplete) — candy reward pokemon
 //	mega_energy (string, autocomplete) — mega energy reward pokemon
 //	min_amount  (int)                  — minimum reward amount; valid for
@@ -41,7 +42,7 @@ import (
 func Quest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string, error) {
 	o := flattenOptions(opts)
 
-	rewardOpts := []string{"pokemon", "item", "stardust", "candy", "mega_energy"}
+	rewardOpts := []string{"pokemon", "item", "stardust", "pokecoins", "candy", "mega_energy"}
 	var set []string
 	for _, name := range rewardOpts {
 		if hasNonZeroValue(o[name]) {
@@ -82,6 +83,8 @@ func Quest(opts []*discordgo.ApplicationCommandInteractionDataOption) ([]string,
 		tokens = append(tokens, strings.ToLower(o["item"].StringValue()))
 	case "stardust":
 		tokens = append(tokens, fmt.Sprintf("stardust:%d", o["stardust"].IntValue()))
+	case "pokecoins":
+		tokens = append(tokens, fmt.Sprintf("pokecoins:%d", o["pokecoins"].IntValue()))
 	case "candy":
 		tokens = append(tokens, "candy:"+o["candy"].StringValue())
 	case "mega_energy":

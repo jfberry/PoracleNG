@@ -39,7 +39,7 @@ func (e *Enricher) Weather(lat, lon float64, gameplayCondition int, coords [][2]
 	}
 
 	// Reverse geocoding
-	e.addGeoResult(m, lat, lon)
+	e.addLocationFields(m, lat, lon)
 
 	// Generate base weather tile (used when showAlteredPokemonStaticMap is false)
 	var pending *staticmap.TilePending
@@ -101,7 +101,7 @@ func (e *Enricher) WeatherTranslate(base map[string]any, oldWeatherID, newWeathe
 				"disappearTime": pok.DisappearTime,
 			}
 			nameInfo := make(map[string]any)
-			TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, pok.PokemonID, pok.Form, 0)
+			TranslateMonsterNamesEng(nameInfo, gd, tr, e.Translations, pok.PokemonID, pok.Form, 0, 0)
 			entry["name"] = nameInfo["name"]
 			entry["nameEng"] = nameInfo["nameEng"]
 			entry["formName"] = nameInfo["formName"]

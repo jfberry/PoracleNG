@@ -27,10 +27,10 @@ const (
 	ScopePokestop   = "pokestop"
 	ScopeStation    = "station"
 	ScopeEverything = "everything"
-	// ScopeTracking — reserved for tracking-UID mutes. The store accepts
-	// entries with this scope (see Add); enforcement in the matcher is a
-	// Phase 2.5 follow-up that requires MatchedUser to carry the rule UID.
-	// Until then, command parsers should not produce ScopeTracking entries.
+	// ScopeTracking mutes a single tracking rule by its database UID.
+	// matchScope compares Event.MatchedRuleUID (populated per matched user
+	// in cmd/processor/helpers.go) against the entry's value. Producers:
+	// `!mute id:N`, alert buttons, and the v2 mutes API.
 	ScopeTracking = "tracking"
 )
 
@@ -142,6 +142,24 @@ func (s *Store) List(humanID string) []Entry {
 	}
 	out := make([]Entry, len(src))
 	copy(out, src)
+	return out
+}
+
+// ListActive returns the user's entries that are still active at `now`,
+// filtering out expired-but-unswept ones. Like List, the result is a
+// snapshot — safe to mutate without affecting the store. Returns nil when
+// the user has no active entries. Used by the v2 mutes API and snapshot so
+// clients never see entries the sweeper hasn't reaped yet.
+func (s *Store) ListActive(humanID string, now int64) []Entry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []Entry
+	for _, e := range s.entries[humanID] {
+		if e.ExpiresAt > 0 && e.ExpiresAt <= now {
+			continue
+		}
+		out = append(out, e)
+	}
 	return out
 }
 

@@ -46,7 +46,11 @@ func newScheduler(
 ) *SummaryScheduler {
 	t.Helper()
 	s := NewSummaryScheduler(
-		schedulerConfig{Locale: "en"},
+		// Pin the timezone: the test humans sit at lat/lon 0/0, so an empty
+		// DefaultTimezone would resolve to the host's time.Local and make
+		// every fixed-UTC "now" in this file pass or fail depending on where
+		// the suite runs.
+		schedulerConfig{Locale: "en", DefaultTimezone: "UTC"},
 		mgr,
 		tracker.NewSummaryBuffer(""),
 		dispatch,

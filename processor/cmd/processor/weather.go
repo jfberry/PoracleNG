@@ -2,12 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"maps"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/pokemon/poracleng/processor/internal/geo"
 	"github.com/pokemon/poracleng/processor/internal/staticmap"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 	"github.com/pokemon/poracleng/processor/internal/webhook"
@@ -156,80 +154,152 @@ func (ps *ProcessorService) consumeWeatherChanges() {
 
 		webhookFields := parseWebhookFields(msg)
 
-		for _, user := range matched {
-			lang := user.Language
+		ps.dispatchWeatherChange(weatherChangeDispatchInput{
+			s2CellID:        change.S2CellID,
+			oldCondition:    change.OldGameplayCondition,
+			newCondition:    change.GameplayCondition,
+			baseEnrichment:  baseEnrichment,
+			baseTilePending: baseTilePending,
+			matched:         matched,
+			matchedAreas:    matchedAreas,
+			webhookFields:   webhookFields,
+			now:             now,
+			minAlert:        minAlert,
+		})
+	}
+}
+
+// weatherChangeDispatchInput carries the shared, per-change context into
+// dispatchWeatherChange. baseEnrichment/baseTilePending are computed once per
+// weather change and shared across every matched user's RenderJob.
+type weatherChangeDispatchInput struct {
+	s2CellID        string
+	oldCondition    int
+	newCondition    int
+	baseEnrichment  map[string]any
+	baseTilePending *staticmap.TilePending
+	matched         []webhook.MatchedUser
+	matchedAreas    []webhook.MatchedArea
+	webhookFields   map[string]any
+	now             int64
+	minAlert        int64
+}
+
+// dispatchWeatherChange fans a weather change out to one RenderJob per matched
+// user, mirroring dispatchPokemonAlert's tile handling.
+//
+// When the base weather tile is SHARED (show_altered_pokemon_static_map off, so
+// every user renders the same cell tile), all jobs share a SINGLE tileGate: the
+// tile resolves once and its URL is written once into the shared baseEnrichment
+// map, with chan-close happens-before making it visible to every render worker.
+// Wrapping the shared *staticmap.TilePending in a gate PER USER was a bug — the
+// pending's Result/ResultImg channels deliver to exactly one receiver, so only
+// one message got the real tile URL and the rest blocked to their deadline and
+// applied the fallback image; and the per-user gate goroutines raced writing
+// baseEnrichment.
+//
+// Per-user tiles (the per-pokemon plot config, show_altered_pokemon_static_map
+// on) keep their own gate — each user's pending is distinct, so there is no
+// sharing to coordinate.
+//
+// Clean users carry their per-user clean-deletion TTH via RenderJob.
+// OverrideCleanTTH (aligned to their last-tracked pokemon's despawn) instead of
+// a pre-resolution COPY of baseEnrichment. The copy snapshotted the map before
+// the async tile resolved, so a clean user's message lost the shared tile;
+// sharing baseEnrichment + OverrideCleanTTH keeps both the resolved tile and the
+// correct auto-delete timing. The weatherchange template renders no tth field,
+// so this is a behaviour-preserving swap for the clean-deletion timing only.
+func (ps *ProcessorService) dispatchWeatherChange(in weatherChangeDispatchInput) {
+	if ps.renderCh == nil {
+		return
+	}
+	l := log.WithField("ref", in.s2CellID)
+
+	// Build every user's RenderJob FIRST, THEN spawn the shared base-tile gate.
+	// WeatherTranslate READS in.baseEnrichment (lat/lon); the shared gate's
+	// goroutine WRITES in.baseEnrichment via TilePending.Apply. Spawning that
+	// gate before the loop finished would race the writes against these reads
+	// (concurrent map read+write → runtime crash, reachable under render-queue
+	// pressure where Apply fires synchronously). Deferring the single shared
+	// gate until every read is done makes the reads happen-before the write via
+	// goroutine-spawn ordering — mirroring dispatchPokemonAlert, whose loop
+	// never touches the gated map. Per-user tiles get their own gate in the loop
+	// (they write a per-user map, so there is no shared-map hazard).
+	var jobs []RenderJob
+	for _, user := range in.matched {
+		lang := user.Language
+		if lang == "" {
+			lang = ps.cfg.General.Locale
 			if lang == "" {
-				lang = ps.cfg.General.Locale
-				if lang == "" {
-					lang = "en"
-				}
-			}
-
-			var perLang map[string]map[string]any
-			var userTilePending *staticmap.TilePending
-			if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
-				var langEnrichment map[string]any
-				userMode := ps.tileMode("weatherchange", []webhook.MatchedUser{user}, change.S2CellID)
-				langEnrichment, userTilePending = ps.enricher.WeatherTranslate(
-					baseEnrichment,
-					change.OldGameplayCondition,
-					change.GameplayCondition,
-					user.ActivePokemons,
-					lang,
-					ps.cfg.Weather.ShowAlteredPokemonStaticMap,
-					userMode,
-					change.S2CellID,
-				)
-				perLang = map[string]map[string]any{lang: langEnrichment}
-			}
-
-			// For clean weather alerts, align TTH with the longest-lived
-			// pokemon actually shown in the alert. CaresUntil is the max
-			// across every pokemon ever registered for this cell (extended,
-			// never reduced — see WeatherCareTracker.Register) and so can
-			// outlive the pokemon the alert mentions. Using it directly
-			// produced a real-world bug: pokemon A despawned and was
-			// clean-deleted, but the weather alert that mentioned A stayed
-			// behind until pokemon B's later despawn time. When the
-			// activePokemon tracker is off we have no per-pokemon data,
-			// so we fall back to CaresUntil as the best estimate.
-			userEnrichment := baseEnrichment
-			if user.Clean > 0 {
-				cleanUntil := weatherAlertCleanUntil(user)
-				if cleanUntil > 0 {
-					// Re-check the min-alert threshold with the
-					// alert-accurate TTH (the pre-filter at the top of
-					// the loop used CaresUntil, which can over-estimate
-					// when only short-lived active pokemon remain).
-					if remaining := cleanUntil - now; remaining < minAlert {
-						l.Debugf("Weather alert suppressed for %s (%s) — alert TTH %ds below alert_minimum_time %ds",
-							user.Name, user.ID, remaining, minAlert)
-						continue
-					}
-					userEnrichment = make(map[string]any, len(baseEnrichment)+1)
-					maps.Copy(userEnrichment, baseEnrichment)
-					userEnrichment["tth"] = geo.ComputeTTH(cleanUntil)
-				}
-			}
-
-			// Use per-user tile if available, otherwise base tile
-			tp := baseTilePending
-			if userTilePending != nil {
-				tp = userTilePending
-			}
-
-			ps.renderCh <- RenderJob{
-				AlertType:         "weatherchange",
-				TemplateType:      "weatherchange",
-				Enrichment:        userEnrichment,
-				PerLangEnrichment: perLang,
-				WebhookFields:     webhookFields,
-				MatchedUsers:      []webhook.MatchedUser{user},
-				MatchedAreas:      matchedAreas,
-				TileGate:          ps.newTileGate(tp),
-				LogReference:      change.S2CellID,
+				lang = "en"
 			}
 		}
+
+		var perLang map[string]map[string]any
+		var userTilePending *staticmap.TilePending
+		if ps.enricher.GameData != nil && ps.enricher.Translations != nil {
+			userMode := ps.tileMode("weatherchange", []webhook.MatchedUser{user}, in.s2CellID)
+			langEnrichment, utp := ps.enricher.WeatherTranslate(
+				in.baseEnrichment,
+				in.oldCondition,
+				in.newCondition,
+				user.ActivePokemons,
+				lang,
+				ps.cfg.Weather.ShowAlteredPokemonStaticMap,
+				userMode,
+				in.s2CellID,
+			)
+			userTilePending = utp
+			perLang = map[string]map[string]any{lang: langEnrichment}
+		}
+
+		// Clean users auto-delete when their longest-lived shown pokemon
+		// despawns (weatherAlertCleanUntil), carried per-job via
+		// OverrideCleanTTH so the shared baseEnrichment map is untouched.
+		var overrideCleanTTH int64
+		if user.Clean > 0 {
+			cleanUntil := weatherAlertCleanUntil(user)
+			if cleanUntil > 0 {
+				// Re-check the min-alert threshold with the alert-accurate TTH
+				// (the pre-filter used CaresUntil, which can over-estimate when
+				// only short-lived active pokemon remain).
+				if remaining := cleanUntil - in.now; remaining < in.minAlert {
+					l.Debugf("Weather alert suppressed for %s (%s) — alert TTH %ds below alert_minimum_time %ds",
+						user.Name, user.ID, remaining, in.minAlert)
+					continue
+				}
+				overrideCleanTTH = cleanUntil
+			}
+		}
+
+		job := RenderJob{
+			AlertType:         "weatherchange",
+			TemplateType:      "weatherchange",
+			Enrichment:        in.baseEnrichment,
+			PerLangEnrichment: perLang,
+			WebhookFields:     in.webhookFields,
+			MatchedUsers:      []webhook.MatchedUser{user},
+			MatchedAreas:      in.matchedAreas,
+			OverrideCleanTTH:  overrideCleanTTH,
+			LogReference:      in.s2CellID,
+		}
+		// Per-user tile → its own gate now (writes a per-user map, no shared
+		// hazard). Shared-tile users are left with a nil gate and get the single
+		// shared baseGate attached below, after all baseEnrichment reads finish.
+		if userTilePending != nil {
+			job.TileGate = ps.newTileGate(userTilePending)
+		}
+		jobs = append(jobs, job)
+	}
+
+	// All in.baseEnrichment reads are complete — now spawn the single shared
+	// gate (nil when there is no shared base tile) and enqueue.
+	baseGate := ps.newTileGate(in.baseTilePending)
+	for i := range jobs {
+		if jobs[i].TileGate == nil {
+			jobs[i].TileGate = baseGate
+		}
+		ps.renderCh <- jobs[i]
 	}
 }
 

@@ -121,12 +121,12 @@ func TestAppliesToTarget(t *testing.T) {
 		target  string
 		want    bool
 	}{
-		{nil, AppliesToDM, false},                                                   // action default kicks in (we're not setting an Action, so default = any)
-		{[]string{AppliesToAny}, AppliesToDM, true},                                  // any matches dm
-		{[]string{AppliesToAny}, AppliesToChannel, true},                             // any matches channel
-		{[]string{AppliesToDM}, AppliesToDM, true},                                   // explicit dm matches dm
-		{[]string{AppliesToDM}, AppliesToChannel, false},                             // explicit dm doesn't match channel
-		{[]string{AppliesToDM, AppliesToChannel}, AppliesToWebhook, false},           // dm+channel doesn't match webhook
+		{nil, AppliesToDM, false},                                          // action default kicks in (we're not setting an Action, so default = any)
+		{[]string{AppliesToAny}, AppliesToDM, true},                        // any matches dm
+		{[]string{AppliesToAny}, AppliesToChannel, true},                   // any matches channel
+		{[]string{AppliesToDM}, AppliesToDM, true},                         // explicit dm matches dm
+		{[]string{AppliesToDM}, AppliesToChannel, false},                   // explicit dm doesn't match channel
+		{[]string{AppliesToDM, AppliesToChannel}, AppliesToWebhook, false}, // dm+channel doesn't match webhook
 		{[]string{AppliesToDM, AppliesToChannel}, AppliesToChannel, true},
 	}
 	for i, tc := range cases {
