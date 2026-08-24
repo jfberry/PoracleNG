@@ -142,10 +142,7 @@ func TestStatsTrackerMemoryIsIndependentOfSightingVolume(t *testing.T) {
 	var after runtime.MemStats
 	runtime.ReadMemStats(&after)
 
-	growth := int64(after.HeapAlloc) - int64(before.HeapAlloc)
-	if growth < 0 {
-		growth = 0
-	}
+	growth := max(int64(after.HeapAlloc)-int64(before.HeapAlloc), 0)
 
 	// Per-sighting storage would be ~55 MB for this volume. Bounded counters
 	// stay far under; 30 MB leaves generous headroom for either the ring or

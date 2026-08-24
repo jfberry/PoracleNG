@@ -450,8 +450,8 @@ func isNestedStruct(v reflect.Value) bool {
 		return false
 	}
 	t := v.Type()
-	for i := 0; i < t.NumField(); i++ {
-		ft := t.Field(i)
+	for ft := range t.Fields() {
+		ft := ft
 		if !ft.IsExported() {
 			continue
 		}

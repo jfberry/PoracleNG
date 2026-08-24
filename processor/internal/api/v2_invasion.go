@@ -245,12 +245,12 @@ func v2InvasionToRule(gd *gamedata.GameData, row *db.InvasionTrackingAPI) v2Inva
 	// mode and is nulled at its 'any' wildcard there.
 	switch strings.ToLower(row.GruntType) {
 	case "everything":
-		rule.Everything = ptr(true)
+		rule.Everything = new(true)
 	case "boss":
-		rule.Boss = ptr(true)
+		rule.Boss = new(true)
 	default:
 		if id, ok := typeNameToID(gd)[strings.ToLower(row.GruntType)]; ok {
-			rule.TypeID = ptr(id)
+			rule.TypeID = new(id)
 		}
 		rule.Gender = ptrUnless(invasionGenderEnum.fromStored(row.Gender), "any")
 	}

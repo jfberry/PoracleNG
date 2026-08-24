@@ -172,7 +172,7 @@ func (c *InfoCommand) pokemonInfo(ctx *bot.CommandContext, args []string) []bot.
 	}
 
 	// Determine platform for emoji resolution
-	platform := strings.SplitN(ctx.TargetType, ":", 2)[0]
+	platform, _, _ := strings.Cut(ctx.TargetType, ":")
 	if platform == bot.TypeWebhook {
 		platform = "discord"
 	}

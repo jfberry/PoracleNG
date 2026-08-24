@@ -37,8 +37,7 @@ func (e *TargetError) Localize(tr *i18n.Translator) string {
 // otherwise it returns err.Error(). Call sites that already have a translator
 // should prefer this over err.Error() so translatable errors are honoured.
 func LocalizeTargetError(tr *i18n.Translator, err error) string {
-	var te *TargetError
-	if errors.As(err, &te) {
+	if te, ok := errors.AsType[*TargetError](err); ok {
 		return te.Localize(tr)
 	}
 	return err.Error()

@@ -25,7 +25,7 @@ func (c *HelpCommand) Aliases() []string { return nil }
 
 func (c *HelpCommand) Run(ctx *bot.CommandContext, args []string) []bot.Reply {
 	prefix := bot.CommandPrefix(ctx)
-	platform := strings.SplitN(ctx.TargetType, ":", 2)[0]
+	platform, _, _ := strings.Cut(ctx.TargetType, ":")
 	if platform == bot.TypeWebhook {
 		platform = "discord"
 	}

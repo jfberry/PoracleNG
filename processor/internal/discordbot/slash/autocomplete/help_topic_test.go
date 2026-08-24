@@ -3,6 +3,7 @@ package autocomplete
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -49,12 +50,7 @@ func values(choices []*discordgo.ApplicationCommandOptionChoice) []string {
 }
 
 func contains(vals []string, want string) bool {
-	for _, v := range vals {
-		if v == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(vals, want)
 }
 
 // The shipped help entries carry platform "" — a platform-scoped lookup alone

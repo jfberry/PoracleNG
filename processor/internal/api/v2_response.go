@@ -72,13 +72,13 @@ func addNullForDroppedFields(t reflect.Type, merged map[string]json.RawMessage) 
 	if t == nil || t.Kind() != reflect.Struct {
 		return
 	}
-	for i := 0; i < t.NumField(); i++ {
-		f := t.Field(i)
+	for f := range t.Fields() {
+		f := f
 		tag := f.Tag.Get("json")
 		if tag == "" || tag == "-" {
 			continue
 		}
-		name := strings.Split(tag, ",")[0]
+		name, _, _ := strings.Cut(tag, ",")
 		if name == "" || name == "-" {
 			continue
 		}

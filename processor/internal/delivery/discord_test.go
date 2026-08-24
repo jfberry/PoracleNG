@@ -100,10 +100,10 @@ func TestDiscordSendChannel(t *testing.T) {
 }
 
 func TestDiscordSendDM(t *testing.T) {
-	var requestCount int32
+	var requestCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&requestCount, 1)
+		requestCount.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 
 		if r.URL.Path == "/users/@me/channels" {
@@ -138,7 +138,7 @@ func TestDiscordSendDM(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	count := atomic.LoadInt32(&requestCount)
+	count := requestCount.Load()
 	if count != 2 {
 		t.Errorf("expected 2 requests (DM create + send), got %d", count)
 	}
@@ -150,10 +150,10 @@ func TestDiscordSendDM(t *testing.T) {
 }
 
 func TestDiscordSendDMCached(t *testing.T) {
-	var requestCount int32
+	var requestCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&requestCount, 1)
+		requestCount.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 
 		if r.URL.Path == "/users/@me/channels" {
@@ -179,7 +179,7 @@ func TestDiscordSendDMCached(t *testing.T) {
 		t.Fatalf("first send error: %v", err)
 	}
 
-	firstCount := atomic.LoadInt32(&requestCount)
+	firstCount := requestCount.Load()
 	if firstCount != 2 {
 		t.Errorf("expected 2 requests for first send, got %d", firstCount)
 	}
@@ -191,7 +191,7 @@ func TestDiscordSendDMCached(t *testing.T) {
 		t.Fatalf("second send error: %v", err)
 	}
 
-	finalCount := atomic.LoadInt32(&requestCount)
+	finalCount := requestCount.Load()
 	if finalCount != 3 {
 		t.Errorf("expected 3 total requests (1 DM create + 2 sends), got %d", finalCount)
 	}
@@ -369,10 +369,10 @@ func TestDiscordEdit(t *testing.T) {
 }
 
 func TestDiscordRateLimit429(t *testing.T) {
-	var attempts int32
+	var attempts atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		count := atomic.AddInt32(&attempts, 1)
+		count := attempts.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		if count == 1 {
 			w.Header().Set("Retry-After", "0.01")
@@ -397,7 +397,7 @@ func TestDiscordRateLimit429(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	finalAttempts := atomic.LoadInt32(&attempts)
+	finalAttempts := attempts.Load()
 	if finalAttempts < 2 {
 		t.Errorf("expected at least 2 attempts, got %d", finalAttempts)
 	}
@@ -413,9 +413,9 @@ func TestDiscordRateLimit429(t *testing.T) {
 // message in the channel. Delete must now back off on 429 (Retry-After) and
 // retry — sharing the same rate-limit handling as posts.
 func TestDiscordDelete_RetriesOn429(t *testing.T) {
-	var attempts int32
+	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := atomic.AddInt32(&attempts, 1)
+		n := attempts.Add(1)
 		if n == 1 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -430,7 +430,7 @@ func TestDiscordDelete_RetriesOn429(t *testing.T) {
 	if err := ds.Delete(context.Background(), "channel123:msg456"); err != nil {
 		t.Fatalf("Delete should succeed after a 429 retry, got: %v", err)
 	}
-	if got := atomic.LoadInt32(&attempts); got < 2 {
+	if got := attempts.Load(); got < 2 {
 		t.Errorf("expected the delete to retry after 429 (>=2 attempts), got %d", got)
 	}
 }
@@ -438,9 +438,9 @@ func TestDiscordDelete_RetriesOn429(t *testing.T) {
 // TestDiscordEdit_RetriesOn429 — edits bypassed the send path's retry too, so a
 // 429 on an in-place update (e.g. RSVP change) used to fail without retry.
 func TestDiscordEdit_RetriesOn429(t *testing.T) {
-	var attempts int32
+	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := atomic.AddInt32(&attempts, 1)
+		n := attempts.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		if n == 1 {
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -456,7 +456,7 @@ func TestDiscordEdit_RetriesOn429(t *testing.T) {
 	if err := ds.Edit(context.Background(), "channel123:msg456", json.RawMessage(`{"content":"edited"}`), nil); err != nil {
 		t.Fatalf("Edit should succeed after a 429 retry, got: %v", err)
 	}
-	if got := atomic.LoadInt32(&attempts); got < 2 {
+	if got := attempts.Load(); got < 2 {
 		t.Errorf("expected the edit to retry after 429 (>=2 attempts), got %d", got)
 	}
 }

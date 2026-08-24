@@ -18,8 +18,8 @@ func TestV2Pokemon_CostumeWriteMapper(t *testing.T) {
 		want    int
 	}{
 		{"omitted -> any (9000)", nil, 9000},
-		{"zero -> no costume (0)", ptr(0), 0},
-		{"specific costume", ptr(5), 5},
+		{"zero -> no costume (0)", new(0), 0},
+		{"specific costume", new(5), 5},
 	}
 
 	for _, c := range cases {
