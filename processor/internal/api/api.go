@@ -78,6 +78,17 @@ type Capabilities struct {
 	// /health response and skip probing /api/dts/testdata; when the key is
 	// absent they fall back to structural detection (presence of `types`).
 	DerivedDtsTypes bool `json:"derivedDtsTypes"`
+
+	// Costume reports whether this binary understands costume filters on
+	// pokemon and raid tracking rules (the `costume` field on the v2 rule
+	// schemas, backed by the monsters.costume / raid.costume columns).
+	//
+	// One flag rather than two: the columns arrive in separate migrations (6
+	// and 7), but a binary always carries both, and migrations are mandatory
+	// at startup (RunMigrations fatals on failure) so the schema can never lag
+	// the binary. For a server that is actually serving traffic the two
+	// questions collapse into one. See #212.
+	Costume bool `json:"costume"`
 }
 
 // HandleHealth returns a Gin handler that responds with a small health
@@ -107,5 +118,6 @@ func BuildCapabilities() Capabilities {
 		TomlDts:              true,
 		ButtonResponseObject: true,
 		DerivedDtsTypes:      true,
+		Costume:              true,
 	}
 }

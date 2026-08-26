@@ -559,6 +559,25 @@
         ],
         "type": "object"
       },
+      "CostumeEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Costume id (game-master), the value stored in a tracking rule's costume field",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Display name in the requested locale, falling back to the raw masterfile name when the costume_<id> key is untranslated",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
       "Def": {
         "additionalProperties": false,
         "properties": {
@@ -2436,6 +2455,160 @@
           "day",
           "hours",
           "mins"
+        ],
+        "type": "object"
+      },
+      "V2ActivityBody": {
+        "additionalProperties": false,
+        "properties": {
+          "costumes": {
+            "description": "Costume ids seen on wild pokemon, grouped by pokemon, ascending by pokemon_id",
+            "items": {
+              "$ref": "#/components/schemas/V2PokemonIDs"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "forms": {
+            "description": "Form ids seen on wild pokemon, grouped by pokemon",
+            "items": {
+              "$ref": "#/components/schemas/V2PokemonIDs"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "invasion_grunts": {
+            "description": "Grunt ids (game-master) seen as invasions",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "max_battle_bosses": {
+            "description": "Pokédex ids seen as max battle bosses",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_candy": {
+            "description": "Pokédex ids seen as quest candy rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_items": {
+            "description": "Item ids seen as quest rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_mega": {
+            "description": "Pokédex ids seen as quest mega energy rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_pokemon": {
+            "description": "Pokédex ids seen as quest encounter rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quest_xl": {
+            "description": "Pokédex ids seen as quest XL candy rewards",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "raid_bosses": {
+            "description": "Pokédex ids seen as raid bosses",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "raid_costumes": {
+            "description": "Costume ids seen on raid bosses, grouped by pokemon",
+            "items": {
+              "$ref": "#/components/schemas/V2PokemonIDs"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "raid_forms": {
+            "description": "Form ids seen on raid bosses, grouped by pokemon",
+            "items": {
+              "$ref": "#/components/schemas/V2PokemonIDs"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "window_secs": {
+            "description": "Recency window in seconds: an id appears here if it was seen within this many seconds",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_secs",
+          "raid_bosses",
+          "max_battle_bosses",
+          "quest_pokemon",
+          "quest_items",
+          "quest_candy",
+          "quest_mega",
+          "quest_xl",
+          "invasion_grunts",
+          "costumes",
+          "forms",
+          "raid_costumes",
+          "raid_forms"
         ],
         "type": "object"
       },
@@ -11003,6 +11176,32 @@
         },
         "type": "object"
       },
+      "V2PokemonIDs": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Ids seen on this pokemon within the window, ascending",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "pokemon_id": {
+            "description": "Pokédex id",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pokemon_id",
+          "ids"
+        ],
+        "type": "object"
+      },
       "V2PokemonRule": {
         "additionalProperties": false,
         "properties": {
@@ -13502,6 +13701,56 @@
         ]
       }
     },
+    "/masterdata/costumes": {
+      "get": {
+        "description": "Returns costumes keyed by costume id (an empty object when game data is unavailable). `?locale=` selects the language (default `en`); a costume with no translation in that locale falls back to the raw masterfile name rather than the bare translation key.",
+        "operationId": "get-masterdata-costumes",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "locale",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/CostumeEntry"
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "All costumes with localised names",
+        "tags": [
+          "masterdata"
+        ]
+      }
+    },
     "/masterdata/grunts": {
       "get": {
         "description": "Returns the poracle-v2 grunts map keyed by grunt id (an empty object when game data is unavailable). Keys are arbitrary grunt ids; each value is a poracle2Grunt (type, gender, grunt category, per-slot reward flags, encounters).",
@@ -14372,6 +14621,43 @@
         "summary": "Generate a test alert",
         "tags": [
           "test"
+        ]
+      }
+    },
+    "/v2/activity": {
+      "get": {
+        "description": "Everything the processor has seen within `window_secs`, in one response: raid and max battle bosses, quest reward ids, invasion grunts, and the costumes/forms seen on wild pokemon and raid bosses. Intended for populating pickers with what is actually live rather than the whole masterfile. Resolve ids to names via /api/masterdata/monsters, /api/masterdata/costumes and /api/masterdata/grunts. An empty list means nothing of that kind was seen recently — NOT that the server lacks support; use the /health capability flags for that. Data is in-memory and does not survive a restart.",
+        "operationId": "v2-get-activity",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ActivityBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Recently-seen bosses, rewards, costumes and forms",
+        "tags": [
+          "v2-activity"
         ]
       }
     },
