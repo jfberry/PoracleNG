@@ -255,6 +255,16 @@ type v2AddProfileInput struct {
 	Body v2AddProfileBody
 }
 
+// v2AddProfileOutput reports the created profile. profile_no is always present;
+// profile carries the full resource and is omitted only if the read-back after
+// the insert failed.
+type v2AddProfileOutput struct {
+	Body struct {
+		ProfileNo int                `json:"profile_no" doc:"The profile_no assigned to the new profile — the LOWEST FREE number, which the caller cannot predict"`
+		Profile   *v2ProfileResponse `json:"profile,omitempty" doc:"The created profile. Omitted only when the post-insert read-back failed; profile_no is still authoritative."`
+	}
+}
+
 func registerV2ProfileAdd(api huma.API, deps *TrackingDeps, tag []string, sec []map[string][]string) {
 	huma.Register(api, huma.Operation{
 		OperationID: "v2-add-human-profile", Method: "POST", Path: "/v2/humans/{id}/profiles",
@@ -263,7 +273,7 @@ func registerV2ProfileAdd(api huma.API, deps *TrackingDeps, tag []string, sec []
 			"schema (numeric bounds + step/end cross-field, no cross-midnight) and stored as JSON. 422 if the name is empty or " +
 			"active_hours is invalid; 404 if the human does not exist. Triggers a state reload.",
 		Tags: tag, Security: sec, RejectUnknownQueryParameters: true,
-	}, func(_ context.Context, in *v2AddProfileInput) (*statusOKOutput, error) {
+	}, func(_ context.Context, in *v2AddProfileInput) (*v2AddProfileOutput, error) {
 		if _, err := resolveFullHuman(deps, in.ID); err != nil {
 			return nil, err
 		}
@@ -274,12 +284,34 @@ func registerV2ProfileAdd(api huma.API, deps *TrackingDeps, tag []string, sec []
 		if err != nil {
 			return nil, err
 		}
-		if err := deps.Humans.AddProfile(in.ID, in.Body.Name, activeHours); err != nil {
+		profileNo, err := deps.Humans.AddProfile(in.ID, in.Body.Name, activeHours)
+		if err != nil {
 			log.Errorf("v2 profiles: add %s: %s", in.ID, err)
 			return nil, huma.Error500InternalServerError("database error")
 		}
 		reloadState(deps)
-		return okStatus(), nil
+
+		// Report the profile we actually created. The store assigns the lowest
+		// FREE profile_no, which the caller cannot predict, so returning only
+		// {"status":"ok"} forced a snapshot/create/re-read/diff dance against
+		// names that are not unique (#213).
+		out := &v2AddProfileOutput{}
+		out.Body.ProfileNo = profileNo
+		profiles, err := deps.Humans.GetProfiles(in.ID)
+		if err != nil {
+			// The profile IS created; only the read-back failed. Report the
+			// number rather than failing the whole call.
+			log.Errorf("v2 profiles: read back %s/%d after add: %s", in.ID, profileNo, err)
+			return out, nil
+		}
+		for _, p := range profiles {
+			if p.ProfileNo == profileNo {
+				created := profileToV2Response(p)
+				out.Body.Profile = &created
+				break
+			}
+		}
+		return out, nil
 	})
 }
 

@@ -2660,6 +2660,24 @@
         ],
         "type": "object"
       },
+      "V2AddProfileOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/V2ProfileResponse",
+            "description": "The created profile. Omitted only when the post-insert read-back failed; profile_no is still authoritative."
+          },
+          "profile_no": {
+            "description": "The profile_no assigned to the new profile — the LOWEST FREE number, which the caller cannot predict",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "profile_no"
+        ],
+        "type": "object"
+      },
       "V2AdminDisableBody": {
         "additionalProperties": false,
         "properties": {
@@ -15880,7 +15898,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StatusOKOutputBody"
+                  "$ref": "#/components/schemas/V2AddProfileOutputBody"
                 }
               }
             },

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -437,5 +438,36 @@ func TestV2Profiles_Switch_MissingRequired_422(t *testing.T) {
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/profile", `{}`)
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for missing profile_no, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- #213: create must report the profile_no it assigned --------------------
+
+// PoracleNG assigns the LOWEST FREE profile_no, not max+1, so with profiles
+// 1 and 3 present the next one is 2. A client cannot predict that and was not
+// told it — the reported workaround was snapshot/create/re-read/diff against
+// non-unique names, which had already written alarms to a profile_no with no
+// profile row. Create must return what it created.
+func TestV2Profiles_Add_ReturnsAssignedProfileNo(t *testing.T) {
+	r, humans, _ := newV2ProfilesTestAPI(t)
+	humans.SeedProfile(store.Profile{ID: "u1", ProfileNo: 3, Name: "Third"})
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/profiles", `{"name":"Gap"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var got struct {
+		ProfileNo int `json:"profile_no"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode body: %v; raw: %s", err, w.Body.String())
+	}
+	if got.ProfileNo != 2 {
+		t.Errorf("profile_no = %d, want 2 (lowest free with 1 and 3 taken); body: %s",
+			got.ProfileNo, w.Body.String())
+	}
+	if p := profileByNo(humans, "u1", 2); p == nil || p.Name != "Gap" {
+		t.Errorf("profile 2 = %+v, want the created \"Gap\" profile", p)
 	}
 }
