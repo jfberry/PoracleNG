@@ -153,16 +153,49 @@ func TestV2Invasion_Boss(t *testing.T) {
 
 // --- exactly-one-mode + gender placement ------------------------------------
 
-func TestV2Invasion_NoModeSet422(t *testing.T) {
+// Omitting every targeting field means "everything", matching what bare
+// !invasion has always done in the bot (invasion.go defaults gruntTypes to
+// everything when nothing matched). Requiring an explicit mode made the API
+// diverge from the command for no benefit.
+func TestV2Invasion_NoModeMeansEverything(t *testing.T) {
 	r, is, _, restore := newV2InvasionTestAPI(t)
 	defer restore()
 
-	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion", `[{"distance":500}]`)
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422 for no mode set, got %d: %s", w.Code, w.Body.String())
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true", `[{}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for an omitted target, got %d: %s", w.Code, w.Body.String())
 	}
-	if len(is.AllRows()) != 0 {
-		t.Fatalf("no-mode rule must not be stored: %+v", is.AllRows())
+	rows := is.AllRows()
+	if len(rows) != 1 || rows[0].GruntType != "everything" {
+		t.Fatalf("stored = %+v, want grunt_type everything", rows)
+	}
+}
+
+// Distance-only rules are the common shape of this: "everything within 500m".
+func TestV2Invasion_NoModeWithOtherFieldsStillEverything(t *testing.T) {
+	r, is, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"distance":500,"clean":true}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := is.AllRows()
+	if len(rows) != 1 || rows[0].GruntType != "everything" || rows[0].Distance != 500 {
+		t.Fatalf("stored = %+v, want everything at 500m", rows)
+	}
+}
+
+// Setting two targets is still a client bug and still 422s.
+func TestV2Invasion_MultipleModesStill422(t *testing.T) {
+	r, _, _, restore := newV2InvasionTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/invasion?silent=true",
+		`[{"type_id":11,"boss":true}]`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for two modes, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

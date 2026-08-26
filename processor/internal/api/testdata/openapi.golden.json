@@ -4220,7 +4220,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -4277,7 +4277,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,
@@ -4336,7 +4336,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -4393,7 +4393,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,
@@ -4452,7 +4452,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -4509,7 +4509,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,
@@ -8071,7 +8071,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -8128,7 +8128,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,
@@ -9668,7 +9668,7 @@
             ]
           },
           "everything": {
-            "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+            "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
             "type": "boolean"
           },
           "gender": {
@@ -9725,7 +9725,7 @@
             ]
           },
           "type_id": {
-            "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+            "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
             "format": "int64",
             "maximum": 18,
             "minimum": 1,
@@ -10235,7 +10235,7 @@
                   ]
                 },
                 "everything": {
-                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed.",
+                  "description": "Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed.",
                   "type": "boolean"
                 },
                 "gender": {
@@ -10292,7 +10292,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,

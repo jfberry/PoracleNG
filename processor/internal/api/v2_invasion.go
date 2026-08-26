@@ -83,9 +83,10 @@ func canonicalGruntTypes(gd *gamedata.GameData) map[string]bool {
 
 // v2InvasionRule is the strict v2 invasion tracking request/response rule object.
 //
-// EXACTLY ONE of {grunt_type, type_id, grunt_id, everything, boss} must be set
-// per rule (0 set or >1 set ⇒ 422). All of them resolve to the stored
-// grunt_type string the matcher compares against:
+// AT MOST ONE of {grunt_type, type_id, grunt_id, everything, boss} may be set
+// per rule (>1 ⇒ 422). Omitting all of them is the wildcard and stores
+// "everything", matching bare !invasion in the bot. All of them resolve to the
+// stored grunt_type string the matcher compares against:
 //   - grunt_type: stored as given, after validation against canonicalGruntTypes.
 //   - type_id  (1-18): grunt_type = lower(gd.Types[type_id].Name); + optional gender.
 //   - grunt_id (game-master id): grunt_type derived from the grunt's TypeID/template;
@@ -111,10 +112,10 @@ func canonicalGruntTypes(gd *gamedata.GameData) map[string]bool {
 // (Pokestop-event rows live in the SAME table but are addressed via the separate
 // /incident endpoint; see v2_incident.go.)
 type v2InvasionRule struct {
-	TypeID     *int    `json:"type_id,omitempty" minimum:"1" maximum:"18" doc:"Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. EXACTLY ONE mode field required — set this OR grunt_id OR everything OR boss (not omitted-to-wildcard; use everything for the catch-all). Mutually exclusive with grunt_id/everything/boss. In responses, the active mode field is always present; the other mode fields are omitted/null."`
+	TypeID     *int    `json:"type_id,omitempty" minimum:"1" maximum:"18" doc:"Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null."`
 	GruntID    *int    `json:"grunt_id,omitempty" minimum:"0" doc:"Game-master grunt id; resolves to that grunt's name and implies its own gender. One-of mode field. Mutually exclusive with the others; gender not allowed. Read-back reports the rule as grunt_type, because that is what is stored — see grunt_type."`
 	GruntType  *string `json:"grunt_type,omitempty" doc:"The stored targeting value, and the ONE targeting field every read emits. Accepts any grunt name the bot accepts: a pokemon type (\"water\"), a named grunt (\"giovanni\", \"blanche\", \"mixed\", \"npc_0\"), or a catch-all (\"everything\", \"boss\"). type_id and grunt_id are input conveniences that resolve to one of these. Pokestop-event names are not valid here — use /incident. Enumerate valid names from GET /api/masterdata/grunts. One-of mode field; may be combined with gender."`
-	Everything *bool   `json:"everything,omitempty" doc:"Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). This is the 'any invasion' selector — there is no omit-to-wildcard on invasion (exactly one mode field must be set). Mutually exclusive with the others; gender not allowed."`
+	Everything *bool   `json:"everything,omitempty" doc:"Catch-all wildcard: set true to match EVERY invasion (stored grunt_type \"everything\"). Equivalent to omitting every mode field, which is the wildcard; set it explicitly when you want the intent on the wire. Mutually exclusive with the others; gender not allowed."`
 	Boss       *bool   `json:"boss,omitempty" doc:"Catch-all for boss encounters: set true to match only boss invasions (stored grunt_type \"boss\"). One-of mode field. Mutually exclusive with the others; gender not allowed."`
 	Gender     *string `json:"gender,omitempty" nullable:"true" enum:"any,male,female" doc:"Grunt gender filter: any|male|female. Omit to match any gender (defaults to 'any', stored as 0). ONLY valid together with type_id. Returned as null when 'any' (or when not in type_id mode)."`
 
@@ -153,13 +154,9 @@ func translateV2Invasion(deps *TrackingDeps, humanID string, profileNo int, oc o
 	if req.Boss != nil && *req.Boss {
 		modes++
 	}
-	if modes == 0 {
-		return db.InvasionTrackingAPI{}, huma.Error422UnprocessableEntity(
-			"exactly one of grunt_type, type_id, grunt_id, everything, boss must be set")
-	}
 	if modes > 1 {
 		return db.InvasionTrackingAPI{}, huma.Error422UnprocessableEntity(
-			"grunt_type, type_id, grunt_id, everything and boss are mutually exclusive (set exactly one)")
+			"grunt_type, type_id, grunt_id, everything and boss are mutually exclusive (set at most one)")
 	}
 
 	// gender is only valid with the name-shaped modes: a specific grunt_id
@@ -209,6 +206,11 @@ func translateV2Invasion(deps *TrackingDeps, humanID string, profileNo int, oc o
 
 	case req.Boss != nil && *req.Boss:
 		gruntType = "boss"
+
+	default:
+		// No targeting field at all: the wildcard, matching bare !invasion,
+		// which the bot has always defaulted to "everything".
+		gruntType = "everything"
 	}
 
 	distance := valueOr(req.Distance, 0)
