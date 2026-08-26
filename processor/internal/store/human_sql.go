@@ -535,6 +535,15 @@ func (s *SQLHumanStore) UpdateProfileHours(id string, profileNo int, activeHours
 	return nil
 }
 
+func (s *SQLHumanStore) UpdateProfileName(id string, profileNo int, name string) error {
+	_, err := s.db.Exec(
+		`UPDATE profiles SET name = ? WHERE id = ? AND profile_no = ?`, name, id, profileNo)
+	if err != nil {
+		return fmt.Errorf("update profile name %s/%d: %w", id, profileNo, err)
+	}
+	return nil
+}
+
 // --- Tracking tables list ---
 
 // trackingTables lists the per-profile tracking tables. Used by

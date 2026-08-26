@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -499,4 +500,131 @@ func assertStatusOK(t *testing.T, w *httptest.ResponseRecorder) {
 
 func hasCall(m *store.MockHumanStore, name string) bool {
 	return slices.Contains(m.Calls, name)
+}
+
+// --- #214: list and delete -------------------------------------------------
+
+// seedHumans adds extra humans of assorted types to the fixture store.
+func seedHumans(humans *store.MockHumanStore) {
+	humans.AddHuman(&store.Human{ID: "u2", Type: "discord:user", Name: "User2", Enabled: true})
+	humans.AddHuman(&store.Human{ID: "w1", Type: "webhook", Name: "Hook1", Enabled: true})
+	humans.AddHuman(&store.Human{ID: "w2", Type: "webhook", Name: "Hook2", Enabled: false})
+}
+
+type v2HumanListBody struct {
+	Humans []struct {
+		ID      string `json:"id"`
+		Type    string `json:"type"`
+		Name    string `json:"name"`
+		Enabled bool   `json:"enabled"`
+	} `json:"humans"`
+}
+
+func listHumans(t *testing.T, r *gin.Engine, query string) v2HumanListBody {
+	t.Helper()
+	w := v2DoReq(t, r, http.MethodGet, "/api/v2/humans"+query, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/v2/humans%s = %d: %s", query, w.Code, w.Body.String())
+	}
+	var got v2HumanListBody
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v; raw: %s", err, w.Body.String())
+	}
+	return got
+}
+
+// "Who is registered on this instance" had no answer on either API version,
+// so PoracleWeb.NET kept a repository over the Poracle database alive for its
+// admin user list.
+func TestV2Humans_List_ReturnsEveryone(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+	seedHumans(humans)
+
+	got := listHumans(t, r, "")
+	if len(got.Humans) != 4 {
+		t.Fatalf("listed %d humans, want 4: %+v", len(got.Humans), got.Humans)
+	}
+	// Deterministic order so clients can cache and diff.
+	ids := make([]string, len(got.Humans))
+	for i, h := range got.Humans {
+		ids[i] = h.ID
+	}
+	want := []string{"u1", "u2", "w1", "w2"}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("ids = %v, want ascending %v", ids, want)
+		}
+	}
+}
+
+// ?type=webhook alone closes the delegated-webhook half of their need.
+func TestV2Humans_List_FiltersByType(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+	seedHumans(humans)
+
+	got := listHumans(t, r, "?type=webhook")
+	if len(got.Humans) != 2 {
+		t.Fatalf("listed %d webhooks, want 2: %+v", len(got.Humans), got.Humans)
+	}
+	for _, h := range got.Humans {
+		if h.Type != "webhook" {
+			t.Errorf("got type %q in a ?type=webhook listing", h.Type)
+		}
+	}
+}
+
+// Batch read by id, same comma-separated form as the v2 bulk delete's ?uid=,
+// so an admin page resolving many display names makes one request not N.
+func TestV2Humans_List_BatchByID(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+	seedHumans(humans)
+
+	got := listHumans(t, r, "?id=u1,w2")
+	if len(got.Humans) != 2 {
+		t.Fatalf("listed %d, want 2: %+v", len(got.Humans), got.Humans)
+	}
+	if got.Humans[0].ID != "u1" || got.Humans[1].ID != "w2" {
+		t.Errorf("ids = %+v, want u1 and w2", got.Humans)
+	}
+}
+
+// An id that does not exist is simply absent, not a 404 — a batch read of
+// mixed-validity ids should return what it found.
+func TestV2Humans_List_BatchIgnoresUnknownIDs(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+	seedHumans(humans)
+
+	got := listHumans(t, r, "?id=u1,nope")
+	if len(got.Humans) != 1 || got.Humans[0].ID != "u1" {
+		t.Fatalf("got %+v, want just u1", got.Humans)
+	}
+}
+
+// Deleting in the client's own database means knowing every table a human
+// touches — PoracleNG's schema, not theirs, going stale silently.
+func TestV2Humans_Delete_RemovesHuman(t *testing.T) {
+	r, humans, reloads := newV2HumansTestAPI(t, nil)
+	seedHumans(humans)
+
+	w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/u2", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("DELETE = %d: %s", w.Code, w.Body.String())
+	}
+	if h, _ := humans.Get("u2"); h != nil {
+		t.Errorf("human u2 still present after delete: %+v", h)
+	}
+	if atomic.LoadInt32(reloads) != 1 {
+		t.Errorf("expected 1 reload after delete, got %d", atomic.LoadInt32(reloads))
+	}
+}
+
+func TestV2Humans_Delete_UnknownHuman404(t *testing.T) {
+	r, _, reloads := newV2HumansTestAPI(t, nil)
+	w := v2DoReq(t, r, http.MethodDelete, "/api/v2/humans/nope", "")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+	if atomic.LoadInt32(reloads) != 0 {
+		t.Errorf("a failed delete must not reload")
+	}
 }

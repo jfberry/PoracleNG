@@ -208,6 +208,10 @@ type HumanStore interface {
 	// UpdateProfileHours updates the active_hours field on a profile.
 	UpdateProfileHours(id string, profileNo int, activeHours string) error
 
+	// UpdateProfileName renames a profile, leaving its schedule, area and
+	// location untouched (#213).
+	UpdateProfileName(id string, profileNo int, name string) error
+
 	// --- Saved locations ---
 
 	// ListLocations returns every saved location for the given human id,

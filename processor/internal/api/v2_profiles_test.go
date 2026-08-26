@@ -195,7 +195,7 @@ func TestV2Profiles_Add_OK_WithActiveHours(t *testing.T) {
 	r, humans, reloads := newV2ProfilesTestAPI(t)
 	// A single-fire entry (Sun 08:30) plus a range entry (Mon 09:00 -> 17:00 step 2h).
 	body := `{"name":"Work","active_hours":[` +
-		`{"day":0,"hours":8,"mins":30},` +
+		`{"day":7,"hours":8,"mins":30},` +
 		`{"day":1,"hours":9,"mins":0,"step":2,"end_hours":17,"end_mins":0}` +
 		`]}`
 	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/profiles", body)
@@ -218,7 +218,7 @@ func TestV2Profiles_Add_OK_WithActiveHours(t *testing.T) {
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 parsed entries, got %d: %+v", len(entries), entries)
 	}
-	if entries[0].Day != 0 || entries[0].Hours != 8 || entries[0].Mins != 30 || entries[0].IsRange() {
+	if entries[0].Day != 7 || entries[0].Hours != 8 || entries[0].Mins != 30 || entries[0].IsRange() {
 		t.Fatalf("single-fire entry not round-tripped: %+v", entries[0])
 	}
 	if !entries[1].IsRange() || entries[1].Step != 2 || entries[1].EndHours != 17 || entries[1].EndMins != 0 {
@@ -307,15 +307,46 @@ func TestV2Profiles_Update_Clears(t *testing.T) {
 	}
 }
 
-func TestV2Profiles_Update_BoundsViolation_Day(t *testing.T) {
+// #208: the schema declared day as 0-6 while the scheduler reads ISO
+// weekdays (isoDow: Monday 1 ... Sunday 7) and nothing translated between
+// them. Sunday was unexpressible, and day=0 was accepted and stored but
+// matched no weekday, so it never fired — silent on both sides.
+func TestV2Profiles_Update_RejectsDayZeroWhichNeverFires(t *testing.T) {
 	r, _, reloads := newV2ProfilesTestAPI(t)
 	w := v2DoReq(t, r, http.MethodPatch, "/api/v2/humans/u1/profiles/1",
-		`{"active_hours":[{"day":7,"hours":1,"mins":0}]}`)
+		`{"active_hours":[{"day":0,"hours":1,"mins":0}]}`)
 	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected 422 for day=7, got %d: %s", w.Code, w.Body.String())
+		t.Fatalf("expected 422 for day=0 (matches no ISO weekday), got %d: %s", w.Code, w.Body.String())
 	}
 	if atomic.LoadInt32(reloads) != 0 {
 		t.Fatalf("invalid update must not reload")
+	}
+}
+
+func TestV2Profiles_Update_RejectsDayAboveSeven(t *testing.T) {
+	r, _, _ := newV2ProfilesTestAPI(t)
+	w := v2DoReq(t, r, http.MethodPatch, "/api/v2/humans/u1/profiles/1",
+		`{"active_hours":[{"day":8,"hours":1,"mins":0}]}`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for day=8, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// Sunday is ISO 7 and must be storable — it was the day v2 could not express.
+func TestV2Profiles_Update_AcceptsSundayAsISOSeven(t *testing.T) {
+	r, humans, _ := newV2ProfilesTestAPI(t)
+	w := v2DoReq(t, r, http.MethodPatch, "/api/v2/humans/u1/profiles/1",
+		`{"active_hours":[{"day":7,"hours":9,"mins":30}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for Sunday (day=7), got %d: %s", w.Code, w.Body.String())
+	}
+	p := profileByNo(humans, "u1", 1)
+	entries, err := db.ParseActiveHours(p.ActiveHours)
+	if err != nil {
+		t.Fatalf("stored active_hours does not parse: %v (raw=%q)", err, p.ActiveHours)
+	}
+	if len(entries) != 1 || entries[0].Day != 7 {
+		t.Fatalf("stored entries = %+v, want a single day=7 entry", entries)
 	}
 }
 
@@ -469,5 +500,61 @@ func TestV2Profiles_Add_ReturnsAssignedProfileNo(t *testing.T) {
 	}
 	if p := profileByNo(humans, "u1", 2); p == nil || p.Name != "Gap" {
 		t.Errorf("profile 2 = %+v, want the created \"Gap\" profile", p)
+	}
+}
+
+// --- #213: rename ----------------------------------------------------------
+
+// Nothing in either API could rename a profile. v2's PATCH required
+// active_hours and rejected name as an unexpected property; v1's
+// POST /api/profiles/{id}/update answered {"status":"ok"} for a rename and
+// wrote nothing, which is worse. PoracleWeb.NET kept a direct database write
+// against profiles.name solely for this.
+func TestV2Profiles_Update_RenamesWithoutTouchingSchedule(t *testing.T) {
+	r, humans, _ := newV2ProfilesTestAPI(t)
+	// Give the profile a schedule first, so we can prove a rename leaves it.
+	if w := v2DoReq(t, r, http.MethodPatch, "/api/v2/humans/u1/profiles/1",
+		`{"active_hours":[{"day":1,"hours":9,"mins":0}]}`); w.Code != http.StatusOK {
+		t.Fatalf("seed schedule: got %d: %s", w.Code, w.Body.String())
+	}
+
+	w := v2DoReq(t, r, http.MethodPatch, "/api/v2/humans/u1/profiles/1", `{"name":"Renamed"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for rename, got %d: %s", w.Code, w.Body.String())
+	}
+
+	p := profileByNo(humans, "u1", 1)
+	if p == nil || p.Name != "Renamed" {
+		t.Fatalf("profile = %+v, want name %q", p, "Renamed")
+	}
+	entries, err := db.ParseActiveHours(p.ActiveHours)
+	if err != nil {
+		t.Fatalf("active_hours no longer parses after rename: %v (raw=%q)", err, p.ActiveHours)
+	}
+	if len(entries) != 1 || entries[0].Day != 1 {
+		t.Errorf("rename clobbered the schedule: %+v", entries)
+	}
+}
+
+// active_hours-only PATCH must keep working, and must not blank the name.
+func TestV2Profiles_Update_ScheduleOnlyKeepsName(t *testing.T) {
+	r, humans, _ := newV2ProfilesTestAPI(t)
+	w := v2DoReq(t, r, http.MethodPatch, "/api/v2/humans/u1/profiles/1",
+		`{"active_hours":[{"day":2,"hours":7,"mins":15}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if p := profileByNo(humans, "u1", 1); p == nil || p.Name != "Default" {
+		t.Errorf("profile = %+v, want name preserved as %q", p, "Default")
+	}
+}
+
+// A PATCH with neither field is a no-op request and should say so rather than
+// silently succeeding while writing nothing.
+func TestV2Profiles_Update_EmptyBody422(t *testing.T) {
+	r, _, _ := newV2ProfilesTestAPI(t)
+	w := v2DoReq(t, r, http.MethodPatch, "/api/v2/humans/u1/profiles/1", `{}`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for a PATCH with nothing to change, got %d: %s", w.Code, w.Body.String())
 	}
 }

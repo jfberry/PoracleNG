@@ -571,6 +571,8 @@ func RegisterV2Humans(humaAPI huma.API, deps *TrackingDeps) {
 	sec := []map[string][]string{{"poracleSecret": {}}}
 
 	registerV2HumanCreate(humaAPI, deps, tag, sec)
+	registerV2HumansList(humaAPI, deps, tag, sec)
+	registerV2HumanDelete(humaAPI, deps, tag, sec)
 	registerV2HumanGet(humaAPI, deps, tag, sec)
 	registerV2HumanAreasGet(humaAPI, deps, tag, sec)
 	registerV2HumanEnable(humaAPI, deps, tag, sec)

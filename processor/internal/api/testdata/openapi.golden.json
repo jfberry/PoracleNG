@@ -2410,10 +2410,10 @@
         "additionalProperties": false,
         "properties": {
           "day": {
-            "description": "Day of week (0=Sunday … 6=Saturday)",
+            "description": "ISO day of week (1=Monday … 7=Sunday)",
             "format": "int64",
-            "maximum": 6,
-            "minimum": 0,
+            "maximum": 7,
+            "minimum": 1,
             "type": "integer"
           },
           "end_hours": {
@@ -9112,6 +9112,69 @@
         ],
         "type": "object"
       },
+      "V2HumanSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "admin_disable": {
+            "description": "Whether an admin has disabled this account; such a user must re-register",
+            "type": "boolean"
+          },
+          "current_profile_no": {
+            "description": "The profile currently active for this human",
+            "format": "int64",
+            "type": "integer"
+          },
+          "enabled": {
+            "description": "Whether the user has alerts switched on (the !start/!stop flag)",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Human id (Discord/Telegram id, or webhook name)",
+            "type": "string"
+          },
+          "language": {
+            "description": "Alert language code, empty when the user has not chosen one",
+            "type": "string"
+          },
+          "name": {
+            "description": "Display name",
+            "type": "string"
+          },
+          "type": {
+            "description": "Registration type, e.g. discord:user, discord:channel, webhook, telegram:user",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "enabled",
+          "admin_disable",
+          "language",
+          "current_profile_no"
+        ],
+        "type": "object"
+      },
+      "V2HumansListOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "humans": {
+            "description": "Matching humans, ascending by id",
+            "items": {
+              "$ref": "#/components/schemas/V2HumanSummary"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "humans"
+        ],
+        "type": "object"
+      },
       "V2IncidentRule": {
         "additionalProperties": false,
         "properties": {
@@ -11994,19 +12057,17 @@
         "additionalProperties": false,
         "properties": {
           "active_hours": {
-            "description": "New active-hours schedule ([] clears it). Validated against the strict schema.",
+            "description": "New active-hours schedule ([] clears it, omitted leaves it unchanged). Validated against the strict schema.",
             "items": {
               "$ref": "#/components/schemas/V2ActiveHourEntry"
             },
-            "type": [
-              "array",
-              "null"
-            ]
+            "type": "array"
+          },
+          "name": {
+            "description": "New profile name. Omit to leave it unchanged.",
+            "type": "string"
           }
         },
-        "required": [
-          "active_hours"
-        ],
         "type": "object"
       },
       "ValidationIssue": {
@@ -14680,6 +14741,63 @@
       }
     },
     "/v2/humans": {
+      "get": {
+        "description": "Lists humans on this instance, ascending by id. `?type=` narrows to one registration type; `?id=a,b,c` fetches a specific set in one request (unknown ids are omitted, not an error). Combining them intersects. Returns a summary per human — use GET /v2/humans/{id} for the full resource.",
+        "operationId": "v2-list-humans",
+        "parameters": [
+          {
+            "description": "Filter to one registration type, e.g. webhook or discord:user. Omit for every type.",
+            "explode": false,
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "description": "Filter to one registration type, e.g. webhook or discord:user. Omit for every type.",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated ids to fetch, e.g. id=123,456 — the same form as the bulk tracking delete's uid=. Unknown ids are omitted rather than erroring. Omit to list everything.",
+            "explode": false,
+            "in": "query",
+            "name": "id",
+            "schema": {
+              "description": "Comma-separated ids to fetch, e.g. id=123,456 — the same form as the bulk tracking delete's uid=. Unknown ids are omitted rather than erroring. Omit to list everything.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2HumansListOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "List registered humans",
+        "tags": [
+          "v2-humans"
+        ]
+      },
       "post": {
         "description": "Creates a new user/channel/webhook with an optional community membership and a default profile. Returns the created human resource.",
         "operationId": "v2-create-human",
@@ -14727,6 +14845,53 @@
       }
     },
     "/v2/humans/{id}": {
+      "delete": {
+        "description": "Removes the human along with every tracking rule, profile and summary schedule they own. Irreversible. 404 if the human does not exist. Triggers a state reload.",
+        "operationId": "v2-delete-human",
+        "parameters": [
+          {
+            "description": "Human id (the owning user)",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Human id (the owning user)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusOKOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "poracleSecret": []
+          }
+        ],
+        "summary": "Delete a human and all their data",
+        "tags": [
+          "v2-humans"
+        ]
+      },
       "get": {
         "description": "Returns the full human resource. blocked_alerts is a read-only derived field. 404 if the human does not exist.",
         "operationId": "v2-get-human",
@@ -15986,7 +16151,7 @@
         ]
       },
       "patch": {
-        "description": "Replaces the profile's active-hours schedule. The schedule is validated against the strict schema (numeric bounds + step/end cross-field, no cross-midnight); an empty [] clears the schedule. 422 on an invalid schedule; 404 if the human does not exist. Triggers a state reload.",
+        "description": "Partial update: send `name`, `active_hours`, or both — omitted fields are left unchanged. The schedule is validated against the strict schema (numeric bounds + step/end cross-field, no cross-midnight); an empty [] clears it. 422 on an invalid schedule or a body with neither field; 404 if the human does not exist. Triggers a state reload.",
         "operationId": "v2-update-human-profile",
         "parameters": [
           {
@@ -16048,7 +16213,7 @@
             "poracleSecret": []
           }
         ],
-        "summary": "Update a profile's active_hours",
+        "summary": "Update a profile's name and/or active_hours",
         "tags": [
           "v2-profiles"
         ]

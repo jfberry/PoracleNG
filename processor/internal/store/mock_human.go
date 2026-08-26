@@ -405,6 +405,19 @@ func (m *MockHumanStore) UpdateProfileHours(id string, profileNo int, activeHour
 	return nil
 }
 
+func (m *MockHumanStore) UpdateProfileName(id string, profileNo int, name string) error {
+	m.record("UpdateProfileName")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.profiles[id] {
+		if m.profiles[id][i].ProfileNo == profileNo {
+			m.profiles[id][i].Name = name
+			return nil
+		}
+	}
+	return nil
+}
+
 func (m *MockHumanStore) ListLocations(id string) ([]UserLocation, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
