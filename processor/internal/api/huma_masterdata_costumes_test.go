@@ -128,6 +128,13 @@ func getGrunts(t *testing.T, locale string) map[string]any {
 		"character_category_2": "Ruepel",
 		"character_category_6": "Giovanni",
 		"character_category_1": "Teamleiter",
+		// The real display names: gamelocale ships grunt_<id> (full) and
+		// grunt_a_<id> (abbreviated) for 415 grunts across 16 locales.
+		"grunt_5":   "Pflanze - Ruepel (Weiblich)",
+		"grunt_a_5": "Pflanze \u2640",
+		"grunt_44":  "Giovanni",
+		"grunt_1":   "Blanche",
+		// grunt 2 deliberately has no key, to exercise the fallback.
 	}))
 	RegisterMasterdataGrunts(humaAPI, gruntsTestGameData(), bundle)
 
@@ -212,5 +219,46 @@ func TestMasterdataGrunts_DefaultsToEnglish(t *testing.T) {
 
 	if e := gruntEntry(t, body, "5"); e["type"] != "Grass" {
 		t.Errorf("grunt 5 type = %v, want English %q", e["type"], "Grass")
+	}
+}
+
+// gamelocale ships grunt_<id> — the complete display name, already composed as
+// type + category + gender and translated across 16 locales ("Dark - Grunt
+// (Female)" / "Unlicht - Rüpel (Weiblich)"). Composing our own from the type
+// and category halves duplicated work that was already done, and did it worse.
+func TestMasterdataGrunts_UsesGruntIDDisplayName(t *testing.T) {
+	body := getGrunts(t, "de")
+
+	e := gruntEntry(t, body, "5")
+	if e["name"] != "Pflanze - Ruepel (Weiblich)" {
+		t.Errorf("grunt 5 name = %v, want the localised grunt_5 value", e["name"])
+	}
+	if e["short_name"] != "Pflanze ♀" {
+		t.Errorf("grunt 5 short_name = %v, want the localised grunt_a_5 value", e["short_name"])
+	}
+}
+
+// Named grunts get a real name, not a category label — this is what makes
+// Blanche distinguishable from Candela without leaning on the type fallback.
+func TestMasterdataGrunts_NamedGruntHasItsOwnName(t *testing.T) {
+	body := getGrunts(t, "de")
+
+	if e := gruntEntry(t, body, "1"); e["name"] != "Blanche" {
+		t.Errorf("grunt 1 name = %v, want %q", e["name"], "Blanche")
+	}
+	if e := gruntEntry(t, body, "44"); e["name"] != "Giovanni" {
+		t.Errorf("grunt 44 name = %v, want %q", e["name"], "Giovanni")
+	}
+}
+
+// A grunt with no grunt_<id> key falls back to the composed type + category
+// rather than leaking the bare key.
+func TestMasterdataGrunts_NameFallsBackWhenUntranslated(t *testing.T) {
+	body := getGrunts(t, "de")
+
+	e := gruntEntry(t, body, "2")
+	name, _ := e["name"].(string)
+	if name == "grunt_2" || name == "" {
+		t.Errorf("grunt 2 name = %q, want a composed fallback rather than the bare key", name)
 	}
 }

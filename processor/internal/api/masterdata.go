@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -91,6 +92,8 @@ func buildGruntsResponse(gd *gamedata.GameData, tr *i18n.Translator) map[string]
 
 		result[strconv.Itoa(id)] = &poracle2Grunt{
 			GruntType:    gruntType,
+			Name:         gruntDisplayName(id, typeName, gruntName, tr),
+			ShortName:    gruntShortName(id, tr),
 			Type:         typeName,
 			Gender:       g.Gender,
 			Grunt:        gruntName,
@@ -108,7 +111,14 @@ type poracle2Grunt struct {
 	// GruntType is the canonical stored grunt_type string (lowercased,
 	// template-derived) — the value an invasion tracking rule holds and the
 	// one targeting field a v2 invasion read emits.
-	GruntType    string             `json:"grunt_type"`
+	GruntType string `json:"grunt_type"`
+	// Name is the complete display name in the requested locale, from the
+	// gamelocale grunt_<id> key: already composed as type + category + gender
+	// ("Dark - Grunt (Female)" / "Unlicht - Rüpel (Weiblich)"), and shipped
+	// for 415 grunts across 16 locales. ShortName is the abbreviated form
+	// (grunt_a_<id>, e.g. "Dark ♀") for compact pickers.
+	Name         string             `json:"name"`
+	ShortName    string             `json:"short_name"`
 	Type         string             `json:"type"`
 	Gender       int                `json:"gender"`
 	Grunt        string             `json:"grunt"`
@@ -180,4 +190,41 @@ func gruntDisplayType(g *gamedata.Grunt, gruntType string, tr *i18n.Translator) 
 		return ""
 	}
 	return strings.ToUpper(gruntType[:1]) + gruntType[1:]
+}
+
+// gruntDisplayName resolves a grunt's full display name.
+//
+// gamelocale already ships this, composed and translated, as grunt_<id> — the
+// type, category and gender in one string, for 415 grunts across 16 locales.
+// Prefer it; compose from the halves only when the key is absent, which is
+// what keeps a grunt outside that set from rendering as a bare "grunt_123".
+func gruntDisplayName(id int, typeName, categoryName string, tr *i18n.Translator) string {
+	if tr != nil {
+		key := fmt.Sprintf("grunt_%d", id)
+		if v := tr.T(key); v != key && v != "" {
+			return v
+		}
+	}
+	switch {
+	case typeName != "" && categoryName != "":
+		return typeName + " - " + categoryName
+	case categoryName != "":
+		return categoryName
+	default:
+		return typeName
+	}
+}
+
+// gruntShortName resolves the abbreviated display name (grunt_a_<id>, e.g.
+// "Dark ♀"). Empty when the locale has no short form — a client should fall
+// back to Name rather than treat empty as an error.
+func gruntShortName(id int, tr *i18n.Translator) string {
+	if tr == nil {
+		return ""
+	}
+	key := fmt.Sprintf("grunt_a_%d", id)
+	if v := tr.T(key); v != key && v != "" {
+		return v
+	}
+	return ""
 }

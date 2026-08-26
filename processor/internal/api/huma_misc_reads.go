@@ -318,10 +318,12 @@ func RegisterMasterdataGrunts(api huma.API, gd *gamedata.GameData, translations 
 		Summary: "Grunt types with localised names",
 		Description: "Returns the poracle-v2 grunts map keyed by grunt id (an empty object when game data is unavailable). " +
 			"Each value carries `grunt_type` — the canonical string an invasion tracking rule stores and the one targeting " +
-			"field a v2 invasion read emits — alongside the display halves `type` and `grunt`, gender, per-slot reward flags " +
-			"and encounters. `?locale=` selects the language (default `en`): `type` resolves via poke_type_<id> and `grunt` " +
-			"via character_category_<id>. A grunt with no pokemon type falls back to its template-derived name for `type`, " +
-			"which is what keeps grunts sharing a category (Blanche/Candela/Spark) distinguishable.",
+			"field a v2 invasion read emits — plus `name` and `short_name` (the display name and its abbreviated form), the " +
+			"`type` and `grunt` halves, gender, per-slot reward flags and encounters. `?locale=` selects the language " +
+			"(default `en`): `name` resolves via grunt_<id> and `short_name` via grunt_a_<id>, which gamelocale ships " +
+			"already composed as type + category + gender. `type` and `grunt` resolve via poke_type_<id> and " +
+			"character_category_<id> and remain available for clients that want to compose their own label. Index on " +
+			"`grunt_type`, not on the map key: several grunt ids share one grunt_type.",
 		Tags:     []string{"masterdata"},
 		Security: []map[string][]string{{"poracleSecret": {}}},
 	}, func(_ context.Context, in *masterdataGruntsInput) (*masterdataGruntsOutput, error) {
