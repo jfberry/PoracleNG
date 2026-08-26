@@ -15,6 +15,16 @@ func (e *Enricher) FortUpdate(lat, lon float64, fortID string, fort *webhook.For
 	tz := geo.GetTimezone(lat, lon)
 	addSunTimes(m, lat, lon, tz)
 
+	// Alert location. Every other webhook type carries flat latitude/longitude
+	// that the view's webhook layer resolves on its own, but a fort_update is
+	// nested (new/old snapshots, each with location.lat/lon) so there is no
+	// flat field to fall back on — without this, {{latitude}}/{{longitude}}
+	// render empty even though they are advertised for every DTS type (#200).
+	// These are the same coordinates used for the timezone, map URLs and
+	// static map above: new snapshot if present, else old.
+	m["latitude"] = lat
+	m["longitude"] = lon
+
 	// Map URLs
 	e.addMapURLs(m, lat, lon, "pokestops", fortID)
 
