@@ -153,10 +153,11 @@ func TestV2Invasion_Boss(t *testing.T) {
 
 // --- exactly-one-mode + gender placement ------------------------------------
 
-// Omitting every targeting field means "everything", matching what bare
-// !invasion has always done in the bot (invasion.go defaults gruntTypes to
-// everything when nothing matched). Requiring an explicit mode made the API
-// diverge from the command for no benefit.
+// Omitting every targeting field means "everything". v2 uses blank-means-
+// wildcard consistently rather than requiring a magic value, and invasion was
+// the one type demanding an explicit target.
+//
+// Not bot parity: bare !invasion prints usage rather than tracking everything.
 func TestV2Invasion_NoModeMeansEverything(t *testing.T) {
 	r, is, _, restore := newV2InvasionTestAPI(t)
 	defer restore()

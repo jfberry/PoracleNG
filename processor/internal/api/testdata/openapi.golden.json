@@ -4277,7 +4277,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,
@@ -4393,7 +4393,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,
@@ -4509,7 +4509,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,
@@ -8128,7 +8128,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,
@@ -9725,7 +9725,7 @@
             ]
           },
           "type_id": {
-            "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+            "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
             "format": "int64",
             "maximum": 18,
             "minimum": 1,
@@ -10292,7 +10292,7 @@
                   ]
                 },
                 "type_id": {
-                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\"), the same as bare !invasion. In responses, the active mode field is always present; the other mode fields are omitted/null.",
+                  "description": "Pokemon type id (1-18); grunt_type resolves to that type's lowercased name. At most one mode field may be set — this OR grunt_id OR grunt_type OR everything OR boss. Omitting all of them matches EVERY invasion (stored \"everything\") — blank is the wildcard, as elsewhere in v2. In responses, the active mode field is always present; the other mode fields are omitted/null.",
                   "format": "int64",
                   "maximum": 18,
                   "minimum": 1,
