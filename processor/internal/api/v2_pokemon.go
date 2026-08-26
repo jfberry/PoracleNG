@@ -19,51 +19,51 @@ import (
 // Defaults documented in each field's doc string come from the field audit
 // pokemon table.
 type v2PokemonRule struct {
-	PokemonID int `json:"pokemon_id" required:"true" doc:"Pokédex id (required)"`
+	PokemonID int `json:"pokemon_id" required:"true" minimum:"1" doc:"Pokédex id (required)"`
 
-	Form *int `json:"form,omitempty" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
+	Form *int `json:"form,omitempty" minimum:"0" nullable:"true" doc:"Form id (game-master). Omit to match any form (stored as 0 = any). Returned as null when at its wildcard."`
 
-	Costume *int `json:"costume,omitempty" nullable:"true" doc:"Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume."`
+	Costume *int `json:"costume,omitempty" minimum:"0" nullable:"true" doc:"Costume id. Omit/null = any (stored 9000). 0 = no costume. N = that costume."`
 
-	MinIV *int `json:"min_iv,omitempty" nullable:"true" doc:"Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard."`
-	MaxIV *int `json:"max_iv,omitempty" nullable:"true" doc:"Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MinIV *int `json:"min_iv,omitempty" minimum:"0" maximum:"100" nullable:"true" doc:"Minimum IV %. Omit to impose no lower bound (stored as -1 = no lower bound). Returned as null when at its wildcard."`
+	MaxIV *int `json:"max_iv,omitempty" minimum:"0" maximum:"100" nullable:"true" doc:"Maximum IV %. Omit to impose no upper bound (stored as 100 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
 
-	MinCP *int `json:"min_cp,omitempty" nullable:"true" doc:"Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
-	MaxCP *int `json:"max_cp,omitempty" nullable:"true" doc:"Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard."`
+	MinCP *int `json:"min_cp,omitempty" minimum:"0" maximum:"9000" nullable:"true" doc:"Minimum CP. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
+	MaxCP *int `json:"max_cp,omitempty" minimum:"0" maximum:"9000" nullable:"true" doc:"Maximum CP. Omit to impose no upper bound (stored as 9000 = the CP cap sentinel, i.e. no upper bound). Returned as null when at its wildcard."`
 
-	MinLevel *int `json:"min_level,omitempty" nullable:"true" doc:"Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
-	MaxLevel *int `json:"max_level,omitempty" nullable:"true" doc:"Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MinLevel *int `json:"min_level,omitempty" minimum:"0" maximum:"55" nullable:"true" doc:"Minimum encounter level. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
+	MaxLevel *int `json:"max_level,omitempty" minimum:"0" maximum:"55" nullable:"true" doc:"Maximum encounter level. Omit to impose no upper bound (stored as 55 = the level ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
 
-	ATK *int `json:"atk,omitempty" nullable:"true" doc:"Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
-	DEF *int `json:"def,omitempty" nullable:"true" doc:"Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
-	STA *int `json:"sta,omitempty" nullable:"true" doc:"Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
+	ATK *int `json:"atk,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Minimum ATK IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
+	DEF *int `json:"def,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Minimum DEF IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
+	STA *int `json:"sta,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Minimum STA IV (0-15). Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
 
-	MaxATK *int `json:"max_atk,omitempty" nullable:"true" doc:"Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
-	MaxDEF *int `json:"max_def,omitempty" nullable:"true" doc:"Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
-	MaxSTA *int `json:"max_sta,omitempty" nullable:"true" doc:"Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MaxATK *int `json:"max_atk,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Maximum ATK IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MaxDEF *int `json:"max_def,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Maximum DEF IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
+	MaxSTA *int `json:"max_sta,omitempty" minimum:"0" maximum:"15" nullable:"true" doc:"Maximum STA IV (0-15). Omit to impose no ceiling (stored as 15 = the IV ceiling, i.e. no upper bound). Returned as null when at its wildcard."`
 
 	Gender *string `json:"gender,omitempty" nullable:"true" enum:"any,male,female,genderless" doc:"Gender filter: any|male|female|genderless. Omit to match any gender (defaults to 'any', stored as 0). Returned as null when 'any'."`
 
-	MinWeight *int `json:"min_weight,omitempty" nullable:"true" doc:"Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
-	MaxWeight *int `json:"max_weight,omitempty" nullable:"true" doc:"Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard."`
+	MinWeight *int `json:"min_weight,omitempty" minimum:"0" nullable:"true" doc:"Minimum weight in grams. Omit to impose no lower bound (stored as 0 = no lower bound). Returned as null when at its wildcard."`
+	MaxWeight *int `json:"max_weight,omitempty" minimum:"0" nullable:"true" doc:"Maximum weight in grams. Omit to impose no upper bound (stored as 9000000 = no upper weight sentinel). Returned as null when at its wildcard."`
 
-	MinTime *int `json:"min_time,omitempty" nullable:"true" doc:"Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard."`
+	MinTime *int `json:"min_time,omitempty" minimum:"0" nullable:"true" doc:"Minimum seconds remaining on the spawn. Omit to impose no minimum (stored as 0 = no minimum). Returned as null when at its wildcard."`
 
-	Rarity    *int `json:"rarity,omitempty" nullable:"true" doc:"Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard."`
-	MaxRarity *int `json:"max_rarity,omitempty" nullable:"true" doc:"Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard."`
+	Rarity    *int `json:"rarity,omitempty" minimum:"1" maximum:"6" nullable:"true" doc:"Minimum rarity tier. Omit to match any rarity (stored as -1 = any). Returned as null when at its wildcard."`
+	MaxRarity *int `json:"max_rarity,omitempty" minimum:"1" maximum:"6" nullable:"true" doc:"Maximum rarity tier (1-6). Omit to impose no upper bound (stored as 6 = the top tier, i.e. no upper bound). Returned as null when at its wildcard."`
 
-	Size    *int `json:"size,omitempty" nullable:"true" doc:"Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard."`
-	MaxSize *int `json:"max_size,omitempty" nullable:"true" doc:"Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard."`
+	Size    *int `json:"size,omitempty" minimum:"1" maximum:"5" nullable:"true" doc:"Minimum size tier. Omit to match any size (stored as -1 = any). Returned as null when at its wildcard."`
+	MaxSize *int `json:"max_size,omitempty" minimum:"1" maximum:"5" nullable:"true" doc:"Maximum size tier (1-5). Omit to impose no upper bound (stored as 5 = the top tier, i.e. no upper bound). Returned as null when at its wildcard."`
 
 	PVPRankingLeague    *int `json:"pvp_ranking_league,omitempty" nullable:"true" enum:"0,500,1500,2500" doc:"PVP league CP cap (the stored int IS the cap): 0 | 500 | 1500 | 2500. Omit (or 0) for IV-mode tracking with no PVP filter (stored as 0 = none/IV mode). Returned as null when at its wildcard."`
-	PVPRankingBest      *int `json:"pvp_ranking_best,omitempty" nullable:"true" doc:"Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard."`
-	PVPRankingWorst     *int `json:"pvp_ranking_worst,omitempty" nullable:"true" doc:"Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard."`
-	PVPRankingMinCP     *int `json:"pvp_ranking_min_cp,omitempty" nullable:"true" doc:"PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
-	PVPRankingCap       *int `json:"pvp_ranking_cap,omitempty" nullable:"true" doc:"PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard."`
-	PVPRankingEvolution *int `json:"pvp_ranking_evolution,omitempty" nullable:"true" doc:"Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0)."`
+	PVPRankingBest      *int `json:"pvp_ranking_best,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Best (lowest, 1-based) PVP rank to alert on. Omit to start from rank 1 (stored as 1 = best possible rank). Returned as null when at its wildcard."`
+	PVPRankingWorst     *int `json:"pvp_ranking_worst,omitempty" minimum:"1" maximum:"4096" nullable:"true" doc:"Worst (highest) PVP rank to alert on. Omit to impose no upper rank limit (stored as 4096 = no upper rank limit sentinel; PVP ranks never exceed it). Returned as null when at its wildcard."`
+	PVPRankingMinCP     *int `json:"pvp_ranking_min_cp,omitempty" minimum:"0" nullable:"true" doc:"PVP CP floor. Omit to impose no floor (stored as 0 = no floor). Returned as null when at its wildcard."`
+	PVPRankingCap       *int `json:"pvp_ranking_cap,omitempty" minimum:"0" maximum:"100" nullable:"true" doc:"PVP level cap. Omit to use the league default cap (stored as 0 = league default). Returned as null when at its wildcard."`
+	PVPRankingEvolution *int `json:"pvp_ranking_evolution,omitempty" minimum:"0" maximum:"3" nullable:"true" doc:"Temp-evolution (mega) PVP discriminator selecting which evolution's PVP rank this rule alerts on: 0 = base form, 1 = Mega, 2 = Mega X, 3 = Mega Y. Omit for base form (stored as 0). Returned as null when at its wildcard (0)."`
 
 	// Common fields.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`

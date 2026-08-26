@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -196,6 +197,21 @@ func (b *Bundle) LoadedLanguages() []string {
 }
 
 // For returns the translator for the given locale, falling back to English.
+// Locales returns the sorted codes of every loaded locale — the set of
+// languages this server actually has translations for. The set-language
+// endpoints validate against it when the operator has not narrowed things with
+// available_languages, so "unrestricted" does not mean "unvalidated" (#216).
+func (b *Bundle) Locales() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	out := make([]string, 0, len(b.translators))
+	for code := range b.translators {
+		out = append(out, code)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (b *Bundle) For(locale string) *Translator {
 	if locale == "" {
 		locale = "en"

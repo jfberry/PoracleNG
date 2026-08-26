@@ -40,10 +40,10 @@ func eventNameToDisplayType(gd *gamedata.GameData) map[string]int {
 // It down-translates to grunt_type = lower(event name) and gender = 0; the row
 // lands in the shared invasion table and is read back / matched by that name.
 type v2IncidentRule struct {
-	DisplayType int `json:"display_type" required:"true" doc:"Pokestop-event id (game-master, e.g. a Showcase/Kecleon event; no wildcard — required). Resolves to the event's lowercased name as the stored grunt_type. (required)"`
+	DisplayType int `json:"display_type" required:"true" minimum:"0" doc:"Pokestop-event id (game-master, e.g. a Showcase/Kecleon event; no wildcard — required). Resolves to the event's lowercased name as the stored grunt_type. (required)"`
 
 	// Common fields. invasion (shared table) HAS a clean column.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`

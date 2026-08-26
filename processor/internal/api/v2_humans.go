@@ -338,8 +338,10 @@ func registerV2HumanLanguage(api huma.API, deps *TrackingDeps, tag []string, sec
 	huma.Register(api, huma.Operation{
 		OperationID: "v2-set-human-language", Method: "POST", Path: "/v2/humans/{id}/language",
 		Summary: "Set a human's language",
-		Description: "Validated against the configured available_languages (case-insensitive) when restricted; otherwise any code is accepted. " +
-			"Triggers a state reload. 404 if the human does not exist; 422 if the language is empty or unavailable.",
+		Description: "Validated against the configured available_languages (case-insensitive) when the operator has restricted them; " +
+			"otherwise against the set of languages this server actually has translations for, so unrestricted does not mean " +
+			"unvalidated. NOTE: the code is stored lowercased, so a client that sends \"DE\" reads back \"de\" — compare " +
+			"case-insensitively. Triggers a state reload. 404 if the human does not exist; 422 if the language is empty or unavailable.",
 		Tags: tag, Security: sec, RejectUnknownQueryParameters: true,
 	}, func(_ context.Context, in *v2LanguageInput) (*statusOKOutput, error) {
 		if _, err := resolveFullHuman(deps, in.ID); err != nil {
@@ -365,6 +367,25 @@ func registerV2HumanLanguage(api huma.API, deps *TrackingDeps, tag []string, sec
 				return nil, huma.Error422UnprocessableEntity("language is not available")
 			}
 			language = matched
+		} else if deps.Translations != nil {
+			// Unrestricted: still validate against what the server can actually
+			// translate into. Storing a code with no translations produces a
+			// user whose alerts silently fall back for every string (#216).
+			// An empty bundle means "cannot tell" — accept rather than reject
+			// everything.
+			if loaded := deps.Translations.Locales(); len(loaded) > 0 {
+				known := false
+				for _, code := range loaded {
+					if strings.EqualFold(code, language) {
+						known = true
+						break
+					}
+				}
+				if !known {
+					return nil, huma.Error422UnprocessableEntity(
+						"unknown language: this server has no translations for " + language)
+				}
+			}
 		}
 
 		if err := deps.Humans.SetLanguage(in.ID, language); err != nil {

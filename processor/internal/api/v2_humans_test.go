@@ -12,6 +12,7 @@ import (
 
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/geofence"
+	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
@@ -77,11 +78,19 @@ func newV2HumansTestAPI(t *testing.T, cfg *config.Config) (*gin.Engine, *store.M
 		cfg = &config.Config{}
 	}
 
+	// A bundle with known locales, so language validation has a set to
+	// validate against (#216).
+	bundle := i18n.NewBundle()
+	for _, code := range []string{"en", "de", "fr", "zh-cn"} {
+		bundle.AddTranslator(i18n.NewTranslator(code, map[string]string{"x": "y"}))
+	}
+
 	var reloads int32
 	deps := &TrackingDeps{
-		Humans:   humans,
-		StateMgr: mgr,
-		Config:   cfg,
+		Translations: bundle,
+		Humans:       humans,
+		StateMgr:     mgr,
+		Config:       cfg,
 		ReloadFunc: func() {
 			atomic.AddInt32(&reloads, 1)
 		},
@@ -731,5 +740,50 @@ func TestV2Humans_SetAreas_TrustedStillRejectsUnknownNames(t *testing.T) {
 	}
 	if len(got.Rejected) != 1 || got.Rejected[0] != "nosuchfence" {
 		t.Errorf("rejected = %v, want [nosuchfence] even when trusted", got.Rejected)
+	}
+}
+
+// --- #216: language validation ----------------------------------------------
+
+// On a deployment that configures available_languages an unknown code is
+// refused; on one that configures nothing, any string was accepted and stored.
+// "Unrestricted" should not mean "unvalidated" — the set of languages the
+// server has translations for is known either way.
+func TestV2Humans_Language_RejectsUnknownCodeWhenUnrestricted(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/language", `{"language":"zz"}`)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for an unknown language, got %d: %s", w.Code, w.Body.String())
+	}
+	if h, _ := humans.Get("u1"); h.Language == "zz" {
+		t.Errorf("rejected language must not be stored, got %q", h.Language)
+	}
+}
+
+func TestV2Humans_Language_AcceptsKnownCodeWhenUnrestricted(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/language", `{"language":"de"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a loaded language, got %d: %s", w.Code, w.Body.String())
+	}
+	h, _ := humans.Get("u1")
+	if h.Language != "de" {
+		t.Errorf("stored language = %q, want %q", h.Language, "de")
+	}
+}
+
+// The write lowercases; documented so a client comparing what it sent with
+// what it reads back does not think the write failed.
+func TestV2Humans_Language_LowercasesWhatItStores(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/language", `{"language":"DE"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if h, _ := humans.Get("u1"); h.Language != "de" {
+		t.Errorf("stored language = %q, want lowercased %q", h.Language, "de")
 	}
 }

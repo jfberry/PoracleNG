@@ -21,7 +21,7 @@ import (
 // SINGLE int — a client wanting multiple levels POSTs multiple rule objects (the
 // create body is already an array). A level array is now a type mismatch (422).
 type v2EggRule struct {
-	Level int `json:"level" required:"true" minimum:"1" doc:"Egg tier (required, >= 1; no wildcard — eggs are always tracked by tier). Single int — POST multiple rule objects for multiple tiers."`
+	Level int `json:"level" required:"true" minimum:"1" maximum:"90" doc:"Egg tier (required, >= 1; no wildcard — eggs are always tracked by tier). Single int — POST multiple rule objects for multiple tiers."`
 
 	Team      *string `json:"team,omitempty" nullable:"true" enum:"harmony,mystic,valor,instinct,any" doc:"Controlling team: harmony|mystic|valor|instinct|any (0|1|2|3|4). Omit to match any team (defaults to 'any', stored as 4). Returned as null when 'any'."`
 	Exclusive *bool   `json:"exclusive,omitempty" nullable:"true" doc:"Match EX-raid eggs only. Omit to match regardless (default false). Returned as null when false."`
@@ -30,7 +30,7 @@ type v2EggRule struct {
 	RSVPChanges *string `json:"rsvp_changes,omitempty" nullable:"true" enum:"none,rsvp,rsvp_only" doc:"RSVP change handling: none|rsvp|rsvp_only (0|1|2). Omit to disable RSVP updates (defaults to 'none', stored as 0). Returned as null when 'none'."`
 
 	// Common fields.
-	Distance *int    `json:"distance,omitempty" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
+	Distance *int    `json:"distance,omitempty" minimum:"0" maximum:"40000000" nullable:"true" doc:"Radius in metres around the anchor location. Omit (or 0) to match by the profile's geofence areas instead of a radius — 0 means area-based, NOT zero metres (stored as 0). Returned as null when at its wildcard."`
 	Template *string `json:"template,omitempty" nullable:"true" doc:"DTS template name. Omit (or empty) to use the server's configured default template (stored as \"\"). Returned as null when at its wildcard."`
 	Clean    *bool   `json:"clean,omitempty" nullable:"true" doc:"Auto-delete the alert on expiry (clean bitmask bit 1). Omit to disable (default false). Returned as null when false."`
 	Edit     *bool   `json:"edit,omitempty" nullable:"true" doc:"Keep the message updated in place (clean bitmask bit 2). Omit to disable (default false). Returned as null when false."`
