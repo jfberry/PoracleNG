@@ -18,6 +18,14 @@ import (
 
 // --- harness ----------------------------------------------------------------
 
+// privateFence is a square fence with userSelectable:false — the shape
+// PoracleWeb.NET serves for user-drawn geofences.
+func privateFence(name string, lat, lon, half float64) geofence.Fence {
+	f := humanSquareFence(name, lat, lon, half)
+	f.UserSelectable = false
+	return f
+}
+
 // humanSquareFence builds an axis-aligned square fence centred on (lat,lon) with the
 // given half-side. Used so MatchedAreaNames / PointInPolygon are predictable.
 func humanSquareFence(name string, lat, lon, half float64) geofence.Fence {
@@ -57,6 +65,9 @@ func newV2HumansTestAPI(t *testing.T, cfg *config.Config) (*gin.Engine, *store.M
 	fences := []geofence.Fence{
 		humanSquareFence("alpha", 10, 10, 1),
 		humanSquareFence("beta", 20, 20, 1),
+		// A user-drawn private fence: served by the client, deliberately kept
+		// out of the bot's !area picker (#215).
+		privateFence("private", 30, 30, 1),
 	}
 	idx := geofence.NewSpatialIndex(fences) // mutates fences in place (NormalizedName)
 	mgr := state.NewManager()
@@ -181,8 +192,19 @@ func TestV2Humans_AreasGet_AllWhenUnrestricted(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	areas := v2RulesArray(t, v2DecodeBody(t, w), "areas")
-	if len(areas) != 2 {
-		t.Fatalf("expected 2 available areas, got %d: %v", len(areas), areas)
+	if len(areas) != 3 {
+		t.Fatalf("expected 3 available areas, got %d: %v", len(areas), areas)
+	}
+	// The listing reports every fence with its userSelectable flag, so a
+	// client can tell which ones need trusted:true to set (#215).
+	selectable := map[string]bool{}
+	for _, m := range areas {
+		name, _ := m["name"].(string)
+		sel, _ := m["userSelectable"].(bool)
+		selectable[name] = sel
+	}
+	if !selectable["alpha"] || selectable["private"] {
+		t.Errorf("userSelectable flags = %v, want alpha true and private false", selectable)
 	}
 }
 
@@ -456,7 +478,6 @@ func TestV2Humans_SetAreas_IntersectsAllowed(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	assertStatusOK(t, w)
 	h, _ := humans.Get("u1")
 	if len(h.Area) != 1 || h.Area[0] != "alpha" {
 		t.Fatalf("expected stored areas [alpha] (deduped, lowered, filtered), got %v", h.Area)
@@ -626,5 +647,89 @@ func TestV2Humans_Delete_UnknownHuman404(t *testing.T) {
 	}
 	if atomic.LoadInt32(reloads) != 0 {
 		t.Errorf("a failed delete must not reload")
+	}
+}
+
+// --- #215: setAreas must not drop names silently ----------------------------
+
+type v2SetAreasResult struct {
+	Areas    []string `json:"areas"`
+	Rejected []string `json:"rejected"`
+}
+
+func setAreas(t *testing.T, r *gin.Engine, body string) (int, v2SetAreasResult) {
+	t.Helper()
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/areas", body)
+	var got v2SetAreasResult
+	if w.Code == http.StatusOK {
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode: %v; raw: %s", err, w.Body.String())
+		}
+	}
+	return w.Code, got
+}
+
+// A 200 and {"status":"ok"} over a request where a name was silently
+// discarded is indistinguishable from one where everything was stored.
+func TestV2Humans_SetAreas_ReportsWhatItStoredAndRejected(t *testing.T) {
+	r, _, _ := newV2HumansTestAPI(t, nil)
+
+	code, got := setAreas(t, r, `{"areas":["alpha","ghost"]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if len(got.Areas) != 1 || got.Areas[0] != "alpha" {
+		t.Errorf("areas = %v, want [alpha]", got.Areas)
+	}
+	if len(got.Rejected) != 1 || got.Rejected[0] != "ghost" {
+		t.Errorf("rejected = %v, want [ghost] — a dropped name must be reported", got.Rejected)
+	}
+}
+
+// PoracleWeb.NET serves user-drawn private geofences with userSelectable:false
+// deliberately, to keep their names out of the bot's !area picker and DM text.
+// The same flag then made them unsettable by the very user who drew them, so
+// every user-geofence change became a direct database write. The caller holds
+// the API secret, which is what distinguishes a server-side client from a
+// user, so it may assert trust explicitly.
+func TestV2Humans_SetAreas_TrustedBypassesUserSelectable(t *testing.T) {
+	r, humans, _ := newV2HumansTestAPI(t, nil)
+
+	// Without trust, a non-user-selectable fence is rejected...
+	code, got := setAreas(t, r, `{"areas":["private"]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if len(got.Areas) != 0 || len(got.Rejected) != 1 {
+		t.Fatalf("untrusted: areas=%v rejected=%v, want the private fence rejected", got.Areas, got.Rejected)
+	}
+
+	// ...and with it, stored.
+	code, got = setAreas(t, r, `{"areas":["private"],"trusted":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if len(got.Areas) != 1 || got.Areas[0] != "private" {
+		t.Fatalf("trusted: areas=%v rejected=%v, want the private fence stored", got.Areas, got.Rejected)
+	}
+	h, _ := humans.Get("u1")
+	if len(h.Area) != 1 || h.Area[0] != "private" {
+		t.Errorf("stored areas = %v, want [private]", h.Area)
+	}
+}
+
+// trusted must not invent fences: a name that matches nothing is still
+// rejected, so a typo cannot become a stored area that matches no geofence.
+func TestV2Humans_SetAreas_TrustedStillRejectsUnknownNames(t *testing.T) {
+	r, _, _ := newV2HumansTestAPI(t, nil)
+	code, got := setAreas(t, r, `{"areas":["alpha","nosuchfence"],"trusted":true}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if len(got.Areas) != 1 || got.Areas[0] != "alpha" {
+		t.Errorf("areas = %v, want [alpha]", got.Areas)
+	}
+	if len(got.Rejected) != 1 || got.Rejected[0] != "nosuchfence" {
+		t.Errorf("rejected = %v, want [nosuchfence] even when trusted", got.Rejected)
 	}
 }

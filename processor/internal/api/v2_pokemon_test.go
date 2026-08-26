@@ -15,8 +15,10 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/config"
 	"github.com/pokemon/poracleng/processor/internal/db"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
 	"github.com/pokemon/poracleng/processor/internal/rowtext"
+	"github.com/pokemon/poracleng/processor/internal/state"
 	"github.com/pokemon/poracleng/processor/internal/store"
 )
 
@@ -58,8 +60,19 @@ func newV2PokemonTestAPI(t *testing.T) (*gin.Engine, *store.MockTrackingStore[db
 		},
 	}
 
+	// Live fences, so override_areas validation has something to validate
+	// against. Production carries no AreaLogic, so StateMgr is the only
+	// source of the permitted set (#211).
+	fences := []geofence.Fence{
+		humanSquareFence("alpha", 10, 10, 1),
+		humanSquareFence("beta", 20, 20, 1),
+	}
+	mgr := state.NewManager()
+	mgr.Set(&state.State{Fences: fences, Geofence: geofence.NewSpatialIndex(fences)})
+
 	deps := &TrackingDeps{
 		Humans:   humans,
+		StateMgr: mgr,
 		Tracking: &store.TrackingStores{Monsters: monsterStore},
 		Config:   &config.Config{},
 		RowText: &rowtext.Generator{
@@ -781,5 +794,61 @@ func TestV2Pokemon_AcceptsValidPVPLeagues(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("league %d should be accepted, got %d: %s", league, w.Code, w.Body.String())
 		}
+	}
+}
+
+// --- #211: override_areas must actually be validated ------------------------
+
+// validateOverrideFields has always contained an override_areas check, but it
+// only runs when oc.permitted is non-nil, and permitted is nil whenever
+// deps.AreaLogic is nil — which it always is in production (main.go never sets
+// it). The check was dead code on every tracking write, v1 and v2, for all 11
+// types, so a rule could be scoped to a fence that does not exist and would
+// simply never match.
+func TestV2Pokemon_RejectsUnknownOverrideArea(t *testing.T) {
+	r, monsterStore, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon?silent=true",
+		`[{"pokemon_id":25,"override_areas":["nosuchfence"]}]`)
+	if w.Code != http.StatusBadRequest && w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 4xx for an unknown override area, got %d: %s", w.Code, w.Body.String())
+	}
+	if n := len(monsterStore.AllRows()); n != 0 {
+		t.Errorf("a rejected rule must not be stored; store has %d rows", n)
+	}
+}
+
+func TestV2Pokemon_AcceptsKnownOverrideArea(t *testing.T) {
+	r, monsterStore, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon?silent=true",
+		`[{"pokemon_id":25,"override_areas":["alpha"]}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a known area, got %d: %s", w.Code, w.Body.String())
+	}
+	if n := len(monsterStore.AllRows()); n != 1 {
+		t.Fatalf("expected the rule stored, store has %d rows", n)
+	}
+}
+
+// Storage normalises underscores to spaces (normalizeOverrideAreas) while the
+// permitted set is keyed on raw lowercased fence names. Validating without the
+// same normalisation would reject a name that would have stored and matched
+// perfectly well.
+func TestV2Pokemon_OverrideAreaNormalisationMatchesStorage(t *testing.T) {
+	r, monsterStore, _, restore := newV2PokemonTestAPI(t)
+	defer restore()
+
+	// Fence is named "alpha"; underscores and case must not change the verdict.
+	w := v2DoReq(t, r, http.MethodPost, "/api/v2/humans/u1/tracking/pokemon?silent=true",
+		`[{"pokemon_id":25,"override_areas":["ALPHA"]}]`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for a case-variant known area, got %d: %s", w.Code, w.Body.String())
+	}
+	rows := monsterStore.AllRows()
+	if len(rows) != 1 || len(rows[0].OverrideAreas) != 1 || rows[0].OverrideAreas[0] != "alpha" {
+		t.Errorf("stored override_areas = %+v, want normalised [alpha]", rows)
 	}
 }

@@ -11946,7 +11946,40 @@
         "additionalProperties": false,
         "properties": {
           "areas": {
-            "description": "Requested area names; intersected with the human's allowed areas (invalid/duplicate entries dropped)",
+            "description": "Requested area names. Matched case-insensitively against the fences this human may select; duplicates are collapsed and anything unmatched comes back in the rejected list rather than being dropped silently.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "trusted": {
+            "description": "Set true to select fences that are not userSelectable — for a server-side client that has already authorised the change (e.g. the user drew the fence). Honoured because the caller holds the API secret. Unknown fence names are still rejected.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "areas"
+        ],
+        "type": "object"
+      },
+      "V2SetAreasOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "areas": {
+            "description": "The areas now stored, lowercased and deduped",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "rejected": {
+            "description": "Requested names that were NOT stored — unknown fences, or fences this human may not select. Empty when everything applied.",
             "items": {
               "type": "string"
             },
@@ -11957,7 +11990,8 @@
           }
         },
         "required": [
-          "areas"
+          "areas",
+          "rejected"
         ],
         "type": "object"
       },
@@ -15097,7 +15131,7 @@
         ]
       },
       "post": {
-        "description": "Intersects the requested areas with what the human is allowed to select (userSelectable for non-admins, community-filtered when area_security is enabled), dedups, lowercases, and stores the result. Triggers a state reload. 404 if the human does not exist.",
+        "description": "Stores the requested areas, lowercased and deduped, after matching them against the fences this human may select (userSelectable for non-admins, community-filtered when area_security is enabled). Names that do not match come back in `rejected` rather than being discarded silently. Set `trusted: true` to select non-userSelectable fences on behalf of a user whose client has already authorised the change; unknown names are still rejected. Triggers a state reload. 404 if the human does not exist.",
         "operationId": "v2-set-human-areas",
         "parameters": [
           {
@@ -15126,7 +15160,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StatusOKOutputBody"
+                  "$ref": "#/components/schemas/V2SetAreasOutputBody"
                 }
               }
             },
