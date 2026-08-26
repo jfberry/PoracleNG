@@ -1673,6 +1673,9 @@
           "grunt": {
             "type": "string"
           },
+          "grunt_type": {
+            "type": "string"
+          },
           "secondReward": {
             "type": "boolean"
           },
@@ -1684,6 +1687,7 @@
           }
         },
         "required": [
+          "grunt_type",
           "type",
           "gender",
           "grunt",
@@ -14424,8 +14428,18 @@
     },
     "/masterdata/grunts": {
       "get": {
-        "description": "Returns the poracle-v2 grunts map keyed by grunt id (an empty object when game data is unavailable). Keys are arbitrary grunt ids; each value is a poracle2Grunt (type, gender, grunt category, per-slot reward flags, encounters).",
+        "description": "Returns the poracle-v2 grunts map keyed by grunt id (an empty object when game data is unavailable). Each value carries `grunt_type` — the canonical string an invasion tracking rule stores and the one targeting field a v2 invasion read emits — alongside the display halves `type` and `grunt`, gender, per-slot reward flags and encounters. `?locale=` selects the language (default `en`): `type` resolves via poke_type_<id> and `grunt` via character_category_<id>. A grunt with no pokemon type falls back to its template-derived name for `type`, which is what keeps grunts sharing a category (Blanche/Candela/Spark) distinguishable.",
         "operationId": "get-masterdata-grunts",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "locale",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -14456,7 +14470,7 @@
             "poracleSecret": []
           }
         ],
-        "summary": "Grunt types",
+        "summary": "Grunt types with localised names",
         "tags": [
           "masterdata"
         ]

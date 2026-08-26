@@ -97,3 +97,120 @@ func TestMasterdataCostumes_NilGameDataReturnsEmptyObject(t *testing.T) {
 		t.Errorf("body = %v, want empty object", obj)
 	}
 }
+
+// --- #209 follow-up: grunt display names ------------------------------------
+
+func gruntsTestGameData() *gamedata.GameData {
+	return &gamedata.GameData{
+		Types: map[int]*gamedata.TypeInfo{11: {TypeID: 11, Name: "Grass"}},
+		Grunts: map[int]*gamedata.Grunt{
+			// Typed grunt: type name is localisable via poke_type_{id}.
+			5: {ID: 5, TypeID: 11, CategoryID: 2, Gender: 2, Template: "CHARACTER_GRASS_GRUNT_FEMALE"},
+			// Leader: no type, category carries the name.
+			44: {ID: 44, CategoryID: 6, Template: "CHARACTER_GIOVANNI"},
+			// Training leaders share category 1, so the TYPE field is what
+			// keeps them distinct.
+			1: {ID: 1, CategoryID: 1, Template: "CHARACTER_BLANCHE"},
+			2: {ID: 2, CategoryID: 1, Template: "CHARACTER_CANDELA"},
+		},
+	}
+}
+
+func getGrunts(t *testing.T, locale string) map[string]any {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	humaAPI := NewHumaAPI(r, r.Group("/api"), "test")
+
+	bundle := i18n.NewBundle()
+	bundle.AddTranslator(i18n.NewTranslator("de", map[string]string{
+		"poke_type_11":         "Pflanze",
+		"character_category_2": "Ruepel",
+		"character_category_6": "Giovanni",
+		"character_category_1": "Teamleiter",
+	}))
+	RegisterMasterdataGrunts(humaAPI, gruntsTestGameData(), bundle)
+
+	q := ""
+	if locale != "" {
+		q = "?locale=" + locale
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/masterdata/grunts"+q, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /api/masterdata/grunts%s = %d: %s", q, w.Code, w.Body.String())
+	}
+	return decodeBody(t, w)
+}
+
+func gruntEntry(t *testing.T, body map[string]any, id string) map[string]any {
+	t.Helper()
+	e, ok := body[id].(map[string]any)
+	if !ok {
+		t.Fatalf("grunt %s missing from response: %v", id, body)
+	}
+	return e
+}
+
+// The endpoint was English-only and built once at startup, the same gap as
+// costumes. It matters more since #209 made grunt_type the field every
+// invasion read emits: the string is the identity, so a client needs
+// somewhere to get its display name.
+func TestMasterdataGrunts_LocalisesTypeAndCategory(t *testing.T) {
+	body := getGrunts(t, "de")
+
+	e := gruntEntry(t, body, "5")
+	if e["type"] != "Pflanze" {
+		t.Errorf("grunt 5 type = %v, want localised %q", e["type"], "Pflanze")
+	}
+	if e["grunt"] != "Ruepel" {
+		t.Errorf("grunt 5 grunt = %v, want localised %q", e["grunt"], "Ruepel")
+	}
+}
+
+// A grunt with no pokemon type keeps a distinct, usable type string from the
+// template rather than going blank.
+func TestMasterdataGrunts_UntypedGruntFallsBackToTemplateName(t *testing.T) {
+	body := getGrunts(t, "de")
+
+	if e := gruntEntry(t, body, "44"); e["type"] != "Giovanni" {
+		t.Errorf("grunt 44 type = %v, want template-derived %q", e["type"], "Giovanni")
+	}
+}
+
+// Blanche and Candela share category 1 ("Team Leader"), so the category alone
+// cannot tell them apart — the type field is what does.
+func TestMasterdataGrunts_SharedCategoryStillDistinguishable(t *testing.T) {
+	body := getGrunts(t, "de")
+
+	b, c := gruntEntry(t, body, "1"), gruntEntry(t, body, "2")
+	if b["grunt"] != "Teamleiter" || c["grunt"] != "Teamleiter" {
+		t.Fatalf("expected both to share the localised category, got %v / %v", b["grunt"], c["grunt"])
+	}
+	if b["type"] == c["type"] {
+		t.Errorf("blanche and candela must stay distinguishable, both type = %v", b["type"])
+	}
+}
+
+// grunt_type is the string an invasion rule stores and every v2 read emits;
+// without it a client cannot map a rule back to a display name.
+func TestMasterdataGrunts_ExposesGruntTypeKey(t *testing.T) {
+	body := getGrunts(t, "de")
+
+	if e := gruntEntry(t, body, "5"); e["grunt_type"] != "grass" {
+		t.Errorf("grunt 5 grunt_type = %v, want %q", e["grunt_type"], "grass")
+	}
+	if e := gruntEntry(t, body, "1"); e["grunt_type"] != "blanche" {
+		t.Errorf("grunt 1 grunt_type = %v, want %q", e["grunt_type"], "blanche")
+	}
+}
+
+// No locale keeps the existing English wire shape.
+func TestMasterdataGrunts_DefaultsToEnglish(t *testing.T) {
+	body := getGrunts(t, "")
+
+	if e := gruntEntry(t, body, "5"); e["type"] != "Grass" {
+		t.Errorf("grunt 5 type = %v, want English %q", e["type"], "Grass")
+	}
+}

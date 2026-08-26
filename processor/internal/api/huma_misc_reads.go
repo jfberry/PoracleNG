@@ -306,19 +306,34 @@ type masterdataGruntsOutput struct {
 // poracle-v2 grunts map from classic.json grunt data. Replaces the legacy gin
 // HandleMasterdataGrunts. The map is re-marshalled by huma to the same JSON the
 // gin handler produced via c.Data (json.Marshal of the same value).
-func RegisterMasterdataGrunts(api huma.API, gd *gamedata.GameData) {
-	// Build the response once since game data is loaded at startup.
-	result := buildGruntsResponse(gd)
+// masterdataGruntsInput carries the optional locale query param, matching
+// GET /masterdata/monsters and /masterdata/costumes.
+type masterdataGruntsInput struct {
+	Locale string `query:"locale"`
+}
 
+func RegisterMasterdataGrunts(api huma.API, gd *gamedata.GameData, translations *i18n.Bundle) {
 	huma.Register(api, huma.Operation{
 		OperationID: "get-masterdata-grunts", Method: "GET", Path: "/masterdata/grunts",
-		Summary: "Grunt types",
-		Description: "Returns the poracle-v2 grunts map keyed by grunt id (an empty object when game data is unavailable). Keys are " +
-			"arbitrary grunt ids; each value is a poracle2Grunt (type, gender, grunt category, per-slot reward flags, encounters).",
+		Summary: "Grunt types with localised names",
+		Description: "Returns the poracle-v2 grunts map keyed by grunt id (an empty object when game data is unavailable). " +
+			"Each value carries `grunt_type` — the canonical string an invasion tracking rule stores and the one targeting " +
+			"field a v2 invasion read emits — alongside the display halves `type` and `grunt`, gender, per-slot reward flags " +
+			"and encounters. `?locale=` selects the language (default `en`): `type` resolves via poke_type_<id> and `grunt` " +
+			"via character_category_<id>. A grunt with no pokemon type falls back to its template-derived name for `type`, " +
+			"which is what keeps grunts sharing a category (Blanche/Candela/Spark) distinguishable.",
 		Tags:     []string{"masterdata"},
 		Security: []map[string][]string{{"poracleSecret": {}}},
-	}, func(_ context.Context, _ *struct{}) (*masterdataGruntsOutput, error) {
-		return &masterdataGruntsOutput{Body: result}, nil
+	}, func(_ context.Context, in *masterdataGruntsInput) (*masterdataGruntsOutput, error) {
+		locale := in.Locale
+		if locale == "" {
+			locale = "en"
+		}
+		var tr *i18n.Translator
+		if translations != nil {
+			tr = translations.For(locale)
+		}
+		return &masterdataGruntsOutput{Body: buildGruntsResponse(gd, tr)}, nil
 	})
 }
 
