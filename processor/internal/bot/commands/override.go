@@ -92,8 +92,17 @@ func parseOverride(ctx *bot.CommandContext, locationLabel string, areas []string
 				}
 			}
 		}
+		// Repeated `area:` params and comma lists both accumulate, so the
+		// same area can arrive twice ("area:london area:paris,london").
+		// Store each one once, in the order the user first named it.
+		seen := make(map[string]bool, len(areas))
 		for _, a := range areas {
-			out.Areas = append(out.Areas, strings.ToLower(strings.ReplaceAll(a, "_", " ")))
+			norm := strings.ToLower(strings.ReplaceAll(a, "_", " "))
+			if seen[norm] {
+				continue
+			}
+			seen[norm] = true
+			out.Areas = append(out.Areas, norm)
 		}
 	}
 
