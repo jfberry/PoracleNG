@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,7 +15,10 @@ import (
 	"github.com/pokemon/poracleng/processor/internal/discordbot/slash/mappers"
 	"github.com/pokemon/poracleng/processor/internal/dts"
 	"github.com/pokemon/poracleng/processor/internal/gamedata"
+	"github.com/pokemon/poracleng/processor/internal/geofence"
 	"github.com/pokemon/poracleng/processor/internal/i18n"
+	"github.com/pokemon/poracleng/processor/internal/state"
+	"github.com/pokemon/poracleng/processor/internal/store"
 	"github.com/pokemon/poracleng/processor/internal/tracker"
 )
 
@@ -536,7 +540,7 @@ func TestDtsTypeForKnownMappings(t *testing.T) {
 	}
 }
 
-func TestFindUntrackSubtypeReturnsSubCommandName(t *testing.T) {
+func TestSubCommandNameReturnsSubCommandName(t *testing.T) {
 	ic := &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{
 		Type: discordgo.InteractionApplicationCommandAutocomplete,
 		Data: discordgo.ApplicationCommandInteractionData{
@@ -552,12 +556,12 @@ func TestFindUntrackSubtypeReturnsSubCommandName(t *testing.T) {
 			},
 		},
 	}}
-	if got := findUntrackSubtype(ic); got != "raid" {
-		t.Errorf("findUntrackSubtype=%q, want raid", got)
+	if got := subCommandName(ic); got != "raid" {
+		t.Errorf("subCommandName=%q, want raid", got)
 	}
 }
 
-func TestFindUntrackSubtypeNoSubCommand(t *testing.T) {
+func TestSubCommandNameNoSubCommand(t *testing.T) {
 	// Flat options (no sub-command) — caller treats empty as "no subtype hint".
 	ic := &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{
 		Type: discordgo.InteractionApplicationCommandAutocomplete,
@@ -568,14 +572,14 @@ func TestFindUntrackSubtypeNoSubCommand(t *testing.T) {
 			},
 		},
 	}}
-	if got := findUntrackSubtype(ic); got != "" {
-		t.Errorf("findUntrackSubtype=%q, want empty (no sub-command)", got)
+	if got := subCommandName(ic); got != "" {
+		t.Errorf("subCommandName=%q, want empty (no sub-command)", got)
 	}
 }
 
-func TestFindUntrackSubtypeNilInteraction(t *testing.T) {
-	if got := findUntrackSubtype(nil); got != "" {
-		t.Errorf("findUntrackSubtype(nil)=%q, want empty", got)
+func TestSubCommandNameNilInteraction(t *testing.T) {
+	if got := subCommandName(nil); got != "" {
+		t.Errorf("subCommandName(nil)=%q, want empty", got)
 	}
 }
 
@@ -960,4 +964,186 @@ func TestRouteAutocompleteHelpTopicIsRouted(t *testing.T) {
 		t.Errorf("expected the 'track' help topic, got %v", got)
 	}
 
+}
+
+// areaSubcommandIC builds an /area <sub> autocomplete interaction with the
+// `area` option focused, invoked by a DM user (Interaction.User).
+func areaSubcommandIC(sub, userID string) *discordgo.InteractionCreate {
+	return &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{
+		Type: discordgo.InteractionApplicationCommandAutocomplete,
+		User: &discordgo.User{ID: userID},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name: "area",
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{
+				{Name: sub, Type: discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandInteractionDataOption{
+						{Name: "area", Type: discordgo.ApplicationCommandOptionString, Focused: true},
+					}},
+			},
+		},
+	}}
+}
+
+// areaRouteDeps wires a human with one selected area ("london") against a
+// state snapshot offering three user-selectable fences.
+func areaRouteDeps(t *testing.T) *bot.BotDeps {
+	t.Helper()
+	humans := store.NewMockHumanStore()
+	humans.AddHuman(&store.Human{ID: "discord:user:42", Area: []string{"london"}})
+	mgr := state.NewManager()
+	mgr.Set(&state.State{Fences: []geofence.Fence{
+		{Name: "London", UserSelectable: true},
+		{Name: "Paris", UserSelectable: true},
+		{Name: "Berlin", UserSelectable: true},
+	}})
+	return &bot.BotDeps{Humans: humans, StateMgr: mgr, Cfg: &config.Config{}, Translations: i18n.NewBundle()}
+}
+
+func TestRouteAutocompleteAreaAddOffersUnselectedAreas(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = areaRouteDeps(t)
+
+	out := d.routeAutocomplete("area", "area", "", "en", areaSubcommandIC("add", "discord:user:42"))
+
+	got := map[string]bool{}
+	for _, c := range out {
+		got[c.Name] = true
+	}
+	if got["London"] {
+		t.Errorf("/area add offered an already-selected area: %v", got)
+	}
+	if !got["Paris"] || !got["Berlin"] {
+		t.Errorf("/area add missing addable areas: %v", got)
+	}
+}
+
+func TestRouteAutocompleteAreaRemoveOffersSelectedAreas(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = areaRouteDeps(t)
+
+	out := d.routeAutocomplete("area", "area", "", "en", areaSubcommandIC("remove", "discord:user:42"))
+
+	if len(out) != 1 || !strings.EqualFold(out[0].Name, "london") {
+		t.Fatalf("/area remove choices = %v, want just the selected area", out)
+	}
+}
+
+// trackerAreasIC builds a /<cmd> autocomplete interaction with the flat
+// `areas` option focused (tracker commands have no sub-command layer).
+func trackerAreasIC(cmd, userID string) *discordgo.InteractionCreate {
+	return &discordgo.InteractionCreate{Interaction: &discordgo.Interaction{
+		Type: discordgo.InteractionApplicationCommandAutocomplete,
+		User: &discordgo.User{ID: userID},
+		Data: discordgo.ApplicationCommandInteractionData{
+			Name: cmd,
+			Options: []*discordgo.ApplicationCommandInteractionDataOption{
+				{Name: "areas", Type: discordgo.ApplicationCommandOptionString, Focused: true},
+			},
+		},
+	}}
+}
+
+// The tracker `areas:` option overrides the rule's areas outright, so every
+// area available to the user is a legal value — including ones they already
+// have selected. parseOverride validates against exactly that set.
+func TestRouteAutocompleteTrackerAreasOffersAllAvailable(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = areaRouteDeps(t)
+
+	out := d.routeAutocomplete("track", "areas", "", "en", trackerAreasIC("track", "discord:user:42"))
+
+	got := map[string]bool{}
+	for _, c := range out {
+		got[c.Name] = true
+	}
+	if !got["London"] || !got["Paris"] || !got["Berlin"] {
+		t.Errorf("tracker areas: want every available area, got %v", got)
+	}
+}
+
+// Picking a second area must append to what's already typed, not replace
+// it — Discord overwrites the whole option with the chosen value.
+func TestRouteAutocompleteTrackerAreasAppendsToTypedList(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = areaRouteDeps(t)
+
+	out := d.routeAutocomplete("track", "areas", "London,", "en", trackerAreasIC("track", "discord:user:42"))
+
+	if len(out) != 2 {
+		t.Fatalf("got %d choices, want 2 (London already typed): %v", len(out), out)
+	}
+	for _, c := range out {
+		v, _ := c.Value.(string)
+		if !strings.HasPrefix(v, "London,") {
+			t.Errorf("choice %q would replace the typed list instead of appending", v)
+		}
+	}
+}
+
+// With nothing committed yet, a composing picker still offers bare values.
+func TestRouteAutocompleteAreaAddBareValueWhenNothingTyped(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = areaRouteDeps(t)
+
+	out := d.routeAutocomplete("area", "area", "pa", "en", areaSubcommandIC("add", "discord:user:42"))
+
+	if len(out) != 1 || out[0].Value != "Paris" {
+		t.Fatalf("got %v, want a single bare Paris choice", out)
+	}
+}
+
+// /area add and /area remove both hold a comma-separated list, so each pick
+// must append to what's already there rather than replace it.
+func TestRouteAutocompleteAreaSubcommandsAppend(t *testing.T) {
+	for _, tc := range []struct {
+		sub     string
+		focused string
+		want    []string
+	}{
+		{"add", "Paris,", []string{"Paris,Berlin"}},
+		{"remove", "london,", nil}, // only london is selected, and it's taken
+	} {
+		t.Run(tc.sub, func(t *testing.T) {
+			d := NewDispatcher(Config{})
+			d.bundle = testBundle(t)
+			d.cfgRoot = &config.Config{}
+			d.deps = areaRouteDeps(t)
+
+			out := d.routeAutocomplete("area", "area", tc.focused, "en", areaSubcommandIC(tc.sub, "discord:user:42"))
+
+			var got []string
+			for _, c := range out {
+				v, _ := c.Value.(string)
+				got = append(got, v)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("values = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// The remove picker reads from the human record, which stores lowercase
+// names; both pickers should show the fence's display casing.
+func TestRouteAutocompleteAreaRemoveUsesDisplayCasing(t *testing.T) {
+	d := NewDispatcher(Config{})
+	d.bundle = testBundle(t)
+	d.cfgRoot = &config.Config{}
+	d.deps = areaRouteDeps(t)
+
+	out := d.routeAutocomplete("area", "area", "", "en", areaSubcommandIC("remove", "discord:user:42"))
+
+	if len(out) != 1 || out[0].Name != "London" {
+		t.Fatalf("got %v, want the display-cased London", out)
+	}
 }
