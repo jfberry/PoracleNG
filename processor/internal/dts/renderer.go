@@ -39,16 +39,17 @@ type RendererConfig struct {
 // Renderer ties together templates, enrichment, emoji, and URL shortening
 // to produce DeliveryJobs from matched webhook data.
 type Renderer struct {
-	templates       *TemplateStore
-	viewBuilder     *ViewBuilder
-	shortener       *ShlinkShortener // nil if not configured
-	gd              *gamedata.GameData
-	bundle          *i18n.Bundle
-	emoji           *EmojiLookup
-	locale          string
-	defaultTemplate string // config default_template_name, used when tracking has no explicit template
-	altLanguage     string
-	minAlertSec     int
+	templates          *TemplateStore
+	viewBuilder        *ViewBuilder
+	shortener          *ShlinkShortener // nil if not configured
+	gd                 *gamedata.GameData
+	bundle             *i18n.Bundle
+	emoji              *EmojiLookup
+	locale             string
+	defaultTemplate    string // config default_template_name, used when tracking has no explicit template
+	apiDefaultTemplate string // config [api_delivery] template; used to resolve empty template for api destinations
+	altLanguage        string
+	minAlertSec        int
 
 	// errorNoticer is an optional callback the renderer fires when a
 	// template render fails (per-user, per-group, or by template panic).
@@ -82,6 +83,10 @@ type Renderer struct {
 func (r *Renderer) SetButtonsEnabled(v bool) {
 	r.buttonsEnabled = v
 }
+
+// SetAPIDefaultTemplate records the [api_delivery] template id used to resolve
+// an empty tracking-rule template for api destinations.
+func (r *Renderer) SetAPIDefaultTemplate(id string) { r.apiDefaultTemplate = id }
 
 // SetAdminRecipientCheck wires the host's admin-list predicate. The
 // renderer calls it for each DM destination to decide whether
@@ -175,25 +180,29 @@ func NewRenderer(cfg RendererConfig) (*Renderer, error) {
 
 // resolveTemplate returns the template ID to use for DTS lookup.
 // If the tracking rule has no explicit template (empty string), the
-// configured default_template_name is used first. If that is also empty,
-// an empty string is returned which causes Get() to fall through to
-// the DTS entry marked as default.
-func (r *Renderer) resolveTemplate(trackingTemplate string) string {
+// configured default_template_name is used first — except for api
+// destinations, which prefer the [api_delivery] default template when one
+// is configured. If that is also empty, an empty string is returned which
+// causes Get() to fall through to the DTS entry marked as default.
+func (r *Renderer) resolveTemplate(platform, trackingTemplate string) string {
 	if trackingTemplate != "" {
 		return trackingTemplate
+	}
+	if platform == "api" && r.apiDefaultTemplate != "" {
+		return r.apiDefaultTemplate
 	}
 	return r.defaultTemplate
 }
 
 // ResolveTemplate returns the template ID to use, applying the default if empty.
-func (r *Renderer) ResolveTemplate(trackingTemplate string) string {
-	return r.resolveTemplate(trackingTemplate)
+func (r *Renderer) ResolveTemplate(platform, trackingTemplate string) string {
+	return r.resolveTemplate(platform, trackingTemplate)
 }
 
 // CheckTemplate validates that a template can be found for the given parameters.
 // Returns nil if a template exists, or an error describing what's missing.
 func (r *Renderer) CheckTemplate(templateType, platform, templateID, language string) error {
-	resolvedID := r.resolveTemplate(templateID)
+	resolvedID := r.resolveTemplate(platform, templateID)
 	tmpl := r.templates.Get(templateType, platform, resolvedID, language)
 	if tmpl != nil {
 		return nil
@@ -327,6 +336,27 @@ func (r *Renderer) isBelowMinAlertTime(enrichment map[string]any) bool {
 	return r.minAlertSec > 0 && tthSeconds > 0 && tthSeconds < r.minAlertSec
 }
 
+// positionalPerUser builds a per-user enrichment map carrying only the
+// location-relative fields the matcher computes for every alert type.
+// Unlike enrichment.PokemonPerUser it has no PVP dependency, so it applies
+// to raids, quests, invasions and every other grouped type. Key names
+// mirror PokemonPerUser exactly (internal/enrichment/peruser.go:58-64) so
+// the LayeredView resolves {{distance}}, {{bearing}} and {{bearingEmoji}}
+// identically on both paths.
+func positionalPerUser(users []webhook.MatchedUser) map[string]map[string]any {
+	m := make(map[string]map[string]any, len(users))
+	for _, u := range users {
+		m[u.ID] = map[string]any{
+			"distance":          u.Distance,
+			"bearing":           u.Bearing,
+			"bearingEmojiKey":   u.CardinalDirection,
+			"userDistanceTrack": u.TrackDistance > 0,
+			"userTrackDistance": u.TrackDistance,
+		}
+	}
+	return m
+}
+
 // renderForUsers is the shared rendering loop that produces DeliveryJobs for each user.
 // The original parameter (nil for non-change renders) is the prior-sighting snapshot
 // installed onto each LayeredView so templates can reference {{original.X}}.
@@ -357,9 +387,60 @@ func (r *Renderer) renderForUsers(
 	// enrichment, users with the same (template, platform, language) get identical
 	// rendered output. Render once per group and clone the result.
 	if perUserEnrichment == nil {
-		return r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, original, users, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)
+		// Split users by whether their resolved (template, platform,
+		// language) references per-user positional fields. Templates that
+		// don't (the common case) keep the group-render fast path;
+		// templates that do render per-user so {{distance}}/{{bearing}}
+		// resolve to each user's own value.
+		var groupedUsers, perUserUsers []webhook.MatchedUser
+		for _, user := range users {
+			platform := delivery.PlatformFromType(user.Type)
+			language := user.Language
+			if language == "" {
+				language = r.locale
+			}
+			templateID := r.resolveTemplate(platform, user.Template)
+			if r.templates.UsesPerUserFields(templateType, platform, templateID, language) {
+				perUserUsers = append(perUserUsers, user)
+			} else {
+				groupedUsers = append(groupedUsers, user)
+			}
+		}
+
+		var jobs []webhook.DeliveryJob
+		if len(groupedUsers) > 0 {
+			jobs = append(jobs, r.renderGrouped(templateType, enrichment, perLangEnrichment, webhookFields, original, groupedUsers, areas, logReference, tthMap, lat, lon, shlinkCache, editKeyBase)...)
+		}
+		if len(perUserUsers) > 0 {
+			jobs = append(jobs, r.renderPerUser(templateType, enrichment, perLangEnrichment, positionalPerUser(perUserUsers), webhookFields, original, perUserUsers, areas, logReference, editKeyBase, tthMap, lat, lon, shlinkCache)...)
+		}
+		return jobs
 	}
 
+	return r.renderPerUser(templateType, enrichment, perLangEnrichment, perUserEnrichment, webhookFields, original, users, areas, logReference, editKeyBase, tthMap, lat, lon, shlinkCache)
+}
+
+// renderPerUser renders one DeliveryJob per user, building a fresh
+// LayeredView per user so per-user enrichment (PVP display, distance,
+// bearing) resolves to that user's own values. This is the non-grouped
+// path: it is used for pokemon (which always has per-user PVP data) and,
+// via Task 3, for any grouped type whose template references per-user
+// positional fields.
+func (r *Renderer) renderPerUser(
+	templateType string,
+	enrichment map[string]any,
+	perLangEnrichment map[string]map[string]any,
+	perUserEnrichment map[string]map[string]any,
+	webhookFields map[string]any,
+	original map[string]any,
+	users []webhook.MatchedUser,
+	areas []webhook.MatchedArea,
+	logReference string,
+	editKeyBase string,
+	tthMap map[string]any,
+	lat, lon string,
+	shlinkCache map[string]string,
+) []webhook.DeliveryJob {
 	var jobs []webhook.DeliveryJob
 
 	for _, user := range users {
@@ -385,7 +466,7 @@ func (r *Renderer) renderForUsers(
 		view.original = original
 
 		// f. Get template (with monsterNoIv -> monster fallback)
-		templateID := r.resolveTemplate(user.Template)
+		templateID := r.resolveTemplate(platform, user.Template)
 		tmpl := r.templates.Get(templateType, platform, templateID, language)
 		if tmpl == nil && templateType == "monsterNoIv" {
 			tmpl = r.templates.Get("monster", platform, templateID, language)
@@ -432,7 +513,7 @@ func (r *Renderer) renderForUsers(
 		}
 
 		// Append ping to content
-		if user.Ping != "" {
+		if user.Ping != "" && platform != "api" {
 			rawMessage = appendPingToRaw(rawMessage, user.Ping)
 		}
 
@@ -511,19 +592,10 @@ func (r *Renderer) evalShowIf(expr string, view any) (bool, error) {
 
 // deliveryTargetType maps a webhook user.Type ("discord:user", etc.) to
 // the short noun the button schema uses for applies_to: "dm" / "channel"
-// / "webhook". Mirrors the helper in cmd/processor; duplicated here to
-// avoid an import cycle.
+// / "webhook". Delegates to delivery.TargetClass, the single source of
+// truth shared with cmd/processor's snapshotTargetType.
 func deliveryTargetType(userType string) string {
-	switch userType {
-	case "discord:user", "telegram:user":
-		return "dm"
-	case "discord:channel", "discord:thread", "telegram:group", "telegram:channel":
-		return "channel"
-	case "webhook":
-		return "webhook"
-	default:
-		return ""
-	}
+	return delivery.TargetClass(userType)
 }
 
 // renderGroupKey identifies a unique (template, platform, language) combination.
@@ -568,7 +640,7 @@ func (r *Renderer) renderGrouped(
 			language = r.locale
 		}
 		key := renderGroupKey{
-			templateID:    r.resolveTemplate(user.Template),
+			templateID:    r.resolveTemplate(platform, user.Template),
 			platform:      platform,
 			language:      language,
 			distanceTrack: user.TrackDistance > 0,
@@ -642,7 +714,7 @@ func (r *Renderer) renderGrouped(
 			// json.RawMessage is a []byte — shared safely when no ping.
 			// For users with a ping, parse+modify+re-serialize.
 			userMessage := rawMessage
-			if user.Ping != "" {
+			if user.Ping != "" && key.platform != "api" {
 				userMessage = appendPingToRaw(rawMessage, user.Ping)
 			}
 

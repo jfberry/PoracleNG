@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -92,14 +93,15 @@ func (j jsonID) String() string { return string(j) }
 
 // TemplateStore holds parsed DTS entries and a cache of compiled templates.
 type TemplateStore struct {
-	mu          sync.RWMutex
-	entries     []DTSEntry
-	cache       map[string]*raymond.Template
-	sourceCache map[string]string
-	tileUsage   map[string]bool
-	partials    map[string]string
-	configDir   string
-	fallbackDir string
+	mu           sync.RWMutex
+	entries      []DTSEntry
+	cache        map[string]*raymond.Template
+	sourceCache  map[string]string
+	tileUsage    map[string]bool
+	perUserUsage map[string]bool
+	partials     map[string]string
+	configDir    string
+	fallbackDir  string
 	// defaultLocale is the configured [general] locale, used as a last
 	// resort before "any language" in selectEntry. Without it, a user
 	// whose language has no template (e.g. legacy lang="nl" with no NL
@@ -112,11 +114,12 @@ type TemplateStore struct {
 // LoadTemplates reads dts.json from configDir (preferred) or fallbackDir.
 func LoadTemplates(configDir, fallbackDir string) (*TemplateStore, error) {
 	ts := &TemplateStore{
-		cache:       make(map[string]*raymond.Template),
-		sourceCache: make(map[string]string),
-		tileUsage:   make(map[string]bool),
-		configDir:   configDir,
-		fallbackDir: fallbackDir,
+		cache:        make(map[string]*raymond.Template),
+		sourceCache:  make(map[string]string),
+		tileUsage:    make(map[string]bool),
+		perUserUsage: make(map[string]bool),
+		configDir:    configDir,
+		fallbackDir:  fallbackDir,
 	}
 
 	ts.partials = loadPartials(configDir, fallbackDir)
@@ -185,32 +188,49 @@ func loadEntries(configDir, fallbackDir string) ([]DTSEntry, error) {
 		entries = append(entries, fallbackEntries...)
 	}
 
-	// 1b. Load fallback dts/**/*.json (readonly — bundled help, info,
-	// info sub-topic files; kept out of the monolithic fallbacks/dts.json
-	// so each topic is one small file that operators can copy verbatim
-	// into config/dts/ to customise).
+	// 1b. Load fallback dts/**/*.{json,toml} (readonly — bundled help,
+	// info, info sub-topic files, and platform packs like the api DTS
+	// pack; kept out of the monolithic fallbacks/dts.json so each topic
+	// is one small file that operators can copy verbatim into
+	// config/dts/ to customise).
 	fallbackDtsDir := filepath.Join(fallbackDir, "dts")
 	filepath.WalkDir(fallbackDtsDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".json") {
+		if err != nil || d.IsDir() {
 			return nil
 		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			log.Warnf("dts: failed to read %s: %s", path, err)
-			return nil
+		switch {
+		case strings.HasSuffix(path, ".json"):
+			data, err := os.ReadFile(path)
+			if err != nil {
+				log.Warnf("dts: failed to read %s: %s", path, err)
+				return nil
+			}
+			var extraEntries []DTSEntry
+			if err := json.Unmarshal(data, &extraEntries); err != nil {
+				log.Warnf("dts: failed to parse %s: %s", path, err)
+				return nil
+			}
+			for i := range extraEntries {
+				extraEntries[i].sourceFile = path
+				extraEntries[i].sourceFormat = SourceFormatJSON
+				extraEntries[i].Readonly = true
+			}
+			entries = append(entries, extraEntries...)
+			log.Debugf("dts: loaded %d fallback entries from %s", len(extraEntries), path)
+		case strings.HasSuffix(path, ".toml"):
+			tomlEntries, terr := loadTOMLFile(path)
+			if terr != nil {
+				log.Warnf("dts: failed to parse %s: %s", path, terr)
+				return nil
+			}
+			for i := range tomlEntries {
+				tomlEntries[i].sourceFile = path
+				tomlEntries[i].sourceFormat = SourceFormatTOML
+				tomlEntries[i].Readonly = true
+			}
+			entries = append(entries, tomlEntries...)
+			log.Debugf("dts: loaded %d fallback entries from %s (toml)", len(tomlEntries), path)
 		}
-		var extraEntries []DTSEntry
-		if err := json.Unmarshal(data, &extraEntries); err != nil {
-			log.Warnf("dts: failed to parse %s: %s", path, err)
-			return nil
-		}
-		for i := range extraEntries {
-			extraEntries[i].sourceFile = path
-			extraEntries[i].sourceFormat = SourceFormatJSON
-			extraEntries[i].Readonly = true
-		}
-		entries = append(entries, extraEntries...)
-		log.Debugf("dts: loaded %d fallback entries from %s", len(extraEntries), path)
 		return nil
 	})
 
@@ -346,6 +366,7 @@ func (ts *TemplateStore) Reload(configDir, fallbackDir string) error {
 	ts.cache = make(map[string]*raymond.Template)
 	ts.sourceCache = make(map[string]string)
 	ts.tileUsage = make(map[string]bool)
+	ts.perUserUsage = make(map[string]bool)
 	ts.configDir = configDir
 	ts.fallbackDir = fallbackDir
 	ts.mu.Unlock()
@@ -478,6 +499,7 @@ func (ts *TemplateStore) ClearCache() {
 	ts.cache = make(map[string]*raymond.Template)
 	ts.sourceCache = make(map[string]string)
 	ts.tileUsage = make(map[string]bool)
+	ts.perUserUsage = make(map[string]bool)
 	ts.mu.Unlock()
 }
 
@@ -516,8 +538,64 @@ func (ts *TemplateStore) UsesTile(templateType, platform, templateID, language s
 	return uses
 }
 
+// UsesPerUserFields reports whether the template selected for these
+// parameters references a per-user positional field ({{distance}},
+// {{bearing}}, {{bearingEmoji}}). Result is cached per selection key,
+// mirroring UsesTile. Unlike UsesTile, an unresolvable template returns
+// false: falling through to the group-render fast path is the safe,
+// zero-regression default when there is no source to inspect.
+func (ts *TemplateStore) UsesPerUserFields(templateType, platform, templateID, language string) bool {
+	key := cacheKey(templateType, platform, templateID, language)
+
+	ts.mu.RLock()
+	if result, ok := ts.perUserUsage[key]; ok {
+		ts.mu.RUnlock()
+		return result
+	}
+	ts.mu.RUnlock()
+
+	// Trigger template resolution (which populates sourceCache).
+	tmpl := ts.Get(templateType, platform, templateID, language)
+	if tmpl == nil {
+		return false
+	}
+
+	ts.mu.RLock()
+	source, ok := ts.sourceCache[key]
+	ts.mu.RUnlock()
+	if !ok {
+		return false
+	}
+
+	uses := sourceUsesPerUserFields(source)
+
+	ts.mu.Lock()
+	ts.perUserUsage[key] = uses
+	ts.mu.Unlock()
+
+	return uses
+}
+
 func cacheKey(templateType, platform, templateID, language string) string {
 	return templateType + " " + platform + " " + templateID + " " + language
+}
+
+// perUserFieldRe matches a Handlebars expression that references a
+// per-user positional field. It anchors at an opening stache (`{{` or
+// `{{{`) and allows any helper name / arguments up to the next brace
+// (`[^{}]*`), so both `{{distance}}` and `{{fmtDist (distance)}}` match.
+// The `\b...\b` word boundaries keep `userDistanceTrack` and
+// `userTrackDistance` — which are group-safe flags, not positional
+// values — from matching: in `userdistancetrack` the 'distance' run is
+// flanked by word characters, so no boundary exists before it.
+var perUserFieldRe = regexp.MustCompile(`\{\{\{?[^{}]*\b(distance|bearing|bearingemoji)\b`)
+
+// sourceUsesPerUserFields reports whether a rendered-template source
+// references {{distance}}, {{bearing}} or {{bearingEmoji}} (in any stache
+// or subexpression form). Applied to lowercased source so casing in the
+// template doesn't matter.
+func sourceUsesPerUserFields(source string) bool {
+	return perUserFieldRe.MatchString(strings.ToLower(source))
 }
 
 // selectEntry applies the selection chain to find the best matching entry.
@@ -1229,6 +1307,7 @@ func (ts *TemplateStore) SaveEntry(inc DTSEntry) error {
 	ts.cache = make(map[string]*raymond.Template)
 	ts.sourceCache = make(map[string]string)
 	ts.tileUsage = make(map[string]bool)
+	ts.perUserUsage = make(map[string]bool)
 	configDir := ts.configDir
 
 	// Collect entries sharing the savePath for the TOML re-encode path.
@@ -1319,6 +1398,7 @@ func (ts *TemplateStore) DeleteEntry(filterType, filterPlatform, filterLanguage,
 		ts.cache = make(map[string]*raymond.Template)
 		ts.sourceCache = make(map[string]string)
 		ts.tileUsage = make(map[string]bool)
+		ts.perUserUsage = make(map[string]bool)
 		found = true
 		break
 	}

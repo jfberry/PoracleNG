@@ -1384,3 +1384,114 @@ func TestLaneStats(t *testing.T) {
 		return active == 1 && total == 6 && maxDepth == 6 && target == "t"
 	}, time.Second)
 }
+
+// nilSendSender simulates APISender's drop contract: Send returns (nil, nil)
+// — handled without a send, no error (the 401/403/other-4xx drop path).
+type nilSendSender struct {
+	queueMockSender
+}
+
+func (n *nilSendSender) Send(_ context.Context, job *Job) (*SentMessage, error) {
+	n.mu.Lock()
+	n.sendCalls = append(n.sendCalls, job)
+	n.mu.Unlock()
+	return nil, nil
+}
+
+// TestAPITransientFailuresDoNotDisable pins the api-platform exemption from
+// consecutive-failure auto-disable: every api destination shares ONE
+// endpoint, so transient (5xx/timeout) failures are perfectly correlated —
+// counting them would mass-disable every destination during a receiver
+// outage. Only PermanentError (404/410) may escalate for api.
+func TestAPITransientFailuresDoNotDisable(t *testing.T) {
+	apiMock := &queueMockSender{platform: "api", sendErr: errors.New("api endpoint 503")}
+	var mu sync.Mutex
+	var disabled []string
+	fq, enqueue := newTestFairQueue(t, map[string]Sender{"api": apiMock}, QueueConfig{
+		FailThreshold: 3,
+		OnDisabled: func(target, _, _ string) {
+			mu.Lock()
+			disabled = append(disabled, target)
+			mu.Unlock()
+		},
+	})
+	fq.Start()
+	for range 6 {
+		enqueue(&Job{Target: "u-1", Type: "api:user", Message: json.RawMessage(`{}`)})
+	}
+	time.Sleep(200 * time.Millisecond)
+	fq.Stop()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(disabled) != 0 {
+		t.Errorf("transient api failures must not disable destinations, got disabled=%v", disabled)
+	}
+	if got := len(apiMock.getSendCalls()); got != 6 {
+		t.Errorf("expected all 6 sends attempted (no fail-block), got %d", got)
+	}
+}
+
+// TestAPIPermanentFailuresStillDisable confirms the 404/410 path (a genuinely
+// per-destination signal) still drives auto-disable for api destinations.
+func TestAPIPermanentFailuresStillDisable(t *testing.T) {
+	apiMock := &queueMockSender{platform: "api", sendErr: &PermanentError{Err: errors.New("gone"), Reason: "destination gone (404)"}}
+	var mu sync.Mutex
+	var disabled []string
+	fq, enqueue := newTestFairQueue(t, map[string]Sender{"api": apiMock}, QueueConfig{
+		FailThreshold: 3,
+		OnDisabled: func(target, _, _ string) {
+			mu.Lock()
+			disabled = append(disabled, target)
+			mu.Unlock()
+		},
+	})
+	fq.Start()
+	for range 3 {
+		enqueue(&Job{Target: "u-2", Type: "api:user", Message: json.RawMessage(`{}`)})
+	}
+	time.Sleep(200 * time.Millisecond)
+	fq.Stop()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(disabled) != 1 || disabled[0] != "u-2" {
+		t.Errorf("permanent api failures should disable at threshold, got disabled=%v", disabled)
+	}
+}
+
+// TestNilSendDropDoesNotDisableOrTrack pins the (nil, nil) drop contract:
+// no failure counting, no disable, no tracking — and the queue keeps going.
+func TestNilSendDropDoesNotDisableOrTrack(t *testing.T) {
+	dropper := &nilSendSender{queueMockSender{platform: "api"}}
+	var mu sync.Mutex
+	var disabled []string
+	fq, enqueue := newTestFairQueue(t, map[string]Sender{"api": dropper}, QueueConfig{
+		FailThreshold: 2,
+		OnDisabled: func(target, _, _ string) {
+			mu.Lock()
+			disabled = append(disabled, target)
+			mu.Unlock()
+		},
+	})
+	fq.Start()
+	for range 4 {
+		// TTH must be non-zero: clean jobs with an expired TTL are suppressed
+		// before Send, which would bypass the (nil, nil) path under test.
+		enqueue(&Job{Target: "u-3", Type: "api:user", Message: json.RawMessage(`{}`), Clean: 1, TTH: TTH{Hours: 1}})
+	}
+	time.Sleep(200 * time.Millisecond)
+	fq.Stop()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if got := len(dropper.getSendCalls()); got != 4 {
+		t.Fatalf("expected 4 Send attempts (nil,nil path exercised), got %d", got)
+	}
+	if len(disabled) != 0 {
+		t.Errorf("nil-send drops must not disable, got %v", disabled)
+	}
+	if fq.tracker.Size() != 0 {
+		t.Errorf("nil-send drops must not be tracked, tracker size = %d", fq.tracker.Size())
+	}
+}

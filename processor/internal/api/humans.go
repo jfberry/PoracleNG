@@ -616,6 +616,14 @@ func HandleCreateHuman(deps *TrackingDeps) gin.HandlerFunc {
 		if human.Type == "" {
 			human.Type = "discord:user"
 		}
+		if err := store.ValidateHumanType(human.Type); err != nil {
+			trackingJSONError(c, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if (human.Type == "api:user" || human.Type == "api:channel") && !store.ValidAPIDestinationID(human.ID) {
+			trackingJSONError(c, http.StatusUnprocessableEntity, "api destination id must match ^[A-Za-z0-9._~-]{1,128}$ (colon-free)")
+			return
+		}
 		if body.Enabled != nil && !*body.Enabled {
 			human.Enabled = false
 		}

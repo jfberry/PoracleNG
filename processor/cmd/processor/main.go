@@ -188,7 +188,7 @@ func main() {
 		telegramToken = tokens[0]
 	}
 
-	if discordToken != "" || telegramToken != "" {
+	if discordToken != "" || telegramToken != "" || cfg.APIDelivery.Enabled {
 		var err error
 		proc.dispatcher, err = delivery.NewDispatcher(delivery.DispatcherConfig{
 			DiscordToken:    discordToken,
@@ -199,10 +199,19 @@ func main() {
 			CacheDir:        filepath.Join(cfg.BaseDir, "config", ".cache"),
 			TileProviderURL: cfg.Geocoding.StaticProviderURL,
 			TileInternalURL: cfg.Geocoding.StaticInternalURL,
+			APIEndpoint:     apiEndpoint(cfg),
+			APISecret:       cfg.APIDelivery.Secret,
+			APISecretHeader: cfg.APIDelivery.SecretHeader,
+			APISecretPrefix: cfg.APIDelivery.SecretPrefix,
+			APITimeoutMs:    cfg.APIDelivery.TimeoutMs,
+			APIMaxRetries:   cfg.APIDelivery.MaxRetries,
+			APILogOnly:      cfg.APIDelivery.LogOnly,
+			Version:         buildVersion,
 			Queue: delivery.QueueConfig{
 				ConcurrentDiscord:  cfg.Tuning.ConcurrentDiscordDestinations,
 				ConcurrentWebhook:  cfg.Tuning.ConcurrentDiscordWebhooks,
 				ConcurrentTelegram: cfg.Tuning.ConcurrentTelegramDestinations,
+				ConcurrentAPI:      cfg.APIDelivery.Concurrency,
 				OnDisabled: func(target, name, jobType string) {
 					proc.disableUserForDeliveryFailure(target, name, jobType)
 				},
@@ -238,10 +247,11 @@ func main() {
 				})
 			}
 			proc.dispatcher.Start()
-			log.Infof("Delivery dispatcher started: discord=%d webhook=%d telegram=%d queue=%d",
+			log.Infof("Delivery dispatcher started: discord=%d webhook=%d telegram=%d api=%d queue=%d",
 				cfg.Tuning.ConcurrentDiscordDestinations,
 				cfg.Tuning.ConcurrentDiscordWebhooks,
 				cfg.Tuning.ConcurrentTelegramDestinations,
+				cfg.APIDelivery.Concurrency,
 				cfg.Tuning.DeliveryQueueSize)
 		}
 	}
@@ -1259,6 +1269,15 @@ func readBuildInfo() (version, commit, branch, date string) {
 	return processor.BuildInfo()
 }
 
+// apiEndpoint returns the configured api endpoint only when api delivery is
+// enabled, so a stale endpoint with enabled=false does not register a sender.
+func apiEndpoint(cfg *config.Config) string {
+	if cfg.APIDelivery.Enabled {
+		return cfg.APIDelivery.Endpoint
+	}
+	return ""
+}
+
 // ProcessorService ties together all matching/tracking components.
 type ProcessorService struct {
 	cfg              *config.Config
@@ -1676,6 +1695,7 @@ func NewProcessorService(cfg *config.Config, stateMgr *state.Manager, database *
 		dtsRenderer = nil
 		dtsInitErr = err
 	} else {
+		dtsRenderer.SetAPIDefaultTemplate(cfg.APIDelivery.Template)
 		dtsRenderer.Templates().LogSummary()
 	}
 

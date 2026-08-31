@@ -214,7 +214,7 @@ The processor renders DTS templates using `jfberry/raymond` (a fork of `mailgun/
 1. Webhook handler enqueues a `RenderJob` to the render channel (buffered, configurable pool size)
 2. Render worker picks up the job, resolves pending static map tile (blocking wait with deadline)
 3. For each matched user: build `LayeredView` (8-layer priority lookup), select DTS template, render with raymond, URL-shorten `<S< ... >S>` markers, parse JSON result, append ping
-4. **Group rendering optimization**: for non-pokemon types, users with the same (template, platform, language) share a single render — only per-user fields (distance, bearing) are patched afterward
+4. **Group rendering optimization**: for non-pokemon types, users with the same (template, platform, language) share a single render. Templates that reference per-user positional fields ({{distance}}, {{bearing}}, {{bearingEmoji}}) opt that group out of sharing and render per-user instead — detected via `TemplateStore.UsesPerUserFields`, mirroring the `UsesTile` mechanism.
 5. Rendered delivery jobs dispatched directly to the `delivery.Dispatcher`
 
 **Queue pressure**: When the render channel is >80% full, tile generation is skipped to reduce backpressure.

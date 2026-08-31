@@ -119,6 +119,12 @@ func registerV2HumanCreate(api huma.API, deps *TrackingDeps, tag []string, sec [
 		if human.Type == "" {
 			human.Type = "discord:user"
 		}
+		if err := store.ValidateHumanType(human.Type); err != nil {
+			return nil, huma.Error422UnprocessableEntity(err.Error())
+		}
+		if (human.Type == "api:user" || human.Type == "api:channel") && !store.ValidAPIDestinationID(human.ID) {
+			return nil, huma.Error422UnprocessableEntity("api destination id must match ^[A-Za-z0-9._~-]{1,128}$ (colon-free)")
+		}
 		if b.Enabled != nil && !*b.Enabled {
 			human.Enabled = false
 		}

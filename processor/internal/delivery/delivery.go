@@ -31,12 +31,17 @@ type Job struct {
 	// "telegram:user", "telegram:group", "telegram:channel"
 	Message       json.RawMessage `json:"message"` // pre-rendered message JSON
 	TTH           TTH             `json:"tth"`
-	Clean         int             `json:"clean"`        // track for deletion on TTH expiry
-	EditKey       string          `json:"editKey"`      // non-empty = track for future edits
-	ReplyKey      string          `json:"replyKey"`     // non-empty = (ReplyKey,Target) indexes the latest sent message in MessageTracker for reply chaining
-	MsgType       string          `json:"msgType"`      // alert type ("raid", "egg", "pokemon", etc.) stored in MessageTracker for per-lifecycle-type first-visible detection
-	Name          string          `json:"name"`         // human-readable destination name
-	LogReference  string          `json:"logReference"` // encounter/gym ID for tracing
+	Clean         int             `json:"clean"`                  // track for deletion on TTH expiry
+	EditKey       string          `json:"editKey"`                // non-empty = track for future edits
+	ReplyKey      string          `json:"replyKey"`               // non-empty = (ReplyKey,Target) indexes the latest sent message in MessageTracker for reply chaining
+	MsgType       string          `json:"msgType"`                // alert type ("raid", "egg", "pokemon", etc.) stored in MessageTracker for per-lifecycle-type first-visible detection
+	TemplateID    string          `json:"templateId"`             // resolved DTS template id used for this render; consumed by APISender's envelope. Populated in cmd/processor/render.go from webhook.DeliveryJob.TemplateSelected.
+	TemplateType  string          `json:"templateType,omitempty"` // DTS template TYPE that rendered Message ("monster", "monsterChanged", "rsvpChanges", ...). Distinct from MsgType (the source alert type): change events keep MsgType "pokemon"/"raid" but render a different template type — the api envelope's template_type is what keys the receiver's payload schema.
+	Name          string          `json:"name"`                   // human-readable destination name
+	LogReference  string          `json:"logReference"`           // encounter/gym ID for tracing
+	TrackingUIDs  []int64         `json:"trackingUids,omitempty"` // matched tracking-rule UIDs (api envelope tracking_uids)
+	Areas         []string        `json:"areas,omitempty"`        // matched geofence area names (api envelope areas)
+	ExpiresAt     int64           `json:"expiresAt,omitempty"`    // absolute unix expiry stamped at render time (api envelope expires_at); 0 = derive from TTH at send time. Absolute so queue latency between render and send doesn't shift the reported expiry late.
 	Lat           float64         `json:"lat"`
 	Lon           float64         `json:"lon"`
 	StaticMapData []byte          `json:"-"` // inline tile image bytes

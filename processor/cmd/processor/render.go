@@ -189,10 +189,22 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 		tileURL, _ := job.Enrichment["staticMap"].(string)
 		for _, j := range jobs {
 			var tth delivery.TTH
+			var expiresAt int64
 			if job.OverrideCleanTTH != 0 {
 				tth = tthFromUnix(job.OverrideCleanTTH)
+				expiresAt = job.OverrideCleanTTH
 			} else {
 				tth = tthFromMap(j.TTH)
+				if d := tth.Duration(); d > 0 {
+					expiresAt = time.Now().Add(d).Unix()
+				}
+			}
+			// Per-delivery template type: the renderer's value wins over the
+			// RenderJob's (same preference as buildSnapshot — pokemon picks
+			// monster vs monsterNoIv dynamically).
+			templateType := j.TemplateType
+			if templateType == "" {
+				templateType = job.TemplateType
 			}
 			ps.dispatcher.Dispatch(&delivery.Job{
 				Target:        j.Target,
@@ -207,9 +219,14 @@ func (ps *ProcessorService) processRenderJob(job RenderJob) {
 				EditKey:       j.EditKey,
 				ReplyKey:      job.ReplyKey,
 				MsgType:       job.AlertType,
+				TemplateType:  templateType,
 				StaticMapData: tileBytesForMessage(j.Message, job.TileImageData, tileURL),
 				Language:      j.Language,
 				Template:      j.TemplateRequested,
+				TemplateID:    j.TemplateSelected,
+				TrackingUIDs:  collectTrackingUIDs(job.MatchedUsers, j.Target),
+				Areas:         collectAreaNames(job.MatchedAreas),
+				ExpiresAt:     expiresAt,
 				SnapshotData:  ps.buildSnapshot(job, j, tth),
 			})
 		}
@@ -384,6 +401,12 @@ func (ps *ProcessorService) buildSnapshot(rj RenderJob, dj webhook.DeliveryJob, 
 	if ps.snapshotStore == nil {
 		return nil
 	}
+	// Snapshots exist to serve click-time renders for interactive buttons,
+	// which are Discord-only. Writing them for api deliveries is pure pogreb
+	// churn with no consumer — skip.
+	if delivery.PlatformFromType(dj.Type) == "api" {
+		return nil
+	}
 	now := time.Now()
 	expires := now.Add(tth.Duration()).Unix()
 
@@ -459,17 +482,23 @@ func collectTrackingUIDs(users []webhook.MatchedUser, target string) []int64 {
 	return out
 }
 
+// collectAreaNames extracts the geofence area names from matched areas (for
+// the api envelope's areas field). Mirrors the inline slice buildSnapshot
+// builds. Named distinctly from helpers.go's areaNames, which returns a
+// comma-joined string for log lines rather than a []string.
+func collectAreaNames(areas []webhook.MatchedArea) []string {
+	if len(areas) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(areas))
+	for _, a := range areas {
+		out = append(out, a.Name)
+	}
+	return out
+}
+
 // snapshotTargetType maps a delivery.Job.Type ("discord:user", etc.) to the
 // short noun used in Snapshot.TargetType ("dm" / "channel" / "webhook").
 func snapshotTargetType(jobType string) string {
-	switch jobType {
-	case "discord:user", "telegram:user":
-		return "dm"
-	case "discord:channel", "discord:thread", "telegram:group", "telegram:channel":
-		return "channel"
-	case "webhook":
-		return "webhook"
-	default:
-		return ""
-	}
+	return delivery.TargetClass(jobType)
 }

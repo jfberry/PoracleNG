@@ -635,6 +635,53 @@ func TestRenderAlertBasicRaid(t *testing.T) {
 	}
 }
 
+func TestRenderAlertAPINoPing(t *testing.T) {
+	entries := []DTSEntry{
+		{Type: "raid", ID: "default", Platform: "api",
+			Template: map[string]any{"gym": "{{gymName}}"}},
+	}
+	r := newTestRenderer(t, entries)
+	enrichment := map[string]any{"gymName": "Gym A", "latitude": 1.0, "longitude": 2.0, "tth": map[string]any{"totalSeconds": 600}}
+	users := []webhook.MatchedUser{
+		{ID: "u-1", Type: "api:user", Template: "default", Language: "en", Ping: "<@123>"},
+	}
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "ref", "")
+	if len(jobs) != 1 {
+		t.Fatalf("want 1 job, got %d", len(jobs))
+	}
+	// Ping must NOT be appended for api destinations — the message stays valid JSON with no mention.
+	msg := parseMessage(t, jobs[0].Message)
+	if _, hasContent := msg["content"]; hasContent {
+		// appendPingToRaw writes into "content"; api output must be untouched.
+		t.Errorf("api job should not have ping-injected content: %v", msg)
+	}
+}
+
+// TestRenderAlertAPINoPingPerUser mirrors TestRenderAlertAPINoPing but forces
+// the renderPerUser path instead of renderGrouped: the template references
+// {{distance}}, so UsesPerUserFields routes the user through renderPerUser
+// (renderer.go:403). The api-platform ping skip (renderer.go:516) must hold
+// on that path too, not just the group-render fast path.
+func TestRenderAlertAPINoPingPerUser(t *testing.T) {
+	entries := []DTSEntry{
+		{Type: "raid", ID: "default", Platform: "api",
+			Template: map[string]any{"gym": "{{gymName}}", "d": "{{#if distance}}{{distance}}{{else}}0{{/if}}"}},
+	}
+	r := newTestRenderer(t, entries)
+	enrichment := map[string]any{"gymName": "Gym A", "latitude": 1.0, "longitude": 2.0, "tth": map[string]any{"totalSeconds": 600}}
+	users := []webhook.MatchedUser{
+		{ID: "u-1", Type: "api:user", Template: "default", Language: "en", Ping: "<@1>", Distance: 500},
+	}
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "ref", "")
+	if len(jobs) != 1 {
+		t.Fatalf("want 1 job, got %d", len(jobs))
+	}
+	msg := parseMessage(t, jobs[0].Message)
+	if _, hasContent := msg["content"]; hasContent {
+		t.Errorf("api job (per-user path) should not have ping-injected content: %v", msg)
+	}
+}
+
 func TestRenderAlertNoPerLangEnrichment(t *testing.T) {
 	// Fort updates have no per-language enrichment
 	entries := []DTSEntry{
@@ -801,6 +848,71 @@ func TestRenderAlertNoDeduplication(t *testing.T) {
 	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "", "")
 	if len(jobs) != 2 {
 		t.Fatalf("expected 2 jobs (no dedup), got %d", len(jobs))
+	}
+}
+
+func TestRenderAlertPerUserDistance(t *testing.T) {
+	entries := []DTSEntry{
+		{Type: "raid", ID: "1", Platform: "discord", Default: true,
+			Template: map[string]any{"content": "{{gymName}} {{distance}}m"}},
+	}
+	r := newTestRenderer(t, entries)
+
+	enrichment := map[string]any{
+		"gymName":   "Gym A",
+		"latitude":  1.0,
+		"longitude": 2.0,
+		"tth":       map[string]any{"totalSeconds": 600},
+	}
+	users := []webhook.MatchedUser{
+		{ID: "u1", Type: "discord:user", Template: "1", Language: "en", Distance: 500, Bearing: 90, CardinalDirection: "east", TrackDistance: 1000},
+		{ID: "u2", Type: "discord:user", Template: "1", Language: "en", Distance: 1200, Bearing: 270, CardinalDirection: "west", TrackDistance: 2000},
+	}
+
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "ref", "")
+	if len(jobs) != 2 {
+		t.Fatalf("expected 2 jobs, got %d", len(jobs))
+	}
+	got := map[string]string{}
+	for _, j := range jobs {
+		msg := parseMessage(t, j.Message)
+		got[j.Target], _ = msg["content"].(string)
+	}
+	if got["u1"] != "Gym A 500m" {
+		t.Errorf("u1 content = %q, want %q", got["u1"], "Gym A 500m")
+	}
+	if got["u2"] != "Gym A 1200m" {
+		t.Errorf("u2 content = %q, want %q", got["u2"], "Gym A 1200m")
+	}
+}
+
+func TestRenderAlertGroupedWithoutDistance(t *testing.T) {
+	entries := []DTSEntry{
+		{Type: "raid", ID: "1", Platform: "discord", Default: true,
+			Template: map[string]any{"content": "{{gymName}} raid"}},
+	}
+	r := newTestRenderer(t, entries)
+
+	enrichment := map[string]any{
+		"gymName":   "Gym A",
+		"latitude":  1.0,
+		"longitude": 2.0,
+		"tth":       map[string]any{"totalSeconds": 600},
+	}
+	users := []webhook.MatchedUser{
+		{ID: "u1", Type: "discord:user", Template: "1", Language: "en", Distance: 500},
+		{ID: "u2", Type: "discord:user", Template: "1", Language: "en", Distance: 1200},
+	}
+
+	jobs := r.RenderAlert("raid", enrichment, nil, nil, users, nil, "ref", "")
+	if len(jobs) != 2 {
+		t.Fatalf("expected 2 jobs, got %d", len(jobs))
+	}
+	for _, j := range jobs {
+		msg := parseMessage(t, j.Message)
+		if c, _ := msg["content"].(string); c != "Gym A raid" {
+			t.Errorf("target %s content = %q, want %q", j.Target, c, "Gym A raid")
+		}
 	}
 }
 

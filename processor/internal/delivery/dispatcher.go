@@ -27,6 +27,18 @@ type DispatcherConfig struct {
 	// our re-upload path. Empty TileInternalURL falls back to TileProviderURL.
 	TileProviderURL string
 	TileInternalURL string
+
+	// API* fields configure the generic HTTP "api" delivery platform
+	// (api:user / api:channel destinations). APIEndpoint empty means the
+	// api sender is not registered.
+	APIEndpoint     string
+	APISecret       string
+	APISecretHeader string
+	APISecretPrefix string
+	APITimeoutMs    int
+	APIMaxRetries   int
+	APILogOnly      bool
+	Version         string // PoracleNG version for API User-Agent
 }
 
 // DispatchBypass enqueues a job that must skip the rate-limit count and
@@ -94,12 +106,27 @@ func NewDispatcher(cfg DispatcherConfig) (*Dispatcher, error) {
 	if cfg.TelegramToken != "" {
 		senders["telegram"] = NewTelegramSender(cfg.TelegramToken)
 	}
+	if cfg.APIEndpoint != "" {
+		senders["api"] = NewAPISender(APIConfig{
+			Endpoint:     cfg.APIEndpoint,
+			Secret:       cfg.APISecret,
+			SecretHeader: cfg.APISecretHeader,
+			SecretPrefix: cfg.APISecretPrefix,
+			TimeoutMs:    cfg.APITimeoutMs,
+			MaxRetries:   cfg.APIMaxRetries,
+			LogOnly:      cfg.APILogOnly,
+			Version:      cfg.Version,
+		})
+	}
 
 	if ds, ok := senders["discord"].(*DiscordSender); ok {
 		ds.SetConcurrency(cfg.Queue.ConcurrentDiscord, cfg.Queue.ConcurrentWebhook)
 	}
 	if ts, ok := senders["telegram"].(*TelegramSender); ok {
 		ts.SetConcurrency(cfg.Queue.ConcurrentTelegram)
+	}
+	if as, ok := senders["api"].(*APISender); ok {
+		as.SetConcurrency(cfg.Queue.ConcurrentAPI)
 	}
 
 	tracker := NewMessageTracker(cfg.CacheDir, senders)
@@ -157,6 +184,9 @@ func NewDispatcherWithSenders(senders map[string]Sender, tracker *MessageTracker
 	}
 	if ts, ok := senders["telegram"].(*TelegramSender); ok {
 		ts.SetConcurrency(queueCfg.ConcurrentTelegram)
+	}
+	if as, ok := senders["api"].(*APISender); ok {
+		as.SetConcurrency(queueCfg.ConcurrentAPI)
 	}
 	d := &Dispatcher{tracker: tracker}
 	d.queue = NewFairQueue(senders, tracker, queueCfg, d)
@@ -216,6 +246,9 @@ func (d *Dispatcher) WebhookDepth() int { return d.queue.WebhookDepth() }
 
 // TelegramDepth returns the number of telegram jobs currently in-flight.
 func (d *Dispatcher) TelegramDepth() int { return d.queue.TelegramDepth() }
+
+// APIDepth returns the number of api jobs currently in-flight.
+func (d *Dispatcher) APIDepth() int { return d.queue.APIDepth() }
 
 // RateLimitWaiting returns the number of delivery goroutines currently blocked
 // waiting for Discord rate limits to clear.

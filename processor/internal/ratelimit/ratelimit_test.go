@@ -213,6 +213,15 @@ func TestWebhookType(t *testing.T) {
 	}
 }
 
+func TestIsUserTypeAPI(t *testing.T) {
+	if !isUserType("api:user") {
+		t.Error("api:user should use the DM limit")
+	}
+	if isUserType("api:channel") {
+		t.Error("api:channel should use the channel limit")
+	}
+}
+
 func TestResetSeconds(t *testing.T) {
 	l := New(Config{TimingPeriod: 60, DMLimit: 5, ChannelLimit: 5, MaxLimitsBeforeStop: 10})
 	defer l.Close()

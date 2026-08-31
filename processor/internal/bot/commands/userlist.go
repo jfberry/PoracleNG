@@ -41,6 +41,8 @@ func (c *UserlistCommand) Run(ctx *bot.CommandContext, args []string) []bot.Repl
 			filterPlatform = "discord"
 		case "telegram":
 			filterPlatform = "telegram"
+		case "api":
+			filterPlatform = "api"
 		case "user":
 			filterType = "user"
 		case "channel":
